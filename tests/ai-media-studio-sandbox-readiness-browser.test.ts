@@ -58,13 +58,13 @@ function executionControlFor(input, requestNumber, mode) {
         evidenceKey: "evidence_000000000000000000000001", observedAt: "2026-07-21T12:01:00.000Z", expiresAt: "2030-07-21T13:01:00.000Z",
         quoteKey: "quote_000000000000000000000001", renderSpecKey: "render_spec_000000000000000000000001" },
     humanApproval: mode === "blocked" ? { state: "not_requested" }
-      : window.__sandboxHarness.approvalCalls.length === 0 ? { state: "not_requested" }
+      : window.__sandboxHarness.approvalSuccesses === 0 ? { state: "not_requested" }
       : { state: "approved", evidenceKey: "evidence_000000000000000000000002",
         observedAt: "2026-07-21T12:02:00.000Z", expiresAt: "2030-07-21T13:02:00.000Z",
         approvedQuoteKey: "quote_000000000000000000000001", renderSpecKey: "render_spec_000000000000000000000001" },
     execute: { state: "disabled", postAvailable: false, reasonCodes: mode === "blocked"
       ? ["binding_stale", "provider_verification_not_requested", "maximum_quote_missing", "human_approval_not_requested", "one_shot_executor_not_installed"]
-      : window.__sandboxHarness.approvalCalls.length === 0
+      : window.__sandboxHarness.approvalSuccesses === 0
         ? ["human_approval_not_requested", "one_shot_executor_not_installed"]
         : ["one_shot_executor_not_installed"] },
     effects: { providerCalled: false, secretResolved: false, verificationPerformed: false, quoteRequested: false,
@@ -88,6 +88,8 @@ export const mediaStudioCoreApi = {
         method: "POST", credentials: "include", cache: "no-store", headers: { "content-type": "application/json" },
         body: JSON.stringify(input.input),
       });
+    if (harness.approvalFailureMessage) throw new Error(harness.approvalFailureMessage);
+    harness.approvalSuccesses += 1;
     return { outcome: "recorded", approval: { planId: input.planId, batchId: input.input.expectedBatchId,
       slotId: input.slotId, decision: input.input.decision, approvedQuoteKey: input.input.expectedQuoteKey,
       renderSpecKey: "render_spec_000000000000000000000001" },
@@ -165,7 +167,8 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
     }
     if (request.url === "/") {
       const html = `<!doctype html><html><body><main><div id="root"></div></main><script>
-        window.__sandboxHarness = { calls: [], executionCalls: [], approvalCalls: [], approvalRuntimeAvailable: true,
+        window.__sandboxHarness = { calls: [], executionCalls: [], approvalCalls: [], approvalSuccesses: 0,
+          approvalFailureMessage: "", approvalRuntimeAvailable: true,
           delayMs: 80, failNext: false, controlMode: "ready" };
       </script><script type="module" src="/${path.relative(repositoryRoot, entryPath)}"></script></body></html>`;
       response.writeHead(200, { "content-type": "text/html; charset=utf-8" });
@@ -237,10 +240,16 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
   assert.equal(await confirm.isDisabled(), true);
   await dialog.getByRole("checkbox", { name: "I approve this exact quote and render specification only." }).check();
   assert.equal(await confirm.isDisabled(), false);
+  await page.evaluate(() => { (window as any).__sandboxHarness.approvalFailureMessage = "The batch or quote changed; refresh before deciding"; });
+  await confirm.click();
+  await assert.doesNotReject(dialog.getByRole("alert").getByText("The batch or quote changed; refresh before deciding").waitFor());
+  assert.equal(await dialog.count(), 1, "a rejected approval must keep the exact review dialog open");
+  assert.deepEqual(consoleErrors, [], "a handled 409/503-style rejection must not become an unhandled browser error");
+  await page.evaluate(() => { (window as any).__sandboxHarness.approvalFailureMessage = ""; });
   await confirm.click();
   await assert.doesNotReject(page.getByText("Exact quote approval recorded. Generation and spending remain disabled.").waitFor());
   assert.equal(await executeButton.isDisabled(), true);
-  const approvalCall = await page.evaluate(() => (window as any).__sandboxHarness.approvalCalls[0]);
+  const approvalCall = await page.evaluate(() => (window as any).__sandboxHarness.approvalCalls.at(-1));
   assert.deepEqual(approvalCall.input, {
     expectedBatchId: "batch_000000000000000000000001",
     expectedQuoteKey: "quote_000000000000000000000001",
@@ -313,7 +322,8 @@ test("SandboxReadinessPanel browser click path is read-only, accessible, retryab
     slotId: "slot_000000000000000000000065",
   });
   assert.ok(capturedApiRequests.length >= 8);
-  assert.equal(capturedApiRequests.filter((request) => request.method === "POST").length, 1);
+  assert.equal(capturedApiRequests.filter((request) => request.method === "POST").length, 2,
+    "one rejected approval and its deliberate same-key retry are the only POSTs");
   assert.ok(capturedApiRequests.every((request) => request.method === "GET" || request.method === "POST"));
   assert.ok(capturedApiRequests.every((request) => new URL(request.url).hostname === "127.0.0.1"));
   assert.ok(capturedApiRequests.every((request) => /\/runtime$|\/(sandbox-readiness|one-video-execution-control|one-video-cost-approval)\//u.test(request.url)));

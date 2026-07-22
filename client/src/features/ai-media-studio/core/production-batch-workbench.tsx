@@ -306,17 +306,22 @@ function OneVideoExecutionControlPanel({
     if (!operationRef.current || operationRef.current.quoteKey !== quoteKey) {
       operationRef.current = { quoteKey, idempotencyKey: createCostApprovalIdempotencyKey() };
     }
-    await approvalMutation.mutateAsync({
-      planId,
-      slotId,
-      input: {
-        expectedBatchId: batchId,
-        expectedQuoteKey: quoteKey,
-        decision: "approved",
-        idempotencyKey: operationRef.current.idempotencyKey,
-      },
-    });
-    setApprovalDialogOpen(false);
+    try {
+      await approvalMutation.mutateAsync({
+        planId,
+        slotId,
+        input: {
+          expectedBatchId: batchId,
+          expectedQuoteKey: quoteKey,
+          decision: "approved",
+          idempotencyKey: operationRef.current.idempotencyKey,
+        },
+      });
+      setApprovalDialogOpen(false);
+    } catch {
+      // React Query owns the sanitized error rendered inside the dialog. Keep
+      // the same quote and idempotency key available for a deliberate retry.
+    }
   };
 
   return (
