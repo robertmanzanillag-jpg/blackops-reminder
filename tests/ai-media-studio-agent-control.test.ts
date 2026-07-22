@@ -26,7 +26,7 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     maximumVideos: 100,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
-  assert.equal(snapshot.summary.done, 18);
+  assert.equal(snapshot.summary.done, 19);
   assert.equal(snapshot.summary.running, 0);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
@@ -69,6 +69,7 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   const heyGenAccountMaximumQuote = snapshot.workItems.find((item) => item.id === "ams-agent-heygen-account-maximum-quote");
   const heldAdmission = snapshot.workItems.find((item) => item.id === "ams-agent-one-video-held-admission");
   const rosterMutationHardening = snapshot.workItems.find((item) => item.id === "ams-agent-roster-mutation-hardening");
+  const sourceAutomationSync = snapshot.workItems.find((item) => item.id === "ams-agent-source-automation-sync");
   assert.equal(sandbox?.state, "blocked");
   assert.equal(canary?.state, "backlog");
   assert.match(sandbox?.mergeGate ?? "", /Robert approves/u);
@@ -155,6 +156,12 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   assert.match(rosterMutationHardening?.acceptance.join(" ") ?? "", /fallback identities[\s\S]*cross-site[\s\S]*private fields[\s\S]*before persistence/u);
   assert.match(rosterMutationHardening?.acceptance.join(" ") ?? "", /no provider call[\s\S]*secret resolution[\s\S]*external spend/u);
   assert.match(rosterMutationHardening?.evidence.join(" ") ?? "", /954bd9f7[\s\S]*41\/41[\s\S]*14\/14[\s\S]*P0=P1=P2=P3=0[\s\S]*43\/43[\s\S]*17\/17/u);
+  assert.equal(sourceAutomationSync?.state, "done");
+  assert.equal(sourceAutomationSync?.branch, "codex/ai-media-studio-source-automation-sync");
+  assert.equal(sourceAutomationSync?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/171");
+  assert.match(sourceAutomationSync?.acceptance.join(" ") ?? "", /Server-owned adapters[\s\S]*tenant-scoped sync is bounded and deduplicated[\s\S]*redacts provider payloads[\s\S]*no script[\s\S]*render[\s\S]*video-provider[\s\S]*secret[\s\S]*spend[\s\S]*publishing[\s\S]*migration[\s\S]*deployment effect/u);
+  assert.match(sourceAutomationSync?.evidence.join(" ") ?? "", /2452b955[\s\S]*44\/44[\s\S]*26\/26[\s\S]*4\/4[\s\S]*17\/17[\s\S]*P0=P1=P2=P3=0[\s\S]*36\/36/u);
+  assert.match(sourceAutomationSync?.blockers.join(" ") ?? "", /production Kong source adapter[\s\S]*source-to-script orchestration[\s\S]*PostgreSQL rehearsal[\s\S]*Video generation[\s\S]*HeyGen[\s\S]*spend[\s\S]*publishing[\s\S]*migrations[\s\S]*deployment/iu);
   assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR1|PR16|PR13/u);
   assert.match(staging?.blockers.join(" ") ?? "", /staging target[\s\S]*explicit rehearsal approval/u);
   assert.match(staging?.nextAction ?? "", /script-batch workbench[\s\S]*separate approval[\s\S]*restored-staging rehearsal/u);

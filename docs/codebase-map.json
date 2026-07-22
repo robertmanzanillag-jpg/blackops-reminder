@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T13:40:41.186Z",
+  "generatedAt": "2026-07-22T14:16:42.235Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -94,11 +94,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 923,
-    "filesIndexed": 773,
-    "imports": 3305,
-    "routes": 503,
-    "symbols": 15213
+    "filesVisible": 927,
+    "filesIndexed": 777,
+    "imports": 3333,
+    "routes": 504,
+    "symbols": 15311
   },
   "directories": {
     ".agents/skills": {
@@ -195,10 +195,10 @@
       }
     },
     "server/ai-media-studio": {
-      "files": 182,
-      "indexed": 163,
+      "files": 183,
+      "indexed": 164,
       "kinds": {
-        "server": 182
+        "server": 183
       }
     },
     "server/replit_integrations": {
@@ -223,10 +223,10 @@
       }
     },
     "tests": {
-      "files": 240,
-      "indexed": 229,
+      "files": 243,
+      "indexed": 232,
       "kinds": {
-        "test": 240
+        "test": 243
       }
     },
     "tests/fixtures": {
@@ -13173,6 +13173,7 @@
         "./service",
         "./sources/contracts",
         "./sources/source-pagination",
+        "./sources/sync-service",
         "./strict-money-action-request",
         "./webhook-security",
         "express",
@@ -13353,6 +13354,7 @@
         "requireStrictHeldAdmissionMutation",
         "requireStrictHeldAdmissionSession",
         "requireStrictHeyGenRosterMutation",
+        "requireStrictSourceAutomationSync",
         "reservationTtlSeconds",
         "resolveProviderWebhookAccount",
         "resources",
@@ -13386,6 +13388,7 @@
         "sensitiveMutationRequestGuard",
         "service",
         "snapshotRepository",
+        "sourceAutomationSync",
         "sourceType",
         "sourcesQuerySchema",
         "sourcesResponseSchema",
@@ -13416,6 +13419,7 @@
         "${AI_MEDIA_STUDIO_API_BASE}/analytics/summary",
         "${AI_MEDIA_STUDIO_API_BASE}/automation/policy",
         "${AI_MEDIA_STUDIO_API_BASE}/automation/sources",
+        "${AI_MEDIA_STUDIO_API_BASE}/automation/sources/sync",
         "${AI_MEDIA_STUDIO_API_BASE}/dashboard",
         "${AI_MEDIA_STUDIO_API_BASE}/generations",
         "${AI_MEDIA_STUDIO_API_BASE}/governance/assets/:id/quality-review",
@@ -13689,7 +13693,8 @@
         "./fake-source-adapter",
         "./in-memory-source-repository",
         "./ingest",
-        "./source-pagination"
+        "./source-pagination",
+        "./sync-service"
       ],
       "exports": [],
       "symbols": [],
@@ -13755,6 +13760,59 @@
         "sourceListFilter",
         "unsigned",
         "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/sources/sync-service.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-operations",
+        "../core/resource-domain",
+        "./contracts",
+        "./ingest"
+      ],
+      "exports": [
+        "PublicSourceAdapterDescriptor",
+        "SourceAutomationSyncError",
+        "SourceAutomationSyncErrorCode",
+        "SourceAutomationSyncService"
+      ],
+      "symbols": [
+        "ADAPTER_KEY",
+        "MAX_SOURCE_FIELD_BYTES",
+        "SourceAutomationSyncError",
+        "SourceAutomationSyncService",
+        "adapter",
+        "adapterKey",
+        "candidate",
+        "canonicalUrl",
+        "capturedAt",
+        "categories",
+        "category",
+        "cloneJsonRecord",
+        "content",
+        "fetchSnapshot",
+        "fingerprint",
+        "guardedAdapter",
+        "indexed",
+        "isIsoDate",
+        "isPublicHttpsUrl",
+        "items",
+        "material",
+        "nextCursor",
+        "normalizeAdapterItem",
+        "normalizeJsonValue",
+        "normalized",
+        "payload",
+        "prototype",
+        "providerExternalId",
+        "rawItems",
+        "result",
+        "serialized",
+        "sourcePublishedAt",
+        "title",
+        "url"
       ],
       "routes": []
     },
@@ -21292,6 +21350,11 @@
         "PublishingPreview",
         "PublishingSchedule",
         "SocialPlatform",
+        "SourceAutomationCategory",
+        "SourceAutomationSyncEffects",
+        "SourceAutomationSyncItem",
+        "SourceAutomationSyncRequest",
+        "SourceAutomationSyncResponse",
         "SourceIntake",
         "SourceItem",
         "analyticsMetricsSchema",
@@ -21322,6 +21385,11 @@
         "publishingPreviewSchema",
         "publishingScheduleSchema",
         "socialPlatformSchema",
+        "sourceAutomationCategorySchema",
+        "sourceAutomationSyncEffectsSchema",
+        "sourceAutomationSyncItemSchema",
+        "sourceAutomationSyncRequestSchema",
+        "sourceAutomationSyncResponseSchema",
         "sourceIntakeSchema",
         "sourceItemSchema",
         "sourceRightsStatusSchema",
@@ -21361,6 +21429,11 @@
         "publishingScheduleSchema",
         "sha256DigestSchema",
         "socialPlatformSchema",
+        "sourceAutomationCategorySchema",
+        "sourceAutomationSyncEffectsSchema",
+        "sourceAutomationSyncItemSchema",
+        "sourceAutomationSyncRequestSchema",
+        "sourceAutomationSyncResponseSchema",
         "sourceIntakeFieldsSchema",
         "sourceIntakeSchema",
         "sourceItemSchema",
@@ -22097,6 +22170,7 @@
         "sandboxReadiness",
         "secureHeyGenSetupRuntime",
         "snapshot",
+        "sourceAutomationSync",
         "staging",
         "staticHeyGenOnboarding"
       ],
@@ -27879,6 +27953,114 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-source-automation-sync-contracts.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/ai-media-studio-operations",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidate",
+        "capturedAt",
+        "item",
+        "parsed",
+        "response",
+        "tooManyItems"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-automation-sync-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/analytics/in-memory-repository",
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/operations-runtime",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/publishing/in-memory",
+        "../server/ai-media-studio/routes",
+        "../server/ai-media-studio/sources/contracts",
+        "../server/ai-media-studio/sources/in-memory-source-repository",
+        "../shared/ai-media-studio-operations",
+        "express",
+        "node:assert/strict",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "body",
+        "canonicalOrigin",
+        "counters",
+        "endpoint",
+        "first",
+        "firstResponse",
+        "firstText",
+        "forceNoDevFallback",
+        "harness",
+        "marker",
+        "mutationHeaders",
+        "operationsRepositories",
+        "originalError",
+        "otherTenant",
+        "previous",
+        "rawRequest",
+        "replay",
+        "req",
+        "response",
+        "restoreDevFallback",
+        "runtime",
+        "server",
+        "sourceAdapter",
+        "sources",
+        "startHarness",
+        "text",
+        "url",
+        "userId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-source-automation-sync-service.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/sources/contracts",
+        "../server/ai-media-studio/sources/in-memory-source-repository",
+        "../server/ai-media-studio/sources/sync-service",
+        "../shared/ai-media-studio-operations",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "adapter",
+        "adapterFailure",
+        "capturedAt",
+        "counter",
+        "first",
+        "malformed",
+        "mutableAdapter",
+        "mutableItem",
+        "otherTenant",
+        "replay",
+        "repository",
+        "repositoryFailure",
+        "result",
+        "scopeA",
+        "scopeB",
+        "sensitive",
+        "serialized",
+        "service",
+        "storageFailure",
+        "stored"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-sources.test.ts",
       "kind": "test",
       "imports": [
@@ -29929,6 +30111,9 @@
     "tests/ai-media-studio-secure-heygen-verification-coordinator.test.ts",
     "tests/ai-media-studio-server-owned-cost-approval-authorization.test.ts",
     "tests/ai-media-studio-server-owned-held-admission-authorization.test.ts",
+    "tests/ai-media-studio-source-automation-sync-contracts.test.ts",
+    "tests/ai-media-studio-source-automation-sync-routes.test.ts",
+    "tests/ai-media-studio-source-automation-sync-service.test.ts",
     "tests/ai-media-studio-sources.test.ts",
     "tests/ai-media-studio-staging-rehearsal-runbook.test.ts",
     "tests/ai-media-studio-static-heygen-credential-drizzle.test.ts",

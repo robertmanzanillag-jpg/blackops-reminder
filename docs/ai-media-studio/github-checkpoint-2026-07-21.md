@@ -2,6 +2,15 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Tenant-safe source automation sync checkpoint (2026-07-22)
+
+- Branch: `codex/ai-media-studio-source-automation-sync`, preserved in draft PR [#171](https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/171) and stacked on draft PR #170.
+- Boundary: strict authenticated exact-origin JSON POST synchronizes only a server-registered adapter key and a 1–100 limit. Provider cursor/native configuration never enters or leaves the browser. Tenant identity comes from the sealed session principal.
+- Data behavior: the complete snapshot is validated and copied into plain DTOs before any content-hash upsert. Replays deduplicate within one tenant and the public result exposes only Studio-owned IDs, category and blocked governance states.
+- Review corrections: private adapter/repository errors are normalized to redacted 503 responses without generic logging; impossible dates cannot create partial writes; mutable adapter configuration, getters and nested payloads are copied in one pass before persistence.
+- Evidence: root final 44/44; checker 26/26 plus HTTP 4/4; security recheck 17/17; App QA 36/36; P0=P1=P2=P3=0; TypeScript, production build, codebase map and diff hygiene pass.
+- Safety and next gates: no production adapter or scheduler was activated. The sync creates no scripts, render/outbox, video-provider/HeyGen call, secret resolution, spend, publishing, migration or deployment. A real Kong adapter, durable server-side cursor/scheduler, rights/moderation and source-to-script orchestration remain separate reviewed slices.
+
 ## HeyGen roster mutation hardening checkpoint (2026-07-22)
 
 - Branch: `codex/ai-media-studio-roster-mutation-hardening`, preserved in draft PR [#170](https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/170) and stacked on draft PR #169.
