@@ -1,6 +1,7 @@
 import { CheckCircle2, CircleAlert, LockKeyhole, RefreshCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useHeyGenOnboardingReadiness } from "./hooks";
+import { HeyGenGuidedSetup } from "./heygen-guided-setup";
 import { HeyGenRosterSetup } from "./heygen-roster-setup";
 import type { HeyGenOnboardingReadiness } from "@shared/ai-media-studio-heygen-onboarding";
 
@@ -99,6 +100,7 @@ export function HeyGenOnboardingPanel() {
   return (
     <div className="space-y-6">
       <ReadinessPanel readiness={query.data} refreshing={query.isFetching} onRefresh={() => query.refetch().then(() => undefined)} />
+      <HeyGenGuidedSetup readiness={query.data} onReadinessRefresh={() => query.refetch().then(() => undefined)} />
       <HeyGenRosterSetup onboardingReadiness={query.data} />
     </div>
   );

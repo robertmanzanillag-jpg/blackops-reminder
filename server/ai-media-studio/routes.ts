@@ -35,6 +35,13 @@ import {
 } from "../../shared/ai-media-studio-heygen-roster";
 import { heyGenOnboardingReadinessSchema } from "../../shared/ai-media-studio-heygen-onboarding";
 import {
+  registerHeyGenCredentialReferenceRequestSchema,
+  registerHeyGenCredentialReferenceResponseSchema,
+  runHeyGenLiveVerificationFailureResponseSchema,
+  runHeyGenLiveVerificationRequestSchema,
+  runHeyGenLiveVerificationResponseSchema,
+} from "../../shared/ai-media-studio-heygen-secure-setup";
+import {
   assetQualityReviewResponseSchema,
   createAssetQualityReviewRequestSchema,
   createInfluencerGovernanceProfileRequestSchema,
@@ -100,6 +107,17 @@ import {
   HeyGenOnboardingReadinessService,
   type HeyGenOnboardingReadinessRepository,
 } from "./providers/heygen-onboarding-readiness";
+import {
+  SecureHeyGenSetupError,
+  type SecureHeyGenSetupRepository,
+} from "./provider-credentials/secure-heygen-setup-contracts";
+import { SecureHeyGenSetupService } from "./provider-credentials/secure-heygen-setup-service";
+import { StaticHeyGenVerificationService } from "./provider-credentials/static-heygen-verification-service";
+import {
+  StaticHeyGenLiveVerificationCoordinator,
+  StaticHeyGenLiveVerificationError,
+  type StaticHeyGenLiveVerificationAuthorizer,
+} from "./provider-credentials/static-heygen-verification-coordinator";
 import { DeterministicScriptService } from "./script-service";
 import { ProductionBatchError, type ProductionBatchRepository } from "./production-batches/contracts";
 import { ProductionBatchService } from "./production-batches/service";
@@ -194,6 +212,13 @@ export interface AiMediaStudioDependencies {
   };
   heyGenOnboardingReadinessRepository?: HeyGenOnboardingReadinessRepository;
   createDurableHeyGenOnboardingReadinessRepository?: () => HeyGenOnboardingReadinessRepository;
+  secureHeyGenSetupRepository?: SecureHeyGenSetupRepository;
+  createDurableSecureHeyGenSetupRepository?: () => SecureHeyGenSetupRepository;
+  staticHeyGenLiveVerificationCoordinator?: Pick<StaticHeyGenLiveVerificationCoordinator, "run">;
+  staticHeyGenLiveVerificationAuthorizer?: StaticHeyGenLiveVerificationAuthorizer;
+  createDurableStaticHeyGenLiveVerificationCoordinator?: (
+    authorizer: StaticHeyGenLiveVerificationAuthorizer,
+  ) => Pick<StaticHeyGenLiveVerificationCoordinator, "run">;
   /** Trusted server-owned calendar zone for the planning-only daily roster preview. */
   heyGenRosterDailyPlanTimeZone?: string;
   productionBatchRepository?: ProductionBatchRepository;
@@ -227,6 +252,10 @@ export interface AiMediaStudioRuntime {
   heyGenRosterPersistence: MediaStudioPersistenceStatus;
   heyGenOnboardingReadiness: HeyGenOnboardingReadinessService | undefined;
   heyGenOnboardingReadinessPersistence: MediaStudioPersistenceStatus;
+  secureHeyGenSetup: SecureHeyGenSetupService | undefined;
+  secureHeyGenSetupPersistence: MediaStudioPersistenceStatus;
+  staticHeyGenLiveVerification: Pick<StaticHeyGenLiveVerificationCoordinator, "run"> | undefined;
+  staticHeyGenLiveVerificationPersistence: MediaStudioPersistenceStatus;
   productionBatches: ProductionBatchService | undefined;
   productionBatchPersistence: MediaStudioPersistenceStatus;
   launchPreflight: LaunchPreflightService | undefined;
@@ -409,6 +438,39 @@ function createDefaultDurableHeyGenOnboardingReadinessRepository(): HeyGenOnboar
   return {
     observe: async (...args) => (await load()).observe(...args),
   };
+}
+
+function createDefaultDurableSecureHeyGenSetupRepository(): SecureHeyGenSetupRepository {
+  let pending: Promise<SecureHeyGenSetupRepository> | undefined;
+  const load = () => pending ??= Promise.all([
+    import("../db"),
+    import("./provider-credentials/drizzle-secure-heygen-setup-repository"),
+  ]).then(([database, adapter]) => new adapter.DrizzleSecureHeyGenSetupRepository(database.db));
+  return {
+    setup: async (...args) => (await load()).setup(...args),
+  };
+}
+
+function createDefaultDurableStaticHeyGenLiveVerificationCoordinator(
+  authorizer: StaticHeyGenLiveVerificationAuthorizer,
+): Pick<StaticHeyGenLiveVerificationCoordinator, "run"> {
+  let pending: Promise<StaticHeyGenLiveVerificationCoordinator> | undefined;
+  const load = () => pending ??= Promise.all([
+    import("../db"),
+    import("./provider-credentials/drizzle-static-heygen-verification-context-loader"),
+    import("./provider-credentials/drizzle-static-heygen-verification-replay-reader"),
+    import("./provider-credentials/drizzle-static-heygen-verification-repository"),
+    import("./provider-credentials/static-heygen-secret-resolver"),
+  ]).then(([database, contextAdapter, replayAdapter, evidenceAdapter, secretAdapter]) => new StaticHeyGenLiveVerificationCoordinator({
+    authorizer,
+    replayReader: new replayAdapter.DrizzleStaticHeyGenVerificationReplayReader(database.db),
+    contextLoader: new contextAdapter.DrizzleStaticHeyGenVerificationContextLoader(database.db),
+    secretResolver: secretAdapter.createStaticHeyGenSecretResolver(),
+    evidenceService: new StaticHeyGenVerificationService(
+      new evidenceAdapter.DrizzleStaticHeyGenVerificationRepository(database.db),
+    ),
+  }));
+  return { run: async (...args) => (await load()).run(...args) };
 }
 
 function createDefaultDurableProductionBatchRepository(): ProductionBatchRepository {
@@ -636,6 +698,84 @@ function selectHeyGenOnboardingReadinessRuntime(
   };
 }
 
+function selectSecureHeyGenSetupRuntime(
+  dependencies: AiMediaStudioDependencies,
+  databaseUrl: string | undefined,
+): { service: SecureHeyGenSetupService | undefined; status: MediaStudioPersistenceStatus } {
+  if (dependencies.secureHeyGenSetupRepository) {
+    return {
+      service: new SecureHeyGenSetupService(dependencies.secureHeyGenSetupRepository),
+      status: { mode: "injected", available: true, durable: false, reason: "Secure HeyGen setup repository supplied by the composition caller" },
+    };
+  }
+  if (configuredDatabase(databaseUrl)) {
+    try {
+      const repository = (dependencies.createDurableSecureHeyGenSetupRepository
+        ?? createDefaultDurableSecureHeyGenSetupRepository)();
+      return {
+        service: new SecureHeyGenSetupService(repository),
+        status: { mode: "drizzle", available: true, durable: true, reason: "PostgreSQL/Drizzle secure HeyGen setup selected" },
+      };
+    } catch (error) {
+      return {
+        service: undefined,
+        status: { mode: "unavailable", available: false, durable: false,
+          reason: `Secure HeyGen setup initialization failed: ${error instanceof Error ? error.message : "unknown error"}` },
+      };
+    }
+  }
+  return {
+    service: undefined,
+    status: { mode: "unavailable", available: false, durable: false,
+      reason: "DATABASE_URL or an injected secure HeyGen setup repository is required" },
+  };
+}
+
+function selectStaticHeyGenLiveVerificationRuntime(
+  dependencies: AiMediaStudioDependencies,
+  databaseUrl: string | undefined,
+): {
+  coordinator: Pick<StaticHeyGenLiveVerificationCoordinator, "run"> | undefined;
+  status: MediaStudioPersistenceStatus;
+} {
+  if (dependencies.staticHeyGenLiveVerificationCoordinator) {
+    return {
+      coordinator: dependencies.staticHeyGenLiveVerificationCoordinator,
+      status: { mode: "injected", available: true, durable: false,
+        reason: "Explicit live HeyGen verification coordinator supplied by the composition caller" },
+    };
+  }
+  if (!dependencies.staticHeyGenLiveVerificationAuthorizer) {
+    return {
+      coordinator: undefined,
+      status: { mode: "unavailable", available: false, durable: false,
+        reason: "An explicit server-side live verification authorizer is required" },
+    };
+  }
+  if (configuredDatabase(databaseUrl)) {
+    try {
+      const coordinator = (dependencies.createDurableStaticHeyGenLiveVerificationCoordinator
+        ?? createDefaultDurableStaticHeyGenLiveVerificationCoordinator)(dependencies.staticHeyGenLiveVerificationAuthorizer);
+      return {
+        coordinator,
+        status: { mode: "drizzle", available: true, durable: true,
+          reason: "Explicitly authorized PostgreSQL/Drizzle live HeyGen verification selected" },
+      };
+    } catch (error) {
+      return {
+        coordinator: undefined,
+        status: { mode: "unavailable", available: false, durable: false,
+          reason: `Live HeyGen verification initialization failed: ${error instanceof Error ? error.message : "unknown error"}` },
+      };
+    }
+  }
+  return {
+    coordinator: undefined,
+    status: { mode: "unavailable", available: false, durable: false,
+      reason: "DATABASE_URL and an explicit live verification authorizer are required" },
+  };
+}
+
 function unavailableGovernanceRepository(reason: string): GovernanceRepository {
   return new Proxy({}, {
     get: () => async () => { throw new MediaStudioPersistenceUnavailableError(reason); },
@@ -663,6 +803,41 @@ function requireCapability(status: MediaStudioPersistenceStatus, label: string) 
     if (status.available) { next(); return; }
     res.status(503).json({ error: `${label} persistence unavailable`, code: "persistence_unavailable" });
   };
+}
+
+function aiMediaStudioOriginMatchesRequest(req: Request, origin: string): boolean {
+  const host = req.get("host");
+  if (!host) return false;
+  try {
+    const originUrl = new URL(origin);
+    if (originUrl.host === host) return true;
+    const configuredOrigins = [process.env.PUBLIC_APP_URL, process.env.PUBLIC_BASE_URL, process.env.EXPO_PUBLIC_DOMAIN]
+      .filter((value): value is string => Boolean(value?.trim()))
+      .map((value) => value.startsWith("http") ? value : `https://${value}`);
+    return configuredOrigins.some((value) => {
+      try { return new URL(value).origin === originUrl.origin; } catch { return false; }
+    });
+  } catch {
+    return false;
+  }
+}
+
+function requireSameOriginJsonAiMediaStudioMutation(req: Request, res: Response, next: NextFunction): void {
+  const fetchSite = req.get("sec-fetch-site");
+  if (fetchSite && !["same-origin", "same-site", "none"].includes(fetchSite)) {
+    res.status(403).json({ error: "Cross-site AI Media Studio requests are not allowed" });
+    return;
+  }
+  const origin = req.get("origin");
+  if (origin && !aiMediaStudioOriginMatchesRequest(req, origin)) {
+    res.status(403).json({ error: "AI Media Studio request origin is not allowed" });
+    return;
+  }
+  if (!req.is("application/json")) {
+    res.status(415).json({ error: "AI Media Studio requests must use application/json" });
+    return;
+  }
+  next();
 }
 
 const idSchema = z.string().trim().min(1).max(128).regex(/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u);
@@ -847,6 +1022,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     ? new HeyGenRosterDailyPlanService(heyGenRosterSelection.service)
     : undefined;
   const heyGenOnboardingReadinessSelection = selectHeyGenOnboardingReadinessRuntime(dependencies, databaseUrl);
+  const secureHeyGenSetupSelection = selectSecureHeyGenSetupRuntime(dependencies, databaseUrl);
+  const staticHeyGenLiveVerificationSelection = selectStaticHeyGenLiveVerificationRuntime(dependencies, databaseUrl);
   const productionBatchSelection = selectProductionBatchRuntime(dependencies, databaseUrl);
   const launchPreflightSelection = selectLaunchPreflightRuntime(dependencies, databaseUrl);
   const sandboxReadinessSelection = selectSandboxReadinessRuntime(dependencies, databaseUrl);
@@ -1094,6 +1271,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.setHeader("X-AI-Media-Studio-Governance", governanceSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-HeyGen-Roster", heyGenRosterSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-HeyGen-Onboarding", heyGenOnboardingReadinessSelection.status.mode);
+    res.setHeader("X-AI-Media-Studio-HeyGen-Secure-Setup", secureHeyGenSetupSelection.status.mode);
+    res.setHeader("X-AI-Media-Studio-HeyGen-Live-Verification", staticHeyGenLiveVerificationSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-Production-Batches", productionBatchSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-Sandbox-Readiness", sandboxReadinessSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-One-Video-Execution-Control", oneVideoExecutionControlSelection.status.mode);
@@ -1107,6 +1286,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.status(available ? 200 : 503).json({ persistence: persistence.status, catalog: core.status,
       operations: operations.status, governance: governanceSelection.status,
       heyGenRoster: heyGenRosterSelection.status, heyGenOnboardingReadiness: heyGenOnboardingReadinessSelection.status,
+      secureHeyGenSetup: secureHeyGenSetupSelection.status,
+      staticHeyGenLiveVerification: staticHeyGenLiveVerificationSelection.status,
       productionBatches: productionBatchSelection.status,
       sandboxReadiness: sandboxReadinessSelection.status,
       oneVideoExecutionControl: oneVideoExecutionControlSelection.status });
@@ -1123,6 +1304,11 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const requireGovernance = requireCapability(governanceSelection.status, "AI Media Studio governance");
   const requireHeyGenRoster = requireCapability(heyGenRosterSelection.status, "HeyGen roster");
   const requireHeyGenOnboardingReadiness = requireCapability(heyGenOnboardingReadinessSelection.status, "HeyGen onboarding readiness");
+  const requireSecureHeyGenSetup = requireCapability(secureHeyGenSetupSelection.status, "Secure HeyGen setup");
+  const requireStaticHeyGenLiveVerification = requireCapability(
+    staticHeyGenLiveVerificationSelection.status,
+    "Live HeyGen verification",
+  );
   const requireProductionBatches = requireCapability(productionBatchSelection.status, "AI Media Studio production batch");
   const requireLaunchPreflight = requireCapability(launchPreflightSelection.status, "AI Media Studio launch preflight");
   const requireSandboxReadiness = requireCapability(sandboxReadinessSelection.status, "AI Media Studio sandbox readiness");
@@ -1167,6 +1353,53 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     const readiness = await heyGenOnboardingReadinessSelection.service!.get(scope);
     res.json(heyGenOnboardingReadinessSchema.parse(readiness));
   }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/static-credential-reference`,
+    (req, res, next) => { res.set("Cache-Control", "private, no-store"); getCurrentUserId(req); next(); },
+    requireSameOriginJsonAiMediaStudioMutation,
+    requireSecureHeyGenSetup, asyncRoute(async (req, res) => {
+      const parsed = registerHeyGenCredentialReferenceRequestSchema.safeParse(req.body);
+      if (!parsed.success || Object.keys(req.query).length !== 0) throw new SecureHeyGenSetupError("INVALID_REQUEST");
+      const ownerUserId = getCurrentUserId(req);
+      const receipt = await secureHeyGenSetupSelection.service!.setup({
+        scope: { ownerUserId, workspaceId: core.workspaceId },
+        actorUserId: ownerUserId,
+        idempotencyKey: parsed.data.idempotencyKey,
+      });
+      res.status(receipt.outcome === "created" ? 201 : 200)
+        .json(registerHeyGenCredentialReferenceResponseSchema.parse(receipt));
+    }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/live-verification`,
+    (req, res, next) => { res.set("Cache-Control", "private, no-store"); getCurrentUserId(req); next(); },
+    requireSameOriginJsonAiMediaStudioMutation,
+    requireStaticHeyGenLiveVerification, asyncRoute(async (req, res) => {
+      const parsed = runHeyGenLiveVerificationRequestSchema.safeParse(req.body);
+      if (!parsed.success || Object.keys(req.query).length !== 0) {
+        throw new StaticHeyGenLiveVerificationError("INVALID_REQUEST");
+      }
+      const result = await staticHeyGenLiveVerificationSelection.coordinator!.run({
+        scope: { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId },
+        idempotencyKey: parsed.data.idempotencyKey,
+        authorizationContext: req,
+      });
+      if (result.outcome === "provider_failed") {
+        res.status(503).json(runHeyGenLiveVerificationFailureResponseSchema.parse(result));
+        return;
+      }
+      res.status(result.outcome === "recorded" ? 201 : 200).json(runHeyGenLiveVerificationResponseSchema.parse({
+        outcome: result.outcome,
+        verification: {
+          providerKey: "heygen",
+          state: "verified",
+          avatarCount: result.verification.avatarCount,
+          voiceCount: result.verification.voiceCount,
+          observedAt: result.verification.verifiedAt,
+          expiresAt: result.verification.expiresAt,
+        },
+        effects: result.effects,
+      }));
+    }));
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster`, requireHeyGenRoster, asyncRoute(async (req, res) => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
@@ -1684,6 +1917,21 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   }
 
   router.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (error instanceof StaticHeyGenLiveVerificationError) {
+      const message = error.code === "INVALID_REQUEST" ? "Invalid live HeyGen verification request"
+        : error.code === "UNAUTHORIZED" ? "Live HeyGen verification is not authorized"
+          : "Live HeyGen verification is unavailable";
+      res.status(error.statusCode).json({ error: message, code: error.code });
+      return;
+    }
+    if (error instanceof SecureHeyGenSetupError) {
+      const message = error.code === "INVALID_REQUEST" ? "Invalid secure HeyGen setup request"
+        : error.code === "CONFLICT" || error.code === "AMBIGUOUS"
+          ? "Secure HeyGen setup conflicts with existing provider metadata"
+          : "Secure HeyGen setup is unavailable";
+      res.status(error.statusCode).json({ error: message, code: error.code });
+      return;
+    }
     if (error instanceof HeyGenOnboardingReadinessError) {
       const message = error.code === "INVALID_REQUEST"
         ? "Invalid HeyGen onboarding readiness request"
@@ -1774,6 +2022,10 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     heyGenRosterPersistence: heyGenRosterSelection.status,
     heyGenOnboardingReadiness: heyGenOnboardingReadinessSelection.service,
     heyGenOnboardingReadinessPersistence: heyGenOnboardingReadinessSelection.status,
+    secureHeyGenSetup: secureHeyGenSetupSelection.service,
+    secureHeyGenSetupPersistence: secureHeyGenSetupSelection.status,
+    staticHeyGenLiveVerification: staticHeyGenLiveVerificationSelection.coordinator,
+    staticHeyGenLiveVerificationPersistence: staticHeyGenLiveVerificationSelection.status,
     productionBatches: productionBatchSelection.service,
     productionBatchPersistence: productionBatchSelection.status,
     launchPreflight: launchPreflightSelection.service,

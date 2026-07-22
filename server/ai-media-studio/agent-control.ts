@@ -293,6 +293,33 @@ const workItems: readonly AiMediaStudioAgentWorkItem[] = [
     nextAction: "Keep this stacked checkpoint unmerged; Robert later supplies the API key only through the secret manager and separately approves live read-only verification.",
   },
   {
+    id: "ams-agent-secure-heygen-setup-runtime",
+    title: "Guided secure HeyGen setup and explicit verification runtime",
+    owner: "Dedicated HeyGen onboarding and verification agents",
+    state: "done",
+    branch: "codex/ai-media-studio-secure-heygen-setup-runtime",
+    pullRequestUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/161",
+    acceptance: [
+      "Robert adds the API key only as AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY in the deployment secret manager",
+      "The browser registers only a fixed allowlisted reference and accepts 5–10 avatar-look and voice pairs for exactly ten blocked videos each",
+      "Live verification is a separate explicitly authorized GET-only action with immutable evidence and no generation or spend",
+      "The action center shows the current safe next step without requesting or exposing credential material",
+    ],
+    mergeGate: "Focused, PostgreSQL, TypeScript, build, independent checker, security and App QA evidence must pass before a stacked draft PR is ready.",
+    evidence: [
+      "Draft PR #161 preserves the secure setup checkpoint on GitHub",
+      "Focused setup suite 22/22, PostgreSQL 1/1, browser 1/1 and production build passed",
+      "Independent security and App QA reviews report P0=P1=P2=P3=0; checker found no functional P0/P1",
+      "Public setup contracts reject API keys, caller-selected secret references and provider account IDs",
+    ],
+    blockers: [
+      "PR28 and PR29 migrations remain pending and unapplied",
+      "No live verification call is authorized; quote, generation, spend, publishing and deployment remain separate gates",
+      "The quote-to-human-approval binding must be corrected before any spend action is mounted",
+    ],
+    nextAction: "Keep draft PR #161 unmerged; then Robert supplies the secret through the deployment secret manager and the avatar/voice IDs through the guided roster before separately authorizing GET-only verification.",
+  },
+  {
     id: "ams-agent-staging-migrations",
     title: "Ordered staging migration and restart rehearsal",
     owner: "App QA + database release gate",
