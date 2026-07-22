@@ -54,7 +54,7 @@ test("tests a verified top creator without fabricating expected revenue", () => 
   assert.equal(plan.decisions[0].decision, "test");
   assert.equal(plan.decisions[0].observed.totalViews, 0);
   assert.equal(plan.goal.projection, "insufficient_real_posts");
-  assert.equal(plan.operatingPolicy.dailyTestClips, 5);
+  assert.equal(plan.operatingPolicy.dailyTestClips, 10);
   assert.equal(plan.decisions[0].assignments.length, 7);
   assert.deepEqual(
     new Set(plan.decisions[0].assignments.map((row) => row.strategyId)),
@@ -88,8 +88,12 @@ test("requires an explicit runtime opt-in before enabling Metricool publishing",
   assert.equal(authorizedRows[0].publishAllowed, true);
   assert.equal(authorizedRows[1].status, "blocked_media_missing");
   assert.equal(authorizedRows[1].publishAllowed, false);
-  assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: 20 }).operatingPolicy.dailyTestClips, 5);
-  assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: -3 }).operatingPolicy.dailyTestClips, 5);
+  const capped = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: 20 });
+  const floored = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: -3 });
+  assert.equal(capped.operatingPolicy.dailyTestClips, 10);
+  assert.equal(capped.operatingPolicy.configuredDailyCeiling, 15);
+  assert.equal(floored.operatingPolicy.dailyTestClips, 10);
+  assert.equal(floored.operatingPolicy.configuredDailyCeiling, 10);
 });
 
 test("starts at five daily and reduces only after enough verified poor results", () => {
@@ -190,6 +194,26 @@ test("scales only after real qualifying posts and keeps exploration", () => {
   assert.equal(plan.decisions[0].assignments.filter((row) => row.strategyId === "direct_insight").length, 5);
   assert.equal(plan.goal.measuredViews, 36000);
   assert.equal(plan.goal.measuredEarningsUsd, 54);
+});
+
+test("raises the ten-post baseline only after enough verified winning posts", () => {
+  const metrics = Array.from({ length: 15 }, (_, index) => ({
+    campaignId: campaign.id,
+    strategyId: "direct_insight",
+    finalStatus: "published",
+    publishedPostUrl: publishedPostUrlFor(index + 20),
+    views: 10_000 + index * 100,
+    earningsUsd: 15,
+    qualifiedForPayout: true,
+    metricEvidenceVerified: true,
+    payoutEvidenceVerified: true,
+    qualificationEvidenceVerified: true,
+  }));
+  const plan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics, now, targetDailyClips: 15 });
+  assert.equal(plan.operatingPolicy.dailyTestClips, 15);
+  assert.equal(plan.operatingPolicy.minimumInitialDailyClips, 10);
+  assert.equal(plan.operatingPolicy.maximumDailyClipsPerAccount, 15);
+  assert.equal(plan.operatingPolicy.volumeReason, "increase_verified_winners");
 });
 
 test("queued or scheduled rows never count as published performance", () => {

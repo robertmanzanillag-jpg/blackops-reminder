@@ -321,12 +321,12 @@ export function buildStreamerGrowthCeoPlan({
   now = new Date(),
   monthlyViewsTarget = 1_000_000,
   publishingAuthorized = false,
-  targetDailyClips = 5,
+  targetDailyClips = 10,
 }) {
   const parsedTargetDailyClips = Number(targetDailyClips);
   const safeConfiguredDailyClips = Number.isFinite(parsedTargetDailyClips)
-    ? Math.max(5, Math.min(8, Math.trunc(parsedTargetDailyClips)))
-    : 5;
+    ? Math.max(10, Math.min(15, Math.trunc(parsedTargetDailyClips)))
+    : 10;
   const decisions = campaigns.map((campaign) => campaignDecision(campaign, metrics, now, publishingAuthorized))
     .sort((a, b) => b.priorityScore - a.priorityScore || a.title.localeCompare(b.title));
   const campaignById = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
@@ -346,14 +346,14 @@ export function buildStreamerGrowthCeoPlan({
   const dailyTestClips = !active.length
     ? 0
     : actualPublishedRows.length < 15
-      ? 5
+      ? 10
       : recutting
-        ? 2
+        ? 10
         : scaling.length
-          ? Math.max(6, safeConfiguredDailyClips)
+          ? Math.max(12, safeConfiguredDailyClips)
           : optimizing
-            ? 4
-            : 5;
+            ? 10
+            : 10;
   const volumeReason = !active.length
     ? "no_active_campaign"
     : actualPublishedRows.length < 15
@@ -386,10 +386,10 @@ export function buildStreamerGrowthCeoPlan({
     },
     operatingPolicy: {
       dailyTestClips,
-      initialDailyClips: 5,
-      minimumInitialDailyClips: 5,
+      initialDailyClips: 10,
+      minimumInitialDailyClips: 10,
       configuredDailyCeiling: safeConfiguredDailyClips,
-      maximumDailyClipsPerAccount: 8,
+      maximumDailyClipsPerAccount: 15,
       volumeReason,
       exploitPercent: scaling.length ? 70 : 0,
       explorePercent: scaling.length ? 30 : 100,
@@ -486,7 +486,7 @@ async function main() {
     row.qualificationEvidenceVerified = row.payoutEvidenceVerified;
   }
   const publishingAuthorized = process.env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED === "true";
-  const targetDailyClips = process.env.CLIPPERS_TARGET_DAILY_CLIPS || 5;
+  const targetDailyClips = process.env.CLIPPERS_TARGET_DAILY_CLIPS || 10;
   const plan = buildStreamerGrowthCeoPlan({ campaigns, metrics, publishingAuthorized, targetDailyClips });
   await mkdir(reportDir, { recursive: true });
   for (const decision of plan.decisions) {
