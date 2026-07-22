@@ -253,15 +253,19 @@ export function buildBlackRoomFacebookCaption(
 
 export function buildBlackRoomYouTubeCaption(input: BlackRoomMetricoolScheduleInput): string {
   const fullVideo = input.language === "es" ? "Set completo" : "Full set";
-  return `${input.caption.trim()}\n\n${fullVideo}: ${blackRoomYoutubeWatchUrl(input.sourceVideoId)}\n#Shorts #BlackRoom`;
+  const hashtags = isBlackRoomYouTubeShort(input) ? "#Shorts #BlackRoom" : "#BlackRoom #DJSet";
+  return `${input.caption.trim()}\n\n${fullVideo}: ${blackRoomYoutubeWatchUrl(input.sourceVideoId)}\n${hashtags}`;
 }
 
-export function blackRoomMetricoolNetworks(input: BlackRoomMetricoolScheduleInput): BlackRoomMetricoolNetwork[] {
-  const isShort = input.videoFormat === "vertical"
+export function isBlackRoomYouTubeShort(input: Pick<BlackRoomMetricoolScheduleInput, "videoFormat" | "durationSeconds">): boolean {
+  return input.videoFormat === "vertical"
     && Number.isFinite(input.durationSeconds)
     && input.durationSeconds >= 3
     && input.durationSeconds <= 178;
-  return isShort ? ["tiktok", "facebook", "youtube"] : ["tiktok", "facebook"];
+}
+
+export function blackRoomMetricoolNetworks(_input: BlackRoomMetricoolScheduleInput): BlackRoomMetricoolNetwork[] {
+  return ["tiktok", "facebook", "youtube"];
 }
 
 export function buildMetricoolPayload(
@@ -278,7 +282,6 @@ export function buildMetricoolPayload(
     draft: false,
     firstCommentText: "",
     hasNotReadNotes: false,
-    media: { mediaId },
     mediaAltText: [],
     providers: [{ network }],
     publicationDate: { dateTime: input.publicationDateTime, timezone },
@@ -286,6 +289,7 @@ export function buildMetricoolPayload(
     smartLinkData: { ids: [] },
     text: caption,
   };
+  if (mediaId) payload.media = { mediaId };
   if (network === "tiktok") payload.tiktokData = {
       disableComment: false,
       disableDuet: false,
@@ -302,10 +306,12 @@ export function buildMetricoolPayload(
     title: postTitle || "BlackRoom DJ clip",
   };
   if (network === "youtube") payload.youtubeData = {
-    title: postTitle || "BlackRoom DJ Short",
-    type: "short",
+    title: postTitle || (isBlackRoomYouTubeShort(input) ? "BlackRoom DJ Short" : "BlackRoom DJ set"),
+    type: isBlackRoomYouTubeShort(input) ? "short" : "video",
     privacy: "public",
-    tags: ["BlackRoom", "DJ", "Music", "Shorts"],
+    tags: isBlackRoomYouTubeShort(input)
+      ? ["BlackRoom", "DJ", "Music", "Shorts"]
+      : ["BlackRoom", "DJ", "Music", "DJ Set"],
     category: "MUSIC",
     madeForKids: false,
   };
@@ -326,9 +332,13 @@ export function buildMetricoolFacebookPayload(input: BlackRoomMetricoolScheduleI
 }
 
 export function buildMetricoolYouTubeShortPayload(input: BlackRoomMetricoolScheduleInput, mediaId: string) {
-  if (!blackRoomMetricoolNetworks(input).includes("youtube")) {
+  if (!isBlackRoomYouTubeShort(input)) {
     throw new Error("BlackRoom YouTube Shorts require a vertical clip between 3 and 178 seconds");
   }
+  return buildMetricoolPayload(input, mediaId, "youtube", buildBlackRoomYouTubeCaption(input));
+}
+
+export function buildMetricoolYouTubePayload(input: BlackRoomMetricoolScheduleInput, mediaId: string) {
   return buildMetricoolPayload(input, mediaId, "youtube", buildBlackRoomYouTubeCaption(input));
 }
 
@@ -413,6 +423,7 @@ export async function scheduleBlackRoomMetricoolPost(
     verifyOnly?: boolean;
     verificationAttempts?: number;
     verificationIntervalMs?: number;
+    normalizationRetryDelayMs?: number;
     networks?: BlackRoomMetricoolNetwork[];
   } = {},
 ): Promise<BlackRoomMetricoolReceipt> {
@@ -468,12 +479,14 @@ export async function scheduleBlackRoomMetricoolPost(
   }
   for (const network of missingNetworks) {
     const payload = buildMetricoolPayload(input, "", network, captions[network]);
-    // The live MCP schema exposes mediaFiles for attached files. Keep the
-    // public MP4 in info.media too, so non-ChatGPT MCP clients retain media.
-    payload.media = [input.mediaUrl];
+    // createScheduledPost normalizes `mediaFiles` and injects the resulting
+    // media into the scheduled post. Sending the same URL in `info.media` as
+    // well makes Metricool attach the video twice; Facebook then rejects the
+    // post because a Reel/Post accepts only one video.
+    delete payload.media;
     let scheduled: any;
     try {
-      scheduled = await callMetricoolMcpTool(fetcher, token, "createScheduledPost", {
+      const createArgs = {
         date: mcpDate,
         blogId: String(blogId),
         info: JSON.stringify(payload),
@@ -481,7 +494,21 @@ export async function scheduleBlackRoomMetricoolPost(
           download_url: input.mediaUrl,
           file_id: `blackroom-${input.sourceVideoId}-${network}.mp4`,
         }],
-      });
+      };
+      const normalizationAttempts = 3;
+      const normalizationRetryDelayMs = Math.max(0, Math.min(10_000, options.normalizationRetryDelayMs ?? 1_500));
+      for (let attempt = 1; attempt <= normalizationAttempts; attempt += 1) {
+        try {
+          scheduled = await callMetricoolMcpTool(fetcher, token, "createScheduledPost", createArgs);
+          break;
+        } catch (error) {
+          const canRetryNormalization = error instanceof Error
+            && /Failed to normalize media/i.test(error.message)
+            && attempt < normalizationAttempts;
+          if (!canRetryNormalization) throw error;
+          if (normalizationRetryDelayMs) await new Promise((resolve) => setTimeout(resolve, attempt * normalizationRetryDelayMs));
+        }
+      }
     } catch (error) {
       if (error instanceof Error && /MCP createScheduledPost failed(?: with HTTP 4\d\d|:)/.test(error.message)) throw error;
       throw new BlackRoomMetricoolUncertainError(

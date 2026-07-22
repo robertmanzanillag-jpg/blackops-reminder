@@ -15,6 +15,7 @@ import {
   markBlackRoomNetworkUncertain,
   reserveBlackRoomLedgerEntry,
   resetBlackRoomNetworkAttempt,
+  requiredBlackRoomReceiptNetworks,
   scheduleBlackRoomLedgerEntry,
   selectPublishableBlackRoomReservation,
   shouldRunBlackRoomWorker,
@@ -105,10 +106,17 @@ test("prompt stops after rendering and reservation so deterministic publisher ow
   assert.match(prompt, /tiempos absolutos del set original/);
   assert.match(prompt, /debajo de 500 MB/);
   assert.match(prompt, /cercano a 5 Mbps/);
-  assert.match(prompt, /TikTok @blackroom\.clipss, la página de clips de Facebook y YouTube Shorts/);
+  assert.match(prompt, /TikTok @blackroom\.clipss, la página de clips de Facebook y YouTube/);
   assert.match(prompt, /evidencia inequívoca de Metricool para TikTok, Facebook/);
   assert.match(prompt, /enlace exacto del video completo de YouTube/);
-  assert.match(prompt, /verticales de hasta 178 segundos también se publican como Shorts/);
+  assert.match(prompt, /horizontales y largos se publican como videos normales de YouTube/);
+  assert.match(prompt, /cortes de 300 y 600 segundos deben ser horizontales/);
+});
+
+test("requires all three Metricool receipts for vertical, horizontal, short, and long clips", () => {
+  assert.deepEqual(requiredBlackRoomReceiptNetworks({ format: "vertical", durationSeconds: 30 }), ["tiktok", "facebook", "youtube"]);
+  assert.deepEqual(requiredBlackRoomReceiptNetworks({ format: "horizontal", durationSeconds: 30 }), ["tiktok", "facebook", "youtube"]);
+  assert.deepEqual(requiredBlackRoomReceiptNetworks({ format: "horizontal", durationSeconds: 600 }), ["tiktok", "facebook", "youtube"]);
 });
 
 test("past BlackRoom slots roll forward while future slots keep their target date", () => {
