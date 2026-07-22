@@ -26,9 +26,9 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     maximumVideos: 100,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
-  assert.equal(snapshot.summary.done, 4);
+  assert.equal(snapshot.summary.done, 5);
   assert.equal(snapshot.summary.running, 0);
-  assert.equal(snapshot.summary.ready, 1);
+  assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
   assert.equal(new Set(snapshot.workItems.map((item) => item.id)).size, snapshot.workItems.length);
   for (const item of snapshot.workItems) {
@@ -62,13 +62,14 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   assert.match(durablePlan?.evidence.join(" ") ?? "", /PostgreSQL 16[\s\S]*5→50[\s\S]*10→100/u);
   assert.match(durablePlan?.evidence.join(" ") ?? "", /checker[\s\S]*App QA[\s\S]*P0=P1=P2=0/u);
   assert.match(durablePlan?.blockers.join(" ") ?? "", /Merge[\s\S]*sandbox[\s\S]*spend[\s\S]*deployment/u);
-  assert.equal(durableScriptBatch?.state, "ready");
+  assert.equal(durableScriptBatch?.state, "done");
+  assert.equal(durableScriptBatch?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/141");
   assert.match(durableScriptBatch?.acceptance.join(" ") ?? "", /ten eligible Kong sources[\s\S]*every blocked slot/u);
   assert.match(durableScriptBatch?.acceptance.join(" ") ?? "", /Legacy generation[\s\S]*no provider[\s\S]*budget[\s\S]*render[\s\S]*outbox/u);
   assert.match(durableScriptBatch?.evidence.join(" ") ?? "", /PostgreSQL 16[\s\S]*5→50[\s\S]*10→100[\s\S]*zero launch side effects/u);
   assert.match(durableScriptBatch?.evidence.join(" ") ?? "", /checker[\s\S]*P0=P1=P2=0/u);
   assert.match(durableScriptBatch?.evidence.join(" ") ?? "", /App QA[\s\S]*P0=P1=P2=0/u);
-  assert.match(durableScriptBatch?.blockers.join(" ") ?? "", /GitHub PR checkpoint[\s\S]*Clippers chunk warning[\s\S]*deployment only/u);
+  assert.match(durableScriptBatch?.blockers.join(" ") ?? "", /Merge[\s\S]*sandbox[\s\S]*spend[\s\S]*deployment[\s\S]*Clippers chunk warning/u);
   assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR1|PR16|PR13/u);
   assert.match(staging?.blockers.join(" ") ?? "", /staging target[\s\S]*explicit rehearsal approval/u);
   assert.match(staging?.nextAction ?? "", /script-batch workbench[\s\S]*separate approval[\s\S]*restored-staging rehearsal/u);

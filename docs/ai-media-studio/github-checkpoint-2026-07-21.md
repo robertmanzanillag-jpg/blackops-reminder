@@ -4,10 +4,10 @@ Purpose: preserve the current AI Media Studio delivery state in GitHub before th
 
 ## Active local work: durable production script batch
 
-- Branch: `codex/ai-media-studio-durable-script-batch`, stacked on reviewed draft PR #136. Backend and frontend makers have non-overlapping ownership; no commit or PR exists yet.
+- Branch: `codex/ai-media-studio-durable-script-batch`, commit `258b969f`, preserved as mergeable draft PR #141 and stacked on reviewed draft PR #136.
 - Target: select exactly ten tenant-eligible Kong sources, persist deterministic draft scripts for every one of the 50–100 blocked slots, and expose a provider-neutral production-batch workbench.
 - Safety boundary: plan and slots remain blocked; no budget reservation, launch intent, render job, outbox command, provider submission, network call, spend, publication, migration application, secret change or deployment is authorized.
-- Evidence complete: focused contracts/routes/UI and legacy-bypass checks pass; owned PostgreSQL 16 applies the exact 22-pair chain and proves 5→50, 10→100, replay/concurrency, tenant isolation, source refresh, late rollback and zero launch side effects; TypeScript, production build and the refreshed codebase map pass. Independent checker and App QA are P0=P1=P2=0 after two fixed UI error-message findings. The inherited Clippers chunk warning remains a deployment-only blocker; no deployment is requested.
+- Evidence complete: focused contracts/routes/UI and legacy-bypass checks pass; owned PostgreSQL 16 applies the exact 22-pair chain and proves 5→50, 10→100, replay/concurrency, tenant isolation, source refresh, late rollback and zero launch side effects; TypeScript, production build and the refreshed codebase map pass. Independent checker and App QA are P0=P1=P2=0 after two fixed UI error-message findings. The inherited Clippers chunk warning remains a deployment-only blocker; no merge or deployment is requested.
 
 ## Active local checkpoint: durable 5–10 avatar roster plan bridge
 
