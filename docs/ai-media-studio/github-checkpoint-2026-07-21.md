@@ -2,6 +2,17 @@
 
 Purpose: preserve the current AI Media Studio delivery state in GitHub before the active Codex session loses context or credits. It does not deploy, apply migrations, call providers, post to social platforms, create live OAuth sessions, or touch secrets.
 
+## Active local work: offline launch preflight
+
+- Branch: `codex/ai-media-studio-offline-launch-preflight`, stacked exactly on draft PR #144. No PR URL has been assigned to this branch yet.
+- PR #144 bridge: the authenticated production-batch workbench now requires one explicit review confirmation per creator, covering all ten selected scripts for each of the exact 5–10 creators. Only the resulting exact `approved_ready` plan/batch identity enables the preflight read.
+- Read boundary: `GET /api/ai-media-studio/production-batches/:planId/launch-preflight` derives one coherent PostgreSQL-clock observation with exactly 14 ordered gates: batch integrity, plan window, source eligibility, local provider binding, governance coverage, launch intent, content approval, policy/kill switch, live provider verification, maximum quote, sandbox proof, human launch approval, authority snapshot, and budget/admission capacity. Every gate preserves the 5–10 × 10 shape (50–100 slots) and returns only bounded state, reason, counts and safe next-action codes.
+- Safety boundary: the response is `source=derived_read_only`, `canGenerate=false`, `sandboxExecutionAllowed=false`, `spendAuthorized=false`, `noSpend=true` and `authoritativeForAdmission=false`. All seven effect flags are false. The GET creates no intent, evidence, snapshot, reservation, render or outbox row; it calls no provider and cannot apply a migration, spend, publish or deploy.
+- UI boundary: the 14 gates appear only after exact batch approval, with per-gate state, progress and safe in-page recovery guidance. Refresh remains a credentialed GET with no automatic retry or focus refetch. Script approval is explicitly not launch approval.
+- Review corrections: source eligibility now requires the persisted source title, future `valid_from` policy/kill-switch revisions do not pass the observation, and budget/concurrency capacity follows admission-aligned active-capacity semantics. Creator confirmation changes only `confirmedMemberIds`; approval success/focus remain sequenced by the approval transition, and the mutation resets only after an external batch identity change.
+- Final evidence: focused checks pass 54/54; authenticated route checks pass 2/2; the owned PostgreSQL 16 exact-chain check passes 1/1; TypeScript and production build pass. The final full AI Media Studio run contains 791 tests: 749 pass, 1 inherited PR26 wording-regex failure and 41 skip; this branch does not modify that baseline test.
+- Remaining gates: preserve and review the draft GitHub handoff; keep all 22 migration pairs unapplied until an explicitly approved staging rehearsal; complete real provider verification, governance/launch evidence, quote, sandbox, human approval and budget admission through their separate controlled capabilities; then obtain separate spend and Replit deployment approval. No external setup, provider call, migration, spend or deployment is requested here.
+
 ## Active local work: durable script review and launch readiness
 
 - Branch: `codex/ai-media-studio-launch-readiness`, preserved as draft PR #144 and stacked on mergeable draft PR #141. Local checker, security and App QA gates are complete.

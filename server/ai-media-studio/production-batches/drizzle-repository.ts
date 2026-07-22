@@ -21,6 +21,15 @@ import {
   type PrepareProductionBatchInput,
   type ProductionBatchRepository,
 } from "./contracts";
+import {
+  productionApprovalInputDigest,
+  productionCreativeDigest,
+  readProductionApproval,
+  readProductionBatchEnvelope,
+  readProductionVariantMetadata,
+  type ProductionBatchApprovalEnvelope,
+  type ProductionBatchEnvelope,
+} from "./metadata-integrity";
 
 type ExecuteResult = { rows?: unknown[] } | unknown[];
 export type ProductionBatchExecutor = { execute(query: SQL): Promise<ExecuteResult> };
@@ -28,49 +37,10 @@ export type ProductionBatchDatabase = ProductionBatchExecutor & {
   transaction<T>(callback: (tx: ProductionBatchExecutor) => Promise<T>): Promise<T>;
 };
 
-type Envelope = Readonly<{
-  version: 1;
-  batchId: string;
-  planId: string;
-  slotId: string;
-  scriptKey: string;
-  idempotencyKey: string;
-  inputDigest: string;
-  sourceContentHash: string;
-  sourceContentChecksum: string;
-  sourceTitle: string;
-  sourceCategory: SourceCategory;
-  generatorVersion: string;
-  variantCount: number;
-  preparedAt: string;
-}>;
+type Envelope = ProductionBatchEnvelope;
 type CreativeReview = ReturnType<typeof productionBatchCreativeReviewSchema.parse>;
 type StoredCreativeReview = Readonly<CreativeReview & { creativeDigest: string }>;
-type ApprovalEnvelope = Readonly<{
-  version: 1;
-  ownerUserId: string;
-  workspaceId: string;
-  batchId: string;
-  planId: string;
-  slotId: string;
-  scriptKey: string;
-  selectedVariantChecksum: string;
-  selectedCreativeDigest: string;
-  inputDigest: string;
-  idempotencyKey: string;
-  approvedAt: string;
-}>;
-
-const ENVELOPE_KEYS = [
-  "batchId", "generatorVersion", "idempotencyKey", "inputDigest", "planId", "preparedAt",
-  "scriptKey", "slotId", "sourceCategory", "sourceContentChecksum", "sourceContentHash", "sourceTitle", "variantCount", "version",
-] as const;
-const VARIANT_KEYS = [...ENVELOPE_KEYS, "selected", "variantIndex", "variantKey"].sort();
-const CREATIVE_KEYS = ["angle", "caption", "creativeDigest", "cta", "hashtags", "hook", "script", "seoKeywords", "title"] as const;
-const APPROVAL_KEYS = [
-  "approvedAt", "batchId", "idempotencyKey", "inputDigest", "ownerUserId", "planId", "scriptKey",
-  "selectedCreativeDigest", "selectedVariantChecksum", "slotId", "version", "workspaceId",
-] as const;
+type ApprovalEnvelope = ProductionBatchApprovalEnvelope;
 
 function rows(result: ExecuteResult): Record<string, unknown>[] {
   const values = Array.isArray(result) ? result : result.rows;
@@ -89,14 +59,6 @@ function integer(row: Record<string, unknown>, camel: string, snake: string): nu
   return Number(value(row, camel, snake));
 }
 
-function object(input: unknown): Record<string, unknown> | undefined {
-  if (typeof input === "string") {
-    try { return object(JSON.parse(input)); } catch { return undefined; }
-  }
-  return input !== null && typeof input === "object" && !Array.isArray(input)
-    ? input as Record<string, unknown> : undefined;
-}
-
 function iso(input: unknown): string {
   const date = input instanceof Date ? input : new Date(String(input));
   if (!Number.isFinite(date.getTime())) throw new ProductionBatchError("BATCH_UNAVAILABLE");
@@ -112,8 +74,7 @@ function digest(input: unknown): string {
 }
 
 function approvalInputDigest(input: ApproveProductionBatchInput): string {
-  return digest({
-    domain: "ai-media-production-batch-approval-v1",
+  return productionApprovalInputDigest({
     ownerUserId: input.scope.ownerUserId,
     workspaceId: input.scope.workspaceId,
     planId: input.planId,
@@ -123,81 +84,24 @@ function approvalInputDigest(input: ApproveProductionBatchInput): string {
 }
 
 function creativeReviewDigest(creative: CreativeReview): string {
-  return digest({ domain: "ai-media-production-creative-v1", ...creative });
+  return productionCreativeDigest(creative);
 }
 
 function publicKey(prefix: "batch" | "script" | "variant", seed: string): string {
   return `${prefix}_${hash(seed).slice(0, 24)}`;
 }
 
-function exactKeys(input: Record<string, unknown>, expected: readonly string[]): boolean {
-  const actual = Object.keys(input).sort();
-  const sorted = [...expected].sort();
-  return actual.length === sorted.length && actual.every((key, index) => key === sorted[index]);
-}
-
-function validMetadataKeys(metadata: Record<string, unknown>): boolean {
-  const allowed = ["productionBatchApprovalV1", "productionBatchV1", "productionCreativeV1"];
-  return Object.keys(metadata).every((key) => allowed.includes(key)) && "productionBatchV1" in metadata;
-}
-
 function validEnvelope(input: unknown): Envelope | undefined {
-  const metadata = object(input);
-  if (!metadata || !validMetadataKeys(metadata)) return undefined;
-  const envelope = object(metadata.productionBatchV1);
-  if (!envelope || !exactKeys(envelope, ENVELOPE_KEYS)
-    || envelope.version !== 1
-    || typeof envelope.batchId !== "string" || !/^batch_[a-f0-9]{24}$/u.test(envelope.batchId)
-    || typeof envelope.planId !== "string" || !/^plan_[a-f0-9]{24}$/u.test(envelope.planId)
-    || typeof envelope.slotId !== "string" || !/^slot_[a-f0-9]{24}$/u.test(envelope.slotId)
-    || typeof envelope.scriptKey !== "string" || !/^script_[a-f0-9]{24}$/u.test(envelope.scriptKey)
-    || typeof envelope.idempotencyKey !== "string"
-    || typeof envelope.inputDigest !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(envelope.inputDigest)
-    || typeof envelope.sourceContentHash !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(envelope.sourceContentHash)
-    || typeof envelope.sourceContentChecksum !== "string" || !/^[a-f0-9]{64}$/u.test(envelope.sourceContentChecksum)
-    || typeof envelope.sourceTitle !== "string" || !envelope.sourceTitle.trim()
-    || !SOURCE_CATEGORIES.includes(envelope.sourceCategory as SourceCategory)
-    || typeof envelope.generatorVersion !== "string" || !envelope.generatorVersion
-    || !Number.isInteger(envelope.variantCount) || Number(envelope.variantCount) < 1 || Number(envelope.variantCount) > 5
-    || typeof envelope.preparedAt !== "string" || !Number.isFinite(Date.parse(envelope.preparedAt))) return undefined;
-  return envelope as unknown as Envelope;
+  return readProductionBatchEnvelope(input);
 }
 
 function validVariantEnvelope(input: unknown, base: Envelope, index: number): { creative: CreativeReview; creativeDigest: string } | undefined {
-  const metadata = object(input);
-  if (!metadata || !validMetadataKeys(metadata) || !("productionCreativeV1" in metadata)) return undefined;
-  const envelope = object(metadata.productionBatchV1);
-  if (!envelope || !exactKeys(envelope, VARIANT_KEYS)) return undefined;
-  const { variantKey, variantIndex, selected, ...candidate } = envelope;
-  const baseRecord = base as unknown as Record<string, unknown>;
-  if (!(ENVELOPE_KEYS.every((key) => candidate[key] === baseRecord[key])
-    && typeof variantKey === "string" && /^variant_[a-f0-9]{24}$/u.test(variantKey)
-    && variantIndex === index && selected === (index === 0))) return undefined;
-  const creative = object(metadata.productionCreativeV1);
-  if (!creative || !exactKeys(creative, CREATIVE_KEYS)) return undefined;
-  const { creativeDigest, ...review } = creative;
-  const parsed = productionBatchCreativeReviewSchema.safeParse(review);
-  return parsed.success && typeof creativeDigest === "string"
-    && /^sha256:[a-f0-9]{64}$/u.test(creativeDigest)
-    && creativeDigest === creativeReviewDigest(parsed.data)
-    ? { creative: parsed.data, creativeDigest } : undefined;
+  return readProductionVariantMetadata(input, base, index);
 }
 
 function validApproval(input: unknown, base: Envelope, scope: ApproveProductionBatchInput["scope"],
   selectedChecksum: string, selectedCreativeDigest: string): ApprovalEnvelope | undefined {
-  const metadata = object(input);
-  if (!metadata || !validMetadataKeys(metadata) || !("productionBatchApprovalV1" in metadata)) return undefined;
-  const approval = object(metadata.productionBatchApprovalV1);
-  if (!approval || !exactKeys(approval, APPROVAL_KEYS) || approval.version !== 1
-    || approval.ownerUserId !== scope.ownerUserId || approval.workspaceId !== scope.workspaceId
-    || approval.batchId !== base.batchId || approval.planId !== base.planId || approval.slotId !== base.slotId
-    || approval.scriptKey !== base.scriptKey
-    || typeof approval.inputDigest !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(approval.inputDigest)
-    || approval.selectedVariantChecksum !== selectedChecksum || !/^[a-f0-9]{64}$/u.test(selectedChecksum)
-    || approval.selectedCreativeDigest !== selectedCreativeDigest || !/^sha256:[a-f0-9]{64}$/u.test(selectedCreativeDigest)
-    || typeof approval.idempotencyKey !== "string" || !approval.idempotencyKey
-    || typeof approval.approvedAt !== "string" || !Number.isFinite(Date.parse(approval.approvedAt))) return undefined;
-  return approval as unknown as ApprovalEnvelope;
+  return readProductionApproval(input, base, scope, selectedChecksum, selectedCreativeDigest);
 }
 
 function category(row: Record<string, unknown>): SourceCategory | undefined {
@@ -302,6 +206,7 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
           AND status IN ('accepted','ready') AND moderation_status='approved'
           AND rights_status IN ('owned','licensed')
           AND title IS NOT NULL AND length(btrim(title)) BETWEEN 1 AND 200
+          AND title=btrim(title) AND title !~ '[[:cntrl:]]'
           AND content IS NOT NULL AND length(btrim(content)) BETWEEN 1 AND 4000
           AND content_hash ~ '^sha256:[a-f0-9]{64}$'
           AND source_type IN ('events','restaurants','hotels','nightclubs','deals','travel_packages','beach_clubs','experiences')

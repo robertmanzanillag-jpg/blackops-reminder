@@ -43,6 +43,10 @@ import {
   lockGovernanceProfile,
 } from "./authority-locks";
 import { launchAuthorityInputDigest } from "./launch-authority-service";
+import {
+  verifiedProductionBatchApprovalBinding,
+  type ApprovedProductionBatchSlotFacts,
+} from "../production-batches/metadata-integrity";
 
 type ExecuteResult = { rows?: unknown[] } | unknown[];
 export type LaunchAuthorityDatabase = { execute(query: SQL): Promise<ExecuteResult> };
@@ -109,25 +113,6 @@ function rows(result: ExecuteResult): Row[] {
 
 function value(row: Row, camel: string, snake: string): unknown {
   return row[camel] ?? row[snake];
-}
-
-function productionBatchSourceBindingIsCurrent(scriptMetadata: unknown, source: Row): boolean {
-  if (scriptMetadata === null || typeof scriptMetadata !== "object" || Array.isArray(scriptMetadata)) return true;
-  const metadata = scriptMetadata as Record<string, unknown>;
-  if (!("productionBatchV1" in metadata)) return true;
-  if (Object.keys(metadata).length !== 1) return false;
-  const candidate = metadata.productionBatchV1;
-  if (candidate === null || typeof candidate !== "object" || Array.isArray(candidate)) return false;
-  const envelope = candidate as Record<string, unknown>;
-  const expectedKeys = ["batchId", "generatorVersion", "idempotencyKey", "inputDigest", "planId", "preparedAt",
-    "scriptKey", "slotId", "sourceCategory", "sourceContentChecksum", "sourceContentHash", "sourceTitle",
-    "variantCount", "version"].sort();
-  const actualKeys = Object.keys(envelope).sort();
-  if (actualKeys.length !== expectedKeys.length || actualKeys.some((key, index) => key !== expectedKeys[index])) return false;
-  const content = String(value(source, "content", "content") ?? "");
-  return envelope.version === 1
-    && String(envelope.sourceContentHash) === String(value(source, "contentHash", "content_hash") ?? "")
-    && String(envelope.sourceContentChecksum) === createHash("sha256").update(content).digest("hex");
 }
 
 function canonicalJson(input: unknown): unknown {
@@ -377,12 +362,23 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
       await lockGovernanceProfile(tx, command.scope, influencerId);
       const { id, now } = await this.identity(tx);
       const facts = rows(await tx.execute(sql`
-        SELECT plans.id AS daily_plan_id,plans.plan_digest,plans.source_roster_key,plans.source_roster_digest,
-          slots.id AS daily_plan_slot_id,slots.slot_digest,slots.source_member_key,slots.provider_account_id,
-          slots.provider_key,slots.provider_credential_version,variants.id AS script_variant_id,
-          variants.checksum AS script_variant_checksum,scripts.id AS script_id,scripts.source_type,
-          scripts.metadata AS script_metadata,
-          scripts.source_item_id,sources.content_hash AS source_content_hash,
+        SELECT plans.id AS daily_plan_id,plans.public_plan_key,plans.status AS plan_status,
+          plans.planned_slot_count,
+          plans.plan_digest,plans.source_roster_key,plans.source_roster_digest,
+          slots.id AS daily_plan_slot_id,slots.public_slot_key,slots.status AS slot_status,
+          slots.slot_digest,slots.source_member_key,slots.provider_account_id,
+          slots.provider_key,slots.provider_credential_version,selected.id AS script_variant_id,
+          selected.checksum AS script_variant_checksum,scripts.id AS script_id,scripts.source_type,
+          scripts.title AS script_title,scripts.status AS script_status,scripts.current_variant_id,
+          scripts.metadata AS script_metadata,scripts.source_item_id,
+          selected.id AS selected_variant_id,selected.version AS selected_variant_version,
+          selected.label AS selected_variant_label,selected.content AS selected_variant_content,
+          selected.status AS selected_variant_status,selected.checksum AS selected_variant_checksum,
+          selected.metadata AS selected_variant_metadata,
+          variants.id AS variant_id,variants.version AS variant_version,variants.label AS variant_label,
+          variants.content AS variant_content,variants.status AS variant_status,
+          variants.checksum AS variant_checksum,variants.metadata AS variant_metadata,
+          sources.content_hash AS source_content_hash,
           governance.id AS governance_profile_id,governance.evidence_digest AS governance_evidence_digest
         FROM ${aiMediaDailyPlans} plans
         INNER JOIN ${aiMediaDailyPlanSlots} slots ON slots.owner_user_id=plans.owner_user_id
@@ -402,11 +398,13 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
           AND voices.workspace_id=slots.workspace_id AND voices.id=slots.voice_resource_id
           AND voices.provider_account_id=slots.provider_account_id AND voices.provider_key=slots.provider_key
           AND voices.resource_type='voice'
-        INNER JOIN ${aiMediaScriptVariants} variants ON variants.owner_user_id=slots.owner_user_id
-          AND variants.workspace_id=slots.workspace_id AND variants.id=slots.script_variant_id
-        INNER JOIN ${aiMediaScripts} scripts ON scripts.owner_user_id=variants.owner_user_id
-          AND scripts.workspace_id=variants.workspace_id AND scripts.id=variants.script_id
-          AND scripts.influencer_id=slots.influencer_id AND scripts.current_variant_id=variants.id
+        INNER JOIN ${aiMediaScriptVariants} selected ON selected.owner_user_id=slots.owner_user_id
+          AND selected.workspace_id=slots.workspace_id AND selected.id=slots.script_variant_id
+        INNER JOIN ${aiMediaScripts} scripts ON scripts.owner_user_id=selected.owner_user_id
+          AND scripts.workspace_id=selected.workspace_id AND scripts.id=selected.script_id
+          AND scripts.influencer_id=slots.influencer_id AND scripts.current_variant_id=selected.id
+        INNER JOIN ${aiMediaScriptVariants} variants ON variants.owner_user_id=scripts.owner_user_id
+          AND variants.workspace_id=scripts.workspace_id AND variants.script_id=scripts.id
         LEFT JOIN ${aiMediaSourceItems} sources ON sources.owner_user_id=scripts.owner_user_id
           AND sources.workspace_id=scripts.workspace_id AND sources.id=scripts.source_item_id
           AND sources.source_type=scripts.source_type
@@ -415,7 +413,7 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
         WHERE plans.owner_user_id=${command.scope.ownerUserId} AND plans.workspace_id=${command.scope.workspaceId}
           AND slots.id=${command.dailyPlanSlotId} AND plans.status='planned' AND slots.status='planned'
           AND plans.plan_date=(${now} AT TIME ZONE plans.accounting_time_zone)::date
-          AND variants.status='approved' AND variants.checksum IS NOT NULL AND scripts.status='approved'
+          AND selected.status='approved' AND selected.checksum IS NOT NULL AND scripts.status='approved'
           AND ((scripts.source_type='manual' AND scripts.source_item_id IS NULL)
             OR (scripts.source_type<>'manual' AND sources.id IS NOT NULL AND sources.content_hash IS NOT NULL
               AND sources.status IN ('accepted','ready') AND sources.moderation_status='approved'
@@ -427,8 +425,8 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
           AND avatars.status='active' AND voices.status='active'
           AND governance.state='active' AND governance.revoked_at IS NULL
           AND governance.valid_from<=${now} AND governance.expires_at>${now}
-          AND governance.allowed_uses @> jsonb_build_array(${governanceUse})
-          AND (governance.territories @> jsonb_build_array(${governanceTerritory})
+          AND governance.allowed_uses @> jsonb_build_array(${governanceUse}::text)
+          AND (governance.territories @> jsonb_build_array(${governanceTerritory}::text)
             OR governance.territories @> '["WORLDWIDE"]'::jsonb)
           AND NOT EXISTS (SELECT 1 FROM ${aiMediaGovernanceProfiles} newer
             WHERE newer.owner_user_id=governance.owner_user_id AND newer.workspace_id=governance.workspace_id
@@ -436,21 +434,14 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
           AND ${command.slotAttempt}=COALESCE((SELECT MAX(previous.attempt)+1 FROM ${aiMediaBudgetReservations} previous
             WHERE previous.owner_user_id=slots.owner_user_id AND previous.workspace_id=slots.workspace_id
               AND previous.daily_plan_slot_id=slots.id),1)
-        FOR UPDATE OF plans,slots,accounts,influencers,avatars,voices,variants,scripts,governance
+        ORDER BY variants.version
+        FOR UPDATE OF plans,slots,accounts,influencers,avatars,voices,selected,variants,scripts,governance
       `));
-      if (facts.length !== 1) throw denied();
-      const row = facts[0];
-      if (String(value(row, "sourceType", "source_type")) !== "manual") {
-        const lockedSource = rows(await tx.execute(sql`SELECT id,content_hash,content FROM ${aiMediaSourceItems}
-          WHERE owner_user_id=${command.scope.ownerUserId} AND workspace_id=${command.scope.workspaceId}
-            AND id=${value(row, "sourceItemId", "source_item_id")}
-            AND source_type=${value(row, "sourceType", "source_type")}
-            AND content_hash=${value(row, "sourceContentHash", "source_content_hash")}
-            AND status IN ('accepted','ready') AND moderation_status='approved'
-            AND rights_status IN ('owned','licensed') FOR UPDATE`));
-        if (lockedSource.length !== 1
-          || !productionBatchSourceBindingIsCurrent(value(row, "scriptMetadata", "script_metadata"), lockedSource[0])) throw denied();
-      }
+      if (facts.length < 1 || facts.length > 5) throw denied();
+      const row = facts[0]!;
+      const planSlots = await this.lockProductionPlanShape(tx, command.scope, row);
+      const lockedSource = await this.lockProductionBatchSource(tx, command.scope, row);
+      if (!this.productionBatchIntegrityIsCurrent(command.scope, now, facts, planSlots, lockedSource)) throw denied();
       const base = subjectFromLaunchRow(row, command.scope, command.slotAttempt, governanceUse,
         governanceTerritory, command.contentCountry, id, digest("pending"));
       const launchIntentDigest = digest({ domain: "ai-media-launch-intent-v1", id,
@@ -714,15 +705,123 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
     return uuid(String(value(found[0], "influencerId", "influencer_id")), "influencerId");
   }
 
+  private async lockProductionBatchSource(
+    tx: LaunchAuthorityDatabase,
+    scope: TenantScope,
+    row: Row,
+  ): Promise<Row> {
+    const locked = rows(await tx.execute(sql`
+      SELECT id,source_type,title,content,content_hash,status,rights_status,moderation_status
+      FROM ${aiMediaSourceItems}
+      WHERE owner_user_id=${scope.ownerUserId} AND workspace_id=${scope.workspaceId}
+        AND id=${value(row, "sourceItemId", "source_item_id")}
+        AND source_type=${value(row, "sourceType", "source_type")}
+        AND content_hash=${value(row, "sourceContentHash", "source_content_hash")}
+        AND status IN ('accepted','ready') AND moderation_status='approved'
+        AND rights_status IN ('owned','licensed')
+      FOR UPDATE
+    `));
+    if (locked.length !== 1) throw denied();
+    return locked[0]!;
+  }
+
+  private async lockProductionPlanShape(
+    tx: LaunchAuthorityDatabase,
+    scope: TenantScope,
+    row: Row,
+  ): Promise<Row[]> {
+    const locked = rows(await tx.execute(sql`
+      SELECT source_member_key,video_number,status AS slot_status
+      FROM ${aiMediaDailyPlanSlots}
+      WHERE owner_user_id=${scope.ownerUserId} AND workspace_id=${scope.workspaceId}
+        AND daily_plan_id=${value(row, "dailyPlanId", "daily_plan_id")}
+      ORDER BY source_member_key,video_number
+      FOR UPDATE
+    `));
+    if (locked.length < 50 || locked.length > 100) throw denied();
+    return locked;
+  }
+
+  private productionBatchIntegrityIsCurrent(
+    scope: TenantScope,
+    now: Date,
+    rowsForSlot: readonly Row[],
+    planSlots: readonly Row[],
+    source: Row,
+  ): boolean {
+    const row = rowsForSlot[0];
+    if (!row) return false;
+    const facts: ApprovedProductionBatchSlotFacts = {
+      scope,
+      databaseNow: now,
+      plan: {
+        publicKey: String(value(row, "publicPlanKey", "public_plan_key") ?? ""),
+        status: String(value(row, "planStatus", "plan_status") ?? ""),
+        plannedSlotCount: Number(value(row, "plannedSlotCount", "planned_slot_count")),
+      },
+      planSlots: planSlots.map((slot) => ({
+        sourceMemberKey: String(value(slot, "sourceMemberKey", "source_member_key") ?? ""),
+        videoNumber: Number(value(slot, "videoNumber", "video_number")),
+        status: String(value(slot, "slotStatus", "slot_status") ?? ""),
+      })),
+      slot: {
+        publicKey: String(value(row, "publicSlotKey", "public_slot_key") ?? ""),
+        status: String(value(row, "slotStatus", "slot_status") ?? ""),
+        scriptVariantId: String(value(row, "selectedVariantId", "selected_variant_id")
+          ?? value(row, "scriptVariantId", "script_variant_id") ?? ""),
+      },
+      script: {
+        id: String(value(row, "scriptId", "script_id") ?? ""),
+        title: String(value(row, "scriptTitle", "script_title") ?? ""),
+        status: String(value(row, "scriptStatus", "script_status") ?? ""),
+        currentVariantId: String(value(row, "currentVariantId", "current_variant_id") ?? ""),
+        metadata: value(row, "scriptMetadata", "script_metadata"),
+        sourceType: String(value(row, "sourceType", "source_type") ?? ""),
+        sourceItemId: value(row, "sourceItemId", "source_item_id") == null
+          ? null : String(value(row, "sourceItemId", "source_item_id")),
+      },
+      source: {
+        id: String(value(source, "id", "id") ?? ""),
+        type: String(value(source, "sourceType", "source_type") ?? ""),
+        title: String(value(source, "title", "title") ?? ""),
+        content: String(value(source, "content", "content") ?? ""),
+        contentHash: String(value(source, "contentHash", "content_hash") ?? ""),
+        status: String(value(source, "status", "status") ?? ""),
+        rightsStatus: String(value(source, "rightsStatus", "rights_status") ?? ""),
+        moderationStatus: String(value(source, "moderationStatus", "moderation_status") ?? ""),
+      },
+      variants: rowsForSlot.map((variantRow) => ({
+        id: String(value(variantRow, "variantId", "variant_id") ?? ""),
+        version: Number(value(variantRow, "variantVersion", "variant_version")),
+        label: String(value(variantRow, "variantLabel", "variant_label") ?? ""),
+        content: String(value(variantRow, "variantContent", "variant_content") ?? ""),
+        status: String(value(variantRow, "variantStatus", "variant_status") ?? ""),
+        checksum: String(value(variantRow, "variantChecksum", "variant_checksum") ?? ""),
+        metadata: value(variantRow, "variantMetadata", "variant_metadata"),
+      })),
+    };
+    return Boolean(verifiedProductionBatchApprovalBinding(facts));
+  }
+
   private async lockExactSubject(
     tx: LaunchAuthorityDatabase,
     command: { scope: TenantScope; dailyPlanSlotId: string; slotAttempt: number },
     now: Date,
   ): Promise<LockedLaunchSubject> {
     const result = rows(await tx.execute(sql`
-      SELECT intents.*,plans.plan_date::text,plans.accounting_time_zone,
+      SELECT intents.*,plans.public_plan_key,plans.status AS plan_status,plans.planned_slot_count,
+        slots.public_slot_key,slots.status AS slot_status,
+        plans.plan_date::text,plans.accounting_time_zone,
         ((plans.plan_date+1)::timestamp AT TIME ZONE plans.accounting_time_zone) AS plan_expires_at,
-        slots.influencer_id,scripts.language,scripts.metadata AS script_metadata,
+        slots.influencer_id,scripts.language,scripts.title AS script_title,
+        scripts.status AS script_status,scripts.current_variant_id,scripts.metadata AS script_metadata,
+        selected.id AS selected_variant_id,selected.version AS selected_variant_version,
+        selected.label AS selected_variant_label,selected.content AS selected_variant_content,
+        selected.status AS selected_variant_status,selected.checksum AS selected_variant_checksum,
+        selected.metadata AS selected_variant_metadata,
+        variants.id AS variant_id,variants.version AS variant_version,variants.label AS variant_label,
+        variants.content AS variant_content,variants.status AS variant_status,
+        variants.checksum AS variant_checksum,variants.metadata AS variant_metadata,
         governance.expires_at AS governance_expires_at,accounts.credential_expires_at
       FROM ${aiMediaLaunchIntents} intents
       INNER JOIN ${aiMediaDailyPlans} plans
@@ -752,14 +851,17 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
         ON voices.owner_user_id=slots.owner_user_id AND voices.workspace_id=slots.workspace_id
         AND voices.id=slots.voice_resource_id AND voices.provider_account_id=slots.provider_account_id
         AND voices.provider_key=slots.provider_key AND voices.resource_type='voice'
-      INNER JOIN ${aiMediaScriptVariants} variants
-        ON variants.owner_user_id=slots.owner_user_id AND variants.workspace_id=slots.workspace_id
-        AND variants.id=intents.script_variant_id AND variants.script_id=intents.script_id
-        AND variants.checksum=intents.script_variant_checksum
+      INNER JOIN ${aiMediaScriptVariants} selected
+        ON selected.owner_user_id=slots.owner_user_id AND selected.workspace_id=slots.workspace_id
+        AND selected.id=intents.script_variant_id AND selected.script_id=intents.script_id
+        AND selected.checksum=intents.script_variant_checksum
       INNER JOIN ${aiMediaScripts} scripts
-        ON scripts.owner_user_id=variants.owner_user_id AND scripts.workspace_id=variants.workspace_id
+        ON scripts.owner_user_id=selected.owner_user_id AND scripts.workspace_id=selected.workspace_id
         AND scripts.id=intents.script_id AND scripts.influencer_id=slots.influencer_id
         AND scripts.source_type=intents.source_type AND scripts.current_variant_id=intents.script_variant_id
+      INNER JOIN ${aiMediaScriptVariants} variants
+        ON variants.owner_user_id=scripts.owner_user_id AND variants.workspace_id=scripts.workspace_id
+        AND variants.script_id=scripts.id
       LEFT JOIN ${aiMediaSourceItems} sources
         ON sources.owner_user_id=intents.owner_user_id AND sources.workspace_id=intents.workspace_id
         AND sources.id=intents.source_item_id AND sources.source_type=intents.source_type
@@ -771,7 +873,7 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
       WHERE intents.owner_user_id=${command.scope.ownerUserId} AND intents.workspace_id=${command.scope.workspaceId}
         AND intents.daily_plan_slot_id=${command.dailyPlanSlotId} AND intents.slot_attempt=${command.slotAttempt}
         AND plans.status='planned' AND plans.plan_date=(${now} AT TIME ZONE plans.accounting_time_zone)::date
-        AND slots.status='planned' AND variants.status='approved' AND scripts.status='approved'
+        AND slots.status='planned' AND selected.status='approved' AND scripts.status='approved'
         AND ((intents.source_type='manual' AND intents.source_item_id IS NULL AND intents.source_content_hash IS NULL)
           OR (intents.source_type<>'manual' AND sources.id IS NOT NULL
             AND sources.status IN ('accepted','ready') AND sources.moderation_status='approved'
@@ -783,8 +885,8 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
         AND avatars.status='active' AND voices.status='active'
         AND governance.state='active' AND governance.revoked_at IS NULL
         AND governance.valid_from<=${now} AND governance.expires_at>${now}
-        AND governance.allowed_uses @> jsonb_build_array(intents.governance_use)
-        AND (governance.territories @> jsonb_build_array(intents.governance_territory)
+        AND governance.allowed_uses @> jsonb_build_array(intents.governance_use::text)
+        AND (governance.territories @> jsonb_build_array(intents.governance_territory::text)
           OR governance.territories @> '["WORLDWIDE"]'::jsonb)
         AND NOT EXISTS (SELECT 1 FROM ${aiMediaGovernanceProfiles} newer
           WHERE newer.owner_user_id=governance.owner_user_id AND newer.workspace_id=governance.workspace_id
@@ -793,21 +895,14 @@ export class DrizzleLaunchAuthorityRepository implements LaunchAuthorityReposito
           FROM ${aiMediaBudgetReservations} previous
           WHERE previous.owner_user_id=slots.owner_user_id AND previous.workspace_id=slots.workspace_id
             AND previous.daily_plan_slot_id=slots.id),1)
-      FOR UPDATE OF intents,plans,slots,accounts,influencers,avatars,voices,variants,scripts,governance
+      ORDER BY variants.version
+      FOR UPDATE OF intents,plans,slots,accounts,influencers,avatars,voices,selected,variants,scripts,governance
     `));
-    if (result.length !== 1) throw denied();
-    const row = result[0];
-    if (String(value(row, "sourceType", "source_type")) !== "manual") {
-      const lockedSource = rows(await tx.execute(sql`SELECT id,content_hash,content FROM ${aiMediaSourceItems}
-        WHERE owner_user_id=${command.scope.ownerUserId} AND workspace_id=${command.scope.workspaceId}
-          AND id=${value(row, "sourceItemId", "source_item_id")}
-          AND source_type=${value(row, "sourceType", "source_type")}
-          AND content_hash=${value(row, "sourceContentHash", "source_content_hash")}
-          AND status IN ('accepted','ready') AND moderation_status='approved'
-          AND rights_status IN ('owned','licensed') FOR UPDATE`));
-      if (lockedSource.length !== 1
-        || !productionBatchSourceBindingIsCurrent(value(row, "scriptMetadata", "script_metadata"), lockedSource[0])) throw denied();
-    }
+    if (result.length < 1 || result.length > 5) throw denied();
+    const row = result[0]!;
+    const planSlots = await this.lockProductionPlanShape(tx, command.scope, row);
+    const lockedSource = await this.lockProductionBatchSource(tx, command.scope, row);
+    if (!this.productionBatchIntegrityIsCurrent(command.scope, now, result, planSlots, lockedSource)) throw denied();
     const subject = subjectFromLaunchRow(row, command.scope, command.slotAttempt,
       String(value(row, "governanceUse", "governance_use")),
       String(value(row, "governanceTerritory", "governance_territory")),

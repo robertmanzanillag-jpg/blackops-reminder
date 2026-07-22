@@ -8,6 +8,7 @@ import type {
   InfluencerListRequest,
   MediaAsset,
   MediaLibraryRequest,
+  LaunchPreflight,
   ApproveProductionBatchRequest,
   PrepareProductionBatchRequest,
   ProductionBatchResponse,
@@ -20,6 +21,7 @@ import {
   heyGenRosterDailyPlanResponseSchema,
 } from "@shared/ai-media-studio-heygen-roster";
 import { productionBatchResponseSchema } from "@shared/ai-media-studio-production-batches";
+import { launchPreflightResponseSchema } from "@shared/ai-media-studio-launch-preflight";
 
 type InfluencerListResponse = { influencers: Influencer[]; nextCursor: string | null; hasMore: boolean };
 type InfluencerResponse = { influencer: Influencer };
@@ -27,6 +29,12 @@ type ProviderResourceListResponse = { resources: ProviderResource[]; nextCursor:
 type MediaLibraryResponse = { assets: MediaAsset[]; nextCursor: string | null; hasMore: boolean };
 
 const API_ROOT = "/api/ai-media-studio";
+
+const launchPreflightErrorMessages: Readonly<Record<number, string>> = {
+  404: "Launch preflight was not found for this approved batch.",
+  409: "Launch preflight is not available for the current batch state.",
+  503: "Launch preflight observation is temporarily unavailable.",
+};
 
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${API_ROOT}${path}`, {
@@ -92,6 +100,20 @@ export const mediaStudioCoreApi = {
       "AI Media Studio production batch persistence is unavailable",
     ]);
     return response === null ? null : productionBatchResponseSchema.parse(response);
+  },
+  productionBatchLaunchPreflight: async ({ planId, batchId }: { planId: string; batchId: string }): Promise<{ preflight: LaunchPreflight }> => {
+    const response = await fetch(
+      `${API_ROOT}/production-batches/${encodeURIComponent(planId)}/launch-preflight`,
+      { credentials: "include" },
+    );
+    if (!response.ok) {
+      throw new Error(launchPreflightErrorMessages[response.status] ?? `Request failed (${response.status})`);
+    }
+    const parsed = launchPreflightResponseSchema.parse(await response.json());
+    if (parsed.preflight.subject.planId !== planId || parsed.preflight.subject.batchId !== batchId) {
+      throw new Error("Launch preflight identity did not match the current approved batch.");
+    }
+    return parsed;
   },
   prepareProductionBatchScripts: async ({ planId, input }: { planId: string; input: PrepareProductionBatchRequest }): Promise<ProductionBatchResponse> => {
     const response = await requestJson<unknown>(`/production-batches/${encodeURIComponent(planId)}/prepare-scripts`, {

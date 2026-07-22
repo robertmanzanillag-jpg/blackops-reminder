@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
 import { PgDialect } from "drizzle-orm/pg-core";
 import type {
@@ -23,6 +24,10 @@ import {
   launchAuthorityInputDigest,
   type LaunchAuthorityOperation,
 } from "../server/ai-media-studio/planning/launch-authority-service";
+import {
+  productionApprovalInputDigest,
+  productionCreativeDigest,
+} from "../server/ai-media-studio/production-batches/metadata-integrity";
 
 const dialect = new PgDialect();
 const scope = { ownerUserId: "owner-1", workspaceId: "workspace-1" } as const;
@@ -42,10 +47,15 @@ const ids = {
   created: "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
   intent: "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
   script: "ffffffff-ffff-4fff-8fff-ffffffffffff",
+  source: "12121212-1212-4212-8212-121212121212",
 } as const;
 const now = new Date("2026-07-21T12:00:00.000Z");
 const expires = new Date("2026-07-21T12:20:00.000Z");
 const digest = (character: string) => `sha256:${character.repeat(64)}` as const;
+const rawHash = (input: string) => createHash("sha256").update(input).digest("hex");
+const productionPlanId = `plan_${"1".repeat(24)}`;
+const productionSlotId = `slot_${"2".repeat(24)}`;
+const productionBatchId = `batch_${"3".repeat(24)}`;
 
 function trustedPrincipal(capability: LaunchAuthorityCapability, kind: "user" | "workload" = "user") {
   return {
@@ -59,8 +69,8 @@ const subjectBase = {
   planDigest: digest("1"), slotDigest: digest("2"), providerAccountId: ids.account,
   sourceRosterKey: "roster-1", sourceRosterDigest: digest("0"), sourceMemberKey: "member-1",
   providerKey: "heygen", providerCredentialVersion: 3, scriptVariantId: ids.variant,
-  scriptId: ids.script, scriptVariantChecksum: "3".repeat(64), sourceType: "manual",
-  sourceItemId: null, sourceContentHash: null, governanceProfileId: ids.governance,
+  scriptId: ids.script, scriptVariantChecksum: rawHash("Full selected script"), sourceType: "experiences",
+  sourceItemId: ids.source, sourceContentHash: digest("6"), governanceProfileId: ids.governance,
   governanceEvidenceDigest: digest("4"), governanceUse: "paid_ads", governanceTerritory: "US",
   contentCountry: "US",
 };
@@ -107,23 +117,71 @@ function authorized<T>(operation: LaunchAuthorityOperation, command: T, principa
 }
 
 function subjectRow(overrides: Record<string, unknown> = {}) {
+  const creative = { title: "Selected title", angle: "Exact angle", hook: "Exact hook",
+    script: "Full selected script", cta: "Exact CTA", caption: "Exact caption",
+    hashtags: ["#kong"], seoKeywords: ["kong media"] };
+  const base = {
+    version: 1, batchId: productionBatchId, planId: productionPlanId, slotId: productionSlotId,
+    scriptKey: `script_${"4".repeat(24)}`, idempotencyKey: "prepare-batch-0001",
+    inputDigest: digest("5"), sourceContentHash: subject.sourceContentHash,
+    sourceContentChecksum: rawHash("Exact source content"), sourceTitle: "Exact source title",
+    sourceCategory: "experiences", generatorVersion: "deterministic-script-v1", variantCount: 1,
+    preparedAt: "2026-07-21T11:00:00.000Z",
+  };
+  const approval = {
+    version: 1, ...scope, batchId: productionBatchId, planId: productionPlanId,
+    slotId: productionSlotId, scriptKey: base.scriptKey, selectedVariantChecksum: subject.scriptVariantChecksum,
+    selectedCreativeDigest: productionCreativeDigest(creative),
+    inputDigest: productionApprovalInputDigest({ ...scope, planId: productionPlanId,
+      expectedBatchId: productionBatchId, idempotencyKey: "approve-batch-0001" }),
+    idempotencyKey: "approve-batch-0001", approvedAt: "2026-07-21T11:30:00.000Z",
+  };
   return {
     daily_plan_id: ids.plan, daily_plan_slot_id: ids.slot, plan_digest: subject.planDigest,
+    public_plan_key: productionPlanId, plan_status: "planned", planned_slot_count: 50,
+    public_slot_key: productionSlotId,
+    slot_status: "planned",
     slot_digest: subject.slotDigest, plan_date: "2026-07-21", accounting_time_zone: "UTC",
     id: ids.intent, launch_intent_digest: subject.launchIntentDigest,
     launch_subject_digest: subject.launchSubjectDigest,
     source_roster_key: subject.sourceRosterKey, source_roster_digest: subject.sourceRosterDigest,
-    source_member_key: subject.sourceMemberKey, script_id: ids.script, source_type: "manual",
-    source_item_id: null, source_content_hash: null,
+    source_member_key: subject.sourceMemberKey, script_id: ids.script, source_type: "experiences",
+    source_item_id: ids.source, source_content_hash: subject.sourceContentHash,
     plan_expires_at: new Date("2026-07-22T00:00:00.000Z"), influencer_id: ids.influencer,
     provider_account_id: ids.account, provider_key: "heygen", provider_credential_version: 3,
     script_variant_id: ids.variant, script_variant_checksum: subject.scriptVariantChecksum, language: "en",
+    script_title: creative.title, script_status: "approved", current_variant_id: ids.variant,
+    script_metadata: { productionBatchV1: base, productionBatchApprovalV1: approval },
+    selected_variant_id: ids.variant, selected_variant_version: 1, selected_variant_label: creative.title,
+    selected_variant_content: creative.script, selected_variant_status: "approved",
+    selected_variant_checksum: subject.scriptVariantChecksum,
+    selected_variant_metadata: { productionBatchV1: { ...base, variantKey: `variant_${"7".repeat(24)}`,
+      variantIndex: 0, selected: true }, productionCreativeV1: { ...creative,
+      creativeDigest: approval.selectedCreativeDigest }, productionBatchApprovalV1: approval },
+    variant_id: ids.variant, variant_version: 1, variant_label: creative.title,
+    variant_content: creative.script, variant_status: "approved", variant_checksum: subject.scriptVariantChecksum,
+    variant_metadata: { productionBatchV1: { ...base, variantKey: `variant_${"7".repeat(24)}`,
+      variantIndex: 0, selected: true }, productionCreativeV1: { ...creative,
+      creativeDigest: approval.selectedCreativeDigest }, productionBatchApprovalV1: approval },
     governance_profile_id: ids.governance, governance_evidence_digest: subject.governanceEvidenceDigest,
     governance_use: subject.governanceUse, governance_territory: subject.governanceTerritory,
     content_country: subject.contentCountry,
     governance_expires_at: new Date("2026-07-21T13:00:00.000Z"), credential_expires_at: null,
     ...overrides,
   };
+}
+
+function sourceRow(overrides: Record<string, unknown> = {}) {
+  return { id: ids.source, source_type: "experiences", title: "Exact source title",
+    content: "Exact source content", content_hash: subject.sourceContentHash, status: "ready",
+    rights_status: "owned", moderation_status: "approved", ...overrides };
+}
+
+function planShapeRows() {
+  return Array.from({ length: 50 }, (_, index) => ({
+    source_member_key: `member_${String(Math.floor(index / 10) + 1).padStart(24, "0")}`,
+    video_number: (index % 10) + 1, slot_status: "planned",
+  }));
 }
 
 function evidenceRow(kind: "content_approval" | "human_launch_approval" | "sandbox_proof" | "maximum_quote") {
@@ -217,7 +275,9 @@ test("human launch intent derives and freezes the exact current database subject
     if (call === 5) return { rows: [{ influencer_id: ids.influencer }] };
     if (call === 7) return { rows: [{ generated_id: ids.intent, database_now: now }] };
     if (call === 8) return { rows: [subjectRow()] };
-    if (call === 9) return { rows: [{ id: ids.intent, input_digest: input.inputDigest }] };
+    if (call === 9) return { rows: planShapeRows() };
+    if (call === 10) return { rows: [sourceRow()] };
+    if (call === 11) return { rows: [{ id: ids.intent, input_digest: input.inputDigest }] };
     return { rows: [] };
   });
   const result = await new DrizzleLaunchAuthorityRepository(harness.db, options()).declareLaunchIntent(input);
@@ -225,10 +285,34 @@ test("human launch intent derives and freezes the exact current database subject
   assert.match(sqlText(harness.calls[7]), /source_roster_key.*source_member_key.*current_variant_id/i);
   assert.match(sqlText(harness.calls[7]), /not exists.*newer.*version>governance\.version/i);
   assert.match(sqlText(harness.calls[7]), /sources\.status in \('accepted','ready'\).*rights_status in \('owned','licensed'\)/i);
-  const insert = sqlText(harness.calls[8]);
+  assert.match(sqlText(harness.calls[7]), /jsonb_build_array\(\$\d+::text\).*jsonb_build_array\(\$\d+::text\)/i);
+  assert.match(sqlText(harness.calls[8]), /for update/i);
+  assert.match(sqlText(harness.calls[9]), /for update/i);
+  const insert = sqlText(harness.calls[10]);
   assert.match(insert, /insert into .*ai_media_launch_intents/i);
   assert.match(insert, /launch_subject_digest,launch_intent_digest,actor_user_id,input_digest/i);
   assert.doesNotMatch(JSON.stringify(command), /planDigest|providerAccountId|scriptVariantId|sourceItemId/i);
+});
+
+test("launch intent denies legacy or tampered production metadata before inserting authority", async () => {
+  const principal = trustedPrincipal("launch_intent:declare", "user");
+  const command: DeclareLaunchIntentCommand = { scope, dailyPlanSlotId: ids.slot, slotAttempt: 1,
+    governanceUse: "paid_ads", governanceTerritory: "US", contentCountry: "US",
+    idempotencyKey: "launch-intent-tampered-metadata" };
+  const input = authorized("declare_launch_intent", command, principal);
+  const row = subjectRow({ script_metadata: {} });
+  const harness = makeDb((call) => {
+    if (call === 5) return { rows: [{ influencer_id: ids.influencer }] };
+    if (call === 7) return { rows: [{ generated_id: ids.intent, database_now: now }] };
+    if (call === 8) return { rows: [row] };
+    if (call === 9) return { rows: planShapeRows() };
+    if (call === 10) return { rows: [sourceRow()] };
+    return { rows: [] };
+  });
+  await assert.rejects(new DrizzleLaunchAuthorityRepository(harness.db, options()).declareLaunchIntent(input),
+    (error: unknown) => error instanceof LaunchAuthorityPersistenceError && error.code === "AUTHORITY_DENIED");
+  assert.equal(harness.calls.length, 10);
+  assert.doesNotMatch(allText(harness.calls), /insert into .*ai_media_launch_intents/i);
 });
 
 test("opaque runtime handle denies when the injected verifier cannot authenticate it", async () => {
@@ -240,11 +324,13 @@ test("opaque runtime handle denies when the injected verifier cannot authenticat
     if (call === 4) return { rows: [{ influencer_id: ids.influencer }] };
     if (call === 6) return { rows: [{ generated_id: ids.created, database_now: now }] };
     if (call === 7) return { rows: [subjectRow()] };
+    if (call === 8) return { rows: planShapeRows() };
+    if (call === 9) return { rows: [sourceRow()] };
     return { rows: [] };
   });
   await assert.rejects(new DrizzleLaunchAuthorityRepository(harness.db, options()).recordSandboxAttestation(input),
     (error: unknown) => error instanceof LaunchAuthorityPersistenceError && error.code === "AUTHORITY_DENIED");
-  assert.equal(harness.calls.length, 7, "verification denies before evidence-chain read or insert");
+  assert.equal(harness.calls.length, 9, "verification denies before evidence-chain read or insert");
 });
 
 test("content evidence derives exact subject and chain after workspace plus governance locks", async () => {
@@ -257,7 +343,9 @@ test("content evidence derives exact subject and chain after workspace plus gove
     if (call === 4) return { rows: [{ influencer_id: ids.influencer }] };
     if (call === 6) return { rows: [{ generated_id: ids.created, database_now: now }] };
     if (call === 7) return { rows: [subjectRow()] };
-    if (call === 9) return { rows: [{ id: ids.created, input_digest: input.inputDigest }] };
+    if (call === 8) return { rows: planShapeRows() };
+    if (call === 9) return { rows: [sourceRow()] };
+    if (call === 11) return { rows: [{ id: ids.created, input_digest: input.inputDigest }] };
     return { rows: [] };
   });
   const repository = new DrizzleLaunchAuthorityRepository(harness.db, options());
@@ -267,14 +355,36 @@ test("content evidence derives exact subject and chain after workspace plus gove
   const lockedSubject = sqlText(harness.calls[6]);
   assert.match(lockedSubject, /not exists.*newer.*newer\.version>governance\.version/i);
   assert.match(lockedSubject, /max\(previous\.attempt\)\+1/i);
-  const previous = sqlText(harness.calls[7]);
+  assert.match(lockedSubject, /jsonb_build_array\(intents\.governance_use::text\).*jsonb_build_array\(intents\.governance_territory::text\)/i);
+  const previous = sqlText(harness.calls[9]);
   assert.match(previous, /order by revision desc limit 1 for update/i);
   assert.doesNotMatch(previous, /launch_subject_digest/i);
-  const insert = sqlText(harness.calls[8]);
-  assert.ok(harness.calls[8].params.includes("authenticated_workload"));
-  assert.ok(!harness.calls[8].params.includes(principal.authenticationEvidenceDigest),
+  const insert = sqlText(harness.calls[10]);
+  assert.ok(harness.calls[10].params.includes("authenticated_workload"));
+  assert.ok(!harness.calls[10].params.includes(principal.authenticationEvidenceDigest),
     "human/workload authentication evidence is actor-bound in evidenceDigest, not persisted as runtime attestation evidence");
   assert.doesNotMatch(insert, /render_jobs|outbox|provider.*submit/i);
+});
+
+test("exact-subject relock revalidates production metadata before appending evidence", async () => {
+  const principal = trustedPrincipal("content:decide", "workload");
+  const command: RecordContentApprovalCommand = { scope, dailyPlanSlotId: ids.slot, slotAttempt: 1,
+    decision: "approved", idempotencyKey: "content-approval-tampered-metadata" };
+  const input = authorized("record_content_approval", command, principal);
+  const row = subjectRow();
+  (row.variant_metadata as Record<string, unknown>).untrustedExtension = true;
+  const harness = makeDb((call) => {
+    if (call === 4) return { rows: [{ influencer_id: ids.influencer }] };
+    if (call === 6) return { rows: [{ generated_id: ids.created, database_now: now }] };
+    if (call === 7) return { rows: [row] };
+    if (call === 8) return { rows: planShapeRows() };
+    if (call === 9) return { rows: [sourceRow()] };
+    return { rows: [] };
+  });
+  await assert.rejects(new DrizzleLaunchAuthorityRepository(harness.db, options()).recordContentApproval(input),
+    (error: unknown) => error instanceof LaunchAuthorityPersistenceError && error.code === "AUTHORITY_DENIED");
+  assert.equal(harness.calls.length, 9);
+  assert.doesNotMatch(allText(harness.calls), /insert into .*ai_media_launch_evidence/i);
 });
 
 test("trusted quote is the only evidence method that carries exact micro-USD", async () => {
@@ -288,7 +398,9 @@ test("trusted quote is the only evidence method that carries exact micro-USD", a
     if (call === 4) return { rows: [{ influencer_id: ids.influencer }] };
     if (call === 6) return { rows: [{ generated_id: ids.created, database_now: now }] };
     if (call === 7) return { rows: [subjectRow()] };
-    if (call === 9) return { rows: [{ id: ids.created, input_digest: input.inputDigest }] };
+    if (call === 8) return { rows: planShapeRows() };
+    if (call === 9) return { rows: [sourceRow()] };
+    if (call === 11) return { rows: [{ id: ids.created, input_digest: input.inputDigest }] };
     return { rows: [] };
   });
   const repository = new DrizzleLaunchAuthorityRepository(harness.db, {
@@ -298,7 +410,7 @@ test("trusted quote is the only evidence method that carries exact micro-USD", a
     } as never; } }, validityPolicy: { ttlSeconds: () => 600 },
   });
   await repository.recordMaximumQuoteAttestation(input);
-  const insert = harness.calls[8];
+  const insert = harness.calls[10];
   assert.match(sqlText(insert), /source_attestation_id,source_evidence_digest,evidence_digest/i);
   assert.ok(insert.params.includes("maximum_quote"));
   assert.ok(insert.params.includes("provider_quote_adapter"));
@@ -324,22 +436,24 @@ test("snapshot chooses latest whole chains, validates gates, and derives bounded
     if (call === 4) return { rows: [{ influencer_id: ids.influencer }] };
     if (call === 6) return { rows: [{ generated_id: ids.created, database_now: now }] };
     if (call === 7) return { rows: [subjectRow()] };
-    if (call === 8) return { rows: [policy] };
-    if (call === 9) return { rows: [kill] };
-    if (call >= 10 && call <= 13) return { rows: [evidence[call - 10]] };
-    if (call === 14) return { rows: [{ id: ids.created, input_digest: input.inputDigest,
+    if (call === 8) return { rows: planShapeRows() };
+    if (call === 9) return { rows: [sourceRow()] };
+    if (call === 10) return { rows: [policy] };
+    if (call === 11) return { rows: [kill] };
+    if (call >= 12 && call <= 15) return { rows: [evidence[call - 12]] };
+    if (call === 16) return { rows: [{ id: ids.created, input_digest: input.inputDigest,
       authority_digest: digest("d"), admission_digest: digest("e") }] };
     return { rows: [] };
   });
   const repository = new DrizzleLaunchAuthorityRepository(harness.db, options(300));
   const result = await repository.createAuthoritySnapshot(input);
   assert.equal(result.replayed, false);
-  for (const query of harness.calls.slice(9, 13)) {
+  for (const query of harness.calls.slice(11, 15)) {
     const text = sqlText(query);
     assert.match(text, /order by revision desc limit 1 for update/i);
     assert.doesNotMatch(text, /launch_subject_digest/i);
   }
-  const insert = harness.calls[13];
+  const insert = harness.calls[15];
   assert.match(sqlText(insert), /insert into .*ai_media_launch_authority_snapshots/i);
   assert.ok(insert.params.includes("1250000"));
   assert.ok(insert.params.some((value) => value instanceof Date
