@@ -26,8 +26,8 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     maximumVideos: 100,
   });
   assert.equal(snapshot.summary.total, snapshot.workItems.length);
-  assert.equal(snapshot.summary.done, 12);
-  assert.equal(snapshot.summary.running, 1);
+  assert.equal(snapshot.summary.done, 13);
+  assert.equal(snapshot.summary.running, 0);
   assert.equal(snapshot.summary.ready, 0);
   assert.equal(snapshot.summary.blocked, 2);
   assert.equal(new Set(snapshot.workItems.map((item) => item.id)).size, snapshot.workItems.length);
@@ -116,9 +116,11 @@ test("agent status is explicitly no-spend, no-deploy, no-migration and no-live-p
   assert.equal(heyGenVerificationEvidence?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/154");
   assert.match(heyGenVerificationEvidence?.acceptance.join(" ") ?? "", /credential-version-bound[\s\S]*avatar look[\s\S]*parent-group[\s\S]*voice/u);
   assert.match(heyGenVerificationEvidence?.blockers.join(" ") ?? "", /No API key[\s\S]*provider request[\s\S]*separate approvals/u);
-  assert.equal(secureHeyGenSetupRuntime?.state, "running");
+  assert.equal(secureHeyGenSetupRuntime?.state, "done");
   assert.equal(secureHeyGenSetupRuntime?.branch, "codex/ai-media-studio-secure-heygen-setup-runtime");
+  assert.equal(secureHeyGenSetupRuntime?.pullRequestUrl, "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/161");
   assert.match(secureHeyGenSetupRuntime?.acceptance.join(" ") ?? "", /AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY[\s\S]*5–10[\s\S]*GET-only/u);
+  assert.match(secureHeyGenSetupRuntime?.evidence.join(" ") ?? "", /PR #161[\s\S]*22\/22[\s\S]*P0=P1=P2=P3=0/u);
   assert.match(secureHeyGenSetupRuntime?.blockers.join(" ") ?? "", /migrations remain pending[\s\S]*No live verification[\s\S]*quote-to-human-approval/u);
   assert.doesNotMatch(staging?.blockers.join(" ") ?? "", /PR1|PR16|PR13/u);
   assert.match(staging?.blockers.join(" ") ?? "", /staging target[\s\S]*explicit rehearsal approval/u);
