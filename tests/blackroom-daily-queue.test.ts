@@ -28,7 +28,7 @@ test("rotates 90-minute posting windows across the full day", () => {
   assert.deepEqual(late.map((slot) => slot.localTime), ["02:00", "05:26", "08:51", "12:17", "15:43", "19:09", "22:34"]);
 });
 
-test("records source videos once and tracks short and long-form experiments", () => {
+test("records non-overlapping source moments and tracks short and long-form experiments", () => {
   const now = new Date("2026-07-20T12:00:00.000Z");
   const state = createBlackRoomQueueState(now);
   recordBlackRoomSourceUsage(state, { videoId: "yt-001", jobId: "job-1", dj: "DJ A", format: "vertical", language: "en", durationSeconds: 15, segmentStartSeconds: 10, segmentEndSeconds: 25 }, now);
@@ -38,7 +38,8 @@ test("records source videos once and tracks short and long-form experiments", ()
   recordBlackRoomSourceUsage(state, { videoId: "yt-005", jobId: "job-1", dj: "DJ C", format: "vertical", language: "en", durationSeconds: 300, segmentStartSeconds: 300, segmentEndSeconds: 600 }, now);
   recordBlackRoomSourceUsage(state, { videoId: "yt-006", jobId: "job-1", dj: "DJ C", format: "horizontal", language: "es", durationSeconds: 600, segmentStartSeconds: 600, segmentEndSeconds: 1200 }, now);
   assert.deepEqual(state.sourceHistory.map((item) => item.durationSeconds), [15, 30, 60, 120, 300, 600]);
-  assert.throws(() => recordBlackRoomSourceUsage(state, { videoId: "yt-001", jobId: "job-2", dj: "DJ C", format: "vertical", language: "es", durationSeconds: 15, segmentStartSeconds: 0, segmentEndSeconds: 15 }, now), /already used/);
+  assert.throws(() => recordBlackRoomSourceUsage(state, { videoId: "yt-001", jobId: "job-2", dj: "DJ C", format: "vertical", language: "es", durationSeconds: 15, segmentStartSeconds: 0, segmentEndSeconds: 15 }, now), /overlaps/);
+  assert.doesNotThrow(() => recordBlackRoomSourceUsage(state, { videoId: "yt-001", jobId: "job-2", dj: "DJ A", format: "horizontal", language: "es", durationSeconds: 15, segmentStartSeconds: 30, segmentEndSeconds: 45 }, now));
 });
 
 test("keeps a two-week persistent scheduling buffer", () => {

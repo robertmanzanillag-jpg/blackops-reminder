@@ -6,8 +6,7 @@ import { promisify } from "node:util";
 import {
   BLACKROOM_WORKER_LOCK_PATH,
   BLACKROOM_WORKER_STATE_PATH,
-  buildBlackRoomCodexArgs,
-  buildBlackRoomWorkerPrompt,
+  buildBlackRoomLocalEditorArgs,
   createBlackRoomLocalWorkerState,
   resolveBlackRoomPublicationDateTime,
   isBlackRoomJobPublishable,
@@ -18,6 +17,8 @@ import {
   hasCompleteBlackRoomMetricoolReceipt,
   requiredBlackRoomReceiptNetworks,
   buildBlackRoomUploadChunks,
+  blackRoomEditorExitMessage,
+  isBlackRoomSourceSegmentRecorded,
   BLACKROOM_FFPROBE_SHOW_ENTRIES,
   type BlackRoomLocalWorkerState,
 } from "../server/blackroom-local-worker";
@@ -30,7 +31,7 @@ const statePath = path.join(projectDir, BLACKROOM_WORKER_STATE_PATH);
 const lockPath = path.join(projectDir, BLACKROOM_WORKER_LOCK_PATH);
 const logPath = path.join(projectDir, "clippers_workspace/blackroom/agent/worker.log");
 const activityPath = path.join(projectDir, "clippers_workspace/blackroom/agent/activity-log.json");
-const codexPath = process.env.BLACKROOM_CODEX_PATH || "/Applications/ChatGPT.app/Contents/Resources/codex";
+const nodePath = process.env.BLACKROOM_NODE_PATH || process.execPath;
 const pollMs = Math.max(5_000, Number(process.env.BLACKROOM_WORKER_POLL_MS || 15_000));
 const maxRunMs = Math.max(60_000, Number(process.env.BLACKROOM_WORKER_MAX_RUN_MS || 45 * 60_000));
 const remoteUrl = String(process.env.BLACKROOM_REMOTE_CONTROL_URL || "https://robplanner.replit.app").replace(/\/$/, "");
@@ -108,11 +109,7 @@ async function fileExists(filePath: string): Promise<boolean> {
 
 async function ensureSourceRecorded(entry: any): Promise<void> {
   const queue = await readJson<any>(queuePath, { sourceHistory: [] });
-  const existing = (queue.sourceHistory || []).find((candidate: any) => candidate.videoId === entry.videoId);
-  if (existing) {
-    if (existing.jobId !== entry.jobId) throw new Error(`Source ${entry.videoId} belongs to another BlackRoom job`);
-    return;
-  }
+  if (isBlackRoomSourceSegmentRecorded(queue.sourceHistory || [], entry)) return;
   await runNpm(["run", "blackroom:agent", "--", "--record-source", "--video", entry.videoId, "--job", entry.jobId,
     "--dj", entry.dj, "--format", entry.format, "--language", entry.language, "--duration", String(entry.durationSeconds),
     "--start-second", String(entry.segmentStartSeconds), "--end-second", String(entry.segmentEndSeconds)]);
@@ -268,7 +265,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
   return true;
 }
 
-async function runCodex(state: BlackRoomLocalWorkerState): Promise<void> {
+async function runLocalEditor(state: BlackRoomLocalWorkerState): Promise<void> {
   const startedAt = new Date().toISOString();
   Object.assign(state, { running: true, pid: null, startedAt, finishedAt: null, lastError: null, runs: state.runs + 1 });
   await writeJson(statePath, state);
@@ -277,13 +274,12 @@ async function runCodex(state: BlackRoomLocalWorkerState): Promise<void> {
   const output = await open(logPath, "a");
   let timeout: ReturnType<typeof setTimeout> | null = null;
   try {
-    const child = spawn(codexPath, buildBlackRoomCodexArgs(projectDir), {
-      cwd: projectDir, detached: true, stdio: ["pipe", output.fd, output.fd],
+    const child = spawn(nodePath, buildBlackRoomLocalEditorArgs(projectDir), {
+      cwd: projectDir, detached: true, stdio: ["ignore", output.fd, output.fd],
     });
     activeChild = child;
     state.pid = child.pid || null;
     await writeJson(statePath, state);
-    child.stdin.end(buildBlackRoomWorkerPrompt(projectDir));
     const exitPromise = waitForChildExit(child);
     const outcome = await Promise.race([
       exitPromise.then((exitCode) => ({ timedOut: false as const, exitCode })),
@@ -296,8 +292,12 @@ async function runCodex(state: BlackRoomLocalWorkerState): Promise<void> {
     clearTimeout(timeout);
     timeout = null;
     Object.assign(state, { running: false, pid: null, finishedAt: new Date().toISOString(), lastExitCode: exitCode });
-    if (exitCode !== 0) state.lastError = `Codex terminó con código ${exitCode}`;
-    else await appendLog("Descarga y edición terminadas; buscando el clip reservado para publicarlo.", "edición", "success");
+    if (exitCode !== 0) state.lastError = `El editor local terminó con código ${exitCode}`;
+    else {
+      const latestQueue = await readJson<any>(queuePath, { enabled: false });
+      const completion = blackRoomEditorExitMessage(latestQueue.enabled === true);
+      await appendLog(completion.message, "edición", completion.level);
+    }
   } catch (error) {
     Object.assign(state, { running: false, pid: null, finishedAt: new Date().toISOString(), lastExitCode: 1, lastError: error instanceof Error ? error.message : String(error) });
   } finally {
@@ -355,9 +355,9 @@ async function main(): Promise<void> {
       try {
         const publishedExisting = await publishOneReservedEntry();
         if (!publishedExisting) {
-          await runCodex(state);
+          await runLocalEditor(state);
           const publishedNew = await publishOneReservedEntry();
-          if (!publishedNew) throw new Error(state.lastError || "Codex finished without reserving a BlackRoom video");
+          if (!publishedNew) throw new Error(state.lastError || "El editor local terminó sin reservar un video de BlackRoom");
         }
         state.lastError = null;
         await writeJson(statePath, state);

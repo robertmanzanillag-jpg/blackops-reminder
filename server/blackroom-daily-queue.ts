@@ -36,6 +36,7 @@ export interface BlackRoomDailyJob {
     durationsSeconds: number[];
     minimumClipsPerDuration: number;
     neverRepeatSourceVideo: boolean;
+    allowDistinctNonOverlappingSegments: boolean;
     neverReuseOverlappingSegment: boolean;
     optimizeDurationFromPerformance: boolean;
     differentMomentsAcrossFormats: boolean;
@@ -169,7 +170,8 @@ function createDailyJob(state: BlackRoomQueueState, targetDate: string, dayIndex
       formats: ["vertical", "horizontal"],
       durationsSeconds: [...BLACKROOM_DURATION_VARIANTS],
       minimumClipsPerDuration: 1,
-      neverRepeatSourceVideo: true,
+      neverRepeatSourceVideo: false,
+      allowDistinctNonOverlappingSegments: true,
       neverReuseOverlappingSegment: true,
       optimizeDurationFromPerformance: true,
       differentMomentsAcrossFormats: true,
@@ -297,8 +299,9 @@ export function recordBlackRoomSourceUsage(
 ): BlackRoomSourceUsage {
   const videoId = String(usage.videoId || "").trim();
   if (!videoId) throw new Error("videoId is required");
-  if (state.sourceHistory.some((item) => item.videoId === videoId)) {
-    throw new Error(`BlackRoom source video already used: ${videoId}`);
+  if (state.sourceHistory.some((item) => item.videoId === videoId
+    && usage.segmentStartSeconds < item.segmentEndSeconds && item.segmentStartSeconds < usage.segmentEndSeconds)) {
+    throw new Error(`BlackRoom source segment overlaps a previous clip: ${videoId}`);
   }
   if (!BLACKROOM_DURATION_VARIANTS.includes(usage.durationSeconds)) {
     throw new Error("durationSeconds must be 15, 30, 60, 120, 300, or 600");
@@ -411,7 +414,7 @@ export function summarizeBlackRoomQueue(state: BlackRoomQueueState) {
     bufferWeeks: Math.ceil(state.bufferDays / 7),
     postsPerDay: state.postsPerDay,
     pendingPrioritySources: state.prioritySources.filter((source) => source.status === "pending").length,
-    usedSourceVideos: state.sourceHistory.length,
+    usedSourceVideos: new Set(state.sourceHistory.map((item) => item.videoId)).size,
     durationSamples: {
       ...Object.fromEntries(BLACKROOM_DURATION_VARIANTS.map((duration) => [
         duration,
@@ -434,6 +437,9 @@ export async function readBlackRoomQueue(filePath = BLACKROOM_QUEUE_PATH, now = 
           ...job.requirements,
           durationsSeconds: [...BLACKROOM_DURATION_VARIANTS],
           minimumClipsPerDuration: 1,
+          neverRepeatSourceVideo: false,
+          allowDistinctNonOverlappingSegments: true,
+          neverReuseOverlappingSegment: true,
         }
         : job.requirements,
     })) : [];

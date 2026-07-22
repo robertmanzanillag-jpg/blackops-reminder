@@ -4,15 +4,16 @@ import {
   BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES,
   BLACKROOM_FFPROBE_SHOW_ENTRIES,
   buildBlackRoomUploadChunks,
+  blackRoomEditorExitMessage,
   assertSafeConfirmedDeletion,
-  buildBlackRoomCodexArgs,
-  buildBlackRoomWorkerPrompt,
+  buildBlackRoomLocalEditorArgs,
   confirmBlackRoomNetworkReceipt,
   createBlackRoomLocalWorkerState,
   createBlackRoomWorkerLedger,
   nextBlackRoomPublicationDateTime,
   resolveBlackRoomPublicationDateTime,
   isBlackRoomJobPublishable,
+  isBlackRoomSourceSegmentRecorded,
   markBlackRoomNetworkUncertain,
   reserveBlackRoomLedgerEntry,
   resetBlackRoomNetworkAttempt,
@@ -83,35 +84,28 @@ test("worker state starts stopped and recoverable", () => {
   });
 });
 
-test("uses only Codex exec flags supported by the installed noninteractive CLI", () => {
-  const args = buildBlackRoomCodexArgs("/tmp/blackroom-project");
-  assert.deepEqual(args.slice(0, 3), ["exec", "--ephemeral", "--color"]);
-  assert.equal(args.includes("-a"), false);
-  assert.equal(args.includes("workspace-write"), true);
-  assert.ok(args.includes("sandbox_workspace_write.network_access=true"));
-  assert.equal(args.at(-1), "-");
+test("worker launches the local deterministic editor without Codex", () => {
+  const args = buildBlackRoomLocalEditorArgs("/tmp/blackroom-project");
+  assert.deepEqual(args, ["--import", "tsx", "/tmp/blackroom-project/script/blackroom-deterministic-editor.ts"]);
+  assert.equal(args.join(" ").toLowerCase().includes("codex"), false);
 });
 
-test("prompt stops after rendering and reservation so deterministic publisher owns Metricool", () => {
-  const prompt = buildBlackRoomWorkerPrompt("/tmp/blackroom-project");
-  assert.match(prompt, /EXACTAMENTE un video/);
-  assert.match(prompt, /no abras Chrome ni intentes entrar en Metricool/i);
-  assert.match(prompt, /Termina justo después de que la reserva/i);
-  assert.match(prompt, /No confirmes, no marques uncertain, no borres archivos/i);
-  assert.match(prompt, /no resuelvas CAPTCHA/i);
-  assert.match(prompt, /Nunca repitas video fuente/);
-  assert.match(prompt, /No abras ni navegues YouTube con Chrome/);
-  assert.match(prompt, /\/opt\/homebrew\/bin\/yt-dlp/);
-  assert.match(prompt, /No descargues el set completo/);
-  assert.match(prompt, /--download-sections/);
-  assert.match(prompt, /tiempos absolutos del set original/);
-  assert.match(prompt, /debajo de 500 MB/);
-  assert.match(prompt, /cercano a 5 Mbps/);
-  assert.match(prompt, /TikTok @blackroom\.clipss, la página de clips de Facebook y YouTube/);
-  assert.match(prompt, /evidencia inequívoca de Metricool para TikTok, Facebook/);
-  assert.match(prompt, /enlace exacto del video completo de YouTube/);
-  assert.match(prompt, /horizontales y largos se publican como videos normales de YouTube/);
-  assert.match(prompt, /cortes de 300 y 600 segundos deben ser horizontales/);
+test("worker records distinct non-overlapping moments from the same source independently", () => {
+  const history = [{ videoId: "same-set", segmentStartSeconds: 10, segmentEndSeconds: 40 }];
+  assert.equal(isBlackRoomSourceSegmentRecorded(history, { videoId: "same-set", segmentStartSeconds: 10, segmentEndSeconds: 40 }), true);
+  assert.equal(isBlackRoomSourceSegmentRecorded(history, { videoId: "same-set", segmentStartSeconds: 50, segmentEndSeconds: 80 }), false);
+  assert.equal(isBlackRoomSourceSegmentRecorded(history, { videoId: "other-set", segmentStartSeconds: 10, segmentEndSeconds: 40 }), false);
+});
+
+test("editor completion activity distinguishes a real finish from a pause", () => {
+  assert.deepEqual(blackRoomEditorExitMessage(true), {
+    message: "Descarga y edición terminadas; buscando el clip reservado para publicarlo.",
+    level: "success",
+  });
+  assert.deepEqual(blackRoomEditorExitMessage(false), {
+    message: "Edición detenida por pausa; no se iniciarán nuevos clips.",
+    level: "info",
+  });
 });
 
 test("requires all three Metricool receipts for vertical, horizontal, short, and long clips", () => {
@@ -163,7 +157,7 @@ test("rejects silent or nearly silent DJ audio before upload", () => {
   assert.throws(() => validateBlackRoomAudioLoudness("no volumedetect summary"), /silent/);
 });
 
-test("ledger blocks duplicate slots and source videos", () => {
+test("ledger blocks duplicate slots and overlapping source segments", () => {
   const ledger = createBlackRoomWorkerLedger();
   reserveBlackRoomLedgerEntry(ledger, {
     ...mediaDetails,
@@ -182,7 +176,14 @@ test("ledger blocks duplicate slots and source videos", () => {
     jobId: "job-1", slot: "02:00", videoId: "video-1",
     renderPath: "/tmp/project/clippers_workspace/blackroom/rendered/c.mp4",
     sourcePath: "/tmp/project/clippers_workspace/blackroom/sources/c.mp4",
-  }), /source video already reserved/);
+  }), /segment overlaps/);
+  assert.doesNotThrow(() => reserveBlackRoomLedgerEntry(ledger, {
+    ...mediaDetails,
+    segmentStartSeconds: 100, segmentEndSeconds: 130,
+    jobId: "job-1", slot: "03:30", videoId: "video-1",
+    renderPath: "/tmp/project/clippers_workspace/blackroom/rendered/d.mp4",
+    sourcePath: "/tmp/project/clippers_workspace/blackroom/sources/d.mp4",
+  }));
 });
 
 test("uncertain reservations persist their exact Metricool schedule for verification-only recovery", () => {
@@ -260,14 +261,22 @@ test("safe deletion requires confirmed Metricool receipt and exact media path", 
   assert.throws(() => assertSafeConfirmedDeletion(project, historicalSingleNetwork, historicalSingleNetwork.renderPath), /complete Metricool confirmations/);
 });
 
-test("ledger rejects a source already recorded in queue history", () => {
+test("ledger rejects overlap with queue history but permits a different moment", () => {
   const ledger = createBlackRoomWorkerLedger();
+  const history = [{ videoId: "video-used", segmentStartSeconds: 5, segmentEndSeconds: 35 }];
   assert.throws(() => reserveBlackRoomLedgerEntry(ledger, {
     ...mediaDetails,
     jobId: "job-1", slot: "00:30", videoId: "video-used",
     renderPath: "/tmp/project/clippers_workspace/blackroom/rendered/a.mp4",
     sourcePath: "/tmp/project/clippers_workspace/blackroom/sources/a.mp4",
-  }, ["video-used"]), /already used by queue history/);
+  }, history), /segment overlaps/);
+  assert.doesNotThrow(() => reserveBlackRoomLedgerEntry(ledger, {
+    ...mediaDetails,
+    segmentStartSeconds: 50, segmentEndSeconds: 80,
+    jobId: "job-1", slot: "02:00", videoId: "video-used",
+    renderPath: "/tmp/project/clippers_workspace/blackroom/rendered/b.mp4",
+    sourcePath: "/tmp/project/clippers_workspace/blackroom/sources/b.mp4",
+  }, history));
 });
 
 test("ledger rejects missing paths and non-finite segment boundaries", () => {

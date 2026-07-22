@@ -80,8 +80,7 @@ async function main(): Promise<void> {
       if (![15, 30, 60, 120, 300, 600].includes(durationSeconds)) throw new Error("unsupported duration");
       if (!renderPathInput || !sourcePathInput) throw new Error("render and source paths are required");
       const queue = JSON.parse(await readFile(queuePath, "utf8"));
-      const usedSourceVideoIds = Array.isArray(queue.sourceHistory)
-        ? queue.sourceHistory.map((item: { videoId?: unknown }) => String(item.videoId || "")) : [];
+      const sourceHistory = Array.isArray(queue.sourceHistory) ? queue.sourceHistory : [];
       result = reserveBlackRoomLedgerEntry(ledger, {
         jobId: arg("--job") || "", slot: arg("--slot") || "", videoId: arg("--video") || "",
         dj: arg("--dj") || "", language, format,
@@ -89,7 +88,7 @@ async function main(): Promise<void> {
         segmentStartSeconds: Number(arg("--segment-start")), segmentEndSeconds: Number(arg("--segment-end")),
         caption: arg("--caption") || "",
         renderPath: path.resolve(renderPathInput), sourcePath: path.resolve(sourcePathInput),
-      }, usedSourceVideoIds);
+      }, sourceHistory);
       await writeLedger(ledger);
     } else if (process.argv.includes("--confirm")) {
       result = updateBlackRoomLedgerEntry(ledger, arg("--reservation") || "", { status: "confirmed", metricoolId: arg("--metricool-id") || "" });

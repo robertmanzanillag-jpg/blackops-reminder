@@ -18,6 +18,21 @@ export interface BlackRoomLocalWorkerState {
 export const BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES = 4 * 1024 * 1024;
 export const BLACKROOM_FFPROBE_SHOW_ENTRIES = "format=format_name,duration:stream=codec_type,codec_name,width,height,pix_fmt,duration,channels";
 
+export function isBlackRoomSourceSegmentRecorded(
+  sourceHistory: Array<{ videoId?: string; segmentStartSeconds?: number; segmentEndSeconds?: number }>,
+  entry: Pick<BlackRoomLedgerEntry, "videoId" | "segmentStartSeconds" | "segmentEndSeconds">,
+): boolean {
+  return sourceHistory.some((candidate) => candidate.videoId === entry.videoId
+    && candidate.segmentStartSeconds === entry.segmentStartSeconds
+    && candidate.segmentEndSeconds === entry.segmentEndSeconds);
+}
+
+export function blackRoomEditorExitMessage(queueEnabled: boolean): { message: string; level: "info" | "success" } {
+  return queueEnabled
+    ? { message: "Descarga y edición terminadas; buscando el clip reservado para publicarlo.", level: "success" }
+    : { message: "Edición detenida por pausa; no se iniciarán nuevos clips.", level: "info" };
+}
+
 export function buildBlackRoomUploadChunks(totalBytes: number, chunkBytes = BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES): Array<{ index: number; start: number; end: number; size: number }> {
   if (!Number.isSafeInteger(totalBytes) || totalBytes <= 0 || !Number.isSafeInteger(chunkBytes) || chunkBytes <= 0) throw new Error("Invalid BlackRoom upload size");
   const chunks: Array<{ index: number; start: number; end: number; size: number }> = [];
@@ -141,20 +156,8 @@ export function createBlackRoomLocalWorkerState(): BlackRoomLocalWorkerState {
   };
 }
 
-export function buildBlackRoomCodexArgs(projectDir: string): string[] {
-  return [
-    "exec",
-    "--ephemeral",
-    "--color",
-    "never",
-    "-s",
-    "workspace-write",
-    "-c",
-    "sandbox_workspace_write.network_access=true",
-    "-C",
-    projectDir,
-    "-",
-  ];
+export function buildBlackRoomLocalEditorArgs(projectDir: string): string[] {
+  return ["--import", "tsx", path.join(projectDir, "script/blackroom-deterministic-editor.ts")];
 }
 
 export function shouldRunBlackRoomWorker(
@@ -289,7 +292,7 @@ export function validateBlackRoomAudioLoudness(output: string): { meanVolumeDb: 
 export function reserveBlackRoomLedgerEntry(
   ledger: BlackRoomWorkerLedger,
   input: Omit<BlackRoomLedgerEntry, "reservationId" | "status" | "metricoolId" | "publicationDateTime" | "networkAttempts" | "networkReceipts" | "createdAt" | "updatedAt">,
-  usedSourceVideoIds: Iterable<string> = [],
+  sourceHistory: Iterable<{ videoId: string; segmentStartSeconds: number; segmentEndSeconds: number }> = [],
   now = new Date(),
 ): BlackRoomLedgerEntry {
   if (!input.jobId || !input.slot || !input.videoId) throw new Error("jobId, slot, and videoId are required");
@@ -298,9 +301,12 @@ export function reserveBlackRoomLedgerEntry(
   if (![15, 30, 60, 120, 300, 600].includes(input.durationSeconds)) throw new Error("unsupported duration");
   if (!Number.isFinite(input.segmentStartSeconds) || !Number.isFinite(input.segmentEndSeconds)
     || input.segmentStartSeconds < 0 || input.segmentEndSeconds <= input.segmentStartSeconds) throw new Error("invalid segment");
-  if (new Set(usedSourceVideoIds).has(input.videoId)) throw new Error("source video already used by queue history");
   if (ledger.entries.some((entry) => entry.jobId === input.jobId && entry.slot === input.slot)) throw new Error("slot already reserved");
-  if (ledger.entries.some((entry) => entry.videoId === input.videoId)) throw new Error("source video already reserved");
+  const overlaps = (entry: { videoId: string; segmentStartSeconds: number; segmentEndSeconds: number }) => entry.videoId === input.videoId
+    && input.segmentStartSeconds < entry.segmentEndSeconds && entry.segmentStartSeconds < input.segmentEndSeconds;
+  if (ledger.entries.some(overlaps) || Array.from(sourceHistory).some(overlaps)) {
+    throw new Error("source video segment overlaps a previous BlackRoom clip");
+  }
   const timestamp = now.toISOString();
   const entry: BlackRoomLedgerEntry = {
     ...input,
@@ -372,30 +378,4 @@ export function assertSafeConfirmedDeletion(projectDir: string, entry: BlackRoom
   if (![entry.renderPath, entry.sourcePath].map((item) => path.resolve(item)).includes(resolvedFile)) throw new Error("file is not part of this reservation");
   if (!allowedRoots.some((root) => resolvedFile.startsWith(`${root}${path.sep}`))) throw new Error("file is outside BlackRoom media directories");
   return resolvedFile;
-}
-
-export function buildBlackRoomWorkerPrompt(projectDir: string): string {
-  const queuePath = path.join(projectDir, "clippers_workspace/blackroom/agent/queue.json");
-  const ledgerPath = path.join(projectDir, BLACKROOM_WORKER_LEDGER_PATH);
-  return `Eres el editor local de BlackRoom. Prepara y reserva EXACTAMENTE un video pendiente y termina. Usa shell para YouTube/edición; no abras Chrome ni intentes entrar en Metricool. El proceso determinista que te invoca se encarga de subir, verificar y limpiar después. Escribe archivos solo dentro de ${projectDir}.
-
-Objetivo: canal fuente https://www.youtube.com/@blackroom_us -> edición -> Metricool -> TikTok @blackroom.clipss, la página de clips de Facebook y YouTube. Facebook llevará un CTA separado hacia la página principal; el publicador determinista lo añade sin poner ese enlace en TikTok. Los cortes verticales elegibles se publican como Shorts; los horizontales y largos se publican como videos normales de YouTube.
-
-Estado persistente:
-- Cola: ${queuePath}
-- Ledger de recibos/reservas: ${ledgerPath}
-
-Reglas obligatorias:
-1. Lee la cola al empezar. Si enabled no es true, termina sin descargar, editar ni cambiar trabajos. Vuelve a comprobar enabled justo antes de reservar; si está pausado, aborta.
-2. Procesa un solo slot no confirmado del primer lote queued/retry/processing. Respeta la cantidad, DJs y horarios que figuran en requirements/slots; la cantidad puede cambiar por una orden del chat.
-3. No abras ni navegues YouTube con Chrome. Si prioritySources contiene una entrada pending, usa primero esa URL y verifica con yt-dlp que pertenece al canal BlackRoom; si no pertenece, no la reserves y explica el error. Si no hay prioridad, obtén el inventario del canal y selecciona la fuente exclusivamente desde shell con /opt/homebrew/bin/yt-dlp contra https://www.youtube.com/@blackroom_us/videos (por ejemplo, primero --flat-playlist --dump-single-json y luego descarga una URL concreta). Selecciona al azar un video que no aparezca en sourceHistory ni en el ledger. Nunca repitas video fuente ni uses segmentos solapados.
-4. Alterna inglés/español y vertical/horizontal; el momento vertical debe ser diferente del horizontal para un mismo DJ.
-5. Prueba 15, 30, 60, 120, 300 y 600 segundos conforme a requirements. Los cortes de 300 y 600 segundos deben ser horizontales para publicarse como videos normales en YouTube; conserva vertical y horizontal entre los cortes cortos. El corte debe incluir un drop cerca del principio. No inventes que un video corto soporta una duración mayor.
-6. No descargues el set completo. Elige primero una ventana aleatoria suficientemente larga para el formato (duración objetivo + 90 s de margen; para 5/10 min usa +180 s), sin solapar segmentos usados. Descarga solo esa ventana en la mayor calidad disponible mediante /opt/homebrew/bin/yt-dlp con --download-sections "*INICIO-FIN" y --force-keyframes-at-cuts. Analiza el audio de esa ventana con /opt/homebrew/bin/ffmpeg y sitúa un aumento fuerte/drop dentro de los primeros segundos del corte final. Guarda una sola fuente parcial bajo clippers_workspace/blackroom/sources y el render final bajo clippers_workspace/blackroom/rendered; registra en el ledger los tiempos absolutos del set original. Renderiza a 1080p con /opt/homebrew/bin/ffmpeg como MP4 H.264 y AAC 128 kbps, y usa -movflags +faststart. Mantén el video entre 5 y 25 Mbps; para 5/10 minutos usa un objetivo cercano a 5 Mbps para que el MP4 final quede inequívocamente debajo de 500 MB. Si ffmpeg falla o el archivo queda vacío, incompleto o supera 500 MB, borra solo ese render fallido y vuelve a renderizar antes de reservar. Verifica duración, codecs, pixel format, resolución y tamaño con /opt/homebrew/bin/ffprobe y mide el render final con ffmpeg volumedetect; no reserves si la pista AAC no cubre el clip completo, no tiene canales, es silenciosa o su volumen máximo está por debajo de -30 dBFS. No uses Chrome.
-7. Antes de reservar la fuente, vuelve a leer cola y ledger. Reserva exclusivamente con npm run blackroom:ledger -- --reserve --job ID --slot HH:MM --video ID --dj NOMBRE --language en|es --format vertical|horizontal --duration SEGUNDOS --segment-start SEGUNDO --segment-end SEGUNDO --caption TEXTO --render RUTA --source RUTA. Si falla, no publiques. No escribas el ledger directamente.
-8. Termina justo después de que la reserva se haya escrito correctamente. No confirmes, no marques uncertain, no borres archivos, no registres sourceHistory y no cambies el estado final del lote; el publicador determinista hará esas acciones después de obtener evidencia inequívoca de Metricool para TikTok, Facebook y YouTube.
-9. No añadas links en el caption que generas: TikTok queda sin enlaces y el publicador determinista añadirá solamente al caption de Facebook el enlace exacto del video completo de YouTube y el enlace de la página principal. No resuelvas CAPTCHA, no introduzcas contraseñas y no cambies ajustes de ninguna cuenta.
-10. Deja en el ledger: jobId, slot, videoId, DJ, idioma, formato, duración, segmento, ruta de render, caption, estado reserved y timestamps.
-
-No afirmes que el post fue subido o programado. Al final devuelve un resumen compacto de la reserva y las rutas verificadas.`;
 }

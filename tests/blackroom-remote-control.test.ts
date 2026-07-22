@@ -247,6 +247,8 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /const byId=id=>document\.getElementById\(id\)/);
   assert.match(blackRoomPage, /Trabajando de verdad/);
   assert.match(blackRoomPage, /Actividad en vivo/);
+  assert.doesNotMatch(blackRoomPage, /1 semana/);
+  assert.match(blackRoomPage, /segmentos sin repetir ni solapar/);
   assert.match(blackRoomPage, /Chat y órdenes/);
   assert.match(blackRoomPage, /aria-live="polite"/);
   assert.match(blackRoomPage, /function renderActivity\(history=\[\]\)/);
