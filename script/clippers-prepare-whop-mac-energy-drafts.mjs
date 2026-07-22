@@ -352,6 +352,9 @@ export async function prepareWhopMacEnergyDrafts(options = {}) {
     validateSourceProbe(spec, sourceProbe);
     approved.push({ spec, sourcePath, sourceSha256: await sha256(sourcePath) });
   }
+  if (new Set(approved.map((item) => item.sourceSha256)).size !== CLIP_SPECS.length) {
+    throw new Error("Campaign requires ten source files with distinct content.");
+  }
 
   await assertSafeOutputPath(workspaceRoot, outputDir);
   await mkdir(outputDir, { recursive: true });

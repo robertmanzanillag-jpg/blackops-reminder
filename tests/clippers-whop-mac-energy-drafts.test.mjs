@@ -10,7 +10,7 @@ import { CAMPAIGN, CLIP_SPECS } from "../script/clippers-prepare-whop-mac-energy
 const repoRoot = path.resolve(import.meta.dirname, "..");
 const scriptPath = path.join(repoRoot, "script/clippers-prepare-whop-mac-energy-drafts.mjs");
 
-async function fixture({ missingSource, symlinkSource } = {}) {
+async function fixture({ missingSource, symlinkSource, duplicateContent } = {}) {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "whop-mac-energy-test-"));
   const sourceDir = path.join(workspaceRoot, CAMPAIGN.sourceDrop);
   const binDir = path.join(workspaceRoot, "bin");
@@ -23,7 +23,7 @@ async function fixture({ missingSource, symlinkSource } = {}) {
 
   for (const [index, spec] of CLIP_SPECS.entries()) {
     if (spec.sourceName === missingSource || spec.sourceName === symlinkSource) continue;
-    await writeFile(path.join(sourceDir, spec.sourceName), `approved-source-${index}`);
+    await writeFile(path.join(sourceDir, spec.sourceName), duplicateContent && index < 2 ? "duplicate-approved-source" : `approved-source-${index}`);
   }
   if (symlinkSource) {
     const outside = path.join(await mkdtemp(path.join(os.tmpdir(), "whop-mac-outside-")), "outside.mp4");
@@ -155,6 +155,14 @@ test("missing approved source blocks before rendering or writing a false-ready m
   assert.match(result.stderr, /Required campaign source is missing/);
   await assert.rejects(readFile(item.ffmpegLog, "utf8"));
   await assert.rejects(readFile(path.join(item.workspaceRoot, CAMPAIGN.outputDrop, "draft-manifest.json"), "utf8"));
+});
+
+test("different filenames with duplicate source content are rejected", async () => {
+  const item = await fixture({ duplicateContent: true });
+  const result = run(item);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /distinct content/);
+  await assert.rejects(readFile(item.ffmpegLog, "utf8"));
 });
 
 test("symlinked campaign sources are rejected", async () => {

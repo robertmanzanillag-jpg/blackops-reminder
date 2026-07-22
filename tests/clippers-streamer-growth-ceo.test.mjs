@@ -123,6 +123,28 @@ test("preserves campaign-approved captions and disclosure tags per draft", () =>
   assert.equal(plan.decisions[0].assignments[0].preparationStatus, "ready_with_campaign_hook");
 });
 
+test("appends required disclosures missing from a custom campaign caption", () => {
+  const draftFile = campaign.draftFiles[0];
+  const plan = buildStreamerGrowthCeoPlan({
+    campaigns: [{
+      ...campaign,
+      draftsReady: 1,
+      draftFiles: [draftFile],
+      draftMetadata: {
+        [draftFile]: {
+          caption: "A custom campaign caption",
+          requiredHashtags: ["@drinkmacenergy", "#MACenergy", "#paidpartner"],
+        },
+      },
+    }],
+    now,
+  });
+  assert.equal(
+    plan.decisions[0].assignments[0].captionText,
+    "A custom campaign caption @drinkmacenergy #MACenergy #paidpartner",
+  );
+});
+
 test("holds ten daily while the CEO recuts weak results", () => {
   const metrics = Array.from({ length: 15 }, (_, index) => ({
     campaignId: campaign.id,
@@ -210,8 +232,8 @@ test("separates Metricool approval readiness from Vyro cashout readiness", () =>
 test("scales only after real qualifying posts and keeps exploration", () => {
   const metrics = [
     { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 12000, earningsUsd: 18, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.41, shareRate: 0.03 },
-    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 9000, earningsUsd: 13.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.38, shareRate: 0.025 },
-    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 15000, earningsUsd: 22.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.45, shareRate: 0.04 },
+    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl: publishedPostUrlFor(1), views: 9000, earningsUsd: 13.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.38, shareRate: 0.025 },
+    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl: publishedPostUrlFor(2), views: 15000, earningsUsd: 22.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.45, shareRate: 0.04 },
   ];
   const plan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics, now });
   assert.equal(plan.status, "scaling");
@@ -221,6 +243,39 @@ test("scales only after real qualifying posts and keeps exploration", () => {
   assert.equal(plan.decisions[0].assignments.filter((row) => row.strategyId === "direct_insight").length, 5);
   assert.equal(plan.goal.measuredViews, 36000);
   assert.equal(plan.goal.measuredEarningsUsd, 54);
+});
+
+test("deduplicates verified performance by exact public post URL", () => {
+  const duplicate = {
+    campaignId: campaign.id,
+    strategyId: "direct_insight",
+    finalStatus: "published",
+    publishedPostUrl,
+    views: 12_000,
+    earningsUsd: 18,
+    qualifiedForPayout: true,
+    metricEvidenceVerified: true,
+    payoutEvidenceVerified: true,
+    qualificationEvidenceVerified: true,
+  };
+  const plan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: Array(15).fill(duplicate), now, targetDailyClips: 15 });
+  assert.equal(plan.decisions[0].observed.publishedPosts, 1);
+  assert.equal(plan.goal.measuredViews, 12_000);
+  assert.equal(plan.operatingPolicy.dailyTestClips, 10);
+});
+
+test("caps Metricool rows at the CEO daily limit per account", () => {
+  const largeCampaign = {
+    ...campaign,
+    draftsReady: 20,
+    draftFiles: Array.from({ length: 20 }, (_, index) => `draft-${index + 1}.mp4`),
+  };
+  const plan = buildStreamerGrowthCeoPlan({ campaigns: [largeCampaign], metrics: [], now, publishingAuthorized: true });
+  const media = Object.fromEntries(Array.from({ length: 20 }, (_, index) => [index + 1, { ready: true }]));
+  const rows = buildMetricoolApprovalRows(plan.decisions[0], media);
+  assert.equal(plan.decisions[0].assignments.length, 10);
+  assert.equal(rows.length, 10);
+  assert.ok(rows.every((row) => row.publishAllowed));
 });
 
 test("raises the ten-post baseline only after enough verified winning posts", () => {
@@ -259,7 +314,7 @@ test("pauses a cut style after six posts with no payout qualification", () => {
     campaignId: campaign.id,
     strategyId: index % 2 ? "hook_only" : "curiosity_question",
     finalStatus: "published",
-    publishedPostUrl,
+    publishedPostUrl: publishedPostUrlFor(index + 40),
     views: 500 + index * 100,
     earningsUsd: 0,
     qualifiedForPayout: false,

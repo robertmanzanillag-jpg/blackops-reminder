@@ -19,6 +19,22 @@ function tiktokPostMatchesAccount(url, accountHandle) {
   return Boolean(match && expected && match[1].toLowerCase() === expected);
 }
 
+function uniquePublishedRows(rows) {
+  const byPostUrl = new Map();
+  for (const row of rows) {
+    const key = String(row.publishedPostUrl || "").trim().toLowerCase();
+    if (key) byPostUrl.set(key, row);
+  }
+  return [...byPostUrl.values()];
+}
+
+function captionWithRequiredTags(caption, requiredTags) {
+  const base = String(caption || "").trim();
+  const normalized = base.toLowerCase();
+  const missing = requiredTags.filter((tag) => !normalized.includes(tag.toLowerCase()));
+  return `${base} ${missing.join(" ")}`.trim();
+}
+
 function draftAssignments(campaign, experiment, rows) {
   const draftCount = Math.floor(finiteNumber(campaign.draftsReady) || 0);
   const namedDrafts = Array.isArray(campaign.draftFiles)
@@ -68,8 +84,10 @@ function draftAssignments(campaign, experiment, rows) {
     const assignmentHashtags = Array.isArray(draftMetadata.requiredHashtags)
       ? draftMetadata.requiredHashtags.map((value) => String(value || "").trim()).filter(Boolean)
       : requiredHashtags;
-    const captionText = String(draftMetadata.caption || "").trim()
-      || `${generatedCaption} ${assignmentHashtags.join(" ")}`.trim();
+    const captionText = captionWithRequiredTags(
+      String(draftMetadata.caption || "").trim() || generatedCaption,
+      assignmentHashtags,
+    );
     return {
       slot: index + 1,
       draftFile,
@@ -120,7 +138,9 @@ function htmlValue(value) {
 }
 
 export function buildMetricoolApprovalRows(decision, mediaReadyBySlot = {}) {
-  return (decision.assignments || []).map((assignment) => {
+  const configuredLimit = finiteNumber(decision.dailyClipLimit);
+  const dailyClipLimit = Math.min(15, Math.trunc(configuredLimit === null ? 15 : configuredLimit));
+  return (decision.assignments || []).slice(0, dailyClipLimit).map((assignment) => {
     const media = mediaReadyBySlot[assignment.slot] || {};
     const publishingAuthorized = decision.publishingAuthorized === true;
     const status = decision.canProduce !== true
@@ -208,11 +228,11 @@ function payoutBlockers(campaign) {
 }
 
 function metricRowsForCampaign(metrics, campaignId, campaign) {
-  return metrics.filter((row) => row.campaignId === campaignId
+  return uniquePublishedRows(metrics.filter((row) => row.campaignId === campaignId
     && row.finalStatus === "published"
     && tiktokPostMatchesAccount(row.publishedPostUrl, campaign?.accountHandle)
     && row.metricEvidenceVerified === true
-    && finiteNumber(row.views) !== null);
+    && finiteNumber(row.views) !== null));
 }
 
 function strategyPerformance(rows, strategyId) {
@@ -341,13 +361,13 @@ export function buildStreamerGrowthCeoPlan({
   const decisions = campaigns.map((campaign) => campaignDecision(campaign, metrics, now, publishingAuthorized))
     .sort((a, b) => b.priorityScore - a.priorityScore || a.title.localeCompare(b.title));
   const campaignById = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
-  const actualPublishedRows = metrics.filter((row) => {
+  const actualPublishedRows = uniquePublishedRows(metrics.filter((row) => {
     const campaign = campaignById.get(row.campaignId);
     return row.finalStatus === "published"
       && tiktokPostMatchesAccount(row.publishedPostUrl, campaign?.accountHandle)
       && row.metricEvidenceVerified === true
       && finiteNumber(row.views) !== null;
-  });
+  }));
   const measuredViews = actualPublishedRows.reduce((sum, row) => sum + Number(row.views), 0);
   const measuredEarningsUsd = actualPublishedRows.reduce((sum, row) => sum + (row.payoutEvidenceVerified === true ? (finiteNumber(row.earningsUsd) || 0) : 0), 0);
   const active = decisions.filter((row) => row.canProduce);
@@ -376,6 +396,15 @@ export function buildStreamerGrowthCeoPlan({
           : optimizing
             ? "reduce_for_efficiency"
             : "hold_baseline";
+  const remainingByAccount = new Map();
+  for (const decision of decisions) {
+    const accountKey = String(decision.accountHandle || "").trim().toLowerCase();
+    const remaining = remainingByAccount.has(accountKey) ? remainingByAccount.get(accountKey) : dailyTestClips;
+    const assignments = decision.assignments.slice(0, Math.max(0, remaining));
+    decision.assignments = assignments;
+    decision.dailyClipLimit = assignments.length;
+    remainingByAccount.set(accountKey, Math.max(0, remaining - assignments.length));
+  }
   const next = decisions[0] || null;
   return {
     status: !campaigns.length ? "needs_campaign_catalog" : !active.length ? "blocked" : scaling.length ? "scaling" : "testing",
