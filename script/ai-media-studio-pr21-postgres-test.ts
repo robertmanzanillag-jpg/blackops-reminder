@@ -78,10 +78,10 @@ async function main(): Promise<void> {
     throw new Error("Refusing an external TEST_DATABASE_URL; this harness always creates its own mktemp PostgreSQL cluster");
   }
   const selectedSuite = process.env.AI_MEDIA_POSTGRES_SUITE?.trim() || "all";
-  if (!(["all", "pr21", "pr26", "pr16a", "pr16b", "full-chain", "roster-plan"] as const).includes(
-    selectedSuite as "all" | "pr21" | "pr26" | "pr16a" | "pr16b" | "full-chain" | "roster-plan",
+  if (!(["all", "pr21", "pr26", "pr16a", "pr16b", "full-chain", "roster-plan", "production-batch"] as const).includes(
+    selectedSuite as "all" | "pr21" | "pr26" | "pr16a" | "pr16b" | "full-chain" | "roster-plan" | "production-batch",
   )) {
-    throw new Error("AI_MEDIA_POSTGRES_SUITE must be all, pr21, pr26, pr16a, pr16b, full-chain, or roster-plan");
+    throw new Error("AI_MEDIA_POSTGRES_SUITE must be all, pr21, pr26, pr16a, pr16b, full-chain, roster-plan, or production-batch");
   }
 
   const temporaryRoot = await mkdtemp(join(testTemporaryDirectory(), TEMP_PREFIX));
@@ -205,6 +205,15 @@ async function main(): Promise<void> {
       }
       await runCommand("node", ["--import", "tsx", "--test", "--test-concurrency=1",
         "tests/ai-media-studio-heygen-roster-plan-postgres.test.ts"], childEnvironment);
+    }
+    if (selectedSuite === "all" || selectedSuite === "production-batch") {
+      if (selectedSuite === "all") {
+        await runCommand("dropdb", ["-h", socketDirectory, "-p", TEST_PORT, "-U", "postgres", TEST_DATABASE_NAME]);
+        await runCommand("createdb", ["-h", socketDirectory, "-p", TEST_PORT, "-U", "postgres", "-T", "template0",
+          "--encoding=UTF8", "--locale=C", TEST_DATABASE_NAME]);
+      }
+      await runCommand("node", ["--import", "tsx", "--test", "--test-concurrency=1",
+        "tests/ai-media-studio-production-batch-postgres.test.ts"], childEnvironment);
     }
   } catch (error) {
     const log = testProcessStarted ? "" : await readFile(logPath, "utf8").catch(() => "");

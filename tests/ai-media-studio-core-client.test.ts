@@ -49,13 +49,13 @@ test("media library exposes all reusable asset classes and safe view-only links"
   assert.match(library, /EmptyPanel/);
 });
 
-test("variant review exposes every generated field plus explicit use and copy actions", async () => {
-  const workbench = await readFile(resolve(repositoryRoot, "client/src/features/ai-media-studio/create-video-workbench.tsx"), "utf8");
-  for (const field of ["angle", "title", "hook", "script", "cta", "caption", "hashtags", "seoKeywords"]) {
-    assert.match(workbench, new RegExp(`variant\\.${field}`), `missing ${field}`);
-  }
-  assert.match(workbench, /Use this variant/);
-  assert.match(workbench, /Copy all fields/);
+test("production batch exposes durable preparation without a generation action", async () => {
+  const workbench = await source("production-batch-workbench.tsx");
+  assert.match(workbench, /Prepare script batch — no credits/);
+  assert.match(workbench, /Preparation only · Generation disabled · No credits can be spent/);
+  assert.match(workbench, /<details/);
+  assert.match(workbench, /<summary/);
+  assert.doesNotMatch(workbench, /createGeneration|Queue video preview|retryJob/);
 });
 
 test("form conversion normalizes repeatable values and preserves canonical resource IDs", () => {
@@ -188,14 +188,12 @@ test("generation selection replaces an archived stale ID and preserves a valid a
   assert.equal(reconcileGenerationInfluencer(options.slice(0, 1), "archived-emily"), undefined);
 });
 
-test("workbench reconciles refreshed options and disables transient stale submissions", async () => {
-  const workbench = await readFile(resolve(repositoryRoot, "client/src/features/ai-media-studio/create-video-workbench.tsx"), "utf8");
-  assert.match(workbench, /reconcileGenerationInfluencer\(options\.influencers, influencerId\)/);
-  assert.match(workbench, /setInfluencerId\(""\)/);
-  assert.match(workbench, /setLanguage\(""\)/);
-  assert.match(workbench, /setVoiceId\(""\)/);
-  assert.match(workbench, /if \(next\.id === influencerId\) return/);
-  assert.match(workbench, /disabled=\{create\.isPending \|\| !selectedInfluencer \|\| governanceQuery\.isLoading \|\| governanceQuery\.isError \|\| !governanceReadyForPreview\}/);
-  assert.match(workbench, /if \(!selectedInfluencer\)/);
-  assert.match(workbench, /if \(!governanceReadyForPreview\)/);
+test("production workbench retries only the safe preparation with one secure attempt key", async () => {
+  const workbench = await source("production-batch-workbench.tsx");
+  assert.match(workbench, /crypto\.randomUUID/);
+  assert.match(workbench, /attemptRef\.current \?\?=/);
+  assert.match(workbench, /planId: batch\.planId/);
+  assert.match(workbench, /variantCount: 3/);
+  assert.match(workbench, /usePrepareProductionBatchScripts/);
+  assert.doesNotMatch(workbench, /providerAccount|avatarResource|voiceResource|native/);
 });

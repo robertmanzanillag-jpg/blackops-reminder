@@ -1,8 +1,7 @@
 import { RefreshCcw, Sparkles, TriangleAlert } from "lucide-react";
 import { useIsFetching, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { CreateVideoWorkbench } from "@/features/ai-media-studio/create-video-workbench";
-import { CoreStudioWorkspace } from "@/features/ai-media-studio/core";
+import { CoreStudioWorkspace, ProductionBatchWorkbench } from "@/features/ai-media-studio/core";
 import { DashboardOverview } from "@/features/ai-media-studio/dashboard-overview";
 import { ErrorPanel, LoadingPanel } from "@/features/ai-media-studio/feedback";
 import { useStudioDashboard } from "@/features/ai-media-studio/hooks";
@@ -71,13 +70,9 @@ export default function AiMediaStudioPage() {
         <CoreStudioWorkspace />
       </div>
 
-      <section id="create" aria-labelledby="create-heading" className="mt-8 scroll-mt-24">
-        <div className="mb-4">
-          <h2 id="create-heading" className="text-xl font-semibold text-white">Production desk</h2>
-          <p className="mt-1 text-sm text-zinc-400">Launch a provider-neutral 9:16 preview from a reviewed script.</p>
-        </div>
-        <CreateVideoWorkbench />
-      </section>
+      <div className="mt-8">
+        <ProductionBatchWorkbench />
+      </div>
 
       <section id="jobs" aria-labelledby="jobs-heading" className="mt-8 scroll-mt-24">
         <h2 id="jobs-heading" className="sr-only">Generation jobs</h2>

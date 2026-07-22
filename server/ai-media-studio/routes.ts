@@ -3,7 +3,6 @@ import { Router } from "express";
 import { z } from "zod";
 import {
   AI_MEDIA_STUDIO_API_BASE,
-  createGenerationRequestSchema,
   dashboardResponseSchema,
   mediaJobResponseSchema,
   mediaJobsResponseSchema,
@@ -25,6 +24,7 @@ import {
   type ProviderResource,
 } from "../../shared/ai-media-studio-core";
 import { generateScriptVariantsRequestSchema } from "../../shared/ai-media-studio-scripts";
+import { productionBatchResponseSchema } from "../../shared/ai-media-studio-production-batches";
 import {
   configureHeyGenRosterResponseSchema,
   heyGenRosterDailyPlanResponseSchema,
@@ -90,6 +90,8 @@ import { HeyGenRosterError } from "./providers/heygen-roster-contracts";
 import { HeyGenRosterService } from "./providers/heygen-roster-service";
 import { HeyGenRosterDailyPlanService } from "./providers/heygen-roster-daily-plan-service";
 import { DeterministicScriptService } from "./script-service";
+import { ProductionBatchError, type ProductionBatchRepository } from "./production-batches/contracts";
+import { ProductionBatchService } from "./production-batches/service";
 import { AiMediaStudioService, MediaStudioError } from "./service";
 import {
   deriveVerifiedWebhookEnvelope,
@@ -175,6 +177,8 @@ export interface AiMediaStudioDependencies {
   };
   /** Trusted server-owned calendar zone for the planning-only daily roster preview. */
   heyGenRosterDailyPlanTimeZone?: string;
+  productionBatchRepository?: ProductionBatchRepository;
+  createDurableProductionBatchRepository?: () => ProductionBatchRepository;
   operations?: OperationsRuntimeDependencies;
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
@@ -196,6 +200,8 @@ export interface AiMediaStudioRuntime {
   heyGenRoster: HeyGenRosterService | undefined;
   heyGenRosterDailyPlan: HeyGenRosterDailyPlanService | undefined;
   heyGenRosterPersistence: MediaStudioPersistenceStatus;
+  productionBatches: ProductionBatchService | undefined;
+  productionBatchPersistence: MediaStudioPersistenceStatus;
   publishingSubmissionGate: PublishingSubmissionGate;
   assetIngestRepository?: AssetIngestRepository;
   assetIngestHooks: AssetIngestWorkerHooks;
@@ -360,6 +366,50 @@ function createDefaultDurableHeyGenRosterRuntime(): {
     accountResolver: {
       resolve: async (...args) => (await load()).accountResolver.resolve(...args),
     },
+  };
+}
+
+function createDefaultDurableProductionBatchRepository(): ProductionBatchRepository {
+  let pending: Promise<ProductionBatchRepository> | undefined;
+  const load = () => pending ??= Promise.all([
+    import("../db"),
+    import("./production-batches/drizzle-repository"),
+  ]).then(([database, adapter]) => new adapter.DrizzleProductionBatchRepository(database.db));
+  return {
+    getCurrent: async (...args) => (await load()).getCurrent(...args),
+    prepare: async (...args) => (await load()).prepare(...args),
+  };
+}
+
+function selectProductionBatchRuntime(
+  dependencies: AiMediaStudioDependencies,
+  databaseUrl: string | undefined,
+): { service: ProductionBatchService | undefined; status: MediaStudioPersistenceStatus } {
+  if (dependencies.productionBatchRepository) {
+    return {
+      service: new ProductionBatchService(dependencies.productionBatchRepository),
+      status: { mode: "injected", available: true, durable: false, reason: "Production batch repository supplied by the composition caller" },
+    };
+  }
+  if (configuredDatabase(databaseUrl)) {
+    try {
+      const repository = (dependencies.createDurableProductionBatchRepository ?? createDefaultDurableProductionBatchRepository)();
+      return {
+        service: new ProductionBatchService(repository),
+        status: { mode: "drizzle", available: true, durable: true, reason: "PostgreSQL/Drizzle production batch persistence selected" },
+      };
+    } catch (error) {
+      return {
+        service: undefined,
+        status: { mode: "unavailable", available: false, durable: false,
+          reason: `Production batch persistence initialization failed: ${error instanceof Error ? error.message : "unknown error"}` },
+      };
+    }
+  }
+  return {
+    service: undefined,
+    status: { mode: "unavailable", available: false, durable: false,
+      reason: "DATABASE_URL or an injected production batch repository is required" },
   };
 }
 
@@ -622,6 +672,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const heyGenRosterDailyPlan = heyGenRosterSelection.service
     ? new HeyGenRosterDailyPlanService(heyGenRosterSelection.service)
     : undefined;
+  const productionBatchSelection = selectProductionBatchRuntime(dependencies, databaseUrl);
   const operations = createOperationsRuntime({
     ...dependencies.operations,
     runtimeEnvironment: dependencies.operations?.runtimeEnvironment ?? runtimeEnvironment,
@@ -864,13 +915,17 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.setHeader("X-AI-Media-Studio-Operations", operations.status.mode);
     res.setHeader("X-AI-Media-Studio-Governance", governanceSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-HeyGen-Roster", heyGenRosterSelection.status.mode);
+    res.setHeader("X-AI-Media-Studio-Production-Batches", productionBatchSelection.status.mode);
     next();
   });
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/runtime`, (req, res) => {
     getCurrentUserId(req);
-    const available = persistence.status.available && core.status.available && operations.status.available && governanceSelection.status.available;
-    res.status(available ? 200 : 503).json({ persistence: persistence.status, catalog: core.status, operations: operations.status, governance: governanceSelection.status, heyGenRoster: heyGenRosterSelection.status });
+    const available = persistence.status.available && core.status.available && operations.status.available
+      && governanceSelection.status.available;
+    res.status(available ? 200 : 503).json({ persistence: persistence.status, catalog: core.status,
+      operations: operations.status, governance: governanceSelection.status,
+      heyGenRoster: heyGenRosterSelection.status, productionBatches: productionBatchSelection.status });
   });
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/agent`, (req, res) => {
@@ -883,6 +938,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const requireOperations = requireCapability(operations.status, "AI Media Studio operations");
   const requireGovernance = requireCapability(governanceSelection.status, "AI Media Studio governance");
   const requireHeyGenRoster = requireCapability(heyGenRosterSelection.status, "HeyGen roster");
+  const requireProductionBatches = requireCapability(productionBatchSelection.status, "AI Media Studio production batch");
   const tenant = async (req: Request): Promise<TenantScope> => {
     const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
     await core.ensureDefaults(scope);
@@ -934,6 +990,22 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       return;
     }
     res.json(heyGenRosterDailyPlanResponseSchema.parse({ plan }));
+  }));
+
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/current`, requireProductionBatches, asyncRoute(async (req, res) => {
+    const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
+    const batch = await productionBatchSelection.service!.current(scope);
+    if (!batch) {
+      res.status(404).json({ error: "Production batch not found", code: "PRODUCTION_BATCH_NOT_FOUND" });
+      return;
+    }
+    res.json(productionBatchResponseSchema.parse({ batch }));
+  }));
+
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/prepare-scripts`, requireProductionBatches, asyncRoute(async (req, res) => {
+    const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
+    const batch = await productionBatchSelection.service!.prepare(scope, req.params.planId, req.body);
+    res.json(productionBatchResponseSchema.parse({ batch }));
   }));
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/options`, requireCatalog, asyncRoute(async (req, res) => {
@@ -1119,22 +1191,9 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.json(mediaJobsResponseSchema.parse({ jobs: jobs.map(toPublicJob) }));
   }));
 
-  router.post(`${AI_MEDIA_STUDIO_API_BASE}/generations`, requireJobs, requireCatalog, requireGovernance, asyncRoute(async (req, res) => {
-    const input = createGenerationRequestSchema.parse(req.body);
-    const scope = await tenant(req);
-    const influencer = await core.influencers.get(scope, input.influencerId);
-    const options = await core.influencers.options(scope);
-    if (!options.some((option) => option.id === influencer.id)) {
-      throw new CoreDomainValidationError("Generation requires an active influencer with active canonical resources");
-    }
-    if (influencer.voiceResourceId !== input.voiceId || influencer.language !== input.language) {
-      throw new CoreDomainValidationError("Generation voice and language must match the selected influencer");
-    }
-    let job = await service.createGeneration(scope.ownerUserId, input);
-    if (job.influencerName !== influencer.name) {
-      job = await repository.update({ ...job, influencerName: influencer.name });
-    }
-    res.status(202).json({ generationId: job.generationId, jobId: job.id, job: toPublicJob(job) });
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/generations`, asyncRoute(async (req, res) => {
+    getCurrentUserId(req);
+    res.status(409).json({ error: "A prepared and admitted production plan is required", code: "PLAN_ADMISSION_REQUIRED" });
   }));
 
   router.post(`${AI_MEDIA_STUDIO_API_BASE}/scripts/generate`, asyncRoute(async (req, res) => {
@@ -1301,8 +1360,9 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     const job = await reconcileCompletedArtifact(await service.getJob(getCurrentUserId(req), req.params.id));
     res.json(mediaJobResponseSchema.parse({ job: toPublicJob(job) }));
   }));
-  router.post(`${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/retry`, requireJobs, requireCatalog, requireGovernance, asyncRoute(async (req, res) => {
-    res.json(mediaJobResponseSchema.parse({ job: toPublicJob(await service.retryJob(getCurrentUserId(req), req.params.id)) }));
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/retry`, asyncRoute(async (req, res) => {
+    getCurrentUserId(req);
+    res.status(409).json({ error: "A prepared and admitted production plan is required", code: "PLAN_ADMISSION_REQUIRED" });
   }));
   router.post(`${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/cancel`, requireJobs, asyncRoute(async (req, res) => {
     res.json(mediaJobResponseSchema.parse({ job: toPublicJob(await service.cancelJob(getCurrentUserId(req), req.params.id)) }));
@@ -1369,6 +1429,16 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   }
 
   router.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    if (error instanceof ProductionBatchError) {
+      const message = error.code === "INVALID_REQUEST" ? "Invalid production batch request"
+        : error.code === "NOT_FOUND" ? "Production plan not found"
+          : error.code === "IDEMPOTENCY_CONFLICT" ? "Production batch request conflicts with the prepared batch"
+            : error.code === "SOURCE_INELIGIBLE" ? "Exactly 10 eligible sources are required"
+              : error.code === "SOURCE_REFRESHED" ? "A selected source changed; script refresh is required"
+                : "Production batch is unavailable";
+      res.status(error.statusCode).json({ error: message, code: error.code });
+      return;
+    }
     if (error instanceof HeyGenRosterError) {
       const status = error.code === "INVALID_REQUEST" ? 400
         : error.code === "IDEMPOTENCY_CONFLICT" ? 409
@@ -1422,6 +1492,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     heyGenRoster: heyGenRosterSelection.service,
     heyGenRosterDailyPlan,
     heyGenRosterPersistence: heyGenRosterSelection.status,
+    productionBatches: productionBatchSelection.service,
+    productionBatchPersistence: productionBatchSelection.status,
     publishingSubmissionGate,
     router,
     persistence: persistence.status,
