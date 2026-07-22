@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { mediaStudioCoreApi } from "../client/src/features/ai-media-studio/core/api.ts";
-import { approvalResultMatchesBatch, formatMaximumQuoteUsd } from "../client/src/features/ai-media-studio/core/production-batch-workbench.tsx";
+import { approvalResultMatchesBatch, contentPlanSummary, formatMaximumQuoteUsd } from "../client/src/features/ai-media-studio/core/production-batch-workbench.tsx";
 
 function publicKey(prefix: string, value: number): string {
   return `${prefix}_${value.toString(16).padStart(24, "0")}`;
@@ -26,7 +26,7 @@ function productionBatchResponse(
         slotId: publicKey("slot", position),
         videoNumber: itemIndex + 1,
         preparation: "draft",
-        source: { title: `Source ${position}`, category: "experiences" },
+        source: { title: `Source ${itemIndex + 1}`, category: "experiences" },
         script: {
           key: publicKey("script", position),
           title: `Draft ${position}`,
@@ -55,6 +55,12 @@ function productionBatchResponse(
       avatarCount,
       videosPerAvatar: 10,
       plannedVideoCount: avatarCount * 10,
+      contentPlan: {
+        strategy: "topic_deck_by_video_number",
+        sourceTopicCount: 10,
+        slotCount: avatarCount * 10,
+        reuseAcrossCreators: true,
+      },
       canGenerate: false,
       noSpend: true,
       preparedAt: status === "not_started" ? null : "2026-07-21T12:00:00.000Z",
@@ -70,6 +76,15 @@ function productionBatchResponse(
     },
   };
 }
+
+test("content-plan UI distinguishes planned reuse from completed preparation", () => {
+  const pending = productionBatchResponse("not_started").batch;
+  const prepared = productionBatchResponse("draft_ready").batch;
+  assert.equal(contentPlanSummary(pending),
+    "10 source topics will be reused across creators. Topic N will supply video N for every creator, producing 50 planned slots without requiring 50 unique sources.");
+  assert.equal(contentPlanSummary(prepared),
+    "10 source topics reused across creators. Topic N supplies video N for every creator, producing 50 planned slots without requiring 50 unique sources.");
+});
 
 const launchGateCodes = [
   "batch_integrity", "plan_window", "source_eligibility", "provider_binding_local",
@@ -225,6 +240,9 @@ test("current production batch is fetched with credentials and validated", async
     assert.equal(request?.init?.credentials, "include");
     assert.equal(response?.batch.groups.length, 5);
     assert.equal(response?.batch.plannedVideoCount, 50);
+    assert.deepEqual(response?.batch.contentPlan, {
+      strategy: "topic_deck_by_video_number", sourceTopicCount: 10, slotCount: 50, reuseAcrossCreators: true,
+    });
     assert.equal(response?.batch.canGenerate, false);
   } finally {
     globalThis.fetch = originalFetch;

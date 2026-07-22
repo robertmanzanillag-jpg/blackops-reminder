@@ -40,7 +40,8 @@ function durableRows(currentContent = "Exact content") {
         public_slot_key: slotId, source_member_key: publicKey("member", member + 10), video_number: video,
         slot_status: "blocked", script_variant_id: `${slotId}-selected`, creator_name: `Creator ${member + 1}`,
         script_title: `Script ${video}`, script_status: "draft", current_variant_id: `${slotId}-selected`,
-        script_metadata: { productionBatchV1: envelope }, current_source_hash: envelope.sourceContentHash,
+        script_metadata: { productionBatchV1: envelope }, current_source_id: `source-id-${video}`,
+        current_source_hash: envelope.sourceContentHash,
         source_status: "ready", rights_status: "owned", moderation_status: "approved",
         current_source_content: currentContent, variant_id: variant === 0 ? `${slotId}-selected` : `${slotId}-${variant}`,
         variant_version: variant + 1, variant_label: variantTitle, variant_content: content, variant_status: "draft",
@@ -75,7 +76,22 @@ test("durable read verifies exact script checksums/envelopes and projects source
   const fresh = readDatabase(durableRows());
   const ready = await new DrizzleProductionBatchRepository(fresh.database).getCurrent(scope);
   assert.equal(ready?.status, "draft_ready");
+  assert.deepEqual(ready?.contentPlan, {
+    strategy: "topic_deck_by_video_number", sourceTopicCount: 10, slotCount: 50, reuseAcrossCreators: true,
+  });
   assert.equal(ready?.groups.flatMap((group) => group.items).every((item) => item.preparation === "draft"), true);
+  const sourceTitlesByVideo = new Map<number, Set<string>>();
+  for (const item of ready!.groups.flatMap((group) => group.items)) {
+    assert.equal(item.preparation, "draft");
+    const titles = sourceTitlesByVideo.get(item.videoNumber) ?? new Set<string>();
+    titles.add(item.source.title);
+    sourceTitlesByVideo.set(item.videoNumber, titles);
+  }
+  assert.equal(sourceTitlesByVideo.size, 10);
+  assert.ok([...sourceTitlesByVideo.values()].every((titles) => titles.size === 1),
+    "the same videoNumber must reuse one source topic across every creator");
+  assert.equal(new Set([...sourceTitlesByVideo.values()].map((titles) => [...titles][0])).size, 10,
+    "different video numbers must map to different source topics");
 
   const refreshed = readDatabase(durableRows("Changed after preparation"));
   const stale = await new DrizzleProductionBatchRepository(refreshed.database).getCurrent(scope);
@@ -85,6 +101,29 @@ test("durable read verifies exact script checksums/envelopes and projects source
   const corrupt = durableRows(); corrupt[0]!.variant_checksum = "0".repeat(64);
   await assert.rejects(new DrizzleProductionBatchRepository(readDatabase(corrupt).database).getCurrent(scope),
     (error: unknown) => error instanceof ProductionBatchError && error.code === "BATCH_UNAVAILABLE");
+});
+
+test("bound topic-deck identity fails closed on source ID or hash drift and cross-number reuse", async () => {
+  const expectUnavailable = async (rows: Record<string, unknown>[]) => {
+    await assert.rejects(new DrizzleProductionBatchRepository(readDatabase(rows).database).getCurrent(scope),
+      (error: unknown) => error instanceof ProductionBatchError && error.code === "BATCH_UNAVAILABLE");
+  };
+
+  const mismatchedId = durableRows();
+  for (const row of mismatchedId.filter((candidate) => candidate.source_member_key === publicKey("member", 11)
+    && candidate.video_number === 1)) row.current_source_id = "different-source-id";
+  await expectUnavailable(mismatchedId);
+
+  const mismatchedHash = durableRows();
+  for (const row of mismatchedHash.filter((candidate) => candidate.source_member_key === publicKey("member", 11)
+    && candidate.video_number === 1)) row.current_source_hash = `sha256:${"9".repeat(64)}`;
+  await expectUnavailable(mismatchedHash);
+
+  const reusedAcrossNumbers = durableRows();
+  for (const row of reusedAcrossNumbers.filter((candidate) => candidate.video_number === 2)) {
+    row.current_source_id = "source-id-1";
+  }
+  await expectUnavailable(reusedAcrossNumbers);
 });
 
 test("prepare locks plan, ordered slots, and exactly ten sources without advisory, budget, render, provider, or outbox work", async () => {
@@ -114,7 +153,8 @@ test("prepare locks plan, ordered slots, and exactly ten sources without advisor
   assert.match(queries[1]!, /order by .*source_member_key.*video_number.*for update of/iu);
   assert.match(queries[2]!, /order by .*created_at.*limit 10 for update/iu);
   assert.match(queries[2]!, /title=btrim\(title\).*title !~ '\[\[:cntrl:\]\]'/iu);
-  assert.match(queries[2]!, /adapter_key=/iu);
+  assert.match(queries[2]!, /payload->>'adapterKey'=/u);
+  assert.doesNotMatch(queries[2]!, /adapter_key/iu);
   const all = queries.join(" ");
   assert.doesNotMatch(all, /advisory|budget|render|outbox|launch_intent|provider_submission/iu);
 });
@@ -151,6 +191,7 @@ test("exact replay locks current sources and fails closed when content refreshed
     generator: { version: "deterministic-script-v1", generate: () => { throw new Error("exact replay must not regenerate"); } },
   }), (error: unknown) => error instanceof ProductionBatchError && error.code === "SOURCE_REFRESHED");
   assert.match(queries[2]!, /order by .*source_member_key.*video_number.*for update of .*sources/iu);
-  assert.match(queries[2]!, /sources\.adapter_key=/iu);
+  assert.match(queries[2]!, /sources\.payload->>'adapterKey'=/u);
+  assert.doesNotMatch(queries[2]!, /adapter_key/iu);
   assert.equal(queries.length, 3, "stale replay fails before script read or mutation");
 });

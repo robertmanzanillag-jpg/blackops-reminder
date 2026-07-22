@@ -18,6 +18,7 @@ function batch(status: "not_started" | "draft_ready"): ProductionBatch {
   return {
     batchId: key("batch", prepared ? 2 : 1), planId: key("plan", 3), status,
     avatarCount: 5, videosPerAvatar: 10, plannedVideoCount: 50,
+    contentPlan: { strategy: "topic_deck_by_video_number", sourceTopicCount: 10, slotCount: 50, reuseAcrossCreators: true },
     canGenerate: false, noSpend: true,
     preparedAt: prepared ? "2026-07-22T12:00:00.000Z" : null,
     approvedAt: null,

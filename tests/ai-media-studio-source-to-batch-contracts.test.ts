@@ -16,6 +16,7 @@ function batch(status: ProductionBatch["status"] = "draft_ready"): ProductionBat
     avatarCount: 5,
     videosPerAvatar: 10,
     plannedVideoCount: 50,
+    contentPlan: { strategy: "topic_deck_by_video_number", sourceTopicCount: 10, slotCount: 50, reuseAcrossCreators: true },
     canGenerate: false,
     noSpend: true,
     preparedAt: status === "not_started" ? null : "2026-07-22T12:00:00.000Z",

@@ -9,7 +9,9 @@ import {
   aiMediaSourceItems,
 } from "../../../shared/models/ai-media-studio-db";
 import {
+  PRODUCTION_BATCH_CONTENT_PLAN_STRATEGY,
   PRODUCTION_BATCH_FIXED_BLOCKERS,
+  PRODUCTION_BATCH_SOURCE_TOPIC_COUNT,
   productionBatchCreativeReviewSchema,
   productionBatchSchema,
   type ProductionBatch,
@@ -116,6 +118,15 @@ function blockers(status: ProductionBatch["status"]): ProductionBatch["blockers"
   ...PRODUCTION_BATCH_FIXED_BLOCKERS];
 }
 
+function contentPlan(slotCount: number): ProductionBatch["contentPlan"] {
+  return {
+    strategy: PRODUCTION_BATCH_CONTENT_PLAN_STRATEGY,
+    sourceTopicCount: PRODUCTION_BATCH_SOURCE_TOPIC_COUNT,
+    slotCount,
+    reuseAcrossCreators: true,
+  };
+}
+
 export class DrizzleProductionBatchRepository implements ProductionBatchRepository {
   constructor(private readonly db: ProductionBatchDatabase) {}
 
@@ -176,7 +187,8 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
             AND sources.id=scripts.source_item_id AND sources.source_type=scripts.source_type
           WHERE slots.owner_user_id=${input.scope.ownerUserId} AND slots.workspace_id=${input.scope.workspaceId}
             AND slots.daily_plan_id=${text(plan[0], "id", "id")} AND slots.status='blocked'
-            AND (${input.sourceAdapterKey ?? null}::text IS NULL OR sources.adapter_key=${input.sourceAdapterKey ?? null})
+            AND (${input.sourceAdapterKey ?? null}::text IS NULL
+              OR sources.payload->>'adapterKey'=${input.sourceAdapterKey ?? null})
             AND sources.status IN ('accepted','ready') AND sources.moderation_status='approved'
             AND sources.rights_status IN ('owned','licensed')
           ORDER BY slots.source_member_key ASC,slots.video_number ASC
@@ -204,7 +216,8 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
         SELECT id, title, content, content_hash, source_type AS source_category
         FROM ${aiMediaSourceItems}
         WHERE owner_user_id=${input.scope.ownerUserId} AND workspace_id=${input.scope.workspaceId}
-          AND (${input.sourceAdapterKey ?? null}::text IS NULL OR adapter_key=${input.sourceAdapterKey ?? null})
+          AND (${input.sourceAdapterKey ?? null}::text IS NULL
+            OR payload->>'adapterKey'=${input.sourceAdapterKey ?? null})
           AND status IN ('accepted','ready') AND moderation_status='approved'
           AND rights_status IN ('owned','licensed')
           AND title IS NOT NULL AND length(btrim(title)) BETWEEN 1 AND 200
@@ -461,7 +474,8 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
         slots.public_slot_key, slots.source_member_key, slots.video_number, slots.status AS slot_status,
         slots.script_variant_id, influencers.name AS creator_name,
         scripts.title AS script_title, scripts.status AS script_status, scripts.current_variant_id,
-        scripts.metadata AS script_metadata, sources.content_hash AS current_source_hash,
+        scripts.metadata AS script_metadata, sources.id AS current_source_id,
+        sources.content_hash AS current_source_hash,
         sources.content AS current_source_content,sources.status AS source_status,
         sources.rights_status,sources.moderation_status,
         variants.id AS variant_id, variants.version AS variant_version, variants.label AS variant_label,
@@ -515,7 +529,8 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
       return productionBatchSchema.parse({
         batchId: publicKey("batch", `${scope.ownerUserId}\0${scope.workspaceId}\0${planId}\0not-started`),
         planId, status: "not_started", avatarCount: groups.length, videosPerAvatar: 10,
-        plannedVideoCount: slotRows.length, canGenerate: false, noSpend: true, preparedAt: null,
+        plannedVideoCount: slotRows.length, contentPlan: contentPlan(slotRows.length),
+        canGenerate: false, noSpend: true, preparedAt: null,
         approvedAt: null,
         blockers: blockers("not_started"), groups,
       });
@@ -586,16 +601,39 @@ export class DrizzleProductionBatchRepository implements ProductionBatchReposito
       return { row, envelope, selectedCreative };
     });
     if (!batchEnvelope) throw new ProductionBatchError("BATCH_UNAVAILABLE");
+    this.assertTopicDeckIdentity(verified.map(({ row }) => row));
     if (planStatus === "planned" && stale) throw new ProductionBatchError("SOURCE_REFRESHED");
     const status = planStatus === "planned" ? "approved_ready" as const
       : stale ? "stale" as const : "draft_ready" as const;
     const groups = this.group(verified);
     return productionBatchSchema.parse({
       batchId: batchEnvelope.batchId, planId, status, avatarCount: groups.length, videosPerAvatar: 10,
-      plannedVideoCount: verified.length, canGenerate: false, noSpend: true,
+      plannedVideoCount: verified.length, contentPlan: contentPlan(verified.length), canGenerate: false, noSpend: true,
       preparedAt: batchEnvelope.preparedAt, approvedAt: batchApproval?.approvedAt ?? null,
       blockers: blockers(status), groups,
     });
+  }
+
+  private assertTopicDeckIdentity(slots: Record<string, unknown>[]): void {
+    const topics = new Map<number, { sourceId: string; sourceHash: string }>();
+    for (const slot of slots) {
+      const videoNumber = integer(slot, "videoNumber", "video_number");
+      const sourceId = text(slot, "currentSourceId", "current_source_id");
+      const sourceHash = text(slot, "currentSourceHash", "current_source_hash");
+      if (!sourceId || !/^sha256:[a-f0-9]{64}$/u.test(sourceHash)) {
+        throw new ProductionBatchError("BATCH_UNAVAILABLE");
+      }
+      const topic = topics.get(videoNumber);
+      if (topic && (topic.sourceId !== sourceId || topic.sourceHash !== sourceHash)) {
+        throw new ProductionBatchError("BATCH_UNAVAILABLE");
+      }
+      topics.set(videoNumber, { sourceId, sourceHash });
+    }
+    if (topics.size !== PRODUCTION_BATCH_SOURCE_TOPIC_COUNT
+      || [...topics.keys()].some((videoNumber) => videoNumber < 1 || videoNumber > PRODUCTION_BATCH_SOURCE_TOPIC_COUNT)
+      || new Set([...topics.values()].map(({ sourceId }) => sourceId)).size !== PRODUCTION_BATCH_SOURCE_TOPIC_COUNT) {
+      throw new ProductionBatchError("BATCH_UNAVAILABLE");
+    }
   }
 
   private assertSlotShape(slots: Record<string, unknown>[], planned: number, expectedStatus = "blocked"): void {

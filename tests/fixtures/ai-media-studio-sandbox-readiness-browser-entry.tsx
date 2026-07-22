@@ -44,6 +44,12 @@ function approvedBatch(plan: number, batch: number, firstSlot: number, names: st
     avatarCount: 5,
     videosPerAvatar: 10 as const,
     plannedVideoCount: 50,
+    contentPlan: {
+      strategy: "topic_deck_by_video_number" as const,
+      sourceTopicCount: 10 as const,
+      slotCount: 50,
+      reuseAcrossCreators: true as const,
+    },
     canGenerate: false as const,
     noSpend: true as const,
     preparedAt: "2026-07-21T12:00:00.000Z",
