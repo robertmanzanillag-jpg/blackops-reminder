@@ -103,6 +103,27 @@ export function parseBlackRoomMediaRange(value: string | undefined, size: number
   return { start, end: Math.min(requestedEnd, size - 1) };
 }
 
+export function blackRoomMediaHeaders(
+  uploadId: string,
+  size: number,
+  range: { start: number; end: number } | null,
+  method = "GET",
+): Record<string, string> {
+  const start = range?.start ?? 0;
+  const end = range?.end ?? size - 1;
+  return {
+    "Accept-Ranges": "bytes",
+    "Content-Type": "video/mp4",
+    "Content-Disposition": `inline; filename="blackroom-${uploadId}.mp4"`,
+    "Cache-Control": "public, max-age=300",
+    // Replit's deployment proxy rejects large, length-delimited responses even
+    // though byte-range requests work. Stream full GETs with chunked encoding;
+    // retain Content-Length for HEAD probes and explicit ranges.
+    ...((range || method === "HEAD") ? { "Content-Length": String(end - start + 1) } : {}),
+    ...(range ? { "Content-Range": `bytes ${start}-${end}/${size}` } : {}),
+  };
+}
+
 async function serveBlackRoomMedia(req: Request, res: Response): Promise<void> {
   cleanupExpiredBlackRoomUploads();
   const upload = blackRoomUploads.get(String(req.params.uploadId || ""));
@@ -121,16 +142,13 @@ async function serveBlackRoomMedia(req: Request, res: Response): Promise<void> {
   const start = range?.start ?? 0;
   const end = range?.end ?? info.size - 1;
   const status = range ? 206 : 200;
-  res.status(status).set({
-    "Accept-Ranges": "bytes",
-    "Content-Type": "video/mp4",
-    "Content-Length": String(end - start + 1),
-    "Content-Disposition": `inline; filename="blackroom-${req.params.uploadId}.mp4"`,
-    "Cache-Control": "public, max-age=300",
-    ...(range ? { "Content-Range": `bytes ${start}-${end}/${info.size}` } : {}),
-  });
+  res.status(status).set(blackRoomMediaHeaders(String(req.params.uploadId || ""), info.size, range, req.method));
   if (req.method === "HEAD") { res.end(); return; }
-  createReadStream(upload.filePath, { start, end }).pipe(res);
+  try {
+    await pipeline(createReadStream(upload.filePath, { start, end }), res);
+  } catch {
+    if (!res.headersSent) res.status(500).end();
+  }
 }
 
 export function hasValidBlackRoomRemoteToken(authorization: string | undefined, configuredToken = process.env.BLACKROOM_REMOTE_CONTROL_TOKEN): boolean {
@@ -343,6 +361,7 @@ export function registerBlackRoomControlRoutes(app: Express): void {
       res.status(201).json({ receipt });
     } catch (error: any) {
       const uncertain = error instanceof BlackRoomMetricoolUncertainError || error?.uncertain === true;
+      if (!verifyOnly && !uncertain) await removeBlackRoomUpload(uploadId);
       res.status(uncertain ? 409 : 502).json({ error: error.message || "Metricool scheduling failed", uncertain });
     }
   });
