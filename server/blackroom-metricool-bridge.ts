@@ -33,6 +33,53 @@ type FetchLike = typeof fetch;
 
 const METRICOOL_MCP_URL = "https://ai.metricool.com/mcp";
 
+export function formatMetricoolMcpDate(publicationDateTime: string, timezone = BLACKROOM_TIMEZONE): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})$/.exec(publicationDateTime);
+  if (!match) throw new Error("Invalid Metricool publication date");
+  const [, year, month, day, hour, minute, second] = match;
+  const expectedWallClockMs = Date.UTC(
+    Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute), Number(second),
+  );
+  const formatter = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+  });
+  let instantMs = expectedWallClockMs;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = Object.fromEntries(
+      formatter.formatToParts(new Date(instantMs)).map((part) => [part.type, part.value]),
+    );
+    const observedWallClockMs = Date.UTC(
+      Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+      Number(parts.hour), Number(parts.minute), Number(parts.second),
+    );
+    const correctionMs = expectedWallClockMs - observedWallClockMs;
+    instantMs += correctionMs;
+    if (correctionMs === 0) break;
+  }
+  const finalParts = Object.fromEntries(
+    formatter.formatToParts(new Date(instantMs)).map((part) => [part.type, part.value]),
+  );
+  const normalized = `${finalParts.year}-${finalParts.month}-${finalParts.day}T${finalParts.hour}:${finalParts.minute}:${finalParts.second}`;
+  if (normalized !== publicationDateTime) {
+    throw new Error(`Metricool publication date does not exist in timezone ${timezone}`);
+  }
+  const offsetMinutes = Math.round((expectedWallClockMs - instantMs) / 60_000);
+  if (!Number.isFinite(offsetMinutes) || Math.abs(offsetMinutes) > 14 * 60) {
+    throw new Error(`Invalid Metricool timezone offset for ${timezone}`);
+  }
+  const sign = offsetMinutes >= 0 ? "+" : "-";
+  const absoluteMinutes = Math.abs(offsetMinutes);
+  const offset = `${String(Math.floor(absoluteMinutes / 60)).padStart(2, "0")}:${String(absoluteMinutes % 60).padStart(2, "0")}`;
+  return `${publicationDateTime}${sign}${offset}`;
+}
+
 export class BlackRoomMetricoolUncertainError extends Error {
   readonly uncertain = true;
   constructor(message: string) {
@@ -381,7 +428,9 @@ export async function scheduleBlackRoomMetricoolPost(
   // go through the current official MCP endpoint and tool contract.
   const headers = { "X-Mc-Auth": token, "content-type": "application/json", accept: "application/json" };
   const date = input.publicationDateTime.slice(0, 10);
-  const timezone = encodeURIComponent(input.timezone || BLACKROOM_TIMEZONE);
+  const localTimezone = input.timezone || BLACKROOM_TIMEZONE;
+  const timezone = encodeURIComponent(localTimezone);
+  const mcpDate = formatMetricoolMcpDate(input.publicationDateTime, localTimezone);
   const schedulerUrl = `https://app.metricool.com/api/v2/scheduler/posts?blogId=${blogId}&userId=${encodeURIComponent(userId)}&integrationSource=MCP`;
   const verifyUrl = `${schedulerUrl}&start=${date}T00%3A00%3A00&end=${date}T23%3A59%3A59&timezone=${timezone}&extendedRange=false`;
   const existing = await metricoolJson(await fetcher(verifyUrl, { headers, signal: AbortSignal.timeout(60_000) }), "duplicate preflight");
@@ -424,7 +473,7 @@ export async function scheduleBlackRoomMetricoolPost(
     let scheduled: any;
     try {
       scheduled = await callMetricoolMcpTool(fetcher, token, "createScheduledPost", {
-        date: input.publicationDateTime,
+        date: mcpDate,
         blogId: String(blogId),
         info: JSON.stringify(payload),
         mediaFiles: [{
