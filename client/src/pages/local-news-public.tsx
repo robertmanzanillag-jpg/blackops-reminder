@@ -57,6 +57,7 @@ type Copy = {
   skip: string;
   share: string;
   dailyEdition: string;
+  activeBrief: string;
   activeBriefs: string;
   trafficDesk: string;
   routeAdvisory: string;
@@ -95,6 +96,7 @@ const COPY: Record<NewsLanguage, Copy> = {
     skip: "Skip to news",
     share: "Share update",
     dailyEdition: "The daily local edition",
+    activeBrief: "active verified brief",
     activeBriefs: "active verified briefs",
     trafficDesk: "Traffic desk",
     routeAdvisory: "Route advisory",
@@ -131,6 +133,7 @@ const COPY: Record<NewsLanguage, Copy> = {
     skip: "Ir a las noticias",
     share: "Compartir actualización",
     dailyEdition: "La edición local del día",
+    activeBrief: "boletín activo verificado",
     activeBriefs: "boletines activos verificados",
     trafficDesk: "Mesa de tráfico",
     routeAdvisory: "Alerta de ruta",
@@ -539,6 +542,7 @@ function NewsFeed({ language, city }: { language: NewsLanguage; city: NewsCity |
   }), [query.data]);
   const cities: NewsCity[] = city ? [city] : ["miami", "new-york"];
   const hasArticles = cities.some((item) => grouped[item].length > 0);
+  const activeCount = query.data?.articles.length || 0;
 
   if (query.isLoading) return <LoadingState language={language} />;
   if (query.isError) return <ErrorState language={language} retry={() => void query.refetch()} />;
@@ -555,7 +559,7 @@ function NewsFeed({ language, city }: { language: NewsLanguage; city: NewsCity |
             </h1>
           </div>
           <div className="border-t border-[#17395c]/20 pt-4 text-xs text-[#65717c] sm:border-l sm:border-t-0 sm:pl-6 sm:pt-0 sm:text-right" aria-live="polite">
-            <p className="font-black uppercase tracking-[0.14em] text-[#17395c]">{query.data?.articles.length || 0} {COPY[language].activeBriefs}</p>
+            <p className="font-black uppercase tracking-[0.14em] text-[#17395c]">{activeCount} {activeCount === 1 ? COPY[language].activeBrief : COPY[language].activeBriefs}</p>
             <p className="mt-2 inline-flex items-center gap-2 sm:justify-end">
               {query.isFetching && <RefreshCw className="h-3.5 w-3.5 animate-spin" aria-label={COPY[language].refreshing} />}
               {COPY[language].updated}: {formatDate(query.data?.updatedAt || new Date().toISOString(), language)}
