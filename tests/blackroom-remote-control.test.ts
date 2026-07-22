@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomMediaHeaders, blackRoomPage, hasBlackRoomChatAccess, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange, resolveBlackRoomPanelAgent } from "../server/blackroom-control-routes";
+import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomMediaHeaders, blackRoomPage, hasBlackRoomChatAccess, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange, registerBlackRoomControlRoutes, resolveBlackRoomPanelAgent } from "../server/blackroom-control-routes";
 import {
   createBlackRoomRemoteControlState,
   isBlackRoomRemoteDeviceOnline,
@@ -115,6 +115,36 @@ test("BlackRoom control mutations and panel data are owner-only", () => {
   }
 });
 
+test("BlackRoom HTML route returns a controlled 401 when the session expired", async () => {
+  const handlers = new Map<string, Function>();
+  const app: any = {};
+  for (const method of ["get", "post", "put", "head"]) {
+    app[method] = (route: string, ...callbacks: Function[]) => {
+      handlers.set(`${method.toUpperCase()} ${route}`, callbacks.at(-1)!);
+      return app;
+    };
+  }
+  registerBlackRoomControlRoutes(app);
+  const response: any = {
+    statusCode: 200,
+    body: "",
+    status(code: number) { this.statusCode = code; return this; },
+    type() { return this; },
+    set() { return this; },
+    send(body: string) { this.body = body; return this; },
+  };
+  const previousFallback = process.env.ALLOW_DEV_USER_FALLBACK;
+  process.env.ALLOW_DEV_USER_FALLBACK = "false";
+  try {
+    await handlers.get("GET /blackroom")!({ headers: {}, header: () => undefined }, response);
+  } finally {
+    if (previousFallback === undefined) delete process.env.ALLOW_DEV_USER_FALLBACK;
+    else process.env.ALLOW_DEV_USER_FALLBACK = previousFallback;
+  }
+  assert.equal(response.statusCode, 401);
+  assert.match(response.body, /sesión expiró/);
+});
+
 test("local worker publishes structured live activity with every heartbeat", () => {
   const worker = readFileSync("script/blackroom-local-worker.ts", "utf8");
   const control = readFileSync("script/blackroom-control-server.mjs", "utf8");
@@ -220,7 +250,13 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /Chat y órdenes/);
   assert.match(blackRoomPage, /aria-live="polite"/);
   assert.match(blackRoomPage, /function renderActivity\(history=\[\]\)/);
+  assert.match(blackRoomPage, /setAttribute\('role','log'\)/);
+  assert.match(blackRoomPage, /aria-relevant','additions/);
+  assert.match(blackRoomPage, /renderedActivityIds/);
+  assert.match(blackRoomPage, /ArrowLeft','ArrowRight','Home','End/);
+  assert.match(blackRoomPage, /tabIndex=activity\?0:-1/);
   assert.match(blackRoomPage, /setInterval\(\(\)=>refreshStatus\(\),5000\)/);
-  const script = blackRoomPage.match(/<script>([\s\S]*)<\/script>/)?.[1] || "";
-  assert.doesNotThrow(() => new Function(script));
+  const scripts = [...blackRoomPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
+  assert.equal(scripts.length, 2);
+  for (const script of scripts) assert.doesNotThrow(() => new Function(script));
 });
