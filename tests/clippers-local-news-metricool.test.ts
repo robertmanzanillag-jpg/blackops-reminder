@@ -417,6 +417,157 @@ test("durable ledger makes successful queue IDs idempotent across runs", async (
   assert.equal(posts, 1);
 });
 
+test("durable ledger deduplicates the same event and copy when a later cycle changes queueItemId", async () => {
+  const dir = await workspace([item({ id: "cycle-one-id" })]);
+  let posts = 0;
+  const fetcher: typeof fetch = async () => {
+    posts += 1;
+    return new Response(JSON.stringify({ id: `post-${posts}` }), { status: 200 });
+  };
+  const options = {
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: fetcher,
+  };
+
+  assert.equal((await deliverClipperLocalNewsToMetricool(options)).scheduled, 1);
+  await writeFile(path.join(dir, "metricool-queue.json"), JSON.stringify({
+    items: [item({ id: "cycle-two-id", copy: "  CIERRE local.  Fuente oficial: https://example.gov/road  " })],
+  }), "utf8");
+
+  const second = await deliverClipperLocalNewsToMetricool(options);
+  assert.equal(second.scheduled, 0);
+  assert.equal(second.alreadyScheduled, 1);
+  assert.equal(posts, 1);
+
+  const ledger = JSON.parse(await readFile(path.join(dir, "metricool-delivery-ledger.json"), "utf8"));
+  assert.equal(ledger.entries.length, 1);
+  assert.equal(ledger.entries[0].eventId, "event-1");
+  assert.match(ledger.entries[0].copyHash, /^[a-f0-9]{64}$/);
+});
+
+test("a real update to an existing event remains publishable when its copy changes", async () => {
+  const dir = await workspace([item({ id: "initial-event-copy" })]);
+  let posts = 0;
+  const fetcher: typeof fetch = async () => {
+    posts += 1;
+    return new Response(JSON.stringify({ id: `post-${posts}` }), { status: 200 });
+  };
+  const options = {
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: fetcher,
+  };
+
+  assert.equal((await deliverClipperLocalNewsToMetricool(options)).scheduled, 1);
+  await writeFile(path.join(dir, "metricool-queue.json"), JSON.stringify({
+    items: [item({ id: "updated-event-copy", copy: "Reabierta la vía local. Fuente oficial: https://example.gov/road" })],
+  }), "utf8");
+
+  const second = await deliverClipperLocalNewsToMetricool(options);
+  assert.equal(second.scheduled, 1);
+  assert.equal(second.alreadyScheduled, 0);
+  assert.equal(posts, 2);
+});
+
+test("deduplicates identical copy inside one queue even when event and queue IDs differ", async () => {
+  const dir = await workspace([
+    item({ id: "duplicate-one", eventId: "event-one" }),
+    item({ id: "duplicate-two", eventId: "event-two" }),
+  ]);
+  let posts = 0;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async () => {
+      posts += 1;
+      return new Response(JSON.stringify({ id: `post-${posts}` }), { status: 200 });
+    },
+  });
+
+  assert.equal(result.scheduled, 1);
+  assert.equal(result.alreadyScheduled, 1);
+  assert.equal(posts, 1);
+});
+
+test("does not deduplicate the same copy across different destination platforms", async () => {
+  const dir = await workspace([
+    item({ id: "same-copy-x", platform: "x" }),
+    item({ id: "same-copy-facebook", platform: "facebook" }),
+  ]);
+  const providers: string[] = [];
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (_input, init) => {
+      providers.push(JSON.parse(String(init?.body)).providers[0].network);
+      return new Response(JSON.stringify({ id: `post-${providers.length}` }), { status: 200 });
+    },
+  });
+
+  assert.equal(result.scheduled, 2);
+  assert.deepEqual(providers, ["twitter", "facebook"]);
+});
+
+test("an alternate duplicate queue item retries in the same run after the first request fails", async () => {
+  const dir = await workspace([
+    item({ id: "first-copy-attempt" }),
+    item({ id: "second-copy-attempt" }),
+  ]);
+  let posts = 0;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async () => {
+      posts += 1;
+      return posts === 1
+        ? new Response(JSON.stringify({ error: "temporary" }), { status: 500 })
+        : new Response(JSON.stringify({ id: "retry-success" }), { status: 200 });
+    },
+  });
+
+  assert.equal(result.status, "partial");
+  assert.equal(result.failed, 1);
+  assert.equal(result.scheduled, 1);
+  assert.equal(posts, 2);
+  const ledger = JSON.parse(await readFile(path.join(dir, "metricool-delivery-ledger.json"), "utf8"));
+  assert.equal(ledger.entries[0].queueItemId, "second-copy-attempt");
+});
+
+test("continues reading a legacy ledger without eventId or copyHash", async () => {
+  const dir = await workspace([item({ id: "legacy-queue-id" })]);
+  await writeFile(path.join(dir, "metricool-delivery-ledger.json"), JSON.stringify({
+    version: 1,
+    entries: [{
+      queueItemId: "legacy-queue-id",
+      lane: "miami-news",
+      platform: "x",
+      blogId: "99",
+      scheduledFor: "2026-07-21T15:00:00.000Z",
+      scheduledAt: "2026-07-21T14:58:00.000Z",
+      metricoolPostId: "legacy-post",
+    }],
+  }), "utf8");
+  let fetched = false;
+
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async () => { fetched = true; throw new Error("legacy duplicate must not reach Metricool"); },
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.scheduled, 0);
+  assert.equal(result.alreadyScheduled, 1);
+  assert.equal(fetched, false);
+});
+
 test("failed scheduling is not written to the ledger and is retried next run", async () => {
   const dir = await workspace([item()]);
   let attempt = 0;
@@ -506,8 +657,8 @@ test("recovers a bounded stale lock and cleans up its replacement", async () => 
 test("spaces posts for the same lane and platform by at least two minutes and honors run cap", async () => {
   const dir = await workspace([
     item({ id: "one" }),
-    item({ id: "two", eventId: "event-2" }),
-    item({ id: "three", eventId: "event-3" }),
+    item({ id: "two", eventId: "event-2", copy: "Cierre en la avenida 2. Fuente oficial: https://example.gov/road/2" }),
+    item({ id: "three", eventId: "event-3", copy: "Cierre en la avenida 3. Fuente oficial: https://example.gov/road/3" }),
   ]);
   const dates: string[] = [];
   const result = await deliverClipperLocalNewsToMetricool({

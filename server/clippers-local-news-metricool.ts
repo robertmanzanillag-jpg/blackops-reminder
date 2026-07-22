@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -51,6 +51,8 @@ const queueFileSchema = z.object({
 
 const ledgerEntrySchema = z.object({
   queueItemId: z.string().min(1).max(500),
+  eventId: z.string().min(1).max(500).optional(),
+  copyHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   lane: z.enum(["miami-news", "ny-news"]),
   platform: z.enum(["x", "facebook"]),
   blogId: z.string().min(1).max(100),
@@ -145,6 +147,20 @@ function hasRealValue(value: string | undefined): value is string {
 function cappedInteger(value: number | string | undefined, fallback: number): number {
   const parsed = typeof value === "number" ? value : Number.parseInt(value || "", 10);
   return Number.isFinite(parsed) ? Math.max(1, Math.min(MAX_PER_RUN, Math.trunc(parsed))) : fallback;
+}
+
+function metricoolContentHash(copy: string): string {
+  const normalized = copy.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase("es-US");
+  return createHash("sha256").update(normalized, "utf8").digest("hex");
+}
+
+function metricoolContentKey(item: Pick<QueueItem, "copy" | "lane" | "platform">): string {
+  return `${item.lane}|${item.platform}|${metricoolContentHash(item.copy)}`;
+}
+
+function metricoolLedgerContentKey(entry: Ledger["entries"][number]): string | null {
+  if (!entry.copyHash) return null;
+  return `${entry.lane}|${entry.platform}|${entry.copyHash}`;
 }
 
 function defaultWorkspace(env: NodeJS.ProcessEnv): string {
@@ -480,6 +496,7 @@ export async function deliverClipperLocalNewsToMetricool(
     result.scanned = queue.length;
 
     const already = new Set(ledger.entries.map((entry) => entry.queueItemId));
+    const scheduledContentKeys = new Set(ledger.entries.map(metricoolLedgerContentKey).filter((key): key is string => Boolean(key)));
     const now = options.now || (() => new Date());
     const fetchedNow = now();
     const safeItems = queue.filter((item) => {
@@ -493,11 +510,18 @@ export async function deliverClipperLocalNewsToMetricool(
       const eligible = baseEligible && committeeEligible;
       if (!eligible) result.filtered += 1;
       else result.eligible += 1;
-      if (eligible && already.has(item.id)) result.alreadyScheduled += 1;
       const notBefore = item.notBefore ? new Date(item.notBefore).getTime() : Number.NEGATIVE_INFINITY;
       const deferred = eligible && Number.isFinite(notBefore) && notBefore > fetchedNow.getTime();
       if (deferred) result.deferred += 1;
-      return eligible && !deferred && !already.has(item.id);
+      if (!eligible || deferred) return false;
+
+      const duplicate = already.has(item.id)
+        || scheduledContentKeys.has(metricoolContentKey(item));
+      if (duplicate) {
+        result.alreadyScheduled += 1;
+        return false;
+      }
+      return true;
     });
 
     const laneConfig = {} as Record<ClipperLocalNewsLane, { label: string; aliases: string[]; override?: string }>;
@@ -542,6 +566,11 @@ export async function deliverClipperLocalNewsToMetricool(
     const mediaIds = new Map<ClipperLocalNewsLane, string | null>();
     let attempts = 0;
     for (const item of safeItems) {
+      const contentKey = metricoolContentKey(item);
+      if (scheduledContentKeys.has(contentKey)) {
+        result.alreadyScheduled += 1;
+        continue;
+      }
       const profile = laneProfiles.get(item.lane);
       if (!profile || !supportsProvider(profile, item.platform)) {
         if (!result.blockedLanes.includes(item.lane)) result.blockedLanes.push(item.lane);
@@ -585,6 +614,8 @@ export async function deliverClipperLocalNewsToMetricool(
         const responseBody = await safeJson(response);
         ledger.entries.push({
           queueItemId: item.id,
+          eventId: item.eventId,
+          copyHash: metricoolContentHash(item.copy),
           lane: item.lane,
           platform: item.platform,
           blogId: profile.blogId,
@@ -593,6 +624,7 @@ export async function deliverClipperLocalNewsToMetricool(
           metricoolPostId: responsePostId(responseBody),
         });
         await atomicWriteLedger(ledgerPath, ledger);
+        scheduledContentKeys.add(contentKey);
         cursors.set(cursorKey, scheduledMs);
         result.scheduled += 1;
         if (mediaId) result.mediaAttached += 1;
@@ -626,4 +658,5 @@ export const __clipperLocalNewsMetricoolInternals = {
   responsePostId,
   publicBrandMediaUrl,
   normalizeMetricoolMedia,
+  metricoolContentHash,
 };
