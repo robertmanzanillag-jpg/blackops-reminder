@@ -363,9 +363,14 @@ function isTrafficArticle(article: PublicNewsArticle): boolean {
 }
 
 function routeLabel(article: PublicNewsArticle, language: NewsLanguage): string {
-  const context = `${article.title} ${article.location || ""}`;
-  const match = context.match(/\b(?:I-|US-|SR-|FL-|NY-|Route\s+|Ruta\s+|Line(?:s)?\s+|L[ií]nea(?:s)?\s+)[A-Z0-9][A-Z0-9,\s-]{0,20}/i);
-  if (match) return match[0].trim().replace(/[,:;-]+$/, "");
+  const context = `${article.location || ""} ${article.title}`;
+  const routePatterns = [
+    /\b(?:I|US|SR|FL|NY)-\d+[A-Z]?\b/i,
+    /\b(?:Route|Ruta)\s+\d+[A-Z]?\b/i,
+    /\b(?:Line|Lines|L[ií]nea|L[ií]neas)\s+[A-Z0-9]+(?:\s*,\s*[A-Z0-9]+)*/i,
+  ];
+  const match = routePatterns.map((pattern) => context.match(pattern)?.[0]).find(Boolean);
+  if (match) return match;
   if (article.location) return article.location.length > 48 ? `${article.location.slice(0, 45).trim()}…` : article.location;
   return article.city === "miami" ? "Miami-Dade" : language === "es" ? "Área metropolitana de Nueva York" : "New York metro area";
 }
