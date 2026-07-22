@@ -311,6 +311,17 @@ function storageProviderForCandidate(candidate: MediaAsset, configuredProvider: 
   return OWNED_OBJECT_STORAGE_PROVIDER;
 }
 
+function mediaAssetChecksumLockKey(
+  ownerUserId: string,
+  workspaceId: string,
+  type: MediaAssetType,
+  checksumSha256: string,
+): string {
+  // JSON encoding is unambiguous even when a scope component contains punctuation,
+  // while avoiding the NUL bytes that PostgreSQL rejects in text parameters.
+  return JSON.stringify(["ai-media-asset-checksum-v1", ownerUserId, workspaceId, type, checksumSha256]);
+}
+
 export interface MediaAssetPage {
   assets: MediaAsset[];
   nextCursor: string | null;
@@ -336,7 +347,12 @@ export class DrizzleMediaAssetRepository implements MediaAssetRepository {
     const checksumSha256 = candidate.checksumSha256;
     return this.db.transaction(async (tx) => {
       if (checksumSha256 !== null) {
-        const lockKey = `${candidate.ownerUserId}\u0000${this.workspaceId}\u0000${candidate.type}\u0000${checksumSha256}`;
+        const lockKey = mediaAssetChecksumLockKey(
+          candidate.ownerUserId,
+          this.workspaceId,
+          candidate.type,
+          checksumSha256,
+        );
         await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${lockKey}, 0))`);
         const [existing] = await tx.select().from(aiMediaMediaAssets).where(and(
           eq(aiMediaMediaAssets.ownerUserId, candidate.ownerUserId),

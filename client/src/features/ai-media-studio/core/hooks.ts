@@ -14,6 +14,9 @@ export const coreStudioKeys = {
   productionBatchLaunchPreflight: (planId: string, batchId: string) => [
     "ai-media-studio", "core", "production-batch", "launch-preflight", planId, batchId,
   ] as const,
+  productionBatchSandboxReadiness: (planId: string, batchId: string, slotId: string) => [
+    "ai-media-studio", "core", "production-batch", "sandbox-readiness", planId, batchId, slotId,
+  ] as const,
 };
 
 export function useHeyGenRoster() {
@@ -53,6 +56,26 @@ export function useProductionBatchLaunchPreflight({
     queryKey: coreStudioKeys.productionBatchLaunchPreflight(planId, batchId),
     queryFn: () => mediaStudioCoreApi.productionBatchLaunchPreflight({ planId, batchId }),
     enabled: enabled && Boolean(planId) && Boolean(batchId),
+    retry: false,
+    refetchOnWindowFocus: false,
+  });
+}
+
+export function useProductionBatchSandboxReadiness({
+  planId,
+  batchId,
+  slotId,
+  enabled,
+}: {
+  planId: string;
+  batchId: string;
+  slotId: string;
+  enabled: boolean;
+}) {
+  return useQuery({
+    queryKey: coreStudioKeys.productionBatchSandboxReadiness(planId, batchId, slotId),
+    queryFn: () => mediaStudioCoreApi.productionBatchSandboxReadiness({ planId, batchId, slotId }),
+    enabled: enabled && Boolean(planId) && Boolean(batchId) && Boolean(slotId),
     retry: false,
     refetchOnWindowFocus: false,
   });

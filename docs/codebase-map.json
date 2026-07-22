@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-22T02:39:09.857Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-offline-launch-preflight",
+  "generatedAt": "2026-07-22T03:40:12.659Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-one-video-sandbox-readiness",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -87,39 +87,53 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 799,
-    "filesIndexed": 671,
-    "imports": 2801,
-    "routes": 495,
-    "symbols": 13320
+    "filesVisible": 812,
+    "filesIndexed": 684,
+    "imports": 2890,
+    "routes": 496,
+    "symbols": 13608
   },
   "directories": {
     "script": {
-      "files": 41,
-      "indexed": 39,
+      "files": 42,
+      "indexed": 40,
       "kinds": {
-        "script": 41
+        "script": 42
       }
     },
     "server/ai-media-studio": {
-      "files": 144,
-      "indexed": 137,
+      "files": 147,
+      "indexed": 140,
       "kinds": {
-        "server": 144
+        "server": 147
       }
     },
     "shared": {
-      "files": 11,
-      "indexed": 11,
+      "files": 12,
+      "indexed": 12,
       "kinds": {
-        "shared": 11
+        "shared": 12
       }
     },
     "tests": {
-      "files": 191,
-      "indexed": 182,
+      "files": 197,
+      "indexed": 188,
       "kinds": {
-        "test": 191
+        "test": 197
+      }
+    },
+    "tests/fixtures": {
+      "files": 3,
+      "indexed": 1,
+      "kinds": {
+        "test": 3
+      }
+    },
+    "tests/helpers": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "test": 1
       }
     },
     ".agents/skills": {
@@ -220,13 +234,6 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
-      }
-    },
-    "tests/fixtures": {
-      "files": 2,
-      "indexed": 0,
-      "kinds": {
-        "test": 2
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -2368,7 +2375,8 @@
         "./types",
         "@shared/ai-media-studio-heygen-roster",
         "@shared/ai-media-studio-launch-preflight",
-        "@shared/ai-media-studio-production-batches"
+        "@shared/ai-media-studio-production-batches",
+        "@shared/ai-media-studio-sandbox-readiness"
       ],
       "exports": [
         "CoreApiBoundary",
@@ -2390,7 +2398,8 @@
         "queryString",
         "requestJson",
         "requestOptionalJson",
-        "response"
+        "response",
+        "subject"
       ],
       "routes": []
     },
@@ -2545,6 +2554,7 @@
         "usePrepareProductionBatchScripts",
         "useProductionBatch",
         "useProductionBatchLaunchPreflight",
+        "useProductionBatchSandboxReadiness",
         "useProviderResources"
       ],
       "symbols": [
@@ -2565,6 +2575,7 @@
         "usePrepareProductionBatchScripts",
         "useProductionBatch",
         "useProductionBatchLaunchPreflight",
+        "useProductionBatchSandboxReadiness",
         "useProviderResources"
       ],
       "routes": []
@@ -2750,6 +2761,7 @@
       ],
       "exports": [
         "ProductionBatchWorkbench",
+        "approvalResultMatchesBatch",
         "newProductionBatchApprovalKey",
         "newProductionBatchAttemptKey"
       ],
@@ -2757,29 +2769,37 @@
         "LaunchGateIcon",
         "LaunchPreflightPanel",
         "ProductionBatchWorkbench",
+        "SandboxReadinessPanel",
         "action",
         "allCreatorsConfirmed",
         "allReviewsAvailable",
         "approvalAttemptRef",
+        "approvalMatchesCurrentBatch",
+        "approvalResultMatchesBatch",
         "approve",
         "approveScripts",
+        "approvedSlots",
+        "approvedSlotsKey",
         "attemptRef",
         "batch",
         "batchQuery",
         "confirmCreatorReview",
         "confirmedMembers",
         "errorMessage",
+        "externalRequirementLabels",
         "identity",
         "newProductionBatchApprovalKey",
         "newProductionBatchAttemptKey",
         "ownApprovalTransition",
+        "packet",
         "prepare",
         "prepareScripts",
         "query",
         "readyScripts",
         "resultRef",
         "reviewedBatchRef",
-        "scriptReadiness"
+        "scriptReadiness",
+        "selectedSlot"
       ],
       "routes": []
     },
@@ -2790,7 +2810,8 @@
         "@shared/ai-media-studio-core",
         "@shared/ai-media-studio-heygen-roster",
         "@shared/ai-media-studio-launch-preflight",
-        "@shared/ai-media-studio-production-batches"
+        "@shared/ai-media-studio-production-batches",
+        "@shared/ai-media-studio-sandbox-readiness"
       ],
       "exports": [
         "AssetDelivery",
@@ -5098,6 +5119,41 @@
         "ownedRoot",
         "root",
         "run",
+        "stop",
+        "temporaryDirectory",
+        "testUrl",
+        "waitUntilReady"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/ai-media-studio-offline-one-slot-runtime-test.ts",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:fs",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:process"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "FORBIDDEN_ENV",
+        "PORT",
+        "TEMP_PREFIX",
+        "child",
+        "dataDirectory",
+        "forbidden",
+        "log",
+        "logPath",
+        "main",
+        "ownedRoot",
+        "root",
+        "run",
+        "safeEnvironment",
+        "socketDirectory",
         "stop",
         "temporaryDirectory",
         "testUrl",
@@ -9676,6 +9732,7 @@
         "isSafeOwnedObjectKey",
         "limit",
         "lockKey",
+        "mediaAssetChecksumLockKey",
         "page",
         "personaMetadata",
         "predicates",
@@ -10401,17 +10458,21 @@
         "foundation",
         "from",
         "gate",
+        "gates",
         "governanceReady",
         "human",
         "id",
-        "influencerCounts",
+        "influencers",
         "instant",
         "intentReady",
         "internalPlanId",
+        "invalidBatchShapeReport",
         "killExists",
         "killValid",
         "launchPreflightWindowIsCurrent",
-        "metadata",
+        "member",
+        "memberInfluencers",
+        "memberVideos",
         "metadataReady",
         "offlineReady",
         "parsed",
@@ -10440,7 +10501,57 @@
         "validAt",
         "value",
         "variantRows",
-        "variantsByScript"
+        "variantsByScript",
+        "video",
+        "videos"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/drizzle-sandbox-readiness-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-sandbox-readiness",
+        "../core/resource-domain",
+        "../production-batches/metadata-integrity",
+        "./sandbox-readiness-contracts",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "DrizzleSandboxReadinessRepository",
+        "SandboxReadinessDatabase",
+        "SandboxReadinessTransactionalDatabase"
+      ],
+      "symbols": [
+        "DrizzleSandboxReadinessRepository",
+        "ExecuteResult",
+        "Row",
+        "blocked",
+        "bool",
+        "clock",
+        "databaseNow",
+        "date",
+        "envelope",
+        "gate",
+        "governancePresent",
+        "governanceReady",
+        "influencerReady",
+        "internalPlanId",
+        "number",
+        "parsed",
+        "passed",
+        "plan",
+        "planSlotRows",
+        "plans",
+        "providerReady",
+        "rows",
+        "selected",
+        "slot",
+        "slotRows",
+        "text",
+        "value",
+        "variants",
+        "verified"
       ],
       "routes": []
     },
@@ -10685,6 +10796,42 @@
         "validDatabaseTime",
         "validateBinding",
         "verifier"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/sandbox-readiness-contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-sandbox-readiness",
+        "../core/resource-domain"
+      ],
+      "exports": [
+        "SandboxReadinessError",
+        "SandboxReadinessErrorCode",
+        "SandboxReadinessRepository"
+      ],
+      "symbols": [
+        "SandboxReadinessError"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/planning/sandbox-readiness-service.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-sandbox-readiness",
+        "../core/resource-domain",
+        "./sandbox-readiness-contracts"
+      ],
+      "exports": [
+        "SandboxReadinessService"
+      ],
+      "symbols": [
+        "PLAN_KEY",
+        "SLOT_KEY",
+        "SandboxReadinessService",
+        "parsed"
       ],
       "routes": []
     },
@@ -11683,6 +11830,7 @@
         "../../shared/ai-media-studio-launch-preflight",
         "../../shared/ai-media-studio-operations",
         "../../shared/ai-media-studio-production-batches",
+        "../../shared/ai-media-studio-sandbox-readiness",
         "../../shared/ai-media-studio-scripts",
         "../user-context",
         "./agent-control",
@@ -11700,6 +11848,8 @@
         "./persistence/runtime",
         "./planning/launch-preflight-contracts",
         "./planning/launch-preflight-service",
+        "./planning/sandbox-readiness-contracts",
+        "./planning/sandbox-readiness-service",
         "./ports",
         "./production-batches/contracts",
         "./production-batches/service",
@@ -11754,6 +11904,7 @@
         "createDefaultDurableHeyGenRosterRuntime",
         "createDefaultDurableLaunchPreflightRepository",
         "createDefaultDurableProductionBatchRepository",
+        "createDefaultDurableSandboxReadinessRepository",
         "createDefaultProviderWebhookAccountResolver",
         "created",
         "dashboard",
@@ -11843,6 +11994,7 @@
         "requireLaunchPreflight",
         "requireOperations",
         "requireProductionBatches",
+        "requireSandboxReadiness",
         "resolveProviderWebhookAccount",
         "resources",
         "result",
@@ -11852,6 +12004,8 @@
         "runtime",
         "runtimeEnvironment",
         "samples",
+        "sandboxReadiness",
+        "sandboxReadinessSelection",
         "scheduledFor",
         "scope",
         "scriptService",
@@ -11862,6 +12016,7 @@
         "selectHeyGenRosterRuntime",
         "selectLaunchPreflightRuntime",
         "selectProductionBatchRuntime",
+        "selectSandboxReadinessRuntime",
         "service",
         "sourceType",
         "sourcesQuerySchema",
@@ -11909,6 +12064,7 @@
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/approve-scripts",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/launch-preflight",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/prepare-scripts",
+        "${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/sandbox-readiness/:slotId",
         "${AI_MEDIA_STUDIO_API_BASE}/production-batches/current",
         "${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster",
         "${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster/daily-plan",
@@ -19681,6 +19837,44 @@
       "routes": []
     },
     {
+      "path": "shared/ai-media-studio-sandbox-readiness.ts",
+      "kind": "shared",
+      "imports": [
+        "./ai-media-studio-production-batches",
+        "./ai-media-studio-scripts",
+        "zod"
+      ],
+      "exports": [
+        "SandboxReadiness",
+        "SandboxReadinessGate",
+        "sandboxExternalRequirementCodes",
+        "sandboxReadinessGateCodes",
+        "sandboxReadinessGateSchema",
+        "sandboxReadinessNextActionCodes",
+        "sandboxReadinessReasonCodes",
+        "sandboxReadinessResponseSchema",
+        "sandboxReadinessSchema"
+      ],
+      "symbols": [
+        "blocked",
+        "cleanText",
+        "expectedStatus",
+        "invalidExternalRequirements",
+        "invalidGate",
+        "passed",
+        "pending",
+        "publicKey",
+        "sandboxExternalRequirementCodes",
+        "sandboxReadinessGateCodes",
+        "sandboxReadinessGateSchema",
+        "sandboxReadinessNextActionCodes",
+        "sandboxReadinessReasonCodes",
+        "sandboxReadinessResponseSchema",
+        "sandboxReadinessSchema"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/ai-media-studio-scripts.ts",
       "kind": "shared",
       "imports": [
@@ -20266,6 +20460,7 @@
         "durableScriptBatch",
         "launchReadiness",
         "officeSource",
+        "offlinePreflight",
         "pageSource",
         "routesSource",
         "sandbox",
@@ -20616,6 +20811,7 @@
         "insert",
         "later",
         "lock",
+        "lockKey",
         "lookup",
         "mismatched",
         "missing",
@@ -21510,14 +21706,28 @@
       "kind": "test",
       "imports": [
         "../server/ai-media-studio/planning/drizzle-launch-preflight-repository",
+        "../server/ai-media-studio/planning/launch-preflight-contracts",
+        "../shared/ai-media-studio-launch-preflight",
         "node:assert/strict",
         "node:fs",
         "node:test"
       ],
       "exports": [],
       "symbols": [
+        "Derive",
+        "ambiguous",
+        "argumentsBeforeSlots",
+        "batchId",
         "candidate",
+        "checksum",
+        "derive",
+        "digest",
+        "malformedSlots",
+        "missing",
         "now",
+        "observed",
+        "ordinal",
+        "planId",
         "repository",
         "source",
         "text"
@@ -22263,6 +22473,130 @@
         "upperClock",
         "uuid",
         "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-offline-one-slot-runtime.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/assets/contracts",
+        "../server/ai-media-studio/assets/drizzle-ingest-repository",
+        "../server/ai-media-studio/assets/worker",
+        "../server/ai-media-studio/persistence/drizzle-core-repositories",
+        "../server/ai-media-studio/planning/contracts",
+        "../server/ai-media-studio/planning/drizzle-daily-admission-repository",
+        "../server/ai-media-studio/planning/drizzle-held-work-activation-repository",
+        "../server/ai-media-studio/planning/held-work-activation-domain",
+        "../server/ai-media-studio/workers/admitted-render-contracts",
+        "../server/ai-media-studio/workers/admitted-render-terminal-worker",
+        "../server/ai-media-studio/workers/admitted-render-worker",
+        "../server/ai-media-studio/workers/drizzle-admitted-render-repository",
+        "../server/ai-media-studio/workers/drizzle-admitted-render-terminal-repository",
+        "drizzle-orm",
+        "drizzle-orm/node-postgres",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:process",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "Manifest",
+        "MigrationFile",
+        "OWNER",
+        "PORT",
+        "RECONCILE_LOGIN",
+        "RECONCILE_ROLE",
+        "RepositoryDatabase",
+        "SCRIPT_CHECKSUM",
+        "SCRIPT_CONTENT",
+        "SUBMIT_LOGIN",
+        "SUBMIT_ROLE",
+        "TEMP_PREFIX",
+        "WORKSPACE",
+        "activation",
+        "activationRepository",
+        "adminPool",
+        "adminRepositoryDatabase",
+        "admission",
+        "admissionRepository",
+        "admittedRepository",
+        "applyExactMigrationChain",
+        "approvedBindings",
+        "avatarId",
+        "bytes",
+        "capability",
+        "capabilityLane",
+        "checksum",
+        "client",
+        "content",
+        "counts",
+        "database",
+        "databaseUrl",
+        "db",
+        "deterministicUuid",
+        "dialect",
+        "digest",
+        "durableIngest",
+        "enabled",
+        "evidence",
+        "execute",
+        "finalObjectKey",
+        "forbidden",
+        "held",
+        "hex",
+        "ids",
+        "influencerId",
+        "ingestRepository",
+        "ingestWorker",
+        "ingested",
+        "integrationTest",
+        "launchIntentDigest",
+        "launchSubjectDigest",
+        "ledger",
+        "manifest",
+        "mediaAssets",
+        "migration",
+        "migrationRoot",
+        "mp4",
+        "now",
+        "ownedAsset",
+        "parsed",
+        "pool",
+        "prefix",
+        "reconcileLane",
+        "rendered",
+        "requireOwnedUrl",
+        "resolvedRoot",
+        "resolvedSocket",
+        "result",
+        "scriptId",
+        "seedValidFiveByTenSubject",
+        "selected",
+        "slotId",
+        "socket",
+        "stored",
+        "subject",
+        "submitLane",
+        "submitWorker",
+        "submitted",
+        "terminal",
+        "terminalRepository",
+        "terminalWorker",
+        "totalSlots",
+        "tx",
+        "unsignedActivation",
+        "unsignedAdmission",
+        "url",
+        "value",
+        "variantId"
       ],
       "routes": []
     },
@@ -23625,24 +23959,31 @@
       "kind": "test",
       "imports": [
         "../client/src/features/ai-media-studio/core/api.ts",
+        "../client/src/features/ai-media-studio/core/production-batch-workbench.tsx",
         "node:assert/strict",
         "node:test"
       ],
       "exports": [],
       "symbols": [
+        "approved",
         "batch",
+        "externalBatch",
         "first",
+        "gateCodes",
         "groups",
         "launchGateCodes",
         "launchPreflightResponse",
         "observation",
         "originalFetch",
         "position",
+        "privatePreview",
         "privateResponse",
         "productionBatchResponse",
         "publicKey",
+        "request",
         "requiredSlots",
         "response",
+        "sandboxReadinessResponse",
         "stale",
         "unsafe",
         "unsafeBatch"
@@ -24359,6 +24700,165 @@
         "storage",
         "upload",
         "whitespaceVariant"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-sandbox-readiness-browser.test.ts",
+      "kind": "test",
+      "imports": [
+        "@vitejs/plugin-react",
+        "node:assert/strict",
+        "node:fs",
+        "node:http",
+        "node:path",
+        "node:test",
+        "playwright",
+        "vite"
+      ],
+      "exports": [
+        "mediaStudioCoreApi"
+      ],
+      "symbols": [
+        "address",
+        "browser",
+        "browserHarnessPlugin",
+        "bundledBrowser",
+        "creatorName",
+        "entryPath",
+        "gateCodes",
+        "harness",
+        "html",
+        "httpServer",
+        "mediaStudioCoreApi",
+        "packetFor",
+        "page",
+        "queryKeys",
+        "repositoryRoot",
+        "requestNumber",
+        "resetCall",
+        "selectedCall",
+        "selector",
+        "systemChrome",
+        "unsafeControls",
+        "videoNumber",
+        "virtualApiId",
+        "virtualApiSource",
+        "vite",
+        "wait",
+        "workbenchPath"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-sandbox-readiness-contracts.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/ai-media-studio-sandbox-readiness",
+        "./helpers/ai-media-studio-sandbox-readiness-fixture",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "corrupt",
+        "packet"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-sandbox-readiness-drizzle.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/drizzle-sandbox-readiness-repository",
+        "../server/ai-media-studio/planning/sandbox-readiness-contracts",
+        "../server/ai-media-studio/production-batches/metadata-integrity",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "approval",
+        "approvedRows",
+        "base",
+        "batchId",
+        "candidate",
+        "content",
+        "creative",
+        "database",
+        "databaseFrom",
+        "input",
+        "missingSlot",
+        "mutations",
+        "packet",
+        "plan",
+        "planId",
+        "planSlots",
+        "queryText",
+        "rawHash",
+        "repository",
+        "scope",
+        "scriptKey",
+        "scripted",
+        "selected",
+        "slot",
+        "slotId",
+        "source",
+        "sourceContent",
+        "variants"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-sandbox-readiness-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/in-memory",
+        "../server/ai-media-studio/planning/sandbox-readiness-contracts",
+        "../server/ai-media-studio/providers/fake-video-provider",
+        "../server/ai-media-studio/routes",
+        "./helpers/ai-media-studio-sandbox-readiness-fixture",
+        "express",
+        "node:assert/strict",
+        "node:http",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "base",
+        "body",
+        "getWithBody",
+        "harness",
+        "missing",
+        "previous",
+        "req",
+        "response",
+        "runtime",
+        "server",
+        "unavailable",
+        "url"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-sandbox-readiness-service.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/sandbox-readiness-contracts",
+        "../server/ai-media-studio/planning/sandbox-readiness-service",
+        "./helpers/ai-media-studio-sandbox-readiness-fixture",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "corrupt",
+        "missing",
+        "service"
       ],
       "routes": []
     },
@@ -25416,6 +25916,29 @@
       "routes": []
     },
     {
+      "path": "tests/fixtures/ai-media-studio-sandbox-readiness-browser-entry.tsx",
+      "kind": "test",
+      "imports": [
+        "../../client/src/features/ai-media-studio/core/production-batch-workbench",
+        "@tanstack/react-query",
+        "react",
+        "react-dom/client"
+      ],
+      "exports": [],
+      "symbols": [
+        "approvedBatch",
+        "approvedItem",
+        "batches",
+        "groups",
+        "harness",
+        "key",
+        "queryClient",
+        "render",
+        "root"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/github-client-security.test.ts",
       "kind": "test",
       "imports": [
@@ -25490,6 +26013,27 @@
         "snapshotEnv",
         "status",
         "url"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/helpers/ai-media-studio-sandbox-readiness-fixture.ts",
+      "kind": "test",
+      "imports": [
+        "../../shared/ai-media-studio-sandbox-readiness"
+      ],
+      "exports": [
+        "batchId",
+        "planId",
+        "sandboxPacket",
+        "slotId"
+      ],
+      "symbols": [
+        "batchId",
+        "gates",
+        "planId",
+        "sandboxPacket",
+        "slotId"
       ],
       "routes": []
     },
@@ -26154,6 +26698,7 @@
     "tests/ai-media-studio-oauth-vault-cleanup-drizzle.test.ts",
     "tests/ai-media-studio-oauth-vault-cleanup-worker.test.ts",
     "tests/ai-media-studio-offline-launch-preflight-postgres.test.ts",
+    "tests/ai-media-studio-offline-one-slot-runtime.test.ts",
     "tests/ai-media-studio-operations-client.test.ts",
     "tests/ai-media-studio-operations-drizzle.test.ts",
     "tests/ai-media-studio-operations-http.test.ts",
@@ -26212,6 +26757,11 @@
     "tests/ai-media-studio-routes.test.ts",
     "tests/ai-media-studio-runtime-persistence.test.ts",
     "tests/ai-media-studio-s3-storage.test.ts",
+    "tests/ai-media-studio-sandbox-readiness-browser.test.ts",
+    "tests/ai-media-studio-sandbox-readiness-contracts.test.ts",
+    "tests/ai-media-studio-sandbox-readiness-drizzle.test.ts",
+    "tests/ai-media-studio-sandbox-readiness-routes.test.ts",
+    "tests/ai-media-studio-sandbox-readiness-service.test.ts",
     "tests/ai-media-studio-schema-wiring.test.ts",
     "tests/ai-media-studio-scripts-contract.test.ts",
     "tests/ai-media-studio-sources.test.ts",

@@ -350,8 +350,15 @@ test("asset createOrGet locks the tenant checksum and stores metadata without by
   assert.equal(db.executions.length, 1);
   const lock = new PgDialect().sqlToQuery(db.executions[0] as never);
   assert.match(lock.sql, /pg_advisory_xact_lock/);
-  assert.deepEqual(lock.params, [
-    `${scope.ownerUserId}\u0000${scope.workspaceId}\u0000video\u0000${assetRow.checksum}`,
+  assert.equal(lock.params.length, 1);
+  const lockKey = String(lock.params[0]);
+  assert.equal(lockKey.includes("\u0000"), false);
+  assert.deepEqual(JSON.parse(lockKey), [
+    "ai-media-asset-checksum-v1",
+    scope.ownerUserId,
+    scope.workspaceId,
+    "video",
+    assetRow.checksum,
   ]);
 
   const lookup = renderedWhere(db.records[0]);

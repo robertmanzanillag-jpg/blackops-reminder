@@ -146,6 +146,39 @@ test("launch preflight maps every contract next action locally and only to safe 
   assert.ok(hrefs.every((href) => href === "#production-batch" || href === "#heygen-roster"));
 });
 
+test("approved batch exposes a separate one-video sandbox readiness packet without execution controls", async () => {
+  const [api, hooks, workbench] = await Promise.all([
+    read("client/src/features/ai-media-studio/core/api.ts"),
+    read("client/src/features/ai-media-studio/core/hooks.ts"),
+    read("client/src/features/ai-media-studio/core/production-batch-workbench.tsx"),
+  ]);
+  assert.match(api, /\/production-batches\/\$\{encodeURIComponent\(planId\)\}\/sandbox-readiness\/\$\{encodeURIComponent\(slotId\)\}/);
+  assert.match(api, /sandboxReadinessResponseSchema\.parse/);
+  assert.match(api, /subject\.planId !== planId \|\| subject\.batchId !== batchId \|\| subject\.slotId !== slotId/);
+  assert.doesNotMatch(api, /productionBatchSandboxReadiness[\s\S]{0,700}method:\s*"(POST|PUT|PATCH|DELETE)"/);
+  assert.match(hooks, /productionBatchSandboxReadiness\(planId, batchId, slotId\)/);
+  assert.match(hooks, /enabled: enabled && Boolean\(planId\) && Boolean\(batchId\) && Boolean\(slotId\)/);
+  assert.match(hooks, /retry: false/);
+  assert.match(hooks, /refetchOnWindowFocus: false/);
+  assert.match(workbench, /batch\.status === "approved_ready" && \(/);
+  assert.match(workbench, /<label htmlFor="sandbox-approved-slot"/);
+  assert.match(workbench, /<select[\s\S]*value=\{selectedSlotId\}[\s\S]*setSelectedSlotId/);
+  assert.match(workbench, /approvedSlots\[0\]\?\.item\.slotId/);
+  assert.match(workbench, /Refresh readiness packet/);
+  assert.match(workbench, /No spend · No provider call · No execution/);
+  assert.match(workbench, /Connecting the provider API remains a separate, later approval step/);
+  assert.match(workbench, /aspect-\[9\/16\]/);
+  assert.match(workbench, /Vertical · 9:16/);
+  assert.match(workbench, /packet\.preview\.creatorName/);
+  assert.match(workbench, /packet\.preview\.script\.script/);
+  assert.match(workbench, /packet\.gates\.map/);
+  assert.match(workbench, /aria-label="Six one-video sandbox readiness gates"/);
+  assert.match(workbench, /Required external steps — not performed here/);
+  assert.doesNotMatch(workbench, /providerAccountId|avatarResourceId|voiceResourceId|nativeId/);
+  const buttonBlocks = Array.from(workbench.matchAll(/<Button\b[\s\S]*?<\/Button>/g), (match) => match[0]);
+  for (const button of buttonBlocks) assert.doesNotMatch(button, />\s*(Execute|Generate|Spend)\b/);
+});
+
 test("studio navigation replaces legacy creation and exposes no generation or retry mutation", async () => {
   const [page, navigation, api, hooks, jobList] = await Promise.all([
     read("client/src/pages/ai-media-studio.tsx"),

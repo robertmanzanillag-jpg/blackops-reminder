@@ -302,15 +302,36 @@ export class DrizzleLaunchPreflightRepository implements LaunchPreflightReposito
   private derive(scope: TenantScope, publicPlanKey: string, now: Date, plan: Row, slots: Row[], variants: Row[],
     authority: Row[], policies: Row[], capacity: Row[]): LaunchPreflight {
     const required = count(plan, "plannedSlotCount", "planned_slot_count");
-    const influencerCounts = new Map<string, number>();
-    for (const slot of slots) {
-      const id = String(value(slot, "influencerId", "influencer_id"));
-      influencerCounts.set(id, (influencerCounts.get(id) ?? 0) + 1);
+    if (required < 50 || required > 100 || required % 10 !== 0) {
+      // The public contract cannot truthfully represent any other planned shape.
+      throw new LaunchPreflightError("UNAVAILABLE");
     }
-    const avatarCount = influencerCounts.size;
-    const exactShape = required === slots.length && required === avatarCount * 10
-      && avatarCount >= 5 && avatarCount <= 10
-      && [...influencerCounts.values()].every((amount) => amount === 10);
+    const avatarCount = required / 10;
+    const memberVideos = new Map<string, Set<number>>();
+    const memberInfluencers = new Map<string, Set<string>>();
+    for (const slot of slots) {
+      const member = String(value(slot, "sourceMemberKey", "source_member_key"));
+      const video = Number(value(slot, "videoNumber", "video_number"));
+      const videos = memberVideos.get(member) ?? new Set<number>();
+      videos.add(video);
+      memberVideos.set(member, videos);
+      const influencers = memberInfluencers.get(member) ?? new Set<string>();
+      influencers.add(String(value(slot, "influencerId", "influencer_id")));
+      memberInfluencers.set(member, influencers);
+    }
+    const exactShape = slots.length === required && memberVideos.size === avatarCount
+      && [...memberVideos.entries()].every(([member, videos]) => /^member_[0-9a-f]{24}$/u.test(member)
+        && videos.size === 10 && [...videos].every((video) => Number.isInteger(video) && video >= 1 && video <= 10)
+        && memberInfluencers.get(member)?.size === 1)
+      && new Set(slots.map((slot) => String(value(slot, "influencerId", "influencer_id")))).size === avatarCount;
+
+    const batchIds = new Set(slots.map((slot) => readProductionBatchEnvelope(
+      value(slot, "scriptMetadata", "script_metadata"),
+    )?.batchId));
+    if (batchIds.has(undefined) || batchIds.size !== 1) throw new LaunchPreflightError("UNAVAILABLE");
+    const batchId = [...batchIds][0];
+    if (!batchId) throw new LaunchPreflightError("UNAVAILABLE");
+    if (!exactShape) return invalidBatchShapeReport(publicPlanKey, batchId, avatarCount, required, now);
 
     const variantsByScript = new Map<string, Row[]>();
     for (const variant of variants) {
@@ -339,14 +360,6 @@ export class DrizzleLaunchPreflightRepository implements LaunchPreflightReposito
         metadata: value(variant, "metadata", "metadata"),
       })),
     })).length;
-    const batchIds = new Set(slots.map((slot) => {
-      const metadata = value(slot, "scriptMetadata", "script_metadata") as Record<string, unknown> | undefined;
-      const envelope = metadata?.productionBatchV1 as Record<string, unknown> | undefined;
-      return typeof envelope?.batchId === "string" ? envelope.batchId : "";
-    }));
-    const batchId = batchIds.size === 1 ? [...batchIds][0] : "";
-    if (!exactShape || !/^batch_[0-9a-f]{24}$/u.test(batchId)) throw new LaunchPreflightError("UNAVAILABLE");
-
     const sourceReady = slots.filter((slot) => {
       const envelope = readProductionBatchEnvelope(value(slot, "scriptMetadata", "script_metadata"));
       const content = String(value(slot, "sourceContent", "source_content"));
@@ -490,6 +503,25 @@ export class DrizzleLaunchPreflightRepository implements LaunchPreflightReposito
       gates,
     });
   }
+}
+
+function invalidBatchShapeReport(publicPlanKey: string, batchId: string, avatarCount: number,
+  required: number, now: Date): LaunchPreflight {
+  const gates = launchPreflightGateCodes.map((code) => gate(required, code === "batch_integrity"
+    ? blocked(code, 0, "batch_shape_invalid", "repair_batch")
+    : blocked(code, 0, "observation_unavailable", "retry_observation", "unavailable"))) as LaunchPreflight["gates"];
+  return launchPreflightSchema.parse({
+    version: 1, source: "derived_read_only",
+    subject: { planId: publicPlanKey, batchId, avatarCount, videosPerAvatar: 10, plannedVideoCount: required },
+    observedAt: now.toISOString(), status: "blocked",
+    canGenerate: false, sandboxExecutionAllowed: false, spendAuthorized: false, noSpend: true,
+    authoritativeForAdmission: false,
+    effects: { intentCreated: false, evidenceCreated: false, snapshotCreated: false, reservationCreated: false,
+      renderCreated: false, outboxCreated: false, providerCalled: false },
+    summary: { totalGates: 14, passedGates: 0, blockedGates: 1, pendingExternalGates: 0,
+      pendingHumanGates: 0, unavailableGates: 13, readySlots: 0, requiredSlots: required },
+    gates,
+  });
 }
 
 function validAt(row: Row, fromCamel: string, fromSnake: string, expiresCamel: string, expiresSnake: string,

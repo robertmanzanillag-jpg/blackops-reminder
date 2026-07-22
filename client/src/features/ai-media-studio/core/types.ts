@@ -32,6 +32,10 @@ import type {
   LaunchPreflight,
   LaunchPreflightGate,
 } from "@shared/ai-media-studio-launch-preflight";
+import type {
+  SandboxReadiness,
+  SandboxReadinessGate,
+} from "@shared/ai-media-studio-sandbox-readiness";
 
 export type {
   CreateInfluencerRequest,
@@ -69,6 +73,11 @@ export type {
 export type {
   LaunchPreflight,
   LaunchPreflightGate,
+};
+
+export type {
+  SandboxReadiness,
+  SandboxReadinessGate,
 };
 
 export type MediaAssetKind = MediaAsset["kind"];
