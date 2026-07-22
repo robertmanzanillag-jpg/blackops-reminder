@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
+import type { BlackRoomCeoAnalytics } from "./blackroom-growth-ceo";
 
 export type BlackRoomRemoteCommand =
   | { id: string; type: "daily_target"; posts: number; createdAt: string }
   | { id: string; type: "extra_posts"; posts: number; targetDate: string; createdAt: string }
-  | { id: string; type: "priority_source"; url: string; createdAt: string };
+  | { id: string; type: "priority_source"; url: string; createdAt: string }
+  | { id: string; type: "ceo_schedule"; slotsByDate: Record<string, string[]>; analytics: BlackRoomCeoAnalytics; createdAt: string };
 
 export interface BlackRoomChatResult {
   reply: string;
@@ -79,7 +81,8 @@ export function parseBlackRoomChatCommand(
   if (/\b(estado|status|como va|cuantos? hay)\b/.test(text) && /\b(black\s*room|agente|videos?|cola)\b/.test(text)) {
     return { reply: "Estoy consultando el estado actual de BlackRoom.", command: null, statusRequested: true };
   }
-  const weeks = Number(text.match(/\b([1-4])\s*semanas?\b/)?.[1]);
+  const requestedWeeks = Number(text.match(/\b([1-4])\s*semanas?\b/)?.[1]);
+  const weeks = Number.isFinite(requestedWeeks) ? Math.max(2, requestedWeeks) : requestedWeeks;
   const wantsPause = /\b(pausa|pausar|deten|detener)\b/.test(text)
     || /\bpara (?:el )?(?:agente|contenido|videos?)\b/.test(text);
   if (wantsPause && /\b(black\s*room|agente|videos?|contenido|tiktok|facebook|metricool)\b/.test(text)) {
@@ -97,8 +100,8 @@ export function parseBlackRoomChatCommand(
     };
   }
   const number = Number(text.match(/\b(\d{1,2})\b/)?.[1]);
-  if (Number.isFinite(number) && (number < 1 || number > 20)) {
-    return { reply: "La cantidad debe estar entre 1 y 20 videos para mantener una cadencia segura.", command: null };
+  if (Number.isFinite(number) && (number < 1 || number > 16)) {
+    return { reply: "La cantidad debe estar entre 1 y 16 videos para mantener al menos 90 minutos entre publicaciones.", command: null };
   }
   if (Number.isFinite(number) && /\b(mas|extra|adicional)/.test(text) && /\bhoy\b/.test(text)) {
     const available = remainingNinetyMinuteSlots(now, timezone);
@@ -111,6 +114,9 @@ export function parseBlackRoomChatCommand(
     };
   }
   if (Number.isFinite(number) && /(por dia|al dia|x dia|diarios?|cada dia)/.test(text)) {
+    if (number < 7) {
+      return { reply: "Para esta campaña el mínimo es 7 videos por día. Puedes elegir entre 7 y 16 manteniendo al menos 90 minutos entre publicaciones.", command: null };
+    }
     return {
       reply: `Entendido. El objetivo automático será ${number} video${number === 1 ? "" : "s"} por día. Si los analytics no respaldan esa frecuencia, te lo señalaré sin ignorar tu orden.`,
       command: { id: randomUUID(), type: "daily_target", posts: number, createdAt: now.toISOString() },
@@ -118,9 +124,9 @@ export function parseBlackRoomChatCommand(
   }
   if (/analytics|analitica|recomienda|conviene|deberia|mejor cantidad/.test(text)) {
     const samples = Math.max(0, Number(options.analyticsSamples || 0));
-    const current = Math.max(1, Number(options.currentPostsPerDay || 10));
-    return samples < 20
-      ? { reply: `Todavía no hay suficientes posts con analytics comparables (${samples}/20). Mantendría ${current} diarios por ahora y no subiría la frecuencia basándome en datos incompletos.`, command: null }
+    const current = Math.max(1, Number(options.currentPostsPerDay || 7));
+    return samples < 21
+      ? { reply: `Todavía no hay suficientes posts con analytics comparables (${samples}/21). Mantendría ${current} diarios por ahora y no subiría la frecuencia basándome en datos incompletos.`, command: null }
       : { reply: `Ya hay ${samples} posts comparables. Mantendría ${current} diarios hasta que retención, finalización y seguidores por publicación indiquen una diferencia estable.`, command: null };
   }
   return {

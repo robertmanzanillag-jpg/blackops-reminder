@@ -10,6 +10,7 @@ import { BLACKROOM_QUEUE_PATH, pauseBlackRoomAgent, readBlackRoomQueue, startBla
 import {
   isBlackRoomRemoteDeviceOnline,
   mutateBlackRoomRemoteControl,
+  appendBlackRoomCeoCommand,
   readBlackRoomRemoteControl,
   recordBlackRoomRemoteHeartbeat,
   setBlackRoomRemoteCommand,
@@ -17,6 +18,7 @@ import {
 } from "./blackroom-remote-control";
 import { executeBlackRoomChatMessage } from "./blackroom-chat-service";
 import { BlackRoomMetricoolUncertainError, scheduleBlackRoomMetricoolPost } from "./blackroom-metricool-bridge";
+import { BLACKROOM_CEO_DAILY_POSTS, BLACKROOM_CEO_REFRESH_MS, buildBlackRoomLearningSlots, collectBlackRoomMetricoolAnalytics } from "./blackroom-growth-ceo";
 import { getCurrentUserId } from "./user-context";
 import { isConfiguredSingleUserOwner } from "./single-user-owner";
 
@@ -35,7 +37,50 @@ type BlackRoomUpload = {
   chunkSizes?: number[];
 };
 const blackRoomUploads = new Map<string, BlackRoomUpload>();
+let blackRoomCeoRefreshPromise: Promise<void> | null = null;
 export const BLACKROOM_PUBLIC_MEDIA_PATHS = ["/api/blackroom-agent/media/:uploadId.mp4", "/api/blackroom-agent/media/:uploadId"] as const;
+
+function addUtcDays(date: string, days: number): string {
+  const value = new Date(`${date}T12:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + days);
+  return value.toISOString().slice(0, 10);
+}
+
+function blackRoomLocalDate(now: Date): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+  }).format(now);
+}
+
+async function refreshBlackRoomCeo(force = false): Promise<void> {
+  if (blackRoomCeoRefreshPromise) return blackRoomCeoRefreshPromise;
+  blackRoomCeoRefreshPromise = (async () => {
+    const current = await readBlackRoomRemoteControl();
+    const previous = [...current.commands].reverse().find((command) => command.type === "ceo_schedule");
+    if (!force && previous && Date.now() - new Date(previous.createdAt).getTime() < BLACKROOM_CEO_REFRESH_MS) return;
+    const analytics = await collectBlackRoomMetricoolAnalytics();
+    const today = blackRoomLocalDate(new Date());
+    const currentTarget = Number((current.device?.queue as any)?.postsPerDay || BLACKROOM_CEO_DAILY_POSTS);
+    const posts = Math.max(BLACKROOM_CEO_DAILY_POSTS, Math.min(16, Math.floor(currentTarget)));
+    const slotsByDate = Object.fromEntries(Array.from({ length: 14 }, (_, dayIndex) => {
+      const targetDate = addUtcDays(today, dayIndex + 1);
+      return [targetDate, buildBlackRoomLearningSlots({
+        dayIndex,
+        posts,
+        sampleCount: analytics.sampleCount,
+        recommendedTimes: analytics.recommendedTimes,
+      })];
+    }));
+    await mutateBlackRoomRemoteControl((state) => appendBlackRoomCeoCommand(state, {
+      id: `blackroom-ceo-${randomUUID()}`,
+      type: "ceo_schedule",
+      slotsByDate,
+      analytics,
+      createdAt: analytics.lastCheckedAt,
+    }));
+  })().finally(() => { blackRoomCeoRefreshPromise = null; });
+  return blackRoomCeoRefreshPromise;
+}
 
 async function removeBlackRoomUpload(uploadId: string): Promise<void> {
   const upload = blackRoomUploads.get(uploadId);
@@ -184,6 +229,14 @@ export function registerBlackRoomControlRoutes(app: Express): void {
     }
     catch (error: any) { res.status(500).json({ error: error.message || "Failed to read BlackRoom agent" }); }
   });
+  app.post("/api/blackroom-agent/analytics/refresh", async (req, res) => {
+    try {
+      if (!await hasBlackRoomChatAccess(req)) return res.status(403).json({ error: "Solo el owner puede actualizar los analytics de BlackRoom." });
+      await refreshBlackRoomCeo(true);
+      const remote = await readBlackRoomRemoteControl();
+      res.json({ remote: remoteView(remote) });
+    } catch (error: any) { res.status(502).json({ error: error.message || "No pude actualizar los analytics de Metricool" }); }
+  });
   app.post("/api/blackroom-agent/start", async (req, res) => {
     try {
       const state = await withBlackRoomQueueLock(BLACKROOM_QUEUE_PATH, async () => {
@@ -194,6 +247,7 @@ export function registerBlackRoomControlRoutes(app: Express): void {
       });
       const remote = await mutateBlackRoomRemoteControl((current) => setBlackRoomRemoteCommand(current, true, Number(req.body?.weeks || 2)));
       res.json({ agent: summarizeBlackRoomQueue(state), remote: remoteView(remote) });
+      void refreshBlackRoomCeo().catch((error) => console.error("[blackroom-ceo] analytics refresh failed:", error instanceof Error ? error.message : error));
     } catch (error: any) { res.status(500).json({ error: error.message || "Failed to start BlackRoom agent" }); }
   });
   app.post("/api/blackroom-agent/pause", async (_req, res) => {
@@ -365,4 +419,8 @@ export function registerBlackRoomControlRoutes(app: Express): void {
       res.status(uncertain ? 409 : 502).json({ error: error.message || "Metricool scheduling failed", uncertain });
     }
   });
+  const ceoTimer = setInterval(() => {
+    void refreshBlackRoomCeo().catch((error) => console.error("[blackroom-ceo] analytics refresh failed:", error instanceof Error ? error.message : error));
+  }, 60 * 60_000);
+  ceoTimer.unref();
 }
