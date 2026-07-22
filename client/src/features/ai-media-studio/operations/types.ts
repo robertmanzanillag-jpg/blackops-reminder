@@ -13,12 +13,20 @@ import type {
   SourceEligibilityReviewResponse,
 } from "@shared/ai-media-studio-source-eligibility";
 import type {
+  ParsedSourceScriptPreviewRequest,
   SourceScriptPreviewRequest,
   SourceScriptPreviewResponse,
 } from "@shared/ai-media-studio-source-to-script";
 import type {
   SourceToBatchAutomationResponse,
 } from "@shared/ai-media-studio-source-to-batch";
+import type {
+  ReusableScriptAsset,
+  ReusableScriptAssetListRequest,
+  ReusableScriptAssetListResponse,
+  ReusableScriptAssetSaveRequest,
+  ReusableScriptAssetSaveResponse,
+} from "@shared/ai-media-studio-reusable-script-assets";
 
 export type {
   AnalyticsSummary,
@@ -32,8 +40,14 @@ export type {
   SourceEligibilityReviewRequest,
   SourceEligibilityReviewResponse,
   SourceScriptPreviewRequest,
+  ParsedSourceScriptPreviewRequest,
   SourceScriptPreviewResponse,
   SourceToBatchAutomationResponse,
+  ReusableScriptAsset,
+  ReusableScriptAssetListRequest,
+  ReusableScriptAssetListResponse,
+  ReusableScriptAssetSaveRequest,
+  ReusableScriptAssetSaveResponse,
 };
 
 export type PublishingJobStatus = PublishingJob["status"];
@@ -71,6 +85,19 @@ export function createSourceActionIdempotencyKey(
   const sourcePart = sourceItemId.replace(/[^A-Za-z0-9._:-]/gu, "-");
   const hashPart = contentHash.replace(/^sha256:/u, "").slice(0, 24);
   return `ams-${action}-${hashPart}-${sourcePart}`.slice(0, 128);
+}
+
+export function createReusableScriptSaveIdempotencyKey(
+  sourceItemId: string,
+  contentHash: string,
+  previewDigest: string,
+  selectedVariantId: string,
+): string {
+  const sourcePart = sourceItemId.replace(/[^A-Za-z0-9._:-]/gu, "-").slice(0, 24);
+  const variantPart = selectedVariantId.replace(/[^A-Za-z0-9._:-]/gu, "-").slice(0, 24);
+  const contentPart = contentHash.replace(/^sha256:/u, "").slice(0, 16);
+  const previewPart = previewDigest.replace(/^sha256:/u, "").slice(0, 16);
+  return `ams-save-${contentPart}-${previewPart}-${sourcePart}-${variantPart}`.slice(0, 128);
 }
 
 export type RankedAttribution = { label: string; count: number };

@@ -35,6 +35,10 @@ import {
   sourceScriptPreviewResponseSchema,
 } from "../../shared/ai-media-studio-source-to-script";
 import {
+  reusableScriptAssetListResponseSchema,
+  reusableScriptAssetSaveResponseSchema,
+} from "../../shared/ai-media-studio-reusable-script-assets";
+import {
   sourceToBatchAutomationRequestSchema,
   sourceToBatchAutomationResponseSchema,
 } from "../../shared/ai-media-studio-source-to-batch";
@@ -208,6 +212,12 @@ import { SourceCursorError } from "./sources/source-pagination";
 import { SourceAutomationSyncError, SourceAutomationSyncService } from "./sources/sync-service";
 import { SourceEligibilityReviewError, SourceEligibilityReviewService } from "./sources/eligibility-review-service";
 import { SourceToScriptPreviewError, SourceToScriptPreviewService } from "./sources/source-to-script-preview-service";
+import type { ReusableScriptAssetRepository } from "./sources/reusable-script-asset-contracts";
+import {
+  ReusableScriptAssetError,
+  ReusableScriptAssetService,
+} from "./sources/reusable-script-asset-service";
+import { InMemoryReusableScriptAssetRepository } from "./sources/in-memory-reusable-script-asset-repository";
 import { SourceToBatchAutomationService } from "./sources/source-to-batch-automation-service";
 import type { SourceSyncSchedulerObserver } from "./sources/source-sync-scheduler";
 import {
@@ -309,6 +319,8 @@ export interface AiMediaStudioDependencies {
   /** Read-only durable scheduler observation for the dedicated Agent Control pane. */
   sourceSyncSchedulerObserver?: SourceSyncSchedulerObserver;
   createDurableSourceSyncSchedulerObserver?: () => SourceSyncSchedulerObserver;
+  reusableScriptAssetRepository?: ReusableScriptAssetRepository;
+  createDurableReusableScriptAssetRepository?: () => ReusableScriptAssetRepository;
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
   /** Server-only production asset configuration; never serialized into Studio DTOs. */
@@ -348,6 +360,8 @@ export interface AiMediaStudioRuntime {
   oneVideoHeldAdmissionReadiness: Pick<OneVideoHeldAdmissionReadinessService, "observe"> | undefined;
   oneVideoHeldAdmission: Pick<OneVideoHeldAdmissionCoordinator, "admit"> | undefined;
   oneVideoHeldAdmissionPersistence: MediaStudioPersistenceStatus;
+  reusableScriptAssets: ReusableScriptAssetService | undefined;
+  reusableScriptAssetPersistence: MediaStudioPersistenceStatus;
   publishingSubmissionGate: PublishingSubmissionGate;
   assetIngestRepository?: AssetIngestRepository;
   assetIngestHooks: AssetIngestWorkerHooks;
@@ -430,6 +444,57 @@ function createDefaultDurableAssetIngestRepository(): AssetIngestRepository {
 function configuredDatabase(value: string | undefined): boolean {
   const databaseUrl = value?.trim();
   return Boolean(databaseUrl && !/^(change[-_ ]?me|replace[-_ ]?me|your[-_ ]|example|placeholder)/iu.test(databaseUrl));
+}
+
+function createDefaultDurableReusableScriptAssetRepository(): ReusableScriptAssetRepository {
+  let pending: Promise<ReusableScriptAssetRepository> | undefined;
+  const load = () => pending ??= Promise.all([
+    import("../db"),
+    import("./sources/drizzle-reusable-script-asset-repository"),
+  ]).then(([database, adapter]) => new adapter.DrizzleReusableScriptAssetRepository(database.db));
+  return {
+    replay: async (...args) => (await load()).replay(...args),
+    save: async (...args) => (await load()).save(...args),
+    list: async (...args) => (await load()).list(...args),
+  };
+}
+
+function selectReusableScriptAssetRepository(
+  dependencies: AiMediaStudioDependencies,
+  runtimeEnvironment: string | undefined,
+  databaseUrl: string | undefined,
+): { repository: ReusableScriptAssetRepository | undefined; status: MediaStudioPersistenceStatus } {
+  if (dependencies.reusableScriptAssetRepository) {
+    return {
+      repository: dependencies.reusableScriptAssetRepository,
+      status: { mode: "injected", available: true, durable: false, reason: "Reusable script repository supplied by the composition caller" },
+    };
+  }
+  if (configuredDatabase(databaseUrl)) {
+    try {
+      return {
+        repository: (dependencies.createDurableReusableScriptAssetRepository
+          ?? createDefaultDurableReusableScriptAssetRepository)(),
+        status: { mode: "drizzle", available: true, durable: true, reason: "PostgreSQL reusable script persistence selected" },
+      };
+    } catch {
+      return {
+        repository: undefined,
+        status: { mode: "unavailable", available: false, durable: false, reason: "Reusable script persistence initialization failed" },
+      };
+    }
+  }
+  const environment = runtimeEnvironment?.trim().toLowerCase();
+  if (environment === "development" || environment === "test") {
+    return {
+      repository: new InMemoryReusableScriptAssetRepository(),
+      status: { mode: "memory", available: true, durable: false, reason: `Ephemeral reusable script persistence allowed for ${environment}` },
+    };
+  }
+  return {
+    repository: undefined,
+    status: { mode: "unavailable", available: false, durable: false, reason: "DATABASE_URL is required for reusable script persistence" },
+  };
 }
 
 function createDefaultProviderWebhookAccountResolver(workspaceId: string): ProviderWebhookAccountResolver {
@@ -1415,6 +1480,14 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   );
   const sourceEligibilityReview = new SourceEligibilityReviewService(operations.sources);
   const sourceToScriptPreview = new SourceToScriptPreviewService(operations.sources, scriptService);
+  const reusableScriptAssetSelection = selectReusableScriptAssetRepository(
+    dependencies,
+    runtimeEnvironment,
+    databaseUrl,
+  );
+  const reusableScriptAssets = reusableScriptAssetSelection.repository
+    ? new ReusableScriptAssetService(sourceToScriptPreview, reusableScriptAssetSelection.repository)
+    : undefined;
   const sourceToBatchAutomation = productionBatchSelection.service
     ? new SourceToBatchAutomationService(productionBatchSelection.service)
     : undefined;
@@ -1665,6 +1738,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.setHeader("X-AI-Media-Studio-One-Video-Execution-Control", oneVideoExecutionControlSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-One-Video-Cost-Approval", oneVideoCostApprovalSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-One-Video-Held-Admission", oneVideoHeldAdmissionSelection.status.mode);
+    res.setHeader("X-AI-Media-Studio-Reusable-Scripts", reusableScriptAssetSelection.status.mode);
     next();
   });
 
@@ -1699,6 +1773,10 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const requireJobs = requireCapability(persistence.status, "AI Media Studio job");
   const requireCatalog = requireCapability(core.status, "AI Media Studio catalog");
   const requireOperations = requireCapability(operations.status, "AI Media Studio operations");
+  const requireReusableScriptAssets = requireCapability(
+    reusableScriptAssetSelection.status,
+    "AI Media Studio reusable scripts",
+  );
   const requireGovernance = requireCapability(governanceSelection.status, "AI Media Studio governance");
   const requireHeyGenRoster = requireCapability(heyGenRosterSelection.status, "HeyGen roster");
   const requireHeyGenOnboardingReadiness = requireCapability(heyGenOnboardingReadinessSelection.status, "HeyGen onboarding readiness");
@@ -1775,6 +1853,17 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
         throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
       }
       res.locals.sourceScriptPreviewPrincipal = sensitiveMutationRequestGuard.authorize(req);
+      next();
+    } catch (error) {
+      next(error);
+    }
+  };
+  const requireStrictReusableScriptAssetSave = (req: Request, res: Response, next: NextFunction): void => {
+    try {
+      if (!sensitiveMutationRequestGuard) {
+        throw new StrictMoneyActionRequestError("INVALID_CONFIGURATION");
+      }
+      res.locals.reusableScriptAssetPrincipal = sensitiveMutationRequestGuard.authorize(req);
       next();
     } catch (error) {
       next(error);
@@ -2313,6 +2402,47 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       res.json(sourceScriptPreviewResponseSchema.parse(result));
     }));
 
+  router.post(`${AI_MEDIA_STUDIO_API_BASE}/automation/sources/scripts/assets`,
+    requireStrictReusableScriptAssetSave,
+    requireOperations,
+    requireReusableScriptAssets,
+    asyncRoute(async (req, res) => {
+      const principal = res.locals.reusableScriptAssetPrincipal as StrictMoneyActionPrincipal | undefined;
+      if (!principal?.authenticatedUserId || !reusableScriptAssets) {
+        throw new ReusableScriptAssetError("INVALID_CONFIGURATION");
+      }
+      if (Object.keys(req.query).length !== 0 || requestHasRawQuery(req.originalUrl) || req.get("transfer-encoding")) {
+        throw new ReusableScriptAssetError("INVALID_REQUEST");
+      }
+      const result = await reusableScriptAssets.save({
+        ownerUserId: principal.authenticatedUserId,
+        workspaceId: core.workspaceId,
+      }, principal.authenticatedUserId, req.body);
+      res.set("Cache-Control", "private, no-store");
+      res.status(result.replayed ? 200 : 201).json(reusableScriptAssetSaveResponseSchema.parse(result));
+    }));
+
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/automation/sources/scripts/assets`,
+    (req, res, next) => {
+      res.set("Cache-Control", "private, no-store");
+      getCurrentUserId(req);
+      next();
+    },
+    requireOperations,
+    requireReusableScriptAssets,
+    asyncRoute(async (req, res) => {
+      if (!reusableScriptAssets || req.get("transfer-encoding")) {
+        throw new ReusableScriptAssetError(
+          reusableScriptAssets ? "INVALID_REQUEST" : "INVALID_CONFIGURATION",
+        );
+      }
+      const result = await reusableScriptAssets.list({
+        ownerUserId: getCurrentUserId(req),
+        workspaceId: core.workspaceId,
+      }, req.query);
+      res.json(reusableScriptAssetListResponseSchema.parse(result));
+    }));
+
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs`, requireOperations, asyncRoute(async (req, res) => {
     const input = publishingJobListRequestSchema.parse(req.query);
     const values = (await operations.publishing.list(await tenant(req))).map(toPublishingJob)
@@ -2675,6 +2805,17 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       res.status(error.statusCode).json({ error: message, code: error.code });
       return;
     }
+    if (error instanceof ReusableScriptAssetError) {
+      const message = error.code === "INVALID_REQUEST" ? "Invalid reusable script request"
+        : error.code === "NOT_FOUND" ? "Reusable script source was not found"
+          : error.code === "SOURCE_INELIGIBLE" ? "Source item is not eligible for reusable scripts"
+            : error.code === "SOURCE_REFRESHED" ? "Source content changed; create a new preview"
+              : error.code === "PREVIEW_STALE" ? "Script preview changed; create a new preview"
+                : error.code === "IDEMPOTENCY_CONFLICT" ? "Reusable script save conflicts with an earlier request"
+                  : "Reusable script persistence is unavailable";
+      res.status(error.statusCode).json({ error: message, code: error.code });
+      return;
+    }
     if (error instanceof SourceEligibilityReviewError) {
       const message = error.code === "INVALID_REQUEST" ? "Invalid source eligibility review request"
         : error.code === "NOT_FOUND" ? "Source item not found"
@@ -2776,6 +2917,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     oneVideoHeldAdmissionReadiness: oneVideoHeldAdmissionSelection.runtime?.readiness,
     oneVideoHeldAdmission: oneVideoHeldAdmissionSelection.runtime?.coordinator,
     oneVideoHeldAdmissionPersistence: oneVideoHeldAdmissionSelection.status,
+    reusableScriptAssets,
+    reusableScriptAssetPersistence: reusableScriptAssetSelection.status,
     publishingSubmissionGate,
     router,
     persistence: persistence.status,

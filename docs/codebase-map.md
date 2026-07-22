@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-22T19:17:08.622Z
+Generated: 2026-07-22T19:46:29.613Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 959 | 809 | 3546 | 507 | 15881 |
+| 968 | 818 | 3619 | 508 | 16174 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,12 +29,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 261 | 250 | test:261 |
-| `server/ai-media-studio` | 191 | 172 | server:191 |
+| `tests` | 263 | 252 | test:263 |
+| `server/ai-media-studio` | 196 | 177 | server:196 |
 | `client/src` | 158 | 156 | ui-component:55, other:48, client-page:24, client-component:21 |
 | `server` | 96 | 92 | server:96 |
-| `script` | 46 | 44 | script:46 |
-| `shared` | 23 | 23 | shared:23 |
+| `script` | 47 | 45 | script:47 |
+| `shared` | 24 | 24 | shared:24 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
 | `docs/ai-media-studio` | 17 | 17 | docs:17 |
 | `docs` | 12 | 11 | docs:12 |
@@ -52,7 +52,7 @@ Package: `rest-express`
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/ai-media-studio`, `/ai-media-studio-agent`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/tools`
-- `server/ai-media-studio/routes.ts`: `${AI_MEDIA_STUDIO_API_BASE}/agent`, `${AI_MEDIA_STUDIO_API_BASE}/analytics/attribution`, `${AI_MEDIA_STUDIO_API_BASE}/analytics/summary`, `${AI_MEDIA_STUDIO_API_BASE}/automation/policy`, `${AI_MEDIA_STUDIO_API_BASE}/automation/sources`, `${AI_MEDIA_STUDIO_API_BASE}/automation/sources/:sourceItemId/eligibility-review`, `${AI_MEDIA_STUDIO_API_BASE}/automation/sources/production-batch/prepare`, `${AI_MEDIA_STUDIO_API_BASE}/automation/sources/scripts/preview`, `${AI_MEDIA_STUDIO_API_BASE}/automation/sources/sync`, `${AI_MEDIA_STUDIO_API_BASE}/dashboard`, `${AI_MEDIA_STUDIO_API_BASE}/generations`, `${AI_MEDIA_STUDIO_API_BASE}/governance/assets/:id/quality-review`, `${AI_MEDIA_STUDIO_API_BASE}/governance/influencers/:id/profile`, `${AI_MEDIA_STUDIO_API_BASE}/governance/influencers/:id/profile/revoke`, `${AI_MEDIA_STUDIO_API_BASE}/influencers`, `${AI_MEDIA_STUDIO_API_BASE}/influencers/:id`, `${AI_MEDIA_STUDIO_API_BASE}/jobs`, `${AI_MEDIA_STUDIO_API_BASE}/jobs/:id`, `${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/cancel`, `${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/retry`, `${AI_MEDIA_STUDIO_API_BASE}/media-assets`, `${AI_MEDIA_STUDIO_API_BASE}/media-assets/:id/delivery`, `${AI_MEDIA_STUDIO_API_BASE}/options`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/approve-scripts`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/launch-preflight`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-cost-approval/:slotId`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-execution-control/:slotId`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-held-admission-readiness/:slotId`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-held-admission/:slotId`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/prepare-scripts`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/sandbox-readiness/:slotId`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/current`, `${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/live-verification`, `${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/onboarding-readiness`, `${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster`, `${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster/daily-plan`, `${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/static-credential-reference`, `${AI_MEDIA_STUDIO_API_BASE}/provider-resources`, `${AI_MEDIA_STUDIO_API_BASE}/publishing/connections`, `${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs`, `${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/approve`, `${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/cancel`, `${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/reject`, `${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/retry`, `${AI_MEDIA_STUDIO_API_BASE}/publishing/preview`, `${AI_MEDIA_STUDIO_API_BASE}/runtime`, `${AI_MEDIA_STUDIO_API_BASE}/scripts/generate`, `${AI_MEDIA_STUDIO_API_BASE}/webhooks/providers/:providerKey`, `${AI_MEDIA_STUDIO_API_BASE}/webhooks/providers/:providerKey/accounts/:endpointKey`
+- `server/ai-media-studio/routes.ts`: `${AI_MEDIA_STUDIO_API_BASE}/agent`, `${AI_MEDIA_STUDIO_API_BASE}/analytics/attribution`, `${AI_MEDIA_STUDIO_API_BASE}/analytics/summary`, `${AI_MEDIA_STUDIO_API_BASE}/automation/policy`, `${AI_MEDIA_STUDIO_API_BASE}/automation/sources`, `${AI_MEDIA_STUDIO_API_BASE}/automation/sources/:sourceItemId/eligibility-review`, `${AI_MEDIA_STUDIO_API_BASE}/automation/sources/production-batch/prepare`, `${AI_MEDIA_STUDIO_API_BASE}/automation/sources/scripts/assets`, `${AI_MEDIA_STUDIO_API_BASE}/automation/sources/scripts/preview`, `${AI_MEDIA_STUDIO_API_BASE}/automation/sources/sync`, `${AI_MEDIA_STUDIO_API_BASE}/dashboard`, `${AI_MEDIA_STUDIO_API_BASE}/generations`, `${AI_MEDIA_STUDIO_API_BASE}/governance/assets/:id/quality-review`, `${AI_MEDIA_STUDIO_API_BASE}/governance/influencers/:id/profile`, `${AI_MEDIA_STUDIO_API_BASE}/governance/influencers/:id/profile/revoke`, `${AI_MEDIA_STUDIO_API_BASE}/influencers`, `${AI_MEDIA_STUDIO_API_BASE}/influencers/:id`, `${AI_MEDIA_STUDIO_API_BASE}/jobs`, `${AI_MEDIA_STUDIO_API_BASE}/jobs/:id`, `${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/cancel`, `${AI_MEDIA_STUDIO_API_BASE}/jobs/:id/retry`, `${AI_MEDIA_STUDIO_API_BASE}/media-assets`, `${AI_MEDIA_STUDIO_API_BASE}/media-assets/:id/delivery`, `${AI_MEDIA_STUDIO_API_BASE}/options`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/approve-scripts`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/launch-preflight`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-cost-approval/:slotId`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-execution-control/:slotId`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-held-admission-readiness/:slotId`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/one-video-held-admission/:slotId`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/prepare-scripts`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/:planId/sandbox-readiness/:slotId`, `${AI_MEDIA_STUDIO_API_BASE}/production-batches/current`, `${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/live-verification`, `${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/onboarding-readiness`, `${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster`, `${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/roster/daily-plan`, `${AI_MEDIA_STUDIO_API_BASE}/provider-configurations/heygen/static-credential-reference`, `${AI_MEDIA_STUDIO_API_BASE}/provider-resources`, `${AI_MEDIA_STUDIO_API_BASE}/publishing/connections`, `${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs`, `${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/approve`, `${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/cancel`, `${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/reject`, `${AI_MEDIA_STUDIO_API_BASE}/publishing/jobs/:id/retry`, `${AI_MEDIA_STUDIO_API_BASE}/publishing/preview`, `${AI_MEDIA_STUDIO_API_BASE}/runtime`, `${AI_MEDIA_STUDIO_API_BASE}/scripts/generate`, `${AI_MEDIA_STUDIO_API_BASE}/webhooks/providers/:providerKey`, `${AI_MEDIA_STUDIO_API_BASE}/webhooks/providers/:providerKey/accounts/:endpointKey`
 - `server/assistant.ts`: `/api/assistant/chat`, `/api/assistant/context`, `/api/assistant/transcribe`
 - `server/index.ts`: `/api/health`, `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
@@ -221,6 +221,8 @@ Package: `rest-express`
 - `tests/ai-media-studio-render-flow-integration.test.ts`
 - `tests/ai-media-studio-render-queue-persistence.test.ts`
 - `tests/ai-media-studio-render-worker.test.ts`
+- `tests/ai-media-studio-reusable-script-assets-pg.test.ts`
+- `tests/ai-media-studio-reusable-script-assets.test.ts`
 - `tests/ai-media-studio-routes.test.ts`
 - `tests/ai-media-studio-runtime-persistence.test.ts`
 - `tests/ai-media-studio-s3-storage.test.ts`
@@ -356,6 +358,7 @@ Package: `rest-express`
 - `script/ai-media-studio-one-video-execution-control-postgres-test.ts` (script; 15 symbols, 6 imports)
 - `script/ai-media-studio-pr21-postgres-test.ts` (script; 21 symbols, 6 imports)
 - `script/ai-media-studio-pr30-quote-bound-human-approval-postgres-test.ts` (script; 16 symbols, 6 imports)
+- `script/ai-media-studio-reusable-script-assets-postgres-test.ts` (script; 16 symbols, 6 imports)
 - `script/ai-media-studio-secure-heygen-setup-postgres-test.ts` (script; 16 symbols, 6 imports)
 - `script/ai-media-studio-static-heygen-postgres-test.ts` (script; 15 symbols, 6 imports)
 - `script/ai-media-studio-worker.ts` (script; 19 symbols, 3 imports)
@@ -406,7 +409,6 @@ Package: `rest-express`
 - `server/ai-media-studio/analytics/index.ts` (server; 4 imports)
 - `server/ai-media-studio/assets/contracts.ts` (server; 1 symbols)
 - `server/ai-media-studio/assets/drizzle-ingest-repository.ts` (server; 25 symbols, 5 imports)
-- `server/ai-media-studio/assets/fakes.ts` (server; 12 symbols, 2 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

@@ -10,11 +10,11 @@ import { setupTelegramWebhook } from "./telegram-chat";
 import { storage } from "./storage";
 import {
   getSystemUserId,
-  exceptProductionBatchMutations,
-  onlyProductionBatchMutations,
+  exceptEarlyAuthenticatedJsonMutations,
+  onlyEarlyAuthenticatedJsonMutations,
   requireAppUser,
-  requireAuthenticatedProductionBatchMutationBeforeBody,
-  sanitizeProductionBatchJsonParserError,
+  requireAuthenticatedJsonMutationBeforeBody,
+  sanitizeAuthenticatedJsonMutationParserError,
 } from "./user-context";
 import { registerLocalAuthRoutes } from "./local-auth";
 import { createSessionMiddleware, resolveSessionRuntimeSettings } from "./session-config";
@@ -68,13 +68,13 @@ declare module "http" {
 const sessionSettings = resolveSessionRuntimeSettings();
 const sessionMiddleware = createSessionMiddleware(sessionSettings);
 if (sessionMiddleware) {
-  app.use(onlyProductionBatchMutations(sessionMiddleware));
+  app.use(onlyEarlyAuthenticatedJsonMutations(sessionMiddleware));
   log(`Session auth enabled with ${sessionSettings.storeKind} store`, "auth");
 } else {
   log("SESSION_SECRET not configured; local session auth is disabled", "auth");
 }
 
-app.use(requireAuthenticatedProductionBatchMutationBeforeBody);
+app.use(requireAuthenticatedJsonMutationBeforeBody);
 
 app.use(
   express.json({
@@ -85,7 +85,7 @@ app.use(
   }),
 );
 
-app.use(sanitizeProductionBatchJsonParserError);
+app.use(sanitizeAuthenticatedJsonMutationParserError);
 
 app.use(express.urlencoded({ extended: false, limit: "64kb", parameterLimit: 100 }));
 
@@ -296,7 +296,7 @@ app.get("/dropshipping/legal/checkout-readiness", (_req, res) => {
 });
 
 if (sessionMiddleware) {
-  app.use(exceptProductionBatchMutations(sessionMiddleware));
+  app.use(exceptEarlyAuthenticatedJsonMutations(sessionMiddleware));
 }
 
 app.use(requireAppUser);

@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { operationsApi } from "./api";
-import type { AnalyticsFilters, AttributionFilters, PublishingJob, SocialPlatform, SourceFilters } from "./types";
+import type { AnalyticsFilters, AttributionFilters, PublishingJob, ReusableScriptAssetListRequest, SocialPlatform, SourceFilters } from "./types";
 
 export const operationsKeys = {
   all: ["ai-media-studio", "operations"] as const,
@@ -10,6 +10,7 @@ export const operationsKeys = {
   summary: (filters: AnalyticsFilters) => ["ai-media-studio", "operations", "analytics-summary", filters] as const,
   attributions: (filters: Omit<AttributionFilters, "cursor">) => ["ai-media-studio", "operations", "attributions", filters] as const,
   sources: (filters: Omit<SourceFilters, "cursor">) => ["ai-media-studio", "operations", "sources", filters] as const,
+  reusableScripts: (filters: Omit<ReusableScriptAssetListRequest, "cursor">) => ["ai-media-studio", "operations", "reusable-scripts", filters] as const,
   policy: ["ai-media-studio", "operations", "policy"] as const,
 };
 
@@ -64,6 +65,14 @@ export function useSources(filters: Omit<SourceFilters, "cursor">) {
   });
 }
 
+export function useReusableScriptAssets(filters: Omit<ReusableScriptAssetListRequest, "cursor">) {
+  return useInfiniteQuery({
+    queryKey: operationsKeys.reusableScripts(filters), initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) => operationsApi.reusableScriptAssets({ ...filters, cursor: pageParam }),
+    getNextPageParam: (page) => page.hasMore ? page.nextCursor ?? undefined : undefined,
+  });
+}
+
 export function useSourceReviewMutations() {
   const queryClient = useQueryClient();
   const refreshSources = () => queryClient.invalidateQueries({
@@ -72,6 +81,12 @@ export function useSourceReviewMutations() {
   return {
     review: useMutation({ mutationFn: operationsApi.reviewSourceEligibility, onSuccess: refreshSources }),
     preview: useMutation({ mutationFn: operationsApi.previewSourceScript }),
+    saveReusableScript: useMutation({
+      mutationFn: operationsApi.saveReusableScriptAsset,
+      onSuccess: () => queryClient.invalidateQueries({
+        queryKey: ["ai-media-studio", "operations", "reusable-scripts"],
+      }),
+    }),
     prepareBatch: useMutation({
       mutationFn: operationsApi.prepareSourceProductionBatch,
       onSuccess: () => Promise.all([

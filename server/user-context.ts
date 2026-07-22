@@ -183,6 +183,7 @@ export function requireAppUser(req: Request, res: Response, next: NextFunction):
 }
 
 const PRODUCTION_BATCH_MUTATION_PATH = /^\/api\/ai-media-studio\/production-batches\/[^/?#]+\/(?:prepare-scripts|approve-scripts)\/?$/iu;
+const REUSABLE_SCRIPT_ASSET_MUTATION_PATH = /^\/api\/ai-media-studio\/automation\/sources\/scripts\/assets\/?$/iu;
 const JSON_DECOMPRESSION_ERROR_CODES = new Set([
   "Z_BUF_ERROR",
   "Z_DATA_ERROR",
@@ -193,6 +194,19 @@ const JSON_DECOMPRESSION_ERROR_CODES = new Set([
 export function isProductionBatchMutationRequest(method: string | undefined, originalUrl: string | undefined): boolean {
   if (method !== "POST" || typeof originalUrl !== "string") return false;
   return PRODUCTION_BATCH_MUTATION_PATH.test(originalUrl.split("?", 1)[0] ?? "");
+}
+
+export function isReusableScriptAssetMutationRequest(method: string | undefined, originalUrl: string | undefined): boolean {
+  if (method !== "POST" || typeof originalUrl !== "string") return false;
+  return REUSABLE_SCRIPT_ASSET_MUTATION_PATH.test(originalUrl.split("?", 1)[0] ?? "");
+}
+
+export function isEarlyAuthenticatedJsonMutationRequest(
+  method: string | undefined,
+  originalUrl: string | undefined,
+): boolean {
+  return isProductionBatchMutationRequest(method, originalUrl)
+    || isReusableScriptAssetMutationRequest(method, originalUrl);
 }
 
 export function requestHasRawQuery(originalUrl: string | undefined): boolean {
@@ -209,6 +223,16 @@ export function exceptProductionBatchMutations(middleware: RequestHandler): Requ
     ? next() : middleware(req, res, next);
 }
 
+export function onlyEarlyAuthenticatedJsonMutations(middleware: RequestHandler): RequestHandler {
+  return (req, res, next) => isEarlyAuthenticatedJsonMutationRequest(req.method, req.originalUrl)
+    ? middleware(req, res, next) : next();
+}
+
+export function exceptEarlyAuthenticatedJsonMutations(middleware: RequestHandler): RequestHandler {
+  return (req, res, next) => isEarlyAuthenticatedJsonMutationRequest(req.method, req.originalUrl)
+    ? next() : middleware(req, res, next);
+}
+
 /** Runs before body parsing so unauthenticated callers cannot exercise the JSON parser. */
 export const requireAuthenticatedProductionBatchMutationBeforeBody: RequestHandler = (req, res, next) => {
   if (!isProductionBatchMutationRequest(req.method, req.originalUrl)) {
@@ -217,6 +241,24 @@ export const requireAuthenticatedProductionBatchMutationBeforeBody: RequestHandl
   }
   if (!resolveAuthenticatedUserId(req)) {
     res.status(401).json({ error: "Production batch mutation is not authorized", code: "UNAUTHENTICATED" });
+    return;
+  }
+  next();
+};
+
+/** Runs before body parsing for every strict authenticated JSON mutation. */
+export const requireAuthenticatedJsonMutationBeforeBody: RequestHandler = (req, res, next) => {
+  if (!isEarlyAuthenticatedJsonMutationRequest(req.method, req.originalUrl)) {
+    next();
+    return;
+  }
+  if (!resolveAuthenticatedUserId(req)) {
+    res.status(401).json({
+      error: isProductionBatchMutationRequest(req.method, req.originalUrl)
+        ? "Production batch mutation is not authorized"
+        : "AI Media Studio mutation is not authorized",
+      code: "UNAUTHENTICATED",
+    });
     return;
   }
   next();
@@ -233,6 +275,26 @@ export const sanitizeProductionBatchJsonParserError: ErrorRequestHandler = (erro
     error: status === 413 ? "Production batch JSON body is too large"
       : status === 415 ? "Production batch JSON body is unsupported"
         : "Production batch JSON body is invalid",
+    code: status === 413 ? "JSON_BODY_TOO_LARGE"
+      : status === 415 ? "UNSUPPORTED_JSON_BODY"
+        : "INVALID_JSON_BODY",
+  });
+};
+
+/** Prevents parser implementation details from leaking on strict authenticated JSON mutations. */
+export const sanitizeAuthenticatedJsonMutationParserError: ErrorRequestHandler = (error, req, res, next) => {
+  if (!isEarlyAuthenticatedJsonMutationRequest(req.method, req.originalUrl) || !isJsonParserError(error)) {
+    next(error);
+    return;
+  }
+  const status = parserErrorStatus(error);
+  const label = isProductionBatchMutationRequest(req.method, req.originalUrl)
+    ? "Production batch"
+    : "AI Media Studio";
+  res.status(status).json({
+    error: status === 413 ? `${label} JSON body is too large`
+      : status === 415 ? `${label} JSON body is unsupported`
+        : `${label} JSON body is invalid`,
     code: status === 413 ? "JSON_BODY_TOO_LARGE"
       : status === 415 ? "UNSUPPORTED_JSON_BODY"
         : "INVALID_JSON_BODY",

@@ -4,6 +4,10 @@ import { createServer, request } from "node:http";
 import test from "node:test";
 import express, { type Request } from "express";
 import { sourceScriptPreviewResponseSchema } from "../shared/ai-media-studio-source-to-script";
+import {
+  reusableScriptAssetListResponseSchema,
+  reusableScriptAssetSaveResponseSchema,
+} from "../shared/ai-media-studio-reusable-script-assets";
 import { InMemoryAnalyticsRepository } from "../server/ai-media-studio/analytics/in-memory-repository";
 import { InMemoryMediaJobRepository } from "../server/ai-media-studio/in-memory";
 import type { OperationsRepositories } from "../server/ai-media-studio/operations-runtime";
@@ -14,6 +18,7 @@ import { InMemorySourceRepository } from "../server/ai-media-studio/sources/in-m
 
 const canonicalOrigin = "https://studio.example:8443";
 const endpoint = "/api/ai-media-studio/automation/sources/scripts/preview";
+const reusableAssetsEndpoint = "/api/ai-media-studio/automation/sources/scripts/assets";
 const eligibilityEndpoint = (sourceItemId: string) =>
   `/api/ai-media-studio/automation/sources/${sourceItemId}/eligibility-review`;
 const mutationHeaders = {
@@ -289,4 +294,91 @@ test("source-to-script preview route fails closed for ineligible source without 
     code: "SOURCE_INELIGIBLE",
   });
   assert.doesNotMatch(text, /Restricted Kong event|private-event-id|kong\.example/u);
+});
+
+test("reusable script routes save verified variants, replay safely, and list only the tenant catalog", async (t) => {
+  const harness = await startHarness();
+  t.after(harness.close);
+  const content = "Licensed event details that stay behind the server-owned source boundary.";
+  const source = (await harness.sources.upsertByContentHash({ ownerUserId: "owner-a", workspaceId: "personal" }, {
+    adapterKey: "kong-owned-catalog",
+    providerExternalId: "private-upstream-event-42",
+    category: "events",
+    canonicalUrl: "https://kong.example/private-event-42",
+    title: "Weekend guide",
+    content,
+    contentHash: digest(content),
+    rightsStatus: "licensed",
+    moderationStatus: "approved",
+    status: "accepted",
+    payload: { secretProviderField: "never-return" },
+  })).item;
+  const previewRequest = {
+    sourceItemId: source.id,
+    idempotencyKey: "source-script-preview-for-save-001",
+    language: "en",
+    variantCount: 3,
+  };
+  const previewResponse = await fetch(`${harness.baseUrl}${endpoint}`, {
+    method: "POST", headers: mutationHeaders, body: JSON.stringify(previewRequest),
+  });
+  assert.equal(previewResponse.status, 200);
+  const preview = sourceScriptPreviewResponseSchema.parse(await previewResponse.json());
+  const saveBody = {
+    previewRequest,
+    expectedSourceContentHash: preview.source.contentHash,
+    expectedPreviewDigest: preview.previewDigest,
+    selectedVariantId: preview.scriptSet.variants[1]!.id,
+    saveIdempotencyKey: "reusable-script-save-route-001",
+  };
+
+  const createdResponse = await fetch(`${harness.baseUrl}${reusableAssetsEndpoint}`, {
+    method: "POST", headers: mutationHeaders, body: JSON.stringify(saveBody),
+  });
+  assert.equal(createdResponse.status, 201);
+  assert.equal(createdResponse.headers.get("cache-control"), "private, no-store");
+  const createdText = await createdResponse.text();
+  assert.doesNotMatch(createdText, /private-upstream-event|secretProviderField|kong\.example|providerAccountId|secretRef/u);
+  const created = reusableScriptAssetSaveResponseSchema.parse(JSON.parse(createdText));
+  assert.equal(created.replayed, false);
+  assert.equal(created.asset.variants.length, 3);
+  assert.equal(created.asset.currentVariantId, created.asset.variants[1]!.id);
+  assert.equal(created.effects.scriptPersisted, true);
+  assert.equal(created.effects.videoProviderCalled, false);
+  assert.equal(created.effects.spendCommitted, false);
+  assert.equal(created.effects.publishingCreated, false);
+
+  const replayResponse = await fetch(`${harness.baseUrl}${reusableAssetsEndpoint}`, {
+    method: "POST", headers: mutationHeaders, body: JSON.stringify(saveBody),
+  });
+  assert.equal(replayResponse.status, 200);
+  const replay = reusableScriptAssetSaveResponseSchema.parse(await replayResponse.json());
+  assert.equal(replay.replayed, true);
+  assert.equal(replay.asset.id, created.asset.id);
+
+  const listResponse = await fetch(`${harness.baseUrl}${reusableAssetsEndpoint}?limit=25&status=draft`, {
+    headers: { "x-test-user": "owner-a" },
+  });
+  assert.equal(listResponse.status, 200);
+  assert.equal(listResponse.headers.get("cache-control"), "private, no-store");
+  const list = reusableScriptAssetListResponseSchema.parse(await listResponse.json());
+  assert.equal(list.items.length, 1);
+  assert.equal(list.items[0]!.id, created.asset.id);
+
+  const isolatedResponse = await fetch(`${harness.baseUrl}${reusableAssetsEndpoint}?limit=25`, {
+    headers: { "x-test-user": "owner-b" },
+  });
+  assert.equal(isolatedResponse.status, 200);
+  assert.deepEqual(reusableScriptAssetListResponseSchema.parse(await isolatedResponse.json()).items, []);
+
+  const injectedCreative = await fetch(`${harness.baseUrl}${reusableAssetsEndpoint}`, {
+    method: "POST",
+    headers: mutationHeaders,
+    body: JSON.stringify({ ...saveBody, script: "browser-controlled creative", providerId: "heygen" }),
+  });
+  assert.equal(injectedCreative.status, 400);
+  const rawQuery = await fetch(`${harness.baseUrl}${reusableAssetsEndpoint}?unsafe=true`, {
+    method: "POST", headers: mutationHeaders, body: JSON.stringify(saveBody),
+  });
+  assert.equal(rawQuery.status, 400);
 });

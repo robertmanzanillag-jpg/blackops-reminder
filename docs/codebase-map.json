@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-22T19:17:08.622Z",
+  "generatedAt": "2026-07-22T19:46:29.613Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -96,13 +96,41 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 959,
-    "filesIndexed": 809,
-    "imports": 3546,
-    "routes": 507,
-    "symbols": 15881
+    "filesVisible": 968,
+    "filesIndexed": 818,
+    "imports": 3619,
+    "routes": 508,
+    "symbols": 16174
   },
   "directories": {
+    "script": {
+      "files": 47,
+      "indexed": 45,
+      "kinds": {
+        "script": 47
+      }
+    },
+    "server/ai-media-studio": {
+      "files": 196,
+      "indexed": 177,
+      "kinds": {
+        "server": 196
+      }
+    },
+    "shared": {
+      "files": 24,
+      "indexed": 24,
+      "kinds": {
+        "shared": 24
+      }
+    },
+    "tests": {
+      "files": 263,
+      "indexed": 252,
+      "kinds": {
+        "test": 263
+      }
+    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -175,13 +203,6 @@
         "docs": 2
       }
     },
-    "script": {
-      "files": 46,
-      "indexed": 44,
-      "kinds": {
-        "script": 46
-      }
-    },
     "scripts": {
       "files": 4,
       "indexed": 1,
@@ -196,13 +217,6 @@
         "server": 96
       }
     },
-    "server/ai-media-studio": {
-      "files": 191,
-      "indexed": 172,
-      "kinds": {
-        "server": 191
-      }
-    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -210,25 +224,11 @@
         "server": 8
       }
     },
-    "shared": {
-      "files": 23,
-      "indexed": 23,
-      "kinds": {
-        "shared": 23
-      }
-    },
     "shared/models": {
       "files": 2,
       "indexed": 2,
       "kinds": {
         "shared": 2
-      }
-    },
-    "tests": {
-      "files": 261,
-      "indexed": 250,
-      "kinds": {
-        "test": 261
       }
     },
     "tests/fixtures": {
@@ -3380,15 +3380,19 @@
         "./types",
         "@shared/ai-media-studio-core",
         "@shared/ai-media-studio-operations",
+        "@shared/ai-media-studio-reusable-script-assets",
         "@shared/ai-media-studio-source-eligibility",
         "@shared/ai-media-studio-source-to-batch",
         "@shared/ai-media-studio-source-to-script"
       ],
       "exports": [
+        "OperationsApiError",
         "operationsApi"
       ],
       "symbols": [
         "API_ROOT",
+        "OperationsApiError",
+        "body",
         "fallback",
         "operationsApi",
         "params",
@@ -3405,6 +3409,7 @@
       "kind": "other",
       "imports": [
         "../feedback",
+        "./api",
         "./feedback",
         "./hooks",
         "./types",
@@ -3419,18 +3424,34 @@
       ],
       "symbols": [
         "AutomationWorkspace",
+        "BoundPreview",
+        "SaveNotice",
+        "SavedScriptsPanel",
+        "SavedScriptsQuery",
+        "boundPreview",
+        "candidate",
+        "current",
         "dateTime",
-        "firstVariant",
+        "expectedBinding",
         "inputClass",
+        "isStalePreviewError",
+        "next",
         "policy",
         "policyQuery",
+        "previewBindingKey",
         "previewPending",
         "previewScript",
         "previewable",
+        "result",
         "reviewPending",
         "reviewSource",
         "reviewable",
-        "sourcePreview",
+        "saveNotice",
+        "saveScript",
+        "savedScripts",
+        "savedScriptsQuery",
+        "saving",
+        "selectedVariantId",
         "sources",
         "sourcesQuery"
       ],
@@ -3470,6 +3491,7 @@
         "usePublishingJobs",
         "usePublishingMutations",
         "useReadyPublishingAssets",
+        "useReusableScriptAssets",
         "useSourceReviewMutations",
         "useSources"
       ],
@@ -3485,6 +3507,7 @@
         "usePublishingJobs",
         "usePublishingMutations",
         "useReadyPublishingAssets",
+        "useReusableScriptAssets",
         "useSourceReviewMutations",
         "useSources"
       ],
@@ -3570,6 +3593,7 @@
       "kind": "other",
       "imports": [
         "@shared/ai-media-studio-operations",
+        "@shared/ai-media-studio-reusable-script-assets",
         "@shared/ai-media-studio-source-eligibility",
         "@shared/ai-media-studio-source-to-batch",
         "@shared/ai-media-studio-source-to-script"
@@ -3592,21 +3616,26 @@
         "SourceRightsStatus",
         "SourceStatus",
         "SourcesResponse",
+        "createReusableScriptSaveIdempotencyKey",
         "createSourceActionIdempotencyKey",
         "rankAttributions",
         "scheduledPublishingError",
         "validateAnalyticsDateWindow"
       ],
       "symbols": [
+        "contentPart",
         "counts",
+        "createReusableScriptSaveIdempotencyKey",
         "createSourceActionIdempotencyKey",
         "hashPart",
+        "previewPart",
         "rankAttributions",
         "scheduledMs",
         "scheduledPublishingError",
         "sourcePart",
         "validateAnalyticsDateWindow",
-        "value"
+        "value",
+        "variantPart"
       ],
       "routes": []
     },
@@ -5515,6 +5544,38 @@
     },
     {
       "path": "script/ai-media-studio-pr30-quote-bound-human-approval-postgres-test.ts",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:fs",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:process"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "PORT",
+        "TEMP_PREFIX",
+        "child",
+        "dataDirectory",
+        "log",
+        "logPath",
+        "main",
+        "ownedRoot",
+        "root",
+        "run",
+        "socketDirectory",
+        "stop",
+        "temporaryDirectory",
+        "testUrl",
+        "waitUntilReady"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/ai-media-studio-reusable-script-assets-postgres-test.ts",
       "kind": "script",
       "imports": [
         "node:child_process",
@@ -13179,6 +13240,7 @@
         "../../shared/ai-media-studio-one-video-held-admission-readiness",
         "../../shared/ai-media-studio-operations",
         "../../shared/ai-media-studio-production-batches",
+        "../../shared/ai-media-studio-reusable-script-assets",
         "../../shared/ai-media-studio-sandbox-readiness",
         "../../shared/ai-media-studio-scripts",
         "../../shared/ai-media-studio-source-eligibility",
@@ -13230,7 +13292,10 @@
         "./sources/contracts",
         "./sources/eligibility-review-service",
         "./sources/http-kong-source-reader",
+        "./sources/in-memory-reusable-script-asset-repository",
         "./sources/kong-owned-source-adapter",
+        "./sources/reusable-script-asset-contracts",
+        "./sources/reusable-script-asset-service",
         "./sources/source-pagination",
         "./sources/source-sync-scheduler",
         "./sources/source-to-batch-automation-service",
@@ -13290,6 +13355,7 @@
         "createDefaultDurableOneVideoExecutionControlRepository",
         "createDefaultDurableOneVideoHeldAdmissionRuntime",
         "createDefaultDurableProductionBatchRepository",
+        "createDefaultDurableReusableScriptAssetRepository",
         "createDefaultDurableSandboxReadinessRepository",
         "createDefaultDurableSecureHeyGenSetupRepository",
         "createDefaultDurableSourceSyncSchedulerObserver",
@@ -13411,6 +13477,7 @@
         "requireOneVideoHeldAdmission",
         "requireOperations",
         "requireProductionBatches",
+        "requireReusableScriptAssets",
         "requireSameOriginJsonAiMediaStudioMutation",
         "requireSandboxReadiness",
         "requireSecureHeyGenSetup",
@@ -13419,6 +13486,7 @@
         "requireStrictHeldAdmissionSession",
         "requireStrictHeyGenRosterMutation",
         "requireStrictProductionBatchMutation",
+        "requireStrictReusableScriptAssetSave",
         "requireStrictSourceAutomationSync",
         "requireStrictSourceEligibilityReview",
         "requireStrictSourceScriptPreview",
@@ -13427,6 +13495,8 @@
         "resolveProviderWebhookAccount",
         "resources",
         "result",
+        "reusableScriptAssetSelection",
+        "reusableScriptAssets",
         "review",
         "roster",
         "router",
@@ -13450,6 +13520,7 @@
         "selectOneVideoExecutionControlRuntime",
         "selectOneVideoHeldAdmissionRuntime",
         "selectProductionBatchRuntime",
+        "selectReusableScriptAssetRepository",
         "selectSandboxReadinessRuntime",
         "selectSecureHeyGenSetupRuntime",
         "selectStaticHeyGenLiveVerificationRuntime",
@@ -13493,6 +13564,7 @@
         "${AI_MEDIA_STUDIO_API_BASE}/automation/sources",
         "${AI_MEDIA_STUDIO_API_BASE}/automation/sources/:sourceItemId/eligibility-review",
         "${AI_MEDIA_STUDIO_API_BASE}/automation/sources/production-batch/prepare",
+        "${AI_MEDIA_STUDIO_API_BASE}/automation/sources/scripts/assets",
         "${AI_MEDIA_STUDIO_API_BASE}/automation/sources/scripts/preview",
         "${AI_MEDIA_STUDIO_API_BASE}/automation/sources/sync",
         "${AI_MEDIA_STUDIO_API_BASE}/dashboard",
@@ -13669,6 +13741,93 @@
         "ModerationStatus",
         "SOURCE_CATEGORIES",
         "SourceEligibilityRepositoryError"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/sources/drizzle-reusable-script-asset-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-reusable-script-assets",
+        "../../../shared/models/ai-media-studio-db",
+        "../core/resource-domain",
+        "../script-service",
+        "./reusable-script-asset-contracts",
+        "./reusable-script-asset-pagination",
+        "drizzle-orm",
+        "node:crypto"
+      ],
+      "exports": [
+        "DrizzleReusableScriptAssetRepository",
+        "ReusableScriptAssetDatabase",
+        "ReusableScriptAssetExecutor"
+      ],
+      "symbols": [
+        "DrizzleReusableScriptAssetRepository",
+        "ExecuteResult",
+        "Row",
+        "SHA256",
+        "UUID",
+        "assetScriptRows",
+        "bytes",
+        "checksum",
+        "creative",
+        "currentContentHash",
+        "cursor",
+        "cursorPredicate",
+        "deterministicUuid",
+        "digest",
+        "digestJson",
+        "envelope",
+        "existingRows",
+        "findReplay",
+        "grouped",
+        "hasMore",
+        "hex",
+        "idList",
+        "influencerId",
+        "influencerRows",
+        "insertedScript",
+        "insertedVariant",
+        "iso",
+        "items",
+        "loadAsset",
+        "lockIdempotencyKey",
+        "lockKey",
+        "metadata",
+        "pageIds",
+        "pageRows",
+        "parsed",
+        "rawContentHash",
+        "record",
+        "regenerated",
+        "replay",
+        "rows",
+        "savedAt",
+        "script",
+        "scriptId",
+        "scriptIdentity",
+        "scriptRows",
+        "scriptsById",
+        "selectedIndex",
+        "selectedVariantId",
+        "source",
+        "sourceContent",
+        "sourceRows",
+        "sourceTitle",
+        "sourceType",
+        "sourceUpdatedAt",
+        "statusPredicate",
+        "text",
+        "toAsset",
+        "transactionPreviewDigest",
+        "updated",
+        "value",
+        "variantIdentity",
+        "variantIds",
+        "variantRows",
+        "variants",
+        "variantsByScriptId"
       ],
       "routes": []
     },
@@ -13883,6 +14042,43 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/sources/in-memory-reusable-script-asset-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-reusable-script-assets",
+        "../core/resource-domain",
+        "./reusable-script-asset-contracts",
+        "./reusable-script-asset-pagination",
+        "node:crypto"
+      ],
+      "exports": [
+        "InMemoryReusableScriptAssetRepository"
+      ],
+      "symbols": [
+        "InMemoryReusableScriptAssetRepository",
+        "Stored",
+        "bytes",
+        "candidates",
+        "clone",
+        "cursor",
+        "deterministicUuid",
+        "digest",
+        "existing",
+        "hasMore",
+        "hex",
+        "items",
+        "key",
+        "now",
+        "scriptId",
+        "scriptIdentity",
+        "scripts",
+        "selectedIndex",
+        "tenantKey",
+        "variants"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/sources/in-memory-source-repository.ts",
       "kind": "server",
       "imports": [
@@ -14048,6 +14244,92 @@
         "sources",
         "stop",
         "timeout"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/sources/reusable-script-asset-contracts.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-reusable-script-assets",
+        "../../../shared/ai-media-studio-scripts",
+        "../../../shared/ai-media-studio-source-to-script",
+        "../core/resource-domain"
+      ],
+      "exports": [
+        "PersistReusableScriptAssetInput",
+        "PersistReusableScriptAssetResult",
+        "ReusableScriptAssetRepository",
+        "ReusableScriptAssetRepositoryError",
+        "ReusableScriptAssetRepositoryErrorCode"
+      ],
+      "symbols": [
+        "ReusableScriptAssetRepositoryError"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/sources/reusable-script-asset-pagination.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-reusable-script-assets",
+        "../core/resource-domain",
+        "./reusable-script-asset-contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "ReusableScriptAssetCursorPosition",
+        "decodeReusableScriptAssetCursor",
+        "encodeReusableScriptAssetCursor"
+      ],
+      "symbols": [
+        "CursorPayload",
+        "checksum",
+        "createdAt",
+        "createdAtMs",
+        "decodeReusableScriptAssetCursor",
+        "decoded",
+        "digest",
+        "encodeReusableScriptAssetCursor",
+        "equal",
+        "expectedChecksum",
+        "expectedQuery",
+        "leftBytes",
+        "query",
+        "queryFingerprint",
+        "rightBytes",
+        "unsigned",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/sources/reusable-script-asset-service.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/ai-media-studio-reusable-script-assets",
+        "../core/resource-domain",
+        "./reusable-script-asset-contracts",
+        "./source-to-script-preview-service",
+        "node:crypto"
+      ],
+      "exports": [
+        "ReusableScriptAssetError",
+        "ReusableScriptAssetErrorCode",
+        "ReusableScriptAssetService"
+      ],
+      "symbols": [
+        "EFFECTS",
+        "ReusableScriptAssetError",
+        "ReusableScriptAssetService",
+        "digest",
+        "inputDigest",
+        "mapPreviewError",
+        "mapRepositoryError",
+        "parsed",
+        "replay",
+        "result",
+        "validScope"
       ],
       "routes": []
     },
@@ -21035,19 +21317,25 @@
         "LOCAL_AUTH_USER_COOKIE_NAME",
         "allowsDevUserFallback",
         "createSignedLocalAuthCookieValue",
+        "exceptEarlyAuthenticatedJsonMutations",
         "exceptProductionBatchMutations",
         "getCurrentUserId",
         "getSystemUserId",
+        "isEarlyAuthenticatedJsonMutationRequest",
         "isProductionBatchMutationRequest",
         "isPublicApiPath",
         "isPublicApiRequest",
+        "isReusableScriptAssetMutationRequest",
+        "onlyEarlyAuthenticatedJsonMutations",
         "onlyProductionBatchMutations",
         "requestHasRawQuery",
         "requireAppUser",
+        "requireAuthenticatedJsonMutationBeforeBody",
         "requireAuthenticatedProductionBatchMutationBeforeBody",
         "resolveAuthenticatedUserId",
         "resolveCurrentUserId",
         "resolveRequestApiPath",
+        "sanitizeAuthenticatedJsonMutationParserError",
         "sanitizeProductionBatchJsonParserError"
       ],
       "symbols": [
@@ -21057,6 +21345,7 @@
         "LOCAL_AUTH_USER_COOKIE_NAME",
         "PRODUCTION_BATCH_MUTATION_PATH",
         "PUBLIC_API_PATHS",
+        "REUSABLE_SCRIPT_ASSET_MUTATION_PATH",
         "RequestWithAuth",
         "actualBuffer",
         "allowsDevUserFallback",
@@ -21071,6 +21360,7 @@
         "createSignedLocalAuthCookieValue",
         "directHeader",
         "error",
+        "exceptEarlyAuthenticatedJsonMutations",
         "exceptProductionBatchMutations",
         "expected",
         "expectedBuffer",
@@ -21078,11 +21368,15 @@
         "getLocalAuthCookieSecret",
         "getSystemUserId",
         "header",
+        "isEarlyAuthenticatedJsonMutationRequest",
         "isJsonParserError",
         "isProductionBatchMutationRequest",
         "isPublicApiPath",
         "isPublicApiRequest",
+        "isReusableScriptAssetMutationRequest",
         "knownBodyParserError",
+        "label",
+        "onlyEarlyAuthenticatedJsonMutations",
         "onlyProductionBatchMutations",
         "parserErrorStatus",
         "payload",
@@ -22025,6 +22319,45 @@
         "quoteReadinessReasonCodes",
         "quoteReadinessSchema",
         "quoteReadinessStates"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/ai-media-studio-reusable-script-assets.ts",
+      "kind": "shared",
+      "imports": [
+        "./ai-media-studio-operations",
+        "./ai-media-studio-scripts",
+        "./ai-media-studio-source-to-script",
+        "zod"
+      ],
+      "exports": [
+        "ReusableScriptAsset",
+        "ReusableScriptAssetListRequest",
+        "ReusableScriptAssetListResponse",
+        "ReusableScriptAssetSaveRequest",
+        "ReusableScriptAssetSaveResponse",
+        "ReusableScriptAssetVariant",
+        "reusableScriptAssetEffectsSchema",
+        "reusableScriptAssetListRequestSchema",
+        "reusableScriptAssetListResponseSchema",
+        "reusableScriptAssetSaveRequestSchema",
+        "reusableScriptAssetSaveResponseSchema",
+        "reusableScriptAssetSchema",
+        "reusableScriptAssetVariantSchema"
+      ],
+      "symbols": [
+        "canonicalIdSchema",
+        "isoDateSchema",
+        "reusableScriptAssetEffectsSchema",
+        "reusableScriptAssetListRequestSchema",
+        "reusableScriptAssetListResponseSchema",
+        "reusableScriptAssetSaveRequestSchema",
+        "reusableScriptAssetSaveResponseSchema",
+        "reusableScriptAssetSchema",
+        "reusableScriptAssetVariantSchema",
+        "sha256DigestSchema",
+        "uuidSchema"
       ],
       "routes": []
     },
@@ -28166,6 +28499,148 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-reusable-script-assets-pg.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/core/resource-domain",
+        "../server/ai-media-studio/sources/drizzle-reusable-script-asset-repository",
+        "../server/ai-media-studio/sources/drizzle-source-repository",
+        "../server/ai-media-studio/sources/reusable-script-asset-service",
+        "../server/ai-media-studio/sources/source-to-script-preview-service",
+        "../shared/ai-media-studio-source-to-script",
+        "drizzle-orm/node-postgres",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:process",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "Manifest",
+        "MigrationFile",
+        "PORT",
+        "TEMP_PREFIX",
+        "applyExactChain",
+        "archivedPrepared",
+        "archivedSource",
+        "assets",
+        "bytes",
+        "changedContent",
+        "content",
+        "contentHash",
+        "database",
+        "digest",
+        "durableRows",
+        "enabled",
+        "expectAssetError",
+        "first",
+        "hex",
+        "id",
+        "influencerId",
+        "integrationTest",
+        "manifest",
+        "migrationRoot",
+        "parsed",
+        "pool",
+        "prepared",
+        "preview",
+        "previewRequest",
+        "previews",
+        "primaryList",
+        "primarySource",
+        "rawHash",
+        "refreshedPrepared",
+        "refreshedSource",
+        "replay",
+        "requireOwnedUrl",
+        "resolvedRoot",
+        "resolvedSocket",
+        "result",
+        "reviewedForward",
+        "rollbackPrepared",
+        "rollbackSource",
+        "saveRequest",
+        "secondaryList",
+        "secondaryPrepared",
+        "secondarySaved",
+        "secondarySource",
+        "seedInfluencer",
+        "seedSource",
+        "sideEffects",
+        "socket",
+        "stack",
+        "tenantCounts",
+        "uuid",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-reusable-script-assets.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/core/resource-domain",
+        "../server/ai-media-studio/script-service",
+        "../server/ai-media-studio/sources/drizzle-reusable-script-asset-repository",
+        "../server/ai-media-studio/sources/in-memory-reusable-script-asset-repository",
+        "../server/ai-media-studio/sources/in-memory-source-repository",
+        "../server/ai-media-studio/sources/reusable-script-asset-service",
+        "../server/ai-media-studio/sources/source-to-script-preview-service",
+        "../shared/ai-media-studio-reusable-script-assets",
+        "../shared/ai-media-studio-source-to-script",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "allSql",
+        "base",
+        "checksum",
+        "compiled",
+        "contentHash",
+        "created",
+        "createdAt",
+        "dialect",
+        "expectedPreviewDigest",
+        "first",
+        "fixture",
+        "generated",
+        "generatedChecksum",
+        "generatedVariant",
+        "inputDigest",
+        "list",
+        "preview",
+        "previewRequest",
+        "previews",
+        "replay",
+        "repository",
+        "request",
+        "response",
+        "result",
+        "scriptId",
+        "scriptIds",
+        "scriptSet",
+        "second",
+        "service",
+        "sourceId",
+        "sourceIds",
+        "sources",
+        "text",
+        "variant",
+        "variantId",
+        "variantIds"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-routes.test.ts",
       "kind": "test",
       "imports": [
@@ -28950,16 +29425,25 @@
       "exports": [],
       "symbols": [
         "api",
+        "assetId",
         "automation",
         "first",
         "hash",
         "hooks",
+        "listed",
         "operationsRoot",
         "originalFetch",
+        "previewHash",
+        "previewRequest",
         "readOperationsSource",
         "result",
+        "reusableAsset",
+        "save",
+        "saveIdempotencyKey",
+        "saved",
         "second",
-        "variant"
+        "variant",
+        "variantId"
       ],
       "routes": []
     },
@@ -29138,6 +29622,7 @@
         "../server/ai-media-studio/publishing/in-memory",
         "../server/ai-media-studio/routes",
         "../server/ai-media-studio/sources/in-memory-source-repository",
+        "../shared/ai-media-studio-reusable-script-assets",
         "../shared/ai-media-studio-source-to-script",
         "express",
         "node:assert/strict",
@@ -29152,25 +29637,39 @@
         "body",
         "canonicalOrigin",
         "content",
+        "created",
+        "createdResponse",
+        "createdText",
         "digest",
         "eligibilityEndpoint",
         "endpoint",
         "forceNoDevFallback",
         "harness",
+        "injectedCreative",
+        "isolatedResponse",
+        "list",
+        "listResponse",
         "mutationHeaders",
         "operationsRepositories",
         "parsed",
         "preview",
+        "previewRequest",
+        "previewResponse",
         "previous",
         "privateField",
+        "rawQuery",
         "rawRequest",
+        "replay",
+        "replayResponse",
         "req",
         "response",
         "restoreDevFallback",
+        "reusableAssetsEndpoint",
         "review",
         "reviewBody",
         "reviewText",
         "runtime",
+        "saveBody",
         "server",
         "source",
         "sources",
@@ -31038,6 +31537,7 @@
         "requestWithHeader",
         "res",
         "response",
+        "reusableScriptAssetMutationPath",
         "tamperedCookie",
         "unrelated",
         "unrelatedZlib",
@@ -31302,6 +31802,8 @@
     "tests/ai-media-studio-render-flow-integration.test.ts",
     "tests/ai-media-studio-render-queue-persistence.test.ts",
     "tests/ai-media-studio-render-worker.test.ts",
+    "tests/ai-media-studio-reusable-script-assets-pg.test.ts",
+    "tests/ai-media-studio-reusable-script-assets.test.ts",
     "tests/ai-media-studio-routes.test.ts",
     "tests/ai-media-studio-runtime-persistence.test.ts",
     "tests/ai-media-studio-s3-storage.test.ts",

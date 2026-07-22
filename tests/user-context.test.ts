@@ -6,19 +6,25 @@ import {
   allowsDevUserFallback,
   createSignedLocalAuthCookieValue,
   exceptProductionBatchMutations,
+  isEarlyAuthenticatedJsonMutationRequest,
   getSystemUserId,
   isProductionBatchMutationRequest,
+  isReusableScriptAssetMutationRequest,
   isPublicApiPath,
   isPublicApiRequest,
   onlyProductionBatchMutations,
+  onlyEarlyAuthenticatedJsonMutations,
   requestHasRawQuery,
+  requireAuthenticatedJsonMutationBeforeBody,
   requireAppUser,
   sanitizeProductionBatchJsonParserError,
+  sanitizeAuthenticatedJsonMutationParserError,
   resolveAuthenticatedUserId,
   resolveCurrentUserId,
 } from "../server/user-context";
 
 const productionBatchMutationPath = "/api/ai-media-studio/production-batches/plan_000000000000000000000002/prepare-scripts";
+const reusableScriptAssetMutationPath = "/api/ai-media-studio/automation/sources/scripts/assets";
 
 function requestWithHeader(headerValue?: string, extras: Record<string, unknown> = {}) {
   return {
@@ -132,6 +138,12 @@ test("production-batch session wrappers run early only for the two protected mut
   assert.equal(isProductionBatchMutationRequest("POST", `${productionBatchMutationPath}/`), true);
   assert.equal(isProductionBatchMutationRequest("GET", productionBatchMutationPath), false);
   assert.equal(isProductionBatchMutationRequest("POST", "/api/auth/login"), false);
+  assert.equal(isReusableScriptAssetMutationRequest("POST", reusableScriptAssetMutationPath), true);
+  assert.equal(isReusableScriptAssetMutationRequest("POST", `${reusableScriptAssetMutationPath}/`), true);
+  assert.equal(isReusableScriptAssetMutationRequest("GET", reusableScriptAssetMutationPath), false);
+  assert.equal(isReusableScriptAssetMutationRequest("POST", `${reusableScriptAssetMutationPath}/unexpected`), false);
+  assert.equal(isEarlyAuthenticatedJsonMutationRequest("POST", productionBatchMutationPath), true);
+  assert.equal(isEarlyAuthenticatedJsonMutationRequest("POST", reusableScriptAssetMutationPath), true);
   assert.equal(requestHasRawQuery(`${productionBatchMutationPath}?__proto__`), true);
   assert.equal(requestHasRawQuery(productionBatchMutationPath), false);
 });
@@ -175,6 +187,46 @@ test("production-batch parser sanitizer maps only known body-parser errors", () 
   const unrelatedZlib = { code: "Z_DATA_ERROR", status: 500 };
   sanitizeProductionBatchJsonParserError(unrelatedZlib, request, {} as any, (error) => { forwarded = error; });
   assert.equal(forwarded, unrelatedZlib);
+});
+
+test("reusable-script saves authenticate before JSON parsing and sanitize parser failures", () => {
+  let middlewareCalls = 0;
+  let nextCalls = 0;
+  const early = onlyEarlyAuthenticatedJsonMutations((_req, _res, next) => {
+    middlewareCalls += 1;
+    next();
+  });
+  early({ method: "POST", originalUrl: reusableScriptAssetMutationPath } as any, {} as any, () => {
+    nextCalls += 1;
+  });
+  assert.deepEqual({ middlewareCalls, nextCalls }, { middlewareCalls: 1, nextCalls: 1 });
+
+  let authStatus = 0;
+  let authBody: unknown;
+  requireAuthenticatedJsonMutationBeforeBody(requestWithHeader(undefined, {
+    method: "POST", originalUrl: reusableScriptAssetMutationPath,
+  }), {
+    status(value: number) { authStatus = value; return this; },
+    json(value: unknown) { authBody = value; return this; },
+  } as any, () => assert.fail("unauthenticated save must stop before the parser"));
+  assert.equal(authStatus, 401);
+  assert.deepEqual(authBody, { error: "AI Media Studio mutation is not authorized", code: "UNAUTHENTICATED" });
+
+  let parserStatus = 0;
+  let parserBody: unknown;
+  sanitizeAuthenticatedJsonMutationParserError({
+    type: "entity.parse.failed",
+    message: "caller-controlled-secret-fragment",
+  }, {
+    method: "POST",
+    originalUrl: reusableScriptAssetMutationPath,
+  } as any, {
+    status(value: number) { parserStatus = value; return this; },
+    json(value: unknown) { parserBody = value; return this; },
+  } as any, () => assert.fail("known parser error must be handled"));
+  assert.equal(parserStatus, 400);
+  assert.deepEqual(parserBody, { error: "AI Media Studio JSON body is invalid", code: "INVALID_JSON_BODY" });
+  assert.doesNotMatch(JSON.stringify(parserBody), /caller-controlled-secret-fragment/u);
 });
 
 test("rejects tampered signed local auth cookies", () => {
