@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-22T15:16:26.462Z
+Generated: 2026-07-22T16:08:03.782Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 946 | 796 | 3452 | 507 | 15565 |
+| 954 | 804 | 3506 | 507 | 15764 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,8 +29,8 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 255 | 244 | test:255 |
-| `server/ai-media-studio` | 187 | 168 | server:187 |
+| `tests` | 259 | 248 | test:259 |
+| `server/ai-media-studio` | 191 | 172 | server:191 |
 | `client/src` | 158 | 156 | ui-component:55, other:48, client-page:24, client-component:21 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 46 | 44 | script:46 |
@@ -108,6 +108,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts`
 - `tests/ai-media-studio-heygen-v3-static-verification-provider.test.ts`
 - `tests/ai-media-studio-http-artifact-reader.test.ts`
+- `tests/ai-media-studio-http-kong-source-reader.test.ts`
 - `tests/ai-media-studio-influencers.test.ts`
 - `tests/ai-media-studio-kong-owned-source-adapter.test.ts`
 - `tests/ai-media-studio-launch-authority-drizzle.test.ts`
@@ -211,6 +212,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-production-batch-service.test.ts`
 - `tests/ai-media-studio-production-batch-ui.test.ts`
 - `tests/ai-media-studio-production-oauth-runtime.test.ts`
+- `tests/ai-media-studio-production-source-sync-runtime.test.ts`
 - `tests/ai-media-studio-publishing-accounts.test.ts`
 - `tests/ai-media-studio-publishing-drizzle.test.ts`
 - `tests/ai-media-studio-publishing.test.ts`
@@ -240,6 +242,8 @@ Package: `rest-express`
 - `tests/ai-media-studio-source-eligibility-routes.test.ts`
 - `tests/ai-media-studio-source-eligibility-service.test.ts`
 - `tests/ai-media-studio-source-operator-client.test.ts`
+- `tests/ai-media-studio-source-sync-scheduler-drizzle.test.ts`
+- `tests/ai-media-studio-source-sync-scheduler.test.ts`
 - `tests/ai-media-studio-source-to-batch-automation.test.ts`
 - `tests/ai-media-studio-source-to-batch-contracts.test.ts`
 - `tests/ai-media-studio-source-to-batch-routes.test.ts`
@@ -392,7 +396,7 @@ Package: `rest-express`
 - `server/agent-actions.ts` (server; 42 symbols, 9 imports)
 - `server/ai-cost-notifications.ts` (server; 26 symbols)
 - `server/ai-cost-policy.ts` (server; 35 symbols)
-- `server/ai-media-studio/agent-control.ts` (server; 2 symbols, 1 imports)
+- `server/ai-media-studio/agent-control.ts` (server; 7 symbols, 2 imports)
 - `server/ai-media-studio/analytics/domain.ts` (server; 65 symbols, 2 imports)
 - `server/ai-media-studio/analytics/drizzle-repository.ts` (server; 24 symbols, 5 imports)
 - `server/ai-media-studio/analytics/fake-ingestion-adapter.ts` (server; 2 symbols, 2 imports)

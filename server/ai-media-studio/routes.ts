@@ -197,12 +197,14 @@ import {
 } from "./publishing/domain";
 import type { PublishingSubmissionGate } from "./publishing/worker";
 import type { CanonicalSourceItem, SourceAdapter } from "./sources/contracts";
+import { HttpKongSourceReader } from "./sources/http-kong-source-reader";
 import { KongOwnedSourceAdapter, type KongSourceReader } from "./sources/kong-owned-source-adapter";
 import { SourceCursorError } from "./sources/source-pagination";
 import { SourceAutomationSyncError, SourceAutomationSyncService } from "./sources/sync-service";
 import { SourceEligibilityReviewError, SourceEligibilityReviewService } from "./sources/eligibility-review-service";
 import { SourceToScriptPreviewError, SourceToScriptPreviewService } from "./sources/source-to-script-preview-service";
 import { SourceToBatchAutomationService } from "./sources/source-to-batch-automation-service";
+import type { SourceSyncSchedulerObserver } from "./sources/source-sync-scheduler";
 import {
   InMemoryAssetIngestRepository,
   createProductionAssetRuntimeFromEnvironment,
@@ -299,6 +301,9 @@ export interface AiMediaStudioDependencies {
   sourceAdapters?: readonly SourceAdapter[];
   /** Injected server-side Kong data reader. Supplying it only registers the inert adapter; it performs no construction I/O. */
   kongSourceReader?: KongSourceReader;
+  /** Read-only durable scheduler observation for the dedicated Agent Control pane. */
+  sourceSyncSchedulerObserver?: SourceSyncSchedulerObserver;
+  createDurableSourceSyncSchedulerObserver?: () => SourceSyncSchedulerObserver;
   assetIngestRepository?: AssetIngestRepository;
   assetDeliverySigner?: AssetDeliverySigner;
   /** Server-only production asset configuration; never serialized into Studio DTOs. */
@@ -558,6 +563,15 @@ function createDefaultDurableProductionBatchRepository(): ProductionBatchReposit
     prepare: async (...args) => (await load()).prepare(...args),
     approve: async (...args) => (await load()).approve(...args),
   };
+}
+
+function createDefaultDurableSourceSyncSchedulerObserver(): SourceSyncSchedulerObserver {
+  let pending: Promise<SourceSyncSchedulerObserver> | undefined;
+  const load = () => pending ??= Promise.all([
+    import("../db"),
+    import("./sources/drizzle-source-sync-scheduler-repository"),
+  ]).then(([database, adapter]) => new adapter.DrizzleSourceSyncSchedulerRepository(database.db));
+  return { observe: async (...args) => (await load()).observe(...args) };
 }
 
 function createDefaultDurableLaunchPreflightRepository(): LaunchPreflightRepository {
@@ -1336,6 +1350,7 @@ function toSourceItem(source: CanonicalSourceItem): SourceItem {
 
 export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependencies = {}): AiMediaStudioRuntime {
   const runtimeEnvironment = dependencies.runtimeEnvironment ?? process.env.NODE_ENV;
+  const environment = runtimeEnvironment?.trim().toLowerCase();
   const databaseUrl = dependencies.databaseUrl ?? process.env.DATABASE_URL;
   const persistence = selectMediaJobRepository({
     repository: dependencies.repository,
@@ -1382,9 +1397,13 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     databaseUrl: dependencies.operations?.databaseUrl ?? databaseUrl,
   });
   const scriptService = new DeterministicScriptService();
+  const kongSourceReader = dependencies.kongSourceReader
+    ?? (!explicitHarness && environment === "production" && configuredDatabase(databaseUrl)
+      ? new HttpKongSourceReader()
+      : undefined);
   const sourceAutomationSync = new SourceAutomationSyncService(
     [
-      ...(dependencies.kongSourceReader ? [new KongOwnedSourceAdapter(dependencies.kongSourceReader)] : []),
+      ...(kongSourceReader ? [new KongOwnedSourceAdapter(kongSourceReader)] : []),
       ...(dependencies.sourceAdapters ?? []),
     ],
     operations.sources,
@@ -1394,7 +1413,10 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const sourceToBatchAutomation = productionBatchSelection.service
     ? new SourceToBatchAutomationService(productionBatchSelection.service)
     : undefined;
-  const environment = runtimeEnvironment?.trim().toLowerCase();
+  const sourceSyncSchedulerObserver = dependencies.sourceSyncSchedulerObserver
+    ?? (!explicitHarness && configuredDatabase(databaseUrl)
+      ? (dependencies.createDurableSourceSyncSchedulerObserver ?? createDefaultDurableSourceSyncSchedulerObserver)()
+      : undefined);
   const assetDeliverySigner = dependencies.assetDeliverySigner ?? (() => {
     const productionAssets = createProductionAssetRuntimeFromEnvironment(
       dependencies.productionAssetEnvironment ?? process.env,
@@ -1657,10 +1679,17 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       oneVideoHeldAdmission: oneVideoHeldAdmissionSelection.status });
   });
 
-  router.get(`${AI_MEDIA_STUDIO_API_BASE}/agent`, (req, res) => {
-    getCurrentUserId(req);
-    res.json(aiMediaStudioAgentSnapshotSchema.parse(createAiMediaStudioAgentSnapshot()));
-  });
+  router.get(`${AI_MEDIA_STUDIO_API_BASE}/agent`, asyncRoute(async (req, res) => {
+    res.set("Cache-Control", "private, no-store");
+    const scope = { ownerUserId: getCurrentUserId(req), workspaceId: core.workspaceId };
+    let sourceScheduler: Awaited<ReturnType<SourceSyncSchedulerObserver["observe"]>> | "unavailable" | undefined;
+    try {
+      sourceScheduler = await sourceSyncSchedulerObserver?.observe(scope);
+    } catch {
+      sourceScheduler = "unavailable";
+    }
+    res.json(aiMediaStudioAgentSnapshotSchema.parse(createAiMediaStudioAgentSnapshot(() => new Date(), sourceScheduler)));
+  }));
 
   const requireJobs = requireCapability(persistence.status, "AI Media Studio job");
   const requireCatalog = requireCapability(core.status, "AI Media Studio catalog");
