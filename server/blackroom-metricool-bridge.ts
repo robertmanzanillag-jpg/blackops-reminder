@@ -333,8 +333,20 @@ async function callMetricoolMcpTool(
     throw new Error(`Metricool MCP ${name} failed with HTTP ${response.status}${detail ? `: ${detail}` : ""}`);
   }
   let envelope: any;
-  try { envelope = JSON.parse(raw); }
-  catch { throw new Error(`Metricool MCP ${name} returned invalid JSON`); }
+  try {
+    if (/^text\/event-stream\b/i.test(response.headers.get("content-type") || "") || /^\s*(?:event:|data:)/m.test(raw)) {
+      const events = raw.split(/\r?\n\r?\n/).flatMap((event) => {
+        const data = event.split(/\r?\n/)
+          .filter((line) => line.startsWith("data:"))
+          .map((line) => line.slice(5).trim())
+          .join("\n");
+        if (!data || data === "[DONE]") return [];
+        return [JSON.parse(data)];
+      });
+      envelope = events.findLast((event) => event?.result || event?.error) || events.at(-1);
+    } else envelope = JSON.parse(raw);
+  } catch { throw new Error(`Metricool MCP ${name} returned invalid JSON or SSE`); }
+  if (!envelope) throw new Error(`Metricool MCP ${name} returned no result`);
   if (envelope?.error) throw new Error(`Metricool MCP ${name} failed: ${String(envelope.error.message || "unknown error").slice(0, 500)}`);
   if (envelope?.result?.isError) {
     const detail = Array.isArray(envelope.result.content)
@@ -406,7 +418,9 @@ export async function scheduleBlackRoomMetricoolPost(
   }
   for (const network of missingNetworks) {
     const payload = buildMetricoolPayload(input, "", network, captions[network]);
-    payload.media = [];
+    // The live MCP schema exposes mediaFiles for attached files. Keep the
+    // public MP4 in info.media too, so non-ChatGPT MCP clients retain media.
+    payload.media = [input.mediaUrl];
     let scheduled: any;
     try {
       scheduled = await callMetricoolMcpTool(fetcher, token, "createScheduledPost", {

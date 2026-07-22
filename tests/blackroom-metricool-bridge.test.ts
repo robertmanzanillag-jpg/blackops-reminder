@@ -32,6 +32,11 @@ const mcpSuccess = () => Response.json({
   result: { content: [{ type: "text", text: "Scheduled" }], isError: false },
 });
 
+const mcpSuccessSse = () => new Response(
+  `event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: "test", result: { content: [{ type: "text", text: "Scheduled" }], isError: false } })}\n\n`,
+  { headers: { "content-type": "text/event-stream" } },
+);
+
 const mcpInfo = (call: { body?: any }) => JSON.parse(call.body.params.arguments.info);
 
 test("extracts normalized media ids without accepting unrelated top-level ids", () => {
@@ -208,7 +213,7 @@ test("schedules through Metricool's official MCP, then verifies before returning
       const youtube = { id: 993, text: `${input.caption}\n\nFull set: https://www.youtube.com/watch?v=${input.sourceVideoId}\n#Shorts #BlackRoom`, publicationDate: { dateTime: input.publicationDateTime } };
       return Response.json({ data: verifications.length === 1 ? [] : verifications.length === 2 ? [tiktok] : verifications.length === 3 ? [tiktok, facebook] : [tiktok, facebook, youtube] });
     }
-    if (method === "POST") return mcpSuccess();
+    if (method === "POST") return calls.filter((call) => call.method === "POST").length === 1 ? mcpSuccessSse() : mcpSuccess();
     return Response.json({ data: [] });
   };
   const receipt = await scheduleBlackRoomMetricoolPost(input, {
@@ -226,7 +231,7 @@ test("schedules through Metricool's official MCP, then verifies before returning
   assert.equal(calls[1].url, "https://ai.metricool.com/mcp");
   assert.equal(calls[1].body.method, "tools/call");
   assert.equal(calls[1].body.params.name, "createScheduledPost");
-  assert.deepEqual(mcpInfo(calls[1]).media, []);
+  assert.deepEqual(mcpInfo(calls[1]).media, [input.mediaUrl]);
   assert.deepEqual(mcpInfo(calls[1]).providers, [{ network: "tiktok" }]);
   assert.deepEqual(mcpInfo(calls[3]).providers, [{ network: "facebook" }]);
   assert.deepEqual(mcpInfo(calls[5]).providers, [{ network: "youtube" }]);
