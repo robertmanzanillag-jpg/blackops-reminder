@@ -209,6 +209,31 @@ function remoteView(state: BlackRoomRemoteControlState) {
   return { ...state, online: isBlackRoomRemoteDeviceOnline(state) };
 }
 
+function blackRoomCounter(value: unknown): number {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.max(0, Math.floor(number)) : 0;
+}
+
+export function resolveBlackRoomPanelAgent(
+  localQueue: ReturnType<typeof summarizeBlackRoomQueue>,
+  remoteQueue: Record<string, any> | undefined,
+  remoteOnline: boolean,
+) {
+  if (remoteOnline && remoteQueue?.totals) return remoteQueue;
+  if (!remoteQueue?.delivery) return localQueue;
+  const scheduled = blackRoomCounter(remoteQueue.delivery.scheduled);
+  const completed = blackRoomCounter(remoteQueue.delivery.completed);
+  return {
+    ...localQueue,
+    totals: { ...localQueue.totals, scheduled, completed },
+    delivery: {
+      scheduled,
+      completed,
+      confirmed: blackRoomCounter(remoteQueue.delivery.confirmed),
+    },
+  };
+}
+
 export async function hasBlackRoomChatAccess(req: Request): Promise<boolean> {
   return isConfiguredSingleUserOwner(getCurrentUserId(req));
 }
@@ -224,8 +249,9 @@ export function registerBlackRoomControlRoutes(app: Express): void {
   app.get("/api/blackroom-agent", async (_req, res) => {
     try {
       const remote = await readBlackRoomRemoteControl();
-      const localQueue = remote.device?.queue as ReturnType<typeof summarizeBlackRoomQueue> | undefined;
-      res.json({ agent: isBlackRoomRemoteDeviceOnline(remote) && localQueue?.totals ? localQueue : summarizeBlackRoomQueue(await readBlackRoomQueue()), remote: remoteView(remote) });
+      const remoteQueue = remote.device?.queue as Record<string, any> | undefined;
+      const localQueue = summarizeBlackRoomQueue(await readBlackRoomQueue());
+      res.json({ agent: resolveBlackRoomPanelAgent(localQueue, remoteQueue, isBlackRoomRemoteDeviceOnline(remote)), remote: remoteView(remote) });
     }
     catch (error: any) { res.status(500).json({ error: error.message || "Failed to read BlackRoom agent" }); }
   });

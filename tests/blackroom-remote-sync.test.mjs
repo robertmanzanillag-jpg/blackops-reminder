@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { planBlackRoomRemoteSync } from "../script/blackroom-remote-sync.mjs";
+import {
+  applyBlackRoomDeliveryCounts,
+  planBlackRoomRemoteSync,
+  summarizeBlackRoomDeliveryLedger,
+} from "../script/blackroom-remote-sync.mjs";
 
 test("newer pause cannot be undone by an older play response", () => {
   const play = planBlackRoomRemoteSync({
@@ -38,4 +42,41 @@ test("pause remains pending until the local worker has stopped", () => {
     localWorkerRunning: false,
     lastAppliedGeneration: 1,
   }), { action: "none", generation: 2 });
+});
+
+test("delivery ledger drives scheduled and completed post counters", () => {
+  const ledger = {
+    entries: [
+      {
+        status: "confirmed",
+        publicationDateTime: "2026-07-22T06:30:00",
+        networkReceipts: { tiktok: "1", facebook: "2", youtube: "3" },
+      },
+      {
+        status: "confirmed",
+        publicationDateTime: "2026-07-22T02:00:00",
+        networkReceipts: { tiktok: "4", facebook: "5", youtube: "6" },
+      },
+      {
+        status: "confirmed",
+        publicationDateTime: "2026-07-22T10:00:00",
+        networkReceipts: { tiktok: "7", facebook: "8" },
+      },
+      {
+        status: "confirmed",
+        publicationDateTime: "9999-99-99T99:99:99",
+        networkReceipts: { tiktok: "9", facebook: "10", youtube: "11" },
+      },
+      { status: "reserved", publicationDateTime: "2026-07-22T12:00:00", networkReceipts: {} },
+    ],
+  };
+  const delivery = summarizeBlackRoomDeliveryLedger(ledger, new Date("2026-07-22T07:34:00.000Z"));
+  assert.deepEqual(delivery, { scheduled: 1, completed: 1, confirmed: 2 });
+
+  const queue = applyBlackRoomDeliveryCounts(
+    { totals: { queued: 15, processing: 0, retry: 1, scheduled: 0, completed: 0 } },
+    delivery,
+  );
+  assert.deepEqual(queue.totals, { queued: 15, processing: 0, retry: 1, scheduled: 1, completed: 1 });
+  assert.deepEqual(queue.delivery, delivery);
 });
