@@ -105,13 +105,16 @@ function htmlValue(value) {
 export function buildMetricoolApprovalRows(decision, mediaReadyBySlot = {}) {
   return (decision.assignments || []).map((assignment) => {
     const media = mediaReadyBySlot[assignment.slot] || {};
+    const publishingAuthorized = decision.publishingAuthorized === true;
     const status = decision.canProduce !== true
       ? "blocked_campaign"
       : media.ready !== true
         ? "blocked_media_missing"
         : decision.canEnterApprovalQueue !== true
           ? "blocked_payout_setup"
-          : "approval_required";
+          : publishingAuthorized
+            ? "authorized_for_metricool"
+            : "approval_required";
     return {
       order: assignment.slot,
       account: decision.accountHandle,
@@ -121,7 +124,7 @@ export function buildMetricoolApprovalRows(decision, mediaReadyBySlot = {}) {
       strategyId: assignment.strategyId,
       caption: assignment.captionText,
       status,
-      publishAllowed: false,
+      publishAllowed: status === "authorized_for_metricool",
     };
   });
 }
@@ -132,6 +135,11 @@ function metricoolRowsCsv(rows) {
 }
 
 function metricoolRowsHtml(decision, rows) {
+  const authorizedRows = rows.filter((row) => row.status === "authorized_for_metricool");
+  const approvalLabel = authorizedRows.length ? "Authorized" : "Blocked";
+  const notice = authorizedRows.length
+    ? "Eligible clips may be scheduled through Metricool. Scheduled items are not counted as published until a public TikTok URL is verified."
+    : "No clip is published or scheduled. Review and explicit approval are still required.";
   const clips = rows.map((row) => `
     <article class="clip-row">
       <video controls preload="metadata" src="/clippers-workspace/${htmlValue(row.draftFile)}"></video>
@@ -146,8 +154,8 @@ function metricoolRowsHtml(decision, rows) {
 <title>Metricool Review Queue</title><style>
 *{box-sizing:border-box}body{margin:0;background:#f7f7f5;color:#171717;font-family:Inter,Arial,sans-serif;letter-spacing:0}header{background:#171717;color:#fff;padding:28px max(20px,calc((100vw - 1120px)/2))}header h1{font-size:28px;margin:0 0 8px}header p{margin:0;color:#cfcfc9}.summary{display:flex;gap:20px;flex-wrap:wrap;padding:18px max(20px,calc((100vw - 1120px)/2));border-bottom:1px solid #d9d9d4;background:#fff}.summary strong{display:block;font-size:20px}.summary span{font-size:12px;color:#666}.notice{padding:14px max(20px,calc((100vw - 1120px)/2));background:#fff3cd;color:#5d4600;border-bottom:1px solid #ead58d}main{max-width:1120px;margin:auto}.clip-row{display:grid;grid-template-columns:180px 1fr;gap:24px;padding:24px 20px;border-bottom:1px solid #d9d9d4}.clip-row video{width:180px;aspect-ratio:9/16;background:#000}.clip-copy{align-self:center;min-width:0}.meta{display:flex;gap:8px;flex-wrap:wrap}.meta span{font-size:12px;border:1px solid #bbb;padding:4px 7px;border-radius:4px}.clip-copy h2{font-size:18px;line-height:1.35;margin:14px 0 8px}.clip-copy p{font-size:12px;color:#666;overflow-wrap:anywhere;margin:0}@media(max-width:620px){.clip-row{grid-template-columns:110px 1fr;gap:14px}.clip-row video{width:110px}.clip-copy h2{font-size:15px}}
 </style></head><body><header><h1>Metricool Review Queue</h1><p>${htmlValue(decision.title)} · @${htmlValue(decision.accountHandle)}</p></header>
-<section class="summary"><div><strong>${rows.length}</strong><span>real clips</span></div><div><strong>Approval required</strong><span>Metricool mode</span></div><div><strong>${decision.cashoutReady ? "Ready" : "Pending"}</strong><span>Vyro cashout</span></div></section>
-<div class="notice">No clip is published or scheduled. Review and explicit approval are still required.</div><main>${clips}</main></body></html>`;
+<section class="summary"><div><strong>${rows.length}</strong><span>real clips</span></div><div><strong>${approvalLabel}</strong><span>Metricool mode</span></div><div><strong>${decision.cashoutReady ? "Ready" : "Pending"}</strong><span>Vyro cashout</span></div></section>
+<div class="notice">${notice}</div><main>${clips}</main></body></html>`;
 }
 
 function campaignExpiryMs(campaign) {
@@ -224,7 +232,7 @@ function chooseExperiment(rows) {
   };
 }
 
-function campaignDecision(campaign, metrics, now) {
+function campaignDecision(campaign, metrics, now, publishingAuthorized = false) {
   const productionBlockers = campaignBlockers(campaign, now);
   const paymentBlockers = payoutBlockers(campaign);
   const rows = metricRowsForCampaign(metrics, campaign.id);
@@ -270,6 +278,7 @@ function campaignDecision(campaign, metrics, now) {
     canProduce: productionBlockers.length === 0,
     canEnterApprovalQueue: productionBlockers.length === 0,
     cashoutReady: paymentBlockers.length === 0,
+    publishingAuthorized,
     realPublishEnabled: false,
     metricoolApprovalRequired: true,
     payoutCpm,
@@ -293,13 +302,26 @@ function campaignDecision(campaign, metrics, now) {
           : decision === "pause_and_recut"
             ? "Pause this cut style and create materially different hooks before another paid test."
             : paymentBlockers.length
-              ? `Queue the next ${experiment.nextStrategyId} test for approval; resolve ${paymentBlockers[0]} before cashout.`
+              ? publishingAuthorized
+                ? `Validate final media for the next ${experiment.nextStrategyId} test before Metricool scheduling; resolve ${paymentBlockers[0]} before cashout.`
+                : `Queue the next ${experiment.nextStrategyId} test for approval; resolve ${paymentBlockers[0]} before cashout.`
               : `Run the next controlled test with ${experiment.nextStrategyId}.`,
   };
 }
 
-export function buildStreamerGrowthCeoPlan({ campaigns = [], metrics = [], now = new Date(), monthlyViewsTarget = 1_000_000 }) {
-  const decisions = campaigns.map((campaign) => campaignDecision(campaign, metrics, now))
+export function buildStreamerGrowthCeoPlan({
+  campaigns = [],
+  metrics = [],
+  now = new Date(),
+  monthlyViewsTarget = 1_000_000,
+  publishingAuthorized = false,
+  targetDailyClips = 5,
+}) {
+  const parsedTargetDailyClips = Number(targetDailyClips);
+  const safeTargetDailyClips = Number.isFinite(parsedTargetDailyClips)
+    ? Math.max(1, Math.min(5, Math.trunc(parsedTargetDailyClips)))
+    : 5;
+  const decisions = campaigns.map((campaign) => campaignDecision(campaign, metrics, now, publishingAuthorized))
     .sort((a, b) => b.priorityScore - a.priorityScore || a.title.localeCompare(b.title));
   const actualPublishedRows = metrics.filter((row) => row.finalStatus === "published"
     && exactTikTokPostPattern.test(String(row.publishedPostUrl || "").trim())
@@ -329,12 +351,13 @@ export function buildStreamerGrowthCeoPlan({ campaigns = [], metrics = [], now =
       blocked: decisions.filter((row) => !row.canProduce).length,
     },
     operatingPolicy: {
-      dailyTestClips: scaling.length ? 4 : active.length ? 2 : 0,
-      maximumDailyClipsPerAccount: 8,
+      dailyTestClips: active.length ? safeTargetDailyClips : 0,
+      maximumDailyClipsPerAccount: 5,
       exploitPercent: scaling.length ? 70 : 0,
       explorePercent: scaling.length ? 30 : 100,
       minimumSamplesBeforeWinner: 3,
       paidSpendAllowed: false,
+      publishingAuthorized,
       metricoolApprovalRequired: true,
       realPublishEnabled: false,
     },
@@ -345,7 +368,9 @@ export function buildStreamerGrowthCeoPlan({ campaigns = [], metrics = [], now =
       "Only proof-backed finalStatus=published Metricool rows count as views; earnings require separate payout evidence.",
       "No caption or subtitle winner is declared before three real posts per strategy.",
       "Payout identity and payment method affect cashout readiness, not campaign-source or Metricool approval readiness.",
-      "The CEO may prepare and rank work, but real publishing remains disabled.",
+      publishingAuthorized
+        ? "Metricool publishing is authorized only for proof-backed eligible clips on the configured TikTok account."
+        : "The CEO may prepare and rank work, but real publishing remains disabled.",
     ],
   };
 }
@@ -421,9 +446,9 @@ async function main() {
     ]);
     row.qualificationEvidenceVerified = row.payoutEvidenceVerified;
   }
-  const plan = buildStreamerGrowthCeoPlan({ campaigns, metrics });
+  const publishingAuthorized = process.env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED === "true";
+  const plan = buildStreamerGrowthCeoPlan({ campaigns, metrics, publishingAuthorized });
   await mkdir(reportDir, { recursive: true });
-  await writeFile(path.join(reportDir, "streamer-growth-ceo.json"), `${JSON.stringify(plan, null, 2)}\n`);
   for (const decision of plan.decisions) {
     const mediaReadyBySlot = {};
     for (const assignment of decision.assignments || []) {
@@ -439,6 +464,13 @@ async function main() {
       };
     }
     const rows = buildMetricoolApprovalRows(decision, mediaReadyBySlot);
+    decision.realPublishEnabled = rows.some((row) => row.status === "authorized_for_metricool");
+    decision.metricoolApprovalRequired = !decision.realPublishEnabled;
+    if (decision.publishingAuthorized) {
+      decision.nextAction = decision.realPublishEnabled
+        ? `Schedule the next eligible ${decision.experiment.nextStrategyId} test in Metricool${decision.cashoutBlockers.length ? `; resolve ${decision.cashoutBlockers[0]} before cashout` : ""}.`
+        : `Render and validate final media for the next ${decision.experiment.nextStrategyId} test before scheduling.`;
+    }
     const firstDraft = decision.assignments?.[0]?.draftFile;
     if (firstDraft && rows.length) {
       const firstOriginal = await containedRegularFile(workspaceRoot, resolveWorkspaceMediaPath(workspaceRoot, firstDraft));
@@ -450,6 +482,10 @@ async function main() {
       }
     }
   }
+  plan.operatingPolicy.realPublishEnabled = plan.decisions.some((decision) => decision.realPublishEnabled);
+  plan.operatingPolicy.metricoolApprovalRequired = !plan.operatingPolicy.realPublishEnabled;
+  plan.nextBestAction = plan.decisions[0]?.nextAction || plan.nextBestAction;
+  await writeFile(path.join(reportDir, "streamer-growth-ceo.json"), `${JSON.stringify(plan, null, 2)}\n`);
   console.log(JSON.stringify(plan, null, 2));
 }
 

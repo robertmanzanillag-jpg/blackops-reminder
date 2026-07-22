@@ -47,7 +47,7 @@ test("tests a verified top creator without fabricating expected revenue", () => 
   assert.equal(plan.decisions[0].decision, "test");
   assert.equal(plan.decisions[0].observed.totalViews, 0);
   assert.equal(plan.goal.projection, "insufficient_real_posts");
-  assert.equal(plan.operatingPolicy.dailyTestClips, 2);
+  assert.equal(plan.operatingPolicy.dailyTestClips, 5);
   assert.equal(plan.decisions[0].assignments.length, 7);
   assert.deepEqual(
     new Set(plan.decisions[0].assignments.map((row) => row.strategyId)),
@@ -56,6 +56,33 @@ test("tests a verified top creator without fabricating expected revenue", () => 
   assert.deepEqual(plan.decisions[0].assignments[0].requiredHashtags, ["#MrBeast", "#paidpartner"]);
   assert.match(plan.decisions[0].assignments[0].captionText, /#MrBeast #paidpartner$/);
   assert.ok(plan.decisions[0].assignments.every((row) => row.publishAllowed === false));
+});
+
+test("requires an explicit runtime opt-in before enabling Metricool publishing", () => {
+  const defaultPlan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now });
+  const authorizedPlan = buildStreamerGrowthCeoPlan({
+    campaigns: [campaign],
+    metrics: [],
+    now,
+    publishingAuthorized: true,
+  });
+
+  assert.equal(defaultPlan.operatingPolicy.realPublishEnabled, false);
+  assert.equal(defaultPlan.operatingPolicy.metricoolApprovalRequired, true);
+  assert.equal(authorizedPlan.operatingPolicy.publishingAuthorized, true);
+  assert.equal(authorizedPlan.operatingPolicy.realPublishEnabled, false);
+  assert.equal(authorizedPlan.operatingPolicy.metricoolApprovalRequired, true);
+  assert.equal(authorizedPlan.decisions[0].publishingAuthorized, true);
+  assert.equal(authorizedPlan.decisions[0].realPublishEnabled, false);
+  const authorizedRows = buildMetricoolApprovalRows(authorizedPlan.decisions[0], {
+    1: { ready: true, relativePath: "drafts/vyro/authorized.mp4" },
+  });
+  assert.equal(authorizedRows[0].status, "authorized_for_metricool");
+  assert.equal(authorizedRows[0].publishAllowed, true);
+  assert.equal(authorizedRows[1].status, "blocked_media_missing");
+  assert.equal(authorizedRows[1].publishAllowed, false);
+  assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: 20 }).operatingPolicy.dailyTestClips, 5);
+  assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: -3 }).operatingPolicy.dailyTestClips, 1);
 });
 
 test("accepts an observed countdown without inventing an exact campaign deadline", () => {
