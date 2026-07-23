@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-23T02:22:24.189Z",
+  "generatedAt": "2026-07-23T03:08:43.303Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -51,6 +51,7 @@
     "test:ai-media-heygen-secure-setup-browser": "node --import tsx --test tests/ai-media-studio-heygen-guided-setup-browser.test.ts",
     "test:ai-media-heygen-secure-setup-postgres": "node --import tsx script/ai-media-studio-secure-heygen-setup-postgres-test.ts",
     "test:ai-media-pr30-quote-bound-postgres": "node --import tsx script/ai-media-studio-pr30-quote-bound-human-approval-postgres-test.ts",
+    "test:ai-media-pr29-verified-runtime-postgres": "node --import tsx script/ai-media-studio-pr29-static-heygen-verification-postgres-test.ts",
     "test:ai-media-source-to-batch": "node --import tsx --test tests/ai-media-studio-source-to-batch-contracts.test.ts tests/ai-media-studio-source-to-batch-automation.test.ts tests/ai-media-studio-source-to-batch-routes.test.ts tests/ai-media-studio-source-operator-client.test.ts",
     "test:ai-media-source-scheduler": "node --import tsx --test tests/ai-media-studio-http-kong-source-reader.test.ts tests/ai-media-studio-kong-owned-source-adapter.test.ts tests/ai-media-studio-source-eligibility-review.test.ts tests/ai-media-studio-source-sync-scheduler.test.ts tests/ai-media-studio-source-sync-scheduler-drizzle.test.ts tests/ai-media-studio-production-source-sync-runtime.test.ts tests/ai-media-studio-source-automation-sync-routes.test.ts",
     "test:ai-media-migrations": "node --import tsx --test tests/ai-media-studio-migration-manifest.test.ts && AI_MEDIA_POSTGRES_SUITE=full-chain node --import tsx script/ai-media-studio-pr21-postgres-test.ts",
@@ -96,20 +97,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 976,
-    "filesIndexed": 822,
-    "imports": 3646,
+    "filesVisible": 977,
+    "filesIndexed": 823,
+    "imports": 3656,
     "routes": 508,
-    "symbols": 16278
+    "symbols": 16300
   },
   "directories": {
-    "server/ai-media-studio": {
-      "files": 200,
-      "indexed": 179,
-      "kinds": {
-        "server": 200
-      }
-    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -190,10 +184,10 @@
       }
     },
     "script": {
-      "files": 47,
-      "indexed": 45,
+      "files": 48,
+      "indexed": 46,
       "kinds": {
-        "script": 47
+        "script": 48
       }
     },
     "scripts": {
@@ -208,6 +202,13 @@
       "indexed": 92,
       "kinds": {
         "server": 96
+      }
+    },
+    "server/ai-media-studio": {
+      "files": 200,
+      "indexed": 179,
+      "kinds": {
+        "server": 200
       }
     },
     "server/replit_integrations": {
@@ -5549,6 +5550,38 @@
         "testDatabaseUrl",
         "testTemporaryDirectory",
         "waitForPostgres"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/ai-media-studio-pr29-static-heygen-verification-postgres-test.ts",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:fs",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:process"
+      ],
+      "exports": [],
+      "symbols": [
+        "DATABASE",
+        "PORT",
+        "TEMP_PREFIX",
+        "child",
+        "dataDirectory",
+        "log",
+        "logPath",
+        "main",
+        "ownedRoot",
+        "root",
+        "run",
+        "socketDirectory",
+        "stop",
+        "temporaryDirectory",
+        "testUrl",
+        "waitUntilReady"
       ],
       "routes": []
     },
@@ -14962,6 +14995,7 @@
       "exports": [
         "CreateProductionAdmittedRenderRuntimeInput",
         "ProductionAdmittedRenderRuntime",
+        "ProductionAdmittedWorkerDatabaseCapabilities",
         "ProductionHeyGenV3ArtifactBinding",
         "createProductionAdmittedRenderRuntime"
       ],
@@ -27664,6 +27698,8 @@
       "path": "tests/ai-media-studio-pr29-static-heygen-verification-evidence-postgres.test.ts",
       "kind": "test",
       "imports": [
+        "../server/ai-media-studio/provider-credentials/verified-static-heygen-runtime-credential",
+        "drizzle-orm/node-postgres",
         "node:assert/strict",
         "node:crypto",
         "node:fs",
@@ -27684,15 +27720,18 @@
         "avatarIds",
         "avatarLook",
         "bytes",
+        "credentialLoader",
         "digest",
         "enabled",
         "evidenceId",
+        "exactIdentity",
         "externalDigest",
         "ids",
         "influencerIds",
         "insertHeader",
         "insertResourceEvidence",
         "integrationTest",
+        "loadedCredential",
         "lookIndex",
         "manifest",
         "migrationRoot",
@@ -27977,6 +28016,8 @@
         "../server/ai-media-studio/workers/drizzle-admitted-render-repository",
         "../server/ai-media-studio/workers/production-admitted-render-runtime",
         "../server/ai-media-studio/workers/verified-static-heygen-production-runtime-factory",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
         "node:assert/strict",
         "node:test"
       ],
@@ -27988,12 +28029,15 @@
         "bindingCalls",
         "both",
         "calls",
+        "capturingDatabaseLane",
         "composed",
         "createInput",
         "createMaterializedInput",
         "databaseCalls",
         "databaseLane",
+        "dialect",
         "digest",
+        "duplicateCapability",
         "duplicateWorker",
         "factory",
         "ids",
