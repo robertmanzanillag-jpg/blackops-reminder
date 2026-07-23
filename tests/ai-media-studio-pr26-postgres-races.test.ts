@@ -42,7 +42,10 @@ const ids={account:"26000000-0000-4000-8000-000000000001",influencer:"26000000-0
   exactSubmitCapability:"26000000-0000-4000-8000-000000000018",
   exactReconcileActionCapability:"26000000-0000-4000-8000-00000000001a",
   exactTerminalActionCapability:"26000000-0000-4000-8000-00000000001b",
-  exactReconcileWorkerCapability:"26000000-0000-4000-8000-00000000001c"} as const;
+  exactReconcileWorkerCapability:"26000000-0000-4000-8000-00000000001c",
+  exactIngestActionCapability:"26000000-0000-4000-8000-00000000001d",
+  exactLinkActionCapability:"26000000-0000-4000-8000-00000000001e",
+  exactMediaAsset:"26000000-0000-4000-8000-00000000001f"} as const;
 const digest=(character:string)=>`sha256:${character.repeat(64)}` as const;
 const dialect=new PgDialect();
 
@@ -89,6 +92,12 @@ const pr34Forward=readFileSync(new URL(
 ),"utf8");
 const pr34Rollback=readFileSync(new URL(
   "../migrations/ai-media-studio/pending/20260723_pr34_exact_one_video_reconcile_terminal_rollback.sql",import.meta.url,
+),"utf8");
+const pr35Forward=readFileSync(new URL(
+  "../migrations/ai-media-studio/pending/20260723_pr35_exact_asset_ingest_link_forward.sql",import.meta.url,
+),"utf8");
+const pr35Rollback=readFileSync(new URL(
+  "../migrations/ai-media-studio/pending/20260723_pr35_exact_asset_ingest_link_rollback.sql",import.meta.url,
 ),"utf8");
 
 class RoleSession{
@@ -1105,6 +1114,146 @@ integrationTest("pending PR34 exact reconciliation and terminal observation are 
     [terminal.attempt.id]);
     assert.deepEqual(ledger.rows,[{terminal_events:"1",ingest_jobs:"1",capacity:"released",capacity_version:"2",
       committed:"1250000",job_stage:"artifact_ingest_queued",publishing_surface_absent:true}]);
+
+    await adminPool.query(`ALTER TABLE public.ai_media_assets
+      ADD COLUMN status text NOT NULL DEFAULT 'ready',
+      ADD COLUMN storage_key text,
+      ADD COLUMN storage_provider text NOT NULL DEFAULT 'owned-s3',
+      ADD COLUMN mime_type text NOT NULL DEFAULT 'video/mp4',
+      ADD COLUMN byte_size bigint,
+      ADD COLUMN render_job_id uuid`);
+    await adminPool.query(pr35Forward);
+    const ingestCommandId="exact-run-pr35-ingest",ingestCommandDigest=digest("0");
+    const linkCommandId="exact-run-pr35-link",linkCommandDigest=digest("b");
+    await adminPool.query(`INSERT INTO ai_media_exact_one_video_run_capabilities(
+      id,database_principal,owner_user_id,workspace_id,actor_user_id,budget_reservation_id,render_job_id,
+      daily_plan_slot_id,slot_attempt,work_handoff_digest,action,command_id,command_digest,max_lease_ms,
+      valid_from,expires_at,evidence_digest)
+      VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'ingest_asset',$11,$12,300000,
+        clock_timestamp()-interval '1 minute',clock_timestamp()+interval '1 hour',$13),
+       ($14,$2,$3,$4,$5,$6,$7,$8,$9,$10,'link_asset',$15,$16,300000,
+        clock_timestamp()-interval '1 minute',clock_timestamp()+interval '1 hour',$17)`,
+    [ids.exactIngestActionCapability,EXACT_RUN_LOGIN,OWNER,WORKSPACE,terminal.actor,
+      terminal.work.reservationId,terminal.work.renderJobId,terminal.target.daily_plan_slot_id,
+      terminal.target.attempt,terminal.target.work_handoff_digest,ingestCommandId,ingestCommandDigest,digest("2"),
+      ids.exactLinkActionCapability,linkCommandId,linkCommandDigest,digest("3")]);
+    const assetTableBlind=await adminPool.query<{ingest:boolean;asset:boolean;render:boolean}>(`SELECT
+      has_table_privilege($1,'public.ai_media_asset_ingest_jobs','SELECT,INSERT,UPDATE,DELETE') ingest,
+      has_table_privilege($1,'public.ai_media_assets','SELECT,INSERT,UPDATE,DELETE') asset,
+      has_table_privilege($1,'public.ai_media_render_jobs','SELECT,INSERT,UPDATE,DELETE') render`,
+    [EXACT_RUN_LOGIN]);
+    assert.deepEqual(assetTableBlind.rows,[{ingest:false,asset:false,render:false}]);
+    const ingestAcquire=await session.query<Record<string,unknown>>(acquireRunSql,
+      [ids.exactIngestActionCapability,OWNER,WORKSPACE,terminal.work.reservationId,terminal.work.renderJobId,
+        terminal.target.daily_plan_slot_id,terminal.target.attempt,terminal.target.work_handoff_digest,
+        "ingest_asset",ingestCommandId,ingestCommandDigest,terminal.actor,60_000]);
+    assert.equal(ingestAcquire.rows[0]?.kind,"acquired");
+    const ingestPrefix=[ingestAcquire.rows[0].execution_id,ingestAcquire.rows[0].lease_token,
+      ingestAcquire.rows[0].fencing_token,ingestCommandDigest,terminal.actor,OWNER,WORKSPACE,
+      terminal.work.reservationId,terminal.work.renderJobId,terminal.target.daily_plan_slot_id,
+      terminal.target.attempt,terminal.target.work_handoff_digest];
+    const claimIngestSql=
+      "SELECT * FROM ai_media_worker_api.claim_exact_one_video_asset_ingest_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)";
+    const failIngestSql=
+      "SELECT * FROM ai_media_worker_api.record_exact_one_video_asset_ingest_failed_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)";
+    const completeIngestSql=
+      "SELECT * FROM ai_media_worker_api.record_exact_one_video_asset_ingest_completed_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)";
+    await assert.rejects(session.query(claimIngestSql,
+      [...ingestPrefix.slice(0,9),"26000000-0000-4000-8000-000000000020",...ingestPrefix.slice(10),
+        applied.rows[0].ingest_job_id,"exact-asset-worker",60_000]),
+    (error:unknown)=>typeof error==="object"&&error!==null&&"code" in error&&error.code==="42501");
+    const firstIngest=await session.query<Record<string,unknown>>(claimIngestSql,
+      [...ingestPrefix,applied.rows[0].ingest_job_id,"exact-asset-worker",60_000]);
+    assert.equal(firstIngest.rows[0]?.claim_outcome,"claimed");assertIdentity(firstIngest.rows[0],{
+      ...terminal,commandDigest:ingestCommandDigest,acquired:ingestAcquire.rows[0],
+    });
+    const retryAt=new Date(Date.now()-1_000).toISOString();
+    const failureTail=[applied.rows[0].ingest_job_id,firstIngest.rows[0].lease_token,
+      firstIngest.rows[0].fencing_token,"source_unavailable",true,retryAt];
+    const failed=await session.query<Record<string,unknown>>(failIngestSql,[...ingestPrefix,...failureTail]);
+    assert.equal(failed.rows[0]?.applied,true);assert.equal(failed.rows[0]?.state,"retry_wait");
+    const failedReplay=await session.query<Record<string,unknown>>(failIngestSql,[...ingestPrefix,...failureTail]);
+    assert.equal(failedReplay.rows[0]?.applied,true);assert.equal(failedReplay.rows[0]?.state,"retry_wait");
+    const reclaimedIngest=await session.query<Record<string,unknown>>(claimIngestSql,
+      [...ingestPrefix,applied.rows[0].ingest_job_id,"exact-asset-worker",60_000]);
+    assert.equal(reclaimedIngest.rows[0]?.claim_outcome,"claimed");
+    assert.equal(reclaimedIngest.rows[0]?.fencing_token,"2");
+    const objectKey=`tenant/${OWNER}/${terminal.work.renderJobId}/video.mp4`,sha="a".repeat(64);
+    const staleComplete=await session.query<Record<string,unknown>>(completeIngestSql,
+      [...ingestPrefix,applied.rows[0].ingest_job_id,firstIngest.rows[0].lease_token,
+        firstIngest.rows[0].fencing_token,objectKey,sha,12345]);
+    assert.equal(staleComplete.rows[0]?.applied,false);
+    const completionTail=[applied.rows[0].ingest_job_id,reclaimedIngest.rows[0].lease_token,
+      reclaimedIngest.rows[0].fencing_token,objectKey,sha,12345];
+    const completedIngest=await session.query<Record<string,unknown>>(completeIngestSql,
+      [...ingestPrefix,...completionTail]);
+    assert.equal(completedIngest.rows[0]?.applied,true);
+    const completedReplay=await session.query<Record<string,unknown>>(completeIngestSql,
+      [...ingestPrefix,...completionTail]);
+    assert.equal(completedReplay.rows[0]?.applied,true);
+    const ingestRunComplete=await session.query<{applied:boolean}>(completeRunSql,
+      [ids.exactIngestActionCapability,OWNER,WORKSPACE,ingestAcquire.rows[0].execution_id,
+        ingestCommandId,ingestCommandDigest,ingestAcquire.rows[0].fencing_token,
+        ingestAcquire.rows[0].lease_token,terminal.work.reservationId,terminal.work.renderJobId,
+        terminal.target.daily_plan_slot_id,terminal.target.attempt,terminal.target.work_handoff_digest,
+        "ingest_asset","asset_completed_unlinked"]);
+    assert.deepEqual(ingestRunComplete.rows,[{applied:true}]);
+
+    const linkAcquire=await session.query<Record<string,unknown>>(acquireRunSql,
+      [ids.exactLinkActionCapability,OWNER,WORKSPACE,terminal.work.reservationId,terminal.work.renderJobId,
+        terminal.target.daily_plan_slot_id,terminal.target.attempt,terminal.target.work_handoff_digest,
+        "link_asset",linkCommandId,linkCommandDigest,terminal.actor,60_000]);
+    assert.equal(linkAcquire.rows[0]?.kind,"acquired");
+    const linkPrefix=[linkAcquire.rows[0].execution_id,linkAcquire.rows[0].lease_token,
+      linkAcquire.rows[0].fencing_token,linkCommandDigest,terminal.actor,OWNER,WORKSPACE,
+      terminal.work.reservationId,terminal.work.renderJobId,terminal.target.daily_plan_slot_id,
+      terminal.target.attempt,terminal.target.work_handoff_digest];
+    const loadLinkSql=
+      "SELECT * FROM ai_media_worker_api.load_exact_one_video_asset_link_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)";
+    const recordLinkSql=
+      "SELECT * FROM ai_media_worker_api.record_exact_one_video_asset_linked_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)";
+    const linkLoad=await session.query<Record<string,unknown>>(loadLinkSql,
+      [...linkPrefix,applied.rows[0].ingest_job_id]);
+    assert.equal(linkLoad.rows[0]?.link_state,"completed_unlinked");
+    assert.equal(linkLoad.rows[0]?.owned_object_key,objectKey);
+    assert.equal(linkLoad.rows[0]?.sha256,sha);
+    await adminPool.query(`INSERT INTO public.ai_media_assets(
+      id,owner_user_id,workspace_id,kind,checksum,deleted_at,status,storage_key,storage_provider,
+      mime_type,byte_size,render_job_id)
+      VALUES($1,$2,$3,'video',$4,NULL,'ready',$5,'owned-s3','video/mp4',$6,$7)`,
+    [ids.exactMediaAsset,OWNER,WORKSPACE,sha,objectKey,12345,terminal.work.renderJobId]);
+    const staleLink=await session.query<Record<string,unknown>>(recordLinkSql,
+      [...linkPrefix,applied.rows[0].ingest_job_id,
+        Number(linkLoad.rows[0].ingest_fencing_token)-1,objectKey,sha,ids.exactMediaAsset]);
+    assert.equal(staleLink.rows[0]?.applied,false);
+    const linked=await session.query<Record<string,unknown>>(recordLinkSql,
+      [...linkPrefix,applied.rows[0].ingest_job_id,linkLoad.rows[0].ingest_fencing_token,
+        objectKey,sha,ids.exactMediaAsset]);
+    assert.equal(linked.rows[0]?.applied,true);assert.equal(linked.rows[0]?.render_completed,true);
+    const linkedReplay=await session.query<Record<string,unknown>>(recordLinkSql,
+      [...linkPrefix,applied.rows[0].ingest_job_id,linkLoad.rows[0].ingest_fencing_token,
+        objectKey,sha,ids.exactMediaAsset]);
+    assert.equal(linkedReplay.rows[0]?.applied,true);
+    const linkRunComplete=await session.query<{applied:boolean}>(completeRunSql,
+      [ids.exactLinkActionCapability,OWNER,WORKSPACE,linkAcquire.rows[0].execution_id,
+        linkCommandId,linkCommandDigest,linkAcquire.rows[0].fencing_token,linkAcquire.rows[0].lease_token,
+        terminal.work.reservationId,terminal.work.renderJobId,terminal.target.daily_plan_slot_id,
+        terminal.target.attempt,terminal.target.work_handoff_digest,"link_asset","asset_linked"]);
+    assert.deepEqual(linkRunComplete.rows,[{applied:true}]);
+    const linkedProjection=await adminPool.query<{ingest_asset:string;output_asset:string;stage:string;
+      status:string;progress:number;publishing_surface_absent:boolean}>(`SELECT
+      ingest.media_asset_id::text ingest_asset,render.output_media_asset_id::text output_asset,
+      render.stage,render.status,render.progress,
+      to_regclass('public.ai_media_publishing_jobs') IS NULL publishing_surface_absent
+      FROM ai_media_asset_ingest_jobs ingest JOIN ai_media_render_jobs render ON render.id=ingest.render_job_id
+      WHERE ingest.id=$1`,[applied.rows[0].ingest_job_id]);
+    assert.deepEqual(linkedProjection.rows,[{ingest_asset:ids.exactMediaAsset,output_asset:ids.exactMediaAsset,
+      stage:"completed",status:"completed",progress:100,publishing_surface_absent:true}]);
+    const pr35RollbackClient=await adminPool.connect();try{
+      await assert.rejects(pr35RollbackClient.query(pr35Rollback),
+        /rollback preserves exact one-video asset ingest and link evidence/u);
+      await pr35RollbackClient.query("ROLLBACK");
+    }finally{pr35RollbackClient.release();}
     const rollbackClient=await adminPool.connect();try{
       await assert.rejects(rollbackClient.query(pr34Rollback),
         /rollback preserves exact one-video reconciliation and terminal evidence/u);
