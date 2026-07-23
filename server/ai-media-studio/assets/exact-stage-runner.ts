@@ -120,8 +120,9 @@ export class ExactAssetStageRunner {
       workerId: this.options.workerId,
       leaseDurationMs: this.options.leaseDurationMs,
     });
-    if (claimed.kind === "idle") return exactResult(context, "idle");
-    if (claimed.kind === "dead_letter") return exactResult(context, "dead_letter");
+    if (claimed.kind !== "claimed") {
+      return exactResult(context, claimed.kind === "idle" ? "idle" : "dead_letter");
+    }
     return this.processClaimedIngest(context, claimed.claim);
   }
 
