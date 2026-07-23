@@ -5,8 +5,11 @@ import { PassThrough } from "node:stream";
 import test from "node:test";
 import {
   BLACKROOM_FACEBOOK_MAIN_URL,
+  BLACKROOM_YOUTUBE_CHANNEL_HANDLE,
+  BLACKROOM_YOUTUBE_CHANNEL_URL,
   blackRoomMetricoolNetworks,
   buildBlackRoomFacebookCaption,
+  buildBlackRoomYouTubeCaption,
   buildMetricoolPayload,
   buildMetricoolFacebookPayload,
   buildMetricoolYouTubePayload,
@@ -77,7 +80,7 @@ test("always supplies a bounded TikTok title without leaking links", () => {
   assert.equal(payload.tiktokData.title.includes("https://"), false);
 });
 
-test("builds a separate Facebook payload with a bilingual main-page funnel CTA", () => {
+test("builds a Facebook payload with clickable full-video and channel links", () => {
   const english = buildMetricoolFacebookPayload(input, "media-123");
   const spanish = buildMetricoolFacebookPayload({ ...input, language: "es" }, "media-123");
   assert.deepEqual(english.providers, [{ network: "facebook" }]);
@@ -86,11 +89,22 @@ test("builds a separate Facebook payload with a bilingual main-page funnel CTA",
   assert.equal(buildMetricoolFacebookPayload({ ...input, durationSeconds: 120 }, "media-123").facebookData.type, "POST");
   assert.equal(buildMetricoolFacebookPayload({ ...input, videoFormat: "horizontal" }, "media-123").facebookData.type, "POST");
   assert.match(english.text, /Watch the full set on YouTube: https:\/\/www\.youtube\.com\/watch\?v=abc123xyz01/);
+  assert.ok(english.text.includes(`Official BlackRoom channel: ${BLACKROOM_YOUTUBE_CHANNEL_URL}`));
   assert.match(english.text, /Follow the full BlackRoom experience/);
   assert.match(spanish.text, /Mira el set completo en YouTube/);
+  assert.ok(spanish.text.includes(`Canal oficial de BlackRoom: ${BLACKROOM_YOUTUBE_CHANNEL_URL}`));
   assert.match(spanish.text, /Sigue la experiencia completa de BlackRoom/);
   assert.ok(english.text.endsWith(BLACKROOM_FACEBOOK_MAIN_URL));
   assert.equal(buildMetricoolTikTokPayload(input, "media-123").text.includes(BLACKROOM_FACEBOOK_MAIN_URL), false);
+});
+
+test("adds the clickable BlackRoom handle and visible source URL to YouTube Shorts", () => {
+  const english = buildMetricoolYouTubeShortPayload(input, "media-123");
+  const spanish = buildMetricoolYouTubeShortPayload({ ...input, language: "es" }, "media-123");
+  assert.ok(english.text.includes(`BlackRoom channel: ${BLACKROOM_YOUTUBE_CHANNEL_HANDLE}`));
+  assert.match(english.text, /Full set: https:\/\/www\.youtube\.com\/watch\?v=abc123xyz01/);
+  assert.ok(spanish.text.includes(`Canal BlackRoom: ${BLACKROOM_YOUTUBE_CHANNEL_HANDLE}`));
+  assert.match(spanish.text, /Set completo: https:\/\/www\.youtube\.com\/watch\?v=abc123xyz01/);
 });
 
 test("publishes to YouTube only when the clip is eligible as a Short", () => {
@@ -234,7 +248,7 @@ test("schedules through Metricool's official MCP, then verifies before returning
       const verifications = calls.filter((call) => call.method === "GET" && call.url.includes("/scheduler/posts"));
       const tiktok = { id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } };
       const facebook = { id: 992, text: buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId), publicationDate: { dateTime: input.publicationDateTime } };
-      const youtube = { id: 993, text: `${input.caption}\n\nFull set: https://www.youtube.com/watch?v=${input.sourceVideoId}\n#Shorts #BlackRoom`, publicationDate: { dateTime: input.publicationDateTime } };
+      const youtube = { id: 993, text: buildBlackRoomYouTubeCaption(input), publicationDate: { dateTime: input.publicationDateTime } };
       return Response.json({ data: verifications.length === 1 ? [] : verifications.length === 2 ? [tiktok] : verifications.length === 3 ? [tiktok, facebook] : [tiktok, facebook, youtube] });
     }
     if (method === "POST") return calls.filter((call) => call.method === "POST").length === 1 ? mcpSuccessSse() : mcpSuccess();
@@ -285,7 +299,7 @@ test("retries a transient Metricool media-normalization failure before schedulin
     const posts = mcpAttempts >= 4 ? [
       { id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } },
       { id: 992, text: buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId), publicationDate: { dateTime: input.publicationDateTime } },
-      { id: 993, text: `${input.caption}\n\nFull set: https://www.youtube.com/watch?v=${input.sourceVideoId}\n#Shorts #BlackRoom`, publicationDate: { dateTime: input.publicationDateTime } },
+      { id: 993, text: buildBlackRoomYouTubeCaption(input), publicationDate: { dateTime: input.publicationDateTime } },
     ] : mcpAttempts >= 3 ? [
       { id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } },
       { id: 992, text: buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId), publicationDate: { dateTime: input.publicationDateTime } },
@@ -311,7 +325,7 @@ test("returns an existing exact post before uploading media or creating a duplic
     return Response.json({ data: [
       { id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } },
       { id: 992, text: buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId), publicationDate: { dateTime: input.publicationDateTime } },
-      { id: 993, text: `${input.caption}\n\nFull set: https://www.youtube.com/watch?v=${input.sourceVideoId}\n#Shorts #BlackRoom`, publicationDate: { dateTime: input.publicationDateTime } },
+      { id: 993, text: buildBlackRoomYouTubeCaption(input), publicationDate: { dateTime: input.publicationDateTime } },
     ] });
   };
   const receipt = await scheduleBlackRoomMetricoolPost(input, {
@@ -327,7 +341,7 @@ test("retries only the missing Facebook post after TikTok was already confirmed"
   const calls: Array<{ method: string; body?: any }> = [];
   const tiktok = { id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } };
   const facebook = { id: 992, text: buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId), publicationDate: { dateTime: input.publicationDateTime } };
-  const youtube = { id: 993, text: `${input.caption}\n\nFull set: https://www.youtube.com/watch?v=${input.sourceVideoId}\n#Shorts #BlackRoom`, publicationDate: { dateTime: input.publicationDateTime } };
+  const youtube = { id: 993, text: buildBlackRoomYouTubeCaption(input), publicationDate: { dateTime: input.publicationDateTime } };
   const mockFetch = async (url: string | URL | Request, init: RequestInit = {}) => {
     const method = init.method || "GET";
     calls.push({ method, body: init.body ? JSON.parse(String(init.body)) : undefined });
