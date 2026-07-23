@@ -1,0 +1,85 @@
+name: AI Media Studio CI
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ai-media-studio-ci.yml"
+      - "client/src/features/ai-media-studio/**"
+      - "client/src/pages/ai-media-studio*.tsx"
+      - "docs/ai-media-studio/**"
+      - "server/ai-media-studio/**"
+      - "script/ai-media-studio-ci*"
+      - "shared/ai-media-studio-*.ts"
+      - "shared/models/ai-media-studio-db.ts"
+      - "tests/ai-media-studio-*.test.ts"
+      - "migrations/ai-media-studio/**"
+      - "package.json"
+      - "package-lock.json"
+      - "tsconfig.json"
+      - "vite.config.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-media-studio-ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: Typecheck, offline tests, and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: "true"
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+        timeout-minutes: 8
+
+      - name: Typecheck
+        run: npm run check
+        timeout-minutes: 5
+
+      - name: Run offline AI Media Studio contract and domain tests
+        run: >-
+          node --import tsx --test
+          tests/ai-media-studio-agent-control.test.ts
+          tests/ai-media-studio-canonical-roster-persona.test.ts
+          tests/ai-media-studio-core-schema.test.ts
+          tests/ai-media-studio-heygen-roster-drizzle.test.ts
+          tests/ai-media-studio-launch-plan-profile.test.ts
+          tests/ai-media-studio-production-batch-contracts.test.ts
+          tests/ai-media-studio-reusable-script-assets.test.ts
+          tests/ai-media-studio-sandbox-readiness-contracts.test.ts
+          tests/ai-media-studio-source-to-batch-contracts.test.ts
+          tests/ai-media-studio-strict-money-action-request.test.ts
+        timeout-minutes: 5
+
+      - name: Build production bundle
+        run: npm run build
+        timeout-minutes: 8
+
+      - name: Check patch whitespace
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git diff --check "$PR_BASE_SHA...$PR_HEAD_SHA"
+          else
+            git show --check --format= HEAD
+          fi
