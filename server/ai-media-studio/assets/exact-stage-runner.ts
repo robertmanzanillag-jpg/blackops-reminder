@@ -134,16 +134,17 @@ export class ExactAssetStageRunner {
     if (claim.linkState === "linked") return exactResult(context, "asset_linked");
     if (!this.options.hooks?.onCompleted) return exactResult(context, "asset_completed_unlinked");
     const job = completedJobFromLinkClaim(claim);
+    let materialized: void | { mediaAssetId: string };
     try {
-      const materialized = await this.options.hooks.onCompleted(job);
-      if (!materialized?.mediaAssetId) return exactResult(context, "asset_completed_unlinked");
-      const applied = await this.options.repository.recordExactLink(context, claim, {
-        mediaAssetId: materialized.mediaAssetId,
-      });
-      return exactResult(context, applied ? "asset_linked" : "asset_completed_unlinked");
+      materialized = await this.options.hooks.onCompleted(job);
     } catch {
       return exactResult(context, "asset_completed_unlinked");
     }
+    if (!materialized?.mediaAssetId) return exactResult(context, "asset_completed_unlinked");
+    const applied = await this.options.repository.recordExactLink(context, claim, {
+      mediaAssetId: materialized.mediaAssetId,
+    });
+    return exactResult(context, applied ? "asset_linked" : "asset_completed_unlinked");
   }
 
   private async processClaimedIngest(
@@ -302,8 +303,8 @@ function completedJobFromLinkClaim(claim: ExactAssetLinkClaim): AssetIngestJob {
     leaseRecoveries: 0,
     maxLeaseRecoveries: 1,
     availableAtMs: 0,
-    createdAtMs: 0,
-    updatedAtMs: 0,
+    createdAtMs: new Date(claim.createdAt).getTime(),
+    updatedAtMs: new Date(claim.updatedAt).getTime(),
     ownedObjectKey: claim.ownedObjectKey,
     sha256: claim.sha256,
     sizeBytes: claim.sizeBytes,

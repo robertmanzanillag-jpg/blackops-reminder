@@ -159,6 +159,7 @@ test("link is stale-load fenced and atomically verifies canonical asset plus com
   assert.match(load, /ingest\.id=p_ingest_job_id/u);
   assert.match(load, /ingest\.state='completed'/u);
   assert.match(load, /ingest\.fencing_token::bigint/u);
+  assert.match(load, /ingest\.created_at,ingest\.updated_at/u);
   for (const predicate of [
     "asset.owner_user_id=ingest.owner_user_id",
     "asset.workspace_id=ingest.workspace_id",

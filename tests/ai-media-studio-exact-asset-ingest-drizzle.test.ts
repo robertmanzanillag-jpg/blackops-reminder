@@ -135,6 +135,8 @@ function linkRow(overrides: Record<string, unknown> = {}) {
     size_bytes: "4096",
     expected_mime_type: "video/mp4",
     ingest_fencing_token: "4",
+    ingest_created_at: new Date("2026-07-23T19:55:00.000Z"),
+    ingest_updated_at: new Date("2026-07-23T20:00:00.000Z"),
     ...overrides,
   });
 }
@@ -193,6 +195,8 @@ test("exact ingest and link claims bind explicit jobs plus the immutable full co
   assert.equal(link.ingestJobId, ids.ingest);
   assert.equal(link.ingestFencingToken, 4n);
   assert.equal(link.sizeBytes, 4096);
+  assert.equal(link.createdAt, "2026-07-23T19:55:00.000Z");
+  assert.equal(link.updatedAt, "2026-07-23T20:00:00.000Z");
   assert.equal(Object.isFrozen(ingest), true);
   assert.equal(Object.isFrozen(link), true);
   assert.equal(h.transactions(), 2);

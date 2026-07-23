@@ -120,6 +120,8 @@ function linkClaim(overrides: Partial<ExactAssetLinkClaim> = {}): ExactAssetLink
     sha256: sha("c"),
     sizeBytes: 4096,
     ingestFencingToken: 4n,
+    createdAt: "2026-07-23T19:55:00.000Z",
+    updatedAt: "2026-07-23T20:00:00.000Z",
     ...overrides,
   });
 }
@@ -152,6 +154,7 @@ class Repository implements ExactAssetStageRepository {
   failResult: ExactAssetIngestFailureResult = { applied: true, state: "retry_wait" };
   linkClaim: ExactAssetLinkClaim | undefined = linkClaim();
   linkApplied = true;
+  linkError: Error | undefined;
   async claimExactIngest(
     context: ExactOneVideoStageContext,
     input: { ingestJobId: string; workerId: string; leaseDurationMs: number },
@@ -185,6 +188,7 @@ class Repository implements ExactAssetStageRepository {
     input: { mediaAssetId: string },
   ) {
     this.links.push({ context, claim: exactClaim, mediaAssetId: input.mediaAssetId });
+    if (this.linkError) throw this.linkError;
     return this.linkApplied;
   }
 }
@@ -382,6 +386,8 @@ test("link stage loads exactly one target, materializes canonical media, and rec
   assert.equal((hookJob as { id?: string; state?: string; ownedObjectKey?: string } | undefined)?.state, "completed");
   assert.equal((hookJob as { id?: string; state?: string; ownedObjectKey?: string } | undefined)?.ownedObjectKey,
     "ai-media-studio/workspace-1/owner-1/video.mp4");
+  assert.equal((hookJob as { updatedAtMs?: number } | undefined)?.updatedAtMs,
+    Date.parse("2026-07-23T20:00:00.000Z"));
   assert.equal(h.repository.claims.length, 0);
 });
 
@@ -398,6 +404,13 @@ test("link stage keeps completed-unlinked state when hook is absent, throws, or 
   stale.repository.linkApplied = false;
   assert.equal((await stale.runner.linkAssetExact(linkContext)).outcome, "asset_completed_unlinked");
   assert.equal(stale.repository.links.length, 1);
+});
+
+test("link repository failures propagate instead of sealing a normal unlinked outcome", async () => {
+  const h = runner({ hooks: { onCompleted() { return { mediaAssetId: ids.media }; } } });
+  h.repository.linkError = new Error("commit failed");
+  await assert.rejects(h.runner.linkAssetExact(linkContext), /commit failed/u);
+  assert.equal(h.repository.links.length, 1);
 });
 
 test("runner rejects unsafe source policies before any target or repository call", () => {
