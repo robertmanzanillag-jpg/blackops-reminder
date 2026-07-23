@@ -312,7 +312,7 @@ test("artifact binding is revalidated immediately before provider GET", async ()
     renderJobId: ids.render,
     remoteArtifactRef: artifactRef(),
     expectedMimeType: "video/mp4",
-  }), /no longer current/u);
+  }), /provider credential is unavailable/u);
   assert.equal(bindingCalls, 2);
   assert.equal(providerCalls, 0);
 });
