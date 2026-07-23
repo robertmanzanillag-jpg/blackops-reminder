@@ -56,6 +56,8 @@ export interface ExactAssetLinkClaim {
   readonly sha256: string;
   readonly sizeBytes: number;
   readonly ingestFencingToken: bigint;
+  readonly createdAt: string;
+  readonly updatedAt: string;
 }
 
 export interface ExactAssetIngestFailureResult {
@@ -459,6 +461,8 @@ function linkClaimFrom(row: Record<string, unknown>): ExactAssetLinkClaim {
       row.ingest_fencing_token,
       "ingest_fencing_token",
     ),
+    createdAt: iso(row.ingest_created_at, "ingest_created_at"),
+    updatedAt: iso(row.ingest_updated_at, "ingest_updated_at"),
   };
   return claim;
 }

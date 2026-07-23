@@ -327,7 +327,8 @@ CREATE FUNCTION ai_media_worker_api.load_exact_one_video_asset_link_v1(
   owner_user_id text,workspace_id text,budget_reservation_id uuid,render_job_id uuid,
   daily_plan_slot_id uuid,slot_attempt integer,work_handoff_digest text,
   ingest_job_id uuid,link_state text,media_asset_id uuid,owned_object_key text,sha256 text,
-  size_bytes bigint,expected_mime_type text,ingest_fencing_token bigint
+  size_bytes bigint,expected_mime_type text,ingest_fencing_token bigint,
+  ingest_created_at timestamptz,ingest_updated_at timestamptz
 ) LANGUAGE plpgsql SECURITY DEFINER SET search_path=pg_catalog SET row_security=on AS $function$
 DECLARE context record;
 BEGIN
@@ -340,7 +341,8 @@ BEGIN
     p_slot_attempt,p_work_handoff_digest,ingest.id,
     CASE WHEN ingest.media_asset_id IS NULL THEN 'completed_unlinked' ELSE 'linked' END::text,
     ingest.media_asset_id,ingest.owned_object_key,ingest.sha256,ingest.size_bytes,
-    ingest.expected_mime_type,ingest.fencing_token::bigint
+    ingest.expected_mime_type,ingest.fencing_token::bigint,
+    ingest.created_at,ingest.updated_at
   FROM public.ai_media_asset_ingest_jobs ingest
   JOIN public.ai_media_render_jobs render
     ON render.id=ingest.render_job_id AND render.owner_user_id=ingest.owner_user_id
