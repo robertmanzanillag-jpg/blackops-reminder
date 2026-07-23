@@ -162,12 +162,12 @@ BEGIN
 
   IF job.state IN ('queued','retry_wait') AND job.available_at<=sampled_at
     AND job.dead_letter_at IS NULL AND job.attempts<job.max_attempts THEN
-    UPDATE public.ai_media_asset_ingest_jobs SET state='leased',attempts=attempts+1,
+    UPDATE public.ai_media_asset_ingest_jobs AS target SET state='leased',attempts=target.attempts+1,
       lease_owner=p_worker_id,lease_token=new_lease,
       lease_expires_at=sampled_at+(p_lease_ms::text||' milliseconds')::interval,
-      fencing_token=fencing_token+1,updated_at=sampled_at
-    WHERE id=job.id AND state IN ('queued','retry_wait') AND available_at<=sampled_at
-      AND dead_letter_at IS NULL
+      fencing_token=target.fencing_token+1,updated_at=sampled_at
+    WHERE target.id=job.id AND target.state IN ('queued','retry_wait')
+      AND target.available_at<=sampled_at AND target.dead_letter_at IS NULL
     RETURNING * INTO job;
     RETURN QUERY SELECT p_execution_id,p_run_lease_token,p_run_fencing_token,p_command_digest,p_actor_user_id,
       p_owner_user_id,p_workspace_id,p_budget_reservation_id,p_render_job_id,p_daily_plan_slot_id,
@@ -295,14 +295,15 @@ BEGIN
       job.id,job.state,job.error_code,CASE WHEN job.state='retry_wait' THEN job.available_at END;
     RETURN;
   END IF;
-  UPDATE public.ai_media_asset_ingest_jobs SET state=next_state,available_at=p_retry_at,
+  UPDATE public.ai_media_asset_ingest_jobs AS target SET state=next_state,available_at=p_retry_at,
     error_code=p_error_code,error_message=NULL,
     dead_letter_at=CASE WHEN next_state='dead_letter' THEN sampled_at ELSE NULL END,
     lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=sampled_at
-  WHERE id=p_ingest_job_id AND owner_user_id=p_owner_user_id AND workspace_id=p_workspace_id
-    AND render_job_id=p_render_job_id AND state='leased'
-    AND lease_token=p_ingest_lease_token AND fencing_token=p_ingest_fencing_token
-    AND lease_expires_at>sampled_at RETURNING * INTO updated_job;
+  WHERE target.id=p_ingest_job_id AND target.owner_user_id=p_owner_user_id
+    AND target.workspace_id=p_workspace_id AND target.render_job_id=p_render_job_id
+    AND target.state='leased' AND target.lease_token=p_ingest_lease_token
+    AND target.fencing_token=p_ingest_fencing_token
+    AND target.lease_expires_at>sampled_at RETURNING * INTO updated_job;
   IF FOUND THEN job=updated_job;did_apply=true; END IF;
   RETURN QUERY SELECT p_execution_id,p_run_lease_token,p_run_fencing_token,p_command_digest,p_actor_user_id,
     p_owner_user_id,p_workspace_id,p_budget_reservation_id,p_render_job_id,p_daily_plan_slot_id,
@@ -398,9 +399,11 @@ BEGIN
       p_slot_attempt,p_work_handoff_digest,false,p_ingest_job_id,NULL::uuid,false;
     RETURN;
   END IF;
-  UPDATE public.ai_media_asset_ingest_jobs SET media_asset_id=p_media_asset_id,updated_at=sampled_at
-  WHERE id=job.id AND (media_asset_id IS NULL OR media_asset_id=p_media_asset_id)
-  RETURNING id INTO changed;
+  UPDATE public.ai_media_asset_ingest_jobs AS target
+  SET media_asset_id=p_media_asset_id,updated_at=sampled_at
+  WHERE target.id=job.id
+    AND (target.media_asset_id IS NULL OR target.media_asset_id=p_media_asset_id)
+  RETURNING target.id INTO changed;
   IF changed IS NULL THEN
     RETURN QUERY SELECT p_execution_id,p_run_lease_token,p_run_fencing_token,p_command_digest,p_actor_user_id,
       p_owner_user_id,p_workspace_id,p_budget_reservation_id,p_render_job_id,p_daily_plan_slot_id,
