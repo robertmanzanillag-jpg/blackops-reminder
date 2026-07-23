@@ -7,7 +7,7 @@ channel = "stable-24_05"
 
 [deployment]
 deploymentTarget = "vm"
-build = ["npm", "run", "build"]
+build = ["npm", "run", "deploy:build"]
 run = ["npm", "run", "start"]
 
 [[ports]]
