@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-07-23T05:56:45.970Z
-Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-artifact-binding-bootstrap`
+Generated: 2026-07-23T06:43:48.503Z
+Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-one-video-run-once-executor`
 Package: `rest-express`
 
 ## Guardrails
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 983 | 829 | 3703 | 508 | 16389 |
+| 985 | 831 | 3711 | 508 | 16425 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,8 +29,8 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 268 | 256 | test:268 |
-| `server/ai-media-studio` | 204 | 183 | server:204 |
+| `tests` | 269 | 257 | test:269 |
+| `server/ai-media-studio` | 205 | 184 | server:205 |
 | `client/src` | 158 | 156 | ui-component:55, other:48, client-page:24, client-component:21 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 48 | 46 | script:48 |
@@ -163,6 +163,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-one-video-held-admission-routes.test.ts`
 - `tests/ai-media-studio-one-video-held-admission-snapshot-repository.test.ts`
 - `tests/ai-media-studio-one-video-held-admission-ui.test.ts`
+- `tests/ai-media-studio-one-video-run-once-executor.test.ts`
 - `tests/ai-media-studio-operations-client.test.ts`
 - `tests/ai-media-studio-operations-drizzle.test.ts`
 - `tests/ai-media-studio-operations-http.test.ts`
