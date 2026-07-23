@@ -511,11 +511,14 @@ integrationTest("pending PR32 exact fence is table-blind, concurrency-one, repla
   [ids.exactRunCapability,EXACT_RUN_LOGIN,OWNER,WORKSPACE,work.reservationId,work.renderJobId,
     target.daily_plan_slot_id,target.attempt,target.work_handoff_digest,commandId,commandDigest,digest("8"),
     ids.exactUncertainCapability,uncertainCommandId,uncertainCommandDigest,digest("9")]);
+  const tableAccess=await adminPool.query<{subject:string;allowed:boolean}>(`SELECT subject,
+    has_table_privilege(subject,'public.ai_media_exact_one_video_run_fences','SELECT,INSERT,UPDATE,DELETE') allowed
+    FROM unnest($1::text[]) WITH ORDINALITY subjects(subject,ordinal) ORDER BY ordinal`,[[EXACT_RUN_LOGIN,EXACT_RUN_ROLE]]);
+  assert.deepEqual(tableAccess.rows,[
+    {subject:EXACT_RUN_LOGIN,allowed:false},{subject:EXACT_RUN_ROLE,allowed:false},
+  ]);
   const session=new RoleSession(EXACT_RUN_LOGIN,EXACT_RUN_ROLE);await session.connect();
   try{
-    const tableAccess=await session.query<{allowed:boolean}>(`SELECT
-      has_table_privilege(current_user,'public.ai_media_exact_one_video_run_fences','SELECT,INSERT,UPDATE,DELETE') allowed`);
-    assert.equal(tableAccess.rows[0].allowed,false);
     const acquireParams=[ids.exactRunCapability,OWNER,WORKSPACE,work.reservationId,work.renderJobId,
       target.daily_plan_slot_id,target.attempt,target.work_handoff_digest,"activate_and_submit",
       commandId,commandDigest,"robert",1_000];
