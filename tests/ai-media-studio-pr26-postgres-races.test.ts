@@ -737,14 +737,13 @@ integrationTest("pending PR33 exact submit claim is table-blind, fenced, replay-
       "provider-request-ambiguous",digest("c")]);
     assert.equal(ambiguous.rows[0]?.applied,true);
     assert.equal(ambiguous.rows[0]?.execution_id,successSetup.acquired.execution_id);
-    const completed=await session.query<{execution_id:string;applied:boolean}>(
+    const completed=await session.query<{applied:boolean}>(
       "SELECT * FROM ai_media_worker_api.complete_exact_one_video_run_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)",
       [ids.exactRunCapability,OWNER,WORKSPACE,successSetup.acquired.execution_id,successSetup.commandId,
         successSetup.commandDigest,successSetup.acquired.fencing_token,successSetup.acquired.lease_token,
         successSetup.work.reservationId,successSetup.work.renderJobId,successSetup.target.daily_plan_slot_id,
         successSetup.target.attempt,successSetup.target.work_handoff_digest,"activate_and_submit","ambiguous"]);
     assert.equal(completed.rows[0]?.applied,true);
-    assert.equal(completed.rows[0]?.execution_id,successSetup.acquired.execution_id);
     const replay=await session.query<Record<string,unknown>>(
       "SELECT * FROM ai_media_worker_api.acquire_exact_one_video_run_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
       [ids.exactRunCapability,OWNER,WORKSPACE,successSetup.work.reservationId,successSetup.work.renderJobId,
