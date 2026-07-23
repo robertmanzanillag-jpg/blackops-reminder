@@ -66,6 +66,7 @@ const forwards=["20260721_pr19_daily_admission_forward.sql","20260721_pr20_launc
   "20260721_pr24_held_activation_forward.sql","20260721_pr25_admitted_worker_forward.sql",
   "20260721_pr26_db_capability_forward.sql"].map(migration);
 const pr26Rollback=migration("20260721_pr26_db_capability_rollback.sql");
+const pr4Forward=migration("20260720_pr4_assets_forward.sql");
 const pr27Forward=migration("20260721_pr27_heygen_terminal_forward.sql");
 const pr32Forward=readFileSync(new URL(
   "../migrations/ai-media-studio/pending/20260723_pr32_exact_one_video_run_fence_forward.sql",import.meta.url,
@@ -481,6 +482,14 @@ integrationTest("pending PR32 exact fence is table-blind, concurrency-one, repla
     END IF;
   END $roles$`);
   await adminPool.query(`GRANT ${EXACT_RUN_ROLE} TO ${EXACT_RUN_LOGIN}`);
+  await adminPool.query(`CREATE TABLE public.ai_media_assets(
+    id uuid PRIMARY KEY,owner_user_id text NOT NULL,workspace_id text NOT NULL,kind text NOT NULL,
+    checksum text,deleted_at timestamptz);
+    ALTER TABLE public.ai_media_render_jobs ADD COLUMN output_url text,ADD COLUMN error_code text,
+      ADD COLUMN error_message text,ADD COLUMN completed_at timestamptz`);
+  await adminPool.query(pr4Forward);
+  await adminPool.query(`UPDATE public.ai_media_admitted_worker_capabilities
+    SET revoked_at=clock_timestamp() WHERE allowed_operations @> ARRAY['release_terminal_capacity']::text[]`);
   await adminPool.query(pr27Forward);
   const work=await createActivatedWork();
   await adminPool.query(pr32Forward);
