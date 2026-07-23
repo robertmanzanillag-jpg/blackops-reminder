@@ -337,6 +337,27 @@ test("returns an existing exact post before uploading media or creating a duplic
   assert.equal(calls.length, 1);
 });
 
+test("recognizes legacy Facebook and YouTube captions without creating duplicates", async () => {
+  const legacyFacebook = `${input.caption}\n\nWatch the full set on YouTube: https://www.youtube.com/watch?v=${input.sourceVideoId}\nFollow the full BlackRoom experience: ${BLACKROOM_FACEBOOK_MAIN_URL}`;
+  const legacyYoutube = `${input.caption}\n\nFull set: https://www.youtube.com/watch?v=${input.sourceVideoId}\n#Shorts #BlackRoom`;
+  const calls: string[] = [];
+  const mockFetch = async (url: string | URL | Request) => {
+    calls.push(String(url));
+    return Response.json({ data: [
+      { id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } },
+      { id: 992, text: legacyFacebook, publicationDate: { dateTime: input.publicationDateTime } },
+      { id: 993, text: legacyYoutube, publicationDate: { dateTime: input.publicationDateTime } },
+    ] });
+  };
+  const receipt = await scheduleBlackRoomMetricoolPost(input, {
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    fetch: mockFetch as typeof fetch,
+  });
+  assert.equal(receipt.metricoolId, "991");
+  assert.deepEqual(receipt.platformReceipts, { tiktok: "991", facebook: "992", youtube: "993" });
+  assert.equal(calls.length, 1);
+});
+
 test("retries only the missing Facebook post after TikTok was already confirmed", async () => {
   const calls: Array<{ method: string; body?: any }> = [];
   const tiktok = { id: 991, text: input.caption, publicationDate: { dateTime: input.publicationDateTime } };
