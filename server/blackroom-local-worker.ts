@@ -56,6 +56,7 @@ function isValidBlackRoomPublicationDateTime(value: string): boolean {
 export interface BlackRoomLedgerEntry {
   reservationId: string;
   jobId: string;
+  targetNetworks?: BlackRoomReceiptNetwork[];
   slot: string;
   videoId: string;
   dj: string;
@@ -79,15 +80,22 @@ export interface BlackRoomLedgerEntry {
 export interface BlackRoomWorkerLedger { version: 1; entries: BlackRoomLedgerEntry[] }
 
 export function requiredBlackRoomReceiptNetworks(
-  entry: Pick<BlackRoomLedgerEntry, "format" | "durationSeconds">,
+  entry: Pick<BlackRoomLedgerEntry, "format" | "durationSeconds" | "targetNetworks">,
 ): Array<"tiktok" | "facebook" | "youtube"> {
-  const networks: Array<"tiktok" | "facebook" | "youtube"> = ["tiktok", "facebook"];
-  if (entry.format === "vertical" && entry.durationSeconds >= 3 && entry.durationSeconds <= 178) networks.push("youtube");
-  return networks;
+  const eligible: Array<"tiktok" | "facebook" | "youtube"> = ["tiktok", "facebook"];
+  if (entry.format === "vertical" && entry.durationSeconds >= 3 && entry.durationSeconds <= 178) eligible.push("youtube");
+  if (entry.targetNetworks?.length) {
+    const requested = [...new Set(entry.targetNetworks)];
+    if (requested.some((network) => !eligible.includes(network))) {
+      throw new Error("BlackRoom target network is incompatible with the rendered clip");
+    }
+    return requested;
+  }
+  return eligible;
 }
 
 export function hasCompleteBlackRoomMetricoolReceipt(
-  entry: Pick<BlackRoomLedgerEntry, "format" | "durationSeconds" | "metricoolId">,
+  entry: Pick<BlackRoomLedgerEntry, "format" | "durationSeconds" | "targetNetworks" | "metricoolId">,
 ): boolean {
   const receipts = new Map<string, string>();
   for (const part of String(entry.metricoolId || "").split("|")) {

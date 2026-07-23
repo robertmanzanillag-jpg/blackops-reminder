@@ -21,6 +21,7 @@ import {
   isBlackRoomSourceSegmentRecorded,
   BLACKROOM_FFPROBE_SHOW_ENTRIES,
   type BlackRoomLocalWorkerState,
+  type BlackRoomLedgerEntry,
 } from "../server/blackroom-local-worker";
 import { BLACKROOM_QUEUE_PATH } from "../server/blackroom-daily-queue";
 
@@ -162,7 +163,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
   const queue = await readJson<any>(queuePath, {});
   if (queue.enabled !== true) return false;
   await recoverConfirmedCleanup();
-  const ledger = await readJson<any>(ledgerPath, { entries: [] });
+  const ledger = await readJson<{ entries: BlackRoomLedgerEntry[] }>(ledgerPath, { entries: [] });
   const entry = selectPublishableBlackRoomReservation(queue, ledger.entries || []);
   if (!entry) return false;
   await appendLog(`Preparando el clip ${entry.reservationId} para validación y publicación.`, "preparación");
@@ -245,17 +246,10 @@ async function publishOneReservedEntry(): Promise<boolean> {
     entry.networkReceipts[network] = networkId;
     await appendLog(`${network} confirmado por Metricool.`, network, "success");
   }
-  const tiktokId = String(entry.networkReceipts.tiktok || "");
-  const facebookId = String(entry.networkReceipts.facebook || "");
-  const youtubeId = String(entry.networkReceipts.youtube || "");
-  if (!tiktokId || !facebookId || (networks.includes("youtube") && !youtubeId)) {
+  if (networks.some((network) => !String(entry.networkReceipts[network] || "").trim())) {
     throw new Error("BlackRoom is missing one or more required Metricool receipts");
   }
-  const combinedMetricoolId = [
-    `tiktok:${tiktokId}`,
-    `facebook:${facebookId}`,
-    ...(networks.includes("youtube") ? [`youtube:${youtubeId}`] : []),
-  ].join("|");
+  const combinedMetricoolId = networks.map((network) => `${network}:${entry.networkReceipts[network]}`).join("|");
   const confirmedDestinations = networks.join(", ");
   await runNpm(["run", "blackroom:ledger", "--", "--confirm", "--reservation", entry.reservationId, "--metricool-id", combinedMetricoolId]);
   const postScheduleQueue = await readJson<any>(queuePath, {});

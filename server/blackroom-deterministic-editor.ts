@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import type { BlackRoomDailyJob, BlackRoomQueueState, BlackRoomExperimentDuration } from "./blackroom-daily-queue";
+import type { BlackRoomDailyJob, BlackRoomQueueState, BlackRoomExperimentDuration, BlackRoomTargetNetwork } from "./blackroom-daily-queue";
+import { BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS } from "./blackroom-growth-ceo";
 import type { BlackRoomLedgerEntry, BlackRoomWorkerLedger } from "./blackroom-local-worker";
 import type { BlackRoomCreativeStrategy } from "./blackroom-growth-ceo";
 
@@ -12,7 +13,7 @@ export interface BlackRoomEnergySample { timeSeconds: number; rmsDb: number }
 export interface BlackRoomEditPlan {
   jobId: string; slot: string; targetDate: string; videoId: string; videoUrl: string; title: string; dj: string;
   language: "en" | "es"; format: "vertical" | "horizontal"; durationSeconds: BlackRoomExperimentDuration;
-  windowStartSeconds: number; windowEndSeconds: number; caption: string; creativeStrategy: BlackRoomCreativeStrategy;
+  windowStartSeconds: number; windowEndSeconds: number; caption: string; creativeStrategy: BlackRoomCreativeStrategy; targetNetworks: BlackRoomTargetNetwork[];
 }
 
 export async function commitBlackRoomReservation(
@@ -50,9 +51,40 @@ function isActionableJob(job: BlackRoomDailyJob, now: Date): boolean {
     && (!job.notBefore || new Date(job.notBefore).getTime() <= now.getTime());
 }
 
-function chooseDuration(job: BlackRoomDailyJob, entries: BlackRoomLedgerEntry[], queue: BlackRoomQueueState): BlackRoomExperimentDuration {
+function distributedSlotSelected(index: number, total: number, target: number): boolean {
+  const bounded = Math.max(0, Math.min(total, Math.floor(target)));
+  return Math.floor((index + 1) * bounded / total) > Math.floor(index * bounded / total);
+}
+
+export function selectBlackRoomTargetNetworks(
+  job: BlackRoomDailyJob,
+  slot: BlackRoomDailyJob["slots"][number],
+  queue: BlackRoomQueueState,
+): BlackRoomTargetNetwork[] {
+  if (slot.networks?.length) return [...new Set(slot.networks)];
+  const slotIndex = Math.max(0, job.slots.findIndex((candidate) => candidate.localTime === slot.localTime));
+  const total = Math.max(1, job.slots.length);
+  const targets = { ...BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS, ...(queue.analytics?.networkDailyTargets || {}) };
+  const durations = job.requirements.durationsSeconds;
+  const youtubeCandidateIndexes = job.slots
+    .map((_, index) => ({ index, duration: durations[index % Math.max(1, durations.length)] }))
+    .filter((candidate) => Number(candidate.duration || 0) <= 120)
+    .map((candidate) => candidate.index);
+  const networks = (["tiktok", "facebook", "youtube"] as BlackRoomTargetNetwork[])
+    .filter((network) => {
+      const requested = Number(targets[network] || 0);
+      if (network !== "youtube") return distributedSlotSelected(slotIndex, total, requested);
+      const candidateIndex = youtubeCandidateIndexes.indexOf(slotIndex);
+      return candidateIndex >= 0
+        && distributedSlotSelected(candidateIndex, youtubeCandidateIndexes.length, requested);
+    });
+  return networks.length ? networks : ["facebook"];
+}
+
+function chooseDuration(job: BlackRoomDailyJob, entries: BlackRoomLedgerEntry[], queue: BlackRoomQueueState, targetNetworks: BlackRoomTargetNetwork[]): BlackRoomExperimentDuration {
   const allowed = job.requirements.durationsSeconds
-    .filter((duration): duration is BlackRoomExperimentDuration => [15, 30, 60, 120, 300, 600].includes(duration));
+    .filter((duration): duration is BlackRoomExperimentDuration => [15, 30, 60, 120, 300, 600].includes(duration))
+    .filter((duration) => !targetNetworks.includes("youtube") || duration <= 120);
   if (!allowed.length) throw new Error("BlackRoom job has no supported durations");
   const counts = new Map(allowed.map((duration) => [duration, entries.filter((entry) => entry.durationSeconds === duration).length]));
   const requiredSamples = Math.max(1, Number(job.requirements.minimumClipsPerDuration || 1));
@@ -74,8 +106,9 @@ function chooseLanguage(entries: BlackRoomLedgerEntry[]): "en" | "es" {
   return entries.filter((entry) => entry.language === "en").length <= entries.filter((entry) => entry.language === "es").length ? "en" : "es";
 }
 
-function chooseFormat(duration: BlackRoomExperimentDuration, entries: BlackRoomLedgerEntry[]): "vertical" | "horizontal" {
+function chooseFormat(duration: BlackRoomExperimentDuration, entries: BlackRoomLedgerEntry[], targetNetworks: BlackRoomTargetNetwork[]): "vertical" | "horizontal" {
   if (duration >= 300) return "horizontal";
+  if (targetNetworks.includes("youtube")) return "vertical";
   const vertical = entries.filter((entry) => entry.format === "vertical" && entry.durationSeconds < 300).length;
   const horizontal = entries.filter((entry) => entry.format === "horizontal" && entry.durationSeconds < 300).length;
   return vertical <= horizontal ? "vertical" : "horizontal";
@@ -132,12 +165,14 @@ export function planBlackRoomDeterministicEdit(input: {
   });
   if (!job) return null;
   const occupied = new Set(input.ledger.entries.filter((entry) => entry.jobId === job.id).map((entry) => entry.slot));
-  const slot = job.slots.find((candidate) => !occupied.has(candidate.localTime))?.localTime;
-  if (!slot) return null;
+  const slotConfig = job.slots.find((candidate) => !occupied.has(candidate.localTime));
+  if (!slotConfig) return null;
+  const slot = slotConfig.localTime;
   const jobEntries = input.ledger.entries.filter((entry) => entry.jobId === job.id);
   const creativeStrategy: BlackRoomCreativeStrategy = input.queue.analytics?.creativeStrategy || "drop_first";
-  const durationSeconds = chooseDuration(job, jobEntries, input.queue);
-  const format = chooseFormat(durationSeconds, jobEntries);
+  const targetNetworks = selectBlackRoomTargetNetworks(job, slotConfig, input.queue);
+  const durationSeconds = chooseDuration(job, jobEntries, input.queue, targetNetworks);
+  const format = chooseFormat(durationSeconds, jobEntries, targetNetworks);
   const language = chooseLanguage(jobEntries);
   const margin = durationSeconds >= 300 ? 180 : 90;
   const windowDuration = durationSeconds + margin;
@@ -182,7 +217,7 @@ export function planBlackRoomDeterministicEdit(input: {
   return {
     jobId: job.id, slot, targetDate: job.targetDate, videoId: selected.video.id,
     videoUrl: blackRoomVideoUrl(selected.video), title: selected.video.title, dj: selected.dj,
-    language, format, durationSeconds, creativeStrategy, windowStartSeconds,
+    language, format, durationSeconds, creativeStrategy, targetNetworks, windowStartSeconds,
     windowEndSeconds: windowStartSeconds + windowDuration,
     caption: buildCaption(selected.dj, language, durationSeconds, seed, creativeStrategy),
   };

@@ -179,6 +179,7 @@ async function reserve(
         "run", "blackroom:ledger", "--", "--reserve",
         "--job", plan.jobId, "--slot", plan.slot, "--video", plan.videoId, "--dj", plan.dj,
         "--language", plan.language, "--format", plan.format, "--duration", String(plan.durationSeconds),
+        "--networks", plan.targetNetworks.join(","),
         "--segment-start", String(segmentStart), "--segment-end", String(segmentEnd), "--caption", plan.caption,
         "--render", renderPath, "--source", sourcePath,
       ]);

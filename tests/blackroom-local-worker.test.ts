@@ -131,6 +131,17 @@ test("requires YouTube only for clips eligible as Shorts", () => {
   }), true);
 });
 
+
+test("explicit network orders require only their selected compatible receipts", () => {
+  const targeted = { format: "vertical" as const, durationSeconds: 30 as const, targetNetworks: ["facebook", "youtube"] as Array<"facebook" | "youtube"> };
+  assert.deepEqual(requiredBlackRoomReceiptNetworks(targeted), ["facebook", "youtube"]);
+  assert.equal(hasCompleteBlackRoomMetricoolReceipt({ ...targeted, metricoolId: "facebook:2|youtube:3" }), true);
+  assert.equal(hasCompleteBlackRoomMetricoolReceipt({ ...targeted, metricoolId: "facebook:2" }), false);
+  assert.throws(() => requiredBlackRoomReceiptNetworks({
+    format: "horizontal", durationSeconds: 30, targetNetworks: ["youtube"],
+  }), /incompatible/);
+});
+
 test("past BlackRoom slots roll forward while future slots keep their target date", () => {
   const now = new Date("2026-07-21T07:00:00.000Z"); // 03:00 in New York.
   assert.equal(nextBlackRoomPublicationDateTime("2026-07-21", "05:00", "America/New_York", now), "2026-07-21T05:00:00");
@@ -227,7 +238,7 @@ test("persists Metricool progress independently for each network", () => {
   });
   markBlackRoomNetworkUncertain(entry, "tiktok", "2026-07-22T00:30:00");
   assert.deepEqual(entry.networkAttempts, { tiktok: "uncertain" });
-  assert.equal(entry.networkAttempts.facebook, undefined);
+  assert.equal((entry.networkAttempts as Record<string, string>).facebook, undefined);
 
   confirmBlackRoomNetworkReceipt(entry, "tiktok", "991");
   assert.deepEqual(entry.networkReceipts, { tiktok: "991" });
@@ -235,8 +246,8 @@ test("persists Metricool progress independently for each network", () => {
 
   markBlackRoomNetworkUncertain(entry, "facebook", "2026-07-22T00:30:00");
   resetBlackRoomNetworkAttempt(entry, "facebook");
-  assert.equal(entry.networkAttempts.facebook, undefined);
-  assert.equal(entry.networkReceipts.facebook, undefined);
+  assert.equal((entry.networkAttempts as Record<string, string>).facebook, undefined);
+  assert.equal((entry.networkReceipts as Record<string, string>).facebook, undefined);
   assert.equal(entry.networkReceipts.tiktok, "991");
 });
 

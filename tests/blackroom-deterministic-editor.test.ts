@@ -9,6 +9,7 @@ import {
   findBlackRoomDropOffset,
   parseBlackRoomEnergySamples,
   planBlackRoomDeterministicEdit,
+  selectBlackRoomTargetNetworks,
   isOwnedBlackRoomMetadata,
 } from "../server/blackroom-deterministic-editor";
 
@@ -80,6 +81,39 @@ test("planner stops immediately when the queue is paused", () => {
     queue: queue(false), ledger: { version: 1, entries: [] } as any,
     inventory: [{ id: "fresh", title: "DJ - DJ Set", duration: 3600 }],
   }), null);
+});
+
+
+test("network targets are spread across the day and explicit Facebook plus YouTube orders exclude TikTok", () => {
+  const state = queue();
+  state.jobs[0].slots = Array.from({ length: 10 }, (_, index) => ({
+    localTime: `${String(index * 2).padStart(2, "0")}:00`,
+    timezone: "America/New_York",
+  }));
+  state.analytics = { networkDailyTargets: { tiktok: 5, facebook: 10, youtube: 7 } };
+  const selected = state.jobs[0].slots.map((slot: any) => selectBlackRoomTargetNetworks(state.jobs[0], slot, state));
+  assert.equal(selected.filter((networks: string[]) => networks.includes("tiktok")).length, 5);
+  assert.equal(selected.filter((networks: string[]) => networks.includes("facebook")).length, 10);
+  assert.equal(selected.filter((networks: string[]) => networks.includes("youtube")).length, 7);
+
+  const explicit = { ...state.jobs[0].slots[0], networks: ["facebook", "youtube"] };
+  assert.deepEqual(selectBlackRoomTargetNetworks(state.jobs[0], explicit, state), ["facebook", "youtube"]);
+});
+
+test("a Facebook and YouTube-only order produces a vertical Short and never targets TikTok", () => {
+  const state = queue();
+  state.jobs[0].slots[0].networks = ["facebook", "youtube"];
+  state.jobs[0].requirements.djs = 1;
+  state.jobs[0].requirements.postsPerDj = 10;
+  const plan = planBlackRoomDeterministicEdit({
+    queue: state,
+    ledger: { version: 1, entries: [] } as any,
+    now: new Date("2026-07-22T12:00:00.000Z"),
+    inventory: [{ id: "fresh", title: "DJ A - DJ Set", duration: 3600 }],
+  });
+  assert.deepEqual(plan?.targetNetworks, ["facebook", "youtube"]);
+  assert.equal(plan?.format, "vertical");
+  assert.ok((plan?.durationSeconds || 999) <= 120);
 });
 
 test("planner skips a full retry job and advances to the next day", () => {
@@ -179,7 +213,7 @@ test("CEO low-view strategy favors short clips after every duration has evidence
   });
   assert.equal(plan?.durationSeconds, 15);
   assert.equal(plan?.creativeStrategy, "instant_drop");
-  assert.match(plan?.caption || "", /No intro|Sin intro/);
+  assert.match(plan?.caption || "", /No intro|Sin intro|first second|primer segundo|full pressure|presión/);
 });
 
 test("CEO does not bias duration from fewer than five TikTok samples", () => {

@@ -20,12 +20,13 @@ import { mkdtemp, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-test("rotates 90-minute posting windows across the full day", () => {
+test("rotates ten posting windows across the full day", () => {
   const overnight = buildRotatingSlots({ dayIndex: 0 });
   const late = buildRotatingSlots({ dayIndex: 1 });
-  assert.equal(overnight.length, 7);
-  assert.deepEqual(overnight.map((slot) => slot.localTime), ["00:30", "03:56", "07:21", "10:47", "14:13", "17:39", "21:04"]);
-  assert.deepEqual(late.map((slot) => slot.localTime), ["02:00", "05:26", "08:51", "12:17", "15:43", "19:09", "22:34"]);
+  assert.equal(overnight.length, 10);
+  assert.equal(late.length, 10);
+  assert.notDeepEqual(overnight, late);
+  for (const slots of [overnight, late]) assert.equal(new Set(slots.map((slot) => slot.localTime)).size, 10);
 });
 
 test("records non-overlapping source moments and tracks short and long-form experiments", () => {
@@ -48,7 +49,7 @@ test("keeps a two-week persistent scheduling buffer", () => {
   assert.equal(ensureBlackRoomScheduleBuffer(state, now), 14);
   assert.equal(ensureBlackRoomScheduleBuffer(state, now), 0);
   assert.equal(state.jobs.length, 14);
-  assert.equal(state.jobs[0].requirements.posts, 7);
+  assert.equal(state.jobs[0].requirements.posts, 10);
   assert.equal(state.jobs[0].requirements.djs, 5);
   assert.equal(state.jobs[0].requirements.deleteOnlyAfterMetricoolConfirmation, true);
   assert.deepEqual(state.jobs[0].requirements.durationsSeconds, [15, 30, 60, 120, 300, 600]);
@@ -117,7 +118,7 @@ test("applies CEO analytics and learned slots only to pending days", () => {
   const targetDate = state.jobs[0].targetDate;
   const command = {
     id: "ceo-schedule", type: "ceo_schedule" as const, createdAt: now.toISOString(),
-    slotsByDate: { [targetDate]: ["01:00", "04:00", "07:00", "10:00", "13:00", "16:00", "20:00"] },
+    slotsByDate: { [targetDate]: ["00:30", "03:00", "05:30", "08:00", "10:30", "13:00", "15:30", "18:00", "20:30", "23:00"] },
     analytics: {
       sampleCount: 24, lastCheckedAt: now.toISOString(), nextCheckAt: now.toISOString(), confidence: "learning" as const,
       networkSamples: { tiktok: 24, facebook: 24, youtube: 24 }, recommendedTimes: ["13:00"], reason: "learning",
@@ -141,14 +142,14 @@ test("daily target changes do not erase extra posts already requested for a date
   assert.equal(state.jobs[0].requirements.posts, 11);
 });
 
-test("daily target cannot reduce the two-week campaign below seven posts", () => {
+test("daily target cannot reduce the two-week campaign below five posts", () => {
   const now = new Date("2026-07-21T12:00:00.000Z");
   const state = createBlackRoomQueueState(now);
   ensureBlackRoomScheduleBuffer(state, now);
   applyBlackRoomRemoteCommands(state, [{ id: "daily-low", type: "daily_target", posts: 1, createdAt: now.toISOString() }], now);
-  assert.equal(state.postsPerDay, 7);
-  assert.equal(state.jobs[0].requirements.posts, 7);
-  assert.equal(state.jobs[0].slots.length, 7);
+  assert.equal(state.postsPerDay, 5);
+  assert.equal(state.jobs[0].requirements.posts, 5);
+  assert.equal(state.jobs[0].slots.length, 5);
 });
 
 test("extra today creates exactly the requested future slots when today has no daily batch", () => {
@@ -157,11 +158,20 @@ test("extra today creates exactly the requested future slots when today has no d
   ensureBlackRoomScheduleBuffer(state, now);
   assert.equal(state.jobs.some((job) => job.targetDate === "2026-07-21"), false);
   applyBlackRoomRemoteCommands(state, [{
-    id: "extra-today", type: "extra_posts", posts: 3, targetDate: "2026-07-21", createdAt: now.toISOString(),
+    id: "extra-today", type: "extra_posts", posts: 3, targetDate: "2026-07-21", networks: ["facebook", "youtube"], createdAt: now.toISOString(),
   }], now);
   const today = state.jobs.find((job) => job.targetDate === "2026-07-21");
   assert.equal(today?.requirements.posts, 3);
   assert.deepEqual(today?.slots.map((slot) => slot.localTime), ["14:15", "15:45", "17:15"]);
+  assert.ok(today?.slots.every((slot) => slot.networks?.join(",") === "facebook,youtube"));
+  applyBlackRoomRemoteCommands(state, [{ id: "daily-after-extra", type: "daily_target", posts: 10, createdAt: now.toISOString() }], now);
+  assert.ok(today?.slots.every((slot) => slot.networks?.join(",") === "facebook,youtube"));
+  applyBlackRoomRemoteCommands(state, [{
+    id: "ceo-after-extra", type: "ceo_schedule",
+    slotsByDate: { "2026-07-21": ["14:30", "16:00", "17:30"] },
+    analytics: state.analytics, createdAt: now.toISOString(),
+  }], now);
+  assert.ok(today?.slots.every((slot) => slot.networks?.join(",") === "facebook,youtube"));
 });
 
 test("repeated extra-today commands add only the new amount to an ad hoc batch", () => {
