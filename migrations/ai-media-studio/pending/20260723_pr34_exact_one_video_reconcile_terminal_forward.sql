@@ -319,18 +319,19 @@ BEGIN
       p_owner_user_id,p_workspace_id,p_budget_reservation_id,p_render_job_id,p_daily_plan_slot_id,
       p_slot_attempt,p_work_handoff_digest,false;RETURN;
   END IF;
-  PERFORM 1 FROM public.ai_media_provider_submission_attempts attempt
-  WHERE attempt.id=p_attempt_id AND attempt.owner_user_id=p_owner_user_id
-    AND attempt.workspace_id=p_workspace_id AND attempt.budget_reservation_id=p_budget_reservation_id
-    AND attempt.render_job_id=p_render_job_id AND attempt.daily_plan_slot_id=p_daily_plan_slot_id
-    AND attempt.slot_attempt=p_slot_attempt AND attempt.work_handoff_digest=p_work_handoff_digest
-    AND attempt.state='ambiguous'
-    AND attempt.fencing_token=p_submission_fencing_token
-    AND attempt.send_authorization_digest=p_authorization_digest
-    AND attempt.reconciliation_lease_token=p_reconciliation_lease_token
-    AND attempt.reconciliation_lease_owner=context.admitted_actor_user_id
-    AND attempt.reconciliation_fencing_token=p_reconciliation_fencing_token
-    AND attempt.reconciliation_lease_expires_at>sampled_at FOR UPDATE;
+  PERFORM 1 FROM public.ai_media_provider_submission_attempts live_attempt
+  WHERE live_attempt.id=p_attempt_id AND live_attempt.owner_user_id=p_owner_user_id
+    AND live_attempt.workspace_id=p_workspace_id
+    AND live_attempt.budget_reservation_id=p_budget_reservation_id
+    AND live_attempt.render_job_id=p_render_job_id AND live_attempt.daily_plan_slot_id=p_daily_plan_slot_id
+    AND live_attempt.slot_attempt=p_slot_attempt AND live_attempt.work_handoff_digest=p_work_handoff_digest
+    AND live_attempt.state='ambiguous'
+    AND live_attempt.fencing_token=p_submission_fencing_token
+    AND live_attempt.send_authorization_digest=p_authorization_digest
+    AND live_attempt.reconciliation_lease_token=p_reconciliation_lease_token
+    AND live_attempt.reconciliation_lease_owner=context.admitted_actor_user_id
+    AND live_attempt.reconciliation_fencing_token=p_reconciliation_fencing_token
+    AND live_attempt.reconciliation_lease_expires_at>sampled_at FOR UPDATE;
   IF NOT FOUND THEN
     RETURN QUERY SELECT p_execution_id,p_run_lease_token,p_run_fencing_token,p_command_digest,p_actor_user_id,
       p_owner_user_id,p_workspace_id,p_budget_reservation_id,p_render_job_id,p_daily_plan_slot_id,
@@ -390,7 +391,8 @@ BEGIN
         AND event.actor_user_id=context.admitted_actor_user_id
     ) AND attempt.reconciliation_evidence_digest=bound_evidence
       AND attempt.reconciliation_fencing_token=p_reconciliation_fencing_token
-      AND attempt.provider_account_id=p_provider_account_id AND attempt.provider_key=p_provider_key
+      AND attempt.provider_account_id=p_provider_account_id
+      AND attempt.provider_key=p_provider_key
       AND attempt.provider_credential_version=p_provider_credential_version
       AND attempt.provider_idempotency_key=p_provider_idempotency_key
       AND p_guarantee='linearizable_not_accepted_and_cannot_later_accept'
@@ -405,21 +407,23 @@ BEGIN
       p_owner_user_id,p_workspace_id,p_budget_reservation_id,p_render_job_id,p_daily_plan_slot_id,
       p_slot_attempt,p_work_handoff_digest,false;RETURN;
   END IF;
-  PERFORM 1 FROM public.ai_media_provider_submission_attempts attempt
-  WHERE attempt.id=p_attempt_id AND attempt.owner_user_id=p_owner_user_id
-    AND attempt.workspace_id=p_workspace_id AND attempt.budget_reservation_id=p_budget_reservation_id
-    AND attempt.render_job_id=p_render_job_id AND attempt.daily_plan_slot_id=p_daily_plan_slot_id
-    AND attempt.slot_attempt=p_slot_attempt AND attempt.work_handoff_digest=p_work_handoff_digest
-    AND attempt.state='ambiguous'
-    AND attempt.fencing_token=p_submission_fencing_token
-    AND attempt.send_authorization_digest=p_authorization_digest
-    AND attempt.reconciliation_lease_token=p_reconciliation_lease_token
-    AND attempt.reconciliation_lease_owner=context.admitted_actor_user_id
-    AND attempt.reconciliation_fencing_token=p_reconciliation_fencing_token
-    AND attempt.reconciliation_lease_expires_at>sampled_at
-    AND attempt.provider_account_id=p_provider_account_id AND attempt.provider_key=p_provider_key
-    AND attempt.provider_credential_version=p_provider_credential_version
-    AND attempt.provider_idempotency_key=p_provider_idempotency_key FOR UPDATE;
+  PERFORM 1 FROM public.ai_media_provider_submission_attempts live_attempt
+  WHERE live_attempt.id=p_attempt_id AND live_attempt.owner_user_id=p_owner_user_id
+    AND live_attempt.workspace_id=p_workspace_id
+    AND live_attempt.budget_reservation_id=p_budget_reservation_id
+    AND live_attempt.render_job_id=p_render_job_id AND live_attempt.daily_plan_slot_id=p_daily_plan_slot_id
+    AND live_attempt.slot_attempt=p_slot_attempt AND live_attempt.work_handoff_digest=p_work_handoff_digest
+    AND live_attempt.state='ambiguous'
+    AND live_attempt.fencing_token=p_submission_fencing_token
+    AND live_attempt.send_authorization_digest=p_authorization_digest
+    AND live_attempt.reconciliation_lease_token=p_reconciliation_lease_token
+    AND live_attempt.reconciliation_lease_owner=context.admitted_actor_user_id
+    AND live_attempt.reconciliation_fencing_token=p_reconciliation_fencing_token
+    AND live_attempt.reconciliation_lease_expires_at>sampled_at
+    AND live_attempt.provider_account_id=p_provider_account_id
+    AND live_attempt.provider_key=p_provider_key
+    AND live_attempt.provider_credential_version=p_provider_credential_version
+    AND live_attempt.provider_idempotency_key=p_provider_idempotency_key FOR UPDATE;
   IF NOT FOUND THEN
     RETURN QUERY SELECT p_execution_id,p_run_lease_token,p_run_fencing_token,p_command_digest,p_actor_user_id,
       p_owner_user_id,p_workspace_id,p_budget_reservation_id,p_render_job_id,p_daily_plan_slot_id,
