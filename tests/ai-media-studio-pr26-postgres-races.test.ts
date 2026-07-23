@@ -573,12 +573,12 @@ integrationTest("pending PR32 exact fence is table-blind, concurrency-one, repla
       uncertainParams);
     assert.equal(conflict.rows[0].kind,"conflict");
   }finally{await session.close();}
-  const evidence=await adminPool.query<{completed:string;uncertain:string;publishing:string}>(`SELECT
+  const evidence=await adminPool.query<{completed:string;uncertain:string;publishing_surface_absent:boolean}>(`SELECT
     count(*) FILTER (WHERE state='completed')::text completed,
     count(*) FILTER (WHERE state='uncertain')::text uncertain,
-    (SELECT count(*)::text FROM ai_media_publishing_jobs) publishing
+    to_regclass('public.ai_media_publishing_jobs') IS NULL publishing_surface_absent
     FROM ai_media_exact_one_video_run_fences`);
-  assert.deepEqual(evidence.rows[0],{completed:"1",uncertain:"1",publishing:"0"});
+  assert.deepEqual(evidence.rows[0],{completed:"1",uncertain:"1",publishing_surface_absent:true});
   const rollbackClient=await adminPool.connect();try{
     await assert.rejects(rollbackClient.query(pr32Rollback),
       /rollback preserves exact one-video authorization and run evidence/u);
