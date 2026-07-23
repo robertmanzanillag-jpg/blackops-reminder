@@ -174,6 +174,33 @@ test("extra today creates exactly the requested future slots when today has no d
   assert.ok(today?.slots.every((slot) => slot.networks?.join(",") === "facebook,youtube"));
 });
 
+test("extra today creates a fresh actionable batch when the existing batch is terminal", () => {
+  for (const status of ["scheduled", "completed"] as const) {
+    const now = new Date("2026-07-21T18:00:00.000Z");
+    const state = createBlackRoomQueueState(now);
+    ensureBlackRoomScheduleBuffer(state, now);
+    const terminal = structuredClone(state.jobs[0]);
+    terminal.id = `terminal-${status}`;
+    terminal.targetDate = "2026-07-21";
+    terminal.originalTargetDate = "2026-07-21";
+    terminal.status = status;
+    state.jobs.push(terminal);
+    state.extraPostsByDate["2026-07-21"] = 3;
+
+    applyBlackRoomRemoteCommands(state, [{
+      id: `extra-after-${status}`, type: "extra_posts", posts: 2, targetDate: "2026-07-21",
+      networks: ["facebook", "youtube"], createdAt: now.toISOString(),
+    }], now);
+
+    const active = state.jobs.find((job) => job.targetDate === "2026-07-21" && job.status === "queued");
+    assert.ok(active);
+    assert.notEqual(active.id, terminal.id);
+    assert.equal(active.requirements.posts, 2);
+    assert.ok(active.slots.every((slot) => slot.networks?.join(",") === "facebook,youtube"));
+    assert.equal(terminal.requirements.posts, 10);
+  }
+});
+
 test("repeated extra-today commands add only the new amount to an ad hoc batch", () => {
   const now = new Date("2026-07-21T18:00:00.000Z");
   const state = createBlackRoomQueueState(now);

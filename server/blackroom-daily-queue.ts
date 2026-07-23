@@ -273,12 +273,14 @@ export function applyBlackRoomRemoteCommands(state: BlackRoomQueueState, command
         resizeJob(state, job, target);
       }
     } else if (command.type === "extra_posts") {
-      let job = state.jobs.find((item) => item.targetDate === command.targetDate);
+      const sameDateJobs = state.jobs.filter((item) => item.targetDate === command.targetDate);
+      let job = sameDateJobs.find((item) => ["queued", "retry", "processing"].includes(item.status));
       const createdAdHoc = !job;
       if (!job) {
         job = createDailyJob(state, command.targetDate, 0, now);
         state.jobs.push(job);
-        state.adHocExtraDates.push(command.targetDate);
+        if (!state.adHocExtraDates.includes(command.targetDate)) state.adHocExtraDates.push(command.targetDate);
+        if (sameDateJobs.length) state.extraPostsByDate[command.targetDate] = 0;
       }
       const added = Math.max(1, Math.min(16, Math.floor(command.posts)));
       state.extraPostsByDate[command.targetDate] = Number(state.extraPostsByDate[command.targetDate] || 0) + added;
