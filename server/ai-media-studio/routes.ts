@@ -243,6 +243,7 @@ import {
   toPublicAssetQualityReview,
   toPublicInfluencerGovernanceProfile,
 } from "./governance/service";
+import type { ProductionAdmittedRenderRuntime } from "./workers/production-admitted-render-runtime";
 
 export interface AiMediaStudioDependencies {
   repository?: MediaJobRepository;
@@ -329,6 +330,10 @@ export interface AiMediaStudioDependencies {
   productionAssetAdapterDependencies?: ProductionAssetAdapterDependencies;
   /** Must probe the live reader, owned storage, signer, and worker process; absent by default. */
   assetIngestWorkerReadiness?: { isReady(): boolean | Promise<boolean> };
+  /** Precomposed admitted-render workers. Merely supplying them never starts or invokes a worker. */
+  productionAdmittedRenderRuntime?: ProductionAdmittedRenderRuntime;
+  /** Inert composition seam; the factory must construct workers without I/O or autostart. */
+  createProductionAdmittedRenderRuntime?: () => ProductionAdmittedRenderRuntime;
 }
 export interface AiMediaStudioRuntime {
   service: AiMediaStudioService;
@@ -366,6 +371,8 @@ export interface AiMediaStudioRuntime {
   assetIngestRepository?: AssetIngestRepository;
   assetIngestHooks: AssetIngestWorkerHooks;
   reconcileCompletedAssetIngests(limit?: number): Promise<number>;
+  productionAdmittedRenderRuntime: ProductionAdmittedRenderRuntime | undefined;
+  productionAdmittedRenderRuntimeStatus: MediaStudioPersistenceStatus;
 }
 
 function toPublicJob(job: MediaGenerationJob): MediaJob {
@@ -444,6 +451,58 @@ function createDefaultDurableAssetIngestRepository(): AssetIngestRepository {
 function configuredDatabase(value: string | undefined): boolean {
   const databaseUrl = value?.trim();
   return Boolean(databaseUrl && !/^(change[-_ ]?me|replace[-_ ]?me|your[-_ ]|example|placeholder)/iu.test(databaseUrl));
+}
+
+type ProductionAdmittedRenderRuntimeSelection = Readonly<{
+  runtime: ProductionAdmittedRenderRuntime | undefined;
+  status: MediaStudioPersistenceStatus;
+}>;
+
+const ADMITTED_RENDER_NOT_COMPOSED_REASON =
+  "Admitted render runtime is not composed; workers remain stopped";
+
+/**
+ * Selects an already-inert admitted-render composition once at startup.
+ *
+ * This function never calls a worker method. The cached status is safe for
+ * repeated HTTP inspection and intentionally contains no provider credentials,
+ * database capabilities, worker identifiers, or runtime objects.
+ */
+function selectProductionAdmittedRenderRuntime(
+  dependencies: AiMediaStudioDependencies,
+): ProductionAdmittedRenderRuntimeSelection {
+  const injected = dependencies.productionAdmittedRenderRuntime;
+  const factory = dependencies.createProductionAdmittedRenderRuntime;
+  if ((injected && factory) || (!injected && !factory)) {
+    return {
+      runtime: undefined,
+      status: { mode: "unavailable", available: false, durable: false,
+        reason: ADMITTED_RENDER_NOT_COMPOSED_REASON },
+    };
+  }
+
+  let runtime: ProductionAdmittedRenderRuntime;
+  try {
+    runtime = injected ?? factory!();
+  } catch {
+    return {
+      runtime: undefined,
+      status: { mode: "unavailable", available: false, durable: false,
+        reason: "Admitted render runtime composition failed closed; workers remain stopped" },
+    };
+  }
+  if (runtime?.configured !== true || runtime.providerKey !== "heygen" || runtime.autostart !== false) {
+    return {
+      runtime: undefined,
+      status: { mode: "unavailable", available: false, durable: false,
+        reason: "Admitted render runtime configuration is invalid; workers remain stopped" },
+    };
+  }
+  return {
+    runtime,
+    status: { mode: injected ? "injected" : "drizzle", available: true, durable: !injected,
+      reason: "Admitted HeyGen render runtime is composed with autostart disabled" },
+  };
 }
 
 function createDefaultDurableReusableScriptAssetRepository(): ReusableScriptAssetRepository {
@@ -1460,6 +1519,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const oneVideoExecutionControlSelection = selectOneVideoExecutionControlRuntime(dependencies, databaseUrl);
   const oneVideoCostApprovalSelection = selectOneVideoCostApprovalRuntime(dependencies, databaseUrl);
   const oneVideoHeldAdmissionSelection = selectOneVideoHeldAdmissionRuntime(dependencies, databaseUrl);
+  const productionAdmittedRenderRuntimeSelection = selectProductionAdmittedRenderRuntime(dependencies);
   const sensitiveMutationRequestGuard = createSensitiveMutationRequestGuard(dependencies, runtimeEnvironment);
   const operations = createOperationsRuntime({
     ...dependencies.operations,
@@ -1738,6 +1798,7 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     res.setHeader("X-AI-Media-Studio-One-Video-Execution-Control", oneVideoExecutionControlSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-One-Video-Cost-Approval", oneVideoCostApprovalSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-One-Video-Held-Admission", oneVideoHeldAdmissionSelection.status.mode);
+    res.setHeader("X-AI-Media-Studio-Admitted-Render", productionAdmittedRenderRuntimeSelection.status.mode);
     res.setHeader("X-AI-Media-Studio-Reusable-Scripts", reusableScriptAssetSelection.status.mode);
     next();
   });
@@ -1755,7 +1816,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       sandboxReadiness: sandboxReadinessSelection.status,
       oneVideoExecutionControl: oneVideoExecutionControlSelection.status,
       oneVideoCostApproval: oneVideoCostApprovalSelection.status,
-      oneVideoHeldAdmission: oneVideoHeldAdmissionSelection.status });
+      oneVideoHeldAdmission: oneVideoHeldAdmissionSelection.status,
+      admittedRenderRuntime: productionAdmittedRenderRuntimeSelection.status });
   });
 
   router.get(`${AI_MEDIA_STUDIO_API_BASE}/agent`, asyncRoute(async (req, res) => {
@@ -2925,6 +2987,8 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
     assetIngestRepository,
     assetIngestHooks,
     reconcileCompletedAssetIngests,
+    productionAdmittedRenderRuntime: productionAdmittedRenderRuntimeSelection.runtime,
+    productionAdmittedRenderRuntimeStatus: productionAdmittedRenderRuntimeSelection.status,
   };
 }
 
