@@ -232,13 +232,15 @@ BEGIN
       job.id,job.owned_object_key,job.sha256,job.size_bytes;
     RETURN;
   END IF;
-  UPDATE public.ai_media_asset_ingest_jobs SET state='completed',owned_object_key=p_owned_object_key,
+  UPDATE public.ai_media_asset_ingest_jobs AS target
+  SET state='completed',owned_object_key=p_owned_object_key,
     sha256=p_sha256,size_bytes=p_size_bytes,completed_at=sampled_at,error_code=NULL,error_message=NULL,
     lease_owner=NULL,lease_token=NULL,lease_expires_at=NULL,updated_at=sampled_at
-  WHERE id=p_ingest_job_id AND owner_user_id=p_owner_user_id AND workspace_id=p_workspace_id
-    AND render_job_id=p_render_job_id AND state='leased'
-    AND lease_token=p_ingest_lease_token AND fencing_token=p_ingest_fencing_token
-    AND lease_expires_at>sampled_at RETURNING * INTO updated_job;
+  WHERE target.id=p_ingest_job_id AND target.owner_user_id=p_owner_user_id
+    AND target.workspace_id=p_workspace_id AND target.render_job_id=p_render_job_id
+    AND target.state='leased' AND target.lease_token=p_ingest_lease_token
+    AND target.fencing_token=p_ingest_fencing_token
+    AND target.lease_expires_at>sampled_at RETURNING * INTO updated_job;
   IF FOUND THEN job=updated_job;did_apply=true; END IF;
   RETURN QUERY SELECT p_execution_id,p_run_lease_token,p_run_fencing_token,p_command_digest,p_actor_user_id,
     p_owner_user_id,p_workspace_id,p_budget_reservation_id,p_render_job_id,p_daily_plan_slot_id,
@@ -410,17 +412,23 @@ BEGIN
       p_slot_attempt,p_work_handoff_digest,false,p_ingest_job_id,NULL::uuid,false;
     RETURN;
   END IF;
-  UPDATE public.ai_media_render_jobs SET status='completed',stage='completed',progress=100,
+  UPDATE public.ai_media_render_jobs AS target
+  SET status='completed',stage='completed',progress=100,
     output_media_asset_id=p_media_asset_id,output_url=NULL,
-    completed_at=COALESCE(completed_at,sampled_at),error_code=NULL,error_message=NULL,updated_at=sampled_at
-  WHERE id=p_render_job_id AND owner_user_id=p_owner_user_id AND workspace_id=p_workspace_id
-    AND budget_reservation_id=p_budget_reservation_id AND daily_plan_slot_id=p_daily_plan_slot_id
-    AND slot_attempt=p_slot_attempt AND work_handoff_digest=p_work_handoff_digest
-    AND provider_terminal_state='completed'
-    AND ((stage IN ('artifact_ingest_queued','artifact_ingest_retrying') AND output_media_asset_id IS NULL)
-      OR (stage='completed' AND status='completed' AND progress=100
-        AND output_media_asset_id=p_media_asset_id))
-  RETURNING id INTO changed;
+    completed_at=COALESCE(target.completed_at,sampled_at),
+    error_code=NULL,error_message=NULL,updated_at=sampled_at
+  WHERE target.id=p_render_job_id AND target.owner_user_id=p_owner_user_id
+    AND target.workspace_id=p_workspace_id
+    AND target.budget_reservation_id=p_budget_reservation_id
+    AND target.daily_plan_slot_id=p_daily_plan_slot_id
+    AND target.slot_attempt=p_slot_attempt
+    AND target.work_handoff_digest=p_work_handoff_digest
+    AND target.provider_terminal_state='completed'
+    AND ((target.stage IN ('artifact_ingest_queued','artifact_ingest_retrying')
+        AND target.output_media_asset_id IS NULL)
+      OR (target.stage='completed' AND target.status='completed' AND target.progress=100
+        AND target.output_media_asset_id=p_media_asset_id))
+  RETURNING target.id INTO changed;
   IF changed IS NULL THEN RAISE EXCEPTION 'exact asset render link CAS failed'; END IF;
   RETURN QUERY SELECT p_execution_id,p_run_lease_token,p_run_fencing_token,p_command_digest,p_actor_user_id,
     p_owner_user_id,p_workspace_id,p_budget_reservation_id,p_render_job_id,p_daily_plan_slot_id,

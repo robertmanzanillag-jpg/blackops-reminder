@@ -145,6 +145,7 @@ test("completion and failure are lease/fence protected, exact replay aware, and 
     assert.match(body, /job\.state=/u);
   }
   assert.match(complete, /job\.owned_object_key=p_owned_object_key AND job\.sha256=p_sha256/u);
+  assert.match(complete, /target\.owner_user_id=p_owner_user_id/u);
   assert.match(complete, /p_sha256!~'\^\[0-9a-f\]\{64\}\$'/u);
   assert.match(fail, /p_error_code NOT IN \('source_rejected','source_unavailable','mime_rejected'/u);
   assert.match(fail, /next_state=CASE WHEN p_retryable AND job\.attempts<job\.max_attempts/u);
@@ -178,8 +179,12 @@ test("link is stale-load fenced and atomically verifies canonical asset plus com
     /UPDATE public\.ai_media_asset_ingest_jobs AS target\s+SET media_asset_id=p_media_asset_id/u,
   );
   assert.match(link, /target\.media_asset_id IS NULL/u);
-  assert.match(link, /UPDATE public\.ai_media_render_jobs SET status='completed',stage='completed',progress=100/u);
-  assert.match(link, /provider_terminal_state='completed'/u);
+  assert.match(
+    link,
+    /UPDATE public\.ai_media_render_jobs AS target\s+SET status='completed',stage='completed',progress=100/u,
+  );
+  assert.match(link, /target\.owner_user_id=p_owner_user_id/u);
+  assert.match(link, /target\.provider_terminal_state='completed'/u);
 });
 
 test("PR35 contains no provider/download/publishing I/O and rollback preserves evidence", () => {
