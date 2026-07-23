@@ -14,6 +14,9 @@ const TIME_ZONE = "America/New_York";
 const DEFAULT_MAX_PER_RUN = 20;
 const MAX_PER_RUN = 50;
 const MIN_SPACING_MS = 2 * 60_000;
+const STANDARD_SPACING_MS = 75 * 60_000;
+const DAILY_MINIMUM_PER_ACCOUNT = 10;
+const DAILY_MAXIMUM_PER_ACCOUNT = 14;
 const STALE_LOCK_MS = 10 * 60_000;
 
 const committeeVerdictSchema = z.object({
@@ -27,6 +30,9 @@ const committeeVerdictSchema = z.object({
 const queueItemSchema = z.object({
   id: z.string().min(1).max(500),
   eventId: z.string().min(1).max(500),
+  eventRevision: z.number().int().positive().optional(),
+  canonicalEventIdentity: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  claimIdentityHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   lane: z.enum(["miami-news", "ny-news"]),
   platform: z.enum(["x", "facebook"]),
   copy: z.string().min(1).max(20_000),
@@ -36,6 +42,10 @@ const queueItemSchema = z.object({
   autoEligible: z.boolean(),
   published: z.literal(false),
   createdAt: z.string().datetime(),
+  source: z.string().max(500).optional(),
+  section: z.enum(["traffic", "weather", "breaking", "public_safety", "local"]).optional(),
+  editorialUrgency: z.enum(["routine", "developing", "breaking"]).optional(),
+  editorialPriority: z.number().finite().min(0).max(100).optional(),
   notBefore: z.string().datetime().nullable().optional(),
   verdicts: z.array(committeeVerdictSchema).max(3).optional(),
   evidence: z.array(z.string()).max(500).optional(),
@@ -43,6 +53,13 @@ const queueItemSchema = z.object({
   publishDecision: z.enum(["auto_publish", "quarantine", "reject"]).optional(),
   checkedAt: z.string().datetime().optional(),
   reviewHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  organicGrowth: z.object({
+    ceoDecision: z.object({
+      dailyMinimumPosts: z.literal(10),
+      dailyTargetPosts: z.union([z.literal(10), z.literal(12), z.literal(14)]),
+      performanceMode: z.enum(["baseline", "growing", "breakout"]),
+    }).passthrough().optional(),
+  }).passthrough().optional(),
 }).passthrough();
 
 const queueFileSchema = z.object({
@@ -52,7 +69,11 @@ const queueFileSchema = z.object({
 const ledgerEntrySchema = z.object({
   queueItemId: z.string().min(1).max(500),
   eventId: z.string().min(1).max(500).optional(),
+  eventRevision: z.number().int().positive().optional(),
+  canonicalEventIdentity: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  reviewHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   copyHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  reviewedCopyHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   lane: z.enum(["miami-news", "ny-news"]),
   platform: z.enum(["x", "facebook"]),
   blogId: z.string().min(1).max(100),
@@ -72,13 +93,14 @@ type Ledger = z.infer<typeof ledgerSchema>;
 const COMMITTEE_ROLES = ["source_verifier", "safety_editor", "monetization_editor"] as const;
 
 function hasCompleteCommitteeApproval(item: QueueItem): boolean {
+  if (!item.eventRevision || !item.canonicalEventIdentity || !item.claimIdentityHash) return false;
   if (item.publishDecision !== "auto_publish" || item.consensus !== "unanimous_approve" || !item.reviewHash || !item.checkedAt) return false;
   if (!item.verdicts || item.verdicts.length !== COMMITTEE_ROLES.length || !item.evidence) return false;
   const roles = new Set(item.verdicts.map((verdict) => verdict.role));
   if (!COMMITTEE_ROLES.every((role) => roles.has(role)) || item.verdicts.some((verdict) => verdict.verdict !== "approve")) return false;
   const expectedCopyHash = `copyHash=${hashLocalNewsReviewValue(item.copy)}`;
   if (!item.evidence.includes(expectedCopyHash)) return false;
-  const expectedReviewHash = hashLocalNewsQueueReview({ copy: item.copy, platform: item.platform, verdicts: item.verdicts, evidence: item.evidence, consensus: item.consensus, publishDecision: item.publishDecision, checkedAt: item.checkedAt });
+  const expectedReviewHash = hashLocalNewsQueueReview({ queueItemId: item.id, eventId: item.eventId, eventRevision: item.eventRevision, lane: item.lane, copy: item.copy, platform: item.platform, risk: item.risk, canonicalEventIdentity: item.canonicalEventIdentity, claimIdentityHash: item.claimIdentityHash, verdicts: item.verdicts, evidence: item.evidence, consensus: item.consensus, publishDecision: item.publishDecision, checkedAt: item.checkedAt });
   if (item.reviewHash !== expectedReviewHash) return false;
   if (item.risk === "high" || item.risk === "critical") {
     const connectorEvidence = item.evidence.find((entry) => entry.startsWith("connector="));
@@ -86,6 +108,18 @@ function hasCompleteCommitteeApproval(item: QueueItem): boolean {
     if (!connectorEvidence || connectorEvidence === "connector=none" || !claimHashEvidence || claimHashEvidence === "claimHash=none") return false;
   }
   return true;
+}
+
+/** Fail-closed validator shared with the public feed for sensitive stories. */
+export function hasCompleteLocalNewsCommitteeApproval(value: unknown): boolean {
+  const parsed = queueItemSchema.safeParse(value);
+  return parsed.success && hasCompleteCommitteeApproval(parsed.data);
+}
+
+function isRoutineTransitNoise(item: QueueItem): boolean {
+  if (item.editorialUrgency === "breaking" || item.risk === "high" || item.risk === "critical") return false;
+  const text = `${item.source || ""} ${item.copy}`.normalize("NFKC").toLocaleLowerCase("en-US");
+  return /\b(?:mta|subway|metrobus|miami[- ]dade transit)\b/.test(text);
 }
 
 export type ClipperLocalNewsMetricoolResultStatus = "completed" | "partial" | "blocked";
@@ -147,6 +181,69 @@ function hasRealValue(value: string | undefined): value is string {
 function cappedInteger(value: number | string | undefined, fallback: number): number {
   const parsed = typeof value === "number" ? value : Number.parseInt(value || "", 10);
   return Number.isFinite(parsed) ? Math.max(1, Math.min(MAX_PER_RUN, Math.trunc(parsed))) : fallback;
+}
+
+function easternDateKey(value: string | Date): string {
+  const date = value instanceof Date ? value : new Date(value);
+  return new Intl.DateTimeFormat("en-CA", { timeZone: TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+}
+
+function accountKey(item: Pick<QueueItem, "lane" | "platform">): string {
+  return `${item.lane}|${item.platform}`;
+}
+
+function accountDailyTargets(items: QueueItem[]): Map<string, number> {
+  const targets = new Map<string, number>();
+  for (const item of items) {
+    const requested = item.organicGrowth?.ceoDecision?.dailyTargetPosts || DAILY_MINIMUM_PER_ACCOUNT;
+    const target = Math.max(DAILY_MINIMUM_PER_ACCOUNT, Math.min(DAILY_MAXIMUM_PER_ACCOUNT, requested));
+    targets.set(accountKey(item), Math.max(targets.get(accountKey(item)) || DAILY_MINIMUM_PER_ACCOUNT, target));
+  }
+  return targets;
+}
+
+function easternOffsetMs(date: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(date);
+  const value = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, Number(part.value)]));
+  return Date.UTC(value.year, value.month - 1, value.day, value.hour, value.minute, value.second) - date.getTime();
+}
+
+function easternDayEndMs(value: Date): number {
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(value);
+  const date = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, Number(part.value)]));
+  const utcGuess = Date.UTC(date.year, date.month - 1, date.day + 1, 0, 0, 0);
+  return utcGuess - easternOffsetMs(new Date(utcGuess));
+}
+
+function deficitAwareAccountOrder(items: QueueItem[], scheduledByAccountDay: Map<string, number>, targets: Map<string, number>, day: string): QueueItem[] {
+  const groups = new Map<string, QueueItem[]>();
+  for (const item of items) {
+    const key = accountKey(item);
+    const group = groups.get(key) || [];
+    group.push(item);
+    groups.set(key, group);
+  }
+  const simulated = new Map<string, number>();
+  for (const key of groups.keys()) simulated.set(key, scheduledByAccountDay.get(`${key}|${day}`) || 0);
+  const keys = [...groups.keys()];
+  const ordered: QueueItem[] = [];
+  let tieCursor = 0;
+  while (keys.some((key) => (groups.get(key)?.length || 0) > 0)) {
+    let selected = "";
+    let greatestDeficit = Number.NEGATIVE_INFINITY;
+    for (let offset = 0; offset < keys.length; offset += 1) {
+      const key = keys[(tieCursor + offset) % keys.length];
+      if (!(groups.get(key)?.length)) continue;
+      const deficit = (targets.get(key) || DAILY_MINIMUM_PER_ACCOUNT) - (simulated.get(key) || 0);
+      if (deficit > greatestDeficit) { selected = key; greatestDeficit = deficit; }
+    }
+    const item = groups.get(selected)?.shift();
+    if (!item) break;
+    ordered.push(item);
+    simulated.set(selected, (simulated.get(selected) || 0) + 1);
+    tieCursor = (keys.indexOf(selected) + 1) % Math.max(1, keys.length);
+  }
+  return ordered;
 }
 
 function metricoolContentHash(copy: string): string {
@@ -499,14 +596,17 @@ export async function deliverClipperLocalNewsToMetricool(
     const scheduledContentKeys = new Set(ledger.entries.map(metricoolLedgerContentKey).filter((key): key is string => Boolean(key)));
     const now = options.now || (() => new Date());
     const fetchedNow = now();
-    const safeItems = queue.filter((item) => {
+    let safeItems = queue.filter((item) => {
       const platformEnabled = item.platform !== "x" || env.CLIPPERS_LOCAL_NEWS_ENABLE_X === "true";
+      if (isRoutineTransitNoise(item)) {
+        result.filtered += 1;
+        return false;
+      }
       const baseEligible = item.status === "auto_eligible"
         && item.autoEligible
         && !item.approvalRequired
         && platformEnabled;
-      const committeeFieldsPresent = Boolean(item.publishDecision || item.consensus || item.reviewHash || item.verdicts?.length);
-      const committeeEligible = committeeFieldsPresent ? hasCompleteCommitteeApproval(item) : item.risk === "low" || item.risk === "medium";
+      const committeeEligible = hasCompleteCommitteeApproval(item);
       const eligible = baseEligible && committeeEligible;
       if (!eligible) result.filtered += 1;
       else result.eligible += 1;
@@ -522,7 +622,11 @@ export async function deliverClipperLocalNewsToMetricool(
         return false;
       }
       return true;
-    });
+    }).sort((left, right) => (
+      (right.editorialPriority || 0) - (left.editorialPriority || 0)
+      || right.createdAt.localeCompare(left.createdAt)
+    ));
+    const dailyTargetByAccount = accountDailyTargets(safeItems);
 
     const laneConfig = {} as Record<ClipperLocalNewsLane, { label: string; aliases: string[]; override?: string }>;
     for (const [lane, config] of Object.entries(NEWS_LANE_CONFIG) as Array<[ClipperLocalNewsLane, typeof NEWS_LANE_CONFIG[ClipperLocalNewsLane]]>) {
@@ -556,11 +660,18 @@ export async function deliverClipperLocalNewsToMetricool(
     const maxPerRun = cappedInteger(options.maxPerRun ?? env.CLIPPERS_LOCAL_NEWS_METRICOOL_MAX_PER_RUN, DEFAULT_MAX_PER_RUN);
     const minimumStart = fetchedNow.getTime() + MIN_SPACING_MS;
     const cursors = new Map<string, number>();
+    const scheduledByAccountDay = new Map<string, number>();
     for (const entry of ledger.entries) {
       const key = `${entry.lane}|${entry.platform}`;
       const scheduled = new Date(entry.scheduledFor).getTime();
-      if (Number.isFinite(scheduled)) cursors.set(key, Math.max(cursors.get(key) || 0, scheduled));
+      if (Number.isFinite(scheduled)) {
+        cursors.set(key, Math.max(cursors.get(key) || 0, scheduled));
+        const dayKey = `${key}|${easternDateKey(entry.scheduledFor)}`;
+        scheduledByAccountDay.set(dayKey, (scheduledByAccountDay.get(dayKey) || 0) + 1);
+      }
     }
+
+    safeItems = deficitAwareAccountOrder(safeItems, scheduledByAccountDay, dailyTargetByAccount, easternDateKey(fetchedNow));
 
     const fetcher = options.fetch || globalThis.fetch;
     const mediaIds = new Map<ClipperLocalNewsLane, string | null>();
@@ -578,8 +689,36 @@ export async function deliverClipperLocalNewsToMetricool(
       }
       if (attempts >= maxPerRun) break;
       attempts += 1;
-      const cursorKey = `${item.lane}|${item.platform}`;
-      const scheduledMs = Math.max(minimumStart, (cursors.get(cursorKey) || (minimumStart - MIN_SPACING_MS)) + MIN_SPACING_MS);
+      const cursorKey = accountKey(item);
+      const breaking = item.editorialUrgency === "breaking";
+      const target = dailyTargetByAccount.get(cursorKey) || DAILY_MINIMUM_PER_ACCOUNT;
+      // Breaking items bypass the routine cursor and are sent to Metricool's immediate slot.
+      // Routine slots compress late in the day so an underfilled account can still reach its
+      // account-wide target, while never violating the two-minute safety floor.
+      let scheduledMs = breaking ? fetchedNow.getTime() : minimumStart;
+      if (!breaking) {
+        for (let dayAttempt = 0; dayAttempt < 8; dayAttempt += 1) {
+          const day = easternDateKey(new Date(scheduledMs));
+          const accountDayKey = `${cursorKey}|${day}`;
+          const count = scheduledByAccountDay.get(accountDayKey) || 0;
+          if (count >= target) {
+            scheduledMs = easternDayEndMs(new Date(scheduledMs)) + MIN_SPACING_MS;
+            continue;
+          }
+          const cursor = cursors.get(cursorKey) || 0;
+          const earliest = Math.max(scheduledMs, cursor + MIN_SPACING_MS);
+          if (easternDateKey(new Date(earliest)) !== day) {
+            scheduledMs = earliest;
+            continue;
+          }
+          const remainingAfterThis = Math.max(0, target - count - 1);
+          const availableAfterEarliest = Math.max(0, easternDayEndMs(new Date(earliest)) - MIN_SPACING_MS - earliest);
+          const catchUpSpacing = remainingAfterThis > 0 ? Math.floor(availableAfterEarliest / remainingAfterThis) : MIN_SPACING_MS;
+          const spacingMs = Math.max(MIN_SPACING_MS, Math.min(STANDARD_SPACING_MS, catchUpSpacing));
+          scheduledMs = cursor > 0 ? Math.max(earliest, cursor + spacingMs) : earliest;
+          break;
+        }
+      }
       const scheduledDate = new Date(scheduledMs);
       if (!mediaIds.has(item.lane)) {
         const mediaUrl = publicBrandMediaUrl(env, item.lane);
@@ -615,7 +754,11 @@ export async function deliverClipperLocalNewsToMetricool(
         ledger.entries.push({
           queueItemId: item.id,
           eventId: item.eventId,
+          eventRevision: item.eventRevision,
+          canonicalEventIdentity: item.canonicalEventIdentity,
+          reviewHash: item.reviewHash,
           copyHash: metricoolContentHash(item.copy),
+          reviewedCopyHash: hashLocalNewsReviewValue(item.copy),
           lane: item.lane,
           platform: item.platform,
           blogId: profile.blogId,
@@ -625,7 +768,9 @@ export async function deliverClipperLocalNewsToMetricool(
         });
         await atomicWriteLedger(ledgerPath, ledger);
         scheduledContentKeys.add(contentKey);
-        cursors.set(cursorKey, scheduledMs);
+        cursors.set(cursorKey, Math.max(cursors.get(cursorKey) || 0, scheduledMs));
+        const accountDayKey = `${cursorKey}|${easternDateKey(scheduledDate)}`;
+        scheduledByAccountDay.set(accountDayKey, (scheduledByAccountDay.get(accountDayKey) || 0) + 1);
         result.scheduled += 1;
         if (mediaId) result.mediaAttached += 1;
         else if (publicBrandMediaUrl(env, item.lane)) result.mediaFallback += 1;

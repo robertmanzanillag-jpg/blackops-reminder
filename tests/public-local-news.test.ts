@@ -7,6 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import express from "express";
 import { getPublicLocalNewsBySlug, listPublicLocalNews, renderPublicLocalNewsShareHtml } from "../server/public-local-news";
+import { hashLocalNewsCanonicalEventIdentity, hashLocalNewsQueueReview, hashLocalNewsReviewValue } from "../server/clippers-local-news-review-committee";
 import { registerRoutes } from "../server/routes";
 import { requireAppUser } from "../server/user-context";
 
@@ -63,7 +64,7 @@ const highRiskEvent = {
   id: "high-risk-event-1234",
   title: "Severe emergency",
   eventType: "Emergency",
-  risk: "high",
+  risk: "high" as const,
 };
 
 function queueItem(overrides: Record<string, unknown>) {
@@ -83,6 +84,17 @@ function queueItem(overrides: Record<string, unknown>) {
     createdAt: NOW,
     ...overrides,
   };
+}
+
+function reviewedSensitiveQueueItem(event: typeof highRiskEvent = highRiskEvent, overrides: Record<string, unknown> = {}) {
+  const claimIdentityHash = "a".repeat(64);
+  const canonicalEventIdentity = hashLocalNewsCanonicalEventIdentity({ eventId: event.id, eventRevision: event.revision, lane: event.lane, title: event.title, description: event.description, instruction: event.instruction, location: event.location, eventType: event.eventType, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, effective: event.effective, expires: event.expires, claimIdentityHash });
+  const base = queueItem({ id: "reviewed-sensitive", eventId: event.id, eventRevision: event.revision, canonicalEventIdentity, claimIdentityHash, lane: event.lane, platform: "facebook", risk: event.risk, copy: "Arresto confirmado por una fuente oficial; toda persona se presume inocente.", ...overrides });
+  const checkedAt = "2026-07-21T11:40:00.000Z";
+  const verdicts = (["source_verifier", "safety_editor", "monetization_editor"] as const).map((role) => ({ role, verdict: "approve" as const, reasons: ["verified"], evidence: ["official"], checkedAt }));
+  const evidence = ["connector=official-sensitive", `claimHash=${claimIdentityHash}`, `copyHash=${hashLocalNewsReviewValue(base.copy)}`];
+  const reviewed = { ...base, verdicts, evidence, consensus: "unanimous_approve" as const, publishDecision: "auto_publish" as const, checkedAt };
+  return { ...reviewed, reviewHash: hashLocalNewsQueueReview({ queueItemId: reviewed.id, eventId: reviewed.eventId, eventRevision: reviewed.eventRevision, lane: reviewed.lane, copy: reviewed.copy, platform: reviewed.platform, risk: reviewed.risk, canonicalEventIdentity: reviewed.canonicalEventIdentity, claimIdentityHash: reviewed.claimIdentityHash, verdicts, evidence, consensus: reviewed.consensus, publishDecision: reviewed.publishDecision, checkedAt }) };
 }
 
 test.before(async () => {
@@ -239,4 +251,53 @@ test("public HTTP feed bypasses auth, validates queries, supports ETag, and retu
   assert.match(shareHtml, /property="og:title"/);
   assert.match(shareHtml, /https:\/\/news\.example\.com\/local-news\/miami-news-profile\.png/);
   assert.match(shareHtml, /https:\/\/news\.example\.com\/news\/article\//);
+});
+
+test("publishes a sensitive current revision only with an intact unanimous committee review", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "public-local-news-sensitive-"));
+  try {
+    const sensitiveEvent = { ...highRiskEvent, title: "Defendant faces three counts", description: "The defendant was taken into custody after a criminal complaint.", eventType: "Criminal complaint", source: "U.S. Attorney for the Southern District of Florida", sourceUrl: "https://www.justice.gov/usao-sdfl/pr/example" };
+    const reviewed = reviewedSensitiveQueueItem(sensitiveEvent);
+    const writeState = async (candidate: unknown, event: typeof sensitiveEvent = sensitiveEvent) => writeFile(path.join(dir, "state.json"), JSON.stringify({
+      version: 1, updatedAt: NOW, events: [event], queue: [candidate],
+    }), "utf8");
+    await writeState(reviewed);
+    await writeFile(path.join(dir, "metricool-delivery-ledger.json"), JSON.stringify({
+      version: 1,
+      entries: [{
+        queueItemId: reviewed.id,
+        eventId: reviewed.eventId,
+        eventRevision: reviewed.eventRevision,
+        canonicalEventIdentity: reviewed.canonicalEventIdentity,
+        reviewHash: reviewed.reviewHash,
+        copyHash: hashLocalNewsReviewValue(reviewed.copy),
+        reviewedCopyHash: hashLocalNewsReviewValue(reviewed.copy),
+        lane: reviewed.lane,
+        platform: reviewed.platform,
+        blogId: "private-sensitive",
+        scheduledFor: "2026-07-21T11:50:00.000Z",
+        scheduledAt: "2026-07-21T11:45:00.000Z",
+        metricoolPostId: "sensitive-post",
+      }],
+    }), "utf8");
+
+    const approved = await listPublicLocalNews({ workspaceDir: dir, now: NOW });
+    assert.equal(approved.articles.length, 1);
+    assert.equal(approved.articles[0].source, sensitiveEvent.source);
+    assert.equal(approved.articles[0].category, "public-safety");
+    assert.match(approved.articles[0].translations.es.summary, /se presume inocente/);
+    assert.match(approved.articles[0].translations.en.summary, /presumed innocent/);
+    const approvedEn = await listPublicLocalNews({ workspaceDir: dir, now: NOW, lang: "en" });
+    assert.match(renderPublicLocalNewsShareHtml(approvedEn.articles[0], "https://example.com/news/sensitive", "https://example.com/logo.png"), /presumed innocent/);
+
+    await writeState({ ...reviewed, copy: `${reviewed.copy} Texto alterado después de la revisión.` });
+    const tampered = await listPublicLocalNews({ workspaceDir: dir, now: NOW });
+    assert.equal(tampered.articles.length, 0);
+
+    await writeState(reviewed, { ...sensitiveEvent, description: `${sensitiveEvent.description} Contenido alterado sin nueva revisión.` });
+    const eventTampered = await listPublicLocalNews({ workspaceDir: dir, now: NOW });
+    assert.equal(eventTampered.articles.length, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });

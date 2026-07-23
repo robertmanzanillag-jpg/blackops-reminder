@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import {
+  buildLocalNewsCeoDecision,
   buildLocalNewsGrowthPackage,
   localNewsArticleSlug,
   selectLocalNewsGrowthVariant,
@@ -36,6 +37,10 @@ test("growth package stays zero-cost and produces an owned tracked link plus a l
   const growth = buildLocalNewsGrowthPackage(event, [], "https://news.example.com/path");
   assert.equal(growth.zeroCost, true);
   assert.equal(growth.experiment, "deterministic_observed_metrics");
+  assert.deepEqual(
+    { minimum: growth.ceoDecision.dailyMinimumPosts, target: growth.ceoDecision.dailyTargetPosts, format: growth.ceoDecision.preferredFormat },
+    { minimum: 10, target: 10, format: "video_first" },
+  );
   assert.match(growth.ownedArticleUrl || "", /^https:\/\/news\.example\.com\/news\/article\//);
   assert.match(growth.ownedArticleUrl || "", /utm_medium=organic_social/);
   assert.match(growth.ownedArticleUrl || "", new RegExp(`utm_content=${growth.variantId}`));
@@ -44,6 +49,13 @@ test("growth package stays zero-cost and produces an owned tracked link plus a l
     { ready: growth.shortForm.ready, format: growth.shortForm.format, sound: growth.shortForm.soundRequired, mode: growth.shortForm.renderMode },
     { ready: true, format: "9:16", sound: true, mode: "local_template" },
   );
+});
+
+test("CEO raises volume only after observed performance clears confidence thresholds", () => {
+  const growing = buildLocalNewsCeoDecision([{ impressions: 600, engagements: 15, clicks: 2, shares: 1 }]);
+  const breakout = buildLocalNewsCeoDecision([{ impressions: 1_200, engagements: 50, clicks: 8, shares: 4 }]);
+  assert.deepEqual({ target: growing.dailyTargetPosts, mode: growing.performanceMode }, { target: 12, mode: "growing" });
+  assert.deepEqual({ target: breakout.dailyTargetPosts, mode: breakout.performanceMode }, { target: 14, mode: "breakout" });
 });
 
 test("local-news publishing path contains no paid model SDK or generation calls", async () => {

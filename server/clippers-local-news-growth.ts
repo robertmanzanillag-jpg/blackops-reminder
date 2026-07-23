@@ -21,6 +21,16 @@ export interface LocalNewsGrowthMetric {
   shares: number;
 }
 
+export interface LocalNewsCeoDecision {
+  dailyMinimumPosts: 10;
+  dailyTargetPosts: 10 | 12 | 14;
+  performanceMode: "baseline" | "growing" | "breakout";
+  observedImpressions: number;
+  observedEngagementRate: number;
+  preferredFormat: "video_first";
+  learningRule: "observed_metrics_only";
+}
+
 export interface LocalNewsGrowthPackage {
   zeroCost: true;
   experiment: "deterministic_observed_metrics";
@@ -29,12 +39,15 @@ export interface LocalNewsGrowthPackage {
   headlineVariants: Record<LocalNewsGrowthVariantId, Record<LocalNewsGrowthLanguage, string>>;
   ownedArticleUrl: string | null;
   hashtags: string[];
+  ceoDecision: LocalNewsCeoDecision;
   shortForm: {
     ready: true;
     format: "9:16";
     durationSeconds: 8;
     soundRequired: true;
     renderMode: "local_template";
+    preferred: true;
+    publishableVideoUrl: null;
     scenes: Array<{ startSecond: number; endSecond: number; text: string }>;
   };
 }
@@ -76,6 +89,29 @@ function variantScore(metrics: LocalNewsGrowthMetric[]): { impressions: number; 
   return {
     impressions: totals.impressions,
     score: (totals.clicks + totals.shares * 2 + totals.engagements * 0.25) / totals.impressions,
+  };
+}
+
+export function buildLocalNewsCeoDecision(metrics: LocalNewsGrowthMetric[]): LocalNewsCeoDecision {
+  const totals = metrics.reduce((result, metric) => ({
+    impressions: result.impressions + metric.impressions,
+    engagements: result.engagements + metric.engagements,
+    clicks: result.clicks + metric.clicks,
+    shares: result.shares + metric.shares,
+  }), { impressions: 0, engagements: 0, clicks: 0, shares: 0 });
+  const engagementRate = totals.impressions
+    ? (totals.engagements + totals.clicks * 2 + totals.shares * 3) / totals.impressions
+    : 0;
+  const breakout = totals.impressions >= 1_000 && engagementRate >= 0.06;
+  const growing = !breakout && totals.impressions >= 500 && engagementRate >= 0.03;
+  return {
+    dailyMinimumPosts: 10,
+    dailyTargetPosts: breakout ? 14 : growing ? 12 : 10,
+    performanceMode: breakout ? "breakout" : growing ? "growing" : "baseline",
+    observedImpressions: totals.impressions,
+    observedEngagementRate: Math.round(engagementRate * 10_000) / 10_000,
+    preferredFormat: "video_first",
+    learningRule: "observed_metrics_only",
   };
 }
 
@@ -146,12 +182,15 @@ export function buildLocalNewsGrowthPackage(
     headlineVariants,
     ownedArticleUrl,
     hashtags: hashtags(event),
+    ceoDecision: buildLocalNewsCeoDecision(metrics),
     shortForm: {
       ready: true,
       format: "9:16",
       durationSeconds: 8,
       soundRequired: true,
       renderMode: "local_template",
+      preferred: true,
+      publishableVideoUrl: null,
       scenes: [
         { startSecond: 0, endSecond: 2, text: sectionLabel(event.section, "es").toUpperCase() },
         { startSecond: 2, endSecond: 6, text: headline.es },
