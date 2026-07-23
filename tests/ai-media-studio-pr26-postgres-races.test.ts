@@ -1022,7 +1022,7 @@ integrationTest("pending PR34 exact reconciliation and terminal observation are 
         bucket.committed_micro_usd,attempt.provider_request_id`,
     [reconciliation.attempt.id]);
     assert.deepEqual(ledger.rows,[{state:"reconciled_no_submit",capacity:"released",capacity_version:"2",
-      committed:"0",provider_request_id:null,ambiguous_request_id:"provider-request-ambiguous",events:"1"}]);
+      committed:"0",provider_request_id:null,ambiguous_request_id:"provider-request-reconcile",events:"1"}]);
   }finally{await session.close();}
 
   const terminal=await setupScenario("confirmed","observe_terminal","terminal");
