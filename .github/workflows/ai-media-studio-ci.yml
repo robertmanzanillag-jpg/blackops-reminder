@@ -76,6 +76,7 @@ jobs:
           tests/ai-media-studio-pr32-exact-one-video-run-fence-migration.test.ts
           tests/ai-media-studio-pr33-exact-one-video-submit-migration.test.ts
           tests/ai-media-studio-pr34-exact-reconcile-terminal-migration.test.ts
+          tests/ai-media-studio-pr35-exact-asset-ingest-link-migration.test.ts
           tests/ai-media-studio-reusable-script-assets.test.ts
           tests/ai-media-studio-sandbox-readiness-contracts.test.ts
           tests/ai-media-studio-source-to-batch-contracts.test.ts

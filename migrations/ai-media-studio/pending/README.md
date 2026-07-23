@@ -66,6 +66,18 @@ creates the existing durable ingest handoff; PR34 performs no provider/network
 request, media download, ingest worker claim, publication, worker start,
 deployment, migration application, or public-route mount.
 
+The PR35 pair stacks on PR27 and PR32 and prepares a table-blind, direct-target
+surface for the exact `ingest_asset` and `link_asset` commands. It can claim
+only the ingest job already bound to the completed provider-terminal event and
+the exact reservation/render/slot/attempt/handoff. Lease recovery is bounded;
+completion and safe-code failure results are fenced and exact-replay aware.
+The separate link command loads only that completed owned-object handoff, then
+accepts only a ready, undeleted, tenant-matching canonical video whose checksum,
+owned storage key, and render identity match before atomically completing the
+render projection. PR35 does not download media, access a provider or object
+store, create canonical media, publish, start a worker, spend, deploy, apply a
+migration, or mount a public route.
+
 Disposable PostgreSQL 16 rehearsal:
 
 ```sh
