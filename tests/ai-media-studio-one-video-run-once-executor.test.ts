@@ -9,6 +9,7 @@ import {
   type ExactOneVideoRunFence,
   type ExactOneVideoRunLease,
   type ExactOneVideoRunTarget,
+  type ExactOneVideoStageContext,
   type ExactOneVideoStageResult,
   type ExactOneVideoStageRunner,
   type OneVideoRunOnceAction,
@@ -53,13 +54,17 @@ function result(action: OneVideoRunOnceAction, changes: Partial<ExactOneVideoSta
   return { target, action, outcome: action === "activate_and_submit" ? "confirmed" : "idle", ...changes };
 }
 
-function stages(call: (action: OneVideoRunOnceAction, exact: ExactOneVideoRunTarget) => Promise<ExactOneVideoStageResult>): ExactOneVideoStageRunner {
+function stages(call: (context: ExactOneVideoStageContext) => Promise<ExactOneVideoStageResult>): ExactOneVideoStageRunner {
+  const invoke = (action: OneVideoRunOnceAction, context: ExactOneVideoStageContext) => {
+    assert.equal(context.action, action);
+    return call(context);
+  };
   return {
-    activateAndSubmitExact: (exact) => call("activate_and_submit", exact),
-    reconcileSubmissionExact: (exact) => call("reconcile_submission", exact),
-    observeTerminalExact: (exact) => call("observe_terminal", exact),
-    ingestAssetExact: (exact) => call("ingest_asset", exact),
-    linkAssetExact: (exact) => call("link_asset", exact),
+    activateAndSubmitExact: (context) => invoke("activate_and_submit", context),
+    reconcileSubmissionExact: (context) => invoke("reconcile_submission", context),
+    observeTerminalExact: (context) => invoke("observe_terminal", context),
+    ingestAssetExact: (context) => invoke("ingest_asset", context),
+    linkAssetExact: (context) => invoke("link_asset", context),
   };
 }
 
@@ -97,10 +102,10 @@ test("construction is inert and one invocation calls only the selected exact sta
       },
       async complete() { completions += 1; return true; },
     }),
-    stages: stages(async (action, exact) => {
-      calls.push(action);
-      assert.deepEqual(exact, target);
-      return result(action);
+    stages: stages(async (context) => {
+      calls.push(context.action);
+      assert.deepEqual(context.target, target);
+      return result(context.action);
     }),
   });
 
@@ -117,14 +122,16 @@ test("construction is inert and one invocation calls only the selected exact sta
   });
 });
 
-test("all five actions are individually bounded and there is no global runNext or publishing surface", async () => {
+test("all five actions receive their immutable authorized lease context with no global drain or publishing surface", async () => {
   const calls: OneVideoRunOnceAction[] = [];
+  const contexts: ExactOneVideoStageContext[] = [];
   const executor = new OneVideoRunOnceExecutor({
     authorization: { assertAuthorized() {} },
     fence: fence(),
-    stages: stages(async (action) => {
-      calls.push(action);
-      return result(action);
+    stages: stages(async (context) => {
+      calls.push(context.action);
+      contexts.push(context);
+      return result(context.action);
     }),
   });
   for (const action of [
@@ -135,8 +142,121 @@ test("all five actions are individually bounded and there is no global runNext o
   assert.deepEqual(calls, [
     "activate_and_submit", "reconcile_submission", "observe_terminal", "ingest_asset", "link_asset",
   ]);
+  for (const context of contexts) {
+    assert.deepEqual(context.target, target);
+    assert.equal(context.commandId, `command-${context.action}`);
+    assert.equal(context.commandDigest, oneVideoRunOnceCommandDigest(command(context.action, {
+      commandId: context.commandId,
+    })));
+    assert.equal(context.actorUserId, principal.actorUserId);
+    assert.equal(context.lease.executionId, lease.executionId);
+    assert.equal(context.lease.commandId, context.commandId);
+    assert.equal(context.lease.commandDigest, context.commandDigest);
+    assert.equal(context.lease.fencingToken, lease.fencingToken);
+    assert.equal(context.lease.leaseToken, lease.leaseToken);
+    assert.equal(Object.isFrozen(context), true);
+    assert.equal(Object.isFrozen(context.target), true);
+    assert.equal(Object.isFrozen(context.target.scope), true);
+    assert.equal(Object.isFrozen(context.lease), true);
+  }
   assert.equal("runNext" in executor, false);
   assert.equal("publish" in executor, false);
+});
+
+test("stage context and its lease cannot be substituted or mutated", async () => {
+  const acquiredLeaseBacking = {
+    ...lease,
+    commandDigest: oneVideoRunOnceCommandDigest(command()),
+  };
+  const acquiredLease = acquiredLeaseBacking as ExactOneVideoRunLease;
+  let completedLease: ExactOneVideoRunLease | undefined;
+  const executor = new OneVideoRunOnceExecutor({
+    authorization: { assertAuthorized() {} },
+    fence: fence({
+      acquire: async () => ({ kind: "acquired", lease: acquiredLease }),
+      complete: async (input) => {
+        completedLease = input.lease;
+        return true;
+      },
+    }),
+    stages: stages(async (context) => {
+      assert.notEqual(context.lease, acquiredLease);
+      assert.throws(() => {
+        (context as { lease: ExactOneVideoRunLease }).lease = {
+          ...context.lease,
+          fencingToken: 99n,
+        } as ExactOneVideoRunLease;
+      }, TypeError);
+      assert.throws(() => {
+        (context.lease as { fencingToken: bigint }).fencingToken = 99n;
+      }, TypeError);
+      assert.throws(() => {
+        (context.target as { slotAttempt: number }).slotAttempt = 99;
+      }, TypeError);
+      acquiredLeaseBacking.fencingToken = 88n;
+      acquiredLeaseBacking.leaseToken = "60000000-0000-4000-8000-000000000006";
+      assert.equal(context.lease.fencingToken, 1n);
+      assert.equal(context.lease.leaseToken, lease.leaseToken);
+      return result(context.action);
+    }),
+  });
+
+  await executor.run(command());
+  assert.equal(completedLease?.fencingToken, 1n);
+  assert.equal(completedLease?.leaseToken, lease.leaseToken);
+  assert.equal(Object.isFrozen(completedLease), true);
+});
+
+test("principal is snapshotted before authorization awaits and cannot change the fenced stage identity", async () => {
+  const principalBacking = {
+    capability: "run-exactly-one-video" as const,
+    actorUserId: "original-operator",
+  };
+  const mutablePrincipal = principalBacking as TrustedOneVideoRunPrincipal;
+  const exactCommand = command("activate_and_submit", { principal: mutablePrincipal });
+  const expectedDigest = oneVideoRunOnceCommandDigest(exactCommand);
+  let releaseAuthorization!: () => void;
+  const authorizationPending = new Promise<void>((resolve) => { releaseAuthorization = resolve; });
+  let authorizationEntered!: () => void;
+  const authorizationStarted = new Promise<void>((resolve) => { authorizationEntered = resolve; });
+  let fencedActor: string | undefined;
+  let fencedDigest: Sha256Digest | undefined;
+  let stageContext: ExactOneVideoStageContext | undefined;
+  const executor = new OneVideoRunOnceExecutor({
+    authorization: { async assertAuthorized(input) {
+      assert.equal(input.principal.actorUserId, "original-operator");
+      assert.equal(Object.isFrozen(input.principal), true);
+      authorizationEntered();
+      await authorizationPending;
+      assert.equal(input.principal.actorUserId, "original-operator");
+    } },
+    fence: fence({
+      async acquire(input) {
+        fencedActor = input.actorUserId;
+        fencedDigest = input.commandDigest;
+        return { kind: "acquired", lease: {
+          ...lease,
+          commandId: input.commandId,
+          commandDigest: input.commandDigest,
+        } as ExactOneVideoRunLease };
+      },
+    }),
+    stages: stages(async (context) => {
+      stageContext = context;
+      return result(context.action);
+    }),
+  });
+
+  const running = executor.run(exactCommand);
+  await authorizationStarted;
+  principalBacking.actorUserId = "substituted-operator";
+  releaseAuthorization();
+  await running;
+
+  assert.equal(fencedActor, "original-operator");
+  assert.equal(fencedDigest, expectedDigest);
+  assert.equal(stageContext?.actorUserId, "original-operator");
+  assert.equal(stageContext?.commandDigest, expectedDigest);
 });
 
 test("authorization and durable fence fail closed before any stage I/O", async () => {
@@ -178,10 +298,10 @@ test("concurrent invocation is rejected in-process while the first exact stage i
   const executor = new OneVideoRunOnceExecutor({
     authorization: { assertAuthorized() {} },
     fence: fence(),
-    stages: stages(async (action) => {
+    stages: stages(async (context) => {
       entered();
       await pending;
-      return result(action);
+      return result(context.action);
     }),
   });
   const first = executor.run(command());
@@ -201,7 +321,7 @@ test("wrong-target results are sealed uncertain and are never reported as succes
       async complete() { completed += 1; return true; },
       async sealUncertain() { sealed += 1; return true; },
     }),
-    stages: stages(async (action) => result(action, {
+    stages: stages(async (context) => result(context.action, {
       target: { ...target, renderJobId: "50000000-0000-4000-8000-000000000005" },
     })),
   });
@@ -240,7 +360,7 @@ test("lost durable completion after stage I/O is sealed uncertain", async () => 
       complete: async () => false,
       sealUncertain: async () => { sealed += 1; return true; },
     }),
-    stages: stages(async (action) => result(action)),
+    stages: stages(async (context) => result(context.action)),
   });
   await assert.rejects(executor.run(command()),
     (error: unknown) => error instanceof OneVideoRunOnceError && error.code === "UNCERTAIN");
@@ -252,7 +372,7 @@ test("an outcome belonging to another stage is rejected and sealed uncertain", a
   const executor = new OneVideoRunOnceExecutor({
     authorization: { assertAuthorized() {} },
     fence: fence({ sealUncertain: async () => { sealed += 1; return true; } }),
-    stages: stages(async (action) => result(action, { outcome: "asset_linked" })),
+    stages: stages(async (context) => result(context.action, { outcome: "asset_linked" })),
   });
   await assert.rejects(executor.run(command()),
     (error: unknown) => error instanceof OneVideoRunOnceError && error.code === "UNCERTAIN");

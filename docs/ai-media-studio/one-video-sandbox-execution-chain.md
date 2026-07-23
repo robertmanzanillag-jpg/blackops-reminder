@@ -30,6 +30,11 @@ migration, publishing, or deployment is authorized.
     to the session principal, actor, exact target, action and digest. Completed
     commands replay durably; uncertain commands cannot be silently resubmitted.
     PR32 is a review artifact and has not been applied to any real database.
+11. Exact stage-context contract. After authorization and durable acquisition,
+    the executor defensively snapshots and freezes the PR32 execution ID, lease
+    token, fencing token, command identity/digest, actor, action and exact target
+    before invoking one selected stage. Replay invokes no stage. This contract is
+    still unmounted and performs no provider, storage or publishing I/O.
 
 ## Missing dependency order
 
@@ -43,9 +48,9 @@ migration, publishing, or deployment is authorized.
    credential version, database capability lanes, owned object storage, and
    artifact binding resolver.
 7. Exact-claim database functions/adapters for submit, ambiguous reconciliation,
-   terminal observation, ingest and asset linking. They must select the exact
-   slot attempt/render target; the current global queue claims are not allowed
-   behind the run-once boundary.
+   terminal observation, ingest and asset linking. They must validate the live
+   PR32 stage context and select only its exact slot attempt/render target; the
+   current global queue claims are not allowed behind the run-once boundary.
 8. Trusted Robert-bound authorization issuer for pending PR32 capabilities and
    explicit migration approval after its isolated PostgreSQL rehearsal.
 9. Explicit production binding of the exact worker ports and durable fence.
