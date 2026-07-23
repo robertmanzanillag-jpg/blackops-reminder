@@ -23,6 +23,7 @@ import type { TrustedActivationPrincipal } from "../server/ai-media-studio/plann
 const TEMP_PREFIX="ams-pr21-pg-",DATABASE="ams_pr21_test",OWNER="owner-pr26",WORKSPACE="personal";
 const SUBMIT_LOGIN="ams_pr26_submit_login",RECONCILE_LOGIN="ams_pr26_reconcile_login";
 const SUBMIT_ROLE="ai_media_admitted_submit_executor",RECONCILE_ROLE="ai_media_admitted_reconcile_executor";
+const EXACT_RUN_LOGIN="ams_pr32_exact_run_login",EXACT_RUN_ROLE="ai_media_one_video_run_executor";
 const SCRIPT_CONTENT="Approved PR26 PostgreSQL capability race script.";
 const SCRIPT_CHECKSUM=createHash("sha256").update(SCRIPT_CONTENT).digest("hex");
 const ids={account:"26000000-0000-4000-8000-000000000001",influencer:"26000000-0000-4000-8000-000000000002",
@@ -35,7 +36,9 @@ const ids={account:"26000000-0000-4000-8000-000000000001",influencer:"26000000-0
   sandbox:"26000000-0000-4000-8000-00000000000f",quote:"26000000-0000-4000-8000-000000000010",
   snapshot:"26000000-0000-4000-8000-000000000011",source:"26000000-0000-4000-8000-000000000012",
   intent:"26000000-0000-4000-8000-000000000013",submitCapability:"26000000-0000-4000-8000-000000000014",
-  reconcileCapability:"26000000-0000-4000-8000-000000000015"} as const;
+  reconcileCapability:"26000000-0000-4000-8000-000000000015",
+  exactRunCapability:"26000000-0000-4000-8000-000000000016",
+  exactUncertainCapability:"26000000-0000-4000-8000-000000000017"} as const;
 const digest=(character:string)=>`sha256:${character.repeat(64)}` as const;
 const dialect=new PgDialect();
 
@@ -63,6 +66,14 @@ const forwards=["20260721_pr19_daily_admission_forward.sql","20260721_pr20_launc
   "20260721_pr24_held_activation_forward.sql","20260721_pr25_admitted_worker_forward.sql",
   "20260721_pr26_db_capability_forward.sql"].map(migration);
 const pr26Rollback=migration("20260721_pr26_db_capability_rollback.sql");
+const pr4Forward=migration("20260720_pr4_assets_forward.sql");
+const pr27Forward=migration("20260721_pr27_heygen_terminal_forward.sql");
+const pr32Forward=readFileSync(new URL(
+  "../migrations/ai-media-studio/pending/20260723_pr32_exact_one_video_run_fence_forward.sql",import.meta.url,
+),"utf8");
+const pr32Rollback=readFileSync(new URL(
+  "../migrations/ai-media-studio/pending/20260723_pr32_exact_one_video_run_fence_rollback.sql",import.meta.url,
+),"utf8");
 
 class RoleSession{
   readonly pool:Pool;private client?:PoolClient;pid=0;
@@ -230,6 +241,14 @@ async function waitForExpiredAttempt(attemptId:string,column="lease_expires_at")
     `SELECT ${column}<=clock_timestamp() expired FROM ai_media_provider_submission_attempts WHERE id=$1`,[attemptId]);
     if(result.rows[0]?.expired)return;await new Promise<void>(resolve=>setImmediate(resolve));}
   throw new Error(`database lease ${column} did not expire`);
+}
+
+async function waitForExpiredExactRun(executionId:string):Promise<void>{
+  const deadline=Date.now()+10_000;while(Date.now()<deadline){const result=await adminPool.query<{expired:boolean}>(
+    `SELECT lease_expires_at<=clock_timestamp() expired
+     FROM ai_media_exact_one_video_run_fences WHERE id=$1`,[executionId]);
+    if(result.rows[0]?.expired)return;await new Promise<void>(resolve=>setImmediate(resolve));}
+  throw new Error("exact one-video run lease did not expire");
 }
 
 before(async()=>{if(enabled)await installSchema();});
@@ -452,4 +471,117 @@ integrationTest("live PR26 rollback preserves evidence, then removes only an unu
     WHERE procedure.oid='public.ai_media_assert_pr25_consistency()'::regprocedure`);
   assert.deepEqual(rollback.rows[0],{capability_table:false,capacity_table:false,api_schema:false,
     submit_table_access:false,public_create:false,legacy_definer:true,legacy_owner:"ai_media_admitted_fn_owner"});
+});
+
+integrationTest("pending PR32 exact fence is table-blind, concurrency-one, replay-safe and uncertainty-terminal",async()=>{
+  await resetOwnedSchema();
+  await adminPool.query(`DO $roles$ BEGIN
+    IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='${EXACT_RUN_ROLE}') THEN
+      CREATE ROLE ${EXACT_RUN_ROLE} NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+      CREATE ROLE ${EXACT_RUN_LOGIN} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+    END IF;
+  END $roles$`);
+  await adminPool.query(`GRANT ${EXACT_RUN_ROLE} TO ${EXACT_RUN_LOGIN}`);
+  await adminPool.query(`CREATE TABLE public.ai_media_assets(
+    id uuid PRIMARY KEY,owner_user_id text NOT NULL,workspace_id text NOT NULL,kind text NOT NULL,
+    checksum text,deleted_at timestamptz);
+    ALTER TABLE public.ai_media_render_jobs ADD COLUMN output_url text,ADD COLUMN error_code text,
+      ADD COLUMN error_message text,ADD COLUMN completed_at timestamptz`);
+  await adminPool.query(pr4Forward);
+  await adminPool.query(`UPDATE public.ai_media_admitted_worker_capabilities
+    SET revoked_at=clock_timestamp() WHERE allowed_operations @> ARRAY['release_terminal_capacity']::text[]`);
+  await adminPool.query(pr27Forward);
+  const work=await createActivatedWork();
+  await adminPool.query(pr32Forward);
+  const exact=await adminPool.query<{daily_plan_slot_id:string;attempt:number;work_handoff_digest:string}>(`
+    SELECT daily_plan_slot_id,attempt,work_handoff_digest FROM ai_media_budget_reservations
+    WHERE owner_user_id=$1 AND workspace_id=$2 AND id=$3 AND render_job_id=$4`,
+  [OWNER,WORKSPACE,work.reservationId,work.renderJobId]);
+  assert.equal(exact.rowCount,1);const target=exact.rows[0];
+  const commandId="exact-run-pr32-submit",commandDigest=digest("6"),uncertainCommandId="exact-run-pr32-terminal",
+    uncertainCommandDigest=digest("7");
+  await adminPool.query(`INSERT INTO ai_media_exact_one_video_run_capabilities(
+    id,database_principal,owner_user_id,workspace_id,actor_user_id,budget_reservation_id,render_job_id,
+    daily_plan_slot_id,slot_attempt,work_handoff_digest,action,command_id,command_digest,max_lease_ms,
+    valid_from,expires_at,evidence_digest)
+    VALUES($1,$2,$3,$4,'robert',$5,$6,$7,$8,$9,'activate_and_submit',$10,$11,300000,
+      clock_timestamp()-interval '1 minute',clock_timestamp()+interval '1 hour',$12),
+    ($13,$2,$3,$4,'robert',$5,$6,$7,$8,$9,'observe_terminal',$14,$15,300000,
+      clock_timestamp()-interval '1 minute',clock_timestamp()+interval '1 hour',$16)`,
+  [ids.exactRunCapability,EXACT_RUN_LOGIN,OWNER,WORKSPACE,work.reservationId,work.renderJobId,
+    target.daily_plan_slot_id,target.attempt,target.work_handoff_digest,commandId,commandDigest,digest("8"),
+    ids.exactUncertainCapability,uncertainCommandId,uncertainCommandDigest,digest("9")]);
+  const tableAccess=await adminPool.query<{subject:string;allowed:boolean}>(`SELECT subject,
+    has_table_privilege(subject,'public.ai_media_exact_one_video_run_fences','SELECT,INSERT,UPDATE,DELETE') allowed
+    FROM unnest($1::text[]) WITH ORDINALITY subjects(subject,ordinal) ORDER BY ordinal`,[[EXACT_RUN_LOGIN,EXACT_RUN_ROLE]]);
+  assert.deepEqual(tableAccess.rows,[
+    {subject:EXACT_RUN_LOGIN,allowed:false},{subject:EXACT_RUN_ROLE,allowed:false},
+  ]);
+  const session=new RoleSession(EXACT_RUN_LOGIN,EXACT_RUN_ROLE);await session.connect();
+  try{
+    const acquireParams=[ids.exactRunCapability,OWNER,WORKSPACE,work.reservationId,work.renderJobId,
+      target.daily_plan_slot_id,target.attempt,target.work_handoff_digest,"activate_and_submit",
+      commandId,commandDigest,"robert",1_000];
+    const acquired=await session.query<Record<string,unknown>>(
+      "SELECT * FROM ai_media_worker_api.acquire_exact_one_video_run_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+      acquireParams);
+    assert.equal(acquired.rowCount,1);assert.equal(acquired.rows[0].kind,"acquired");
+    const busy=await session.query<Record<string,unknown>>(
+      "SELECT * FROM ai_media_worker_api.acquire_exact_one_video_run_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+      acquireParams);
+    assert.equal(busy.rows[0].kind,"busy");
+    await waitForExpiredExactRun(String(acquired.rows[0].execution_id));
+    const reclaimed=await session.query<Record<string,unknown>>(
+      "SELECT * FROM ai_media_worker_api.acquire_exact_one_video_run_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+      [...acquireParams.slice(0,12),60_000]);
+    assert.equal(reclaimed.rows[0].kind,"acquired");
+    assert.equal(reclaimed.rows[0].execution_id,acquired.rows[0].execution_id);
+    assert.equal(reclaimed.rows[0].fencing_token,"2");
+    assert.notEqual(reclaimed.rows[0].lease_token,acquired.rows[0].lease_token);
+    const staleCompletion=await session.query<{applied:boolean}>(
+      "SELECT * FROM ai_media_worker_api.complete_exact_one_video_run_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)",
+      [ids.exactRunCapability,OWNER,WORKSPACE,acquired.rows[0].execution_id,commandId,commandDigest,
+        acquired.rows[0].fencing_token,acquired.rows[0].lease_token,work.reservationId,work.renderJobId,
+        target.daily_plan_slot_id,target.attempt,target.work_handoff_digest,"activate_and_submit","confirmed"]);
+    assert.deepEqual(staleCompletion.rows,[{applied:false}]);
+    const completed=await session.query<{applied:boolean}>(
+      "SELECT * FROM ai_media_worker_api.complete_exact_one_video_run_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)",
+      [ids.exactRunCapability,OWNER,WORKSPACE,reclaimed.rows[0].execution_id,commandId,commandDigest,
+        reclaimed.rows[0].fencing_token,reclaimed.rows[0].lease_token,work.reservationId,work.renderJobId,
+        target.daily_plan_slot_id,target.attempt,target.work_handoff_digest,"activate_and_submit","confirmed"]);
+    assert.deepEqual(completed.rows,[{applied:true}]);
+    const replay=await session.query<Record<string,unknown>>(
+      "SELECT * FROM ai_media_worker_api.acquire_exact_one_video_run_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+      acquireParams);
+    assert.equal(replay.rows[0].kind,"replayed");assert.equal(replay.rows[0].outcome,"confirmed");
+
+    const uncertainParams=[ids.exactUncertainCapability,OWNER,WORKSPACE,work.reservationId,work.renderJobId,
+      target.daily_plan_slot_id,target.attempt,target.work_handoff_digest,"observe_terminal",
+      uncertainCommandId,uncertainCommandDigest,"robert",60_000];
+    const uncertainAcquire=await session.query<Record<string,unknown>>(
+      "SELECT * FROM ai_media_worker_api.acquire_exact_one_video_run_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+      uncertainParams);
+    assert.equal(uncertainAcquire.rows[0].kind,"acquired");
+    const sealed=await session.query<{applied:boolean}>(
+      "SELECT * FROM ai_media_worker_api.seal_exact_one_video_run_uncertain_v1($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+      [ids.exactUncertainCapability,OWNER,WORKSPACE,uncertainAcquire.rows[0].execution_id,
+        uncertainCommandId,uncertainCommandDigest,uncertainAcquire.rows[0].fencing_token,
+        uncertainAcquire.rows[0].lease_token,digest("a")]);
+    assert.deepEqual(sealed.rows,[{applied:true}]);
+    const conflict=await session.query<Record<string,unknown>>(
+      "SELECT * FROM ai_media_worker_api.acquire_exact_one_video_run_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)",
+      uncertainParams);
+    assert.equal(conflict.rows[0].kind,"conflict");
+  }finally{await session.close();}
+  const evidence=await adminPool.query<{completed:string;uncertain:string;publishing_surface_absent:boolean}>(`SELECT
+    count(*) FILTER (WHERE state='completed')::text completed,
+    count(*) FILTER (WHERE state='uncertain')::text uncertain,
+    to_regclass('public.ai_media_publishing_jobs') IS NULL publishing_surface_absent
+    FROM ai_media_exact_one_video_run_fences`);
+  assert.deepEqual(evidence.rows[0],{completed:"1",uncertain:"1",publishing_surface_absent:true});
+  const rollbackClient=await adminPool.connect();try{
+    await assert.rejects(rollbackClient.query(pr32Rollback),
+      /rollback preserves exact one-video authorization and run evidence/u);
+    await rollbackClient.query("ROLLBACK");
+  }finally{rollbackClient.release();}
 });

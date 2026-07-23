@@ -64,17 +64,20 @@ jobs:
           tests/ai-media-studio-agent-control.test.ts
           tests/ai-media-studio-canonical-roster-persona.test.ts
           tests/ai-media-studio-core-schema.test.ts
+          tests/ai-media-studio-exact-one-video-run-fence-drizzle.test.ts
           tests/ai-media-studio-heygen-roster-drizzle.test.ts
           tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts
           tests/ai-media-studio-launch-plan-profile.test.ts
           tests/ai-media-studio-production-batch-contracts.test.ts
           tests/ai-media-studio-production-admitted-render-runtime.test.ts
           tests/ai-media-studio-production-admitted-render-bootstrap.test.ts
+          tests/ai-media-studio-pr32-exact-one-video-run-fence-migration.test.ts
           tests/ai-media-studio-reusable-script-assets.test.ts
           tests/ai-media-studio-sandbox-readiness-contracts.test.ts
           tests/ai-media-studio-source-to-batch-contracts.test.ts
           tests/ai-media-studio-strict-money-action-request.test.ts
           tests/ai-media-studio-verified-static-heygen-runtime-credential.test.ts
+          tests/ai-media-studio-one-video-run-once-executor.test.ts
         timeout-minutes: 5
 
       - name: Run isolated verified HeyGen credential PostgreSQL rehearsal
@@ -87,6 +90,14 @@ jobs:
         run: |
           export PATH="$(pg_config --bindir):$PATH"
           npm run test:ai-media-offline-one-slot-postgres
+        timeout-minutes: 8
+
+      - name: Run isolated exact one-video fence PostgreSQL rehearsal
+        env:
+          AI_MEDIA_POSTGRES_SUITE: pr26
+        run: |
+          export PATH="$(pg_config --bindir):$PATH"
+          npm run test:ai-media-postgres
         timeout-minutes: 8
 
       - name: Build production bundle
