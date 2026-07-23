@@ -14,6 +14,14 @@ test("parses extra posts for today", () => {
   assert.equal(result.command.targetDate, "2026-07-21");
 });
 
+test("targets Facebook and YouTube without adding the extra posts to TikTok", () => {
+  const result = parseBlackRoomChatCommand("sube 2 videos más hoy para Facebook y YouTube", { now });
+  assert.equal(result.command?.type, "extra_posts");
+  if (result.command?.type !== "extra_posts") throw new Error("expected extra_posts");
+  assert.deepEqual(result.command.networks, ["facebook", "youtube"]);
+  assert.match(result.reply, /facebook y youtube/);
+});
+
 test("parses a new daily target", () => {
   const result = parseBlackRoomChatCommand("quiero 12 videos por día", { now });
   assert.equal(result.command?.type, "daily_target");
@@ -34,10 +42,10 @@ test("does not invent an analytics recommendation with too little data", () => {
   assert.match(result.reply, /4\/21/);
 });
 
-test("enforces the seven-post daily campaign floor", () => {
+test("enforces the five-post daily campaign floor", () => {
   const result = parseBlackRoomChatCommand("sube 3 videos por día", { now });
   assert.equal(result.command, null);
-  assert.match(result.reply, /mínimo es 7/);
+  assert.match(result.reply, /mínimo es 5/);
 });
 
 test("rejects extra-today requests that no longer fit safely", () => {

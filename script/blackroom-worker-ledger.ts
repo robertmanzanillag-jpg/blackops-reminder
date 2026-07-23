@@ -75,6 +75,9 @@ async function main(): Promise<void> {
       const durationSeconds = Number(arg("--duration"));
       const renderPathInput = arg("--render") || "";
       const sourcePathInput = arg("--source") || "";
+      const targetNetworks = String(arg("--networks") || "").split(",")
+        .filter((network): network is "tiktok" | "facebook" | "youtube" =>
+          network === "tiktok" || network === "facebook" || network === "youtube");
       if (language !== "en" && language !== "es") throw new Error("language must be en or es");
       if (format !== "vertical" && format !== "horizontal") throw new Error("format must be vertical or horizontal");
       if (![15, 30, 60, 120, 300, 600].includes(durationSeconds)) throw new Error("unsupported duration");
@@ -84,6 +87,7 @@ async function main(): Promise<void> {
       result = reserveBlackRoomLedgerEntry(ledger, {
         jobId: arg("--job") || "", slot: arg("--slot") || "", videoId: arg("--video") || "",
         dj: arg("--dj") || "", language, format,
+        targetNetworks,
         durationSeconds: durationSeconds as 15 | 30 | 60 | 120 | 300 | 600,
         segmentStartSeconds: Number(arg("--segment-start")), segmentEndSeconds: Number(arg("--segment-end")),
         caption: arg("--caption") || "",

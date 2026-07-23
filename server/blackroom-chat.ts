@@ -3,7 +3,7 @@ import type { BlackRoomCeoAnalytics } from "./blackroom-growth-ceo";
 
 export type BlackRoomRemoteCommand =
   | { id: string; type: "daily_target"; posts: number; createdAt: string }
-  | { id: string; type: "extra_posts"; posts: number; targetDate: string; createdAt: string }
+  | { id: string; type: "extra_posts"; posts: number; targetDate: string; networks?: Array<"tiktok" | "facebook" | "youtube">; createdAt: string }
   | { id: string; type: "priority_source"; url: string; createdAt: string }
   | { id: string; type: "ceo_schedule"; slotsByDate: Record<string, string[]>; analytics: BlackRoomCeoAnalytics; createdAt: string };
 
@@ -104,18 +104,24 @@ export function parseBlackRoomChatCommand(
     return { reply: "La cantidad debe estar entre 1 y 16 videos para mantener al menos 90 minutos entre publicaciones.", command: null };
   }
   if (Number.isFinite(number) && /\b(mas|extra|adicional)/.test(text) && /\bhoy\b/.test(text)) {
+    const networks = ([
+      ["tiktok", /\btik\s*tok\b/],
+      ["facebook", /\bfacebook\b/],
+      ["youtube", /\b(?:youtube|shorts?)\b/],
+    ] as const).filter(([, pattern]) => pattern.test(text)).map(([network]) => network);
+    const destination = networks.length ? ` para ${networks.join(" y ")}` : "";
     const available = remainingNinetyMinuteSlots(now, timezone);
     if (number > available) {
       return { reply: `Hoy solo ${available === 1 ? "cabe" : "caben"} ${available} video${available === 1 ? "" : "s"} adicional${available === 1 ? "" : "es"} manteniendo 90 minutos entre publicaciones. Puedes pedir ${number} para mañana o reducir la cantidad.`, command: null };
     }
     return {
-      reply: `Listo. Agregaré ${number} video${number === 1 ? "" : "s"} extra${number === 1 ? "" : "s"} a la cola de hoy, separados de los demás horarios.`,
-      command: { id: randomUUID(), type: "extra_posts", posts: number, targetDate: localDate(now, timezone), createdAt: now.toISOString() },
+      reply: `Listo. Agregaré ${number} video${number === 1 ? "" : "s"} extra${number === 1 ? "" : "s"}${destination} a la cola de hoy, separados de los demás horarios.`,
+      command: { id: randomUUID(), type: "extra_posts", posts: number, targetDate: localDate(now, timezone), ...(networks.length ? { networks } : {}), createdAt: now.toISOString() },
     };
   }
   if (Number.isFinite(number) && /(por dia|al dia|x dia|diarios?|cada dia)/.test(text)) {
-    if (number < 7) {
-      return { reply: "Para esta campaña el mínimo es 7 videos por día. Puedes elegir entre 7 y 16 manteniendo al menos 90 minutos entre publicaciones.", command: null };
+    if (number < 5) {
+      return { reply: "Para esta campaña el mínimo es 5 videos por día. Puedes elegir entre 5 y 16; el CEO ajustará cada red según sus resultados.", command: null };
     }
     return {
       reply: `Entendido. El objetivo automático será ${number} video${number === 1 ? "" : "s"} por día. Si los analytics no respaldan esa frecuencia, te lo señalaré sin ignorar tu orden.`,

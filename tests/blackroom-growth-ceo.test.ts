@@ -9,6 +9,7 @@ import {
   extractBlackRoomMetricSamples,
   extractBlackRoomViewSamples,
   planBlackRoomCreativeLearning,
+  planBlackRoomNetworkLearning,
 } from "../server/blackroom-growth-ceo";
 
 function minutes(time: string): number {
@@ -16,9 +17,9 @@ function minutes(time: string): number {
   return hour * 60 + minute;
 }
 
-test("seven daily exploration slots cover overnight, morning, afternoon and night", () => {
+test("ten daily exploration slots cover overnight, morning, afternoon and night", () => {
   const slots = buildBlackRoomLearningSlots({ dayIndex: 0 });
-  assert.equal(slots.length, 7);
+  assert.equal(slots.length, 10);
   assert.ok(slots.some((slot) => minutes(slot) < 6 * 60));
   assert.ok(slots.some((slot) => minutes(slot) >= 6 * 60 && minutes(slot) < 12 * 60));
   assert.ok(slots.some((slot) => minutes(slot) >= 12 * 60 && minutes(slot) < 18 * 60));
@@ -54,10 +55,25 @@ test("collects each network through discovered Metricool MCP tools and uses the 
   assert.equal(analytics.sampleCount, 2);
   assert.deepEqual(analytics.networkSamples, { tiktok: 3, facebook: 2, youtube: 4 });
   assert.deepEqual(analytics.recommendedTimes, ["18:30"]);
+  assert.deepEqual(analytics.recommendedTimesByNetwork, { tiktok: ["18:30"], facebook: ["18:30"], youtube: ["18:30"] });
+  assert.deepEqual(analytics.networkDailyTargets, { tiktok: 5, facebook: 10, youtube: 7 });
   assert.equal(calls.filter((name) => name === "get_best_times_to_post").length, 3);
 });
 
 test("CEO does not optimize times before the minimum comparable sample", () => {
+test("CEO reduces a low-view network while allowing healthy networks to scale", () => {
+  const result = planBlackRoomNetworkLearning({
+    viewsByNetwork: {
+      tiktok: [1, 2, 3, 4, 5, 6],
+      facebook: [50, 80, 100, 120, 150],
+      youtube: [20, 30, 40, 60, 80],
+    },
+  });
+  assert.deepEqual(result.networkDailyTargets, { tiktok: 5, facebook: 10, youtube: 7 });
+  assert.equal(result.networkMedianViews.tiktok, 3.5);
+  assert.equal(result.networkLowViewRate.tiktok, 1);
+});
+
   const collecting = buildBlackRoomLearningSlots({ dayIndex: 0, sampleCount: BLACKROOM_CEO_MIN_SAMPLES - 1, recommendedTimes: ["12:34"] });
   const baseline = buildBlackRoomLearningSlots({ dayIndex: 0 });
   assert.deepEqual(collecting, baseline);

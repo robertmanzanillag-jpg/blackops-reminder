@@ -1,7 +1,12 @@
 import { callMetricoolMcpTool, listMetricoolMcpTools, BLACKROOM_METRICOOL_BLOG_ID, BLACKROOM_METRICOOL_NETWORKS } from "./blackroom-metricool-bridge";
 
 export const BLACKROOM_CEO_MIN_SAMPLES = 21;
-export const BLACKROOM_CEO_DAILY_POSTS = 7;
+export const BLACKROOM_CEO_DAILY_POSTS = 10;
+export const BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS: Record<string, number> = {
+  tiktok: 5,
+  facebook: 10,
+  youtube: 7,
+};
 export const BLACKROOM_CEO_MIN_SPACING_MINUTES = 90;
 export const BLACKROOM_CEO_REFRESH_MS = 6 * 60 * 60_000;
 export const BLACKROOM_CEO_CREATIVE_MIN_SAMPLES = 5;
@@ -17,6 +22,10 @@ export interface BlackRoomCeoAnalytics {
   confidence: "collecting" | "learning";
   networkSamples: Record<string, number>;
   recommendedTimes: string[];
+  recommendedTimesByNetwork?: Record<string, string[]>;
+  networkMedianViews?: Record<string, number>;
+  networkLowViewRate?: Record<string, number>;
+  networkDailyTargets?: Record<string, number>;
   tiktokMedianViews: number;
   tiktokLowViewRate: number;
   creativeStrategy: BlackRoomCreativeStrategy;
@@ -86,6 +95,38 @@ function median(values: number[]): number {
   const sorted = [...values].sort((left, right) => left - right);
   const middle = Math.floor(sorted.length / 2);
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
+}
+
+export function planBlackRoomNetworkLearning(input: {
+  viewsByNetwork: Record<string, number[]>;
+}): {
+  networkMedianViews: Record<string, number>;
+  networkLowViewRate: Record<string, number>;
+  networkDailyTargets: Record<string, number>;
+} {
+  const networkMedianViews: Record<string, number> = {};
+  const networkLowViewRate: Record<string, number> = {};
+  const networkDailyTargets: Record<string, number> = {};
+  for (const network of BLACKROOM_METRICOOL_NETWORKS) {
+    const views = (input.viewsByNetwork[network] || [])
+      .map(Number)
+      .filter((value) => Number.isFinite(value) && value >= 0);
+    const sampleCount = views.length;
+    const networkMedian = median(views);
+    const lowRate = sampleCount
+      ? views.filter((value) => value <= BLACKROOM_CEO_LOW_VIEW_THRESHOLD).length / sampleCount
+      : 0;
+    let target = BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS[network] || 5;
+    if (sampleCount >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES && (networkMedian <= BLACKROOM_CEO_LOW_VIEW_THRESHOLD || lowRate >= 0.7)) {
+      target = 5;
+    } else if (sampleCount >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES && networkMedian >= 50 && lowRate <= 0.4) {
+      target = BLACKROOM_CEO_DAILY_POSTS;
+    }
+    networkMedianViews[network] = networkMedian;
+    networkLowViewRate[network] = lowRate;
+    networkDailyTargets[network] = target;
+  }
+  return { networkMedianViews, networkLowViewRate, networkDailyTargets };
 }
 
 export function planBlackRoomCreativeLearning(input: {
@@ -229,7 +270,8 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   }
   const networkSamples: Record<string, number> = {};
   const times: string[] = [];
-  let tiktokViews: number[] = [];
+  const recommendedTimesByNetwork: Record<string, string[]> = {};
+  const viewsByNetwork: Record<string, number[]> = {};
   let tiktokPostIds: string[] = [];
   for (const network of BLACKROOM_METRICOOL_NETWORKS) {
     const networkToolPattern = network === "tiktok" ? /^get_?tiktoks$/i : network === "youtube" ? /^get_?videos$/i : /^get_?posts$/i;
@@ -237,19 +279,23 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
     const metrics = await callMetricoolMcpTool(fetcher, String(env.METRICOOL_USER_TOKEN || ""), selectedTool.name, buildToolArguments(selectedTool.inputSchema, network, now, env));
     const payload = toolPayload(metrics);
     networkSamples[network] = extractBlackRoomMetricSamples(payload);
+    const viewRecords = extractBlackRoomViewRecords(payload);
+    viewsByNetwork[network] = viewRecords.map((record) => record.views);
     if (network === "tiktok") {
-      const viewRecords = extractBlackRoomViewRecords(payload);
-      tiktokViews = viewRecords.map((record) => record.views);
       tiktokPostIds = viewRecords.map((record) => record.id);
     }
     if (bestTimesTool) {
       const best = await callMetricoolMcpTool(fetcher, String(env.METRICOOL_USER_TOKEN || ""), bestTimesTool.name, buildToolArguments(bestTimesTool.inputSchema, network, now, env));
-      times.push(...extractBlackRoomBestTimes(toolPayload(best)));
+      const networkTimes = extractBlackRoomBestTimes(toolPayload(best));
+      recommendedTimesByNetwork[network] = networkTimes;
+      times.push(...networkTimes);
     }
   }
   const sampleCount = Math.min(...BLACKROOM_METRICOOL_NETWORKS.map((network) => networkSamples[network] || 0));
   const recommendedTimes = [...new Set(times)].slice(0, 12);
-  const creative = planBlackRoomCreativeLearning({ views: tiktokViews, postIds: tiktokPostIds, previous: options.previous, now });
+  const networkLearning = planBlackRoomNetworkLearning({ viewsByNetwork });
+  const creative = planBlackRoomCreativeLearning({ views: viewsByNetwork.tiktok || [], postIds: tiktokPostIds, previous: options.previous, now });
+  const targets = BLACKROOM_METRICOOL_NETWORKS.map((network) => `${network} ${networkLearning.networkDailyTargets[network]}/día`).join(", ");
   return {
     sampleCount,
     lastCheckedAt: now.toISOString(),
@@ -257,9 +303,11 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
     confidence: sampleCount >= BLACKROOM_CEO_MIN_SAMPLES ? "learning" : "collecting",
     networkSamples,
     recommendedTimes,
+    recommendedTimesByNetwork,
+    ...networkLearning,
     ...creative,
     reason: sampleCount >= BLACKROOM_CEO_MIN_SAMPLES
-      ? `El CEO puede mover como máximo dos horarios futuros por día y mantiene espacios de exploración. ${creative.creativeReason}`
-      : `Recolectando resultados comparables (${sampleCount}/${BLACKROOM_CEO_MIN_SAMPLES}); los horarios siguen explorando las 24 horas. ${creative.creativeReason}`,
+      ? `El CEO estudia las tres redes y mantiene espacios de exploración: ${targets}. ${creative.creativeReason}`
+      : `Recolectando resultados comparables (${sampleCount}/${BLACKROOM_CEO_MIN_SAMPLES}); objetivos prudentes: ${targets}. ${creative.creativeReason}`,
   };
 }

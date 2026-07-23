@@ -8,8 +8,10 @@ export const BLACKROOM_QUEUE_PATH = "clippers_workspace/blackroom/agent/queue.js
 export const BLACKROOM_DEFAULT_BUFFER_DAYS = 14;
 export const BLACKROOM_DEFAULT_POSTS_PER_DAY = BLACKROOM_CEO_DAILY_POSTS;
 export const BLACKROOM_DEFAULT_INTERVAL_MINUTES = 90;
+export const BLACKROOM_MIN_POSTS_PER_DAY = 5;
 export const BLACKROOM_DURATION_VARIANTS = [15, 30, 60, 120, 300, 600] as const;
 export type BlackRoomExperimentDuration = (typeof BLACKROOM_DURATION_VARIANTS)[number];
+export type BlackRoomTargetNetwork = "tiktok" | "facebook" | "youtube";
 
 export type BlackRoomDailyJobStatus = "queued" | "processing" | "retry" | "scheduled" | "completed";
 
@@ -26,7 +28,7 @@ export interface BlackRoomDailyJob {
   updatedAt: string;
   completedAt: string | null;
   lastError: string | null;
-  slots: Array<{ localTime: string; timezone: string }>;
+  slots: Array<{ localTime: string; timezone: string; networks?: BlackRoomTargetNetwork[] }>;
   requirements: {
     posts: number;
     djs: number;
@@ -136,6 +138,10 @@ export function createBlackRoomQueueState(now = new Date()): BlackRoomQueueState
       confidence: "collecting",
       networkSamples: { tiktok: 0, facebook: 0, youtube: 0 },
       recommendedTimes: [],
+      recommendedTimesByNetwork: { tiktok: [], facebook: [], youtube: [] },
+      networkMedianViews: { tiktok: 0, facebook: 0, youtube: 0 },
+      networkLowViewRate: { tiktok: 0, facebook: 0, youtube: 0 },
+      networkDailyTargets: { tiktok: 5, facebook: 10, youtube: 7 },
       tiktokMedianViews: 0,
       tiktokLowViewRate: 0,
       creativeStrategy: "drop_first",
@@ -198,10 +204,22 @@ function youtubeVideoId(url: string): string | null {
   } catch { return null; }
 }
 
+function restoreExplicitNetworkTargets(
+  slots: BlackRoomDailyJob["slots"],
+  previousSlots: BlackRoomDailyJob["slots"],
+): BlackRoomDailyJob["slots"] {
+  const explicit = previousSlots.flatMap((slot) => slot.networks?.length ? [[...slot.networks]] : []);
+  const offset = Math.max(0, slots.length - explicit.length);
+  return slots.map((slot, index) => index >= offset && explicit[index - offset]?.length
+    ? { ...slot, networks: explicit[index - offset] }
+    : slot);
+}
+
 function resizeJob(state: BlackRoomQueueState, job: BlackRoomDailyJob, posts: number): void {
   const count = Math.max(1, Math.min(16, Math.floor(posts)));
   const dayIndex = Math.floor(new Date(`${job.targetDate}T12:00:00.000Z`).getTime() / 86400_000);
-  job.slots = buildRotatingSlots({ dayIndex, posts: count, intervalMinutes: state.intervalMinutes, timezone: state.timezone });
+  const rebuilt = buildRotatingSlots({ dayIndex, posts: count, intervalMinutes: state.intervalMinutes, timezone: state.timezone });
+  job.slots = restoreExplicitNetworkTargets(rebuilt, job.slots);
   job.requirements.posts = count;
   job.requirements.djs = Math.min(5, count);
   job.requirements.postsPerDj = Math.ceil(count / job.requirements.djs);
@@ -247,7 +265,7 @@ export function applyBlackRoomRemoteCommands(state: BlackRoomQueueState, command
   for (const command of commands) {
     if (!command?.id || applied.has(command.id)) continue;
     if (command.type === "daily_target") {
-      state.postsPerDay = Math.max(BLACKROOM_DEFAULT_POSTS_PER_DAY, Math.min(16, Math.floor(command.posts)));
+      state.postsPerDay = Math.max(BLACKROOM_MIN_POSTS_PER_DAY, Math.min(16, Math.floor(command.posts)));
       for (const job of state.jobs.filter((item) => ["queued", "retry"].includes(item.status))) {
         const target = state.adHocExtraDates.includes(job.targetDate)
           ? Number(state.extraPostsByDate[job.targetDate] || job.requirements.posts)
@@ -255,25 +273,46 @@ export function applyBlackRoomRemoteCommands(state: BlackRoomQueueState, command
         resizeJob(state, job, target);
       }
     } else if (command.type === "extra_posts") {
-      let job = state.jobs.find((item) => item.targetDate === command.targetDate);
+      const sameDateJobs = state.jobs.filter((item) => item.targetDate === command.targetDate);
+      let job = sameDateJobs.find((item) => ["queued", "retry", "processing"].includes(item.status));
       const createdAdHoc = !job;
       if (!job) {
         job = createDailyJob(state, command.targetDate, 0, now);
+        if (sameDateJobs.length) {
+          const commandSuffix = command.id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
+          job.id = `${job.id}-extra-${commandSuffix}`;
+        }
         state.jobs.push(job);
-        state.adHocExtraDates.push(command.targetDate);
+        if (!state.adHocExtraDates.includes(command.targetDate)) state.adHocExtraDates.push(command.targetDate);
+        if (sameDateJobs.length) state.extraPostsByDate[command.targetDate] = 0;
       }
       const added = Math.max(1, Math.min(16, Math.floor(command.posts)));
       state.extraPostsByDate[command.targetDate] = Number(state.extraPostsByDate[command.targetDate] || 0) + added;
       if (createdAdHoc) {
         resizeJob(state, job, state.extraPostsByDate[command.targetDate]);
-        job.slots = buildFutureSameDaySlots(now, job.requirements.posts, state.intervalMinutes, state.timezone);
+        job.slots = buildFutureSameDaySlots(now, job.requirements.posts, state.intervalMinutes, state.timezone)
+          .map((slot) => command.networks?.length ? { ...slot, networks: [...command.networks] } : slot);
       } else if (state.adHocExtraDates.includes(command.targetDate)) {
-        job.slots.push(...appendFutureSameDaySlots(now, job.slots, added, state.intervalMinutes, state.timezone));
+        const extraSlots = appendFutureSameDaySlots(now, job.slots, added, state.intervalMinutes, state.timezone)
+          .map((slot) => command.networks?.length ? { ...slot, networks: [...command.networks] } : slot);
+        job.slots.push(...extraSlots);
         job.requirements.posts = job.slots.length;
         job.requirements.djs = Math.min(5, job.requirements.posts);
         job.requirements.postsPerDj = Math.ceil(job.requirements.posts / job.requirements.djs);
       } else {
-        resizeJob(state, job, state.postsPerDay + state.extraPostsByDate[command.targetDate]);
+        if (command.targetDate === localDate(now, state.timezone)) {
+          const extraSlots = appendFutureSameDaySlots(now, job.slots, added, state.intervalMinutes, state.timezone)
+            .map((slot) => command.networks?.length ? { ...slot, networks: [...command.networks] } : slot);
+          job.slots.push(...extraSlots);
+          job.requirements.posts = job.slots.length;
+          job.requirements.djs = Math.min(5, job.requirements.posts);
+          job.requirements.postsPerDj = Math.ceil(job.requirements.posts / job.requirements.djs);
+        } else {
+          resizeJob(state, job, state.postsPerDay + state.extraPostsByDate[command.targetDate]);
+          if (command.networks?.length) {
+            job.slots.slice(-added).forEach((slot) => { slot.networks = [...command.networks!]; });
+          }
+        }
       }
     } else if (command.type === "priority_source") {
       state.prioritySources.push({ id: command.id, url: command.url, videoId: youtubeVideoId(command.url), status: "pending", createdAt: command.createdAt });
@@ -284,7 +323,8 @@ export function applyBlackRoomRemoteCommands(state: BlackRoomQueueState, command
         const learnedSlots = command.slotsByDate[job.targetDate];
         if (!learnedSlots?.length) continue;
         const count = job.requirements.posts;
-        job.slots = learnedSlots.slice(0, count).map((localTime) => ({ localTime, timezone: state.timezone }));
+        const learned = learnedSlots.slice(0, count).map((localTime) => ({ localTime, timezone: state.timezone }));
+        job.slots = restoreExplicitNetworkTargets(learned, job.slots);
         if (job.slots.length < count) resizeJob(state, job, count);
         job.updatedAt = iso(now);
       }
