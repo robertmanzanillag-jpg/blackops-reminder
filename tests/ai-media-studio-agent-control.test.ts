@@ -50,9 +50,17 @@ test("dedicated media agent snapshot exposes exact ownership, gates, evidence an
     assert.ok(item.acceptance.length > 0);
     assert.ok(item.mergeGate.length > 0);
     assert.ok(item.nextAction.length > 0);
-    assert.ok(item.gates);
     assert.ok(item.evidenceLinks);
   }
+});
+
+test("legacy evidence is not converted into authoritative gate state", () => {
+  const snapshot = createAiMediaStudioAgentSnapshot(() => new Date("2026-07-23T20:00:00.000Z"));
+  const legacy = snapshot.workItems.find((item) => item.pullRequestUrl?.endsWith("/pull/136"));
+  const current = snapshot.workItems.find((item) => item.pullRequestUrl?.endsWith("/pull/185"));
+  assert.equal(legacy?.gates, undefined);
+  assert.ok(current?.gates);
+  assert.match(pageSource, /\{item\.gates && \(/u);
 });
 
 test("agent control exposes the exact open draft chain through PR 185 without merged claims", () => {
