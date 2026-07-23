@@ -29,7 +29,10 @@ function fakeRuntime(input: { autostart?: boolean; calls: { workers: number } })
   } as unknown as ProductionAdmittedRenderRuntime;
 }
 
-async function startRuntime(productionAdmittedRenderRuntime?: ProductionAdmittedRenderRuntime) {
+async function startRuntime(
+  productionAdmittedRenderRuntime?: ProductionAdmittedRenderRuntime,
+  createProductionAdmittedRenderRuntime?: () => ProductionAdmittedRenderRuntime,
+) {
   const app = express();
   app.use(express.json());
   app.use((req, _res, next) => {
@@ -41,6 +44,7 @@ async function startRuntime(productionAdmittedRenderRuntime?: ProductionAdmitted
     runtimeEnvironment: "test",
     operations: { runtimeEnvironment: "test" },
     ...(productionAdmittedRenderRuntime ? { productionAdmittedRenderRuntime } : {}),
+    ...(createProductionAdmittedRenderRuntime ? { createProductionAdmittedRenderRuntime } : {}),
   });
   app.use(runtime.router);
   const server = createServer(app);
@@ -91,6 +95,62 @@ test("an injected admitted render runtime exposes only safe status and starts no
   assert.equal(calls.workers, 0);
   assert.equal(text.includes("submitWorker"), false);
   assert.equal(text.includes("providerResolver"), false);
+  assert.equal(text.includes(sentinelSecret), false);
+});
+
+test("an admitted render factory is called once and exposes only cached durable status", async (t) => {
+  const calls = { workers: 0, factory: 0 };
+  const server = await startRuntime(undefined, () => {
+    calls.factory += 1;
+    return fakeRuntime({ calls });
+  });
+  t.after(server.close);
+
+  assert.equal(calls.factory, 1);
+  const firstResponse = await fetch(server.url);
+  const firstText = await firstResponse.text();
+  const secondResponse = await fetch(server.url);
+  const secondText = await secondResponse.text();
+
+  assert.equal(firstResponse.status, 200);
+  assert.equal(secondResponse.status, 200);
+  assert.equal(firstResponse.headers.get("x-ai-media-studio-admitted-render"), "drizzle");
+  assert.equal(secondResponse.headers.get("x-ai-media-studio-admitted-render"), "drizzle");
+  assert.deepEqual(JSON.parse(firstText).admittedRenderRuntime, {
+    mode: "drizzle",
+    available: true,
+    durable: true,
+    reason: "Admitted HeyGen render runtime is composed with autostart disabled",
+  });
+  assert.equal(calls.factory, 1);
+  assert.equal(calls.workers, 0);
+  for (const text of [firstText, secondText]) {
+    assert.equal(text.includes("submitWorker"), false);
+    assert.equal(text.includes("providerResolver"), false);
+    assert.equal(text.includes(sentinelSecret), false);
+  }
+});
+
+test("a throwing admitted render factory fails closed without leaking its error", async (t) => {
+  let factoryCalls = 0;
+  const server = await startRuntime(undefined, () => {
+    factoryCalls += 1;
+    throw new Error(sentinelSecret);
+  });
+  t.after(server.close);
+
+  assert.equal(factoryCalls, 1);
+  const response = await fetch(server.url);
+  const text = await response.text();
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("x-ai-media-studio-admitted-render"), "unavailable");
+  assert.deepEqual(JSON.parse(text).admittedRenderRuntime, {
+    mode: "unavailable",
+    available: false,
+    durable: false,
+    reason: "Admitted render runtime composition failed closed; workers remain stopped",
+  });
+  assert.equal(factoryCalls, 1);
   assert.equal(text.includes(sentinelSecret), false);
 });
 
