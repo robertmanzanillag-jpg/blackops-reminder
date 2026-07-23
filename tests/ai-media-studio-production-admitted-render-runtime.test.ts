@@ -3,6 +3,7 @@ import test from "node:test";
 import type { SQL } from "drizzle-orm";
 import { PgDialect } from "drizzle-orm/pg-core";
 import { InMemoryAssetIngestRepository } from "../server/ai-media-studio/assets/in-memory-repository";
+import { durableProviderArtifactRef } from "../server/ai-media-studio/assets/provider-artifact-identity";
 import type { AvailableProductionAssetRuntime } from "../server/ai-media-studio/assets/production-runtime";
 import type { AdmittedAuthorizedIdentity } from "../server/ai-media-studio/workers/admitted-render-contracts";
 import type { AdmittedTerminalClaim } from "../server/ai-media-studio/workers/admitted-render-terminal-worker";
@@ -26,6 +27,16 @@ const ids = {
   render: "66666666-6666-4666-8666-666666666666",
 } as const;
 const digest = `sha256:${"a".repeat(64)}` as Sha256Digest;
+
+function artifactRef(ownerUserId = "owner-a"): string {
+  return durableProviderArtifactRef({
+    scope: { ownerUserId, workspaceId: "personal" },
+    renderJobId: ids.render,
+    providerAccountId: ids.providerAccount,
+    providerKey: "heygen",
+    providerJobId: "video-123",
+  });
+}
 
 function databaseLane(counter: { calls: number }): AdmittedRenderTransactionalDatabase {
   const lane: AdmittedRenderTransactionalDatabase = {
@@ -251,7 +262,7 @@ test("asset ingest receives the durable HeyGen resolver and never falls back to 
     id: "ingest-1",
     tenantId,
     renderJobId: ids.render,
-    remoteArtifactRef: "provider-artifact://ai-media-studio/render-terminal/v1/stable",
+    remoteArtifactRef: artifactRef("another-owner"),
     sourceUrl: "https://stale.example.com/video.mp4?expired=true",
     maxAttempts: 2,
     availableAtMs: 0,
@@ -262,6 +273,48 @@ test("asset ingest receives the durable HeyGen resolver and never falls back to 
   assert.equal(setup.transportCalls.calls, 0);
   assert.equal(setup.adapterCalls.reader, 0);
   assert.equal(setup.adapterCalls.storage, 0);
+});
+
+test("artifact binding is revalidated immediately before provider GET", async () => {
+  let bindingCalls = 0;
+  let providerCalls = 0;
+  const setup = createInput({
+    heyGen: {
+      apiKey: "test-only-heygen-secret",
+      providerAccountId: ids.providerAccount,
+      providerCredentialVersion: 7,
+      credentialExpiresAt: "2099-01-01T00:00:00.000Z",
+      async fetchImpl() {
+        providerCalls += 1;
+        throw new Error("provider transport must remain blocked");
+      },
+    },
+    async resolveArtifactBinding(request) {
+      bindingCalls += 1;
+      return {
+        jobId: request.jobId,
+        tenantId: request.tenantId,
+        renderJobId: request.renderJobId,
+        remoteArtifactRef: request.remoteArtifactRef,
+        providerJobId: "video-123",
+        scope: { ownerUserId: "owner-a", workspaceId: "personal" },
+        providerAccountId: ids.providerAccount,
+        providerKey: "heygen",
+        providerCredentialVersion: 7,
+        authorizationDigest: (bindingCalls === 1 ? digest : `sha256:${"b".repeat(64)}`) as Sha256Digest,
+      };
+    },
+  });
+  const runtime = createProductionAdmittedRenderRuntime(setup.input);
+  await assert.rejects(runtime.artifactResolver.resolveArtifact({
+    jobId: ids.attempt,
+    tenantId: JSON.stringify(["personal", "owner-a"]),
+    renderJobId: ids.render,
+    remoteArtifactRef: artifactRef(),
+    expectedMimeType: "video/mp4",
+  }), /no longer current/u);
+  assert.equal(bindingCalls, 2);
+  assert.equal(providerCalls, 0);
 });
 
 test("invalid lanes, worker identities, asset runtime and HeyGen credentials fail closed", () => {
@@ -418,7 +471,7 @@ test("terminal and artifact resolvers use the lazy credential path only when inv
     jobId: "ingest-1",
     tenantId,
     renderJobId: ids.render,
-    remoteArtifactRef: "provider-artifact://ai-media-studio/render-terminal/v1/stable",
+    remoteArtifactRef: artifactRef(),
     expectedMimeType: "video/mp4",
   });
   assert.equal(result.sourceUrl, "https://files.heygen.ai/private.mp4");
@@ -438,7 +491,12 @@ test("production composition requires exactly one static or lazy credential sour
 test("verified server-only factory composes the lazy runtime with zero database or secret I/O", () => {
   const setup = createInput();
   let databaseCalls = 0;
-  const { heyGen: _staticCredential, ...runtime } = setup.input;
+  let artifactDatabaseCalls = 0;
+  const {
+    heyGen: _staticCredential,
+    resolveArtifactBinding: _testBinding,
+    ...runtime
+  } = setup.input;
   const factory = createVerifiedStaticHeyGenProductionRuntimeFactory({
     runtime,
     credentialDatabase: {
@@ -447,13 +505,21 @@ test("verified server-only factory composes the lazy runtime with zero database 
         return { rows: [] };
       },
     },
+    artifactBindingDatabase: {
+      async execute() {
+        artifactDatabaseCalls += 1;
+        return { rows: [] };
+      },
+    },
     secretResolverOptions: {
       env: { AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY_RUNTIME: "must-remain-unread" },
     },
   });
   assert.equal(databaseCalls, 0);
-  const composed = factory();
+  assert.equal(artifactDatabaseCalls, 0);
+  const composed = factory({ assetHooks: {} });
   assert.equal(databaseCalls, 0);
+  assert.equal(artifactDatabaseCalls, 0);
   assert.equal(composed.configured, true);
   assert.equal(composed.autostart, false);
 });

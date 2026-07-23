@@ -1,8 +1,9 @@
 import type { ProviderArtifactResolutionRequest, ProviderArtifactResolver } from "../assets/contracts";
 import type { AvailableProductionAssetRuntime } from "../assets/production-runtime";
 import { createProductionAssetIngestWorker } from "../assets/production-runtime";
+import { durableProviderArtifactRef } from "../assets/provider-artifact-identity";
 import type { AssetIngestRepository } from "../assets/contracts";
-import type { AssetIngestWorker } from "../assets/worker";
+import type { AssetIngestWorker, AssetIngestWorkerHooks } from "../assets/worker";
 import type { TenantScope } from "../core/resource-domain";
 import type { Sha256Digest } from "../planning/contracts";
 import type { RuntimeProviderCredentialMaterializer } from "../provider-credentials/runtime-provider-credential-contracts";
@@ -55,6 +56,7 @@ interface ProductionAdmittedRenderRuntimeCommonInput {
   databaseCapabilities: ProductionAdmittedWorkerDatabaseCapabilities;
   assetRepository: AssetIngestRepository;
   assetRuntime: AvailableProductionAssetRuntime;
+  assetHooks?: AssetIngestWorkerHooks;
   workerIds: Readonly<{
     submit: string;
     terminal: string;
@@ -102,16 +104,35 @@ export function createProductionAdmittedRenderRuntime(
     : new HeyGenV3AdmittedRenderProvider(input.heyGen);
   const resolveProvider = async (
     identity: Pick<AdmittedAuthorizedIdentity | AdmittedTerminalClaim | ProductionHeyGenV3ArtifactBinding, "scope" | "providerAccountId" | "providerKey" | "providerCredentialVersion" | "authorizationDigest">,
+    assertAdditionalCurrent?: () => Promise<void>,
   ): Promise<HeyGenV3AdmittedRenderProvider> => {
     assertIdentityShapeAndScope(identity, input.databaseCapabilities.scope);
     if (input.heyGen !== undefined && staticProvider !== undefined) {
       assertStaticConfigurationMatchesIdentity(identity, input.heyGen);
-      return staticProvider;
+      return assertAdditionalCurrent === undefined
+        ? staticProvider
+        : new HeyGenV3AdmittedRenderProvider({
+            ...input.heyGen,
+            assertCredentialCurrent: combineCurrentGuards(
+              assertAdditionalCurrent,
+              input.heyGen.assertCredentialCurrent,
+            ),
+          });
     }
     try {
       const configuration = await materializeConfiguration(input, identity);
       assertConfigurationMatchesIdentity(identity, configuration);
-      return new HeyGenV3AdmittedRenderProvider(configuration);
+      return new HeyGenV3AdmittedRenderProvider({
+        ...configuration,
+        ...(assertAdditionalCurrent === undefined
+          ? {}
+          : {
+              assertCredentialCurrent: combineCurrentGuards(
+                assertAdditionalCurrent,
+                configuration.assertCredentialCurrent,
+              ),
+            }),
+      });
     } catch {
       throw new Error("HeyGen production credential is unavailable");
     }
@@ -132,7 +153,11 @@ export function createProductionAdmittedRenderRuntime(
     async resolveArtifact(request) {
       const binding = await input.resolveArtifactBinding(request);
       assertArtifactBindingRequest(request, binding);
-      const provider = await resolveProvider(binding);
+      const provider = await resolveProvider(binding, async () => {
+        const current = await input.resolveArtifactBinding(request);
+        assertArtifactBindingRequest(request, current);
+        assertSameArtifactBinding(binding, current);
+      });
       return new HeyGenV3ProviderArtifactResolver({
         provider,
         async resolveBinding() {
@@ -185,6 +210,7 @@ export function createProductionAdmittedRenderRuntime(
       repository: input.assetRepository,
       productionRuntime: input.assetRuntime,
       providerArtifactResolver: artifactResolver,
+      ...(input.assetHooks ? { hooks: input.assetHooks } : {}),
     }),
   };
 }
@@ -280,11 +306,42 @@ function assertArtifactBindingRequest(
     || binding.tenantId !== request.tenantId
     || binding.renderJobId !== request.renderJobId
     || binding.remoteArtifactRef !== request.remoteArtifactRef
+    || binding.providerKey !== HEYGEN_PROVIDER_KEY
+    || binding.remoteArtifactRef !== durableProviderArtifactRef(binding)
     || !structuredTenantMatchesScope(binding.tenantId, binding.scope)
     || !binding.providerJobId.trim()
     || binding.providerJobId.length > 500) {
     throw new Error("HeyGen production artifact binding does not match the ingest job");
   }
+}
+
+function assertSameArtifactBinding(
+  expected: ProductionHeyGenV3ArtifactBinding,
+  current: ProductionHeyGenV3ArtifactBinding,
+): void {
+  if (current.jobId !== expected.jobId
+    || current.tenantId !== expected.tenantId
+    || current.renderJobId !== expected.renderJobId
+    || current.remoteArtifactRef !== expected.remoteArtifactRef
+    || current.providerJobId !== expected.providerJobId
+    || current.scope.ownerUserId !== expected.scope.ownerUserId
+    || current.scope.workspaceId !== expected.scope.workspaceId
+    || current.providerAccountId !== expected.providerAccountId
+    || current.providerKey !== expected.providerKey
+    || current.providerCredentialVersion !== expected.providerCredentialVersion
+    || current.authorizationDigest !== expected.authorizationDigest) {
+    throw new Error("HeyGen production artifact binding is no longer current");
+  }
+}
+
+function combineCurrentGuards(
+  bindingGuard: () => Promise<void>,
+  credentialGuard: (() => Promise<void>) | undefined,
+): () => Promise<void> {
+  return async () => {
+    await bindingGuard();
+    await credentialGuard?.();
+  };
 }
 
 function validIdentityPart(value: unknown): value is string {

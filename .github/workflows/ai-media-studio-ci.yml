@@ -10,6 +10,7 @@ on:
       - "server/ai-media-studio/**"
       - "script/ai-media-studio-ci*"
       - "script/ai-media-studio-pr29-static-heygen-verification-postgres-test.ts"
+      - "script/ai-media-studio-offline-one-slot-runtime-test.ts"
       - "shared/ai-media-studio-*.ts"
       - "shared/models/ai-media-studio-db.ts"
       - "tests/ai-media-studio-*.test.ts"
@@ -59,6 +60,7 @@ jobs:
         run: >-
           node --import tsx --test
           tests/ai-media-studio-admitted-render-runtime-routes.test.ts
+          tests/ai-media-studio-admitted-artifact-binding-loader.test.ts
           tests/ai-media-studio-agent-control.test.ts
           tests/ai-media-studio-canonical-roster-persona.test.ts
           tests/ai-media-studio-core-schema.test.ts
@@ -67,6 +69,7 @@ jobs:
           tests/ai-media-studio-launch-plan-profile.test.ts
           tests/ai-media-studio-production-batch-contracts.test.ts
           tests/ai-media-studio-production-admitted-render-runtime.test.ts
+          tests/ai-media-studio-production-admitted-render-bootstrap.test.ts
           tests/ai-media-studio-reusable-script-assets.test.ts
           tests/ai-media-studio-sandbox-readiness-contracts.test.ts
           tests/ai-media-studio-source-to-batch-contracts.test.ts
@@ -78,6 +81,12 @@ jobs:
         run: |
           export PATH="$(pg_config --bindir):$PATH"
           npm run test:ai-media-pr29-verified-runtime-postgres
+        timeout-minutes: 8
+
+      - name: Run isolated admitted artifact binding PostgreSQL rehearsal
+        run: |
+          export PATH="$(pg_config --bindir):$PATH"
+          npm run test:ai-media-offline-one-slot-postgres
         timeout-minutes: 8
 
       - name: Build production bundle

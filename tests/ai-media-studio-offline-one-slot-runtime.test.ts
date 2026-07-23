@@ -11,6 +11,7 @@ import type { SQL } from "drizzle-orm";
 import { Pool, type PoolClient } from "pg";
 import { AssetIngestWorker } from "../server/ai-media-studio/assets/worker";
 import { DrizzleAssetIngestRepository } from "../server/ai-media-studio/assets/drizzle-ingest-repository";
+import { DrizzleAdmittedProviderArtifactBindingLoader } from "../server/ai-media-studio/assets/drizzle-admitted-artifact-binding-loader";
 import type { ArtifactReadStream, OwnedObjectStorage } from "../server/ai-media-studio/assets/contracts";
 import { DrizzleMediaAssetRepository } from "../server/ai-media-studio/persistence/drizzle-core-repositories";
 import {
@@ -557,6 +558,7 @@ integrationTest("offline PG16 exact-22-migration rehearsal durably completes one
     WHERE render_job_id=$1`, [admission.reservation.renderJobId]);
   assert.equal(durableIngest.rowCount, 1);
   const ingestRepository = new DrizzleAssetIngestRepository(database);
+  const artifactBindingLoader = new DrizzleAdmittedProviderArtifactBindingLoader(database);
   const mediaAssets = new DrizzleMediaAssetRepository(database, { workspaceId: WORKSPACE });
   let readerCalls = 0;
   let resolverCalls = 0;
@@ -572,6 +574,16 @@ integrationTest("offline PG16 exact-22-migration rehearsal durably completes one
     } },
     providerArtifactResolver: { async resolveArtifact(request) {
       resolverCalls += 1;
+      const binding = await artifactBindingLoader.load(request);
+      assert.ok(binding, "actively leased ingest must resolve through the exact admitted evidence graph");
+      assert.equal(binding.jobId, request.jobId);
+      assert.equal(binding.renderJobId, admission.reservation.renderJobId);
+      assert.equal(binding.remoteArtifactRef, request.remoteArtifactRef);
+      assert.equal(binding.providerJobId, "offline-provider-job-1");
+      assert.equal(binding.providerAccountId, selected.providerAccountId);
+      assert.equal(binding.providerKey, "heygen");
+      assert.equal(binding.providerCredentialVersion, 1);
+      assert.deepEqual(binding.scope, { ownerUserId: OWNER, workspaceId: WORKSPACE });
       return { remoteArtifactRef: request.remoteArtifactRef,
         sourceUrl: "https://offline.invalid/refreshed-render.mp4?synthetic=2", mediaType: "video/mp4",
         sourceUrlPolicy: "ephemeral_refresh_via_provider_get" };

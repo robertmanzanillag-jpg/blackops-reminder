@@ -3,6 +3,10 @@ import {
   type StaticHeyGenSecretResolverOptions,
 } from "../provider-credentials/static-heygen-secret-resolver";
 import {
+  DrizzleAdmittedProviderArtifactBindingLoader,
+  type AdmittedProviderArtifactBindingDatabase,
+} from "../assets/drizzle-admitted-artifact-binding-loader";
+import {
   DrizzleVerifiedStaticHeyGenRuntimeCredentialLoader,
   VerifiedStaticHeyGenRuntimeCredentialMaterializer,
   type VerifiedStaticHeyGenRuntimeCredentialDatabase,
@@ -15,12 +19,13 @@ import {
 
 type InertRuntimeDependencies = Omit<
   CreateProductionAdmittedRenderRuntimeInput,
-  "heyGen" | "heyGenCredentialMaterializer"
+  "heyGen" | "heyGenCredentialMaterializer" | "resolveArtifactBinding" | "assetHooks"
 >;
 
 export interface VerifiedStaticHeyGenProductionRuntimeFactoryInput {
   readonly runtime: InertRuntimeDependencies;
   readonly credentialDatabase: VerifiedStaticHeyGenRuntimeCredentialDatabase;
+  readonly artifactBindingDatabase: AdmittedProviderArtifactBindingDatabase;
   readonly secretResolverOptions?: StaticHeyGenSecretResolverOptions;
 }
 
@@ -31,12 +36,25 @@ export interface VerifiedStaticHeyGenProductionRuntimeFactoryInput {
  */
 export function createVerifiedStaticHeyGenProductionRuntimeFactory(
   input: VerifiedStaticHeyGenProductionRuntimeFactoryInput,
-): () => ProductionAdmittedRenderRuntime {
+): (runtimeInput: Readonly<{
+  assetHooks: NonNullable<CreateProductionAdmittedRenderRuntimeInput["assetHooks"]>;
+}>) => ProductionAdmittedRenderRuntime {
   const loader = new DrizzleVerifiedStaticHeyGenRuntimeCredentialLoader(input.credentialDatabase);
+  const artifactBindingLoader = new DrizzleAdmittedProviderArtifactBindingLoader(
+    input.artifactBindingDatabase,
+  );
   const secretResolver = createStaticHeyGenSecretResolver(input.secretResolverOptions);
   const materializer = new VerifiedStaticHeyGenRuntimeCredentialMaterializer(loader, secretResolver);
-  return () => createProductionAdmittedRenderRuntime({
+  return (runtimeInput) => createProductionAdmittedRenderRuntime({
     ...input.runtime,
+    assetHooks: runtimeInput.assetHooks,
     heyGenCredentialMaterializer: materializer,
+    async resolveArtifactBinding(request) {
+      const binding = await artifactBindingLoader.load(request);
+      if (!binding || binding.providerKey !== "heygen") {
+        throw new Error("Verified HeyGen artifact binding unavailable");
+      }
+      return { ...binding, providerKey: "heygen" as const };
+    },
   } as CreateProductionAdmittedRenderRuntimeInput);
 }

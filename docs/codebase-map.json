@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-23T03:08:43.303Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime",
+  "generatedAt": "2026-07-23T05:56:45.970Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-artifact-binding-bootstrap",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -52,6 +52,7 @@
     "test:ai-media-heygen-secure-setup-postgres": "node --import tsx script/ai-media-studio-secure-heygen-setup-postgres-test.ts",
     "test:ai-media-pr30-quote-bound-postgres": "node --import tsx script/ai-media-studio-pr30-quote-bound-human-approval-postgres-test.ts",
     "test:ai-media-pr29-verified-runtime-postgres": "node --import tsx script/ai-media-studio-pr29-static-heygen-verification-postgres-test.ts",
+    "test:ai-media-offline-one-slot-postgres": "node --import tsx script/ai-media-studio-offline-one-slot-runtime-test.ts",
     "test:ai-media-source-to-batch": "node --import tsx --test tests/ai-media-studio-source-to-batch-contracts.test.ts tests/ai-media-studio-source-to-batch-automation.test.ts tests/ai-media-studio-source-to-batch-routes.test.ts tests/ai-media-studio-source-operator-client.test.ts",
     "test:ai-media-source-scheduler": "node --import tsx --test tests/ai-media-studio-http-kong-source-reader.test.ts tests/ai-media-studio-kong-owned-source-adapter.test.ts tests/ai-media-studio-source-eligibility-review.test.ts tests/ai-media-studio-source-sync-scheduler.test.ts tests/ai-media-studio-source-sync-scheduler-drizzle.test.ts tests/ai-media-studio-production-source-sync-runtime.test.ts tests/ai-media-studio-source-automation-sync-routes.test.ts",
     "test:ai-media-migrations": "node --import tsx --test tests/ai-media-studio-migration-manifest.test.ts && AI_MEDIA_POSTGRES_SUITE=full-chain node --import tsx script/ai-media-studio-pr21-postgres-test.ts",
@@ -97,13 +98,27 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 977,
-    "filesIndexed": 823,
-    "imports": 3656,
+    "filesVisible": 983,
+    "filesIndexed": 829,
+    "imports": 3703,
     "routes": 508,
-    "symbols": 16300
+    "symbols": 16389
   },
   "directories": {
+    "server/ai-media-studio": {
+      "files": 204,
+      "indexed": 183,
+      "kinds": {
+        "server": 204
+      }
+    },
+    "tests": {
+      "files": 268,
+      "indexed": 256,
+      "kinds": {
+        "test": 268
+      }
+    },
     ".agents/skills": {
       "files": 2,
       "indexed": 1,
@@ -204,13 +219,6 @@
         "server": 96
       }
     },
-    "server/ai-media-studio": {
-      "files": 200,
-      "indexed": 179,
-      "kinds": {
-        "server": 200
-      }
-    },
     "server/replit_integrations": {
       "files": 8,
       "indexed": 8,
@@ -230,13 +238,6 @@
       "indexed": 2,
       "kinds": {
         "shared": 2
-      }
-    },
-    "tests": {
-      "files": 266,
-      "indexed": 254,
-      "kinds": {
-        "test": 266
       }
     },
     "tests/fixtures": {
@@ -7718,6 +7719,50 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/assets/drizzle-admitted-artifact-binding-loader.ts",
+      "kind": "server",
+      "imports": [
+        "../../../shared/models/ai-media-studio-db",
+        "../core/resource-domain",
+        "../planning/contracts",
+        "./contracts",
+        "./provider-artifact-identity",
+        "drizzle-orm",
+        "node:crypto"
+      ],
+      "exports": [
+        "AdmittedProviderArtifactBinding",
+        "AdmittedProviderArtifactBindingDatabase",
+        "AdmittedProviderArtifactBindingLoader",
+        "DrizzleAdmittedProviderArtifactBindingLoader"
+      ],
+      "symbols": [
+        "DrizzleAdmittedProviderArtifactBindingLoader",
+        "ExecuteResult",
+        "Row",
+        "SHA256",
+        "UUID",
+        "binding",
+        "boundEvidenceDigest",
+        "candidate",
+        "decode",
+        "expectedArtifactRef",
+        "expectedBoundDigest",
+        "loaded",
+        "parseRequest",
+        "providerCredentialVersion",
+        "providerEvidenceDigest",
+        "resultRows",
+        "scope",
+        "submissionAttemptId",
+        "terminalBoundDigest",
+        "text",
+        "validOpaque",
+        "value"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/assets/drizzle-ingest-repository.ts",
       "kind": "server",
       "imports": [
@@ -7960,6 +8005,22 @@
         "validateEndpoint",
         "value",
         "values"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/assets/provider-artifact-identity.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "node:crypto"
+      ],
+      "exports": [
+        "DurableProviderArtifactIdentity",
+        "durableProviderArtifactRef"
+      ],
+      "symbols": [
+        "durableProviderArtifactRef"
       ],
       "routes": []
     },
@@ -14748,6 +14809,7 @@
       "path": "server/ai-media-studio/workers/admitted-render-terminal-worker.ts",
       "kind": "server",
       "imports": [
+        "../assets/provider-artifact-identity",
         "../core/resource-domain",
         "../planning/contracts",
         "./admitted-render-contracts",
@@ -14976,11 +15038,89 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/workers/production-admitted-render-bootstrap-node.ts",
+      "kind": "server",
+      "imports": [
+        "../../db",
+        "../assets/drizzle-ingest-repository",
+        "../assets/production-runtime",
+        "./drizzle-admitted-render-repository",
+        "./production-admitted-render-bootstrap",
+        "./verified-static-heygen-production-runtime-factory",
+        "drizzle-orm/node-postgres",
+        "pg"
+      ],
+      "exports": [
+        "createNodeProductionAdmittedRenderBootstrapDependencies"
+      ],
+      "symbols": [
+        "createNodeProductionAdmittedRenderBootstrapDependencies",
+        "database",
+        "runtime"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/workers/production-admitted-render-bootstrap.ts",
+      "kind": "server",
+      "imports": [
+        "../assets/contracts",
+        "../assets/drizzle-admitted-artifact-binding-loader",
+        "../assets/drizzle-ingest-repository",
+        "../assets/production-runtime",
+        "../assets/worker",
+        "../provider-credentials/verified-static-heygen-runtime-credential",
+        "./drizzle-admitted-render-repository",
+        "./production-admitted-render-runtime",
+        "./verified-static-heygen-production-runtime-factory"
+      ],
+      "exports": [
+        "ProductionAdmittedRenderBootstrapAdapters",
+        "ProductionAdmittedRenderBootstrapDependencies",
+        "createProductionAdmittedRenderBootstrapDependencies"
+      ],
+      "symbols": [
+        "ApplicationDatabase",
+        "CONFIG",
+        "KNOWN_CONFIG",
+        "ParsedConfiguration",
+        "UUID",
+        "WORKER_ID",
+        "applicationDatabase",
+        "assetRuntime",
+        "capabilityIds",
+        "configuration",
+        "configured",
+        "connectionString",
+        "createProductionAdmittedRenderBootstrapDependencies",
+        "databaseIdentity",
+        "exactInteger",
+        "exactPart",
+        "exactUuid",
+        "exactWorkerId",
+        "factory",
+        "leaseDurationMs",
+        "ownerUserId",
+        "parseConfiguration",
+        "parsed",
+        "productionAssetEnvironment",
+        "reconcileDatabase",
+        "reconcileLane",
+        "safeAssetRuntime",
+        "submitDatabase",
+        "submitLane",
+        "workerIds",
+        "workspaceId"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/workers/production-admitted-render-runtime.ts",
       "kind": "server",
       "imports": [
         "../assets/contracts",
         "../assets/production-runtime",
+        "../assets/provider-artifact-identity",
         "../assets/worker",
         "../core/resource-domain",
         "../planning/contracts",
@@ -15007,10 +15147,13 @@
         "assertCompositionInput",
         "assertConfigurationMatchesIdentity",
         "assertIdentityShapeAndScope",
+        "assertSameArtifactBinding",
         "assertStaticConfigurationMatchesIdentity",
         "binding",
+        "combineCurrentGuards",
         "configuration",
         "createProductionAdmittedRenderRuntime",
+        "current",
         "hasMaterializer",
         "hasStaticConfiguration",
         "materializeConfiguration",
@@ -15067,6 +15210,7 @@
       "path": "server/ai-media-studio/workers/verified-static-heygen-production-runtime-factory.ts",
       "kind": "server",
       "imports": [
+        "../assets/drizzle-admitted-artifact-binding-loader",
         "../provider-credentials/static-heygen-secret-resolver",
         "../provider-credentials/verified-static-heygen-runtime-credential",
         "./production-admitted-render-runtime"
@@ -15077,6 +15221,8 @@
       ],
       "symbols": [
         "InertRuntimeDependencies",
+        "artifactBindingLoader",
+        "binding",
         "createVerifiedStaticHeyGenProductionRuntimeFactory",
         "loader",
         "materializer",
@@ -19943,6 +20089,7 @@
         "./agent-actions",
         "./ai-cost-policy",
         "./ai-media-studio",
+        "./ai-media-studio/workers/production-admitted-render-bootstrap-node",
         "./app-qa-agent",
         "./assistant",
         "./automation-registry",
@@ -23145,6 +23292,36 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-admitted-artifact-binding-loader.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/assets/drizzle-admitted-artifact-binding-loader",
+        "../server/ai-media-studio/assets/provider-artifact-identity",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "authorizationDigest",
+        "binding",
+        "boundDigest",
+        "compiled",
+        "exactRow",
+        "ids",
+        "loader",
+        "malformed",
+        "providerEvidenceDigest",
+        "providerJobId",
+        "remoteArtifactRef",
+        "request",
+        "scope"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-admitted-render-runtime-routes.test.ts",
       "kind": "test",
       "imports": [
@@ -25790,6 +25967,7 @@
       "kind": "test",
       "imports": [
         "../server/ai-media-studio/assets/contracts",
+        "../server/ai-media-studio/assets/drizzle-admitted-artifact-binding-loader",
         "../server/ai-media-studio/assets/drizzle-ingest-repository",
         "../server/ai-media-studio/assets/worker",
         "../server/ai-media-studio/persistence/drizzle-core-repositories",
@@ -25839,7 +26017,9 @@
         "admittedRepository",
         "applyExactMigrationChain",
         "approvedBindings",
+        "artifactBindingLoader",
         "avatarId",
+        "binding",
         "bytes",
         "capability",
         "capabilityLane",
@@ -28003,11 +28183,41 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-production-admitted-render-bootstrap.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/assets/in-memory-repository",
+        "../server/ai-media-studio/assets/production-runtime",
+        "../server/ai-media-studio/workers/drizzle-admitted-render-repository",
+        "../server/ai-media-studio/workers/production-admitted-render-bootstrap",
+        "../server/ai-media-studio/workers/production-admitted-render-runtime",
+        "drizzle-orm",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "applicationDatabase",
+        "assetRuntime",
+        "calls",
+        "config",
+        "environment",
+        "harness",
+        "invalid",
+        "lane",
+        "result",
+        "runtime",
+        "setup"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-production-admitted-render-runtime.test.ts",
       "kind": "test",
       "imports": [
         "../server/ai-media-studio/assets/in-memory-repository",
         "../server/ai-media-studio/assets/production-runtime",
+        "../server/ai-media-studio/assets/provider-artifact-identity",
         "../server/ai-media-studio/planning/contracts",
         "../server/ai-media-studio/provider-credentials/runtime-provider-credential-contracts",
         "../server/ai-media-studio/providers/heygen-v3-admitted-render-provider",
@@ -28024,6 +28234,7 @@
       "exports": [],
       "symbols": [
         "adapterCalls",
+        "artifactRef",
         "assetRuntime",
         "authorization",
         "bindingCalls",
@@ -31880,6 +32091,7 @@
   ],
   "tests": [
     "tests/ai-cost-notifications.test.ts",
+    "tests/ai-media-studio-admitted-artifact-binding-loader.test.ts",
     "tests/ai-media-studio-admitted-render-runtime-routes.test.ts",
     "tests/ai-media-studio-admitted-render-terminal-worker.test.ts",
     "tests/ai-media-studio-admitted-render-worker.test.ts",
@@ -32019,6 +32231,7 @@
     "tests/ai-media-studio-pr6-provider-identity-migration.test.ts",
     "tests/ai-media-studio-pr8-publishing-accounts-migration.test.ts",
     "tests/ai-media-studio-pr9-oauth-migration.test.ts",
+    "tests/ai-media-studio-production-admitted-render-bootstrap.test.ts",
     "tests/ai-media-studio-production-admitted-render-runtime.test.ts",
     "tests/ai-media-studio-production-asset-runtime.test.ts",
     "tests/ai-media-studio-production-batch-client.test.ts",
