@@ -29,6 +29,10 @@ export interface HeyGenV3AdmittedProviderOptions {
   apiKey: string;
   providerAccountId: string;
   providerCredentialVersion: number;
+  /** Server-only verification expiry; required by lazy verified credential materializers. */
+  credentialExpiresAt?: string;
+  /** Revalidates the exact server-side admission immediately before provider I/O. */
+  assertCredentialCurrent?: () => Promise<void>;
   fetchImpl?: HeyGenFetch;
   timeoutMs?: number;
   now?: () => Date;
@@ -94,6 +98,8 @@ export class HeyGenV3AdmittedRenderProvider implements AdmittedRenderProvider, A
   private readonly fetchImpl: HeyGenFetch;
   private readonly timeoutMs: number;
   private readonly now: () => Date;
+  private readonly credentialExpiresAtMs: number | undefined;
+  private readonly credentialGuard: (() => Promise<void>) | undefined;
   private readonly credentialMaterialDigest: Sha256Digest;
 
   constructor(options: HeyGenV3AdmittedProviderOptions) {
@@ -109,6 +115,10 @@ export class HeyGenV3AdmittedRenderProvider implements AdmittedRenderProvider, A
       throw new Error("HeyGen timeout must be between 1 and 120000 milliseconds");
     }
     this.now = options.now ?? (() => new Date());
+    this.credentialExpiresAtMs = options.credentialExpiresAt === undefined
+      ? undefined
+      : exactCredentialExpiry(options.credentialExpiresAt);
+    this.credentialGuard = options.assertCredentialCurrent;
     this.credentialMaterialDigest = sha256(this.apiKey);
   }
 
@@ -137,6 +147,7 @@ export class HeyGenV3AdmittedRenderProvider implements AdmittedRenderProvider, A
       voice_id: voiceId,
     });
     const requestDigest = sha256(body);
+    await this.assertCredentialCurrent();
     let response: Response;
     try {
       response = await this.fetchImpl(`${HEYGEN_API_ORIGIN}/v3/videos`, {
@@ -198,6 +209,7 @@ export class HeyGenV3AdmittedRenderProvider implements AdmittedRenderProvider, A
     this.assertBoundCapability(context);
     const providerJobId = opaqueId(context.providerJobId, "video id");
     const observedAt = exactObservedAt(this.now());
+    await this.assertCredentialCurrent();
     let response: Response;
     try {
       response = await this.fetchImpl(`${HEYGEN_API_ORIGIN}/v3/videos/${encodeURIComponent(providerJobId)}`, {
@@ -296,6 +308,22 @@ export class HeyGenV3AdmittedRenderProvider implements AdmittedRenderProvider, A
         observedAt: exactObservedAt(this.now()),
       }),
     };
+  }
+
+  private async assertCredentialCurrent(): Promise<void> {
+    if (this.credentialExpiresAtMs !== undefined
+      && this.credentialExpiresAtMs <= this.now().getTime() + 30_000) {
+      throw new Error("HeyGen provider credential is expired");
+    }
+    try {
+      await this.credentialGuard?.();
+    } catch {
+      throw new Error("HeyGen provider credential is unavailable");
+    }
+    if (this.credentialExpiresAtMs !== undefined
+      && this.credentialExpiresAtMs <= this.now().getTime() + 30_000) {
+      throw new Error("HeyGen provider credential is expired");
+    }
   }
 
   private unknownTerminal(
@@ -499,6 +527,12 @@ function exactSecret(value: string): string {
     throw new Error("HeyGen API credential is invalid");
   }
   return value;
+}
+
+function exactCredentialExpiry(value: string): number {
+  const expiresAtMs = Date.parse(value);
+  if (!Number.isFinite(expiresAtMs)) throw new Error("HeyGen provider credential expiry is invalid");
+  return expiresAtMs;
 }
 
 function validScopePart(value: string): boolean {

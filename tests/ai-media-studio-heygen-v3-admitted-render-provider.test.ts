@@ -248,6 +248,68 @@ test("account or credential rotation mismatch blocks before provider I/O", async
   assert.equal(networkCalls, 0);
 });
 
+test("credential expiry is rechecked immediately before every provider call", async () => {
+  let current = new Date("2026-07-21T21:00:00.000Z");
+  let networkCalls = 0;
+  const adapter = new HeyGenV3AdmittedRenderProvider({
+    apiKey: SECRET,
+    providerAccountId: "account-1",
+    providerCredentialVersion: 7,
+    credentialExpiresAt: "2026-07-21T21:02:00.000Z",
+    now: () => current,
+    async fetchImpl() {
+      networkCalls += 1;
+      return jsonResponse({ data: { video_id: "video-123" } });
+    },
+  });
+  current = new Date("2026-07-21T21:01:31.000Z");
+  await assert.rejects(() => adapter.submit({ script: "Hello", aspectRatio: "9:16" }, {
+    ...capability(),
+    providerIdempotencyKey: "admit:expiry:attempt-1",
+    avatarExternalResourceId: "avatar-123",
+    voiceExternalResourceId: "voice-123",
+  }), /credential is expired/u);
+  await assert.rejects(() => adapter.observeTerminal({
+    ...capability(),
+    providerJobId: "video-123",
+  }), /credential is expired/u);
+  assert.equal(networkCalls, 0);
+});
+
+test("server admission is revalidated after provider resolution and before network I/O", async () => {
+  let admitted = true;
+  let guardCalls = 0;
+  let networkCalls = 0;
+  const adapter = new HeyGenV3AdmittedRenderProvider({
+    apiKey: SECRET,
+    providerAccountId: "account-1",
+    providerCredentialVersion: 7,
+    credentialExpiresAt: "2099-01-01T00:00:00.000Z",
+    async assertCredentialCurrent() {
+      guardCalls += 1;
+      if (!admitted) throw new Error(`${SECRET}: revoked`);
+    },
+    async fetchImpl() {
+      networkCalls += 1;
+      return jsonResponse({ data: { video_id: "video-123" } });
+    },
+  });
+  admitted = false;
+  await assert.rejects(() => adapter.submit({ script: "Hello", aspectRatio: "9:16" }, {
+    ...capability(),
+    providerIdempotencyKey: "admit:revoked:attempt-1",
+    avatarExternalResourceId: "avatar-123",
+    voiceExternalResourceId: "voice-123",
+  }), (error: unknown) => {
+    assert(error instanceof Error);
+    assert.equal(error.message, "HeyGen provider credential is unavailable");
+    assert.doesNotMatch(error.message, new RegExp(SECRET, "u"));
+    return true;
+  });
+  assert.equal(guardCalls, 1);
+  assert.equal(networkCalls, 0);
+});
+
 test("HeyGen artifact resolver uses an exact binding and refreshes through authoritative GET", async () => {
   let networkCalls = 0;
   const adapter = provider(async (input, init) => {
