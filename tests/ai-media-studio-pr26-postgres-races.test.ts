@@ -695,20 +695,22 @@ integrationTest("pending PR33 exact submit claim is table-blind, fenced, replay-
       WHERE attempt.id=$1 GROUP BY attempt.state,reservation.state,reservation.submission_state,
         job.stage,outbox.status,slot.status`;
     const before=await adminPool.query<Record<string,unknown>>(projectionSql,[authorized.rows[0].id]);
-    const staleConfirmed=await session.query<{applied:boolean}>(confirmedSql,[staleSetup.acquired.execution_id,
+    const staleConfirmed=await session.query<{execution_id:string;applied:boolean}>(confirmedSql,[staleSetup.acquired.execution_id,
       staleSetup.acquired.lease_token,staleSetup.acquired.fencing_token,staleSetup.commandDigest,"robert",
       OWNER,WORKSPACE,staleSetup.work.reservationId,staleSetup.work.renderJobId,staleSetup.target.daily_plan_slot_id,
       staleSetup.target.attempt,staleSetup.target.work_handoff_digest,authorized.rows[0].id,
       authorized.rows[0].fencing_token,authorized.rows[0].send_authorization_digest,authorized.rows[0].lease_token,
       "provider-job-expired",null,digest("a")]);
-    const staleAmbiguous=await session.query<{applied:boolean}>(ambiguousSql,[staleSetup.acquired.execution_id,
+    const staleAmbiguous=await session.query<{execution_id:string;applied:boolean}>(ambiguousSql,[staleSetup.acquired.execution_id,
       staleSetup.acquired.lease_token,staleSetup.acquired.fencing_token,staleSetup.commandDigest,"robert",
       OWNER,WORKSPACE,staleSetup.work.reservationId,staleSetup.work.renderJobId,staleSetup.target.daily_plan_slot_id,
       staleSetup.target.attempt,staleSetup.target.work_handoff_digest,authorized.rows[0].id,
       authorized.rows[0].fencing_token,authorized.rows[0].send_authorization_digest,authorized.rows[0].lease_token,
       "provider-request-expired",digest("b")]);
-    assert.deepEqual(staleConfirmed.rows,[{applied:false}]);
-    assert.deepEqual(staleAmbiguous.rows,[{applied:false}]);
+    assert.equal(staleConfirmed.rows[0]?.applied,false);
+    assert.equal(staleConfirmed.rows[0]?.execution_id,staleSetup.acquired.execution_id);
+    assert.equal(staleAmbiguous.rows[0]?.applied,false);
+    assert.equal(staleAmbiguous.rows[0]?.execution_id,staleSetup.acquired.execution_id);
     const after=await adminPool.query<Record<string,unknown>>(projectionSql,[authorized.rows[0].id]);
     assert.deepEqual(after.rows,before.rows);
   }finally{await session.close();}
