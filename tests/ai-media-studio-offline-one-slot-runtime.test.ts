@@ -615,7 +615,7 @@ integrationTest("offline PG16 exact-22-migration rehearsal durably completes one
       assert.equal(binding.renderJobId, admission.reservation.renderJobId);
       assert.equal(binding.remoteArtifactRef, request.remoteArtifactRef);
       assert.equal(binding.providerJobId, "offline-provider-job-1");
-      assert.equal(binding.providerAccountId, selected.providerAccountId);
+      assert.equal(binding.providerAccountId, ids.account);
       assert.equal(binding.providerKey, "heygen");
       assert.equal(binding.providerCredentialVersion, 1);
       assert.deepEqual(binding.scope, { ownerUserId: OWNER, workspaceId: WORKSPACE });
