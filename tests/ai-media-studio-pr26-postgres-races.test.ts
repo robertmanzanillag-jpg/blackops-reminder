@@ -369,7 +369,7 @@ integrationTest("concurrent definitive no-submit finality refunds and releases c
     const ambiguous=await submit.query<{applied:boolean}>(
       "SELECT * FROM ai_media_worker_api.record_submit_ambiguous_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
       [ids.submitCapability,OWNER,WORKSPACE,row.id,row.budget_reservation_id,row.fencing_token,
-        row.send_authorization_digest,row.lease_token,null,digest("3")]);
+        row.send_authorization_digest,row.lease_token,"provider-request-ambiguous",digest("3")]);
     assert.deepEqual(ambiguous.rows,[{applied:true}]);
     const firstClaim=await reconciler.query<{reconciliation_lease_token:string;reconciliation_fencing_token:string}>(
       "SELECT * FROM ai_media_worker_api.claim_reconciliation_v1($1,$2,$3,$4,$5)",
@@ -405,10 +405,12 @@ integrationTest("concurrent definitive no-submit finality refunds and releases c
       assert.deepEqual(outcomes,[false,true]);
     }finally{await barrier.query("ROLLBACK").catch(()=>undefined);barrier.release();await left.close();await right.close();}
     const ledger=await adminPool.query<{attempt_state:string;reservation_state:string;submission_state:string;
-      capacity_state:string;capacity_version:string;committed:string;terminal_events:string}>(`
+      capacity_state:string;capacity_version:string;committed:string;terminal_events:string;
+      provider_request_id:string|null;ambiguous_request_id:string|null}>(`
       SELECT attempt.state attempt_state,reservation.state reservation_state,reservation.submission_state,
         capacity.state capacity_state,capacity.state_version::text capacity_version,
-        bucket.committed_micro_usd::text committed,
+        bucket.committed_micro_usd::text committed,attempt.provider_request_id,
+        max(event.provider_request_id) FILTER (WHERE event.event_kind='ambiguous') ambiguous_request_id,
         count(event.id) FILTER (WHERE event.event_kind='reconciled_no_submit')::text terminal_events
       FROM ai_media_provider_submission_attempts attempt
       JOIN ai_media_budget_reservations reservation ON reservation.id=attempt.budget_reservation_id
@@ -416,9 +418,10 @@ integrationTest("concurrent definitive no-submit finality refunds and releases c
       JOIN ai_media_submission_capacity_leases capacity ON capacity.submission_attempt_id=attempt.id
       LEFT JOIN ai_media_provider_submission_events event ON event.submission_attempt_id=attempt.id
       WHERE attempt.id=$1 GROUP BY attempt.state,reservation.state,reservation.submission_state,
-        capacity.state,capacity.state_version,bucket.committed_micro_usd`,[row.id]);
+        capacity.state,capacity.state_version,bucket.committed_micro_usd,attempt.provider_request_id`,[row.id]);
     assert.deepEqual(ledger.rows[0],{attempt_state:"reconciled_no_submit",reservation_state:"released",
-      submission_state:"reconciled_no_submit",capacity_state:"released",capacity_version:"2",committed:"0",terminal_events:"1"});
+      submission_state:"reconciled_no_submit",capacity_state:"released",capacity_version:"2",committed:"0",
+      provider_request_id:null,ambiguous_request_id:"provider-request-ambiguous",terminal_events:"1"});
   }finally{await submit.close();await reconciler.close();}
 });
 
@@ -1005,19 +1008,21 @@ integrationTest("pending PR34 exact reconciliation and terminal observation are 
     assertIdentity(mismatchedFinality.rows[0],reconciliation);
     await completeAction(session,reconciliation,"reconciled_no_submit");
     const ledger=await adminPool.query<{state:string;capacity:string;capacity_version:string;
-      committed:string;events:string}>(`SELECT
+      committed:string;events:string;provider_request_id:string|null;ambiguous_request_id:string|null}>(`SELECT
       attempt.state,capacity.state capacity,capacity.state_version::text capacity_version,
-      bucket.committed_micro_usd::text committed,
+      bucket.committed_micro_usd::text committed,attempt.provider_request_id,
+      max(event.provider_request_id) FILTER (WHERE event.event_kind='ambiguous') ambiguous_request_id,
       count(event.id) FILTER (WHERE event.event_kind='reconciled_no_submit')::text events
       FROM ai_media_provider_submission_attempts attempt
       JOIN ai_media_submission_capacity_leases capacity ON capacity.submission_attempt_id=attempt.id
       JOIN ai_media_budget_reservations reservation ON reservation.id=attempt.budget_reservation_id
       JOIN ai_media_budget_buckets bucket ON bucket.id=reservation.budget_bucket_id
       LEFT JOIN ai_media_provider_submission_events event ON event.submission_attempt_id=attempt.id
-      WHERE attempt.id=$1 GROUP BY attempt.state,capacity.state,capacity.state_version,bucket.committed_micro_usd`,
+      WHERE attempt.id=$1 GROUP BY attempt.state,capacity.state,capacity.state_version,
+        bucket.committed_micro_usd,attempt.provider_request_id`,
     [reconciliation.attempt.id]);
     assert.deepEqual(ledger.rows,[{state:"reconciled_no_submit",capacity:"released",capacity_version:"2",
-      committed:"0",events:"1"}]);
+      committed:"0",provider_request_id:null,ambiguous_request_id:"provider-request-ambiguous",events:"1"}]);
   }finally{await session.close();}
 
   const terminal=await setupScenario("confirmed","observe_terminal","terminal");
