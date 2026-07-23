@@ -38,6 +38,17 @@ tokens, monotonic fencing, replay of completed commands, and terminal uncertain
 sealing. It contains no exact worker claim implementation, provider I/O,
 publishing, spend, deployment, migration application, or public route.
 
+The PR33 pair stacks on PR32 and prepares four table-blind submit functions for
+one exact live `activate_and_submit` execution: claim, authorize, record
+confirmed, and record ambiguous. Every call binds the PR32 execution/lease/fence,
+command digest, actor, tenant, reservation, render, slot, attempt, and handoff,
+then requires exactly one matching live PR26 admitted-submit capability. The
+claim is direct-target only and never scans or drains the global queue.
+Authorization and outcomes retain the PR26 atomic budget, capacity, event, and
+fencing transitions. PR33 performs no provider/network request, spend beyond an
+already approved reservation, publication, worker start, deployment, migration
+application, or public-route mount.
+
 Disposable PostgreSQL 16 rehearsal:
 
 ```sh

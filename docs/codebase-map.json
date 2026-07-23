@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-23T07:12:31.588Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-exact-run-fence",
+  "generatedAt": "2026-07-23T08:18:22.829Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-exact-submit-claim",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -98,33 +98,33 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 990,
-    "filesIndexed": 834,
-    "imports": 3725,
+    "filesVisible": 995,
+    "filesIndexed": 837,
+    "imports": 3741,
     "routes": 508,
-    "symbols": 16488
+    "symbols": 16587
   },
   "directories": {
     "migrations/ai-media-studio": {
-      "files": 57,
+      "files": 59,
       "indexed": 3,
       "kinds": {
-        "other": 55,
+        "other": 57,
         "docs": 2
       }
     },
     "server/ai-media-studio": {
-      "files": 206,
-      "indexed": 185,
+      "files": 207,
+      "indexed": 186,
       "kinds": {
-        "server": 206
+        "server": 207
       }
     },
     "tests": {
-      "files": 271,
-      "indexed": 259,
+      "files": 273,
+      "indexed": 261,
       "kinds": {
-        "test": 271
+        "test": 273
       }
     },
     ".agents/skills": {
@@ -15042,6 +15042,70 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/workers/drizzle-exact-submit-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "../planning/contracts",
+        "./admitted-render-contracts",
+        "./one-video-run-once-executor",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "DrizzleExactSubmitRepository",
+        "ExactSubmitDatabase",
+        "ExactSubmitTransactionalDatabase"
+      ],
+      "symbols": [
+        "DIGEST",
+        "DrizzleExactSubmitRepository",
+        "ExactContextIdentity",
+        "ExecuteResult",
+        "GuardedAuthorization",
+        "GuardedClaim",
+        "SAFE",
+        "UUID",
+        "assertClaimInput",
+        "assertExactAuthorization",
+        "assertFinalization",
+        "assertReturnedContext",
+        "assertScope",
+        "assertUuid",
+        "assertWorkerLease",
+        "authorizationFrom",
+        "big",
+        "boundedProviderId",
+        "brand",
+        "canonicalJson",
+        "claimFrom",
+        "committedCall",
+        "date",
+        "dbDigest",
+        "dbUuid",
+        "deepFreezeJsonObject",
+        "deepFreezeJsonValue",
+        "exactContextIdentity",
+        "exactMutation",
+        "exactOptionalRow",
+        "identity",
+        "identityFrom",
+        "isJsonValue",
+        "iso",
+        "optionalProviderId",
+        "plainJsonObject",
+        "positive",
+        "prototype",
+        "result",
+        "returnedScope",
+        "safePart",
+        "sameContext",
+        "sameScope",
+        "text",
+        "value"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/workers/in-memory-render-work-repository.ts",
       "kind": "server",
       "imports": [
@@ -15076,6 +15140,7 @@
       "imports": [
         "./contracts",
         "./drizzle-exact-one-video-run-fence",
+        "./drizzle-exact-submit-repository",
         "./in-memory-render-work-repository",
         "./one-video-run-once-executor",
         "./render-worker"
@@ -15098,6 +15163,7 @@
         "ExactOneVideoRunFence",
         "ExactOneVideoRunLease",
         "ExactOneVideoRunTarget",
+        "ExactOneVideoStageContext",
         "ExactOneVideoStageOutcome",
         "ExactOneVideoStageResult",
         "ExactOneVideoStageRunner",
@@ -15122,6 +15188,9 @@
         "canonicalJson",
         "command",
         "commandDigest",
+        "context",
+        "exactStageContext",
+        "lease",
         "oneVideoRunOnceCommandDigest",
         "result",
         "runExactStage",
@@ -24178,6 +24247,42 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-exact-submit-drizzle.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/workers/admitted-render-contracts",
+        "../server/ai-media-studio/workers/drizzle-exact-submit-repository",
+        "../server/ai-media-studio/workers/one-video-run-once-executor",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Rendered",
+        "authorization",
+        "authorizationRow",
+        "claim",
+        "claimRow",
+        "compiled",
+        "dialect",
+        "digest",
+        "execute",
+        "fakeAuthorization",
+        "fullContextRow",
+        "h",
+        "harness",
+        "id",
+        "ids",
+        "rendered",
+        "scope",
+        "wrongAuthorization",
+        "wrongTarget"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-full-chain-postgres.test.ts",
       "kind": "test",
       "imports": [
@@ -26847,18 +26952,28 @@
       ],
       "exports": [],
       "symbols": [
+        "acquiredLease",
+        "acquiredLeaseBacking",
+        "authorizationPending",
+        "authorizationStarted",
         "command",
         "different",
         "digest",
         "durable",
+        "exactCommand",
         "executor",
+        "expectedDigest",
         "fence",
         "first",
+        "invoke",
         "lease",
+        "mutablePrincipal",
         "otherActor",
         "pending",
         "principal",
+        "principalBacking",
         "result",
+        "running",
         "same",
         "stages",
         "started"
@@ -27785,6 +27900,7 @@
       "exports": [],
       "symbols": [
         "EXACT_RUN_LOGIN",
+        "ExactSetup",
         "RoleSession",
         "SCRIPT_CHECKSUM",
         "SCRIPT_CONTENT",
@@ -27797,22 +27913,27 @@
         "activationUnsigned",
         "adminPool",
         "admission",
+        "after",
         "ambiguous",
+        "ambiguousSql",
         "attempt",
         "attempts",
         "auth",
         "authorization",
+        "authorizeSql",
         "authorized",
         "barrier",
         "before",
         "busy",
         "capacity",
         "claim",
+        "claimSql",
         "claimed",
         "client",
         "commandId",
         "completed",
         "confirmed",
+        "confirmedSql",
         "conflict",
         "createActivatedWork",
         "databaseUrl",
@@ -27845,8 +27966,12 @@
         "pr27Forward",
         "pr32Forward",
         "pr32Rollback",
+        "pr33Forward",
+        "pr33Rollback",
+        "pr4Forward",
         "prerequisite",
         "preserved",
+        "projectionSql",
         "publicUsage",
         "reclaimed",
         "reconciler",
@@ -27865,19 +27990,28 @@
         "sealed",
         "seedAuthorityGraph",
         "session",
+        "setupExactSubmit",
         "socket",
         "stale",
+        "staleAmbiguous",
+        "staleCompletion",
+        "staleConfirmed",
+        "staleSetup",
         "submit",
+        "successSetup",
         "tableAccess",
         "uncertainAcquire",
         "uncertainParams",
+        "unclaimed",
         "unknownRelease",
         "unsafeFunctions",
         "unsigned",
         "value",
         "waitForBlocked",
         "waitForExpiredAttempt",
-        "work"
+        "waitForExpiredExactRun",
+        "work",
+        "wrongDailyPlanSlotId"
       ],
       "routes": []
     },
@@ -28272,6 +28406,22 @@
       ],
       "exports": [],
       "symbols": [
+        "forward",
+        "rollback"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr33-exact-one-video-submit-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "claim",
         "forward",
         "rollback"
       ],
@@ -32303,6 +32453,7 @@
     "tests/ai-media-studio-daily-admission-drizzle.test.ts",
     "tests/ai-media-studio-drizzle-one-video-held-admission-repository.test.ts",
     "tests/ai-media-studio-exact-one-video-run-fence-drizzle.test.ts",
+    "tests/ai-media-studio-exact-submit-drizzle.test.ts",
     "tests/ai-media-studio-full-chain-postgres.test.ts",
     "tests/ai-media-studio-governance-drizzle.test.ts",
     "tests/ai-media-studio-governance.test.ts",
@@ -32420,6 +32571,7 @@
     "tests/ai-media-studio-pr30-quote-bound-human-approval-postgres.test.ts",
     "tests/ai-media-studio-pr31-held-admission-expiry-migration.test.ts",
     "tests/ai-media-studio-pr32-exact-one-video-run-fence-migration.test.ts",
+    "tests/ai-media-studio-pr33-exact-one-video-submit-migration.test.ts",
     "tests/ai-media-studio-pr4-assets-migration.test.ts",
     "tests/ai-media-studio-pr5-governance-migration.test.ts",
     "tests/ai-media-studio-pr6-provider-identity-migration.test.ts",

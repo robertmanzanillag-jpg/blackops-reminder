@@ -65,6 +65,7 @@ jobs:
           tests/ai-media-studio-canonical-roster-persona.test.ts
           tests/ai-media-studio-core-schema.test.ts
           tests/ai-media-studio-exact-one-video-run-fence-drizzle.test.ts
+          tests/ai-media-studio-exact-submit-drizzle.test.ts
           tests/ai-media-studio-heygen-roster-drizzle.test.ts
           tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts
           tests/ai-media-studio-launch-plan-profile.test.ts
@@ -72,6 +73,7 @@ jobs:
           tests/ai-media-studio-production-admitted-render-runtime.test.ts
           tests/ai-media-studio-production-admitted-render-bootstrap.test.ts
           tests/ai-media-studio-pr32-exact-one-video-run-fence-migration.test.ts
+          tests/ai-media-studio-pr33-exact-one-video-submit-migration.test.ts
           tests/ai-media-studio-reusable-script-assets.test.ts
           tests/ai-media-studio-sandbox-readiness-contracts.test.ts
           tests/ai-media-studio-source-to-batch-contracts.test.ts
