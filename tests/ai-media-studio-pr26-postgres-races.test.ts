@@ -1123,8 +1123,8 @@ integrationTest("pending PR34 exact reconciliation and terminal observation are 
       ADD COLUMN byte_size bigint,
       ADD COLUMN render_job_id uuid`);
     await adminPool.query(pr35Forward);
-    const ingestCommandId="exact-run-pr35-ingest",ingestCommandDigest=digest("0");
-    const linkCommandId="exact-run-pr35-link",linkCommandDigest=digest("1");
+    const ingestCommandId="exact-run-pr35-ingest",ingestCommandDigest=digest("d");
+    const linkCommandId="exact-run-pr35-link",linkCommandDigest=digest("e");
     await adminPool.query(`INSERT INTO ai_media_exact_one_video_run_capabilities(
       id,database_principal,owner_user_id,workspace_id,actor_user_id,budget_reservation_id,render_job_id,
       daily_plan_slot_id,slot_attempt,work_handoff_digest,action,command_id,command_digest,max_lease_ms,
