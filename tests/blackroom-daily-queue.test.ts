@@ -180,7 +180,7 @@ test("extra today creates a fresh actionable batch when the existing batch is te
     const state = createBlackRoomQueueState(now);
     ensureBlackRoomScheduleBuffer(state, now);
     const terminal = structuredClone(state.jobs[0]);
-    terminal.id = `terminal-${status}`;
+    terminal.id = "blackroom-tiktok-2026-07-21";
     terminal.targetDate = "2026-07-21";
     terminal.originalTargetDate = "2026-07-21";
     terminal.status = status;
@@ -195,6 +195,9 @@ test("extra today creates a fresh actionable batch when the existing batch is te
     const active = state.jobs.find((job) => job.targetDate === "2026-07-21" && job.status === "queued");
     assert.ok(active);
     assert.notEqual(active.id, terminal.id);
+    assert.equal(active.id.endsWith("-extra-extra-after-" + status), true);
+    state.enabled = true;
+    assert.equal(claimNextBlackRoomJob(state, now)?.id, active.id);
     assert.equal(active.requirements.posts, 2);
     assert.ok(active.slots.every((slot) => slot.networks?.join(",") === "facebook,youtube"));
     assert.equal(terminal.requirements.posts, 10);

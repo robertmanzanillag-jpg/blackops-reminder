@@ -278,6 +278,10 @@ export function applyBlackRoomRemoteCommands(state: BlackRoomQueueState, command
       const createdAdHoc = !job;
       if (!job) {
         job = createDailyJob(state, command.targetDate, 0, now);
+        if (sameDateJobs.length) {
+          const commandSuffix = command.id.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40);
+          job.id = `${job.id}-extra-${commandSuffix}`;
+        }
         state.jobs.push(job);
         if (!state.adHocExtraDates.includes(command.targetDate)) state.adHocExtraDates.push(command.targetDate);
         if (sameDateJobs.length) state.extraPostsByDate[command.targetDate] = 0;
