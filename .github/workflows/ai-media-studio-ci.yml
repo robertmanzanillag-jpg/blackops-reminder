@@ -62,12 +62,15 @@ jobs:
           tests/ai-media-studio-canonical-roster-persona.test.ts
           tests/ai-media-studio-core-schema.test.ts
           tests/ai-media-studio-heygen-roster-drizzle.test.ts
+          tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts
           tests/ai-media-studio-launch-plan-profile.test.ts
           tests/ai-media-studio-production-batch-contracts.test.ts
+          tests/ai-media-studio-production-admitted-render-runtime.test.ts
           tests/ai-media-studio-reusable-script-assets.test.ts
           tests/ai-media-studio-sandbox-readiness-contracts.test.ts
           tests/ai-media-studio-source-to-batch-contracts.test.ts
           tests/ai-media-studio-strict-money-action-request.test.ts
+          tests/ai-media-studio-verified-static-heygen-runtime-credential.test.ts
         timeout-minutes: 5
 
       - name: Build production bundle

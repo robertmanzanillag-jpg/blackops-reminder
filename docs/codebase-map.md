@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-22T19:46:29.613Z
+Generated: 2026-07-23T02:22:24.189Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 968 | 818 | 3619 | 508 | 16174 |
+| 976 | 822 | 3646 | 508 | 16278 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,8 +29,8 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 263 | 252 | test:263 |
-| `server/ai-media-studio` | 196 | 177 | server:196 |
+| `tests` | 266 | 254 | test:266 |
+| `server/ai-media-studio` | 200 | 179 | server:200 |
 | `client/src` | 158 | 156 | ui-component:55, other:48, client-page:24, client-component:21 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 47 | 45 | script:47 |
@@ -49,6 +49,7 @@ Package: `rest-express`
 | `scripts` | 4 | 1 | script:4 |
 | `tests/helpers` | 1 | 1 | test:1 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
+| `.github/workflows` | 1 | 0 | other:1 |
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/ai-media-studio`, `/ai-media-studio-agent`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/tools`
@@ -66,6 +67,7 @@ Package: `rest-express`
 
 ## Test Inventory
 - `tests/ai-cost-notifications.test.ts`
+- `tests/ai-media-studio-admitted-render-runtime-routes.test.ts`
 - `tests/ai-media-studio-admitted-render-terminal-worker.test.ts`
 - `tests/ai-media-studio-admitted-render-worker.test.ts`
 - `tests/ai-media-studio-agent-control.test.ts`
@@ -76,6 +78,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-assets.test.ts`
 - `tests/ai-media-studio-authority-route-surface.test.ts`
 - `tests/ai-media-studio-backend.test.ts`
+- `tests/ai-media-studio-canonical-roster-persona.test.ts`
 - `tests/ai-media-studio-core-client.test.ts`
 - `tests/ai-media-studio-core-persistence.test.ts`
 - `tests/ai-media-studio-core-routes.test.ts`
@@ -261,6 +264,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-static-heygen-postgres.test.ts`
 - `tests/ai-media-studio-static-heygen-verification-evidence.test.ts`
 - `tests/ai-media-studio-strict-money-action-request.test.ts`
+- `tests/ai-media-studio-verified-static-heygen-runtime-credential.test.ts`
 - `tests/ai-media-studio-webhook-env-secret.test.ts`
 - `tests/ai-media-studio-webhook-resolver.test.ts`
 - `tests/ai-media-studio-webhook-security.test.ts`
@@ -330,7 +334,7 @@ Package: `rest-express`
 
 ## Key Files
 - `client/src/pages/agents-office.tsx` (client-page; 146 symbols, 8 imports)
-- `client/src/pages/ai-media-studio-agent.tsx` (client-page; 5 symbols, 5 imports)
+- `client/src/pages/ai-media-studio-agent.tsx` (client-page; 8 symbols, 5 imports)
 - `client/src/pages/ai-media-studio.tsx` (client-page; 5 symbols, 11 imports)
 - `client/src/pages/app-qa-agent.tsx` (client-page; 11 symbols, 8 imports)
 - `client/src/pages/assistant.tsx` (client-page; 49 symbols, 7 imports)
@@ -401,7 +405,7 @@ Package: `rest-express`
 - `server/agent-actions.ts` (server; 42 symbols, 9 imports)
 - `server/ai-cost-notifications.ts` (server; 26 symbols)
 - `server/ai-cost-policy.ts` (server; 35 symbols)
-- `server/ai-media-studio/agent-control.ts` (server; 7 symbols, 3 imports)
+- `server/ai-media-studio/agent-control.ts` (server; 12 symbols, 3 imports)
 - `server/ai-media-studio/analytics/domain.ts` (server; 65 symbols, 2 imports)
 - `server/ai-media-studio/analytics/drizzle-repository.ts` (server; 24 symbols, 5 imports)
 - `server/ai-media-studio/analytics/fake-ingestion-adapter.ts` (server; 2 symbols, 2 imports)

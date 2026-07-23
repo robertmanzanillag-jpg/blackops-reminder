@@ -5,6 +5,7 @@ import type { AssetIngestRepository } from "../assets/contracts";
 import type { AssetIngestWorker } from "../assets/worker";
 import type { TenantScope } from "../core/resource-domain";
 import type { Sha256Digest } from "../planning/contracts";
+import type { RuntimeProviderCredentialMaterializer } from "../provider-credentials/runtime-provider-credential-contracts";
 import {
   HeyGenV3AdmittedRenderProvider,
   HeyGenV3ProviderArtifactResolver,
@@ -44,12 +45,11 @@ export interface ProductionHeyGenV3ArtifactBinding {
   authorizationDigest: Sha256Digest;
 }
 
-export interface CreateProductionAdmittedRenderRuntimeInput {
+interface ProductionAdmittedRenderRuntimeCommonInput {
   databaseLanes: AdmittedWorkerDatabaseLanes;
   databaseCapabilities: AdmittedWorkerDatabaseCapabilities;
   assetRepository: AssetIngestRepository;
   assetRuntime: AvailableProductionAssetRuntime;
-  heyGen: HeyGenV3AdmittedProviderOptions;
   workerIds: Readonly<{
     submit: string;
     terminal: string;
@@ -58,6 +58,17 @@ export interface CreateProductionAdmittedRenderRuntimeInput {
   leaseDurationMs: number;
   resolveArtifactBinding(request: ProviderArtifactResolutionRequest): Promise<ProductionHeyGenV3ArtifactBinding>;
 }
+
+export type CreateProductionAdmittedRenderRuntimeInput = ProductionAdmittedRenderRuntimeCommonInput & (
+  | {
+      heyGen: HeyGenV3AdmittedProviderOptions;
+      heyGenCredentialMaterializer?: never;
+    }
+  | {
+      heyGen?: never;
+      heyGenCredentialMaterializer: RuntimeProviderCredentialMaterializer<HeyGenV3AdmittedProviderOptions>;
+    }
+);
 
 export interface ProductionAdmittedRenderRuntime {
   readonly configured: true;
@@ -81,34 +92,57 @@ export function createProductionAdmittedRenderRuntime(
 ): ProductionAdmittedRenderRuntime {
   assertCompositionInput(input);
 
-  const provider = new HeyGenV3AdmittedRenderProvider(input.heyGen);
+  const staticProvider = input.heyGen === undefined
+    ? undefined
+    : new HeyGenV3AdmittedRenderProvider(input.heyGen);
+  const resolveProvider = async (
+    identity: Pick<AdmittedAuthorizedIdentity | AdmittedTerminalClaim | ProductionHeyGenV3ArtifactBinding, "scope" | "providerAccountId" | "providerKey" | "providerCredentialVersion" | "authorizationDigest">,
+  ): Promise<HeyGenV3AdmittedRenderProvider> => {
+    assertIdentityShapeAndScope(identity, input.databaseCapabilities.scope);
+    if (input.heyGen !== undefined && staticProvider !== undefined) {
+      assertStaticConfigurationMatchesIdentity(identity, input.heyGen);
+      return staticProvider;
+    }
+    try {
+      const configuration = await materializeConfiguration(input, identity);
+      assertConfigurationMatchesIdentity(identity, configuration);
+      return new HeyGenV3AdmittedRenderProvider(configuration);
+    } catch {
+      throw new Error("HeyGen production credential is unavailable");
+    }
+  };
   const providerResolver: AdmittedProviderResolver = {
     async resolve(authorization) {
-      assertConfiguredIdentity(authorization, input.heyGen, input.databaseCapabilities.scope);
+      const provider = await resolveProvider(authorization);
       return { provider, capability: mintExactCapability(authorization) };
     },
   };
   const terminalProviderResolver: AdmittedTerminalProviderResolver = {
     async resolveTerminal(claim) {
-      assertConfiguredIdentity(claim, input.heyGen, input.databaseCapabilities.scope);
+      const provider = await resolveProvider(claim);
       return { provider, capability: mintExactCapability(claim) };
     },
   };
-  const artifactResolver = new HeyGenV3ProviderArtifactResolver({
-    provider,
-    async resolveBinding(request) {
+  const artifactResolver: ProviderArtifactResolver = {
+    async resolveArtifact(request) {
       const binding = await input.resolveArtifactBinding(request);
-      assertArtifactBinding(request, binding, input.heyGen, input.databaseCapabilities.scope);
-      return {
-        jobId: binding.jobId,
-        tenantId: binding.tenantId,
-        renderJobId: binding.renderJobId,
-        remoteArtifactRef: binding.remoteArtifactRef,
-        providerJobId: binding.providerJobId,
-        capability: mintExactCapability(binding),
-      };
+      assertArtifactBindingRequest(request, binding);
+      const provider = await resolveProvider(binding);
+      return new HeyGenV3ProviderArtifactResolver({
+        provider,
+        async resolveBinding() {
+          return {
+            jobId: binding.jobId,
+            tenantId: binding.tenantId,
+            renderJobId: binding.renderJobId,
+            remoteArtifactRef: binding.remoteArtifactRef,
+            providerJobId: binding.providerJobId,
+            capability: mintExactCapability(binding),
+          };
+        },
+      }).resolveArtifact(request);
     },
-  });
+  };
 
   const repository = new DrizzleAdmittedRenderRepository(
     input.databaseLanes,
@@ -152,7 +186,11 @@ export function createProductionAdmittedRenderRuntime(
 
 function assertCompositionInput(input: CreateProductionAdmittedRenderRuntimeInput): void {
   const workerIds = [input.workerIds.submit, input.workerIds.terminal, input.workerIds.assetIngest];
-  if (workerIds.some((value) => !/^[A-Za-z0-9][A-Za-z0-9._:-]{2,119}$/u.test(value))
+  const hasStaticConfiguration = input.heyGen !== undefined;
+  const hasMaterializer = input.heyGenCredentialMaterializer !== undefined;
+  if (hasStaticConfiguration === hasMaterializer
+    || (hasMaterializer && typeof input.heyGenCredentialMaterializer?.materialize !== "function")
+    || workerIds.some((value) => !/^[A-Za-z0-9][A-Za-z0-9._:-]{2,119}$/u.test(value))
     || new Set(workerIds).size !== workerIds.length
     || !Number.isInteger(input.leaseDurationMs)
     || input.leaseDurationMs < 1
@@ -163,28 +201,73 @@ function assertCompositionInput(input: CreateProductionAdmittedRenderRuntimeInpu
   }
 }
 
-function assertConfiguredIdentity(
+function assertIdentityShapeAndScope(
   identity: Pick<AdmittedAuthorizedIdentity | AdmittedTerminalClaim, "scope" | "providerAccountId" | "providerKey" | "providerCredentialVersion" | "authorizationDigest">,
-  configuration: HeyGenV3AdmittedProviderOptions,
   expectedScope: TenantScope,
 ): void {
-  if (identity.providerKey !== HEYGEN_PROVIDER_KEY
-    || identity.providerAccountId !== configuration.providerAccountId
-    || identity.providerCredentialVersion !== configuration.providerCredentialVersion
+  if (!identity.scope
+    || identity.providerKey !== HEYGEN_PROVIDER_KEY
+    || !validIdentityPart(identity.providerAccountId)
+    || !Number.isSafeInteger(identity.providerCredentialVersion)
+    || identity.providerCredentialVersion < 1
     || identity.scope.ownerUserId !== expectedScope.ownerUserId
     || identity.scope.workspaceId !== expectedScope.workspaceId
-    || !identity.scope.ownerUserId.trim()
-    || !identity.scope.workspaceId.trim()
+    || !validIdentityPart(identity.scope.ownerUserId)
+    || !validIdentityPart(identity.scope.workspaceId)
     || !DIGEST.test(identity.authorizationDigest)) {
     throw new Error("HeyGen production binding does not match the admitted authorization");
   }
 }
 
-function assertArtifactBinding(
+async function materializeConfiguration(
+  input: CreateProductionAdmittedRenderRuntimeInput,
+  identity: Pick<AdmittedAuthorizedIdentity | AdmittedTerminalClaim | ProductionHeyGenV3ArtifactBinding, "scope" | "providerAccountId" | "providerKey" | "providerCredentialVersion">,
+): Promise<HeyGenV3AdmittedProviderOptions> {
+  if (input.heyGenCredentialMaterializer === undefined) {
+    throw new Error("HeyGen production credential is unavailable");
+  }
+  try {
+    const configuration = await input.heyGenCredentialMaterializer.materialize(Object.freeze({
+      scope: Object.freeze({ ...identity.scope }),
+      providerAccountId: identity.providerAccountId,
+      providerKey: identity.providerKey,
+      providerCredentialVersion: identity.providerCredentialVersion,
+    }));
+    if (configuration === undefined) throw new Error("unavailable");
+    return configuration;
+  } catch {
+    throw new Error("HeyGen production credential is unavailable");
+  }
+}
+
+function assertStaticConfigurationMatchesIdentity(
+  identity: Pick<AdmittedAuthorizedIdentity | AdmittedTerminalClaim | ProductionHeyGenV3ArtifactBinding, "providerAccountId" | "providerCredentialVersion">,
+  configuration: HeyGenV3AdmittedProviderOptions,
+): void {
+  if (configuration.providerAccountId !== identity.providerAccountId
+    || configuration.providerCredentialVersion !== identity.providerCredentialVersion) {
+    throw new Error("HeyGen production binding does not match the admitted authorization");
+  }
+}
+
+function assertConfigurationMatchesIdentity(
+  identity: Pick<AdmittedAuthorizedIdentity | AdmittedTerminalClaim | ProductionHeyGenV3ArtifactBinding, "providerAccountId" | "providerCredentialVersion">,
+  configuration: HeyGenV3AdmittedProviderOptions,
+): void {
+  if (!configuration
+    || typeof configuration !== "object"
+    || configuration.providerAccountId !== identity.providerAccountId
+    || configuration.providerCredentialVersion !== identity.providerCredentialVersion
+    || typeof configuration.credentialExpiresAt !== "string"
+    || !Number.isFinite(Date.parse(configuration.credentialExpiresAt))
+    || Date.parse(configuration.credentialExpiresAt) <= Date.now() + 30_000) {
+    throw new Error("HeyGen production credential is unavailable");
+  }
+}
+
+function assertArtifactBindingRequest(
   request: ProviderArtifactResolutionRequest,
   binding: ProductionHeyGenV3ArtifactBinding,
-  configuration: HeyGenV3AdmittedProviderOptions,
-  expectedScope: TenantScope,
 ): void {
   if (binding.jobId !== request.jobId
     || binding.tenantId !== request.tenantId
@@ -195,7 +278,14 @@ function assertArtifactBinding(
     || binding.providerJobId.length > 500) {
     throw new Error("HeyGen production artifact binding does not match the ingest job");
   }
-  assertConfiguredIdentity(binding, configuration, expectedScope);
+}
+
+function validIdentityPart(value: unknown): value is string {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= 255
+    && value === value.trim()
+    && !/[\u0000-\u001f\u007f]/u.test(value);
 }
 
 function structuredTenantMatchesScope(tenantId: string, scope: TenantScope): boolean {

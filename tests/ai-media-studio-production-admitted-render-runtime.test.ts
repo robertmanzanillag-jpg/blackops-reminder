@@ -9,7 +9,10 @@ import {
   createProductionAdmittedRenderRuntime,
   type CreateProductionAdmittedRenderRuntimeInput,
 } from "../server/ai-media-studio/workers/production-admitted-render-runtime";
+import { createVerifiedStaticHeyGenProductionRuntimeFactory } from "../server/ai-media-studio/workers/verified-static-heygen-production-runtime-factory";
 import type { Sha256Digest } from "../server/ai-media-studio/planning/contracts";
+import type { HeyGenV3AdmittedProviderOptions } from "../server/ai-media-studio/providers/heygen-v3-admitted-render-provider";
+import type { RuntimeProviderCredentialIdentity } from "../server/ai-media-studio/provider-credentials/runtime-provider-credential-contracts";
 
 const ids = {
   submitCapability: "11111111-1111-4111-8111-111111111111",
@@ -89,6 +92,7 @@ function createInput(overrides: Partial<CreateProductionAdmittedRenderRuntimeInp
       apiKey: "test-only-heygen-secret",
       providerAccountId: ids.providerAccount,
       providerCredentialVersion: 7,
+      credentialExpiresAt: "2099-01-01T00:00:00.000Z",
       async fetchImpl() {
         transportCalls.calls += 1;
         throw new Error("provider transport should not run in this test");
@@ -246,4 +250,174 @@ test("invalid lanes, worker identities, asset runtime and HeyGen credentials fai
 
   const invalidCredential = createInput({ heyGen: { apiKey: " ", providerAccountId: ids.providerAccount, providerCredentialVersion: 7 } });
   assert.throws(() => createProductionAdmittedRenderRuntime(invalidCredential.input), /API credential/u);
+});
+
+
+function createMaterializedInput(
+  materialize: (identity: RuntimeProviderCredentialIdentity) => Promise<HeyGenV3AdmittedProviderOptions | undefined>,
+) {
+  const setup = createInput();
+  const input = {
+    ...setup.input,
+    heyGen: undefined,
+    heyGenCredentialMaterializer: { materialize },
+  } as unknown as CreateProductionAdmittedRenderRuntimeInput;
+  return { ...setup, input };
+}
+
+test("runtime credential materialization is lazy and invalid identities fail before it", async () => {
+  const materializerCalls = { calls: 0 };
+  const setup = createMaterializedInput(async () => {
+    materializerCalls.calls += 1;
+    return {
+      apiKey: "lazy-test-secret",
+      providerAccountId: ids.providerAccount,
+      providerCredentialVersion: 7,
+      credentialExpiresAt: "2099-01-01T00:00:00.000Z",
+      async fetchImpl() {
+        setup.transportCalls.calls += 1;
+        throw new Error("expected test transport failure");
+      },
+    };
+  });
+  const runtime = createProductionAdmittedRenderRuntime(setup.input);
+  assert.equal(materializerCalls.calls, 0);
+  await assert.rejects(
+    () => runtime.providerResolver.resolve(authorization({ scope: { ownerUserId: "wrong-owner", workspaceId: "personal" } })),
+    /does not match the admitted authorization/u,
+  );
+  assert.equal(materializerCalls.calls, 0);
+
+  const resolved = await runtime.providerResolver.resolve(authorization());
+  assert.equal(materializerCalls.calls, 1);
+  assert.equal(setup.transportCalls.calls, 0);
+  await resolved.provider.submit(
+    { script: "Approved script", aspectRatio: "9:16" },
+    {
+      ...resolved.capability,
+      providerIdempotencyKey: "admit:slot-1:attempt-1",
+      avatarExternalResourceId: "avatar-1",
+      voiceExternalResourceId: "voice-1",
+    },
+  );
+  assert.equal(setup.transportCalls.calls, 1);
+});
+
+test("runtime credential materialization failures and binding mismatches fail closed", async (t) => {
+  const cases: Array<{
+    name: string;
+    materialize: () => Promise<HeyGenV3AdmittedProviderOptions | undefined>;
+  }> = [
+    { name: "undefined", materialize: async () => undefined },
+    { name: "throw", materialize: async () => { throw new Error("private materializer detail"); } },
+    {
+      name: "account mismatch",
+      materialize: async () => ({
+        apiKey: "lazy-test-secret",
+        providerAccountId: "77777777-7777-4777-8777-777777777777",
+        providerCredentialVersion: 7,
+        credentialExpiresAt: "2099-01-01T00:00:00.000Z",
+      }),
+    },
+    {
+      name: "version mismatch",
+      materialize: async () => ({
+        apiKey: "lazy-test-secret",
+        providerAccountId: ids.providerAccount,
+        providerCredentialVersion: 8,
+        credentialExpiresAt: "2099-01-01T00:00:00.000Z",
+      }),
+    },
+    {
+      name: "expired",
+      materialize: async () => ({
+        apiKey: "lazy-test-secret",
+        providerAccountId: ids.providerAccount,
+        providerCredentialVersion: 7,
+        credentialExpiresAt: "2020-01-01T00:00:00.000Z",
+      }),
+    },
+  ];
+  for (const item of cases) {
+    await t.test(item.name, async () => {
+      const setup = createMaterializedInput(item.materialize);
+      const runtime = createProductionAdmittedRenderRuntime(setup.input);
+      await assert.rejects(
+        () => runtime.providerResolver.resolve(authorization()),
+        (error: Error) => error.message === "HeyGen production credential is unavailable",
+      );
+    });
+  }
+});
+
+test("terminal and artifact resolvers use the lazy credential path only when invoked", async () => {
+  const calls = { materialize: 0, fetch: 0 };
+  const setup = createMaterializedInput(async () => {
+    calls.materialize += 1;
+    return {
+      apiKey: "lazy-test-secret",
+      providerAccountId: ids.providerAccount,
+      providerCredentialVersion: 7,
+      credentialExpiresAt: "2099-01-01T00:00:00.000Z",
+      async fetchImpl() {
+        calls.fetch += 1;
+        return new Response(JSON.stringify({
+          data: {
+            id: "video-123",
+            status: "completed",
+            video_url: "https://files.heygen.ai/private.mp4",
+          },
+        }), { status: 200, headers: { "content-type": "application/json" } });
+      },
+    };
+  });
+  const runtime = createProductionAdmittedRenderRuntime(setup.input);
+  assert.deepEqual(calls, { materialize: 0, fetch: 0 });
+
+  await runtime.terminalProviderResolver.resolveTerminal(terminalClaim());
+  assert.deepEqual(calls, { materialize: 1, fetch: 0 });
+
+  const tenantId = JSON.stringify(["personal", "owner-a"]);
+  const result = await runtime.artifactResolver.resolveArtifact({
+    jobId: "ingest-1",
+    tenantId,
+    renderJobId: ids.render,
+    remoteArtifactRef: "provider-artifact://ai-media-studio/render-terminal/v1/stable",
+    expectedMimeType: "video/mp4",
+  });
+  assert.equal(result.sourceUrl, "https://files.heygen.ai/private.mp4");
+  assert.deepEqual(calls, { materialize: 2, fetch: 1 });
+});
+
+test("production composition requires exactly one static or lazy credential source", () => {
+  const neither = createInput({ heyGen: undefined } as never);
+  assert.throws(() => createProductionAdmittedRenderRuntime(neither.input), /composition is invalid/u);
+
+  const both = createInput({
+    heyGenCredentialMaterializer: { async materialize() { return undefined; } },
+  } as never);
+  assert.throws(() => createProductionAdmittedRenderRuntime(both.input), /composition is invalid/u);
+});
+
+test("verified server-only factory composes the lazy runtime with zero database or secret I/O", () => {
+  const setup = createInput();
+  let databaseCalls = 0;
+  const { heyGen: _staticCredential, ...runtime } = setup.input;
+  const factory = createVerifiedStaticHeyGenProductionRuntimeFactory({
+    runtime,
+    credentialDatabase: {
+      async execute() {
+        databaseCalls += 1;
+        return { rows: [] };
+      },
+    },
+    secretResolverOptions: {
+      env: { AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY_RUNTIME: "must-remain-unread" },
+    },
+  });
+  assert.equal(databaseCalls, 0);
+  const composed = factory();
+  assert.equal(databaseCalls, 0);
+  assert.equal(composed.configured, true);
+  assert.equal(composed.autostart, false);
 });
