@@ -6,6 +6,8 @@ import { join } from "node:path";
 export const BLACKROOM_METRICOOL_BLOG_ID = 6585226;
 export const BLACKROOM_TIMEZONE = "America/New_York";
 export const BLACKROOM_FACEBOOK_MAIN_URL = "https://www.facebook.com/profile.php?id=61568193332044";
+export const BLACKROOM_YOUTUBE_CHANNEL_URL = "https://www.youtube.com/@blackroom_us";
+export const BLACKROOM_YOUTUBE_CHANNEL_HANDLE = "@blackroom_us";
 export const BLACKROOM_METRICOOL_NETWORKS = ["tiktok", "facebook", "youtube"] as const;
 export type BlackRoomMetricoolNetwork = (typeof BLACKROOM_METRICOOL_NETWORKS)[number];
 
@@ -248,10 +250,26 @@ export function buildBlackRoomFacebookCaption(
   const callToAction = language === "es"
     ? "Sigue la experiencia completa de BlackRoom"
     : "Follow the full BlackRoom experience";
-  return `${caption.trim()}\n\n${fullVideo}: ${blackRoomYoutubeWatchUrl(sourceVideoId)}\n${callToAction}: ${BLACKROOM_FACEBOOK_MAIN_URL}`;
+  const youtubeChannel = language === "es" ? "Canal oficial de BlackRoom" : "Official BlackRoom channel";
+  return `${caption.trim()}\n\n${fullVideo}: ${blackRoomYoutubeWatchUrl(sourceVideoId)}\n${youtubeChannel}: ${BLACKROOM_YOUTUBE_CHANNEL_URL}\n${callToAction}: ${BLACKROOM_FACEBOOK_MAIN_URL}`;
 }
 
 export function buildBlackRoomYouTubeCaption(input: BlackRoomMetricoolScheduleInput): string {
+  const fullVideo = input.language === "es" ? "Set completo" : "Full set";
+  const channel = input.language === "es" ? "Canal BlackRoom" : "BlackRoom channel";
+  const hashtags = isBlackRoomYouTubeShort(input) ? "#Shorts #BlackRoom" : "#BlackRoom #DJSet";
+  return `${input.caption.trim()}\n\n${channel}: ${BLACKROOM_YOUTUBE_CHANNEL_HANDLE}\n${fullVideo}: ${blackRoomYoutubeWatchUrl(input.sourceVideoId)}\n${hashtags}`;
+}
+
+function legacyBlackRoomFacebookCaption(input: BlackRoomMetricoolScheduleInput): string {
+  const fullVideo = input.language === "es" ? "Mira el set completo en YouTube" : "Watch the full set on YouTube";
+  const callToAction = input.language === "es"
+    ? "Sigue la experiencia completa de BlackRoom"
+    : "Follow the full BlackRoom experience";
+  return `${input.caption.trim()}\n\n${fullVideo}: ${blackRoomYoutubeWatchUrl(input.sourceVideoId)}\n${callToAction}: ${BLACKROOM_FACEBOOK_MAIN_URL}`;
+}
+
+function legacyBlackRoomYouTubeCaption(input: BlackRoomMetricoolScheduleInput): string {
   const fullVideo = input.language === "es" ? "Set completo" : "Full set";
   const hashtags = isBlackRoomYouTubeShort(input) ? "#Shorts #BlackRoom" : "#BlackRoom #DJSet";
   return `${input.caption.trim()}\n\n${fullVideo}: ${blackRoomYoutubeWatchUrl(input.sourceVideoId)}\n${hashtags}`;
@@ -347,14 +365,19 @@ export function buildMetricoolYouTubePayload(input: BlackRoomMetricoolScheduleIn
   return buildMetricoolYouTubeShortPayload(input, mediaId);
 }
 
-export function findVerifiedMetricoolPost(value: unknown, caption: string, publicationDateTime: string): Record<string, any> | null {
+export function findVerifiedMetricoolPost(
+  value: unknown,
+  caption: string | readonly string[],
+  publicationDateTime: string,
+): Record<string, any> | null {
+  const acceptedCaptions = typeof caption === "string" ? [caption] : caption;
   return objects(value).find((record) => {
     const text = String(record.text ?? record.caption ?? record.content ?? "");
     const publication = record.publicationDate;
     const dateTime = typeof publication === "string"
       ? publication
       : String(publication?.dateTime ?? record.publicationDateTime ?? record.date ?? "");
-    return text === caption && dateTime.startsWith(publicationDateTime);
+    return acceptedCaptions.includes(text) && dateTime.startsWith(publicationDateTime);
   }) || null;
 }
 
@@ -490,6 +513,11 @@ export async function scheduleBlackRoomMetricoolPost(
     facebook: buildBlackRoomFacebookCaption(input.caption, input.sourceVideoId, input.language),
     youtube: buildBlackRoomYouTubeCaption(input),
   };
+  const verificationCaptions: Record<BlackRoomMetricoolNetwork, readonly string[]> = {
+    tiktok: [captions.tiktok],
+    facebook: [captions.facebook, legacyBlackRoomFacebookCaption(input)],
+    youtube: [captions.youtube, legacyBlackRoomYouTubeCaption(input)],
+  };
   const eligibleNetworks = blackRoomMetricoolNetworks(input);
   const requestedNetworks = options.networks?.length ? Array.from(new Set(options.networks)) : eligibleNetworks;
   if (requestedNetworks.some((network) => !eligibleNetworks.includes(network))) {
@@ -499,7 +527,7 @@ export async function scheduleBlackRoomMetricoolPost(
   const platformReceipts: Partial<Record<BlackRoomMetricoolNetwork, string>> = {};
   const missingNetworks: BlackRoomMetricoolNetwork[] = [];
   for (const network of requiredNetworks) {
-    const existingMatch = findVerifiedMetricoolPost(existing, captions[network], input.publicationDateTime);
+    const existingMatch = findVerifiedMetricoolPost(existing, verificationCaptions[network], input.publicationDateTime);
     const existingId = existingMatch?.id ?? existingMatch?.uuid;
     if (existingId == null || String(existingId).trim() === "") missingNetworks.push(network);
     else platformReceipts[network] = String(existingId);
@@ -565,7 +593,7 @@ export async function scheduleBlackRoomMetricoolPost(
           await fetcher(verifyUrl, { headers, signal: AbortSignal.timeout(60_000) }),
           `${network} post verification`,
         );
-        matched = findVerifiedMetricoolPost(verification, captions[network], input.publicationDateTime);
+        matched = findVerifiedMetricoolPost(verification, verificationCaptions[network], input.publicationDateTime);
       }
     } catch (error) {
       throw new BlackRoomMetricoolUncertainError(
