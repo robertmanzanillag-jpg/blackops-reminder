@@ -20,6 +20,11 @@ migration, publishing, or deployment is authorized.
 7. Held-work activation repository with a branded activation principal.
 8. Admitted submit, terminal observation, renewable artifact resolution, and
    owned-storage ingest workers, composed with `autostart: false`.
+9. Provider-neutral one-video run-once orchestration contract with an exact
+   reservation/render/slot/attempt/handoff target, trusted server authorization,
+   required durable fencing, process concurrency one, one stage per invocation,
+   uncertain-outcome sealing, no global `runNext`, no publishing surface, and
+   `autostart: false`. It is intentionally not mounted to HTTP or a live runtime.
 
 ## Missing dependency order
 
@@ -32,9 +37,15 @@ migration, publishing, or deployment is authorized.
 6. Production runtime binding for the static HeyGen secret, account and
    credential version, database capability lanes, owned object storage, and
    artifact binding resolver.
-7. Explicit one-shot worker trigger for submit, terminal observation, and
-   ingest. This is the first step allowed to perform provider I/O and therefore
-   requires a separate Robert approval and exact cost approval.
+7. Exact-claim database functions/adapters for submit, ambiguous reconciliation,
+   terminal observation, ingest and asset linking. They must select the exact
+   slot attempt/render target; the current global queue claims are not allowed
+   behind the run-once boundary.
+8. Durable implementation of the run-once fence and trusted Robert-bound
+   authorization adapter.
+9. Explicit production binding of those exact ports. This is the first step
+   allowed to perform provider I/O and therefore requires a separate Robert
+   approval and exact cost approval.
 
 ## Non-bypass rules
 
@@ -48,3 +59,7 @@ migration, publishing, or deployment is authorized.
 - A completed provider URL is ephemeral; the durable artifact identity is
   resolved again and copied into owned storage before delivery.
 - Publishing remains a separate approval and connector boundary after ingest.
+- The run-once contract cannot accept the existing global `runNext()` workers.
+  A production binding is incomplete until every stage has an exact durable
+  claim and returns the same reservation, render, slot, attempt and handoff
+  identity supplied to the executor.

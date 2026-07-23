@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-23T05:56:45.970Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-artifact-binding-bootstrap",
+  "generatedAt": "2026-07-23T06:43:48.503Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-one-video-run-once-executor",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -98,25 +98,25 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 983,
-    "filesIndexed": 829,
-    "imports": 3703,
+    "filesVisible": 985,
+    "filesIndexed": 831,
+    "imports": 3711,
     "routes": 508,
-    "symbols": 16389
+    "symbols": 16425
   },
   "directories": {
     "server/ai-media-studio": {
-      "files": 204,
-      "indexed": 183,
+      "files": 205,
+      "indexed": 184,
       "kinds": {
-        "server": 204
+        "server": 205
       }
     },
     "tests": {
-      "files": 268,
-      "indexed": 256,
+      "files": 269,
+      "indexed": 257,
       "kinds": {
-        "test": 268
+        "test": 269
       }
     },
     ".agents/skills": {
@@ -15031,10 +15031,62 @@
       "imports": [
         "./contracts",
         "./in-memory-render-work-repository",
+        "./one-video-run-once-executor",
         "./render-worker"
       ],
       "exports": [],
       "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/workers/one-video-run-once-executor.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "../planning/contracts",
+        "node:crypto"
+      ],
+      "exports": [
+        "ExactOneVideoFenceAcquireResult",
+        "ExactOneVideoRunAuthorization",
+        "ExactOneVideoRunFence",
+        "ExactOneVideoRunLease",
+        "ExactOneVideoRunTarget",
+        "ExactOneVideoStageOutcome",
+        "ExactOneVideoStageResult",
+        "ExactOneVideoStageRunner",
+        "OneVideoRunOnceAction",
+        "OneVideoRunOnceCommand",
+        "OneVideoRunOnceError",
+        "OneVideoRunOnceErrorCode",
+        "OneVideoRunOnceExecutor",
+        "TrustedOneVideoRunPrincipal",
+        "oneVideoRunOnceCommandDigest"
+      ],
+      "symbols": [
+        "ACTIONS",
+        "DIGEST",
+        "OUTCOMES",
+        "OneVideoRunOnceError",
+        "OneVideoRunOnceExecutor",
+        "UUID",
+        "acquired",
+        "assertExactResult",
+        "canonicalJson",
+        "command",
+        "commandDigest",
+        "oneVideoRunOnceCommandDigest",
+        "result",
+        "runExactStage",
+        "safePart",
+        "sameTarget",
+        "sealed",
+        "sha256",
+        "target",
+        "uncertainErrorDigest",
+        "validateCommand",
+        "validated"
+      ],
       "routes": []
     },
     {
@@ -26706,6 +26758,34 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-one-video-run-once-executor.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/contracts",
+        "../server/ai-media-studio/workers/one-video-run-once-executor",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "command",
+        "different",
+        "digest",
+        "durable",
+        "executor",
+        "fence",
+        "first",
+        "lease",
+        "pending",
+        "principal",
+        "result",
+        "same",
+        "stages",
+        "started"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-operations-client.test.ts",
       "kind": "test",
       "imports": [
@@ -32187,6 +32267,7 @@
     "tests/ai-media-studio-one-video-held-admission-routes.test.ts",
     "tests/ai-media-studio-one-video-held-admission-snapshot-repository.test.ts",
     "tests/ai-media-studio-one-video-held-admission-ui.test.ts",
+    "tests/ai-media-studio-one-video-run-once-executor.test.ts",
     "tests/ai-media-studio-operations-client.test.ts",
     "tests/ai-media-studio-operations-drizzle.test.ts",
     "tests/ai-media-studio-operations-http.test.ts",
