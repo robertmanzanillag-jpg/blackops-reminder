@@ -93,7 +93,8 @@ export interface ExactOneVideoRunLease {
 export type ExactOneVideoFenceAcquireResult =
   | { kind: "acquired"; lease: ExactOneVideoRunLease }
   | { kind: "replayed"; result: ExactOneVideoStageResult }
-  | { kind: "busy" | "conflict" };
+  | { kind: "busy" }
+  | { kind: "conflict" };
 
 /**
  * Production implementations must acquire and complete in durable storage.
