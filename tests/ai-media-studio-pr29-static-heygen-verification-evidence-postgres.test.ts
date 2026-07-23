@@ -156,7 +156,7 @@ async function seedStaticPlan(): Promise<void> {
   for (const [avatarIndex, avatarId] of avatarIds.entries()) {
     for (let videoNumber = 1; videoNumber <= 10; videoNumber += 1) {
       const slotId = `30000000-0000-4000-8000-${String(100000000000 + avatarIndex * 10 + videoNumber).padStart(12, "0")}`;
-      const publicSlotKey = `slot_${String(avatarIndex + 1).padStart(2, "0")}_${String(videoNumber).padStart(2, "0")}_${"2".repeat(16)}`;
+      const publicSlotKey = `slot_${String(avatarIndex * 10 + videoNumber).padStart(24, "0")}`;
       await pool.query(`INSERT INTO ai_media_daily_plan_slots
         (id,owner_user_id,workspace_id,public_slot_key,daily_plan_id,provider_account_id,provider_key,
           provider_credential_version,source_member_key,influencer_id,avatar_resource_id,voice_resource_id,
