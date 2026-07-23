@@ -166,7 +166,7 @@ test("maps the live Metricool Facebook brand labels to the correct Miami and New
 
 test("schedules Facebook breaking and traffic updates as text-only posts without requiring media", async () => {
   const dir = await workspace([
-    item({ id: "miami-text-only", platform: "facebook", copy: "TRÁFICO | Cierre en Miami-Dade. Según FHP/FL511: tome una ruta alterna. Fuente: https://fl511.com" }),
+    item({ id: "miami-text-only", platform: "facebook", editorialUrgency: "breaking", copy: "TRÁFICO | Cierre en Miami-Dade. Según FHP/FL511: tome una ruta alterna. Fuente: https://fl511.com" }),
   ]);
   let scheduledPayload: Record<string, unknown> | null = null;
 
@@ -189,6 +189,7 @@ test("schedules Facebook breaking and traffic updates as text-only posts without
   assert.equal(result.status, "completed");
   assert.equal(result.scheduled, 1);
   assert.deepEqual(scheduledPayload?.providers, [{ network: "facebook" }]);
+  assert.deepEqual(scheduledPayload?.publicationDate, { dateTime: "2026-07-21T12:00:00", timezone: "America/New_York" });
   assert.match(String(scheduledPayload?.text), /TRÁFICO/);
   assert.equal("media" in (scheduledPayload || {}), false);
   assert.equal("images" in (scheduledPayload || {}), false);
@@ -670,7 +671,7 @@ test("recovers a bounded stale lock and cleans up its replacement", async () => 
   await assert.rejects(access(lockPath), /ENOENT/);
 });
 
-test("spaces posts for the same lane and platform by at least two minutes and honors run cap", async () => {
+test("spaces standard posts across the day and honors the run cap", async () => {
   const dir = await workspace([
     item({ id: "one" }),
     item({ id: "two", eventId: "event-2", copy: "Cierre en la avenida 2. Fuente oficial: https://example.gov/road/2" }),
@@ -688,7 +689,33 @@ test("spaces posts for the same lane and platform by at least two minutes and ho
     },
   });
   assert.equal(result.scheduled, 2);
-  assert.deepEqual(dates, ["2026-07-21T12:02:00", "2026-07-21T12:04:00"]);
+  assert.deepEqual(dates, ["2026-07-21T12:02:00", "2026-07-21T13:17:00"]);
+});
+
+test("allocates a 20-post run evenly so both city accounts can reach ten per day", async () => {
+  const items = (["miami-news", "ny-news"] as const).flatMap((lane) => Array.from({ length: 12 }, (_, index) => item({
+    id: `${lane}-${index}`,
+    eventId: `${lane}-event-${index}`,
+    lane,
+    platform: "facebook",
+    copy: `ESPAÑOL / ENGLISH verified local story ${lane} ${index}.`,
+    editorialPriority: 50,
+  })));
+  const dir = await workspace(items);
+  const scheduledBlogIds: string[] = [];
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99", METRICOOL_NY_NEWS_BLOG_ID: "100" },
+    workspaceDir: dir,
+    now: fixedNow,
+    maxPerRun: 20,
+    fetch: async (input) => {
+      scheduledBlogIds.push(new URL(String(input)).searchParams.get("blogId") || "");
+      return new Response(JSON.stringify({ id: `post-${scheduledBlogIds.length}` }), { status: 200 });
+    },
+  });
+  assert.equal(result.scheduled, 20);
+  assert.equal(scheduledBlogIds.filter((id) => id === "99").length, 10);
+  assert.equal(scheduledBlogIds.filter((id) => id === "100").length, 10);
 });
 
 test("suppresses routine subway and Metrobus noise before it reaches Metricool", async () => {
@@ -748,4 +775,67 @@ test("committee review identity cannot be replayed or risk-downgraded", () => {
   assert.equal(hasCompleteLocalNewsCommitteeApproval({ ...reviewed, lane: "miami-news" }), false);
   assert.equal(hasCompleteLocalNewsCommitteeApproval({ ...reviewed, risk: "low" }), false);
   assert.equal(hasCompleteLocalNewsCommitteeApproval({ ...reviewed, canonicalEventIdentity: undefined }), false);
+});
+
+
+function ledgerEntry(lane: "miami-news" | "ny-news", platform: "facebook" | "x", index: number, scheduledFor: string) {
+  return { queueItemId: `ledger-${lane}-${platform}-${index}`, lane, platform, blogId: lane === "miami-news" ? "99" : "100", scheduledFor, scheduledAt: scheduledFor, metricoolPostId: `old-${index}` };
+}
+
+test("allocates the run by existing account-day deficit instead of raw queue order", async () => {
+  const queued = (["miami-news", "ny-news"] as const).flatMap((lane) => Array.from({ length: 10 }, (_, index) => item({
+    id: `deficit-${lane}-${index}`, eventId: `deficit-event-${lane}-${index}`, lane, platform: "facebook", copy: `Verified deficit story ${lane} ${index}.`, editorialPriority: 50,
+  })));
+  const dir = await workspace(queued);
+  await writeFile(path.join(dir, "metricool-delivery-ledger.json"), JSON.stringify({ version: 1, entries: Array.from({ length: 9 }, (_, index) => ledgerEntry("miami-news", "facebook", index, `2026-07-21T${String(12 + index).padStart(2, "0")}:00:00.000Z`)) }), "utf8");
+  const posted: string[] = [];
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99", METRICOOL_NY_NEWS_BLOG_ID: "100" }, workspaceDir: dir, now: fixedNow, maxPerRun: 10,
+    fetch: async (input) => { posted.push(new URL(String(input)).searchParams.get("blogId") || ""); return new Response(JSON.stringify({ id: `new-${posted.length}` }), { status: 200 }); },
+  });
+  assert.equal(result.scheduled, 10);
+  assert.equal(posted.filter((blogId) => blogId === "99").length, 1);
+  assert.equal(posted.filter((blogId) => blogId === "100").length, 9);
+});
+
+test("compresses safe routine slots late in the day so ten can still land on that account-day", async () => {
+  const dir = await workspace(Array.from({ length: 10 }, (_, index) => item({ id: `late-${index}`, eventId: `late-event-${index}`, platform: "facebook", copy: `Verified late-day story ${index}.` })));
+  const dates: string[] = [];
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" }, workspaceDir: dir, now: () => new Date("2026-07-22T02:00:00.000Z"), maxPerRun: 10,
+    fetch: async (_input, init) => { dates.push(JSON.parse(String(init?.body)).publicationDate.dateTime); return new Response(JSON.stringify({ id: `late-post-${dates.length}` }), { status: 200 }); },
+  });
+  assert.equal(result.scheduled, 10);
+  assert.ok(dates.every((date) => date.startsWith("2026-07-21T")), dates.join(", "));
+  assert.ok(dates.at(-1)! <= "2026-07-21T23:59:59");
+});
+
+test("shares a capped run fairly across all four city and platform accounts", async () => {
+  const queued = (["miami-news", "ny-news"] as const).flatMap((lane) => (["facebook", "x"] as const).flatMap((platform) => Array.from({ length: 6 }, (_, index) => item({
+    id: `four-${lane}-${platform}-${index}`, eventId: `four-event-${lane}-${platform}-${index}`, lane, platform, copy: `Verified four-account story ${lane} ${platform} ${index}.`,
+  }))));
+  const dir = await workspace(queued);
+  const combinations: string[] = [];
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99", METRICOOL_NY_NEWS_BLOG_ID: "100" }, workspaceDir: dir, now: fixedNow, maxPerRun: 20,
+    fetch: async (input, init) => { const blogId = new URL(String(input)).searchParams.get("blogId"); const network = JSON.parse(String(init?.body)).providers[0].network; combinations.push(`${blogId}|${network}`); return new Response(JSON.stringify({ id: `four-post-${combinations.length}` }), { status: 200 }); },
+  });
+  assert.equal(result.scheduled, 20);
+  for (const combination of ["99|facebook", "99|twitter", "100|facebook", "100|twitter"]) assert.equal(combinations.filter((value) => value === combination).length, 5, combination);
+});
+
+test("uses one maximum observed adaptive target for a mixed baseline and breakout account-day", async () => {
+  const modes = [10, 10, 10, 14] as const;
+  const dir = await workspace(modes.map((dailyTargetPosts, index) => item({
+    id: `adaptive-${index}`, eventId: `adaptive-event-${index}`, platform: "facebook", copy: `Verified adaptive story ${index}.`, editorialPriority: 100 - index,
+    organicGrowth: { ceoDecision: { dailyMinimumPosts: 10, dailyTargetPosts, performanceMode: dailyTargetPosts === 14 ? "breakout" : "baseline" } },
+  })));
+  await writeFile(path.join(dir, "metricool-delivery-ledger.json"), JSON.stringify({ version: 1, entries: Array.from({ length: 10 }, (_, index) => ledgerEntry("miami-news", "facebook", index, `2026-07-21T${String(6 + index).padStart(2, "0")}:00:00.000Z`)) }), "utf8");
+  const dates: string[] = [];
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" }, workspaceDir: dir, now: fixedNow, maxPerRun: 4,
+    fetch: async (_input, init) => { dates.push(JSON.parse(String(init?.body)).publicationDate.dateTime); return new Response(JSON.stringify({ id: `adaptive-post-${dates.length}` }), { status: 200 }); },
+  });
+  assert.equal(result.scheduled, 4);
+  assert.ok(dates.every((date) => date.startsWith("2026-07-21T")), dates.join(", "));
 });

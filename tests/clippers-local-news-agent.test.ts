@@ -6,6 +6,7 @@ import test from "node:test";
 import { z } from "zod";
 import { detectLocalNewsSensitiveContent } from "../server/clippers-local-news-review-committee";
 import { __clipperLocalNewsInternals, bootstrapClipperLocalNews, getClipperLocalNewsStatus, ingestClipperLocalNewsEvents, normalizeClipperLocalNewsEvent, recordClipperLocalNewsMetrics, runClipperLocalNewsCycle } from "../server/clippers-local-news-agent";
+import { LocalNewsTranslator } from "../server/clippers-local-news-translation";
 
 async function fixture(t: test.TestContext) {
   const workspaceDir = await mkdtemp(path.join(os.tmpdir(), "local-news-agent-"));
@@ -14,6 +15,126 @@ async function fixture(t: test.TestContext) {
 }
 
 const event = { sourceEventId: "nws-1", source: "NWS Miami", sourceUrl: "https://weather.gov/example", lane: "miami-news" as const, title: "Flood Watch", description: "Heavy rain is possible.", location: "Miami-Dade", severity: "Moderate", urgency: "Expected" };
+
+test("X weighting charges Unicode punctuation and emoji while treating a URL as 23", () => {
+  assert.equal(__clipperLocalNewsInternals.xWeightedLength("A…😀 https://example.com/very/long/path"), 29);
+});
+
+test("offline OPUS adapter produces substantive Spanish and English in the same social post", async (t) => {
+  const workspaceDir = await fixture(t);
+  const translations = new Map([
+    ["Flood Watch", "Vigilancia de inundaciones"],
+    ["Heavy rain is possible.", "Es posible que llueva intensamente."],
+    ["Review the official source before taking action.", "Consulta la fuente oficial antes de actuar."],
+  ]);
+  const translator = new LocalNewsTranslator({ enabled: true, adapter: { translate: async (input) => translations.get(input) || `Traducción: ${input}` } });
+  await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", env: { NODE_ENV: "production" }, translator, events: [event] });
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  const facebook = queue.find((item: any) => item.platform === "facebook");
+  const x = queue.find((item: any) => item.platform === "x");
+  assert.match(facebook.copy, /Vigilancia de inundaciones/);
+  assert.match(facebook.copy, /Es posible que llueva intensamente/);
+  assert.match(facebook.copy, /Flood Watch/);
+  assert.match(facebook.copy, /Heavy rain is possible/);
+  assert.match(x.copy, /Vigilancia de inundaciones/);
+  assert.ok(queue.every((item: any) => item.evidence.includes("local_translation=opus_mt_verified")));
+});
+
+test("offline translation integrity failure quarantines both platforms", async (t) => {
+  const workspaceDir = await fixture(t);
+  const translator = new LocalNewsTranslator({ enabled: true, adapter: { translate: async (input) => input.replace("I-95", "I-94") } });
+  await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", env: { NODE_ENV: "production" }, translator, events: [{ ...event, title: "Crash closes I-95", description: "Two lanes closed on I-95." }] });
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  assert.ok(queue.every((item: any) => item.status === "quarantined" && item.autoEligible === false && item.reasons.includes("local_translation_integrity_failed")));
+});
+
+test("offline translation quarantines added routes and times", async (t) => {
+  const workspaceDir = await fixture(t);
+  const translator = new LocalNewsTranslator({ enabled: true, adapter: { translate: async (input) => `Traducción de ${input} I-75 a las 9:30.` } });
+  await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", env: { NODE_ENV: "production" }, translator, events: [{ ...event, title: "Crash closes I-95", description: "Two lanes closed on I-95 at 8:30." }] });
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  assert.ok(queue.every((item: any) => item.status === "quarantined" && item.reasons.includes("local_translation_integrity_failed")));
+});
+
+test("temporary offline model failure retries on the next duplicate cycle", async (t) => {
+  const workspaceDir = await fixture(t);
+  let available = false;
+  const translations = new Map([
+    ["Flood Watch", "Vigilancia de inundaciones"],
+    ["Heavy rain is possible.", "Es posible que llueva intensamente."],
+    ["Review the official source before taking action.", "Consulta la fuente oficial antes de actuar."],
+  ]);
+  const translator = new LocalNewsTranslator({ enabled: true, adapter: { translate: async (input) => {
+    if (!available) throw new Error("model_download_pending");
+    return translations.get(input) || `Traducción: ${input}`;
+  } } });
+  const options = { workspaceDir, env: { NODE_ENV: "production" }, translator, events: [event] };
+  await ingestClipperLocalNewsEvents({ ...options, now: "2026-07-21T12:00:00Z" });
+  let queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  assert.ok(queue.every((item: any) => item.reasons.includes("local_translation_unavailable") && item.autoEligible === false));
+  available = true;
+  await ingestClipperLocalNewsEvents({ ...options, now: "2026-07-21T12:05:00Z" });
+  queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  assert.ok(queue.every((item: any) => item.autoEligible === true && item.evidence.includes("local_translation=opus_mt_verified")));
+});
+
+test("production cannot bypass required bilingual translation with an off flag", async (t) => {
+  const workspaceDir = await fixture(t);
+  const translator = new LocalNewsTranslator({ enabled: false });
+  await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", env: { NODE_ENV: "production", CLIPPERS_LOCAL_NEWS_LOCAL_TRANSLATION: "false" }, translator, events: [event] });
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  assert.ok(queue.every((item: any) => item.status === "quarantined" && item.autoEligible === false));
+});
+
+test("unknown source language is quarantined instead of labeling Spanish as English", async (t) => {
+  const workspaceDir = await fixture(t);
+  let calls = 0;
+  const translator = new LocalNewsTranslator({ enabled: true, adapter: { translate: async () => { calls += 1; return "Alerta vial local"; } } });
+  await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", env: { NODE_ENV: "production" }, translator, events: [{ ...event, title: "Aviso vial", description: "Zona centro", instruction: "Cuidado" }] });
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  assert.equal(calls, 0);
+  assert.ok(queue.every((item: any) => item.status === "quarantined" && item.autoEligible === false && item.reasons.includes("local_translation_integrity_failed")));
+  assert.ok(queue.every((item: any) => item.evidence.some((entry: string) => entry.includes("source_language_unknown"))));
+});
+
+test("mixed-language source fields are quarantined before translation", async (t) => {
+  const workspaceDir = await fixture(t);
+  let calls = 0;
+  const translator = new LocalNewsTranslator({ enabled: true, adapter: { translate: async () => { calls += 1; return "Traducción inesperada"; } } });
+  await ingestClipperLocalNewsEvents({
+    workspaceDir,
+    now: "2026-07-21T12:00:00Z",
+    env: { NODE_ENV: "production" },
+    translator,
+    events: [{ ...event, title: "Choque cierra I-95", description: "The road is closed after a major crash.", instruction: "Review the official source before taking action." }],
+  });
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  assert.equal(calls, 0);
+  assert.ok(queue.every((item: any) => item.status === "quarantined" && item.autoEligible === false));
+  assert.ok(queue.every((item: any) => item.evidence.some((entry: string) => entry.includes("source_field_language_mismatch:title:es"))));
+});
+
+test("Spanish events with missing fields use Spanish source fallbacks before translation", async (t) => {
+  const workspaceDir = await fixture(t);
+  const translations = new Map([
+    ["Choque cierra I-95", "Crash closes I-95"],
+    ["La fuente oficial no proporcionó detalles adicionales.", "The official source provided no additional detail."],
+    ["Consulta la fuente oficial antes de actuar.", "Review the official source before taking action."],
+  ]);
+  const translator = new LocalNewsTranslator({ enabled: true, adapter: { translate: async (input) => translations.get(input) || "" } });
+  await ingestClipperLocalNewsEvents({
+    workspaceDir,
+    now: "2026-07-21T12:00:00Z",
+    env: { NODE_ENV: "production" },
+    translator,
+    events: [{ ...event, title: "Choque cierra I-95", description: "", instruction: "" }],
+  });
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  const facebook = queue.find((item: any) => item.platform === "facebook");
+  assert.ok(queue.every((item: any) => item.status === "auto_eligible" && item.evidence.includes("local_translation=opus_mt_verified")));
+  assert.match(facebook.copy, /Detalle: La fuente oficial no proporcionó detalles adicionales\./);
+  assert.match(facebook.copy, /Detail: The official source provided no additional detail\./);
+});
 
 test("bootstrap creates all artifacts and clamps schedule to 2-5 minutes", async (t) => {
   const workspaceDir = await fixture(t);
@@ -47,14 +168,45 @@ test("risk gate blocks critical events and copy stays platform-specific", async 
   assert.ok(queue.every((item: any) => item.status === "quarantined" && item.publishDecision === "quarantine" && item.published === false));
   const x = queue.find((item: any) => item.platform === "x");
   const facebook = queue.find((item: any) => item.platform === "facebook");
-  assert.ok(x.copy.length <= 280);
+  assert.ok(__clipperLocalNewsInternals.xWeightedLength(x.copy) <= 280);
   assert.notEqual(x.copy, facebook.copy);
-  assert.match(x.copy, /Según NWS Miami .*https:\/\/weather.gov\/example/);
+  assert.match(x.copy, /Fuente \/ Source: https:\/\/weather.gov\/example/);
   assert.match(facebook.copy, /Esta página no es la agencia emisora/);
   assert.equal(facebook.textOnly, true);
   assert.equal(facebook.mediaRequired, false);
-  assert.match(facebook.copy, /Hora: .*E[DS]T/);
-  assert.match(facebook.copy, /Impacto: Evacuate immediately/);
+  assert.match(facebook.copy, /Detalle: .* a las .*E[DS]T/);
+  assert.match(facebook.copy, /EXTRACTO ORIGINAL \/ ORIGINAL EXCERPT\nEvacuate immediately/);
+});
+
+test("X keeps both languages and a valid source when the official URL is unusually long", async (t) => {
+  const workspaceDir = await fixture(t);
+  await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", env: { PUBLIC_BASE_URL: "https://metrocurrent.example" }, events: [{
+    ...event,
+    sourceEventId: "long-url-1",
+    sourceUrl: `https://weather.gov/${"official-update-".repeat(30)}`,
+  }] });
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  const x = queue.find((item: any) => item.platform === "x");
+  assert.ok(__clipperLocalNewsInternals.xWeightedLength(x.copy) <= 280);
+  assert.match(x.copy, /^ES —/);
+  assert.match(x.copy, /\nEN —/);
+  assert.match(x.copy, new RegExp(`Fuente / Source: https://weather\\.gov/${"official-update-".repeat(30)}`));
+  assert.doesNotMatch(x.copy, /metrocurrent\.example/);
+});
+
+test("X preserves an exact long official source using X weighted URL length", async (t) => {
+  const workspaceDir = await fixture(t);
+  const oversizedHost = `${"a".repeat(50)}.${"b".repeat(50)}.${"c".repeat(50)}.gov`;
+  await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", events: [{
+    ...event,
+    sourceEventId: "oversized-host-1",
+    sourceUrl: `https://${oversizedHost}/official-update`,
+    title: "Person charged after investigation",
+  }] });
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  const x = queue.find((item: any) => item.platform === "x");
+  assert.match(x.copy, new RegExp(`Fuente / Source: https://${oversizedHost}/official-update`));
+  assert.ok(__clipperLocalNewsInternals.xWeightedLength(x.copy) <= 280);
 });
 
 test("low and medium events default to auto eligible, opt-out requires approval, and road closed remains active", async (t) => {
@@ -125,16 +277,25 @@ test("professional newsroom classifies desks and produces attributed Facebook te
   assert.equal(persisted.section, "traffic");
   assert.equal(persisted.editorialUrgency, "developing");
   assert.deepEqual({ textOnly: facebook.textOnly, mediaRequired: facebook.mediaRequired }, { textOnly: true, mediaRequired: false });
+  assert.match(facebook.copy, /^ESPAÑOL/);
+  assert.match(facebook.copy, /\nENGLISH\n/);
   assert.match(facebook.copy, /TRÁFICO:/);
-  assert.match(facebook.copy, /Qué hacer: Use an alternate route/);
-  assert.match(facebook.copy, /Según Notify NYC/);
+  assert.match(facebook.copy, /INSTRUCCIÓN ORIGINAL \(EXTRACTO\) \/ ORIGINAL INSTRUCTION \(EXCERPT\)\nUse an alternate route/);
+  assert.match(facebook.copy, /Según \/ According to Notify NYC/);
   assert.match(facebook.copy, /https:\/\/news\.example\.com\/news\/article\//);
   assert.match(facebook.copy, /utm_source=metricool/);
   assert.match(x.copy, /https:\/\/notify\.nyc\/traffic-1/);
-  assert.ok(x.copy.length <= 280);
+  assert.ok(__clipperLocalNewsInternals.xWeightedLength(x.copy) <= 280);
+  assert.match(x.copy, /^ES —/);
+  assert.match(x.copy, /\nEN —/);
   assert.equal(facebook.organicGrowth.zeroCost, true);
   assert.equal(facebook.organicGrowth.shortForm.renderMode, "local_template");
   assert.equal(result.status.editorial.owner, "Local News CEO");
+  assert.deepEqual(
+    { minimum: result.status.editorial.dailyPublishing.minimumPerAccount, maximum: result.status.editorial.dailyPublishing.adaptiveMaximum, bilingual: result.status.editorial.dailyPublishing.bilingualSamePost, videoFirst: result.status.editorial.dailyPublishing.videoFirst },
+    { minimum: 10, maximum: 14, bilingual: true, videoFirst: true },
+  );
+  assert.deepEqual(result.status.editorial.dailyPublishing.accounts["ny-news"].facebook, { queuedToday: 1, target: 10, deficit: 9, performanceMode: "baseline" });
   assert.equal(result.status.editorial.sections.traffic.events, 1);
   assert.equal(result.status.editorial.textOnlyFacebook, 1);
   assert.deepEqual(
@@ -161,6 +322,19 @@ test("adaptive Facebook cadence allows relevant developing coverage and defers c
   assert.equal(deferred.notBefore, "2026-07-21T13:00:00.000Z");
   assert.equal(result.status.editorial.cadenceHeld, 2);
   assert.equal(result.status.editorial.cadence.facebookRelevantMax, 10);
+});
+
+test("breaking coverage bypasses hourly cadence holds and remains immediately eligible", async (t) => {
+  const workspaceDir = await fixture(t);
+  const events = Array.from({ length: 12 }, (_, index) => ({
+    sourceEventId: `breaking-${index}`, source: "Notify NYC", sourceUrl: `https://notify.nyc/breaking-${index}`, lane: "ny-news" as const,
+    title: `Emergency road closure ${index}`, description: "Road closed after a major incident.", location: `Street ${index}`, eventType: "Emergency closure", urgency: "Immediate", severity: "Severe",
+  }));
+  await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", events });
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  const breaking = queue.filter((item: any) => item.editorialUrgency === "breaking");
+  assert.equal(breaking.length, 24);
+  assert.ok(breaking.every((item: any) => item.gateReason !== "cadence" && item.notBefore === null));
 });
 
 test("three-role committee records auditable unanimous verdicts and hashes on every queue item", async (t) => {
@@ -325,9 +499,9 @@ test("Facebook newsroom copy keeps official detail concise for long source descr
     location: "Miami-Dade", eventType: "Traffic advisory",
   }] });
   const facebook = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items.find((item: any) => item.platform === "facebook");
-  assert.ok(facebook.copy.length < 1800);
-  assert.match(facebook.copy, /Impacto: Long detail/);
-  assert.match(facebook.copy, /Qué hacer: Use alternate route/);
+  assert.ok(facebook.copy.length < 4000);
+  assert.match(facebook.copy, /EXTRACTO ORIGINAL \/ ORIGINAL EXCERPT\nLong detail/);
+  assert.match(facebook.copy, /INSTRUCCIÓN ORIGINAL \(EXTRACTO\) \/ ORIGINAL INSTRUCTION \(EXCERPT\)\nUse alternate route/);
 });
 
 test("sensitive Spanish and English topics receive automatic final quarantine or rejection", async (t) => {
@@ -443,7 +617,7 @@ test("official DOJ accusation uses the sensitive connector, public-safety priori
   assert.ok(queue.every((item: any) => item.publishDecision === "auto_publish" && item.autoEligible));
   assert.ok(queue.every((item: any) => /^[a-f0-9]{64}$/.test(item.claimIdentityHash) && /^[a-f0-9]{64}$/.test(item.canonicalEventIdentity)));
   assert.match(queue.find((item: any) => item.platform === "facebook").copy, /se presume inocente/);
-  assert.match(queue.find((item: any) => item.platform === "x").copy, /Acusación; se presume inocente/);
+  assert.match(queue.find((item: any) => item.platform === "x").copy, /ES: Se presume inocente\. EN: Presumed innocent/);
 });
 
 
