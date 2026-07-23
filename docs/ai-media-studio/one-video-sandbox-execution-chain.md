@@ -25,6 +25,11 @@ migration, publishing, or deployment is authorized.
    required durable fencing, process concurrency one, one stage per invocation,
    uncertain-outcome sealing, no global `runNext`, no publishing surface, and
    `autostart: false`. It is intentionally not mounted to HTTP or a live runtime.
+10. Function-only Drizzle fence adapter plus pending PR32 PostgreSQL migration.
+    The pending role is table-blind and every single-command capability is bound
+    to the session principal, actor, exact target, action and digest. Completed
+    commands replay durably; uncertain commands cannot be silently resubmitted.
+    PR32 is a review artifact and has not been applied to any real database.
 
 ## Missing dependency order
 
@@ -41,9 +46,10 @@ migration, publishing, or deployment is authorized.
    terminal observation, ingest and asset linking. They must select the exact
    slot attempt/render target; the current global queue claims are not allowed
    behind the run-once boundary.
-8. Durable implementation of the run-once fence and trusted Robert-bound
-   authorization adapter.
-9. Explicit production binding of those exact ports. This is the first step
+8. Trusted Robert-bound authorization issuer for pending PR32 capabilities and
+   explicit migration approval after its isolated PostgreSQL rehearsal.
+9. Explicit production binding of the exact worker ports and durable fence.
+   This is the first step
    allowed to perform provider I/O and therefore requires a separate Robert
    approval and exact cost approval.
 

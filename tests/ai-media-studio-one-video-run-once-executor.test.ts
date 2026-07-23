@@ -39,6 +39,7 @@ const lease = {
     principal,
   }),
   fencingToken: 1n,
+  leaseToken: "50000000-0000-4000-8000-000000000005",
 } as ExactOneVideoRunLease;
 
 function command(
@@ -89,6 +90,7 @@ test("construction is inert and one invocation calls only the selected exact sta
     fence: fence({
       async acquire(input) {
         acquisitions += 1;
+        assert.equal(input.actorUserId, "robert");
         return { kind: "acquired", lease: {
           ...lease, commandId: input.commandId, commandDigest: input.commandDigest,
         } as ExactOneVideoRunLease };

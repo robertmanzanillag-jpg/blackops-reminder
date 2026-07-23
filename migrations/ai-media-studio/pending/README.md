@@ -29,6 +29,15 @@ principal. No role membership or capability row is provisioned by PR31. It has
 no provider I/O, worker start, spend, publication, backfill, deployment, or
 migration application.
 
+The PR32 pair prepares a table-blind, single-command durable fence for the
+unmounted exact one-video executor. A precreated NOLOGIN/NOINHERIT executor role
+can call only three SECURITY DEFINER functions. Every capability is bound to the
+session principal, tenant, actor, reservation, render, slot, attempt, handoff,
+action, command and digest. The fence provides concurrency one, opaque lease
+tokens, monotonic fencing, replay of completed commands, and terminal uncertain
+sealing. It contains no exact worker claim implementation, provider I/O,
+publishing, spend, deployment, migration application, or public route.
+
 Disposable PostgreSQL 16 rehearsal:
 
 ```sh

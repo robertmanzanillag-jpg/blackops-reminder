@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-07-23T06:43:48.503Z
-Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-one-video-run-once-executor`
+Generated: 2026-07-23T07:12:31.588Z
+Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-exact-run-fence`
 Package: `rest-express`
 
 ## Guardrails
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 985 | 831 | 3711 | 508 | 16425 |
+| 990 | 834 | 3725 | 508 | 16488 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,8 +29,8 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 269 | 257 | test:269 |
-| `server/ai-media-studio` | 205 | 184 | server:205 |
+| `tests` | 271 | 259 | test:271 |
+| `server/ai-media-studio` | 206 | 185 | server:206 |
 | `client/src` | 158 | 156 | ui-component:55, other:48, client-page:24, client-component:21 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 48 | 46 | script:48 |
@@ -40,7 +40,7 @@ Package: `rest-express`
 | `docs` | 12 | 11 | docs:12 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
 | `tests/fixtures` | 7 | 5 | test:7 |
-| `migrations/ai-media-studio` | 55 | 3 | other:53, docs:2 |
+| `migrations/ai-media-studio` | 57 | 3 | other:55, docs:2 |
 | `client/public` | 13 | 2 | other:13 |
 | `shared/models` | 2 | 2 | shared:2 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
@@ -87,6 +87,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-daily-admission-domain.test.ts`
 - `tests/ai-media-studio-daily-admission-drizzle.test.ts`
 - `tests/ai-media-studio-drizzle-one-video-held-admission-repository.test.ts`
+- `tests/ai-media-studio-exact-one-video-run-fence-drizzle.test.ts`
 - `tests/ai-media-studio-full-chain-postgres.test.ts`
 - `tests/ai-media-studio-governance-drizzle.test.ts`
 - `tests/ai-media-studio-governance.test.ts`
@@ -203,6 +204,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr30-quote-bound-human-approval-migration.test.ts`
 - `tests/ai-media-studio-pr30-quote-bound-human-approval-postgres.test.ts`
 - `tests/ai-media-studio-pr31-held-admission-expiry-migration.test.ts`
+- `tests/ai-media-studio-pr32-exact-one-video-run-fence-migration.test.ts`
 - `tests/ai-media-studio-pr4-assets-migration.test.ts`
 - `tests/ai-media-studio-pr5-governance-migration.test.ts`
 - `tests/ai-media-studio-pr6-provider-identity-migration.test.ts`

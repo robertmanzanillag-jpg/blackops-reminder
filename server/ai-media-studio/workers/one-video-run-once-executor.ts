@@ -87,6 +87,7 @@ export interface ExactOneVideoRunLease {
   commandId: string;
   commandDigest: Sha256Digest;
   fencingToken: bigint;
+  leaseToken: string;
   readonly [exactOneVideoRunLease]: true;
 }
 
@@ -106,6 +107,7 @@ export interface ExactOneVideoRunFence {
     action: OneVideoRunOnceAction;
     commandId: string;
     commandDigest: Sha256Digest;
+    actorUserId: string;
   }): Promise<ExactOneVideoFenceAcquireResult>;
   complete(input: {
     lease: ExactOneVideoRunLease;
@@ -174,6 +176,7 @@ export class OneVideoRunOnceExecutor {
         action: validated.action,
         commandId: validated.commandId,
         commandDigest,
+        actorUserId: validated.principal.actorUserId,
       });
       if (acquired.kind === "replayed") {
         assertExactResult(validated, acquired.result);
@@ -270,7 +273,8 @@ function assertExactLease(
   commandDigest: Sha256Digest,
   lease: ExactOneVideoRunLease,
 ): void {
-  if (!lease || !UUID.test(lease.executionId) || lease.commandId !== command.commandId
+  if (!lease || !UUID.test(lease.executionId) || !UUID.test(lease.leaseToken)
+    || lease.commandId !== command.commandId
     || lease.commandDigest !== commandDigest || !DIGEST.test(lease.commandDigest)
     || typeof lease.fencingToken !== "bigint" || lease.fencingToken < 1n) {
     throw new OneVideoRunOnceError("CONFLICT");
