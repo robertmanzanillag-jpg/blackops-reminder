@@ -729,13 +729,14 @@ integrationTest("pending PR33 exact submit claim is table-blind, fenced, replay-
       successSetup.target.attempt,successSetup.target.work_handoff_digest,claim.rows[0].id,claim.rows[0].fencing_token,
       claim.rows[0].lease_token,claim.rows[0].sealed_request_digest]);
     assert.equal(authorized.rowCount,1);
-    const ambiguous=await session.query<{applied:boolean}>(ambiguousSql,[successSetup.acquired.execution_id,
+    const ambiguous=await session.query<{execution_id:string;applied:boolean}>(ambiguousSql,[successSetup.acquired.execution_id,
       successSetup.acquired.lease_token,successSetup.acquired.fencing_token,successSetup.commandDigest,"robert",
       OWNER,WORKSPACE,successSetup.work.reservationId,successSetup.work.renderJobId,successSetup.target.daily_plan_slot_id,
       successSetup.target.attempt,successSetup.target.work_handoff_digest,authorized.rows[0].id,
       authorized.rows[0].fencing_token,authorized.rows[0].send_authorization_digest,authorized.rows[0].lease_token,
       "provider-request-ambiguous",digest("c")]);
-    assert.deepEqual(ambiguous.rows,[{applied:true}]);
+    assert.equal(ambiguous.rows[0]?.applied,true);
+    assert.equal(ambiguous.rows[0]?.execution_id,successSetup.acquired.execution_id);
     const completed=await session.query<{applied:boolean}>(
       "SELECT * FROM ai_media_worker_api.complete_exact_one_video_run_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)",
       [ids.exactRunCapability,OWNER,WORKSPACE,successSetup.acquired.execution_id,successSetup.commandId,
