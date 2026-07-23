@@ -333,7 +333,9 @@ export interface AiMediaStudioDependencies {
   /** Precomposed admitted-render workers. Merely supplying them never starts or invokes a worker. */
   productionAdmittedRenderRuntime?: ProductionAdmittedRenderRuntime;
   /** Inert composition seam; the factory must construct workers without I/O or autostart. */
-  createProductionAdmittedRenderRuntime?: () => ProductionAdmittedRenderRuntime;
+  createProductionAdmittedRenderRuntime?: (input: Readonly<{
+    assetHooks: AssetIngestWorkerHooks;
+  }>) => ProductionAdmittedRenderRuntime;
 }
 export interface AiMediaStudioRuntime {
   service: AiMediaStudioService;
@@ -470,6 +472,7 @@ const ADMITTED_RENDER_NOT_COMPOSED_REASON =
  */
 function selectProductionAdmittedRenderRuntime(
   dependencies: AiMediaStudioDependencies,
+  assetHooks: AssetIngestWorkerHooks,
 ): ProductionAdmittedRenderRuntimeSelection {
   const injected = dependencies.productionAdmittedRenderRuntime;
   const factory = dependencies.createProductionAdmittedRenderRuntime;
@@ -483,7 +486,7 @@ function selectProductionAdmittedRenderRuntime(
 
   let runtime: ProductionAdmittedRenderRuntime;
   try {
-    runtime = injected ?? factory!();
+    runtime = injected ?? factory!({ assetHooks });
   } catch {
     return {
       runtime: undefined,
@@ -1519,7 +1522,6 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
   const oneVideoExecutionControlSelection = selectOneVideoExecutionControlRuntime(dependencies, databaseUrl);
   const oneVideoCostApprovalSelection = selectOneVideoCostApprovalRuntime(dependencies, databaseUrl);
   const oneVideoHeldAdmissionSelection = selectOneVideoHeldAdmissionRuntime(dependencies, databaseUrl);
-  const productionAdmittedRenderRuntimeSelection = selectProductionAdmittedRenderRuntime(dependencies);
   const sensitiveMutationRequestGuard = createSensitiveMutationRequestGuard(dependencies, runtimeEnvironment);
   const operations = createOperationsRuntime({
     ...dependencies.operations,
@@ -1752,6 +1754,10 @@ export function createAiMediaStudioRuntime(dependencies: AiMediaStudioDependenci
       await service.recordArtifactIngestFailure(ownerUserId, ingest.renderJobId, ingest);
     },
   };
+  const productionAdmittedRenderRuntimeSelection = selectProductionAdmittedRenderRuntime(
+    dependencies,
+    assetIngestHooks,
+  );
   const reconcileCompletedAssetIngests = async (limit = 25): Promise<number> => {
     if (!assetIngestRepository) return 0;
     if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new Error("Artifact reconciliation limit must be between 1 and 100");

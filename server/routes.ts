@@ -31,6 +31,7 @@ import { getMeetingPrepById, getUpcomingMeetingPreps } from "./meeting-intellige
 import { buildCeoOperationalHealth } from "./ceo-operational-health";
 import { registerTelegramRoutes } from "./telegram-routes";
 import { registerAiMediaStudioRoutes } from "./ai-media-studio";
+import { createNodeProductionAdmittedRenderBootstrapDependencies } from "./ai-media-studio/workers/production-admitted-render-bootstrap-node";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
 import { ensureAppDriveStructure } from "./google-drive";
@@ -828,7 +829,7 @@ export async function registerRoutes(
   });
 
   registerTelegramRoutes(app);
-  registerAiMediaStudioRoutes(app);
+  registerAiMediaStudioRoutes(app, createNodeProductionAdmittedRenderBootstrapDependencies());
 
   // GET all tasks
   app.get("/api/tasks", async (req, res) => {

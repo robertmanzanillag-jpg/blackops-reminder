@@ -11,6 +11,7 @@ import type { SQL } from "drizzle-orm";
 import { Pool, type PoolClient } from "pg";
 import { AssetIngestWorker } from "../server/ai-media-studio/assets/worker";
 import { DrizzleAssetIngestRepository } from "../server/ai-media-studio/assets/drizzle-ingest-repository";
+import { DrizzleAdmittedProviderArtifactBindingLoader } from "../server/ai-media-studio/assets/drizzle-admitted-artifact-binding-loader";
 import type { ArtifactReadStream, OwnedObjectStorage } from "../server/ai-media-studio/assets/contracts";
 import { DrizzleMediaAssetRepository } from "../server/ai-media-studio/persistence/drizzle-core-repositories";
 import {
@@ -557,10 +558,13 @@ integrationTest("offline PG16 exact-22-migration rehearsal durably completes one
     WHERE render_job_id=$1`, [admission.reservation.renderJobId]);
   assert.equal(durableIngest.rowCount, 1);
   const ingestRepository = new DrizzleAssetIngestRepository(database);
+  const artifactBindingLoader = new DrizzleAdmittedProviderArtifactBindingLoader(database);
   const mediaAssets = new DrizzleMediaAssetRepository(database, { workspaceId: WORKSPACE });
   let readerCalls = 0;
   let resolverCalls = 0;
   let materializationError: unknown;
+  let artifactBindingObserved = false;
+  let artifactBindingDiagnostics: unknown;
   const ingestWorker = new AssetIngestWorker({
     workerId: "offline-asset-worker",
     repository: ingestRepository,
@@ -572,6 +576,49 @@ integrationTest("offline PG16 exact-22-migration rehearsal durably completes one
     } },
     providerArtifactResolver: { async resolveArtifact(request) {
       resolverCalls += 1;
+      const binding = await artifactBindingLoader.load(request);
+      artifactBindingObserved = binding !== undefined;
+      if (!binding) {
+        artifactBindingDiagnostics = (await adminPool.query(`SELECT
+            ingest.state ingest_state,ingest.lease_owner,ingest.lease_expires_at>transaction_timestamp() lease_current,
+            ingest.provider_key ingest_provider_key,ingest.remote_artifact_ref ingest_ref,
+            ingest.remote_url ingest_url,ingest.expected_mime_type ingest_mime,
+            terminal.terminal_state,terminal.provider_key terminal_provider_key,
+            terminal.remote_artifact_ref terminal_ref,terminal.remote_url terminal_url,
+            terminal.expected_mime_type terminal_mime,terminal.provider_job_id terminal_provider_job_id,
+            terminal.bound_evidence_digest terminal_digest,
+            attempt.state attempt_state,attempt.provider_job_id attempt_provider_job_id,
+            terminal_check.state terminal_check_state,
+            render.stage render_stage,render.status render_status,
+            render.provider_terminal_state render_terminal_state,
+            render.provider_terminal_evidence_digest render_terminal_digest,
+            render.output_media_asset_id,
+            outbox.status outbox_status,outbox.provider_terminal_state outbox_terminal_state,
+            outbox.provider_terminal_evidence_digest outbox_terminal_digest,
+            slot.status slot_status,slot.provider_terminal_state slot_terminal_state,
+            slot.provider_terminal_evidence_digest slot_terminal_digest
+          FROM ai_media_asset_ingest_jobs ingest
+          LEFT JOIN ai_media_provider_terminal_events terminal
+            ON terminal.render_job_id=ingest.render_job_id
+            AND terminal.owner_user_id=ingest.owner_user_id
+            AND terminal.workspace_id=ingest.workspace_id
+          LEFT JOIN ai_media_provider_submission_attempts attempt ON attempt.id=terminal.submission_attempt_id
+          LEFT JOIN ai_media_provider_terminal_checks terminal_check ON terminal_check.id=terminal.terminal_check_id
+          LEFT JOIN ai_media_render_jobs render ON render.id=terminal.render_job_id
+          LEFT JOIN ai_media_outbox outbox ON outbox.id=terminal.dispatch_outbox_id
+          LEFT JOIN ai_media_daily_plan_slots slot ON slot.id=terminal.daily_plan_slot_id
+          WHERE ingest.id=$1`, [request.jobId])).rows;
+        throw new Error("exact admitted artifact binding was unavailable");
+      }
+      assert.ok(binding, "actively leased ingest must resolve through the exact admitted evidence graph");
+      assert.equal(binding.jobId, request.jobId);
+      assert.equal(binding.renderJobId, admission.reservation.renderJobId);
+      assert.equal(binding.remoteArtifactRef, request.remoteArtifactRef);
+      assert.equal(binding.providerJobId, "offline-provider-job-1");
+      assert.equal(binding.providerAccountId, ids.account);
+      assert.equal(binding.providerKey, "heygen");
+      assert.equal(binding.providerCredentialVersion, 1);
+      assert.deepEqual(binding.scope, { ownerUserId: OWNER, workspaceId: WORKSPACE });
       return { remoteArtifactRef: request.remoteArtifactRef,
         sourceUrl: "https://offline.invalid/refreshed-render.mp4?synthetic=2", mediaType: "video/mp4",
         sourceUrlPolicy: "ephemeral_refresh_via_provider_get" };
@@ -604,6 +651,7 @@ integrationTest("offline PG16 exact-22-migration rehearsal durably completes one
   });
   const ingested = await ingestWorker.runNext();
   if (materializationError) throw materializationError;
+  assert.equal(artifactBindingObserved, true, JSON.stringify(artifactBindingDiagnostics));
   assert.equal(ingested.outcome, "completed");
   if (ingested.outcome !== "completed") assert.fail("owned ingest did not complete");
   assert.equal(ingested.job.mediaAssetId, ids.asset);

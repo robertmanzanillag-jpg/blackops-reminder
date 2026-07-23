@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-07-23T03:08:43.303Z
-Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime`
+Generated: 2026-07-23T05:56:45.970Z
+Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-artifact-binding-bootstrap`
 Package: `rest-express`
 
 ## Guardrails
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 977 | 823 | 3656 | 508 | 16300 |
+| 983 | 829 | 3703 | 508 | 16389 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,8 +29,8 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 266 | 254 | test:266 |
-| `server/ai-media-studio` | 200 | 179 | server:200 |
+| `tests` | 268 | 256 | test:268 |
+| `server/ai-media-studio` | 204 | 183 | server:204 |
 | `client/src` | 158 | 156 | ui-component:55, other:48, client-page:24, client-component:21 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 48 | 46 | script:48 |
@@ -67,6 +67,7 @@ Package: `rest-express`
 
 ## Test Inventory
 - `tests/ai-cost-notifications.test.ts`
+- `tests/ai-media-studio-admitted-artifact-binding-loader.test.ts`
 - `tests/ai-media-studio-admitted-render-runtime-routes.test.ts`
 - `tests/ai-media-studio-admitted-render-terminal-worker.test.ts`
 - `tests/ai-media-studio-admitted-render-worker.test.ts`
@@ -206,6 +207,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr6-provider-identity-migration.test.ts`
 - `tests/ai-media-studio-pr8-publishing-accounts-migration.test.ts`
 - `tests/ai-media-studio-pr9-oauth-migration.test.ts`
+- `tests/ai-media-studio-production-admitted-render-bootstrap.test.ts`
 - `tests/ai-media-studio-production-admitted-render-runtime.test.ts`
 - `tests/ai-media-studio-production-asset-runtime.test.ts`
 - `tests/ai-media-studio-production-batch-client.test.ts`

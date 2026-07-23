@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { durableProviderArtifactRef } from "../assets/provider-artifact-identity";
 import type { Sha256Digest } from "../planning/contracts";
 import type {
   AdmittedTerminalObservation,
@@ -244,17 +245,7 @@ function remoteArtifactRef(
   claim: AdmittedTerminalClaim,
   _observation: Extract<AdmittedTerminalObservation, { kind: "completed" }>,
 ): string {
-  // This identity must survive signed-URL refreshes, repeated observations, and
-  // credential rotation. Mutable evidence belongs beside it, never inside it.
-  return `provider-artifact://ai-media-studio/render-terminal/v1/${createHash("sha256").update(JSON.stringify({
-    version: 1,
-    ownerUserId: claim.scope.ownerUserId,
-    workspaceId: claim.scope.workspaceId,
-    renderJobId: claim.renderJobId,
-    providerAccountId: claim.providerAccountId,
-    providerKey: claim.providerKey,
-    providerJobId: claim.providerJobId,
-  })).digest("hex")}`;
+  return durableProviderArtifactRef(claim);
 }
 
 function errorDigest(error: unknown, claim: AdmittedTerminalClaim): Sha256Digest {
