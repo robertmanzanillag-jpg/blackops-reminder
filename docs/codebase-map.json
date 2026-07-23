@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-07-23T09:15:17.530Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-exact-reconcile-terminal",
+  "generatedAt": "2026-07-23T11:25:31.633Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-exact-runtime-wiring",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -98,33 +98,33 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1000,
-    "filesIndexed": 840,
-    "imports": 3759,
+    "filesVisible": 1018,
+    "filesIndexed": 854,
+    "imports": 3847,
     "routes": 508,
-    "symbols": 16734
+    "symbols": 17051
   },
   "directories": {
     "migrations/ai-media-studio": {
-      "files": 61,
+      "files": 65,
       "indexed": 3,
       "kinds": {
-        "other": 59,
+        "other": 63,
         "docs": 2
       }
     },
     "server/ai-media-studio": {
-      "files": 208,
-      "indexed": 187,
+      "files": 214,
+      "indexed": 193,
       "kinds": {
-        "server": 208
+        "server": 214
       }
     },
     "tests": {
-      "files": 275,
-      "indexed": 263,
+      "files": 283,
+      "indexed": 271,
       "kinds": {
-        "test": 275
+        "test": 283
       }
     },
     ".agents/skills": {
@@ -7763,6 +7763,121 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/assets/drizzle-exact-asset-ingest-repository.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "../planning/contracts",
+        "../workers/one-video-run-once-executor",
+        "./contracts",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "DrizzleExactAssetIngestRepository",
+        "ExactAssetIngestClaim",
+        "ExactAssetIngestClaimResult",
+        "ExactAssetIngestDatabase",
+        "ExactAssetIngestFailureResult",
+        "ExactAssetIngestTransactionalDatabase",
+        "ExactAssetLinkClaim"
+      ],
+      "symbols": [
+        "CONTENT_SHA256",
+        "DIGEST",
+        "DrizzleExactAssetIngestRepository",
+        "ERROR_CODES",
+        "ExactAssetContextIdentity",
+        "ExecuteResult",
+        "GuardedIngestClaim",
+        "GuardedLinkClaim",
+        "SAFE",
+        "UUID",
+        "applied",
+        "assertCompletedOutcome",
+        "assertFailedOutcome",
+        "assertIngestClaim",
+        "assertLinkClaim",
+        "assertReturnedContext",
+        "assertScope",
+        "assertUuid",
+        "assertWorkerLease",
+        "boundedText",
+        "brand",
+        "claim",
+        "committedCall",
+        "committedOptionalCall",
+        "contentSha256",
+        "dbDigest",
+        "dbUuid",
+        "digest",
+        "exactApplied",
+        "exactContextIdentity",
+        "exactFailure",
+        "exactHttpsUrl",
+        "exactOneRow",
+        "expectedMimeType",
+        "identity",
+        "ingestClaimFrom",
+        "iso",
+        "key",
+        "linkClaimFrom",
+        "mediaAssetId",
+        "objectKey",
+        "optionalOneRow",
+        "parsed",
+        "positiveBigInt",
+        "positiveInteger",
+        "raw",
+        "returnedJobId",
+        "returnedScope",
+        "row",
+        "safePart",
+        "safeText",
+        "sameContext",
+        "scope",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/assets/drizzle-exact-asset-stage-target-loader.ts",
+      "kind": "server",
+      "imports": [
+        "../core/resource-domain",
+        "../planning/contracts",
+        "../workers/one-video-run-once-executor",
+        "./exact-stage-runner",
+        "drizzle-orm"
+      ],
+      "exports": [
+        "DrizzleExactAssetStageTargetLoader",
+        "ExactAssetTargetDatabase",
+        "ExactAssetTargetTransactionalDatabase"
+      ],
+      "symbols": [
+        "AssetAction",
+        "DIGEST",
+        "DrizzleExactAssetStageTargetLoader",
+        "ExecuteResult",
+        "Identity",
+        "SAFE",
+        "UUID",
+        "assertReturnedIdentity",
+        "assertScope",
+        "dbBigInt",
+        "dbText",
+        "dbUuid",
+        "exactIdentity",
+        "exactOptionalRow",
+        "identity",
+        "result",
+        "row",
+        "rows",
+        "safe"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/assets/drizzle-ingest-repository.ts",
       "kind": "server",
       "imports": [
@@ -7802,6 +7917,59 @@
         "validRemoteArtifactRef",
         "value",
         "workspaceId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/assets/exact-stage-runner.ts",
+      "kind": "server",
+      "imports": [
+        "../workers/one-video-run-once-executor",
+        "./contracts",
+        "./drizzle-exact-asset-ingest-repository",
+        "./worker",
+        "node:crypto"
+      ],
+      "exports": [
+        "ExactAssetStageRepository",
+        "ExactAssetStageRunner",
+        "ExactAssetStageRunnerHooks",
+        "ExactAssetStageRunnerOptions",
+        "ExactAssetStageTarget",
+        "ExactAssetStageTargetLoader"
+      ],
+      "symbols": [
+        "ExactAssetStageRunner",
+        "appendPrefix",
+        "applied",
+        "assertAction",
+        "claim",
+        "claimed",
+        "classifyFailure",
+        "committed",
+        "completedJobFromLinkClaim",
+        "digest",
+        "exactResult",
+        "failed",
+        "failedJob",
+        "failure",
+        "job",
+        "leasedJobFromClaim",
+        "normalizeMime",
+        "output",
+        "resolver",
+        "retryDelay",
+        "safeEphemeralSourceUrl",
+        "sha256",
+        "sourceUrl",
+        "storageCall",
+        "structuredTenantKey",
+        "systemClock",
+        "take",
+        "target",
+        "temporaryObjectKey",
+        "url",
+        "validateSourcePolicy"
       ],
       "routes": []
     },
@@ -7921,7 +8089,10 @@
       "kind": "server",
       "imports": [
         "./contracts",
+        "./drizzle-exact-asset-ingest-repository",
+        "./drizzle-exact-asset-stage-target-loader",
         "./drizzle-ingest-repository",
+        "./exact-stage-runner",
         "./fakes",
         "./http-artifact-reader",
         "./in-memory-repository",
@@ -15177,6 +15348,65 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/workers/exact-provider-stage-runner.ts",
+      "kind": "server",
+      "imports": [
+        "../assets/provider-artifact-identity",
+        "../planning/contracts",
+        "./admitted-render-contracts",
+        "./admitted-render-terminal-worker",
+        "./drizzle-exact-reconcile-terminal-repository",
+        "./one-video-run-once-executor",
+        "node:crypto"
+      ],
+      "exports": [
+        "ExactAssetStageDelegate",
+        "ExactOneVideoProviderStageRunner",
+        "ExactOneVideoProviderStageRunner as ExactProviderStageRunner ",
+        "ExactOneVideoProviderStageRunnerOptions",
+        "ExactProviderStageRunnerOptions",
+        "ExactReconcileTerminalStageRepository",
+        "ExactSubmitStageRepository"
+      ],
+      "symbols": [
+        "Ambiguous",
+        "CapabilityMismatchError",
+        "Confirmed",
+        "ExactOneVideoProviderStageRunner",
+        "InvalidProviderOutcomeError",
+        "ReconciledConfirmed",
+        "TerminalRelease",
+        "WorkerLease",
+        "applied",
+        "assertAction",
+        "assertCapability",
+        "assertTerminalClaim",
+        "authorization",
+        "bounded",
+        "candidate",
+        "claim",
+        "classification",
+        "digest",
+        "errorDigest",
+        "finalized",
+        "invalidObservationDigest",
+        "kind",
+        "released",
+        "repo",
+        "resolved",
+        "result",
+        "safeCompleted",
+        "safeFailed",
+        "safeNegativeFinality",
+        "safeObservationEnvelope",
+        "safeReconciliationOutcome",
+        "safeSubmitOutcome",
+        "terminalResult",
+        "url"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/workers/in-memory-render-work-repository.ts",
       "kind": "server",
       "imports": [
@@ -15213,9 +15443,12 @@
         "./drizzle-exact-one-video-run-fence",
         "./drizzle-exact-reconcile-terminal-repository",
         "./drizzle-exact-submit-repository",
+        "./exact-provider-stage-runner",
         "./in-memory-render-work-repository",
         "./one-video-run-once-executor",
-        "./render-worker"
+        "./production-exact-one-video-runtime",
+        "./render-worker",
+        "./server-owned-one-video-run-authorization"
       ],
       "exports": [],
       "symbols": [],
@@ -15245,6 +15478,7 @@
         "OneVideoRunOnceErrorCode",
         "OneVideoRunOnceExecutor",
         "TrustedOneVideoRunPrincipal",
+        "hasTrustedOneVideoRunPrincipalIdentity",
         "oneVideoRunOnceCommandDigest"
       ],
       "symbols": [
@@ -15262,6 +15496,7 @@
         "commandDigest",
         "context",
         "exactStageContext",
+        "hasTrustedOneVideoRunPrincipalIdentity",
         "lease",
         "oneVideoRunOnceCommandDigest",
         "result",
@@ -15270,7 +15505,10 @@
         "sameTarget",
         "sealed",
         "sha256",
+        "snapshot",
+        "snapshotPrincipal",
         "target",
+        "trustedPrincipalOrigins",
         "uncertainErrorDigest",
         "validateCommand",
         "validated"
@@ -15410,6 +15648,44 @@
       "routes": []
     },
     {
+      "path": "server/ai-media-studio/workers/production-exact-one-video-runtime.ts",
+      "kind": "server",
+      "imports": [
+        "../assets/contracts",
+        "../assets/drizzle-exact-asset-ingest-repository",
+        "../assets/drizzle-exact-asset-stage-target-loader",
+        "../assets/exact-stage-runner",
+        "../assets/production-runtime",
+        "../core/resource-domain",
+        "./admitted-render-contracts",
+        "./admitted-render-terminal-worker",
+        "./drizzle-exact-one-video-run-fence",
+        "./drizzle-exact-reconcile-terminal-repository",
+        "./drizzle-exact-submit-repository",
+        "./exact-provider-stage-runner",
+        "./one-video-run-once-executor",
+        "./server-owned-one-video-run-authorization"
+      ],
+      "exports": [
+        "CreateProductionExactOneVideoRuntimeInput",
+        "ProductionExactOneVideoDatabase",
+        "ProductionExactOneVideoRuntime",
+        "createProductionExactOneVideoRuntime"
+      ],
+      "symbols": [
+        "SCOPE_PART",
+        "UUID",
+        "WORKER_ID",
+        "assertCompositionInput",
+        "assetStages",
+        "createProductionExactOneVideoRuntime",
+        "executor",
+        "stages",
+        "validScope"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-media-studio/workers/render-worker.ts",
       "kind": "server",
       "imports": [
@@ -15443,6 +15719,29 @@
         "result",
         "retryDelayMs",
         "retryable"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/ai-media-studio/workers/server-owned-one-video-run-authorization.ts",
+      "kind": "server",
+      "imports": [
+        "../planning/contracts",
+        "./one-video-run-once-executor"
+      ],
+      "exports": [
+        "ServerOwnedOneVideoRunAuthorization",
+        "ServerOwnedOneVideoRunAuthorizationInput",
+        "createServerOwnedOneVideoRunAuthorization"
+      ],
+      "symbols": [
+        "UUID",
+        "command",
+        "commandDigest",
+        "createServerOwnedOneVideoRunAuthorization",
+        "frozenTarget",
+        "principal",
+        "sameTarget"
       ],
       "routes": []
     },
@@ -24287,6 +24586,117 @@
       "routes": []
     },
     {
+      "path": "tests/ai-media-studio-exact-asset-ingest-drizzle.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/assets/drizzle-exact-asset-ingest-repository",
+        "../server/ai-media-studio/workers/one-video-run-once-executor",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Rendered",
+        "assertFullIdentityBound",
+        "assertFunctionOnly",
+        "baseContext",
+        "claim",
+        "claimResult",
+        "compiled",
+        "dialect",
+        "digest",
+        "emptyLink",
+        "execute",
+        "fullContextRow",
+        "h",
+        "harness",
+        "ids",
+        "ingest",
+        "ingestResult",
+        "ingestRow",
+        "link",
+        "linkRow",
+        "other",
+        "rendered",
+        "repository",
+        "scope",
+        "sha"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-exact-asset-stage-runner.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/assets/contracts",
+        "../server/ai-media-studio/assets/drizzle-exact-asset-ingest-repository",
+        "../server/ai-media-studio/assets/exact-stage-runner",
+        "../server/ai-media-studio/assets/fakes",
+        "../server/ai-media-studio/planning/contracts",
+        "../server/ai-media-studio/workers/one-video-run-once-executor",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Repository",
+        "Targets",
+        "baseTarget",
+        "claim",
+        "digest",
+        "h",
+        "ids",
+        "ingestContext",
+        "lease",
+        "linkClaim",
+        "linkContext",
+        "mp4",
+        "noHook",
+        "providerArtifactResolver",
+        "reader",
+        "repository",
+        "result",
+        "runner",
+        "scope",
+        "sha",
+        "stale",
+        "storage",
+        "stream",
+        "targets",
+        "throws"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-exact-asset-target-loader.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/assets/drizzle-exact-asset-stage-target-loader",
+        "../server/ai-media-studio/workers/one-video-run-once-executor",
+        "drizzle-orm",
+        "drizzle-orm/pg-core",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "compiled",
+        "context",
+        "dialect",
+        "digest",
+        "execute",
+        "h",
+        "harness",
+        "ids",
+        "row",
+        "scope",
+        "target"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-media-studio-exact-one-video-run-fence-drizzle.test.ts",
       "kind": "test",
       "imports": [
@@ -24315,6 +24725,59 @@
         "repository",
         "result",
         "row"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-exact-provider-stage-runner.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/contracts",
+        "../server/ai-media-studio/workers/admitted-render-contracts",
+        "../server/ai-media-studio/workers/admitted-render-terminal-worker",
+        "../server/ai-media-studio/workers/drizzle-exact-reconcile-terminal-repository",
+        "../server/ai-media-studio/workers/exact-provider-stage-runner",
+        "../server/ai-media-studio/workers/one-video-run-once-executor",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Assets",
+        "ReconcileTerminalRepository",
+        "SubmitRepository",
+        "accepted",
+        "assets",
+        "auth",
+        "authRepository",
+        "capability",
+        "commandDigest",
+        "commandId",
+        "confirmed",
+        "context",
+        "digest",
+        "goodResolver",
+        "h",
+        "harness",
+        "idle",
+        "idleRepository",
+        "ids",
+        "lease",
+        "lost",
+        "lostRepository",
+        "matching",
+        "providerResolver",
+        "reconcileRepository",
+        "reconciliationContext",
+        "rejected",
+        "repository",
+        "resolved",
+        "scope",
+        "submitContext",
+        "submitRepository",
+        "target",
+        "terminalContext",
+        "terminalResolver"
       ],
       "routes": []
     },
@@ -28039,6 +28502,7 @@
         "ambiguousSubmitSql",
         "applied",
         "assertIdentity",
+        "assetTableBlind",
         "attempt",
         "attempts",
         "auth",
@@ -28051,6 +28515,7 @@
         "busy",
         "capacity",
         "claim",
+        "claimIngestSql",
         "claimReconciliationSql",
         "claimSql",
         "claimSubmitSql",
@@ -28060,8 +28525,12 @@
         "commandDigest",
         "commandId",
         "completeAction",
+        "completeIngestSql",
         "completeRunSql",
         "completed",
+        "completedIngest",
+        "completedReplay",
+        "completionTail",
         "confirmed",
         "confirmedSql",
         "confirmedSubmitSql",
@@ -28082,6 +28551,10 @@
         "evidence",
         "exact",
         "exactActor",
+        "failIngestSql",
+        "failed",
+        "failedReplay",
+        "failureTail",
         "finality",
         "finalityObservedAt",
         "finalityReplay",
@@ -28089,18 +28562,33 @@
         "finalizeNoSubmitSql",
         "first",
         "firstClaim",
+        "firstIngest",
         "forwards",
         "guardedClient",
         "ids",
+        "ingestAcquire",
+        "ingestCommandId",
+        "ingestPrefix",
+        "ingestRunComplete",
         "installSchema",
         "integrationTest",
         "ledger",
         "left",
         "leftCall",
+        "linkAcquire",
+        "linkCommandId",
+        "linkLoad",
+        "linkPrefix",
+        "linkRunComplete",
+        "linked",
+        "linkedProjection",
+        "linkedReplay",
+        "loadLinkSql",
         "migration",
         "mismatched",
         "mismatchedFinality",
         "noWrongClaim",
+        "objectKey",
         "observedAt",
         "outcomes",
         "params",
@@ -28114,6 +28602,9 @@
         "pr33Rollback",
         "pr34Forward",
         "pr34Rollback",
+        "pr35Forward",
+        "pr35Rollback",
+        "pr35RollbackClient",
         "pr4Forward",
         "prefix",
         "prerequisite",
@@ -28121,12 +28612,15 @@
         "projectionSql",
         "publicUsage",
         "reclaimed",
+        "reclaimedIngest",
         "reconciler",
         "reconciliation",
+        "recordLinkSql",
         "recordTerminalSql",
         "releaseParams",
         "releaseTerminalSql",
         "released",
+        "releasedReplay",
         "rendered",
         "replay",
         "requireOwnedUrl",
@@ -28134,6 +28628,7 @@
         "resolvedSocket",
         "result",
         "results",
+        "retryAt",
         "rightCall",
         "roles",
         "rollback",
@@ -28146,8 +28641,10 @@
         "socket",
         "stale",
         "staleAmbiguous",
+        "staleComplete",
         "staleCompletion",
         "staleConfirmed",
+        "staleLink",
         "staleSetup",
         "submit",
         "submitAcquire",
@@ -28157,6 +28654,7 @@
         "successSetup",
         "tableAccess",
         "terminal",
+        "terminalReleaseObservedAt",
         "terminalTail",
         "uncertainAcquire",
         "uncertainParams",
@@ -28624,6 +29122,51 @@
         "start",
         "terminalClaim",
         "terminalRecord"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr35-exact-asset-ingest-link-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "body",
+        "claim",
+        "commonPrefix",
+        "complete",
+        "context",
+        "end",
+        "exposed",
+        "fail",
+        "forward",
+        "link",
+        "load",
+        "names",
+        "resultIdentity",
+        "rollback",
+        "signatures",
+        "sliceFunction",
+        "start"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-pr36-exact-asset-target-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "forward",
+        "rollback"
       ],
       "routes": []
     },
@@ -29176,6 +29719,25 @@
         "read",
         "repositoryRoot",
         "workbench"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-production-exact-one-video-runtime.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/assets/production-runtime",
+        "../server/ai-media-studio/workers/production-exact-one-video-runtime",
+        "../server/ai-media-studio/workers/server-owned-one-video-run-authorization",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "calls",
+        "runtime",
+        "scope",
+        "setup"
       ],
       "routes": []
     },
@@ -30165,6 +30727,26 @@
         "subjectId",
         "validRequest",
         "wrongUserRequest"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ai-media-studio-server-owned-one-video-run-authorization.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-media-studio/planning/contracts",
+        "../server/ai-media-studio/workers/one-video-run-once-executor",
+        "../server/ai-media-studio/workers/server-owned-one-video-run-authorization",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "authority",
+        "digest",
+        "exact",
+        "executor",
+        "input"
       ],
       "routes": []
     },
@@ -32652,7 +33234,11 @@
     "tests/ai-media-studio-daily-admission-domain.test.ts",
     "tests/ai-media-studio-daily-admission-drizzle.test.ts",
     "tests/ai-media-studio-drizzle-one-video-held-admission-repository.test.ts",
+    "tests/ai-media-studio-exact-asset-ingest-drizzle.test.ts",
+    "tests/ai-media-studio-exact-asset-stage-runner.test.ts",
+    "tests/ai-media-studio-exact-asset-target-loader.test.ts",
     "tests/ai-media-studio-exact-one-video-run-fence-drizzle.test.ts",
+    "tests/ai-media-studio-exact-provider-stage-runner.test.ts",
     "tests/ai-media-studio-exact-reconcile-terminal-drizzle.test.ts",
     "tests/ai-media-studio-exact-submit-drizzle.test.ts",
     "tests/ai-media-studio-full-chain-postgres.test.ts",
@@ -32774,6 +33360,8 @@
     "tests/ai-media-studio-pr32-exact-one-video-run-fence-migration.test.ts",
     "tests/ai-media-studio-pr33-exact-one-video-submit-migration.test.ts",
     "tests/ai-media-studio-pr34-exact-reconcile-terminal-migration.test.ts",
+    "tests/ai-media-studio-pr35-exact-asset-ingest-link-migration.test.ts",
+    "tests/ai-media-studio-pr36-exact-asset-target-migration.test.ts",
     "tests/ai-media-studio-pr4-assets-migration.test.ts",
     "tests/ai-media-studio-pr5-governance-migration.test.ts",
     "tests/ai-media-studio-pr6-provider-identity-migration.test.ts",
@@ -32790,6 +33378,7 @@
     "tests/ai-media-studio-production-batch-routes.test.ts",
     "tests/ai-media-studio-production-batch-service.test.ts",
     "tests/ai-media-studio-production-batch-ui.test.ts",
+    "tests/ai-media-studio-production-exact-one-video-runtime.test.ts",
     "tests/ai-media-studio-production-oauth-runtime.test.ts",
     "tests/ai-media-studio-production-source-sync-runtime.test.ts",
     "tests/ai-media-studio-publishing-accounts.test.ts",
@@ -32815,6 +33404,7 @@
     "tests/ai-media-studio-secure-heygen-verification-coordinator.test.ts",
     "tests/ai-media-studio-server-owned-cost-approval-authorization.test.ts",
     "tests/ai-media-studio-server-owned-held-admission-authorization.test.ts",
+    "tests/ai-media-studio-server-owned-one-video-run-authorization.test.ts",
     "tests/ai-media-studio-source-automation-sync-contracts.test.ts",
     "tests/ai-media-studio-source-automation-sync-routes.test.ts",
     "tests/ai-media-studio-source-automation-sync-service.test.ts",

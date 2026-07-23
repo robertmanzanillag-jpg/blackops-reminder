@@ -78,6 +78,13 @@ render projection. PR35 does not download media, access a provider or object
 store, create canonical media, publish, start a worker, spend, deploy, apply a
 migration, or mount a public route.
 
+The PR36 pair stacks on PR35 and adds one read-only, table-blind target lookup
+for exact asset commands. The caller never supplies an ingest-job id: the
+SECURITY DEFINER function derives the unique job from the live PR32 lease and
+the completed terminal render's reservation, slot, attempt, and handoff tuple.
+It grants only EXECUTE to the exact executor role and performs no provider,
+network, storage, spend, publishing, startup, deploy, or migration-application I/O.
+
 Disposable PostgreSQL 16 rehearsal:
 
 ```sh

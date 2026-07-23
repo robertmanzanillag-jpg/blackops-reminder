@@ -4,6 +4,7 @@ import type { Sha256Digest } from "../planning/contracts";
 
 declare const trustedOneVideoRunPrincipal: unique symbol;
 declare const exactOneVideoRunLease: unique symbol;
+const trustedPrincipalOrigins = new WeakMap<object, object>();
 
 export type OneVideoRunOnceAction =
   | "activate_and_submit"
@@ -29,6 +30,16 @@ export interface TrustedOneVideoRunPrincipal {
   readonly capability: "run-exactly-one-video";
   readonly actorUserId: string;
   readonly [trustedOneVideoRunPrincipal]: true;
+}
+
+/** Compares a validated snapshot with its original opaque server capability. */
+export function hasTrustedOneVideoRunPrincipalIdentity(
+  candidate: TrustedOneVideoRunPrincipal,
+  original: TrustedOneVideoRunPrincipal,
+): boolean {
+  return candidate === original
+    || (Boolean(candidate) && typeof candidate === "object"
+      && trustedPrincipalOrigins.get(candidate) === original);
 }
 
 export interface ExactOneVideoRunAuthorization {
@@ -290,11 +301,17 @@ function validateCommand(command: OneVideoRunOnceCommand): OneVideoRunOnceComman
     }),
     action: command.action,
     commandId: command.commandId,
-    principal: Object.freeze({
-      capability: command.principal.capability,
-      actorUserId: command.principal.actorUserId,
-    }) as TrustedOneVideoRunPrincipal,
+    principal: snapshotPrincipal(command.principal),
   });
+}
+
+function snapshotPrincipal(principal: TrustedOneVideoRunPrincipal): TrustedOneVideoRunPrincipal {
+  const snapshot = Object.freeze({
+    capability: principal.capability,
+    actorUserId: principal.actorUserId,
+  }) as TrustedOneVideoRunPrincipal;
+  trustedPrincipalOrigins.set(snapshot, principal);
+  return snapshot;
 }
 
 function assertExactResult(command: OneVideoRunOnceCommand, result: ExactOneVideoStageResult): void {
