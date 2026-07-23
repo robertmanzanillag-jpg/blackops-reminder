@@ -13,12 +13,12 @@ export type OneVideoRunOnceAction =
   | "link_asset";
 
 export interface ExactOneVideoRunTarget {
-  scope: TenantScope;
-  budgetReservationId: string;
-  renderJobId: string;
-  dailyPlanSlotId: string;
-  slotAttempt: number;
-  workHandoffDigest: Sha256Digest;
+  readonly scope: Readonly<TenantScope>;
+  readonly budgetReservationId: string;
+  readonly renderJobId: string;
+  readonly dailyPlanSlotId: string;
+  readonly slotAttempt: number;
+  readonly workHandoffDigest: Sha256Digest;
 }
 
 /**
@@ -70,24 +70,34 @@ export interface ExactOneVideoStageResult {
   outcome: ExactOneVideoStageOutcome;
 }
 
+export interface ExactOneVideoStageContext {
+  readonly target: ExactOneVideoRunTarget;
+  readonly action: OneVideoRunOnceAction;
+  readonly commandId: string;
+  readonly commandDigest: Sha256Digest;
+  readonly actorUserId: string;
+  readonly lease: ExactOneVideoRunLease;
+}
+
 /**
- * Every method is exact-target only. Deliberately no `runNext()` or publishing
- * method is accepted by this boundary.
+ * Every method requires the complete authorized and durably fenced exact-run
+ * context. Deliberately no `runNext()` or publishing method is accepted by
+ * this boundary.
  */
 export interface ExactOneVideoStageRunner {
-  activateAndSubmitExact(target: ExactOneVideoRunTarget): Promise<ExactOneVideoStageResult>;
-  reconcileSubmissionExact(target: ExactOneVideoRunTarget): Promise<ExactOneVideoStageResult>;
-  observeTerminalExact(target: ExactOneVideoRunTarget): Promise<ExactOneVideoStageResult>;
-  ingestAssetExact(target: ExactOneVideoRunTarget): Promise<ExactOneVideoStageResult>;
-  linkAssetExact(target: ExactOneVideoRunTarget): Promise<ExactOneVideoStageResult>;
+  activateAndSubmitExact(context: ExactOneVideoStageContext): Promise<ExactOneVideoStageResult>;
+  reconcileSubmissionExact(context: ExactOneVideoStageContext): Promise<ExactOneVideoStageResult>;
+  observeTerminalExact(context: ExactOneVideoStageContext): Promise<ExactOneVideoStageResult>;
+  ingestAssetExact(context: ExactOneVideoStageContext): Promise<ExactOneVideoStageResult>;
+  linkAssetExact(context: ExactOneVideoStageContext): Promise<ExactOneVideoStageResult>;
 }
 
 export interface ExactOneVideoRunLease {
-  executionId: string;
-  commandId: string;
-  commandDigest: Sha256Digest;
-  fencingToken: bigint;
-  leaseToken: string;
+  readonly executionId: string;
+  readonly commandId: string;
+  readonly commandDigest: Sha256Digest;
+  readonly fencingToken: bigint;
+  readonly leaseToken: string;
   readonly [exactOneVideoRunLease]: true;
 }
 
@@ -185,17 +195,18 @@ export class OneVideoRunOnceExecutor {
       if (acquired.kind === "busy") throw new OneVideoRunOnceError("BUSY");
       if (acquired.kind === "conflict") throw new OneVideoRunOnceError("CONFLICT");
       assertExactLease(validated, commandDigest, acquired.lease);
+      const context = exactStageContext(validated, commandDigest, acquired.lease);
       try {
-        const result = await runExactStage(this.options.stages, validated);
+        const result = await runExactStage(this.options.stages, context);
         assertExactResult(validated, result);
-        if (!await this.options.fence.complete({ lease: acquired.lease, result })) {
+        if (!await this.options.fence.complete({ lease: context.lease, result })) {
           throw new OneVideoRunOnceError("CONFLICT");
         }
         return result;
       } catch (error) {
         const sealed = await this.options.fence.sealUncertain({
-          lease: acquired.lease,
-          errorDigest: uncertainErrorDigest(error, validated, acquired.lease),
+          lease: context.lease,
+          errorDigest: uncertainErrorDigest(error, validated, context.lease),
         });
         if (!sealed) throw new OneVideoRunOnceError("CONFLICT");
         throw new OneVideoRunOnceError("UNCERTAIN");
@@ -221,15 +232,37 @@ export function oneVideoRunOnceCommandDigest(
 
 async function runExactStage(
   stages: ExactOneVideoStageRunner,
-  command: OneVideoRunOnceCommand,
+  context: ExactOneVideoStageContext,
 ): Promise<ExactOneVideoStageResult> {
-  switch (command.action) {
-    case "activate_and_submit": return stages.activateAndSubmitExact(command.target);
-    case "reconcile_submission": return stages.reconcileSubmissionExact(command.target);
-    case "observe_terminal": return stages.observeTerminalExact(command.target);
-    case "ingest_asset": return stages.ingestAssetExact(command.target);
-    case "link_asset": return stages.linkAssetExact(command.target);
+  switch (context.action) {
+    case "activate_and_submit": return stages.activateAndSubmitExact(context);
+    case "reconcile_submission": return stages.reconcileSubmissionExact(context);
+    case "observe_terminal": return stages.observeTerminalExact(context);
+    case "ingest_asset": return stages.ingestAssetExact(context);
+    case "link_asset": return stages.linkAssetExact(context);
   }
+}
+
+function exactStageContext(
+  command: OneVideoRunOnceCommand,
+  commandDigest: Sha256Digest,
+  acquiredLease: ExactOneVideoRunLease,
+): ExactOneVideoStageContext {
+  const lease = Object.freeze({
+    executionId: acquiredLease.executionId,
+    commandId: acquiredLease.commandId,
+    commandDigest: acquiredLease.commandDigest,
+    fencingToken: acquiredLease.fencingToken,
+    leaseToken: acquiredLease.leaseToken,
+  }) as ExactOneVideoRunLease;
+  return Object.freeze({
+    target: command.target,
+    action: command.action,
+    commandId: command.commandId,
+    commandDigest,
+    actorUserId: command.principal.actorUserId,
+    lease,
+  });
 }
 
 function validateCommand(command: OneVideoRunOnceCommand): OneVideoRunOnceCommand {
@@ -257,7 +290,10 @@ function validateCommand(command: OneVideoRunOnceCommand): OneVideoRunOnceComman
     }),
     action: command.action,
     commandId: command.commandId,
-    principal: command.principal,
+    principal: Object.freeze({
+      capability: command.principal.capability,
+      actorUserId: command.principal.actorUserId,
+    }) as TrustedOneVideoRunPrincipal,
   });
 }
 
