@@ -151,7 +151,7 @@ async function seedStaticPlan(): Promise<void> {
       source_roster_key,source_roster_digest,plan_date,accounting_time_zone,status,planned_slot_count,
       idempotency_key,input_digest,plan_digest)
     VALUES ($1,$2,$3,$4,$5,'heygen',1,'roster-1',$6,(transaction_timestamp() AT TIME ZONE 'UTC')::date,
-      'UTC','planned',50,'plan-idem',$7,$8)`,
+      'UTC','blocked',50,'plan-idem',$7,$8)`,
     [ids.plan, owner, workspace, planKey, ids.account, digest("roster"), digest("plan-input"), digest("plan")]);
   for (const [avatarIndex, avatarId] of avatarIds.entries()) {
     for (let videoNumber = 1; videoNumber <= 10; videoNumber += 1) {
@@ -161,7 +161,7 @@ async function seedStaticPlan(): Promise<void> {
         (id,owner_user_id,workspace_id,public_slot_key,daily_plan_id,provider_account_id,provider_key,
           provider_credential_version,source_member_key,influencer_id,avatar_resource_id,voice_resource_id,
           video_number,status,slot_digest)
-        VALUES ($1,$2,$3,$4,$5,$6,'heygen',1,$7,$8,$9,$10,$11,'planned',$12)`,
+        VALUES ($1,$2,$3,$4,$5,$6,'heygen',1,$7,$8,$9,$10,$11,'blocked',$12)`,
         [slotId, owner, workspace, publicSlotKey, ids.plan, ids.account, `member-${avatarIndex + 1}`,
           influencerIds[avatarIndex], avatarId, ids.voice, videoNumber, digest(`slot-${avatarIndex + 1}-${videoNumber}`)]);
     }
