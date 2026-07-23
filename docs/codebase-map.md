@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-07-23T09:15:17.530Z
-Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-exact-reconcile-terminal`
+Generated: 2026-07-23T11:25:31.633Z
+Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-exact-runtime-wiring`
 Package: `rest-express`
 
 ## Guardrails
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1000 | 840 | 3759 | 508 | 16734 |
+| 1018 | 854 | 3847 | 508 | 17051 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,8 +29,8 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 275 | 263 | test:275 |
-| `server/ai-media-studio` | 208 | 187 | server:208 |
+| `tests` | 283 | 271 | test:283 |
+| `server/ai-media-studio` | 214 | 193 | server:214 |
 | `client/src` | 158 | 156 | ui-component:55, other:48, client-page:24, client-component:21 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 48 | 46 | script:48 |
@@ -40,7 +40,7 @@ Package: `rest-express`
 | `docs` | 12 | 11 | docs:12 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
 | `tests/fixtures` | 7 | 5 | test:7 |
-| `migrations/ai-media-studio` | 61 | 3 | other:59, docs:2 |
+| `migrations/ai-media-studio` | 65 | 3 | other:63, docs:2 |
 | `client/public` | 13 | 2 | other:13 |
 | `shared/models` | 2 | 2 | shared:2 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
@@ -87,7 +87,11 @@ Package: `rest-express`
 - `tests/ai-media-studio-daily-admission-domain.test.ts`
 - `tests/ai-media-studio-daily-admission-drizzle.test.ts`
 - `tests/ai-media-studio-drizzle-one-video-held-admission-repository.test.ts`
+- `tests/ai-media-studio-exact-asset-ingest-drizzle.test.ts`
+- `tests/ai-media-studio-exact-asset-stage-runner.test.ts`
+- `tests/ai-media-studio-exact-asset-target-loader.test.ts`
 - `tests/ai-media-studio-exact-one-video-run-fence-drizzle.test.ts`
+- `tests/ai-media-studio-exact-provider-stage-runner.test.ts`
 - `tests/ai-media-studio-exact-reconcile-terminal-drizzle.test.ts`
 - `tests/ai-media-studio-exact-submit-drizzle.test.ts`
 - `tests/ai-media-studio-full-chain-postgres.test.ts`
@@ -209,6 +213,8 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr32-exact-one-video-run-fence-migration.test.ts`
 - `tests/ai-media-studio-pr33-exact-one-video-submit-migration.test.ts`
 - `tests/ai-media-studio-pr34-exact-reconcile-terminal-migration.test.ts`
+- `tests/ai-media-studio-pr35-exact-asset-ingest-link-migration.test.ts`
+- `tests/ai-media-studio-pr36-exact-asset-target-migration.test.ts`
 - `tests/ai-media-studio-pr4-assets-migration.test.ts`
 - `tests/ai-media-studio-pr5-governance-migration.test.ts`
 - `tests/ai-media-studio-pr6-provider-identity-migration.test.ts`
@@ -225,6 +231,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-production-batch-routes.test.ts`
 - `tests/ai-media-studio-production-batch-service.test.ts`
 - `tests/ai-media-studio-production-batch-ui.test.ts`
+- `tests/ai-media-studio-production-exact-one-video-runtime.test.ts`
 - `tests/ai-media-studio-production-oauth-runtime.test.ts`
 - `tests/ai-media-studio-production-source-sync-runtime.test.ts`
 - `tests/ai-media-studio-publishing-accounts.test.ts`
@@ -250,6 +257,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-secure-heygen-verification-coordinator.test.ts`
 - `tests/ai-media-studio-server-owned-cost-approval-authorization.test.ts`
 - `tests/ai-media-studio-server-owned-held-admission-authorization.test.ts`
+- `tests/ai-media-studio-server-owned-one-video-run-authorization.test.ts`
 - `tests/ai-media-studio-source-automation-sync-contracts.test.ts`
 - `tests/ai-media-studio-source-automation-sync-routes.test.ts`
 - `tests/ai-media-studio-source-automation-sync-service.test.ts`

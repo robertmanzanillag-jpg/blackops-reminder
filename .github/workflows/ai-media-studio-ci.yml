@@ -65,8 +65,10 @@ jobs:
           tests/ai-media-studio-canonical-roster-persona.test.ts
           tests/ai-media-studio-core-schema.test.ts
           tests/ai-media-studio-exact-one-video-run-fence-drizzle.test.ts
+          tests/ai-media-studio-exact-provider-stage-runner.test.ts
           tests/ai-media-studio-exact-reconcile-terminal-drizzle.test.ts
           tests/ai-media-studio-exact-asset-stage-runner.test.ts
+          tests/ai-media-studio-exact-asset-target-loader.test.ts
           tests/ai-media-studio-exact-submit-drizzle.test.ts
           tests/ai-media-studio-heygen-roster-drizzle.test.ts
           tests/ai-media-studio-heygen-v3-admitted-render-provider.test.ts
@@ -74,16 +76,19 @@ jobs:
           tests/ai-media-studio-production-batch-contracts.test.ts
           tests/ai-media-studio-production-admitted-render-runtime.test.ts
           tests/ai-media-studio-production-admitted-render-bootstrap.test.ts
+          tests/ai-media-studio-production-exact-one-video-runtime.test.ts
           tests/ai-media-studio-pr32-exact-one-video-run-fence-migration.test.ts
           tests/ai-media-studio-pr33-exact-one-video-submit-migration.test.ts
           tests/ai-media-studio-pr34-exact-reconcile-terminal-migration.test.ts
           tests/ai-media-studio-pr35-exact-asset-ingest-link-migration.test.ts
+          tests/ai-media-studio-pr36-exact-asset-target-migration.test.ts
           tests/ai-media-studio-reusable-script-assets.test.ts
           tests/ai-media-studio-sandbox-readiness-contracts.test.ts
           tests/ai-media-studio-source-to-batch-contracts.test.ts
           tests/ai-media-studio-strict-money-action-request.test.ts
           tests/ai-media-studio-verified-static-heygen-runtime-credential.test.ts
           tests/ai-media-studio-one-video-run-once-executor.test.ts
+          tests/ai-media-studio-server-owned-one-video-run-authorization.test.ts
         timeout-minutes: 5
 
       - name: Run isolated verified HeyGen credential PostgreSQL rehearsal

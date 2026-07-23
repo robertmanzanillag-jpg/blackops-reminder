@@ -5,6 +5,7 @@ export * from "./worker";
 export * from "./drizzle-ingest-repository";
 export * from "./drizzle-exact-asset-ingest-repository";
 export * from "./exact-stage-runner";
+export * from "./drizzle-exact-asset-stage-target-loader";
 export * from "./http-artifact-reader";
 export * from "./s3-compatible-storage";
 export * from "./production-runtime";
