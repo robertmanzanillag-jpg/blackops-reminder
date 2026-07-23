@@ -57,6 +57,7 @@ jobs:
       - name: Run offline AI Media Studio contract and domain tests
         run: >-
           node --import tsx --test
+          tests/ai-media-studio-admitted-render-runtime-routes.test.ts
           tests/ai-media-studio-agent-control.test.ts
           tests/ai-media-studio-canonical-roster-persona.test.ts
           tests/ai-media-studio-core-schema.test.ts
