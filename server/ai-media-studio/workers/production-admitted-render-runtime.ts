@@ -45,9 +45,14 @@ export interface ProductionHeyGenV3ArtifactBinding {
   authorizationDigest: Sha256Digest;
 }
 
+export interface ProductionAdmittedWorkerDatabaseCapabilities extends AdmittedWorkerDatabaseCapabilities {
+  /** Separate PR27 capability bound to the terminal worker id. */
+  terminalCapabilityId: string;
+}
+
 interface ProductionAdmittedRenderRuntimeCommonInput {
   databaseLanes: AdmittedWorkerDatabaseLanes;
-  databaseCapabilities: AdmittedWorkerDatabaseCapabilities;
+  databaseCapabilities: ProductionAdmittedWorkerDatabaseCapabilities;
   assetRepository: AssetIngestRepository;
   assetRuntime: AvailableProductionAssetRuntime;
   workerIds: Readonly<{
@@ -152,7 +157,7 @@ export function createProductionAdmittedRenderRuntime(
     { reconcile: input.databaseLanes.reconcile },
     {
       scope: input.databaseCapabilities.scope,
-      reconcileCapabilityId: input.databaseCapabilities.reconcileCapabilityId,
+      reconcileCapabilityId: input.databaseCapabilities.terminalCapabilityId,
     },
   );
 
@@ -192,6 +197,8 @@ function assertCompositionInput(input: CreateProductionAdmittedRenderRuntimeInpu
     || (hasMaterializer && typeof input.heyGenCredentialMaterializer?.materialize !== "function")
     || workerIds.some((value) => !/^[A-Za-z0-9][A-Za-z0-9._:-]{2,119}$/u.test(value))
     || new Set(workerIds).size !== workerIds.length
+    || new Set([input.databaseCapabilities.submitCapabilityId, input.databaseCapabilities.reconcileCapabilityId,
+      input.databaseCapabilities.terminalCapabilityId]).size !== 3
     || !Number.isInteger(input.leaseDurationMs)
     || input.leaseDurationMs < 1
     || input.leaseDurationMs > 300_000

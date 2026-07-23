@@ -9,6 +9,7 @@ on:
       - "docs/ai-media-studio/**"
       - "server/ai-media-studio/**"
       - "script/ai-media-studio-ci*"
+      - "script/ai-media-studio-pr29-static-heygen-verification-postgres-test.ts"
       - "shared/ai-media-studio-*.ts"
       - "shared/models/ai-media-studio-db.ts"
       - "tests/ai-media-studio-*.test.ts"
@@ -72,6 +73,12 @@ jobs:
           tests/ai-media-studio-strict-money-action-request.test.ts
           tests/ai-media-studio-verified-static-heygen-runtime-credential.test.ts
         timeout-minutes: 5
+
+      - name: Run isolated verified HeyGen credential PostgreSQL rehearsal
+        run: |
+          export PATH="$(pg_config --bindir):$PATH"
+          npm run test:ai-media-pr29-verified-runtime-postgres
+        timeout-minutes: 8
 
       - name: Build production bundle
         run: npm run build

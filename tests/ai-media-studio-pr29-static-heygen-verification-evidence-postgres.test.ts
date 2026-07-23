@@ -4,7 +4,9 @@ import { readFileSync, realpathSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import process from "node:process";
 import test, { after } from "node:test";
+import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
+import { DrizzleVerifiedStaticHeyGenRuntimeCredentialLoader } from "../server/ai-media-studio/provider-credentials/verified-static-heygen-runtime-credential";
 
 type MigrationFile = { path: string; sha256: string };
 type Manifest = {
@@ -154,7 +156,7 @@ async function seedStaticPlan(): Promise<void> {
   for (const [avatarIndex, avatarId] of avatarIds.entries()) {
     for (let videoNumber = 1; videoNumber <= 10; videoNumber += 1) {
       const slotId = `30000000-0000-4000-8000-${String(100000000000 + avatarIndex * 10 + videoNumber).padStart(12, "0")}`;
-      const publicSlotKey = `slot_${String(avatarIndex + 1).padStart(2, "0")}_${String(videoNumber).padStart(2, "0")}_${"2".repeat(16)}`;
+      const publicSlotKey = `slot_${String(avatarIndex * 10 + videoNumber).padStart(24, "0")}`;
       await pool.query(`INSERT INTO ai_media_daily_plan_slots
         (id,owner_user_id,workspace_id,public_slot_key,daily_plan_id,provider_account_id,provider_key,
           provider_credential_version,source_member_key,influencer_id,avatar_resource_id,voice_resource_id,
@@ -284,6 +286,26 @@ integrationTest("PG16 PR29 exact static HeyGen verification graph gates activati
   await activateWithPointers();
   await pool.query("COMMIT");
 
+  const credentialLoader = new DrizzleVerifiedStaticHeyGenRuntimeCredentialLoader(drizzle(pool));
+  const exactIdentity = {
+    scope: { ownerUserId: owner, workspaceId: workspace },
+    providerAccountId: ids.account,
+    providerKey: "heygen",
+    providerCredentialVersion: 1,
+  } as const;
+  const loadedCredential = await credentialLoader.load(exactIdentity);
+  assert.ok(loadedCredential);
+  assert.deepEqual(loadedCredential.scope, exactIdentity.scope);
+  assert.equal(loadedCredential.providerAccountId, ids.account);
+  assert.equal(loadedCredential.providerCredentialVersion, 1);
+  assert.equal(loadedCredential.secretRef, "env://AI_MEDIA_STUDIO_SECRET_HEYGEN_API_KEY");
+  assert.ok(Date.parse(loadedCredential.expiresAt) > Date.parse(loadedCredential.verifiedAt));
+  assert.equal(await credentialLoader.load({
+    ...exactIdentity,
+    scope: { ownerUserId: "other-owner", workspaceId: workspace },
+  }), undefined);
+  assert.equal(await credentialLoader.load({ ...exactIdentity, providerCredentialVersion: 2 }), undefined);
+
   await assert.rejects(pool.query(`UPDATE ai_media_static_heygen_verification_headers SET billing_model='changed' WHERE id=$1`, [ids.header]),
     /static HeyGen verification evidence is append-only/u);
   await assert.rejects(pool.query(`DELETE FROM ai_media_static_heygen_resource_verifications WHERE id=$1`, [avatarEvidenceId(0)]),
@@ -313,6 +335,8 @@ integrationTest("PG16 PR29 exact static HeyGen verification graph gates activati
     static_credential_verification_digest=NULL,static_credential_verified_at=NULL,
     static_credential_verification_expires_at=NULL,capabilities='[]'::jsonb WHERE id=$1`, [ids.account]);
   await pool.query("COMMIT");
+  assert.equal(await credentialLoader.load(exactIdentity), undefined,
+    "credential rotation must immediately invalidate the formerly admitted runtime identity");
   await assert.rejects(pool.query(`UPDATE ai_media_provider_accounts SET status='active',credential_status='active',
     credential_expires_at=transaction_timestamp()+interval '1 hour',last_verified_at=transaction_timestamp(),
     static_credential_verification_id=$2,static_credential_verification_digest=$3,

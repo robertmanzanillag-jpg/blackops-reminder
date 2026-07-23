@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-23T02:22:24.189Z
+Generated: 2026-07-23T03:08:43.303Z
 Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-secure-heygen-setup-runtime`
 Package: `rest-express`
 
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 976 | 822 | 3646 | 508 | 16278 |
+| 977 | 823 | 3656 | 508 | 16300 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -33,7 +33,7 @@ Package: `rest-express`
 | `server/ai-media-studio` | 200 | 179 | server:200 |
 | `client/src` | 158 | 156 | ui-component:55, other:48, client-page:24, client-component:21 |
 | `server` | 96 | 92 | server:96 |
-| `script` | 47 | 45 | script:47 |
+| `script` | 48 | 46 | script:48 |
 | `shared` | 24 | 24 | shared:24 |
 | `.` | 25 | 18 | other:16, docs:8, package:1 |
 | `docs/ai-media-studio` | 17 | 17 | docs:17 |
@@ -361,6 +361,7 @@ Package: `rest-express`
 - `script/ai-media-studio-offline-one-slot-runtime-test.ts` (script; 19 symbols, 6 imports)
 - `script/ai-media-studio-one-video-execution-control-postgres-test.ts` (script; 15 symbols, 6 imports)
 - `script/ai-media-studio-pr21-postgres-test.ts` (script; 21 symbols, 6 imports)
+- `script/ai-media-studio-pr29-static-heygen-verification-postgres-test.ts` (script; 16 symbols, 6 imports)
 - `script/ai-media-studio-pr30-quote-bound-human-approval-postgres-test.ts` (script; 16 symbols, 6 imports)
 - `script/ai-media-studio-reusable-script-assets-postgres-test.ts` (script; 16 symbols, 6 imports)
 - `script/ai-media-studio-secure-heygen-setup-postgres-test.ts` (script; 16 symbols, 6 imports)
@@ -412,7 +413,6 @@ Package: `rest-express`
 - `server/ai-media-studio/analytics/in-memory-repository.ts` (server; 21 symbols, 2 imports)
 - `server/ai-media-studio/analytics/index.ts` (server; 4 imports)
 - `server/ai-media-studio/assets/contracts.ts` (server; 1 symbols)
-- `server/ai-media-studio/assets/drizzle-ingest-repository.ts` (server; 25 symbols, 5 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

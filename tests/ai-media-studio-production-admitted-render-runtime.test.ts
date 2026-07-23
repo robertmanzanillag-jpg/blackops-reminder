@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { SQL } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
 import { InMemoryAssetIngestRepository } from "../server/ai-media-studio/assets/in-memory-repository";
 import type { AvailableProductionAssetRuntime } from "../server/ai-media-studio/assets/production-runtime";
 import type { AdmittedAuthorizedIdentity } from "../server/ai-media-studio/workers/admitted-render-contracts";
@@ -17,6 +19,7 @@ import type { RuntimeProviderCredentialIdentity } from "../server/ai-media-studi
 const ids = {
   submitCapability: "11111111-1111-4111-8111-111111111111",
   reconcileCapability: "22222222-2222-4222-8222-222222222222",
+  terminalCapability: "77777777-7777-4777-8777-777777777777",
   providerAccount: "33333333-3333-4333-8333-333333333333",
   attempt: "44444444-4444-4444-8444-444444444444",
   reservation: "55555555-5555-4555-8555-555555555555",
@@ -34,6 +37,18 @@ function databaseLane(counter: { calls: number }): AdmittedRenderTransactionalDa
       counter.calls += 1;
       return callback(lane);
     },
+  };
+  return lane;
+}
+
+function capturingDatabaseLane(params: unknown[][]): AdmittedRenderTransactionalDatabase {
+  const dialect = new PgDialect();
+  const lane: AdmittedRenderTransactionalDatabase = {
+    async execute(query: SQL) {
+      params.push(dialect.sqlToQuery(query).params);
+      return { rows: [] };
+    },
+    async transaction(callback) { return callback(lane); },
   };
   return lane;
 }
@@ -85,6 +100,7 @@ function createInput(overrides: Partial<CreateProductionAdmittedRenderRuntimeInp
       scope: { ownerUserId: "owner-a", workspaceId: "personal" },
       submitCapabilityId: ids.submitCapability,
       reconcileCapabilityId: ids.reconcileCapability,
+      terminalCapabilityId: ids.terminalCapability,
     },
     assetRepository: new InMemoryAssetIngestRepository(),
     assetRuntime: assetRuntime(adapterCalls),
@@ -178,6 +194,18 @@ test("production admitted composition performs zero I/O and starts no loop", () 
   assert.equal(setup.bindingCalls.calls, 0);
 });
 
+test("terminal claims use the distinct terminal capability on the reconcile login lane", async () => {
+  const setup = createInput();
+  const terminalParams: unknown[][] = [];
+  setup.input.databaseLanes.reconcile = capturingDatabaseLane(terminalParams);
+  const runtime = createProductionAdmittedRenderRuntime(setup.input);
+  const result = await runtime.terminalWorker.runNext();
+  assert.equal(result.outcome, "idle");
+  assert.equal(terminalParams.length, 1);
+  assert.ok(terminalParams[0].includes(ids.terminalCapability));
+  assert.ok(!terminalParams[0].includes(ids.reconcileCapability));
+});
+
 test("account and credential mismatches fail before provider I/O", async () => {
   const setup = createInput();
   const runtime = createProductionAdmittedRenderRuntime(setup.input);
@@ -244,6 +272,14 @@ test("invalid lanes, worker identities, asset runtime and HeyGen credentials fai
 
   const duplicateWorker = createInput({ workerIds: { submit: "same-worker", terminal: "same-worker", assetIngest: "asset-worker" } });
   assert.throws(() => createProductionAdmittedRenderRuntime(duplicateWorker.input), /composition is invalid/u);
+
+  const duplicateCapability = createInput({ databaseCapabilities: {
+    scope: { ownerUserId: "owner-a", workspaceId: "personal" },
+    submitCapabilityId: ids.submitCapability,
+    reconcileCapabilityId: ids.reconcileCapability,
+    terminalCapabilityId: ids.reconcileCapability,
+  } });
+  assert.throws(() => createProductionAdmittedRenderRuntime(duplicateCapability.input), /composition is invalid/u);
 
   const unavailableAssets = createInput({ assetRuntime: { available: false, reason: "not_configured" } as never });
   assert.throws(() => createProductionAdmittedRenderRuntime(unavailableAssets.input), /composition is invalid/u);

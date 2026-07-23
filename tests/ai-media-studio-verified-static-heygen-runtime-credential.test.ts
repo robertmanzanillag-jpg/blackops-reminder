@@ -91,6 +91,21 @@ test("no exact verified row returns undefined without resolving a secret", async
   assert.equal(resolutions, 0);
 });
 
+test("ambiguous exact rows fail closed without resolving a secret", async () => {
+  let resolutions = 0;
+  const loader = new DrizzleVerifiedStaticHeyGenRuntimeCredentialLoader({
+    async execute() { return { rows: [exactRow(), exactRow()] }; },
+  });
+  const materializer = new VerifiedStaticHeyGenRuntimeCredentialMaterializer(loader, {
+    async resolve() {
+      resolutions += 1;
+      return "must-not-resolve" as StaticHeyGenApiKey;
+    },
+  });
+  assert.equal(await materializer.materialize(identity), undefined);
+  assert.equal(resolutions, 0);
+});
+
 test("missing secret fails generically without reference, key, or legacy fallback leakage", async () => {
   const attemptedRefs: string[] = [];
   const loader = new DrizzleVerifiedStaticHeyGenRuntimeCredentialLoader({
