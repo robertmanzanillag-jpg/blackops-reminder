@@ -49,6 +49,23 @@ fencing transitions. PR33 performs no provider/network request, spend beyond an
 already approved reservation, publication, worker start, deployment, migration
 application, or public-route mount.
 
+The PR34 pair stacks on PR32, PR26, and PR27 and prepares seven table-blind,
+direct-target functions for one exact `reconcile_submission` or
+`observe_terminal` execution. Reconciliation can claim only the ambiguity
+bound to the exact reservation/render/slot/attempt/handoff, release an unknown
+observation, record a confirmed provider job, or finalize a linearizable
+no-submit result. Terminal observation can claim only the exact confirmed
+submission, release a nonterminal observation, or atomically record the exact
+provider terminal result. Every finalizer requires the live PR32 run lease and
+the live inner reconciliation or terminal-check lease before invoking the
+reviewed PR26/PR27 atomic transition. If that inner transition commits before
+the outer PR32 fence is completed, the same live command may replay only exact
+equivalent durable reconciliation or terminal evidence; mismatched evidence is
+rejected without mutation. A completed terminal observation only
+creates the existing durable ingest handoff; PR34 performs no provider/network
+request, media download, ingest worker claim, publication, worker start,
+deployment, migration application, or public-route mount.
+
 Disposable PostgreSQL 16 rehearsal:
 
 ```sh

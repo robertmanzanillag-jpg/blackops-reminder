@@ -39,7 +39,10 @@ const ids={account:"26000000-0000-4000-8000-000000000001",influencer:"26000000-0
   reconcileCapability:"26000000-0000-4000-8000-000000000015",
   exactRunCapability:"26000000-0000-4000-8000-000000000016",
   exactUncertainCapability:"26000000-0000-4000-8000-000000000017",
-  exactSubmitCapability:"26000000-0000-4000-8000-000000000018"} as const;
+  exactSubmitCapability:"26000000-0000-4000-8000-000000000018",
+  exactReconcileActionCapability:"26000000-0000-4000-8000-00000000001a",
+  exactTerminalActionCapability:"26000000-0000-4000-8000-00000000001b",
+  exactReconcileWorkerCapability:"26000000-0000-4000-8000-00000000001c"} as const;
 const digest=(character:string)=>`sha256:${character.repeat(64)}` as const;
 const dialect=new PgDialect();
 
@@ -80,6 +83,12 @@ const pr33Forward=readFileSync(new URL(
 ),"utf8");
 const pr33Rollback=readFileSync(new URL(
   "../migrations/ai-media-studio/pending/20260723_pr33_exact_one_video_submit_rollback.sql",import.meta.url,
+),"utf8");
+const pr34Forward=readFileSync(new URL(
+  "../migrations/ai-media-studio/pending/20260723_pr34_exact_one_video_reconcile_terminal_forward.sql",import.meta.url,
+),"utf8");
+const pr34Rollback=readFileSync(new URL(
+  "../migrations/ai-media-studio/pending/20260723_pr34_exact_one_video_reconcile_terminal_rollback.sql",import.meta.url,
 ),"utf8");
 
 class RoleSession{
@@ -360,7 +369,7 @@ integrationTest("concurrent definitive no-submit finality refunds and releases c
     const ambiguous=await submit.query<{applied:boolean}>(
       "SELECT * FROM ai_media_worker_api.record_submit_ambiguous_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
       [ids.submitCapability,OWNER,WORKSPACE,row.id,row.budget_reservation_id,row.fencing_token,
-        row.send_authorization_digest,row.lease_token,null,digest("3")]);
+        row.send_authorization_digest,row.lease_token,"provider-request-ambiguous",digest("3")]);
     assert.deepEqual(ambiguous.rows,[{applied:true}]);
     const firstClaim=await reconciler.query<{reconciliation_lease_token:string;reconciliation_fencing_token:string}>(
       "SELECT * FROM ai_media_worker_api.claim_reconciliation_v1($1,$2,$3,$4,$5)",
@@ -396,10 +405,12 @@ integrationTest("concurrent definitive no-submit finality refunds and releases c
       assert.deepEqual(outcomes,[false,true]);
     }finally{await barrier.query("ROLLBACK").catch(()=>undefined);barrier.release();await left.close();await right.close();}
     const ledger=await adminPool.query<{attempt_state:string;reservation_state:string;submission_state:string;
-      capacity_state:string;capacity_version:string;committed:string;terminal_events:string}>(`
+      capacity_state:string;capacity_version:string;committed:string;terminal_events:string;
+      provider_request_id:string|null;ambiguous_request_id:string|null}>(`
       SELECT attempt.state attempt_state,reservation.state reservation_state,reservation.submission_state,
         capacity.state capacity_state,capacity.state_version::text capacity_version,
-        bucket.committed_micro_usd::text committed,
+        bucket.committed_micro_usd::text committed,attempt.provider_request_id,
+        max(event.provider_request_id) FILTER (WHERE event.event_kind='ambiguous') ambiguous_request_id,
         count(event.id) FILTER (WHERE event.event_kind='reconciled_no_submit')::text terminal_events
       FROM ai_media_provider_submission_attempts attempt
       JOIN ai_media_budget_reservations reservation ON reservation.id=attempt.budget_reservation_id
@@ -407,9 +418,10 @@ integrationTest("concurrent definitive no-submit finality refunds and releases c
       JOIN ai_media_submission_capacity_leases capacity ON capacity.submission_attempt_id=attempt.id
       LEFT JOIN ai_media_provider_submission_events event ON event.submission_attempt_id=attempt.id
       WHERE attempt.id=$1 GROUP BY attempt.state,reservation.state,reservation.submission_state,
-        capacity.state,capacity.state_version,bucket.committed_micro_usd`,[row.id]);
+        capacity.state,capacity.state_version,bucket.committed_micro_usd,attempt.provider_request_id`,[row.id]);
     assert.deepEqual(ledger.rows[0],{attempt_state:"reconciled_no_submit",reservation_state:"released",
-      submission_state:"reconciled_no_submit",capacity_state:"released",capacity_version:"2",committed:"0",terminal_events:"1"});
+      submission_state:"reconciled_no_submit",capacity_state:"released",capacity_version:"2",committed:"0",
+      provider_request_id:null,ambiguous_request_id:"provider-request-ambiguous",terminal_events:"1"});
   }finally{await submit.close();await reconciler.close();}
 });
 
@@ -765,4 +777,338 @@ integrationTest("pending PR33 exact submit claim is table-blind, fenced, replay-
       /rollback preserves exact one-video submit claim, authorization, and outcome evidence/u);
     await rollbackClient.query("ROLLBACK");
   }finally{rollbackClient.release();}
+});
+
+integrationTest("pending PR34 exact reconciliation and terminal observation are target-bound, fenced and replay-safe",async()=>{
+  type ExactTarget={daily_plan_slot_id:string;attempt:number;work_handoff_digest:string};
+  type ExactScenario={
+    work:{reservationId:string;renderJobId:string};target:ExactTarget;actor:string;
+    action:"reconcile_submission"|"observe_terminal";actionCapabilityId:string;
+    commandId:string;commandDigest:string;acquired:Record<string,unknown>;attempt:Record<string,unknown>;
+  };
+  const claimSubmitSql=
+    "SELECT * FROM ai_media_worker_api.claim_exact_one_video_submit_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)";
+  const authorizeSubmitSql=
+    "SELECT * FROM ai_media_worker_api.authorize_exact_one_video_submit_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)";
+  const ambiguousSubmitSql=
+    "SELECT * FROM ai_media_worker_api.record_exact_one_video_submit_ambiguous_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)";
+  const confirmedSubmitSql=
+    "SELECT * FROM ai_media_worker_api.record_exact_one_video_submit_confirmed_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)";
+  const acquireRunSql=
+    "SELECT * FROM ai_media_worker_api.acquire_exact_one_video_run_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)";
+  const completeRunSql=
+    "SELECT * FROM ai_media_worker_api.complete_exact_one_video_run_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)";
+  const exactActor=`${EXACT_RUN_LOGIN}:exact-one-video-worker`;
+  const assertIdentity=(row:Record<string,unknown>,scenario:ExactScenario):void=>{
+    assert.equal(row.execution_id,scenario.acquired.execution_id);
+    assert.equal(row.run_lease_token,scenario.acquired.lease_token);
+    assert.equal(row.run_fencing_token,scenario.acquired.fencing_token);
+    assert.equal(row.command_digest,scenario.commandDigest);
+    assert.equal(row.actor_user_id,scenario.actor);
+    assert.equal(row.owner_user_id,OWNER);
+    assert.equal(row.workspace_id,WORKSPACE);
+    assert.equal(row.budget_reservation_id,scenario.work.reservationId);
+    assert.equal(row.render_job_id,scenario.work.renderJobId);
+    assert.equal(row.daily_plan_slot_id,scenario.target.daily_plan_slot_id);
+    assert.equal(row.slot_attempt,scenario.target.attempt);
+    assert.equal(row.work_handoff_digest,scenario.target.work_handoff_digest);
+  };
+  async function setupScenario(
+    outcome:"ambiguous"|"confirmed",action:"reconcile_submission"|"observe_terminal",suffix:string,
+  ):Promise<ExactScenario>{
+    await resetOwnedSchema();
+    await adminPool.query(`DO $roles$ BEGIN
+      IF NOT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='${EXACT_RUN_ROLE}') THEN
+        CREATE ROLE ${EXACT_RUN_ROLE} NOLOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+        CREATE ROLE ${EXACT_RUN_LOGIN} LOGIN NOINHERIT NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS;
+      END IF;
+    END $roles$`);
+    await adminPool.query(`GRANT ${EXACT_RUN_ROLE} TO ${EXACT_RUN_LOGIN}`);
+    await adminPool.query(`CREATE TABLE public.ai_media_assets(
+      id uuid PRIMARY KEY,owner_user_id text NOT NULL,workspace_id text NOT NULL,kind text NOT NULL,
+      checksum text,deleted_at timestamptz);
+      ALTER TABLE public.ai_media_render_jobs ADD COLUMN output_url text,ADD COLUMN error_code text,
+        ADD COLUMN error_message text,ADD COLUMN completed_at timestamptz`);
+    await adminPool.query(pr4Forward);
+    await adminPool.query(`UPDATE public.ai_media_admitted_worker_capabilities
+      SET revoked_at=clock_timestamp() WHERE allowed_operations @> ARRAY['release_terminal_capacity']::text[]`);
+    await adminPool.query(pr27Forward);
+    const work=await createActivatedWork();
+    await adminPool.query(pr32Forward);
+    await adminPool.query(pr33Forward);
+    await adminPool.query(pr34Forward);
+    const exact=await adminPool.query<ExactTarget>(`SELECT daily_plan_slot_id,attempt,work_handoff_digest
+      FROM ai_media_budget_reservations WHERE owner_user_id=$1 AND workspace_id=$2 AND id=$3 AND render_job_id=$4`,
+    [OWNER,WORKSPACE,work.reservationId,work.renderJobId]);
+    assert.equal(exact.rowCount,1);const target=exact.rows[0];
+    const submitCommandId=`exact-run-pr34-submit-${suffix}`,submitCommandDigest=digest("1");
+    const actionCapabilityId=action==="reconcile_submission"
+      ?ids.exactReconcileActionCapability:ids.exactTerminalActionCapability;
+    const commandId=`exact-run-pr34-${action}-${suffix}`;
+    const commandDigest=action==="reconcile_submission"?digest("2"):digest("3");
+    await adminPool.query(`INSERT INTO ai_media_exact_one_video_run_capabilities(
+      id,database_principal,owner_user_id,workspace_id,actor_user_id,budget_reservation_id,render_job_id,
+      daily_plan_slot_id,slot_attempt,work_handoff_digest,action,command_id,command_digest,max_lease_ms,
+      valid_from,expires_at,evidence_digest)
+      VALUES($1,$2,$3,$4,$14,$5,$6,$7,$8,$9,'activate_and_submit',$10,$11,300000,
+        clock_timestamp()-interval '1 minute',clock_timestamp()+interval '1 hour',$12),
+       ($13,$2,$3,$4,$14,$5,$6,$7,$8,$9,$15,$16,$17,300000,
+        clock_timestamp()-interval '1 minute',clock_timestamp()+interval '1 hour',$18)`,
+    [ids.exactRunCapability,EXACT_RUN_LOGIN,OWNER,WORKSPACE,work.reservationId,work.renderJobId,
+      target.daily_plan_slot_id,target.attempt,target.work_handoff_digest,submitCommandId,submitCommandDigest,digest("4"),
+      actionCapabilityId,exactActor,action,commandId,commandDigest,digest("5")]);
+    await adminPool.query(`INSERT INTO public.ai_media_admitted_worker_capabilities(
+      id,database_principal,owner_user_id,workspace_id,lane,accounting_time_zone,worker_id,allowed_operations,
+      max_lease_ms,max_batch_size,valid_from,expires_at,evidence_digest)
+      VALUES($1,$2,$3,$4,'submit','UTC','exact-one-video-worker',
+        ARRAY['claim','authorize','record_submit_confirmed','record_submit_ambiguous'],
+        300000,1,clock_timestamp()-interval '1 minute',clock_timestamp()+interval '1 hour',$5),
+       ($6,$2,$3,$4,'reconcile','UTC','exact-one-video-worker',
+        ARRAY['claim_reconciliation','release_reconciliation_unknown','record_reconciled_confirmed',
+          'finalize_reconciled_no_submit','claim_terminal_check','release_terminal_check_unknown',
+          'record_provider_terminal'],
+        300000,1,clock_timestamp()-interval '1 minute',clock_timestamp()+interval '1 hour',$7)`,
+    [ids.exactSubmitCapability,EXACT_RUN_LOGIN,OWNER,WORKSPACE,digest("6"),
+      ids.exactReconcileWorkerCapability,digest("7")]);
+    const tableAccess=await adminPool.query<{fence:boolean;attempt:boolean;terminal:boolean;event:boolean;ingest:boolean}>(`
+      SELECT has_table_privilege($1,'public.ai_media_exact_one_video_run_fences','SELECT,INSERT,UPDATE,DELETE') fence,
+        has_table_privilege($1,'public.ai_media_provider_submission_attempts','SELECT,INSERT,UPDATE,DELETE') attempt,
+        has_table_privilege($1,'public.ai_media_provider_terminal_checks','SELECT,INSERT,UPDATE,DELETE') terminal,
+        has_table_privilege($1,'public.ai_media_provider_terminal_events','SELECT,INSERT,UPDATE,DELETE') event,
+        has_table_privilege($1,'public.ai_media_asset_ingest_jobs','SELECT,INSERT,UPDATE,DELETE') ingest`,
+    [EXACT_RUN_LOGIN]);
+    assert.deepEqual(tableAccess.rows,[{fence:false,attempt:false,terminal:false,event:false,ingest:false}]);
+    const session=new RoleSession(EXACT_RUN_LOGIN,EXACT_RUN_ROLE);await session.connect();
+    try{
+      const submitAcquire=await session.query<Record<string,unknown>>(acquireRunSql,
+        [ids.exactRunCapability,OWNER,WORKSPACE,work.reservationId,work.renderJobId,target.daily_plan_slot_id,
+          target.attempt,target.work_handoff_digest,"activate_and_submit",submitCommandId,submitCommandDigest,
+          exactActor,60_000]);
+      assert.equal(submitAcquire.rows[0]?.kind,"acquired");
+      const submitPrefix=[submitAcquire.rows[0].execution_id,submitAcquire.rows[0].lease_token,
+        submitAcquire.rows[0].fencing_token,submitCommandDigest,exactActor,OWNER,WORKSPACE,work.reservationId,
+        work.renderJobId,target.daily_plan_slot_id,target.attempt,target.work_handoff_digest];
+      const claim=await session.query<Record<string,unknown>>(claimSubmitSql,
+        [...submitPrefix,"exact-one-video-worker",60_000]);
+      assert.equal(claim.rowCount,1);
+      const authorization=await session.query<Record<string,unknown>>(authorizeSubmitSql,
+        [...submitPrefix,claim.rows[0].id,claim.rows[0].fencing_token,claim.rows[0].lease_token,
+          claim.rows[0].sealed_request_digest]);
+      assert.equal(authorization.rowCount,1);
+      const attempt=authorization.rows[0];
+      if(outcome==="ambiguous"){
+        const result=await session.query<Record<string,unknown>>(ambiguousSubmitSql,
+          [...submitPrefix,attempt.id,attempt.fencing_token,attempt.send_authorization_digest,
+            attempt.lease_token,`provider-request-${suffix}`,digest("8")]);
+        assert.equal(result.rows[0]?.applied,true);
+      }else{
+        const result=await session.query<Record<string,unknown>>(confirmedSubmitSql,
+          [...submitPrefix,attempt.id,attempt.fencing_token,attempt.send_authorization_digest,
+            attempt.lease_token,`provider-job-${suffix}`,`provider-request-${suffix}`,digest("9")]);
+        assert.equal(result.rows[0]?.applied,true);
+      }
+      const submitCompleted=await session.query<{applied:boolean}>(completeRunSql,
+        [ids.exactRunCapability,OWNER,WORKSPACE,submitAcquire.rows[0].execution_id,submitCommandId,
+          submitCommandDigest,submitAcquire.rows[0].fencing_token,submitAcquire.rows[0].lease_token,
+          work.reservationId,work.renderJobId,target.daily_plan_slot_id,target.attempt,
+          target.work_handoff_digest,"activate_and_submit",outcome]);
+      assert.deepEqual(submitCompleted.rows,[{applied:true}]);
+      const acquired=await session.query<Record<string,unknown>>(acquireRunSql,
+        [actionCapabilityId,OWNER,WORKSPACE,work.reservationId,work.renderJobId,target.daily_plan_slot_id,
+          target.attempt,target.work_handoff_digest,action,commandId,commandDigest,exactActor,60_000]);
+      assert.equal(acquired.rows[0]?.kind,"acquired");
+      return {work,target,actor:exactActor,action,actionCapabilityId,commandId,commandDigest,
+        acquired:acquired.rows[0],attempt};
+    }finally{await session.close();}
+  }
+  async function waitForTerminalDue(terminalCheckId:string):Promise<void>{
+    const deadline=Date.now()+10_000;
+    while(Date.now()<deadline){
+      const result=await adminPool.query<{due:boolean}>(`SELECT state='pending' AND next_check_at<=clock_timestamp() due
+        FROM ai_media_provider_terminal_checks WHERE id=$1`,[terminalCheckId]);
+      if(result.rows[0]?.due)return;
+      await new Promise<void>(resolve=>setImmediate(resolve));
+    }
+    throw new Error("terminal backoff did not become due");
+  }
+  const acquireActionParams=(scenario:ExactScenario):unknown[]=>[
+    scenario.actionCapabilityId,OWNER,WORKSPACE,scenario.work.reservationId,scenario.work.renderJobId,
+    scenario.target.daily_plan_slot_id,scenario.target.attempt,scenario.target.work_handoff_digest,
+    scenario.action,scenario.commandId,scenario.commandDigest,scenario.actor,60_000,
+  ];
+  const completeAction=async(session:RoleSession,scenario:ExactScenario,outcome:string):Promise<void>=>{
+    const result=await session.query<{applied:boolean}>(completeRunSql,
+      [scenario.actionCapabilityId,OWNER,WORKSPACE,scenario.acquired.execution_id,scenario.commandId,
+        scenario.commandDigest,scenario.acquired.fencing_token,scenario.acquired.lease_token,
+        scenario.work.reservationId,scenario.work.renderJobId,scenario.target.daily_plan_slot_id,
+        scenario.target.attempt,scenario.target.work_handoff_digest,scenario.action,outcome]);
+    assert.deepEqual(result.rows,[{applied:true}]);
+    const replay=await session.query<Record<string,unknown>>(acquireRunSql,acquireActionParams(scenario));
+    assert.equal(replay.rows[0]?.kind,"replayed");assert.equal(replay.rows[0]?.outcome,outcome);
+  };
+
+  const reconciliation=await setupScenario("ambiguous","reconcile_submission","reconcile");
+  let session=new RoleSession(EXACT_RUN_LOGIN,EXACT_RUN_ROLE);await session.connect();
+  try{
+    const claimReconciliationSql=
+      "SELECT * FROM ai_media_worker_api.claim_exact_one_video_reconciliation_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)";
+    const finalizeNoSubmitSql=
+      "SELECT * FROM ai_media_worker_api.finalize_exact_one_video_reconciled_no_submit_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24)";
+    const prefix=[reconciliation.acquired.execution_id,reconciliation.acquired.lease_token,
+      reconciliation.acquired.fencing_token,reconciliation.commandDigest,reconciliation.actor,OWNER,WORKSPACE,
+      reconciliation.work.reservationId,reconciliation.work.renderJobId,reconciliation.target.daily_plan_slot_id,
+      reconciliation.target.attempt,reconciliation.target.work_handoff_digest];
+    const eventsBefore=await adminPool.query<{count:string}>(
+      "SELECT count(*)::text count FROM ai_media_provider_submission_events WHERE submission_attempt_id=$1",
+      [reconciliation.attempt.id]);
+    await assert.rejects(session.query(claimReconciliationSql,
+      [...prefix.slice(0,9),"26000000-0000-4000-8000-00000000001d",...prefix.slice(10),
+        "exact-one-video-worker",1_000]),
+    (error:unknown)=>typeof error==="object"&&error!==null&&"code" in error&&error.code==="42501");
+    const untouched=await adminPool.query<{fence:string;events:string}>(`SELECT
+      attempt.reconciliation_fencing_token::text fence,count(event.id)::text events
+      FROM ai_media_provider_submission_attempts attempt
+      LEFT JOIN ai_media_provider_submission_events event ON event.submission_attempt_id=attempt.id
+      WHERE attempt.id=$1 GROUP BY attempt.reconciliation_fencing_token`,[reconciliation.attempt.id]);
+    assert.deepEqual(untouched.rows,[{fence:"0",events:eventsBefore.rows[0].count}]);
+    const first=await session.query<Record<string,unknown>>(claimReconciliationSql,
+      [...prefix,"exact-one-video-worker",1_000]);
+    assert.equal(first.rowCount,1);assertIdentity(first.rows[0],reconciliation);
+    await waitForExpiredAttempt(String(first.rows[0].id),"reconciliation_lease_expires_at");
+    const reclaimed=await session.query<Record<string,unknown>>(claimReconciliationSql,
+      [...prefix,"exact-one-video-worker",60_000]);
+    assert.equal(reclaimed.rowCount,1);assertIdentity(reclaimed.rows[0],reconciliation);
+    assert.equal(reclaimed.rows[0].id,first.rows[0].id);
+    assert.equal(reclaimed.rows[0].reconciliation_fencing_token,"2");
+    assert.notEqual(reclaimed.rows[0].reconciliation_lease_token,first.rows[0].reconciliation_lease_token);
+    const finalityTail=[first.rows[0].id,first.rows[0].fencing_token,first.rows[0].send_authorization_digest,
+      first.rows[0].reconciliation_lease_token,first.rows[0].reconciliation_fencing_token,
+      "linearizable_not_accepted_and_cannot_later_accept",first.rows[0].provider_account_id,
+      first.rows[0].provider_key,first.rows[0].provider_credential_version,first.rows[0].provider_idempotency_key,
+      new Date().toISOString(),digest("a")];
+    const stale=await session.query<Record<string,unknown>>(finalizeNoSubmitSql,[...prefix,...finalityTail]);
+    assert.equal(stale.rows[0]?.applied,false);assertIdentity(stale.rows[0],reconciliation);
+    const finalityObservedAt=new Date().toISOString(),finalityEvidence=digest("b");
+    const currentFinalityTail=[
+      reclaimed.rows[0].id,reclaimed.rows[0].fencing_token,reclaimed.rows[0].send_authorization_digest,
+      reclaimed.rows[0].reconciliation_lease_token,reclaimed.rows[0].reconciliation_fencing_token,
+      "linearizable_not_accepted_and_cannot_later_accept",reclaimed.rows[0].provider_account_id,
+      reclaimed.rows[0].provider_key,reclaimed.rows[0].provider_credential_version,
+      reclaimed.rows[0].provider_idempotency_key,finalityObservedAt,finalityEvidence,
+    ];
+    const applied=await session.query<Record<string,unknown>>(finalizeNoSubmitSql,
+      [...prefix,...currentFinalityTail]);
+    assert.equal(applied.rows[0]?.applied,true);assertIdentity(applied.rows[0],reconciliation);
+    const finalityReplay=await session.query<Record<string,unknown>>(finalizeNoSubmitSql,
+      [...prefix,...currentFinalityTail]);
+    assert.equal(finalityReplay.rows[0]?.applied,true);assertIdentity(finalityReplay.rows[0],reconciliation);
+    const mismatchedFinality=await session.query<Record<string,unknown>>(finalizeNoSubmitSql,
+      [...prefix,...currentFinalityTail.slice(0,-1),digest("f")]);
+    assert.equal(mismatchedFinality.rows[0]?.applied,false);
+    assertIdentity(mismatchedFinality.rows[0],reconciliation);
+    await completeAction(session,reconciliation,"reconciled_no_submit");
+    const ledger=await adminPool.query<{state:string;capacity:string;capacity_version:string;
+      committed:string;events:string;provider_request_id:string|null;ambiguous_request_id:string|null}>(`SELECT
+      attempt.state,capacity.state capacity,capacity.state_version::text capacity_version,
+      bucket.committed_micro_usd::text committed,attempt.provider_request_id,
+      max(event.provider_request_id) FILTER (WHERE event.event_kind='ambiguous') ambiguous_request_id,
+      count(event.id) FILTER (WHERE event.event_kind='reconciled_no_submit')::text events
+      FROM ai_media_provider_submission_attempts attempt
+      JOIN ai_media_submission_capacity_leases capacity ON capacity.submission_attempt_id=attempt.id
+      JOIN ai_media_budget_reservations reservation ON reservation.id=attempt.budget_reservation_id
+      JOIN ai_media_budget_buckets bucket ON bucket.id=reservation.budget_bucket_id
+      LEFT JOIN ai_media_provider_submission_events event ON event.submission_attempt_id=attempt.id
+      WHERE attempt.id=$1 GROUP BY attempt.state,capacity.state,capacity.state_version,
+        bucket.committed_micro_usd,attempt.provider_request_id`,
+    [reconciliation.attempt.id]);
+    assert.deepEqual(ledger.rows,[{state:"reconciled_no_submit",capacity:"released",capacity_version:"2",
+      committed:"0",provider_request_id:null,ambiguous_request_id:"provider-request-reconcile",events:"1"}]);
+  }finally{await session.close();}
+
+  const terminal=await setupScenario("confirmed","observe_terminal","terminal");
+  session=new RoleSession(EXACT_RUN_LOGIN,EXACT_RUN_ROLE);await session.connect();
+  try{
+    const claimTerminalSql=
+      "SELECT * FROM ai_media_worker_api.claim_exact_one_video_terminal_check_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)";
+    const releaseTerminalSql=
+      "SELECT * FROM ai_media_worker_api.release_exact_one_video_terminal_check_unknown_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)";
+    const recordTerminalSql=
+      "SELECT * FROM ai_media_worker_api.record_exact_one_video_provider_terminal_v1($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)";
+    const prefix=[terminal.acquired.execution_id,terminal.acquired.lease_token,terminal.acquired.fencing_token,
+      terminal.commandDigest,terminal.actor,OWNER,WORKSPACE,terminal.work.reservationId,terminal.work.renderJobId,
+      terminal.target.daily_plan_slot_id,terminal.target.attempt,terminal.target.work_handoff_digest];
+    await assert.rejects(session.query(claimTerminalSql,
+      [...prefix.slice(0,9),"26000000-0000-4000-8000-00000000001d",...prefix.slice(10),
+        "exact-one-video-worker",60_000]),
+    (error:unknown)=>typeof error==="object"&&error!==null&&"code" in error&&error.code==="42501");
+    const noWrongClaim=await adminPool.query("SELECT id FROM ai_media_provider_terminal_checks");
+    assert.equal(noWrongClaim.rowCount,0);
+    const first=await session.query<Record<string,unknown>>(claimTerminalSql,
+      [...prefix,"exact-one-video-worker",60_000]);
+    assert.equal(first.rowCount,1);assertIdentity(first.rows[0],terminal);
+    const terminalReleaseObservedAt=new Date().toISOString();
+    const released=await session.query<Record<string,unknown>>(releaseTerminalSql,
+      [...prefix,first.rows[0].id,first.rows[0].lease_token,first.rows[0].fencing_token,
+        "processing",terminalReleaseObservedAt,digest("c")]);
+    assert.equal(released.rows[0]?.applied,true);assertIdentity(released.rows[0],terminal);
+    const releasedReplay=await session.query<Record<string,unknown>>(releaseTerminalSql,
+      [...prefix,first.rows[0].id,first.rows[0].lease_token,first.rows[0].fencing_token,
+        "processing",terminalReleaseObservedAt,digest("c")]);
+    assert.equal(releasedReplay.rows[0]?.applied,true);assertIdentity(releasedReplay.rows[0],terminal);
+    await waitForTerminalDue(String(first.rows[0].id));
+    const reclaimed=await session.query<Record<string,unknown>>(claimTerminalSql,
+      [...prefix,"exact-one-video-worker",60_000]);
+    assert.equal(reclaimed.rowCount,1);assertIdentity(reclaimed.rows[0],terminal);
+    assert.equal(reclaimed.rows[0].id,first.rows[0].id);
+    assert.equal(reclaimed.rows[0].fencing_token,"2");
+    assert.notEqual(reclaimed.rows[0].lease_token,first.rows[0].lease_token);
+    const terminalTail=[first.rows[0].id,first.rows[0].submission_attempt_id,
+      first.rows[0].submission_fencing_token,first.rows[0].lease_token,first.rows[0].fencing_token,
+      first.rows[0].send_authorization_digest,first.rows[0].provider_account_id,first.rows[0].provider_key,
+      first.rows[0].provider_credential_version,first.rows[0].provider_job_id,"completed",
+      "artifact-ref-pr34","https://media.example.com/pr34/video.mp4",new Date().toISOString(),digest("d")];
+    const stale=await session.query<Record<string,unknown>>(recordTerminalSql,[...prefix,...terminalTail]);
+    assert.equal(stale.rows[0]?.outcome,"rejected");assertIdentity(stale.rows[0],terminal);
+    const observedAt=new Date().toISOString(),providerEvidence=digest("e");
+    const currentTail=[reclaimed.rows[0].id,reclaimed.rows[0].submission_attempt_id,
+      reclaimed.rows[0].submission_fencing_token,reclaimed.rows[0].lease_token,
+      reclaimed.rows[0].fencing_token,reclaimed.rows[0].send_authorization_digest,
+      reclaimed.rows[0].provider_account_id,reclaimed.rows[0].provider_key,
+      reclaimed.rows[0].provider_credential_version,reclaimed.rows[0].provider_job_id,"completed",
+      "artifact-ref-pr34","https://media.example.com/pr34/video.mp4",observedAt,providerEvidence];
+    const applied=await session.query<Record<string,unknown>>(recordTerminalSql,[...prefix,...currentTail]);
+    assert.equal(applied.rows[0]?.outcome,"applied");assert.ok(applied.rows[0]?.terminal_event_id);
+    assert.ok(applied.rows[0]?.ingest_job_id);assertIdentity(applied.rows[0],terminal);
+    const duplicate=await session.query<Record<string,unknown>>(recordTerminalSql,[...prefix,...currentTail]);
+    assert.equal(duplicate.rows[0]?.outcome,"replayed");
+    assert.equal(duplicate.rows[0]?.terminal_event_id,applied.rows[0]?.terminal_event_id);
+    assert.equal(duplicate.rows[0]?.ingest_job_id,applied.rows[0]?.ingest_job_id);
+    assertIdentity(duplicate.rows[0],terminal);
+    const mismatched=await session.query<Record<string,unknown>>(recordTerminalSql,
+      [...prefix,...currentTail.slice(0,-1),digest("f")]);
+    assert.equal(mismatched.rows[0]?.outcome,"conflict");assertIdentity(mismatched.rows[0],terminal);
+    await completeAction(session,terminal,"completed");
+    const ledger=await adminPool.query<{terminal_events:string;ingest_jobs:string;capacity:string;capacity_version:string;
+      committed:string;job_stage:string;publishing_surface_absent:boolean}>(`SELECT
+      count(DISTINCT event.id)::text terminal_events,count(DISTINCT ingest.id)::text ingest_jobs,
+      capacity.state capacity,capacity.state_version::text capacity_version,
+      bucket.committed_micro_usd::text committed,job.stage job_stage,
+      to_regclass('public.ai_media_publishing_jobs') IS NULL publishing_surface_absent
+      FROM ai_media_provider_submission_attempts attempt
+      JOIN ai_media_render_jobs job ON job.id=attempt.render_job_id
+      JOIN ai_media_submission_capacity_leases capacity ON capacity.submission_attempt_id=attempt.id
+      JOIN ai_media_budget_reservations reservation ON reservation.id=attempt.budget_reservation_id
+      JOIN ai_media_budget_buckets bucket ON bucket.id=reservation.budget_bucket_id
+      LEFT JOIN ai_media_provider_terminal_events event ON event.submission_attempt_id=attempt.id
+      LEFT JOIN ai_media_asset_ingest_jobs ingest ON ingest.render_job_id=attempt.render_job_id
+      WHERE attempt.id=$1 GROUP BY capacity.state,capacity.state_version,bucket.committed_micro_usd,job.stage`,
+    [terminal.attempt.id]);
+    assert.deepEqual(ledger.rows,[{terminal_events:"1",ingest_jobs:"1",capacity:"released",capacity_version:"2",
+      committed:"1250000",job_stage:"artifact_ingest_queued",publishing_surface_absent:true}]);
+    const rollbackClient=await adminPool.connect();try{
+      await assert.rejects(rollbackClient.query(pr34Rollback),
+        /rollback preserves exact one-video reconciliation and terminal evidence/u);
+      await rollbackClient.query("ROLLBACK");
+    }finally{rollbackClient.release();}
+  }finally{await session.close();}
 });

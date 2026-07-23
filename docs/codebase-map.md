@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-07-23T08:18:22.829Z
-Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-exact-submit-claim`
+Generated: 2026-07-23T09:15:17.530Z
+Repo: `/Users/robertmanzanilla/Documents/asistente/.worktrees/ai-media-studio-exact-reconcile-terminal`
 Package: `rest-express`
 
 ## Guardrails
@@ -14,7 +14,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 995 | 837 | 3741 | 508 | 16587 |
+| 1000 | 840 | 3759 | 508 | 16734 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,8 +29,8 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 273 | 261 | test:273 |
-| `server/ai-media-studio` | 207 | 186 | server:207 |
+| `tests` | 275 | 263 | test:275 |
+| `server/ai-media-studio` | 208 | 187 | server:208 |
 | `client/src` | 158 | 156 | ui-component:55, other:48, client-page:24, client-component:21 |
 | `server` | 96 | 92 | server:96 |
 | `script` | 48 | 46 | script:48 |
@@ -40,7 +40,7 @@ Package: `rest-express`
 | `docs` | 12 | 11 | docs:12 |
 | `server/replit_integrations` | 8 | 8 | server:8 |
 | `tests/fixtures` | 7 | 5 | test:7 |
-| `migrations/ai-media-studio` | 59 | 3 | other:57, docs:2 |
+| `migrations/ai-media-studio` | 61 | 3 | other:59, docs:2 |
 | `client/public` | 13 | 2 | other:13 |
 | `shared/models` | 2 | 2 | shared:2 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
@@ -88,6 +88,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-daily-admission-drizzle.test.ts`
 - `tests/ai-media-studio-drizzle-one-video-held-admission-repository.test.ts`
 - `tests/ai-media-studio-exact-one-video-run-fence-drizzle.test.ts`
+- `tests/ai-media-studio-exact-reconcile-terminal-drizzle.test.ts`
 - `tests/ai-media-studio-exact-submit-drizzle.test.ts`
 - `tests/ai-media-studio-full-chain-postgres.test.ts`
 - `tests/ai-media-studio-governance-drizzle.test.ts`
@@ -207,6 +208,7 @@ Package: `rest-express`
 - `tests/ai-media-studio-pr31-held-admission-expiry-migration.test.ts`
 - `tests/ai-media-studio-pr32-exact-one-video-run-fence-migration.test.ts`
 - `tests/ai-media-studio-pr33-exact-one-video-submit-migration.test.ts`
+- `tests/ai-media-studio-pr34-exact-reconcile-terminal-migration.test.ts`
 - `tests/ai-media-studio-pr4-assets-migration.test.ts`
 - `tests/ai-media-studio-pr5-governance-migration.test.ts`
 - `tests/ai-media-studio-pr6-provider-identity-migration.test.ts`

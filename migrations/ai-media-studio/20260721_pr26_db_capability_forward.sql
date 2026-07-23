@@ -271,6 +271,7 @@ BEGIN
   ELSE
     UPDATE public.ai_media_provider_submission_attempts SET state='reconciled_no_submit',
       reconciliation_evidence_digest=p_evidence_digest,reconciled_at=sampled_at,
+      provider_job_id=NULL,provider_request_id=NULL,
       lease_token=NULL,lease_owner=NULL,lease_expires_at=NULL,
       reconciliation_lease_token=NULL,reconciliation_lease_owner=NULL,reconciliation_lease_expires_at=NULL,
       updated_at=sampled_at WHERE id=p_attempt_id AND fencing_token=p_fencing_token RETURNING * INTO attempt;

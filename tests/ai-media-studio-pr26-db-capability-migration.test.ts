@@ -114,12 +114,13 @@ test("no-submit finality binds every provider identity and refunds exactly once"
   assert.match(finish,/no-submit capacity release must affect exactly one row/u);
   assert.match(finish,/no-submit budget refund must affect exactly one row/u);
   assert.match(finish,/committed_micro_usd=committed_micro_usd-current_row\.amount_micro_usd/u);
+  assert.match(finish,/state='reconciled_no_submit',[\s\S]*provider_job_id=NULL,provider_request_id=NULL,[\s\S]*reconciliation_lease_token=NULL/u);
 });
 
 test("rollback is evidence-preserving and never restores direct table access",()=>{
   assert.match(rollback,/EXISTS \(SELECT 1 FROM public\.ai_media_admitted_worker_capabilities LIMIT 1\)/u);
   assert.match(rollback,/EXISTS \(SELECT 1 FROM public\.ai_media_submission_capacity_leases LIMIT 1\)/u);
-  assert.match(rollback,/otherwise forward-fix/u);
+  assert.match(rollback,/otherwise stop and forward-fix/u);
   assert.match(rollback,/REVOKE EXECUTE ON FUNCTION/u);
   assert.match(rollback,/REVOKE INSERT,UPDATE ON TABLE/u);
   assert.match(rollback,/Deliberately retain REVOKE CREATE ON SCHEMA public FROM PUBLIC/u);
