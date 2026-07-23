@@ -839,25 +839,18 @@ export function createAiMediaStudioAgentSnapshot(
 }
 
 function materializeWorkItem(item: AiMediaStudioAgentWorkItem): AiMediaStudioAgentWorkItem {
-  const gates = item.gates ?? {
-    checker: { status: "pending" as const, evidence: [] },
-    appQa: { status: "pending" as const, evidence: [] },
-    ci: { status: "pending", evidence: [] },
-    human: {
-      status: item.state === "blocked" ? "blocked" as const : "pending" as const,
-      evidence: [],
-    },
-  };
   return {
     ...item,
     baseBranch: item.baseBranch ?? null,
     headBranch: item.headBranch ?? item.branch,
-    gates: {
-      checker: { ...gates.checker, evidence: [...gates.checker.evidence] },
-      appQa: { ...gates.appQa, evidence: [...gates.appQa.evidence] },
-      ci: { ...gates.ci, evidence: [...gates.ci.evidence] },
-      human: { ...gates.human, evidence: [...gates.human.evidence] },
-    },
+    ...(item.gates ? {
+      gates: {
+        checker: { ...item.gates.checker, evidence: [...item.gates.checker.evidence] },
+        appQa: { ...item.gates.appQa, evidence: [...item.gates.appQa.evidence] },
+        ci: { ...item.gates.ci, evidence: [...item.gates.ci.evidence] },
+        human: { ...item.gates.human, evidence: [...item.gates.human.evidence] },
+      },
+    } : {}),
     harness: item.harness ?? null,
     worktree: item.worktree ?? null,
     heartbeatAt: item.heartbeatAt ?? null,
