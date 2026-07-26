@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, mkdirSync, realpathSync, symlinkSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import test from "node:test";
 import {
   BLACKROOM_REMOTE_UPLOAD_CHUNK_BYTES,
@@ -287,6 +290,27 @@ test("safe deletion requires confirmed Metricool receipt and exact media path", 
 
   const historicalSingleNetwork = { ...entry, metricoolId: "991", renderPath: `${project}/clippers_workspace/blackroom/renders/old.mp4` };
   assert.throws(() => assertSafeConfirmedDeletion(project, historicalSingleNetwork, historicalSingleNetwork.renderPath), /complete Metricool confirmations/);
+});
+
+test("safe deletion accepts an exact confirmed media file through a relocated runtime symlink", () => {
+  const root = mkdtempSync(path.join(tmpdir(), "blackroom-runtime-"));
+  const stableProject = path.join(root, "stable");
+  const previousProject = path.join(root, "previous");
+  const rendered = path.join(stableProject, "clippers_workspace/blackroom/rendered");
+  mkdirSync(rendered, { recursive: true });
+  const stableFile = path.join(rendered, "confirmed.mp4");
+  writeFileSync(stableFile, "video");
+  symlinkSync(stableProject, previousProject);
+  const legacyFile = path.join(previousProject, "clippers_workspace/blackroom/rendered/confirmed.mp4");
+  const ledger = createBlackRoomWorkerLedger();
+  const entry = reserveBlackRoomLedgerEntry(ledger, {
+    ...mediaDetails,
+    jobId: "job-relocated", slot: "01:00", videoId: "video-relocated",
+    renderPath: legacyFile,
+    sourcePath: path.join(previousProject, "clippers_workspace/blackroom/sources/confirmed.mp4"),
+  });
+  updateBlackRoomLedgerEntry(ledger, entry.reservationId, { status: "confirmed", metricoolId: "tiktok:991|facebook:992|youtube:993" });
+  assert.equal(assertSafeConfirmedDeletion(stableProject, entry, legacyFile), realpathSync(stableFile));
 });
 
 test("ledger rejects overlap with queue history but permits a different moment", () => {

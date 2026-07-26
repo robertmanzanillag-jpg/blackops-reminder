@@ -1,3 +1,4 @@
+import { realpathSync } from "node:fs";
 import path from "node:path";
 
 export const BLACKROOM_WORKER_STATE_PATH = "clippers_workspace/blackroom/agent/worker-state.json";
@@ -381,8 +382,17 @@ export function assertSafeConfirmedDeletion(projectDir: string, entry: BlackRoom
   if (entry.status !== "confirmed" || !hasCompleteBlackRoomMetricoolReceipt(entry)) {
     throw new Error("complete Metricool confirmations are required before deletion");
   }
-  const resolvedProject = path.resolve(projectDir);
-  const resolvedFile = path.resolve(filePath);
+  // The local runtime may be relocated from an iCloud-backed folder to a
+  // stable disk folder. Resolve symlinks when the file exists so a confirmed
+  // ledger entry recorded before that relocation still maps to the same
+  // physical BlackRoom media file. The exact ledger membership check remains
+  // mandatory, and nonexistent paths retain the deterministic path fallback.
+  const resolvePhysicalPath = (value: string): string => {
+    try { return realpathSync.native(value); }
+    catch { return path.resolve(value); }
+  };
+  const resolvedProject = resolvePhysicalPath(projectDir);
+  const resolvedFile = resolvePhysicalPath(filePath);
   const allowedRoots = [
     path.join(resolvedProject, "clippers_workspace/blackroom/sources"),
     path.join(resolvedProject, "clippers_workspace/blackroom/rendered"),
@@ -390,7 +400,7 @@ export function assertSafeConfirmedDeletion(projectDir: string, entry: BlackRoom
     // on `rendered`; exact ledger membership is still required above.
     path.join(resolvedProject, "clippers_workspace/blackroom/renders"),
   ];
-  if (![entry.renderPath, entry.sourcePath].map((item) => path.resolve(item)).includes(resolvedFile)) throw new Error("file is not part of this reservation");
+  if (![entry.renderPath, entry.sourcePath].map(resolvePhysicalPath).includes(resolvedFile)) throw new Error("file is not part of this reservation");
   if (!allowedRoots.some((root) => resolvedFile.startsWith(`${root}${path.sep}`))) throw new Error("file is outside BlackRoom media directories");
   return resolvedFile;
 }
