@@ -5,7 +5,7 @@ export type BlackRoomRemoteCommand =
   | { id: string; type: "daily_target"; posts: number; createdAt: string }
   | { id: string; type: "extra_posts"; posts: number; targetDate: string; networks?: Array<"tiktok" | "facebook" | "youtube">; createdAt: string }
   | { id: string; type: "priority_source"; url: string; createdAt: string }
-  | { id: string; type: "ceo_schedule"; slotsByDate: Record<string, string[]>; analytics: BlackRoomCeoAnalytics; createdAt: string };
+  | { id: string; type: "ceo_schedule"; slotsByDate: Record<string, string[]>; postsByDate?: Record<string, number>; analytics: BlackRoomCeoAnalytics; createdAt: string };
 
 export interface BlackRoomChatResult {
   reply: string;
@@ -100,8 +100,8 @@ export function parseBlackRoomChatCommand(
     };
   }
   const number = Number(text.match(/\b(\d{1,2})\b/)?.[1]);
-  if (Number.isFinite(number) && (number < 1 || number > 5)) {
-    return { reply: "La campaña está limitada a 5 videos por día para proteger el alcance y medir resultados comparables. Primero el CEO debe demostrar con analytics que conviene aumentar.", command: null };
+  if (Number.isFinite(number) && (number < 1 || number > 10)) {
+    return { reply: "El límite absoluto de la campaña es 10 videos por día. El CEO mantiene 5 como base y solo prueba aumentos medidos cuando los analytics lo justifican.", command: null };
   }
   if (Number.isFinite(number) && /\b(mas|extra|adicional)/.test(text) && /\bhoy\b/.test(text)) {
     const networks = ([
@@ -115,16 +115,14 @@ export function parseBlackRoomChatCommand(
       return { reply: `Hoy solo ${available === 1 ? "cabe" : "caben"} ${available} video${available === 1 ? "" : "s"} adicional${available === 1 ? "" : "es"} manteniendo 90 minutos entre publicaciones. Puedes pedir ${number} para mañana o reducir la cantidad.`, command: null };
     }
     return {
-      reply: `Listo. Agregaré ${number} video${number === 1 ? "" : "s"} extra${number === 1 ? "" : "s"}${destination} a la cola de hoy, separados de los demás horarios.`,
+      reply: `Listo. Agregaré hasta ${number} video${number === 1 ? "" : "s"} extra${number === 1 ? "" : "s"}${destination} a la cola de hoy, separados de los demás horarios y sin superar el límite diario de 10.`,
       command: { id: randomUUID(), type: "extra_posts", posts: number, targetDate: localDate(now, timezone), ...(networks.length ? { networks } : {}), createdAt: now.toISOString() },
     };
   }
   if (Number.isFinite(number) && /(por dia|al dia|x dia|diarios?|cada dia)/.test(text)) {
-    if (number !== 5) {
-      return { reply: "La cadencia de aprendizaje actual es exactamente 5 videos por día. El CEO no la aumentará hasta tener métricas comparables y una recomendación verificable.", command: null };
-    }
+    if (number < 5) return { reply: "La base mínima es 5 videos por día para obtener una muestra útil. El CEO puede probar 7 en días de experimento, sin pasar de 10.", command: null };
     return {
-      reply: "Entendido. El objetivo automático será 5 videos por día. El CEO comparará formatos, duración, horario y red antes de recomendar cualquier cambio.",
+      reply: `Entendido. El objetivo manual será ${number} videos por día. El CEO comparará formatos, duración, horario y red; su base automática seguirá siendo 5 y sus pruebas normales serán de 7.`,
       command: { id: randomUUID(), type: "daily_target", posts: number, createdAt: now.toISOString() },
     };
   }

@@ -106,8 +106,8 @@ test("caps remote quantity and extras while retaining a priority source", () => 
     { id: "source-1", type: "priority_source" as const, url: "https://youtu.be/video123", createdAt: now.toISOString() },
   ];
   assert.equal(applyBlackRoomRemoteCommands(state, commands, now), 2);
-  assert.equal(state.postsPerDay, 5);
-  assert.equal(state.jobs[0].requirements.posts, 5);
+  assert.equal(state.postsPerDay, 10);
+  assert.equal(state.jobs[0].requirements.posts, 10);
   assert.equal(state.prioritySources[0].status, "pending");
   assert.equal(applyBlackRoomRemoteCommands(state, commands, now), 0);
 });
@@ -140,7 +140,7 @@ test("daily target changes do not erase extra posts already requested for a date
   const targetDate = state.jobs[0].targetDate;
   applyBlackRoomRemoteCommands(state, [{ id: "extra", type: "extra_posts", posts: 3, targetDate, createdAt: now.toISOString() }], now);
   applyBlackRoomRemoteCommands(state, [{ id: "daily", type: "daily_target", posts: 8, createdAt: now.toISOString() }], now);
-  assert.equal(state.jobs[0].requirements.posts, 5);
+  assert.equal(state.jobs[0].requirements.posts, 10);
 });
 
 test("daily target cannot reduce the two-week campaign below five posts", () => {
@@ -153,15 +153,30 @@ test("daily target cannot reduce the two-week campaign below five posts", () => 
   assert.equal(state.jobs[0].slots.length, 5);
 });
 
-test("caps a daily target and extras at five posts", () => {
+test("caps a daily target and extras at ten posts", () => {
   const now = new Date("2026-07-21T12:00:00.000Z");
   const state = createBlackRoomQueueState(now);
   ensureBlackRoomScheduleBuffer(state, now);
   applyBlackRoomRemoteCommands(state, [{ id: "daily-high", type: "daily_target", posts: 15, createdAt: now.toISOString() }], now);
-  assert.equal(state.postsPerDay, 5);
-  assert.equal(state.jobs[0].requirements.posts, 5);
+  assert.equal(state.postsPerDay, 10);
+  assert.equal(state.jobs[0].requirements.posts, 10);
   applyBlackRoomRemoteCommands(state, [{ id: "extra-over-cap", type: "extra_posts", posts: 3, targetDate: state.jobs[0].targetDate, createdAt: now.toISOString() }], now);
-  assert.equal(state.jobs[0].requirements.posts, 5);
+  assert.equal(state.jobs[0].requirements.posts, 10);
+});
+
+test("CEO schedule can make a seven-post experiment without changing the five-post baseline", () => {
+  const now = new Date("2026-07-21T12:00:00.000Z");
+  const state = createBlackRoomQueueState(now);
+  ensureBlackRoomScheduleBuffer(state, now);
+  const targetDate = state.jobs[0].targetDate;
+  const slots = ["00:30", "03:30", "06:30", "09:30", "12:30", "15:30", "18:30"];
+  applyBlackRoomRemoteCommands(state, [{
+    id: "ceo-seven", type: "ceo_schedule", createdAt: now.toISOString(),
+    slotsByDate: { [targetDate]: slots }, postsByDate: { [targetDate]: 7 }, analytics: state.analytics,
+  }], now);
+  assert.equal(state.postsPerDay, 5);
+  assert.equal(state.jobs[0].requirements.posts, 7);
+  assert.deepEqual(state.jobs[0].slots.map((slot) => slot.localTime), slots);
 });
 
 test("cancels stale queued jobs instead of dumping them after downtime", () => {

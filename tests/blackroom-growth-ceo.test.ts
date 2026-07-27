@@ -9,6 +9,7 @@ import {
   extractBlackRoomMetricSamples,
   extractBlackRoomViewSamples,
   planBlackRoomCreativeLearning,
+  planBlackRoomCampaignPosts,
   planBlackRoomNetworkLearning,
 } from "../server/blackroom-growth-ceo";
 
@@ -17,9 +18,9 @@ function minutes(time: string): number {
   return hour * 60 + minute;
 }
 
-test("ten daily exploration slots cover overnight, morning, afternoon and night", () => {
+test("five-post baseline exploration slots cover overnight, morning, afternoon and night", () => {
   const slots = buildBlackRoomLearningSlots({ dayIndex: 0 });
-  assert.equal(slots.length, 10);
+  assert.equal(slots.length, 5);
   assert.ok(slots.some((slot) => minutes(slot) < 6 * 60));
   assert.ok(slots.some((slot) => minutes(slot) >= 6 * 60 && minutes(slot) < 12 * 60));
   assert.ok(slots.some((slot) => minutes(slot) >= 12 * 60 && minutes(slot) < 18 * 60));
@@ -56,12 +57,17 @@ test("collects each network through discovered Metricool MCP tools and uses the 
   assert.deepEqual(analytics.networkSamples, { tiktok: 3, facebook: 2, youtube: 4 });
   assert.deepEqual(analytics.recommendedTimes, ["18:30"]);
   assert.deepEqual(analytics.recommendedTimesByNetwork, { tiktok: ["18:30"], facebook: ["18:30"], youtube: ["18:30"] });
-  assert.deepEqual(analytics.networkDailyTargets, { tiktok: 5, facebook: 10, youtube: 7 });
+  assert.deepEqual(analytics.networkDailyTargets, { tiktok: 5, facebook: 5, youtube: 5 });
   assert.equal(calls.filter((name) => name === "get_best_times_to_post").length, 3);
 });
 
 test("CEO does not optimize times before the minimum comparable sample", () => {
-test("CEO reduces a low-view network while allowing healthy networks to scale", () => {
+  const collecting = buildBlackRoomLearningSlots({ dayIndex: 0, sampleCount: BLACKROOM_CEO_MIN_SAMPLES - 1, recommendedTimes: ["12:34"] });
+  const baseline = buildBlackRoomLearningSlots({ dayIndex: 0 });
+  assert.deepEqual(collecting, baseline);
+});
+
+test("CEO keeps per-network targets at five until comparable evidence exists", () => {
   const result = planBlackRoomNetworkLearning({
     viewsByNetwork: {
       tiktok: [1, 2, 3, 4, 5, 6],
@@ -69,15 +75,24 @@ test("CEO reduces a low-view network while allowing healthy networks to scale", 
       youtube: [20, 30, 40, 60, 80],
     },
   });
-  assert.deepEqual(result.networkDailyTargets, { tiktok: 5, facebook: 10, youtube: 7 });
+  assert.deepEqual(result.networkDailyTargets, { tiktok: 5, facebook: 5, youtube: 5 });
   assert.equal(result.networkMedianViews.tiktok, 3.5);
   assert.equal(result.networkLowViewRate.tiktok, 1);
 });
 
-  const collecting = buildBlackRoomLearningSlots({ dayIndex: 0, sampleCount: BLACKROOM_CEO_MIN_SAMPLES - 1, recommendedTimes: ["12:34"] });
-  const baseline = buildBlackRoomLearningSlots({ dayIndex: 0 });
-  assert.deepEqual(collecting, baseline);
+test("CEO uses five as the baseline and only schedules two controlled seven-post days", () => {
+  const analytics = {
+    sampleCount: BLACKROOM_CEO_MIN_SAMPLES,
+    networkMedianViews: { tiktok: 5, facebook: 100, youtube: 80 },
+    networkLowViewRate: { tiktok: 0.8, facebook: 0.1, youtube: 0.2 },
+  };
+  assert.equal(planBlackRoomCampaignPosts({ dayIndex: 0, analytics }), 5);
+  assert.equal(planBlackRoomCampaignPosts({ dayIndex: 2, analytics }), 7);
+  assert.equal(planBlackRoomCampaignPosts({ dayIndex: 9, analytics }), 7);
+  assert.equal(planBlackRoomCampaignPosts({ dayIndex: 10, analytics }), 5);
+  assert.equal(planBlackRoomCampaignPosts({ dayIndex: 2, analytics: { ...analytics, sampleCount: 20 } }), 5);
 });
+
 
 test("CEO changes at most two slots after 21 samples and preserves circular spacing", () => {
   const baseline = buildBlackRoomLearningSlots({ dayIndex: 0 });

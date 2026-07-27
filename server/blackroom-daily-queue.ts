@@ -12,7 +12,10 @@ export const BLACKROOM_DEFAULT_BUFFER_DAYS = 14;
 export const BLACKROOM_DEFAULT_POSTS_PER_DAY = 5;
 export const BLACKROOM_DEFAULT_INTERVAL_MINUTES = 90;
 export const BLACKROOM_MIN_POSTS_PER_DAY = 5;
-export const BLACKROOM_MAX_POSTS_PER_DAY = 5;
+// Five is the dependable baseline.  The CEO may run controlled seven-post
+// experiments after enough comparable results arrive; ten remains a hard
+// safety ceiling, never the default.
+export const BLACKROOM_MAX_POSTS_PER_DAY = 10;
 export const BLACKROOM_DURATION_VARIANTS = [15, 30, 60, 120, 300, 600] as const;
 export type BlackRoomExperimentDuration = (typeof BLACKROOM_DURATION_VARIANTS)[number];
 export type BlackRoomTargetNetwork = "tiktok" | "facebook" | "youtube";
@@ -145,7 +148,7 @@ export function createBlackRoomQueueState(now = new Date()): BlackRoomQueueState
       recommendedTimesByNetwork: { tiktok: [], facebook: [], youtube: [] },
       networkMedianViews: { tiktok: 0, facebook: 0, youtube: 0 },
       networkLowViewRate: { tiktok: 0, facebook: 0, youtube: 0 },
-      networkDailyTargets: { tiktok: 5, facebook: 10, youtube: 7 },
+      networkDailyTargets: { tiktok: 5, facebook: 5, youtube: 5 },
       tiktokMedianViews: 0,
       tiktokLowViewRate: 0,
       creativeStrategy: "drop_first",
@@ -330,6 +333,8 @@ export function applyBlackRoomRemoteCommands(state: BlackRoomQueueState, command
     } else if (command.type === "ceo_schedule") {
       state.analytics = command.analytics;
       for (const job of state.jobs.filter((item) => ["queued", "retry"].includes(item.status))) {
+        const plannedPosts = command.postsByDate?.[job.targetDate];
+        if (Number.isFinite(plannedPosts)) resizeJob(state, job, Number(plannedPosts));
         const learnedSlots = command.slotsByDate[job.targetDate];
         if (!learnedSlots?.length) continue;
         const count = job.requirements.posts;
