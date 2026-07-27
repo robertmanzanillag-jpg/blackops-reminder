@@ -100,8 +100,8 @@ export function parseBlackRoomChatCommand(
     };
   }
   const number = Number(text.match(/\b(\d{1,2})\b/)?.[1]);
-  if (Number.isFinite(number) && (number < 1 || number > 16)) {
-    return { reply: "La cantidad debe estar entre 1 y 16 videos para mantener al menos 90 minutos entre publicaciones.", command: null };
+  if (Number.isFinite(number) && (number < 1 || number > 5)) {
+    return { reply: "La campaña está limitada a 5 videos por día para proteger el alcance y medir resultados comparables. Primero el CEO debe demostrar con analytics que conviene aumentar.", command: null };
   }
   if (Number.isFinite(number) && /\b(mas|extra|adicional)/.test(text) && /\bhoy\b/.test(text)) {
     const networks = ([
@@ -120,11 +120,11 @@ export function parseBlackRoomChatCommand(
     };
   }
   if (Number.isFinite(number) && /(por dia|al dia|x dia|diarios?|cada dia)/.test(text)) {
-    if (number < 5) {
-      return { reply: "Para esta campaña el mínimo es 5 videos por día. Puedes elegir entre 5 y 16; el CEO ajustará cada red según sus resultados.", command: null };
+    if (number !== 5) {
+      return { reply: "La cadencia de aprendizaje actual es exactamente 5 videos por día. El CEO no la aumentará hasta tener métricas comparables y una recomendación verificable.", command: null };
     }
     return {
-      reply: `Entendido. El objetivo automático será ${number} video${number === 1 ? "" : "s"} por día. Si los analytics no respaldan esa frecuencia, te lo señalaré sin ignorar tu orden.`,
+      reply: "Entendido. El objetivo automático será 5 videos por día. El CEO comparará formatos, duración, horario y red antes de recomendar cualquier cambio.",
       command: { id: randomUUID(), type: "daily_target", posts: number, createdAt: now.toISOString() },
     };
   }

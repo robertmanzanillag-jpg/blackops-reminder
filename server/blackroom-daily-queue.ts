@@ -1,19 +1,23 @@
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { BlackRoomRemoteCommand } from "./blackroom-chat";
-import { BLACKROOM_CEO_DAILY_POSTS, buildBlackRoomLearningSlots, type BlackRoomCeoAnalytics } from "./blackroom-growth-ceo";
+import { buildBlackRoomLearningSlots, type BlackRoomCeoAnalytics } from "./blackroom-growth-ceo";
 
 export const BLACKROOM_QUEUE_VERSION = 4;
 export const BLACKROOM_QUEUE_PATH = "clippers_workspace/blackroom/agent/queue.json";
 export const BLACKROOM_DEFAULT_BUFFER_DAYS = 14;
-export const BLACKROOM_DEFAULT_POSTS_PER_DAY = BLACKROOM_CEO_DAILY_POSTS;
+// Five is the deliberate learning baseline.  A higher volume can make a
+// temporary distribution drop look like a creative failure, and it can also
+// exhaust the audience before Metricool has enough comparable results.
+export const BLACKROOM_DEFAULT_POSTS_PER_DAY = 5;
 export const BLACKROOM_DEFAULT_INTERVAL_MINUTES = 90;
 export const BLACKROOM_MIN_POSTS_PER_DAY = 5;
+export const BLACKROOM_MAX_POSTS_PER_DAY = 5;
 export const BLACKROOM_DURATION_VARIANTS = [15, 30, 60, 120, 300, 600] as const;
 export type BlackRoomExperimentDuration = (typeof BLACKROOM_DURATION_VARIANTS)[number];
 export type BlackRoomTargetNetwork = "tiktok" | "facebook" | "youtube";
 
-export type BlackRoomDailyJobStatus = "queued" | "processing" | "retry" | "scheduled" | "completed";
+export type BlackRoomDailyJobStatus = "queued" | "processing" | "retry" | "scheduled" | "completed" | "cancelled";
 
 export interface BlackRoomDailyJob {
   id: string;
@@ -216,7 +220,7 @@ function restoreExplicitNetworkTargets(
 }
 
 function resizeJob(state: BlackRoomQueueState, job: BlackRoomDailyJob, posts: number): void {
-  const count = Math.max(1, Math.min(16, Math.floor(posts)));
+  const count = Math.max(1, Math.min(BLACKROOM_MAX_POSTS_PER_DAY, Math.floor(posts)));
   const dayIndex = Math.floor(new Date(`${job.targetDate}T12:00:00.000Z`).getTime() / 86400_000);
   const rebuilt = buildRotatingSlots({ dayIndex, posts: count, intervalMinutes: state.intervalMinutes, timezone: state.timezone });
   job.slots = restoreExplicitNetworkTargets(rebuilt, job.slots);
@@ -265,7 +269,7 @@ export function applyBlackRoomRemoteCommands(state: BlackRoomQueueState, command
   for (const command of commands) {
     if (!command?.id || applied.has(command.id)) continue;
     if (command.type === "daily_target") {
-      state.postsPerDay = Math.max(BLACKROOM_MIN_POSTS_PER_DAY, Math.min(16, Math.floor(command.posts)));
+      state.postsPerDay = Math.max(BLACKROOM_MIN_POSTS_PER_DAY, Math.min(BLACKROOM_MAX_POSTS_PER_DAY, Math.floor(command.posts)));
       for (const job of state.jobs.filter((item) => ["queued", "retry"].includes(item.status))) {
         const target = state.adHocExtraDates.includes(job.targetDate)
           ? Number(state.extraPostsByDate[job.targetDate] || job.requirements.posts)
@@ -286,7 +290,13 @@ export function applyBlackRoomRemoteCommands(state: BlackRoomQueueState, command
         if (!state.adHocExtraDates.includes(command.targetDate)) state.adHocExtraDates.push(command.targetDate);
         if (sameDateJobs.length) state.extraPostsByDate[command.targetDate] = 0;
       }
-      const added = Math.max(1, Math.min(16, Math.floor(command.posts)));
+      const existingPosts = createdAdHoc ? 0 : job.requirements.posts;
+      const remainingCapacity = Math.max(0, BLACKROOM_MAX_POSTS_PER_DAY - existingPosts);
+      const added = Math.min(remainingCapacity, Math.max(0, Math.floor(command.posts)));
+      if (!added) {
+        applied.add(command.id);
+        continue;
+      }
       state.extraPostsByDate[command.targetDate] = Number(state.extraPostsByDate[command.targetDate] || 0) + added;
       if (createdAdHoc) {
         resizeJob(state, job, state.extraPostsByDate[command.targetDate]);
@@ -378,8 +388,29 @@ export function recoverInterruptedBlackRoomJobs(state: BlackRoomQueueState, now 
   return recovered;
 }
 
+/**
+ * A missed day must never be treated as a backlog to dump on the next day.
+ * Preserve the audit record, but remove it from eligibility for publication.
+ */
+export function cancelStaleBlackRoomJobs(state: BlackRoomQueueState, now = new Date()): number {
+  const today = localDate(now, state.timezone);
+  let cancelled = 0;
+  for (const job of state.jobs) {
+    if (!['queued', 'retry'].includes(job.status) || job.targetDate >= today) continue;
+    job.status = 'cancelled';
+    job.leaseExpiresAt = null;
+    job.completedAt = null;
+    job.updatedAt = iso(now);
+    job.lastError = 'Lote vencido cancelado: no se publica contenido atrasado en bloque.';
+    cancelled += 1;
+  }
+  if (cancelled) state.updatedAt = iso(now);
+  return cancelled;
+}
+
 export function ensureBlackRoomScheduleBuffer(state: BlackRoomQueueState, now = new Date()): number {
   const today = localDate(now, state.timezone);
+  cancelStaleBlackRoomJobs(state, now);
   const existing = new Set(state.jobs.map((job) => job.targetDate));
   let created = 0;
   for (let dayIndex = 1; dayIndex <= state.bufferDays; dayIndex += 1) {
@@ -451,7 +482,7 @@ export function retryBlackRoomJob(state: BlackRoomQueueState, jobId: string, err
 }
 
 export function summarizeBlackRoomQueue(state: BlackRoomQueueState) {
-  const totals = { queued: 0, processing: 0, retry: 0, scheduled: 0, completed: 0 };
+  const totals: Record<BlackRoomDailyJobStatus, number> = { queued: 0, processing: 0, retry: 0, scheduled: 0, completed: 0, cancelled: 0 };
   for (const job of state.jobs) totals[job.status] += 1;
   return {
     enabled: state.enabled,

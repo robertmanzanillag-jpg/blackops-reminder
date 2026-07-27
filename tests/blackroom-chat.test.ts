@@ -22,11 +22,14 @@ test("targets Facebook and YouTube without adding the extra posts to TikTok", ()
   assert.match(result.reply, /facebook y youtube/);
 });
 
-test("parses a new daily target", () => {
-  const result = parseBlackRoomChatCommand("quiero 12 videos por día", { now });
+test("keeps the learning cadence at five daily videos", () => {
+  const result = parseBlackRoomChatCommand("quiero 5 videos por día", { now });
   assert.equal(result.command?.type, "daily_target");
   if (result.command?.type !== "daily_target") throw new Error("expected daily_target");
-  assert.equal(result.command.posts, 12);
+  assert.equal(result.command.posts, 5);
+  const overCap = parseBlackRoomChatCommand("quiero 12 videos por día", { now });
+  assert.equal(overCap.command, null);
+  assert.match(overCap.reply, /limitada a 5/i);
 });
 
 test("queues a specific YouTube source", () => {
@@ -45,7 +48,7 @@ test("does not invent an analytics recommendation with too little data", () => {
 test("enforces the five-post daily campaign floor", () => {
   const result = parseBlackRoomChatCommand("sube 3 videos por día", { now });
   assert.equal(result.command, null);
-  assert.match(result.reply, /mínimo es 5/);
+  assert.match(result.reply, /exactamente 5/i);
 });
 
 test("rejects extra-today requests that no longer fit safely", () => {
