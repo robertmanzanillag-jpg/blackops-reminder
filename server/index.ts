@@ -16,6 +16,7 @@ import { startPromoVideoDailyScheduler } from "./promo-video-agent";
 import { startCybersecurityScheduler } from "./cybersecurity-agent";
 import { startAppQaScheduler } from "./app-qa-agent";
 import { startClipperLocalNewsScheduler } from "./clippers-local-news-scheduler";
+import { startMetricoolAnalyticsScheduler } from "./metricool-analytics-sync";
 import { initializeRevenueEnginePersistence } from "./revenue-engine";
 import { initializeBlackRoomRemoteControlPersistence } from "./blackroom-remote-control";
 
@@ -412,6 +413,7 @@ app.use((req, res, next) => {
       startCybersecurityScheduler();
       startAppQaScheduler();
       startClipperLocalNewsScheduler();
+      startMetricoolAnalyticsScheduler();
       
       runStartupTaskDeduplication().catch(err => {
         log(`Failed to deduplicate startup tasks: ${err.message}`, "tasks");
