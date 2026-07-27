@@ -47,4 +47,7 @@ test("strips paid AI credentials from subprocesses", async () => {
     else process.env.OPENAI_API_KEY = previous;
   }
   assert.equal(observedEnv.OPENAI_API_KEY, undefined);
+  assert.equal(observedEnv.METRICOOL_USER_TOKEN, undefined);
+  assert.equal(observedEnv.GOOGLE_API_KEY, undefined);
+  assert.equal(observedEnv.PATH, process.env.PATH);
 });
