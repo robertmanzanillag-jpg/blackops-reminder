@@ -8,6 +8,16 @@ export const BLACKROOM_CHANNEL_ID = "UCi__qHBfHLlYg0fu86BUA8g";
 export const BLACKROOM_CHANNEL_HANDLE = "@blackroom_us";
 export const BLACKROOM_CHANNEL_VIDEOS_URL = "https://www.youtube.com/@blackroom_us/videos";
 
+/**
+ * YouTube sometimes requires an authenticated browser session before it will
+ * serve a creator's own long-form videos to the local editor.  This returns
+ * only yt-dlp command flags: no cookie is read, persisted, logged or sent to
+ * the app. The cookie database is accessed locally by yt-dlp at execution.
+ */
+export function buildBlackRoomYtDlpAuthArgs(browser = process.env.BLACKROOM_YTDLP_COOKIES_FROM_BROWSER || "chrome"): string[] {
+  return browser.trim().toLowerCase() === "chrome" ? ["--cookies-from-browser", "chrome"] : [];
+}
+
 export interface BlackRoomInventoryVideo { id: string; title: string; duration: number; url?: string }
 export interface BlackRoomEnergySample { timeSeconds: number; rmsDb: number }
 export interface BlackRoomEditPlan {

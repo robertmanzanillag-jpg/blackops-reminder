@@ -4,6 +4,7 @@ import path from "node:path";
 import { promisify } from "node:util";
 import {
   BLACKROOM_CHANNEL_VIDEOS_URL,
+  buildBlackRoomYtDlpAuthArgs,
   buildBlackRoomRenderArgs,
   buildBlackRoomYtDlpWindowArgs,
   commitBlackRoomReservation,
@@ -36,6 +37,7 @@ const ytDlpPath = process.env.BLACKROOM_YTDLP_PATH || "/opt/homebrew/bin/yt-dlp"
 const ffmpegPath = process.env.BLACKROOM_FFMPEG_PATH || "/opt/homebrew/bin/ffmpeg";
 const ffprobePath = process.env.BLACKROOM_FFPROBE_PATH || "/opt/homebrew/bin/ffprobe";
 const npmPath = process.env.BLACKROOM_NPM_PATH || "npm";
+const ytDlpAuthArgs = buildBlackRoomYtDlpAuthArgs();
 let activeCleanup: (() => Promise<void>) | null = null;
 
 async function readJson<T>(filePath: string): Promise<T> {
@@ -74,12 +76,12 @@ function assertOwnedBlackRoomSource(metadata: any): void {
 }
 
 async function loadMetadata(url: string): Promise<any> {
-  const { stdout } = await run(ytDlpPath, ["--skip-download", "--dump-single-json", "--no-warnings", "--no-playlist", url]);
+  const { stdout } = await run(ytDlpPath, [...ytDlpAuthArgs, "--skip-download", "--dump-single-json", "--no-warnings", "--no-playlist", url]);
   return JSON.parse(stdout);
 }
 
 async function loadChannelInventory(): Promise<BlackRoomInventoryVideo[]> {
-  const { stdout } = await run(ytDlpPath, ["--flat-playlist", "--dump-single-json", "--no-warnings", BLACKROOM_CHANNEL_VIDEOS_URL]);
+  const { stdout } = await run(ytDlpPath, [...ytDlpAuthArgs, "--flat-playlist", "--dump-single-json", "--no-warnings", BLACKROOM_CHANNEL_VIDEOS_URL]);
   const inventory = JSON.parse(stdout);
   return (Array.isArray(inventory?.entries) ? inventory.entries : [])
     .map(metadataToInventory)
@@ -109,7 +111,7 @@ function mediaStem(plan: BlackRoomEditPlan): string {
 
 async function downloadWindow(plan: BlackRoomEditPlan, sourcePath: string, temporaryDirectory: string): Promise<void> {
   await appendActivity(`Descargando una ventana parcial de ${plan.dj} en 1080p con audio.`, "descarga");
-  await run(ytDlpPath, buildBlackRoomYtDlpWindowArgs(plan, sourcePath, temporaryDirectory), 128 * 1024 * 1024);
+  await run(ytDlpPath, [...ytDlpAuthArgs, ...buildBlackRoomYtDlpWindowArgs(plan, sourcePath, temporaryDirectory)], 128 * 1024 * 1024);
   const info = await stat(sourcePath);
   if (!info.isFile() || info.size <= 0) throw new Error("yt-dlp produced an empty BlackRoom source window");
 }

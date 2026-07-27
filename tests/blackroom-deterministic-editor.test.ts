@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildBlackRoomVideoFilter,
   buildBlackRoomRenderArgs,
+  buildBlackRoomYtDlpAuthArgs,
   buildBlackRoomYtDlpWindowArgs,
   commitBlackRoomReservation,
   extractBlackRoomDj,
@@ -254,6 +255,11 @@ test("command builders keep downloads partial and renders platform-compatible", 
   assert.ok(render.includes("aac"));
   assert.ok(render.includes("+faststart"));
   assert.equal(render.at(-1), "/project/rendered/a.mp4");
+});
+
+test("YouTube downloads use the local Chrome session by default and can be disabled", () => {
+  assert.deepEqual(buildBlackRoomYtDlpAuthArgs(), ["--cookies-from-browser", "chrome"]);
+  assert.deepEqual(buildBlackRoomYtDlpAuthArgs("none"), []);
 });
 
 test("owned-source validation accepts only the official BlackRoom channel", () => {
