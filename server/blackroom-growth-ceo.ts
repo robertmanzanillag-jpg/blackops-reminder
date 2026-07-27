@@ -1,11 +1,15 @@
 import { callMetricoolMcpTool, listMetricoolMcpTools, BLACKROOM_METRICOOL_BLOG_ID, BLACKROOM_METRICOOL_NETWORKS } from "./blackroom-metricool-bridge";
 
 export const BLACKROOM_CEO_MIN_SAMPLES = 21;
-export const BLACKROOM_CEO_DAILY_POSTS = 10;
+export const BLACKROOM_CEO_DAILY_POSTS = 5;
+export const BLACKROOM_CEO_EXPERIMENTAL_POSTS = 7;
+export const BLACKROOM_CEO_MAX_DAILY_POSTS = 10;
+// Shared baseline for the deterministic editor. The campaign planner may
+// selectively raise a day to seven only after its separate evidence gate.
 export const BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS: Record<string, number> = {
   tiktok: 5,
-  facebook: 10,
-  youtube: 7,
+  facebook: 5,
+  youtube: 5,
 };
 export const BLACKROOM_CEO_MIN_SPACING_MINUTES = 90;
 export const BLACKROOM_CEO_REFRESH_MS = 6 * 60 * 60_000;
@@ -116,17 +120,41 @@ export function planBlackRoomNetworkLearning(input: {
     const lowRate = sampleCount
       ? views.filter((value) => value <= BLACKROOM_CEO_LOW_VIEW_THRESHOLD).length / sampleCount
       : 0;
-    let target = BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS[network] || 5;
+    let target = 5;
     if (sampleCount >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES && (networkMedian <= BLACKROOM_CEO_LOW_VIEW_THRESHOLD || lowRate >= 0.7)) {
       target = 5;
-    } else if (sampleCount >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES && networkMedian >= 50 && lowRate <= 0.4) {
-      target = BLACKROOM_CEO_DAILY_POSTS;
+    } else if (sampleCount >= BLACKROOM_CEO_MIN_SAMPLES && networkMedian >= 50 && lowRate <= 0.4) {
+      target = BLACKROOM_CEO_EXPERIMENTAL_POSTS;
     }
     networkMedianViews[network] = networkMedian;
     networkLowViewRate[network] = lowRate;
     networkDailyTargets[network] = target;
   }
   return { networkMedianViews, networkLowViewRate, networkDailyTargets };
+}
+
+/**
+ * Protect the baseline while still buying a small amount of learning.
+ * A seven-post day is permitted only after all three networks have a
+ * comparable sample and at least two show healthy distribution.  We use two
+ * spaced experiment days per fortnight, so a weak TikTok result cannot be
+ * mistaken for audience fatigue caused by a sudden daily flood.
+ */
+export function planBlackRoomCampaignPosts(input: {
+  dayIndex: number;
+  analytics: Pick<BlackRoomCeoAnalytics, "sampleCount" | "networkMedianViews" | "networkLowViewRate">;
+}): number {
+  const sampleCount = Math.max(0, Number(input.analytics.sampleCount || 0));
+  if (sampleCount < BLACKROOM_CEO_MIN_SAMPLES) return BLACKROOM_CEO_DAILY_POSTS;
+  const healthyNetworks = BLACKROOM_METRICOOL_NETWORKS.filter((network) =>
+    Number(input.analytics.networkMedianViews?.[network] || 0) >= 50
+    && Number(input.analytics.networkLowViewRate?.[network] || 1) <= 0.4,
+  ).length;
+  // Days 3 and 10 of the rolling fourteen-day plan are the controlled volume
+  // experiments. All other days remain comparable five-post baselines.
+  return healthyNetworks >= 2 && [2, 9].includes(input.dayIndex % 14)
+    ? BLACKROOM_CEO_EXPERIMENTAL_POSTS
+    : BLACKROOM_CEO_DAILY_POSTS;
 }
 
 export function planBlackRoomCreativeLearning(input: {

@@ -18,7 +18,7 @@ import {
 } from "./blackroom-remote-control";
 import { executeBlackRoomChatMessage } from "./blackroom-chat-service";
 import { BlackRoomMetricoolUncertainError, scheduleBlackRoomMetricoolPost } from "./blackroom-metricool-bridge";
-import { BLACKROOM_CEO_DAILY_POSTS, BLACKROOM_CEO_REFRESH_MS, buildBlackRoomLearningSlots, collectBlackRoomMetricoolAnalytics } from "./blackroom-growth-ceo";
+import { BLACKROOM_CEO_DAILY_POSTS, BLACKROOM_CEO_MAX_DAILY_POSTS, BLACKROOM_CEO_REFRESH_MS, buildBlackRoomLearningSlots, collectBlackRoomMetricoolAnalytics, planBlackRoomCampaignPosts } from "./blackroom-growth-ceo";
 import { getCurrentUserId } from "./user-context";
 import { isConfiguredSingleUserOwner } from "./single-user-owner";
 
@@ -61,12 +61,16 @@ async function refreshBlackRoomCeo(force = false): Promise<void> {
     const analytics = await collectBlackRoomMetricoolAnalytics({ previous: previous?.analytics });
     const today = blackRoomLocalDate(new Date());
     const currentTarget = Number((current.device?.queue as any)?.postsPerDay || BLACKROOM_CEO_DAILY_POSTS);
-    const posts = Math.max(BLACKROOM_CEO_DAILY_POSTS, Math.min(16, Math.floor(currentTarget)));
+    const manualTarget = Math.max(BLACKROOM_CEO_DAILY_POSTS, Math.min(BLACKROOM_CEO_MAX_DAILY_POSTS, Math.floor(currentTarget)));
+    const postsByDate = Object.fromEntries(Array.from({ length: 14 }, (_, dayIndex) => {
+      const targetDate = addUtcDays(today, dayIndex + 1);
+      return [targetDate, manualTarget > BLACKROOM_CEO_DAILY_POSTS ? manualTarget : planBlackRoomCampaignPosts({ dayIndex, analytics })];
+    }));
     const slotsByDate = Object.fromEntries(Array.from({ length: 14 }, (_, dayIndex) => {
       const targetDate = addUtcDays(today, dayIndex + 1);
       return [targetDate, buildBlackRoomLearningSlots({
         dayIndex,
-        posts,
+        posts: postsByDate[targetDate],
         sampleCount: analytics.sampleCount,
         recommendedTimes: analytics.recommendedTimes,
       })];
@@ -75,6 +79,7 @@ async function refreshBlackRoomCeo(force = false): Promise<void> {
       id: `blackroom-ceo-${randomUUID()}`,
       type: "ceo_schedule",
       slotsByDate,
+      postsByDate,
       analytics,
       createdAt: analytics.lastCheckedAt,
     }));
