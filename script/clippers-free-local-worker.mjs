@@ -3,10 +3,13 @@ import { mkdir, open, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const PAID_AI_ENV = /(?:^|_)(?:OPENAI|ANTHROPIC|GEMINI|GOOGLE_GENERATIVE_AI|MISTRAL|COHERE|REPLICATE|FAL|TOGETHER|GROQ|PERPLEXITY)(?:_|$)/i;
+const SAFE_ENV_KEYS = ["HOME", "LANG", "LC_ALL", "NODE_ENV", "PATH", "SHELL", "TMPDIR", "USER"];
 
-function localOnlyEnv(source) {
-  return Object.fromEntries(Object.entries(source).filter(([key]) => !PAID_AI_ENV.test(key)));
+function localOnlyEnv(source, overrides = {}) {
+  const safe = Object.fromEntries(SAFE_ENV_KEYS
+    .filter((key) => typeof source[key] === "string")
+    .map((key) => [key, source[key]]));
+  return { ...safe, ...overrides };
 }
 
 function run(command, args, options = {}) {
@@ -47,12 +50,11 @@ export async function runClipperFreeLocalWorker(options = {}) {
   }
 
   const startedAt = new Date().toISOString();
-  const env = {
-    ...localOnlyEnv(process.env),
+  const env = localOnlyEnv(process.env, {
     CLIPPERS_WORKSPACE_ROOT: workspaceRoot,
     CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "false",
     CLIPPERS_TARGET_DAILY_CLIPS: process.env.CLIPPERS_TARGET_DAILY_CLIPS || "5",
-  };
+  });
   const execute = options.run || run;
   try {
     const planning = execute("npm", ["run", "clippers:streamer-growth-ceo"], { cwd: projectRoot, env });
