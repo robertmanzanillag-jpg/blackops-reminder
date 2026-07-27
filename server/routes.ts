@@ -27,6 +27,7 @@ import { syncGoogleCalendarToTasks } from "./calendar-sync";
 import { executeApprovedPendingAction } from "./trust-executor";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import { ensureDefaultAutomations, recordManualAutomationRun } from "./automation-registry";
+import { getMetricoolAnalyticsSyncStatus, getMetricoolAnalyticsSchedulerStatus, syncMetricoolAnalytics } from "./metricool-analytics-sync";
 import { getMeetingPrepById, getUpcomingMeetingPreps } from "./meeting-intelligence";
 import { buildCeoOperationalHealth } from "./ceo-operational-health";
 import { registerTelegramRoutes } from "./telegram-routes";
@@ -2174,7 +2175,7 @@ export async function registerRoutes(
         getClipperLocalNewsStatus(),
         getClipperLocalNewsMetricoolReadiness(),
       ]);
-      res.json({ ...status, metricool });
+      res.json({ ...status, metricool, metricoolAnalytics: { sync: await getMetricoolAnalyticsSyncStatus(), scheduler: getMetricoolAnalyticsSchedulerStatus() } });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to inspect clippers local news status" });
     }
@@ -2232,6 +2233,15 @@ export async function registerRoutes(
         return res.status(400).json({ error: "Invalid clippers local news metrics payload", details: error.errors });
       }
       res.status(500).json({ error: error.message || "Failed to record clippers local news metrics" });
+    }
+  });
+
+  app.post("/api/clippers/local-news/sync-metricool-analytics", async (_req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      res.json(await syncMetricoolAnalytics());
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to sync Metricool analytics" });
     }
   });
 

@@ -138,16 +138,16 @@ export const DEFAULT_AUTOMATIONS: AutomationSeed[] = [
   {
     key: "metricool-daily-analytics-sync",
     name: "Metricool daily analytics sync",
-    description: "Pulls Metricool analytics, best-time signals, scheduled posts, and brand performance into the marketing learning loop. Paused until Metricool credentials and brands are connected.",
+    description: "Pulls Metricool Facebook post analytics for Miami News and NY News once per day into the local-news CEO learning loop. X remains disabled until explicitly connected.",
     type: "agent_run",
     assignedAgentId: "marketing-agent",
     schedule: { kind: "daily_time", hour: 6, minute: 45 },
     timezone: DEFAULT_TIMEZONE,
-    status: "paused",
+    status: "active",
     permissionLevel: "autonomous",
     requiresApproval: false,
     costEstimate: "low",
-    metadata: { source: "server/metricool-tracking.ts", function: "getMetricoolTrackingPlan", key: "metricool-daily-analytics-sync", requiresEnv: ["METRICOOL_USER_TOKEN", "METRICOOL_USER_ID"] },
+    metadata: { source: "server/metricool-analytics-sync.ts", function: "syncMetricoolAnalytics", key: "metricool-daily-analytics-sync", requiresEnv: ["METRICOOL_USER_TOKEN", "METRICOOL_USER_ID"], networks: ["facebook"], xEnabled: false },
   },
   {
     key: "clippers-local-news-cycle",
@@ -298,10 +298,19 @@ export const DEFAULT_AUTOMATIONS: AutomationSeed[] = [
 
 export async function ensureDefaultAutomations(userId: string): Promise<AutomationDefinition[]> {
   const existing = await storage.getAutomationDefinitions(userId);
-  const existingKeys = new Set(existing.map((automation) => (automation.metadata as any)?.key).filter(Boolean));
 
   for (const seed of DEFAULT_AUTOMATIONS) {
-    if (existingKeys.has(seed.key)) continue;
+    const existingAutomation = existing.find((automation) => (automation.metadata as any)?.key === seed.key);
+    if (existingAutomation) {
+      if (seed.key === "metricool-daily-analytics-sync" && existingAutomation.status === "paused") {
+        await storage.updateAutomationDefinition(existingAutomation.id, {
+          status: "active",
+          description: seed.description,
+          metadata: { ...(existingAutomation.metadata as object), ...(seed.metadata as object) },
+        });
+      }
+      continue;
+    }
     const { key, ...automation } = seed;
     await storage.createAutomationDefinition(userId, {
       ...automation,
