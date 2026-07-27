@@ -4,6 +4,7 @@ import {
   buildRotatingSlots,
   claimNextBlackRoomJob,
   completeBlackRoomJob,
+  cancelStaleBlackRoomJobs,
   createBlackRoomQueueState,
   ensureBlackRoomScheduleBuffer,
   pauseBlackRoomAgent,
@@ -20,13 +21,13 @@ import { mkdtemp, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-test("rotates ten posting windows across the full day", () => {
+test("rotates the five-post learning baseline across the full day", () => {
   const overnight = buildRotatingSlots({ dayIndex: 0 });
   const late = buildRotatingSlots({ dayIndex: 1 });
-  assert.equal(overnight.length, 10);
-  assert.equal(late.length, 10);
+  assert.equal(overnight.length, 5);
+  assert.equal(late.length, 5);
   assert.notDeepEqual(overnight, late);
-  for (const slots of [overnight, late]) assert.equal(new Set(slots.map((slot) => slot.localTime)).size, 10);
+  for (const slots of [overnight, late]) assert.equal(new Set(slots.map((slot) => slot.localTime)).size, 5);
 });
 
 test("records non-overlapping source moments and tracks short and long-form experiments", () => {
@@ -49,7 +50,7 @@ test("keeps a two-week persistent scheduling buffer", () => {
   assert.equal(ensureBlackRoomScheduleBuffer(state, now), 14);
   assert.equal(ensureBlackRoomScheduleBuffer(state, now), 0);
   assert.equal(state.jobs.length, 14);
-  assert.equal(state.jobs[0].requirements.posts, 10);
+  assert.equal(state.jobs[0].requirements.posts, 5);
   assert.equal(state.jobs[0].requirements.djs, 5);
   assert.equal(state.jobs[0].requirements.deleteOnlyAfterMetricoolConfirmation, true);
   assert.deepEqual(state.jobs[0].requirements.durationsSeconds, [15, 30, 60, 120, 300, 600]);
@@ -95,7 +96,7 @@ test("starts weeks of work and pause prevents new claims", () => {
   assert.equal(claimNextBlackRoomJob(state, now), null);
 });
 
-test("applies remote quantity, extra-today and priority-source commands once", () => {
+test("caps remote quantity and extras while retaining a priority source", () => {
   const now = new Date("2026-07-21T12:00:00.000Z");
   const state = createBlackRoomQueueState(now);
   ensureBlackRoomScheduleBuffer(state, now);
@@ -104,9 +105,9 @@ test("applies remote quantity, extra-today and priority-source commands once", (
     { id: "extra-3", type: "extra_posts" as const, posts: 3, targetDate: state.jobs[0].targetDate, createdAt: now.toISOString() },
     { id: "source-1", type: "priority_source" as const, url: "https://youtu.be/video123", createdAt: now.toISOString() },
   ];
-  assert.equal(applyBlackRoomRemoteCommands(state, commands, now), 3);
-  assert.equal(state.postsPerDay, 12);
-  assert.equal(state.jobs[0].requirements.posts, 15);
+  assert.equal(applyBlackRoomRemoteCommands(state, commands, now), 2);
+  assert.equal(state.postsPerDay, 5);
+  assert.equal(state.jobs[0].requirements.posts, 5);
   assert.equal(state.prioritySources[0].status, "pending");
   assert.equal(applyBlackRoomRemoteCommands(state, commands, now), 0);
 });
@@ -129,7 +130,7 @@ test("applies CEO analytics and learned slots only to pending days", () => {
   };
   assert.equal(applyBlackRoomRemoteCommands(state, [command], now), 1);
   assert.equal(state.analytics.sampleCount, 24);
-  assert.deepEqual(state.jobs[0].slots.map((slot) => slot.localTime), command.slotsByDate[targetDate]);
+  assert.deepEqual(state.jobs[0].slots.map((slot) => slot.localTime), command.slotsByDate[targetDate].slice(0, 5));
 });
 
 test("daily target changes do not erase extra posts already requested for a date", () => {
@@ -139,7 +140,7 @@ test("daily target changes do not erase extra posts already requested for a date
   const targetDate = state.jobs[0].targetDate;
   applyBlackRoomRemoteCommands(state, [{ id: "extra", type: "extra_posts", posts: 3, targetDate, createdAt: now.toISOString() }], now);
   applyBlackRoomRemoteCommands(state, [{ id: "daily", type: "daily_target", posts: 8, createdAt: now.toISOString() }], now);
-  assert.equal(state.jobs[0].requirements.posts, 11);
+  assert.equal(state.jobs[0].requirements.posts, 5);
 });
 
 test("daily target cannot reduce the two-week campaign below five posts", () => {
@@ -150,6 +151,26 @@ test("daily target cannot reduce the two-week campaign below five posts", () => 
   assert.equal(state.postsPerDay, 5);
   assert.equal(state.jobs[0].requirements.posts, 5);
   assert.equal(state.jobs[0].slots.length, 5);
+});
+
+test("caps a daily target and extras at five posts", () => {
+  const now = new Date("2026-07-21T12:00:00.000Z");
+  const state = createBlackRoomQueueState(now);
+  ensureBlackRoomScheduleBuffer(state, now);
+  applyBlackRoomRemoteCommands(state, [{ id: "daily-high", type: "daily_target", posts: 15, createdAt: now.toISOString() }], now);
+  assert.equal(state.postsPerDay, 5);
+  assert.equal(state.jobs[0].requirements.posts, 5);
+  applyBlackRoomRemoteCommands(state, [{ id: "extra-over-cap", type: "extra_posts", posts: 3, targetDate: state.jobs[0].targetDate, createdAt: now.toISOString() }], now);
+  assert.equal(state.jobs[0].requirements.posts, 5);
+});
+
+test("cancels stale queued jobs instead of dumping them after downtime", () => {
+  const now = new Date("2026-07-27T12:00:00.000Z");
+  const state = createBlackRoomQueueState(new Date("2026-07-20T12:00:00.000Z"));
+  ensureBlackRoomScheduleBuffer(state, new Date("2026-07-20T12:00:00.000Z"));
+  assert.equal(cancelStaleBlackRoomJobs(state, now), 6);
+  assert.equal(state.jobs.filter((job) => job.status === "cancelled").length, 6);
+  assert.ok(state.jobs.filter((job) => job.status === "cancelled").every((job) => /vencido/.test(job.lastError || "")));
 });
 
 test("extra today creates exactly the requested future slots when today has no daily batch", () => {
@@ -200,7 +221,7 @@ test("extra today creates a fresh actionable batch when the existing batch is te
     assert.equal(claimNextBlackRoomJob(state, now)?.id, active.id);
     assert.equal(active.requirements.posts, 2);
     assert.ok(active.slots.every((slot) => slot.networks?.join(",") === "facebook,youtube"));
-    assert.equal(terminal.requirements.posts, 10);
+    assert.equal(terminal.requirements.posts, 5);
   }
 });
 
