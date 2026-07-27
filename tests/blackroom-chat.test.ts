@@ -48,7 +48,7 @@ test("does not invent an analytics recommendation with too little data", () => {
 test("enforces the five-post daily campaign floor", () => {
   const result = parseBlackRoomChatCommand("sube 3 videos por día", { now });
   assert.equal(result.command, null);
-  assert.match(result.reply, /mínimo es 5/);
+  assert.match(result.reply, /exactamente 5/i);
 });
 
 test("rejects extra-today requests that no longer fit safely", () => {
