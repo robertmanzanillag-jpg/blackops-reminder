@@ -47,6 +47,9 @@ export interface ClipperLocalNewsRawEvent {
   status?: string;
   active?: boolean;
   properties?: Record<string, unknown>;
+  /** Public media published by the verified source (never an arbitrary scrape). */
+  mediaUrl?: string;
+  mediaType?: "image" | "video";
   provenance?: ClipperLocalNewsProvenance;
   [key: string]: unknown;
 }
@@ -88,6 +91,9 @@ export interface ClipperLocalNewsEvent {
   editorialPriority: number;
   revisionKind: ClipperLocalNewsRevisionKind;
   provenance: ClipperLocalNewsProvenance | null;
+  mediaUrl: string | null;
+  mediaType: "image" | "video" | null;
+  qualityScore: number;
 }
 
 export interface ClipperLocalNewsQueueItem {
@@ -112,8 +118,11 @@ export interface ClipperLocalNewsQueueItem {
   editorialUrgency: ClipperLocalNewsEditorialUrgency;
   editorialPriority: number;
   revisionKind: ClipperLocalNewsRevisionKind;
-  textOnly: true;
-  mediaRequired: false;
+  textOnly: boolean;
+  mediaRequired: boolean;
+  mediaUrl: string | null;
+  mediaType: "image" | "video" | null;
+  qualityScore: number;
   gateReason: "none" | "risk" | "operator_opt_out" | "cadence" | "committee_quarantine" | "committee_reject";
   notBefore: string | null;
   verdicts: ClipperLocalNewsCommitteeReview[];
@@ -173,7 +182,7 @@ export interface ClipperLocalNewsStatus {
     resolvedRevisions: number;
     cadence: { windowMinutes: 60; facebookPerLane: 6; facebookRoutinePerLane: 2; xPerLane: 8; xRoutinePerLane: 3; facebookRelevantMax: 10; adaptive: "urgency_and_observed_performance" };
     committee: { reviewed: number; unanimous: number; quarantined: number; rejected: number; roles: ClipperLocalNewsCommitteeRole[] };
-    growth: { mode: "zero_cost_organic"; paidAds: false; paidAiPerPost: false; ownedLinks: number; experiments: number; shortFormReady: number; videoFirst: true; localTranslation: { mode: "offline_opus_mt"; monthlyApiCostUsd: 0; requiredInProduction: true } };
+    growth: { mode: "zero_cost_organic"; paidAds: false; paidAiPerPost: false; ownedLinks: number; experiments: number; shortFormReady: number; sourceVideos: number; sourceImages: number; highQuality: number; videoFirst: true; localTranslation: { mode: "offline_opus_mt"; monthlyApiCostUsd: 0; requiredInProduction: true } };
     dailyPublishing: { minimumPerAccount: 10; adaptiveMaximum: 14; bilingualSamePost: true; videoFirst: true; accounts: Record<ClipperLocalNewsLane, Record<ClipperLocalNewsPlatform, { queuedToday: number; target: 10 | 12 | 14; deficit: number; performanceMode: "baseline" | "growing" | "breakout" }>> };
   };
   metrics: { total: number; impressions: number; engagements: number; clicks: number; shares: number; revenueUsd: number; costUsd: number; profitUsd: number };
@@ -352,6 +361,44 @@ function editorialPriorityFor(input: { risk: ClipperLocalNewsRisk; section: Clip
   return Math.max(0, Math.min(100, 10 + risk + section + urgency - (input.lifecycle === "resolved" ? 15 : 0)));
 }
 
+function mediaTypeFor(value: unknown): "image" | "video" | null {
+  const text = clean(value).toLowerCase();
+  if (!text) return null;
+  if (/video|\.mp4(?:$|[?#])|\.mov(?:$|[?#])|\.m3u8(?:$|[?#])/.test(text)) return "video";
+  if (/image|\.(?:jpe?g|png|webp|gif)(?:$|[?#])/.test(text)) return "image";
+  return null;
+}
+
+function mediaUrlFor(raw: ClipperLocalNewsRawEvent, props: Record<string, unknown>, verified: boolean): { url: string | null; type: "image" | "video" | null } {
+  if (!verified) return { url: null, type: null };
+  const candidate = raw.mediaUrl || props.mediaUrl || props.media_url || props.videoUrl || props.video_url || props.imageUrl || props.image_url;
+  const url = candidate ? safeUrl(candidate, "") : "";
+  if (!url) return { url: null, type: null };
+  const type = raw.mediaType || mediaTypeFor(props.mediaType) || mediaTypeFor(props.media_type) || mediaTypeFor(url) || "image";
+  return { url, type };
+}
+
+function qualityScoreFor(input: {
+  provenanceVerified: boolean;
+  title: string;
+  description: string;
+  instruction: string;
+  editorialUrgency: ClipperLocalNewsEditorialUrgency;
+  lifecycle: ClipperLocalNewsLifecycle;
+  mediaType: "image" | "video" | null;
+}): number {
+  let score = input.provenanceVerified ? 45 : 20;
+  if (input.title.length >= 24) score += 8;
+  if (input.description.length >= 80) score += 12;
+  if (input.instruction.length >= 20) score += 5;
+  if (input.editorialUrgency === "breaking") score += 12;
+  else if (input.editorialUrgency === "developing") score += 6;
+  if (input.lifecycle === "resolved") score -= 12;
+  if (input.mediaType === "image") score += 12;
+  if (input.mediaType === "video") score += 30;
+  return Math.max(0, Math.min(100, score));
+}
+
 function revisionKindFor(raw: ClipperLocalNewsRawEvent, lifecycle: ClipperLocalNewsLifecycle): ClipperLocalNewsRevisionKind {
   if (lifecycle === "resolved") return "resolved";
   const text = `${clean(raw.status)} ${clean(raw.title || raw.headline)} ${clean(raw.eventType)}`.toLowerCase();
@@ -396,8 +443,10 @@ export function normalizeClipperLocalNewsEvent(raw: ClipperLocalNewsRawEvent, no
   const editorialPriority = editorialPriorityFor({ risk, section, editorialUrgency, lifecycle });
   const revisionKind = revisionKindFor(raw, lifecycle);
   const provenance = verifiedFetchedEvents.has(raw) && raw.provenance?.verified ? raw.provenance : null;
-  const fingerprint = digest(JSON.stringify({ title, description, instruction, location, eventType, severity, urgency, certainty, lifecycle, effective, expires, sourceUrl, section, editorialUrgency, revisionKind, claimHash: provenance?.claimHash }));
-  return { id: digest(`${source.toLowerCase()}|${sourceEventId.toLowerCase()}`), sourceEventId, source, sourceUrl, lane, title, description, instruction, location, eventType, severity, urgency, certainty, risk, lifecycle, effective, expires, fingerprint, section, editorialUrgency, editorialPriority, revisionKind, provenance };
+  const media = mediaUrlFor(raw, props, Boolean(provenance));
+  const qualityScore = qualityScoreFor({ provenanceVerified: Boolean(provenance), title, description, instruction, editorialUrgency, lifecycle, mediaType: media.type });
+  const fingerprint = digest(JSON.stringify({ title, description, instruction, location, eventType, severity, urgency, certainty, lifecycle, effective, expires, sourceUrl, section, editorialUrgency, revisionKind, media, qualityScore, claimHash: provenance?.claimHash }));
+  return { id: digest(`${source.toLowerCase()}|${sourceEventId.toLowerCase()}`), sourceEventId, source, sourceUrl, lane, title, description, instruction, location, eventType, severity, urgency, certainty, risk, lifecycle, effective, expires, fingerprint, section, editorialUrgency, editorialPriority, revisionKind, provenance, mediaUrl: media.url, mediaType: media.type, qualityScore };
 }
 
 function truncate(text: string, limit: number): string {
@@ -552,6 +601,8 @@ const rawEventSchema = z.object({
   expires: z.string().datetime({ offset: true }).optional(),
   status: z.string().max(100).optional(),
   active: z.boolean().optional(),
+  mediaUrl: z.string().url().max(2_000).optional(),
+  mediaType: z.enum(["image", "video"]).optional(),
   properties: z.record(z.string(), z.unknown()).optional(),
 }).passthrough();
 
@@ -611,7 +662,7 @@ function csv<T extends object>(rows: T[], columns: string[]): string {
 
 async function persist(dir: string, state: LocalNewsState): Promise<void> {
   const analytics = summarizeMetrics(state.metrics);
-  const queueColumns = ["id", "eventId", "eventRevision", "canonicalEventIdentity", "claimIdentityHash", "lane", "platform", "section", "editorialUrgency", "editorialPriority", "revisionKind", "risk", "lifecycle", "status", "gateReason", "notBefore", "publishDecision", "consensus", "checkedAt", "reviewHash", "textOnly", "mediaRequired", "approvalRequired", "autoEligible", "published", "copy", "source", "sourceUrl", "createdAt"];
+  const queueColumns = ["id", "eventId", "eventRevision", "canonicalEventIdentity", "claimIdentityHash", "lane", "platform", "section", "editorialUrgency", "editorialPriority", "qualityScore", "revisionKind", "risk", "lifecycle", "status", "gateReason", "notBefore", "publishDecision", "consensus", "checkedAt", "reviewHash", "textOnly", "mediaRequired", "mediaType", "mediaUrl", "approvalRequired", "autoEligible", "published", "copy", "source", "sourceUrl", "createdAt"];
   const metricColumns = ["id", "queueItemId", "eventId", "lane", "platform", "variantId", "impressions", "engagements", "clicks", "shares", "revenueUsd", "costUsd", "observedAt", "recordedAt"];
   await Promise.all([
     atomicWrite(path.join(dir, FILES.state), `${JSON.stringify(state, null, 2)}\n`),
@@ -771,20 +822,21 @@ async function queueFor(event: ClipperLocalNewsEvent, now: string, env: NodeJS.P
     const latestRecent = recent.reduce((latest, item) => Math.max(latest, new Date(item.notBefore || item.createdAt).getTime()), nowMs);
     const notBefore = cadenceHeld ? new Date(latestRecent + CADENCE.windowMinutes * 60_000).toISOString() : null;
     const relevantMetrics = metrics.filter((metric) => metric.lane === event.lane && metric.platform === platform);
-    const organicGrowth = buildLocalNewsGrowthPackage(event, relevantMetrics, env.PUBLIC_BASE_URL);
+    const organicGrowth = buildLocalNewsGrowthPackage({ ...event, mediaUrl: event.mediaUrl, mediaType: event.mediaType, qualityScore: event.qualityScore }, relevantMetrics, env.PUBLIC_BASE_URL);
     const copy = buildClipperLocalNewsCopy(event, platform, organicGrowth, bilingual);
     const copyHash = hashLocalNewsReviewValue(copy);
     const publishDecision = (translationGated || !autoEnabled) && committee.publishDecision === "auto_publish" ? "quarantine" as const : committee.publishDecision;
     const status: ClipperLocalNewsQueueStatus = committee.publishDecision === "reject" ? "rejected" : committee.publishDecision === "quarantine" || translationGated ? "quarantined" : !autoEnabled ? "approval_required" : "auto_eligible";
     const translationEvidence = translationRequired ? bilingual?.safe ? ["local_translation=opus_mt_verified"] : [`local_translation_failed=${(bilingual?.issues || ["unknown"]).join(",")}`] : ["local_translation=disabled_nonproduction"];
-    const evidence = [...committee.evidence, ...translationEvidence, `copyHash=${copyHash}`];
+    const mediaEvidence = event.mediaType === "video" && event.mediaUrl ? ["media=verified_official_video"] : event.mediaType === "image" && event.mediaUrl ? ["media=verified_official_image"] : ["media=none"];
+    const evidence = [...committee.evidence, ...translationEvidence, ...mediaEvidence, `qualityScore=${event.qualityScore}`, `copyHash=${copyHash}`];
     const id = digest(`${event.id}|${event.revision}|${platform}`);
     const claimIdentityHash = hashLocalNewsReviewValue(event.provenance?.claimHash || event.fingerprint);
     const canonicalEventIdentity = hashLocalNewsCanonicalEventIdentity({ eventId: event.id, eventRevision: event.revision, lane: event.lane, title: event.title, description: event.description, instruction: event.instruction, location: event.location, eventType: event.eventType, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, effective: event.effective, expires: event.expires, claimIdentityHash });
     const reviewHash = hashLocalNewsQueueReview({ queueItemId: id, eventId: event.id, eventRevision: event.revision, lane: event.lane, copy, platform, risk: event.risk, canonicalEventIdentity, claimIdentityHash, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, checkedAt: committee.checkedAt });
     const translationUnavailable = Boolean(translationGated && bilingual?.issues.some((issue) => issue.startsWith("local_translation_failed:")));
     const reasons = translationGated ? [...committee.reasons, translationUnavailable ? "local_translation_unavailable" : "local_translation_integrity_failed"] : !autoEnabled && committee.publishDecision === "auto_publish" ? [...committee.reasons, "operator_disabled_automatic_publication"] : committee.reasons;
-    return { id, eventId: event.id, eventRevision: event.revision, canonicalEventIdentity, claimIdentityHash, lane: event.lane, platform, copy, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, section: event.section, editorialUrgency: event.editorialUrgency, editorialPriority: event.editorialPriority, revisionKind: event.revisionKind, textOnly: true, mediaRequired: false, gateReason, notBefore, status, approvalRequired: status === "approval_required", autoEligible: !gated, published: false, createdAt: now, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, reasons, checkedAt: committee.checkedAt, reviewHash, organicGrowth };
+    return { id, eventId: event.id, eventRevision: event.revision, canonicalEventIdentity, claimIdentityHash, lane: event.lane, platform, copy, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, section: event.section, editorialUrgency: event.editorialUrgency, editorialPriority: event.editorialPriority, revisionKind: event.revisionKind, textOnly: !event.mediaUrl, mediaRequired: false, mediaUrl: event.mediaUrl, mediaType: event.mediaType, qualityScore: event.qualityScore, gateReason, notBefore, status, approvalRequired: status === "approval_required", autoEligible: !gated, published: false, createdAt: now, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, reasons, checkedAt: committee.checkedAt, reviewHash, organicGrowth };
   }));
 }
 
@@ -909,6 +961,15 @@ function rssTag(item: string, tag: string): string {
   return match ? decodeXml(match[1]) : "";
 }
 
+function rssMedia(item: string): { url: string; type: "image" | "video" } | null {
+  const enclosure = item.match(/<enclosure\b([^>]*)>/i)?.[1] || item.match(/<media:(?:content|thumbnail)\b([^>]*)>/i)?.[1] || "";
+  const url = enclosure.match(/\burl\s*=\s*["']([^"']+)["']/i)?.[1] || "";
+  if (!url) return null;
+  const declaredType = enclosure.match(/\btype\s*=\s*["']([^"']+)["']/i)?.[1] || "";
+  const type = mediaTypeFor(`${declaredType} ${url}`);
+  return type ? { url, type } : null;
+}
+
 function rssEvents(xml: string, source: SourceDefinition, now = isoNow()): ClipperLocalNewsRawEvent[] {
   const nowMs = new Date(now).getTime();
   return [...xml.matchAll(/<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/gi)].slice(0, MAX_BATCH_SIZE).flatMap((match) => {
@@ -917,11 +978,12 @@ function rssEvents(xml: string, source: SourceDefinition, now = isoNow()): Clipp
     const description = rssTag(item, "description");
     const link = rssTag(item, "link") || source.url;
     const guid = rssTag(item, "guid") || link || digest(`${title}|${description}`);
+    const media = rssMedia(item);
     const published = rssTag(item, "pubDate") || rssTag(item, "dc:date");
     const publishedDate = published ? new Date(published) : null;
     const publishedMs = publishedDate?.getTime();
     if (publishedMs && Number.isFinite(publishedMs) && (nowMs - publishedMs > RSS_STALE_MS || publishedMs - nowMs > RSS_FUTURE_SKEW_MS)) return [];
-    return [attachVerifiedProvenance({ sourceEventId: guid, source: source.sourceName || source.id, sourceUrl: safeUrl(link, source.url), lane: source.lane, title, description, eventType: rssTag(item, "category") || title, effective: publishedDate && Number.isFinite(publishedDate.getTime()) ? publishedDate.toISOString() : undefined }, source, now)];
+    return [attachVerifiedProvenance({ sourceEventId: guid, source: source.sourceName || source.id, sourceUrl: safeUrl(link, source.url), lane: source.lane, title, description, eventType: rssTag(item, "category") || title, effective: publishedDate && Number.isFinite(publishedDate.getTime()) ? publishedDate.toISOString() : undefined, ...(media ? { mediaUrl: safeUrl(media.url, ""), mediaType: media.type } : {}) }, source, now)];
   });
 }
 
@@ -1181,6 +1243,9 @@ export async function getClipperLocalNewsStatus(options: ClipperLocalNewsOptions
         ownedLinks: state?.queue.filter((item) => Boolean(item.organicGrowth?.ownedArticleUrl)).length || 0,
         experiments: state?.queue.filter((item) => Boolean(item.organicGrowth?.variantId)).length || 0,
         shortFormReady: state?.queue.filter((item) => item.organicGrowth?.shortForm.ready === true).length || 0,
+        sourceVideos: state?.queue.filter((item) => item.mediaType === "video").length || 0,
+        sourceImages: state?.queue.filter((item) => item.mediaType === "image").length || 0,
+        highQuality: state?.queue.filter((item) => (item.qualityScore || 0) >= 70).length || 0,
         videoFirst: true,
         localTranslation: { mode: "offline_opus_mt", monthlyApiCostUsd: 0, requiredInProduction: true },
       },
