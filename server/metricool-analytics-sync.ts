@@ -95,6 +95,8 @@ interface LedgerEntry {
   platform?: unknown;
   metricoolPostId?: unknown;
   blogId?: unknown;
+  copyHash?: unknown;
+  reviewedCopyHash?: unknown;
 }
 
 const LANE_CONFIG: Record<ClipperLocalNewsLane, { label: string; aliases: string[]; envKey: string }> = {
@@ -152,6 +154,11 @@ function normalizeId(value: unknown): string | null {
   return null;
 }
 
+function contentHash(value: string): string {
+  const normalized = value.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase("es-US");
+  return createHash("sha256").update(normalized, "utf8").digest("hex");
+}
+
 function safeErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : "analytics_sync_failed";
   return message
@@ -202,6 +209,7 @@ function flattenRecord(value: Record<string, unknown>, depth = 0): Record<string
 export function parseMetricoolPostMetrics(value: unknown): Array<{
   postId: string | null;
   queueItemId: string | null;
+  contentHash: string | null;
   observedAt: string | null;
   impressions: number;
   engagements: number;
@@ -209,11 +217,13 @@ export function parseMetricoolPostMetrics(value: unknown): Array<{
   shares: number;
 }> {
   const seen = new Set<string>();
-  const output: Array<{ postId: string | null; queueItemId: string | null; observedAt: string | null; impressions: number; engagements: number; clicks: number; shares: number }> = [];
+  const output: Array<{ postId: string | null; queueItemId: string | null; contentHash: string | null; observedAt: string | null; impressions: number; engagements: number; clicks: number; shares: number }> = [];
   for (const rawRecord of recordObjects(value)) {
     const record = flattenRecord(rawRecord);
     const postId = textFrom(record, [/^id$/i, /post.?id/i, /publication.?id/i, /uuid/i]);
     const queueItemId = textFrom(record, [/job.?id/i, /queue.?item/i]);
+    const content = textFrom(record, [/^text$/i, /^message$/i, /^caption$/i, /^content$/i, /copy/i]);
+    const postContentHash = content ? contentHash(content) : null;
     const observedAt = textFrom(record, [/published.?at/i, /publication.?date/i, /date.?time/i, /timestamp/i, /^date$/i, /created(?:.?at)?$/i]);
     const reactions = numberFrom(record, [/reaction/i, /like/i]);
     const comments = numberFrom(record, [/comment/i]);
@@ -223,10 +233,10 @@ export function parseMetricoolPostMetrics(value: unknown): Array<{
     const impressions = numberFrom(record, [/view/i, /impression/i, /reach/i]);
     if (!postId && !queueItemId && !observedAt) continue;
     if (!postId && !queueItemId && output.some((existing) => existing.observedAt === observedAt && existing.impressions === impressions && existing.engagements === engagements && existing.clicks === clicks && existing.shares === shares && Boolean(existing.postId || existing.queueItemId))) continue;
-    const key = [postId || "", queueItemId || "", observedAt || "", impressions, engagements, clicks, shares].join("|");
+    const key = [postId || "", queueItemId || "", postContentHash || "", observedAt || "", impressions, engagements, clicks, shares].join("|");
     if (seen.has(key)) continue;
     seen.add(key);
-    output.push({ postId, queueItemId, observedAt, impressions, engagements, clicks, shares });
+    output.push({ postId, queueItemId, contentHash: postContentHash, observedAt, impressions, engagements, clicks, shares });
   }
   return output;
 }
@@ -313,6 +323,7 @@ async function performMetricoolAnalyticsSync(input: MetricoolAnalyticsSyncDeps =
     let postsSeen = 0;
     let duplicatesSkipped = 0;
     let unmatchedSkipped = 0;
+    let successfulBrandFetches = 0;
     const brandErrors: string[] = [];
     const from = new Date(startedAt.getTime() - config.lookbackDays * 86_400_000).toISOString();
     const to = startedAt.toISOString();
@@ -328,9 +339,14 @@ async function performMetricoolAnalyticsSync(input: MetricoolAnalyticsSyncDeps =
         const response = await fetcher(url, { headers: { Accept: "application/json", "X-Mc-Auth": token }, signal: controller.signal });
         if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? "metricool_api_access_denied_or_plan_required" : `analytics_http_${target.lane}_${response.status}`);
         const posts = parseMetricoolPostMetrics(await safeJson(response));
+        successfulBrandFetches += 1;
         postsSeen += posts.length;
         for (const post of posts) {
-          const ledgerEntry = ledger.find((entry) => normalizeId(entry.metricoolPostId) === post.postId || normalizeId(entry.queueItemId) === post.queueItemId);
+          const ledgerEntry = ledger.find((entry) => (
+            (normalizeId(entry.metricoolPostId) && normalizeId(entry.metricoolPostId) === post.postId)
+            || (normalizeId(entry.queueItemId) && normalizeId(entry.queueItemId) === post.queueItemId)
+            || (post.contentHash && [normalizeId(entry.copyHash), normalizeId(entry.reviewedCopyHash)].includes(post.contentHash))
+          ) && normalizeId(entry.lane) === target.lane && normalizeId(entry.platform) === "facebook" && normalizeId(entry.blogId) === target.blogId);
           if (!ledgerEntry) { unmatchedSkipped += 1; continue; }
           const key = fingerprint(target.lane, target.blogId, post);
           if (seen.has(key)) { duplicatesSkipped += 1; continue; }
@@ -355,7 +371,7 @@ async function performMetricoolAnalyticsSync(input: MetricoolAnalyticsSyncDeps =
     const connectedCount = targets.filter((target) => target.connected).length;
     result.status = connectedCount === 0 ? "blocked" : brandErrors.length || connectedCount < targets.length ? "partial" : "completed";
     result.source = "metricool";
-    result.lastSuccessAt = connectedCount > 0 ? startedAt.toISOString() : result.lastSuccessAt;
+    result.lastSuccessAt = successfulBrandFetches > 0 ? startedAt.toISOString() : result.lastSuccessAt;
     result.lastError = connectedCount === 0 ? "metricool_news_brands_not_connected" : brandErrors.length ? brandErrors.join("; ").slice(0, 240) : null;
     result.postsSeen = postsSeen;
     result.metricsRecorded = metrics.length;

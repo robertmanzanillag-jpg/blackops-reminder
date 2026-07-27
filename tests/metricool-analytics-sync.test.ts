@@ -17,8 +17,8 @@ function response(value: unknown, status = 200): Response {
 
 test("parses Metricool post metrics without trusting a single provider field", () => {
   const parsed = parseMetricoolPostMetrics({ data: [{ id: "post-1", publicationDate: "2026-07-26T12:00:00Z", views: 42, reactions: 3, comments: 1, shares: 2, linkClicks: 4 }] });
-  assert.deepEqual(parsed, [{ postId: "post-1", queueItemId: null, observedAt: "2026-07-26T12:00:00Z", impressions: 42, engagements: 10, clicks: 4, shares: 2 }]);
-  assert.deepEqual(parseMetricoolPostMetrics({ data: [{ postId: "nested-1", publicationDate: { dateTime: "2026-07-26T12:00:00Z" }, metrics: { views: 9, reactions: 1 } }] }), [{ postId: "nested-1", queueItemId: null, observedAt: "2026-07-26T12:00:00Z", impressions: 9, engagements: 1, clicks: 0, shares: 0 }]);
+  assert.deepEqual(parsed, [{ postId: "post-1", queueItemId: null, contentHash: null, observedAt: "2026-07-26T12:00:00Z", impressions: 42, engagements: 10, clicks: 4, shares: 2 }]);
+  assert.deepEqual(parseMetricoolPostMetrics({ data: [{ postId: "nested-1", publicationDate: { dateTime: "2026-07-26T12:00:00Z" }, metrics: { views: 9, reactions: 1 } }] }), [{ postId: "nested-1", queueItemId: null, contentHash: null, observedAt: "2026-07-26T12:00:00Z", impressions: 9, engagements: 1, clicks: 0, shares: 0 }]);
 });
 
 test("syncs Facebook analytics for both local-news brands and deduplicates observations", async () => {
@@ -104,6 +104,48 @@ test("fails closed when credentials exist but neither local-news brand is connec
   assert.equal(result.status, "blocked");
   assert.equal(result.lastError, "metricool_news_brands_not_connected");
   assert.equal(result.metricsRecorded, 0);
+});
+
+test("matches an owned post by copy hash when Metricool omits the delivery and queue IDs", async () => {
+  const workspaceDir = await mkdtemp(path.join(tmpdir(), "metricool-analytics-copy-match-"));
+  const copy = "ESPAÑOL / ENGLISH | Cierre verificado en Miami. Fuente oficial: https://example.gov/road";
+  const normalized = copy.normalize("NFKC").replace(/\s+/g, " ").trim().toLocaleLowerCase("es-US");
+  const { createHash } = await import("node:crypto");
+  const copyHash = createHash("sha256").update(normalized, "utf8").digest("hex");
+  await writeFile(path.join(workspaceDir, "metricool-delivery-ledger.json"), JSON.stringify({ entries: [
+    { queueItemId: "queue-copy", eventId: "event-copy", lane: "miami-news", platform: "facebook", blogId: "miami-1", metricoolPostId: null, copyHash },
+  ] }));
+  const result = await syncMetricoolAnalytics({
+    workspaceDir,
+    env: { METRICOOL_USER_TOKEN: "configured-token", METRICOOL_USER_ID: "3558197" },
+    fetch: async (input) => {
+      const url = String(input);
+      if (url.includes("simpleProfiles")) return response({ data: [{ blogId: "miami-1", label: "Miami News" }] });
+      if (url.includes("blogId=miami-1")) return response({ data: [{ id: "provider-id", text: copy, publicationDate: "2026-07-27T14:00:00Z", impressions: 12, reactions: 2 }] });
+      return response({ data: [] });
+    },
+    now: () => new Date("2026-07-27T15:00:00Z"),
+  });
+  assert.equal(result.status, "partial");
+  assert.equal(result.metricsRecorded, 1);
+  assert.equal(result.unmatchedSkipped, 0);
+});
+
+test("does not advance lastSuccessAt when every connected analytics request fails", async () => {
+  const workspaceDir = await mkdtemp(path.join(tmpdir(), "metricool-analytics-errors-"));
+  const env = { METRICOOL_USER_TOKEN: "configured-token", METRICOOL_USER_ID: "3558197" };
+  const now = new Date("2026-07-27T15:00:00Z");
+  const result = await syncMetricoolAnalytics({
+    workspaceDir,
+    env,
+    fetch: async (input) => String(input).includes("simpleProfiles")
+      ? response({ data: [{ blogId: "miami-1", label: "Miami News" }, { blogId: "ny-1", label: "New York News" }] })
+      : response({ error: "denied" }, 403),
+    now: () => now,
+  });
+  assert.equal(result.status, "partial");
+  assert.equal(result.lastSuccessAt, null);
+  assert.match(result.lastError || "", /plan_required/);
 });
 
 test("serializes overlapping manual and scheduled sync calls", async () => {
