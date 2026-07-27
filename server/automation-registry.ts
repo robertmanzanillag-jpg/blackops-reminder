@@ -298,10 +298,19 @@ export const DEFAULT_AUTOMATIONS: AutomationSeed[] = [
 
 export async function ensureDefaultAutomations(userId: string): Promise<AutomationDefinition[]> {
   const existing = await storage.getAutomationDefinitions(userId);
-  const existingKeys = new Set(existing.map((automation) => (automation.metadata as any)?.key).filter(Boolean));
 
   for (const seed of DEFAULT_AUTOMATIONS) {
-    if (existingKeys.has(seed.key)) continue;
+    const existingAutomation = existing.find((automation) => (automation.metadata as any)?.key === seed.key);
+    if (existingAutomation) {
+      if (seed.key === "metricool-daily-analytics-sync" && existingAutomation.status === "paused") {
+        await storage.updateAutomationDefinition(existingAutomation.id, {
+          status: "active",
+          description: seed.description,
+          metadata: { ...(existingAutomation.metadata as object), ...(seed.metadata as object) },
+        });
+      }
+      continue;
+    }
     const { key, ...automation } = seed;
     await storage.createAutomationDefinition(userId, {
       ...automation,

@@ -1,6 +1,6 @@
 # Metricool Tracking Runbook
 
-Status: installed as a safe configuration layer. Real posting and analytics remain paused until Metricool credentials and social accounts are connected.
+Status: daily Facebook analytics sync is wired for the Miami News and New York News brands. It remains fail-closed until the Metricool API credentials and both matching brands are available; X is intentionally disabled.
 
 ## Decision
 
@@ -42,7 +42,8 @@ Total: 10 brands and 29 social profiles if every prepared profile is connected.
 - `script/metricool-plan.ts`: local status command that prints plan and credential readiness without exposing token values.
 - `tests/metricool-tracking.test.ts`: regression coverage for the current 10-brand/29-profile plan.
 - `CEO_ASSISTANT_ENV.example`: Metricool env placeholders.
-- `server/automation-registry.ts`: paused daily Metricool analytics sync automation.
+- `server/metricool-analytics-sync.ts`: owner-only daily Facebook analytics pull at 06:45 America/New_York, with deduplication, delivery-ledger matching, and fail-closed brand/credential checks.
+- `server/automation-registry.ts`: active daily Metricool analytics sync automation; existing paused rows are reconciled to active on startup.
 
 ## Local Check
 
@@ -93,7 +94,7 @@ Metricool's official MCP package can be attached to MCP clients with:
 2. Run `npm run metricool:plan`.
 3. Verify Metricool MCP can list brands.
 4. Keep publishing approval-required at first.
-5. Pull analytics daily: posts, views, engagement, comments, best times, scheduled queue.
+5. Pull analytics daily: owned posts, views, engagement, comments, clicks, and shares. Unmatched manual or third-party posts are skipped.
 6. Join Dropshipping posts with Shopify/UTM metrics.
 7. Let Marketing Command Center update winners, losers, next hooks, next schedule, and risk notes.
 

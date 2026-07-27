@@ -33,6 +33,7 @@ export interface MetricoolAnalyticsSyncStatus {
   postsSeen: number;
   metricsRecorded: number;
   duplicatesSkipped: number;
+  unmatchedSkipped: number;
   lookbackDays: number;
   source: "metricool" | "none";
 }
@@ -132,9 +133,10 @@ function emptyStatus(env: NodeJS.ProcessEnv, config = getMetricoolAnalyticsSyncC
     lastSuccessAt: null,
     lastError: null,
     brands: [],
-    postsSeen: 0,
-    metricsRecorded: 0,
-    duplicatesSkipped: 0,
+  postsSeen: 0,
+  metricsRecorded: 0,
+  duplicatesSkipped: 0,
+    unmatchedSkipped: 0,
     lookbackDays: config.lookbackDays,
     source: "none",
   };
@@ -148,6 +150,14 @@ function normalizeId(value: unknown): string | null {
   if (typeof value === "string" && value.trim()) return value.trim().slice(0, 500);
   if (typeof value === "number" && Number.isFinite(value)) return String(value);
   return null;
+}
+
+function safeErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : "analytics_sync_failed";
+  return message
+    .replace(/https?:\/\/\S+/gi, "[url]")
+    .replace(/(api[-_ ]?key|token|secret|password)\s*[:=]\s*\S+/gi, "$1=[redacted]")
+    .slice(0, 240);
 }
 
 function recordObjects(value: unknown, depth = 0): Record<string, unknown>[] {
@@ -204,7 +214,7 @@ export function parseMetricoolPostMetrics(value: unknown): Array<{
     const record = flattenRecord(rawRecord);
     const postId = textFrom(record, [/^id$/i, /post.?id/i, /publication.?id/i, /uuid/i]);
     const queueItemId = textFrom(record, [/job.?id/i, /queue.?item/i]);
-    const observedAt = textFrom(record, [/published.?at/i, /publication.?date/i, /date.?time/i, /timestamp/i, /^date$/i, /created.?at/i]);
+    const observedAt = textFrom(record, [/published.?at/i, /publication.?date/i, /date.?time/i, /timestamp/i, /^date$/i, /created(?:.?at)?$/i]);
     const reactions = numberFrom(record, [/reaction/i, /like/i]);
     const comments = numberFrom(record, [/comment/i]);
     const shares = numberFrom(record, [/share/i]);
@@ -246,7 +256,7 @@ async function discoverBrands(fetcher: Fetcher, token: string, userId: string, s
   const url = new URL("/api/admin/simpleProfiles", METRICOOL_API);
   url.searchParams.set("userId", userId);
   const response = await fetcher(url, { headers: { Accept: "application/json", "X-Mc-Auth": token }, signal });
-  if (!response.ok) throw new Error(`brand_discovery_http_${response.status}`);
+  if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? "metricool_api_access_denied_or_plan_required" : `brand_discovery_http_${response.status}`);
   const raw = await safeJson(response);
   const collect = (value: unknown, depth = 0): Array<{ blogId: string; label: string }> => {
     if (depth > 5 || value === null || typeof value !== "object") return [];
@@ -271,7 +281,7 @@ function fingerprint(lane: string, blogId: string, metric: ReturnType<typeof par
   return createHash("sha256").update(JSON.stringify([lane, blogId, metric])).digest("hex");
 }
 
-export async function syncMetricoolAnalytics(input: MetricoolAnalyticsSyncDeps = {}): Promise<MetricoolAnalyticsSyncResult> {
+async function performMetricoolAnalyticsSync(input: MetricoolAnalyticsSyncDeps = {}): Promise<MetricoolAnalyticsSyncResult> {
   const env = input.env || process.env;
   const config = getMetricoolAnalyticsSyncConfig(env);
   const dir = workspaceDir(input);
@@ -302,6 +312,8 @@ export async function syncMetricoolAnalytics(input: MetricoolAnalyticsSyncDeps =
     const metrics: ClipperLocalNewsMetricInput[] = [];
     let postsSeen = 0;
     let duplicatesSkipped = 0;
+    let unmatchedSkipped = 0;
+    const brandErrors: string[] = [];
     const from = new Date(startedAt.getTime() - config.lookbackDays * 86_400_000).toISOString();
     const to = startedAt.toISOString();
     for (const target of targets) {
@@ -312,42 +324,48 @@ export async function syncMetricoolAnalytics(input: MetricoolAnalyticsSyncDeps =
       url.searchParams.set("blogId", target.blogId);
       url.searchParams.set("userId", userId);
       url.searchParams.set("integrationSource", "MCP");
-      const response = await fetcher(url, { headers: { Accept: "application/json", "X-Mc-Auth": token }, signal: controller.signal });
-      if (!response.ok) throw new Error(`analytics_http_${target.lane}_${response.status}`);
-      const posts = parseMetricoolPostMetrics(await safeJson(response));
-      postsSeen += posts.length;
-      for (const post of posts) {
-        const key = fingerprint(target.lane, target.blogId, post);
-        if (seen.has(key)) { duplicatesSkipped += 1; continue; }
-        seen.add(key);
-        const ledgerEntry = ledger.find((entry) => normalizeId(entry.metricoolPostId) === post.postId || normalizeId(entry.queueItemId) === post.queueItemId);
-        metrics.push({
-          queueItemId: normalizeId(ledgerEntry?.queueItemId) || post.queueItemId || undefined,
-          eventId: normalizeId(ledgerEntry?.eventId) || undefined,
-          lane: target.lane,
-          platform: "facebook",
-          impressions: post.impressions,
-          engagements: post.engagements,
-          clicks: post.clicks,
-          shares: post.shares,
-          observedAt: isoDateTime(post.observedAt, startedAt),
-        });
+      try {
+        const response = await fetcher(url, { headers: { Accept: "application/json", "X-Mc-Auth": token }, signal: controller.signal });
+        if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? "metricool_api_access_denied_or_plan_required" : `analytics_http_${target.lane}_${response.status}`);
+        const posts = parseMetricoolPostMetrics(await safeJson(response));
+        postsSeen += posts.length;
+        for (const post of posts) {
+          const ledgerEntry = ledger.find((entry) => normalizeId(entry.metricoolPostId) === post.postId || normalizeId(entry.queueItemId) === post.queueItemId);
+          if (!ledgerEntry) { unmatchedSkipped += 1; continue; }
+          const key = fingerprint(target.lane, target.blogId, post);
+          if (seen.has(key)) { duplicatesSkipped += 1; continue; }
+          seen.add(key);
+          metrics.push({
+            queueItemId: normalizeId(ledgerEntry.queueItemId) || post.queueItemId || undefined,
+            eventId: normalizeId(ledgerEntry.eventId) || undefined,
+            lane: target.lane,
+            platform: "facebook",
+            impressions: post.impressions,
+            engagements: post.engagements,
+            clicks: post.clicks,
+            shares: post.shares,
+            observedAt: isoDateTime(post.observedAt, startedAt),
+          });
+        }
+      } catch (error) {
+        brandErrors.push(safeErrorMessage(error));
       }
     }
     if (metrics.length) await recordClipperLocalNewsMetrics({ workspaceDir: dir, env, now: startedAt, metrics });
     const connectedCount = targets.filter((target) => target.connected).length;
-    result.status = connectedCount === targets.length ? "completed" : connectedCount > 0 ? "partial" : "blocked";
+    result.status = connectedCount === 0 ? "blocked" : brandErrors.length || connectedCount < targets.length ? "partial" : "completed";
     result.source = "metricool";
     result.lastSuccessAt = connectedCount > 0 ? startedAt.toISOString() : result.lastSuccessAt;
-    result.lastError = connectedCount > 0 ? null : "metricool_news_brands_not_connected";
+    result.lastError = connectedCount === 0 ? "metricool_news_brands_not_connected" : brandErrors.length ? brandErrors.join("; ").slice(0, 240) : null;
     result.postsSeen = postsSeen;
     result.metricsRecorded = metrics.length;
     result.duplicatesSkipped = duplicatesSkipped;
+    result.unmatchedSkipped = unmatchedSkipped;
     await atomicWrite(stateFile, { ...result, seen: Array.from(seen).slice(-20_000) });
     return result;
   } catch (error) {
     result.status = "partial";
-    result.lastError = error instanceof Error ? error.message.replace(/https?:\/\/\S+/gi, "[url]").slice(0, 240) : "analytics_sync_failed";
+    result.lastError = safeErrorMessage(error);
     await atomicWrite(stateFile, { ...result, seen: prior.seen });
     return result;
   } finally {
@@ -355,9 +373,19 @@ export async function syncMetricoolAnalytics(input: MetricoolAnalyticsSyncDeps =
   }
 }
 
+let syncInFlight: Promise<MetricoolAnalyticsSyncResult> | null = null;
+export function syncMetricoolAnalytics(input: MetricoolAnalyticsSyncDeps = {}): Promise<MetricoolAnalyticsSyncResult> {
+  if (syncInFlight) return syncInFlight;
+  syncInFlight = performMetricoolAnalyticsSync(input).finally(() => { syncInFlight = null; });
+  return syncInFlight;
+}
+
 export async function getMetricoolAnalyticsSyncStatus(input: Pick<MetricoolAnalyticsSyncDeps, "env" | "workspaceDir"> = {}): Promise<MetricoolAnalyticsSyncStatus> {
   const env = input.env || process.env;
-  return readStoredState(path.join(workspaceDir(input), SYNC_FILE), env);
+  const stored = await readStoredState(path.join(workspaceDir(input), SYNC_FILE), env);
+  const { seen: _seen, ...publicStatus } = stored;
+  const current = emptyStatus(env);
+  return { ...current, ...publicStatus, enabled: current.enabled, configured: current.configured, lookbackDays: current.lookbackDays };
 }
 
 function zonedClock(date: Date): { dateKey: string; hour: number; minute: number } {
@@ -404,7 +432,7 @@ export function createMetricoolAnalyticsScheduler(deps: MetricoolAnalyticsSchedu
         status: result.status === "completed" ? "success" : result.status === "blocked" ? "skipped" : "failed",
         resultSummary: `Metricool analytics sync ${result.status}: ${result.metricsRecorded} metric(s) recorded.`,
         errorMessage: result.lastError,
-        metadata: { postsSeen: result.postsSeen, metricsRecorded: result.metricsRecorded, duplicatesSkipped: result.duplicatesSkipped, source: result.source },
+        metadata: { postsSeen: result.postsSeen, metricsRecorded: result.metricsRecorded, duplicatesSkipped: result.duplicatesSkipped, unmatchedSkipped: result.unmatchedSkipped, source: result.source },
       })));
       if (result.status === "completed") completedCount += 1;
       lastFinishedAt = now().toISOString();

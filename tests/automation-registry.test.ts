@@ -91,3 +91,12 @@ test("registers the active five-minute Clippers local-news intake cycle", () => 
   assert.equal((automation.metadata as any).requiresMetricoolConnection, true);
   assert.deepEqual((automation.metadata as any).brandIds, ["winner-account-1", "winner-account-2"]);
 });
+
+test("registers the Metricool analytics sync as active Facebook-only automation", () => {
+  const automation = DEFAULT_AUTOMATIONS.find((item) => item.key === "metricool-daily-analytics-sync");
+  assert.ok(automation);
+  assert.equal(automation.status, "active");
+  assert.deepEqual(automation.schedule, { kind: "daily_time", hour: 6, minute: 45 });
+  assert.deepEqual((automation.metadata as any).networks, ["facebook"]);
+  assert.equal((automation.metadata as any).xEnabled, false);
+});

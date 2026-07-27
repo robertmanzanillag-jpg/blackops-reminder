@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   createMetricoolAnalyticsScheduler,
   getMetricoolAnalyticsSyncConfig,
+  getMetricoolAnalyticsSyncStatus,
   parseMetricoolPostMetrics,
   syncMetricoolAnalytics,
 } from "../server/metricool-analytics-sync";
@@ -22,21 +23,28 @@ test("parses Metricool post metrics without trusting a single provider field", (
 
 test("syncs Facebook analytics for both local-news brands and deduplicates observations", async () => {
   const workspaceDir = await mkdtemp(path.join(tmpdir(), "metricool-analytics-"));
-  await writeFile(path.join(workspaceDir, "metricool-delivery-ledger.json"), JSON.stringify({ entries: [{ queueItemId: "queue-1", eventId: "event-1", lane: "miami-news", platform: "facebook", blogId: "miami-1", metricoolPostId: "post-1" }] }));
+  await writeFile(path.join(workspaceDir, "metricool-delivery-ledger.json"), JSON.stringify({ entries: [
+    { queueItemId: "queue-1", eventId: "event-1", lane: "miami-news", platform: "facebook", blogId: "miami-1", metricoolPostId: "post-1" },
+    { queueItemId: "queue-2", eventId: "event-2", lane: "ny-news", platform: "facebook", blogId: "ny-1", metricoolPostId: "post-2" },
+  ] }));
   const calls: string[] = [];
   const fetcher: typeof fetch = async (input) => {
     const url = String(input);
     calls.push(url);
     if (url.includes("simpleProfiles")) return response({ data: [{ blogId: "miami-1", label: "Miami News", networks: ["facebook"] }, { blogId: "ny-1", label: "New York News", networks: ["facebook"] }] });
-    if (url.includes("blogId=miami-1")) return response({ data: [{ id: "post-1", publicationDate: "2026-07-26T12:00:00Z", views: 42, reactions: 3, comments: 1, shares: 2, linkClicks: 4 }] });
+    if (url.includes("blogId=miami-1")) return response({ data: [
+      { id: "post-1", publicationDate: "2026-07-26T12:00:00Z", views: 42, reactions: 3, comments: 1, shares: 2, linkClicks: 4 },
+      { id: "external-1", publicationDate: "2026-07-26T12:30:00Z", views: 100, reactions: 10 },
+    ] });
     if (url.includes("blogId=ny-1")) return response({ data: [{ id: "post-2", jobId: "queue-2", publicationDate: "2026-07-26T13:00:00Z", reach: 8, reactions: 1 }] });
     return response({ error: "not found" }, 404);
   };
   const env = { METRICOOL_USER_TOKEN: "configured-token", METRICOOL_USER_ID: "3558197", CLIPPERS_LOCAL_NEWS_WORKSPACE: workspaceDir };
   const first = await syncMetricoolAnalytics({ env, workspaceDir, fetch: fetcher, now: () => new Date("2026-07-27T15:00:00Z") });
   assert.equal(first.status, "completed");
-  assert.equal(first.postsSeen, 2);
+  assert.equal(first.postsSeen, 3);
   assert.equal(first.metricsRecorded, 2);
+  assert.equal(first.unmatchedSkipped, 1);
   assert.equal(first.brands.filter((brand) => brand.connected).length, 2);
   assert.equal(calls.filter((url) => url.includes("analytics/posts/facebook")).length, 2);
   const state = JSON.parse(await readFile(path.join(workspaceDir, "state.json"), "utf8"));
@@ -47,6 +55,10 @@ test("syncs Facebook analytics for both local-news brands and deduplicates obser
   assert.equal(second.status, "completed");
   assert.equal(second.metricsRecorded, 0);
   assert.equal(second.duplicatesSkipped, 2);
+  const publicStatus = await getMetricoolAnalyticsSyncStatus({ workspaceDir, env: { METRICOOL_ANALYTICS_SYNC_ENABLED: "false" } });
+  assert.equal(publicStatus.enabled, false);
+  assert.equal(publicStatus.configured, false);
+  assert.equal("seen" in publicStatus, false);
 });
 
 test("daily scheduler runs at the configured New York time and records a single run per date", async () => {
@@ -92,6 +104,28 @@ test("fails closed when credentials exist but neither local-news brand is connec
   assert.equal(result.status, "blocked");
   assert.equal(result.lastError, "metricool_news_brands_not_connected");
   assert.equal(result.metricsRecorded, 0);
+});
+
+test("serializes overlapping manual and scheduled sync calls", async () => {
+  const workspaceDir = await mkdtemp(path.join(tmpdir(), "metricool-analytics-lock-"));
+  let profileCalls = 0;
+  const fetcher: typeof fetch = async (input) => {
+    const url = String(input);
+    if (url.includes("simpleProfiles")) {
+      profileCalls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      return response({ data: [] });
+    }
+    return response({ data: [] });
+  };
+  const env = { METRICOOL_USER_TOKEN: "configured-token", METRICOOL_USER_ID: "3558197" };
+  const [first, second] = await Promise.all([
+    syncMetricoolAnalytics({ env, workspaceDir, fetch: fetcher, now: () => new Date("2026-07-27T15:00:00Z") }),
+    syncMetricoolAnalytics({ env, workspaceDir, fetch: fetcher, now: () => new Date("2026-07-27T15:00:01Z") }),
+  ]);
+  assert.equal(profileCalls, 1);
+  assert.equal(first.status, "blocked");
+  assert.deepEqual(second, first);
 });
 
 test("server startup wires the Metricool analytics scheduler", async () => {

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-27T07:48:48.903Z",
+  "generatedAt": "2026-07-27T07:58:07.128Z",
   "repoRoot": "/private/tmp/blackops-metricool-analytics-20260727",
   "packageName": "rest-express",
   "scripts": {
@@ -105,23 +105,9 @@
     "filesIndexed": 424,
     "imports": 1625,
     "routes": 489,
-    "symbols": 9728
+    "symbols": 9736
   },
   "directories": {
-    "server": {
-      "files": 126,
-      "indexed": 122,
-      "kinds": {
-        "server": 126
-      }
-    },
-    "tests": {
-      "files": 90,
-      "indexed": 87,
-      "kinds": {
-        "test": 90
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -200,6 +186,13 @@
         "script": 4
       }
     },
+    "server": {
+      "files": 126,
+      "indexed": 122,
+      "kinds": {
+        "server": 126
+      }
+    },
     "server/replit_integrations": {
       "files": 9,
       "indexed": 9,
@@ -219,6 +212,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 90,
+      "indexed": 87,
+      "kinds": {
+        "test": 90
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -7073,7 +7073,7 @@
         "daysUntil",
         "ensureDefaultAutomations",
         "existing",
-        "existingKeys",
+        "existingAutomation",
         "getNextRunAt",
         "isRunnable",
         "now",
@@ -11722,6 +11722,7 @@
         "StoredSyncState",
         "TIME_ZONE",
         "__metricoolAnalyticsInternals",
+        "abortTimer",
         "atomicWrite",
         "blogId",
         "boundedInt",
@@ -11732,7 +11733,9 @@
         "comments",
         "config",
         "connectedCount",
+        "controller",
         "createMetricoolAnalyticsScheduler",
+        "current",
         "deadline",
         "dir",
         "direct",
@@ -11762,6 +11765,7 @@
         "log",
         "logError",
         "match",
+        "message",
         "nested",
         "normalizeId",
         "normalized",
@@ -11773,6 +11777,7 @@
         "parseMetricoolPostMetrics",
         "parsed",
         "parts",
+        "performMetricoolAnalyticsSync",
         "postId",
         "posts",
         "prior",
@@ -11787,6 +11792,7 @@
         "response",
         "result",
         "runSync",
+        "safeErrorMessage",
         "safeJson",
         "schedule",
         "seen",
@@ -11796,6 +11802,7 @@
         "stateFile",
         "status",
         "stopMetricoolAnalyticsScheduler",
+        "stored",
         "syncMetricoolAnalytics",
         "targets",
         "temporary",
@@ -17177,6 +17184,7 @@
         "env",
         "first",
         "parsed",
+        "publicStatus",
         "response",
         "result",
         "scheduler",

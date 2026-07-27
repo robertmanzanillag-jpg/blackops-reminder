@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-27T07:48:48.903Z
+Generated: 2026-07-27T07:58:07.128Z
 Repo: `/private/tmp/blackops-metricool-analytics-20260727`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 505 | 424 | 1625 | 489 | 9728 |
+| 505 | 424 | 1625 | 489 | 9736 |
 
 ## Entrypoints
 - `client/src/App.tsx`
