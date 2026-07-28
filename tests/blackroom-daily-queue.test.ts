@@ -13,6 +13,7 @@ import {
   retryBlackRoomJob,
   startBlackRoomAgent,
   readBlackRoomQueue,
+  reconcileBlackRoomSchedule,
   writeBlackRoomQueue,
   withBlackRoomQueueLock,
   applyBlackRoomRemoteCommands,
@@ -186,6 +187,26 @@ test("cancels stale queued jobs instead of dumping them after downtime", () => {
   assert.equal(cancelStaleBlackRoomJobs(state, now), 6);
   assert.equal(state.jobs.filter((job) => job.status === "cancelled").length, 6);
   assert.ok(state.jobs.filter((job) => job.status === "cancelled").every((job) => /vencido/.test(job.lastError || "")));
+});
+
+test("enabled health reconciliation renews the future buffer without replaying completed days", () => {
+  const start = new Date("2026-07-20T12:00:00.000Z");
+  const now = new Date("2026-07-27T12:00:00.000Z");
+  const state = createBlackRoomQueueState(start);
+  startBlackRoomAgent(state, 2, start);
+  for (const job of state.jobs) {
+    job.status = "completed";
+    job.completedAt = now.toISOString();
+  }
+
+  const result = reconcileBlackRoomSchedule(state, now);
+  assert.equal(result.recovered, 0);
+  assert.equal(result.created, 7);
+  assert.equal(state.jobs.filter((job) => job.status === "queued").length, 7);
+  assert.deepEqual(state.jobs.filter((job) => job.status === "queued").map((job) => job.targetDate), [
+    "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-08", "2026-08-09", "2026-08-10",
+  ]);
+  assert.equal(state.jobs.filter((job) => job.targetDate < "2026-07-27").every((job) => job.status === "completed"), true);
 });
 
 test("extra today creates exactly the requested future slots when today has no daily batch", () => {
