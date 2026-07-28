@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-28T06:00:25.760Z",
+  "generatedAt": "2026-07-28T06:14:53.305Z",
   "repoRoot": "/private/tmp/asistente-clippers-autonomous",
   "packageName": "rest-express",
   "scripts": {
@@ -105,25 +105,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 513,
-    "filesIndexed": 431,
-    "imports": 1664,
+    "filesVisible": 514,
+    "filesIndexed": 432,
+    "imports": 1670,
     "routes": 489,
-    "symbols": 10010
+    "symbols": 10016
   },
   "directories": {
-    "script": {
-      "files": 57,
-      "indexed": 53,
-      "kinds": {
-        "script": 57
-      }
-    },
     "tests": {
-      "files": 93,
-      "indexed": 90,
+      "files": 94,
+      "indexed": 91,
       "kinds": {
-        "test": 93
+        "test": 94
       }
     },
     ".": {
@@ -188,6 +181,13 @@
       "indexed": 12,
       "kinds": {
         "docs": 13
+      }
+    },
+    "script": {
+      "files": 57,
+      "indexed": 53,
+      "kinds": {
+        "script": 57
       }
     },
     "scripts": {
@@ -5410,6 +5410,7 @@
         "blogId",
         "buildPublicationSchedule",
         "callMetricoolMcp",
+        "campaignExpiresAt",
         "candidates",
         "candidatesById",
         "caption",
@@ -16594,7 +16595,27 @@
         "previous",
         "projectRoot",
         "result",
-        "saved"
+        "saved",
+        "workspaceRoot"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clippers-launch-agent-installer.test.mjs",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "home",
+        "plist",
+        "result"
       ],
       "routes": []
     },
@@ -17082,6 +17103,7 @@
         "evidencePath",
         "result",
         "root",
+        "skipped",
         "sourceUrl"
       ],
       "routes": []

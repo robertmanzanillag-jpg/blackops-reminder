@@ -32,7 +32,9 @@ function run(command, args, options = {}) {
 export async function runClipperFreeLocalWorker(options = {}) {
   const projectRoot = path.resolve(options.projectRoot || process.cwd());
   loadClipperSelectedEnv(projectRoot);
-  const workspaceRoot = path.resolve(options.workspaceRoot || path.join(projectRoot, "clippers_workspace"));
+  const workspaceRoot = path.resolve(
+    options.workspaceRoot || process.env.CLIPPERS_WORKSPACE_ROOT || path.join(projectRoot, "clippers_workspace"),
+  );
   const stateDir = path.join(workspaceRoot, "reports", "free-local-worker");
   const lockPath = path.join(stateDir, "worker.lock");
   const reportPath = path.join(stateDir, "latest.json");

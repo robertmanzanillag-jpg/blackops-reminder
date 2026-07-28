@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-07-28T06:00:25.760Z
+Generated: 2026-07-28T06:14:53.305Z
 Repo: `/private/tmp/asistente-clippers-autonomous`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 513 | 431 | 1664 | 489 | 10010 |
+| 514 | 432 | 1670 | 489 | 10016 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,7 +30,7 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `server` | 126 | 122 | server:126 |
 | `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
-| `tests` | 93 | 90 | test:93 |
+| `tests` | 94 | 91 | test:94 |
 | `script` | 57 | 53 | script:57 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `docs` | 13 | 12 | docs:13 |
@@ -201,7 +201,7 @@ Package: `rest-express`
 - `script/clippers-generate-owned-weekly-backlog-sources.ts` (script; 34 symbols, 3 imports)
 - `script/clippers-import-external-closeout-evidence.ts` (script; 117 symbols, 3 imports)
 - `script/clippers-local-subtitles.mjs` (script; 47 symbols, 5 imports)
-- `script/clippers-metricool-autopilot.mjs` (script; 95 symbols, 4 imports)
+- `script/clippers-metricool-autopilot.mjs` (script; 96 symbols, 4 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)
 - `script/clippers-record-owned-meme-rights.ts` (script; 10 symbols, 1 imports)

@@ -29,6 +29,28 @@ test("runs local CEO planning and cleanup without paid AI", async () => {
   assert.equal(saved.metricoolDeliveryEnabled, false);
 });
 
+test("honors an explicit workspace root outside the project directory", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-free-worker-project-"));
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-free-worker-workspace-"));
+  const previous = process.env.CLIPPERS_WORKSPACE_ROOT;
+  const calls = [];
+  try {
+    process.env.CLIPPERS_WORKSPACE_ROOT = workspaceRoot;
+    const result = await runClipperFreeLocalWorker({
+      projectRoot,
+      run(command, args, options) {
+        calls.push({ command, args, env: options.env });
+        return { command: [command, ...args].join(" "), status: 0, signal: null, stdout: "", stderr: "" };
+      },
+    });
+    assert.equal(result.reportPath, path.join(workspaceRoot, "reports", "free-local-worker", "latest.json"));
+    assert.equal(calls[0].env.CLIPPERS_WORKSPACE_ROOT, workspaceRoot);
+  } finally {
+    if (previous === undefined) delete process.env.CLIPPERS_WORKSPACE_ROOT;
+    else process.env.CLIPPERS_WORKSPACE_ROOT = previous;
+  }
+});
+
 test("strips paid AI credentials from subprocesses", async () => {
   const projectRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-free-worker-env-"));
   const previous = process.env.OPENAI_API_KEY;
