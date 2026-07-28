@@ -95,6 +95,24 @@ test("planner skips a source that failed to download without recording it as pub
   assert.equal(plan.videoId, "fallback-video");
 });
 
+test("planner skips a failed source after the DJ has already been selected", () => {
+  const state = queue();
+  state.failedSourceVideos = [{ videoId: "blocked-video", failedAt: "2026-07-28T00:00:00.000Z", reason: "timeout" }];
+  state.sourceHistory = [];
+  state.jobs[0].requirements.djs = 1;
+  state.jobs[0].requirements.postsPerDj = 2;
+  const selected = planBlackRoomDeterministicEdit({
+    queue: state,
+    ledger: { version: 1, entries: [{ jobId: "job-1", slot: "00:30", videoId: "prior-video", dj: "Fallback DJ", language: "en", format: "vertical", durationSeconds: 15 }] } as any,
+    inventory: [
+      { id: "blocked-video", title: "Fallback DJ - DJ Set", duration: 3600 },
+      { id: "fallback-video", title: "Fallback DJ - DJ Set", duration: 3600 },
+    ],
+  });
+  assert.ok(selected);
+  assert.equal(selected.videoId, "fallback-video");
+});
+
 test("planner stops immediately when the queue is paused", () => {
   assert.equal(planBlackRoomDeterministicEdit({
     queue: queue(false), ledger: { version: 1, entries: [] } as any,

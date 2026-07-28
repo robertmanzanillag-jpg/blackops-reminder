@@ -212,7 +212,8 @@ export function planBlackRoomDeterministicEdit(input: {
     if (!unseen.length) throw new Error(`BlackRoom needs ${job.requirements.djs} distinct DJs before reusing one`);
     eligible = unseen;
   } else {
-    const belowTarget = eligible.filter((candidate) => usedDjs.has(candidate.dj)
+    const belowTarget = eligible.filter((candidate) => !usedVideos.has(candidate.video.id)
+      && usedDjs.has(candidate.dj)
       && (usedDjs.get(candidate.dj) || 0) < job.requirements.postsPerDj);
     if (!belowTarget.length) throw new Error("No unused source remains for the five selected DJs within the per-DJ quota");
     eligible = belowTarget;
