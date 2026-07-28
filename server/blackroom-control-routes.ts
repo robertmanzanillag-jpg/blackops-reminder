@@ -71,7 +71,7 @@ async function refreshBlackRoomCeo(force = false): Promise<void> {
       return [targetDate, buildBlackRoomLearningSlots({
         dayIndex,
         posts: postsByDate[targetDate],
-        sampleCount: analytics.sampleCount,
+        sampleCount: analytics.comparableSampleCount,
         recommendedTimes: analytics.recommendedTimes,
       })];
     }));

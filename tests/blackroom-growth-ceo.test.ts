@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   BLACKROOM_CEO_MIN_SAMPLES,
+  BLACKROOM_CEO_ANALYTICS_LOOKBACK_DAYS,
   BLACKROOM_CEO_CREATIVE_MIN_SAMPLES,
   buildBlackRoomLearningSlots,
   collectBlackRoomMetricoolAnalytics,
@@ -28,7 +29,7 @@ test("five-post baseline exploration slots cover overnight, morning, afternoon a
   for (let index = 1; index < slots.length; index += 1) assert.ok(minutes(slots[index]) - minutes(slots[index - 1]) >= 90);
 });
 
-test("collects each network through discovered Metricool MCP tools and uses the least-sampled network", async () => {
+test("collects each network through discovered Metricool MCP tools and totals usable historical samples", async () => {
   const calls: string[] = [];
   const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
     const request = JSON.parse(String(init?.body || "{}"));
@@ -53,12 +54,55 @@ test("collects each network through discovered Metricool MCP tools and uses the 
     env: { METRICOOL_USER_TOKEN: "secure-test-token", METRICOOL_USER_ID: "user-1" },
     now: new Date("2026-07-22T12:00:00.000Z"),
   });
-  assert.equal(analytics.sampleCount, 2);
+  assert.equal(analytics.sampleCount, 9);
+  assert.equal(analytics.comparableSampleCount, 2);
   assert.deepEqual(analytics.networkSamples, { tiktok: 3, facebook: 2, youtube: 4 });
   assert.deepEqual(analytics.recommendedTimes, ["18:30"]);
   assert.deepEqual(analytics.recommendedTimesByNetwork, { tiktok: ["18:30"], facebook: ["18:30"], youtube: ["18:30"] });
   assert.deepEqual(analytics.networkDailyTargets, { tiktok: 5, facebook: 5, youtube: 5 });
   assert.equal(calls.filter((name) => name === "get_best_times_to_post").length, 3);
+  assert.equal(BLACKROOM_CEO_ANALYTICS_LOOKBACK_DAYS, 30);
+});
+
+test("keeps Facebook and YouTube learning data when one Metricool network temporarily fails", async () => {
+  const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const request = JSON.parse(String(init?.body || "{}"));
+    if (request.method === "tools/list") {
+      return new Response(JSON.stringify({ result: { tools: [
+        { name: "get_tiktoks", inputSchema: { properties: {} } },
+        { name: "get_posts", inputSchema: { properties: {} } },
+        { name: "get_videos", inputSchema: { properties: {} } },
+      ] } }), { headers: { "content-type": "application/json" } });
+    }
+    const name = request.params.name as string;
+    if (name === "get_tiktoks") return new Response(JSON.stringify({ error: { message: "TikTok is reconnecting" } }), { headers: { "content-type": "application/json" } });
+    const count = name === "get_posts" ? 4 : 3;
+    const payload = { data: Array.from({ length: count }, (_, index) => ({ permalink: `${name}-${index}`, video_views: index + 10 })) };
+    return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify(payload) }] } }), { headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+  const analytics = await collectBlackRoomMetricoolAnalytics({
+    fetch: fetcher,
+    env: { METRICOOL_USER_TOKEN: "secure-test-token" },
+  });
+  assert.equal(analytics.sampleCount, 7);
+  assert.equal(analytics.comparableSampleCount, 0);
+  assert.equal(analytics.confidence, "collecting");
+  assert.deepEqual(analytics.networkSamples, { tiktok: 0, facebook: 4, youtube: 3 });
+  assert.match(analytics.networkErrors?.tiktok || "", /reconnecting/);
+});
+
+test("CEO keeps the baseline when imported samples are not comparable across all networks", () => {
+  const analytics = {
+    sampleCount: 21,
+    comparableSampleCount: 0,
+    networkMedianViews: { tiktok: 0, facebook: 100, youtube: 100 },
+    networkLowViewRate: { tiktok: 0, facebook: 0.1, youtube: 0.1 },
+  };
+  assert.equal(planBlackRoomCampaignPosts({ dayIndex: 2, analytics }), 5);
+  assert.deepEqual(
+    buildBlackRoomLearningSlots({ dayIndex: 0, sampleCount: analytics.comparableSampleCount, recommendedTimes: ["12:34"] }),
+    buildBlackRoomLearningSlots({ dayIndex: 0 }),
+  );
 });
 
 test("CEO does not optimize times before the minimum comparable sample", () => {

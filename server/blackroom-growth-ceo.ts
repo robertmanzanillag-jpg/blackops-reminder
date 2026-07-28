@@ -13,6 +13,10 @@ export const BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS: Record<string, number> = {
 };
 export const BLACKROOM_CEO_MIN_SPACING_MINUTES = 90;
 export const BLACKROOM_CEO_REFRESH_MS = 6 * 60 * 60_000;
+// Metricool's Evolution view defaults to a 30-day period. Use the same
+// window so the CEO starts with the posts Robert can already see there,
+// instead of waiting for a new two-week cohort to accumulate.
+export const BLACKROOM_CEO_ANALYTICS_LOOKBACK_DAYS = 30;
 export const BLACKROOM_CEO_CREATIVE_MIN_SAMPLES = 5;
 export const BLACKROOM_CEO_CREATIVE_NEW_SAMPLES = 3;
 export const BLACKROOM_CEO_LOW_VIEW_THRESHOLD = 10;
@@ -20,11 +24,17 @@ export const BLACKROOM_CREATIVE_STRATEGIES = ["drop_first", "instant_drop", "bui
 export type BlackRoomCreativeStrategy = (typeof BLACKROOM_CREATIVE_STRATEGIES)[number];
 
 export interface BlackRoomCeoAnalytics {
+  /** Total imported posts across all connected networks, for visibility. */
   sampleCount: number;
+  /** Smallest usable cohort across the networks, used for cadence/time changes. */
+  comparableSampleCount: number;
   lastCheckedAt: string;
   nextCheckAt: string;
   confidence: "collecting" | "learning";
   networkSamples: Record<string, number>;
+  /** Per-network read failures. A failed network must not hide the data from
+   * the other connected networks. */
+  networkErrors?: Record<string, string>;
   recommendedTimes: string[];
   recommendedTimesByNetwork?: Record<string, string[]>;
   networkMedianViews?: Record<string, number>;
@@ -73,8 +83,8 @@ function metricValue(record: Record<string, any>, names: string[]): number | nul
 export function extractBlackRoomMetricSamples(value: unknown): number {
   const ids = new Set<string>();
   for (const record of records(value)) {
-    const views = metricValue(record, ["views", "impressions", "reach", "videoViews", "viewCount"]);
-    const id = record.id ?? record.postId ?? record.post_id ?? record.uuid ?? record.url;
+    const views = metricValue(record, ["views", "impressions", "reach", "videoViews", "video_views", "viewCount", "view_count", "totalViews"]);
+    const id = record.id ?? record.postId ?? record.post_id ?? record.uuid ?? record.url ?? record.permalink ?? record.postUrl;
     if (views !== null && id != null) ids.add(String(id));
   }
   return ids.size;
@@ -83,8 +93,8 @@ export function extractBlackRoomMetricSamples(value: unknown): number {
 export function extractBlackRoomViewRecords(value: unknown): Array<{ id: string; views: number }> {
   const samples = new Map<string, number>();
   for (const record of records(value)) {
-    const views = metricValue(record, ["views", "videoViews", "viewCount", "plays"]);
-    const id = record.id ?? record.postId ?? record.post_id ?? record.uuid ?? record.url;
+    const views = metricValue(record, ["views", "videoViews", "video_views", "viewCount", "view_count", "totalViews", "plays"]);
+    const id = record.id ?? record.postId ?? record.post_id ?? record.uuid ?? record.url ?? record.permalink ?? record.postUrl;
     if (views !== null && id != null) samples.set(String(id), views);
   }
   return [...samples].map(([id, views]) => ({ id, views }));
@@ -142,9 +152,9 @@ export function planBlackRoomNetworkLearning(input: {
  */
 export function planBlackRoomCampaignPosts(input: {
   dayIndex: number;
-  analytics: Pick<BlackRoomCeoAnalytics, "sampleCount" | "networkMedianViews" | "networkLowViewRate">;
+  analytics: Pick<BlackRoomCeoAnalytics, "sampleCount" | "networkMedianViews" | "networkLowViewRate"> & Partial<Pick<BlackRoomCeoAnalytics, "comparableSampleCount">>;
 }): number {
-  const sampleCount = Math.max(0, Number(input.analytics.sampleCount || 0));
+  const sampleCount = Math.max(0, Number(input.analytics.comparableSampleCount ?? input.analytics.sampleCount ?? 0));
   if (sampleCount < BLACKROOM_CEO_MIN_SAMPLES) return BLACKROOM_CEO_DAILY_POSTS;
   const healthyNetworks = BLACKROOM_METRICOOL_NETWORKS.filter((network) =>
     Number(input.analytics.networkMedianViews?.[network] || 0) >= 50
@@ -267,7 +277,7 @@ export function buildBlackRoomLearningSlots(input: {
 function buildToolArguments(schema: Record<string, any> | undefined, network: string, now: Date, env: NodeJS.ProcessEnv) {
   const properties = schema?.properties || {};
   const args: Record<string, unknown> = {};
-  const start = new Date(now.getTime() - 14 * 86400_000).toISOString().slice(0, 10);
+  const start = new Date(now.getTime() - BLACKROOM_CEO_ANALYTICS_LOOKBACK_DAYS * 86400_000).toISOString().slice(0, 10);
   const end = now.toISOString().slice(0, 10);
   for (const key of Object.keys(properties)) {
     const normalized = key.toLowerCase().replace(/_/g, "");
@@ -277,6 +287,8 @@ function buildToolArguments(schema: Record<string, any> | undefined, network: st
     else if (["start", "startdate", "from", "datefrom", "sincedate"].includes(normalized)) args[key] = start;
     else if (["end", "enddate", "to", "dateto", "untildate"].includes(normalized)) args[key] = end;
     else if (normalized === "timezone") args[key] = "America/New_York";
+    else if (["limit", "pagesize", "perpage", "maxresults", "count"].includes(normalized)) args[key] = 100;
+    else if (["page", "pagenumber", "pageindex"].includes(normalized)) args[key] = 1;
   }
   return args;
 }
@@ -300,26 +312,46 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const times: string[] = [];
   const recommendedTimesByNetwork: Record<string, string[]> = {};
   const viewsByNetwork: Record<string, number[]> = {};
+  const networkErrors: Record<string, string> = {};
+  const networkMetricFailures = new Set<string>();
   let tiktokPostIds: string[] = [];
   for (const network of BLACKROOM_METRICOOL_NETWORKS) {
     const networkToolPattern = network === "tiktok" ? /^get_?tiktoks$/i : network === "youtube" ? /^get_?videos$/i : /^get_?posts$/i;
     const selectedTool = tools.find((tool) => networkToolPattern.test(tool.name)) || metricsTool!;
-    const metrics = await callMetricoolMcpTool(fetcher, String(env.METRICOOL_USER_TOKEN || ""), selectedTool.name, buildToolArguments(selectedTool.inputSchema, network, now, env));
-    const payload = toolPayload(metrics);
-    networkSamples[network] = extractBlackRoomMetricSamples(payload);
-    const viewRecords = extractBlackRoomViewRecords(payload);
-    viewsByNetwork[network] = viewRecords.map((record) => record.views);
-    if (network === "tiktok") {
-      tiktokPostIds = viewRecords.map((record) => record.id);
+    try {
+      const metrics = await callMetricoolMcpTool(fetcher, String(env.METRICOOL_USER_TOKEN || ""), selectedTool.name, buildToolArguments(selectedTool.inputSchema, network, now, env));
+      const payload = toolPayload(metrics);
+      networkSamples[network] = extractBlackRoomMetricSamples(payload);
+      const viewRecords = extractBlackRoomViewRecords(payload);
+      viewsByNetwork[network] = viewRecords.map((record) => record.views);
+      if (network === "tiktok") tiktokPostIds = viewRecords.map((record) => record.id);
+    } catch (error) {
+      networkSamples[network] = 0;
+      viewsByNetwork[network] = [];
+      networkMetricFailures.add(network);
+      networkErrors[network] = error instanceof Error ? error.message.slice(0, 240) : "Metricool no devolvió métricas";
     }
     if (bestTimesTool) {
-      const best = await callMetricoolMcpTool(fetcher, String(env.METRICOOL_USER_TOKEN || ""), bestTimesTool.name, buildToolArguments(bestTimesTool.inputSchema, network, now, env));
-      const networkTimes = extractBlackRoomBestTimes(toolPayload(best));
-      recommendedTimesByNetwork[network] = networkTimes;
-      times.push(...networkTimes);
+      try {
+        const best = await callMetricoolMcpTool(fetcher, String(env.METRICOOL_USER_TOKEN || ""), bestTimesTool.name, buildToolArguments(bestTimesTool.inputSchema, network, now, env));
+        const networkTimes = extractBlackRoomBestTimes(toolPayload(best));
+        recommendedTimesByNetwork[network] = networkTimes;
+        times.push(...networkTimes);
+      } catch (error) {
+        recommendedTimesByNetwork[network] = [];
+        networkErrors[network] = [networkErrors[network], error instanceof Error ? error.message.slice(0, 240) : "Metricool no devolvió horarios"].filter(Boolean).join(" · ");
+      }
     }
   }
-  const sampleCount = Math.min(...BLACKROOM_METRICOOL_NETWORKS.map((network) => networkSamples[network] || 0));
+  if (BLACKROOM_METRICOOL_NETWORKS.every((network) => networkMetricFailures.has(network))) {
+    throw new Error(`Metricool no devolvió analíticas: ${Object.entries(networkErrors).map(([network, message]) => `${network}: ${message}`).join(" | ")}`);
+  }
+  // Count the real samples already available across every connected network.
+  // The previous minimum made the entire CEO show zero whenever just one
+  // network had a temporary empty response, even when Facebook/YouTube data
+  // was available and visible in Metricool.
+  const sampleCount = BLACKROOM_METRICOOL_NETWORKS.reduce((total, network) => total + (networkSamples[network] || 0), 0);
+  const comparableSampleCount = Math.min(...BLACKROOM_METRICOOL_NETWORKS.map((network) => networkSamples[network] || 0));
   const recommendedTimes = [...new Set(times)].slice(0, 12);
   const networkLearning = planBlackRoomNetworkLearning({ viewsByNetwork });
   const creative = planBlackRoomCreativeLearning({ views: viewsByNetwork.tiktok || [], postIds: tiktokPostIds, previous: options.previous, now });
@@ -328,14 +360,16 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
     sampleCount,
     lastCheckedAt: now.toISOString(),
     nextCheckAt: new Date(now.getTime() + BLACKROOM_CEO_REFRESH_MS).toISOString(),
-    confidence: sampleCount >= BLACKROOM_CEO_MIN_SAMPLES ? "learning" : "collecting",
+    confidence: comparableSampleCount >= BLACKROOM_CEO_MIN_SAMPLES ? "learning" : "collecting",
     networkSamples,
+    comparableSampleCount,
+    networkErrors: Object.keys(networkErrors).length ? networkErrors : undefined,
     recommendedTimes,
     recommendedTimesByNetwork,
     ...networkLearning,
     ...creative,
-    reason: sampleCount >= BLACKROOM_CEO_MIN_SAMPLES
-      ? `El CEO estudia las tres redes y mantiene espacios de exploración: ${targets}. ${creative.creativeReason}`
-      : `Recolectando resultados comparables (${sampleCount}/${BLACKROOM_CEO_MIN_SAMPLES}); objetivos prudentes: ${targets}. ${creative.creativeReason}`,
+    reason: comparableSampleCount >= BLACKROOM_CEO_MIN_SAMPLES
+      ? `El CEO estudia resultados reales de las tres redes: ${targets}. ${creative.creativeReason}`
+      : `Importó ${sampleCount} resultados reales; recolectando evidencia comparable (${comparableSampleCount}/${BLACKROOM_CEO_MIN_SAMPLES}) antes de cambiar horas o volumen. ${creative.creativeReason}`,
   };
 }
