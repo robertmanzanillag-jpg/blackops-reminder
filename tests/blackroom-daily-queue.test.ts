@@ -6,6 +6,7 @@ import {
   completeBlackRoomJob,
   cancelStaleBlackRoomJobs,
   createBlackRoomQueueState,
+  recordBlackRoomFailedSource,
   ensureBlackRoomScheduleBuffer,
   pauseBlackRoomAgent,
   recoverInterruptedBlackRoomJobs,
@@ -13,6 +14,7 @@ import {
   retryBlackRoomJob,
   startBlackRoomAgent,
   readBlackRoomQueue,
+  reconcileBlackRoomSchedule,
   writeBlackRoomQueue,
   withBlackRoomQueueLock,
   applyBlackRoomRemoteCommands,
@@ -188,6 +190,26 @@ test("cancels stale queued jobs instead of dumping them after downtime", () => {
   assert.ok(state.jobs.filter((job) => job.status === "cancelled").every((job) => /vencido/.test(job.lastError || "")));
 });
 
+test("enabled health reconciliation renews the future buffer without replaying completed days", () => {
+  const start = new Date("2026-07-20T12:00:00.000Z");
+  const now = new Date("2026-07-27T12:00:00.000Z");
+  const state = createBlackRoomQueueState(start);
+  startBlackRoomAgent(state, 2, start);
+  for (const job of state.jobs) {
+    job.status = "completed";
+    job.completedAt = now.toISOString();
+  }
+
+  const result = reconcileBlackRoomSchedule(state, now);
+  assert.equal(result.recovered, 0);
+  assert.equal(result.created, 7);
+  assert.equal(state.jobs.filter((job) => job.status === "queued").length, 7);
+  assert.deepEqual(state.jobs.filter((job) => job.status === "queued").map((job) => job.targetDate), [
+    "2026-08-04", "2026-08-05", "2026-08-06", "2026-08-07", "2026-08-08", "2026-08-09", "2026-08-10",
+  ]);
+  assert.equal(state.jobs.filter((job) => job.targetDate < "2026-07-27").every((job) => job.status === "completed"), true);
+});
+
 test("extra today creates exactly the requested future slots when today has no daily batch", () => {
   const now = new Date("2026-07-21T18:00:00.000Z"); // 14:00 America/New_York
   const state = createBlackRoomQueueState(now);
@@ -283,6 +305,14 @@ test("serializes concurrent queue mutations without losing source history", asyn
   await Promise.all([mutate("video-a", 50), mutate("video-b", 0)]);
   const finalState = await readBlackRoomQueue(queuePath);
   assert.deepEqual(finalState.sourceHistory.map((item) => item.videoId).sort(), ["video-a", "video-b"]);
+});
+
+test("records a failed download separately from published source history", () => {
+  const state = createBlackRoomQueueState(new Date("2026-07-28T12:00:00.000Z"));
+  const recorded = recordBlackRoomFailedSource(state, "failed-video", "yt-dlp timed out", new Date("2026-07-28T12:01:00.000Z"));
+  assert.equal(recorded.videoId, "failed-video");
+  assert.equal(state.sourceHistory.length, 0);
+  assert.deepEqual(state.failedSourceVideos.map((item) => item.videoId), ["failed-video"]);
 });
 
 test("does not steal a newly created lock before its PID is written", async () => {

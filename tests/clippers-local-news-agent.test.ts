@@ -20,6 +20,41 @@ test("X weighting charges Unicode punctuation and emoji while treating a URL as 
   assert.equal(__clipperLocalNewsInternals.xWeightedLength("A…😀 https://example.com/very/long/path"), 29);
 });
 
+test("hot-topic classifier prioritizes violent crime, kidnapping, and immigration over routine local noise", () => {
+  const immigration = normalizeClipperLocalNewsEvent({
+    sourceEventId: "ice-1",
+    source: "Official immigration newsroom",
+    sourceUrl: "https://www.ice.gov/newsroom/example",
+    lane: "miami-news",
+    title: "ICE announces immigration detention operation",
+    description: "Officials released a verified update about detention and deportation proceedings.",
+    eventType: "Immigration enforcement",
+  });
+  const kidnapping = normalizeClipperLocalNewsEvent({
+    sourceEventId: "kidnap-1",
+    source: "Official police newsroom",
+    sourceUrl: "https://www.nyc.gov/police/example",
+    lane: "ny-news",
+    title: "Police seek suspect in kidnapping investigation",
+    description: "Detectives released a verified public safety bulletin.",
+    eventType: "Kidnapping",
+  });
+  const traffic = normalizeClipperLocalNewsEvent({
+    sourceEventId: "traffic-1",
+    source: "Road authority",
+    sourceUrl: "https://www.transportation.gov/example",
+    lane: "miami-news",
+    title: "Routine traffic congestion reported",
+    description: "Drivers should expect a normal weekday delay.",
+    eventType: "Traffic",
+  });
+  assert.equal(immigration.section, "public_safety");
+  assert.equal(immigration.topicTag, "immigration");
+  assert.equal(kidnapping.topicTag, "kidnapping");
+  assert.ok(immigration.editorialPriority > traffic.editorialPriority);
+  assert.ok(kidnapping.editorialPriority > traffic.editorialPriority);
+});
+
 test("offline OPUS adapter produces substantive Spanish and English in the same social post", async (t) => {
   const workspaceDir = await fixture(t);
   const translations = new Map([
@@ -436,6 +471,21 @@ test("official RSS adapters normalize attributed XML items without credentials a
   assert.equal(items.length, 1);
   assert.deepEqual({ source: items[0].source, title: items[0].title, description: items[0].description }, { source: "Notify NYC", title: "Traffic & Transit", description: "Road closed temporarily ." });
   assert.equal(items[0].effective, "2026-07-21T12:00:00.000Z");
+});
+
+test("official RSS media is kept only when the feed exposes a public video or image", () => {
+  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "notify-nyc")!;
+  const items = __clipperLocalNewsInternals.rssEvents(`<rss><channel>
+    <item><guid>video-alert</guid><title>Major closure update</title><description>Video details from the official source.</description><link>https://notify.nyc/video-alert</link><enclosure url="https://notify.nyc/media/closure.mp4" type="video/mp4"/><pubDate>Tue, 21 Jul 2026 12:00:00 GMT</pubDate></item>
+    <item><guid>image-alert</guid><title>Image update</title><description>Photo details from the official source.</description><link>https://notify.nyc/image-alert</link><media:content url="https://notify.nyc/media/update.jpg" type="image/jpeg"/><pubDate>Tue, 21 Jul 2026 12:01:00 GMT</pubDate></item>
+  </channel></rss>`, source, "2026-07-21T12:05:00Z");
+  assert.deepEqual(items.map((item) => ({ mediaUrl: item.mediaUrl, mediaType: item.mediaType })), [
+    { mediaUrl: "https://notify.nyc/media/closure.mp4", mediaType: "video" },
+    { mediaUrl: "https://notify.nyc/media/update.jpg", mediaType: "image" },
+  ]);
+  const normalized = normalizeClipperLocalNewsEvent(items[0], "2026-07-21T12:05:00Z");
+  assert.equal(normalized.mediaType, "video");
+  assert.ok(normalized.qualityScore >= 80);
 });
 
 test("MTA adapter ingests only live unscheduled subway alerts and ignores planned-work floods", () => {

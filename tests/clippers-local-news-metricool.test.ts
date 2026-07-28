@@ -96,6 +96,44 @@ test("X delivery is opt-in so the paid Metricool add-on stays off by default", a
   assert.equal(fetched, false);
 });
 
+test("routine traffic is filtered from automatic delivery by default", async () => {
+  const dir = await workspace([item({ id: "traffic-default", platform: "facebook", section: "traffic", copy: "TRÁFICO | Congestión rutinaria. Fuente: https://fl511.com" })]);
+  let fetched = false;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: credentials,
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async () => { fetched = true; throw new Error("routine traffic must not reach Metricool"); },
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.scanned, 1);
+  assert.equal(result.eligible, 0);
+  assert.equal(result.scheduled, 0);
+  assert.equal(result.filtered, 1);
+  assert.equal(fetched, false);
+});
+
+test("breaking or high-impact traffic remains eligible without enabling routine traffic", async () => {
+  const dir = await workspace([item({ id: "traffic-breaking", platform: "facebook", section: "traffic", editorialUrgency: "breaking", risk: "high", copy: "URGENTE | Accidente con cierre total. Fuente: https://fl511.com" })]);
+  let posts = 0;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: credentials,
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/admin/simpleProfiles") {
+        return new Response(JSON.stringify({ profiles: [{ blogId: 501, label: "Miami News", networks: ["facebook"] }] }), { status: 200 });
+      }
+      if (init?.method === "POST") posts += 1;
+      return new Response(JSON.stringify({ data: { uuid: "traffic-breaking-post" } }), { status: 201 });
+    },
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.scheduled, 1);
+  assert.equal(posts, 1);
+});
+
 test("discovers the exact Miami News brand and sends one provider with safe scheduling fields", async () => {
   const dir = await workspace([item()]);
   const calls: Array<{ url: URL; init?: RequestInit }> = [];
@@ -171,7 +209,7 @@ test("schedules Facebook breaking and traffic updates as text-only posts without
   let scheduledPayload: Record<string, unknown> | null = null;
 
   const result = await deliverClipperLocalNewsToMetricool({
-    env: credentials,
+    env: { ...credentials, CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC: "true" },
     workspaceDir: dir,
     now: fixedNow,
     fetch: async (input, init) => {
@@ -222,6 +260,27 @@ test("normalizes the existing public brand image and attaches it without any pai
   assert.deepEqual(scheduledPayload?.media, { mediaId: "media-123" });
   assert.equal(result.mediaAttached, 1);
   assert.equal(result.mediaFallback, 0);
+});
+
+test("prefers a verified source video over the fallback brand image", async () => {
+  const dir = await workspace([item({ id: "miami-facebook-video", platform: "facebook", mediaUrl: "https://notify.nyc/media/closure.mp4", mediaType: "video" })]);
+  let normalizedUrl = "";
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, PUBLIC_BASE_URL: "https://news.example.com" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/admin/simpleProfiles") return new Response(JSON.stringify({ profiles: [{ blogId: 501, label: "Miami News", networks: ["facebook"] }] }), { status: 200 });
+      if (url.pathname === "/api/actions/normalize/image/url") {
+        normalizedUrl = url.searchParams.get("url") || "";
+        return new Response(JSON.stringify({ mediaId: "source-video-media" }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ id: "video-post" }), { status: 201 });
+    },
+  });
+  assert.equal(normalizedUrl, "https://notify.nyc/media/closure.mp4");
+  assert.equal(result.mediaAttached, 1);
 });
 
 test("media normalization failure falls back to publishing the verified text", async () => {

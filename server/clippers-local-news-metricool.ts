@@ -44,8 +44,12 @@ const queueItemSchema = z.object({
   createdAt: z.string().datetime(),
   source: z.string().max(500).optional(),
   section: z.enum(["traffic", "weather", "breaking", "public_safety", "local"]).optional(),
+  topicTag: z.enum(["violent_crime", "kidnapping", "immigration"]).nullable().optional(),
   editorialUrgency: z.enum(["routine", "developing", "breaking"]).optional(),
   editorialPriority: z.number().finite().min(0).max(100).optional(),
+  qualityScore: z.number().finite().min(0).max(100).optional(),
+  mediaUrl: z.string().url().max(2_000).nullable().optional(),
+  mediaType: z.enum(["image", "video"]).nullable().optional(),
   notBefore: z.string().datetime().nullable().optional(),
   verdicts: z.array(committeeVerdictSchema).max(3).optional(),
   evidence: z.array(z.string()).max(500).optional(),
@@ -120,6 +124,10 @@ function isRoutineTransitNoise(item: QueueItem): boolean {
   if (item.editorialUrgency === "breaking" || item.risk === "high" || item.risk === "critical") return false;
   const text = `${item.source || ""} ${item.copy}`.normalize("NFKC").toLocaleLowerCase("en-US");
   return /\b(?:mta|subway|metrobus|miami[- ]dade transit)\b/.test(text);
+}
+
+function trafficPublishingEnabled(env: NodeJS.ProcessEnv): boolean {
+  return env.CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC === "true";
 }
 
 export type ClipperLocalNewsMetricoolResultStatus = "completed" | "partial" | "blocked";
@@ -433,6 +441,8 @@ async function normalizeMetricoolMedia(
   token: string,
   mediaUrl: string,
 ): Promise<string | null> {
+  // Metricool's public API uses this image normalization route for both image
+  // and video URLs before they are attached to scheduler/posts.
   const url = new URL("/api/actions/normalize/image/url", METRICOOL_API);
   url.searchParams.set("url", mediaUrl);
   try {
@@ -598,6 +608,11 @@ export async function deliverClipperLocalNewsToMetricool(
     const fetchedNow = now();
     let safeItems = queue.filter((item) => {
       const platformEnabled = item.platform !== "x" || env.CLIPPERS_LOCAL_NEWS_ENABLE_X === "true";
+      const highImpactTraffic = item.editorialUrgency === "breaking" || item.risk === "high" || item.risk === "critical";
+      if (item.section === "traffic" && !trafficPublishingEnabled(env) && !highImpactTraffic) {
+        result.filtered += 1;
+        return false;
+      }
       if (isRoutineTransitNoise(item)) {
         result.filtered += 1;
         return false;
@@ -624,6 +639,7 @@ export async function deliverClipperLocalNewsToMetricool(
       return true;
     }).sort((left, right) => (
       (right.editorialPriority || 0) - (left.editorialPriority || 0)
+      || (right.qualityScore || 0) - (left.qualityScore || 0)
       || right.createdAt.localeCompare(left.createdAt)
     ));
     const dailyTargetByAccount = accountDailyTargets(safeItems);
@@ -674,7 +690,7 @@ export async function deliverClipperLocalNewsToMetricool(
     safeItems = deficitAwareAccountOrder(safeItems, scheduledByAccountDay, dailyTargetByAccount, easternDateKey(fetchedNow));
 
     const fetcher = options.fetch || globalThis.fetch;
-    const mediaIds = new Map<ClipperLocalNewsLane, string | null>();
+    const mediaIds = new Map<string, string | null>();
     let attempts = 0;
     for (const item of safeItems) {
       const contentKey = metricoolContentKey(item);
@@ -720,11 +736,12 @@ export async function deliverClipperLocalNewsToMetricool(
         }
       }
       const scheduledDate = new Date(scheduledMs);
-      if (!mediaIds.has(item.lane)) {
-        const mediaUrl = publicBrandMediaUrl(env, item.lane);
-        mediaIds.set(item.lane, mediaUrl ? await normalizeMetricoolMedia(fetcher, token, mediaUrl) : null);
+      const mediaUrl = item.mediaUrl || publicBrandMediaUrl(env, item.lane);
+      const mediaKey = mediaUrl ? `${item.mediaType || "image"}|${mediaUrl}` : `${item.lane}|none`;
+      if (!mediaIds.has(mediaKey)) {
+        mediaIds.set(mediaKey, mediaUrl ? await normalizeMetricoolMedia(fetcher, token, mediaUrl) : null);
       }
-      const mediaId = mediaIds.get(item.lane) || null;
+      const mediaId = mediaIds.get(mediaKey) || null;
       const url = new URL("/api/v2/scheduler/posts", METRICOOL_API);
       url.searchParams.set("userId", userId);
       url.searchParams.set("blogId", profile.blogId);

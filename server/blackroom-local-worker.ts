@@ -44,7 +44,7 @@ export function buildBlackRoomUploadChunks(totalBytes: number, chunkBytes = BLAC
   return chunks;
 }
 
-export type BlackRoomLedgerStatus = "reserved" | "confirmed" | "uncertain";
+export type BlackRoomLedgerStatus = "reserved" | "confirmed" | "uncertain" | "discarded";
 export type BlackRoomReceiptNetwork = "tiktok" | "facebook" | "youtube";
 export type BlackRoomNetworkAttemptStatus = "uncertain" | "confirmed";
 
@@ -317,10 +317,10 @@ export function reserveBlackRoomLedgerEntry(
   if (![15, 30, 60, 120, 300, 600].includes(input.durationSeconds)) throw new Error("unsupported duration");
   if (!Number.isFinite(input.segmentStartSeconds) || !Number.isFinite(input.segmentEndSeconds)
     || input.segmentStartSeconds < 0 || input.segmentEndSeconds <= input.segmentStartSeconds) throw new Error("invalid segment");
-  if (ledger.entries.some((entry) => entry.jobId === input.jobId && entry.slot === input.slot)) throw new Error("slot already reserved");
+  if (ledger.entries.some((entry) => entry.status !== "discarded" && entry.jobId === input.jobId && entry.slot === input.slot)) throw new Error("slot already reserved");
   const overlaps = (entry: { videoId: string; segmentStartSeconds: number; segmentEndSeconds: number }) => entry.videoId === input.videoId
     && input.segmentStartSeconds < entry.segmentEndSeconds && entry.segmentStartSeconds < input.segmentEndSeconds;
-  if (ledger.entries.some(overlaps) || Array.from(sourceHistory).some(overlaps)) {
+  if (ledger.entries.some((entry) => entry.status !== "discarded" && overlaps(entry)) || Array.from(sourceHistory).some(overlaps)) {
     throw new Error("source video segment overlaps a previous BlackRoom clip");
   }
   const timestamp = now.toISOString();
@@ -336,6 +336,27 @@ export function reserveBlackRoomLedgerEntry(
     updatedAt: timestamp,
   };
   ledger.entries.push(entry);
+  return entry;
+}
+
+/**
+ * A pre-upload reservation whose local media is gone must not poison the
+ * worker forever. Uncertain/confirmed entries are deliberately ineligible:
+ * they can have a real remote side effect and must be verified instead.
+ */
+export function discardBlackRoomUnpublishedReservation(
+  ledger: BlackRoomWorkerLedger,
+  reservationId: string,
+  now = new Date(),
+): BlackRoomLedgerEntry {
+  const entry = ledger.entries.find((candidate) => candidate.reservationId === reservationId);
+  if (!entry) throw new Error("reservation not found");
+  if (entry.status !== "reserved") throw new Error("only an unattempted reserved entry can be discarded");
+  if (Object.keys(entry.networkAttempts || {}).length || Object.keys(entry.networkReceipts || {}).length || entry.metricoolId) {
+    throw new Error("a reservation with Metricool evidence cannot be discarded");
+  }
+  entry.status = "discarded";
+  entry.updatedAt = now.toISOString();
   return entry;
 }
 

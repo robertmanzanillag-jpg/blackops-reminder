@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildBlackRoomVideoFilter,
   buildBlackRoomRenderArgs,
+  buildBlackRoomYtDlpAuthArgs,
   buildBlackRoomYtDlpWindowArgs,
   commitBlackRoomReservation,
   extractBlackRoomDj,
@@ -74,6 +75,65 @@ test("deterministic planner chooses an unused source and covers missing long dur
   assert.equal(plan.format, "horizontal");
   assert.equal(plan.windowEndSeconds - plan.windowStartSeconds, 780);
   assert.equal(plan.caption.includes("http"), false);
+});
+
+test("planner skips a source that failed to download without recording it as published", () => {
+  const state = queue();
+  state.failedSourceVideos = [{ videoId: "blocked-video", failedAt: "2026-07-28T00:00:00.000Z", reason: "timeout" }];
+  state.sourceHistory = [];
+  state.jobs[0].requirements.djs = 1;
+  state.jobs[0].requirements.postsPerDj = 10;
+  const plan = planBlackRoomDeterministicEdit({
+    queue: state,
+    ledger: { version: 1, entries: [] } as any,
+    inventory: [
+      { id: "blocked-video", title: "Blocked DJ - DJ Set", duration: 3600 },
+      { id: "fallback-video", title: "Fallback DJ - DJ Set", duration: 3600 },
+    ],
+  });
+  assert.ok(plan);
+  assert.equal(plan.videoId, "fallback-video");
+});
+
+test("planner skips a failed source after the DJ has already been selected", () => {
+  const state = queue();
+  state.failedSourceVideos = [{ videoId: "blocked-video", failedAt: "2026-07-28T00:00:00.000Z", reason: "timeout" }];
+  state.sourceHistory = [];
+  state.jobs[0].requirements.djs = 1;
+  state.jobs[0].requirements.postsPerDj = 2;
+  const selected = planBlackRoomDeterministicEdit({
+    queue: state,
+    ledger: { version: 1, entries: [{ jobId: "job-1", slot: "00:30", videoId: "prior-video", dj: "Fallback DJ", language: "en", format: "vertical", durationSeconds: 15 }] } as any,
+    inventory: [
+      { id: "blocked-video", title: "Fallback DJ - DJ Set", duration: 3600 },
+      { id: "fallback-video", title: "Fallback DJ - DJ Set", duration: 3600 },
+    ],
+  });
+  assert.ok(selected);
+  assert.equal(selected.videoId, "fallback-video");
+});
+
+test("planner replaces a discarded reservation in the same slot", () => {
+  const state = queue();
+  state.sourceHistory = [];
+  state.jobs[0].slots = [{ localTime: "00:30", timezone: "America/New_York" }];
+  state.jobs[0].requirements.posts = 1;
+  state.jobs[0].requirements.djs = 1;
+  state.jobs[0].requirements.postsPerDj = 1;
+  const plan = planBlackRoomDeterministicEdit({
+    queue: state,
+    ledger: {
+      version: 1,
+      entries: [{
+        jobId: "job-1", slot: "00:30", videoId: "stale-video", dj: "Old DJ", language: "en", format: "vertical", durationSeconds: 15,
+        segmentStartSeconds: 0, segmentEndSeconds: 15, status: "discarded",
+      }],
+    } as any,
+    inventory: [{ id: "replacement-video", title: "Replacement DJ - DJ Set", duration: 3600 }],
+  });
+  assert.ok(plan);
+  assert.equal(plan.slot, "00:30");
+  assert.equal(plan.videoId, "replacement-video");
 });
 
 test("planner stops immediately when the queue is paused", () => {
@@ -248,12 +308,20 @@ test("command builders keep downloads partial and renders platform-compatible", 
   assert.ok(download.includes("--download-sections"));
   assert.ok(download.includes("*100-220"));
   assert.ok(download.includes("bestvideo*[height<=1080]+bestaudio/best[height<=1080]"));
+  assert.deepEqual(download.slice(download.indexOf("--socket-timeout"), download.indexOf("--socket-timeout") + 6), [
+    "--socket-timeout", "30", "--retries", "3", "--fragment-retries", "3",
+  ]);
   assert.ok(download.includes("temp:/project/agent/editor-tmp/a"));
   const render = buildBlackRoomRenderArgs("/project/sources/a.mp4", "/project/rendered/a.mp4", plan, 4);
   assert.ok(render.includes("h264_videotoolbox"));
   assert.ok(render.includes("aac"));
   assert.ok(render.includes("+faststart"));
   assert.equal(render.at(-1), "/project/rendered/a.mp4");
+});
+
+test("YouTube downloads use the local Chrome session by default and can be disabled", () => {
+  assert.deepEqual(buildBlackRoomYtDlpAuthArgs(), ["--cookies-from-browser", "chrome"]);
+  assert.deepEqual(buildBlackRoomYtDlpAuthArgs("none"), []);
 });
 
 test("owned-source validation accepts only the official BlackRoom channel", () => {
