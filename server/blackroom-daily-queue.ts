@@ -153,6 +153,7 @@ export function createBlackRoomQueueState(now = new Date()): BlackRoomQueueState
     adHocExtraDates: [],
     analytics: {
       sampleCount: 0,
+      comparableSampleCount: 0,
       lastCheckedAt: "",
       nextCheckAt: iso(now),
       confidence: "collecting",

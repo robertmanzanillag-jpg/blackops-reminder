@@ -123,7 +123,7 @@ test("applies CEO analytics and learned slots only to pending days", () => {
     id: "ceo-schedule", type: "ceo_schedule" as const, createdAt: now.toISOString(),
     slotsByDate: { [targetDate]: ["00:30", "03:00", "05:30", "08:00", "10:30", "13:00", "15:30", "18:00", "20:30", "23:00"] },
     analytics: {
-      sampleCount: 24, lastCheckedAt: now.toISOString(), nextCheckAt: now.toISOString(), confidence: "learning" as const,
+      sampleCount: 24, comparableSampleCount: 24, lastCheckedAt: now.toISOString(), nextCheckAt: now.toISOString(), confidence: "learning" as const,
       networkSamples: { tiktok: 24, facebook: 24, youtube: 24 }, recommendedTimes: ["13:00"], reason: "learning",
       tiktokMedianViews: 7, tiktokLowViewRate: 0.8, creativeStrategy: "instant_drop" as const,
       creativeStrategyVersion: 1, creativeStrategySampleBaseline: 24, creativeStrategyPostIdsBaseline: [],
