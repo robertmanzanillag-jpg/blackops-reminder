@@ -148,6 +148,13 @@ test("uploads only rights-verified MP4s and persists their public Metricool URL"
     assert.equal(campaigns[0].metricoolBlogId, 6431687);
     assert.match(campaigns[0].publicMediaUrls[draftFile], /^https:\/\/drive\.usercontent\.google\.com\//);
     assert.equal(campaigns[0].publicMediaUrls["clip-01.mp4"], campaigns[0].publicMediaUrls[draftFile]);
+    const receipts = JSON.parse(await readFile(
+      path.join(root, "reports", "metricool-public-media-receipts.json"),
+      "utf8",
+    ));
+    assert.equal(receipts[0].provider, "google_drive");
+    assert.equal(receipts[0].mediaFile, draftFile);
+    assert.match(receipts[0].sha256, /^[a-f0-9]{64}$/);
 
     await writeFile(path.join(root, "reports", "metricool-autopilot-ledger.json"), JSON.stringify([{
       draftFile,
