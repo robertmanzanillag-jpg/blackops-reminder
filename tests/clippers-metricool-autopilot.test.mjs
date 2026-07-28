@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   buildPublicationSchedule,
+  hasTrustedPublicMediaReceipt,
   runMetricoolAutopilot,
   validateAutopilotItem,
 } from "../script/clippers-metricool-autopilot.mjs";
@@ -21,6 +22,15 @@ const eligible = {
   status: "ready_for_metricool_autopilot",
   publishAllowed: true,
 };
+const eligibleReceipt = {
+  campaignId: eligible.campaignId,
+  draftFile: eligible.draftFile,
+  fileId: "1AbCdEfGhIjKlMnOp",
+  mediaUrl: eligible.mediaUrl,
+  sha256: "a".repeat(64),
+  sizeBytes: 1024,
+  uploadedAt: "2026-07-28T04:00:00.000Z",
+};
 
 test("requires every contractual hashtag and a public HTTPS media URL", () => {
   assert.deepEqual(validateAutopilotItem(eligible, "streamersclipusa").blockers, []);
@@ -32,6 +42,15 @@ test("requires every contractual hashtag and a public HTTPS media URL", () => {
     .blockers.includes("public_https_media_required"));
   assert.ok(validateAutopilotItem({ ...eligible, account: "another" }, "streamersclipusa")
     .blockers.includes("wrong_account"));
+});
+
+test("requires the exact public URL to match a validated local upload receipt", () => {
+  assert.equal(hasTrustedPublicMediaReceipt(eligible, [eligibleReceipt]), true);
+  assert.equal(hasTrustedPublicMediaReceipt(
+    { ...eligible, mediaUrl: "https://media.example.org/other.mp4" },
+    [eligibleReceipt],
+  ), false);
+  assert.equal(hasTrustedPublicMediaReceipt(eligible, [{ ...eligibleReceipt, sha256: "not-a-hash" }]), false);
 });
 
 test("builds five spaced daily slots after the current time", () => {
@@ -78,6 +97,7 @@ test("schedules eligible unique rows through Metricool MCP and writes no paid sp
       workspaceRoot,
       queue: { targetDailyClips: 5, items: [eligible] },
       ledger: [],
+      receipts: [eligibleReceipt],
       now: new Date("2026-07-28T05:00:00.000Z"),
       async fetch(url, init) {
         if (url === "https://ai.metricool.com/mcp") {
@@ -134,6 +154,7 @@ test("records an uncertain Metricool outcome and never retries it silently", asy
       workspaceRoot,
       queue: { targetDailyClips: 5, items: [eligible] },
       ledger: [],
+      receipts: [eligibleReceipt],
       now: new Date("2026-07-28T05:00:00.000Z"),
       async fetch(url) {
         if (url === "https://ai.metricool.com/mcp") {
@@ -165,6 +186,7 @@ test("records an uncertain Metricool outcome and never retries it silently", asy
       workspaceRoot,
       queue: { targetDailyClips: 5, items: [eligible] },
       ledger: result.results,
+      receipts: [eligibleReceipt],
       now: new Date("2026-07-28T05:00:00.000Z"),
       async fetch() {
         throw new Error("A pending item must not be submitted twice");
@@ -190,6 +212,7 @@ test("blocks a queue item routed to a different Metricool blog", async () => {
       workspaceRoot,
       queue: { targetDailyClips: 5, items: [{ ...eligible, blogId: 6595747 }] },
       ledger: [],
+      receipts: [eligibleReceipt],
       now: new Date("2026-07-28T05:00:00.000Z"),
       async fetch() {
         throw new Error("Wrong Metricool blogs must not be called");
@@ -219,6 +242,7 @@ test("blocks a slot that would run after the verified campaign expiry", async ()
         items: [{ ...eligible, campaignExpiresAt: "2026-07-28T13:00:00.000Z" }],
       },
       ledger: [],
+      receipts: [eligibleReceipt],
       now: new Date("2026-07-28T05:00:00.000Z"),
       async fetch(url) {
         if (url === "https://ai.metricool.com/mcp") mcpCalls += 1;
@@ -253,6 +277,7 @@ test("blocks an already expired campaign without calling Metricool", async () =>
         items: [{ ...eligible, campaignExpiresAt: "2026-07-28T04:00:00.000Z" }],
       },
       ledger: [],
+      receipts: [eligibleReceipt],
       now: new Date("2026-07-28T05:00:00.000Z"),
       async fetch() {
         fetchCalls += 1;
@@ -281,6 +306,7 @@ test("deduplicates identical items inside one queue before calling Metricool", a
       workspaceRoot,
       queue: { targetDailyClips: 5, items: [eligible, { ...eligible }] },
       ledger: [],
+      receipts: [eligibleReceipt],
       now: new Date("2026-07-28T05:00:00.000Z"),
       async fetch(url) {
         if (url === "https://ai.metricool.com/mcp") {

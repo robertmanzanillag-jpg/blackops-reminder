@@ -220,6 +220,18 @@ export function validateAutopilotItem(item, expectedAccount) {
   return { blockers, requiredHashtags, account, caption };
 }
 
+export function hasTrustedPublicMediaReceipt(item, receipts) {
+  return (Array.isArray(receipts) ? receipts : []).some((receipt) => (
+    String(receipt?.campaignId || "") === String(item?.campaignId || "")
+    && String(receipt?.draftFile || "") === String(item?.draftFile || "")
+    && String(receipt?.mediaUrl || "") === String(item?.mediaUrl || "")
+    && /^[a-f0-9]{64}$/i.test(String(receipt?.sha256 || ""))
+    && /^[A-Za-z0-9_-]{10,160}$/.test(String(receipt?.fileId || ""))
+    && Number(receipt?.sizeBytes) > 0
+    && Number.isFinite(Date.parse(String(receipt?.uploadedAt || "")))
+  ));
+}
+
 function slotIsBeforeCampaignExpiry(item, publicationDateTime) {
   if (!item.campaignExpiresAt) return true;
   const expiresAt = Date.parse(String(item.campaignExpiresAt));
@@ -263,6 +275,7 @@ export async function runMetricoolAutopilot(options = {}) {
   const reportDir = path.join(workspaceRoot, "reports");
   const queuePath = path.join(reportDir, "metricool-autopilot-queue.json");
   const ledgerPath = path.join(reportDir, "metricool-autopilot-ledger.json");
+  const receiptsPath = path.join(reportDir, "metricool-public-media-receipts.json");
   const lockPath = path.join(reportDir, "metricool-autopilot.lock");
   await mkdir(reportDir, { recursive: true });
   const lock = await acquireAutopilotLock(lockPath);
@@ -270,6 +283,7 @@ export async function runMetricoolAutopilot(options = {}) {
   try {
   const queue = options.queue || JSON.parse(await readFile(queuePath, "utf8").catch(() => "{\"items\":[]}"));
   const ledger = options.ledger || JSON.parse(await readFile(ledgerPath, "utf8").catch(() => "[]"));
+  const receipts = options.receipts || JSON.parse(await readFile(receiptsPath, "utf8").catch(() => "[]"));
   const token = requiredEnv(env, "METRICOOL_USER_TOKEN");
   const userId = requiredEnv(env, "METRICOOL_USER_ID");
   const expectedBlogId = Number(requiredEnv(env, "CLIPPERS_METRICOOL_BLOG_ID"));
@@ -293,6 +307,7 @@ export async function runMetricoolAutopilot(options = {}) {
     const campaignExpiresAt = item.campaignExpiresAt ? Date.parse(String(item.campaignExpiresAt)) : null;
     const blockers = [
       ...validation.blockers,
+      !hasTrustedPublicMediaReceipt(item, receipts) ? "trusted_media_receipt_missing" : null,
       !Number.isInteger(blogId) || blogId <= 0 ? "metricool_blog_id_missing" : null,
       Number.isInteger(blogId) && blogId > 0 && blogId !== expectedBlogId ? "wrong_metricool_blog" : null,
       campaignExpiresAt !== null && (!Number.isFinite(campaignExpiresAt) || campaignExpiresAt <= now.getTime())
