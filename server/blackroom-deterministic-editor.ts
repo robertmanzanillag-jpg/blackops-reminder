@@ -168,17 +168,20 @@ export function planBlackRoomDeterministicEdit(input: {
 }): BlackRoomEditPlan | null {
   const now = input.now || new Date();
   if (input.queue.enabled !== true) return null;
+  // A discarded reservation had no remote publication attempt and no usable
+  // local render. It is audit history only, never a consumed slot/source.
+  const activeLedgerEntries = input.ledger.entries.filter((entry) => entry.status !== "discarded");
   const job = input.queue.jobs.find((candidate) => {
     if (!isActionableJob(candidate, now)) return false;
-    const occupied = new Set(input.ledger.entries.filter((entry) => entry.jobId === candidate.id).map((entry) => entry.slot));
+    const occupied = new Set(activeLedgerEntries.filter((entry) => entry.jobId === candidate.id).map((entry) => entry.slot));
     return candidate.slots.some((slot) => !occupied.has(slot.localTime));
   });
   if (!job) return null;
-  const occupied = new Set(input.ledger.entries.filter((entry) => entry.jobId === job.id).map((entry) => entry.slot));
+  const occupied = new Set(activeLedgerEntries.filter((entry) => entry.jobId === job.id).map((entry) => entry.slot));
   const slotConfig = job.slots.find((candidate) => !occupied.has(candidate.localTime));
   if (!slotConfig) return null;
   const slot = slotConfig.localTime;
-  const jobEntries = input.ledger.entries.filter((entry) => entry.jobId === job.id);
+  const jobEntries = activeLedgerEntries.filter((entry) => entry.jobId === job.id);
   const creativeStrategy: BlackRoomCreativeStrategy = input.queue.analytics?.creativeStrategy || "drop_first";
   const targetNetworks = selectBlackRoomTargetNetworks(job, slotConfig, input.queue);
   const durationSeconds = chooseDuration(job, jobEntries, input.queue, targetNetworks);
@@ -189,7 +192,7 @@ export function planBlackRoomDeterministicEdit(input: {
   const usedVideos = new Set([
     ...input.queue.sourceHistory.map((entry) => entry.videoId),
     ...(input.queue.failedSourceVideos || []).map((entry) => entry.videoId),
-    ...input.ledger.entries.map((entry) => entry.videoId),
+    ...activeLedgerEntries.map((entry) => entry.videoId),
   ]);
   const usedDjs = new Map<string, number>();
   for (const entry of jobEntries) usedDjs.set(entry.dj, (usedDjs.get(entry.dj) || 0) + 1);
@@ -199,7 +202,7 @@ export function planBlackRoomDeterministicEdit(input: {
       const intervals = [
         ...input.queue.sourceHistory.filter((entry) => entry.videoId === video.id)
           .map((entry) => ({ start: entry.segmentStartSeconds, end: entry.segmentEndSeconds })),
-        ...input.ledger.entries.filter((entry) => entry.videoId === video.id)
+        ...activeLedgerEntries.filter((entry) => entry.videoId === video.id)
           .map((entry) => ({ start: entry.segmentStartSeconds, end: entry.segmentEndSeconds })),
       ];
       const dj = extractBlackRoomDj(video.title);
