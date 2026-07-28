@@ -51,6 +51,11 @@ test("growth package stays zero-cost and produces an owned tracked link plus a l
   );
 });
 
+test("growth package prefers a verified source video when one is available", () => {
+  const growth = buildLocalNewsGrowthPackage({ ...event, mediaUrl: "https://notify.nyc/closure.mp4", mediaType: "video", qualityScore: 94 }, [], "https://news.example.com");
+  assert.equal(growth.shortForm.publishableVideoUrl, "https://notify.nyc/closure.mp4");
+});
+
 test("CEO raises volume only after observed performance clears confidence thresholds", () => {
   const growing = buildLocalNewsCeoDecision([{ impressions: 600, engagements: 15, clicks: 2, shares: 1 }]);
   const breakout = buildLocalNewsCeoDecision([{ impressions: 1_200, engagements: 50, clicks: 8, shares: 4 }]);

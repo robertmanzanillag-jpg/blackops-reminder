@@ -11,6 +11,9 @@ export interface LocalNewsGrowthEvent {
   section: "traffic" | "weather" | "breaking" | "public_safety" | "local";
   editorialUrgency: "routine" | "developing" | "breaking";
   lifecycle: "active" | "resolved";
+  mediaUrl?: string | null;
+  mediaType?: "image" | "video" | null;
+  qualityScore?: number;
 }
 
 export interface LocalNewsGrowthMetric {
@@ -47,7 +50,7 @@ export interface LocalNewsGrowthPackage {
     soundRequired: true;
     renderMode: "local_template";
     preferred: true;
-    publishableVideoUrl: null;
+    publishableVideoUrl: string | null;
     scenes: Array<{ startSecond: number; endSecond: number; text: string }>;
   };
 }
@@ -190,7 +193,7 @@ export function buildLocalNewsGrowthPackage(
       soundRequired: true,
       renderMode: "local_template",
       preferred: true,
-      publishableVideoUrl: null,
+      publishableVideoUrl: event.mediaType === "video" ? event.mediaUrl || null : null,
       scenes: [
         { startSecond: 0, endSecond: 2, text: sectionLabel(event.section, "es").toUpperCase() },
         { startSecond: 2, endSecond: 6, text: headline.es },

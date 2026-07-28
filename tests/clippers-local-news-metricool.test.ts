@@ -224,6 +224,27 @@ test("normalizes the existing public brand image and attaches it without any pai
   assert.equal(result.mediaFallback, 0);
 });
 
+test("prefers a verified source video over the fallback brand image", async () => {
+  const dir = await workspace([item({ id: "miami-facebook-video", platform: "facebook", mediaUrl: "https://notify.nyc/media/closure.mp4", mediaType: "video" })]);
+  let normalizedUrl = "";
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, PUBLIC_BASE_URL: "https://news.example.com" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/admin/simpleProfiles") return new Response(JSON.stringify({ profiles: [{ blogId: 501, label: "Miami News", networks: ["facebook"] }] }), { status: 200 });
+      if (url.pathname === "/api/actions/normalize/image/url") {
+        normalizedUrl = url.searchParams.get("url") || "";
+        return new Response(JSON.stringify({ mediaId: "source-video-media" }), { status: 200 });
+      }
+      return new Response(JSON.stringify({ id: "video-post" }), { status: 201 });
+    },
+  });
+  assert.equal(normalizedUrl, "https://notify.nyc/media/closure.mp4");
+  assert.equal(result.mediaAttached, 1);
+});
+
 test("media normalization failure falls back to publishing the verified text", async () => {
   const dir = await workspace([item({ id: "miami-facebook-image-fallback", platform: "facebook" })]);
   let scheduledPayload: Record<string, any> | null = null;

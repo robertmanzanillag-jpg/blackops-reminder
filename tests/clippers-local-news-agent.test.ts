@@ -438,6 +438,21 @@ test("official RSS adapters normalize attributed XML items without credentials a
   assert.equal(items[0].effective, "2026-07-21T12:00:00.000Z");
 });
 
+test("official RSS media is kept only when the feed exposes a public video or image", () => {
+  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "notify-nyc")!;
+  const items = __clipperLocalNewsInternals.rssEvents(`<rss><channel>
+    <item><guid>video-alert</guid><title>Major closure update</title><description>Video details from the official source.</description><link>https://notify.nyc/video-alert</link><enclosure url="https://notify.nyc/media/closure.mp4" type="video/mp4"/><pubDate>Tue, 21 Jul 2026 12:00:00 GMT</pubDate></item>
+    <item><guid>image-alert</guid><title>Image update</title><description>Photo details from the official source.</description><link>https://notify.nyc/image-alert</link><media:content url="https://notify.nyc/media/update.jpg" type="image/jpeg"/><pubDate>Tue, 21 Jul 2026 12:01:00 GMT</pubDate></item>
+  </channel></rss>`, source, "2026-07-21T12:05:00Z");
+  assert.deepEqual(items.map((item) => ({ mediaUrl: item.mediaUrl, mediaType: item.mediaType })), [
+    { mediaUrl: "https://notify.nyc/media/closure.mp4", mediaType: "video" },
+    { mediaUrl: "https://notify.nyc/media/update.jpg", mediaType: "image" },
+  ]);
+  const normalized = normalizeClipperLocalNewsEvent(items[0], "2026-07-21T12:05:00Z");
+  assert.equal(normalized.mediaType, "video");
+  assert.ok(normalized.qualityScore >= 80);
+});
+
 test("MTA adapter ingests only live unscheduled subway alerts and ignores planned-work floods", () => {
   const source = { id: "mta-subway-alerts", lane: "ny-news" as const, url: "https://www.mta.info/alerts", requiresKey: false, format: "mta-json" as const, sourceName: "Metropolitan Transportation Authority" };
   const items = __clipperLocalNewsInternals.mtaAlertEvents({ entity: [
