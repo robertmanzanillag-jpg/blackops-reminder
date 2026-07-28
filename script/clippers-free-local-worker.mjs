@@ -50,32 +50,52 @@ export async function runClipperFreeLocalWorker(options = {}) {
   }
 
   const startedAt = new Date().toISOString();
+  const publishingAuthorized = process.env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED === "true";
+  const metricoolEnv = publishingAuthorized ? {
+    METRICOOL_USER_TOKEN: process.env.METRICOOL_USER_TOKEN,
+    METRICOOL_USER_ID: process.env.METRICOOL_USER_ID,
+    CLIPPERS_METRICOOL_BLOG_ID: process.env.CLIPPERS_METRICOOL_BLOG_ID,
+    CLIPPERS_TIKTOK_ACCOUNT: process.env.CLIPPERS_TIKTOK_ACCOUNT || "streamersclipusa",
+  } : {};
   const env = localOnlyEnv(process.env, {
     CLIPPERS_WORKSPACE_ROOT: workspaceRoot,
-    CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "false",
+    CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: publishingAuthorized ? "true" : "false",
     CLIPPERS_TARGET_DAILY_CLIPS: process.env.CLIPPERS_TARGET_DAILY_CLIPS || "5",
+    ...Object.fromEntries(Object.entries(metricoolEnv).filter(([, value]) => typeof value === "string" && value)),
   });
   const execute = options.run || run;
   try {
     const planning = execute("npm", ["run", "clippers:streamer-growth-ceo"], { cwd: projectRoot, env });
+    const delivery = planning.status === 0 && publishingAuthorized
+      ? execute("node", ["script/clippers-metricool-autopilot.mjs"], { cwd: projectRoot, env })
+      : {
+          command: "Metricool delivery skipped",
+          status: publishingAuthorized ? null : 0,
+          signal: null,
+          stdout: "",
+          stderr: planning.status === 0 ? "" : "CEO planning failed",
+        };
     const executeCleanup = process.env.CLIPPERS_FREE_WORKER_CLEANUP_EXECUTE === "true";
-    const cleanup = planning.status === 0
+    const cleanup = planning.status === 0 && (delivery.status === 0 || !publishingAuthorized)
       ? execute("node", ["script/clippers-cleanup-published-vyro-media.mjs", ...(executeCleanup ? ["--execute"] : [])], { cwd: projectRoot, env })
-      : { command: "cleanup skipped", status: null, signal: null, stdout: "", stderr: "CEO planning failed" };
+      : { command: "cleanup skipped", status: null, signal: null, stdout: "", stderr: "Planning or delivery failed" };
     const report = {
-      status: planning.status === 0 && cleanup.status === 0 ? "completed" : "blocked",
+      status: planning.status === 0 && delivery.status === 0 && cleanup.status === 0 ? "completed" : "blocked",
       startedAt,
       finishedAt: new Date().toISOString(),
       paidAiUsed: false,
       paidAiCredentialsPassed: false,
       paidSpendAllowed: false,
       publishingSurface: "metricool",
-      metricoolDeliveryEnabled: false,
+      metricoolDeliveryEnabled: publishingAuthorized,
       cleanupExecuteEnabled: executeCleanup,
       planning,
+      delivery,
       cleanup,
       publicationRule: "Only proof-backed TikTok posts with an exact public URL count as published or measured.",
-      note: "Deterministic local worker restored. Metricool delivery remains blocked until the final MP4 has a public HTTPS download URL and an eligible campaign/source.",
+      note: publishingAuthorized
+        ? "Metricool delivery runs only for proof-backed, unique queue items with public HTTPS media and required campaign hashtags."
+        : "Metricool delivery is disabled until explicit authorization is configured.",
     };
     await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
     return { ...report, reportPath };

@@ -51,3 +51,52 @@ test("strips paid AI credentials from subprocesses", async () => {
   assert.equal(observedEnv.GOOGLE_API_KEY, undefined);
   assert.equal(observedEnv.PATH, process.env.PATH);
 });
+
+test("passes only Metricool delivery credentials after explicit authorization", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-free-worker-live-"));
+  const previous = {
+    authorization: process.env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED,
+    token: process.env.METRICOOL_USER_TOKEN,
+    userId: process.env.METRICOOL_USER_ID,
+    blogId: process.env.CLIPPERS_METRICOOL_BLOG_ID,
+    openai: process.env.OPENAI_API_KEY,
+  };
+  const calls = [];
+  try {
+    process.env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED = "true";
+    process.env.METRICOOL_USER_TOKEN = "metricool-secret";
+    process.env.METRICOOL_USER_ID = "3558197";
+    process.env.CLIPPERS_METRICOOL_BLOG_ID = "6431687";
+    process.env.OPENAI_API_KEY = "must-not-pass";
+    const result = await runClipperFreeLocalWorker({
+      projectRoot,
+      run(command, args, options) {
+        calls.push({ command, args, env: options.env });
+        return { command: [command, ...args].join(" "), status: 0, signal: null, stdout: "", stderr: "" };
+      },
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(result.metricoolDeliveryEnabled, true);
+    assert.deepEqual(calls.map(({ command, args }) => [command, ...args]), [
+      ["npm", "run", "clippers:streamer-growth-ceo"],
+      ["node", "script/clippers-metricool-autopilot.mjs"],
+      ["node", "script/clippers-cleanup-published-vyro-media.mjs"],
+    ]);
+    assert.equal(calls[1].env.METRICOOL_USER_TOKEN, "metricool-secret");
+    assert.equal(calls[1].env.METRICOOL_USER_ID, "3558197");
+    assert.equal(calls[1].env.CLIPPERS_METRICOOL_BLOG_ID, "6431687");
+    assert.equal(calls[1].env.OPENAI_API_KEY, undefined);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      const envName = {
+        authorization: "CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED",
+        token: "METRICOOL_USER_TOKEN",
+        userId: "METRICOOL_USER_ID",
+        blogId: "CLIPPERS_METRICOOL_BLOG_ID",
+        openai: "OPENAI_API_KEY",
+      }[key];
+      if (value === undefined) delete process.env[envName];
+      else process.env[envName] = value;
+    }
+  }
+});

@@ -19,6 +19,59 @@ function tiktokPostMatchesAccount(url, accountHandle) {
   return Boolean(match && expected && match[1].toLowerCase() === expected);
 }
 
+function normalizedTags(values) {
+  return Array.from(new Set((Array.isArray(values) ? values : [])
+    .map((value) => String(value || "").trim())
+    .filter((value) => /^[@#][A-Za-z0-9._-]{2,80}$/.test(value))));
+}
+
+function publishedMetricKey(row) {
+  const url = String(row?.publishedPostUrl || "").trim().toLowerCase();
+  return url || "";
+}
+
+export function dedupePublishedMetrics(metrics = []) {
+  const byPost = new Map();
+  for (const row of metrics) {
+    const key = publishedMetricKey(row);
+    if (!key) continue;
+    const current = byPost.get(key);
+    if (!current || (finiteNumber(row.views) || 0) >= (finiteNumber(current.views) || 0)) byPost.set(key, row);
+  }
+  return [...byPost.values()];
+}
+
+export function buildHashtagPolicy(campaign, metrics = []) {
+  const required = normalizedTags(campaign?.requiredHashtags);
+  const optionalRows = new Map();
+  for (const row of metrics) {
+    for (const tag of normalizedTags(row.optionalHashtags)) {
+      const current = optionalRows.get(tag) || { tag, samples: 0, views: [] };
+      current.samples += 1;
+      const views = finiteNumber(row.views);
+      if (views !== null) current.views.push(views);
+      optionalRows.set(tag, current);
+    }
+  }
+  const optional = [...optionalRows.values()].map((row) => ({
+    tag: row.tag,
+    samples: row.samples,
+    medianViews: median(row.views),
+    recommendation: row.samples < 3 ? "keep_testing" : "compare_against_control",
+  }));
+  return {
+    required: required.map((tag) => ({
+      tag,
+      locked: true,
+      reason: tag.toLowerCase() === "#paidpartner"
+        ? "campaign_disclosure_required"
+        : "campaign_requirement",
+    })),
+    optional,
+    rule: "Required campaign tags are immutable. The CEO may test or remove only optional tags after at least three published samples.",
+  };
+}
+
 function draftAssignments(campaign, experiment, rows) {
   const draftCount = Math.floor(finiteNumber(campaign.draftsReady) || 0);
   const namedDrafts = Array.isArray(campaign.draftFiles)
@@ -35,9 +88,7 @@ function draftAssignments(campaign, experiment, rows) {
     }
     return testedCounts.get(a.id) - testedCounts.get(b.id) || a.id.localeCompare(b.id);
   });
-  const requiredHashtags = Array.isArray(campaign.requiredHashtags)
-    ? campaign.requiredHashtags.map((value) => String(value || "").trim()).filter(Boolean)
-    : [];
+  const requiredHashtags = normalizedTags(campaign.requiredHashtags);
   const winnerSlots = experiment.winnerStrategyId ? Math.round(draftCount * 0.7) : 0;
   const explorationOrder = experiment.winnerStrategyId
     ? ordered.filter((strategy) => strategy.id !== experiment.winnerStrategyId)
@@ -53,13 +104,26 @@ function draftAssignments(campaign, experiment, rows) {
       .replace(/[-_]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    const captionText = strategy.captionStyle === "question"
+    const metadata = campaign.draftMetadata?.[path.basename(namedDrafts[index] || "")] || {};
+    const assignmentRequiredHashtags = normalizedTags([
+      ...requiredHashtags,
+      ...(Array.isArray(metadata.requiredHashtags) ? metadata.requiredHashtags : []),
+    ]);
+    const generatedCaptionText = strategy.captionStyle === "question"
       ? `Would you have expected this from ${campaign.creator}?`
       : strategy.captionStyle === "context"
         ? `${campaign.creator} explains the context behind ${topic}.`
         : strategy.captionStyle === "minimal"
           ? `${campaign.creator}: ${topic}.`
           : `${topic}: the part worth watching.`;
+    const metadataCaption = String(metadata.caption || "").trim();
+    const captionTags = new Set((metadataCaption.match(/#[A-Za-z0-9._-]+/g) || [])
+      .map((tag) => tag.toLowerCase()));
+    const missingRequiredTags = assignmentRequiredHashtags
+      .filter((tag) => !captionTags.has(tag.toLowerCase()));
+    const captionText = metadataCaption
+      ? `${metadataCaption} ${missingRequiredTags.join(" ")}`.trim()
+      : `${generatedCaptionText} ${assignmentRequiredHashtags.join(" ")}`.trim();
     return {
       slot: index + 1,
       draftFile: namedDrafts[index] || null,
@@ -67,10 +131,12 @@ function draftAssignments(campaign, experiment, rows) {
       captionStyle: strategy.captionStyle,
       subtitleStyle: strategy.subtitleStyle,
       hookStyle: strategy.hookStyle,
-      requiredHashtags,
-      captionText: `${captionText} ${requiredHashtags.join(" ")}`.trim(),
-      requiresTranscript,
-      preparationStatus: requiresTranscript ? "needs_local_transcript" : "ready_with_hook_only",
+      requiredHashtags: assignmentRequiredHashtags,
+      captionText,
+      mediaUrl: String(campaign.publicMediaUrls?.[namedDrafts[index]] || campaign.publicMediaUrls?.[path.basename(namedDrafts[index] || "")] || "").trim(),
+      requiresTranscript: metadata.requiresTranscript === false ? false : requiresTranscript,
+      preparationStatus: String(metadata.preparationStatus || "").trim()
+        || (requiresTranscript ? "needs_local_transcript" : "ready_with_hook_only"),
       metricoolStatus: "approval_required",
       publishAllowed: false,
     };
@@ -108,11 +174,19 @@ function htmlValue(value) {
     .replace(/'/g, "&#39;");
 }
 
-export function buildMetricoolApprovalRows(decision, mediaReadyBySlot = {}) {
+export function buildMetricoolApprovalRows(decision, mediaReadyBySlot = {}, deliveryLedger = []) {
+  const deliveredFiles = new Set((Array.isArray(deliveryLedger) ? deliveryLedger : [])
+    .filter((row) => ["scheduled", "published", "verification_pending"].includes(String(row?.status || "").toLowerCase()))
+    .map((row) => String(row?.draftFile || "").trim())
+    .filter(Boolean));
   return (decision.assignments || []).map((assignment) => {
     const media = mediaReadyBySlot[assignment.slot] || {};
     const publishingAuthorized = decision.publishingAuthorized === true;
-    const status = decision.canProduce !== true
+    const alreadyDelivered = deliveredFiles.has(String(media.relativePath || assignment.draftFile || "").trim())
+      || deliveredFiles.has(String(assignment.draftFile || "").trim());
+    const status = alreadyDelivered
+      ? "already_scheduled_or_published"
+      : decision.canProduce !== true
       ? "blocked_campaign"
       : media.ready !== true
         ? "blocked_media_missing"
@@ -129,6 +203,8 @@ export function buildMetricoolApprovalRows(decision, mediaReadyBySlot = {}) {
       draftFile: media.relativePath || assignment.draftFile,
       strategyId: assignment.strategyId,
       caption: assignment.captionText,
+      requiredHashtags: assignment.requiredHashtags,
+      mediaUrl: assignment.mediaUrl,
       status,
       publishAllowed: status === "authorized_for_metricool",
     };
@@ -197,7 +273,7 @@ function payoutBlockers(campaign) {
 }
 
 function metricRowsForCampaign(metrics, campaignId, campaign) {
-  return metrics.filter((row) => row.campaignId === campaignId
+  return dedupePublishedMetrics(metrics).filter((row) => row.campaignId === campaignId
     && row.finalStatus === "published"
     && tiktokPostMatchesAccount(row.publishedPostUrl, campaign?.accountHandle)
     && row.metricEvidenceVerified === true
@@ -249,6 +325,7 @@ function campaignDecision(campaign, metrics, now, publishingAuthorized = false) 
   const minViews = Number(campaign.minViewsPerPost || 0);
   const experiment = chooseExperiment(rows);
   const assignments = draftAssignments(campaign, experiment, rows);
+  const hashtagPolicy = buildHashtagPolicy(campaign, rows);
   let decision = "blocked";
   if (!productionBlockers.length) {
     if (rows.length < 3) decision = "test";
@@ -300,6 +377,7 @@ function campaignDecision(campaign, metrics, now, publishingAuthorized = false) 
       observedRevenuePerThousand,
     },
     experiment,
+    hashtagPolicy,
     assignments,
     nextAction: productionBlockers.length
       ? `Resolve ${productionBlockers[0]}.`
@@ -330,7 +408,7 @@ export function buildStreamerGrowthCeoPlan({
   const decisions = campaigns.map((campaign) => campaignDecision(campaign, metrics, now, publishingAuthorized))
     .sort((a, b) => b.priorityScore - a.priorityScore || a.title.localeCompare(b.title));
   const campaignById = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
-  const actualPublishedRows = metrics.filter((row) => {
+  const actualPublishedRows = dedupePublishedMetrics(metrics).filter((row) => {
     const campaign = campaignById.get(row.campaignId);
     return row.finalStatus === "published"
       && tiktokPostMatchesAccount(row.publishedPostUrl, campaign?.accountHandle)
@@ -405,6 +483,7 @@ export function buildStreamerGrowthCeoPlan({
       "Campaign authorization is required; creator fame never replaces commercial rights.",
       "Only proof-backed finalStatus=published Metricool rows count as views; earnings require separate payout evidence.",
       "No caption or subtitle winner is declared before three real posts per strategy.",
+      "Required campaign hashtags and disclosures are immutable; only optional hashtags may be tested.",
       "Payout identity and payment method affect cashout readiness, not campaign-source or Metricool approval readiness.",
       publishingAuthorized
         ? "Metricool publishing is authorized only for proof-backed eligible clips on the configured TikTok account."
@@ -461,8 +540,11 @@ async function main() {
   const reportDir = path.join(workspaceRoot, "reports");
   const campaignsPath = path.join(inputDir, "paid-streamer-campaigns.json");
   const metricsPath = path.join(inputDir, "paid-streamer-campaign-metrics.json");
+  const deliveryLedgerPath = path.join(reportDir, "metricool-autopilot-ledger.json");
+  const deliveryQueuePath = path.join(reportDir, "metricool-autopilot-queue.json");
   const campaigns = JSON.parse(await readFile(campaignsPath, "utf8").catch(() => "[]"));
   const metrics = JSON.parse(await readFile(metricsPath, "utf8").catch(() => "[]"));
+  const deliveryLedger = JSON.parse(await readFile(deliveryLedgerPath, "utf8").catch(() => "[]"));
   for (const campaign of campaigns) {
     campaign.evidenceVerified = await verifyTextEvidence(workspaceRoot, campaign.rightsEvidencePath, [
       campaign.id,
@@ -487,8 +569,10 @@ async function main() {
   }
   const publishingAuthorized = process.env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED === "true";
   const targetDailyClips = process.env.CLIPPERS_TARGET_DAILY_CLIPS || 5;
+  const expectedMetricoolBlogId = finiteNumber(process.env.CLIPPERS_METRICOOL_BLOG_ID);
   const plan = buildStreamerGrowthCeoPlan({ campaigns, metrics, publishingAuthorized, targetDailyClips });
   await mkdir(reportDir, { recursive: true });
+  const autopilotQueueItems = [];
   for (const decision of plan.decisions) {
     const mediaReadyBySlot = {};
     for (const assignment of decision.assignments || []) {
@@ -503,13 +587,30 @@ async function main() {
         relativePath: validatedMedia ? path.relative(workspaceRoot, validatedMedia) : "",
       };
     }
-    const rows = buildMetricoolApprovalRows(decision, mediaReadyBySlot);
-    decision.realPublishEnabled = rows.some((row) => row.status === "authorized_for_metricool");
+    const rows = buildMetricoolApprovalRows(decision, mediaReadyBySlot, deliveryLedger);
+    const campaign = campaigns.find((row) => row.id === decision.campaignId);
+    const campaignMetricoolBlogId = finiteNumber(campaign?.metricoolBlogId) ?? expectedMetricoolBlogId;
+    const readyForAutopilot = rows
+      .filter((row) => row.publishAllowed
+        && /^https:\/\//i.test(row.mediaUrl)
+        && expectedMetricoolBlogId !== null
+        && campaignMetricoolBlogId === expectedMetricoolBlogId)
+      .map((row) => ({
+        ...row,
+        blogId: campaignMetricoolBlogId,
+        account: String(row.account || "").replace(/^@/, ""),
+        status: "ready_for_metricool_autopilot",
+      }));
+    autopilotQueueItems.push(...readyForAutopilot);
+    decision.realPublishEnabled = readyForAutopilot.length > 0;
+    decision.metricoolAutopilotReady = readyForAutopilot.length > 0;
     decision.metricoolApprovalRequired = !decision.realPublishEnabled;
     if (decision.publishingAuthorized && decision.canProduce) {
       decision.nextAction = decision.realPublishEnabled
-        ? `Schedule the next eligible ${decision.experiment.nextStrategyId} test in Metricool${decision.cashoutBlockers.length ? `; resolve ${decision.cashoutBlockers[0]} before cashout` : ""}.`
-        : `Render and validate final media for the next ${decision.experiment.nextStrategyId} test before scheduling.`;
+        ? `Deliver the next eligible ${decision.experiment.nextStrategyId} test through the verified Metricool autopilot${decision.cashoutBlockers.length ? `; resolve ${decision.cashoutBlockers[0]} before cashout` : ""}.`
+        : rows.some((row) => row.status === "authorized_for_metricool")
+          ? "Attach a public HTTPS media URL for the validated clip before Metricool automation can run."
+          : `Render and validate final media for the next ${decision.experiment.nextStrategyId} test before scheduling.`;
     }
     const firstDraft = decision.assignments?.[0]?.draftFile;
     if (firstDraft && rows.length) {
@@ -525,6 +626,12 @@ async function main() {
   plan.operatingPolicy.realPublishEnabled = plan.decisions.some((decision) => decision.realPublishEnabled);
   plan.operatingPolicy.metricoolApprovalRequired = !plan.operatingPolicy.realPublishEnabled;
   plan.nextBestAction = plan.decisions[0]?.nextAction || plan.nextBestAction;
+  await writeFile(deliveryQueuePath, `${JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    paidSpendAllowed: false,
+    targetDailyClips: plan.operatingPolicy.dailyTestClips,
+    items: autopilotQueueItems,
+  }, null, 2)}\n`, { mode: 0o600 });
   await writeFile(path.join(reportDir, "streamer-growth-ceo.json"), `${JSON.stringify(plan, null, 2)}\n`);
   console.log(JSON.stringify(plan, null, 2));
 }
