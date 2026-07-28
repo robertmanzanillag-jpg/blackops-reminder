@@ -281,6 +281,9 @@ export function buildBlackRoomYtDlpWindowArgs(plan: BlackRoomEditPlan, sourcePat
     plan.videoUrl,
     "--download-sections", `*${plan.windowStartSeconds}-${plan.windowEndSeconds}`,
     "--force-keyframes-at-cuts", "-f", "bestvideo*[height<=1080]+bestaudio/best[height<=1080]",
+    // A network stall must fail fast so the local worker can retry the slot instead
+    // of holding the whole production queue for its outer watchdog window.
+    "--socket-timeout", "30", "--retries", "3", "--fragment-retries", "3",
     "--merge-output-format", "mp4", "--no-playlist", "--no-warnings", "--force-overwrites",
     "--paths", `temp:${temporaryDirectory}`, "-o", sourcePath,
   ];
