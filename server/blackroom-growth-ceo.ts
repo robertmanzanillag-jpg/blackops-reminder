@@ -13,10 +13,13 @@ export const BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS: Record<string, number> = {
 };
 export const BLACKROOM_CEO_MIN_SPACING_MINUTES = 90;
 export const BLACKROOM_CEO_REFRESH_MS = 6 * 60 * 60_000;
-// Metricool's Evolution view defaults to a 30-day period. Use the same
-// window so the CEO starts with the posts Robert can already see there,
-// instead of waiting for a new two-week cohort to accumulate.
+// Keep a recent window constant for endpoints that only expose rolling
+// analytics, but ask Metricool for the complete possible social-media
+// history whenever the discovered tool supports dates or pagination.
 export const BLACKROOM_CEO_ANALYTICS_LOOKBACK_DAYS = 30;
+export const BLACKROOM_CEO_ANALYTICS_HISTORY_START_DATE = "2005-01-01";
+export const BLACKROOM_CEO_ANALYTICS_PAGE_SIZE = 100;
+export const BLACKROOM_CEO_ANALYTICS_MAX_PAGES = 250;
 export const BLACKROOM_CEO_CREATIVE_MIN_SAMPLES = 5;
 export const BLACKROOM_CEO_CREATIVE_NEW_SAMPLES = 3;
 export const BLACKROOM_CEO_LOW_VIEW_THRESHOLD = 10;
@@ -35,6 +38,16 @@ export interface BlackRoomCeoAnalytics {
   /** Per-network read failures. A failed network must not hide the data from
    * the other connected networks. */
   networkErrors?: Record<string, string>;
+  /** Earliest date requested from Metricool. Availability still depends on
+   * the connected network and the Metricool plan's retention. */
+  historyStartDate?: string;
+  /** True means the discovered tool was exhausted for the requested range.
+   * False means Metricool did not expose pagination/date controls or hit a
+   * defensive request limit. */
+  historyCompleteByNetwork?: Record<string, boolean>;
+  /** Number of Metricool tool calls used to assemble each deduplicated
+   * historical cohort. */
+  historyRequestsByNetwork?: Record<string, number>;
   recommendedTimes: string[];
   recommendedTimesByNetwork?: Record<string, string[]>;
   networkMedianViews?: Record<string, number>;
@@ -81,13 +94,17 @@ function metricValue(record: Record<string, any>, names: string[]): number | nul
 }
 
 export function extractBlackRoomMetricSamples(value: unknown): number {
+  return extractBlackRoomMetricSampleIds(value).length;
+}
+
+export function extractBlackRoomMetricSampleIds(value: unknown): string[] {
   const ids = new Set<string>();
   for (const record of records(value)) {
     const views = metricValue(record, ["views", "impressions", "reach", "videoViews", "video_views", "viewCount", "view_count", "totalViews"]);
     const id = record.id ?? record.postId ?? record.post_id ?? record.uuid ?? record.url ?? record.permalink ?? record.postUrl;
     if (views !== null && id != null) ids.add(String(id));
   }
-  return ids.size;
+  return [...ids];
 }
 
 export function extractBlackRoomViewRecords(value: unknown): Array<{ id: string; views: number }> {
@@ -274,11 +291,31 @@ export function buildBlackRoomLearningSlots(input: {
   return baseline.sort((left, right) => left - right).map((minutes) => `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`);
 }
 
-function buildToolArguments(schema: Record<string, any> | undefined, network: string, now: Date, env: NodeJS.ProcessEnv) {
+type BlackRoomMetricoolArgumentWindow = {
+  start?: string;
+  end?: string;
+  page?: number;
+};
+
+function normalizedSchemaKeys(schema: Record<string, any> | undefined): Array<{ key: string; normalized: string }> {
+  return Object.keys(schema?.properties || {}).map((key) => ({
+    key,
+    normalized: key.toLowerCase().replace(/_/g, ""),
+  }));
+}
+
+function buildToolArguments(
+  schema: Record<string, any> | undefined,
+  network: string,
+  now: Date,
+  env: NodeJS.ProcessEnv,
+  window: BlackRoomMetricoolArgumentWindow = {},
+) {
   const properties = schema?.properties || {};
   const args: Record<string, unknown> = {};
-  const start = new Date(now.getTime() - BLACKROOM_CEO_ANALYTICS_LOOKBACK_DAYS * 86400_000).toISOString().slice(0, 10);
-  const end = now.toISOString().slice(0, 10);
+  const start = window.start || new Date(now.getTime() - BLACKROOM_CEO_ANALYTICS_LOOKBACK_DAYS * 86400_000).toISOString().slice(0, 10);
+  const end = window.end || now.toISOString().slice(0, 10);
+  const page = Math.max(1, Math.floor(window.page || 1));
   for (const key of Object.keys(properties)) {
     const normalized = key.toLowerCase().replace(/_/g, "");
     if (normalized === "blogid" || normalized === "brandid") args[key] = String(env.BLACKROOM_METRICOOL_BLOG_ID || BLACKROOM_METRICOOL_BLOG_ID);
@@ -287,10 +324,161 @@ function buildToolArguments(schema: Record<string, any> | undefined, network: st
     else if (["start", "startdate", "from", "datefrom", "sincedate"].includes(normalized)) args[key] = start;
     else if (["end", "enddate", "to", "dateto", "untildate"].includes(normalized)) args[key] = end;
     else if (normalized === "timezone") args[key] = "America/New_York";
-    else if (["limit", "pagesize", "perpage", "maxresults", "count"].includes(normalized)) args[key] = 100;
-    else if (["page", "pagenumber", "pageindex"].includes(normalized)) args[key] = 1;
+    else if (["limit", "pagesize", "perpage", "maxresults", "count"].includes(normalized)) args[key] = BLACKROOM_CEO_ANALYTICS_PAGE_SIZE;
+    else if (["page", "pagenumber", "pageindex"].includes(normalized)) args[key] = page;
+    else if (["offset", "skip"].includes(normalized)) args[key] = (page - 1) * BLACKROOM_CEO_ANALYTICS_PAGE_SIZE;
   }
   return args;
+}
+
+function payloadHasMore(value: unknown, returned: number): boolean {
+  for (const record of records(value)) {
+    for (const [key, raw] of Object.entries(record)) {
+      const normalized = key.toLowerCase().replace(/_/g, "");
+      if (["hasmore", "hasnext", "hasnextpage"].includes(normalized) && raw === true) return true;
+      if (["nextpage", "nextcursor", "cursor"].includes(normalized) && raw != null && raw !== "" && raw !== false) return true;
+      if (["total", "totalcount", "totalresults", "count"].includes(normalized)) {
+        const total = Number(raw);
+        if (Number.isFinite(total) && total > returned) return true;
+      }
+    }
+  }
+  return false;
+}
+
+function dateRangeSupported(schema: Record<string, any> | undefined): boolean {
+  const normalized = normalizedSchemaKeys(schema).map((entry) => entry.normalized);
+  return normalized.some((key) => ["start", "startdate", "from", "datefrom", "sincedate"].includes(key))
+    && normalized.some((key) => ["end", "enddate", "to", "dateto", "untildate"].includes(key));
+}
+
+function paginationSupported(schema: Record<string, any> | undefined): boolean {
+  return normalizedSchemaKeys(schema).some(({ normalized }) =>
+    ["page", "pagenumber", "pageindex", "offset", "skip"].includes(normalized));
+}
+
+function nextDate(date: string): string {
+  const value = new Date(`${date}T00:00:00.000Z`);
+  value.setUTCDate(value.getUTCDate() + 1);
+  return value.toISOString().slice(0, 10);
+}
+
+function splitDateRange(start: string, end: string): [string, string, string, string] | null {
+  const startMs = new Date(`${start}T00:00:00.000Z`).getTime();
+  const endMs = new Date(`${end}T00:00:00.000Z`).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs) || startMs >= endMs) return null;
+  const middle = new Date(startMs + Math.floor((endMs - startMs) / 2)).toISOString().slice(0, 10);
+  return [start, middle, nextDate(middle), end];
+}
+
+function configuredHistoryStartDate(env: NodeJS.ProcessEnv): string {
+  const configured = String(env.BLACKROOM_CEO_ANALYTICS_HISTORY_START_DATE || "");
+  return /^\d{4}-\d{2}-\d{2}$/.test(configured)
+    ? configured
+    : BLACKROOM_CEO_ANALYTICS_HISTORY_START_DATE;
+}
+
+type BlackRoomMetricoolHistory = {
+  metricIds: Set<string>;
+  viewRecords: Map<string, number>;
+  requests: number;
+  complete: boolean;
+};
+
+function emptyMetricoolHistory(complete = true): BlackRoomMetricoolHistory {
+  return { metricIds: new Set(), viewRecords: new Map(), requests: 0, complete };
+}
+
+function mergeMetricoolHistory(target: BlackRoomMetricoolHistory, source: BlackRoomMetricoolHistory): void {
+  for (const id of source.metricIds) target.metricIds.add(id);
+  for (const [id, views] of source.viewRecords) target.viewRecords.set(id, views);
+  target.requests += source.requests;
+  target.complete = target.complete && source.complete;
+}
+
+function addMetricoolPayload(target: BlackRoomMetricoolHistory, payload: unknown): number {
+  const ids = extractBlackRoomMetricSampleIds(payload);
+  for (const id of ids) target.metricIds.add(id);
+  for (const record of extractBlackRoomViewRecords(payload)) target.viewRecords.set(record.id, record.views);
+  return ids.length;
+}
+
+async function collectMetricoolToolHistory(input: {
+  fetcher: typeof fetch;
+  token: string;
+  tool: { name: string; inputSchema?: Record<string, any> };
+  network: string;
+  now: Date;
+  env: NodeJS.ProcessEnv;
+}): Promise<BlackRoomMetricoolHistory> {
+  const supportsDates = dateRangeSupported(input.tool.inputSchema);
+  const supportsPages = paginationSupported(input.tool.inputSchema);
+  let totalRequests = 0;
+  const fullStart = supportsDates ? configuredHistoryStartDate(input.env) : undefined;
+  const fullEnd = supportsDates ? input.now.toISOString().slice(0, 10) : undefined;
+
+  const collectRange = async (start?: string, end?: string): Promise<BlackRoomMetricoolHistory> => {
+    const output = emptyMetricoolHistory(supportsPages || supportsDates);
+    if (supportsPages) {
+      let previousSize = 0;
+      for (let page = 1; page <= BLACKROOM_CEO_ANALYTICS_MAX_PAGES; page += 1) {
+        if (totalRequests >= BLACKROOM_CEO_ANALYTICS_MAX_PAGES) {
+          output.complete = false;
+          return output;
+        }
+        const result = await callMetricoolMcpTool(
+          input.fetcher,
+          input.token,
+          input.tool.name,
+          buildToolArguments(input.tool.inputSchema, input.network, input.now, input.env, { start, end, page }),
+        );
+        totalRequests += 1;
+        output.requests += 1;
+        const payload = toolPayload(result);
+        const returned = addMetricoolPayload(output, payload);
+        const newIds = output.metricIds.size - previousSize;
+        previousSize = output.metricIds.size;
+        const hasMore = payloadHasMore(payload, returned);
+        if (newIds === 0) {
+          // A repeated full page while Metricool still advertises more data
+          // means this tool did not honor our page argument (or needs a
+          // cursor the discovered schema did not expose). Never present that
+          // truncated cohort as a complete historical import.
+          if (hasMore || returned >= BLACKROOM_CEO_ANALYTICS_PAGE_SIZE) output.complete = false;
+          return output;
+        }
+        if (!hasMore && returned < BLACKROOM_CEO_ANALYTICS_PAGE_SIZE) return output;
+      }
+      output.complete = false;
+      return output;
+    }
+
+    if (totalRequests >= BLACKROOM_CEO_ANALYTICS_MAX_PAGES) return emptyMetricoolHistory(false);
+    const result = await callMetricoolMcpTool(
+      input.fetcher,
+      input.token,
+      input.tool.name,
+      buildToolArguments(input.tool.inputSchema, input.network, input.now, input.env, { start, end }),
+    );
+    totalRequests += 1;
+    output.requests += 1;
+    const payload = toolPayload(result);
+    const returned = addMetricoolPayload(output, payload);
+    const mayBeTruncated = payloadHasMore(payload, returned) || returned >= BLACKROOM_CEO_ANALYTICS_PAGE_SIZE;
+    const split = start && end && mayBeTruncated ? splitDateRange(start, end) : null;
+    if (split) {
+      const divided = emptyMetricoolHistory(true);
+      const [leftStart, leftEnd, rightStart, rightEnd] = split;
+      mergeMetricoolHistory(divided, await collectRange(leftStart, leftEnd));
+      mergeMetricoolHistory(divided, await collectRange(rightStart, rightEnd));
+      divided.requests += output.requests;
+      return divided;
+    }
+    if (mayBeTruncated) output.complete = false;
+    return output;
+  };
+
+  return collectRange(fullStart, fullEnd);
 }
 
 export async function collectBlackRoomMetricoolAnalytics(options: {
@@ -313,27 +501,47 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const recommendedTimesByNetwork: Record<string, string[]> = {};
   const viewsByNetwork: Record<string, number[]> = {};
   const networkErrors: Record<string, string> = {};
+  const historyCompleteByNetwork: Record<string, boolean> = {};
+  const historyRequestsByNetwork: Record<string, number> = {};
   const networkMetricFailures = new Set<string>();
   let tiktokPostIds: string[] = [];
   for (const network of BLACKROOM_METRICOOL_NETWORKS) {
     const networkToolPattern = network === "tiktok" ? /^get_?tiktoks$/i : network === "youtube" ? /^get_?videos$/i : /^get_?posts$/i;
     const selectedTool = tools.find((tool) => networkToolPattern.test(tool.name)) || metricsTool!;
     try {
-      const metrics = await callMetricoolMcpTool(fetcher, String(env.METRICOOL_USER_TOKEN || ""), selectedTool.name, buildToolArguments(selectedTool.inputSchema, network, now, env));
-      const payload = toolPayload(metrics);
-      networkSamples[network] = extractBlackRoomMetricSamples(payload);
-      const viewRecords = extractBlackRoomViewRecords(payload);
+      const history = await collectMetricoolToolHistory({
+        fetcher,
+        token: String(env.METRICOOL_USER_TOKEN || ""),
+        tool: selectedTool,
+        network,
+        now,
+        env,
+      });
+      networkSamples[network] = history.metricIds.size;
+      const viewRecords = [...history.viewRecords].map(([id, views]) => ({ id, views }));
       viewsByNetwork[network] = viewRecords.map((record) => record.views);
       if (network === "tiktok") tiktokPostIds = viewRecords.map((record) => record.id);
+      historyCompleteByNetwork[network] = history.complete;
+      historyRequestsByNetwork[network] = history.requests;
     } catch (error) {
       networkSamples[network] = 0;
       viewsByNetwork[network] = [];
+      historyCompleteByNetwork[network] = false;
+      historyRequestsByNetwork[network] = 0;
       networkMetricFailures.add(network);
       networkErrors[network] = error instanceof Error ? error.message.slice(0, 240) : "Metricool no devolvió métricas";
     }
     if (bestTimesTool) {
       try {
-        const best = await callMetricoolMcpTool(fetcher, String(env.METRICOOL_USER_TOKEN || ""), bestTimesTool.name, buildToolArguments(bestTimesTool.inputSchema, network, now, env));
+        const best = await callMetricoolMcpTool(
+          fetcher,
+          String(env.METRICOOL_USER_TOKEN || ""),
+          bestTimesTool.name,
+          buildToolArguments(bestTimesTool.inputSchema, network, now, env, {
+            start: configuredHistoryStartDate(env),
+            end: now.toISOString().slice(0, 10),
+          }),
+        );
         const networkTimes = extractBlackRoomBestTimes(toolPayload(best));
         recommendedTimesByNetwork[network] = networkTimes;
         times.push(...networkTimes);
@@ -356,6 +564,10 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const networkLearning = planBlackRoomNetworkLearning({ viewsByNetwork });
   const creative = planBlackRoomCreativeLearning({ views: viewsByNetwork.tiktok || [], postIds: tiktokPostIds, previous: options.previous, now });
   const targets = BLACKROOM_METRICOOL_NETWORKS.map((network) => `${network} ${networkLearning.networkDailyTargets[network]}/día`).join(", ");
+  const completeNetworks = BLACKROOM_METRICOOL_NETWORKS.filter((network) => historyCompleteByNetwork[network]).length;
+  const historyReason = completeNetworks === BLACKROOM_METRICOOL_NETWORKS.length
+    ? "Historial disponible importado y deduplicado en las tres redes."
+    : `Historial importado parcialmente (${completeNetworks}/${BLACKROOM_METRICOOL_NETWORKS.length} redes completas); Metricool limitó las demás.`;
   return {
     sampleCount,
     lastCheckedAt: now.toISOString(),
@@ -364,12 +576,15 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
     networkSamples,
     comparableSampleCount,
     networkErrors: Object.keys(networkErrors).length ? networkErrors : undefined,
+    historyStartDate: configuredHistoryStartDate(env),
+    historyCompleteByNetwork,
+    historyRequestsByNetwork,
     recommendedTimes,
     recommendedTimesByNetwork,
     ...networkLearning,
     ...creative,
     reason: comparableSampleCount >= BLACKROOM_CEO_MIN_SAMPLES
-      ? `El CEO estudia resultados reales de las tres redes: ${targets}. ${creative.creativeReason}`
-      : `Importó ${sampleCount} resultados reales; recolectando evidencia comparable (${comparableSampleCount}/${BLACKROOM_CEO_MIN_SAMPLES}) antes de cambiar horas o volumen. ${creative.creativeReason}`,
+      ? `${historyReason} El CEO estudia resultados reales de las tres redes: ${targets}. ${creative.creativeReason}`
+      : `${historyReason} Importó ${sampleCount} resultados reales; recolectando evidencia comparable (${comparableSampleCount}/${BLACKROOM_CEO_MIN_SAMPLES}) antes de cambiar horas o volumen. ${creative.creativeReason}`,
   };
 }
