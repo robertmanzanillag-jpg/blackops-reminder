@@ -2,6 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdir, open, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { CLIPPERS_ALLOWED_ENV_KEYS, loadClipperSelectedEnv } from "./clippers-selected-env.mjs";
 
 const SAFE_ENV_KEYS = ["HOME", "LANG", "LC_ALL", "NODE_ENV", "PATH", "SHELL", "TMPDIR", "USER"];
 
@@ -30,6 +31,7 @@ function run(command, args, options = {}) {
 
 export async function runClipperFreeLocalWorker(options = {}) {
   const projectRoot = path.resolve(options.projectRoot || process.cwd());
+  loadClipperSelectedEnv(projectRoot);
   const workspaceRoot = path.resolve(options.workspaceRoot || path.join(projectRoot, "clippers_workspace"));
   const stateDir = path.join(workspaceRoot, "reports", "free-local-worker");
   const lockPath = path.join(stateDir, "worker.lock");
@@ -51,21 +53,51 @@ export async function runClipperFreeLocalWorker(options = {}) {
 
   const startedAt = new Date().toISOString();
   const publishingAuthorized = process.env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED === "true";
+  const publicMediaUploadAuthorized = process.env.CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED === "true";
   const metricoolEnv = publishingAuthorized ? {
     METRICOOL_USER_TOKEN: process.env.METRICOOL_USER_TOKEN,
     METRICOOL_USER_ID: process.env.METRICOOL_USER_ID,
     CLIPPERS_METRICOOL_BLOG_ID: process.env.CLIPPERS_METRICOOL_BLOG_ID,
     CLIPPERS_TIKTOK_ACCOUNT: process.env.CLIPPERS_TIKTOK_ACCOUNT || "streamersclipusa",
   } : {};
+  const publicMediaEnv = publicMediaUploadAuthorized ? Object.fromEntries(
+    [...CLIPPERS_ALLOWED_ENV_KEYS]
+      .filter((key) => key.startsWith("GOOGLE_") || key.startsWith("YOUTUBE_") || key.startsWith("CLIPPERS_PUBLIC_MEDIA"))
+      .map((key) => [key, process.env[key]])
+      .filter(([, value]) => typeof value === "string" && value),
+  ) : {};
+  if (publicMediaUploadAuthorized && process.env.CLIPPERS_METRICOOL_BLOG_ID) {
+    publicMediaEnv.CLIPPERS_METRICOOL_BLOG_ID = process.env.CLIPPERS_METRICOOL_BLOG_ID;
+  }
   const env = localOnlyEnv(process.env, {
     CLIPPERS_WORKSPACE_ROOT: workspaceRoot,
     CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: publishingAuthorized ? "true" : "false",
     CLIPPERS_TARGET_DAILY_CLIPS: process.env.CLIPPERS_TARGET_DAILY_CLIPS || "5",
+    CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED: publicMediaUploadAuthorized ? "true" : "false",
+    CLIPPERS_PUBLIC_MEDIA_PROVIDER: process.env.CLIPPERS_PUBLIC_MEDIA_PROVIDER || "google_drive",
     ...Object.fromEntries(Object.entries(metricoolEnv).filter(([, value]) => typeof value === "string" && value)),
+    ...publicMediaEnv,
   });
   const execute = options.run || run;
   try {
-    const planning = execute("npm", ["run", "clippers:streamer-growth-ceo"], { cwd: projectRoot, env });
+    const mediaUpload = publicMediaUploadAuthorized
+      ? execute("npm", ["run", "clippers:upload-metricool-media"], { cwd: projectRoot, env })
+      : {
+          command: "Public media upload skipped",
+          status: 0,
+          signal: null,
+          stdout: "",
+          stderr: "",
+        };
+    const planning = mediaUpload.status === 0
+      ? execute("npm", ["run", "clippers:streamer-growth-ceo"], { cwd: projectRoot, env })
+      : {
+          command: "CEO planning skipped",
+          status: null,
+          signal: null,
+          stdout: "",
+          stderr: "Public media upload failed",
+        };
     const delivery = planning.status === 0 && publishingAuthorized
       ? execute("node", ["script/clippers-metricool-autopilot.mjs"], { cwd: projectRoot, env })
       : {
@@ -88,7 +120,9 @@ export async function runClipperFreeLocalWorker(options = {}) {
       paidSpendAllowed: false,
       publishingSurface: "metricool",
       metricoolDeliveryEnabled: publishingAuthorized,
+      publicMediaUploadEnabled: publicMediaUploadAuthorized,
       cleanupExecuteEnabled: executeCleanup,
+      mediaUpload,
       planning,
       delivery,
       cleanup,

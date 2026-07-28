@@ -110,6 +110,33 @@ async function verifyMetricoolSchedule(fetcher, token, userId, blogId, caption, 
   throw new Error("Metricool scheduling outcome is unverified");
 }
 
+async function listMetricoolTikTokSchedule(fetcher, token, userId, blogId, startDate, endDate) {
+  const url = `https://app.metricool.com/api/v2/scheduler/posts?blogId=${blogId}`
+    + `&userId=${encodeURIComponent(userId)}&integrationSource=MCP`
+    + `&start=${startDate}T00%3A00%3A00&end=${endDate}T23%3A59%3A59`
+    + `&timezone=${encodeURIComponent(TIMEZONE)}&extendedRange=false`;
+  const response = await fetcher(url, {
+    headers: { "X-Mc-Auth": token, accept: "application/json" },
+    signal: AbortSignal.timeout(60_000),
+  });
+  if (!response.ok) throw new Error(`Metricool schedule preflight failed with HTTP ${response.status}`);
+  const value = JSON.parse(await response.text());
+  return objects(value).flatMap((record) => {
+    const providers = Array.isArray(record.providers) ? record.providers : [];
+    if (!providers.some((provider) => String(provider?.network || "").toLowerCase() === "tiktok")) return [];
+    const publication = record.publicationDate;
+    const dateTime = typeof publication === "string"
+      ? publication
+      : String(publication?.dateTime ?? record.publicationDateTime ?? record.date ?? "");
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(dateTime)) return [];
+    return [{
+      id: String(record.id ?? record.uuid ?? ""),
+      caption: String(record.text ?? record.caption ?? record.content ?? ""),
+      dateTime: dateTime.slice(0, 19),
+    }];
+  });
+}
+
 function localDateParts(date) {
   const parts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
     timeZone: TIMEZONE,
@@ -147,8 +174,12 @@ function zonedDateTime(localDateTime) {
   return `${localDateTime}${sign}${String(Math.floor(absolute / 60)).padStart(2, "0")}:${String(absolute % 60).padStart(2, "0")}`;
 }
 
-export function buildPublicationSchedule(now = new Date(), count = 5) {
+export function buildPublicationSchedule(now = new Date(), count = 5, options = {}) {
   const safeCount = Math.max(0, Math.min(8, Math.trunc(Number(count) || 0)));
+  const occupied = new Set(Array.isArray(options.occupiedLocalDateTimes) ? options.occupiedLocalDateTimes : []);
+  const dailyCounts = new Map(Object.entries(options.existingDailyCounts || {})
+    .map(([date, value]) => [date, Math.max(0, Math.trunc(Number(value) || 0))]));
+  const dailyLimit = Math.max(1, Math.min(8, Math.trunc(Number(options.dailyLimit) || safeCount || 5)));
   const rows = [];
   let dayOffset = 0;
   while (rows.length < safeCount) {
@@ -158,7 +189,9 @@ export function buildPublicationSchedule(now = new Date(), count = 5) {
       const local = `${localDate}T${slot}`;
       const instant = new Date(zonedDateTime(local));
       if (instant.getTime() <= now.getTime() + 30 * 60_000) continue;
+      if (occupied.has(local) || (dailyCounts.get(localDate) || 0) >= dailyLimit) continue;
       rows.push(local);
+      dailyCounts.set(localDate, (dailyCounts.get(localDate) || 0) + 1);
       if (rows.length >= safeCount) break;
     }
     dayOffset += 1;
@@ -185,6 +218,12 @@ export function validateAutopilotItem(item, expectedAccount) {
     requiredHashtags.some((tag) => !captionHasTag(caption, tag)) ? "required_hashtag_missing" : null,
   ].filter(Boolean);
   return { blockers, requiredHashtags, account, caption };
+}
+
+function slotIsBeforeCampaignExpiry(item, publicationDateTime) {
+  if (!item.campaignExpiresAt) return true;
+  const expiresAt = Date.parse(String(item.campaignExpiresAt));
+  return Number.isFinite(expiresAt) && new Date(zonedDateTime(publicationDateTime)).getTime() < expiresAt;
 }
 
 async function writeJsonAtomic(filePath, value) {
@@ -237,6 +276,7 @@ export async function runMetricoolAutopilot(options = {}) {
   if (!Number.isInteger(expectedBlogId) || expectedBlogId <= 0) throw new Error("CLIPPERS_METRICOOL_BLOG_ID is invalid");
   const expectedAccount = String(env.CLIPPERS_TIKTOK_ACCOUNT || "streamersclipusa").replace(/^@/, "");
   const targetDailyClips = Math.max(0, Math.min(8, Math.trunc(Number(queue.targetDailyClips) || 0)));
+  const now = options.now || new Date();
   const deliveredIds = new Set(ledger.map((row) => row.itemId));
   const candidatesById = new Map();
   for (const rawItem of Array.isArray(queue.items) ? queue.items : []) {
@@ -245,28 +285,66 @@ export async function runMetricoolAutopilot(options = {}) {
       candidatesById.set(item.itemId, item);
     }
   }
-  const candidates = [...candidatesById.values()];
-  const schedule = buildPublicationSchedule(options.now || new Date(), Math.min(targetDailyClips, candidates.length));
   const results = [];
+  const candidates = [];
+  for (const item of candidatesById.values()) {
+    const validation = validateAutopilotItem(item, expectedAccount);
+    const blogId = Number(item.blogId || expectedBlogId);
+    const campaignExpiresAt = item.campaignExpiresAt ? Date.parse(String(item.campaignExpiresAt)) : null;
+    const blockers = [
+      ...validation.blockers,
+      !Number.isInteger(blogId) || blogId <= 0 ? "metricool_blog_id_missing" : null,
+      Number.isInteger(blogId) && blogId > 0 && blogId !== expectedBlogId ? "wrong_metricool_blog" : null,
+      campaignExpiresAt !== null && (!Number.isFinite(campaignExpiresAt) || campaignExpiresAt <= now.getTime())
+        ? "campaign_expired_or_invalid"
+        : null,
+    ].filter(Boolean);
+    if (blockers.length) {
+      results.push({ itemId: item.itemId, status: "blocked", blockers });
+    } else {
+      candidates.push({ item, validation, blogId });
+    }
+  }
+  if (!candidates.length) {
+    return {
+      status: "blocked",
+      scheduled: 0,
+      blocked: results.length,
+      verificationPending: 0,
+      results,
+      ledgerPath,
+    };
+  }
+  const startDate = localDateParts(now);
+  const endDate = localDateParts(new Date(now.getTime() + 7 * 86_400_000));
+  const existingSchedule = await listMetricoolTikTokSchedule(
+    fetcher,
+    token,
+    userId,
+    expectedBlogId,
+    startDate,
+    endDate,
+  );
+  const existingDailyCounts = {};
+  for (const row of existingSchedule) {
+    const date = row.dateTime.slice(0, 10);
+    existingDailyCounts[date] = (existingDailyCounts[date] || 0) + 1;
+  }
+  const schedule = buildPublicationSchedule(now, Math.min(targetDailyClips, candidates.length), {
+    occupiedLocalDateTimes: existingSchedule.map((row) => row.dateTime),
+    existingDailyCounts,
+    dailyLimit: targetDailyClips,
+  });
   let scheduleIndex = 0;
 
-  for (const item of candidates) {
+  for (const candidate of candidates) {
     if (scheduleIndex >= schedule.length) break;
-    const validation = validateAutopilotItem(item, expectedAccount);
-    if (validation.blockers.length) {
-      results.push({ itemId: item.itemId, status: "blocked", blockers: validation.blockers });
-      continue;
-    }
-    const blogId = Number(item.blogId || expectedBlogId);
-    if (!Number.isInteger(blogId) || blogId <= 0) {
-      results.push({ itemId: item.itemId, status: "blocked", blockers: ["metricool_blog_id_missing"] });
-      continue;
-    }
-    if (blogId !== expectedBlogId) {
-      results.push({ itemId: item.itemId, status: "blocked", blockers: ["wrong_metricool_blog"] });
-      continue;
-    }
+    const { item, validation, blogId } = candidate;
     const publicationDateTime = schedule[scheduleIndex];
+    if (!slotIsBeforeCampaignExpiry(item, publicationDateTime)) {
+      results.push({ itemId: item.itemId, status: "blocked", blockers: ["campaign_expires_before_slot"] });
+      continue;
+    }
     scheduleIndex += 1;
     const payload = {
       autoPublish: true,
@@ -308,6 +386,9 @@ export async function runMetricoolAutopilot(options = {}) {
       account: validation.account,
       caption: validation.caption,
       requiredHashtags: validation.requiredHashtags,
+      strategyId: item.strategyId,
+      subtitleStyle: item.subtitleStyle,
+      hookStyle: item.hookStyle,
       mediaUrl: item.mediaUrl,
       scheduledFor: publicationDateTime,
       metricoolBlogId: blogId,

@@ -100,3 +100,56 @@ test("passes only Metricool delivery credentials after explicit authorization", 
     }
   }
 });
+
+test("uploads public campaign media before CEO planning when explicitly authorized", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-free-worker-media-"));
+  const previous = {
+    upload: process.env.CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED,
+    provider: process.env.CLIPPERS_PUBLIC_MEDIA_PROVIDER,
+    googleClient: process.env.GOOGLE_CLIENT_ID,
+    googleSecret: process.env.GOOGLE_CLIENT_SECRET,
+    googleRefresh: process.env.GOOGLE_DRIVE_REFRESH_TOKEN,
+    blogId: process.env.CLIPPERS_METRICOOL_BLOG_ID,
+  };
+  const calls = [];
+  try {
+    process.env.CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED = "true";
+    process.env.CLIPPERS_PUBLIC_MEDIA_PROVIDER = "google_drive";
+    process.env.GOOGLE_CLIENT_ID = "drive-client";
+    process.env.GOOGLE_CLIENT_SECRET = "drive-secret";
+    process.env.GOOGLE_DRIVE_REFRESH_TOKEN = "drive-refresh";
+    process.env.CLIPPERS_METRICOOL_BLOG_ID = "6431687";
+    const result = await runClipperFreeLocalWorker({
+      projectRoot,
+      run(command, args, options) {
+        calls.push({ command, args, env: options.env });
+        return { command: [command, ...args].join(" "), status: 0, signal: null, stdout: "", stderr: "" };
+      },
+    });
+    assert.equal(result.status, "completed");
+    assert.equal(result.publicMediaUploadEnabled, true);
+    assert.deepEqual(calls.map(({ command, args }) => [command, ...args]), [
+      ["npm", "run", "clippers:upload-metricool-media"],
+      ["npm", "run", "clippers:streamer-growth-ceo"],
+      ["node", "script/clippers-cleanup-published-vyro-media.mjs"],
+    ]);
+    assert.equal(calls[0].env.GOOGLE_CLIENT_ID, "drive-client");
+    assert.equal(calls[0].env.GOOGLE_DRIVE_REFRESH_TOKEN, "drive-refresh");
+    assert.equal(calls[0].env.CLIPPERS_METRICOOL_BLOG_ID, "6431687");
+    assert.equal(calls[0].env.OPENAI_API_KEY, undefined);
+  } finally {
+    const envNames = {
+      upload: "CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED",
+      provider: "CLIPPERS_PUBLIC_MEDIA_PROVIDER",
+      googleClient: "GOOGLE_CLIENT_ID",
+      googleSecret: "GOOGLE_CLIENT_SECRET",
+      googleRefresh: "GOOGLE_DRIVE_REFRESH_TOKEN",
+      blogId: "CLIPPERS_METRICOOL_BLOG_ID",
+    };
+    for (const [key, value] of Object.entries(previous)) {
+      const envName = envNames[key];
+      if (value === undefined) delete process.env[envName];
+      else process.env[envName] = value;
+    }
+  }
+});

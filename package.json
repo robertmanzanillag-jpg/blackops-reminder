@@ -91,6 +91,7 @@
     "clippers:record-owned-source-rights": "node script/clippers-record-owned-source-rights.mjs",
     "clippers:sync-metricool-source-readiness": "node script/clippers-sync-metricool-source-readiness.mjs",
     "clippers:streamer-growth-ceo": "node script/clippers-streamer-growth-ceo.mjs",
+    "clippers:upload-metricool-media": "node --import tsx script/clippers-upload-metricool-media.ts",
     "clippers:metricool-autopilot": "node script/clippers-metricool-autopilot.mjs",
     "clippers:free-local-worker": "node script/clippers-free-local-worker.mjs",
     "clippers:install-free-local-worker": "zsh script/install-clippers-free-local-worker-launch-agent.sh",

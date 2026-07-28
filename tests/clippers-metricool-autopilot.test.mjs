@@ -42,6 +42,21 @@ test("builds five spaced daily slots after the current time", () => {
   ]);
 });
 
+test("counts existing TikTok posts toward the daily limit and avoids occupied slots", () => {
+  const slots = buildPublicationSchedule(new Date("2026-07-28T05:00:00.000Z"), 5, {
+    occupiedLocalDateTimes: ["2026-07-28T10:00:00"],
+    existingDailyCounts: { "2026-07-28": 1 },
+    dailyLimit: 5,
+  });
+  assert.deepEqual(slots, [
+    "2026-07-28T12:30:00",
+    "2026-07-28T15:00:00",
+    "2026-07-28T17:30:00",
+    "2026-07-28T20:00:00",
+    "2026-07-29T10:00:00",
+  ]);
+});
+
 test("does not schedule without explicit authorization", async () => {
   const result = await runMetricoolAutopilot({ env: {}, queue: { targetDailyClips: 5, items: [eligible] } });
   assert.equal(result.status, "blocked");
@@ -72,11 +87,18 @@ test("schedules eligible unique rows through Metricool MCP and writes no paid sp
             headers: { "content-type": "application/json" },
           });
         }
+        if (!calls.length) {
+          return new Response(JSON.stringify({ data: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
         return new Response(JSON.stringify({
           data: [{
             id: "metricool-123",
             text: eligible.caption,
             publicationDate: { dateTime: "2026-07-28T10:00:00" },
+            providers: [{ network: "tiktok" }],
           }],
         }), { status: 200, headers: { "content-type": "application/json" } });
       },
@@ -180,6 +202,71 @@ test("blocks a queue item routed to a different Metricool blog", async () => {
   }
 });
 
+test("blocks a slot that would run after the verified campaign expiry", async () => {
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-metricool-expiry-"));
+  let mcpCalls = 0;
+  try {
+    const result = await runMetricoolAutopilot({
+      env: {
+        CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
+        METRICOOL_USER_TOKEN: "token",
+        METRICOOL_USER_ID: "3558197",
+        CLIPPERS_METRICOOL_BLOG_ID: "6431687",
+      },
+      workspaceRoot,
+      queue: {
+        targetDailyClips: 5,
+        items: [{ ...eligible, campaignExpiresAt: "2026-07-28T13:00:00.000Z" }],
+      },
+      ledger: [],
+      now: new Date("2026-07-28T05:00:00.000Z"),
+      async fetch(url) {
+        if (url === "https://ai.metricool.com/mcp") mcpCalls += 1;
+        return new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+    assert.equal(result.status, "blocked");
+    assert.deepEqual(result.results[0].blockers, ["campaign_expires_before_slot"]);
+    assert.equal(mcpCalls, 0);
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("blocks an already expired campaign without calling Metricool", async () => {
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-metricool-expired-"));
+  let fetchCalls = 0;
+  try {
+    const result = await runMetricoolAutopilot({
+      env: {
+        CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
+        METRICOOL_USER_TOKEN: "token",
+        METRICOOL_USER_ID: "3558197",
+        CLIPPERS_METRICOOL_BLOG_ID: "6431687",
+      },
+      workspaceRoot,
+      queue: {
+        targetDailyClips: 5,
+        items: [{ ...eligible, campaignExpiresAt: "2026-07-28T04:00:00.000Z" }],
+      },
+      ledger: [],
+      now: new Date("2026-07-28T05:00:00.000Z"),
+      async fetch() {
+        fetchCalls += 1;
+        throw new Error("Expired campaigns must not call Metricool");
+      },
+    });
+    assert.equal(result.status, "blocked");
+    assert.deepEqual(result.results[0].blockers, ["campaign_expired_or_invalid"]);
+    assert.equal(fetchCalls, 0);
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
 test("deduplicates identical items inside one queue before calling Metricool", async () => {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-metricool-batch-dedupe-"));
   let mcpCalls = 0;
@@ -203,11 +290,18 @@ test("deduplicates identical items inside one queue before calling Metricool", a
             headers: { "content-type": "application/json" },
           });
         }
+        if (!mcpCalls) {
+          return new Response(JSON.stringify({ data: [] }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        }
         return new Response(JSON.stringify({
           data: [{
             id: "metricool-deduped",
             text: eligible.caption,
             publicationDate: { dateTime: "2026-07-28T10:00:00" },
+            providers: [{ network: "tiktok" }],
           }],
         }), { status: 200, headers: { "content-type": "application/json" } });
       },

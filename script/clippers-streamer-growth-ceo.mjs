@@ -110,7 +110,7 @@ function draftAssignments(campaign, experiment, rows) {
       ...(Array.isArray(metadata.requiredHashtags) ? metadata.requiredHashtags : []),
     ]);
     const generatedCaptionText = strategy.captionStyle === "question"
-      ? `Would you have expected this from ${campaign.creator}?`
+      ? `Would you have expected this from ${campaign.creator}: ${topic}?`
       : strategy.captionStyle === "context"
         ? `${campaign.creator} explains the context behind ${topic}.`
         : strategy.captionStyle === "minimal"
@@ -129,8 +129,9 @@ function draftAssignments(campaign, experiment, rows) {
       draftFile: namedDrafts[index] || null,
       strategyId: strategy.id,
       captionStyle: strategy.captionStyle,
-      subtitleStyle: strategy.subtitleStyle,
+      subtitleStyle: String(metadata.subtitleStyle || "").trim() || strategy.subtitleStyle,
       hookStyle: strategy.hookStyle,
+      finalMediaFile: String(metadata.finalMediaFile || "").trim() || null,
       requiredHashtags: assignmentRequiredHashtags,
       captionText,
       mediaUrl: String(campaign.publicMediaUrls?.[namedDrafts[index]] || campaign.publicMediaUrls?.[path.basename(namedDrafts[index] || "")] || "").trim(),
@@ -200,8 +201,11 @@ export function buildMetricoolApprovalRows(decision, mediaReadyBySlot = {}, deli
       account: decision.accountHandle,
       platform: "tiktok",
       campaignId: decision.campaignId,
+      campaignExpiresAt: decision.campaignExpiresAt,
       draftFile: media.relativePath || assignment.draftFile,
       strategyId: assignment.strategyId,
+      subtitleStyle: assignment.subtitleStyle,
+      hookStyle: assignment.hookStyle,
       caption: assignment.captionText,
       requiredHashtags: assignment.requiredHashtags,
       mediaUrl: assignment.mediaUrl,
@@ -348,6 +352,7 @@ function campaignDecision(campaign, metrics, now, publishingAuthorized = false) 
   );
   return {
     campaignId: campaign.id,
+    campaignExpiresAt: Number.isFinite(expiryMs) ? new Date(expiryMs).toISOString() : null,
     title: campaign.title,
     creator: campaign.creator,
     creatorTier: campaign.creatorTier || "unknown",
@@ -525,7 +530,21 @@ export async function validateMetricoolMp4(workspaceRoot, candidate) {
   return stream?.codec_name && Number(stream.width) > 0 && Number(stream.height) > 0 ? resolved : null;
 }
 
-async function verifyTextEvidence(workspaceRoot, evidencePath, requiredValues) {
+export function resolveAssignmentFinalMediaPath(workspaceRoot, assignment) {
+  if (assignment?.finalMediaFile) {
+    return resolveWorkspaceMediaPath(workspaceRoot, assignment.finalMediaFile);
+  }
+  const original = resolveWorkspaceMediaPath(workspaceRoot, assignment?.draftFile);
+  if (assignment?.subtitleStyle === "hook_only" || assignment?.requiresTranscript === false) return original;
+  const extension = path.extname(original);
+  return path.join(
+    path.dirname(original),
+    "subtitled",
+    `${path.basename(original, extension)}-${assignment?.subtitleStyle}.mp4`,
+  );
+}
+
+export async function verifyTextEvidence(workspaceRoot, evidencePath, requiredValues) {
   const resolved = await containedRegularFile(workspaceRoot, evidencePath);
   if (!resolved) return false;
   const text = await readFile(resolved, "utf8").catch(() => "");
@@ -576,11 +595,7 @@ async function main() {
   for (const decision of plan.decisions) {
     const mediaReadyBySlot = {};
     for (const assignment of decision.assignments || []) {
-      const original = resolveWorkspaceMediaPath(workspaceRoot, assignment.draftFile);
-      const extension = path.extname(original);
-      const finalMedia = assignment.subtitleStyle === "hook_only"
-        ? original
-        : path.join(path.dirname(original), "subtitled", `${path.basename(original, extension)}-${assignment.subtitleStyle}.mp4`);
+      const finalMedia = resolveAssignmentFinalMediaPath(workspaceRoot, assignment);
       const validatedMedia = await validateMetricoolMp4(workspaceRoot, finalMedia);
       mediaReadyBySlot[assignment.slot] = {
         ready: Boolean(validatedMedia),
