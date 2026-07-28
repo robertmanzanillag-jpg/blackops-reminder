@@ -259,6 +259,8 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /aria-live="polite"/);
   assert.match(blackRoomPage, /técnica CEO/);
   assert.match(blackRoomPage, /mediana TikTok/);
+  assert.match(blackRoomPage, /historial:/);
+  assert.match(blackRoomPage, /historyCompleteByNetwork/);
   assert.match(blackRoomPage, /function renderActivity\(history=\[\]\)/);
   assert.match(blackRoomPage, /setAttribute\('role','log'\)/);
   assert.match(blackRoomPage, /aria-relevant','additions/);

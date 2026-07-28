@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   BLACKROOM_CEO_MIN_SAMPLES,
   BLACKROOM_CEO_ANALYTICS_LOOKBACK_DAYS,
+  BLACKROOM_CEO_ANALYTICS_HISTORY_START_DATE,
   BLACKROOM_CEO_CREATIVE_MIN_SAMPLES,
   buildBlackRoomLearningSlots,
   collectBlackRoomMetricoolAnalytics,
@@ -60,8 +61,113 @@ test("collects each network through discovered Metricool MCP tools and totals us
   assert.deepEqual(analytics.recommendedTimes, ["18:30"]);
   assert.deepEqual(analytics.recommendedTimesByNetwork, { tiktok: ["18:30"], facebook: ["18:30"], youtube: ["18:30"] });
   assert.deepEqual(analytics.networkDailyTargets, { tiktok: 5, facebook: 5, youtube: 5 });
+  assert.deepEqual(analytics.historyCompleteByNetwork, { tiktok: true, facebook: true, youtube: true });
+  assert.deepEqual(analytics.historyRequestsByNetwork, { tiktok: 1, facebook: 1, youtube: 1 });
+  assert.equal(analytics.historyStartDate, BLACKROOM_CEO_ANALYTICS_HISTORY_START_DATE);
   assert.equal(calls.filter((name) => name === "get_best_times_to_post").length, 3);
   assert.equal(BLACKROOM_CEO_ANALYTICS_LOOKBACK_DAYS, 30);
+});
+
+test("paginates and deduplicates every available Metricool history page", async () => {
+  const pages: Record<string, number[]> = { get_tiktoks: [], get_posts: [], get_videos: [] };
+  const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const request = JSON.parse(String(init?.body || "{}"));
+    if (request.method === "tools/list") {
+      return new Response(JSON.stringify({ result: { tools: [
+        { name: "get_tiktoks", inputSchema: { properties: { blogId: {}, startDate: {}, endDate: {}, page: {}, pageSize: {} } } },
+        { name: "get_posts", inputSchema: { properties: { blogId: {}, network: {}, start: {}, end: {}, page: {}, pageSize: {} } } },
+        { name: "get_videos", inputSchema: { properties: { brand_id: {}, platform: {}, from: {}, to: {}, page: {}, pageSize: {} } } },
+      ] } }), { headers: { "content-type": "application/json" } });
+    }
+    const name = request.params.name as keyof typeof pages;
+    const page = Number(request.params.arguments.page);
+    pages[name].push(page);
+    const data = page === 1
+      ? Array.from({ length: 100 }, (_, index) => ({ id: `${name}-${index}`, views: index + 1 }))
+      : [{ id: `${name}-99`, views: 100 }, { id: `${name}-100`, views: 101 }];
+    return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({ data }) }] } }), { headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+
+  const analytics = await collectBlackRoomMetricoolAnalytics({
+    fetch: fetcher,
+    env: { METRICOOL_USER_TOKEN: "secure-test-token" },
+    now: new Date("2026-07-28T12:00:00.000Z"),
+  });
+
+  assert.deepEqual(pages, { get_tiktoks: [1, 2], get_posts: [1, 2], get_videos: [1, 2] });
+  assert.deepEqual(analytics.networkSamples, { tiktok: 101, facebook: 101, youtube: 101 });
+  assert.equal(analytics.sampleCount, 303);
+  assert.deepEqual(analytics.historyCompleteByNetwork, { tiktok: true, facebook: true, youtube: true });
+  assert.deepEqual(analytics.historyRequestsByNetwork, { tiktok: 2, facebook: 2, youtube: 2 });
+});
+
+test("does not claim complete history when Metricool repeats a page that still has more results", async () => {
+  const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const request = JSON.parse(String(init?.body || "{}"));
+    if (request.method === "tools/list") {
+      return new Response(JSON.stringify({ result: { tools: [
+        { name: "get_metrics", inputSchema: { properties: { network: {}, startDate: {}, endDate: {}, page: {}, pageSize: {} } } },
+      ] } }), { headers: { "content-type": "application/json" } });
+    }
+    const network = String(request.params.arguments.network);
+    const data = Array.from({ length: 100 }, (_, index) => ({ id: `${network}-${index}`, views: index + 1 }));
+    return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({
+      data,
+      hasMore: true,
+      total: 500,
+    }) }] } }), { headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+
+  const analytics = await collectBlackRoomMetricoolAnalytics({
+    fetch: fetcher,
+    env: { METRICOOL_USER_TOKEN: "secure-test-token" },
+    now: new Date("2026-07-28T12:00:00.000Z"),
+  });
+
+  assert.deepEqual(analytics.networkSamples, { tiktok: 100, facebook: 100, youtube: 100 });
+  assert.deepEqual(analytics.historyRequestsByNetwork, { tiktok: 2, facebook: 2, youtube: 2 });
+  assert.deepEqual(analytics.historyCompleteByNetwork, { tiktok: false, facebook: false, youtube: false });
+  assert.match(analytics.reason, /Historial importado parcialmente/);
+});
+
+test("splits a capped date range until the full historical cohort is available", async () => {
+  const calls: Record<string, Array<{ start?: string; end?: string }>> = { get_tiktoks: [], get_posts: [], get_videos: [] };
+  const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const request = JSON.parse(String(init?.body || "{}"));
+    if (request.method === "tools/list") {
+      return new Response(JSON.stringify({ result: { tools: [
+        { name: "get_tiktoks", inputSchema: { properties: { startDate: {}, endDate: {} } } },
+        { name: "get_posts", inputSchema: { properties: { start: {}, end: {} } } },
+        { name: "get_videos", inputSchema: { properties: { from: {}, to: {} } } },
+      ] } }), { headers: { "content-type": "application/json" } });
+    }
+    const name = request.params.name as keyof typeof calls;
+    const args = request.params.arguments as Record<string, string>;
+    const start = args.startDate || args.start || args.from;
+    const end = args.endDate || args.end || args.to;
+    calls[name].push({ start, end });
+    let data: Array<{ id: string; views: number }>;
+    if (name === "get_tiktoks" && start === BLACKROOM_CEO_ANALYTICS_HISTORY_START_DATE && end === "2026-07-28") {
+      data = Array.from({ length: 100 }, (_, index) => ({ id: `capped-${index}`, views: index }));
+    } else if (name === "get_tiktoks") {
+      data = Array.from({ length: 60 }, (_, index) => ({ id: `${start}-${index}`, views: index }));
+    } else {
+      data = [{ id: `${name}-historical`, views: 20 }];
+    }
+    return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({ data }) }] } }), { headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+
+  const analytics = await collectBlackRoomMetricoolAnalytics({
+    fetch: fetcher,
+    env: { METRICOOL_USER_TOKEN: "secure-test-token" },
+    now: new Date("2026-07-28T12:00:00.000Z"),
+  });
+
+  assert.equal(calls.get_tiktoks.length, 3);
+  assert.equal(calls.get_tiktoks[0].start, BLACKROOM_CEO_ANALYTICS_HISTORY_START_DATE);
+  assert.equal(analytics.networkSamples.tiktok, 120);
+  assert.equal(analytics.historyCompleteByNetwork?.tiktok, true);
+  assert.equal(analytics.historyRequestsByNetwork?.tiktok, 3);
 });
 
 test("keeps Facebook and YouTube learning data when one Metricool network temporarily fails", async () => {
