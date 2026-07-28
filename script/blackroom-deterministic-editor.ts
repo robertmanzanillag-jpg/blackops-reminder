@@ -15,7 +15,14 @@ import {
   type BlackRoomEditPlan,
   type BlackRoomInventoryVideo,
 } from "../server/blackroom-deterministic-editor";
-import { BLACKROOM_QUEUE_PATH, type BlackRoomQueueState } from "../server/blackroom-daily-queue";
+import {
+  BLACKROOM_QUEUE_PATH,
+  recordBlackRoomFailedSource,
+  readBlackRoomQueue,
+  withBlackRoomQueueLock,
+  writeBlackRoomQueue,
+  type BlackRoomQueueState,
+} from "../server/blackroom-daily-queue";
 import {
   BLACKROOM_FFPROBE_SHOW_ENTRIES,
   BLACKROOM_WORKER_LEDGER_PATH,
@@ -120,6 +127,20 @@ async function downloadWindow(plan: BlackRoomEditPlan, sourcePath: string, tempo
   );
   const info = await stat(sourcePath);
   if (!info.isFile() || info.size <= 0) throw new Error("yt-dlp produced an empty BlackRoom source window");
+}
+
+async function deferFailedDownload(plan: BlackRoomEditPlan, error: unknown): Promise<void> {
+  const reason = error instanceof Error ? error.message : String(error);
+  await withBlackRoomQueueLock(queuePath, async () => {
+    const latest = await readBlackRoomQueue(queuePath);
+    recordBlackRoomFailedSource(latest, plan.videoId, reason);
+    await writeBlackRoomQueue(latest, queuePath);
+  });
+  await appendActivity(
+    `La fuente ${plan.videoId} falló al descargar y queda excluida temporalmente; el siguiente intento elegirá otro DJ/video.`,
+    "fuente",
+    "error",
+  );
 }
 
 async function analyzeDrop(sourcePath: string, plan: BlackRoomEditPlan): Promise<number> {
@@ -231,7 +252,12 @@ async function main(): Promise<void> {
   };
   activeCleanup = cleanup;
   try {
-    await downloadWindow(plan, sourcePath, temporaryDirectory);
+    try {
+      await downloadWindow(plan, sourcePath, temporaryDirectory);
+    } catch (error) {
+      await deferFailedDownload(plan, error).catch(() => undefined);
+      throw error;
+    }
     const offsetSeconds = await analyzeDrop(sourcePath, plan);
     await renderClip(sourcePath, renderPath, plan, offsetSeconds);
     await validateRender(renderPath, plan);

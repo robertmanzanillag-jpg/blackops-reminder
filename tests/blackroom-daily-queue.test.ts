@@ -6,6 +6,7 @@ import {
   completeBlackRoomJob,
   cancelStaleBlackRoomJobs,
   createBlackRoomQueueState,
+  recordBlackRoomFailedSource,
   ensureBlackRoomScheduleBuffer,
   pauseBlackRoomAgent,
   recoverInterruptedBlackRoomJobs,
@@ -304,6 +305,14 @@ test("serializes concurrent queue mutations without losing source history", asyn
   await Promise.all([mutate("video-a", 50), mutate("video-b", 0)]);
   const finalState = await readBlackRoomQueue(queuePath);
   assert.deepEqual(finalState.sourceHistory.map((item) => item.videoId).sort(), ["video-a", "video-b"]);
+});
+
+test("records a failed download separately from published source history", () => {
+  const state = createBlackRoomQueueState(new Date("2026-07-28T12:00:00.000Z"));
+  const recorded = recordBlackRoomFailedSource(state, "failed-video", "yt-dlp timed out", new Date("2026-07-28T12:01:00.000Z"));
+  assert.equal(recorded.videoId, "failed-video");
+  assert.equal(state.sourceHistory.length, 0);
+  assert.deepEqual(state.failedSourceVideos.map((item) => item.videoId), ["failed-video"]);
 });
 
 test("does not steal a newly created lock before its PID is written", async () => {
