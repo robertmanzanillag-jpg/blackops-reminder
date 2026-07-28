@@ -44,6 +44,7 @@ const queueItemSchema = z.object({
   createdAt: z.string().datetime(),
   source: z.string().max(500).optional(),
   section: z.enum(["traffic", "weather", "breaking", "public_safety", "local"]).optional(),
+  topicTag: z.enum(["violent_crime", "kidnapping", "immigration"]).nullable().optional(),
   editorialUrgency: z.enum(["routine", "developing", "breaking"]).optional(),
   editorialPriority: z.number().finite().min(0).max(100).optional(),
   qualityScore: z.number().finite().min(0).max(100).optional(),
@@ -123,6 +124,10 @@ function isRoutineTransitNoise(item: QueueItem): boolean {
   if (item.editorialUrgency === "breaking" || item.risk === "high" || item.risk === "critical") return false;
   const text = `${item.source || ""} ${item.copy}`.normalize("NFKC").toLocaleLowerCase("en-US");
   return /\b(?:mta|subway|metrobus|miami[- ]dade transit)\b/.test(text);
+}
+
+function trafficPublishingEnabled(env: NodeJS.ProcessEnv): boolean {
+  return env.CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC === "true";
 }
 
 export type ClipperLocalNewsMetricoolResultStatus = "completed" | "partial" | "blocked";
@@ -603,6 +608,11 @@ export async function deliverClipperLocalNewsToMetricool(
     const fetchedNow = now();
     let safeItems = queue.filter((item) => {
       const platformEnabled = item.platform !== "x" || env.CLIPPERS_LOCAL_NEWS_ENABLE_X === "true";
+      const highImpactTraffic = item.editorialUrgency === "breaking" || item.risk === "high" || item.risk === "critical";
+      if (item.section === "traffic" && !trafficPublishingEnabled(env) && !highImpactTraffic) {
+        result.filtered += 1;
+        return false;
+      }
       if (isRoutineTransitNoise(item)) {
         result.filtered += 1;
         return false;
