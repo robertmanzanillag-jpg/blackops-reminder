@@ -430,6 +430,22 @@ export function ensureBlackRoomScheduleBuffer(state: BlackRoomQueueState, now = 
   return created;
 }
 
+/**
+ * Keeps an enabled campaign actionable as calendar days pass.  The local
+ * control process calls this during its normal health poll, so a full
+ * two-week buffer does not silently run out after the original jobs have
+ * been completed.  This only creates future queue work; it never republishes
+ * a missed day or changes a Metricool-confirmed reservation.
+ */
+export function reconcileBlackRoomSchedule(state: BlackRoomQueueState, now = new Date()): {
+  recovered: number;
+  created: number;
+} {
+  const recovered = recoverInterruptedBlackRoomJobs(state, now);
+  const created = state.enabled ? ensureBlackRoomScheduleBuffer(state, now) : 0;
+  return { recovered, created };
+}
+
 export function startBlackRoomAgent(state: BlackRoomQueueState, weeks = 2, now = new Date()): number {
   const normalizedWeeks = Number.isFinite(weeks) ? Math.floor(weeks) : 2;
   state.enabled = true;
