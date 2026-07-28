@@ -81,8 +81,8 @@ export interface DriveFolderSetupResult {
   }>;
 }
 
-async function getGoogleApis() {
-  return (await import("googleapis")).google;
+async function getGoogleDriveApi() {
+  return import("googleapis/build/src/apis/drive/index.js");
 }
 
 function escapeDriveQueryValue(value: string): string {
@@ -110,12 +110,12 @@ export function getConfiguredClippersDriveRootFolderId(): string | null {
 }
 
 async function getDriveClient(userId: string) {
-  const google = await getGoogleApis();
+  const googleDrive = await getGoogleDriveApi();
   if (
     getGoogleDriveRefreshTokenFromEnv() ||
     hasGoogleDriveOAuthClientConfig()
   ) {
-    return google.drive({ version: "v3", auth: await getGoogleDriveOAuthClient(userId) });
+    return googleDrive.drive({ version: "v3", auth: await getGoogleDriveOAuthClient(userId) });
   }
 
   if (!hasReplitGoogleConnectorEnv()) {
@@ -131,7 +131,7 @@ async function getDriveClient(userId: string) {
     }
     throw error;
   }
-  return google.drive({ version: "v3", auth: await getGoogleOAuthClient(accessToken) });
+  return googleDrive.drive({ version: "v3", auth: await getGoogleOAuthClient(accessToken) });
 }
 
 async function findFolder(drive: any, name: string, parentId: string): Promise<string | null> {
