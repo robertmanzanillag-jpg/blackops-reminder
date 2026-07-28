@@ -13,6 +13,7 @@ import {
   confirmBlackRoomNetworkReceipt,
   createBlackRoomLocalWorkerState,
   createBlackRoomWorkerLedger,
+  discardBlackRoomUnpublishedReservation,
   hasCompleteBlackRoomMetricoolReceipt,
   nextBlackRoomPublicationDateTime,
   resolveBlackRoomPublicationDateTime,
@@ -215,6 +216,24 @@ test("ledger blocks duplicate slots and overlapping source segments", () => {
     renderPath: "/tmp/project/clippers_workspace/blackroom/rendered/d.mp4",
     sourcePath: "/tmp/project/clippers_workspace/blackroom/sources/d.mp4",
   }));
+});
+
+test("an unattempted reservation with missing local media can be discarded and replaced", () => {
+  const ledger = createBlackRoomWorkerLedger();
+  const original = reserveBlackRoomLedgerEntry(ledger, {
+    ...mediaDetails,
+    jobId: "job-stale", slot: "00:30", videoId: "old-video",
+    renderPath: "/tmp/project/clippers_workspace/blackroom/rendered/missing.mp4",
+    sourcePath: "/tmp/project/clippers_workspace/blackroom/sources/missing.mp4",
+  });
+  assert.equal(discardBlackRoomUnpublishedReservation(ledger, original.reservationId).status, "discarded");
+  assert.doesNotThrow(() => reserveBlackRoomLedgerEntry(ledger, {
+    ...mediaDetails,
+    jobId: "job-stale", slot: "00:30", videoId: "replacement-video",
+    renderPath: "/tmp/project/clippers_workspace/blackroom/rendered/replacement.mp4",
+    sourcePath: "/tmp/project/clippers_workspace/blackroom/sources/replacement.mp4",
+  }));
+  assert.throws(() => discardBlackRoomUnpublishedReservation(ledger, original.reservationId), /only an unattempted/);
 });
 
 test("uncertain reservations persist their exact Metricool schedule for verification-only recovery", () => {

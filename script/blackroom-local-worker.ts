@@ -168,7 +168,16 @@ async function publishOneReservedEntry(): Promise<boolean> {
   if (!entry) return false;
   await appendLog(`Preparando el clip ${entry.reservationId} para validación y publicación.`, "preparación");
   const renderInfo = await stat(entry.renderPath).catch(() => null);
-  if (!renderInfo?.isFile() || renderInfo.size <= 0 || renderInfo.size > 500 * 1024 * 1024) throw new Error(`Reserved render is missing or too large: ${entry.reservationId}`);
+  if (!renderInfo?.isFile() || renderInfo.size <= 0 || renderInfo.size > 500 * 1024 * 1024) {
+    const safeToDiscard = entry.status === "reserved"
+      && !Object.keys(entry.networkAttempts || {}).length
+      && !Object.keys(entry.networkReceipts || {}).length
+      && !entry.metricoolId;
+    if (!safeToDiscard) throw new Error(`Reserved render is missing or too large: ${entry.reservationId}`);
+    await runNpm(["run", "blackroom:ledger", "--", "--discard-unpublished", "--reservation", entry.reservationId]);
+    await appendLog(`Reserva local sin archivo descartada de forma segura: ${entry.reservationId}. Se continuará con un clip nuevo.`, "recuperación", "error");
+    return false;
+  }
   const { stdout: probeOutput } = await execFileAsync(process.env.BLACKROOM_FFPROBE_PATH || "/opt/homebrew/bin/ffprobe", [
     "-v", "error", "-show_entries", BLACKROOM_FFPROBE_SHOW_ENTRIES, "-of", "json", entry.renderPath,
   ], { maxBuffer: 4_000_000 });
