@@ -229,7 +229,7 @@ test("an unattempted reservation with missing local media can be discarded and r
   assert.equal(discardBlackRoomUnpublishedReservation(ledger, original.reservationId).status, "discarded");
   assert.doesNotThrow(() => reserveBlackRoomLedgerEntry(ledger, {
     ...mediaDetails,
-    jobId: "job-stale", slot: "00:30", videoId: "replacement-video",
+    jobId: "job-stale", slot: "00:30", videoId: "old-video",
     renderPath: "/tmp/project/clippers_workspace/blackroom/rendered/replacement.mp4",
     sourcePath: "/tmp/project/clippers_workspace/blackroom/sources/replacement.mp4",
   }));

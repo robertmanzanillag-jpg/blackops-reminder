@@ -320,7 +320,7 @@ export function reserveBlackRoomLedgerEntry(
   if (ledger.entries.some((entry) => entry.status !== "discarded" && entry.jobId === input.jobId && entry.slot === input.slot)) throw new Error("slot already reserved");
   const overlaps = (entry: { videoId: string; segmentStartSeconds: number; segmentEndSeconds: number }) => entry.videoId === input.videoId
     && input.segmentStartSeconds < entry.segmentEndSeconds && entry.segmentStartSeconds < input.segmentEndSeconds;
-  if (ledger.entries.some(overlaps) || Array.from(sourceHistory).some(overlaps)) {
+  if (ledger.entries.some((entry) => entry.status !== "discarded" && overlaps(entry)) || Array.from(sourceHistory).some(overlaps)) {
     throw new Error("source video segment overlaps a previous BlackRoom clip");
   }
   const timestamp = now.toISOString();
