@@ -19,6 +19,22 @@ function tiktokPostMatchesAccount(url, accountHandle) {
   return Boolean(match && expected && match[1].toLowerCase() === expected);
 }
 
+function uniquePublishedRows(rows) {
+  const byPostUrl = new Map();
+  for (const row of rows) {
+    const key = String(row.publishedPostUrl || "").trim().toLowerCase();
+    if (key) byPostUrl.set(key, row);
+  }
+  return [...byPostUrl.values()];
+}
+
+function captionWithRequiredTags(caption, requiredTags) {
+  const base = String(caption || "").trim();
+  const normalized = base.toLowerCase();
+  const missing = requiredTags.filter((tag) => !normalized.includes(tag.toLowerCase()));
+  return `${base} ${missing.join(" ")}`.trim();
+}
+
 function draftAssignments(campaign, experiment, rows) {
   const draftCount = Math.floor(finiteNumber(campaign.draftsReady) || 0);
   const namedDrafts = Array.isArray(campaign.draftFiles)
@@ -46,31 +62,44 @@ function draftAssignments(campaign, experiment, rows) {
     const strategy = experiment.winnerStrategyId && index < winnerSlots
       ? captionStrategies.find((row) => row.id === experiment.winnerStrategyId)
       : explorationOrder[(index - winnerSlots + explorationOrder.length) % explorationOrder.length];
-    const requiresTranscript = strategy.subtitleStyle !== "hook_only";
-    const topic = (namedDrafts[index] ? path.basename(namedDrafts[index], path.extname(namedDrafts[index])) : campaign.title)
+    const draftFile = namedDrafts[index] || null;
+    const draftFilename = draftFile ? path.basename(draftFile) : "";
+    const draftMetadata = campaign.draftMetadata?.[draftFile] || campaign.draftMetadata?.[draftFilename] || {};
+    const requiresTranscript = typeof draftMetadata.requiresTranscript === "boolean"
+      ? draftMetadata.requiresTranscript
+      : strategy.subtitleStyle !== "hook_only";
+    const topic = (draftFile ? path.basename(draftFile, path.extname(draftFile)) : campaign.title)
       .replace(/^streamersclipusa-|^streamersclips-/i, "")
       .replace(/^[^-]+-[^-]+-\d+-/i, "")
       .replace(/[-_]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    const captionText = strategy.captionStyle === "question"
+    const generatedCaption = strategy.captionStyle === "question"
       ? `Would you have expected this from ${campaign.creator}?`
       : strategy.captionStyle === "context"
         ? `${campaign.creator} explains the context behind ${topic}.`
         : strategy.captionStyle === "minimal"
           ? `${campaign.creator}: ${topic}.`
           : `${topic}: the part worth watching.`;
+    const assignmentHashtags = Array.isArray(draftMetadata.requiredHashtags)
+      ? draftMetadata.requiredHashtags.map((value) => String(value || "").trim()).filter(Boolean)
+      : requiredHashtags;
+    const captionText = captionWithRequiredTags(
+      String(draftMetadata.caption || "").trim() || generatedCaption,
+      assignmentHashtags,
+    );
     return {
       slot: index + 1,
-      draftFile: namedDrafts[index] || null,
+      draftFile,
       strategyId: strategy.id,
       captionStyle: strategy.captionStyle,
       subtitleStyle: strategy.subtitleStyle,
       hookStyle: strategy.hookStyle,
-      requiredHashtags,
-      captionText: `${captionText} ${requiredHashtags.join(" ")}`.trim(),
+      requiredHashtags: assignmentHashtags,
+      captionText,
       requiresTranscript,
-      preparationStatus: requiresTranscript ? "needs_local_transcript" : "ready_with_hook_only",
+      preparationStatus: String(draftMetadata.preparationStatus || "").trim()
+        || (requiresTranscript ? "needs_local_transcript" : "ready_with_hook_only"),
       metricoolStatus: "approval_required",
       publishAllowed: false,
     };
@@ -109,7 +138,9 @@ function htmlValue(value) {
 }
 
 export function buildMetricoolApprovalRows(decision, mediaReadyBySlot = {}) {
-  return (decision.assignments || []).map((assignment) => {
+  const configuredLimit = finiteNumber(decision.dailyClipLimit);
+  const dailyClipLimit = Math.min(15, Math.trunc(configuredLimit === null ? 15 : configuredLimit));
+  return (decision.assignments || []).slice(0, dailyClipLimit).map((assignment) => {
     const media = mediaReadyBySlot[assignment.slot] || {};
     const publishingAuthorized = decision.publishingAuthorized === true;
     const status = decision.canProduce !== true
@@ -197,11 +228,11 @@ function payoutBlockers(campaign) {
 }
 
 function metricRowsForCampaign(metrics, campaignId, campaign) {
-  return metrics.filter((row) => row.campaignId === campaignId
+  return uniquePublishedRows(metrics.filter((row) => row.campaignId === campaignId
     && row.finalStatus === "published"
     && tiktokPostMatchesAccount(row.publishedPostUrl, campaign?.accountHandle)
     && row.metricEvidenceVerified === true
-    && finiteNumber(row.views) !== null);
+    && finiteNumber(row.views) !== null));
 }
 
 function strategyPerformance(rows, strategyId) {
@@ -321,22 +352,22 @@ export function buildStreamerGrowthCeoPlan({
   now = new Date(),
   monthlyViewsTarget = 1_000_000,
   publishingAuthorized = false,
-  targetDailyClips = 5,
+  targetDailyClips = 10,
 }) {
   const parsedTargetDailyClips = Number(targetDailyClips);
   const safeConfiguredDailyClips = Number.isFinite(parsedTargetDailyClips)
-    ? Math.max(5, Math.min(8, Math.trunc(parsedTargetDailyClips)))
-    : 5;
+    ? Math.max(10, Math.min(15, Math.trunc(parsedTargetDailyClips)))
+    : 10;
   const decisions = campaigns.map((campaign) => campaignDecision(campaign, metrics, now, publishingAuthorized))
     .sort((a, b) => b.priorityScore - a.priorityScore || a.title.localeCompare(b.title));
   const campaignById = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
-  const actualPublishedRows = metrics.filter((row) => {
+  const actualPublishedRows = uniquePublishedRows(metrics.filter((row) => {
     const campaign = campaignById.get(row.campaignId);
     return row.finalStatus === "published"
       && tiktokPostMatchesAccount(row.publishedPostUrl, campaign?.accountHandle)
       && row.metricEvidenceVerified === true
       && finiteNumber(row.views) !== null;
-  });
+  }));
   const measuredViews = actualPublishedRows.reduce((sum, row) => sum + Number(row.views), 0);
   const measuredEarningsUsd = actualPublishedRows.reduce((sum, row) => sum + (row.payoutEvidenceVerified === true ? (finiteNumber(row.earningsUsd) || 0) : 0), 0);
   const active = decisions.filter((row) => row.canProduce);
@@ -346,14 +377,14 @@ export function buildStreamerGrowthCeoPlan({
   const dailyTestClips = !active.length
     ? 0
     : actualPublishedRows.length < 15
-      ? 5
+      ? 10
       : recutting
-        ? 2
+        ? 10
         : scaling.length
-          ? Math.max(6, safeConfiguredDailyClips)
+          ? Math.max(12, safeConfiguredDailyClips)
           : optimizing
-            ? 4
-            : 5;
+            ? 10
+            : 10;
   const volumeReason = !active.length
     ? "no_active_campaign"
     : actualPublishedRows.length < 15
@@ -365,6 +396,15 @@ export function buildStreamerGrowthCeoPlan({
           : optimizing
             ? "reduce_for_efficiency"
             : "hold_baseline";
+  const remainingByAccount = new Map();
+  for (const decision of decisions) {
+    const accountKey = String(decision.accountHandle || "").trim().toLowerCase();
+    const remaining = remainingByAccount.has(accountKey) ? remainingByAccount.get(accountKey) : dailyTestClips;
+    const assignments = decision.assignments.slice(0, Math.max(0, remaining));
+    decision.assignments = assignments;
+    decision.dailyClipLimit = assignments.length;
+    remainingByAccount.set(accountKey, Math.max(0, remaining - assignments.length));
+  }
   const next = decisions[0] || null;
   return {
     status: !campaigns.length ? "needs_campaign_catalog" : !active.length ? "blocked" : scaling.length ? "scaling" : "testing",
@@ -386,10 +426,10 @@ export function buildStreamerGrowthCeoPlan({
     },
     operatingPolicy: {
       dailyTestClips,
-      initialDailyClips: 5,
-      minimumInitialDailyClips: 5,
+      initialDailyClips: 10,
+      minimumInitialDailyClips: 10,
       configuredDailyCeiling: safeConfiguredDailyClips,
-      maximumDailyClipsPerAccount: 8,
+      maximumDailyClipsPerAccount: 15,
       volumeReason,
       exploitPercent: scaling.length ? 70 : 0,
       explorePercent: scaling.length ? 30 : 100,
@@ -486,7 +526,7 @@ async function main() {
     row.qualificationEvidenceVerified = row.payoutEvidenceVerified;
   }
   const publishingAuthorized = process.env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED === "true";
-  const targetDailyClips = process.env.CLIPPERS_TARGET_DAILY_CLIPS || 5;
+  const targetDailyClips = process.env.CLIPPERS_TARGET_DAILY_CLIPS || 10;
   const plan = buildStreamerGrowthCeoPlan({ campaigns, metrics, publishingAuthorized, targetDailyClips });
   await mkdir(reportDir, { recursive: true });
   for (const decision of plan.decisions) {

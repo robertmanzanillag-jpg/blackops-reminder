@@ -8,6 +8,7 @@ import { buildMetricoolApprovalRows, buildStreamerGrowthCeoPlan, resolveWorkspac
 
 const now = new Date("2026-07-21T18:00:00.000Z");
 const publishedPostUrl = "https://www.tiktok.com/@streamersclipusa/video/1234567890123456789";
+const publishedPostUrlFor = (index) => `https://www.tiktok.com/@streamersclipusa/video/${String(1234567890123456789n + BigInt(index))}`;
 const campaign = {
   id: "mrbeast-jre",
   title: "MrBeast x Joe Rogan",
@@ -54,7 +55,7 @@ test("tests a verified top creator without fabricating expected revenue", () => 
   assert.equal(plan.decisions[0].decision, "test");
   assert.equal(plan.decisions[0].observed.totalViews, 0);
   assert.equal(plan.goal.projection, "insufficient_real_posts");
-  assert.equal(plan.operatingPolicy.dailyTestClips, 5);
+  assert.equal(plan.operatingPolicy.dailyTestClips, 10);
   assert.equal(plan.decisions[0].assignments.length, 7);
   assert.deepEqual(
     new Set(plan.decisions[0].assignments.map((row) => row.strategyId)),
@@ -88,11 +89,63 @@ test("requires an explicit runtime opt-in before enabling Metricool publishing",
   assert.equal(authorizedRows[0].publishAllowed, true);
   assert.equal(authorizedRows[1].status, "blocked_media_missing");
   assert.equal(authorizedRows[1].publishAllowed, false);
-  assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: 20 }).operatingPolicy.dailyTestClips, 5);
-  assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: -3 }).operatingPolicy.dailyTestClips, 5);
+  const capped = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: 20 });
+  const floored = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: -3 });
+  assert.equal(capped.operatingPolicy.dailyTestClips, 10);
+  assert.equal(capped.operatingPolicy.configuredDailyCeiling, 15);
+  assert.equal(floored.operatingPolicy.dailyTestClips, 10);
+  assert.equal(floored.operatingPolicy.configuredDailyCeiling, 10);
 });
 
-test("starts at five daily and reduces only after enough verified poor results", () => {
+test("preserves campaign-approved captions and disclosure tags per draft", () => {
+  const draftFile = campaign.draftFiles[0];
+  const approvedCaption = "MAC IS OFFICIALLY BACK. @drinkmacenergy @thenotoriousmma #MACenergy #paidpartner";
+  const plan = buildStreamerGrowthCeoPlan({
+    campaigns: [{
+      ...campaign,
+      draftsReady: 1,
+      draftFiles: [draftFile],
+      draftMetadata: {
+        [path.basename(draftFile)]: {
+          caption: approvedCaption,
+          requiredHashtags: ["@drinkmacenergy", "@thenotoriousmma", "#MACenergy", "#paidpartner"],
+          requiresTranscript: false,
+          preparationStatus: "ready_with_campaign_hook",
+        },
+      },
+    }],
+    metrics: [],
+    now,
+  });
+  assert.equal(plan.decisions[0].assignments[0].captionText, approvedCaption);
+  assert.deepEqual(plan.decisions[0].assignments[0].requiredHashtags, ["@drinkmacenergy", "@thenotoriousmma", "#MACenergy", "#paidpartner"]);
+  assert.equal(plan.decisions[0].assignments[0].requiresTranscript, false);
+  assert.equal(plan.decisions[0].assignments[0].preparationStatus, "ready_with_campaign_hook");
+});
+
+test("appends required disclosures missing from a custom campaign caption", () => {
+  const draftFile = campaign.draftFiles[0];
+  const plan = buildStreamerGrowthCeoPlan({
+    campaigns: [{
+      ...campaign,
+      draftsReady: 1,
+      draftFiles: [draftFile],
+      draftMetadata: {
+        [draftFile]: {
+          caption: "A custom campaign caption",
+          requiredHashtags: ["@drinkmacenergy", "#MACenergy", "#paidpartner"],
+        },
+      },
+    }],
+    now,
+  });
+  assert.equal(
+    plan.decisions[0].assignments[0].captionText,
+    "A custom campaign caption @drinkmacenergy #MACenergy #paidpartner",
+  );
+});
+
+test("holds ten daily while the CEO recuts weak results", () => {
   const metrics = Array.from({ length: 15 }, (_, index) => ({
     campaignId: campaign.id,
     strategyId: index % 2 ? "hook_only" : "curiosity_question",
@@ -105,17 +158,17 @@ test("starts at five daily and reduces only after enough verified poor results",
   }));
 
   const learningPlan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: metrics.slice(0, 5), now });
-  assert.equal(learningPlan.operatingPolicy.dailyTestClips, 5);
-  assert.equal(learningPlan.operatingPolicy.minimumInitialDailyClips, 5);
+  assert.equal(learningPlan.operatingPolicy.dailyTestClips, 10);
+  assert.equal(learningPlan.operatingPolicy.minimumInitialDailyClips, 10);
   assert.equal(learningPlan.operatingPolicy.volumeReason, "initial_learning_floor");
 
   const recutPlan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics, now });
-  assert.equal(recutPlan.operatingPolicy.dailyTestClips, 2);
-  assert.equal(recutPlan.operatingPolicy.maximumDailyClipsPerAccount, 8);
+  assert.equal(recutPlan.operatingPolicy.dailyTestClips, 10);
+  assert.equal(recutPlan.operatingPolicy.maximumDailyClipsPerAccount, 15);
   assert.equal(recutPlan.operatingPolicy.volumeReason, "reduce_while_recutting");
 });
 
-test("scheduled rows cannot raise the five-clip initial learning volume", () => {
+test("scheduled rows cannot raise the ten-clip initial learning volume", () => {
   const scheduledMetrics = Array.from({ length: 20 }, (_, index) => ({
     campaignId: campaign.id,
     finalStatus: index % 2 ? "scheduled" : "queued",
@@ -125,10 +178,10 @@ test("scheduled rows cannot raise the five-clip initial learning volume", () => 
     campaigns: [campaign],
     metrics: scheduledMetrics,
     now,
-    targetDailyClips: 8,
+    targetDailyClips: 15,
   });
-  assert.equal(plan.operatingPolicy.dailyTestClips, 5);
-  assert.equal(plan.operatingPolicy.configuredDailyCeiling, 8);
+  assert.equal(plan.operatingPolicy.dailyTestClips, 10);
+  assert.equal(plan.operatingPolicy.configuredDailyCeiling, 15);
   assert.equal(plan.operatingPolicy.volumeReason, "initial_learning_floor");
 });
 
@@ -149,9 +202,9 @@ test("raises volume only after fifteen verified winning posts", () => {
     campaigns: [campaign],
     metrics: winningMetrics,
     now,
-    targetDailyClips: 8,
+    targetDailyClips: 15,
   });
-  assert.equal(plan.operatingPolicy.dailyTestClips, 8);
+  assert.equal(plan.operatingPolicy.dailyTestClips, 15);
   assert.equal(plan.operatingPolicy.volumeReason, "increase_verified_winners");
 });
 
@@ -179,8 +232,8 @@ test("separates Metricool approval readiness from Vyro cashout readiness", () =>
 test("scales only after real qualifying posts and keeps exploration", () => {
   const metrics = [
     { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 12000, earningsUsd: 18, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.41, shareRate: 0.03 },
-    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 9000, earningsUsd: 13.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.38, shareRate: 0.025 },
-    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 15000, earningsUsd: 22.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.45, shareRate: 0.04 },
+    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl: publishedPostUrlFor(1), views: 9000, earningsUsd: 13.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.38, shareRate: 0.025 },
+    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl: publishedPostUrlFor(2), views: 15000, earningsUsd: 22.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.45, shareRate: 0.04 },
   ];
   const plan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics, now });
   assert.equal(plan.status, "scaling");
@@ -190,6 +243,59 @@ test("scales only after real qualifying posts and keeps exploration", () => {
   assert.equal(plan.decisions[0].assignments.filter((row) => row.strategyId === "direct_insight").length, 5);
   assert.equal(plan.goal.measuredViews, 36000);
   assert.equal(plan.goal.measuredEarningsUsd, 54);
+});
+
+test("deduplicates verified performance by exact public post URL", () => {
+  const duplicate = {
+    campaignId: campaign.id,
+    strategyId: "direct_insight",
+    finalStatus: "published",
+    publishedPostUrl,
+    views: 12_000,
+    earningsUsd: 18,
+    qualifiedForPayout: true,
+    metricEvidenceVerified: true,
+    payoutEvidenceVerified: true,
+    qualificationEvidenceVerified: true,
+  };
+  const plan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: Array(15).fill(duplicate), now, targetDailyClips: 15 });
+  assert.equal(plan.decisions[0].observed.publishedPosts, 1);
+  assert.equal(plan.goal.measuredViews, 12_000);
+  assert.equal(plan.operatingPolicy.dailyTestClips, 10);
+});
+
+test("caps Metricool rows at the CEO daily limit per account", () => {
+  const largeCampaign = {
+    ...campaign,
+    draftsReady: 20,
+    draftFiles: Array.from({ length: 20 }, (_, index) => `draft-${index + 1}.mp4`),
+  };
+  const plan = buildStreamerGrowthCeoPlan({ campaigns: [largeCampaign], metrics: [], now, publishingAuthorized: true });
+  const media = Object.fromEntries(Array.from({ length: 20 }, (_, index) => [index + 1, { ready: true }]));
+  const rows = buildMetricoolApprovalRows(plan.decisions[0], media);
+  assert.equal(plan.decisions[0].assignments.length, 10);
+  assert.equal(rows.length, 10);
+  assert.ok(rows.every((row) => row.publishAllowed));
+});
+
+test("raises the ten-post baseline only after enough verified winning posts", () => {
+  const metrics = Array.from({ length: 15 }, (_, index) => ({
+    campaignId: campaign.id,
+    strategyId: "direct_insight",
+    finalStatus: "published",
+    publishedPostUrl: publishedPostUrlFor(index + 20),
+    views: 10_000 + index * 100,
+    earningsUsd: 15,
+    qualifiedForPayout: true,
+    metricEvidenceVerified: true,
+    payoutEvidenceVerified: true,
+    qualificationEvidenceVerified: true,
+  }));
+  const plan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics, now, targetDailyClips: 15 });
+  assert.equal(plan.operatingPolicy.dailyTestClips, 15);
+  assert.equal(plan.operatingPolicy.minimumInitialDailyClips, 10);
+  assert.equal(plan.operatingPolicy.maximumDailyClipsPerAccount, 15);
+  assert.equal(plan.operatingPolicy.volumeReason, "increase_verified_winners");
 });
 
 test("queued or scheduled rows never count as published performance", () => {
@@ -208,7 +314,7 @@ test("pauses a cut style after six posts with no payout qualification", () => {
     campaignId: campaign.id,
     strategyId: index % 2 ? "hook_only" : "curiosity_question",
     finalStatus: "published",
-    publishedPostUrl,
+    publishedPostUrl: publishedPostUrlFor(index + 40),
     views: 500 + index * 100,
     earningsUsd: 0,
     qualifiedForPayout: false,
@@ -271,7 +377,7 @@ test("ignores verified metrics from a different TikTok account", () => {
   assert.equal(plan.goal.measuredViews, 0);
   assert.equal(plan.decisions[0].observed.publishedPosts, 0);
   assert.equal(plan.decisions[0].decision, "test");
-  assert.equal(plan.operatingPolicy.dailyTestClips, 5);
+  assert.equal(plan.operatingPolicy.dailyTestClips, 10);
 });
 
 test("Metricool rows point to final media while cashout setup remains separate", () => {
