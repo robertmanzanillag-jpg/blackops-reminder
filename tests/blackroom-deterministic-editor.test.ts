@@ -113,6 +113,29 @@ test("planner skips a failed source after the DJ has already been selected", () 
   assert.equal(selected.videoId, "fallback-video");
 });
 
+test("planner replaces a discarded reservation in the same slot", () => {
+  const state = queue();
+  state.sourceHistory = [];
+  state.jobs[0].slots = [{ localTime: "00:30", timezone: "America/New_York" }];
+  state.jobs[0].requirements.posts = 1;
+  state.jobs[0].requirements.djs = 1;
+  state.jobs[0].requirements.postsPerDj = 1;
+  const plan = planBlackRoomDeterministicEdit({
+    queue: state,
+    ledger: {
+      version: 1,
+      entries: [{
+        jobId: "job-1", slot: "00:30", videoId: "stale-video", dj: "Old DJ", language: "en", format: "vertical", durationSeconds: 15,
+        segmentStartSeconds: 0, segmentEndSeconds: 15, status: "discarded",
+      }],
+    } as any,
+    inventory: [{ id: "replacement-video", title: "Replacement DJ - DJ Set", duration: 3600 }],
+  });
+  assert.ok(plan);
+  assert.equal(plan.slot, "00:30");
+  assert.equal(plan.videoId, "replacement-video");
+});
+
 test("planner stops immediately when the queue is paused", () => {
   assert.equal(planBlackRoomDeterministicEdit({
     queue: queue(false), ledger: { version: 1, entries: [] } as any,
