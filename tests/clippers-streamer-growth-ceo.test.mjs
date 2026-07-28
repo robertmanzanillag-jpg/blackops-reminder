@@ -4,7 +4,14 @@ import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-import { buildMetricoolApprovalRows, buildStreamerGrowthCeoPlan, resolveWorkspaceMediaPath, validateMetricoolMp4 } from "../script/clippers-streamer-growth-ceo.mjs";
+import {
+  buildHashtagPolicy,
+  buildMetricoolApprovalRows,
+  buildStreamerGrowthCeoPlan,
+  dedupePublishedMetrics,
+  resolveWorkspaceMediaPath,
+  validateMetricoolMp4,
+} from "../script/clippers-streamer-growth-ceo.mjs";
 
 const now = new Date("2026-07-21T18:00:00.000Z");
 const publishedPostUrl = "https://www.tiktok.com/@streamersclipusa/video/1234567890123456789";
@@ -63,6 +70,59 @@ test("tests a verified top creator without fabricating expected revenue", () => 
   assert.deepEqual(plan.decisions[0].assignments[0].requiredHashtags, ["#MrBeast", "#paidpartner"]);
   assert.match(plan.decisions[0].assignments[0].captionText, /#MrBeast #paidpartner$/);
   assert.ok(plan.decisions[0].assignments.every((row) => row.publishAllowed === false));
+  assert.deepEqual(plan.decisions[0].hashtagPolicy.required, [
+    { tag: "#MrBeast", locked: true, reason: "campaign_requirement" },
+    { tag: "#paidpartner", locked: true, reason: "campaign_disclosure_required" },
+  ]);
+});
+
+test("never treats campaign disclosure hashtags as removable experiments", () => {
+  const policy = buildHashtagPolicy(campaign, [
+    { optionalHashtags: ["#viral"], views: 100 },
+    { optionalHashtags: ["#viral"], views: 200 },
+    { optionalHashtags: ["#viral"], views: 300 },
+  ]);
+  assert.equal(policy.required.find((row) => row.tag === "#paidpartner").locked, true);
+  assert.equal(policy.optional.find((row) => row.tag === "#viral").recommendation, "compare_against_control");
+  assert.ok(!policy.optional.some((row) => row.tag === "#paidpartner"));
+});
+
+test("draft metadata cannot remove campaign disclosure hashtags", () => {
+  const plan = buildStreamerGrowthCeoPlan({
+    campaigns: [{
+      ...campaign,
+      draftMetadata: {
+        "draft-01.mp4": {
+          caption: "Custom campaign caption #MrBeast",
+          requiredHashtags: [],
+        },
+      },
+    }],
+    metrics: [],
+    now,
+  });
+  assert.deepEqual(plan.decisions[0].assignments[0].requiredHashtags, ["#MrBeast", "#paidpartner"]);
+  assert.match(plan.decisions[0].assignments[0].captionText, /#paidpartner$/);
+});
+
+test("deduplicates repeated public post URLs before learning", () => {
+  const repeated = [
+    { publishedPostUrl, views: 100 },
+    { publishedPostUrl, views: 250 },
+  ];
+  assert.deepEqual(dedupePublishedMetrics(repeated), [repeated[1]]);
+  const plan = buildStreamerGrowthCeoPlan({
+    campaigns: [campaign],
+    metrics: repeated.map((row) => ({
+      ...row,
+      campaignId: campaign.id,
+      finalStatus: "published",
+      metricEvidenceVerified: true,
+    })),
+    now,
+  });
+  assert.equal(plan.goal.measuredViews, 250);
+  assert.equal(plan.decisions[0].observed.publishedPosts, 1);
 });
 
 test("requires an explicit runtime opt-in before enabling Metricool publishing", () => {
@@ -88,6 +148,11 @@ test("requires an explicit runtime opt-in before enabling Metricool publishing",
   assert.equal(authorizedRows[0].publishAllowed, true);
   assert.equal(authorizedRows[1].status, "blocked_media_missing");
   assert.equal(authorizedRows[1].publishAllowed, false);
+  const deliveredRows = buildMetricoolApprovalRows(authorizedPlan.decisions[0], {
+    1: { ready: true, relativePath: "draft-01.mp4" },
+  }, [{ draftFile: "draft-01.mp4", status: "verification_pending" }]);
+  assert.equal(deliveredRows[0].status, "already_scheduled_or_published");
+  assert.equal(deliveredRows[0].publishAllowed, false);
   assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: 20 }).operatingPolicy.dailyTestClips, 5);
   assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: -3 }).operatingPolicy.dailyTestClips, 5);
 });
@@ -178,9 +243,9 @@ test("separates Metricool approval readiness from Vyro cashout readiness", () =>
 
 test("scales only after real qualifying posts and keeps exploration", () => {
   const metrics = [
-    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 12000, earningsUsd: 18, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.41, shareRate: 0.03 },
-    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 9000, earningsUsd: 13.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.38, shareRate: 0.025 },
-    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 15000, earningsUsd: 22.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.45, shareRate: 0.04 },
+    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl: "https://www.tiktok.com/@streamersclipusa/video/1234567890123456781", views: 12000, earningsUsd: 18, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.41, shareRate: 0.03 },
+    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl: "https://www.tiktok.com/@streamersclipusa/video/1234567890123456782", views: 9000, earningsUsd: 13.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.38, shareRate: 0.025 },
+    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl: "https://www.tiktok.com/@streamersclipusa/video/1234567890123456783", views: 15000, earningsUsd: 22.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.45, shareRate: 0.04 },
   ];
   const plan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics, now });
   assert.equal(plan.status, "scaling");
@@ -208,7 +273,7 @@ test("pauses a cut style after six posts with no payout qualification", () => {
     campaignId: campaign.id,
     strategyId: index % 2 ? "hook_only" : "curiosity_question",
     finalStatus: "published",
-    publishedPostUrl,
+    publishedPostUrl: `https://www.tiktok.com/@streamersclipusa/video/${4234567890123456700n + BigInt(index)}`,
     views: 500 + index * 100,
     earningsUsd: 0,
     qualifiedForPayout: false,

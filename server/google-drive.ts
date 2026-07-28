@@ -15,11 +15,54 @@ export const DRIVE_APP_ROOT_FOLDER = "Robert A";
 export const DRIVE_RADIO_FLYERS_FOLDER = "Flyers de la radio";
 export const DRIVE_BLACK_ROOM_VIDEOS_FOLDER = "Videos de Black Room";
 export const DRIVE_KONG_VIDEOS_FOLDER = "Videos de Kong";
+export const DRIVE_CLIPPERS_MEDIA_FOLDER = "Clippers Metricool Media";
 
 export interface DriveUploadResult {
   fileId: string;
   webViewLink: string | null;
   webContentLink: string | null;
+}
+
+export function buildGoogleDrivePublicDownloadUrl(fileId: string): string {
+  const cleaned = fileId.trim();
+  if (!/^[a-zA-Z0-9_-]{10,160}$/.test(cleaned)) {
+    throw new Error("Google Drive file id is invalid.");
+  }
+  const params = new URLSearchParams({
+    id: cleaned,
+    export: "download",
+    confirm: "t",
+  });
+  return `https://drive.usercontent.google.com/download?${params.toString()}`;
+}
+
+export async function ensureDriveFilePublicDownload(params: {
+  fileId: string;
+  userId?: string;
+}): Promise<string> {
+  try {
+    const drive = await getDriveClient(params.userId || getSystemUserId());
+    const permissions = await drive.permissions.list({
+      fileId: params.fileId,
+      fields: "permissions(id,type,role)",
+      supportsAllDrives: true,
+    });
+    const alreadyPublic = (permissions.data.permissions || [])
+      .some((permission: any) => permission.type === "anyone" && permission.role === "reader");
+    if (!alreadyPublic) {
+      await drive.permissions.create({
+        fileId: params.fileId,
+        requestBody: { type: "anyone", role: "reader" },
+        supportsAllDrives: true,
+      });
+    }
+    return buildGoogleDrivePublicDownloadUrl(params.fileId);
+  } catch (error: any) {
+    if (isDrivePermissionError(error)) {
+      throw new Error("Google Drive permission is missing or public link sharing is disabled.");
+    }
+    throw error;
+  }
 }
 
 export interface DriveDownloadResult {
