@@ -38,6 +38,7 @@ const ffmpegPath = process.env.BLACKROOM_FFMPEG_PATH || "/opt/homebrew/bin/ffmpe
 const ffprobePath = process.env.BLACKROOM_FFPROBE_PATH || "/opt/homebrew/bin/ffprobe";
 const npmPath = process.env.BLACKROOM_NPM_PATH || "npm";
 const ytDlpAuthArgs = buildBlackRoomYtDlpAuthArgs();
+const ytDlpTimeoutMs = Math.max(60_000, Number(process.env.BLACKROOM_YTDLP_TIMEOUT_MS || 12 * 60_000));
 let activeCleanup: (() => Promise<void>) | null = null;
 
 async function readJson<T>(filePath: string): Promise<T> {
@@ -56,8 +57,8 @@ async function appendActivity(message: string, stage = "edición", level: "info"
   console.log(message);
 }
 
-async function run(file: string, args: string[], maxBuffer = 64 * 1024 * 1024) {
-  return execFileAsync(file, args, { cwd: projectDir, maxBuffer });
+async function run(file: string, args: string[], maxBuffer = 64 * 1024 * 1024, timeout?: number) {
+  return execFileAsync(file, args, { cwd: projectDir, maxBuffer, ...(timeout ? { timeout, killSignal: "SIGTERM" } : {}) });
 }
 
 function metadataToInventory(metadata: any): BlackRoomInventoryVideo {
@@ -111,7 +112,12 @@ function mediaStem(plan: BlackRoomEditPlan): string {
 
 async function downloadWindow(plan: BlackRoomEditPlan, sourcePath: string, temporaryDirectory: string): Promise<void> {
   await appendActivity(`Descargando una ventana parcial de ${plan.dj} en 1080p con audio.`, "descarga");
-  await run(ytDlpPath, [...ytDlpAuthArgs, ...buildBlackRoomYtDlpWindowArgs(plan, sourcePath, temporaryDirectory)], 128 * 1024 * 1024);
+  await run(
+    ytDlpPath,
+    [...ytDlpAuthArgs, ...buildBlackRoomYtDlpWindowArgs(plan, sourcePath, temporaryDirectory)],
+    128 * 1024 * 1024,
+    ytDlpTimeoutMs,
+  );
   const info = await stat(sourcePath);
   if (!info.isFile() || info.size <= 0) throw new Error("yt-dlp produced an empty BlackRoom source window");
 }

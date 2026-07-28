@@ -249,6 +249,9 @@ test("command builders keep downloads partial and renders platform-compatible", 
   assert.ok(download.includes("--download-sections"));
   assert.ok(download.includes("*100-220"));
   assert.ok(download.includes("bestvideo*[height<=1080]+bestaudio/best[height<=1080]"));
+  assert.deepEqual(download.slice(download.indexOf("--socket-timeout"), download.indexOf("--socket-timeout") + 6), [
+    "--socket-timeout", "30", "--retries", "3", "--fragment-retries", "3",
+  ]);
   assert.ok(download.includes("temp:/project/agent/editor-tmp/a"));
   const render = buildBlackRoomRenderArgs("/project/sources/a.mp4", "/project/rendered/a.mp4", plan, 4);
   assert.ok(render.includes("h264_videotoolbox"));
