@@ -188,6 +188,7 @@ export function planBlackRoomDeterministicEdit(input: {
   const windowDuration = durationSeconds + margin;
   const usedVideos = new Set([
     ...input.queue.sourceHistory.map((entry) => entry.videoId),
+    ...(input.queue.failedSourceVideos || []).map((entry) => entry.videoId),
     ...input.ledger.entries.map((entry) => entry.videoId),
   ]);
   const usedDjs = new Map<string, number>();

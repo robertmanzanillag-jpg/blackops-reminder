@@ -66,6 +66,17 @@ export interface BlackRoomSourceUsage {
   recordedAt: string;
 }
 
+/**
+ * Sources that failed before a render was produced. These are deliberately
+ * separate from sourceHistory: a failed download must not masquerade as a
+ * published clip, but it also must not be selected again on every retry.
+ */
+export interface BlackRoomFailedSource {
+  videoId: string;
+  failedAt: string;
+  reason: string;
+}
+
 export interface BlackRoomQueueState {
   version: number;
   enabled: boolean;
@@ -77,6 +88,7 @@ export interface BlackRoomQueueState {
   updatedAt: string;
   jobs: BlackRoomDailyJob[];
   sourceHistory: BlackRoomSourceUsage[];
+  failedSourceVideos: BlackRoomFailedSource[];
   appliedCommandIds: string[];
   prioritySources: Array<{ id: string; url: string; videoId: string | null; status: "pending" | "used"; createdAt: string }>;
   extraPostsByDate: Record<string, number>;
@@ -134,6 +146,7 @@ export function createBlackRoomQueueState(now = new Date()): BlackRoomQueueState
     updatedAt: iso(now),
     jobs: [],
     sourceHistory: [],
+    failedSourceVideos: [],
     appliedCommandIds: [],
     prioritySources: [],
     extraPostsByDate: {},
@@ -378,6 +391,27 @@ export function recordBlackRoomSourceUsage(
   return recorded;
 }
 
+export function recordBlackRoomFailedSource(
+  state: BlackRoomQueueState,
+  videoId: string,
+  reason: string,
+  now = new Date(),
+): BlackRoomFailedSource {
+  const normalizedVideoId = String(videoId || "").trim();
+  if (!normalizedVideoId) throw new Error("videoId is required");
+  const recorded: BlackRoomFailedSource = {
+    videoId: normalizedVideoId,
+    failedAt: iso(now),
+    reason: String(reason || "download failed").slice(0, 500),
+  };
+  state.failedSourceVideos = [
+    ...state.failedSourceVideos.filter((item) => item.videoId !== normalizedVideoId),
+    recorded,
+  ].slice(-100);
+  state.updatedAt = recorded.failedAt;
+  return recorded;
+}
+
 export function recoverInterruptedBlackRoomJobs(state: BlackRoomQueueState, now = new Date()): number {
   let recovered = 0;
   for (const job of state.jobs) {
@@ -550,6 +584,7 @@ export async function readBlackRoomQueue(filePath = BLACKROOM_QUEUE_PATH, now = 
       bufferDays: Math.max(BLACKROOM_DEFAULT_BUFFER_DAYS, Number(parsed.bufferDays || 0)),
       jobs,
       sourceHistory: Array.isArray(parsed.sourceHistory) ? parsed.sourceHistory : [],
+      failedSourceVideos: Array.isArray(parsed.failedSourceVideos) ? parsed.failedSourceVideos : [],
       appliedCommandIds: Array.isArray(parsed.appliedCommandIds) ? parsed.appliedCommandIds : [],
       prioritySources: Array.isArray(parsed.prioritySources) ? parsed.prioritySources : [],
       extraPostsByDate: parsed.extraPostsByDate && typeof parsed.extraPostsByDate === "object" ? parsed.extraPostsByDate : {},
