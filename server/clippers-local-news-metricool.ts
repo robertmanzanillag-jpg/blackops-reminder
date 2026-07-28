@@ -608,7 +608,8 @@ export async function deliverClipperLocalNewsToMetricool(
     const fetchedNow = now();
     let safeItems = queue.filter((item) => {
       const platformEnabled = item.platform !== "x" || env.CLIPPERS_LOCAL_NEWS_ENABLE_X === "true";
-      if (item.section === "traffic" && !trafficPublishingEnabled(env)) {
+      const highImpactTraffic = item.editorialUrgency === "breaking" || item.risk === "high" || item.risk === "critical";
+      if (item.section === "traffic" && !trafficPublishingEnabled(env) && !highImpactTraffic) {
         result.filtered += 1;
         return false;
       }

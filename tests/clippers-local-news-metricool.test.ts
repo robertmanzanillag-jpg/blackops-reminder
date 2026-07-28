@@ -113,6 +113,27 @@ test("routine traffic is filtered from automatic delivery by default", async () 
   assert.equal(fetched, false);
 });
 
+test("breaking or high-impact traffic remains eligible without enabling routine traffic", async () => {
+  const dir = await workspace([item({ id: "traffic-breaking", platform: "facebook", section: "traffic", editorialUrgency: "breaking", risk: "high", copy: "URGENTE | Accidente con cierre total. Fuente: https://fl511.com" })]);
+  let posts = 0;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: credentials,
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/admin/simpleProfiles") {
+        return new Response(JSON.stringify({ profiles: [{ blogId: 501, label: "Miami News", networks: ["facebook"] }] }), { status: 200 });
+      }
+      if (init?.method === "POST") posts += 1;
+      return new Response(JSON.stringify({ data: { uuid: "traffic-breaking-post" } }), { status: 201 });
+    },
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.scheduled, 1);
+  assert.equal(posts, 1);
+});
+
 test("discovers the exact Miami News brand and sends one provider with safe scheduling fields", async () => {
   const dir = await workspace([item()]);
   const calls: Array<{ url: URL; init?: RequestInit }> = [];
