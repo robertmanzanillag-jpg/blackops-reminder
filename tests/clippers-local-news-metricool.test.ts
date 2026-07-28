@@ -96,6 +96,23 @@ test("X delivery is opt-in so the paid Metricool add-on stays off by default", a
   assert.equal(fetched, false);
 });
 
+test("routine traffic is filtered from automatic delivery by default", async () => {
+  const dir = await workspace([item({ id: "traffic-default", platform: "facebook", section: "traffic", copy: "TRÁFICO | Congestión rutinaria. Fuente: https://fl511.com" })]);
+  let fetched = false;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: credentials,
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async () => { fetched = true; throw new Error("routine traffic must not reach Metricool"); },
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.scanned, 1);
+  assert.equal(result.eligible, 0);
+  assert.equal(result.scheduled, 0);
+  assert.equal(result.filtered, 1);
+  assert.equal(fetched, false);
+});
+
 test("discovers the exact Miami News brand and sends one provider with safe scheduling fields", async () => {
   const dir = await workspace([item()]);
   const calls: Array<{ url: URL; init?: RequestInit }> = [];
@@ -171,7 +188,7 @@ test("schedules Facebook breaking and traffic updates as text-only posts without
   let scheduledPayload: Record<string, unknown> | null = null;
 
   const result = await deliverClipperLocalNewsToMetricool({
-    env: credentials,
+    env: { ...credentials, CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC: "true" },
     workspaceDir: dir,
     now: fixedNow,
     fetch: async (input, init) => {

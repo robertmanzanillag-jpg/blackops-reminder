@@ -12,6 +12,7 @@ export type ClipperLocalNewsRisk = "low" | "medium" | "high" | "critical";
 export type ClipperLocalNewsLifecycle = "active" | "resolved";
 export type ClipperLocalNewsQueueStatus = "approval_required" | "auto_eligible" | "quarantined" | "rejected";
 export type ClipperLocalNewsSection = "traffic" | "weather" | "breaking" | "public_safety" | "local";
+export type ClipperLocalNewsTopicTag = "violent_crime" | "kidnapping" | "immigration" | null;
 export type ClipperLocalNewsEditorialUrgency = "routine" | "developing" | "breaking";
 export type ClipperLocalNewsRevisionKind = "original" | "update" | "resolved" | "correction";
 export type ClipperLocalNewsCommitteeRole = "source_verifier" | "safety_editor" | "monetization_editor";
@@ -87,6 +88,7 @@ export interface ClipperLocalNewsEvent {
   revision: number;
   fingerprint: string;
   section: ClipperLocalNewsSection;
+  topicTag: ClipperLocalNewsTopicTag;
   editorialUrgency: ClipperLocalNewsEditorialUrgency;
   editorialPriority: number;
   revisionKind: ClipperLocalNewsRevisionKind;
@@ -115,6 +117,7 @@ export interface ClipperLocalNewsQueueItem {
   published: false;
   createdAt: string;
   section: ClipperLocalNewsSection;
+  topicTag: ClipperLocalNewsTopicTag;
   editorialUrgency: ClipperLocalNewsEditorialUrgency;
   editorialPriority: number;
   revisionKind: ClipperLocalNewsRevisionKind;
@@ -332,14 +335,14 @@ function safeUrl(value: unknown, fallback: string): string {
 function riskFor(input: { severity: string; urgency: string; title: string; eventType: string; description?: string; instruction?: string; location?: string }): ClipperLocalNewsRisk {
   const text = `${input.severity} ${input.urgency} ${input.title} ${input.eventType} ${input.description || ""} ${input.instruction || ""} ${input.location || ""}`.toLowerCase();
   if (/extreme|catastrophic|tornado emergency|hurricane warning|flash flood emergency|evacuat|\bdeath\b|\bdead\b|fatalit|fallecid|muerte|tiroteo|shooting|homicid|asesinat/.test(text)) return "critical";
-  if (/severe|immediate|warning|tornado|hurricane|flash flood|life[- ]threat|arrest|detenid|acusad|charged|indict|\bcrime\b|crimen|delito|robbery|burglary|assault|rape|sexual|kidnap|secuestr|\bminor child\b|\bmenor(?:es)?\b|victim|víctima|violence|violencia|rumou?r|rumor|unconfirmed|no confirmado|sin confirmar|identified as|identificad[oa] como|named as/.test(text)) return "high";
+  if (/severe|immediate|warning|tornado|hurricane|flash flood|life[- ]threat|arrest|detenid|acusad|charged|indict|\bcrime\b|crimen|delito|robbery|burglary|assault|rape|sexual|kidnap|secuestr|\bminor child\b|\bmenor(?:es)?\b|victim|víctima|violence|violencia|human traffick|tr[aá]fico de personas|smuggl|contraband|coyote|deport|ice arrest|cbp seizure|rumou?r|rumor|unconfirmed|no confirmado|sin confirmar|identified as|identificad[oa] como|named as/.test(text)) return "high";
   if (/moderate|expected|watch|flood|storm|snow|traffic|closure|crash|incident/.test(text)) return "medium";
   return "low";
 }
 
 function sectionFor(input: { title: string; eventType: string; description: string; source: string }): ClipperLocalNewsSection {
   const text = `${input.title} ${input.eventType} ${input.description} ${input.source}`.toLowerCase();
-  if (/police|fire|public safety|seguridad p[uú]blica|emergency|rescue|missing person|shelter|federal bureau of investigation|\bfbi\b|department of justice|u\.s\. attorney|arrest|detenid|acusad|charged|indict|homicid|murder|asesinat|robbery|assault|kidnap|secuestr/.test(text)) return "public_safety";
+  if (/police|fire|public safety|seguridad p[uú]blica|emergency|rescue|missing person|shelter|federal bureau of investigation|\bfbi\b|department of justice|u\.s\. attorney|arrest|detenid|acusad|charged|indict|homicid|murder|killer|asesinat|matanza|mass shooting|carjacking|home invasion|robbery|assault|kidnap|secuestr|human traffick|tr[aá]fico de personas|smuggl|contraband|coyote|immigration|inmigraci[oó]n|immigrant|inmigrante|migrant|migrante|asylum|asilo|deport|border patrol|\bice\b|\bcbp\b|uscis|detention|detenci[oó]n/.test(text)) return "public_safety";
   if (/traffic|tr[aá]nsito|road|route|highway|street|bridge|tunnel|closure|closed|reopened|crash|collision|congestion|lane|subway|transit|\btrains?\b|metropolitan transportation authority|mta|fhp|fl511|511ny/.test(text)) return "traffic";
   if (/weather|nws|storm|\brain\b|flood|snow|wind|heat|cold|hurricane|tornado|thunder|coastal/.test(text)) return "weather";
   if (/breaking|urgent|urgente|ultima hora|última hora/.test(text)) return "breaking";
@@ -354,11 +357,20 @@ function editorialUrgencyFor(input: { risk: ClipperLocalNewsRisk; section: Clipp
   return "routine";
 }
 
-function editorialPriorityFor(input: { risk: ClipperLocalNewsRisk; section: ClipperLocalNewsSection; editorialUrgency: ClipperLocalNewsEditorialUrgency; lifecycle: ClipperLocalNewsLifecycle }): number {
+function topicTagFor(input: { title: string; eventType: string; description: string; source: string }): ClipperLocalNewsTopicTag {
+  const text = `${input.title} ${input.eventType} ${input.description} ${input.source}`.toLowerCase();
+  if (/kidnap|secuestr|abduct|rapto|missing child|ni[ñn]o desaparecid/.test(text)) return "kidnapping";
+  if (/murder|killer|homicid|asesinat|matanza|mass shooting|carjacking|home invasion|robbery|burglary|assault|rape|tiroteo|shooting|human traffick|tr[aá]fico de personas|smuggl|contraband|coyote/.test(text)) return "violent_crime";
+  if (/immigration|inmigraci[oó]n|immigrant|inmigrante|migrant|migrante|asylum|asilo|deport|border patrol|\bice\b|\bcbp\b|uscis|detention|detenci[oó]n/.test(text)) return "immigration";
+  return null;
+}
+
+function editorialPriorityFor(input: { risk: ClipperLocalNewsRisk; section: ClipperLocalNewsSection; topicTag?: ClipperLocalNewsTopicTag; editorialUrgency: ClipperLocalNewsEditorialUrgency; lifecycle: ClipperLocalNewsLifecycle }): number {
   const risk = { low: 0, medium: 15, high: 35, critical: 50 }[input.risk];
   const section = { traffic: 0, weather: 15, local: 20, public_safety: 35, breaking: 40 }[input.section];
+  const topic = { violent_crime: 15, kidnapping: 15, immigration: 10, null: 0 }[input.topicTag ?? "null"];
   const urgency = { routine: 0, developing: 10, breaking: 20 }[input.editorialUrgency];
-  return Math.max(0, Math.min(100, 10 + risk + section + urgency - (input.lifecycle === "resolved" ? 15 : 0)));
+  return Math.max(0, Math.min(100, 10 + risk + section + topic + urgency - (input.lifecycle === "resolved" ? 15 : 0)));
 }
 
 function mediaTypeFor(value: unknown): "image" | "video" | null {
@@ -439,14 +451,15 @@ export function normalizeClipperLocalNewsEvent(raw: ClipperLocalNewsRawEvent, no
   const expires = clean(raw.expires || props.expires || props.ends) || null;
   const risk = riskFor({ severity, urgency, title, eventType, description, instruction, location });
   const section = sectionFor({ title, eventType, description, source });
+  const topicTag = topicTagFor({ title, eventType, description, source });
   const editorialUrgency = editorialUrgencyFor({ risk, section, title, eventType, urgency, lifecycle });
-  const editorialPriority = editorialPriorityFor({ risk, section, editorialUrgency, lifecycle });
+  const editorialPriority = editorialPriorityFor({ risk, section, topicTag, editorialUrgency, lifecycle });
   const revisionKind = revisionKindFor(raw, lifecycle);
   const provenance = verifiedFetchedEvents.has(raw) && raw.provenance?.verified ? raw.provenance : null;
   const media = mediaUrlFor(raw, props, Boolean(provenance));
   const qualityScore = qualityScoreFor({ provenanceVerified: Boolean(provenance), title, description, instruction, editorialUrgency, lifecycle, mediaType: media.type });
-  const fingerprint = digest(JSON.stringify({ title, description, instruction, location, eventType, severity, urgency, certainty, lifecycle, effective, expires, sourceUrl, section, editorialUrgency, revisionKind, media, qualityScore, claimHash: provenance?.claimHash }));
-  return { id: digest(`${source.toLowerCase()}|${sourceEventId.toLowerCase()}`), sourceEventId, source, sourceUrl, lane, title, description, instruction, location, eventType, severity, urgency, certainty, risk, lifecycle, effective, expires, fingerprint, section, editorialUrgency, editorialPriority, revisionKind, provenance, mediaUrl: media.url, mediaType: media.type, qualityScore };
+  const fingerprint = digest(JSON.stringify({ title, description, instruction, location, eventType, severity, urgency, certainty, lifecycle, effective, expires, sourceUrl, section, topicTag, editorialUrgency, revisionKind, media, qualityScore, claimHash: provenance?.claimHash }));
+  return { id: digest(`${source.toLowerCase()}|${sourceEventId.toLowerCase()}`), sourceEventId, source, sourceUrl, lane, title, description, instruction, location, eventType, severity, urgency, certainty, risk, lifecycle, effective, expires, fingerprint, section, topicTag, editorialUrgency, editorialPriority, revisionKind, provenance, mediaUrl: media.url, mediaType: media.type, qualityScore };
 }
 
 function truncate(text: string, limit: number): string {
@@ -662,7 +675,7 @@ function csv<T extends object>(rows: T[], columns: string[]): string {
 
 async function persist(dir: string, state: LocalNewsState): Promise<void> {
   const analytics = summarizeMetrics(state.metrics);
-  const queueColumns = ["id", "eventId", "eventRevision", "canonicalEventIdentity", "claimIdentityHash", "lane", "platform", "section", "editorialUrgency", "editorialPriority", "qualityScore", "revisionKind", "risk", "lifecycle", "status", "gateReason", "notBefore", "publishDecision", "consensus", "checkedAt", "reviewHash", "textOnly", "mediaRequired", "mediaType", "mediaUrl", "approvalRequired", "autoEligible", "published", "copy", "source", "sourceUrl", "createdAt"];
+  const queueColumns = ["id", "eventId", "eventRevision", "canonicalEventIdentity", "claimIdentityHash", "lane", "platform", "section", "topicTag", "editorialUrgency", "editorialPriority", "qualityScore", "revisionKind", "risk", "lifecycle", "status", "gateReason", "notBefore", "publishDecision", "consensus", "checkedAt", "reviewHash", "textOnly", "mediaRequired", "mediaType", "mediaUrl", "approvalRequired", "autoEligible", "published", "copy", "source", "sourceUrl", "createdAt"];
   const metricColumns = ["id", "queueItemId", "eventId", "lane", "platform", "variantId", "impressions", "engagements", "clicks", "shares", "revenueUsd", "costUsd", "observedAt", "recordedAt"];
   await Promise.all([
     atomicWrite(path.join(dir, FILES.state), `${JSON.stringify(state, null, 2)}\n`),
@@ -836,7 +849,7 @@ async function queueFor(event: ClipperLocalNewsEvent, now: string, env: NodeJS.P
     const reviewHash = hashLocalNewsQueueReview({ queueItemId: id, eventId: event.id, eventRevision: event.revision, lane: event.lane, copy, platform, risk: event.risk, canonicalEventIdentity, claimIdentityHash, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, checkedAt: committee.checkedAt });
     const translationUnavailable = Boolean(translationGated && bilingual?.issues.some((issue) => issue.startsWith("local_translation_failed:")));
     const reasons = translationGated ? [...committee.reasons, translationUnavailable ? "local_translation_unavailable" : "local_translation_integrity_failed"] : !autoEnabled && committee.publishDecision === "auto_publish" ? [...committee.reasons, "operator_disabled_automatic_publication"] : committee.reasons;
-    return { id, eventId: event.id, eventRevision: event.revision, canonicalEventIdentity, claimIdentityHash, lane: event.lane, platform, copy, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, section: event.section, editorialUrgency: event.editorialUrgency, editorialPriority: event.editorialPriority, revisionKind: event.revisionKind, textOnly: !event.mediaUrl, mediaRequired: false, mediaUrl: event.mediaUrl, mediaType: event.mediaType, qualityScore: event.qualityScore, gateReason, notBefore, status, approvalRequired: status === "approval_required", autoEligible: !gated, published: false, createdAt: now, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, reasons, checkedAt: committee.checkedAt, reviewHash, organicGrowth };
+    return { id, eventId: event.id, eventRevision: event.revision, canonicalEventIdentity, claimIdentityHash, lane: event.lane, platform, copy, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, section: event.section, topicTag: event.topicTag, editorialUrgency: event.editorialUrgency, editorialPriority: event.editorialPriority, revisionKind: event.revisionKind, textOnly: !event.mediaUrl, mediaRequired: false, mediaUrl: event.mediaUrl, mediaType: event.mediaType, qualityScore: event.qualityScore, gateReason, notBefore, status, approvalRequired: status === "approval_required", autoEligible: !gated, published: false, createdAt: now, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, reasons, checkedAt: committee.checkedAt, reviewHash, organicGrowth };
   }));
 }
 
@@ -1272,8 +1285,8 @@ export async function getClipperLocalNewsStatus(options: ClipperLocalNewsOptions
       note: "Notify NYC and Miami-Dade public incident feeds provide official updates but do not guarantee complete road coverage. NY511 remains optional and requires explicit authorized configuration.",
     },
     artifacts,
-    guardrails: ["Queue state never proves or claims real publication.", "Every social post is bilingual (Spanish and English) in one publication; verified stories are never duplicated merely to hit a quota.", "Only official/public or authorized sources with unanimous committee approval can become auto-eligible; commercial news articles are never scraped.", "Revenue progress, cost, reach, and engagement include only explicitly recorded observations; no money or performance is inferred.", "Unresolved accusations, identifiable minors, victim private addresses, graphic violence, contradictory information, unconfirmed claims, and unverifiable critical evacuations receive automatic final quarantine/reject decisions, not a human-review wait.", "Each connected city/platform account targets 10 verified posts daily and can rise to 12 or 14 only from observed performance; routine filler and engagement bait remain blocked.", "Cadence overflow remains automatic but cannot publish before its notBefore timestamp.", "Secrets are read from environment variables and never persisted."],
+    guardrails: ["Queue state never proves or claims real publication.", "Every social post is bilingual (Spanish and English) in one publication; verified stories are never duplicated merely to hit a quota.", "Only official/public or authorized sources with unanimous committee approval can become auto-eligible; commercial news articles are never scraped.", "Violent crime, kidnapping, and immigration topics receive editorial priority boosts, but never bypass source verification or the safety committee.", "Routine traffic is excluded from automatic Metricool delivery by default; set CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC=true only for an explicit traffic campaign.", "Revenue progress, cost, reach, and engagement include only explicitly recorded observations; no money or performance is inferred.", "Unresolved accusations, identifiable minors, victim private addresses, graphic violence, contradictory information, unconfirmed claims, and unverifiable critical evacuations receive automatic final quarantine/reject decisions, not a human-review wait.", "Each connected city/platform account targets 10 verified posts daily and can rise to 12 or 14 only from observed performance; routine filler and engagement bait remain blocked.", "Cadence overflow remains automatic but cannot publish before its notBefore timestamp.", "Secrets are read from environment variables and never persisted."],
   };
 }
 
-export const __clipperLocalNewsInternals = { riskFor, sectionFor, editorialUrgencyFor, sources, connectorCatalog, truncate, xWeightedLength, extractEvents, rssEvents, sourceEvents, mtaAlertEvents, miamiTransitEvents, scheduleMinutes };
+export const __clipperLocalNewsInternals = { riskFor, sectionFor, topicTagFor, editorialUrgencyFor, editorialPriorityFor, sources, connectorCatalog, truncate, xWeightedLength, extractEvents, rssEvents, sourceEvents, mtaAlertEvents, miamiTransitEvents, scheduleMinutes };

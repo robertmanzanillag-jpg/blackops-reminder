@@ -20,6 +20,41 @@ test("X weighting charges Unicode punctuation and emoji while treating a URL as 
   assert.equal(__clipperLocalNewsInternals.xWeightedLength("A…😀 https://example.com/very/long/path"), 29);
 });
 
+test("hot-topic classifier prioritizes violent crime, kidnapping, and immigration over routine local noise", () => {
+  const immigration = normalizeClipperLocalNewsEvent({
+    sourceEventId: "ice-1",
+    source: "Official immigration newsroom",
+    sourceUrl: "https://www.ice.gov/newsroom/example",
+    lane: "miami-news",
+    title: "ICE announces immigration detention operation",
+    description: "Officials released a verified update about detention and deportation proceedings.",
+    eventType: "Immigration enforcement",
+  });
+  const kidnapping = normalizeClipperLocalNewsEvent({
+    sourceEventId: "kidnap-1",
+    source: "Official police newsroom",
+    sourceUrl: "https://www.nyc.gov/police/example",
+    lane: "ny-news",
+    title: "Police seek suspect in kidnapping investigation",
+    description: "Detectives released a verified public safety bulletin.",
+    eventType: "Kidnapping",
+  });
+  const traffic = normalizeClipperLocalNewsEvent({
+    sourceEventId: "traffic-1",
+    source: "Road authority",
+    sourceUrl: "https://www.transportation.gov/example",
+    lane: "miami-news",
+    title: "Routine traffic congestion reported",
+    description: "Drivers should expect a normal weekday delay.",
+    eventType: "Traffic",
+  });
+  assert.equal(immigration.section, "public_safety");
+  assert.equal(immigration.topicTag, "immigration");
+  assert.equal(kidnapping.topicTag, "kidnapping");
+  assert.ok(immigration.editorialPriority > traffic.editorialPriority);
+  assert.ok(kidnapping.editorialPriority > traffic.editorialPriority);
+});
+
 test("offline OPUS adapter produces substantive Spanish and English in the same social post", async (t) => {
   const workspaceDir = await fixture(t);
   const translations = new Map([
