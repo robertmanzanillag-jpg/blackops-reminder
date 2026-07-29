@@ -68,6 +68,145 @@ test("collects each network through discovered Metricool MCP tools and totals us
   assert.equal(BLACKROOM_CEO_ANALYTICS_LOOKBACK_DAYS, 30);
 });
 
+test("reads the current Metricool analytics contract and supplies metric IDs per network connector", async () => {
+  const calls: Array<{ name: string; args: Record<string, any> }> = [];
+  const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const request = JSON.parse(String(init?.body || "{}"));
+    if (request.method === "tools/list") {
+      return new Response(JSON.stringify({ result: { tools: [
+        {
+          name: "getAnalyticsAvailableMetrics",
+          inputSchema: { properties: { connector: { type: "string" }, network: { type: "string" } } },
+        },
+        {
+          name: "getAnalyticsDataByMetrics",
+          inputSchema: { properties: {
+            brandId: { type: "string" },
+            from: { type: "string", description: "ISO 8601 date-time" },
+            to: { type: "string", description: "ISO 8601 date-time" },
+            metrics: { type: "array" },
+          } },
+        },
+        {
+          name: "getBestTimeToPostByNetwork",
+          inputSchema: { properties: {
+            brandId: { type: "string" },
+            fromDate: { type: "string", description: "ISO 8601 date-time" },
+            toDate: { type: "string", description: "ISO 8601 date-time" },
+            socialNetwork: { type: "string" },
+            timezone: { type: "string" },
+          } },
+        },
+      ] } }), { headers: { "content-type": "application/json" } });
+    }
+    const name = String(request.params.name);
+    const args = request.params.arguments as Record<string, any>;
+    calls.push({ name, args });
+    if (name === "getAnalyticsAvailableMetrics") {
+      const prefix = `${args.network}-${args.connector}`;
+      return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({
+        data: [
+          { fieldId: `${prefix}-views`, displayName: "Video views" },
+          { fieldId: `${prefix}-id`, displayName: "Video ID" },
+        ],
+      }) }] } }), { headers: { "content-type": "application/json" } });
+    }
+    if (name === "getAnalyticsDataByMetrics") {
+      const metricId = String(args.metrics[0]);
+      return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({
+        data: {
+          [metricId]: [
+            { postId: `${metricId}-1`, value: 12 },
+            { postId: `${metricId}-2`, value: 24 },
+          ],
+        },
+      }) }] } }), { headers: { "content-type": "application/json" } });
+    }
+    return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({
+      data: [{ time: "19:30", score: 0.9 }],
+    }) }] } }), { headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+
+  const analytics = await collectBlackRoomMetricoolAnalytics({
+    fetch: fetcher,
+    env: { METRICOOL_USER_TOKEN: "secure-test-token" },
+    now: new Date("2026-07-29T12:00:00.000Z"),
+  });
+
+  assert.deepEqual(analytics.networkSamples, { tiktok: 2, facebook: 4, youtube: 2 });
+  assert.deepEqual(analytics.historyRequestsByNetwork, { tiktok: 1, facebook: 2, youtube: 1 });
+  assert.equal(analytics.sampleCount, 8);
+  assert.equal(analytics.comparableSampleCount, 2);
+  assert.deepEqual(analytics.recommendedTimes, ["19:30"]);
+  const availableCalls = calls.filter((call) => call.name === "getAnalyticsAvailableMetrics");
+  assert.deepEqual(
+    availableCalls.map((call) => `${call.args.network}:${call.args.connector}`),
+    ["tiktok:videos", "facebook:posts", "facebook:reels", "youtube:videos"],
+  );
+  const dataCalls = calls.filter((call) => call.name === "getAnalyticsDataByMetrics");
+  assert.equal(dataCalls.length, 4);
+  assert.ok(dataCalls.every((call) => call.args.brandId === "6585226"));
+  assert.ok(dataCalls.every((call) => Array.isArray(call.args.metrics) && call.args.metrics.length === 2));
+  assert.ok(dataCalls.every((call) => String(call.args.metrics[0]).endsWith("-views")));
+  assert.ok(dataCalls.every((call) => String(call.args.metrics[1]).endsWith("-id")));
+  assert.ok(dataCalls.every((call) => /T00:00:00-0[45]:00$/.test(call.args.from)));
+  assert.ok(dataCalls.every((call) => /T23:59:59-0[45]:00$/.test(call.args.to)));
+  const bestTimeCalls = calls.filter((call) => call.name === "getBestTimeToPostByNetwork");
+  assert.equal(bestTimeCalls.length, 3);
+  assert.deepEqual(bestTimeCalls.map((call) => call.args.socialNetwork), ["tiktok", "facebook", "youtube"]);
+  assert.ok(bestTimeCalls.every((call) => call.args.timezone === "America/New_York"));
+  assert.ok(bestTimeCalls.every((call) => call.args.fromDate.startsWith("2026-07-22T")));
+});
+
+test("uses Metricool's coded post identity field instead of counting aggregate date rows as posts", async () => {
+  const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const request = JSON.parse(String(init?.body || "{}"));
+    if (request.method === "tools/list") {
+      return new Response(JSON.stringify({ result: { tools: [
+        {
+          name: "getAnalyticsAvailableMetrics",
+          inputSchema: { properties: { connector: { type: "string" }, network: { type: "string" } } },
+        },
+        {
+          name: "getAnalyticsDataByMetrics",
+          inputSchema: { properties: {
+            brandId: { type: "string" },
+            from: { type: "string" },
+            to: { type: "string" },
+            metrics: { type: "array" },
+          } },
+        },
+      ] } }), { headers: { "content-type": "application/json" } });
+    }
+    if (request.params.name === "getAnalyticsAvailableMetrics") {
+      const prefix = `${request.params.arguments.network}-${request.params.arguments.connector}`;
+      return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({
+        data: [
+          { fieldId: `${prefix}-views`, displayName: "Views" },
+          { fieldId: `${prefix}-identity`, displayName: "Post ID" },
+        ],
+      }) }] } }), { headers: { "content-type": "application/json" } });
+    }
+    const [viewsField, identityField] = request.params.arguments.metrics;
+    return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({
+      data: [
+        { [identityField]: `${identityField}-post-1`, [viewsField]: 20 },
+        { [identityField]: `${identityField}-post-2`, [viewsField]: 40 },
+        { date: "2026-07-29", [viewsField]: 60 },
+      ],
+    }) }] } }), { headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+
+  const analytics = await collectBlackRoomMetricoolAnalytics({
+    fetch: fetcher,
+    env: { METRICOOL_USER_TOKEN: "secure-test-token" },
+    now: new Date("2026-07-29T12:00:00.000Z"),
+  });
+
+  assert.deepEqual(analytics.networkSamples, { tiktok: 2, facebook: 4, youtube: 2 });
+  assert.equal(analytics.sampleCount, 8);
+});
+
 test("paginates and deduplicates every available Metricool history page", async () => {
   const pages: Record<string, number[]> = { get_tiktoks: [], get_posts: [], get_videos: [] };
   const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
@@ -106,7 +245,7 @@ test("does not claim complete history when Metricool repeats a page that still h
     const request = JSON.parse(String(init?.body || "{}"));
     if (request.method === "tools/list") {
       return new Response(JSON.stringify({ result: { tools: [
-        { name: "get_metrics", inputSchema: { properties: { network: {}, startDate: {}, endDate: {}, page: {}, pageSize: {} } } },
+        { name: "getAnalyticsDataByMetrics", inputSchema: { properties: { network: {}, startDate: {}, endDate: {}, page: {}, pageSize: {} } } },
       ] } }), { headers: { "content-type": "application/json" } });
     }
     const network = String(request.params.arguments.network);
@@ -125,9 +264,29 @@ test("does not claim complete history when Metricool repeats a page that still h
   });
 
   assert.deepEqual(analytics.networkSamples, { tiktok: 100, facebook: 100, youtube: 100 });
-  assert.deepEqual(analytics.historyRequestsByNetwork, { tiktok: 2, facebook: 2, youtube: 2 });
+  assert.deepEqual(analytics.historyRequestsByNetwork, { tiktok: 2, facebook: 4, youtube: 2 });
   assert.deepEqual(analytics.historyCompleteByNetwork, { tiktok: false, facebook: false, youtube: false });
   assert.match(analytics.reason, /Historial importado parcialmente/);
+});
+
+test("does not mistake Metricool's available-metrics catalog for published post data", async () => {
+  const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const request = JSON.parse(String(init?.body || "{}"));
+    if (request.method === "tools/list") {
+      return new Response(JSON.stringify({ result: { tools: [
+        { name: "get_metrics", inputSchema: { properties: { network: { type: "string" } } } },
+      ] } }), { headers: { "content-type": "application/json" } });
+    }
+    throw new Error("catalog tool must not be called as analytics data");
+  }) as typeof fetch;
+
+  await assert.rejects(
+    collectBlackRoomMetricoolAnalytics({
+      fetch: fetcher,
+      env: { METRICOOL_USER_TOKEN: "secure-test-token" },
+    }),
+    /does not expose a compatible metrics tool/,
+  );
 });
 
 test("splits a capped date range until the full historical cohort is available", async () => {
@@ -168,6 +327,43 @@ test("splits a capped date range until the full historical cohort is available",
   assert.equal(analytics.networkSamples.tiktok, 120);
   assert.equal(analytics.historyCompleteByNetwork?.tiktok, true);
   assert.equal(analytics.historyRequestsByNetwork?.tiktok, 3);
+});
+
+test("falls back to the recent retention window when Metricool rejects full history", async () => {
+  const starts: string[] = [];
+  const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const request = JSON.parse(String(init?.body || "{}"));
+    if (request.method === "tools/list") {
+      return new Response(JSON.stringify({ result: { tools: [
+        { name: "get_tiktok_videos", inputSchema: { properties: { init_date: {}, end_date: {} } } },
+        { name: "get_facebook_posts", inputSchema: { properties: { init_date: {}, end_date: {} } } },
+        { name: "get_youtube_videos", inputSchema: { properties: { init_date: {}, end_date: {} } } },
+      ] } }), { headers: { "content-type": "application/json" } });
+    }
+    const start = String(request.params.arguments.init_date);
+    starts.push(start);
+    if (start === BLACKROOM_CEO_ANALYTICS_HISTORY_START_DATE) {
+      return new Response(JSON.stringify({ error: { message: "date range exceeds plan retention" } }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+    const name = String(request.params.name);
+    return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({
+      data: [{ id: `${name}-recent`, views: 20 }],
+    }) }] } }), { headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+
+  const analytics = await collectBlackRoomMetricoolAnalytics({
+    fetch: fetcher,
+    env: { METRICOOL_USER_TOKEN: "secure-test-token" },
+    now: new Date("2026-07-29T12:00:00.000Z"),
+  });
+
+  assert.deepEqual(analytics.networkSamples, { tiktok: 1, facebook: 1, youtube: 1 });
+  assert.ok(starts.includes(BLACKROOM_CEO_ANALYTICS_HISTORY_START_DATE));
+  assert.ok(starts.includes("2026-06-29"));
+  assert.deepEqual(analytics.historyCompleteByNetwork, { tiktok: false, facebook: false, youtube: false });
+  assert.match(analytics.reason, /Historial importado parcialmente/);
 });
 
 test("keeps Facebook and YouTube learning data when one Metricool network temporarily fails", async () => {
