@@ -18,6 +18,10 @@ const STANDARD_SPACING_MS = 75 * 60_000;
 const DAILY_MINIMUM_PER_ACCOUNT = 10;
 const DAILY_MAXIMUM_PER_ACCOUNT = 14;
 const STALE_LOCK_MS = 10 * 60_000;
+const MEDIA_NORMALIZATION_ATTEMPTS = 3;
+const MEDIA_NORMALIZATION_RETRY_MS = 250;
+const SCHEDULE_ATTEMPTS = 3;
+const SCHEDULE_RETRY_MS = 500;
 
 const committeeVerdictSchema = z.object({
   role: z.enum(["source_verifier", "safety_editor", "monetization_editor"]),
@@ -445,13 +449,52 @@ async function normalizeMetricoolMedia(
   // and video URLs before they are attached to scheduler/posts.
   const url = new URL("/api/actions/normalize/image/url", METRICOOL_API);
   url.searchParams.set("url", mediaUrl);
-  try {
-    const response = await fetcher(url, { headers: { Accept: "application/json", "X-Mc-Auth": token } });
-    if (!response.ok) return null;
-    return responsePostId(await safeJson(response));
-  } catch {
-    return null;
+  for (let attempt = 1; attempt <= MEDIA_NORMALIZATION_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetcher(url, { headers: { Accept: "application/json", "X-Mc-Auth": token } });
+      if (response.ok) return responsePostId(await safeJson(response));
+      // Give transient Metricool/media-fetch failures a chance to recover
+      // before the scheduler falls back to the verified text. Retry rate
+      // limits and server-side failures, but fail fast on a bad URL or an
+      // authorization error so the next delivery cycle can repair it.
+      const retryable = response.status === 429 || response.status >= 500;
+      if (!retryable || attempt === MEDIA_NORMALIZATION_ATTEMPTS) return null;
+    } catch {
+      if (attempt === MEDIA_NORMALIZATION_ATTEMPTS) return null;
+    }
+    await new Promise((resolve) => setTimeout(resolve, MEDIA_NORMALIZATION_RETRY_MS * attempt));
   }
+  return null;
+}
+
+function metricoolPostTitle(copy: string): string {
+  return copy
+    .replace(/https?:\/\/\S+/gi, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 100) || "Metro Current local news";
+}
+
+async function scheduleMetricoolPost(
+  fetcher: typeof globalThis.fetch,
+  url: URL,
+  token: string,
+  payload: Record<string, unknown>,
+): Promise<Response> {
+  for (let attempt = 1; attempt <= SCHEDULE_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetcher(url, {
+        method: "POST",
+        headers: { Accept: "application/json", "Content-Type": "application/json", "X-Mc-Auth": token },
+        body: JSON.stringify(payload),
+      });
+      if (response.ok || (response.status < 500 && response.status !== 429) || attempt === SCHEDULE_ATTEMPTS) return response;
+    } catch (error) {
+      if (attempt === SCHEDULE_ATTEMPTS) throw error;
+    }
+    await new Promise((resolve) => setTimeout(resolve, SCHEDULE_RETRY_MS * attempt));
+  }
+  throw new Error("Metricool scheduler retry loop exhausted");
 }
 
 async function safeJson(response: Response): Promise<unknown> {
@@ -750,16 +793,24 @@ export async function deliverClipperLocalNewsToMetricool(
         text: item.copy,
         providers: [{ network: providerFor(item.platform) }],
         publicationDate: { dateTime: localDateTime(scheduledDate), timezone: TIME_ZONE },
+        // Keep Metricool from treating the article URL as an implicit smart
+        // link. The attached, normalized media is the canonical preview and
+        // prevents Facebook's "Cannot extract image from link" failure.
+        descendants: [],
+        firstCommentText: "",
+        hasNotReadNotes: false,
+        mediaAltText: [],
+        shortener: false,
+        smartLinkData: { ids: [] },
         ...(mediaId ? { media: { mediaId } } : {}),
+        ...(item.platform === "facebook" ? {
+          facebookData: { type: "POST", title: metricoolPostTitle(item.copy) },
+        } : {}),
         autoPublish: true,
         draft: false,
       };
       try {
-        const response = await fetcher(url, {
-          method: "POST",
-          headers: { Accept: "application/json", "Content-Type": "application/json", "X-Mc-Auth": token },
-          body: JSON.stringify(payload),
-        });
+        const response = await scheduleMetricoolPost(fetcher, url, token, payload);
         if (!response.ok) {
           result.failed += 1;
           if (response.status === 400 || response.status === 403 || response.status === 404) {

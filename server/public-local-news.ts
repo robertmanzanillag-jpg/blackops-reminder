@@ -351,7 +351,15 @@ export function renderPublicLocalNewsShareHtml(article: PublicLocalNewsArticle, 
   const title = escapeHtml(article.title);
   const summary = escapeHtml(article.summary);
   const canonical = escapeHtml(canonicalUrl);
-  const imageMeta = imageUrl ? `<meta property="og:image" content="${escapeHtml(imageUrl)}">` : "";
+  const imageMeta = imageUrl ? [
+    `<meta property="og:image" content="${escapeHtml(imageUrl)}">`,
+    `<meta property="og:image:secure_url" content="${escapeHtml(imageUrl)}">`,
+    `<meta property="og:image:type" content="image/png">`,
+    `<meta property="og:image:width" content="1254">`,
+    `<meta property="og:image:height" content="1254">`,
+    `<meta name="twitter:image" content="${escapeHtml(imageUrl)}">`,
+    `<meta name="twitter:image:alt" content="${escapeHtml(article.city === "miami" ? "Miami News" : "New York News")}">`,
+  ].join("\n  ") : "";
   const city = article.city === "miami" ? "Miami" : article.lang === "es" ? "Nueva York" : "New York";
   const backLabel = article.lang === "es" ? `Volver a ${city}` : `Back to ${city}`;
   const sourceLabel = article.lang === "es" ? "Fuente original" : "Original source";

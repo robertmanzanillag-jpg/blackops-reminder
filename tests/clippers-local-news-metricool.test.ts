@@ -166,6 +166,9 @@ test("discovers the exact Miami News brand and sends one provider with safe sche
   assert.deepEqual(payload.providers, [{ network: "twitter" }]);
   assert.equal(payload.autoPublish, true);
   assert.equal(payload.draft, false);
+  assert.equal(payload.shortener, false);
+  assert.deepEqual(payload.smartLinkData, { ids: [] });
+  assert.deepEqual(payload.facebookData, undefined);
   assert.equal(payload.publicationDate.timezone, "America/New_York");
   assert.equal(payload.publicationDate.dateTime, "2026-07-21T12:02:00");
 
@@ -227,6 +230,9 @@ test("schedules Facebook breaking and traffic updates as text-only posts without
   assert.equal(result.status, "completed");
   assert.equal(result.scheduled, 1);
   assert.deepEqual(scheduledPayload?.providers, [{ network: "facebook" }]);
+  assert.equal(scheduledPayload?.shortener, false);
+  assert.deepEqual(scheduledPayload?.smartLinkData, { ids: [] });
+  assert.deepEqual(scheduledPayload?.facebookData, { type: "POST", title: "TRÁFICO | Cierre en Miami-Dade. Según FHP/FL511: tome una ruta alterna. Fuente:" });
   assert.deepEqual(scheduledPayload?.publicationDate, { dateTime: "2026-07-21T12:00:00", timezone: "America/New_York" });
   assert.match(String(scheduledPayload?.text), /TRÁFICO/);
   assert.equal("media" in (scheduledPayload || {}), false);
@@ -260,6 +266,60 @@ test("normalizes the existing public brand image and attaches it without any pai
   assert.deepEqual(scheduledPayload?.media, { mediaId: "media-123" });
   assert.equal(result.mediaAttached, 1);
   assert.equal(result.mediaFallback, 0);
+});
+
+test("retries transient Metricool media normalization before scheduling a link post", async () => {
+  const dir = await workspace([item({ id: "miami-facebook-image-retry", platform: "facebook" })]);
+  let normalizationAttempts = 0;
+  let scheduledPayload: Record<string, any> | null = null;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, PUBLIC_BASE_URL: "https://news.example.com" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/admin/simpleProfiles") {
+        return new Response(JSON.stringify({ profiles: [{ blogId: 501, label: "Miami News", networks: ["facebook"] }] }), { status: 200 });
+      }
+      if (url.pathname === "/api/actions/normalize/image/url") {
+        normalizationAttempts += 1;
+        if (normalizationAttempts < 3) return new Response("temporary", { status: 503 });
+        return new Response(JSON.stringify({ mediaId: "media-after-retry" }), { status: 200 });
+      }
+      scheduledPayload = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ id: "post-after-retry" }), { status: 201 });
+    },
+  });
+
+  assert.equal(result.scheduled, 1);
+  assert.equal(normalizationAttempts, 3);
+  assert.deepEqual(scheduledPayload?.media, { mediaId: "media-after-retry" });
+  assert.equal(result.mediaAttached, 1);
+  assert.equal(result.mediaFallback, 0);
+});
+
+test("retries transient scheduler failures instead of dropping the news post", async () => {
+  const dir = await workspace([item({ id: "miami-facebook-schedule-retry", platform: "facebook" })]);
+  let scheduleAttempts = 0;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, PUBLIC_BASE_URL: "https://news.example.com" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/admin/simpleProfiles") {
+        return new Response(JSON.stringify({ profiles: [{ blogId: 501, label: "Miami News", networks: ["facebook"] }] }), { status: 200 });
+      }
+      if (url.pathname === "/api/actions/normalize/image/url") return new Response(JSON.stringify({ mediaId: "media-ready" }), { status: 200 });
+      scheduleAttempts += 1;
+      if (scheduleAttempts < 3) return new Response("temporary", { status: 503 });
+      return new Response(JSON.stringify({ id: "post-after-schedule-retry" }), { status: 201 });
+    },
+  });
+
+  assert.equal(result.scheduled, 1);
+  assert.equal(result.failed, 0);
+  assert.equal(scheduleAttempts, 3);
 });
 
 test("prefers a verified source video over the fallback brand image", async () => {
@@ -599,9 +659,13 @@ test("an alternate duplicate queue item retries in the same run after the first 
     env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
     workspaceDir: dir,
     now: fixedNow,
-    fetch: async () => {
+    fetch: async (input) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/admin/simpleProfiles") {
+        return new Response(JSON.stringify({ profiles: [{ blogId: 99, label: "Miami News", networks: ["twitter"] }] }), { status: 200 });
+      }
       posts += 1;
-      return posts === 1
+      return posts <= 3
         ? new Response(JSON.stringify({ error: "temporary" }), { status: 500 })
         : new Response(JSON.stringify({ id: "retry-success" }), { status: 200 });
     },
@@ -610,7 +674,7 @@ test("an alternate duplicate queue item retries in the same run after the first 
   assert.equal(result.status, "partial");
   assert.equal(result.failed, 1);
   assert.equal(result.scheduled, 1);
-  assert.equal(posts, 2);
+  assert.equal(posts, 4);
   const ledger = JSON.parse(await readFile(path.join(dir, "metricool-delivery-ledger.json"), "utf8"));
   assert.equal(ledger.entries[0].queueItemId, "second-copy-attempt");
 });
@@ -646,10 +710,14 @@ test("continues reading a legacy ledger without eventId or copyHash", async () =
 
 test("failed scheduling is not written to the ledger and is retried next run", async () => {
   const dir = await workspace([item()]);
-  let attempt = 0;
-  const fetcher: typeof fetch = async () => {
-    attempt += 1;
-    return attempt === 1
+  let scheduleAttempts = 0;
+  const fetcher: typeof fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.pathname === "/api/admin/simpleProfiles") {
+      return new Response(JSON.stringify({ profiles: [{ blogId: 99, label: "Miami News", networks: ["twitter"] }] }), { status: 200 });
+    }
+    scheduleAttempts += 1;
+    return scheduleAttempts <= 3
       ? new Response(JSON.stringify({ error: "rejected" }), { status: 500 })
       : new Response(JSON.stringify({ id: "retried-ok" }), { status: 200 });
   };
@@ -665,7 +733,7 @@ test("failed scheduling is not written to the ledger and is retried next run", a
   await assert.rejects(access(path.join(dir, "metricool-delivery-ledger.json.lock")), /ENOENT/);
   const second = await deliverClipperLocalNewsToMetricool(options);
   assert.equal(second.scheduled, 1);
-  assert.equal(attempt, 2);
+  assert.equal(scheduleAttempts, 4);
   await assert.rejects(access(path.join(dir, "metricool-delivery-ledger.json.lock")), /ENOENT/);
 });
 

@@ -217,6 +217,10 @@ test("city filters, language projection, detail lookup, and safe share metadata 
   assert.match(html, /property="og:title"/);
   assert.match(html, /https:\/\/example.com\/news\/miami\/story/);
   assert.match(html, /property="og:image"/);
+  assert.match(html, /property="og:image:secure_url"/);
+  assert.match(html, /property="og:image:type" content="image\/png"/);
+  assert.match(html, /property="og:image:width" content="1254"/);
+  assert.match(html, /name="twitter:image"/);
   assert.match(html, /property="og:locale"/);
   assert.match(html, /hreflang="es"/);
   assert.match(html, /hreflang="en"/);
