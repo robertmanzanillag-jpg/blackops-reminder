@@ -23,6 +23,21 @@ export interface BlackRoomActivityEvent {
   message: string;
 }
 
+export type BlackRoomAnalyticsNetwork = "tiktok" | "facebook" | "youtube";
+
+export interface BlackRoomImportedAnalyticsSample {
+  id: string;
+  views: number;
+  publishedAt?: string;
+  durationSeconds?: number;
+}
+
+export interface BlackRoomAnalyticsImport {
+  samples: BlackRoomImportedAnalyticsSample[];
+  sourceFiles: string[];
+  importedAt: string;
+}
+
 export interface BlackRoomRemoteControlState {
   version: 1;
   desiredEnabled: boolean;
@@ -32,6 +47,7 @@ export interface BlackRoomRemoteControlState {
   device: BlackRoomRemoteDeviceStatus | null;
   commands: BlackRoomRemoteCommand[];
   chatHistory: Array<{ id: string; role: "user" | "assistant"; text: string; createdAt: string }>;
+  analyticsImports: Partial<Record<BlackRoomAnalyticsNetwork, BlackRoomAnalyticsImport>>;
 }
 
 export function createBlackRoomRemoteControlState(now = new Date()): BlackRoomRemoteControlState {
@@ -44,7 +60,73 @@ export function createBlackRoomRemoteControlState(now = new Date()): BlackRoomRe
     device: null,
     commands: [],
     chatHistory: [],
+    analyticsImports: {},
   };
+}
+
+function normalizeImportedAnalyticsSample(value: unknown): BlackRoomImportedAnalyticsSample | null {
+  const sample = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  const id = String(sample.id || "").trim().slice(0, 500);
+  const views = Math.floor(Number(sample.views));
+  if (!id || !Number.isSafeInteger(views) || views < 0) return null;
+  const rawPublishedAt = String(sample.publishedAt || "").trim();
+  const publishedAt = rawPublishedAt && Number.isFinite(new Date(rawPublishedAt).getTime())
+    ? rawPublishedAt.slice(0, 40)
+    : undefined;
+  const rawDuration = Math.round(Number(sample.durationSeconds));
+  const durationSeconds = Number.isSafeInteger(rawDuration) && rawDuration > 0 && rawDuration <= 86_400
+    ? rawDuration
+    : undefined;
+  return { id, views, ...(publishedAt ? { publishedAt } : {}), ...(durationSeconds ? { durationSeconds } : {}) };
+}
+
+function normalizeAnalyticsImports(value: unknown): BlackRoomRemoteControlState["analyticsImports"] {
+  const imports = value && typeof value === "object" ? value as Record<string, unknown> : {};
+  return Object.fromEntries((["tiktok", "facebook", "youtube"] as BlackRoomAnalyticsNetwork[]).flatMap((network) => {
+    const raw = imports[network] && typeof imports[network] === "object"
+      ? imports[network] as Record<string, unknown>
+      : null;
+    if (!raw) return [];
+    const samples = Array.isArray(raw.samples)
+      ? raw.samples.map(normalizeImportedAnalyticsSample).filter((sample): sample is BlackRoomImportedAnalyticsSample => Boolean(sample)).slice(-10_000)
+      : [];
+    const sourceFiles = Array.isArray(raw.sourceFiles)
+      ? [...new Set(raw.sourceFiles.map((file) => String(file || "").trim().slice(0, 240)).filter(Boolean))].slice(-100)
+      : [];
+    const importedAt = String(raw.importedAt || "");
+    return [[network, {
+      samples,
+      sourceFiles,
+      importedAt: Number.isFinite(new Date(importedAt).getTime()) ? importedAt : new Date(0).toISOString(),
+    }]];
+  })) as BlackRoomRemoteControlState["analyticsImports"];
+}
+
+export function upsertBlackRoomAnalyticsImports(
+  state: BlackRoomRemoteControlState,
+  imports: Array<{ network: BlackRoomAnalyticsNetwork; sourceFiles?: string[]; samples: unknown[] }>,
+  now = new Date(),
+): Record<BlackRoomAnalyticsNetwork, number> {
+  const totals = { tiktok: 0, facebook: 0, youtube: 0 };
+  for (const input of imports) {
+    const current = state.analyticsImports[input.network];
+    const byId = new Map((current?.samples || []).map((sample) => [sample.id, sample]));
+    for (const value of input.samples.slice(0, 2_000)) {
+      const sample = normalizeImportedAnalyticsSample(value);
+      if (sample) byId.set(sample.id, sample);
+    }
+    const samples = [...byId.values()]
+      .sort((left, right) => String(left.publishedAt || "").localeCompare(String(right.publishedAt || "")))
+      .slice(-10_000);
+    const sourceFiles = [...new Set([
+      ...(current?.sourceFiles || []),
+      ...(input.sourceFiles || []).map((file) => String(file || "").split(/[\\/]/).pop() || ""),
+    ].map((file) => file.trim().slice(0, 240)).filter(Boolean))].slice(-100);
+    state.analyticsImports[input.network] = { samples, sourceFiles, importedAt: now.toISOString() };
+    totals[input.network] = samples.length;
+  }
+  state.updatedAt = now.toISOString();
+  return totals;
 }
 
 export function setBlackRoomRemoteCommand(
@@ -138,6 +220,7 @@ function normalizeRemoteControlState(value: unknown): BlackRoomRemoteControlStat
     device: parsed.device || null,
     commands: Array.isArray(parsed.commands) ? parsed.commands.slice(-100) : [],
     chatHistory: Array.isArray(parsed.chatHistory) ? parsed.chatHistory.slice(-40) : [],
+    analyticsImports: normalizeAnalyticsImports(parsed.analyticsImports),
   };
 }
 

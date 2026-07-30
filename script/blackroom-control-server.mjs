@@ -1,9 +1,11 @@
 import { execFile, spawn } from "node:child_process";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import http from "node:http";
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { classifyMetricoolCsv, extractMetricoolCsvSamples } from "./blackroom-metricool-csv-bridge.mjs";
 import { applyBlackRoomDeliveryCounts, planBlackRoomRemoteSync, summarizeBlackRoomDeliveryLedger } from "./blackroom-remote-sync.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -13,13 +15,25 @@ const npmPath = process.env.BLACKROOM_NPM_PATH || "npm";
 const workerStatePath = path.join(projectDir, "clippers_workspace/blackroom/agent/worker-state.json");
 const workerLedgerPath = path.join(projectDir, "clippers_workspace/blackroom/agent/worker-ledger.json");
 const workerActivityPath = path.join(projectDir, "clippers_workspace/blackroom/agent/activity-log.json");
+const csvBridgeStatePath = path.join(projectDir, "clippers_workspace/blackroom/agent/metricool-csv-imports.json");
+const csvExportDir = path.resolve(process.env.BLACKROOM_METRICOOL_EXPORT_DIR || path.join(homedir(), "Downloads"));
 const remoteUrl = String(process.env.BLACKROOM_REMOTE_CONTROL_URL || "https://ROBPLANNER.replit.app").replace(/\/$/, "");
 const remoteToken = String(process.env.BLACKROOM_REMOTE_CONTROL_TOKEN || "").trim();
 const remotePollMs = Math.max(10_000, Number(process.env.BLACKROOM_REMOTE_POLL_MS || 15_000));
+const csvScanMs = Math.max(60_000, Number(process.env.BLACKROOM_METRICOOL_CSV_SCAN_MS || 5 * 60_000));
 const controlToken = randomBytes(32).toString("hex");
 const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
 let commandTail = Promise.resolve();
 let lastAppliedGeneration = -1;
+let nextCsvScanAt = 0;
+let csvBridgeStatus = { lastCheckedAt: null, lastImportedAt: null, importedFiles: 0, importedSamples: 0, lastError: null };
+
+async function writeJsonAtomic(filePath, value) {
+  await mkdir(path.dirname(filePath), { recursive: true });
+  const temporary = `${filePath}.tmp`;
+  await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+  await rename(temporary, filePath);
+}
 
 async function command(name, options = {}) {
   const args = ["run", "blackroom:agent", "--", `--${name}`];
@@ -43,8 +57,8 @@ async function workerState() {
   catch { state = { running: false, pid: null, runs: 0, lastError: null }; }
   try {
     const activity = JSON.parse(await readFile(workerActivityPath, "utf8"));
-    return { ...state, activity: Array.isArray(activity) ? activity.slice(-80) : [] };
-  } catch { return { ...state, activity: [] }; }
+    return { ...state, csvBridge: csvBridgeStatus, activity: Array.isArray(activity) ? activity.slice(-80) : [] };
+  } catch { return { ...state, csvBridge: csvBridgeStatus, activity: [] }; }
 }
 
 async function queueWithDeliveryCounts(queue) {
@@ -77,8 +91,8 @@ async function stopWorker() {
   throw new Error("El trabajador local no confirmó la pausa dentro de 12 segundos");
 }
 
-async function remoteRequest(method, body) {
-  const response = await fetch(`${remoteUrl}/api/blackroom-agent/remote`, {
+async function remoteRequest(method, body, pathname = "/api/blackroom-agent/remote") {
+  const response = await fetch(`${remoteUrl}${pathname}`, {
     method,
     headers: {
       Authorization: `Bearer ${remoteToken}`,
@@ -90,6 +104,68 @@ async function remoteRequest(method, body) {
   const data = await response.json().catch(() => ({}));
   if (!response.ok) throw new Error(data.error || `Remote control returned ${response.status}`);
   return data;
+}
+
+async function syncMetricoolCsvExports(force = false) {
+  if (!remoteToken || (!force && Date.now() < nextCsvScanAt)) return csvBridgeStatus;
+  nextCsvScanAt = Date.now() + csvScanMs;
+  const checkedAt = new Date().toISOString();
+  try {
+    const previous = JSON.parse(await readFile(csvBridgeStatePath, "utf8").catch(() => '{"files":{}}'));
+    const entries = await readdir(csvExportDir, { withFileTypes: true }).catch((error) => {
+      if (error?.code === "ENOENT") return [];
+      throw error;
+    });
+    const changed = [];
+    for (const entry of entries) {
+      if (!entry.isFile() || !classifyMetricoolCsv(entry.name)) continue;
+      const filePath = path.join(csvExportDir, entry.name);
+      const info = await stat(filePath);
+      if (info.size <= 0 || info.size > 25 * 1024 * 1024) continue;
+      const content = await readFile(filePath, "utf8");
+      const fingerprint = createHash("sha256").update(content).digest("hex");
+      if (previous.files?.[entry.name] === fingerprint) continue;
+      const extracted = extractMetricoolCsvSamples(entry.name, content);
+      if (extracted?.samples.length) changed.push({ filename: entry.name, fingerprint, ...extracted });
+    }
+    if (!changed.length) {
+      csvBridgeStatus = { ...csvBridgeStatus, lastCheckedAt: checkedAt, lastError: null };
+      return csvBridgeStatus;
+    }
+    const grouped = new Map();
+    for (const file of changed) {
+      const group = grouped.get(file.network) || { network: file.network, sourceFiles: [], samples: new Map() };
+      group.sourceFiles.push(file.filename);
+      for (const sample of file.samples) group.samples.set(sample.id, sample);
+      grouped.set(file.network, group);
+    }
+    const imports = [...grouped.values()].map((group) => ({
+      network: group.network,
+      sourceFiles: group.sourceFiles,
+      samples: [...group.samples.values()].slice(-2_000),
+    }));
+    await remoteRequest("POST", { imports }, "/api/blackroom-agent/analytics/import");
+    const files = { ...(previous.files || {}) };
+    for (const file of changed) files[file.filename] = file.fingerprint;
+    await writeJsonAtomic(csvBridgeStatePath, { version: 1, updatedAt: checkedAt, files });
+    const importedSamples = imports.reduce((total, item) => total + item.samples.length, 0);
+    csvBridgeStatus = {
+      lastCheckedAt: checkedAt,
+      lastImportedAt: checkedAt,
+      importedFiles: changed.length,
+      importedSamples,
+      lastError: null,
+    };
+    console.log(`[blackroom-control] imported ${importedSamples} Metricool CSV samples from ${changed.length} file(s)`);
+  } catch (error) {
+    csvBridgeStatus = {
+      ...csvBridgeStatus,
+      lastCheckedAt: checkedAt,
+      lastError: error instanceof Error ? error.message : String(error),
+    };
+    console.error("[blackroom-control] Metricool CSV bridge failed:", csvBridgeStatus.lastError);
+  }
+  return csvBridgeStatus;
 }
 
 async function syncRemoteControl() {
@@ -198,6 +274,7 @@ setTimeout(recoverWorker, 1_000);
 setInterval(recoverWorker, 60_000).unref();
 if (remoteToken) {
   const remoteLoop = async () => {
+    await syncMetricoolCsvExports();
     await syncRemoteControl();
     setTimeout(remoteLoop, remotePollMs).unref();
   };
