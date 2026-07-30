@@ -774,6 +774,7 @@ function directMetricoolToolsForNetwork(
 }
 
 function analyticsConnectorsForNetwork(network: string): string[] {
+  if (network === "tiktok") return ["posts"];
   if (network === "facebook") return ["posts", "reels"];
   return ["videos"];
 }

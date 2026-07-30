@@ -141,7 +141,7 @@ test("reads the current Metricool analytics contract and supplies metric IDs per
   const availableCalls = calls.filter((call) => call.name === "getAnalyticsAvailableMetrics");
   assert.deepEqual(
     availableCalls.map((call) => `${call.args.network}:${call.args.connector}`),
-    ["tiktok:videos", "facebook:posts", "facebook:reels", "youtube:videos"],
+    ["tiktok:posts", "facebook:posts", "facebook:reels", "youtube:videos"],
   );
   const dataCalls = calls.filter((call) => call.name === "getAnalyticsDataByMetrics");
   assert.equal(dataCalls.length, 4);
