@@ -137,7 +137,6 @@ function isHighImpactTraffic(item: QueueItem): boolean {
   const text = `${item.copy} ${item.source || ""}`.normalize("NFKC").toLocaleLowerCase("en-US");
   return /\b(?:accident|crash|collision|fatal|injur|closure|closed|shutdown|evacuat|police activity|major delay|cierre|accidente|choque|colisi[oó]n|fatal|herid|evacuaci[oó]n|carril(?:es)? cerrado|carretera cerrada)\b/.test(text);
 }
-
 function trafficPublishingEnabled(env: NodeJS.ProcessEnv): boolean {
   return env.CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC === "true";
 }

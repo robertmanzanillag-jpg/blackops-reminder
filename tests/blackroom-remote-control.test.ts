@@ -43,7 +43,7 @@ test("CEO schedule advances the generation without adding fake chat messages", (
   appendBlackRoomCeoCommand(state, {
     id: "ceo-1", type: "ceo_schedule", slotsByDate: { "2026-07-23": ["00:30", "04:00"] }, createdAt: now.toISOString(),
     analytics: {
-      sampleCount: 4, lastCheckedAt: now.toISOString(), nextCheckAt: now.toISOString(), confidence: "collecting",
+      sampleCount: 4, comparableSampleCount: 1, lastCheckedAt: now.toISOString(), nextCheckAt: now.toISOString(), confidence: "collecting",
       networkSamples: { tiktok: 2, facebook: 1, youtube: 1 }, recommendedTimes: [], reason: "collecting",
       tiktokMedianViews: 0, tiktokLowViewRate: 0, creativeStrategy: "drop_first",
       creativeStrategyVersion: 0, creativeStrategySampleBaseline: 0, creativeStrategyPostIdsBaseline: [],
@@ -259,6 +259,8 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /aria-live="polite"/);
   assert.match(blackRoomPage, /técnica CEO/);
   assert.match(blackRoomPage, /mediana TikTok/);
+  assert.match(blackRoomPage, /historial:/);
+  assert.match(blackRoomPage, /historyCompleteByNetwork/);
   assert.match(blackRoomPage, /function renderActivity\(history=\[\]\)/);
   assert.match(blackRoomPage, /setAttribute\('role','log'\)/);
   assert.match(blackRoomPage, /aria-relevant','additions/);

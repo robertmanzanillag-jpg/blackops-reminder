@@ -4,6 +4,7 @@ import {
   completeBlackRoomJob,
   ensureBlackRoomScheduleBuffer,
   readBlackRoomQueue,
+  reconcileBlackRoomSchedule,
   recoverInterruptedBlackRoomJobs,
   recordBlackRoomSourceUsage,
   retryBlackRoomJob,
@@ -43,8 +44,13 @@ async function main(): Promise<void> {
   const queuePath = argument("--queue") || process.env.BLACKROOM_QUEUE_PATH || BLACKROOM_QUEUE_PATH;
   const selectedCommand = command();
   if (selectedCommand === "status") {
-    const state = await readBlackRoomQueue(queuePath);
-    console.log(JSON.stringify({ mode: "blackroom_daily_agent", command: selectedCommand, queuePath, recovered: 0, created: 0, job: null, summary: summarizeBlackRoomQueue(state) }, null, 2));
+    const result = await withBlackRoomQueueLock(queuePath, async () => {
+      const state = await readBlackRoomQueue(queuePath);
+      const { recovered, created } = reconcileBlackRoomSchedule(state);
+      if (recovered || created) await writeBlackRoomQueue(state, queuePath);
+      return { recovered, created, summary: summarizeBlackRoomQueue(state) };
+    });
+    console.log(JSON.stringify({ mode: "blackroom_daily_agent", command: selectedCommand, queuePath, ...result, job: null }, null, 2));
     return;
   }
 

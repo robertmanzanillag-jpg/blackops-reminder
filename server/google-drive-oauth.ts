@@ -50,8 +50,8 @@ interface GoogleTokenResponse {
 
 const pendingAuth = new Map<string, PendingGoogleDriveAuth>();
 
-async function getGoogleApis() {
-  return (await import("googleapis")).google;
+async function getOAuth2ClientConstructor() {
+  return (await import("google-auth-library/build/src/auth/oauth2client.js")).OAuth2Client;
 }
 
 async function getStorage() {
@@ -192,8 +192,8 @@ export async function exchangeGoogleDriveAuthorizationCode(params: {
 
 export async function getGoogleDriveOAuthClient(userId: string) {
   const { clientId, clientSecret } = getGoogleDriveClientConfig();
-  const google = await getGoogleApis();
-  const oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
+  const OAuth2Client = await getOAuth2ClientConstructor();
+  const oauth2Client = new OAuth2Client(clientId, clientSecret);
 
   const envRefreshToken = getGoogleDriveRefreshTokenFromEnv();
   if (envRefreshToken) {

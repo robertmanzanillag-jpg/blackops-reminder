@@ -2,12 +2,9 @@ import type { AppErrorEvent, AppHealthCheck, AppIncident, AppProject } from "@sh
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
-import { recordScheduledAutomationRun } from "./automation-registry";
 import { hasRealValue } from "./ceo-doctor-cli";
-import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
 import { isGitHubConnected, listRepositories } from "./github-client";
 import { getDateKeyFromClock, getZonedClock } from "./scheduler-time";
-import { storage } from "./storage";
 import { escapeTelegramHtml, sendTelegramMessage, sendTelegramPhoto } from "./telegram";
 
 export type AppQaSeverity = "critical" | "high" | "medium" | "low" | "info";
@@ -470,6 +467,10 @@ export async function runBugPatrolHandoffs(userId: string, apps: AppProject[], f
       continue;
     }
 
+    // Developer Autopilot pulls in the storage/runtime graph. Keep it out of
+    // App QA's module initialization so pure route/telemetry scouts and their
+    // release-gate tests can start without waiting on production services.
+    const { createDeveloperAutopilotHandoff } = await import("./developer-autopilot");
     const handoff = await createDeveloperAutopilotHandoff(
       userId,
       buildBugPatrolAutopilotMessage(finding, repoFullName),
@@ -1805,7 +1806,9 @@ export async function runAppQaScan(
 ): Promise<AppQaScanResult> {
   const startedAt = new Date();
   let apps: AppProject[];
+  let storage: typeof import("./storage").storage;
   try {
+    ({ storage } = await import("./storage"));
     apps = await storage.getAppProjects(userId);
   } catch (error) {
     const unavailableResult = buildAppQaStorageUnavailableResult(error, startedAt, targetContext);
@@ -1927,6 +1930,7 @@ export async function runAppQaScan(
 
 async function recordAppQaHistory(userId: string, result: AppQaScanResult, startedAt: Date): Promise<void> {
   try {
+    const { recordScheduledAutomationRun } = await import("./automation-registry");
     await recordScheduledAutomationRun(userId, "app-qa-council", startedAt, {
       status: "success",
       resultSummary: result.summary,
@@ -1977,6 +1981,7 @@ export function startAppQaScheduler(): void {
 
   setInterval(async () => {
     try {
+      const { storage } = await import("./storage");
       const configs = await storage.getEnabledTelegramConfigs();
       await Promise.all(configs.map((config) => runAppQaScan(config.userId, false, true, true)));
     } catch (error) {

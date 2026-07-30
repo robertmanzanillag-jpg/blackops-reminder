@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-07-27T07:58:07.128Z
-Repo: `/private/tmp/blackops-metricool-analytics-20260727`
+Generated: 2026-07-28T06:14:53.305Z
+Repo: `/private/tmp/asistente-clippers-autonomous`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 505 | 424 | 1625 | 489 | 9736 |
+| 514 | 432 | 1670 | 489 | 10016 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,8 +30,8 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `server` | 126 | 122 | server:126 |
 | `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
-| `tests` | 90 | 87 | test:90 |
-| `script` | 52 | 49 | script:52 |
+| `tests` | 94 | 91 | test:94 |
+| `script` | 57 | 53 | script:57 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `docs` | 13 | 12 | docs:13 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
@@ -102,6 +102,7 @@ Package: `rest-express`
 - `tests/clippers-local-news-scheduler.test.ts`
 - `tests/clippers-local-news-translation.test.ts`
 - `tests/clippers-owned-source-scripts.test.ts`
+- `tests/clippers-upload-metricool-media.test.ts`
 - `tests/code-agent-security.test.ts`
 - `tests/cybersecurity-agent.test.ts`
 - `tests/db-config.test.ts`
@@ -176,7 +177,7 @@ Package: `rest-express`
 - `package.json` (package)
 - `script/blackroom-control-server.mjs` (script; 50 symbols, 7 imports)
 - `script/blackroom-daily-agent.ts` (script; 16 symbols, 2 imports)
-- `script/blackroom-deterministic-editor.ts` (script; 54 symbols, 7 imports)
+- `script/blackroom-deterministic-editor.ts` (script; 55 symbols, 7 imports)
 - `script/blackroom-local-worker.ts` (script; 72 symbols, 7 imports)
 - `script/blackroom-remote-sync.mjs` (script; 16 symbols)
 - `script/blackroom-worker-ledger.ts` (script; 28 symbols, 4 imports)
@@ -193,19 +194,23 @@ Package: `rest-express`
 - `script/clippers-account-permission-readiness.mjs` (script; 82 symbols, 2 imports)
 - `script/clippers-cleanup-published-vyro-media.mjs` (script; 47 symbols, 4 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
+- `script/clippers-free-local-worker.mjs` (script; 25 symbols, 5 imports)
 - `script/clippers-generate-owned-gap-sources.mjs` (script; 30 symbols, 3 imports)
 - `script/clippers-generate-owned-meme-sources.ts` (script; 23 symbols, 3 imports)
 - `script/clippers-generate-owned-sports-streamer-sources.ts` (script; 26 symbols, 3 imports)
 - `script/clippers-generate-owned-weekly-backlog-sources.ts` (script; 34 symbols, 3 imports)
 - `script/clippers-import-external-closeout-evidence.ts` (script; 117 symbols, 3 imports)
 - `script/clippers-local-subtitles.mjs` (script; 47 symbols, 5 imports)
+- `script/clippers-metricool-autopilot.mjs` (script; 96 symbols, 4 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)
 - `script/clippers-record-owned-meme-rights.ts` (script; 10 symbols, 1 imports)
 - `script/clippers-record-owned-source-rights.mjs` (script; 88 symbols, 3 imports)
-- `script/clippers-streamer-growth-ceo.mjs` (script; 118 symbols, 5 imports)
+- `script/clippers-selected-env.mjs` (script; 11 symbols, 2 imports)
+- `script/clippers-streamer-growth-ceo.mjs` (script; 146 symbols, 5 imports)
 - `script/clippers-sync-metricool-source-readiness.mjs` (script; 28 symbols, 3 imports)
 - `script/clippers-tiktok-preflight.ts` (script; 15 symbols, 1 imports)
+- `script/clippers-upload-metricool-media.ts` (script; 49 symbols, 7 imports)
 - `script/codebase-map.ts` (script; 43 symbols, 3 imports)
 - `script/configure-telegram.ts` (script; 5 symbols, 4 imports)
 - `script/create-ceo-go-live-task.ts` (script; 13 symbols, 3 imports)
@@ -225,10 +230,6 @@ Package: `rest-express`
 - `script/upload-radio-edits-to-drive.ts` (script; 16 symbols, 5 imports)
 - `scripts/create-dropshipping-tutorial.mjs` (script; 33 symbols, 3 imports)
 - `server/._dropshipping-ceo.ts` (server)
-- `server/._local-auth.ts` (server)
-- `server/._radio-video-edit-agent.ts` (server)
-- `server/._radio-youtube-command.ts` (server)
-- `server/._rate-limit.ts` (server)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

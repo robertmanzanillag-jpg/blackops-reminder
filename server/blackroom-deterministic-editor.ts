@@ -168,17 +168,20 @@ export function planBlackRoomDeterministicEdit(input: {
 }): BlackRoomEditPlan | null {
   const now = input.now || new Date();
   if (input.queue.enabled !== true) return null;
+  // A discarded reservation had no remote publication attempt and no usable
+  // local render. It is audit history only, never a consumed slot/source.
+  const activeLedgerEntries = input.ledger.entries.filter((entry) => entry.status !== "discarded");
   const job = input.queue.jobs.find((candidate) => {
     if (!isActionableJob(candidate, now)) return false;
-    const occupied = new Set(input.ledger.entries.filter((entry) => entry.jobId === candidate.id).map((entry) => entry.slot));
+    const occupied = new Set(activeLedgerEntries.filter((entry) => entry.jobId === candidate.id).map((entry) => entry.slot));
     return candidate.slots.some((slot) => !occupied.has(slot.localTime));
   });
   if (!job) return null;
-  const occupied = new Set(input.ledger.entries.filter((entry) => entry.jobId === job.id).map((entry) => entry.slot));
+  const occupied = new Set(activeLedgerEntries.filter((entry) => entry.jobId === job.id).map((entry) => entry.slot));
   const slotConfig = job.slots.find((candidate) => !occupied.has(candidate.localTime));
   if (!slotConfig) return null;
   const slot = slotConfig.localTime;
-  const jobEntries = input.ledger.entries.filter((entry) => entry.jobId === job.id);
+  const jobEntries = activeLedgerEntries.filter((entry) => entry.jobId === job.id);
   const creativeStrategy: BlackRoomCreativeStrategy = input.queue.analytics?.creativeStrategy || "drop_first";
   const targetNetworks = selectBlackRoomTargetNetworks(job, slotConfig, input.queue);
   const durationSeconds = chooseDuration(job, jobEntries, input.queue, targetNetworks);
@@ -188,7 +191,8 @@ export function planBlackRoomDeterministicEdit(input: {
   const windowDuration = durationSeconds + margin;
   const usedVideos = new Set([
     ...input.queue.sourceHistory.map((entry) => entry.videoId),
-    ...input.ledger.entries.map((entry) => entry.videoId),
+    ...(input.queue.failedSourceVideos || []).map((entry) => entry.videoId),
+    ...activeLedgerEntries.map((entry) => entry.videoId),
   ]);
   const usedDjs = new Map<string, number>();
   for (const entry of jobEntries) usedDjs.set(entry.dj, (usedDjs.get(entry.dj) || 0) + 1);
@@ -198,7 +202,7 @@ export function planBlackRoomDeterministicEdit(input: {
       const intervals = [
         ...input.queue.sourceHistory.filter((entry) => entry.videoId === video.id)
           .map((entry) => ({ start: entry.segmentStartSeconds, end: entry.segmentEndSeconds })),
-        ...input.ledger.entries.filter((entry) => entry.videoId === video.id)
+        ...activeLedgerEntries.filter((entry) => entry.videoId === video.id)
           .map((entry) => ({ start: entry.segmentStartSeconds, end: entry.segmentEndSeconds })),
       ];
       const dj = extractBlackRoomDj(video.title);
@@ -211,7 +215,8 @@ export function planBlackRoomDeterministicEdit(input: {
     if (!unseen.length) throw new Error(`BlackRoom needs ${job.requirements.djs} distinct DJs before reusing one`);
     eligible = unseen;
   } else {
-    const belowTarget = eligible.filter((candidate) => usedDjs.has(candidate.dj)
+    const belowTarget = eligible.filter((candidate) => !usedVideos.has(candidate.video.id)
+      && usedDjs.has(candidate.dj)
       && (usedDjs.get(candidate.dj) || 0) < job.requirements.postsPerDj);
     if (!belowTarget.length) throw new Error("No unused source remains for the five selected DJs within the per-DJ quota");
     eligible = belowTarget;
@@ -281,6 +286,9 @@ export function buildBlackRoomYtDlpWindowArgs(plan: BlackRoomEditPlan, sourcePat
     plan.videoUrl,
     "--download-sections", `*${plan.windowStartSeconds}-${plan.windowEndSeconds}`,
     "--force-keyframes-at-cuts", "-f", "bestvideo*[height<=1080]+bestaudio/best[height<=1080]",
+    // A network stall must fail fast so the local worker can retry the slot instead
+    // of holding the whole production queue for its outer watchdog window.
+    "--socket-timeout", "30", "--retries", "3", "--fragment-retries", "3",
     "--merge-output-format", "mp4", "--no-playlist", "--no-warnings", "--force-overwrites",
     "--paths", `temp:${temporaryDirectory}`, "-o", sourcePath,
   ];
