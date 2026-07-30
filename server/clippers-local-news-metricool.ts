@@ -130,6 +130,14 @@ function isRoutineTransitNoise(item: QueueItem): boolean {
   return /\b(?:mta|subway|metrobus|miami[- ]dade transit)\b/.test(text);
 }
 
+function isHighImpactTraffic(item: QueueItem): boolean {
+  if (item.section !== "traffic") return false;
+  if (item.editorialUrgency === "breaking" || item.risk === "high" || item.risk === "critical") return true;
+  if (item.editorialUrgency !== "developing") return false;
+  const text = `${item.copy} ${item.source || ""}`.normalize("NFKC").toLocaleLowerCase("en-US");
+  return /\b(?:accident|crash|collision|fatal|injur|closure|closed|shutdown|evacuat|police activity|major delay|cierre|accidente|choque|colisi[oó]n|fatal|herid|evacuaci[oó]n|carril(?:es)? cerrado|carretera cerrada)\b/.test(text);
+}
+
 function trafficPublishingEnabled(env: NodeJS.ProcessEnv): boolean {
   return env.CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC === "true";
 }
@@ -651,7 +659,7 @@ export async function deliverClipperLocalNewsToMetricool(
     const fetchedNow = now();
     let safeItems = queue.filter((item) => {
       const platformEnabled = item.platform !== "x" || env.CLIPPERS_LOCAL_NEWS_ENABLE_X === "true";
-      const highImpactTraffic = item.editorialUrgency === "breaking" || item.risk === "high" || item.risk === "critical";
+      const highImpactTraffic = isHighImpactTraffic(item);
       if (item.section === "traffic" && !trafficPublishingEnabled(env) && !highImpactTraffic) {
         result.filtered += 1;
         return false;

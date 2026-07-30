@@ -134,6 +134,34 @@ test("breaking or high-impact traffic remains eligible without enabling routine 
   assert.equal(posts, 1);
 });
 
+test("medium developing traffic alerts with a real closure or crash remain eligible", async () => {
+  const dir = await workspace([item({
+    id: "traffic-developing-closure",
+    platform: "facebook",
+    section: "traffic",
+    editorialUrgency: "developing",
+    risk: "medium",
+    copy: "ROAD CLOSURE | Crash closes two lanes on Broadway. Use an alternate route. Fuente: https://511.example/closure",
+  })]);
+  let posts = 0;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: credentials,
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (input, init) => {
+      const url = new URL(String(input));
+      if (url.pathname === "/api/admin/simpleProfiles") {
+        return new Response(JSON.stringify({ profiles: [{ blogId: 501, label: "Miami News", networks: ["facebook"] }] }), { status: 200 });
+      }
+      if (init?.method === "POST") posts += 1;
+      return new Response(JSON.stringify({ id: "traffic-developing-post" }), { status: 201 });
+    },
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.scheduled, 1);
+  assert.equal(posts, 1);
+});
+
 test("discovers the exact Miami News brand and sends one provider with safe scheduling fields", async () => {
   const dir = await workspace([item()]);
   const calls: Array<{ url: URL; init?: RequestInit }> = [];
