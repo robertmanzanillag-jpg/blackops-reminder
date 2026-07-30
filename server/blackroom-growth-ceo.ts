@@ -1,4 +1,11 @@
-import { callMetricoolMcpTool, listMetricoolMcpTools, BLACKROOM_METRICOOL_BLOG_ID, BLACKROOM_METRICOOL_NETWORKS } from "./blackroom-metricool-bridge";
+import {
+  callMetricoolMcpTool,
+  listMetricoolMcpTools,
+  BLACKROOM_METRICOOL_BLOG_ID,
+  BLACKROOM_METRICOOL_NETWORKS,
+  BLACKROOM_TIMEZONE,
+  formatMetricoolMcpDate,
+} from "./blackroom-metricool-bridge";
 
 export const BLACKROOM_CEO_MIN_SAMPLES = 21;
 export const BLACKROOM_CEO_DAILY_POSTS = 5;
@@ -78,19 +85,49 @@ function records(value: unknown): Record<string, any>[] {
 }
 
 function toolPayload(value: any): unknown {
-  const text = Array.isArray(value?.content)
-    ? value.content.map((item: any) => item?.text).find((item: any) => typeof item === "string")
-    : null;
-  if (!text) return value?.structuredContent ?? value;
-  try { return JSON.parse(text); } catch { return text; }
+  const texts = Array.isArray(value?.content)
+    ? value.content.map((item: any) => item?.text).filter((item: any) => typeof item === "string")
+    : [];
+  if (!texts.length) return value?.structuredContent ?? value;
+  const parsed = texts.map((text: string) => {
+    try { return JSON.parse(text); } catch { return text; }
+  });
+  return parsed.length === 1 ? parsed[0] : parsed;
+}
+
+function normalizedName(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]/g, "");
 }
 
 function metricValue(record: Record<string, any>, names: string[]): number | null {
-  for (const name of names) {
-    const value = Number(record[name]);
+  const accepted = new Set(names.map(normalizedName));
+  for (const [key, raw] of Object.entries(record)) {
+    if (!accepted.has(normalizedName(key))) continue;
+    const value = Number(raw);
     if (Number.isFinite(value) && value >= 0) return value;
   }
   return null;
+}
+
+function metricRecordId(record: Record<string, any>): string | null {
+  const id = record.id
+    ?? record.postId
+    ?? record.post_id
+    ?? record.postUuid
+    ?? record.uuid
+    ?? record.videoId
+    ?? record.video_id
+    ?? record.socialNetworkId
+    ?? record.social_network_id
+    ?? record.networkId
+    ?? record.network_id
+    ?? record.publicationId
+    ?? record.publication_id
+    ?? record.url
+    ?? record.permalink
+    ?? record.postUrl
+    ?? record.post_url;
+  return id == null || String(id).trim() === "" ? null : String(id);
 }
 
 export function extractBlackRoomMetricSamples(value: unknown): number {
@@ -100,8 +137,8 @@ export function extractBlackRoomMetricSamples(value: unknown): number {
 export function extractBlackRoomMetricSampleIds(value: unknown): string[] {
   const ids = new Set<string>();
   for (const record of records(value)) {
-    const views = metricValue(record, ["views", "impressions", "reach", "videoViews", "video_views", "viewCount", "view_count", "totalViews"]);
-    const id = record.id ?? record.postId ?? record.post_id ?? record.uuid ?? record.url ?? record.permalink ?? record.postUrl;
+    const views = metricValue(record, ["views", "impressions", "reach", "videoViews", "video_views", "viewCount", "view_count", "totalViews", "plays", "playCount", "blue_reels_play_count"]);
+    const id = metricRecordId(record);
     if (views !== null && id != null) ids.add(String(id));
   }
   return [...ids];
@@ -110,8 +147,8 @@ export function extractBlackRoomMetricSampleIds(value: unknown): string[] {
 export function extractBlackRoomViewRecords(value: unknown): Array<{ id: string; views: number }> {
   const samples = new Map<string, number>();
   for (const record of records(value)) {
-    const views = metricValue(record, ["views", "videoViews", "video_views", "viewCount", "view_count", "totalViews", "plays"]);
-    const id = record.id ?? record.postId ?? record.post_id ?? record.uuid ?? record.url ?? record.permalink ?? record.postUrl;
+    const views = metricValue(record, ["views", "videoViews", "video_views", "viewCount", "view_count", "totalViews", "plays", "playCount", "blue_reels_play_count"]);
+    const id = metricRecordId(record);
     if (views !== null && id != null) samples.set(String(id), views);
   }
   return [...samples].map(([id, views]) => ({ id, views }));
@@ -295,13 +332,39 @@ type BlackRoomMetricoolArgumentWindow = {
   start?: string;
   end?: string;
   page?: number;
+  connector?: string;
+  metrics?: string[];
 };
 
 function normalizedSchemaKeys(schema: Record<string, any> | undefined): Array<{ key: string; normalized: string }> {
   return Object.keys(schema?.properties || {}).map((key) => ({
     key,
-    normalized: key.toLowerCase().replace(/_/g, ""),
+    normalized: normalizedName(key),
   }));
+}
+
+function schemaValue(schema: Record<string, any> | undefined, key: string, value: string | number): string | number {
+  const type = schema?.properties?.[key]?.type;
+  if (type === "integer" || type === "number") {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric : value;
+  }
+  return String(value);
+}
+
+function schemaDateValue(
+  schema: Record<string, any> | undefined,
+  key: string,
+  date: string,
+  endOfDay: boolean,
+): string {
+  const property = schema?.properties?.[key] || {};
+  const description = String(property.description || property.title || "");
+  const expectsDateTime = /iso\s*8601|date.?time|yyyy-mm-ddt|hh:mm/i.test(description)
+    || ["fromdate", "todate"].includes(normalizedName(key));
+  if (!expectsDateTime) return date;
+  const wallClock = `${date}T${endOfDay ? "23:59:59" : "00:00:00"}`;
+  return formatMetricoolMcpDate(wallClock, BLACKROOM_TIMEZONE);
 }
 
 function buildToolArguments(
@@ -317,13 +380,22 @@ function buildToolArguments(
   const end = window.end || now.toISOString().slice(0, 10);
   const page = Math.max(1, Math.floor(window.page || 1));
   for (const key of Object.keys(properties)) {
-    const normalized = key.toLowerCase().replace(/_/g, "");
-    if (normalized === "blogid" || normalized === "brandid") args[key] = String(env.BLACKROOM_METRICOOL_BLOG_ID || BLACKROOM_METRICOOL_BLOG_ID);
-    else if (normalized === "userid") args[key] = String(env.METRICOOL_USER_ID || "");
-    else if (["network", "platform", "socialnetwork"].includes(normalized)) args[key] = network;
-    else if (["start", "startdate", "from", "datefrom", "sincedate"].includes(normalized)) args[key] = start;
-    else if (["end", "enddate", "to", "dateto", "untildate"].includes(normalized)) args[key] = end;
-    else if (normalized === "timezone") args[key] = "America/New_York";
+    const normalized = normalizedName(key);
+    if (normalized === "blogid" || normalized === "brandid") args[key] = schemaValue(
+      schema,
+      key,
+      env.BLACKROOM_METRICOOL_BLOG_ID || BLACKROOM_METRICOOL_BLOG_ID,
+    );
+    else if (normalized === "userid") args[key] = schemaValue(schema, key, env.METRICOOL_USER_ID || "");
+    else if (["network", "platform", "socialnetwork", "provider"].includes(normalized)) args[key] = network;
+    else if (["start", "startdate", "initdate", "initialdate", "from", "fromdate", "datefrom", "sincedate"].includes(normalized)) {
+      args[key] = schemaDateValue(schema, key, start, false);
+    } else if (["end", "enddate", "to", "todate", "dateto", "untildate"].includes(normalized)) {
+      args[key] = schemaDateValue(schema, key, end, true);
+    }
+    else if (normalized === "timezone") args[key] = BLACKROOM_TIMEZONE;
+    else if (normalized === "connector" && window.connector) args[key] = window.connector;
+    else if (["metrics", "metricids", "metricfields"].includes(normalized) && window.metrics?.length) args[key] = window.metrics;
     else if (["limit", "pagesize", "perpage", "maxresults", "count"].includes(normalized)) args[key] = BLACKROOM_CEO_ANALYTICS_PAGE_SIZE;
     else if (["page", "pagenumber", "pageindex"].includes(normalized)) args[key] = page;
     else if (["offset", "skip"].includes(normalized)) args[key] = (page - 1) * BLACKROOM_CEO_ANALYTICS_PAGE_SIZE;
@@ -348,8 +420,8 @@ function payloadHasMore(value: unknown, returned: number): boolean {
 
 function dateRangeSupported(schema: Record<string, any> | undefined): boolean {
   const normalized = normalizedSchemaKeys(schema).map((entry) => entry.normalized);
-  return normalized.some((key) => ["start", "startdate", "from", "datefrom", "sincedate"].includes(key))
-    && normalized.some((key) => ["end", "enddate", "to", "dateto", "untildate"].includes(key));
+  return normalized.some((key) => ["start", "startdate", "initdate", "initialdate", "from", "fromdate", "datefrom", "sincedate"].includes(key))
+    && normalized.some((key) => ["end", "enddate", "to", "todate", "dateto", "untildate"].includes(key));
 }
 
 function paginationSupported(schema: Record<string, any> | undefined): boolean {
@@ -378,6 +450,156 @@ function configuredHistoryStartDate(env: NodeJS.ProcessEnv): string {
     : BLACKROOM_CEO_ANALYTICS_HISTORY_START_DATE;
 }
 
+type BlackRoomMetricoolMetricDefinition = {
+  id: string;
+  label: string;
+};
+
+function extractMetricoolMetricDefinitions(value: unknown): BlackRoomMetricoolMetricDefinition[] {
+  const definitions = new Map<string, string>();
+  const metricCode = /^[A-Z]{2,}[A-Z0-9_.-]*\d+[A-Z0-9_.-]*$/i;
+  const visitStrings = (candidate: unknown) => {
+    if (Array.isArray(candidate)) return candidate.forEach(visitStrings);
+    if (typeof candidate === "string" && metricCode.test(candidate.trim())) {
+      definitions.set(candidate.trim(), candidate.trim());
+    }
+  };
+  visitStrings(value);
+  for (const record of records(value)) {
+    const id = record.fieldId
+      ?? record.field_id
+      ?? record.field
+      ?? record.metricId
+      ?? record.metric_id
+      ?? record.metricCode
+      ?? record.metric_code
+      ?? record.code
+      ?? record.id;
+    const label = record.displayName
+      ?? record.display_name
+      ?? record.metricName
+      ?? record.metric_name
+      ?? record.fieldName
+      ?? record.field_name
+      ?? record.label
+      ?? record.name
+      ?? record.title
+      ?? record.description
+      ?? record.metric;
+    if (typeof id === "string" && id.trim() && typeof label === "string" && label.trim()) {
+      definitions.set(id.trim(), label.trim());
+    }
+    for (const [key, raw] of Object.entries(record)) {
+      if (typeof raw !== "string" || !raw.trim()) continue;
+      if (metricCode.test(key)) definitions.set(key, raw.trim());
+    }
+  }
+  return [...definitions].map(([id, label]) => ({ id, label }));
+}
+
+function preferredMetricDefinitions(
+  definitions: BlackRoomMetricoolMetricDefinition[],
+): BlackRoomMetricoolMetricDefinition[] {
+  const score = (definition: BlackRoomMetricoolMetricDefinition): number => {
+    const value = `${definition.id} ${definition.label}`.toLowerCase();
+    if (/\bviews?\b|video.?views?|view.?count/.test(value)) return 0;
+    if (/play/.test(value)) return 1;
+    if (/impression/.test(value)) return 2;
+    if (/reach/.test(value)) return 3;
+    if (/engagement|interaction/.test(value)) return 4;
+    if (/video|post|count/.test(value)) return 5;
+    if (/share|like/.test(value)) return 6;
+    return 10;
+  };
+  return [...definitions].sort((left, right) =>
+    score(left) - score(right) || left.id.localeCompare(right.id)).slice(0, 1);
+}
+
+function identityMetricDefinitions(
+  definitions: BlackRoomMetricoolMetricDefinition[],
+): BlackRoomMetricoolMetricDefinition[] {
+  const score = (definition: BlackRoomMetricoolMetricDefinition): number => {
+    const value = `${definition.id} ${definition.label}`.toLowerCase();
+    if (/video.?id|post.?id|publication.?id|network.?id/.test(value)) return 0;
+    if (/video.?url|post.?url|permalink|post.?link|share.?url/.test(value)) return 1;
+    return 10;
+  };
+  return [...definitions]
+    .filter((definition) => score(definition) < 10)
+    .sort((left, right) => score(left) - score(right) || left.id.localeCompare(right.id))
+    .slice(0, 1);
+}
+
+function codedMetricRecordId(
+  record: Record<string, any>,
+  metricId: string,
+  identityDefinitions: BlackRoomMetricoolMetricDefinition[],
+): string | null {
+  const direct = metricRecordId(record);
+  if (direct && direct !== metricId) return direct;
+  for (const definition of identityDefinitions) {
+    const entry = Object.entries(record).find(([key]) => normalizedName(key) === normalizedName(definition.id));
+    const value = entry?.[1];
+    if (value != null && String(value).trim() && String(value) !== metricId) return String(value);
+  }
+  // Analytics/evolution rows can also contain dates and metric values, but
+  // they are aggregates rather than individual posts. Never count those rows
+  // as published-post samples because doing so would give the CEO false
+  // confidence and teach it from days/buckets instead of content.
+  return null;
+}
+
+function extractCodedViewRecords(
+  value: unknown,
+  definitions: BlackRoomMetricoolMetricDefinition[],
+): Array<{ id: string; views: number }> {
+  const performanceDefinitions = preferredMetricDefinitions(definitions);
+  const identityDefinitions = identityMetricDefinitions(definitions);
+  const definitionById = new Map(definitions.map((definition) => [normalizedName(definition.id), definition]));
+  const performanceIds = new Set(performanceDefinitions.map((definition) => normalizedName(definition.id)));
+  const samples = new Map<string, number>();
+  const visit = (candidate: unknown, activeMetricId = "", path = "root") => {
+    if (Array.isArray(candidate)) {
+      candidate.forEach((item, index) => visit(item, activeMetricId, `${path}.${index}`));
+      return;
+    }
+    if (!candidate || typeof candidate !== "object") return;
+    const record = candidate as Record<string, any>;
+    const rowMetricId = String(
+      record.metricId
+      ?? record.metric_id
+      ?? record.fieldId
+      ?? record.field_id
+      ?? record.field
+      ?? record.metric
+      ?? record.code
+      ?? activeMetricId
+      ?? "",
+    );
+    const definition = definitionById.get(normalizedName(rowMetricId));
+    if (definition && performanceIds.has(normalizedName(definition.id))) {
+      const raw = record.value ?? record.metricValue ?? record.metric_value;
+      const views = Number(raw);
+      const id = codedMetricRecordId(record, definition.id, identityDefinitions);
+      if (id && Number.isFinite(views) && views >= 0) samples.set(id, views);
+    }
+    for (const [key, raw] of Object.entries(record)) {
+      const keyedDefinition = definitionById.get(normalizedName(key));
+      if (keyedDefinition
+        && performanceIds.has(normalizedName(keyedDefinition.id))
+        && Number.isFinite(Number(raw))
+        && Number(raw) >= 0) {
+        const id = codedMetricRecordId(record, keyedDefinition.id, identityDefinitions);
+        if (id) samples.set(id, Number(raw));
+      } else {
+        visit(raw, keyedDefinition?.id || activeMetricId, `${path}.${key}`);
+      }
+    }
+  };
+  visit(value);
+  return [...samples].map(([id, views]) => ({ id, views }));
+}
+
 type BlackRoomMetricoolHistory = {
   metricIds: Set<string>;
   viewRecords: Map<string, number>;
@@ -396,11 +618,17 @@ function mergeMetricoolHistory(target: BlackRoomMetricoolHistory, source: BlackR
   target.complete = target.complete && source.complete;
 }
 
-function addMetricoolPayload(target: BlackRoomMetricoolHistory, payload: unknown): number {
-  const ids = extractBlackRoomMetricSampleIds(payload);
+function addMetricoolPayload(
+  target: BlackRoomMetricoolHistory,
+  payload: unknown,
+  definitions: BlackRoomMetricoolMetricDefinition[] = [],
+): number {
+  const codedRecords = definitions.length ? extractCodedViewRecords(payload, definitions) : [];
+  const viewRecords = [...extractBlackRoomViewRecords(payload), ...codedRecords];
+  const ids = new Set([...extractBlackRoomMetricSampleIds(payload), ...viewRecords.map((record) => record.id)]);
   for (const id of ids) target.metricIds.add(id);
-  for (const record of extractBlackRoomViewRecords(payload)) target.viewRecords.set(record.id, record.views);
-  return ids.length;
+  for (const record of viewRecords) target.viewRecords.set(record.id, record.views);
+  return ids.size;
 }
 
 async function collectMetricoolToolHistory(input: {
@@ -410,6 +638,9 @@ async function collectMetricoolToolHistory(input: {
   network: string;
   now: Date;
   env: NodeJS.ProcessEnv;
+  connector?: string;
+  metrics?: string[];
+  metricDefinitions?: BlackRoomMetricoolMetricDefinition[];
 }): Promise<BlackRoomMetricoolHistory> {
   const supportsDates = dateRangeSupported(input.tool.inputSchema);
   const supportsPages = paginationSupported(input.tool.inputSchema);
@@ -430,12 +661,18 @@ async function collectMetricoolToolHistory(input: {
           input.fetcher,
           input.token,
           input.tool.name,
-          buildToolArguments(input.tool.inputSchema, input.network, input.now, input.env, { start, end, page }),
+          buildToolArguments(input.tool.inputSchema, input.network, input.now, input.env, {
+            start,
+            end,
+            page,
+            connector: input.connector,
+            metrics: input.metrics,
+          }),
         );
         totalRequests += 1;
         output.requests += 1;
         const payload = toolPayload(result);
-        const returned = addMetricoolPayload(output, payload);
+        const returned = addMetricoolPayload(output, payload, input.metricDefinitions);
         const newIds = output.metricIds.size - previousSize;
         previousSize = output.metricIds.size;
         const hasMore = payloadHasMore(payload, returned);
@@ -458,12 +695,17 @@ async function collectMetricoolToolHistory(input: {
       input.fetcher,
       input.token,
       input.tool.name,
-      buildToolArguments(input.tool.inputSchema, input.network, input.now, input.env, { start, end }),
+      buildToolArguments(input.tool.inputSchema, input.network, input.now, input.env, {
+        start,
+        end,
+        connector: input.connector,
+        metrics: input.metrics,
+      }),
     );
     totalRequests += 1;
     output.requests += 1;
     const payload = toolPayload(result);
-    const returned = addMetricoolPayload(output, payload);
+    const returned = addMetricoolPayload(output, payload, input.metricDefinitions);
     const mayBeTruncated = payloadHasMore(payload, returned) || returned >= BLACKROOM_CEO_ANALYTICS_PAGE_SIZE;
     const split = start && end && mayBeTruncated ? splitDateRange(start, end) : null;
     if (split) {
@@ -478,7 +720,86 @@ async function collectMetricoolToolHistory(input: {
     return output;
   };
 
-  return collectRange(fullStart, fullEnd);
+  try {
+    return await collectRange(fullStart, fullEnd);
+  } catch (error) {
+    if (!supportsDates || !fullStart || !fullEnd) throw error;
+    // Some Metricool plans intentionally reject ranges older than their
+    // retention window. Fall back to the recent rolling window so the CEO
+    // still learns from current posts instead of staying permanently at 0.
+    const recentStart = new Date(
+      input.now.getTime() - BLACKROOM_CEO_ANALYTICS_LOOKBACK_DAYS * 86400_000,
+    ).toISOString().slice(0, 10);
+    const recent = await collectRange(recentStart, fullEnd);
+    recent.complete = false;
+    return recent;
+  }
+}
+
+type BlackRoomMetricoolTool = {
+  name: string;
+  inputSchema?: Record<string, any>;
+};
+
+function findMetricoolTool(
+  tools: BlackRoomMetricoolTool[],
+  names: string[],
+): BlackRoomMetricoolTool | undefined {
+  const accepted = new Set(names.map(normalizedName));
+  return tools.find((tool) => accepted.has(normalizedName(tool.name)));
+}
+
+function directMetricoolToolsForNetwork(
+  tools: BlackRoomMetricoolTool[],
+  network: string,
+): BlackRoomMetricoolTool[] {
+  const canonicalNames: Record<string, string[]> = {
+    tiktok: ["get_tiktok_videos", "get_tiktok_posts"],
+    facebook: ["get_facebook_posts", "get_facebook_reels"],
+    youtube: ["get_youtube_videos"],
+  };
+  const canonical = (canonicalNames[network] || [])
+    .map((name) => findMetricoolTool(tools, [name]))
+    .filter((tool): tool is BlackRoomMetricoolTool => Boolean(tool));
+  if (canonical.length) return canonical;
+  const legacyNames: Record<string, string[]> = {
+    tiktok: ["get_tiktoks"],
+    facebook: ["get_posts", "get_reels"],
+    youtube: ["get_videos"],
+  };
+  const legacy = (legacyNames[network] || [])
+    .map((name) => findMetricoolTool(tools, [name]))
+    .filter((tool): tool is BlackRoomMetricoolTool => Boolean(tool));
+  return legacy.slice(0, 1);
+}
+
+function analyticsConnectorsForNetwork(network: string): string[] {
+  if (network === "facebook") return ["posts", "reels"];
+  return ["videos"];
+}
+
+async function metricDefinitionsForConnector(input: {
+  fetcher: typeof fetch;
+  token: string;
+  tool?: BlackRoomMetricoolTool;
+  network: string;
+  connector: string;
+  now: Date;
+  env: NodeJS.ProcessEnv;
+}): Promise<BlackRoomMetricoolMetricDefinition[]> {
+  if (!input.tool) return [];
+  const result = await callMetricoolMcpTool(
+    input.fetcher,
+    input.token,
+    input.tool.name,
+    buildToolArguments(input.tool.inputSchema, input.network, input.now, input.env, {
+      connector: input.connector,
+    }),
+  );
+  const definitions = extractMetricoolMetricDefinitions(toolPayload(result));
+  const performance = preferredMetricDefinitions(definitions);
+  const identities = identityMetricDefinitions(definitions);
+  return [...new Map([...performance, ...identities].map((definition) => [definition.id, definition])).values()];
 }
 
 export async function collectBlackRoomMetricoolAnalytics(options: {
@@ -491,9 +812,26 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const fetcher = options.fetch || fetch;
   const now = options.now || new Date();
   const tools = await listMetricoolMcpTools({ env, fetch: fetcher });
-  const metricsTool = tools.find((tool) => /^get_?metrics$/i.test(tool.name));
+  // Metricool currently exposes getAnalyticsDataByMetrics plus
+  // getAnalyticsAvailableMetrics. Older installations expose one direct
+  // post/video tool per network. Support both contracts, but never treat
+  // get_metrics/getAnalyticsAvailableMetrics as post data: those tools only
+  // describe which metric IDs can be requested.
+  const analyticsDataTool = findMetricoolTool(tools, [
+    "getAnalyticsDataByMetrics",
+    "getPostsDataByMetrics",
+    "getDataToPostsByNetwork",
+    "getAnalytics",
+  ]);
+  const availableMetricsTool = findMetricoolTool(tools, [
+    "getAnalyticsAvailableMetrics",
+    "getAvailableMetrics",
+    "get_metrics",
+  ]);
   const bestTimesTool = tools.find((tool) => /best.*time|time.*post/i.test(tool.name));
-  if (!metricsTool && !tools.some((tool) => /^get_?(posts|tiktoks|videos|reels)$/i.test(tool.name))) {
+  const hasDirectDataTool = BLACKROOM_METRICOOL_NETWORKS.some((network) =>
+    directMetricoolToolsForNetwork(tools, network).length > 0);
+  if (!analyticsDataTool && !hasDirectDataTool) {
     throw new Error("Metricool MCP does not expose a compatible metrics tool");
   }
   const networkSamples: Record<string, number> = {};
@@ -506,23 +844,66 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const networkMetricFailures = new Set<string>();
   let tiktokPostIds: string[] = [];
   for (const network of BLACKROOM_METRICOOL_NETWORKS) {
-    const networkToolPattern = network === "tiktok" ? /^get_?tiktoks$/i : network === "youtube" ? /^get_?videos$/i : /^get_?posts$/i;
-    const selectedTool = tools.find((tool) => networkToolPattern.test(tool.name)) || metricsTool!;
+    const directTools = directMetricoolToolsForNetwork(tools, network);
+    const networkHistory = emptyMetricoolHistory(true);
+    const connectorErrors: string[] = [];
     try {
-      const history = await collectMetricoolToolHistory({
-        fetcher,
-        token: String(env.METRICOOL_USER_TOKEN || ""),
-        tool: selectedTool,
-        network,
-        now,
-        env,
-      });
-      networkSamples[network] = history.metricIds.size;
-      const viewRecords = [...history.viewRecords].map(([id, views]) => ({ id, views }));
+      if (directTools.length) {
+        for (const tool of directTools) {
+          try {
+            mergeMetricoolHistory(networkHistory, await collectMetricoolToolHistory({
+              fetcher,
+              token: String(env.METRICOOL_USER_TOKEN || ""),
+              tool,
+              network,
+              now,
+              env,
+            }));
+          } catch (error) {
+            connectorErrors.push(`${tool.name}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+      } else if (analyticsDataTool) {
+        for (const connector of analyticsConnectorsForNetwork(network)) {
+          try {
+            let definitions: BlackRoomMetricoolMetricDefinition[] = [];
+            try {
+              definitions = await metricDefinitionsForConnector({
+                fetcher,
+                token: String(env.METRICOOL_USER_TOKEN || ""),
+                tool: availableMetricsTool,
+                network,
+                connector,
+                now,
+                env,
+              });
+            } catch (error) {
+              connectorErrors.push(`${connector} metrics: ${error instanceof Error ? error.message : String(error)}`);
+            }
+            mergeMetricoolHistory(networkHistory, await collectMetricoolToolHistory({
+              fetcher,
+              token: String(env.METRICOOL_USER_TOKEN || ""),
+              tool: analyticsDataTool,
+              network,
+              connector,
+              metrics: definitions.map((definition) => definition.id),
+              metricDefinitions: definitions,
+              now,
+              env,
+            }));
+          } catch (error) {
+            connectorErrors.push(`${connector}: ${error instanceof Error ? error.message : String(error)}`);
+          }
+        }
+      }
+      if (!networkHistory.requests) throw new Error(connectorErrors.join(" | ") || "Metricool no devolvió datos");
+      networkSamples[network] = networkHistory.metricIds.size;
+      const viewRecords = [...networkHistory.viewRecords].map(([id, views]) => ({ id, views }));
       viewsByNetwork[network] = viewRecords.map((record) => record.views);
       if (network === "tiktok") tiktokPostIds = viewRecords.map((record) => record.id);
-      historyCompleteByNetwork[network] = history.complete;
-      historyRequestsByNetwork[network] = history.requests;
+      historyCompleteByNetwork[network] = networkHistory.complete && connectorErrors.length === 0;
+      historyRequestsByNetwork[network] = networkHistory.requests;
+      if (connectorErrors.length) networkErrors[network] = connectorErrors.join(" | ").slice(0, 240);
     } catch (error) {
       networkSamples[network] = 0;
       viewsByNetwork[network] = [];
@@ -533,12 +914,13 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
     }
     if (bestTimesTool) {
       try {
+        const bestTimesStart = new Date(now.getTime() - 7 * 86400_000).toISOString().slice(0, 10);
         const best = await callMetricoolMcpTool(
           fetcher,
           String(env.METRICOOL_USER_TOKEN || ""),
           bestTimesTool.name,
           buildToolArguments(bestTimesTool.inputSchema, network, now, env, {
-            start: configuredHistoryStartDate(env),
+            start: bestTimesStart,
             end: now.toISOString().slice(0, 10),
           }),
         );
