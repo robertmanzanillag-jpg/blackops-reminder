@@ -557,7 +557,32 @@ function extractCodedViewRecords(
   const identityDefinitions = identityMetricDefinitions(definitions);
   const definitionById = new Map(definitions.map((definition) => [normalizedName(definition.id), definition]));
   const performanceIds = new Set(performanceDefinitions.map((definition) => normalizedName(definition.id)));
+  const identityIds = new Set(identityDefinitions.map((definition) => normalizedName(definition.id)));
   const samples = new Map<string, number>();
+  type MetricPoint = { coordinate: string | null; value: unknown };
+  const series = new Map<string, MetricPoint[]>();
+  const pointCoordinate = (record: Record<string, any>): string | null => {
+    const value = record.dateTime
+      ?? record.datetime
+      ?? record.date_time
+      ?? record.timestamp
+      ?? record.publicationDate
+      ?? record.publishedAt
+      ?? record.createdAt;
+    if (value == null || !String(value).trim()) return null;
+    const coordinate = String(value).trim();
+    // A date-only bucket represents a daily aggregate, not an individual
+    // publication. It must never become a post identity join key.
+    if (/^\d{4}-\d{2}-\d{2}$/.test(coordinate)) return null;
+    return coordinate;
+  };
+  const addPoint = (definition: BlackRoomMetricoolMetricDefinition, record: Record<string, any>, raw: unknown) => {
+    const key = normalizedName(definition.id);
+    if (!performanceIds.has(key) && !identityIds.has(key)) return;
+    const points = series.get(key) || [];
+    points.push({ coordinate: pointCoordinate(record), value: raw });
+    series.set(key, points);
+  };
   const visit = (candidate: unknown, activeMetricId = "", path = "root") => {
     if (Array.isArray(candidate)) {
       candidate.forEach((item, index) => visit(item, activeMetricId, `${path}.${index}`));
@@ -577,26 +602,63 @@ function extractCodedViewRecords(
       ?? "",
     );
     const definition = definitionById.get(normalizedName(rowMetricId));
-    if (definition && performanceIds.has(normalizedName(definition.id))) {
+    if (definition) {
       const raw = record.value ?? record.metricValue ?? record.metric_value;
-      const views = Number(raw);
-      const id = codedMetricRecordId(record, definition.id, identityDefinitions);
-      if (id && Number.isFinite(views) && views >= 0) samples.set(id, views);
+      if (raw !== undefined) {
+        addPoint(definition, record, raw);
+        if (performanceIds.has(normalizedName(definition.id))) {
+          const views = Number(raw);
+          const id = codedMetricRecordId(record, definition.id, identityDefinitions);
+          if (id && Number.isFinite(views) && views >= 0) samples.set(id, views);
+        }
+      }
     }
     for (const [key, raw] of Object.entries(record)) {
       const keyedDefinition = definitionById.get(normalizedName(key));
-      if (keyedDefinition
-        && performanceIds.has(normalizedName(keyedDefinition.id))
-        && Number.isFinite(Number(raw))
-        && Number(raw) >= 0) {
-        const id = codedMetricRecordId(record, keyedDefinition.id, identityDefinitions);
-        if (id) samples.set(id, Number(raw));
+      if (keyedDefinition && (raw == null || typeof raw !== "object")) {
+        addPoint(keyedDefinition, record, raw);
+        if (performanceIds.has(normalizedName(keyedDefinition.id))
+          && Number.isFinite(Number(raw))
+          && Number(raw) >= 0) {
+          const id = codedMetricRecordId(record, keyedDefinition.id, identityDefinitions);
+          if (id) samples.set(id, Number(raw));
+        }
       } else {
         visit(raw, keyedDefinition?.id || activeMetricId, `${path}.${key}`);
       }
     }
   };
   visit(value);
+
+  // Metricool's Data Studio analytics response can return each requested
+  // field as an independent timeline. Join the views timeline to the
+  // post-ID/permalink timeline by publication timestamp. Without this join,
+  // all three networks can report a successful request while yielding zero
+  // post samples because views and identity never appear in the same object.
+  const identityPoints = identityDefinitions.flatMap((definition) =>
+    series.get(normalizedName(definition.id)) || []);
+  const identityByCoordinate = new Map<string, string[]>();
+  for (const point of identityPoints) {
+    if (!point.coordinate || point.value == null || !String(point.value).trim()) continue;
+    const values = identityByCoordinate.get(point.coordinate) || [];
+    values.push(String(point.value));
+    identityByCoordinate.set(point.coordinate, values);
+  }
+  const coordinateOffsets = new Map<string, number>();
+  const performancePoints = performanceDefinitions.flatMap((definition) =>
+    series.get(normalizedName(definition.id)) || []);
+  performancePoints.forEach((point) => {
+    const views = Number(point.value);
+    if (!Number.isFinite(views) || views < 0) return;
+    let id: string | null = null;
+    if (point.coordinate) {
+      const candidates = identityByCoordinate.get(point.coordinate) || [];
+      const offset = coordinateOffsets.get(point.coordinate) || 0;
+      id = candidates[offset] || null;
+      coordinateOffsets.set(point.coordinate, offset + 1);
+    }
+    if (id) samples.set(id, views);
+  });
   return [...samples].map(([id, views]) => ({ id, views }));
 }
 

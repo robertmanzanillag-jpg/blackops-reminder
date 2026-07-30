@@ -207,6 +207,120 @@ test("uses Metricool's coded post identity field instead of counting aggregate d
   assert.equal(analytics.sampleCount, 8);
 });
 
+test("joins Metricool's separate views and post-identity timelines by publication timestamp", async () => {
+  const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const request = JSON.parse(String(init?.body || "{}"));
+    if (request.method === "tools/list") {
+      return new Response(JSON.stringify({ result: { tools: [
+        {
+          name: "getAnalyticsAvailableMetrics",
+          inputSchema: { properties: { connector: { type: "string" }, network: { type: "string" } } },
+        },
+        {
+          name: "getAnalyticsDataByMetrics",
+          inputSchema: { properties: {
+            brandId: { type: "string" },
+            from: { type: "string" },
+            to: { type: "string" },
+            metrics: { type: "array" },
+          } },
+        },
+      ] } }), { headers: { "content-type": "application/json" } });
+    }
+    if (request.params.name === "getAnalyticsAvailableMetrics") {
+      const prefix = `${request.params.arguments.network}-${request.params.arguments.connector}`;
+      return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({
+        data: [
+          { fieldId: `${prefix}-views`, displayName: "Video views" },
+          { fieldId: `${prefix}-url`, displayName: "Post permalink" },
+        ],
+      }) }] } }), { headers: { "content-type": "application/json" } });
+    }
+    const [viewsField, identityField] = request.params.arguments.metrics;
+    return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({
+      data: {
+        [viewsField]: [{
+          values: [
+            { dateTime: "2026-07-27T14:00:00-04:00", value: 20 },
+            { dateTime: "2026-07-28T16:30:00-04:00", value: 40 },
+          ],
+        }],
+        [identityField]: [{
+          values: [
+            { dateTime: "2026-07-27T14:00:00-04:00", value: `https://social.example/${identityField}/1` },
+            { dateTime: "2026-07-28T16:30:00-04:00", value: `https://social.example/${identityField}/2` },
+          ],
+        }],
+      },
+    }) }] } }), { headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+
+  const analytics = await collectBlackRoomMetricoolAnalytics({
+    fetch: fetcher,
+    env: { METRICOOL_USER_TOKEN: "secure-test-token" },
+    now: new Date("2026-07-29T12:00:00.000Z"),
+  });
+
+  assert.deepEqual(analytics.networkSamples, { tiktok: 2, facebook: 4, youtube: 2 });
+  assert.equal(analytics.sampleCount, 8);
+  assert.equal(analytics.comparableSampleCount, 2);
+  assert.equal(analytics.tiktokMedianViews, 30);
+});
+
+test("does not join separate Metricool daily aggregate timelines as individual posts", async () => {
+  const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
+    const request = JSON.parse(String(init?.body || "{}"));
+    if (request.method === "tools/list") {
+      return new Response(JSON.stringify({ result: { tools: [
+        {
+          name: "getAnalyticsAvailableMetrics",
+          inputSchema: { properties: { connector: { type: "string" }, network: { type: "string" } } },
+        },
+        {
+          name: "getAnalyticsDataByMetrics",
+          inputSchema: { properties: {
+            brandId: { type: "string" },
+            from: { type: "string" },
+            to: { type: "string" },
+            metrics: { type: "array" },
+          } },
+        },
+      ] } }), { headers: { "content-type": "application/json" } });
+    }
+    if (request.params.name === "getAnalyticsAvailableMetrics") {
+      const prefix = `${request.params.arguments.network}-${request.params.arguments.connector}`;
+      return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({
+        data: [
+          { fieldId: `${prefix}-views`, displayName: "Video views" },
+          { fieldId: `${prefix}-url`, displayName: "Post permalink" },
+        ],
+      }) }] } }), { headers: { "content-type": "application/json" } });
+    }
+    const [viewsField, identityField] = request.params.arguments.metrics;
+    return new Response(JSON.stringify({ result: { content: [{ type: "text", text: JSON.stringify({
+      data: {
+        [viewsField]: [{ values: [
+          { date: "2026-07-27", value: 20 },
+          { date: "2026-07-28", value: 40 },
+        ] }],
+        [identityField]: [{ values: [
+          { date: "2026-07-27", value: `https://social.example/${identityField}/1` },
+          { date: "2026-07-28", value: `https://social.example/${identityField}/2` },
+        ] }],
+      },
+    }) }] } }), { headers: { "content-type": "application/json" } });
+  }) as typeof fetch;
+
+  const analytics = await collectBlackRoomMetricoolAnalytics({
+    fetch: fetcher,
+    env: { METRICOOL_USER_TOKEN: "secure-test-token" },
+    now: new Date("2026-07-29T12:00:00.000Z"),
+  });
+
+  assert.deepEqual(analytics.networkSamples, { tiktok: 0, facebook: 0, youtube: 0 });
+  assert.equal(analytics.sampleCount, 0);
+});
+
 test("paginates and deduplicates every available Metricool history page", async () => {
   const pages: Record<string, number[]> = { get_tiktoks: [], get_posts: [], get_videos: [] };
   const fetcher = (async (_url: string | URL | Request, init?: RequestInit) => {
