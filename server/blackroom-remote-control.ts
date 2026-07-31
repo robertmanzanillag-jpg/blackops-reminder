@@ -38,6 +38,25 @@ export interface BlackRoomAnalyticsImport {
   importedAt: string;
 }
 
+export interface BlackRoomRescheduleExperiment {
+  postId: string;
+  uuid: string;
+  network: BlackRoomAnalyticsNetwork;
+  from: string;
+  to: string;
+  movedAt: string;
+  status: "verified" | "uncertain" | "failed";
+  error?: string;
+}
+
+export interface BlackRoomRescheduleLearning {
+  lastCheckedAt: string | null;
+  lastMovedAt: string | null;
+  movedCount: number;
+  lastError: string | null;
+  experiments: BlackRoomRescheduleExperiment[];
+}
+
 export interface BlackRoomRemoteControlState {
   version: 1;
   desiredEnabled: boolean;
@@ -48,6 +67,7 @@ export interface BlackRoomRemoteControlState {
   commands: BlackRoomRemoteCommand[];
   chatHistory: Array<{ id: string; role: "user" | "assistant"; text: string; createdAt: string }>;
   analyticsImports: Partial<Record<BlackRoomAnalyticsNetwork, BlackRoomAnalyticsImport>>;
+  rescheduleLearning: BlackRoomRescheduleLearning;
 }
 
 export function createBlackRoomRemoteControlState(now = new Date()): BlackRoomRemoteControlState {
@@ -61,7 +81,41 @@ export function createBlackRoomRemoteControlState(now = new Date()): BlackRoomRe
     commands: [],
     chatHistory: [],
     analyticsImports: {},
+    rescheduleLearning: { lastCheckedAt: null, lastMovedAt: null, movedCount: 0, lastError: null, experiments: [] },
   };
+}
+
+function normalizeRescheduleLearning(value: unknown): BlackRoomRescheduleLearning {
+  const raw = value && typeof value === "object" ? value as Partial<BlackRoomRescheduleLearning> : {};
+  const experiments = Array.isArray(raw.experiments) ? raw.experiments.flatMap((item) => {
+    const experiment = item && typeof item === "object" ? item as Partial<BlackRoomRescheduleExperiment> : {};
+    const network = String(experiment.network);
+    const status = String(experiment.status);
+    if (!experiment.postId || !experiment.uuid || !["tiktok", "facebook", "youtube"].includes(network)
+      || !["verified", "uncertain", "failed"].includes(status)) return [];
+    return [{ ...experiment, network, status } as BlackRoomRescheduleExperiment];
+  }).slice(-200) : [];
+  return {
+    lastCheckedAt: raw.lastCheckedAt || null,
+    lastMovedAt: raw.lastMovedAt || null,
+    movedCount: experiments.filter((item) => item.status === "verified").length,
+    lastError: raw.lastError ? String(raw.lastError).slice(0, 500) : null,
+    experiments,
+  };
+}
+
+export function recordBlackRoomRescheduleReport(
+  state: BlackRoomRemoteControlState,
+  report: { checkedAt: string; experiments: BlackRoomRescheduleExperiment[]; error?: string },
+): BlackRoomRemoteControlState {
+  state.rescheduleLearning.experiments = [...state.rescheduleLearning.experiments, ...report.experiments].slice(-200);
+  state.rescheduleLearning.lastCheckedAt = report.checkedAt;
+  const moved = report.experiments.filter((item) => item.status === "verified");
+  if (moved.length) state.rescheduleLearning.lastMovedAt = report.checkedAt;
+  state.rescheduleLearning.movedCount = state.rescheduleLearning.experiments.filter((item) => item.status === "verified").length;
+  state.rescheduleLearning.lastError = report.error || report.experiments.find((item) => item.status === "failed")?.error || null;
+  state.updatedAt = report.checkedAt;
+  return state;
 }
 
 function normalizeImportedAnalyticsSample(value: unknown): BlackRoomImportedAnalyticsSample | null {
@@ -221,6 +275,7 @@ function normalizeRemoteControlState(value: unknown): BlackRoomRemoteControlStat
     commands: Array.isArray(parsed.commands) ? parsed.commands.slice(-100) : [],
     chatHistory: Array.isArray(parsed.chatHistory) ? parsed.chatHistory.slice(-40) : [],
     analyticsImports: normalizeAnalyticsImports(parsed.analyticsImports),
+    rescheduleLearning: normalizeRescheduleLearning(parsed.rescheduleLearning),
   };
 }
 

@@ -12,6 +12,7 @@ import {
   mutateBlackRoomRemoteControl,
   appendBlackRoomCeoCommand,
   readBlackRoomRemoteControl,
+  recordBlackRoomRescheduleReport,
   recordBlackRoomRemoteHeartbeat,
   setBlackRoomRemoteCommand,
   upsertBlackRoomAnalyticsImports,
@@ -21,6 +22,7 @@ import {
 import { executeBlackRoomChatMessage } from "./blackroom-chat-service";
 import { BlackRoomMetricoolUncertainError, scheduleBlackRoomMetricoolPost } from "./blackroom-metricool-bridge";
 import { BLACKROOM_CEO_DAILY_POSTS, BLACKROOM_CEO_MAX_DAILY_POSTS, BLACKROOM_CEO_REFRESH_MS, buildBlackRoomLearningSlots, collectBlackRoomMetricoolAnalytics, planBlackRoomCampaignPosts } from "./blackroom-growth-ceo";
+import { BLACKROOM_RESCHEDULE_COOLDOWN_MS, rescheduleBlackRoomMetricoolExperiments, type BlackRoomRescheduleReport } from "./blackroom-metricool-rescheduler";
 import { getCurrentUserId } from "./user-context";
 import { isConfiguredSingleUserOwner } from "./single-user-owner";
 
@@ -80,14 +82,35 @@ async function refreshBlackRoomCeoOnce(force: boolean): Promise<void> {
         recommendedTimes: analytics.recommendedTimes,
       })];
     }));
-    await mutateBlackRoomRemoteControl((state) => appendBlackRoomCeoCommand(state, {
+    let rescheduleReport: BlackRoomRescheduleReport | null = null;
+    const parsedLastRescheduleCheck = current.rescheduleLearning.lastCheckedAt
+      ? new Date(current.rescheduleLearning.lastCheckedAt).getTime() : 0;
+    const lastRescheduleCheck = Number.isFinite(parsedLastRescheduleCheck) ? parsedLastRescheduleCheck : 0;
+    if (current.desiredEnabled && Date.now() - lastRescheduleCheck >= BLACKROOM_RESCHEDULE_COOLDOWN_MS) {
+      try {
+        rescheduleReport = await rescheduleBlackRoomMetricoolExperiments({
+          analytics,
+          attemptedPostIds: current.rescheduleLearning.experiments.map((item) => item.postId),
+        });
+      } catch (error: any) {
+        rescheduleReport = {
+          checkedAt: new Date().toISOString(),
+          experiments: [],
+          error: String(error?.message || error).slice(0, 500),
+        };
+      }
+    }
+    await mutateBlackRoomRemoteControl((state) => {
+      appendBlackRoomCeoCommand(state, {
       id: `blackroom-ceo-${randomUUID()}`,
       type: "ceo_schedule",
       slotsByDate,
       postsByDate,
       analytics,
       createdAt: analytics.lastCheckedAt,
-    }));
+      });
+      if (rescheduleReport) recordBlackRoomRescheduleReport(state, rescheduleReport);
+    });
 }
 
 async function refreshBlackRoomCeo(force = false): Promise<void> {
@@ -289,7 +312,15 @@ for(const tab of [els.activityTab,els.chatTab])tab.addEventListener('keydown',ev
 
 export const blackRoomPage = blackRoomPageTemplate
   .replace('<option value="1">1 semana</option>', '')
-  .replace('videos sin repetir', 'segmentos sin repetir ni solapar');
+  .replace('videos sin repetir', 'segmentos sin repetir ni solapar')
+  .replace(
+    "historyComplete+'/3 redes completas · '+s.usedSourceVideos",
+    "historyComplete+'/3 redes completas · '+Number(remote.rescheduleLearning?.movedCount||0)+' pruebas de horario verificadas · '+s.usedSourceVideos",
+  )
+  .replace(
+    "'Pulsa Iniciar agente para comenzar.'",
+    "desired?'Agente activo; esperando el próximo trabajo o experimento de horario.':'Pulsa Iniciar agente para comenzar.'",
+  );
 
 export function registerBlackRoomControlRoutes(app: Express): void {
   app.get("/blackroom", async (req, res) => {
@@ -333,7 +364,8 @@ export function registerBlackRoomControlRoutes(app: Express): void {
       sourceFiles: Array.isArray(input?.sourceFiles) ? input.sourceFiles.slice(0, 20) : [],
       samples: Array.isArray(input?.samples) ? input.samples : [],
     }));
-    if (normalized.some((input) => !acceptedNetworks.has(input.network) || input.samples.length > 2_000)) {
+    if (normalized.some((input: { network: BlackRoomAnalyticsNetwork; samples: unknown[] }) =>
+      !acceptedNetworks.has(input.network) || input.samples.length > 2_000)) {
       return res.status(400).json({ error: "Invalid network or too many CSV samples" });
     }
     try {
