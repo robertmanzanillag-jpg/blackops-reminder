@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomMediaHeaders, blackRoomPage, hasBlackRoomChatAccess, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange, registerBlackRoomControlRoutes, resolveBlackRoomPanelAgent } from "../server/blackroom-control-routes";
+import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomMediaHeaders, blackRoomPage, hasBlackRoomChatAccess, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange, registerBlackRoomControlRoutes, resolveBlackRoomPanelAgent, summarizeBlackRoomAnalyticsImports } from "../server/blackroom-control-routes";
 import {
   createBlackRoomRemoteControlState,
   isBlackRoomRemoteDeviceOnline,
@@ -9,6 +9,7 @@ import {
   setBlackRoomRemoteCommand,
   appendBlackRoomRemoteCommand,
   appendBlackRoomCeoCommand,
+  upsertBlackRoomAnalyticsImports,
 } from "../server/blackroom-remote-control";
 import { isPublicApiPath } from "../server/user-context";
 import { DEFAULT_DEV_USER_ID } from "../server/user-context";
@@ -35,6 +36,34 @@ test("remote control cannot reduce the campaign below two weeks", () => {
   const state = createBlackRoomRemoteControlState();
   setBlackRoomRemoteCommand(state, true, 1);
   assert.equal(state.weeks, 2);
+});
+
+test("CSV analytics imports are validated, deduplicated and retained per network", () => {
+  const state = createBlackRoomRemoteControlState();
+  const totals = upsertBlackRoomAnalyticsImports(state, [{
+    network: "tiktok",
+    sourceFiles: ["/Users/robert/Downloads/tiktok-posts_range.csv"],
+    samples: [
+      { id: "post-1", views: 3, publishedAt: "2026-07-27T09:30:00", durationSeconds: 30 },
+      { id: "post-1", views: 99, publishedAt: "2026-07-28T09:30:00", durationSeconds: 30 },
+      { id: "", views: 100 },
+      { id: "negative", views: -1 },
+    ],
+  }], new Date("2026-07-30T12:00:00.000Z"));
+  assert.deepEqual(totals, { tiktok: 1, facebook: 0, youtube: 0 });
+  assert.deepEqual(state.analyticsImports.tiktok?.samples, [{
+    id: "post-1", views: 99, publishedAt: "2026-07-28T09:30:00", durationSeconds: 30,
+  }]);
+  assert.deepEqual(state.analyticsImports.tiktok?.sourceFiles, ["tiktok-posts_range.csv"]);
+  assert.equal(state.analyticsImports.tiktok?.importedAt, "2026-07-30T12:00:00.000Z");
+  assert.deepEqual(summarizeBlackRoomAnalyticsImports(state), {
+    tiktok: {
+      sampleCount: 1,
+      sourceFiles: ["tiktok-posts_range.csv"],
+      importedAt: "2026-07-30T12:00:00.000Z",
+    },
+  });
+  assert.equal("samples" in (summarizeBlackRoomAnalyticsImports(state).tiktok as object), false);
 });
 
 test("CEO schedule advances the generation without adding fake chat messages", () => {
@@ -162,6 +191,9 @@ test("local worker publishes structured live activity with every heartbeat", () 
   assert.match(worker, /archivo local eliminado/);
   assert.match(control, /workerActivityPath/);
   assert.match(control, /activity: Array\.isArray\(activity\) \? activity\.slice\(-80\) : \[\]/);
+  assert.match(control, /syncMetricoolCsvExports/);
+  assert.match(control, /\/api\/blackroom-agent\/analytics\/import/);
+  assert.match(control, /BLACKROOM_METRICOOL_EXPORT_DIR/);
 });
 
 test("panel keeps last confirmed delivery counters when the Mac goes offline", () => {
@@ -193,6 +225,8 @@ test("device authentication rejects missing, short, placeholder, and incorrect t
 });
 
 test("token-protected BlackRoom bridge paths bypass cookie auth for the local worker", () => {
+  assert.equal(isPublicApiPath("/api/blackroom-agent/analytics/import"), true);
+  assert.equal(isPublicApiPath("/api/blackroom-agent/analytics/refresh"), false);
   assert.equal(isPublicApiPath("/api/blackroom-agent/metricool/schedule"), true);
   assert.equal(isPublicApiPath("/api/blackroom-agent/media/reservation-1"), true);
   assert.equal(isPublicApiPath("/api/blackroom-agent/media/reservation-1.mp4"), true);
@@ -200,6 +234,25 @@ test("token-protected BlackRoom bridge paths bypass cookie auth for the local wo
   assert.equal(isPublicApiPath("/api/blackroom-agent/media/chunked/upload-1/complete"), true);
   assert.equal(isPublicApiPath("/api/blackroom-agent/media/chunked/upload-1/delete"), false);
   assert.equal(isPublicApiPath("/api/blackroom-agent/media/reservation-1/extra"), false);
+});
+
+test("CSV analytics import remains protected by the Mac bearer token", () => {
+  const source = readFileSync("server/blackroom-control-routes.ts", "utf8");
+  const start = source.indexOf('app.post("/api/blackroom-agent/analytics/import"');
+  const nextRoute = source.indexOf("\n  app.", start + 10);
+  const route = source.slice(start, nextRoute);
+  assert.ok(start > 0);
+  assert.match(route, /hasValidBlackRoomRemoteToken\(req\.get\("authorization"\)\)/);
+  assert.match(route, /status\(401\)/);
+  assert.match(route, /upsertBlackRoomAnalyticsImports/);
+  assert.match(route, /refreshBlackRoomCeo\(true\)/);
+});
+
+test("an import arriving during a CEO refresh queues one forced follow-up pass", () => {
+  const source = readFileSync("server/blackroom-control-routes.ts", "utf8");
+  assert.match(source, /let blackRoomCeoRefreshPendingForce = false/);
+  assert.match(source, /if \(force\) blackRoomCeoRefreshPendingForce = true/);
+  assert.match(source, /do \{[\s\S]*await refreshBlackRoomCeoOnce\(nextForce\)[\s\S]*\} while \(blackRoomCeoRefreshPendingForce\)/);
 });
 
 test("public MP4 serving accepts browser and video-probe byte ranges", () => {

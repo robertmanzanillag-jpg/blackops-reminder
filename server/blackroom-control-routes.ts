@@ -14,6 +14,8 @@ import {
   readBlackRoomRemoteControl,
   recordBlackRoomRemoteHeartbeat,
   setBlackRoomRemoteCommand,
+  upsertBlackRoomAnalyticsImports,
+  type BlackRoomAnalyticsNetwork,
   type BlackRoomRemoteControlState,
 } from "./blackroom-remote-control";
 import { executeBlackRoomChatMessage } from "./blackroom-chat-service";
@@ -38,6 +40,7 @@ type BlackRoomUpload = {
 };
 const blackRoomUploads = new Map<string, BlackRoomUpload>();
 let blackRoomCeoRefreshPromise: Promise<void> | null = null;
+let blackRoomCeoRefreshPendingForce = false;
 export const BLACKROOM_PUBLIC_MEDIA_PATHS = ["/api/blackroom-agent/media/:uploadId.mp4", "/api/blackroom-agent/media/:uploadId"] as const;
 
 function addUtcDays(date: string, days: number): string {
@@ -52,13 +55,15 @@ function blackRoomLocalDate(now: Date): string {
   }).format(now);
 }
 
-async function refreshBlackRoomCeo(force = false): Promise<void> {
-  if (blackRoomCeoRefreshPromise) return blackRoomCeoRefreshPromise;
-  blackRoomCeoRefreshPromise = (async () => {
+async function refreshBlackRoomCeoOnce(force: boolean): Promise<void> {
     const current = await readBlackRoomRemoteControl();
     const previous = [...current.commands].reverse().find((command) => command.type === "ceo_schedule");
     if (!force && previous && Date.now() - new Date(previous.createdAt).getTime() < BLACKROOM_CEO_REFRESH_MS) return;
-    const analytics = await collectBlackRoomMetricoolAnalytics({ previous: previous?.analytics });
+    const analytics = await collectBlackRoomMetricoolAnalytics({
+      previous: previous?.analytics,
+      importedSamplesByNetwork: Object.fromEntries(Object.entries(current.analyticsImports || {})
+        .map(([network, imported]) => [network, imported?.samples || []])),
+    });
     const today = blackRoomLocalDate(new Date());
     const currentTarget = Number((current.device?.queue as any)?.postsPerDay || BLACKROOM_CEO_DAILY_POSTS);
     const manualTarget = Math.max(BLACKROOM_CEO_DAILY_POSTS, Math.min(BLACKROOM_CEO_MAX_DAILY_POSTS, Math.floor(currentTarget)));
@@ -83,6 +88,20 @@ async function refreshBlackRoomCeo(force = false): Promise<void> {
       analytics,
       createdAt: analytics.lastCheckedAt,
     }));
+}
+
+async function refreshBlackRoomCeo(force = false): Promise<void> {
+  if (blackRoomCeoRefreshPromise) {
+    if (force) blackRoomCeoRefreshPendingForce = true;
+    return blackRoomCeoRefreshPromise;
+  }
+  blackRoomCeoRefreshPromise = (async () => {
+    let nextForce = force;
+    do {
+      blackRoomCeoRefreshPendingForce = false;
+      await refreshBlackRoomCeoOnce(nextForce);
+      nextForce = true;
+    } while (blackRoomCeoRefreshPendingForce);
   })().finally(() => { blackRoomCeoRefreshPromise = null; });
   return blackRoomCeoRefreshPromise;
 }
@@ -210,8 +229,20 @@ export function hasValidBlackRoomRemoteToken(authorization: string | undefined, 
   return suppliedBuffer.length === expectedBuffer.length && timingSafeEqual(suppliedBuffer, expectedBuffer);
 }
 
+export function summarizeBlackRoomAnalyticsImports(state: BlackRoomRemoteControlState) {
+  return Object.fromEntries(Object.entries(state.analyticsImports || {}).map(([network, imported]) => [
+    network,
+    {
+      sampleCount: imported?.samples.length || 0,
+      sourceFiles: imported?.sourceFiles || [],
+      importedAt: imported?.importedAt || null,
+    },
+  ]));
+}
+
 function remoteView(state: BlackRoomRemoteControlState) {
-  return { ...state, online: isBlackRoomRemoteDeviceOnline(state) };
+  const analyticsImports = summarizeBlackRoomAnalyticsImports(state);
+  return { ...state, analyticsImports, online: isBlackRoomRemoteDeviceOnline(state) };
 }
 
 function blackRoomCounter(value: unknown): number {
@@ -287,6 +318,36 @@ export function registerBlackRoomControlRoutes(app: Express): void {
       const remote = await readBlackRoomRemoteControl();
       res.json({ remote: remoteView(remote) });
     } catch (error: any) { res.status(502).json({ error: error.message || "No pude actualizar los analytics de Metricool" }); }
+  });
+  app.post("/api/blackroom-agent/analytics/import", async (req, res) => {
+    if (!hasValidBlackRoomRemoteToken(req.get("authorization"))) {
+      return res.status(401).json({ error: "Invalid BlackRoom device token" });
+    }
+    const imports = Array.isArray(req.body?.imports) ? req.body.imports : [];
+    if (!imports.length || imports.length > 6) {
+      return res.status(400).json({ error: "Send between one and six Metricool CSV imports" });
+    }
+    const acceptedNetworks = new Set<BlackRoomAnalyticsNetwork>(["tiktok", "facebook", "youtube"]);
+    const normalized = imports.map((input: any) => ({
+      network: String(input?.network || "") as BlackRoomAnalyticsNetwork,
+      sourceFiles: Array.isArray(input?.sourceFiles) ? input.sourceFiles.slice(0, 20) : [],
+      samples: Array.isArray(input?.samples) ? input.samples : [],
+    }));
+    if (normalized.some((input) => !acceptedNetworks.has(input.network) || input.samples.length > 2_000)) {
+      return res.status(400).json({ error: "Invalid network or too many CSV samples" });
+    }
+    try {
+      let totals = { tiktok: 0, facebook: 0, youtube: 0 };
+      await mutateBlackRoomRemoteControl((state) => {
+        totals = upsertBlackRoomAnalyticsImports(state, normalized);
+      });
+      res.status(202).json({ accepted: true, totals });
+      void refreshBlackRoomCeo(true).catch((error) => {
+        console.error("[blackroom-ceo] CSV analytics refresh failed:", error instanceof Error ? error.message : error);
+      });
+    } catch (error: any) {
+      res.status(500).json({ error: error.message || "Failed to import Metricool CSV analytics" });
+    }
   });
   app.post("/api/blackroom-agent/start", async (req, res) => {
     try {

@@ -25,6 +25,7 @@ const PUBLIC_API_PATHS = [
   "/api/canva/oauth/callback",
   "/api/zoho/callback",
   "/api/blackroom-agent/remote",
+  "/api/blackroom-agent/analytics/import",
   "/api/blackroom-agent/metricool/schedule",
 ];
 

@@ -6,6 +6,7 @@ import {
   BLACKROOM_TIMEZONE,
   formatMetricoolMcpDate,
 } from "./blackroom-metricool-bridge";
+import type { BlackRoomAnalyticsNetwork, BlackRoomImportedAnalyticsSample } from "./blackroom-remote-control";
 
 export const BLACKROOM_CEO_MIN_SAMPLES = 21;
 export const BLACKROOM_CEO_DAILY_POSTS = 5;
@@ -55,6 +56,8 @@ export interface BlackRoomCeoAnalytics {
   /** Number of Metricool tool calls used to assemble each deduplicated
    * historical cohort. */
   historyRequestsByNetwork?: Record<string, number>;
+  /** Samples supplied by deterministic Metricool CSV exports on the Mac. */
+  importedSamplesByNetwork?: Record<string, number>;
   recommendedTimes: string[];
   recommendedTimesByNetwork?: Record<string, string[]>;
   networkMedianViews?: Record<string, number>;
@@ -69,6 +72,35 @@ export interface BlackRoomCeoAnalytics {
   creativeChangedAt: string;
   creativeReason: string;
   reason: string;
+}
+
+export function recommendBlackRoomTimesFromImportedSamples(
+  samples: BlackRoomImportedAnalyticsSample[],
+): string[] {
+  const buckets = new Map<string, number[]>();
+  for (const sample of samples) {
+    const raw = String(sample.publishedAt || "");
+    const localMatch = /T(\d{2}):(\d{2})/.exec(raw);
+    if (!localMatch) continue;
+    const hour = Number(localMatch[1]);
+    const minute = Number(localMatch[2]);
+    if (!Number.isInteger(hour) || !Number.isInteger(minute) || hour > 23 || minute > 59) continue;
+    const roundedMinutes = Math.round(minute / 30) * 30;
+    const bucketHour = (hour + Math.floor(roundedMinutes / 60)) % 24;
+    const time = `${String(bucketHour).padStart(2, "0")}:${String(roundedMinutes % 60).padStart(2, "0")}`;
+    const values = buckets.get(time) || [];
+    values.push(sample.views);
+    buckets.set(time, values);
+  }
+  return [...buckets]
+    .map(([time, views]) => ({
+      time,
+      count: views.length,
+      median: median(views),
+    }))
+    .sort((left, right) => right.median - left.median || right.count - left.count || left.time.localeCompare(right.time))
+    .slice(0, 4)
+    .map((bucket) => bucket.time);
 }
 
 function records(value: unknown): Record<string, any>[] {
@@ -870,11 +902,24 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   fetch?: typeof fetch;
   now?: Date;
   previous?: Partial<BlackRoomCeoAnalytics> | null;
+  importedSamplesByNetwork?: Partial<Record<BlackRoomAnalyticsNetwork, BlackRoomImportedAnalyticsSample[]>>;
 } = {}): Promise<BlackRoomCeoAnalytics> {
   const env = options.env || process.env;
   const fetcher = options.fetch || fetch;
   const now = options.now || new Date();
-  const tools = await listMetricoolMcpTools({ env, fetch: fetcher });
+  const importedSamplesByNetwork = Object.fromEntries(BLACKROOM_METRICOOL_NETWORKS.map((network) => [
+    network,
+    (options.importedSamplesByNetwork?.[network as BlackRoomAnalyticsNetwork] || []).slice(-10_000),
+  ])) as Record<BlackRoomAnalyticsNetwork, BlackRoomImportedAnalyticsSample[]>;
+  const importedTotal = Object.values(importedSamplesByNetwork).reduce((total, samples) => total + samples.length, 0);
+  let tools: Awaited<ReturnType<typeof listMetricoolMcpTools>> = [];
+  let catalogError = "";
+  try {
+    tools = await listMetricoolMcpTools({ env, fetch: fetcher });
+  } catch (error) {
+    if (!importedTotal) throw error;
+    catalogError = error instanceof Error ? error.message.slice(0, 240) : "Metricool MCP no disponible";
+  }
   // Metricool currently exposes getAnalyticsDataByMetrics plus
   // getAnalyticsAvailableMetrics. Older installations expose one direct
   // post/video tool per network. Support both contracts, but never treat
@@ -894,7 +939,7 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const bestTimesTool = tools.find((tool) => /best.*time|time.*post/i.test(tool.name));
   const hasDirectDataTool = BLACKROOM_METRICOOL_NETWORKS.some((network) =>
     directMetricoolToolsForNetwork(tools, network).length > 0);
-  if (!analyticsDataTool && !hasDirectDataTool) {
+  if (!analyticsDataTool && !hasDirectDataTool && !importedTotal) {
     throw new Error("Metricool MCP does not expose a compatible metrics tool");
   }
   const networkSamples: Record<string, number> = {};
@@ -904,12 +949,19 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const networkErrors: Record<string, string> = {};
   const historyCompleteByNetwork: Record<string, boolean> = {};
   const historyRequestsByNetwork: Record<string, number> = {};
+  const importedCounts: Record<string, number> = {};
   const networkMetricFailures = new Set<string>();
   let tiktokPostIds: string[] = [];
   for (const network of BLACKROOM_METRICOOL_NETWORKS) {
     const directTools = directMetricoolToolsForNetwork(tools, network);
     const networkHistory = emptyMetricoolHistory(true);
     const connectorErrors: string[] = [];
+    const importedSamples = importedSamplesByNetwork[network as BlackRoomAnalyticsNetwork] || [];
+    importedCounts[network] = importedSamples.length;
+    for (const sample of importedSamples) {
+      networkHistory.metricIds.add(sample.id);
+      networkHistory.viewRecords.set(sample.id, sample.views);
+    }
     try {
       if (directTools.length) {
         for (const tool of directTools) {
@@ -959,20 +1011,28 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
           }
         }
       }
-      if (!networkHistory.requests) throw new Error(connectorErrors.join(" | ") || "Metricool no devolvió datos");
+      if (!networkHistory.requests && !importedSamples.length) {
+        throw new Error(connectorErrors.join(" | ") || catalogError || "Metricool no devolvió datos");
+      }
       networkSamples[network] = networkHistory.metricIds.size;
       const viewRecords = [...networkHistory.viewRecords].map(([id, views]) => ({ id, views }));
       viewsByNetwork[network] = viewRecords.map((record) => record.views);
       if (network === "tiktok") tiktokPostIds = viewRecords.map((record) => record.id);
-      historyCompleteByNetwork[network] = networkHistory.complete && connectorErrors.length === 0;
+      historyCompleteByNetwork[network] = networkHistory.requests > 0
+        && networkHistory.complete
+        && connectorErrors.length === 0;
       historyRequestsByNetwork[network] = networkHistory.requests;
-      if (connectorErrors.length) networkErrors[network] = connectorErrors.join(" | ").slice(0, 240);
+      if (connectorErrors.length || (catalogError && importedSamples.length)) {
+        networkErrors[network] = [...connectorErrors, catalogError].filter(Boolean).join(" | ").slice(0, 240);
+      }
     } catch (error) {
-      networkSamples[network] = 0;
-      viewsByNetwork[network] = [];
+      networkSamples[network] = networkHistory.metricIds.size;
+      const viewRecords = [...networkHistory.viewRecords].map(([id, views]) => ({ id, views }));
+      viewsByNetwork[network] = viewRecords.map((record) => record.views);
+      if (network === "tiktok") tiktokPostIds = viewRecords.map((record) => record.id);
       historyCompleteByNetwork[network] = false;
-      historyRequestsByNetwork[network] = 0;
-      networkMetricFailures.add(network);
+      historyRequestsByNetwork[network] = networkHistory.requests;
+      if (!importedSamples.length) networkMetricFailures.add(network);
       networkErrors[network] = error instanceof Error ? error.message.slice(0, 240) : "Metricool no devolvió métricas";
     }
     if (bestTimesTool) {
@@ -995,6 +1055,14 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
         networkErrors[network] = [networkErrors[network], error instanceof Error ? error.message.slice(0, 240) : "Metricool no devolvió horarios"].filter(Boolean).join(" · ");
       }
     }
+    const importedTimes = recommendBlackRoomTimesFromImportedSamples(importedSamples);
+    if (importedTimes.length) {
+      recommendedTimesByNetwork[network] = [...new Set([
+        ...importedTimes,
+        ...(recommendedTimesByNetwork[network] || []),
+      ])].slice(0, 4);
+      times.push(...importedTimes);
+    }
   }
   if (BLACKROOM_METRICOOL_NETWORKS.every((network) => networkMetricFailures.has(network))) {
     throw new Error(`Metricool no devolvió analíticas: ${Object.entries(networkErrors).map(([network, message]) => `${network}: ${message}`).join(" | ")}`);
@@ -1013,6 +1081,9 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const historyReason = completeNetworks === BLACKROOM_METRICOOL_NETWORKS.length
     ? "Historial disponible importado y deduplicado en las tres redes."
     : `Historial importado parcialmente (${completeNetworks}/${BLACKROOM_METRICOOL_NETWORKS.length} redes completas); Metricool limitó las demás.`;
+  const csvReason = importedTotal
+    ? `El puente CSV local aportó ${importedTotal} resultados sin usar IA ni API pagada.`
+    : "Aún no hay resultados del puente CSV local.";
   return {
     sampleCount,
     lastCheckedAt: now.toISOString(),
@@ -1024,12 +1095,13 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
     historyStartDate: configuredHistoryStartDate(env),
     historyCompleteByNetwork,
     historyRequestsByNetwork,
+    importedSamplesByNetwork: importedCounts,
     recommendedTimes,
     recommendedTimesByNetwork,
     ...networkLearning,
     ...creative,
     reason: comparableSampleCount >= BLACKROOM_CEO_MIN_SAMPLES
-      ? `${historyReason} El CEO estudia resultados reales de las tres redes: ${targets}. ${creative.creativeReason}`
-      : `${historyReason} Importó ${sampleCount} resultados reales; recolectando evidencia comparable (${comparableSampleCount}/${BLACKROOM_CEO_MIN_SAMPLES}) antes de cambiar horas o volumen. ${creative.creativeReason}`,
+      ? `${csvReason} ${historyReason} El CEO estudia resultados reales de las tres redes: ${targets}. ${creative.creativeReason}`
+      : `${csvReason} ${historyReason} Importó ${sampleCount} resultados reales; recolectando evidencia comparable (${comparableSampleCount}/${BLACKROOM_CEO_MIN_SAMPLES}) antes de cambiar horas o volumen. ${creative.creativeReason}`,
   };
 }

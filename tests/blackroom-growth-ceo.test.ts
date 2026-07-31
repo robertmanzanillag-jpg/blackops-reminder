@@ -13,6 +13,7 @@ import {
   planBlackRoomCreativeLearning,
   planBlackRoomCampaignPosts,
   planBlackRoomNetworkLearning,
+  recommendBlackRoomTimesFromImportedSamples,
 } from "../server/blackroom-growth-ceo";
 
 function minutes(time: string): number {
@@ -28,6 +29,43 @@ test("five-post baseline exploration slots cover overnight, morning, afternoon a
   assert.ok(slots.some((slot) => minutes(slot) >= 12 * 60 && minutes(slot) < 18 * 60));
   assert.ok(slots.some((slot) => minutes(slot) >= 18 * 60));
   for (let index = 1; index < slots.length; index += 1) assert.ok(minutes(slots[index]) - minutes(slots[index - 1]) >= 90);
+});
+
+test("CSV fallback feeds the CEO without Metricool analytics API availability", async () => {
+  const imported = {
+    tiktok: [
+      { id: "tt-1", views: 9, publishedAt: "2026-07-27T03:31:00", durationSeconds: 30 },
+      { id: "tt-2", views: 205, publishedAt: "2026-07-28T09:30:00", durationSeconds: 30 },
+    ],
+    facebook: [
+      { id: "fb-1", views: 12, publishedAt: "2026-07-27T14:01:00" },
+      { id: "fb-2", views: 100, publishedAt: "2026-07-28T19:05:00" },
+    ],
+    youtube: [
+      { id: "yt-1", views: 63, publishedAt: "2026-07-27T08:02:00" },
+      { id: "yt-2", views: 149, publishedAt: "2026-07-28T14:03:00" },
+    ],
+  };
+  const analytics = await collectBlackRoomMetricoolAnalytics({
+    fetch: (async () => { throw new Error("MCP unavailable"); }) as typeof fetch,
+    importedSamplesByNetwork: imported,
+    now: new Date("2026-07-30T12:00:00.000Z"),
+  });
+  assert.equal(analytics.sampleCount, 6);
+  assert.equal(analytics.comparableSampleCount, 2);
+  assert.deepEqual(analytics.networkSamples, { tiktok: 2, facebook: 2, youtube: 2 });
+  assert.deepEqual(analytics.importedSamplesByNetwork, { tiktok: 2, facebook: 2, youtube: 2 });
+  assert.equal(analytics.tiktokMedianViews, 107);
+  assert.ok(analytics.recommendedTimes.includes("09:30"));
+  assert.match(analytics.reason, /puente CSV local aportó 6 resultados sin usar IA ni API pagada/);
+});
+
+test("CSV time recommendations rank high-view publishing buckets deterministically", () => {
+  assert.deepEqual(recommendBlackRoomTimesFromImportedSamples([
+    { id: "a", views: 10, publishedAt: "2026-07-27T03:31:00" },
+    { id: "b", views: 200, publishedAt: "2026-07-28T09:29:00" },
+    { id: "c", views: 100, publishedAt: "2026-07-29T09:31:00" },
+  ]), ["09:30", "03:30"]);
 });
 
 test("collects each network through discovered Metricool MCP tools and totals usable historical samples", async () => {
