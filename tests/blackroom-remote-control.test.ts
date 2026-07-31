@@ -10,6 +10,7 @@ import {
   appendBlackRoomRemoteCommand,
   appendBlackRoomCeoCommand,
   upsertBlackRoomAnalyticsImports,
+  recordBlackRoomRescheduleReport,
 } from "../server/blackroom-remote-control";
 import { isPublicApiPath } from "../server/user-context";
 import { DEFAULT_DEV_USER_ID } from "../server/user-context";
@@ -30,6 +31,22 @@ test("remote command increments its monotonic generation", () => {
   assert.equal(state.desiredEnabled, true);
   assert.equal(state.weeks, 3);
   assert.equal(state.generation, 1);
+});
+
+test("verified scheduling experiments are retained for CEO learning", () => {
+  const state = createBlackRoomRemoteControlState();
+  recordBlackRoomRescheduleReport(state, {
+    checkedAt: "2026-07-30T12:00:00.000Z",
+    experiments: [{
+      postId: "44", uuid: "post-44", network: "facebook",
+      from: "2026-08-02T12:00:00", to: "2026-08-02T18:00:00",
+      movedAt: "2026-07-30T12:00:00.000Z", status: "verified",
+    }],
+  });
+  assert.equal(state.rescheduleLearning.movedCount, 1);
+  assert.equal(state.rescheduleLearning.lastMovedAt, "2026-07-30T12:00:00.000Z");
+  assert.equal(state.rescheduleLearning.experiments[0].postId, "44");
+  assert.match(blackRoomPage, /pruebas de horario verificadas/);
 });
 
 test("remote control cannot reduce the campaign below two weeks", () => {

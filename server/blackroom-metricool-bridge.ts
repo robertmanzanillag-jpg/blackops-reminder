@@ -477,6 +477,31 @@ export async function listMetricoolMcpTools(
   return tools.filter((tool: any) => typeof tool?.name === "string");
 }
 
+export async function readBlackRoomMetricoolScheduledPosts(
+  input: { start: string; end: string; blogId?: number; timezone?: string },
+  options: { env?: NodeJS.ProcessEnv; fetch?: FetchLike } = {},
+): Promise<unknown> {
+  const env = options.env || process.env;
+  const fetcher = options.fetch || fetch;
+  const token = requiredEnv(env, "METRICOOL_USER_TOKEN");
+  const userId = requiredEnv(env, "METRICOOL_USER_ID");
+  const blogId = input.blogId || Number(env.BLACKROOM_METRICOOL_BLOG_ID || BLACKROOM_METRICOOL_BLOG_ID);
+  if (!Number.isInteger(blogId) || blogId <= 0) throw new Error("Invalid Metricool blogId");
+  const timezone = input.timezone || BLACKROOM_TIMEZONE;
+  const url = new URL("https://app.metricool.com/api/v2/scheduler/posts");
+  url.searchParams.set("blogId", String(blogId));
+  url.searchParams.set("userId", userId);
+  url.searchParams.set("integrationSource", "MCP");
+  url.searchParams.set("start", input.start);
+  url.searchParams.set("end", input.end);
+  url.searchParams.set("timezone", timezone);
+  url.searchParams.set("extendedRange", "true");
+  return metricoolJson(await fetcher(url, {
+    headers: { "X-Mc-Auth": token, accept: "application/json" },
+    signal: AbortSignal.timeout(60_000),
+  }), "scheduled-post read");
+}
+
 export async function scheduleBlackRoomMetricoolPost(
   input: BlackRoomMetricoolScheduleInput,
   options: {
