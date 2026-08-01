@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -48,6 +48,60 @@ test("honors an explicit workspace root outside the project directory", async ()
   } finally {
     if (previous === undefined) delete process.env.CLIPPERS_WORKSPACE_ROOT;
     else process.env.CLIPPERS_WORKSPACE_ROOT = previous;
+  }
+});
+
+test("loads only selected credentials from a separate config root", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-free-worker-project-"));
+  const configRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-free-worker-config-"));
+  const previous = {
+    authorization: process.env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED,
+    configRoot: process.env.CLIPPERS_CONFIG_ROOT,
+    token: process.env.METRICOOL_USER_TOKEN,
+    userId: process.env.METRICOOL_USER_ID,
+    blogId: process.env.CLIPPERS_METRICOOL_BLOG_ID,
+    openai: process.env.OPENAI_API_KEY,
+  };
+  const calls = [];
+  try {
+    await writeFile(path.join(configRoot, ".env.local"), [
+      "METRICOOL_USER_TOKEN=metricool-from-config",
+      "METRICOOL_USER_ID=3558197",
+      "CLIPPERS_METRICOOL_BLOG_ID=6431687",
+      "OPENAI_API_KEY=must-not-load",
+    ].join("\n"));
+    process.env.CLIPPERS_CONFIG_ROOT = configRoot;
+    process.env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED = "true";
+    delete process.env.METRICOOL_USER_TOKEN;
+    delete process.env.METRICOOL_USER_ID;
+    delete process.env.CLIPPERS_METRICOOL_BLOG_ID;
+    process.env.OPENAI_API_KEY = "must-not-pass";
+    const result = await runClipperFreeLocalWorker({
+      projectRoot,
+      run(command, args, options) {
+        calls.push({ command, args, env: options.env });
+        return { command: [command, ...args].join(" "), status: 0, signal: null, stdout: "", stderr: "" };
+      },
+    });
+    assert.equal(result.metricoolDeliveryEnabled, true);
+    assert.equal(calls[1].env.METRICOOL_USER_TOKEN, "metricool-from-config");
+    assert.equal(calls[1].env.METRICOOL_USER_ID, "3558197");
+    assert.equal(calls[1].env.CLIPPERS_METRICOOL_BLOG_ID, "6431687");
+    assert.equal(calls[1].env.OPENAI_API_KEY, undefined);
+  } finally {
+    const envNames = {
+      authorization: "CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED",
+      configRoot: "CLIPPERS_CONFIG_ROOT",
+      token: "METRICOOL_USER_TOKEN",
+      userId: "METRICOOL_USER_ID",
+      blogId: "CLIPPERS_METRICOOL_BLOG_ID",
+      openai: "OPENAI_API_KEY",
+    };
+    for (const [key, value] of Object.entries(previous)) {
+      const envName = envNames[key];
+      if (value === undefined) delete process.env[envName];
+      else process.env[envName] = value;
+    }
   }
 });
 

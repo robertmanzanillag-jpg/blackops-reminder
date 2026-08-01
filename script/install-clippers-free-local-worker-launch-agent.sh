@@ -4,7 +4,9 @@ umask 077
 
 PROJECT_DIR="${CLIPPERS_PROJECT_DIR:-$(pwd)}"
 PLIST_PATH="$HOME/Library/LaunchAgents/com.blackops.clippers-free-worker.plist"
+CONFIG_ROOT="${CLIPPERS_CONFIG_ROOT:-$PROJECT_DIR}"
 WORKSPACE_ROOT="${CLIPPERS_WORKSPACE_ROOT:-$PROJECT_DIR/clippers_workspace}"
+[[ "$CONFIG_ROOT" == /* ]] || CONFIG_ROOT="$PROJECT_DIR/$CONFIG_ROOT"
 [[ "$WORKSPACE_ROOT" == /* ]] || WORKSPACE_ROOT="$PROJECT_DIR/$WORKSPACE_ROOT"
 LOG_DIR="$WORKSPACE_ROOT/reports/free-local-worker"
 NPM_PATH="$(command -v npm)"
@@ -48,6 +50,7 @@ cat > "$PLIST_PATH" <<PLIST
   <key>WorkingDirectory</key><string>$(escape_xml "$PROJECT_DIR")</string>
   <key>EnvironmentVariables</key><dict>
     <key>PATH</key><string>$(escape_xml "$PATH")</string>
+    <key>CLIPPERS_CONFIG_ROOT</key><string>$(escape_xml "$CONFIG_ROOT")</string>
     <key>CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED</key><string>$(escape_xml "$PUBLISHING_AUTHORIZED")</string>
     <key>CLIPPERS_WORKSPACE_ROOT</key><string>$(escape_xml "$WORKSPACE_ROOT")</string>
     <key>CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED</key><string>$(escape_xml "$MEDIA_UPLOAD_AUTHORIZED")</string>

@@ -31,7 +31,10 @@ function run(command, args, options = {}) {
 
 export async function runClipperFreeLocalWorker(options = {}) {
   const projectRoot = path.resolve(options.projectRoot || process.cwd());
-  loadClipperSelectedEnv(projectRoot);
+  const configRoot = path.resolve(
+    options.configRoot || process.env.CLIPPERS_CONFIG_ROOT || projectRoot,
+  );
+  loadClipperSelectedEnv(configRoot);
   const workspaceRoot = path.resolve(
     options.workspaceRoot || process.env.CLIPPERS_WORKSPACE_ROOT || path.join(projectRoot, "clippers_workspace"),
   );

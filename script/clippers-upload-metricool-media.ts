@@ -30,6 +30,8 @@ type Campaign = Record<string, any> & {
 type UploadReceipt = {
   campaignId: string;
   draftFile: string;
+  mediaFile: string;
+  provider: "google_drive";
   fileId: string;
   mediaUrl: string;
   sha256: string;
@@ -194,6 +196,7 @@ export async function runClipperMetricoolMediaUpload(options: {
       }
       const fileInfo = await stat(validated);
       const sha256 = await fileSha256(validated);
+      const mediaFile = path.relative(workspaceRoot, validated);
       const existing = receiptByDraft.get(draftFile);
       if (existing?.sha256 === sha256 && /^https:\/\//i.test(existing.mediaUrl)) {
         let mediaUrl = existing.mediaUrl;
@@ -203,6 +206,9 @@ export async function runClipperMetricoolMediaUpload(options: {
           reachable = await dependencies.verifyPublicUrl(mediaUrl);
         }
         if (reachable) {
+          existing.provider = "google_drive";
+          existing.mediaFile = mediaFile;
+          existing.sizeBytes = fileInfo.size;
           existing.mediaUrl = mediaUrl;
           receiptByDraft.set(draftFile, existing);
           campaign.publicMediaUrls[draftFile] = mediaUrl;
@@ -223,6 +229,8 @@ export async function runClipperMetricoolMediaUpload(options: {
       const receipt: UploadReceipt = {
         campaignId: campaign.id,
         draftFile,
+        mediaFile,
+        provider: "google_drive",
         fileId: upload.fileId,
         mediaUrl,
         sha256,
@@ -253,7 +261,7 @@ export async function runClipperMetricoolMediaUpload(options: {
 }
 
 async function main() {
-  loadClipperSelectedEnv(process.cwd());
+  loadClipperSelectedEnv(process.env.CLIPPERS_CONFIG_ROOT || process.cwd());
   const result = await runClipperMetricoolMediaUpload();
   console.log(JSON.stringify(result, null, 2));
   if (!["completed", "partial"].includes(result.status)) process.exitCode = 1;

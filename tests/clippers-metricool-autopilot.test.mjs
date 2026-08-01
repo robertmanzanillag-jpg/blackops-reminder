@@ -1,11 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, open, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdir, mkdtemp, open, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import {
   buildPublicationSchedule,
+  hasTrustedPublicMediaReceipt,
   runMetricoolAutopilot,
   validateAutopilotItem,
 } from "../script/clippers-metricool-autopilot.mjs";
@@ -17,9 +19,20 @@ const eligible = {
   blogId: 6431687,
   caption: "MrBeast on pyramids. #MrBeast #paidpartner",
   requiredHashtags: ["#MrBeast", "#paidpartner"],
-  mediaUrl: "https://media.example.org/mrbeast-07.mp4",
+  mediaUrl: "https://drive.usercontent.google.com/download?id=1AbCdEfGhIjKlMnOp&export=download&confirm=t",
   status: "ready_for_metricool_autopilot",
   publishAllowed: true,
+};
+const eligibleReceipt = {
+  campaignId: eligible.campaignId,
+  draftFile: eligible.draftFile,
+  mediaFile: eligible.draftFile,
+  provider: "google_drive",
+  fileId: "1AbCdEfGhIjKlMnOp",
+  mediaUrl: eligible.mediaUrl,
+  sha256: "a".repeat(64),
+  sizeBytes: 1024,
+  uploadedAt: "2026-07-28T04:00:00.000Z",
 };
 
 test("requires every contractual hashtag and a public HTTPS media URL", () => {
@@ -32,6 +45,34 @@ test("requires every contractual hashtag and a public HTTPS media URL", () => {
     .blockers.includes("public_https_media_required"));
   assert.ok(validateAutopilotItem({ ...eligible, account: "another" }, "streamersclipusa")
     .blockers.includes("wrong_account"));
+});
+
+test("requires the exact public URL and local MP4 hash to match a validated upload receipt", async () => {
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-metricool-receipt-"));
+  const mediaPath = path.join(workspaceRoot, eligible.draftFile);
+  try {
+    await mkdir(path.dirname(mediaPath), { recursive: true });
+    const content = Buffer.from("verified-local-mp4-fixture");
+    await writeFile(mediaPath, content);
+    const receipt = {
+      ...eligibleReceipt,
+      sha256: createHash("sha256").update(content).digest("hex"),
+      sizeBytes: content.length,
+    };
+    assert.equal(await hasTrustedPublicMediaReceipt(eligible, [receipt], workspaceRoot), true);
+    assert.equal(await hasTrustedPublicMediaReceipt(
+      { ...eligible, mediaUrl: "https://drive.usercontent.google.com/download?id=1OtherFileId2345&export=download&confirm=t" },
+      [receipt],
+      workspaceRoot,
+    ), false);
+    assert.equal(await hasTrustedPublicMediaReceipt(
+      eligible,
+      [{ ...receipt, sha256: "b".repeat(64) }],
+      workspaceRoot,
+    ), false);
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
 });
 
 test("builds five spaced daily slots after the current time", () => {
@@ -78,6 +119,8 @@ test("schedules eligible unique rows through Metricool MCP and writes no paid sp
       workspaceRoot,
       queue: { targetDailyClips: 5, items: [eligible] },
       ledger: [],
+      receipts: [eligibleReceipt],
+      verifyMediaReceipt: async () => true,
       now: new Date("2026-07-28T05:00:00.000Z"),
       async fetch(url, init) {
         if (url === "https://ai.metricool.com/mcp") {
@@ -134,6 +177,8 @@ test("records an uncertain Metricool outcome and never retries it silently", asy
       workspaceRoot,
       queue: { targetDailyClips: 5, items: [eligible] },
       ledger: [],
+      receipts: [eligibleReceipt],
+      verifyMediaReceipt: async () => true,
       now: new Date("2026-07-28T05:00:00.000Z"),
       async fetch(url) {
         if (url === "https://ai.metricool.com/mcp") {
@@ -165,6 +210,8 @@ test("records an uncertain Metricool outcome and never retries it silently", asy
       workspaceRoot,
       queue: { targetDailyClips: 5, items: [eligible] },
       ledger: result.results,
+      receipts: [eligibleReceipt],
+      verifyMediaReceipt: async () => true,
       now: new Date("2026-07-28T05:00:00.000Z"),
       async fetch() {
         throw new Error("A pending item must not be submitted twice");
@@ -190,6 +237,8 @@ test("blocks a queue item routed to a different Metricool blog", async () => {
       workspaceRoot,
       queue: { targetDailyClips: 5, items: [{ ...eligible, blogId: 6595747 }] },
       ledger: [],
+      receipts: [eligibleReceipt],
+      verifyMediaReceipt: async () => true,
       now: new Date("2026-07-28T05:00:00.000Z"),
       async fetch() {
         throw new Error("Wrong Metricool blogs must not be called");
@@ -219,6 +268,8 @@ test("blocks a slot that would run after the verified campaign expiry", async ()
         items: [{ ...eligible, campaignExpiresAt: "2026-07-28T13:00:00.000Z" }],
       },
       ledger: [],
+      receipts: [eligibleReceipt],
+      verifyMediaReceipt: async () => true,
       now: new Date("2026-07-28T05:00:00.000Z"),
       async fetch(url) {
         if (url === "https://ai.metricool.com/mcp") mcpCalls += 1;
@@ -253,6 +304,8 @@ test("blocks an already expired campaign without calling Metricool", async () =>
         items: [{ ...eligible, campaignExpiresAt: "2026-07-28T04:00:00.000Z" }],
       },
       ledger: [],
+      receipts: [eligibleReceipt],
+      verifyMediaReceipt: async () => true,
       now: new Date("2026-07-28T05:00:00.000Z"),
       async fetch() {
         fetchCalls += 1;
@@ -281,6 +334,8 @@ test("deduplicates identical items inside one queue before calling Metricool", a
       workspaceRoot,
       queue: { targetDailyClips: 5, items: [eligible, { ...eligible }] },
       ledger: [],
+      receipts: [eligibleReceipt],
+      verifyMediaReceipt: async () => true,
       now: new Date("2026-07-28T05:00:00.000Z"),
       async fetch(url) {
         if (url === "https://ai.metricool.com/mcp") {
@@ -328,6 +383,29 @@ test("skips a concurrent autopilot run while its lock is active", async () => {
     assert.equal(result.reason, "already_running");
   } finally {
     await lock.close();
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("blocks safely when the trusted receipt ledger is malformed", async () => {
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-metricool-malformed-receipts-"));
+  const reportDir = path.join(workspaceRoot, "reports");
+  try {
+    await mkdir(reportDir, { recursive: true });
+    await writeFile(path.join(reportDir, "metricool-public-media-receipts.json"), "{malformed");
+    const result = await runMetricoolAutopilot({
+      env: { CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true" },
+      workspaceRoot,
+      queue: { targetDailyClips: 5, items: [eligible] },
+      ledger: [],
+      async fetch() {
+        throw new Error("Malformed receipts must block before any network call");
+      },
+    });
+    assert.equal(result.status, "blocked");
+    assert.equal(result.reason, "trusted_media_receipt_malformed");
+    assert.equal(result.scheduled, 0);
+  } finally {
     await rm(workspaceRoot, { recursive: true, force: true });
   }
 });

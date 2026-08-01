@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
+import { createReadStream } from "node:fs";
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { loadClipperSelectedEnv } from "./clippers-selected-env.mjs";
 
 const METRICOOL_MCP_URL = "https://ai.metricool.com/mcp";
 const TIMEZONE = "America/New_York";
@@ -220,6 +222,39 @@ export function validateAutopilotItem(item, expectedAccount) {
   return { blockers, requiredHashtags, account, caption };
 }
 
+function expectedGoogleDriveMediaUrl(fileId) {
+  const params = new URLSearchParams({ id: fileId, export: "download", confirm: "t" });
+  return `https://drive.usercontent.google.com/download?${params.toString()}`;
+}
+
+async function fileSha256(filePath) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+export async function hasTrustedPublicMediaReceipt(item, receipts, workspaceRoot) {
+  const receipt = (Array.isArray(receipts) ? receipts : []).find((candidate) => (
+    candidate?.provider === "google_drive"
+    && String(candidate?.campaignId || "") === String(item?.campaignId || "")
+    && String(candidate?.mediaFile || "") === String(item?.draftFile || "")
+    && String(candidate?.mediaUrl || "") === String(item?.mediaUrl || "")
+    && /^[a-f0-9]{64}$/i.test(String(candidate?.sha256 || ""))
+    && /^[A-Za-z0-9_-]{10,160}$/.test(String(candidate?.fileId || ""))
+    && String(candidate?.mediaUrl || "") === expectedGoogleDriveMediaUrl(String(candidate?.fileId || ""))
+    && Number(candidate?.sizeBytes) > 0
+    && Number.isFinite(Date.parse(String(candidate?.uploadedAt || "")))
+  ));
+  if (!receipt) return false;
+  const root = path.resolve(workspaceRoot);
+  const mediaPath = path.resolve(root, String(receipt.mediaFile || ""));
+  const relative = path.relative(root, mediaPath);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) return false;
+  const mediaStat = await stat(mediaPath).catch(() => null);
+  if (!mediaStat?.isFile() || mediaStat.size !== Number(receipt.sizeBytes)) return false;
+  return await fileSha256(mediaPath) === String(receipt.sha256).toLowerCase();
+}
+
 function slotIsBeforeCampaignExpiry(item, publicationDateTime) {
   if (!item.campaignExpiresAt) return true;
   const expiresAt = Date.parse(String(item.campaignExpiresAt));
@@ -263,6 +298,7 @@ export async function runMetricoolAutopilot(options = {}) {
   const reportDir = path.join(workspaceRoot, "reports");
   const queuePath = path.join(reportDir, "metricool-autopilot-queue.json");
   const ledgerPath = path.join(reportDir, "metricool-autopilot-ledger.json");
+  const receiptsPath = path.join(reportDir, "metricool-public-media-receipts.json");
   const lockPath = path.join(reportDir, "metricool-autopilot.lock");
   await mkdir(reportDir, { recursive: true });
   const lock = await acquireAutopilotLock(lockPath);
@@ -270,6 +306,26 @@ export async function runMetricoolAutopilot(options = {}) {
   try {
   const queue = options.queue || JSON.parse(await readFile(queuePath, "utf8").catch(() => "{\"items\":[]}"));
   const ledger = options.ledger || JSON.parse(await readFile(ledgerPath, "utf8").catch(() => "[]"));
+  let receipts = options.receipts;
+  if (receipts === undefined) {
+    const rawReceipts = await readFile(receiptsPath, "utf8").catch((error) => {
+      if (error?.code === "ENOENT") return "[]";
+      throw error;
+    });
+    try {
+      receipts = JSON.parse(rawReceipts);
+    } catch {
+      return {
+        status: "blocked",
+        reason: "trusted_media_receipt_malformed",
+        scheduled: 0,
+        blocked: Array.isArray(queue.items) ? queue.items.length : 0,
+        verificationPending: 0,
+        results: [],
+        ledgerPath,
+      };
+    }
+  }
   const token = requiredEnv(env, "METRICOOL_USER_TOKEN");
   const userId = requiredEnv(env, "METRICOOL_USER_ID");
   const expectedBlogId = Number(requiredEnv(env, "CLIPPERS_METRICOOL_BLOG_ID"));
@@ -293,6 +349,9 @@ export async function runMetricoolAutopilot(options = {}) {
     const campaignExpiresAt = item.campaignExpiresAt ? Date.parse(String(item.campaignExpiresAt)) : null;
     const blockers = [
       ...validation.blockers,
+      !await (options.verifyMediaReceipt || hasTrustedPublicMediaReceipt)(item, receipts, workspaceRoot)
+        ? "trusted_media_receipt_missing"
+        : null,
       !Number.isInteger(blogId) || blogId <= 0 ? "metricool_blog_id_missing" : null,
       Number.isInteger(blogId) && blogId > 0 && blogId !== expectedBlogId ? "wrong_metricool_blog" : null,
       campaignExpiresAt !== null && (!Number.isFinite(campaignExpiresAt) || campaignExpiresAt <= now.getTime())
@@ -435,8 +494,11 @@ export async function runMetricoolAutopilot(options = {}) {
   }
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+async function main() {
+  loadClipperSelectedEnv(process.env.CLIPPERS_CONFIG_ROOT || process.cwd());
   const result = await runMetricoolAutopilot();
   console.log(JSON.stringify(result, null, 2));
   if (result.status !== "completed") process.exitCode = 1;
 }
+
+if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) await main();
