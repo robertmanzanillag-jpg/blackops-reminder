@@ -610,8 +610,58 @@ test("durable ledger deduplicates the same event and copy when a later cycle cha
   assert.notEqual(ledger.entries[0].copyHash, ledger.entries[0].reviewedCopyHash);
 });
 
+test("durable ledger deduplicates the same official article URL after copy changes", async () => {
+  const sourceUrl = "https://official.example.gov/news/one-story";
+  const dir = await workspace([item({ id: "source-cycle-one", sourceUrl })]);
+  let posts = 0;
+  const options = {
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async () => {
+      posts += 1;
+      return new Response(JSON.stringify({ id: `post-${posts}` }), { status: 200 });
+    },
+  };
+  assert.equal((await deliverClipperLocalNewsToMetricool(options)).scheduled, 1);
+  await writeFile(path.join(dir, "metricool-queue.json"), JSON.stringify({
+    items: [item({ id: "source-cycle-two", eventId: "different-event", sourceUrl, copy: "Different generated copy for the same official article." })],
+  }), "utf8");
+  const second = await deliverClipperLocalNewsToMetricool(options);
+  assert.equal(second.scheduled, 0);
+  assert.equal(second.alreadyScheduled, 1);
+  assert.equal(posts, 1);
+});
+
+test("breaking stories stop at the bounded daily burst instead of flooding an account", async () => {
+  const dir = await workspace([item({ id: "breaking-over-cap", platform: "facebook", editorialUrgency: "breaking" })]);
+  await writeFile(path.join(dir, "metricool-delivery-ledger.json"), JSON.stringify({
+    version: 1,
+    entries: Array.from({ length: 12 }, (_, index) => ({
+      queueItemId: `already-${index}`,
+      lane: "miami-news",
+      platform: "facebook",
+      blogId: "99",
+      scheduledFor: `2026-07-21T${String(index + 12).padStart(2, "0")}:00:00.000Z`,
+      scheduledAt: "2026-07-21T00:00:00.000Z",
+      metricoolPostId: `post-${index}`,
+    })),
+  }), "utf8");
+  let fetched = false;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async () => { fetched = true; throw new Error("daily burst cap must stop the request"); },
+  });
+  assert.equal(result.scheduled, 0);
+  assert.equal(result.deferred, 1);
+  assert.equal(fetched, false);
+});
+
 test("a real update to an existing event remains publishable when its copy changes", async () => {
-  const dir = await workspace([item({ id: "initial-event-copy" })]);
+  const sourceUrl = "https://official.example.gov/news/developing-story";
+  const dir = await workspace([item({ id: "initial-event-copy", sourceUrl })]);
   let posts = 0;
   const fetcher: typeof fetch = async () => {
     posts += 1;
@@ -626,7 +676,7 @@ test("a real update to an existing event remains publishable when its copy chang
 
   assert.equal((await deliverClipperLocalNewsToMetricool(options)).scheduled, 1);
   await writeFile(path.join(dir, "metricool-queue.json"), JSON.stringify({
-    items: [item({ id: "updated-event-copy", copy: "Reabierta la vía local. Fuente oficial: https://example.gov/road" })],
+    items: [item({ id: "updated-event-copy", eventRevision: 2, sourceUrl, copy: "Reabierta la vía local. Fuente oficial: https://example.gov/road" })],
   }), "utf8");
 
   const second = await deliverClipperLocalNewsToMetricool(options);
@@ -651,6 +701,27 @@ test("deduplicates identical copy inside one queue even when event and queue IDs
     },
   });
 
+  assert.equal(result.scheduled, 1);
+  assert.equal(result.alreadyScheduled, 1);
+  assert.equal(posts, 1);
+});
+
+test("deduplicates one official article URL inside a single queue even when generated copy differs", async () => {
+  const sourceUrl = "https://official.example.gov/news/shared-article";
+  const dir = await workspace([
+    item({ id: "source-duplicate-one", eventId: "source-event-one", sourceUrl, copy: "First generated version." }),
+    item({ id: "source-duplicate-two", eventId: "source-event-two", sourceUrl, copy: "Second generated version." }),
+  ]);
+  let posts = 0;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async () => {
+      posts += 1;
+      return new Response(JSON.stringify({ id: `post-${posts}` }), { status: 200 });
+    },
+  });
   assert.equal(result.scheduled, 1);
   assert.equal(result.alreadyScheduled, 1);
   assert.equal(posts, 1);

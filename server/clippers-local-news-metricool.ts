@@ -11,12 +11,13 @@ import { hashLocalNewsQueueReview, hashLocalNewsReviewValue } from "./clippers-l
 
 const METRICOOL_API = "https://app.metricool.com";
 const TIME_ZONE = "America/New_York";
-const DEFAULT_MAX_PER_RUN = 20;
+const DEFAULT_MAX_PER_RUN = 4;
 const MAX_PER_RUN = 50;
 const MIN_SPACING_MS = 2 * 60_000;
 const STANDARD_SPACING_MS = 75 * 60_000;
 const DAILY_MINIMUM_PER_ACCOUNT = 10;
 const DAILY_MAXIMUM_PER_ACCOUNT = 14;
+const BREAKING_DAILY_BURST = 2;
 const STALE_LOCK_MS = 10 * 60_000;
 const MEDIA_NORMALIZATION_ATTEMPTS = 3;
 const MEDIA_NORMALIZATION_RETRY_MS = 250;
@@ -47,6 +48,7 @@ const queueItemSchema = z.object({
   published: z.literal(false),
   createdAt: z.string().datetime(),
   source: z.string().max(500).optional(),
+  sourceUrl: z.string().url().max(2_000).optional(),
   section: z.enum(["traffic", "weather", "breaking", "public_safety", "local"]).optional(),
   topicTag: z.enum(["violent_crime", "kidnapping", "immigration"]).nullable().optional(),
   editorialUrgency: z.enum(["routine", "developing", "breaking"]).optional(),
@@ -81,6 +83,7 @@ const ledgerEntrySchema = z.object({
   canonicalEventIdentity: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   reviewHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   copyHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
+  sourceUrlHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   reviewedCopyHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   lane: z.enum(["miami-news", "ny-news"]),
   platform: z.enum(["x", "facebook"]),
@@ -274,9 +277,35 @@ function metricoolContentKey(item: Pick<QueueItem, "copy" | "lane" | "platform">
   return `${item.lane}|${item.platform}|${metricoolContentHash(item.copy)}`;
 }
 
+function metricoolSourceUrlHash(sourceUrl: string): string {
+  const normalized = new URL(sourceUrl).toString();
+  return createHash("sha256").update(normalized, "utf8").digest("hex");
+}
+
 function metricoolLedgerContentKey(entry: Ledger["entries"][number]): string | null {
   if (!entry.copyHash) return null;
   return `${entry.lane}|${entry.platform}|${entry.copyHash}`;
+}
+
+function metricoolSourceWasScheduled(item: QueueItem, entries: Ledger["entries"]): boolean {
+  if (!item.sourceUrl) return false;
+  let sourceUrlHash: string;
+  try {
+    sourceUrlHash = metricoolSourceUrlHash(item.sourceUrl);
+  } catch {
+    return false;
+  }
+  return entries.some((entry) => {
+    if (entry.lane !== item.lane || entry.platform !== item.platform || entry.sourceUrlHash !== sourceUrlHash) return false;
+    const isNewerRevision = Boolean(
+      entry.eventId
+      && entry.eventId === item.eventId
+      && entry.eventRevision
+      && item.eventRevision
+      && item.eventRevision > entry.eventRevision,
+    );
+    return !isNewerRevision;
+  });
 }
 
 function defaultWorkspace(env: NodeJS.ProcessEnv): string {
@@ -681,7 +710,8 @@ export async function deliverClipperLocalNewsToMetricool(
       if (!eligible || deferred) return false;
 
       const duplicate = already.has(item.id)
-        || scheduledContentKeys.has(metricoolContentKey(item));
+        || scheduledContentKeys.has(metricoolContentKey(item))
+        || metricoolSourceWasScheduled(item, ledger.entries);
       if (duplicate) {
         result.alreadyScheduled += 1;
         return false;
@@ -744,7 +774,7 @@ export async function deliverClipperLocalNewsToMetricool(
     let attempts = 0;
     for (const item of safeItems) {
       const contentKey = metricoolContentKey(item);
-      if (scheduledContentKeys.has(contentKey)) {
+      if (scheduledContentKeys.has(contentKey) || metricoolSourceWasScheduled(item, ledger.entries)) {
         result.alreadyScheduled += 1;
         continue;
       }
@@ -758,6 +788,11 @@ export async function deliverClipperLocalNewsToMetricool(
       const cursorKey = accountKey(item);
       const breaking = item.editorialUrgency === "breaking";
       const target = dailyTargetByAccount.get(cursorKey) || DAILY_MINIMUM_PER_ACCOUNT;
+      const todayAccountKey = `${cursorKey}|${easternDateKey(fetchedNow)}`;
+      if (breaking && (scheduledByAccountDay.get(todayAccountKey) || 0) >= target + BREAKING_DAILY_BURST) {
+        result.deferred += 1;
+        continue;
+      }
       // Breaking items bypass the routine cursor and are sent to Metricool's immediate slot.
       // Routine slots compress late in the day so an underfilled account can still reach its
       // account-wide target, while never violating the two-minute safety floor.
@@ -826,13 +861,14 @@ export async function deliverClipperLocalNewsToMetricool(
           continue;
         }
         const responseBody = await safeJson(response);
-        ledger.entries.push({
+        const ledgerEntry: Ledger["entries"][number] = {
           queueItemId: item.id,
           eventId: item.eventId,
           eventRevision: item.eventRevision,
           canonicalEventIdentity: item.canonicalEventIdentity,
           reviewHash: item.reviewHash,
           copyHash: metricoolContentHash(item.copy),
+          ...(item.sourceUrl ? { sourceUrlHash: metricoolSourceUrlHash(item.sourceUrl) } : {}),
           reviewedCopyHash: hashLocalNewsReviewValue(item.copy),
           lane: item.lane,
           platform: item.platform,
@@ -840,7 +876,8 @@ export async function deliverClipperLocalNewsToMetricool(
           scheduledFor: scheduledDate.toISOString(),
           scheduledAt: fetchedNow.toISOString(),
           metricoolPostId: responsePostId(responseBody),
-        });
+        };
+        ledger.entries.push(ledgerEntry);
         await atomicWriteLedger(ledgerPath, ledger);
         scheduledContentKeys.add(contentKey);
         cursors.set(cursorKey, Math.max(cursors.get(cursorKey) || 0, scheduledMs));
@@ -879,4 +916,5 @@ export const __clipperLocalNewsMetricoolInternals = {
   publicBrandMediaUrl,
   normalizeMetricoolMedia,
   metricoolContentHash,
+  metricoolSourceUrlHash,
 };
