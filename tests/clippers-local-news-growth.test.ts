@@ -33,6 +33,14 @@ test("headline experiments use observed results only after both variants have en
   assert.equal(selectLocalNewsGrowthVariant(event.id, [metrics[0]]), selectLocalNewsGrowthVariant(event.id, []));
 });
 
+test("community learning changes only the format variant when observed metrics are inconclusive", () => {
+  assert.equal(selectLocalNewsGrowthVariant(event.id, [], "explainer"), "utility");
+  assert.equal(selectLocalNewsGrowthVariant(event.id, [], "breaking_alert"), "impact");
+  const growth = buildLocalNewsGrowthPackage(event, [], "https://news.example.com", "question");
+  assert.equal(growth.variantId, "utility");
+  assert.equal(growth.learningSignal, "question");
+});
+
 test("growth package stays zero-cost and produces an owned tracked link plus a local short-form manifest", () => {
   const growth = buildLocalNewsGrowthPackage(event, [], "https://news.example.com/path");
   assert.equal(growth.zeroCost, true);
