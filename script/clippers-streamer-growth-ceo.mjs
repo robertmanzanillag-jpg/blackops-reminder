@@ -5,11 +5,37 @@ import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 
 const captionStrategies = [
-  { id: "direct_insight", captionStyle: "direct", subtitleStyle: "clean_sentence", hookStyle: "clear_claim" },
-  { id: "curiosity_question", captionStyle: "question", subtitleStyle: "word_by_word", hookStyle: "open_loop" },
-  { id: "context_first", captionStyle: "context", subtitleStyle: "clean_sentence", hookStyle: "why_it_matters" },
-  { id: "hook_only", captionStyle: "minimal", subtitleStyle: "hook_only", hookStyle: "short_claim" },
+  { id: "conflict_question", captionStyle: "question", subtitleStyle: "clean_sentence", hookStyle: "specific_conflict" },
+  { id: "surprising_claim", captionStyle: "direct", subtitleStyle: "word_by_word", hookStyle: "unexpected_outcome" },
+  { id: "payoff_open_loop", captionStyle: "context", subtitleStyle: "clean_sentence", hookStyle: "payoff_preview" },
+  { id: "reaction_quote", captionStyle: "minimal", subtitleStyle: "hook_only", hookStyle: "reaction_plus_quote" },
+  { id: "ranked_choice", captionStyle: "question", subtitleStyle: "clean_sentence", hookStyle: "forced_choice" },
 ];
+
+const strategyKnowledgeBase = {
+  version: "2026-08-quality-revenue-v1",
+  principles: [
+    "Show the main subject and a specific conflict or outcome in the first second.",
+    "Use a clear payoff and intentional cuts; never publish mechanically consecutive source segments.",
+    "End with a natural relevant question when it improves the conversation rather than engagement bait.",
+    "Use only a small set of relevant hashtags, including every campaign-required disclosure and hashtag.",
+    "Judge experiments with verified retention, completion, sharing, follows, qualified views, and revenue—not views alone.",
+  ],
+  revenueLanes: [
+    {
+      id: "campaign",
+      purpose: "Short-term marketplace revenue from active rights-cleared campaigns.",
+      dailyCeiling: 1,
+      requirements: ["active_campaign", "documented_rights", "verified_destination_account", "marketplace_submission"],
+    },
+    {
+      id: "owned_original",
+      purpose: "Build durable audience and eligibility for platform monetization with original 60–90 second storytelling.",
+      dailyCeiling: 1,
+      requirements: ["original_narration_or_commentary", "owned_or_documented_visual_rights", "not_sponsored", "vertical_1080p"],
+    },
+  ],
+};
 const exactTikTokPostPattern = /^https:\/\/(?:www\.)?tiktok\.com\/@([A-Za-z0-9._-]{2,40})\/video\/\d{8,30}\/?$/i;
 const execFileAsync = promisify(execFile);
 
@@ -53,13 +79,15 @@ function draftAssignments(campaign, experiment, rows) {
       .replace(/[-_]+/g, " ")
       .replace(/\s+/g, " ")
       .trim();
-    const captionText = strategy.captionStyle === "question"
-      ? `Would you have expected this from ${campaign.creator}?`
-      : strategy.captionStyle === "context"
-        ? `${campaign.creator} explains the context behind ${topic}.`
-        : strategy.captionStyle === "minimal"
-          ? `${campaign.creator}: ${topic}.`
-          : `${topic}: the part worth watching.`;
+    const captionText = strategy.id === "conflict_question"
+      ? `Why did ${campaign.creator} make this choice?`
+      : strategy.id === "surprising_claim"
+        ? `${topic}: the outcome nobody expected.`
+        : strategy.id === "payoff_open_loop"
+          ? `The detail that changes ${topic} comes at the end.`
+          : strategy.id === "ranked_choice"
+            ? `Was this ${campaign.creator}'s best move—or the worst?`
+            : `${campaign.creator}: ${topic}.`;
     return {
       slot: index + 1,
       draftFile: namedDrafts[index] || null,
@@ -89,6 +117,17 @@ function median(values) {
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+function ratio(numerator, denominator) {
+  const top = finiteNumber(numerator);
+  const bottom = finiteNumber(denominator);
+  return top !== null && bottom !== null && bottom > 0 ? top / bottom : null;
+}
+
+function rowRate(row, directKey, numeratorKey) {
+  const direct = finiteNumber(row[directKey]);
+  return direct !== null ? direct : ratio(row[numeratorKey], row.views);
+}
+
 function exactEvidence(value) {
   const text = String(value || "").trim();
   return text.length >= 12 && !/<[^>]+>|placeholder|paste here|example\.com/i.test(text);
@@ -109,7 +148,8 @@ function htmlValue(value) {
 }
 
 export function buildMetricoolApprovalRows(decision, mediaReadyBySlot = {}) {
-  return (decision.assignments || []).map((assignment) => {
+  const dailyPublishingLimit = Math.max(0, Math.min(1, Math.trunc(Number(decision.dailyPublishingLimit ?? 1))));
+  return (decision.assignments || []).slice(0, dailyPublishingLimit).map((assignment) => {
     const media = mediaReadyBySlot[assignment.slot] || {};
     const publishingAuthorized = decision.publishingAuthorized === true;
     const status = decision.canProduce !== true
@@ -206,6 +246,8 @@ function metricRowsForCampaign(metrics, campaignId, campaign) {
 
 function strategyPerformance(rows, strategyId) {
   const strategyRows = rows.filter((row) => row.strategyId === strategyId);
+  const retentionRows = strategyRows.filter((row) => row.retentionEvidenceVerified === true);
+  const engagementRows = strategyRows.filter((row) => row.engagementEvidenceVerified === true);
   const views = strategyRows.map((row) => Number(row.views));
   const qualifying = strategyRows.filter((row) => row.qualifiedForPayout === true && row.qualificationEvidenceVerified === true).length;
   return {
@@ -215,16 +257,33 @@ function strategyPerformance(rows, strategyId) {
     totalViews: views.reduce((sum, value) => sum + value, 0),
     qualifyingPosts: qualifying,
     totalEarningsUsd: strategyRows.reduce((sum, row) => sum + (row.payoutEvidenceVerified === true ? (finiteNumber(row.earningsUsd) || 0) : 0), 0),
-    medianCompletionRate: median(strategyRows.map((row) => finiteNumber(row.completionRate)).filter((value) => value !== null)),
-    medianShareRate: median(strategyRows.map((row) => finiteNumber(row.shareRate)).filter((value) => value !== null)),
+    verifiedRetentionSamples: retentionRows.length,
+    verifiedEngagementSamples: engagementRows.length,
+    medianTwoSecondRetention: median(retentionRows.map((row) => finiteNumber(row.twoSecondRetention)).filter((value) => value !== null)),
+    medianFiveSecondRetention: median(retentionRows.map((row) => finiteNumber(row.fiveSecondRetention)).filter((value) => value !== null)),
+    medianAverageWatchSeconds: median(retentionRows.map((row) => finiteNumber(row.averageWatchSeconds)).filter((value) => value !== null)),
+    medianCompletionRate: median(retentionRows.map((row) => finiteNumber(row.completionRate)).filter((value) => value !== null)),
+    medianShareRate: median(engagementRows.map((row) => rowRate(row, "shareRate", "shares")).filter((value) => value !== null)),
+    medianCommentRate: median(engagementRows.map((row) => rowRate(row, "commentRate", "comments")).filter((value) => value !== null)),
+    medianFollowRate: median(engagementRows.map((row) => rowRate(row, "followRate", "follows")).filter((value) => value !== null)),
   };
+}
+
+function strategyScore(row) {
+  const qualifiedRate = row.samples ? row.qualifyingPosts / row.samples : 0;
+  return qualifiedRate * 35
+    + (row.medianCompletionRate || 0) * 25
+    + (row.medianFiveSecondRetention || 0) * 15
+    + Math.min(0.1, row.medianShareRate || 0) * 150
+    + Math.min(0.1, row.medianFollowRate || 0) * 100
+    + Math.log10(Math.max(1, row.medianViews || 0)) * 3;
 }
 
 function chooseExperiment(rows) {
   const performance = captionStrategies.map((strategy) => strategyPerformance(rows, strategy.id));
   const proven = performance
     .filter((row) => row.samples >= 3 && row.medianViews !== null)
-    .sort((a, b) => (b.medianViews - a.medianViews) || (b.totalEarningsUsd - a.totalEarningsUsd));
+    .sort((a, b) => (strategyScore(b) - strategyScore(a)) || (b.medianViews - a.medianViews));
   const leastTested = [...performance].sort((a, b) => a.samples - b.samples || a.strategyId.localeCompare(b.strategyId))[0];
   const winner = proven[0] || null;
   const nextStrategyId = winner && rows.length >= 8 && rows.length % 10 < 7 ? winner.strategyId : leastTested.strategyId;
@@ -235,6 +294,35 @@ function chooseExperiment(rows) {
     allocation: winner ? { winnerPercent: 70, explorationPercent: 30 } : { balancedTestPercent: 25 },
     performance,
     minimumSamplesPerStrategy: 3,
+    selectionRule: "verified_quality_score_with_70_30_exploration",
+  };
+}
+
+function accountLearning(rows) {
+  const views = rows.map((row) => Number(row.views));
+  const medianViews = median(views);
+  const breakoutThreshold = medianViews === null ? null : Math.ceil(medianViews * 2);
+  const breakouts = breakoutThreshold === null ? [] : rows.filter((row) => Number(row.views) >= breakoutThreshold);
+  const retentionRows = rows.filter((row) => row.retentionEvidenceVerified === true
+    && (finiteNumber(row.fiveSecondRetention) !== null || finiteNumber(row.completionRate) !== null));
+  const strongest = [...rows].sort((a, b) => Number(b.views) - Number(a.views))[0] || null;
+  const recommendations = [];
+  if (!rows.length) recommendations.push("Collect verified public and Metricool metrics before declaring a winning format.");
+  if (rows.length && !breakouts.length) recommendations.push("No verified breakout exists; keep volume low and test materially different hooks.");
+  if (rows.length && retentionRows.length < Math.min(3, rows.length)) recommendations.push("Capture two-second, five-second, average-watch, and completion metrics for the next posts.");
+  if (breakouts.length) recommendations.push("Reuse the winning structure, not the same source segment, while preserving 30% exploration.");
+  return {
+    verifiedPosts: rows.length,
+    medianViews,
+    breakoutThreshold,
+    breakoutPosts: breakouts.length,
+    strongestVerifiedPost: strongest ? {
+      publishedPostUrl: strongest.publishedPostUrl,
+      strategyId: strongest.strategyId || null,
+      views: Number(strongest.views),
+    } : null,
+    retentionCoveragePosts: retentionRows.length,
+    recommendations,
   };
 }
 
@@ -285,6 +373,7 @@ function campaignDecision(campaign, metrics, now, publishingAuthorized = false) 
     canEnterApprovalQueue: productionBlockers.length === 0,
     cashoutReady: paymentBlockers.length === 0,
     publishingAuthorized,
+    dailyPublishingLimit: 1,
     realPublishEnabled: false,
     metricoolApprovalRequired: true,
     payoutCpm,
@@ -325,8 +414,8 @@ export function buildStreamerGrowthCeoPlan({
 }) {
   const parsedTargetDailyClips = Number(targetDailyClips);
   const safeConfiguredDailyClips = Number.isFinite(parsedTargetDailyClips)
-    ? Math.max(5, Math.min(8, Math.trunc(parsedTargetDailyClips)))
-    : 5;
+    ? Math.max(1, Math.min(2, Math.trunc(parsedTargetDailyClips)))
+    : 2;
   const decisions = campaigns.map((campaign) => campaignDecision(campaign, metrics, now, publishingAuthorized))
     .sort((a, b) => b.priorityScore - a.priorityScore || a.title.localeCompare(b.title));
   const campaignById = new Map(campaigns.map((campaign) => [campaign.id, campaign]));
@@ -343,28 +432,21 @@ export function buildStreamerGrowthCeoPlan({
   const scaling = decisions.filter((row) => row.decision === "scale");
   const recutting = decisions.some((row) => row.decision === "pause_and_recut");
   const optimizing = decisions.some((row) => row.decision === "optimize");
+  const learning = accountLearning(actualPublishedRows);
   const dailyTestClips = !active.length
     ? 0
-    : actualPublishedRows.length < 15
-      ? 5
-      : recutting
-        ? 2
-        : scaling.length
-          ? Math.max(6, safeConfiguredDailyClips)
-          : optimizing
-            ? 4
-            : 5;
+    : 1;
   const volumeReason = !active.length
     ? "no_active_campaign"
-    : actualPublishedRows.length < 15
-      ? "initial_learning_floor"
-      : recutting
-        ? "reduce_while_recutting"
-        : scaling.length
-          ? "increase_verified_winners"
+    : recutting
+      ? "quality_reset_while_recutting"
+      : scaling.length
+        ? "one_campaign_plus_owned_original_scale"
+        : learning.breakoutPosts === 0
+          ? "one_controlled_campaign_test_until_breakout"
           : optimizing
-            ? "reduce_for_efficiency"
-            : "hold_baseline";
+            ? "one_controlled_campaign_test_while_optimizing"
+            : "quality_first_baseline";
   const next = decisions[0] || null;
   return {
     status: !campaigns.length ? "needs_campaign_catalog" : !active.length ? "blocked" : scaling.length ? "scaling" : "testing",
@@ -384,12 +466,37 @@ export function buildStreamerGrowthCeoPlan({
       scaling: scaling.length,
       blocked: decisions.filter((row) => !row.canProduce).length,
     },
+    learningSystem: {
+      knowledgeBase: strategyKnowledgeBase,
+      account: learning,
+      experimentCadence: {
+        hookFamilies: captionStrategies.map(({ id, hookStyle }) => ({ id, hookStyle })),
+        repetitionsPerHookBeforeDecision: 3,
+        changeOneMajorVariableAtATime: true,
+        reviewWindowsHours: [24, 72, 240],
+        winnerRequires: ["verified_metrics", "at_least_three_samples", "quality_score_lead", "no_rights_or_quality_failure"],
+      },
+      metricsToCapture: [
+        "views", "twoSecondRetention", "fiveSecondRetention", "averageWatchSeconds", "completionRate",
+        "shares", "comments", "follows", "forYouShare", "searchShare", "qualifiedForPayout", "earningsUsd",
+      ],
+    },
+    dailyPortfolioPlan: {
+      maximumTotalPosts: 2,
+      campaignPosts: dailyTestClips,
+      ownedOriginalPostsTarget: 1,
+      ownedOriginalPostsAuthorized: 0,
+      ownedOriginalStatus: "needs_rights_verified_candidate_and_final_mp4",
+      spacingRule: "Use account-specific Metricool best times; otherwise separate posts and test the 18:00–21:00 local window.",
+      qualityOverride: "Publish fewer or zero when rights, visual, editorial, or MP4 gates fail.",
+    },
     operatingPolicy: {
       dailyTestClips,
-      initialDailyClips: 5,
-      minimumInitialDailyClips: 5,
+      initialDailyClips: 1,
+      minimumInitialDailyClips: 0,
       configuredDailyCeiling: safeConfiguredDailyClips,
-      maximumDailyClipsPerAccount: 8,
+      maximumDailyClipsPerAccount: 2,
+      maximumDailyClipsPerCampaign: 1,
       volumeReason,
       exploitPercent: scaling.length ? 70 : 0,
       explorePercent: scaling.length ? 30 : 100,
@@ -405,6 +512,9 @@ export function buildStreamerGrowthCeoPlan({
       "Campaign authorization is required; creator fame never replaces commercial rights.",
       "Only proof-backed finalStatus=published Metricool rows count as views; earnings require separate payout evidence.",
       "No caption or subtitle winner is declared before three real posts per strategy.",
+      "Never buy views, followers, boosts, or engagement; paid and artificial traffic is excluded from learning.",
+      "Sponsored campaign clips and owned-original monetization are separate lanes and are never counted as interchangeable revenue.",
+      "A daily quota never overrides rights, visual quality, editorial quality, deduplication, or final MP4 validation.",
       "Payout identity and payment method affect cashout readiness, not campaign-source or Metricool approval readiness.",
       publishingAuthorized
         ? "Metricool publishing is authorized only for proof-backed eligible clips on the configured TikTok account."
@@ -478,6 +588,16 @@ async function main() {
       row.publishedPostUrl,
       String(row.views),
     ]);
+    const retentionValues = ["twoSecondRetention", "fiveSecondRetention", "averageWatchSeconds", "completionRate"]
+      .map((key) => finiteNumber(row[key]))
+      .filter((value) => value !== null);
+    const engagementValues = ["shares", "comments", "follows", "shareRate", "commentRate", "followRate"]
+      .map((key) => finiteNumber(row[key]))
+      .filter((value) => value !== null);
+    row.retentionEvidenceVerified = row.metricEvidenceVerified && retentionValues.length > 0
+      && await verifyTextEvidence(workspaceRoot, row.metricoolProofPath, retentionValues.map(String));
+    row.engagementEvidenceVerified = row.metricEvidenceVerified && engagementValues.length > 0
+      && await verifyTextEvidence(workspaceRoot, row.metricoolProofPath, engagementValues.map(String));
     row.payoutEvidenceVerified = exactPost && await verifyTextEvidence(workspaceRoot, row.payoutProofPath, [
       row.campaignId,
       row.publishedPostUrl,

@@ -54,11 +54,11 @@ test("tests a verified top creator without fabricating expected revenue", () => 
   assert.equal(plan.decisions[0].decision, "test");
   assert.equal(plan.decisions[0].observed.totalViews, 0);
   assert.equal(plan.goal.projection, "insufficient_real_posts");
-  assert.equal(plan.operatingPolicy.dailyTestClips, 5);
+  assert.equal(plan.operatingPolicy.dailyTestClips, 1);
   assert.equal(plan.decisions[0].assignments.length, 7);
   assert.deepEqual(
     new Set(plan.decisions[0].assignments.map((row) => row.strategyId)),
-    new Set(["direct_insight", "curiosity_question", "context_first", "hook_only"]),
+    new Set(["conflict_question", "surprising_claim", "payoff_open_loop", "reaction_quote", "ranked_choice"]),
   );
   assert.deepEqual(plan.decisions[0].assignments[0].requiredHashtags, ["#MrBeast", "#paidpartner"]);
   assert.match(plan.decisions[0].assignments[0].captionText, /#MrBeast #paidpartner$/);
@@ -86,16 +86,15 @@ test("requires an explicit runtime opt-in before enabling Metricool publishing",
   });
   assert.equal(authorizedRows[0].status, "authorized_for_metricool");
   assert.equal(authorizedRows[0].publishAllowed, true);
-  assert.equal(authorizedRows[1].status, "blocked_media_missing");
-  assert.equal(authorizedRows[1].publishAllowed, false);
-  assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: 20 }).operatingPolicy.dailyTestClips, 5);
-  assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: -3 }).operatingPolicy.dailyTestClips, 5);
+  assert.equal(authorizedRows.length, 1);
+  assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: 20 }).operatingPolicy.dailyTestClips, 1);
+  assert.equal(buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: [], now, targetDailyClips: -3 }).operatingPolicy.dailyTestClips, 1);
 });
 
-test("starts at five daily and reduces only after enough verified poor results", () => {
+test("keeps campaign volume low until verified quality produces a breakout", () => {
   const metrics = Array.from({ length: 15 }, (_, index) => ({
     campaignId: campaign.id,
-    strategyId: index % 2 ? "hook_only" : "curiosity_question",
+    strategyId: index % 2 ? "reaction_quote" : "conflict_question",
     finalStatus: "published",
     publishedPostUrl: `https://www.tiktok.com/@streamersclipusa/video/${1234567890123456700n + BigInt(index)}`,
     views: 500 + index * 50,
@@ -105,17 +104,17 @@ test("starts at five daily and reduces only after enough verified poor results",
   }));
 
   const learningPlan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics: metrics.slice(0, 5), now });
-  assert.equal(learningPlan.operatingPolicy.dailyTestClips, 5);
-  assert.equal(learningPlan.operatingPolicy.minimumInitialDailyClips, 5);
-  assert.equal(learningPlan.operatingPolicy.volumeReason, "initial_learning_floor");
+  assert.equal(learningPlan.operatingPolicy.dailyTestClips, 1);
+  assert.equal(learningPlan.operatingPolicy.minimumInitialDailyClips, 0);
+  assert.equal(learningPlan.operatingPolicy.volumeReason, "one_controlled_campaign_test_until_breakout");
 
   const recutPlan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics, now });
-  assert.equal(recutPlan.operatingPolicy.dailyTestClips, 2);
-  assert.equal(recutPlan.operatingPolicy.maximumDailyClipsPerAccount, 8);
-  assert.equal(recutPlan.operatingPolicy.volumeReason, "reduce_while_recutting");
+  assert.equal(recutPlan.operatingPolicy.dailyTestClips, 1);
+  assert.equal(recutPlan.operatingPolicy.maximumDailyClipsPerAccount, 2);
+  assert.equal(recutPlan.operatingPolicy.volumeReason, "quality_reset_while_recutting");
 });
 
-test("scheduled rows cannot raise the five-clip initial learning volume", () => {
+test("scheduled rows cannot raise the quality-first learning volume", () => {
   const scheduledMetrics = Array.from({ length: 20 }, (_, index) => ({
     campaignId: campaign.id,
     finalStatus: index % 2 ? "scheduled" : "queued",
@@ -127,15 +126,15 @@ test("scheduled rows cannot raise the five-clip initial learning volume", () => 
     now,
     targetDailyClips: 8,
   });
-  assert.equal(plan.operatingPolicy.dailyTestClips, 5);
-  assert.equal(plan.operatingPolicy.configuredDailyCeiling, 8);
-  assert.equal(plan.operatingPolicy.volumeReason, "initial_learning_floor");
+  assert.equal(plan.operatingPolicy.dailyTestClips, 1);
+  assert.equal(plan.operatingPolicy.configuredDailyCeiling, 2);
+  assert.equal(plan.operatingPolicy.volumeReason, "one_controlled_campaign_test_until_breakout");
 });
 
 test("raises volume only after fifteen verified winning posts", () => {
   const winningMetrics = Array.from({ length: 15 }, (_, index) => ({
     campaignId: campaign.id,
-    strategyId: "direct_insight",
+    strategyId: "surprising_claim",
     finalStatus: "published",
     publishedPostUrl: `https://www.tiktok.com/@streamersclipusa/video/${2234567890123456700n + BigInt(index)}`,
     views: 10_000 + index * 100,
@@ -151,8 +150,8 @@ test("raises volume only after fifteen verified winning posts", () => {
     now,
     targetDailyClips: 8,
   });
-  assert.equal(plan.operatingPolicy.dailyTestClips, 8);
-  assert.equal(plan.operatingPolicy.volumeReason, "increase_verified_winners");
+  assert.equal(plan.operatingPolicy.dailyTestClips, 1);
+  assert.equal(plan.operatingPolicy.volumeReason, "one_campaign_plus_owned_original_scale");
 });
 
 test("accepts an observed countdown without inventing an exact campaign deadline", () => {
@@ -178,16 +177,16 @@ test("separates Metricool approval readiness from Vyro cashout readiness", () =>
 
 test("scales only after real qualifying posts and keeps exploration", () => {
   const metrics = [
-    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 12000, earningsUsd: 18, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.41, shareRate: 0.03 },
-    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 9000, earningsUsd: 13.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.38, shareRate: 0.025 },
-    { campaignId: campaign.id, strategyId: "direct_insight", finalStatus: "published", publishedPostUrl, views: 15000, earningsUsd: 22.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, completionRate: 0.45, shareRate: 0.04 },
+    { campaignId: campaign.id, strategyId: "surprising_claim", finalStatus: "published", publishedPostUrl, views: 12000, earningsUsd: 18, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, retentionEvidenceVerified: true, engagementEvidenceVerified: true, fiveSecondRetention: 0.66, completionRate: 0.41, shareRate: 0.03 },
+    { campaignId: campaign.id, strategyId: "surprising_claim", finalStatus: "published", publishedPostUrl, views: 9000, earningsUsd: 13.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, retentionEvidenceVerified: true, engagementEvidenceVerified: true, fiveSecondRetention: 0.61, completionRate: 0.38, shareRate: 0.025 },
+    { campaignId: campaign.id, strategyId: "surprising_claim", finalStatus: "published", publishedPostUrl, views: 15000, earningsUsd: 22.5, qualifiedForPayout: true, metricEvidenceVerified: true, payoutEvidenceVerified: true, qualificationEvidenceVerified: true, retentionEvidenceVerified: true, engagementEvidenceVerified: true, fiveSecondRetention: 0.71, completionRate: 0.45, shareRate: 0.04 },
   ];
   const plan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics, now });
   assert.equal(plan.status, "scaling");
   assert.equal(plan.decisions[0].decision, "scale");
-  assert.equal(plan.decisions[0].experiment.winnerStrategyId, "direct_insight");
+  assert.equal(plan.decisions[0].experiment.winnerStrategyId, "surprising_claim");
   assert.deepEqual(plan.decisions[0].experiment.allocation, { winnerPercent: 70, explorationPercent: 30 });
-  assert.equal(plan.decisions[0].assignments.filter((row) => row.strategyId === "direct_insight").length, 5);
+  assert.equal(plan.decisions[0].assignments.filter((row) => row.strategyId === "surprising_claim").length, 5);
   assert.equal(plan.goal.measuredViews, 36000);
   assert.equal(plan.goal.measuredEarningsUsd, 54);
 });
@@ -206,7 +205,7 @@ test("queued or scheduled rows never count as published performance", () => {
 test("pauses a cut style after six posts with no payout qualification", () => {
   const metrics = Array.from({ length: 6 }, (_, index) => ({
     campaignId: campaign.id,
-    strategyId: index % 2 ? "hook_only" : "curiosity_question",
+    strategyId: index % 2 ? "reaction_quote" : "conflict_question",
     finalStatus: "published",
     publishedPostUrl,
     views: 500 + index * 100,
@@ -224,7 +223,7 @@ test("ignores published metrics without local Metricool evidence", () => {
     campaigns: [campaign],
     metrics: [{
       campaignId: campaign.id,
-      strategyId: "direct_insight",
+      strategyId: "surprising_claim",
       finalStatus: "published",
       views: 10_000_000,
       earningsUsd: 15_000,
@@ -244,7 +243,7 @@ test("ignores proof flags when the exact TikTok post URL is missing", () => {
     campaigns: [campaign],
     metrics: [{
       campaignId: campaign.id,
-      strategyId: "direct_insight",
+      strategyId: "surprising_claim",
       finalStatus: "published",
       publishedPostUrl: "",
       views: 10_000_000,
@@ -259,7 +258,7 @@ test("ignores proof flags when the exact TikTok post URL is missing", () => {
 test("ignores verified metrics from a different TikTok account", () => {
   const wrongAccountMetrics = Array.from({ length: 15 }, (_, index) => ({
     campaignId: campaign.id,
-    strategyId: "direct_insight",
+    strategyId: "surprising_claim",
     finalStatus: "published",
     publishedPostUrl: `https://www.tiktok.com/@wrongaccount/video/${3234567890123456700n + BigInt(index)}`,
     views: 1_000_000,
@@ -271,7 +270,68 @@ test("ignores verified metrics from a different TikTok account", () => {
   assert.equal(plan.goal.measuredViews, 0);
   assert.equal(plan.decisions[0].observed.publishedPosts, 0);
   assert.equal(plan.decisions[0].decision, "test");
-  assert.equal(plan.operatingPolicy.dailyTestClips, 5);
+  assert.equal(plan.operatingPolicy.dailyTestClips, 1);
+});
+
+test("exposes a real CEO learning system and separates revenue lanes", () => {
+  const plan = buildStreamerGrowthCeoPlan({
+    campaigns: [campaign],
+    metrics: [{
+      campaignId: campaign.id,
+      strategyId: "conflict_question",
+      finalStatus: "published",
+      publishedPostUrl,
+      views: 152,
+      comments: 3,
+      shares: 2,
+      follows: 1,
+      fiveSecondRetention: 0.42,
+      completionRate: 0.21,
+      retentionEvidenceVerified: true,
+      engagementEvidenceVerified: true,
+      metricEvidenceVerified: true,
+    }],
+    now,
+  });
+
+  assert.equal(plan.learningSystem.knowledgeBase.revenueLanes.length, 2);
+  assert.equal(plan.learningSystem.account.medianViews, 152);
+  assert.equal(plan.learningSystem.account.breakoutThreshold, 304);
+  assert.equal(plan.learningSystem.account.breakoutPosts, 0);
+  assert.ok(plan.learningSystem.account.recommendations.some((item) => item.includes("No verified breakout")));
+  assert.deepEqual(plan.learningSystem.experimentCadence.reviewWindowsHours, [24, 72, 240]);
+  assert.ok(plan.learningSystem.metricsToCapture.includes("fiveSecondRetention"));
+  assert.equal(plan.dailyPortfolioPlan.maximumTotalPosts, 2);
+  assert.equal(plan.dailyPortfolioPlan.campaignPosts, 1);
+  assert.equal(plan.dailyPortfolioPlan.ownedOriginalPostsTarget, 1);
+  assert.equal(plan.dailyPortfolioPlan.ownedOriginalPostsAuthorized, 0);
+  assert.equal(plan.operatingPolicy.paidSpendAllowed, false);
+});
+
+test("does not let unverified retention or engagement influence strategy learning", () => {
+  const plan = buildStreamerGrowthCeoPlan({
+    campaigns: [campaign],
+    metrics: Array.from({ length: 3 }, (_, index) => ({
+      campaignId: campaign.id,
+      strategyId: "reaction_quote",
+      finalStatus: "published",
+      publishedPostUrl: `https://www.tiktok.com/@streamersclipusa/video/${4234567890123456700n + BigInt(index)}`,
+      views: 100 + index,
+      fiveSecondRetention: 1,
+      completionRate: 1,
+      shares: 100,
+      follows: 100,
+      metricEvidenceVerified: true,
+      retentionEvidenceVerified: false,
+      engagementEvidenceVerified: false,
+    })),
+    now,
+  });
+  const performance = plan.decisions[0].experiment.performance.find((row) => row.strategyId === "reaction_quote");
+  assert.equal(performance.verifiedRetentionSamples, 0);
+  assert.equal(performance.verifiedEngagementSamples, 0);
+  assert.equal(performance.medianFiveSecondRetention, null);
+  assert.equal(performance.medianShareRate, null);
 });
 
 test("Metricool rows point to final media while cashout setup remains separate", () => {
@@ -282,7 +342,7 @@ test("Metricool rows point to final media while cashout setup remains separate",
   assert.equal(rows[0].draftFile, "drafts/vyro/campaign/subtitled/final.mp4");
   assert.equal(rows[0].status, "approval_required");
   assert.equal(rows[0].publishAllowed, false);
-  assert.equal(rows[1].status, "blocked_media_missing");
+  assert.equal(rows.length, 1);
 });
 
 test("Metricool rows require approval even after campaign and payout gates pass", () => {
