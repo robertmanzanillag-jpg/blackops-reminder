@@ -299,6 +299,31 @@ test("CEO does not bias duration from fewer than five TikTok samples", () => {
   assert.equal(plan?.durationSeconds, 60);
 });
 
+test("CEO reuses the best proven duration after exploration", () => {
+  const state = queue();
+  state.jobs[0].slots = ["00:30", "02:00", "03:30", "05:00", "06:30", "08:00", "09:30"].map((localTime) => ({ localTime, timezone: "America/New_York" }));
+  state.jobs[0].requirements.posts = 7;
+  state.jobs[0].requirements.djs = 1;
+  state.jobs[0].requirements.postsPerDj = 10;
+  state.analytics = {
+    creativeStrategy: "drop_first",
+    preferredDurations: [30, 60, 15, 120],
+    durationPerformance: [
+      { durationSeconds: 30, samples: 5, medianViews: 100, totalViews: 500 },
+      { durationSeconds: 60, samples: 5, medianViews: 80, totalViews: 400 },
+    ],
+  } as any;
+  const explored = { version: 1, entries: [15, 30, 60, 120, 300, 600].map((durationSeconds, index) => ({
+    jobId: "job-1", slot: state.jobs[0].slots[index].localTime, videoId: `old-${index}`,
+    dj: "DJ A", language: "en", format: "vertical", durationSeconds,
+  })) };
+  const plan = planBlackRoomDeterministicEdit({
+    queue: state, ledger: explored as any, now: new Date("2026-07-22T12:00:00.000Z"),
+    inventory: [{ id: "fresh", title: "DJ A - DJ Set", duration: 3600 }],
+  });
+  assert.equal(plan?.durationSeconds, 30);
+});
+
 test("command builders keep downloads partial and renders platform-compatible", () => {
   const plan: any = {
     videoUrl: "https://www.youtube.com/watch?v=abc", windowStartSeconds: 100, windowEndSeconds: 220,

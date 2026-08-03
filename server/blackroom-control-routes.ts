@@ -12,6 +12,7 @@ import {
   mutateBlackRoomRemoteControl,
   appendBlackRoomCeoCommand,
   readBlackRoomRemoteControl,
+  recordBlackRoomPublicationExperiment,
   recordBlackRoomRemoteHeartbeat,
   setBlackRoomRemoteCommand,
   upsertBlackRoomAnalyticsImports,
@@ -63,6 +64,7 @@ async function refreshBlackRoomCeoOnce(force: boolean): Promise<void> {
       previous: previous?.analytics,
       importedSamplesByNetwork: Object.fromEntries(Object.entries(current.analyticsImports || {})
         .map(([network, imported]) => [network, imported?.samples || []])),
+      publicationExperiments: current.publicationExperiments,
     });
     const today = blackRoomLocalDate(new Date());
     const currentTarget = Number((current.device?.queue as any)?.postsPerDay || BLACKROOM_CEO_DAILY_POSTS);
@@ -333,7 +335,8 @@ export function registerBlackRoomControlRoutes(app: Express): void {
       sourceFiles: Array.isArray(input?.sourceFiles) ? input.sourceFiles.slice(0, 20) : [],
       samples: Array.isArray(input?.samples) ? input.samples : [],
     }));
-    if (normalized.some((input) => !acceptedNetworks.has(input.network) || input.samples.length > 2_000)) {
+    if (normalized.some((input: { network: BlackRoomAnalyticsNetwork; samples: unknown[] }) =>
+      !acceptedNetworks.has(input.network) || input.samples.length > 2_000)) {
       return res.status(400).json({ error: "Invalid network or too many CSV samples" });
     }
     try {
@@ -521,10 +524,26 @@ export function registerBlackRoomControlRoutes(app: Express): void {
         sourceVideoId: String(req.body?.sourceVideoId || ""),
         durationSeconds: Number(req.body?.durationSeconds),
         videoFormat: req.body?.videoFormat === "horizontal" ? "horizontal" : "vertical",
+        creativeStrategy: req.body?.creativeStrategy,
         publicationDateTime: String(req.body?.publicationDateTime || ""),
         timezone: String(req.body?.timezone || "America/New_York"),
         mediaUrl: verifyOnly ? "https://localhost.invalid/blackroom-verification-only.mp4" : `${publicOrigin}/api/blackroom-agent/media/${uploadId}.mp4`,
       }, { verifyOnly, networks: [network as "tiktok" | "facebook" | "youtube"] });
+      const receiptId = String(receipt.platformReceipts?.[network as "tiktok" | "facebook" | "youtube"] || receipt.metricoolId || "").trim();
+      if (receiptId) {
+        await mutateBlackRoomRemoteControl((state) => recordBlackRoomPublicationExperiment(state, {
+          metricoolId: receiptId,
+          reservationId,
+          network,
+          creativeStrategy: ["drop_first", "instant_drop", "build_then_drop"].includes(String(req.body?.creativeStrategy))
+            ? req.body.creativeStrategy : "drop_first",
+          durationSeconds: Number(req.body?.durationSeconds),
+          format: req.body?.videoFormat === "horizontal" ? "horizontal" : "vertical",
+          language: req.body?.language === "es" ? "es" : "en",
+          slot: String(req.body?.publicationDateTime || "").slice(11, 16),
+          publishedAt: String(req.body?.publicationDateTime || ""),
+        }));
+      }
       if (!verifyOnly) await removeBlackRoomUpload(uploadId);
       res.status(201).json({ receipt });
     } catch (error: any) {

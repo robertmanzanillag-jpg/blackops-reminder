@@ -1,6 +1,7 @@
 import { eq, sql } from "drizzle-orm";
 import { blackRoomRemoteControl } from "@shared/schema";
 import type { BlackRoomRemoteCommand } from "./blackroom-chat";
+import type { BlackRoomPublicationExperiment } from "./blackroom-growth-ceo";
 
 export const BLACKROOM_REMOTE_ONLINE_WINDOW_MS = 90_000;
 const BLACKROOM_REMOTE_CONTROL_ID = "blackroom-primary";
@@ -48,6 +49,7 @@ export interface BlackRoomRemoteControlState {
   commands: BlackRoomRemoteCommand[];
   chatHistory: Array<{ id: string; role: "user" | "assistant"; text: string; createdAt: string }>;
   analyticsImports: Partial<Record<BlackRoomAnalyticsNetwork, BlackRoomAnalyticsImport>>;
+  publicationExperiments: BlackRoomPublicationExperiment[];
 }
 
 export function createBlackRoomRemoteControlState(now = new Date()): BlackRoomRemoteControlState {
@@ -61,7 +63,27 @@ export function createBlackRoomRemoteControlState(now = new Date()): BlackRoomRe
     commands: [],
     chatHistory: [],
     analyticsImports: {},
+    publicationExperiments: [],
   };
+}
+
+export function recordBlackRoomPublicationExperiment(
+  state: BlackRoomRemoteControlState,
+  experiment: BlackRoomPublicationExperiment,
+): BlackRoomRemoteControlState {
+  const normalized = {
+    ...experiment,
+    metricoolId: String(experiment.metricoolId || "").trim(),
+    reservationId: String(experiment.reservationId || "").trim(),
+    network: String(experiment.network || "").trim(),
+  };
+  if (!normalized.metricoolId || !normalized.reservationId || !normalized.network) return state;
+  const existingIndex = state.publicationExperiments.findIndex((item) =>
+    item.network === normalized.network && item.metricoolId === normalized.metricoolId);
+  if (existingIndex >= 0) state.publicationExperiments[existingIndex] = normalized;
+  else state.publicationExperiments.push(normalized);
+  state.publicationExperiments = state.publicationExperiments.slice(-2_000);
+  return state;
 }
 
 function normalizeImportedAnalyticsSample(value: unknown): BlackRoomImportedAnalyticsSample | null {
@@ -221,6 +243,9 @@ function normalizeRemoteControlState(value: unknown): BlackRoomRemoteControlStat
     commands: Array.isArray(parsed.commands) ? parsed.commands.slice(-100) : [],
     chatHistory: Array.isArray(parsed.chatHistory) ? parsed.chatHistory.slice(-40) : [],
     analyticsImports: normalizeAnalyticsImports(parsed.analyticsImports),
+    publicationExperiments: Array.isArray(parsed.publicationExperiments)
+      ? parsed.publicationExperiments.slice(-2_000) as BlackRoomPublicationExperiment[]
+      : [],
   };
 }
 
