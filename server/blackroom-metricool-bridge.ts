@@ -21,6 +21,7 @@ export interface BlackRoomMetricoolScheduleInput {
   sourceVideoId: string;
   durationSeconds: number;
   videoFormat: "vertical" | "horizontal";
+  creativeStrategy?: "drop_first" | "instant_drop" | "build_then_drop";
 }
 
 export interface BlackRoomMetricoolReceipt {

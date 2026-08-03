@@ -235,6 +235,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
           sourceVideoId: entry.videoId,
           durationSeconds: entry.durationSeconds,
           videoFormat: entry.format,
+          creativeStrategy: entry.creativeStrategy || "drop_first",
           publicationDateTime,
           timezone: queue.timezone || "America/New_York",
         }),

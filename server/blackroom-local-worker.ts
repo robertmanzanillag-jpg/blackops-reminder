@@ -67,6 +67,7 @@ export interface BlackRoomLedgerEntry {
   segmentStartSeconds: number;
   segmentEndSeconds: number;
   caption: string;
+  creativeStrategy?: import("./blackroom-growth-ceo").BlackRoomCreativeStrategy;
   renderPath: string;
   sourcePath: string;
   status: BlackRoomLedgerStatus;
@@ -326,6 +327,7 @@ export function reserveBlackRoomLedgerEntry(
   const timestamp = now.toISOString();
   const entry: BlackRoomLedgerEntry = {
     ...input,
+    creativeStrategy: input.creativeStrategy || "drop_first",
     reservationId: `${input.jobId}:${input.slot}:${input.videoId}`,
     status: "reserved",
     metricoolId: null,

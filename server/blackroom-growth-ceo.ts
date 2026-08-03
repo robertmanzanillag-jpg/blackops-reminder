@@ -34,6 +34,33 @@ export const BLACKROOM_CEO_LOW_VIEW_THRESHOLD = 10;
 export const BLACKROOM_CREATIVE_STRATEGIES = ["drop_first", "instant_drop", "build_then_drop"] as const;
 export type BlackRoomCreativeStrategy = (typeof BLACKROOM_CREATIVE_STRATEGIES)[number];
 
+export interface BlackRoomPublicationExperiment {
+  metricoolId: string;
+  reservationId: string;
+  network: string;
+  creativeStrategy: BlackRoomCreativeStrategy;
+  durationSeconds: number;
+  format: "vertical" | "horizontal";
+  language: "en" | "es";
+  slot: string;
+  publishedAt: string;
+}
+
+export interface BlackRoomCreativeCohort {
+  strategy: BlackRoomCreativeStrategy;
+  samples: number;
+  medianViews: number;
+  totalViews: number;
+  lowViewRate: number;
+}
+
+export interface BlackRoomDurationCohort {
+  durationSeconds: number;
+  samples: number;
+  medianViews: number;
+  totalViews: number;
+}
+
 export interface BlackRoomCeoAnalytics {
   /** Total imported posts across all connected networks, for visibility. */
   sampleCount: number;
@@ -71,6 +98,9 @@ export interface BlackRoomCeoAnalytics {
   creativeStrategyPostIdsBaseline: string[];
   creativeChangedAt: string;
   creativeReason: string;
+  creativePerformance?: BlackRoomCreativeCohort[];
+  durationPerformance?: BlackRoomDurationCohort[];
+  preferredDurations?: number[];
   reason: string;
 }
 
@@ -190,6 +220,42 @@ export function extractBlackRoomViewSamples(value: unknown): number[] {
   return extractBlackRoomViewRecords(value).map((sample) => sample.views);
 }
 
+export function extractBlackRoomExperimentCohorts(
+  viewRecords: Array<{ id: string; views: number; publishedAt?: string; durationSeconds?: number }>,
+  experiments: BlackRoomPublicationExperiment[],
+  network: string,
+): {
+  viewsByStrategy: Partial<Record<BlackRoomCreativeStrategy, number[]>>;
+  viewsByDuration: Record<string, number[]>;
+} {
+  const experimentsById = new Map(experiments
+    .filter((experiment) => experiment.network === network && experiment.metricoolId.trim())
+    .map((experiment) => [experiment.metricoolId.trim(), experiment]));
+  const viewsByStrategy: Partial<Record<BlackRoomCreativeStrategy, number[]>> = {};
+  const viewsByDuration: Record<string, number[]> = {};
+  const matchedExperiments = new Map<string, { experiment: BlackRoomPublicationExperiment; views: number; exact: boolean }>();
+  for (const record of viewRecords) {
+    let experiment = experimentsById.get(String(record.id));
+    const exact = Boolean(experiment);
+    if (!experiment && record.publishedAt) {
+      const minute = String(record.publishedAt).slice(0, 16);
+      const candidates = experiments.filter((candidate) => candidate.network === network
+        && candidate.publishedAt.slice(0, 16) === minute
+        && (!record.durationSeconds || candidate.durationSeconds === record.durationSeconds));
+      if (candidates.length === 1) experiment = candidates[0];
+    }
+    if (!experiment) continue;
+    const key = `${experiment.network}:${experiment.metricoolId}:${experiment.reservationId}`;
+    const previous = matchedExperiments.get(key);
+    if (!previous || (exact && !previous.exact)) matchedExperiments.set(key, { experiment, views: record.views, exact });
+  }
+  for (const { experiment, views } of matchedExperiments.values()) {
+    (viewsByStrategy[experiment.creativeStrategy] ||= []).push(views);
+    (viewsByDuration[String(experiment.durationSeconds)] ||= []).push(views);
+  }
+  return { viewsByStrategy, viewsByDuration };
+}
+
 function median(values: number[]): number {
   if (!values.length) return 0;
   const sorted = [...values].sort((left, right) => left - right);
@@ -229,6 +295,21 @@ export function planBlackRoomNetworkLearning(input: {
   return { networkMedianViews, networkLowViewRate, networkDailyTargets };
 }
 
+export function planBlackRoomDurationLearning(input: {
+  viewsByDuration: Record<string, number[]>;
+}): { durationPerformance: BlackRoomDurationCohort[]; preferredDurations: number[] } {
+  const durationPerformance = [15, 30, 60, 120, 300, 600].map((durationSeconds): BlackRoomDurationCohort => {
+    const views = (input.viewsByDuration[String(durationSeconds)] || [])
+      .map(Number).filter((value) => Number.isFinite(value) && value >= 0);
+    return { durationSeconds, samples: views.length, medianViews: median(views), totalViews: views.reduce((sum, value) => sum + value, 0) };
+  });
+  const preferredDurations = [...durationPerformance]
+    .sort((left, right) => Number(right.samples >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES) - Number(left.samples >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES)
+      || right.medianViews - left.medianViews || right.totalViews - left.totalViews || left.durationSeconds - right.durationSeconds)
+    .map((cohort) => cohort.durationSeconds);
+  return { durationPerformance, preferredDurations };
+}
+
 /**
  * Protect the baseline while still buying a small amount of learning.
  * A seven-post day is permitted only after all three networks have a
@@ -256,11 +337,13 @@ export function planBlackRoomCampaignPosts(input: {
 export function planBlackRoomCreativeLearning(input: {
   views: number[];
   postIds?: string[];
+  viewsByStrategy?: Partial<Record<BlackRoomCreativeStrategy, number[]>>;
   previous?: Partial<BlackRoomCeoAnalytics> | null;
   now?: Date;
 }): Pick<BlackRoomCeoAnalytics,
   "tiktokMedianViews" | "tiktokLowViewRate" | "creativeStrategy" | "creativeStrategyVersion"
-  | "creativeStrategySampleBaseline" | "creativeStrategyPostIdsBaseline" | "creativeChangedAt" | "creativeReason"> {
+  | "creativeStrategySampleBaseline" | "creativeStrategyPostIdsBaseline" | "creativeChangedAt" | "creativeReason"
+  | "creativePerformance"> {
   const now = input.now || new Date();
   const samples = input.views
     .map((views, index) => ({ views, id: input.postIds?.[index] == null ? "" : String(input.postIds[index]) }))
@@ -292,18 +375,37 @@ export function planBlackRoomCreativeLearning(input: {
   const enoughNewEvidence = newPostCount >= BLACKROOM_CEO_CREATIVE_NEW_SAMPLES;
   const shouldRotate = lowPerformance && enoughNewEvidence;
   const strategyIndex = BLACKROOM_CREATIVE_STRATEGIES.indexOf(previousStrategy);
-  const creativeStrategy = shouldRotate
+  const creativePerformance = BLACKROOM_CREATIVE_STRATEGIES.map((strategy): BlackRoomCreativeCohort => {
+    const cohortViews = (input.viewsByStrategy?.[strategy] || []).map(Number).filter((value) => Number.isFinite(value) && value >= 0);
+    return {
+      strategy,
+      samples: cohortViews.length,
+      medianViews: median(cohortViews),
+      totalViews: cohortViews.reduce((sum, value) => sum + value, 0),
+      lowViewRate: cohortViews.length ? cohortViews.filter((value) => value <= BLACKROOM_CEO_LOW_VIEW_THRESHOLD).length / cohortViews.length : 0,
+    };
+  });
+  const provenCohorts = creativePerformance.filter((cohort) => cohort.samples >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES);
+  const provenWinner = provenCohorts.length >= 2
+    ? provenCohorts.sort((left, right) => right.medianViews - left.medianViews || right.totalViews - left.totalViews)[0]?.strategy
+    : undefined;
+  const fallbackStrategy = shouldRotate
     ? BLACKROOM_CREATIVE_STRATEGIES[(strategyIndex + 1) % BLACKROOM_CREATIVE_STRATEGIES.length]
     : previousStrategy;
+  const creativeStrategy = provenWinner || fallbackStrategy;
+  const changed = creativeStrategy !== previousStrategy;
   return {
     tiktokMedianViews,
     tiktokLowViewRate,
     creativeStrategy,
-    creativeStrategyVersion: previousVersion + (shouldRotate ? 1 : 0),
-    creativeStrategySampleBaseline: shouldRotate ? views.length : previousBaseline,
-    creativeStrategyPostIdsBaseline: shouldRotate ? postIds.slice(-200) : previousPostIds,
-    creativeChangedAt: shouldRotate ? now.toISOString() : String(input.previous?.creativeChangedAt || ""),
-    creativeReason: shouldRotate
+    creativeStrategyVersion: previousVersion + (changed ? 1 : 0),
+    creativeStrategySampleBaseline: changed ? views.length : previousBaseline,
+    creativeStrategyPostIdsBaseline: changed ? postIds.slice(-200) : previousPostIds,
+    creativeChangedAt: changed ? now.toISOString() : String(input.previous?.creativeChangedAt || ""),
+    creativePerformance,
+    creativeReason: provenWinner && provenWinner !== previousStrategy
+      ? `El CEO comparó cohortes con evidencia y eligió ${creativeStrategy}.`
+      : shouldRotate
       ? `TikTok sigue bajo (${tiktokMedianViews.toFixed(1)} vistas de mediana; ${(tiktokLowViewRate * 100).toFixed(0)}% en 10 o menos). El CEO cambió a ${creativeStrategy}.`
       : evaluationViews.length < requiredEvidence
         ? `Recolectando señal creativa de TikTok (${evaluationViews.length}/${requiredEvidence}).`
@@ -903,6 +1005,7 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   now?: Date;
   previous?: Partial<BlackRoomCeoAnalytics> | null;
   importedSamplesByNetwork?: Partial<Record<BlackRoomAnalyticsNetwork, BlackRoomImportedAnalyticsSample[]>>;
+  publicationExperiments?: BlackRoomPublicationExperiment[];
 } = {}): Promise<BlackRoomCeoAnalytics> {
   const env = options.env || process.env;
   const fetcher = options.fetch || fetch;
@@ -946,6 +1049,8 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const times: string[] = [];
   const recommendedTimesByNetwork: Record<string, string[]> = {};
   const viewsByNetwork: Record<string, number[]> = {};
+  const viewsByStrategy: Partial<Record<BlackRoomCreativeStrategy, number[]>> = {};
+  const viewsByDuration: Record<string, number[]> = {};
   const networkErrors: Record<string, string> = {};
   const historyCompleteByNetwork: Record<string, boolean> = {};
   const historyRequestsByNetwork: Record<string, number> = {};
@@ -1017,6 +1122,18 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
       networkSamples[network] = networkHistory.metricIds.size;
       const viewRecords = [...networkHistory.viewRecords].map(([id, views]) => ({ id, views }));
       viewsByNetwork[network] = viewRecords.map((record) => record.views);
+      const importedById = new Map(importedSamples.map((sample) => [sample.id, sample]));
+      const cohorts = extractBlackRoomExperimentCohorts(viewRecords.map((record) => ({
+        ...record,
+        publishedAt: importedById.get(record.id)?.publishedAt,
+        durationSeconds: importedById.get(record.id)?.durationSeconds,
+      })), options.publicationExperiments || [], network);
+      for (const [strategy, views] of Object.entries(cohorts.viewsByStrategy)) {
+        (viewsByStrategy[strategy as BlackRoomCreativeStrategy] ||= []).push(...views);
+      }
+      for (const [duration, views] of Object.entries(cohorts.viewsByDuration)) {
+        (viewsByDuration[duration] ||= []).push(...views);
+      }
       if (network === "tiktok") tiktokPostIds = viewRecords.map((record) => record.id);
       historyCompleteByNetwork[network] = networkHistory.requests > 0
         && networkHistory.complete
@@ -1029,6 +1146,18 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
       networkSamples[network] = networkHistory.metricIds.size;
       const viewRecords = [...networkHistory.viewRecords].map(([id, views]) => ({ id, views }));
       viewsByNetwork[network] = viewRecords.map((record) => record.views);
+      const importedById = new Map(importedSamples.map((sample) => [sample.id, sample]));
+      const cohorts = extractBlackRoomExperimentCohorts(viewRecords.map((record) => ({
+        ...record,
+        publishedAt: importedById.get(record.id)?.publishedAt,
+        durationSeconds: importedById.get(record.id)?.durationSeconds,
+      })), options.publicationExperiments || [], network);
+      for (const [strategy, views] of Object.entries(cohorts.viewsByStrategy)) {
+        (viewsByStrategy[strategy as BlackRoomCreativeStrategy] ||= []).push(...views);
+      }
+      for (const [duration, views] of Object.entries(cohorts.viewsByDuration)) {
+        (viewsByDuration[duration] ||= []).push(...views);
+      }
       if (network === "tiktok") tiktokPostIds = viewRecords.map((record) => record.id);
       historyCompleteByNetwork[network] = false;
       historyRequestsByNetwork[network] = networkHistory.requests;
@@ -1075,7 +1204,8 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const comparableSampleCount = Math.min(...BLACKROOM_METRICOOL_NETWORKS.map((network) => networkSamples[network] || 0));
   const recommendedTimes = [...new Set(times)].slice(0, 12);
   const networkLearning = planBlackRoomNetworkLearning({ viewsByNetwork });
-  const creative = planBlackRoomCreativeLearning({ views: viewsByNetwork.tiktok || [], postIds: tiktokPostIds, previous: options.previous, now });
+  const creative = planBlackRoomCreativeLearning({ views: viewsByNetwork.tiktok || [], postIds: tiktokPostIds, viewsByStrategy, previous: options.previous, now });
+  const durationLearning = planBlackRoomDurationLearning({ viewsByDuration });
   const targets = BLACKROOM_METRICOOL_NETWORKS.map((network) => `${network} ${networkLearning.networkDailyTargets[network]}/día`).join(", ");
   const completeNetworks = BLACKROOM_METRICOOL_NETWORKS.filter((network) => historyCompleteByNetwork[network]).length;
   const historyReason = completeNetworks === BLACKROOM_METRICOOL_NETWORKS.length
@@ -1100,6 +1230,7 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
     recommendedTimesByNetwork,
     ...networkLearning,
     ...creative,
+    ...durationLearning,
     reason: comparableSampleCount >= BLACKROOM_CEO_MIN_SAMPLES
       ? `${csvReason} ${historyReason} El CEO estudia resultados reales de las tres redes: ${targets}. ${creative.creativeReason}`
       : `${csvReason} ${historyReason} Importó ${sampleCount} resultados reales; recolectando evidencia comparable (${comparableSampleCount}/${BLACKROOM_CEO_MIN_SAMPLES}) antes de cambiar horas o volumen. ${creative.creativeReason}`,

@@ -7,10 +7,12 @@ import {
   BLACKROOM_CEO_CREATIVE_MIN_SAMPLES,
   buildBlackRoomLearningSlots,
   collectBlackRoomMetricoolAnalytics,
+  extractBlackRoomExperimentCohorts,
   extractBlackRoomBestTimes,
   extractBlackRoomMetricSamples,
   extractBlackRoomViewSamples,
   planBlackRoomCreativeLearning,
+  planBlackRoomDurationLearning,
   planBlackRoomCampaignPosts,
   planBlackRoomNetworkLearning,
   recommendBlackRoomTimesFromImportedSamples,
@@ -675,4 +677,68 @@ test("TikTok view extraction deduplicates posts and ignores missing metrics", ()
   assert.deepEqual(extractBlackRoomViewSamples({ posts: [
     { id: "a", views: 3 }, { id: "a", views: 7 }, { postId: "b", viewCount: 12 }, { id: "c", impressions: 99 },
   ] }), [7, 12]);
+});
+
+test("maps publication receipts to creative and duration cohorts", () => {
+  const result = extractBlackRoomExperimentCohorts([
+    { id: "tt-1", views: 120 }, { id: "tt-2", views: 30 },
+  ], [
+    { metricoolId: "tt-1", reservationId: "r1", network: "tiktok", creativeStrategy: "instant_drop", durationSeconds: 30, format: "vertical", language: "en", slot: "18:00", publishedAt: "2026-07-22T18:00:00" },
+    { metricoolId: "tt-2", reservationId: "r2", network: "tiktok", creativeStrategy: "build_then_drop", durationSeconds: 60, format: "vertical", language: "es", slot: "19:30", publishedAt: "2026-07-22T19:30:00" },
+  ], "tiktok");
+  assert.deepEqual(result.viewsByStrategy, { instant_drop: [120], build_then_drop: [30] });
+  assert.deepEqual(result.viewsByDuration, { "30": [120], "60": [30] });
+});
+
+test("maps CSV URL samples by unique publication minute when receipt ids differ", () => {
+  const result = extractBlackRoomExperimentCohorts([
+    { id: "https://tiktok.example/video/1", views: 75, publishedAt: "2026-07-22T18:00:00", durationSeconds: 30 },
+  ], [{
+    metricoolId: "metricool-991", reservationId: "r1", network: "tiktok", creativeStrategy: "instant_drop",
+    durationSeconds: 30, format: "vertical", language: "en", slot: "18:00", publishedAt: "2026-07-22T18:00:00",
+  }], "tiktok");
+  assert.deepEqual(result.viewsByStrategy, { instant_drop: [75] });
+  assert.deepEqual(result.viewsByDuration, { "30": [75] });
+});
+
+test("does not count direct Metricool and CSV aliases as two experiments", () => {
+  const result = extractBlackRoomExperimentCohorts([
+    { id: "metricool-991", views: 80 },
+    { id: "https://tiktok.example/video/1", views: 75, publishedAt: "2026-07-22T18:00:00", durationSeconds: 30 },
+  ], [{
+    metricoolId: "metricool-991", reservationId: "r1", network: "tiktok", creativeStrategy: "instant_drop",
+    durationSeconds: 30, format: "vertical", language: "en", slot: "18:00", publishedAt: "2026-07-22T18:00:00",
+  }], "tiktok");
+  assert.deepEqual(result.viewsByStrategy, { instant_drop: [80] });
+  assert.deepEqual(result.viewsByDuration, { "30": [80] });
+});
+
+test("CEO selects the best proven creative cohort", () => {
+  const result = planBlackRoomCreativeLearning({
+    views: [120, 130, 140], postIds: ["p1", "p2", "p3"],
+    viewsByStrategy: {
+      drop_first: [5, 6, 7, 8, 9], instant_drop: [80, 90, 100, 110, 120], build_then_drop: [20, 22, 24, 26, 28],
+    },
+    now: new Date("2026-07-22T12:00:00.000Z"),
+  });
+  assert.equal(result.creativeStrategy, "instant_drop");
+  assert.equal(result.creativePerformance?.find((cohort) => cohort.strategy === "instant_drop")?.medianViews, 100);
+});
+
+test("CEO rotates away from a poor technique when it is the only proven cohort", () => {
+  const result = planBlackRoomCreativeLearning({
+    views: [2, 3, 4, 5, 6], postIds: ["p1", "p2", "p3", "p4", "p5"],
+    viewsByStrategy: { drop_first: [2, 3, 4, 5, 6] },
+    now: new Date("2026-07-22T12:00:00.000Z"),
+  });
+  assert.equal(result.creativeStrategy, "instant_drop");
+  assert.equal(result.creativeStrategyVersion, 1);
+});
+
+test("CEO ranks duration cohorts only after comparable evidence", () => {
+  const result = planBlackRoomDurationLearning({ viewsByDuration: {
+    "15": [20, 22, 24, 26, 28], "30": [100, 110, 120, 130, 140], "60": [40, 45],
+  } });
+  assert.equal(result.preferredDurations[0], 30);
+  assert.equal(result.durationPerformance.find((cohort) => cohort.durationSeconds === 30)?.medianViews, 120);
 });

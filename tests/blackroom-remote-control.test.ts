@@ -6,11 +6,21 @@ import {
   createBlackRoomRemoteControlState,
   isBlackRoomRemoteDeviceOnline,
   recordBlackRoomRemoteHeartbeat,
+  recordBlackRoomPublicationExperiment,
   setBlackRoomRemoteCommand,
   appendBlackRoomRemoteCommand,
   appendBlackRoomCeoCommand,
   upsertBlackRoomAnalyticsImports,
 } from "../server/blackroom-remote-control";
+
+test("remote control deduplicates the receipt experiment ledger", () => {
+  const state = createBlackRoomRemoteControlState();
+  const base = { metricoolId: "tt-1", reservationId: "r1", network: "tiktok", durationSeconds: 30, format: "vertical" as const, language: "en" as const, slot: "18:00", publishedAt: "2026-07-22T18:00:00" };
+  recordBlackRoomPublicationExperiment(state, { ...base, creativeStrategy: "instant_drop" });
+  recordBlackRoomPublicationExperiment(state, { ...base, creativeStrategy: "build_then_drop" });
+  assert.equal(state.publicationExperiments.length, 1);
+  assert.equal(state.publicationExperiments[0].creativeStrategy, "build_then_drop");
+});
 import { isPublicApiPath } from "../server/user-context";
 import { DEFAULT_DEV_USER_ID } from "../server/user-context";
 import { isConfiguredSingleUserOwner } from "../server/single-user-owner";

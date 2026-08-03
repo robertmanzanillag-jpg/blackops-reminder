@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { BlackRoomDailyJob, BlackRoomQueueState, BlackRoomExperimentDuration, BlackRoomTargetNetwork } from "./blackroom-daily-queue";
-import { BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS } from "./blackroom-growth-ceo";
+import { BLACKROOM_CEO_CREATIVE_MIN_SAMPLES, BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS } from "./blackroom-growth-ceo";
 import type { BlackRoomLedgerEntry, BlackRoomWorkerLedger } from "./blackroom-local-worker";
 import type { BlackRoomCreativeStrategy } from "./blackroom-growth-ceo";
 
@@ -100,6 +100,18 @@ function chooseDuration(job: BlackRoomDailyJob, entries: BlackRoomLedgerEntry[],
   const requiredSamples = Math.max(1, Number(job.requirements.minimumClipsPerDuration || 1));
   const unexplored = allowed.find((duration) => (counts.get(duration) || 0) < requiredSamples);
   if (unexplored) return unexplored;
+  const provenDurations = new Set((queue.analytics?.durationPerformance || [])
+    .filter((cohort) => Number(cohort.samples || 0) >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES)
+    .map((cohort) => Number(cohort.durationSeconds)));
+  const provenPreferred = (queue.analytics?.preferredDurations || [])
+    .map(Number)
+    .filter((duration): duration is BlackRoomExperimentDuration =>
+      allowed.includes(duration as BlackRoomExperimentDuration) && provenDurations.has(duration))
+    .slice(0, 2);
+  if (provenPreferred.length) {
+    const minimumPreferred = Math.min(...provenPreferred.map((duration) => counts.get(duration) || 0));
+    return provenPreferred.find((duration) => counts.get(duration) === minimumPreferred)!;
+  }
   if (Number(queue.analytics?.networkSamples?.tiktok || 0) >= 5
     && Number(queue.analytics?.tiktokLowViewRate || 0) >= 0.7) {
     const shortTests = allowed.filter((duration) => duration === 15 || duration === 30);
