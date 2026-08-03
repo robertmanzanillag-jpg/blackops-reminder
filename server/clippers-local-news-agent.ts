@@ -5,6 +5,7 @@ import { z } from "zod";
 import { detectLocalNewsSensitiveContent, hashLocalNewsCanonicalEventIdentity, hashLocalNewsQueueReview, hashLocalNewsReviewValue, runLocalNewsReviewCommittee } from "./clippers-local-news-review-committee";
 import { buildLocalNewsGrowthPackage, type LocalNewsGrowthPackage, type LocalNewsGrowthVariantId } from "./clippers-local-news-growth";
 import { detectLocalNewsLanguage, getDefaultLocalNewsTranslator, type LocalNewsTranslator } from "./clippers-local-news-translation";
+import { getLocalNewsGrowthScoutPattern } from "./local-news-growth-scout";
 
 export type ClipperLocalNewsLane = "miami-news" | "ny-news";
 export type ClipperLocalNewsPlatform = "x" | "facebook";
@@ -835,7 +836,7 @@ async function queueFor(event: ClipperLocalNewsEvent, now: string, env: NodeJS.P
     const latestRecent = recent.reduce((latest, item) => Math.max(latest, new Date(item.notBefore || item.createdAt).getTime()), nowMs);
     const notBefore = cadenceHeld ? new Date(latestRecent + CADENCE.windowMinutes * 60_000).toISOString() : null;
     const relevantMetrics = metrics.filter((metric) => metric.lane === event.lane && metric.platform === platform);
-    const organicGrowth = buildLocalNewsGrowthPackage({ ...event, mediaUrl: event.mediaUrl, mediaType: event.mediaType, qualityScore: event.qualityScore }, relevantMetrics, env.PUBLIC_BASE_URL);
+    const organicGrowth = buildLocalNewsGrowthPackage({ ...event, mediaUrl: event.mediaUrl, mediaType: event.mediaType, qualityScore: event.qualityScore }, relevantMetrics, env.PUBLIC_BASE_URL, getLocalNewsGrowthScoutPattern(event.lane));
     const copy = buildClipperLocalNewsCopy(event, platform, organicGrowth, bilingual);
     const copyHash = hashLocalNewsReviewValue(copy);
     const publishDecision = (translationGated || !autoEnabled) && committee.publishDecision === "auto_publish" ? "quarantine" as const : committee.publishDecision;

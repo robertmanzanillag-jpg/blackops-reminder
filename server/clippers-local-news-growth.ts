@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 export type LocalNewsGrowthVariantId = "utility" | "impact";
 export type LocalNewsGrowthLanguage = "es" | "en";
+export type LocalNewsGrowthScoutPattern = "breaking_alert" | "outcome" | "explainer" | "question" | "community_update" | "other";
 
 export interface LocalNewsGrowthEvent {
   id: string;
@@ -42,6 +43,7 @@ export interface LocalNewsGrowthPackage {
   headlineVariants: Record<LocalNewsGrowthVariantId, Record<LocalNewsGrowthLanguage, string>>;
   ownedArticleUrl: string | null;
   hashtags: string[];
+  learningSignal: LocalNewsGrowthScoutPattern | null;
   ceoDecision: LocalNewsCeoDecision;
   shortForm: {
     ready: true;
@@ -118,12 +120,14 @@ export function buildLocalNewsCeoDecision(metrics: LocalNewsGrowthMetric[]): Loc
   };
 }
 
-export function selectLocalNewsGrowthVariant(eventId: string, metrics: LocalNewsGrowthMetric[]): LocalNewsGrowthVariantId {
+export function selectLocalNewsGrowthVariant(eventId: string, metrics: LocalNewsGrowthMetric[], scoutPattern?: LocalNewsGrowthScoutPattern | null): LocalNewsGrowthVariantId {
   const utility = variantScore(metrics.filter((metric) => metric.variantId === "utility"));
   const impact = variantScore(metrics.filter((metric) => metric.variantId === "impact"));
   if (utility.impressions >= 100 && impact.impressions >= 100 && utility.score !== impact.score) {
     return utility.score > impact.score ? "utility" : "impact";
   }
+  if (scoutPattern === "explainer" || scoutPattern === "question") return "utility";
+  if (scoutPattern === "breaking_alert" || scoutPattern === "outcome" || scoutPattern === "community_update") return "impact";
   return Number.parseInt(digest(eventId).slice(0, 2), 16) % 2 === 0 ? "utility" : "impact";
 }
 
@@ -169,9 +173,10 @@ export function buildLocalNewsGrowthPackage(
   event: LocalNewsGrowthEvent,
   metrics: LocalNewsGrowthMetric[],
   publicBaseUrl?: string,
+  scoutPattern?: LocalNewsGrowthScoutPattern | null,
 ): LocalNewsGrowthPackage {
   const headlineVariants = headlines(event);
-  const variantId = selectLocalNewsGrowthVariant(event.id, metrics);
+  const variantId = selectLocalNewsGrowthVariant(event.id, metrics, scoutPattern);
   const baseUrl = safeBaseUrl(publicBaseUrl);
   const ownedArticleUrl = baseUrl
     ? `${baseUrl}/news/article/${encodeURIComponent(localNewsArticleSlug(event.id, event.lane))}?lang=es&utm_source=metricool&utm_medium=organic_social&utm_campaign=local_news&utm_content=${variantId}`
@@ -185,6 +190,7 @@ export function buildLocalNewsGrowthPackage(
     headlineVariants,
     ownedArticleUrl,
     hashtags: hashtags(event),
+    learningSignal: scoutPattern || null,
     ceoDecision: buildLocalNewsCeoDecision(metrics),
     shortForm: {
       ready: true,
