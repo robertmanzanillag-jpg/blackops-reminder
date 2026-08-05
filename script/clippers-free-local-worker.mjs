@@ -50,7 +50,8 @@ async function writeReport(reportPath, report) {
 export async function runClipperFreeLocalWorker(options = {}) {
   const projectRoot = path.resolve(options.projectRoot || DEFAULT_PROJECT_ROOT);
   const workerEnv = { ...process.env, ...(options.env || {}) };
-  const loadedConfigurationFiles = loadClipperSelectedEnv(projectRoot, workerEnv);
+  const configRoot = path.resolve(options.configRoot || workerEnv.CLIPPERS_CONFIG_ROOT || projectRoot);
+  const loadedConfigurationFiles = loadClipperSelectedEnv(configRoot, workerEnv);
   const workspaceRoot = path.resolve(
     options.workspaceRoot || workerEnv.CLIPPERS_WORKSPACE_ROOT || path.join(projectRoot, "clippers_workspace"),
   );
@@ -152,6 +153,7 @@ export async function runClipperFreeLocalWorker(options = {}) {
       startedAt,
       finishedAt: new Date().toISOString(),
       projectRoot,
+      configRoot,
       workspaceRoot,
       loadedConfigurationFiles,
       failedStage,
