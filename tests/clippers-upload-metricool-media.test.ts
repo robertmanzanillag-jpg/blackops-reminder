@@ -25,6 +25,52 @@ function createTestMp4(filePath: string) {
   assert.equal(result.status, 0, result.stderr?.toString());
 }
 
+async function createEligibleCampaignWorkspace(root: string) {
+  const draftFile = "drafts/vyro/test/clip-01.mp4";
+  const evidencePath = "evidence-drop/vyro/test.md";
+  await mkdir(path.join(root, "research"), { recursive: true });
+  await mkdir(path.join(root, path.dirname(draftFile)), { recursive: true });
+  await mkdir(path.join(root, path.dirname(evidencePath)), { recursive: true });
+  createTestMp4(path.join(root, draftFile));
+  const sourceUrl = "https://app.vyro.com/campaign/source";
+  await writeFile(path.join(root, evidencePath), [
+    "# Verified marketplace authorization",
+    "Campaign id: verified-campaign",
+    "Marketplace: vyro",
+    `Source: ${sourceUrl}`,
+    "The campaign explicitly authorizes this source and account for the documented clipping workflow.",
+  ].join("\n"));
+  await writeFile(path.join(root, "research", "paid-streamer-campaigns.json"), JSON.stringify([{
+    id: "verified-campaign",
+    title: "Verified campaign",
+    creator: "Creator",
+    creatorTier: "top",
+    creatorReachEvidence: "https://www.youtube.com/@verifiedcreator",
+    marketplace: "vyro",
+    active: true,
+    joined: true,
+    expiresAt: "2027-07-29T18:00:00.000Z",
+    payoutCpm: 1,
+    minViewsPerPost: 1000,
+    rightsEvidencePath: evidencePath,
+    sourceUrl,
+    accountHandle: "streamersclipusa",
+    sourceFilesReady: 1,
+    draftsReady: 1,
+    requiredHashtags: ["#Creator"],
+    draftFiles: [draftFile],
+    draftMetadata: {
+      "clip-01.mp4": {
+        caption: "Verified clip #Creator",
+        requiredHashtags: ["#Creator"],
+        requiresTranscript: false,
+      },
+    },
+  }], null, 2));
+  await writeFile(path.join(root, "research", "paid-streamer-campaign-metrics.json"), "[]\n");
+  return { draftFile };
+}
+
 test("builds a strict Google Drive public download URL", () => {
   assert.equal(
     buildGoogleDrivePublicDownloadUrl("1AbCdEfGhIjKlMnOp"),
@@ -203,4 +249,85 @@ test("does not upload media without explicit authorization", async () => {
   });
   assert.equal(result.status, "blocked");
   assert.equal(result.uploaded, 0);
+});
+
+test("persists a provisional receipt and reuses the same Drive file after publication fails", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "clippers-drive-retry-"));
+  try {
+    const { draftFile } = await createEligibleCampaignWorkspace(root);
+    let uploadCalls = 0;
+    let publicationCalls = 0;
+    const dependencies = {
+      async ensureFolder() { return "drive-folder"; },
+      async uploadFile() {
+        uploadCalls += 1;
+        return { fileId: "1AbCdEfGhIjKlMnOp" };
+      },
+      async makePublic(fileId: string) {
+        assert.equal(fileId, "1AbCdEfGhIjKlMnOp");
+        publicationCalls += 1;
+        if (publicationCalls === 1) throw new Error("temporary Drive permission failure");
+        return buildGoogleDrivePublicDownloadUrl(fileId);
+      },
+      async verifyPublicUrl() { return true; },
+    };
+    const first = await runClipperMetricoolMediaUpload({
+      workspaceRoot: root,
+      env: {
+        CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED: "true",
+        CLIPPERS_PUBLIC_MEDIA_PROVIDER: "google_drive",
+        CLIPPERS_METRICOOL_BLOG_ID: "6431687",
+      },
+      dependencies,
+    });
+    assert.equal(first.status, "blocked");
+    const pending = JSON.parse(await readFile(path.join(root, "reports", "metricool-public-media-receipts.json"), "utf8"));
+    assert.equal(pending[0].status, "upload_pending_publication");
+    assert.equal(pending[0].fileId, "1AbCdEfGhIjKlMnOp");
+
+    const retry = await runClipperMetricoolMediaUpload({
+      workspaceRoot: root,
+      env: {
+        CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED: "true",
+        CLIPPERS_PUBLIC_MEDIA_PROVIDER: "google_drive",
+        CLIPPERS_METRICOOL_BLOG_ID: "6431687",
+      },
+      dependencies,
+    });
+    assert.equal(retry.status, "completed");
+    assert.equal(uploadCalls, 1, "retry must reuse the provisional Drive file");
+    assert.equal(publicationCalls, 2);
+    const ready = JSON.parse(await readFile(path.join(root, "reports", "metricool-public-media-receipts.json"), "utf8"));
+    assert.equal(ready[0].status, "ready");
+    assert.equal(ready[0].draftFile, draftFile);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("dry-run validates eligible media without Drive mutations", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "clippers-drive-dry-run-"));
+  try {
+    await createEligibleCampaignWorkspace(root);
+    const result = await runClipperMetricoolMediaUpload({
+      dryRun: true,
+      workspaceRoot: root,
+      env: {
+        CLIPPERS_PUBLIC_MEDIA_PROVIDER: "google_drive",
+        CLIPPERS_METRICOOL_BLOG_ID: "6431687",
+      },
+      dependencies: {
+        async ensureFolder() { throw new Error("dry-run must not create folders"); },
+        async uploadFile() { throw new Error("dry-run must not upload"); },
+        async makePublic() { throw new Error("dry-run must not change permissions"); },
+        async verifyPublicUrl() { throw new Error("dry-run must not fetch media"); },
+      },
+    });
+    assert.equal(result.status, "dry_run");
+    assert.equal(result.uploaded, 0);
+    assert.equal(result.wouldUpload, 1);
+    await assert.rejects(readFile(path.join(root, "reports", "metricool-public-media-receipts.json")));
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
 });

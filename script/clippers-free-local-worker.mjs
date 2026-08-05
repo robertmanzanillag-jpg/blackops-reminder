@@ -1,10 +1,12 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, open, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, open, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { CLIPPERS_ALLOWED_ENV_KEYS, loadClipperSelectedEnv } from "./clippers-selected-env.mjs";
 
 const SAFE_ENV_KEYS = ["HOME", "LANG", "LC_ALL", "NODE_ENV", "PATH", "SHELL", "TMPDIR", "USER"];
+const DEFAULT_PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const LOCK_MAX_AGE_MS = 2 * 60 * 60_000;
 
 function localOnlyEnv(source, overrides = {}) {
   const safe = Object.fromEntries(SAFE_ENV_KEYS
@@ -22,18 +24,35 @@ function run(command, args, options = {}) {
   });
   return {
     command: [command, ...args].join(" "),
-    status: result.status,
+    status: result.status ?? 1,
     signal: result.signal,
     stdout: "",
-    stderr: result.status === 0 ? "" : "Subprocess failed; output omitted to prevent credential leakage.",
+    stderr: result.status === 0
+      ? ""
+      : result.error?.code === "ETIMEDOUT"
+        ? "Subprocess timed out after 30 minutes; output omitted to prevent credential leakage."
+        : result.error?.code
+          ? `Subprocess could not start (${result.error.code}); output omitted to prevent credential leakage.`
+          : `Subprocess exited with status ${result.status ?? "unknown"}; output omitted to prevent credential leakage.`,
   };
 }
 
+function skippedStep(command, reason, status = null) {
+  return { command, status, signal: null, stdout: "", stderr: reason };
+}
+
+async function writeReport(reportPath, report) {
+  const temporaryPath = `${reportPath}.${process.pid}.tmp`;
+  await writeFile(temporaryPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+  await rename(temporaryPath, reportPath);
+}
+
 export async function runClipperFreeLocalWorker(options = {}) {
-  const projectRoot = path.resolve(options.projectRoot || process.cwd());
-  loadClipperSelectedEnv(projectRoot);
+  const projectRoot = path.resolve(options.projectRoot || DEFAULT_PROJECT_ROOT);
+  const workerEnv = { ...process.env, ...(options.env || {}) };
+  const loadedConfigurationFiles = loadClipperSelectedEnv(projectRoot, workerEnv);
   const workspaceRoot = path.resolve(
-    options.workspaceRoot || process.env.CLIPPERS_WORKSPACE_ROOT || path.join(projectRoot, "clippers_workspace"),
+    options.workspaceRoot || workerEnv.CLIPPERS_WORKSPACE_ROOT || path.join(projectRoot, "clippers_workspace"),
   );
   const stateDir = path.join(workspaceRoot, "reports", "free-local-worker");
   const lockPath = path.join(stateDir, "worker.lock");
@@ -46,77 +65,98 @@ export async function runClipperFreeLocalWorker(options = {}) {
   } catch (error) {
     if (error?.code === "EEXIST") {
       const lockAgeMs = Date.now() - (await stat(lockPath)).mtimeMs;
-      if (lockAgeMs <= 2 * 60 * 60_000) return { status: "skipped", reason: "already_running", reportPath };
+      if (lockAgeMs <= LOCK_MAX_AGE_MS) return { status: "skipped", reason: "already_running", reportPath };
       await unlink(lockPath);
       lock = await open(lockPath, "wx", 0o600);
     }
     if (!lock) throw error;
   }
+  await lock.writeFile(`${JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() })}\n`);
 
   const startedAt = new Date().toISOString();
-  const publishingAuthorized = process.env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED === "true";
-  const publicMediaUploadAuthorized = process.env.CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED === "true";
+  const publishingAuthorized = workerEnv.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED === "true";
+  const publicMediaUploadAuthorized = workerEnv.CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED === "true";
   const metricoolEnv = publishingAuthorized ? {
-    METRICOOL_USER_TOKEN: process.env.METRICOOL_USER_TOKEN,
-    METRICOOL_USER_ID: process.env.METRICOOL_USER_ID,
-    CLIPPERS_METRICOOL_BLOG_ID: process.env.CLIPPERS_METRICOOL_BLOG_ID,
-    CLIPPERS_TIKTOK_ACCOUNT: process.env.CLIPPERS_TIKTOK_ACCOUNT || "streamersclipusa",
+    METRICOOL_USER_TOKEN: workerEnv.METRICOOL_USER_TOKEN,
+    METRICOOL_USER_ID: workerEnv.METRICOOL_USER_ID,
+    CLIPPERS_METRICOOL_BLOG_ID: workerEnv.CLIPPERS_METRICOOL_BLOG_ID,
+    CLIPPERS_TIKTOK_ACCOUNT: workerEnv.CLIPPERS_TIKTOK_ACCOUNT || "streamersclipusa",
   } : {};
   const publicMediaEnv = publicMediaUploadAuthorized ? Object.fromEntries(
     [...CLIPPERS_ALLOWED_ENV_KEYS]
       .filter((key) => key.startsWith("GOOGLE_") || key.startsWith("YOUTUBE_") || key.startsWith("CLIPPERS_PUBLIC_MEDIA"))
-      .map((key) => [key, process.env[key]])
+      .map((key) => [key, workerEnv[key]])
       .filter(([, value]) => typeof value === "string" && value),
   ) : {};
-  if (publicMediaUploadAuthorized && process.env.CLIPPERS_METRICOOL_BLOG_ID) {
-    publicMediaEnv.CLIPPERS_METRICOOL_BLOG_ID = process.env.CLIPPERS_METRICOOL_BLOG_ID;
+  if (publicMediaUploadAuthorized && workerEnv.CLIPPERS_METRICOOL_BLOG_ID) {
+    publicMediaEnv.CLIPPERS_METRICOOL_BLOG_ID = workerEnv.CLIPPERS_METRICOOL_BLOG_ID;
   }
-  const env = localOnlyEnv(process.env, {
+  const env = localOnlyEnv(workerEnv, {
     CLIPPERS_WORKSPACE_ROOT: workspaceRoot,
     CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: publishingAuthorized ? "true" : "false",
-    CLIPPERS_TARGET_DAILY_CLIPS: process.env.CLIPPERS_TARGET_DAILY_CLIPS || "5",
+    CLIPPERS_TARGET_DAILY_CLIPS: workerEnv.CLIPPERS_TARGET_DAILY_CLIPS || "5",
     CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED: publicMediaUploadAuthorized ? "true" : "false",
-    CLIPPERS_PUBLIC_MEDIA_PROVIDER: process.env.CLIPPERS_PUBLIC_MEDIA_PROVIDER || "google_drive",
+    CLIPPERS_PUBLIC_MEDIA_PROVIDER: workerEnv.CLIPPERS_PUBLIC_MEDIA_PROVIDER || "google_drive",
     ...Object.fromEntries(Object.entries(metricoolEnv).filter(([, value]) => typeof value === "string" && value)),
     ...publicMediaEnv,
   });
   const execute = options.run || run;
   try {
-    const mediaUpload = publicMediaUploadAuthorized
-      ? execute("npm", ["run", "clippers:upload-metricool-media"], { cwd: projectRoot, env })
-      : {
-          command: "Public media upload skipped",
-          status: 0,
-          signal: null,
-          stdout: "",
-          stderr: "",
-        };
-    const planning = mediaUpload.status === 0
+    const configurationBlockers = [];
+    if (!publishingAuthorized) configurationBlockers.push("metricool_autopublish_not_authorized");
+    if (publishingAuthorized && !workerEnv.METRICOOL_USER_TOKEN) configurationBlockers.push("metricool_user_token_missing");
+    if (publishingAuthorized && !workerEnv.METRICOOL_USER_ID) configurationBlockers.push("metricool_user_id_missing");
+    if (publishingAuthorized && !workerEnv.CLIPPERS_METRICOOL_BLOG_ID) configurationBlockers.push("metricool_blog_id_missing");
+
+    const supply = execute("npm", ["run", "clippers:marketplace-intake"], { cwd: projectRoot, env });
+    const mediaUpload = supply.status !== 0
+      ? skippedStep("Public media upload skipped", "Marketplace intake failed.")
+      : publicMediaUploadAuthorized
+        ? execute("npm", ["run", "clippers:upload-metricool-media"], { cwd: projectRoot, env })
+        : skippedStep("Public media upload skipped", "Public media upload is not authorized.", 0);
+    const planning = supply.status === 0 && mediaUpload.status === 0
       ? execute("npm", ["run", "clippers:streamer-growth-ceo"], { cwd: projectRoot, env })
-      : {
-          command: "CEO planning skipped",
-          status: null,
-          signal: null,
-          stdout: "",
-          stderr: "Public media upload failed",
-        };
-    const delivery = planning.status === 0 && publishingAuthorized
+      : skippedStep("CEO planning skipped", supply.status !== 0 ? "Marketplace intake failed." : "Public media upload failed.");
+    const delivery = planning.status === 0 && configurationBlockers.length === 0
       ? execute("node", ["script/clippers-metricool-autopilot.mjs"], { cwd: projectRoot, env })
-      : {
-          command: "Metricool delivery skipped",
-          status: publishingAuthorized ? null : 0,
-          signal: null,
-          stdout: "",
-          stderr: planning.status === 0 ? "" : "CEO planning failed",
-        };
-    const executeCleanup = process.env.CLIPPERS_FREE_WORKER_CLEANUP_EXECUTE === "true";
-    const cleanup = planning.status === 0 && (delivery.status === 0 || !publishingAuthorized)
+      : skippedStep(
+          "Metricool delivery skipped",
+          planning.status !== 0 ? "CEO planning failed." : `Configuration blockers: ${configurationBlockers.join(", ")}.`,
+        );
+    const reconciliation = delivery.status === 0 && publishingAuthorized
+      ? execute("npm", ["run", "clippers:reconcile-publications"], { cwd: projectRoot, env })
+      : skippedStep(
+          "Publication reconciliation skipped",
+          delivery.status !== 0 ? "Metricool delivery failed or was blocked." : "Metricool publishing is not authorized.",
+          publishingAuthorized ? null : 0,
+        );
+    const executeCleanup = workerEnv.CLIPPERS_FREE_WORKER_CLEANUP_EXECUTE === "true";
+    const cleanup = planning.status === 0 && (reconciliation.status === 0 || !publishingAuthorized)
       ? execute("node", ["script/clippers-cleanup-published-vyro-media.mjs", ...(executeCleanup ? ["--execute"] : [])], { cwd: projectRoot, env })
-      : { command: "cleanup skipped", status: null, signal: null, stdout: "", stderr: "Planning or delivery failed" };
+      : skippedStep("cleanup skipped", "Planning, delivery, or publication reconciliation failed.");
+    const failedStage = supply.status !== 0
+      ? "supply"
+      : mediaUpload.status !== 0
+        ? "media_upload"
+        : planning.status !== 0
+          ? "planning"
+          : delivery.status !== 0
+            ? "delivery"
+            : reconciliation.status !== 0
+              ? "reconciliation"
+              : cleanup.status !== 0
+                ? "cleanup"
+                : null;
     const report = {
-      status: planning.status === 0 && delivery.status === 0 && cleanup.status === 0 ? "completed" : "blocked",
+      status: failedStage ? "blocked" : "completed",
       startedAt,
       finishedAt: new Date().toISOString(),
+      projectRoot,
+      workspaceRoot,
+      loadedConfigurationFiles,
+      failedStage,
+      retryable: Boolean(failedStage),
+      configurationBlockers,
       paidAiUsed: false,
       paidAiCredentialsPassed: false,
       paidSpendAllowed: false,
@@ -124,16 +164,18 @@ export async function runClipperFreeLocalWorker(options = {}) {
       metricoolDeliveryEnabled: publishingAuthorized,
       publicMediaUploadEnabled: publicMediaUploadAuthorized,
       cleanupExecuteEnabled: executeCleanup,
+      supply,
       mediaUpload,
       planning,
       delivery,
+      reconciliation,
       cleanup,
       publicationRule: "Only proof-backed TikTok posts with an exact public URL count as published or measured.",
       note: publishingAuthorized
         ? "Metricool delivery runs only for proof-backed, unique queue items with public HTTPS media and required campaign hashtags."
-        : "Metricool delivery is disabled until explicit authorization is configured.",
+        : "Metricool delivery did not run because explicit authorization is missing. Set CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED=true in a selected project environment file and retry.",
     };
-    await writeFile(reportPath, `${JSON.stringify(report, null, 2)}\n`, { mode: 0o600 });
+    await writeReport(reportPath, report);
     return { ...report, reportPath };
   } finally {
     await lock.close();

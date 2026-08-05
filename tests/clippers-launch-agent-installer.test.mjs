@@ -5,12 +5,20 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
 
-test("LaunchAgent persists only explicit non-secret Clippers controls", async () => {
+const repoRoot = process.cwd();
+const installerPath = path.join(repoRoot, "script", "install-clippers-free-local-worker-launch-agent.sh");
+const gitCommonDir = spawnSync("git", ["rev-parse", "--path-format=absolute", "--git-common-dir"], {
+  cwd: repoRoot,
+  encoding: "utf8",
+}).stdout.trim();
+const primaryCheckoutRoot = gitCommonDir.endsWith(`${path.sep}.git`) ? path.dirname(gitCommonDir) : repoRoot;
+
+test("LaunchAgent resolves the checkout from the installer and does not freeze dynamic authorization", async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-home-"));
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-workspace-"));
   try {
-    const result = spawnSync("zsh", ["script/install-clippers-free-local-worker-launch-agent.sh"], {
-      cwd: process.cwd(),
+    const result = spawnSync("zsh", [installerPath], {
+      cwd: workspaceRoot,
       encoding: "utf8",
       env: {
         ...process.env,
@@ -33,12 +41,13 @@ test("LaunchAgent persists only explicit non-secret Clippers controls", async ()
       path.join(home, "Library", "LaunchAgents", "com.blackops.clippers-free-worker.plist"),
       "utf8",
     );
-    assert.match(plist, /CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED<\/key><string>true/);
+    assert.match(plist, new RegExp(`<key>WorkingDirectory</key><string>${primaryCheckoutRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.match(plist, new RegExp(`<string>${primaryCheckoutRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/script/clippers-free-local-worker\\.mjs</string>`));
     assert.match(plist, new RegExp(`CLIPPERS_WORKSPACE_ROOT</key><string>${workspaceRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
-    assert.match(plist, /CLIPPERS_METRICOOL_BLOG_ID<\/key><string>6431687/);
-    assert.match(plist, /CLIPPERS_TIKTOK_ACCOUNT<\/key><string>streamersclipusa/);
-    assert.match(plist, /CLIPPERS_TARGET_DAILY_CLIPS<\/key><string>5/);
-    assert.doesNotMatch(plist, /must-not-persist|METRICOOL_USER_TOKEN|GOOGLE_DRIVE_REFRESH_TOKEN/);
+    assert.doesNotMatch(
+      plist,
+      /must-not-persist|METRICOOL_USER_TOKEN|GOOGLE_DRIVE_REFRESH_TOKEN|CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED|CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED|CLIPPERS_METRICOOL_BLOG_ID|CLIPPERS_TARGET_DAILY_CLIPS/,
+    );
   } finally {
     await rm(home, { recursive: true, force: true });
     await rm(workspaceRoot, { recursive: true, force: true });
@@ -50,8 +59,8 @@ test("LaunchAgent does not install or start by default", async () => {
   try {
     const env = { ...process.env, HOME: home };
     delete env.CLIPPERS_LAUNCH_AGENT_DRY_RUN;
-    const result = spawnSync("zsh", ["script/install-clippers-free-local-worker-launch-agent.sh"], {
-      cwd: process.cwd(),
+    const result = spawnSync("zsh", [installerPath], {
+      cwd: repoRoot,
       encoding: "utf8",
       env,
     });
@@ -62,25 +71,24 @@ test("LaunchAgent does not install or start by default", async () => {
   }
 });
 
-test("LaunchAgent refuses live publishing without a Metricool blog id", async () => {
+test("LaunchAgent refuses an invalid project root without replacing the existing plist", async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-invalid-"));
   try {
-    for (const blogId of ["", "0"]) {
-      const result = spawnSync("zsh", ["script/install-clippers-free-local-worker-launch-agent.sh"], {
-        cwd: process.cwd(),
-        encoding: "utf8",
-        env: {
-          ...process.env,
-          HOME: home,
-          CLIPPERS_LAUNCH_AGENT_DRY_RUN: "true",
-          CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
-          CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED: "false",
-          CLIPPERS_METRICOOL_BLOG_ID: blogId,
-        },
-      });
-      assert.notEqual(result.status, 0);
-      assert.match(result.stderr, /CLIPPERS_METRICOOL_BLOG_ID is required/);
-    }
+    const invalidRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-invalid-project-"));
+    const result = spawnSync("zsh", [installerPath], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        HOME: home,
+        CLIPPERS_PROJECT_DIR: invalidRoot,
+        CLIPPERS_LAUNCH_AGENT_DRY_RUN: "true",
+      },
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /not a valid Clippers checkout/);
+    await assert.rejects(readFile(path.join(home, "Library", "LaunchAgents", "com.blackops.clippers-free-worker.plist")));
+    await rm(invalidRoot, { recursive: true, force: true });
   } finally {
     await rm(home, { recursive: true, force: true });
   }

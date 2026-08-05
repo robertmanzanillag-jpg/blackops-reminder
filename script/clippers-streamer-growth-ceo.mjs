@@ -12,6 +12,9 @@ const captionStrategies = [
 ];
 const exactTikTokPostPattern = /^https:\/\/(?:www\.)?tiktok\.com\/@([A-Za-z0-9._-]{2,40})\/video\/\d{8,30}\/?$/i;
 const execFileAsync = promisify(execFile);
+const decisionStateSchemaVersion = 1;
+const maximumAuthorizedDailyClips = 5;
+const maximumCampaignStatusAgeHours = 24;
 
 function tiktokPostMatchesAccount(url, accountHandle) {
   const match = String(url || "").trim().match(exactTikTokPostPattern);
@@ -252,12 +255,45 @@ function campaignExpiryMs(campaign) {
   return Number.isFinite(observedAt) && hoursRemaining !== null ? observedAt + hoursRemaining * 3_600_000 : NaN;
 }
 
+function campaignStatusObservedMs(campaign) {
+  const candidates = [
+    campaign.statusObservedAt,
+    campaign.remainingTimeObservedAt,
+    campaign.evidenceVerifiedAt,
+  ];
+  for (const candidate of candidates) {
+    const parsed = Date.parse(String(candidate || ""));
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return NaN;
+}
+
+function campaignStatusFreshness(campaign, now) {
+  const observedAtMs = campaignStatusObservedMs(campaign);
+  const ageHours = Number.isFinite(observedAtMs)
+    ? Math.max(0, Math.round(((now.getTime() - observedAtMs) / 3_600_000) * 10) / 10)
+    : null;
+  return {
+    observedAt: Number.isFinite(observedAtMs) ? new Date(observedAtMs).toISOString() : null,
+    ageHours,
+    maximumAgeHours: maximumCampaignStatusAgeHours,
+    status: ageHours === null
+      ? "unknown"
+      : ageHours > maximumCampaignStatusAgeHours
+        ? "stale"
+        : "fresh",
+  };
+}
+
 function campaignBlockers(campaign, now) {
   const expiresAt = campaignExpiryMs(campaign);
+  const freshness = campaignStatusFreshness(campaign, now);
   return [
     campaign.active !== true ? "campaign_not_active" : null,
     campaign.joined !== true ? "campaign_not_joined" : null,
-    !Number.isFinite(expiresAt) || expiresAt <= now.getTime() ? "campaign_expired_or_unknown" : null,
+    !Number.isFinite(expiresAt) ? "campaign_expiry_unknown" : null,
+    Number.isFinite(expiresAt) && expiresAt <= now.getTime() ? "campaign_expired" : null,
+    freshness.status === "stale" ? "campaign_status_stale" : null,
     !exactEvidence(campaign.rightsEvidencePath) || campaign.evidenceVerified !== true ? "campaign_rights_evidence_missing" : null,
     !exactEvidence(campaign.sourceUrl) ? "authorized_source_missing" : null,
     !exactEvidence(campaign.creatorReachEvidence) ? "creator_reach_evidence_missing" : null,
@@ -267,6 +303,128 @@ function campaignBlockers(campaign, now) {
     finiteNumber(campaign.sourceFilesReady) === null || Number(campaign.sourceFilesReady) < 1 ? "source_files_missing" : null,
     finiteNumber(campaign.draftsReady) === null || Number(campaign.draftsReady) < 1 ? "drafts_missing" : null,
   ].filter(Boolean);
+}
+
+function campaignWarnings(campaign, now) {
+  const freshness = campaignStatusFreshness(campaign, now);
+  return [
+    freshness.status === "unknown" ? "campaign_status_freshness_unknown" : null,
+  ].filter(Boolean);
+}
+
+function blockerDomain(code) {
+  if (code.startsWith("campaign_") || code === "authorized_source_missing" || code === "creator_reach_evidence_missing") return "campaign";
+  if (code.startsWith("payout_")) return "payment";
+  if (code.includes("media") || code === "drafts_missing" || code === "source_files_missing") return "media";
+  if (code.includes("authorization")) return "authorization";
+  if (code.includes("metricool") || code.includes("delivery")) return "delivery";
+  return "policy";
+}
+
+function typedBlocker(code, blockingCapability) {
+  return {
+    code,
+    domain: blockerDomain(code),
+    severity: "blocking",
+    blocks: blockingCapability,
+  };
+}
+
+function typedWarning(code) {
+  return {
+    code,
+    domain: blockerDomain(code),
+    severity: "warning",
+    blocks: "refresh_campaign_status",
+  };
+}
+
+function decisionOperationalState({
+  productionBlockers,
+  warnings = [],
+  paymentBlockers,
+  publishingAuthorized,
+  mediaStatus = "unchecked",
+  validatedMediaCount = 0,
+  deliverableCount = 0,
+}) {
+  const canProduce = productionBlockers.length === 0;
+  const canDeliver = canProduce && publishingAuthorized && deliverableCount > 0;
+  const blockers = [
+    ...productionBlockers.map((code) => typedBlocker(code, "produce")),
+    ...paymentBlockers.map((code) => typedBlocker(code, "cashout")),
+    ...(!publishingAuthorized ? [typedBlocker("publishing_not_authorized", "deliver")] : []),
+    ...(canProduce && mediaStatus === "checked" && validatedMediaCount === 0
+      ? [typedBlocker("validated_media_missing", "deliver")]
+      : []),
+    ...(canProduce && publishingAuthorized && mediaStatus === "checked" && validatedMediaCount > 0 && deliverableCount === 0
+      ? [typedBlocker("metricool_delivery_input_missing", "deliver")]
+      : []),
+    ...warnings.map(typedWarning),
+  ];
+  const phase = !canProduce
+    ? "blocked_campaign"
+    : mediaStatus !== "checked"
+      ? "ready_for_media_validation"
+      : validatedMediaCount === 0
+        ? "blocked_media"
+        : !publishingAuthorized
+          ? "awaiting_publish_authorization"
+          : deliverableCount === 0
+            ? "blocked_delivery"
+            : "ready_for_delivery";
+  const nextStep = blockers.find((row) => row.blocks === "produce")?.code
+    || (mediaStatus !== "checked" ? "validate_final_media" : null)
+    || (validatedMediaCount === 0 ? "render_or_repair_final_media" : null)
+    || (!publishingAuthorized ? "obtain_publish_authorization" : null)
+    || (deliverableCount === 0 ? "attach_public_media_and_verify_metricool_account" : "deliver_next_eligible_clip");
+  return {
+    schemaVersion: decisionStateSchemaVersion,
+    phase,
+    activity: "idle",
+    canClaimWorking: false,
+    capabilities: {
+      canAnalyze: true,
+      canProduce,
+      canValidateMedia: canProduce,
+      canDeliver,
+      canCashout: paymentBlockers.length === 0,
+    },
+    authorization: {
+      status: publishingAuthorized ? "authorized" : "not_authorized",
+      dailyClipLimit: maximumAuthorizedDailyClips,
+      paidSpendLimitUsd: 0,
+    },
+    media: {
+      status: mediaStatus,
+      validatedCount: validatedMediaCount,
+      deliverableCount,
+    },
+    blockers,
+    nextStep: { code: nextStep },
+    truth: canDeliver
+      ? "Ready for the worker to deliver; no delivery has started yet."
+      : canProduce
+        ? "Planning is complete, but delivery cannot start until the listed gates pass."
+        : "The CEO is blocked and cannot produce or deliver this campaign.",
+  };
+}
+
+export function refreshDecisionOperationalState(decision, {
+  rows = [],
+  deliverableCount = 0,
+} = {}) {
+  const validatedMediaCount = rows.filter((row) => !["blocked_media_missing", "blocked_campaign"].includes(row.status)).length;
+  decision.operationalState = decisionOperationalState({
+    productionBlockers: decision.productionBlockers || [],
+    warnings: decision.warnings || [],
+    paymentBlockers: decision.cashoutBlockers || [],
+    publishingAuthorized: decision.publishingAuthorized === true,
+    mediaStatus: "checked",
+    validatedMediaCount,
+    deliverableCount,
+  });
+  return decision.operationalState;
 }
 
 function payoutBlockers(campaign) {
@@ -320,7 +478,9 @@ function chooseExperiment(rows) {
 
 function campaignDecision(campaign, metrics, now, publishingAuthorized = false) {
   const productionBlockers = campaignBlockers(campaign, now);
+  const warnings = campaignWarnings(campaign, now);
   const paymentBlockers = payoutBlockers(campaign);
+  const freshness = campaignStatusFreshness(campaign, now);
   const rows = metricRowsForCampaign(metrics, campaign.id, campaign);
   const medianViews = median(rows.map((row) => Number(row.views)));
   const totalViews = rows.reduce((sum, row) => sum + Number(row.views), 0);
@@ -353,6 +513,7 @@ function campaignDecision(campaign, metrics, now, publishingAuthorized = false) 
   return {
     campaignId: campaign.id,
     campaignExpiresAt: Number.isFinite(expiryMs) ? new Date(expiryMs).toISOString() : null,
+    campaignStatusFreshness: freshness,
     title: campaign.title,
     creator: campaign.creator,
     creatorTier: campaign.creatorTier || "unknown",
@@ -361,6 +522,7 @@ function campaignDecision(campaign, metrics, now, publishingAuthorized = false) 
     decision,
     priorityScore,
     productionBlockers,
+    warnings,
     publishBlockers: productionBlockers,
     cashoutBlockers: paymentBlockers,
     canProduce: productionBlockers.length === 0,
@@ -384,6 +546,12 @@ function campaignDecision(campaign, metrics, now, publishingAuthorized = false) 
     experiment,
     hashtagPolicy,
     assignments,
+    operationalState: decisionOperationalState({
+      productionBlockers,
+      warnings,
+      paymentBlockers,
+      publishingAuthorized,
+    }),
     nextAction: productionBlockers.length
       ? `Resolve ${productionBlockers[0]}.`
       : decision === "scale"
@@ -407,8 +575,8 @@ export function buildStreamerGrowthCeoPlan({
   targetDailyClips = 5,
 }) {
   const parsedTargetDailyClips = Number(targetDailyClips);
-  const safeConfiguredDailyClips = Number.isFinite(parsedTargetDailyClips)
-    ? Math.max(5, Math.min(8, Math.trunc(parsedTargetDailyClips)))
+  const safeConfiguredDailyClips = Number.isFinite(parsedTargetDailyClips) && parsedTargetDailyClips > 0
+    ? Math.max(1, Math.min(maximumAuthorizedDailyClips, Math.trunc(parsedTargetDailyClips)))
     : 5;
   const decisions = campaigns.map((campaign) => campaignDecision(campaign, metrics, now, publishingAuthorized))
     .sort((a, b) => b.priorityScore - a.priorityScore || a.title.localeCompare(b.title));
@@ -429,14 +597,14 @@ export function buildStreamerGrowthCeoPlan({
   const dailyTestClips = !active.length
     ? 0
     : actualPublishedRows.length < 15
-      ? 5
+      ? safeConfiguredDailyClips
       : recutting
-        ? 2
+        ? Math.min(2, safeConfiguredDailyClips)
         : scaling.length
-          ? Math.max(6, safeConfiguredDailyClips)
+          ? safeConfiguredDailyClips
           : optimizing
-            ? 4
-            : 5;
+            ? Math.min(4, safeConfiguredDailyClips)
+            : safeConfiguredDailyClips;
   const volumeReason = !active.length
     ? "no_active_campaign"
     : actualPublishedRows.length < 15
@@ -470,9 +638,9 @@ export function buildStreamerGrowthCeoPlan({
     operatingPolicy: {
       dailyTestClips,
       initialDailyClips: 5,
-      minimumInitialDailyClips: 5,
+      minimumInitialDailyClips: Math.min(5, safeConfiguredDailyClips),
       configuredDailyCeiling: safeConfiguredDailyClips,
-      maximumDailyClipsPerAccount: 8,
+      maximumDailyClipsPerAccount: maximumAuthorizedDailyClips,
       volumeReason,
       exploitPercent: scaling.length ? 70 : 0,
       explorePercent: scaling.length ? 30 : 100,
@@ -481,6 +649,30 @@ export function buildStreamerGrowthCeoPlan({
       publishingAuthorized,
       metricoolApprovalRequired: true,
       realPublishEnabled: false,
+    },
+    executionState: {
+      schemaVersion: decisionStateSchemaVersion,
+      activity: "idle",
+      canClaimWorking: false,
+      phase: !campaigns.length ? "needs_campaign_catalog" : !active.length ? "blocked" : "ready_for_production",
+      objective: {
+        targetDailyClips: dailyTestClips,
+        maximumDailyClips: maximumAuthorizedDailyClips,
+        paidSpendLimitUsd: 0,
+      },
+      authorization: {
+        status: publishingAuthorized ? "authorized" : "not_authorized",
+        canPublish: publishingAuthorized,
+      },
+      capabilities: {
+        canAnalyze: true,
+        canProduceNow: active.length > 0,
+        canDeliverNow: false,
+      },
+      blockerCodes: Array.from(new Set(decisions.flatMap((row) => row.operationalState.blockers.map((blocker) => blocker.code)))),
+      truth: active.length
+        ? "The CEO has a production plan, but no delivery is executing."
+        : "The CEO is blocked and is not producing or publishing.",
     },
     decisions,
     nextBestAction: next?.nextAction || "Add a verified paid campaign with evidence; do not fabricate campaign availability.",
@@ -620,6 +812,10 @@ async function main() {
     decision.realPublishEnabled = readyForAutopilot.length > 0;
     decision.metricoolAutopilotReady = readyForAutopilot.length > 0;
     decision.metricoolApprovalRequired = !decision.realPublishEnabled;
+    refreshDecisionOperationalState(decision, {
+      rows,
+      deliverableCount: readyForAutopilot.length,
+    });
     if (decision.publishingAuthorized && decision.canProduce) {
       decision.nextAction = decision.realPublishEnabled
         ? `Deliver the next eligible ${decision.experiment.nextStrategyId} test through the verified Metricool autopilot${decision.cashoutBlockers.length ? `; resolve ${decision.cashoutBlockers[0]} before cashout` : ""}.`
@@ -640,11 +836,35 @@ async function main() {
   }
   plan.operatingPolicy.realPublishEnabled = plan.decisions.some((decision) => decision.realPublishEnabled);
   plan.operatingPolicy.metricoolApprovalRequired = !plan.operatingPolicy.realPublishEnabled;
+  const deliverableItems = plan.decisions.reduce((sum, decision) => sum + decision.operationalState.media.deliverableCount, 0);
+  const validatedItems = plan.decisions.reduce((sum, decision) => sum + decision.operationalState.media.validatedCount, 0);
+  plan.executionState = {
+    ...plan.executionState,
+    phase: deliverableItems > 0
+      ? "ready_for_delivery"
+      : validatedItems > 0
+        ? "blocked_delivery"
+        : plan.portfolio.activeProduction > 0
+          ? "blocked_media"
+          : "blocked",
+    capabilities: {
+      ...plan.executionState.capabilities,
+      canDeliverNow: deliverableItems > 0,
+    },
+    media: { validatedItems, deliverableItems },
+    blockerCodes: Array.from(new Set(plan.decisions.flatMap((row) => row.operationalState.blockers.map((blocker) => blocker.code)))),
+    truth: deliverableItems > 0
+      ? `${deliverableItems} item(s) are ready for the worker; no delivery has started yet.`
+      : "No item can be delivered now; the CEO is not working on a publish action.",
+  };
   plan.nextBestAction = plan.decisions[0]?.nextAction || plan.nextBestAction;
   await writeFile(deliveryQueuePath, `${JSON.stringify({
+    schemaVersion: decisionStateSchemaVersion,
     generatedAt: new Date().toISOString(),
     paidSpendAllowed: false,
     targetDailyClips: plan.operatingPolicy.dailyTestClips,
+    authorization: plan.executionState.authorization,
+    executionState: plan.executionState,
     items: autopilotQueueItems,
   }, null, 2)}\n`, { mode: 0o600 });
   await writeFile(path.join(reportDir, "streamer-growth-ceo.json"), `${JSON.stringify(plan, null, 2)}\n`);

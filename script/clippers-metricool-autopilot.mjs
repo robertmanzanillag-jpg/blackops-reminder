@@ -83,14 +83,16 @@ function objects(value) {
   return found;
 }
 
-async function verifyMetricoolSchedule(fetcher, token, userId, blogId, caption, publicationDateTime) {
+async function verifyMetricoolSchedule(fetcher, token, userId, blogId, caption, publicationDateTime, options = {}) {
   const date = publicationDateTime.slice(0, 10);
   const url = `https://app.metricool.com/api/v2/scheduler/posts?blogId=${blogId}`
     + `&userId=${encodeURIComponent(userId)}&integrationSource=MCP`
     + `&start=${date}T00%3A00%3A00&end=${date}T23%3A59%3A59`
     + `&timezone=${encodeURIComponent(TIMEZONE)}&extendedRange=false`;
-  for (let attempt = 0; attempt < 6; attempt += 1) {
-    if (attempt) await new Promise((resolve) => setTimeout(resolve, 2_000));
+  const attempts = Math.max(1, Math.min(10, Math.trunc(Number(options.attempts ?? 6)) || 1));
+  const delayMs = Math.max(0, Math.min(30_000, Math.trunc(Number(options.delayMs ?? 2_000)) || 0));
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    if (attempt && delayMs) await new Promise((resolve) => setTimeout(resolve, delayMs));
     const response = await fetcher(url, {
       headers: { "X-Mc-Auth": token, accept: "application/json" },
       signal: AbortSignal.timeout(60_000),
@@ -105,7 +107,8 @@ async function verifyMetricoolSchedule(fetcher, token, userId, blogId, caption, 
         : String(publication?.dateTime ?? record.publicationDateTime ?? record.date ?? "");
       return text === caption && dateTime.startsWith(publicationDateTime);
     });
-    if (match) return String(match.id ?? match.uuid ?? "");
+    const id = verifiedRecordId(match);
+    if (id) return id;
   }
   throw new Error("Metricool scheduling outcome is unverified");
 }
@@ -130,9 +133,10 @@ async function listMetricoolTikTokSchedule(fetcher, token, userId, blogId, start
       : String(publication?.dateTime ?? record.publicationDateTime ?? record.date ?? "");
     if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(dateTime)) return [];
     return [{
-      id: String(record.id ?? record.uuid ?? ""),
+      id: verifiedRecordId(record),
       caption: String(record.text ?? record.caption ?? record.content ?? ""),
       dateTime: dateTime.slice(0, 19),
+      mediaUrl: String(record.mediaUrl ?? record.media?.url ?? record.media?.[0]?.url ?? ""),
     }];
   });
 }
@@ -199,10 +203,38 @@ export function buildPublicationSchedule(now = new Date(), count = 5, options = 
   return rows;
 }
 
+function normalized(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
 function queueItemId(item) {
   return createHash("sha256")
     .update([item.campaignId, item.draftFile, item.account].map((value) => String(value || "")).join("|"))
     .digest("hex").slice(0, 16);
+}
+
+function itemDedupeKeys(item) {
+  return [
+    ["item", queueItemId(item)],
+    ["draft", item.draftFile],
+    ["media", item.mediaUrl],
+    ["hash", item.mediaSha256 || item.sha256],
+    ["caption", item.caption],
+    ["source", item.sourceUrl],
+  ].flatMap(([kind, value]) => normalized(value) ? [`${kind}:${normalized(value)}`] : []);
+}
+
+function hasDedupeCollision(item, keys) {
+  return itemDedupeKeys(item).some((key) => keys.has(key));
+}
+
+function addDedupeKeys(item, keys) {
+  itemDedupeKeys(item).forEach((key) => keys.add(key));
+}
+
+function verifiedRecordId(record) {
+  const id = String(record?.id ?? record?.uuid ?? "").trim();
+  return id && !/^(?:null|undefined|0)$/i.test(id) ? id : "";
 }
 
 export function validateAutopilotItem(item, expectedAccount) {
@@ -218,6 +250,21 @@ export function validateAutopilotItem(item, expectedAccount) {
     requiredHashtags.some((tag) => !captionHasTag(caption, tag)) ? "required_hashtag_missing" : null,
   ].filter(Boolean);
   return { blockers, requiredHashtags, account, caption };
+}
+
+function validateMediaReceipt(item, mediaReceipts) {
+  const receipt = mediaReceipts.find((row) => normalized(row?.draftFile) === normalized(item.draftFile)
+    && normalized(row?.campaignId) === normalized(item.campaignId));
+  if (!receipt) return { blocker: "verified_media_receipt_missing", receipt: null };
+  if (!verifiedRecordId({ id: receipt.fileId })) return { blocker: "verified_media_file_id_missing", receipt };
+  if (normalized(receipt.mediaUrl) !== normalized(item.mediaUrl)) {
+    return { blocker: "media_url_receipt_mismatch", receipt };
+  }
+  const expectedHash = normalized(item.mediaSha256 || item.sha256);
+  if (expectedHash && normalized(receipt.sha256) !== expectedHash) {
+    return { blocker: "media_hash_receipt_mismatch", receipt };
+  }
+  return { blocker: null, receipt };
 }
 
 function slotIsBeforeCampaignExpiry(item, publicationDateTime) {
@@ -255,7 +302,8 @@ async function acquireAutopilotLock(lockPath) {
 
 export async function runMetricoolAutopilot(options = {}) {
   const env = options.env || process.env;
-  if (env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED !== "true") {
+  const dryRun = options.dryRun === true || env.CLIPPERS_METRICOOL_DRY_RUN === "true";
+  if (!dryRun && env.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED !== "true") {
     return { status: "blocked", reason: "explicit_autopublish_authorization_required", scheduled: 0 };
   }
   const fetcher = options.fetch || fetch;
@@ -263,6 +311,7 @@ export async function runMetricoolAutopilot(options = {}) {
   const reportDir = path.join(workspaceRoot, "reports");
   const queuePath = path.join(reportDir, "metricool-autopilot-queue.json");
   const ledgerPath = path.join(reportDir, "metricool-autopilot-ledger.json");
+  const mediaReceiptsPath = path.join(reportDir, "metricool-public-media-receipts.json");
   const lockPath = path.join(reportDir, "metricool-autopilot.lock");
   await mkdir(reportDir, { recursive: true });
   const lock = await acquireAutopilotLock(lockPath);
@@ -270,29 +319,48 @@ export async function runMetricoolAutopilot(options = {}) {
   try {
   const queue = options.queue || JSON.parse(await readFile(queuePath, "utf8").catch(() => "{\"items\":[]}"));
   const ledger = options.ledger || JSON.parse(await readFile(ledgerPath, "utf8").catch(() => "[]"));
-  const token = requiredEnv(env, "METRICOOL_USER_TOKEN");
-  const userId = requiredEnv(env, "METRICOOL_USER_ID");
+  const mediaReceipts = options.mediaReceipts
+    || JSON.parse(await readFile(mediaReceiptsPath, "utf8").catch(() => "[]"));
+  const token = dryRun ? "" : requiredEnv(env, "METRICOOL_USER_TOKEN");
+  const userId = dryRun ? String(env.METRICOOL_USER_ID || "dry-run") : requiredEnv(env, "METRICOOL_USER_ID");
   const expectedBlogId = Number(requiredEnv(env, "CLIPPERS_METRICOOL_BLOG_ID"));
   if (!Number.isInteger(expectedBlogId) || expectedBlogId <= 0) throw new Error("CLIPPERS_METRICOOL_BLOG_ID is invalid");
   const expectedAccount = String(env.CLIPPERS_TIKTOK_ACCOUNT || "streamersclipusa").replace(/^@/, "");
   const targetDailyClips = Math.max(0, Math.min(8, Math.trunc(Number(queue.targetDailyClips) || 0)));
   const now = options.now || new Date();
-  const deliveredIds = new Set(ledger.map((row) => row.itemId));
+  const deliveredKeys = new Set();
+  const pendingByItemId = new Map();
+  for (const row of Array.isArray(ledger) ? ledger : []) {
+    const status = normalized(row?.status);
+    if (["scheduled", "published"].includes(status)) addDedupeKeys(row, deliveredKeys);
+    if (status === "verification_pending" && row?.itemId) pendingByItemId.set(String(row.itemId), row);
+  }
   const candidatesById = new Map();
+  const results = [];
+  const queuedKeys = new Set();
   for (const rawItem of Array.isArray(queue.items) ? queue.items : []) {
     const item = { ...rawItem, itemId: queueItemId(rawItem) };
-    if (!deliveredIds.has(item.itemId) && !candidatesById.has(item.itemId)) {
-      candidatesById.set(item.itemId, item);
+    if (hasDedupeCollision(item, deliveredKeys)) {
+      results.push({ itemId: item.itemId, status: "deduplicated", reason: "equivalent_delivery_already_recorded" });
+      continue;
     }
+    if (pendingByItemId.has(item.itemId)) continue;
+    if (hasDedupeCollision(item, queuedKeys)) {
+      results.push({ itemId: item.itemId, status: "deduplicated", reason: "equivalent_queue_item" });
+      continue;
+    }
+    addDedupeKeys(item, queuedKeys);
+    candidatesById.set(item.itemId, item);
   }
-  const results = [];
   const candidates = [];
   for (const item of candidatesById.values()) {
     const validation = validateAutopilotItem(item, expectedAccount);
+    const mediaValidation = validateMediaReceipt(item, Array.isArray(mediaReceipts) ? mediaReceipts : []);
     const blogId = Number(item.blogId || expectedBlogId);
     const campaignExpiresAt = item.campaignExpiresAt ? Date.parse(String(item.campaignExpiresAt)) : null;
     const blockers = [
       ...validation.blockers,
+      mediaValidation.blocker,
       !Number.isInteger(blogId) || blogId <= 0 ? "metricool_blog_id_missing" : null,
       Number.isInteger(blogId) && blogId > 0 && blogId !== expectedBlogId ? "wrong_metricool_blog" : null,
       campaignExpiresAt !== null && (!Number.isFinite(campaignExpiresAt) || campaignExpiresAt <= now.getTime())
@@ -302,15 +370,42 @@ export async function runMetricoolAutopilot(options = {}) {
     if (blockers.length) {
       results.push({ itemId: item.itemId, status: "blocked", blockers });
     } else {
-      candidates.push({ item, validation, blogId });
+      candidates.push({ item, validation, blogId, mediaReceipt: mediaValidation.receipt });
     }
   }
-  if (!candidates.length) {
+  if (!candidates.length && !pendingByItemId.size) {
     return {
       status: "blocked",
       scheduled: 0,
       blocked: results.length,
       verificationPending: 0,
+      results,
+      ledgerPath,
+    };
+  }
+  if (dryRun) {
+    const schedule = buildPublicationSchedule(now, Math.min(targetDailyClips, candidates.length), {
+      dailyLimit: targetDailyClips,
+    });
+    candidates.slice(0, schedule.length).forEach(({ item, validation, blogId, mediaReceipt }, index) => {
+      results.push({
+        itemId: item.itemId,
+        campaignId: item.campaignId,
+        draftFile: item.draftFile,
+        account: validation.account,
+        metricoolBlogId: blogId,
+        mediaReceiptFileId: mediaReceipt.fileId,
+        scheduledFor: schedule[index],
+        status: "dry_run",
+        paidSpendAllowed: false,
+      });
+    });
+    return {
+      status: results.some((row) => row.status === "dry_run") ? "dry_run" : "blocked",
+      dryRun: true,
+      scheduled: 0,
+      wouldSchedule: results.filter((row) => row.status === "dry_run").length,
+      blocked: results.filter((row) => row.status === "blocked").length,
       results,
       ledgerPath,
     };
@@ -325,6 +420,22 @@ export async function runMetricoolAutopilot(options = {}) {
     startDate,
     endDate,
   );
+  for (const [itemId, pending] of pendingByItemId) {
+    const match = existingSchedule.find((row) => row.id
+      && normalized(row.caption) === normalized(pending.caption)
+      && (!pending.scheduledFor || row.dateTime === pending.scheduledFor));
+    if (match) {
+      pending.status = "scheduled";
+      pending.metricoolId = match.id;
+      pending.reconciledAt = new Date().toISOString();
+      delete pending.reason;
+      delete pending.error;
+      results.push(pending);
+    } else {
+      results.push({ ...pending, status: "verification_pending", reason: "retry_suppressed_until_remote_outcome_is_known" });
+    }
+  }
+  if (pendingByItemId.size) await writeJsonAtomic(ledgerPath, ledger);
   const existingDailyCounts = {};
   for (const row of existingSchedule) {
     const date = row.dateTime.slice(0, 10);
@@ -339,13 +450,44 @@ export async function runMetricoolAutopilot(options = {}) {
 
   for (const candidate of candidates) {
     if (scheduleIndex >= schedule.length) break;
-    const { item, validation, blogId } = candidate;
+    const { item, validation, blogId, mediaReceipt } = candidate;
     const publicationDateTime = schedule[scheduleIndex];
     if (!slotIsBeforeCampaignExpiry(item, publicationDateTime)) {
       results.push({ itemId: item.itemId, status: "blocked", blockers: ["campaign_expires_before_slot"] });
       continue;
     }
     scheduleIndex += 1;
+    const immediateSchedule = await listMetricoolTikTokSchedule(
+      fetcher, token, userId, blogId, publicationDateTime.slice(0, 10), publicationDateTime.slice(0, 10),
+    );
+    const equivalent = immediateSchedule.find((row) => normalized(row.caption) === normalized(validation.caption)
+      || (row.mediaUrl && normalized(row.mediaUrl) === normalized(item.mediaUrl)));
+    if (equivalent) {
+      if (!equivalent.id) {
+        results.push({ itemId: item.itemId, status: "blocked", blockers: ["unverified_remote_duplicate"] });
+        continue;
+      }
+      const receipt = {
+        itemId: item.itemId,
+        campaignId: item.campaignId,
+        draftFile: item.draftFile,
+        account: validation.account,
+        caption: validation.caption,
+        mediaUrl: item.mediaUrl,
+        mediaSha256: mediaReceipt.sha256,
+        scheduledFor: equivalent.dateTime,
+        metricoolBlogId: blogId,
+        metricoolUserId: userId,
+        status: "scheduled",
+        metricoolId: equivalent.id,
+        reconciledAt: new Date().toISOString(),
+        paidSpendAllowed: false,
+      };
+      ledger.push(receipt);
+      results.push(receipt);
+      await writeJsonAtomic(ledgerPath, ledger);
+      continue;
+    }
     const payload = {
       autoPublish: true,
       descendants: [],
@@ -370,15 +512,6 @@ export async function runMetricoolAutopilot(options = {}) {
         photoCoverIndex: 0,
       },
     };
-    await callMetricoolMcp(fetcher, token, {
-      date: zonedDateTime(publicationDateTime),
-      blogId: String(blogId),
-      info: JSON.stringify(payload),
-      mediaFiles: [{
-        download_url: item.mediaUrl,
-        file_id: `clippers-${item.itemId}.mp4`,
-      }],
-    });
     const receiptBase = {
       itemId: item.itemId,
       campaignId: item.campaignId,
@@ -390,6 +523,8 @@ export async function runMetricoolAutopilot(options = {}) {
       subtitleStyle: item.subtitleStyle,
       hookStyle: item.hookStyle,
       mediaUrl: item.mediaUrl,
+      mediaSha256: mediaReceipt.sha256,
+      mediaReceiptFileId: mediaReceipt.fileId,
       scheduledFor: publicationDateTime,
       metricoolBlogId: blogId,
       metricoolUserId: userId,
@@ -398,6 +533,15 @@ export async function runMetricoolAutopilot(options = {}) {
     };
     let receipt;
     try {
+      await callMetricoolMcp(fetcher, token, {
+        date: zonedDateTime(publicationDateTime),
+        blogId: String(blogId),
+        info: JSON.stringify(payload),
+        mediaFiles: [{
+          download_url: item.mediaUrl,
+          file_id: `clippers-${item.itemId}.mp4`,
+        }],
+      });
       const metricoolId = await verifyMetricoolSchedule(
         fetcher,
         token,
@@ -405,13 +549,15 @@ export async function runMetricoolAutopilot(options = {}) {
         blogId,
         validation.caption,
         publicationDateTime,
+        { attempts: options.verifyAttempts, delayMs: options.verifyDelayMs },
       );
       receipt = { ...receiptBase, status: "scheduled", metricoolId };
     } catch (error) {
       receipt = {
         ...receiptBase,
         status: "verification_pending",
-        reason: "metricool_accepted_but_schedule_not_verified",
+        reason: "metricool_outcome_not_verified_retry_suppressed",
+        error: String(error?.message || error).slice(0, 300),
       };
     }
     ledger.push(receipt);
