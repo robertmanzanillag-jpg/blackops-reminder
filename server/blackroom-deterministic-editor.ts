@@ -124,15 +124,30 @@ function chooseDuration(job: BlackRoomDailyJob, entries: BlackRoomLedgerEntry[],
   return allowed.find((duration) => counts.get(duration) === minimum)!;
 }
 
-function chooseLanguage(entries: BlackRoomLedgerEntry[]): "en" | "es" {
+function chooseLanguage(entries: BlackRoomLedgerEntry[], queue: BlackRoomQueueState): "en" | "es" {
+  const proven = new Set((queue.analytics?.languagePerformance || [])
+    .filter((cohort) => Number(cohort.samples || 0) >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES)
+    .map((cohort) => cohort.value));
+  const preferred = (queue.analytics?.preferredLanguages || []).find((language) => proven.has(language));
+  if (preferred === "en" || preferred === "es") {
+    const preferredCount = entries.filter((entry) => entry.language === preferred).length;
+    const alternateCount = entries.length - preferredCount;
+    if (preferredCount <= alternateCount + 2) return preferred;
+  }
   return entries.filter((entry) => entry.language === "en").length <= entries.filter((entry) => entry.language === "es").length ? "en" : "es";
 }
 
-function chooseFormat(duration: BlackRoomExperimentDuration, entries: BlackRoomLedgerEntry[], targetNetworks: BlackRoomTargetNetwork[]): "vertical" | "horizontal" {
+function chooseFormat(duration: BlackRoomExperimentDuration, entries: BlackRoomLedgerEntry[], targetNetworks: BlackRoomTargetNetwork[], queue: BlackRoomQueueState): "vertical" | "horizontal" {
   if (duration >= 300) return "horizontal";
   if (targetNetworks.includes("youtube")) return "vertical";
   const vertical = entries.filter((entry) => entry.format === "vertical" && entry.durationSeconds < 300).length;
   const horizontal = entries.filter((entry) => entry.format === "horizontal" && entry.durationSeconds < 300).length;
+  const proven = new Set((queue.analytics?.formatPerformance || [])
+    .filter((cohort) => Number(cohort.samples || 0) >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES)
+    .map((cohort) => cohort.value));
+  const preferred = (queue.analytics?.preferredFormats || []).find((format) => proven.has(format));
+  if (preferred === "vertical" && vertical <= horizontal + 2) return preferred;
+  if (preferred === "horizontal" && horizontal <= vertical + 2) return preferred;
   return vertical <= horizontal ? "vertical" : "horizontal";
 }
 
@@ -197,8 +212,8 @@ export function planBlackRoomDeterministicEdit(input: {
   const creativeStrategy: BlackRoomCreativeStrategy = input.queue.analytics?.creativeStrategy || "drop_first";
   const targetNetworks = selectBlackRoomTargetNetworks(job, slotConfig, input.queue);
   const durationSeconds = chooseDuration(job, jobEntries, input.queue, targetNetworks);
-  const format = chooseFormat(durationSeconds, jobEntries, targetNetworks);
-  const language = chooseLanguage(jobEntries);
+  const format = chooseFormat(durationSeconds, jobEntries, targetNetworks, input.queue);
+  const language = chooseLanguage(jobEntries, input.queue);
   const margin = durationSeconds >= 300 ? 180 : 90;
   const windowDuration = durationSeconds + margin;
   const usedVideos = new Set([

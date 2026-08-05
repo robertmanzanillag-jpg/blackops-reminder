@@ -93,6 +93,23 @@ test("planner explicitly exploits a proven DJ with a fresh eligible source", () 
   assert.equal(plan?.videoId, "winner-fresh");
 });
 
+test("planner biases proven format and language while preserving exploration", () => {
+  const state = queue();
+  state.sourceHistory = [];
+  state.jobs[0].slots = [{ localTime: "18:00", timezone: "America/New_York", networks: ["facebook"] }];
+  state.jobs[0].requirements = { ...state.jobs[0].requirements, posts: 1, djs: 1, postsPerDj: 1, durationsSeconds: [30], minimumClipsPerDuration: 1 };
+  state.analytics = {
+    preferredFormats: ["horizontal"], formatPerformance: [{ value: "horizontal", samples: 8, medianViews: 200, totalViews: 1_600 }],
+    preferredLanguages: ["es"], languagePerformance: [{ value: "es", samples: 8, medianViews: 180, totalViews: 1_440 }],
+  };
+  const plan = planBlackRoomDeterministicEdit({
+    queue: state, ledger: { version: 1, entries: [] } as any,
+    inventory: [{ id: "winner", title: "WINNER - DJ Set", duration: 3600 }],
+  });
+  assert.equal(plan?.format, "horizontal");
+  assert.equal(plan?.language, "es");
+});
+
 test("planner skips a source that failed to download without recording it as published", () => {
   const state = queue();
   state.failedSourceVideos = [{ videoId: "blocked-video", failedAt: "2026-07-28T00:00:00.000Z", reason: "timeout" }];

@@ -63,6 +63,28 @@ export interface BlackRoomDurationCohort {
   totalViews: number;
 }
 
+export interface BlackRoomValueCohort {
+  value: string;
+  samples: number;
+  medianViews: number;
+  totalViews: number;
+}
+
+export interface BlackRoomAttributionStats {
+  /** Raw metric identities returned by Metricool/CSV. */
+  totalRecords: number;
+  /** Unique publication experiments with at least one linked metric identity. */
+  matchedRecords: number;
+  /** Unique experiments resolved by receipt/platform identifier. */
+  exactMatches: number;
+  /** Unique experiments resolved only by an unambiguous time/duration slot. */
+  fallbackMatches: number;
+  /** Raw metric identities that could not be linked to any experiment. */
+  unmatchedRecords: number;
+  /** Share of raw metric identities that were linked, before experiment dedupe. */
+  matchRate: number;
+}
+
 export interface BlackRoomCeoAnalytics {
   /** Total imported posts across all connected networks, for visibility. */
   sampleCount: number;
@@ -105,6 +127,12 @@ export interface BlackRoomCeoAnalytics {
   preferredDurations?: number[];
   preferredDjs?: string[];
   preferredSourceVideoIds?: string[];
+  preferredFormats?: string[];
+  preferredLanguages?: string[];
+  formatPerformance?: BlackRoomValueCohort[];
+  languagePerformance?: BlackRoomValueCohort[];
+  slotPerformance?: BlackRoomValueCohort[];
+  attributionByNetwork?: Record<string, BlackRoomAttributionStats>;
   reason: string;
 }
 
@@ -196,6 +224,24 @@ function metricRecordId(record: Record<string, any>): string | null {
   return id == null || String(id).trim() === "" ? null : String(id);
 }
 
+function metricIdAliases(value: string): string[] {
+  const raw = String(value || "").trim();
+  if (!raw) return [];
+  const aliases = new Set([raw, raw.toLowerCase()]);
+  try {
+    const url = new URL(raw);
+    aliases.add(`${url.hostname.toLowerCase()}${url.pathname.replace(/\/$/, "")}`);
+    const segments = url.pathname.split("/").filter(Boolean);
+    const finalSegment = segments.at(-1);
+    if (finalSegment && finalSegment.length >= 6) aliases.add(finalSegment.toLowerCase());
+    for (const key of ["id", "postId", "video", "v"]) {
+      const found = url.searchParams.get(key);
+      if (found) aliases.add(found.toLowerCase());
+    }
+  } catch { /* Metricool IDs are commonly opaque, not URLs. */ }
+  return [...aliases];
+}
+
 export function extractBlackRoomMetricSamples(value: unknown): number {
   return extractBlackRoomMetricSampleIds(value).length;
 }
@@ -233,26 +279,39 @@ export function extractBlackRoomExperimentCohorts(
   viewsByDuration: Record<string, number[]>;
   viewsByDj: Record<string, number[]>;
   viewsBySourceVideo: Record<string, number[]>;
+  viewsByFormat: Record<string, number[]>;
+  viewsByLanguage: Record<string, number[]>;
+  viewsBySlot: Record<string, number[]>;
+  attribution: BlackRoomAttributionStats;
 } {
-  const experimentsById = new Map(experiments
-    .filter((experiment) => experiment.network === network && experiment.metricoolId.trim())
-    .map((experiment) => [experiment.metricoolId.trim(), experiment]));
+  const networkExperiments = experiments.filter((experiment) => experiment.network === network);
+  const experimentsById = new Map<string, BlackRoomPublicationExperiment>();
+  for (const experiment of networkExperiments) {
+    for (const alias of metricIdAliases(experiment.metricoolId)) experimentsById.set(alias, experiment);
+  }
   const viewsByStrategy: Partial<Record<BlackRoomCreativeStrategy, number[]>> = {};
   const viewsByDuration: Record<string, number[]> = {};
   const viewsByDj: Record<string, number[]> = {};
   const viewsBySourceVideo: Record<string, number[]> = {};
+  const viewsByFormat: Record<string, number[]> = {};
+  const viewsByLanguage: Record<string, number[]> = {};
+  const viewsBySlot: Record<string, number[]> = {};
   const matchedExperiments = new Map<string, { experiment: BlackRoomPublicationExperiment; views: number; exact: boolean }>();
+  let associatedRecords = 0;
+  let exactMatches = 0;
+  let fallbackMatches = 0;
   for (const record of viewRecords) {
-    let experiment = experimentsById.get(String(record.id));
+    let experiment = metricIdAliases(String(record.id)).map((alias) => experimentsById.get(alias)).find(Boolean);
     const exact = Boolean(experiment);
     if (!experiment && record.publishedAt) {
       const minute = String(record.publishedAt).slice(0, 16);
-      const candidates = experiments.filter((candidate) => candidate.network === network
+      const candidates = networkExperiments.filter((candidate) => candidate.network === network
         && candidate.publishedAt.slice(0, 16) === minute
         && (!record.durationSeconds || candidate.durationSeconds === record.durationSeconds));
       if (candidates.length === 1) experiment = candidates[0];
     }
     if (!experiment) continue;
+    associatedRecords += 1;
     const key = `${experiment.network}:${experiment.metricoolId}:${experiment.reservationId}`;
     const previous = matchedExperiments.get(key);
     if (!previous || (exact && !previous.exact)) matchedExperiments.set(key, { experiment, views: record.views, exact });
@@ -262,8 +321,24 @@ export function extractBlackRoomExperimentCohorts(
     (viewsByDuration[String(experiment.durationSeconds)] ||= []).push(views);
     if (experiment.dj && experiment.dj !== "unknown") (viewsByDj[experiment.dj] ||= []).push(views);
     if (experiment.sourceVideoId) (viewsBySourceVideo[experiment.sourceVideoId] ||= []).push(views);
+    (viewsByFormat[experiment.format] ||= []).push(views);
+    (viewsByLanguage[experiment.language] ||= []).push(views);
+    (viewsBySlot[experiment.slot] ||= []).push(views);
   }
-  return { viewsByStrategy, viewsByDuration, viewsByDj, viewsBySourceVideo };
+  const matchedRecords = matchedExperiments.size;
+  exactMatches = [...matchedExperiments.values()].filter((item) => item.exact).length;
+  fallbackMatches = matchedRecords - exactMatches;
+  return {
+    viewsByStrategy, viewsByDuration, viewsByDj, viewsBySourceVideo, viewsByFormat, viewsByLanguage, viewsBySlot,
+    attribution: {
+      totalRecords: viewRecords.length,
+      matchedRecords,
+      exactMatches,
+      fallbackMatches,
+      unmatchedRecords: Math.max(0, viewRecords.length - associatedRecords),
+      matchRate: viewRecords.length ? associatedRecords / viewRecords.length : 0,
+    },
+  };
 }
 
 function rankProvenExperimentValues(groups: Record<string, number[]>): string[] {
@@ -273,6 +348,14 @@ function rankProvenExperimentValues(groups: Record<string, number[]>): string[] 
     .sort((left, right) => median(right.views) - median(left.views) || right.views.length - left.views.length)
     .slice(0, 3)
     .map((group) => group.value);
+}
+
+function summarizeValueCohorts(groups: Record<string, number[]>): BlackRoomValueCohort[] {
+  return Object.entries(groups).map(([value, rawViews]) => {
+    const views = rawViews.map(Number).filter((item) => Number.isFinite(item) && item >= 0);
+    return { value, samples: views.length, medianViews: median(views), totalViews: views.reduce((sum, item) => sum + item, 0) };
+  }).sort((left, right) => Number(right.samples >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES) - Number(left.samples >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES)
+    || right.medianViews - left.medianViews || right.samples - left.samples || left.value.localeCompare(right.value));
 }
 
 function median(values: number[]): number {
@@ -1072,6 +1155,10 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const viewsByDuration: Record<string, number[]> = {};
   const viewsByDj: Record<string, number[]> = {};
   const viewsBySourceVideo: Record<string, number[]> = {};
+  const viewsByFormat: Record<string, number[]> = {};
+  const viewsByLanguage: Record<string, number[]> = {};
+  const viewsBySlot: Record<string, number[]> = {};
+  const attributionByNetwork: Record<string, BlackRoomAttributionStats> = {};
   const networkErrors: Record<string, string> = {};
   const historyCompleteByNetwork: Record<string, boolean> = {};
   const historyRequestsByNetwork: Record<string, number> = {};
@@ -1157,6 +1244,10 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
       }
       for (const [dj, views] of Object.entries(cohorts.viewsByDj)) (viewsByDj[dj] ||= []).push(...views);
       for (const [videoId, views] of Object.entries(cohorts.viewsBySourceVideo)) (viewsBySourceVideo[videoId] ||= []).push(...views);
+      for (const [format, views] of Object.entries(cohorts.viewsByFormat)) (viewsByFormat[format] ||= []).push(...views);
+      for (const [language, views] of Object.entries(cohorts.viewsByLanguage)) (viewsByLanguage[language] ||= []).push(...views);
+      for (const [slot, views] of Object.entries(cohorts.viewsBySlot)) (viewsBySlot[slot] ||= []).push(...views);
+      attributionByNetwork[network] = cohorts.attribution;
       if (network === "tiktok") tiktokPostIds = viewRecords.map((record) => record.id);
       historyCompleteByNetwork[network] = networkHistory.requests > 0
         && networkHistory.complete
@@ -1183,6 +1274,10 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
       }
       for (const [dj, views] of Object.entries(cohorts.viewsByDj)) (viewsByDj[dj] ||= []).push(...views);
       for (const [videoId, views] of Object.entries(cohorts.viewsBySourceVideo)) (viewsBySourceVideo[videoId] ||= []).push(...views);
+      for (const [format, views] of Object.entries(cohorts.viewsByFormat)) (viewsByFormat[format] ||= []).push(...views);
+      for (const [language, views] of Object.entries(cohorts.viewsByLanguage)) (viewsByLanguage[language] ||= []).push(...views);
+      for (const [slot, views] of Object.entries(cohorts.viewsBySlot)) (viewsBySlot[slot] ||= []).push(...views);
+      attributionByNetwork[network] = cohorts.attribution;
       if (network === "tiktok") tiktokPostIds = viewRecords.map((record) => record.id);
       historyCompleteByNetwork[network] = false;
       historyRequestsByNetwork[network] = networkHistory.requests;
@@ -1231,6 +1326,12 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const networkLearning = planBlackRoomNetworkLearning({ viewsByNetwork });
   const creative = planBlackRoomCreativeLearning({ views: viewsByNetwork.tiktok || [], postIds: tiktokPostIds, viewsByStrategy, previous: options.previous, now });
   const durationLearning = planBlackRoomDurationLearning({ viewsByDuration });
+  const attributedRecords = Object.values(attributionByNetwork).reduce((total, item) => total + item.matchedRecords, 0);
+  const unmatchedRecords = Object.values(attributionByNetwork).reduce((total, item) => total + item.unmatchedRecords, 0);
+  const measuredRecords = Object.values(attributionByNetwork).reduce((total, item) => total + item.totalRecords, 0);
+  const attributionReason = measuredRecords
+    ? `Atribución segura: ${attributedRecords} publicaciones únicas vinculadas; ${unmatchedRecords} filas métricas sin vínculo.`
+    : "Todavía no hay resultados atribuibles a publicaciones del agente.";
   const targets = BLACKROOM_METRICOOL_NETWORKS.map((network) => `${network} ${networkLearning.networkDailyTargets[network]}/día`).join(", ");
   const completeNetworks = BLACKROOM_METRICOOL_NETWORKS.filter((network) => historyCompleteByNetwork[network]).length;
   const historyReason = completeNetworks === BLACKROOM_METRICOOL_NETWORKS.length
@@ -1258,8 +1359,14 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
     ...durationLearning,
     preferredDjs: rankProvenExperimentValues(viewsByDj),
     preferredSourceVideoIds: rankProvenExperimentValues(viewsBySourceVideo),
+    preferredFormats: rankProvenExperimentValues(viewsByFormat),
+    preferredLanguages: rankProvenExperimentValues(viewsByLanguage),
+    formatPerformance: summarizeValueCohorts(viewsByFormat),
+    languagePerformance: summarizeValueCohorts(viewsByLanguage),
+    slotPerformance: summarizeValueCohorts(viewsBySlot),
+    attributionByNetwork,
     reason: comparableSampleCount >= BLACKROOM_CEO_MIN_SAMPLES
-      ? `${csvReason} ${historyReason} El CEO estudia resultados reales de las tres redes: ${targets}. ${creative.creativeReason}`
-      : `${csvReason} ${historyReason} Importó ${sampleCount} resultados reales; recolectando evidencia comparable (${comparableSampleCount}/${BLACKROOM_CEO_MIN_SAMPLES}) antes de cambiar horas o volumen. ${creative.creativeReason}`,
+      ? `${csvReason} ${historyReason} ${attributionReason} El CEO estudia resultados reales de las tres redes: ${targets}. ${creative.creativeReason}`
+      : `${csvReason} ${historyReason} ${attributionReason} Importó ${sampleCount} resultados reales; recolectando evidencia comparable (${comparableSampleCount}/${BLACKROOM_CEO_MIN_SAMPLES}) antes de cambiar horas o volumen. ${creative.creativeReason}`,
   };
 }
