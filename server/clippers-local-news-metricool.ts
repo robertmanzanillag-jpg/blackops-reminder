@@ -14,6 +14,8 @@ const TIME_ZONE = "America/New_York";
 const DEFAULT_MAX_PER_RUN = 4;
 const MAX_PER_RUN = 50;
 const MIN_SPACING_MS = 2 * 60_000;
+const DEFAULT_BREAKING_SPACING_MINUTES = 15;
+const MAX_BREAKING_SPACING_MINUTES = 120;
 const STANDARD_SPACING_MS = 75 * 60_000;
 const DAILY_MINIMUM_PER_ACCOUNT = 10;
 const DAILY_MAXIMUM_PER_ACCOUNT = 14;
@@ -142,6 +144,83 @@ function isHighImpactTraffic(item: QueueItem): boolean {
 }
 function trafficPublishingEnabled(env: NodeJS.ProcessEnv): boolean {
   return env.CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC === "true";
+}
+
+const CONNECTOR_LANES: Record<string, ClipperLocalNewsLane> = {
+  "nws-miami": "miami-news",
+  "nws-nyc": "ny-news",
+  "notify-nyc": "ny-news",
+  "fbi-miami": "miami-news",
+  "fbi-ny": "ny-news",
+  "doj-sdfl": "miami-news",
+  "doj-sdny": "ny-news",
+  "miami-dade-news": "miami-news",
+  "mia-airport-news": "miami-news",
+  ny511: "ny-news",
+  fl511: "miami-news",
+  "miami-generic": "miami-news",
+  "ny-generic": "ny-news",
+};
+
+function evidenceValue(item: QueueItem, key: string): string | null {
+  const prefix = `${key}=`;
+  const entry = item.evidence?.find((value) => value.startsWith(prefix));
+  return entry ? entry.slice(prefix.length).trim() : null;
+}
+
+/**
+ * Revalidates jurisdiction at the final delivery boundary. This protects
+ * Metricool from legacy queue rows created before connector-level filtering
+ * was introduced, without trying to infer a city from editorial prose.
+ */
+function matchesDeliveryJurisdiction(item: QueueItem): boolean {
+  const connector = evidenceValue(item, "connector");
+  if (connector?.startsWith("google-news-")) return false;
+  const connectorLane = connector?.startsWith("fhp-miami-")
+    ? "miami-news"
+    : connector ? CONNECTOR_LANES[connector] : undefined;
+  if (connectorLane && connectorLane !== item.lane) return false;
+
+  if (!item.sourceUrl) return true;
+  try {
+    const source = new URL(item.sourceUrl);
+    const hostname = source.hostname.toLocaleLowerCase("en-US");
+    if (hostname === "justice.gov" || hostname === "www.justice.gov") {
+      if (source.pathname.startsWith("/usao-sdfl/")) return item.lane === "miami-news";
+      if (source.pathname.startsWith("/usao-sdny/")) return item.lane === "ny-news";
+      // A national DOJ path is not city evidence, including legacy rows that
+      // predate connector evidence or carry connector=none.
+      return false;
+    }
+    if (hostname === "fbi.gov" || hostname === "www.fbi.gov") {
+      if (source.pathname.startsWith("/contact-us/field-offices/miami/")) return item.lane === "miami-news";
+      if (source.pathname.startsWith("/contact-us/field-offices/newyork/")) return item.lane === "ny-news";
+      // The configured FBI feeds are field-office feeds; a national URL does
+      // not prove local jurisdiction at the delivery boundary.
+      return false;
+    }
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+function breakingSpacingMs(env: NodeJS.ProcessEnv): number {
+  const configured = Number.parseInt(env.CLIPPERS_LOCAL_NEWS_BREAKING_SPACING_MINUTES || "", 10);
+  const minutes = Number.isFinite(configured)
+    ? Math.max(Math.ceil(MIN_SPACING_MS / 60_000), Math.min(MAX_BREAKING_SPACING_MINUTES, configured))
+    : DEFAULT_BREAKING_SPACING_MINUTES;
+  return minutes * 60_000;
+}
+
+function nextBreakingSlot(nowMs: number, occupied: number[], spacingMs: number): number {
+  let candidate = nowMs;
+  for (const scheduled of [...occupied].filter(Number.isFinite).sort((left, right) => left - right)) {
+    if (scheduled < candidate - spacingMs) continue;
+    if (scheduled >= candidate + spacingMs) break;
+    candidate = scheduled + spacingMs;
+  }
+  return candidate;
 }
 
 export type ClipperLocalNewsMetricoolResultStatus = "completed" | "partial" | "blocked";
@@ -296,7 +375,7 @@ function metricoolSourceWasScheduled(item: QueueItem, entries: Ledger["entries"]
     return false;
   }
   return entries.some((entry) => {
-    if (entry.lane !== item.lane || entry.platform !== item.platform || entry.sourceUrlHash !== sourceUrlHash) return false;
+    if (entry.lane !== item.lane || entry.platform !== item.platform) return false;
     const isNewerRevision = Boolean(
       entry.eventId
       && entry.eventId === item.eventId
@@ -304,7 +383,12 @@ function metricoolSourceWasScheduled(item: QueueItem, entries: Ledger["entries"]
       && item.eventRevision
       && item.eventRevision > entry.eventRevision,
     );
-    return !isNewerRevision;
+    const sameSourceUrl = entry.sourceUrlHash === sourceUrlHash;
+    const sameLegacyIdentity = !entry.sourceUrlHash && Boolean(
+      (entry.eventId && entry.eventId === item.eventId)
+      || (entry.canonicalEventIdentity && entry.canonicalEventIdentity === item.canonicalEventIdentity),
+    );
+    return (sameSourceUrl || sameLegacyIdentity) && !isNewerRevision;
   });
 }
 
@@ -687,6 +771,10 @@ export async function deliverClipperLocalNewsToMetricool(
     const fetchedNow = now();
     let safeItems = queue.filter((item) => {
       const platformEnabled = item.platform !== "x" || env.CLIPPERS_LOCAL_NEWS_ENABLE_X === "true";
+      if (!matchesDeliveryJurisdiction(item)) {
+        result.filtered += 1;
+        return false;
+      }
       const highImpactTraffic = isHighImpactTraffic(item);
       if (item.section === "traffic" && !trafficPublishingEnabled(env) && !highImpactTraffic) {
         result.filtered += 1;
@@ -755,13 +843,18 @@ export async function deliverClipperLocalNewsToMetricool(
 
     const maxPerRun = cappedInteger(options.maxPerRun ?? env.CLIPPERS_LOCAL_NEWS_METRICOOL_MAX_PER_RUN, DEFAULT_MAX_PER_RUN);
     const minimumStart = fetchedNow.getTime() + MIN_SPACING_MS;
+    const breakingSpacing = breakingSpacingMs(env);
     const cursors = new Map<string, number>();
+    const occupiedByAccount = new Map<string, number[]>();
     const scheduledByAccountDay = new Map<string, number>();
     for (const entry of ledger.entries) {
       const key = `${entry.lane}|${entry.platform}`;
       const scheduled = new Date(entry.scheduledFor).getTime();
       if (Number.isFinite(scheduled)) {
         cursors.set(key, Math.max(cursors.get(key) || 0, scheduled));
+        const occupied = occupiedByAccount.get(key) || [];
+        occupied.push(scheduled);
+        occupiedByAccount.set(key, occupied);
         const dayKey = `${key}|${easternDateKey(entry.scheduledFor)}`;
         scheduledByAccountDay.set(dayKey, (scheduledByAccountDay.get(dayKey) || 0) + 1);
       }
@@ -793,10 +886,13 @@ export async function deliverClipperLocalNewsToMetricool(
         result.deferred += 1;
         continue;
       }
-      // Breaking items bypass the routine cursor and are sent to Metricool's immediate slot.
+      // Breaking items bypass the routine day-fill cursor, but still reserve a
+      // safe per-account slot so a burst cannot hit Facebook at one timestamp.
       // Routine slots compress late in the day so an underfilled account can still reach its
       // account-wide target, while never violating the two-minute safety floor.
-      let scheduledMs = breaking ? fetchedNow.getTime() : minimumStart;
+      let scheduledMs = breaking
+        ? nextBreakingSlot(fetchedNow.getTime(), occupiedByAccount.get(cursorKey) || [], breakingSpacing)
+        : minimumStart;
       if (!breaking) {
         for (let dayAttempt = 0; dayAttempt < 8; dayAttempt += 1) {
           const day = easternDateKey(new Date(scheduledMs));
@@ -881,6 +977,9 @@ export async function deliverClipperLocalNewsToMetricool(
         await atomicWriteLedger(ledgerPath, ledger);
         scheduledContentKeys.add(contentKey);
         cursors.set(cursorKey, Math.max(cursors.get(cursorKey) || 0, scheduledMs));
+        const occupied = occupiedByAccount.get(cursorKey) || [];
+        occupied.push(scheduledMs);
+        occupiedByAccount.set(cursorKey, occupied);
         const accountDayKey = `${cursorKey}|${easternDateKey(scheduledDate)}`;
         scheduledByAccountDay.set(accountDayKey, (scheduledByAccountDay.get(accountDayKey) || 0) + 1);
         result.scheduled += 1;
@@ -917,4 +1016,7 @@ export const __clipperLocalNewsMetricoolInternals = {
   normalizeMetricoolMedia,
   metricoolContentHash,
   metricoolSourceUrlHash,
+  matchesDeliveryJurisdiction,
+  breakingSpacingMs,
+  nextBreakingSlot,
 };

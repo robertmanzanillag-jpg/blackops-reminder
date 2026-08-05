@@ -27,12 +27,13 @@ function rawItem(overrides: Record<string, unknown> = {}) {
 }
 
 function unanimouslyReviewedItem(overrides: Record<string, unknown> = {}) {
-  const base = rawItem(overrides);
+  const { committeeConnector, ...itemOverrides } = overrides;
+  const base = rawItem(itemOverrides);
   const checkedAt = "2026-07-21T15:55:00.000Z";
   const reviewed = {
     ...base,
     verdicts: ["source_verifier", "safety_editor", "monetization_editor"].map((role) => ({ role, verdict: "approve", reasons: ["verified"], evidence: ["verified"], checkedAt })),
-    evidence: ["connector=official-test", `claimHash=${"a".repeat(64)}`, `copyHash=${hashLocalNewsReviewValue(base.copy)}`],
+    evidence: [`connector=${typeof committeeConnector === "string" ? committeeConnector : "official-test"}`, `claimHash=${"a".repeat(64)}`, `copyHash=${hashLocalNewsReviewValue(base.copy)}`],
     consensus: "unanimous_approve",
     publishDecision: "auto_publish",
     checkedAt,
@@ -232,6 +233,91 @@ test("maps the live Metricool Facebook brand labels to the correct Miami and New
   assert.deepEqual(scheduledBlogIds, ["501", "502"]);
 });
 
+test("delivery-time jurisdiction filter purges legacy nationwide and cross-city queue rows", async () => {
+  const dir = await workspace([
+    item({
+      id: "legacy-doj-nationwide",
+      platform: "facebook",
+      committeeConnector: "none",
+      source: "U.S. Department of Justice",
+      sourceUrl: "https://www.justice.gov/opa/pr/nationwide-enforcement-action",
+    }),
+    item({
+      id: "legacy-fbi-wrong-lane",
+      eventId: "legacy-fbi-event",
+      platform: "facebook",
+      committeeConnector: "fbi-ny",
+      source: "Federal Bureau of Investigation New York",
+      sourceUrl: "https://www.fbi.gov/contact-us/field-offices/newyork/news/example",
+    }),
+    item({
+      id: "legacy-fbi-national-no-connector",
+      eventId: "legacy-fbi-national-event",
+      platform: "facebook",
+      committeeConnector: "unknown-legacy-connector",
+      source: "Federal Bureau of Investigation",
+      sourceUrl: "https://www.fbi.gov/news/press-releases/national-update",
+    }),
+    item({
+      id: "legacy-google-news-aggregator",
+      eventId: "legacy-google-news-event",
+      platform: "facebook",
+      committeeConnector: "google-news-nyc",
+      source: "Google News",
+      sourceUrl: "https://news.google.com/rss/articles/legacy-aggregated-story",
+    }),
+  ]);
+  let fetched = false;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async () => { fetched = true; throw new Error("wrong-jurisdiction rows must not reach Metricool"); },
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.eligible, 0);
+  assert.equal(result.filtered, 4);
+  assert.equal(result.scheduled, 0);
+  assert.equal(fetched, false);
+});
+
+test("delivery-time jurisdiction filter preserves a verified local district article", async () => {
+  const dir = await workspace([
+    item({
+      id: "local-doj-sdfl",
+      platform: "facebook",
+      committeeConnector: "doj-sdfl",
+      source: "U.S. Attorney for the Southern District of Florida",
+      sourceUrl: "https://www.justice.gov/usao-sdfl/pr/verified-local-case",
+    }),
+    item({
+      id: "local-fbi-newyork",
+      eventId: "local-fbi-newyork-event",
+      lane: "ny-news",
+      platform: "facebook",
+      committeeConnector: "fbi-ny",
+      source: "Federal Bureau of Investigation New York",
+      sourceUrl: "https://www.fbi.gov/contact-us/field-offices/newyork/news/verified-local-case",
+      copy: "Verified New York field-office update.",
+    }),
+  ]);
+  let posts = 0;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99", METRICOOL_NY_NEWS_BLOG_ID: "100" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (_input, init) => {
+      if (init?.method === "POST") posts += 1;
+      return new Response(JSON.stringify({ id: "local-district-post" }), { status: 200 });
+    },
+  });
+
+  assert.equal(result.filtered, 0);
+  assert.equal(result.scheduled, 2);
+  assert.equal(posts, 2);
+});
+
 test("schedules Facebook breaking and traffic updates as text-only posts without requiring media", async () => {
   const dir = await workspace([
     item({ id: "miami-text-only", platform: "facebook", editorialUrgency: "breaking", copy: "TRÁFICO | Cierre en Miami-Dade. Según FHP/FL511: tome una ruta alterna. Fuente: https://fl511.com" }),
@@ -265,6 +351,31 @@ test("schedules Facebook breaking and traffic updates as text-only posts without
   assert.equal("media" in (scheduledPayload || {}), false);
   assert.equal("images" in (scheduledPayload || {}), false);
   assert.equal("attachments" in (scheduledPayload || {}), false);
+});
+
+test("spaces multiple breaking posts per account instead of assigning one immediate timestamp", async () => {
+  const dir = await workspace(Array.from({ length: 3 }, (_, index) => item({
+    id: `breaking-spaced-${index}`,
+    eventId: `breaking-spaced-event-${index}`,
+    platform: "facebook",
+    editorialUrgency: "breaking",
+    copy: `URGENTE | Actualización local verificada ${index}. Fuente: https://official.example.gov/${index}`,
+    sourceUrl: `https://official.example.gov/${index}`,
+  })));
+  const dates: string[] = [];
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    maxPerRun: 3,
+    fetch: async (_input, init) => {
+      dates.push(JSON.parse(String(init?.body)).publicationDate.dateTime);
+      return new Response(JSON.stringify({ id: `breaking-${dates.length}` }), { status: 200 });
+    },
+  });
+
+  assert.equal(result.scheduled, 3);
+  assert.deepEqual(dates, ["2026-07-21T12:00:00", "2026-07-21T12:15:00", "2026-07-21T12:30:00"]);
 });
 
 test("normalizes the existing public brand image and attaches it without any paid generation", async () => {
@@ -631,6 +742,45 @@ test("durable ledger deduplicates the same official article URL after copy chang
   assert.equal(second.scheduled, 0);
   assert.equal(second.alreadyScheduled, 1);
   assert.equal(posts, 1);
+});
+
+test("legacy ledger without sourceUrlHash deduplicates the same event identity", async () => {
+  const sourceUrl = "https://feeds.everbridge.net/feeds/453003085617722/rss/alert-1";
+  const queued = item({
+    id: "notify-nyc-translated-variant",
+    eventId: "notify-nyc-alert-1",
+    lane: "ny-news",
+    platform: "facebook",
+    committeeConnector: "notify-nyc",
+    sourceUrl,
+    copy: "Nueva variante bilingüe del mismo aviso oficial.",
+  });
+  const dir = await workspace([queued]);
+  await writeFile(path.join(dir, "metricool-delivery-ledger.json"), JSON.stringify({
+    version: 1,
+    entries: [{
+      queueItemId: "legacy-notify-queue-id",
+      eventId: "notify-nyc-alert-1",
+      eventRevision: 1,
+      lane: "ny-news",
+      platform: "facebook",
+      blogId: "100",
+      scheduledFor: "2026-07-21T15:00:00.000Z",
+      scheduledAt: "2026-07-21T14:55:00.000Z",
+      metricoolPostId: "legacy-notify-post",
+    }],
+  }), "utf8");
+  let fetched = false;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_NY_NEWS_BLOG_ID: "100" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async () => { fetched = true; throw new Error("legacy duplicate must not reach Metricool"); },
+  });
+
+  assert.equal(result.scheduled, 0);
+  assert.equal(result.alreadyScheduled, 1);
+  assert.equal(fetched, false);
 });
 
 test("breaking stories stop at the bounded daily burst instead of flooding an account", async () => {
