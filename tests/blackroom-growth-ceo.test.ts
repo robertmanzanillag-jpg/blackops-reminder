@@ -683,11 +683,13 @@ test("maps publication receipts to creative and duration cohorts", () => {
   const result = extractBlackRoomExperimentCohorts([
     { id: "tt-1", views: 120 }, { id: "tt-2", views: 30 },
   ], [
-    { metricoolId: "tt-1", reservationId: "r1", network: "tiktok", creativeStrategy: "instant_drop", durationSeconds: 30, format: "vertical", language: "en", slot: "18:00", publishedAt: "2026-07-22T18:00:00" },
-    { metricoolId: "tt-2", reservationId: "r2", network: "tiktok", creativeStrategy: "build_then_drop", durationSeconds: 60, format: "vertical", language: "es", slot: "19:30", publishedAt: "2026-07-22T19:30:00" },
+    { metricoolId: "tt-1", reservationId: "r1", network: "tiktok", creativeStrategy: "instant_drop", durationSeconds: 30, format: "vertical", language: "en", slot: "18:00", publishedAt: "2026-07-22T18:00:00", dj: "DJ A", sourceVideoId: "video-a" },
+    { metricoolId: "tt-2", reservationId: "r2", network: "tiktok", creativeStrategy: "build_then_drop", durationSeconds: 60, format: "vertical", language: "es", slot: "19:30", publishedAt: "2026-07-22T19:30:00", dj: "DJ B", sourceVideoId: "video-b" },
   ], "tiktok");
   assert.deepEqual(result.viewsByStrategy, { instant_drop: [120], build_then_drop: [30] });
   assert.deepEqual(result.viewsByDuration, { "30": [120], "60": [30] });
+  assert.deepEqual(result.viewsByDj, { "DJ A": [120], "DJ B": [30] });
+  assert.deepEqual(result.viewsBySourceVideo, { "video-a": [120], "video-b": [30] });
 });
 
 test("maps CSV URL samples by unique publication minute when receipt ids differ", () => {

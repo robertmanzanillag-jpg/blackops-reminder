@@ -77,6 +77,22 @@ test("deterministic planner chooses an unused source and covers missing long dur
   assert.equal(plan.caption.includes("http"), false);
 });
 
+test("planner explicitly exploits a proven DJ with a fresh eligible source", () => {
+  const state = queue();
+  state.analytics = { preferredDjs: ["WINNER"] } as any;
+  const plan = planBlackRoomDeterministicEdit({
+    queue: state,
+    ledger: { version: 1, entries: [] },
+    now: new Date("2026-07-22T12:00:00.000Z"),
+    inventory: [
+      { id: "other-video", title: "OTHER - DJ Set", duration: 3600 },
+      { id: "winner-fresh", title: "WINNER - DJ Set", duration: 3600 },
+    ],
+  });
+  assert.equal(plan?.dj, "WINNER");
+  assert.equal(plan?.videoId, "winner-fresh");
+});
+
 test("planner skips a source that failed to download without recording it as published", () => {
   const state = queue();
   state.failedSourceVideos = [{ videoId: "blocked-video", failedAt: "2026-07-28T00:00:00.000Z", reason: "timeout" }];

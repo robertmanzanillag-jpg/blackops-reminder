@@ -44,6 +44,8 @@ export interface BlackRoomPublicationExperiment {
   language: "en" | "es";
   slot: string;
   publishedAt: string;
+  dj?: string;
+  sourceVideoId?: string;
 }
 
 export interface BlackRoomCreativeCohort {
@@ -101,6 +103,8 @@ export interface BlackRoomCeoAnalytics {
   creativePerformance?: BlackRoomCreativeCohort[];
   durationPerformance?: BlackRoomDurationCohort[];
   preferredDurations?: number[];
+  preferredDjs?: string[];
+  preferredSourceVideoIds?: string[];
   reason: string;
 }
 
@@ -227,12 +231,16 @@ export function extractBlackRoomExperimentCohorts(
 ): {
   viewsByStrategy: Partial<Record<BlackRoomCreativeStrategy, number[]>>;
   viewsByDuration: Record<string, number[]>;
+  viewsByDj: Record<string, number[]>;
+  viewsBySourceVideo: Record<string, number[]>;
 } {
   const experimentsById = new Map(experiments
     .filter((experiment) => experiment.network === network && experiment.metricoolId.trim())
     .map((experiment) => [experiment.metricoolId.trim(), experiment]));
   const viewsByStrategy: Partial<Record<BlackRoomCreativeStrategy, number[]>> = {};
   const viewsByDuration: Record<string, number[]> = {};
+  const viewsByDj: Record<string, number[]> = {};
+  const viewsBySourceVideo: Record<string, number[]> = {};
   const matchedExperiments = new Map<string, { experiment: BlackRoomPublicationExperiment; views: number; exact: boolean }>();
   for (const record of viewRecords) {
     let experiment = experimentsById.get(String(record.id));
@@ -252,8 +260,19 @@ export function extractBlackRoomExperimentCohorts(
   for (const { experiment, views } of matchedExperiments.values()) {
     (viewsByStrategy[experiment.creativeStrategy] ||= []).push(views);
     (viewsByDuration[String(experiment.durationSeconds)] ||= []).push(views);
+    if (experiment.dj && experiment.dj !== "unknown") (viewsByDj[experiment.dj] ||= []).push(views);
+    if (experiment.sourceVideoId) (viewsBySourceVideo[experiment.sourceVideoId] ||= []).push(views);
   }
-  return { viewsByStrategy, viewsByDuration };
+  return { viewsByStrategy, viewsByDuration, viewsByDj, viewsBySourceVideo };
+}
+
+function rankProvenExperimentValues(groups: Record<string, number[]>): string[] {
+  return Object.entries(groups)
+    .map(([value, views]) => ({ value, views: views.filter((item) => Number.isFinite(item) && item >= 0) }))
+    .filter((group) => group.views.length >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES)
+    .sort((left, right) => median(right.views) - median(left.views) || right.views.length - left.views.length)
+    .slice(0, 3)
+    .map((group) => group.value);
 }
 
 function median(values: number[]): number {
@@ -1051,6 +1070,8 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const viewsByNetwork: Record<string, number[]> = {};
   const viewsByStrategy: Partial<Record<BlackRoomCreativeStrategy, number[]>> = {};
   const viewsByDuration: Record<string, number[]> = {};
+  const viewsByDj: Record<string, number[]> = {};
+  const viewsBySourceVideo: Record<string, number[]> = {};
   const networkErrors: Record<string, string> = {};
   const historyCompleteByNetwork: Record<string, boolean> = {};
   const historyRequestsByNetwork: Record<string, number> = {};
@@ -1134,6 +1155,8 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
       for (const [duration, views] of Object.entries(cohorts.viewsByDuration)) {
         (viewsByDuration[duration] ||= []).push(...views);
       }
+      for (const [dj, views] of Object.entries(cohorts.viewsByDj)) (viewsByDj[dj] ||= []).push(...views);
+      for (const [videoId, views] of Object.entries(cohorts.viewsBySourceVideo)) (viewsBySourceVideo[videoId] ||= []).push(...views);
       if (network === "tiktok") tiktokPostIds = viewRecords.map((record) => record.id);
       historyCompleteByNetwork[network] = networkHistory.requests > 0
         && networkHistory.complete
@@ -1158,6 +1181,8 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
       for (const [duration, views] of Object.entries(cohorts.viewsByDuration)) {
         (viewsByDuration[duration] ||= []).push(...views);
       }
+      for (const [dj, views] of Object.entries(cohorts.viewsByDj)) (viewsByDj[dj] ||= []).push(...views);
+      for (const [videoId, views] of Object.entries(cohorts.viewsBySourceVideo)) (viewsBySourceVideo[videoId] ||= []).push(...views);
       if (network === "tiktok") tiktokPostIds = viewRecords.map((record) => record.id);
       historyCompleteByNetwork[network] = false;
       historyRequestsByNetwork[network] = networkHistory.requests;
@@ -1231,6 +1256,8 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
     ...networkLearning,
     ...creative,
     ...durationLearning,
+    preferredDjs: rankProvenExperimentValues(viewsByDj),
+    preferredSourceVideoIds: rankProvenExperimentValues(viewsBySourceVideo),
     reason: comparableSampleCount >= BLACKROOM_CEO_MIN_SAMPLES
       ? `${csvReason} ${historyReason} El CEO estudia resultados reales de las tres redes: ${targets}. ${creative.creativeReason}`
       : `${csvReason} ${historyReason} Importó ${sampleCount} resultados reales; recolectando evidencia comparable (${comparableSampleCount}/${BLACKROOM_CEO_MIN_SAMPLES}) antes de cambiar horas o volumen. ${creative.creativeReason}`,

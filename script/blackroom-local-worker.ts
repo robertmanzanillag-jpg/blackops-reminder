@@ -233,6 +233,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
           caption: entry.caption,
           language: entry.language,
           sourceVideoId: entry.videoId,
+          dj: entry.dj,
           durationSeconds: entry.durationSeconds,
           videoFormat: entry.format,
           creativeStrategy: entry.creativeStrategy || "drop_first",
