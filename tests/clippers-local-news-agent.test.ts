@@ -473,6 +473,16 @@ test("official RSS adapters normalize attributed XML items without credentials a
   assert.equal(items[0].effective, "2026-07-21T12:00:00.000Z");
 });
 
+test("DOJ district connectors reject stories from other jurisdictions", () => {
+  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "doj-sdfl")!;
+  const items = __clipperLocalNewsInternals.rssEvents(`<rss><channel>
+    <item><guid>sdfl-1</guid><title>South Florida case update</title><description>Official release.</description><link>https://www.justice.gov/usao-sdfl/pr/south-florida-case-update</link><pubDate>Tue, 21 Jul 2026 12:00:00 GMT</pubDate></item>
+    <item><guid>nm-1</guid><title>New Mexico case update</title><description>Wrong district.</description><link>https://www.justice.gov/usao-nm/pr/new-mexico-case-update</link><pubDate>Tue, 21 Jul 2026 12:00:00 GMT</pubDate></item>
+  </channel></rss>`, source, "2026-07-21T12:05:00Z");
+  assert.equal(items.length, 1);
+  assert.equal(items[0].sourceUrl, "https://www.justice.gov/usao-sdfl/pr/south-florida-case-update");
+});
+
 test("official RSS media is kept only when the feed exposes a public video or image", () => {
   const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "notify-nyc")!;
   const items = __clipperLocalNewsInternals.rssEvents(`<rss><channel>

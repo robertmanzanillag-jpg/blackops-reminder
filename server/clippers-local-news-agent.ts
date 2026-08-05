@@ -919,7 +919,7 @@ export async function ingestClipperLocalNewsEvents(input: ClipperLocalNewsIngest
   return { created, updated, duplicates, resolved, queued, status: await getClipperLocalNewsStatus({ ...input, workspaceDir: dir }) };
 }
 
-interface SourceDefinition { id: string; lane: ClipperLocalNewsLane; url: string; requiresKey: boolean; key?: string; format?: "json" | "rss" | "mta-json" | "miami-transit-bootstrap"; sourceName?: string; sensitiveEligible?: boolean }
+interface SourceDefinition { id: string; lane: ClipperLocalNewsLane; url: string; requiresKey: boolean; key?: string; format?: "json" | "rss" | "mta-json" | "miami-transit-bootstrap"; sourceName?: string; sensitiveEligible?: boolean; allowedArticlePathPrefix?: string }
 interface ConnectorDefinition { id: string; lane: ClipperLocalNewsLane; configured: boolean; requiresKey: boolean; public: boolean }
 
 function connectorCatalog(env: NodeJS.ProcessEnv): ConnectorDefinition[] {
@@ -947,9 +947,9 @@ function sources(env: NodeJS.ProcessEnv): SourceDefinition[] {
     { id: "nws-nyc", lane: "ny-news", url: "https://api.weather.gov/alerts/active?point=40.7128,-74.0060", requiresKey: false, sourceName: "National Weather Service" },
     { id: "notify-nyc", lane: "ny-news", url: "https://feeds.everbridge.net/feeds/453003085617722/rss/rss.xml", requiresKey: false, format: "rss", sourceName: "Notify NYC" },
     { id: "fbi-ny", lane: "ny-news", url: "https://www.fbi.gov/feeds/new-york-news/rss.xml", requiresKey: false, format: "rss", sourceName: "Federal Bureau of Investigation New York", sensitiveEligible: true },
-    { id: "doj-sdny", lane: "ny-news", url: "https://www.justice.gov/feeds/justice-news.xml?component%5B1981%5D=1981&organization=186051&type%5Bpress_release%5D=press_release", requiresKey: false, format: "rss", sourceName: "U.S. Attorney for the Southern District of New York", sensitiveEligible: true },
+    { id: "doj-sdny", lane: "ny-news", url: "https://www.justice.gov/feeds/justice-news.xml?component%5B1981%5D=1981&organization=186051&type%5Bpress_release%5D=press_release", requiresKey: false, format: "rss", sourceName: "U.S. Attorney for the Southern District of New York", sensitiveEligible: true, allowedArticlePathPrefix: "/usao-sdny/" },
     { id: "fbi-miami", lane: "miami-news", url: "https://www.fbi.gov/feeds/miami-news/rss.xml", requiresKey: false, format: "rss", sourceName: "Federal Bureau of Investigation Miami", sensitiveEligible: true },
-    { id: "doj-sdfl", lane: "miami-news", url: "https://www.justice.gov/feeds/justice-news.xml?component%5B1771%5D=1771&organization=185861&type%5Bpress_release%5D=press_release", requiresKey: false, format: "rss", sourceName: "U.S. Attorney for the Southern District of Florida", sensitiveEligible: true },
+    { id: "doj-sdfl", lane: "miami-news", url: "https://www.justice.gov/feeds/justice-news.xml?component%5B1771%5D=1771&organization=185861&type%5Bpress_release%5D=press_release", requiresKey: false, format: "rss", sourceName: "U.S. Attorney for the Southern District of Florida", sensitiveEligible: true, allowedArticlePathPrefix: "/usao-sdfl/" },
     { id: "miami-dade-news", lane: "miami-news", url: "https://www.miamidade.gov/global/rss-news.page", requiresKey: false, format: "rss", sourceName: "Miami-Dade County" },
     { id: "mia-airport-news", lane: "miami-news", url: "https://news.miami-airport.com/tagfeed/en-us/tags/airport%2Clatest__news", requiresKey: false, format: "rss", sourceName: "Miami International Airport" },
   ];
@@ -984,6 +984,17 @@ function rssMedia(item: string): { url: string; type: "image" | "video" } | null
   return type ? { url, type } : null;
 }
 
+function sourceArticleMatchesConnector(link: string, source: SourceDefinition): boolean {
+  if (!source.allowedArticlePathPrefix) return true;
+  try {
+    const article = new URL(link);
+    const feed = new URL(source.url);
+    return article.hostname === feed.hostname && article.pathname.startsWith(source.allowedArticlePathPrefix);
+  } catch {
+    return false;
+  }
+}
+
 function rssEvents(xml: string, source: SourceDefinition, now = isoNow()): ClipperLocalNewsRawEvent[] {
   const nowMs = new Date(now).getTime();
   return [...xml.matchAll(/<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/gi)].slice(0, MAX_BATCH_SIZE).flatMap((match) => {
@@ -991,6 +1002,7 @@ function rssEvents(xml: string, source: SourceDefinition, now = isoNow()): Clipp
     const title = rssTag(item, "title") || "Official local update";
     const description = rssTag(item, "description");
     const link = rssTag(item, "link") || source.url;
+    if (!sourceArticleMatchesConnector(link, source)) return [];
     const guid = rssTag(item, "guid") || link || digest(`${title}|${description}`);
     const media = rssMedia(item);
     const published = rssTag(item, "pubDate") || rssTag(item, "dc:date");
@@ -1290,4 +1302,4 @@ export async function getClipperLocalNewsStatus(options: ClipperLocalNewsOptions
   };
 }
 
-export const __clipperLocalNewsInternals = { riskFor, sectionFor, topicTagFor, editorialUrgencyFor, editorialPriorityFor, sources, connectorCatalog, truncate, xWeightedLength, extractEvents, rssEvents, sourceEvents, mtaAlertEvents, miamiTransitEvents, scheduleMinutes };
+export const __clipperLocalNewsInternals = { riskFor, sectionFor, topicTagFor, editorialUrgencyFor, editorialPriorityFor, sources, connectorCatalog, truncate, xWeightedLength, extractEvents, rssEvents, sourceArticleMatchesConnector, sourceEvents, mtaAlertEvents, miamiTransitEvents, scheduleMinutes };
