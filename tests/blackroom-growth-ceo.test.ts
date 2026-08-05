@@ -690,6 +690,29 @@ test("maps publication receipts to creative and duration cohorts", () => {
   assert.deepEqual(result.viewsByDuration, { "30": [120], "60": [30] });
   assert.deepEqual(result.viewsByDj, { "DJ A": [120], "DJ B": [30] });
   assert.deepEqual(result.viewsBySourceVideo, { "video-a": [120], "video-b": [30] });
+  assert.deepEqual(result.viewsByFormat, { vertical: [120, 30] });
+  assert.deepEqual(result.viewsByLanguage, { en: [120], es: [30] });
+  assert.deepEqual(result.viewsBySlot, { "18:00": [120], "19:30": [30] });
+  assert.deepEqual(result.attribution, {
+    totalRecords: 2, matchedRecords: 2, exactMatches: 2, fallbackMatches: 0, unmatchedRecords: 0, matchRate: 1,
+  });
+});
+
+test("matches platform URL aliases to the exact Metricool publication experiment", () => {
+  const result = extractBlackRoomExperimentCohorts([
+    { id: "https://www.tiktok.com/@blackroom/video/7488123456789?lang=en", views: 240 },
+    { id: "unrelated-post", views: 12 },
+  ], [{
+    metricoolId: "7488123456789", reservationId: "r-url", network: "tiktok", creativeStrategy: "instant_drop",
+    durationSeconds: 30, format: "vertical", language: "es", slot: "02:30", publishedAt: "2026-07-22T02:30:00",
+    dj: "DJ URL", sourceVideoId: "source-url",
+  }], "tiktok");
+  assert.deepEqual(result.viewsByDj, { "DJ URL": [240] });
+  assert.deepEqual(result.viewsBySourceVideo, { "source-url": [240] });
+  assert.deepEqual(result.viewsBySlot, { "02:30": [240] });
+  assert.equal(result.attribution.exactMatches, 1);
+  assert.equal(result.attribution.unmatchedRecords, 1);
+  assert.equal(result.attribution.matchRate, 0.5);
 });
 
 test("maps CSV URL samples by unique publication minute when receipt ids differ", () => {
@@ -713,6 +736,11 @@ test("does not count direct Metricool and CSV aliases as two experiments", () =>
   }], "tiktok");
   assert.deepEqual(result.viewsByStrategy, { instant_drop: [80] });
   assert.deepEqual(result.viewsByDuration, { "30": [80] });
+  assert.equal(result.attribution.matchedRecords, 1);
+  assert.equal(result.attribution.exactMatches, 1);
+  assert.equal(result.attribution.fallbackMatches, 0);
+  assert.equal(result.attribution.unmatchedRecords, 0);
+  assert.equal(result.attribution.matchRate, 1);
 });
 
 test("CEO selects the best proven creative cohort", () => {
