@@ -9,6 +9,7 @@ import {
   buildMetricoolApprovalRows,
   buildStreamerGrowthCeoPlan,
   dedupePublishedMetrics,
+  refreshDecisionOperationalState,
   resolveWorkspaceMediaPath,
   validateMetricoolMp4,
 } from "../script/clippers-streamer-growth-ceo.mjs";
@@ -24,6 +25,7 @@ const campaign = {
   marketplace: "vyro",
   active: true,
   joined: true,
+  statusObservedAt: "2026-07-21T17:30:00.000Z",
   expiresAt: "2026-07-29T18:00:00.000Z",
   payoutCpm: 1.5,
   minViewsPerPost: 5000,
@@ -176,7 +178,7 @@ test("starts at five daily and reduces only after enough verified poor results",
 
   const recutPlan = buildStreamerGrowthCeoPlan({ campaigns: [campaign], metrics, now });
   assert.equal(recutPlan.operatingPolicy.dailyTestClips, 2);
-  assert.equal(recutPlan.operatingPolicy.maximumDailyClipsPerAccount, 8);
+  assert.equal(recutPlan.operatingPolicy.maximumDailyClipsPerAccount, 5);
   assert.equal(recutPlan.operatingPolicy.volumeReason, "reduce_while_recutting");
 });
 
@@ -193,11 +195,11 @@ test("scheduled rows cannot raise the five-clip initial learning volume", () => 
     targetDailyClips: 8,
   });
   assert.equal(plan.operatingPolicy.dailyTestClips, 5);
-  assert.equal(plan.operatingPolicy.configuredDailyCeiling, 8);
+  assert.equal(plan.operatingPolicy.configuredDailyCeiling, 5);
   assert.equal(plan.operatingPolicy.volumeReason, "initial_learning_floor");
 });
 
-test("raises volume only after fifteen verified winning posts", () => {
+test("never raises volume above the authorized five clips after verified winning posts", () => {
   const winningMetrics = Array.from({ length: 15 }, (_, index) => ({
     campaignId: campaign.id,
     strategyId: "direct_insight",
@@ -216,7 +218,8 @@ test("raises volume only after fifteen verified winning posts", () => {
     now,
     targetDailyClips: 8,
   });
-  assert.equal(plan.operatingPolicy.dailyTestClips, 8);
+  assert.equal(plan.operatingPolicy.dailyTestClips, 5);
+  assert.equal(plan.operatingPolicy.configuredDailyCeiling, 5);
   assert.equal(plan.operatingPolicy.volumeReason, "increase_verified_winners");
 });
 
@@ -371,4 +374,85 @@ test("normalizes served workspace paths without accepting outside paths as ready
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+});
+
+test("reports authorization, objective and execution truth as typed worker state", () => {
+  const plan = buildStreamerGrowthCeoPlan({
+    campaigns: [campaign],
+    metrics: [],
+    now,
+    publishingAuthorized: true,
+    targetDailyClips: 3,
+  });
+
+  assert.deepEqual(plan.executionState.objective, {
+    targetDailyClips: 3,
+    maximumDailyClips: 5,
+    paidSpendLimitUsd: 0,
+  });
+  assert.deepEqual(plan.executionState.authorization, {
+    status: "authorized",
+    canPublish: true,
+  });
+  assert.equal(plan.executionState.activity, "idle");
+  assert.equal(plan.executionState.canClaimWorking, false);
+  assert.equal(plan.executionState.capabilities.canProduceNow, true);
+  assert.equal(plan.executionState.capabilities.canDeliverNow, false);
+  assert.match(plan.executionState.truth, /no delivery is executing/i);
+});
+
+test("blocks unknown, stale and expired campaign state with distinct typed reasons", () => {
+  const unknown = buildStreamerGrowthCeoPlan({
+    campaigns: [{ ...campaign, statusObservedAt: "" }],
+    metrics: [],
+    now,
+  }).decisions[0];
+  assert.ok(unknown.warnings.includes("campaign_status_freshness_unknown"));
+  assert.equal(unknown.operationalState.phase, "ready_for_media_validation");
+  assert.equal(unknown.operationalState.capabilities.canProduce, true);
+  assert.equal(unknown.operationalState.canClaimWorking, false);
+  assert.ok(unknown.operationalState.blockers.some((row) => row.code === "campaign_status_freshness_unknown" && row.severity === "warning"));
+
+  const stale = buildStreamerGrowthCeoPlan({
+    campaigns: [{ ...campaign, statusObservedAt: "2026-07-19T17:00:00.000Z" }],
+    metrics: [],
+    now,
+  }).decisions[0];
+  assert.equal(stale.campaignStatusFreshness.status, "stale");
+  assert.ok(stale.operationalState.blockers.some((row) => row.code === "campaign_status_stale" && row.blocks === "produce"));
+
+  const expired = buildStreamerGrowthCeoPlan({
+    campaigns: [{ ...campaign, expiresAt: "2026-07-21T17:59:59.000Z" }],
+    metrics: [],
+    now,
+  }).decisions[0];
+  assert.ok(expired.productionBlockers.includes("campaign_expired"));
+  assert.ok(!expired.productionBlockers.includes("campaign_expiry_unknown"));
+});
+
+test("separates media, delivery and cashout readiness without claiming active work", () => {
+  const plan = buildStreamerGrowthCeoPlan({
+    campaigns: [{ ...campaign, payoutMethodReady: false }],
+    metrics: [],
+    now,
+    publishingAuthorized: true,
+  });
+  const decision = plan.decisions[0];
+  const rows = buildMetricoolApprovalRows(decision, {
+    1: { ready: true, relativePath: "drafts/vyro/final.mp4" },
+  });
+
+  const blockedDelivery = refreshDecisionOperationalState(decision, { rows, deliverableCount: 0 });
+  assert.equal(blockedDelivery.phase, "blocked_delivery");
+  assert.equal(blockedDelivery.capabilities.canDeliver, false);
+  assert.equal(blockedDelivery.capabilities.canCashout, false);
+  assert.ok(blockedDelivery.blockers.some((row) => row.code === "payout_method_not_connected" && row.blocks === "cashout"));
+  assert.ok(blockedDelivery.blockers.some((row) => row.code === "metricool_delivery_input_missing" && row.blocks === "deliver"));
+
+  const ready = refreshDecisionOperationalState(decision, { rows, deliverableCount: 1 });
+  assert.equal(ready.phase, "ready_for_delivery");
+  assert.equal(ready.capabilities.canDeliver, true);
+  assert.equal(ready.activity, "idle");
+  assert.equal(ready.canClaimWorking, false);
+  assert.match(ready.truth, /no delivery has started/i);
 });

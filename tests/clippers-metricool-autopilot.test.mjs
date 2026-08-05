@@ -22,6 +22,15 @@ const eligible = {
   publishAllowed: true,
 };
 
+const mediaReceipt = {
+  campaignId: eligible.campaignId,
+  draftFile: eligible.draftFile,
+  fileId: "drive-file-123",
+  mediaUrl: eligible.mediaUrl,
+  sha256: "a".repeat(64),
+  status: "ready",
+};
+
 test("requires every contractual hashtag and a public HTTPS media URL", () => {
   assert.deepEqual(validateAutopilotItem(eligible, "streamersclipusa").blockers, []);
   assert.ok(validateAutopilotItem({ ...eligible, caption: "No disclosure" }, "streamersclipusa")
@@ -63,6 +72,54 @@ test("does not schedule without explicit authorization", async () => {
   assert.equal(result.scheduled, 0);
 });
 
+test("dry-run validates a verified media receipt without credentials or network writes", async () => {
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-metricool-dry-run-"));
+  try {
+    const result = await runMetricoolAutopilot({
+      dryRun: true,
+      env: { CLIPPERS_METRICOOL_BLOG_ID: "6431687", CLIPPERS_TIKTOK_ACCOUNT: "streamersclipusa" },
+      workspaceRoot,
+      queue: { targetDailyClips: 5, items: [eligible] },
+      ledger: [],
+      mediaReceipts: [mediaReceipt],
+      now: new Date("2026-07-28T05:00:00.000Z"),
+      async fetch() {
+        throw new Error("dry-run must not call Metricool");
+      },
+    });
+    assert.equal(result.status, "dry_run");
+    assert.equal(result.scheduled, 0);
+    assert.equal(result.wouldSchedule, 1);
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("blocks an item whose public URL has no matching upload receipt", async () => {
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-metricool-receipt-"));
+  try {
+    const result = await runMetricoolAutopilot({
+      env: {
+        CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
+        METRICOOL_USER_TOKEN: "token",
+        METRICOOL_USER_ID: "3558197",
+        CLIPPERS_METRICOOL_BLOG_ID: "6431687",
+      },
+      workspaceRoot,
+      queue: { targetDailyClips: 5, items: [eligible] },
+      ledger: [],
+      mediaReceipts: [],
+      async fetch() {
+        throw new Error("unverified media must not call Metricool");
+      },
+    });
+    assert.equal(result.status, "blocked");
+    assert.ok(result.results[0].blockers.includes("verified_media_receipt_missing"));
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
 test("schedules eligible unique rows through Metricool MCP and writes no paid spend", async () => {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-metricool-autopilot-"));
   const calls = [];
@@ -76,6 +133,7 @@ test("schedules eligible unique rows through Metricool MCP and writes no paid sp
         CLIPPERS_TIKTOK_ACCOUNT: "streamersclipusa",
       },
       workspaceRoot,
+      mediaReceipts: [mediaReceipt],
       queue: { targetDailyClips: 5, items: [eligible] },
       ledger: [],
       now: new Date("2026-07-28T05:00:00.000Z"),
@@ -132,9 +190,11 @@ test("records an uncertain Metricool outcome and never retries it silently", asy
         CLIPPERS_TIKTOK_ACCOUNT: "streamersclipusa",
       },
       workspaceRoot,
+      mediaReceipts: [mediaReceipt],
       queue: { targetDailyClips: 5, items: [eligible] },
       ledger: [],
       now: new Date("2026-07-28T05:00:00.000Z"),
+      verifyAttempts: 1,
       async fetch(url) {
         if (url === "https://ai.metricool.com/mcp") {
           mcpCalls += 1;
@@ -143,7 +203,11 @@ test("records an uncertain Metricool outcome and never retries it silently", asy
             headers: { "content-type": "application/json" },
           });
         }
-        return new Response(JSON.stringify({ data: [] }), {
+        return new Response(JSON.stringify({ data: mcpCalls ? [{
+          text: eligible.caption,
+          publicationDate: { dateTime: "2026-07-28T10:00:00" },
+          providers: [{ network: "tiktok" }],
+        }] : [] }), {
           status: 200,
           headers: { "content-type": "application/json" },
         });
@@ -163,15 +227,21 @@ test("records an uncertain Metricool outcome and never retries it silently", asy
         CLIPPERS_METRICOOL_BLOG_ID: "6431687",
       },
       workspaceRoot,
+      mediaReceipts: [mediaReceipt],
       queue: { targetDailyClips: 5, items: [eligible] },
       ledger: result.results,
       now: new Date("2026-07-28T05:00:00.000Z"),
-      async fetch() {
-        throw new Error("A pending item must not be submitted twice");
+      async fetch(url) {
+        assert.notEqual(url, "https://ai.metricool.com/mcp", "A pending item must not be submitted twice");
+        return new Response(JSON.stringify({ data: [] }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
       },
     });
-    assert.equal(retry.status, "blocked");
-    assert.equal(retry.results.length, 0);
+    assert.equal(retry.status, "attention_required");
+    assert.equal(retry.results.length, 1);
+    assert.equal(retry.results[0].reason, "retry_suppressed_until_remote_outcome_is_known");
   } finally {
     await rm(workspaceRoot, { recursive: true, force: true });
   }
@@ -188,6 +258,7 @@ test("blocks a queue item routed to a different Metricool blog", async () => {
         CLIPPERS_METRICOOL_BLOG_ID: "6431687",
       },
       workspaceRoot,
+      mediaReceipts: [mediaReceipt],
       queue: { targetDailyClips: 5, items: [{ ...eligible, blogId: 6595747 }] },
       ledger: [],
       now: new Date("2026-07-28T05:00:00.000Z"),
@@ -214,6 +285,7 @@ test("blocks a slot that would run after the verified campaign expiry", async ()
         CLIPPERS_METRICOOL_BLOG_ID: "6431687",
       },
       workspaceRoot,
+      mediaReceipts: [mediaReceipt],
       queue: {
         targetDailyClips: 5,
         items: [{ ...eligible, campaignExpiresAt: "2026-07-28T13:00:00.000Z" }],
@@ -248,6 +320,7 @@ test("blocks an already expired campaign without calling Metricool", async () =>
         CLIPPERS_METRICOOL_BLOG_ID: "6431687",
       },
       workspaceRoot,
+      mediaReceipts: [mediaReceipt],
       queue: {
         targetDailyClips: 5,
         items: [{ ...eligible, campaignExpiresAt: "2026-07-28T04:00:00.000Z" }],
@@ -279,6 +352,7 @@ test("deduplicates identical items inside one queue before calling Metricool", a
         CLIPPERS_METRICOOL_BLOG_ID: "6431687",
       },
       workspaceRoot,
+      mediaReceipts: [mediaReceipt],
       queue: { targetDailyClips: 5, items: [eligible, { ...eligible }] },
       ledger: [],
       now: new Date("2026-07-28T05:00:00.000Z"),
@@ -322,6 +396,7 @@ test("skips a concurrent autopilot run while its lock is active", async () => {
     const result = await runMetricoolAutopilot({
       env: { CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true" },
       workspaceRoot,
+      mediaReceipts: [mediaReceipt],
       queue: { targetDailyClips: 5, items: [eligible] },
     });
     assert.equal(result.status, "skipped");

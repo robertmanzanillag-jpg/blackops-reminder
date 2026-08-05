@@ -51,6 +51,7 @@ import { runLegalComplianceReports } from "./legal-compliance-agent";
 import { runAppQaScan } from "./app-qa-agent";
 import { createDeveloperAutopilotHandoff, createDeveloperAutopilotHandoffFromRequest, evaluateDeveloperReleaseGate } from "./developer-autopilot";
 import { buildMonthlyAiSpendReport } from "./ai-cost-policy";
+import { getClipperWorkerRuntimeStatus } from "./clippers-runtime-status";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -2166,6 +2167,15 @@ export async function registerRoutes(
       res.json(status);
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to inspect clippers status" });
+    }
+  });
+
+  app.get("/api/clippers/runtime-status", async (_req, res) => {
+    try {
+      res.set("Cache-Control", "no-store");
+      res.json(await getClipperWorkerRuntimeStatus());
+    } catch {
+      res.status(500).json({ error: "Failed to inspect Clippers worker runtime" });
     }
   });
 
