@@ -13,7 +13,7 @@ const gitCommonDir = spawnSync("git", ["rev-parse", "--path-format=absolute", "-
 }).stdout.trim();
 const primaryCheckoutRoot = gitCommonDir.endsWith(`${path.sep}.git`) ? path.dirname(gitCommonDir) : repoRoot;
 
-test("LaunchAgent resolves the checkout from the installer and does not freeze dynamic authorization", async () => {
+test("LaunchAgent binds a separate config root and only persists explicit non-secret runtime controls", async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-home-"));
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-workspace-"));
   try {
@@ -25,6 +25,7 @@ test("LaunchAgent resolves the checkout from the installer and does not freeze d
         HOME: home,
         CLIPPERS_LAUNCH_AGENT_DRY_RUN: "true",
         CLIPPERS_WORKSPACE_ROOT: workspaceRoot,
+        CLIPPERS_CONFIG_ROOT: repoRoot,
         CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
         CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED: "true",
         CLIPPERS_METRICOOL_BLOG_ID: "6431687",
@@ -44,9 +45,13 @@ test("LaunchAgent resolves the checkout from the installer and does not freeze d
     assert.match(plist, new RegExp(`<key>WorkingDirectory</key><string>${primaryCheckoutRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
     assert.match(plist, new RegExp(`<string>${primaryCheckoutRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/script/clippers-free-local-worker\\.mjs</string>`));
     assert.match(plist, new RegExp(`CLIPPERS_WORKSPACE_ROOT</key><string>${workspaceRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.match(plist, new RegExp(`CLIPPERS_CONFIG_ROOT</key><string>${repoRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`));
+    assert.match(plist, /CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED<\/key><string>true<\/string>/);
+    assert.match(plist, /CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED<\/key><string>true<\/string>/);
+    assert.match(plist, /CLIPPERS_METRICOOL_BLOG_ID<\/key><string>6431687<\/string>/);
     assert.doesNotMatch(
       plist,
-      /must-not-persist|METRICOOL_USER_TOKEN|GOOGLE_DRIVE_REFRESH_TOKEN|CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED|CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED|CLIPPERS_METRICOOL_BLOG_ID|CLIPPERS_TARGET_DAILY_CLIPS/,
+      /must-not-persist|METRICOOL_USER_TOKEN|GOOGLE_DRIVE_REFRESH_TOKEN/,
     );
   } finally {
     await rm(home, { recursive: true, force: true });

@@ -145,6 +145,32 @@ test("reloads selected project authorization on every run instead of freezing La
   assert.equal(calls.some(({ args }) => args.includes("script/clippers-metricool-autopilot.mjs")), true);
 });
 
+test("loads selected credentials from a separate config root", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-free-worker-project-"));
+  const configRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-free-worker-config-root-"));
+  await writeFile(path.join(configRoot, ".env.local"), [
+    "METRICOOL_USER_TOKEN=metricool-from-config-root",
+    "METRICOOL_USER_ID=3558197",
+    "CLIPPERS_METRICOOL_BLOG_ID=6431687",
+    "OPENAI_API_KEY=must-not-load",
+  ].join("\n"));
+  const calls = [];
+  const result = await runClipperFreeLocalWorker({
+    projectRoot,
+    configRoot,
+    env: { CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true" },
+    run(command, args, options) {
+      calls.push({ command, args, env: options.env });
+      return { command: [command, ...args].join(" "), status: 0, signal: null, stdout: "", stderr: "" };
+    },
+  });
+  assert.equal(result.status, "completed");
+  assert.equal(result.configRoot, configRoot);
+  assert.deepEqual(result.loadedConfigurationFiles, [".env.local"]);
+  assert.equal(calls[2].env.METRICOOL_USER_TOKEN, "metricool-from-config-root");
+  assert.equal(calls[2].env.OPENAI_API_KEY, undefined);
+});
+
 test("uploads public campaign media before CEO planning when explicitly authorized", async () => {
   const projectRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-free-worker-media-"));
   const calls = [];
