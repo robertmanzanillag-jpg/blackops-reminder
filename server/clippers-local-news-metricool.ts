@@ -16,6 +16,14 @@ const MAX_PER_RUN = 50;
 const MIN_SPACING_MS = 2 * 60_000;
 const DEFAULT_BREAKING_SPACING_MINUTES = 15;
 const MAX_BREAKING_SPACING_MINUTES = 120;
+const DEFAULT_SCHEDULE_HORIZON_HOURS = 36;
+const MAX_SCHEDULE_HORIZON_HOURS = 36;
+const DEFAULT_MAX_ITEM_AGE_HOURS = {
+  routine: 24,
+  developing: 36,
+  breaking: 12,
+} as const;
+const MAX_ITEM_AGE_HOURS = 72;
 const STANDARD_SPACING_MS = 75 * 60_000;
 const DAILY_MINIMUM_PER_ACCOUNT = 10;
 const DAILY_MAXIMUM_PER_ACCOUNT = 14;
@@ -221,6 +229,39 @@ function nextBreakingSlot(nowMs: number, occupied: number[], spacingMs: number):
     candidate = scheduled + spacingMs;
   }
   return candidate;
+}
+
+function boundedHours(value: string | undefined, fallback: number, maximum: number): number {
+  const configured = Number.parseInt(value || "", 10);
+  return Number.isFinite(configured) ? Math.max(1, Math.min(maximum, configured)) : fallback;
+}
+
+/**
+ * Routine and developing posts are useful only while they are current. Their
+ * default window ends at the earlier of 36 hours from now or the end of the
+ * next New York calendar day. Operators may shorten this window, but cannot
+ * expand it far enough to turn a news queue into a week-long backlog.
+ */
+function scheduleHorizonEndMs(now: Date, env: NodeJS.ProcessEnv): number {
+  const hours = boundedHours(
+    env.CLIPPERS_LOCAL_NEWS_SCHEDULE_HORIZON_HOURS,
+    DEFAULT_SCHEDULE_HORIZON_HOURS,
+    MAX_SCHEDULE_HORIZON_HOURS,
+  );
+  const nextEasternDayEnd = easternDayEndMs(new Date(easternDayEndMs(now) + 12 * 60 * 60_000));
+  return Math.min(now.getTime() + hours * 60 * 60_000, nextEasternDayEnd);
+}
+
+function queueItemIsFresh(item: QueueItem, nowMs: number, env: NodeJS.ProcessEnv): boolean {
+  const urgency = item.editorialUrgency || "routine";
+  const envKey = urgency === "breaking"
+    ? "CLIPPERS_LOCAL_NEWS_BREAKING_MAX_AGE_HOURS"
+    : urgency === "developing"
+      ? "CLIPPERS_LOCAL_NEWS_DEVELOPING_MAX_AGE_HOURS"
+      : "CLIPPERS_LOCAL_NEWS_ROUTINE_MAX_AGE_HOURS";
+  const maxAgeHours = boundedHours(env[envKey], DEFAULT_MAX_ITEM_AGE_HOURS[urgency], MAX_ITEM_AGE_HOURS);
+  const createdAt = new Date(item.createdAt).getTime();
+  return Number.isFinite(createdAt) && nowMs - createdAt <= maxAgeHours * 60 * 60_000;
 }
 
 export type ClipperLocalNewsMetricoolResultStatus = "completed" | "partial" | "blocked";
@@ -784,6 +825,10 @@ export async function deliverClipperLocalNewsToMetricool(
         result.filtered += 1;
         return false;
       }
+      if (!queueItemIsFresh(item, fetchedNow.getTime(), env)) {
+        result.filtered += 1;
+        return false;
+      }
       const baseEligible = item.status === "auto_eligible"
         && item.autoEligible
         && !item.approvalRequired
@@ -843,6 +888,7 @@ export async function deliverClipperLocalNewsToMetricool(
 
     const maxPerRun = cappedInteger(options.maxPerRun ?? env.CLIPPERS_LOCAL_NEWS_METRICOOL_MAX_PER_RUN, DEFAULT_MAX_PER_RUN);
     const minimumStart = fetchedNow.getTime() + MIN_SPACING_MS;
+    const routineHorizonEnd = scheduleHorizonEndMs(fetchedNow, env);
     const breakingSpacing = breakingSpacingMs(env);
     const cursors = new Map<string, number>();
     const occupiedByAccount = new Map<string, number[]>();
@@ -851,7 +897,9 @@ export async function deliverClipperLocalNewsToMetricool(
       const key = `${entry.lane}|${entry.platform}`;
       const scheduled = new Date(entry.scheduledFor).getTime();
       if (Number.isFinite(scheduled)) {
-        cursors.set(key, Math.max(cursors.get(key) || 0, scheduled));
+        // A legacy future backlog remains in the durable ledger for dedupe and
+        // cleanup, but must not drag new, current reporting behind it.
+        if (scheduled <= routineHorizonEnd) cursors.set(key, Math.max(cursors.get(key) || 0, scheduled));
         const occupied = occupiedByAccount.get(key) || [];
         occupied.push(scheduled);
         occupiedByAccount.set(key, occupied);
@@ -890,11 +938,15 @@ export async function deliverClipperLocalNewsToMetricool(
       // safe per-account slot so a burst cannot hit Facebook at one timestamp.
       // Routine slots compress late in the day so an underfilled account can still reach its
       // account-wide target, while never violating the two-minute safety floor.
-      let scheduledMs = breaking
+      let scheduledMs: number | null = breaking
         ? nextBreakingSlot(fetchedNow.getTime(), occupiedByAccount.get(cursorKey) || [], breakingSpacing)
         : minimumStart;
       if (!breaking) {
         for (let dayAttempt = 0; dayAttempt < 8; dayAttempt += 1) {
+          if (scheduledMs > routineHorizonEnd) {
+            scheduledMs = null;
+            break;
+          }
           const day = easternDateKey(new Date(scheduledMs));
           const accountDayKey = `${cursorKey}|${day}`;
           const count = scheduledByAccountDay.get(accountDayKey) || 0;
@@ -904,6 +956,10 @@ export async function deliverClipperLocalNewsToMetricool(
           }
           const cursor = cursors.get(cursorKey) || 0;
           const earliest = Math.max(scheduledMs, cursor + MIN_SPACING_MS);
+          if (earliest > routineHorizonEnd) {
+            scheduledMs = null;
+            break;
+          }
           if (easternDateKey(new Date(earliest)) !== day) {
             scheduledMs = earliest;
             continue;
@@ -913,8 +969,13 @@ export async function deliverClipperLocalNewsToMetricool(
           const catchUpSpacing = remainingAfterThis > 0 ? Math.floor(availableAfterEarliest / remainingAfterThis) : MIN_SPACING_MS;
           const spacingMs = Math.max(MIN_SPACING_MS, Math.min(STANDARD_SPACING_MS, catchUpSpacing));
           scheduledMs = cursor > 0 ? Math.max(earliest, cursor + spacingMs) : earliest;
+          if (scheduledMs > routineHorizonEnd) scheduledMs = null;
           break;
         }
+      }
+      if (scheduledMs === null) {
+        result.deferred += 1;
+        continue;
       }
       const scheduledDate = new Date(scheduledMs);
       const mediaUrl = item.mediaUrl || publicBrandMediaUrl(env, item.lane);
@@ -1019,4 +1080,6 @@ export const __clipperLocalNewsMetricoolInternals = {
   matchesDeliveryJurisdiction,
   breakingSpacingMs,
   nextBreakingSlot,
+  scheduleHorizonEndMs,
+  queueItemIsFresh,
 };

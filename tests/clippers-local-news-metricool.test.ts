@@ -654,6 +654,7 @@ test("blocks a discovered brand when its requested social profile is not connect
   const result = await deliverClipperLocalNewsToMetricool({
     env: credentials,
     workspaceDir: dir,
+    now: fixedNow,
     fetch: async (input, init) => {
       if (init?.method === "POST") posts += 1;
       const url = new URL(String(input));
@@ -1213,4 +1214,115 @@ test("uses one maximum observed adaptive target for a mixed baseline and breakou
   });
   assert.equal(result.scheduled, 4);
   assert.ok(dates.every((date) => date.startsWith("2026-07-21T")), dates.join(", "));
+});
+
+test("ignores a 523-entry legacy future backlog when choosing a slot for current news", async () => {
+  const dir = await workspace([item({
+    id: "current-after-backlog",
+    eventId: "current-after-backlog-event",
+    platform: "facebook",
+    createdAt: "2026-07-21T15:50:00.000Z",
+    copy: "Verified current local report after legacy backlog.",
+  })]);
+  const legacyBacklog = Array.from({ length: 523 }, (_, index) => ledgerEntry(
+    "miami-news",
+    "facebook",
+    index,
+    new Date(Date.UTC(2026, 7, 1) + index * 60 * 60_000).toISOString(),
+  ));
+  await writeFile(
+    path.join(dir, "metricool-delivery-ledger.json"),
+    JSON.stringify({ version: 1, entries: legacyBacklog }),
+    "utf8",
+  );
+  const dates: string[] = [];
+
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (_input, init) => {
+      dates.push(JSON.parse(String(init?.body)).publicationDate.dateTime);
+      return new Response(JSON.stringify({ id: "current-post" }), { status: 200 });
+    },
+  });
+
+  assert.equal(result.scheduled, 1);
+  assert.deepEqual(dates, ["2026-07-21T12:02:00"]);
+});
+
+test("does not push routine news beyond the end of the next New York calendar day", async () => {
+  const dir = await workspace([item({
+    id: "routine-beyond-horizon",
+    eventId: "routine-beyond-horizon-event",
+    platform: "facebook",
+    createdAt: "2026-07-21T15:50:00.000Z",
+    copy: "Verified routine report that must not become stale in a future queue.",
+  })]);
+  const filledToday = Array.from({ length: 10 }, (_, index) => ledgerEntry(
+    "miami-news",
+    "facebook",
+    index,
+    `2026-07-21T${String(12 + index).padStart(2, "0")}:00:00.000Z`,
+  ));
+  const filledTomorrow = Array.from({ length: 10 }, (_, index) => ledgerEntry(
+    "miami-news",
+    "facebook",
+    10 + index,
+    `2026-07-22T${String(12 + index).padStart(2, "0")}:00:00.000Z`,
+  ));
+  await writeFile(
+    path.join(dir, "metricool-delivery-ledger.json"),
+    JSON.stringify({ version: 1, entries: [...filledToday, ...filledTomorrow] }),
+    "utf8",
+  );
+  let fetched = false;
+
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async () => { fetched = true; throw new Error("out-of-horizon news must not reach Metricool"); },
+  });
+
+  assert.equal(result.scheduled, 0);
+  assert.equal(result.deferred, 1);
+  assert.equal(fetched, false);
+});
+
+test("filters stale queue rows while fresh developing and breaking news keep their delivery behavior", async () => {
+  const staleItems = [
+    item({ id: "stale-routine", eventId: "stale-routine-event", platform: "facebook", createdAt: "2026-07-20T15:59:00.000Z", editorialUrgency: "routine", copy: "Old routine report." }),
+    item({ id: "stale-developing", eventId: "stale-developing-event", platform: "facebook", createdAt: "2026-07-20T03:59:00.000Z", editorialUrgency: "developing", copy: "Old developing report." }),
+    item({ id: "stale-breaking", eventId: "stale-breaking-event", platform: "facebook", createdAt: "2026-07-21T03:59:00.000Z", editorialUrgency: "breaking", copy: "Old breaking report." }),
+  ];
+  const staleDir = await workspace(staleItems);
+  let staleFetched = false;
+  const staleResult = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: staleDir,
+    now: fixedNow,
+    fetch: async () => { staleFetched = true; throw new Error("stale news must not reach Metricool"); },
+  });
+  assert.equal(staleResult.filtered, 3);
+  assert.equal(staleResult.scheduled, 0);
+  assert.equal(staleFetched, false);
+
+  const freshDir = await workspace([
+    item({ id: "fresh-developing", eventId: "fresh-developing-event", platform: "facebook", createdAt: "2026-07-21T15:30:00.000Z", editorialUrgency: "developing", copy: "Fresh developing report." }),
+    item({ id: "fresh-breaking", eventId: "fresh-breaking-event", platform: "facebook", createdAt: "2026-07-21T15:45:00.000Z", editorialUrgency: "breaking", copy: "Fresh breaking report." }),
+  ]);
+  const dates: string[] = [];
+  const freshResult = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: freshDir,
+    now: fixedNow,
+    maxPerRun: 2,
+    fetch: async (_input, init) => {
+      dates.push(JSON.parse(String(init?.body)).publicationDate.dateTime);
+      return new Response(JSON.stringify({ id: `fresh-${dates.length}` }), { status: 200 });
+    },
+  });
+  assert.equal(freshResult.scheduled, 2);
+  assert.ok(dates.includes("2026-07-21T12:00:00"), dates.join(", "));
 });
