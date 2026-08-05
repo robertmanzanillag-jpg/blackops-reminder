@@ -237,9 +237,12 @@ export function planBlackRoomDeterministicEdit(input: {
   const priority = input.priorityVideoId
     ? eligible.find((candidate) => candidate.video.id === input.priorityVideoId)
     : undefined;
+  const preferredDjs = new Set(input.queue.analytics?.preferredDjs || []);
   eligible.sort((left, right) => left.video.id.localeCompare(right.video.id));
+  const preferredEligible = eligible.filter((candidate) => preferredDjs.has(candidate.dj));
+  const selectionPool = preferredEligible.length ? preferredEligible : eligible;
   const seed = `${job.id}:${slot}:${durationSeconds}:${format}:${language}:${creativeStrategy}`;
-  const selected = priority || eligible[stableNumber(seed) % eligible.length];
+  const selected = priority || selectionPool[stableNumber(seed) % selectionPool.length];
   const windowStartSeconds = selected.windowStart;
   return {
     jobId: job.id, slot, targetDate: job.targetDate, videoId: selected.video.id,

@@ -53,9 +53,24 @@ test("keeps a two-week persistent scheduling buffer", () => {
   assert.equal(ensureBlackRoomScheduleBuffer(state, now), 0);
   assert.equal(state.jobs.length, 14);
   assert.equal(state.jobs[0].requirements.posts, 5);
+  assert.equal(state.jobs.filter((job) => new Date(job.notBefore) <= now).length, 3);
+  assert.ok(new Date(state.jobs[13].notBefore) > now);
   assert.equal(state.jobs[0].requirements.djs, 5);
   assert.equal(state.jobs[0].requirements.deleteOnlyAfterMetricoolConfirmation, true);
   assert.deepEqual(state.jobs[0].requirements.durationsSeconds, [15, 30, 60, 120, 300, 600]);
+});
+
+test("migrates an old persisted queue into the adaptive release window", async () => {
+  const now = new Date("2026-07-20T12:00:00.000Z");
+  const state = createBlackRoomQueueState(now);
+  ensureBlackRoomScheduleBuffer(state, now);
+  state.jobs.forEach((job) => { job.notBefore = now.toISOString(); });
+  const directory = await mkdtemp(path.join(tmpdir(), "blackroom-old-queue-"));
+  const queuePath = path.join(directory, "queue.json");
+  await writeFile(queuePath, JSON.stringify(state), "utf8");
+  const migrated = await readBlackRoomQueue(queuePath, now);
+  assert.equal(migrated.jobs.filter((job) => new Date(job.notBefore) <= now).length, 3);
+  assert.ok(new Date(migrated.jobs[13].notBefore) > now);
 });
 
 test("recovers an interrupted job after its lease expires", () => {

@@ -179,8 +179,17 @@ export function createBlackRoomQueueState(now = new Date()): BlackRoomQueueState
   };
 }
 
+function adaptiveReleaseTime(targetDate: string, now: Date, existingNotBefore?: string): string {
+  // Keep the full campaign planned, but release each job only three days
+  // before publication so fresh analytics can still change the strategy.
+  const releaseAt = new Date(`${targetDate}T00:00:00.000Z`).getTime() - 3 * 86_400_000;
+  const existing = existingNotBefore ? new Date(existingNotBefore).getTime() : 0;
+  return new Date(Math.max(now.getTime(), releaseAt, Number.isFinite(existing) ? existing : 0)).toISOString();
+}
+
 function createDailyJob(state: BlackRoomQueueState, targetDate: string, dayIndex: number, now: Date): BlackRoomDailyJob {
   const timestamp = iso(now);
+  const notBefore = adaptiveReleaseTime(targetDate, now);
   return {
     id: `blackroom-tiktok-${targetDate}`,
     kind: "daily_tiktok_batch",
@@ -188,7 +197,7 @@ function createDailyJob(state: BlackRoomQueueState, targetDate: string, dayIndex
     originalTargetDate: targetDate,
     status: "queued",
     attempts: 0,
-    notBefore: timestamp,
+    notBefore,
     leaseExpiresAt: null,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -570,6 +579,11 @@ export async function readBlackRoomQueue(filePath = BLACKROOM_QUEUE_PATH, now = 
     const parsed = JSON.parse(await readFile(filePath, "utf8"));
     const jobs = Array.isArray(parsed.jobs) ? parsed.jobs.map((job: BlackRoomDailyJob) => ({
       ...job,
+      // Migrate old persisted queues that were created with every future job
+      // immediately actionable. Never delay an active processing job.
+      notBefore: ["queued", "retry"].includes(job.status)
+        ? adaptiveReleaseTime(job.targetDate, now, job.status === "retry" ? job.notBefore : undefined)
+        : job.notBefore,
       requirements: ["queued", "retry"].includes(job.status)
         ? {
           ...job.requirements,

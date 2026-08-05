@@ -542,6 +542,8 @@ export function registerBlackRoomControlRoutes(app: Express): void {
           language: req.body?.language === "es" ? "es" : "en",
           slot: String(req.body?.publicationDateTime || "").slice(11, 16),
           publishedAt: String(req.body?.publicationDateTime || ""),
+          dj: String(req.body?.dj || "unknown").slice(0, 120),
+          sourceVideoId: String(req.body?.sourceVideoId || "").slice(0, 120),
         }));
       }
       if (!verifyOnly) await removeBlackRoomUpload(uploadId);
