@@ -1251,6 +1251,50 @@ test("ignores a 523-entry legacy future backlog when choosing a slot for current
   assert.deepEqual(dates, ["2026-07-21T12:02:00"]);
 });
 
+test("legacy reservations beyond the horizon cannot push breaking news days into the future", async () => {
+  const dir = await workspace([item({
+    id: "breaking-after-legacy-chain",
+    eventId: "breaking-after-legacy-chain-event",
+    platform: "facebook",
+    createdAt: "2026-07-21T15:50:00.000Z",
+    editorialUrgency: "breaking",
+    copy: "Verified breaking report after a legacy reservation chain.",
+    organicGrowth: { ceoDecision: { dailyMinimumPosts: 10, dailyTargetPosts: 14, performanceMode: "breakout" } },
+  })]);
+  const nowMs = fixedNow().getTime();
+  const legacyBacklog = Array.from({ length: 36 }, (_, index) => ledgerEntry(
+    "miami-news",
+    "facebook",
+    index,
+    new Date(nowMs + index * 121 * 60_000).toISOString(),
+  ));
+  await writeFile(
+    path.join(dir, "metricool-delivery-ledger.json"),
+    JSON.stringify({ version: 1, entries: legacyBacklog }),
+    "utf8",
+  );
+  const dates: string[] = [];
+
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: {
+      ...credentials,
+      METRICOOL_MIAMI_NEWS_BLOG_ID: "99",
+      CLIPPERS_LOCAL_NEWS_SCHEDULE_HORIZON_HOURS: "2",
+      CLIPPERS_LOCAL_NEWS_BREAKING_SPACING_MINUTES: "120",
+    },
+    workspaceDir: dir,
+    now: fixedNow,
+    fetch: async (_input, init) => {
+      dates.push(JSON.parse(String(init?.body)).publicationDate.dateTime);
+      return new Response(JSON.stringify({ id: "bounded-breaking-post" }), { status: 200 });
+    },
+  });
+
+  assert.equal(result.scheduled, 1);
+  assert.deepEqual(dates, ["2026-07-21T14:00:00"]);
+  assert.ok(new Date(`${dates[0]}-04:00`).getTime() <= nowMs + 2 * 60 * 60_000);
+});
+
 test("does not push routine news beyond the end of the next New York calendar day", async () => {
   const dir = await workspace([item({
     id: "routine-beyond-horizon",

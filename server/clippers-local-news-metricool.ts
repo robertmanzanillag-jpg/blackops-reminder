@@ -899,10 +899,12 @@ export async function deliverClipperLocalNewsToMetricool(
       if (Number.isFinite(scheduled)) {
         // A legacy future backlog remains in the durable ledger for dedupe and
         // cleanup, but must not drag new, current reporting behind it.
-        if (scheduled <= routineHorizonEnd) cursors.set(key, Math.max(cursors.get(key) || 0, scheduled));
-        const occupied = occupiedByAccount.get(key) || [];
-        occupied.push(scheduled);
-        occupiedByAccount.set(key, occupied);
+        if (scheduled <= routineHorizonEnd) {
+          cursors.set(key, Math.max(cursors.get(key) || 0, scheduled));
+          const occupied = occupiedByAccount.get(key) || [];
+          occupied.push(scheduled);
+          occupiedByAccount.set(key, occupied);
+        }
         const dayKey = `${key}|${easternDateKey(entry.scheduledFor)}`;
         scheduledByAccountDay.set(dayKey, (scheduledByAccountDay.get(dayKey) || 0) + 1);
       }
@@ -973,6 +975,7 @@ export async function deliverClipperLocalNewsToMetricool(
           break;
         }
       }
+      if (breaking && scheduledMs !== null && scheduledMs > routineHorizonEnd) scheduledMs = null;
       if (scheduledMs === null) {
         result.deferred += 1;
         continue;
