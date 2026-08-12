@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
@@ -336,6 +336,36 @@ test("publishes a sensitive current revision only with an intact unanimous commi
     await writeState(reviewed, { ...sensitiveEvent, description: `${sensitiveEvent.description} Contenido alterado sin nueva revisión.` });
     const eventTampered = await listPublicLocalNews({ workspaceDir: dir, now: NOW });
     assert.equal(eventTampered.articles.length, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("uses the compact public snapshot and refuses to parse an oversized legacy state", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "public-local-news-compact-"));
+  try {
+    const compactState = {
+      version: 1,
+      updatedAt: NOW,
+      events: [miamiEvent],
+      queue: [queueItem({ id: "compact-facebook", platform: "facebook" })],
+    };
+    await writeFile(path.join(dir, "public-news-snapshot.json"), JSON.stringify(compactState), "utf8");
+    await writeFile(path.join(dir, "state.json"), `${" ".repeat(6 * 1024 * 1024)}not-json`, "utf8");
+    await writeFile(path.join(dir, "metricool-delivery-ledger.json"), JSON.stringify({
+      version: 1,
+      entries: [{ queueItemId: "compact-facebook", lane: "miami-news", platform: "facebook", scheduledFor: "2026-07-21T11:52:00.000Z", scheduledAt: NOW }],
+    }), "utf8");
+
+    const compactFeed = await listPublicLocalNews({ workspaceDir: dir, city: "miami", now: NOW });
+    assert.equal(compactFeed.articles.length, 1);
+    assert.equal(compactFeed.articles[0].source, miamiEvent.source);
+
+    await rm(path.join(dir, "public-news-snapshot.json"));
+    const legacySize = (await stat(path.join(dir, "state.json"))).size;
+    assert.ok(legacySize > 5 * 1024 * 1024);
+    const safeEmptyFeed = await listPublicLocalNews({ workspaceDir: dir, city: "miami", now: "2026-07-21T12:01:00.000Z" });
+    assert.deepEqual(safeEmptyFeed.articles, []);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

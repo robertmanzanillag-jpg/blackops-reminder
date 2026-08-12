@@ -109,6 +109,7 @@ interface PublicWorkspaceSnapshot {
 
 const publicWorkspaceSnapshotLoads = new Map<string, Promise<PublicWorkspaceSnapshot>>();
 const PUBLIC_FEED_CACHE_LIMIT = 24;
+const MAX_LEGACY_STATE_BYTES = 5 * 1024 * 1024;
 
 export interface PublicLocalNewsTranslation {
   title: string;
@@ -211,12 +212,26 @@ async function fileFingerprint(filePath: string): Promise<string> {
   }
 }
 
+async function fileSize(filePath: string): Promise<number | null> {
+  try {
+    return (await stat(filePath)).size;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+}
+
 function pause(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 async function publicWorkspaceFingerprint(workspaceDir: string): Promise<string> {
-  return `${await fileFingerprint(path.join(workspaceDir, "state.json"))}|${await fileFingerprint(path.join(workspaceDir, "metricool-delivery-ledger.json"))}`;
+  const snapshotPath = path.join(workspaceDir, "public-news-snapshot.json");
+  const snapshotFingerprint = await fileFingerprint(snapshotPath);
+  const sourceFingerprint = snapshotFingerprint === "missing"
+    ? await fileFingerprint(path.join(workspaceDir, "state.json"))
+    : snapshotFingerprint;
+  return `${sourceFingerprint}|${await fileFingerprint(path.join(workspaceDir, "metricool-delivery-ledger.json"))}`;
 }
 
 function rememberPublicFeed(cacheKey: string, entry: PublicFeedCacheEntry): void {
@@ -231,6 +246,7 @@ function rememberPublicFeed(cacheKey: string, entry: PublicFeedCacheEntry): void
 
 async function loadPublicWorkspaceSnapshot(workspaceDir: string): Promise<PublicWorkspaceSnapshot> {
   const statePath = path.join(workspaceDir, "state.json");
+  const publicSnapshotPath = path.join(workspaceDir, "public-news-snapshot.json");
   const ledgerPath = path.join(workspaceDir, "metricool-delivery-ledger.json");
 
   const activeLoad = publicWorkspaceSnapshotLoads.get(workspaceDir);
@@ -241,13 +257,26 @@ async function loadPublicWorkspaceSnapshot(workspaceDir: string): Promise<Public
     let lastError: unknown;
     for (const delay of retryDelays) {
       if (delay) await pause(delay);
-      const before = `${await fileFingerprint(statePath)}|${await fileFingerprint(ledgerPath)}`;
+      const publicSnapshotFingerprint = await fileFingerprint(publicSnapshotPath);
+      const sourcePath = publicSnapshotFingerprint === "missing" ? statePath : publicSnapshotPath;
+      const sourceFingerprint = publicSnapshotFingerprint === "missing"
+        ? await fileFingerprint(statePath)
+        : publicSnapshotFingerprint;
+      const before = `${sourceFingerprint}|${await fileFingerprint(ledgerPath)}`;
       try {
+        const sourceSize = await fileSize(sourcePath);
+        // A legacy workspace may not have the compact artifact until its next
+        // scheduler cycle. Never parse a giant operational state in a public
+        // request: return an empty edition and let the scheduler materialize it.
+        if (sourcePath === statePath && sourceSize !== null && sourceSize > MAX_LEGACY_STATE_BYTES) {
+          const ledger = await readJsonIfPresent(ledgerPath, publicLedgerSchema);
+          return { fingerprint: before, state: null, ledger };
+        }
         const [state, ledger] = await Promise.all([
-          readJsonIfPresent(statePath, publicStateSchema),
+          readJsonIfPresent(sourcePath, publicStateSchema),
           readJsonIfPresent(ledgerPath, publicLedgerSchema),
         ]);
-        const after = `${await fileFingerprint(statePath)}|${await fileFingerprint(ledgerPath)}`;
+        const after = `${await fileFingerprint(sourcePath)}|${await fileFingerprint(ledgerPath)}`;
         if (before !== after) {
           lastError = new Error("Public local news files changed while being read");
           continue;

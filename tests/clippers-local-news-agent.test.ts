@@ -177,6 +177,8 @@ test("bootstrap creates all artifacts and clamps schedule to 2-5 minutes", async
   assert.equal(status.bootstrapped, true);
   assert.equal(status.scheduleMinutes, 5);
   for (const artifact of Object.values(status.artifacts)) assert.ok((await readFile(artifact, "utf8")).length > 0);
+  const publicSnapshot = JSON.parse(await readFile(path.join(workspaceDir, "public-news-snapshot.json"), "utf8"));
+  assert.deepEqual(publicSnapshot, { version: 1, updatedAt: "2026-07-21T12:00:00.000Z", events: [], queue: [] });
 });
 
 test("stable dedupe, updates and resolution create one revision per change", async (t) => {
