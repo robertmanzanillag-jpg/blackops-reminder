@@ -15,11 +15,9 @@ import { createSessionMiddleware, resolveSessionRuntimeSettings } from "./sessio
 import { startPromoVideoDailyScheduler } from "./promo-video-agent";
 import { startCybersecurityScheduler } from "./cybersecurity-agent";
 import { startAppQaScheduler } from "./app-qa-agent";
-import { startClipperLocalNewsScheduler } from "./clippers-local-news-scheduler";
-import { startLocalNewsGrowthScoutScheduler } from "./local-news-growth-scout";
-import { startMetricoolAnalyticsScheduler } from "./metricool-analytics-sync";
 import { initializeRevenueEnginePersistence } from "./revenue-engine";
 import { initializeBlackRoomRemoteControlPersistence } from "./blackroom-remote-control";
+import { shouldStartResourceIntensiveSchedulers } from "./background-scheduler-policy";
 
 const app = express();
 const httpServer = createServer(app);
@@ -413,9 +411,21 @@ app.use((req, res, next) => {
       startPromoVideoDailyScheduler();
       startCybersecurityScheduler();
       startAppQaScheduler();
-      startClipperLocalNewsScheduler();
-      startLocalNewsGrowthScoutScheduler();
-      startMetricoolAnalyticsScheduler();
+      if (shouldStartResourceIntensiveSchedulers()) {
+        void Promise.all([
+          import("./clippers-local-news-scheduler"),
+          import("./local-news-growth-scout"),
+          import("./metricool-analytics-sync"),
+        ]).then(([localNews, growthScout, metricoolAnalytics]) => {
+          localNews.startClipperLocalNewsScheduler();
+          growthScout.startLocalNewsGrowthScoutScheduler();
+          metricoolAnalytics.startMetricoolAnalyticsScheduler();
+        }).catch((error) => {
+          log(`Failed to start resource-intensive schedulers: ${error instanceof Error ? error.message : String(error)}`, "scheduler");
+        });
+      } else {
+        log("Resource-intensive schedulers disabled for the memory-constrained Replit deployment; dedicated/local workers remain available", "scheduler");
+      }
       
       runStartupTaskDeduplication().catch(err => {
         log(`Failed to deduplicate startup tasks: ${err.message}`, "tasks");
