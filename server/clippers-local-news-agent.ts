@@ -681,9 +681,21 @@ async function persist(dir: string, state: LocalNewsState): Promise<void> {
   const analytics = summarizeMetrics(state.metrics);
   const queueColumns = ["id", "eventId", "eventRevision", "canonicalEventIdentity", "claimIdentityHash", "lane", "platform", "section", "topicTag", "editorialUrgency", "editorialPriority", "qualityScore", "revisionKind", "risk", "lifecycle", "status", "gateReason", "notBefore", "publishDecision", "consensus", "checkedAt", "reviewHash", "textOnly", "mediaRequired", "mediaType", "mediaUrl", "approvalRequired", "autoEligible", "published", "copy", "source", "sourceUrl", "createdAt"];
   const metricColumns = ["id", "queueItemId", "eventId", "lane", "platform", "variantId", "impressions", "engagements", "clicks", "shares", "revenueUsd", "costUsd", "observedAt", "recordedAt"];
-  const publicCandidates = state.queue
+  const rankedPublicCandidates = state.queue
     .filter((item) => item.status === "auto_eligible" && item.autoEligible && !item.approvalRequired)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
+  const publicCandidates: ClipperLocalNewsQueueItem[] = [];
+  const candidatesByLane = new Map(LANES.map((lane) => [lane, rankedPublicCandidates.filter((item) => item.lane === lane)]));
+  for (let index = 0; publicCandidates.length < rankedPublicCandidates.length; index += 1) {
+    let added = false;
+    for (const lane of LANES) {
+      const item = candidatesByLane.get(lane)?.[index];
+      if (!item) continue;
+      publicCandidates.push(item);
+      added = true;
+    }
+    if (!added) break;
+  }
   const eventById = new Map(state.events.map((event) => [event.id, event]));
   const publicQueue: ClipperLocalNewsQueueItem[] = [];
   const publicEvents: ClipperLocalNewsEvent[] = [];
