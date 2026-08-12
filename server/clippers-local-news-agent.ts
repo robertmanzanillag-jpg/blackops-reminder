@@ -263,6 +263,8 @@ const ARCGIS_STALE_MS = 48 * 60 * 60_000;
 const MIAMI_TRANSIT_LOOKBACK_MS = 120 * 24 * 60 * 60_000;
 const MIAMI_TRANSIT_MAX_ACTIVE = 20;
 const FACEBOOK_DETAIL_LIMIT = 700;
+const PUBLIC_SNAPSHOT_MAX_BYTES = 3 * 1024 * 1024;
+const PUBLIC_SNAPSHOT_MAX_QUEUE_ITEMS = 600;
 const verifiedFetchedEvents = new WeakSet<object>();
 const DEFAULT_WORKSPACE = path.join(process.cwd(), "clippers_workspace", "local-news");
 const FILES = {
@@ -679,14 +681,33 @@ async function persist(dir: string, state: LocalNewsState): Promise<void> {
   const analytics = summarizeMetrics(state.metrics);
   const queueColumns = ["id", "eventId", "eventRevision", "canonicalEventIdentity", "claimIdentityHash", "lane", "platform", "section", "topicTag", "editorialUrgency", "editorialPriority", "qualityScore", "revisionKind", "risk", "lifecycle", "status", "gateReason", "notBefore", "publishDecision", "consensus", "checkedAt", "reviewHash", "textOnly", "mediaRequired", "mediaType", "mediaUrl", "approvalRequired", "autoEligible", "published", "copy", "source", "sourceUrl", "createdAt"];
   const metricColumns = ["id", "queueItemId", "eventId", "lane", "platform", "variantId", "impressions", "engagements", "clicks", "shares", "revenueUsd", "costUsd", "observedAt", "recordedAt"];
-  const publicQueue = state.queue
+  const publicCandidates = state.queue
     .filter((item) => item.status === "auto_eligible" && item.autoEligible && !item.approvalRequired)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
-  const publicEventIds = new Set(publicQueue.map((item) => item.eventId));
+  const eventById = new Map(state.events.map((event) => [event.id, event]));
+  const publicQueue: ClipperLocalNewsQueueItem[] = [];
+  const publicEvents: ClipperLocalNewsEvent[] = [];
+  const publicEventIds = new Set<string>();
+  let publicSnapshotBytes = 128;
+  for (const item of publicCandidates) {
+    if (publicQueue.length >= PUBLIC_SNAPSHOT_MAX_QUEUE_ITEMS) break;
+    const event = eventById.get(item.eventId);
+    if (!event) continue;
+    const eventBytes = publicEventIds.has(event.id) ? 0 : Buffer.byteLength(JSON.stringify(event), "utf8") + 1;
+    const itemBytes = Buffer.byteLength(JSON.stringify(item), "utf8") + 1;
+    if (publicSnapshotBytes + eventBytes + itemBytes > PUBLIC_SNAPSHOT_MAX_BYTES) break;
+    publicQueue.push(item);
+    publicSnapshotBytes += itemBytes;
+    if (!publicEventIds.has(event.id)) {
+      publicEventIds.add(event.id);
+      publicEvents.push(event);
+      publicSnapshotBytes += eventBytes;
+    }
+  }
   const publicSnapshot = {
     version: 1,
     updatedAt: state.updatedAt,
-    events: state.events.filter((event) => publicEventIds.has(event.id)),
+    events: publicEvents,
     queue: publicQueue,
   };
   await Promise.all([
