@@ -1952,7 +1952,9 @@ export async function registerRoutes(
   // GET radio slots analysis
   app.get("/api/radio/slots", async (req, res) => {
     try {
-      const slots = await getRadioSlotsForMonth(getCurrentUserId(req));
+      const userId = getCurrentUserId(req);
+      await syncGoogleCalendarToTasks(userId);
+      const slots = await getRadioSlotsForMonth(userId);
       res.json(slots);
     } catch (error) {
       res.status(500).json({ error: "Failed to analyze radio slots" });
@@ -1962,7 +1964,9 @@ export async function registerRoutes(
   // GET radio analysis summary
   app.get("/api/radio/analysis", async (req, res) => {
     try {
-      const analysis = await analyzeRadioEvents(getCurrentUserId(req));
+      const userId = getCurrentUserId(req);
+      await syncGoogleCalendarToTasks(userId);
+      const analysis = await analyzeRadioEvents(userId);
       res.json(analysis);
     } catch (error) {
       res.status(500).json({ error: "Failed to analyze radio events" });

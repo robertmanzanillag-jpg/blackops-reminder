@@ -5,6 +5,13 @@ import { es } from "date-fns/locale";
 import type { Task, DjContact } from "@shared/schema";
 import { getSystemUserId } from "./user-context";
 import { hasRealValue } from "./ceo-doctor-cli";
+import {
+  buildRadioCalendarFields,
+  type RadioCity,
+  type RadioLineupEntry,
+} from "./radio-calendar-parser";
+export { detectRadioCity, parseRadioDescription } from "./radio-calendar-parser";
+export type { RadioCity, RadioLineupEntry } from "./radio-calendar-parser";
 
 function getTelegramBotToken(): string | null {
   const token = process.env.TELEGRAM_BOT_TOKEN;
@@ -18,6 +25,10 @@ export interface RadioSlot {
   slot7: string | null;
   slot8: string | null;
   slot9: string | null;
+  city: RadioCity;
+  timezone: string;
+  lineup: RadioLineupEntry[];
+  timezoneLines: string[];
   emptySlots: number[];
   rawDescription?: string | null;
   eventTitle?: string;
@@ -38,86 +49,12 @@ function isRadioEventTitle(title: string): boolean {
   return normalized.includes("radio") || normalized.includes("black room");
 }
 
-function decodeDescription(description: string): string {
-  return description
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"');
-}
-
-function cleanDjName(value: string): string | null {
-  const cleaned = value
-    .replace(/^[-–—:.\s]+/, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!cleaned || /^(tba|open|empty|vacio|vacío|pending|pendiente)$/i.test(cleaned)) {
-    return null;
-  }
-
-  return cleaned;
-}
-
-function parseRadioDescription(description: string | null): { slot7: string | null; slot8: string | null; slot9: string | null } {
-  if (!description) {
-    return { slot7: null, slot8: null, slot9: null };
-  }
-
-  const cleanDesc = decodeDescription(description);
-  let slot7: string | null = null;
-  let slot8: string | null = null;
-  let slot9: string | null = null;
-
-  const normalized = cleanDesc.replace(/\r?\n/g, " ");
-  const slotPattern = /(?:^|\s)([789])(?:\s*:\s*00)?(?:\s*(?:pm|p\.m\.))?\s*(?:[:.\-–—])?\s*([\s\S]*?)(?=\s[789](?:\s*:\s*00)?(?:\s*(?:pm|p\.m\.))?\s*(?:[:.\-–—])?\s*|$)/gi;
-
-  let match: RegExpExecArray | null;
-  while ((match = slotPattern.exec(normalized)) !== null) {
-    const hour = Number(match[1]);
-    const djName = cleanDjName(match[2] || "");
-
-    if (hour === 7) {
-      slot7 = djName;
-    } else if (hour === 8) {
-      slot8 = djName;
-    } else if (hour === 9) {
-      slot9 = djName;
-    }
-  }
-
-  return { slot7, slot8, slot9 };
-}
-
-function getOrdinalDay(day: number): string {
-  const lastTwo = day % 100;
-  if (lastTwo >= 11 && lastTwo <= 13) return `${day}TH`;
-
-  switch (day % 10) {
-    case 1:
-      return `${day}ST`;
-    case 2:
-      return `${day}ND`;
-    case 3:
-      return `${day}RD`;
-    default:
-      return `${day}TH`;
-  }
-}
-
-function buildRadioSlot(event: Task): RadioSlot {
+export function buildRadioSlot(event: Task): RadioSlot {
   const eventDate = new Date(event.date);
-  const { slot7, slot8, slot9 } = parseRadioDescription(event.description);
-  const emptySlots: number[] = [];
-
-  if (!slot7) emptySlots.push(7);
-  if (!slot8) emptySlots.push(8);
-  if (!slot9) emptySlots.push(9);
+  const fields = buildRadioCalendarFields(event.title, event.description, eventDate);
+  const slot7 = fields.lineup.find((entry) => entry.hour === 7)?.djName || null;
+  const slot8 = fields.lineup.find((entry) => entry.hour === 8)?.djName || null;
+  const slot9 = fields.lineup.find((entry) => entry.hour === 9)?.djName || null;
 
   const dateStr = format(eventDate, "EEEE d 'de' MMMM", { locale: es });
   const weekday = format(eventDate, "EEEE").toUpperCase();
@@ -130,12 +67,16 @@ function buildRadioSlot(event: Task): RadioSlot {
     slot7,
     slot8,
     slot9,
-    emptySlots,
+    city: fields.city,
+    timezone: fields.timezone,
+    lineup: fields.lineup,
+    timezoneLines: fields.timezoneLines,
+    emptySlots: fields.emptySlots,
     rawDescription: event.description,
     eventTitle: event.title,
     weekday,
     dayNumber,
-    ordinalDay: getOrdinalDay(dayNumber),
+    ordinalDay: fields.ordinalDay,
   };
 }
 
@@ -275,7 +216,7 @@ export async function extractDjsFromRadioEvents(userId = getSystemUserId()): Pro
     if (!event.description) continue;
 
     const parsed = parseRadioDescription(event.description);
-    const names = [parsed.slot7, parsed.slot8, parsed.slot9].filter(Boolean) as string[];
+    const names = Object.values(parsed).filter(Boolean) as string[];
 
     for (const djInfo of names) {
         const instagramMatch = djInfo.match(/@(\w+)/);

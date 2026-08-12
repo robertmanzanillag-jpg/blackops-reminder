@@ -18,6 +18,12 @@ interface RadioSlot {
   slot7: string | null;
   slot8: string | null;
   slot9: string | null;
+  city: "miami" | "berlin" | "buenos_aires";
+  timezone: string;
+  lineup: Array<{ hour: number; label: string; djName: string | null }>;
+  timezoneLines: string[];
+  weekday?: string;
+  ordinalDay?: string;
   emptySlots: number[];
 }
 
@@ -332,16 +338,12 @@ export default function RadioPage() {
                         ))}
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-sm">
-                      <div className={`p-2 rounded ${slot.slot7 ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>
-                        7pm: {slot.slot7 || "Vacío"}
-                      </div>
-                      <div className={`p-2 rounded ${slot.slot8 ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>
-                        8pm: {slot.slot8 || "Vacío"}
-                      </div>
-                      <div className={`p-2 rounded ${slot.slot9 ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>
-                        9pm: {slot.slot9 || "Vacío"}
-                      </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-2 text-sm">
+                      {slot.lineup.map((entry) => (
+                        <div key={entry.hour} className={`p-2 rounded ${entry.djName ? "bg-green-900/30 text-green-400" : "bg-red-900/30 text-red-400"}`}>
+                          {entry.hour}pm: {entry.djName || "Vacío"}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}

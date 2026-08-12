@@ -13,6 +13,12 @@ interface RadioSlot {
   slot7: string | null;
   slot8: string | null;
   slot9: string | null;
+  city: "miami" | "berlin" | "buenos_aires";
+  timezone: string;
+  lineup: Array<{ hour: number; label: string; djName: string | null }>;
+  timezoneLines: string[];
+  weekday?: string;
+  ordinalDay?: string;
   emptySlots?: number[];
 }
 
@@ -20,7 +26,11 @@ interface GlobalConfig {
   format: "story" | "post";
 }
 
-const DEFAULT_BACKGROUND_URL = "/br-radio-template.png?v=black-room-radio-miami-20260617";
+const BACKGROUND_URLS: Record<RadioSlot["city"], string> = {
+  miami: "/radio-flyers/miami.png?v=calendar-v1",
+  berlin: "/radio-flyers/berlin.png?v=calendar-v1",
+  buenos_aires: "/radio-flyers/buenos-aires.png?v=calendar-v1",
+};
 
 // ─── Canvas rendering ────────────────────────────────────────────────────────
 
@@ -81,6 +91,7 @@ function renderToCanvas(
   // Scale helper: all coords designed for 1920h, scaled down for post
   const R = H / 1920;
   const sc = (v: number) => Math.round(v * R);
+  const isMiami = slot.city === "miami";
 
   const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
   ctx.fillStyle = COLORS.bg;
@@ -103,13 +114,20 @@ function renderToCanvas(
     addGrain(ctx, W, H);
   }
 
-  // ── Day number + "TH" superscript aligned to the right of the baked "THURSDAY"
+  // ── Calendar-controlled weekday, day number and ordinal suffix.
   const dayNum = slot.dateStr.match(/\d+/)?.[0] ?? "";
   if (dayNum) {
-    const numSz = sc(72);
-    const supSz = sc(36);
-    const dayX  = sc(268); // starts right after baked "THURSDAY" ends
-    const dayY  = sc(1430);
+    const dateX = sc(isMiami ? 48 : 68);
+    const dateY = sc(isMiami ? 1360 : 1432);
+    const dateBaseline = dateY + sc(70);
+    const dateFontSz = sc(isMiami ? 66 : 58);
+    const supSz = sc(isMiami ? 32 : 28);
+    const weekday = (slot.weekday || "THURSDAY").toUpperCase();
+    const ordinal = slot.ordinalDay || `${dayNum}TH`;
+    const suffix = ordinal.replace(/^\d+/, "") || "TH";
+
+    ctx.fillStyle = "#030303";
+    ctx.fillRect(dateX - sc(12), dateY - sc(16), sc(420), sc(112));
 
     ctx.textAlign = "left";
     ctx.textBaseline = "alphabetic";
@@ -119,28 +137,52 @@ function renderToCanvas(
     ctx.shadowOffsetX = sc(2);
     ctx.shadowOffsetY = sc(2);
 
-    ctx.font = `normal ${numSz}px "Bebas Neue", Arial`;
-    (ctx as any).letterSpacing = `${(80 / 1000) * numSz}px`;
-    ctx.fillText(dayNum, dayX, dayY);
+    ctx.font = `normal ${dateFontSz}px "Bebas Neue", Arial`;
+    (ctx as any).letterSpacing = `${(60 / 1000) * dateFontSz}px`;
+    ctx.fillText(`${weekday} ${dayNum}`, dateX, dateBaseline);
 
-    const numW = ctx.measureText(dayNum).width + (80 / 1000) * numSz * dayNum.length;
+    const baseText = `${weekday} ${dayNum}`;
+    const numW = ctx.measureText(baseText).width + (60 / 1000) * dateFontSz * baseText.length;
     ctx.font = `normal ${supSz}px "Bebas Neue", Arial`;
     (ctx as any).letterSpacing = `${(80 / 1000) * supSz}px`;
-    ctx.fillText("TH", dayX + numW + sc(3), dayY - sc(34));
+    ctx.fillText(suffix, dateX + numW + sc(3), dateBaseline - sc(34));
 
     ctx.shadowBlur = 0;
     ctx.shadowColor = "transparent";
   }
 
+  // ── Calendar-controlled timezone lines for Berlin and Buenos Aires.
+  if (!isMiami && slot.timezoneLines?.length) {
+    const blockX = sc(68);
+    const blockY = sc(1518);
+    const lineHeight = sc(42);
+    ctx.fillStyle = "#030303";
+    ctx.fillRect(blockX - sc(8), blockY - sc(10), sc(430), sc(112));
+    ctx.fillStyle = COLORS.redVivid;
+    ctx.font = `normal ${sc(30)}px "Bebas Neue", Arial`;
+    ctx.textAlign = "left";
+    ctx.textBaseline = "top";
+    (ctx as any).letterSpacing = `${sc(2)}px`;
+    slot.timezoneLines.slice(0, 2).forEach((line, index) => {
+      ctx.fillText(line.toUpperCase(), blockX, blockY + index * lineHeight);
+    });
+  }
+
   // ── DJ names: right of "7:00 PM / 8:00 PM / 9:00 PM" baked into template.
   // rowYs shifted down — sc(938) was at LINE UP header, actual time rows start lower.
-  const nameX = sc(300);
-  const djFontSz = sc(76);
+  const nameX = sc(isMiami ? 300 : 210);
+  const djFontSz = sc(isMiami ? 76 : 45);
   // rowYs measured from template: red-pixel cluster baselines at canvas y 1054/1163/1272
-  const rowYs = [sc(1054), sc(1163), sc(1272)];
-  const djSlots = [slot.slot7, slot.slot8, slot.slot9];
+  const rowYs = isMiami
+    ? [sc(1054), sc(1163), sc(1272)]
+    : [sc(1160), sc(1238), sc(1316), sc(1394)];
+  const djSlots = (slot.lineup?.length ? slot.lineup : [
+    { hour: 7, label: "7:00 PM", djName: slot.slot7 },
+    { hour: 8, label: "8:00 PM", djName: slot.slot8 },
+    { hour: 9, label: "9:00 PM", djName: slot.slot9 },
+  ]).map((entry) => entry.djName);
 
-  for (let i = 0; i < 3; i++) {
+  for (let i = 0; i < Math.min(djSlots.length, rowYs.length); i++) {
     if (!djSlots[i]) continue;
     const name = djSlots[i]!.toUpperCase();
     const maxW = W - nameX - sc(40);
@@ -188,26 +230,31 @@ async function generateDataUrl(
 export function FlyerGenerator({ slots }: { slots: RadioSlot[] }) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
+  const [bgImages, setBgImages] = useState<Partial<Record<RadioSlot["city"], HTMLImageElement>>>({});
   const [bgLoaded, setBgLoaded] = useState(false);
   const [fontReady, setFontReady] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [flyerUrls, setFlyerUrls] = useState<Record<string, string>>({});
   const [config, setConfig] = useState<GlobalConfig>({ format: "story" });
 
-  // Load the BR template as default background (sand texture)
+  // Load the approved city templates. Calendar event titles select the city.
   useEffect(() => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => {
-      setBgImage(img);
-      setBgLoaded(true);
-    };
-    img.onerror = () => {
-      setBgImage(null);
-      setBgLoaded(true);
-    };
-    img.src = DEFAULT_BACKGROUND_URL;
+    let remaining = Object.keys(BACKGROUND_URLS).length;
+    const loaded: Partial<Record<RadioSlot["city"], HTMLImageElement>> = {};
+    for (const [city, src] of Object.entries(BACKGROUND_URLS) as Array<[RadioSlot["city"], string]>) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      const finish = () => {
+        remaining -= 1;
+        if (remaining === 0) {
+          setBgImages(loaded);
+          setBgLoaded(true);
+        }
+      };
+      img.onload = () => { loaded[city] = img; finish(); };
+      img.onerror = finish;
+      img.src = src;
+    }
   }, []);
 
   // Font ready — wait for Bebas Neue explicitly so canvas uses the correct face
@@ -218,16 +265,16 @@ export function FlyerGenerator({ slots }: { slots: RadioSlot[] }) {
   // Generate all flyers when data/config changes
   const generateAll = useCallback(async () => {
     if (!fontReady || !bgLoaded) return;
-    const slotsWithDjs = slots.filter(s => s.slot7 || s.slot8 || s.slot9);
+    const slotsWithDjs = slots.filter(s => s.lineup?.some((entry) => entry.djName) || s.slot7 || s.slot8 || s.slot9);
     if (slotsWithDjs.length === 0) return;
     setGenerating(true);
     const urls: Record<string, string> = {};
     for (const slot of slotsWithDjs) {
-      urls[slot.eventId] = await generateDataUrl(slot, bgImage, config);
+      urls[slot.eventId] = await generateDataUrl(slot, bgImages[slot.city] || null, config);
     }
     setFlyerUrls(urls);
     setGenerating(false);
-  }, [slots, bgImage, config, fontReady, bgLoaded]);
+  }, [slots, bgImages, config, fontReady, bgLoaded]);
 
   useEffect(() => {
     generateAll();
@@ -240,7 +287,7 @@ export function FlyerGenerator({ slots }: { slots: RadioSlot[] }) {
     reader.onload = ev => {
       const img = new Image();
       img.onload = () => {
-        setBgImage(img);
+        setBgImages((current) => ({ ...current, miami: img, berlin: img, buenos_aires: img }));
         setBgLoaded(true);
       };
       img.src = ev.target?.result as string;
@@ -268,12 +315,22 @@ export function FlyerGenerator({ slots }: { slots: RadioSlot[] }) {
       eventId: "demo",
       date: new Date().toISOString(),
       dateStr: "jueves 19 de junio",
-      slot7: "DANIØ",
-      slot8: "INSTEAD OF SEVEN",
-      slot9: "N1T0",
+      city: "buenos_aires",
+      timezone: "America/Argentina/Buenos_Aires",
+      lineup: [
+        { hour: 4, label: "4:00 PM", djName: "ZAMURAI" },
+        { hour: 5, label: "5:00 PM", djName: "DANIØ" },
+        { hour: 6, label: "6:00 PM", djName: "INSTEAD OF SEVEN" },
+        { hour: 7, label: "7:00 PM", djName: "N1T0" },
+      ],
+      timezoneLines: ["4PM ART [BUENOS AIRES]", "3PM ET [MIAMI]"],
+      ordinalDay: "19TH",
+      slot7: "N1T0",
+      slot8: null,
+      slot9: null,
     };
     setGenerating(true);
-    const url = await generateDataUrl(demoSlot, bgImage, config);
+    const url = await generateDataUrl(demoSlot, bgImages.buenos_aires || null, config);
     setGenerating(false);
     window.open(url, "_blank");
   };
@@ -285,8 +342,8 @@ export function FlyerGenerator({ slots }: { slots: RadioSlot[] }) {
     // generateAll runs via useEffect on slots change
   };
 
-  const slotsWithDjs  = slots.filter(s => s.slot7 || s.slot8 || s.slot9);
-  const slotsEmpty    = slots.filter(s => !s.slot7 && !s.slot8 && !s.slot9);
+  const slotsWithDjs  = slots.filter(s => s.lineup?.some((entry) => entry.djName) || s.slot7 || s.slot8 || s.slot9);
+  const slotsEmpty    = slots.filter(s => !s.lineup?.some((entry) => entry.djName) && !s.slot7 && !s.slot8 && !s.slot9);
 
   return (
     <Card className="bg-zinc-900 border-zinc-800">
@@ -348,7 +405,7 @@ export function FlyerGenerator({ slots }: { slots: RadioSlot[] }) {
         <div className="space-y-3">
           {slotsWithDjs.map(slot => {
             const url = flyerUrls[slot.eventId];
-            const hasDj = slot.slot7 || slot.slot8 || slot.slot9;
+            const hasDj = slot.lineup?.some((entry) => entry.djName) || slot.slot7 || slot.slot8 || slot.slot9;
             return (
               <div key={slot.eventId}
                 className="flex gap-3 items-start p-3 bg-zinc-800/50 rounded-lg border border-zinc-700"
@@ -374,9 +431,9 @@ export function FlyerGenerator({ slots }: { slots: RadioSlot[] }) {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-white capitalize">{slot.dateStr}</p>
                   <div className="mt-1 space-y-0.5 text-xs">
-                    {slot.slot7 && <p className="text-zinc-300"><span className="text-red-500 mr-1">7pm</span>{slot.slot7}</p>}
-                    {slot.slot8 && <p className="text-zinc-300"><span className="text-red-500 mr-1">8pm</span>{slot.slot8}</p>}
-                    {slot.slot9 && <p className="text-zinc-300"><span className="text-red-500 mr-1">9pm</span>{slot.slot9}</p>}
+                    {slot.lineup?.filter((entry) => entry.djName).map((entry) => (
+                      <p key={entry.hour} className="text-zinc-300"><span className="text-red-500 mr-1">{entry.hour}pm</span>{entry.djName}</p>
+                    ))}
                   </div>
                 </div>
 
