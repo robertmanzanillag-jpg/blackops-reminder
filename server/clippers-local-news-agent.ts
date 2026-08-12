@@ -267,6 +267,7 @@ const verifiedFetchedEvents = new WeakSet<object>();
 const DEFAULT_WORKSPACE = path.join(process.cwd(), "clippers_workspace", "local-news");
 const FILES = {
   state: "state.json",
+  publicSnapshot: "public-news-snapshot.json",
   events: "events.json",
   queue: "metricool-queue.json",
   queueCsv: "metricool-queue.csv",
@@ -678,8 +679,19 @@ async function persist(dir: string, state: LocalNewsState): Promise<void> {
   const analytics = summarizeMetrics(state.metrics);
   const queueColumns = ["id", "eventId", "eventRevision", "canonicalEventIdentity", "claimIdentityHash", "lane", "platform", "section", "topicTag", "editorialUrgency", "editorialPriority", "qualityScore", "revisionKind", "risk", "lifecycle", "status", "gateReason", "notBefore", "publishDecision", "consensus", "checkedAt", "reviewHash", "textOnly", "mediaRequired", "mediaType", "mediaUrl", "approvalRequired", "autoEligible", "published", "copy", "source", "sourceUrl", "createdAt"];
   const metricColumns = ["id", "queueItemId", "eventId", "lane", "platform", "variantId", "impressions", "engagements", "clicks", "shares", "revenueUsd", "costUsd", "observedAt", "recordedAt"];
+  const publicQueue = state.queue
+    .filter((item) => item.status === "auto_eligible" && item.autoEligible && !item.approvalRequired)
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
+  const publicEventIds = new Set(publicQueue.map((item) => item.eventId));
+  const publicSnapshot = {
+    version: 1,
+    updatedAt: state.updatedAt,
+    events: state.events.filter((event) => publicEventIds.has(event.id)),
+    queue: publicQueue,
+  };
   await Promise.all([
     atomicWrite(path.join(dir, FILES.state), `${JSON.stringify(state, null, 2)}\n`),
+    atomicWrite(path.join(dir, FILES.publicSnapshot), `${JSON.stringify(publicSnapshot)}\n`),
     atomicWrite(path.join(dir, FILES.events), `${JSON.stringify({ generatedAt: state.updatedAt, events: state.events }, null, 2)}\n`),
     atomicWrite(path.join(dir, FILES.queue), `${JSON.stringify({ generatedAt: state.updatedAt, disclaimer: "Queue only; no real publication is claimed.", items: state.queue }, null, 2)}\n`),
     atomicWrite(path.join(dir, FILES.queueCsv), csv(state.queue, queueColumns)),
