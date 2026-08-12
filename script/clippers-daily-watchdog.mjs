@@ -98,7 +98,7 @@ function workerState(worker, supply, now) {
     ? Math.max(0, Math.round((now.getTime() - finishedMs) / 60_000))
     : null;
   const workerStatus = clean(worker?.status).toLowerCase();
-  const stage = clean(worker?.failedStage) || (["completed", "partial"].includes(workerStatus) ? workerStatus : "no_worker_report");
+  const stage = clean(worker?.failedStage) || (["running", "completed", "partial"].includes(workerStatus) ? workerStatus : "no_worker_report");
   const blockers = Array.isArray(worker?.configurationBlockers) ? worker.configurationBlockers.map(clean).filter(Boolean) : [];
   if (stage === "supply") {
     if (Number(supply?.summary?.snapshotsRead || 0) === 0) blockers.push("no_fresh_marketplace_snapshots");
@@ -109,7 +109,7 @@ function workerState(worker, supply, now) {
   if (stage === "partial" && Number(worker?.renderingReport?.summary?.missingAgainstTarget) > 0) {
     blockers.push(`renderer_shortfall_${Number(worker.renderingReport.summary.missingAgainstTarget)}`);
   }
-  if (!blockers.length && stage !== "completed") blockers.push(`${stage}_blocked`);
+  if (!blockers.length && !["running", "completed"].includes(stage)) blockers.push(`${stage}_blocked`);
   return {
     status: clean(worker?.status) || "missing",
     stage,

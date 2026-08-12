@@ -66,7 +66,24 @@ export async function runClipperFreeLocalWorker(options = {}) {
   } catch (error) {
     if (error?.code === "EEXIST") {
       const lockAgeMs = Date.now() - (await stat(lockPath)).mtimeMs;
-      if (lockAgeMs <= LOCK_MAX_AGE_MS) return { status: "skipped", reason: "already_running", reportPath };
+      let existingLock = {};
+      try {
+        existingLock = JSON.parse(await readFile(lockPath, "utf8"));
+      } catch {
+        // A process can be terminated between creating and writing the lock.
+        // An unreadable/malformed lock proves no live owner, so it is recoverable.
+      }
+      const existingPid = Number(existingLock?.pid);
+      let processAlive = false;
+      if (Number.isInteger(existingPid) && existingPid > 0) {
+        try {
+          process.kill(existingPid, 0);
+          processAlive = true;
+        } catch (processError) {
+          processAlive = processError?.code === "EPERM";
+        }
+      }
+      if (processAlive && lockAgeMs <= LOCK_MAX_AGE_MS) return { status: "skipped", reason: "already_running", reportPath };
       await unlink(lockPath);
       lock = await open(lockPath, "wx", 0o600);
     }
@@ -77,6 +94,16 @@ export async function runClipperFreeLocalWorker(options = {}) {
   const startedAt = new Date().toISOString();
   const publishingAuthorized = workerEnv.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED === "true";
   const publicMediaUploadAuthorized = workerEnv.CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED === "true";
+  await writeReport(reportPath, {
+    status: "running",
+    startedAt,
+    projectRoot,
+    configRoot,
+    workspaceRoot,
+    paidAiUsed: false,
+    paidSpendAllowed: false,
+    publicationRule: "Only proof-backed TikTok posts with an exact public URL count as published or measured.",
+  });
   const metricoolEnv = publishingAuthorized ? {
     METRICOOL_USER_TOKEN: workerEnv.METRICOOL_USER_TOKEN,
     METRICOOL_USER_ID: workerEnv.METRICOOL_USER_ID,

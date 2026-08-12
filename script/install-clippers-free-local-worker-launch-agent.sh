@@ -28,6 +28,8 @@ RUNTIME_ROOT="$(cd "$RUNTIME_ROOT" 2>/dev/null && pwd -P)" || {
 
 WORKSPACE_ROOT="${CLIPPERS_WORKSPACE_ROOT:-$CONFIG_ROOT/clippers_workspace}"
 [[ "$WORKSPACE_ROOT" == /* ]] || WORKSPACE_ROOT="$CONFIG_ROOT/$WORKSPACE_ROOT"
+SERVICE_LOG_ROOT="${CLIPPERS_SERVICE_LOG_ROOT:-$HOME/Library/Logs/BlackOps/Clippers}"
+[[ "$SERVICE_LOG_ROOT" == /* ]] || SERVICE_LOG_ROOT="$HOME/$SERVICE_LOG_ROOT"
 TIME_ZONE="${CLIPPERS_WATCHDOG_TIME_ZONE:-America/New_York}"
 LOCALTIME_TARGET="$(readlink /etc/localtime 2>/dev/null || true)"
 if [[ "$LOCALTIME_TARGET" == */zoneinfo/* ]]; then
@@ -47,8 +49,8 @@ WORKER_LABEL="com.blackops.clippers-free-worker"
 WATCHDOG_LABEL="com.blackops.clippers-daily-watchdog"
 WORKER_PLIST="$AGENT_DIR/$WORKER_LABEL.plist"
 WATCHDOG_PLIST="$AGENT_DIR/$WATCHDOG_LABEL.plist"
-LOG_DIR="$WORKSPACE_ROOT/reports/free-local-worker"
-WATCHDOG_LOG_DIR="$WORKSPACE_ROOT/reports/clippers-daily-watchdog"
+LOG_DIR="$SERVICE_LOG_ROOT/free-local-worker"
+WATCHDOG_LOG_DIR="$SERVICE_LOG_ROOT/daily-watchdog"
 
 [[ "$DRY_RUN" == "true" || "$DRY_RUN" == "false" ]] || {
   echo "CLIPPERS_LAUNCH_AGENT_DRY_RUN must be true or false." >&2
@@ -218,7 +220,26 @@ for specification in "$WORKER_LABEL:$WORKER_PLIST" "$WATCHDOG_LABEL:$WATCHDOG_PL
   launchctl bootstrap "$DOMAIN" "$plist"
   launchctl print "$DOMAIN/$label" >/dev/null
 done
+REPORT_PATH="$WORKSPACE_ROOT/reports/free-local-worker/latest.json"
+previous_report_started_at="$("$NODE_PATH" -e 'const fs=require("node:fs");try{const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(String(r.startedAt||""))}catch{}' "$REPORT_PATH")"
 launchctl kickstart -k "$DOMAIN/$WORKER_LABEL"
 launchctl print "$DOMAIN/$WORKER_LABEL" >/dev/null
 launchctl print "$DOMAIN/$WATCHDOG_LABEL" >/dev/null
+if [[ "$ALLOW_DEVELOPMENT_RUNTIME" != "true" ]]; then
+  report_ready=false
+  for _attempt in {1..45}; do
+    if [[ -f "$REPORT_PATH" ]] && /usr/bin/head -c 1 "$REPORT_PATH" >/dev/null 2>&1; then
+      if "$NODE_PATH" -e 'const fs=require("node:fs");try{const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.exit(r.projectRoot===process.argv[2]&&String(r.startedAt||"")!==process.argv[3]?0:1)}catch{process.exit(1)}' "$REPORT_PATH" "$RUNTIME_ROOT" "$previous_report_started_at"; then
+        report_ready=true
+        break
+      fi
+    fi
+    sleep 1
+  done
+  [[ "$report_ready" == "true" ]] || {
+    echo "Clippers worker did not produce a new report from the installed runtime within 45 seconds." >&2
+    launchctl print "$DOMAIN/$WORKER_LABEL" >&2 || true
+    exit 1
+  }
+fi
 echo "Clippers LaunchAgents installed and verified: worker daily at ${WORKER_HOUR}:${WORKER_MINUTE}, watchdog daily at ${WATCHDOG_HOUR}:${WATCHDOG_MINUTE} (${TIME_ZONE}); runtime $RUNTIME_ROOT"
