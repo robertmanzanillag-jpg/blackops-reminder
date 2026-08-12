@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { localNewsArticleSlug } from "./clippers-local-news-growth";
@@ -98,6 +98,17 @@ const publicLedgerSchema = z.object({
 type StateEvent = z.infer<typeof publicEventSchema>;
 type StateQueueItem = z.infer<typeof publicQueueItemSchema>;
 type LedgerEntry = z.infer<typeof publicLedgerSchema>["entries"][number];
+type PublicState = z.infer<typeof publicStateSchema>;
+type PublicLedger = z.infer<typeof publicLedgerSchema>;
+
+interface PublicWorkspaceSnapshot {
+  fingerprint: string;
+  state: PublicState | null;
+  ledger: PublicLedger | null;
+}
+
+const publicWorkspaceSnapshotCache = new Map<string, PublicWorkspaceSnapshot>();
+const publicWorkspaceSnapshotLoads = new Map<string, Promise<PublicWorkspaceSnapshot>>();
 
 export interface PublicLocalNewsTranslation {
   title: string;
@@ -179,6 +190,64 @@ async function readJsonIfPresent<S extends z.ZodTypeAny>(filePath: string, schem
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
+}
+
+async function fileFingerprint(filePath: string): Promise<string> {
+  try {
+    const info = await stat(filePath, { bigint: true });
+    return `${info.size}:${info.mtimeNs}`;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return "missing";
+    throw error;
+  }
+}
+
+function pause(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function loadPublicWorkspaceSnapshot(workspaceDir: string): Promise<PublicWorkspaceSnapshot> {
+  const statePath = path.join(workspaceDir, "state.json");
+  const ledgerPath = path.join(workspaceDir, "metricool-delivery-ledger.json");
+  const fingerprint = `${await fileFingerprint(statePath)}|${await fileFingerprint(ledgerPath)}`;
+  const cached = publicWorkspaceSnapshotCache.get(workspaceDir);
+  if (cached?.fingerprint === fingerprint) return cached;
+
+  const activeLoad = publicWorkspaceSnapshotLoads.get(workspaceDir);
+  if (activeLoad) return activeLoad;
+
+  const load = (async () => {
+    const retryDelays = [0, 50, 150, 400, 800];
+    let lastError: unknown;
+    for (const delay of retryDelays) {
+      if (delay) await pause(delay);
+      const before = `${await fileFingerprint(statePath)}|${await fileFingerprint(ledgerPath)}`;
+      try {
+        const [state, ledger] = await Promise.all([
+          readJsonIfPresent(statePath, publicStateSchema),
+          readJsonIfPresent(ledgerPath, publicLedgerSchema),
+        ]);
+        const after = `${await fileFingerprint(statePath)}|${await fileFingerprint(ledgerPath)}`;
+        if (before !== after) {
+          lastError = new Error("Public local news files changed while being read");
+          continue;
+        }
+        const snapshot = { fingerprint: after, state, ledger };
+        publicWorkspaceSnapshotCache.set(workspaceDir, snapshot);
+        return snapshot;
+      } catch (error) {
+        lastError = error;
+        // A known-good snapshot is safer than a public 500 while the scheduler
+        // replaces a large JSON file. The next request retries the new version.
+        if (cached) return cached;
+      }
+    }
+    throw lastError;
+  })().finally(() => {
+    publicWorkspaceSnapshotLoads.delete(workspaceDir);
+  });
+  publicWorkspaceSnapshotLoads.set(workspaceDir, load);
+  return load;
 }
 
 function cityForLane(lane: StateEvent["lane"]): PublicLocalNewsCity {
@@ -285,10 +354,7 @@ export async function listPublicLocalNews(options: PublicLocalNewsOptions = {}):
     : options.now
       ? Date.parse(options.now)
       : Date.now();
-  const [state, ledger] = await Promise.all([
-    readJsonIfPresent(path.join(workspaceDir, "state.json"), publicStateSchema),
-    readJsonIfPresent(path.join(workspaceDir, "metricool-delivery-ledger.json"), publicLedgerSchema),
-  ]);
+  const { state, ledger } = await loadPublicWorkspaceSnapshot(workspaceDir);
   if (!state || !ledger) return { updatedAt: state?.updatedAt || null, lang, city: options.city || null, articles: [] };
 
   const ledgerByQueueId = new Map<string, LedgerEntry[]>();

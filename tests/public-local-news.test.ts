@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import os from "node:os";
@@ -224,6 +224,19 @@ test("ledger evidence gates articles and X/Facebook rows deduplicate to one bili
     (await listPublicLocalNews({ workspaceDir, lang: "en" })).articles[0].slug,
     "article URLs must remain stable across languages and mutable presentation fields",
   );
+});
+
+test("serves the last known-good feed while a large state file is being replaced", async () => {
+  const statePath = path.join(workspaceDir, "state.json");
+  const originalState = await readFile(statePath, "utf8");
+  const before = await listPublicLocalNews({ workspaceDir, lang: "es", limit: 50 });
+  try {
+    await writeFile(statePath, "{\n");
+    const duringReplacement = await listPublicLocalNews({ workspaceDir, lang: "es", limit: 50 });
+    assert.deepEqual(duringReplacement, before);
+  } finally {
+    await writeFile(statePath, originalState);
+  }
 });
 
 test("city filters, language projection, detail lookup, and safe share metadata work", async () => {
