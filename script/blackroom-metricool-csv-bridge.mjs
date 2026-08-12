@@ -16,8 +16,11 @@ function cleanNumber(value) {
 }
 
 function first(row, names) {
+  const normalizedRow = new Map(Object.entries(row).map(([key, value]) => [
+    String(key).toLowerCase().replace(/[^a-z0-9]/g, ""), value,
+  ]));
   for (const name of names) {
-    const value = row[name];
+    const value = row[name] ?? normalizedRow.get(String(name).toLowerCase().replace(/[^a-z0-9]/g, ""));
     if (value != null && String(value).trim()) return String(value).trim();
   }
   return "";
@@ -95,7 +98,17 @@ export function extractMetricoolCsvSamples(filename, text) {
         ? cleanNumber(first(row, ["VideoViews", "Video Views", "Impressions", "Reach"]))
         : cleanNumber(first(row, ["views"]));
     if (!id || views == null) continue;
-    const durationSeconds = cleanNumber(first(row, ["Duration", "Avg. time watched (Seconds)"]));
+    const durationSeconds = cleanNumber(first(row, ["Duration", "Video duration", "Video duration (seconds)"]));
+    const optionalMetric = (names) => cleanNumber(first(row, names));
+    const likes = optionalMetric(["Likes", "Reactions"]);
+    const comments = optionalMetric(["Comments"]);
+    const shares = optionalMetric(["Shares"]);
+    const reach = optionalMetric(["Reach"]);
+    const impressions = optionalMetric(["Impressions"]);
+    const averageWatchSeconds = optionalMetric(["Avg. time watched (Seconds)", "Average watch time", "Average view duration"]);
+    const completionRate = optionalMetric(["Completion rate", "Watched full video percentage", "Average percentage viewed"]);
+    const engagements = [likes, comments, shares].reduce((total, value) => total + (value || 0), 0);
+    const engagementRate = views > 0 && engagements > 0 ? engagements / views : undefined;
     samples.set(id, {
       id,
       views: Math.floor(views),
@@ -103,6 +116,14 @@ export function extractMetricoolCsvSamples(filename, text) {
       ...(durationSeconds != null && durationSeconds > 0
         ? { durationSeconds: Math.min(86_400, Math.round(durationSeconds)) }
         : {}),
+      ...(likes != null ? { likes: Math.floor(likes) } : {}),
+      ...(comments != null ? { comments: Math.floor(comments) } : {}),
+      ...(shares != null ? { shares: Math.floor(shares) } : {}),
+      ...(reach != null ? { reach: Math.floor(reach) } : {}),
+      ...(impressions != null ? { impressions: Math.floor(impressions) } : {}),
+      ...(averageWatchSeconds != null ? { averageWatchSeconds } : {}),
+      ...(completionRate != null ? { completionRate: completionRate > 1 ? completionRate / 100 : completionRate } : {}),
+      ...(engagementRate != null ? { engagementRate } : {}),
     });
   }
   return { network, samples: [...samples.values()] };

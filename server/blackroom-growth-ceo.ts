@@ -94,6 +94,10 @@ export interface BlackRoomCeoAnalytics {
   nextCheckAt: string;
   confidence: "collecting" | "learning";
   networkSamples: Record<string, number>;
+  networkConfidence?: Record<string, "collecting" | "learning">;
+  networkEngagementRate?: Record<string, number>;
+  networkCompletionRate?: Record<string, number>;
+  networkAverageWatchSeconds?: Record<string, number>;
   /** Per-network read failures. A failed network must not hide the data from
    * the other connected networks. */
   networkErrors?: Record<string, string>;
@@ -1151,6 +1155,9 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const times: string[] = [];
   const recommendedTimesByNetwork: Record<string, string[]> = {};
   const viewsByNetwork: Record<string, number[]> = {};
+  const engagementByNetwork: Record<string, number[]> = {};
+  const completionByNetwork: Record<string, number[]> = {};
+  const watchByNetwork: Record<string, number[]> = {};
   const viewsByStrategy: Partial<Record<BlackRoomCreativeStrategy, number[]>> = {};
   const viewsByDuration: Record<string, number[]> = {};
   const viewsByDj: Record<string, number[]> = {};
@@ -1170,6 +1177,9 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
     const networkHistory = emptyMetricoolHistory(true);
     const connectorErrors: string[] = [];
     const importedSamples = importedSamplesByNetwork[network as BlackRoomAnalyticsNetwork] || [];
+    engagementByNetwork[network] = importedSamples.map((sample) => sample.engagementRate).filter((value): value is number => Number.isFinite(value));
+    completionByNetwork[network] = importedSamples.map((sample) => sample.completionRate).filter((value): value is number => Number.isFinite(value));
+    watchByNetwork[network] = importedSamples.map((sample) => sample.averageWatchSeconds).filter((value): value is number => Number.isFinite(value));
     importedCounts[network] = importedSamples.length;
     for (const sample of importedSamples) {
       networkHistory.metricIds.add(sample.id);
@@ -1322,6 +1332,10 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   // was available and visible in Metricool.
   const sampleCount = BLACKROOM_METRICOOL_NETWORKS.reduce((total, network) => total + (networkSamples[network] || 0), 0);
   const comparableSampleCount = Math.min(...BLACKROOM_METRICOOL_NETWORKS.map((network) => networkSamples[network] || 0));
+  const networkConfidence = Object.fromEntries(BLACKROOM_METRICOOL_NETWORKS.map((network) => [
+    network, (networkSamples[network] || 0) >= BLACKROOM_CEO_MIN_SAMPLES ? "learning" : "collecting",
+  ])) as Record<string, "collecting" | "learning">;
+  const learningNetworkCount = Object.values(networkConfidence).filter((value) => value === "learning").length;
   const recommendedTimes = [...new Set(times)].slice(0, 12);
   const networkLearning = planBlackRoomNetworkLearning({ viewsByNetwork });
   const creative = planBlackRoomCreativeLearning({ views: viewsByNetwork.tiktok || [], postIds: tiktokPostIds, viewsByStrategy, previous: options.previous, now });
@@ -1344,8 +1358,12 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
     sampleCount,
     lastCheckedAt: now.toISOString(),
     nextCheckAt: new Date(now.getTime() + BLACKROOM_CEO_REFRESH_MS).toISOString(),
-    confidence: comparableSampleCount >= BLACKROOM_CEO_MIN_SAMPLES ? "learning" : "collecting",
+    confidence: learningNetworkCount > 0 ? "learning" : "collecting",
     networkSamples,
+    networkConfidence,
+    networkEngagementRate: Object.fromEntries(BLACKROOM_METRICOOL_NETWORKS.map((network) => [network, median(engagementByNetwork[network] || [])])),
+    networkCompletionRate: Object.fromEntries(BLACKROOM_METRICOOL_NETWORKS.map((network) => [network, median(completionByNetwork[network] || [])])),
+    networkAverageWatchSeconds: Object.fromEntries(BLACKROOM_METRICOOL_NETWORKS.map((network) => [network, median(watchByNetwork[network] || [])])),
     comparableSampleCount,
     networkErrors: Object.keys(networkErrors).length ? networkErrors : undefined,
     historyStartDate: configuredHistoryStartDate(env),
@@ -1365,8 +1383,8 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
     languagePerformance: summarizeValueCohorts(viewsByLanguage),
     slotPerformance: summarizeValueCohorts(viewsBySlot),
     attributionByNetwork,
-    reason: comparableSampleCount >= BLACKROOM_CEO_MIN_SAMPLES
-      ? `${csvReason} ${historyReason} ${attributionReason} El CEO estudia resultados reales de las tres redes: ${targets}. ${creative.creativeReason}`
-      : `${csvReason} ${historyReason} ${attributionReason} Importó ${sampleCount} resultados reales; recolectando evidencia comparable (${comparableSampleCount}/${BLACKROOM_CEO_MIN_SAMPLES}) antes de cambiar horas o volumen. ${creative.creativeReason}`,
+    reason: learningNetworkCount > 0
+      ? `${csvReason} ${historyReason} ${attributionReason} El CEO aprende por red (${learningNetworkCount}/3 con evidencia suficiente): ${targets}. ${creative.creativeReason}`
+      : `${csvReason} ${historyReason} ${attributionReason} Importó ${sampleCount} resultados reales; cada red necesita ${BLACKROOM_CEO_MIN_SAMPLES} muestras antes de optimizarse. ${creative.creativeReason}`,
   };
 }

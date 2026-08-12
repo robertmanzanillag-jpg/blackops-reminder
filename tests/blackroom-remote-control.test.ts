@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomMediaHeaders, blackRoomPage, hasBlackRoomChatAccess, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange, registerBlackRoomControlRoutes, resolveBlackRoomPanelAgent, summarizeBlackRoomAnalyticsImports } from "../server/blackroom-control-routes";
+import { BLACKROOM_PUBLIC_MEDIA_PATHS, blackRoomMediaHeaders, blackRoomPage, hasBlackRoomChatAccess, hasValidBlackRoomRemoteToken, parseBlackRoomMediaRange, readBlackRoomPanelQueue, registerBlackRoomControlRoutes, resolveBlackRoomPanelAgent, summarizeBlackRoomAnalyticsImports } from "../server/blackroom-control-routes";
 import {
   createBlackRoomRemoteControlState,
   isBlackRoomRemoteDeviceOnline,
@@ -224,6 +224,13 @@ test("panel keeps last confirmed delivery counters when the Mac goes offline", (
     queued: 15, processing: 0, retry: 1, scheduled: 3, completed: 1,
   });
   assert.deepEqual(resolveBlackRoomPanelAgent(localQueue, remoteQueue, false).delivery, remoteQueue.delivery);
+});
+
+test("panel remains available when Replit has no local queue file but the Mac reported one", async () => {
+  const remoteQueue = { enabled: true, totals: { queued: 0, processing: 0, retry: 0, scheduled: 8, completed: 9 } } as any;
+  const result = await readBlackRoomPanelQueue(remoteQueue, async () => { throw new Error("ENOENT"); });
+  assert.equal(result, remoteQueue);
+  await assert.rejects(() => readBlackRoomPanelQueue(undefined, async () => { throw new Error("ENOENT"); }), /ENOENT/);
 });
 
 test("device authentication rejects missing, short, placeholder, and incorrect tokens", () => {
