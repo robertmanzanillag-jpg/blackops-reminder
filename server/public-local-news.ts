@@ -107,8 +107,8 @@ interface PublicWorkspaceSnapshot {
   ledger: PublicLedger | null;
 }
 
-const publicWorkspaceSnapshotCache = new Map<string, PublicWorkspaceSnapshot>();
 const publicWorkspaceSnapshotLoads = new Map<string, Promise<PublicWorkspaceSnapshot>>();
+const PUBLIC_FEED_CACHE_LIMIT = 24;
 
 export interface PublicLocalNewsTranslation {
   title: string;
@@ -160,6 +160,15 @@ export interface PublicLocalNewsFeed {
   articles: PublicLocalNewsArticle[];
 }
 
+interface PublicFeedCacheEntry {
+  fingerprint: string;
+  cachedAt: number;
+  feed: PublicLocalNewsFeed;
+}
+
+const publicFeedCache = new Map<string, PublicFeedCacheEntry>();
+const publicFeedLoads = new Map<string, Promise<PublicLocalNewsFeed>>();
+
 export interface PublicLocalNewsOptions {
   workspaceDir?: string;
   city?: PublicLocalNewsCity;
@@ -206,12 +215,23 @@ function pause(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function publicWorkspaceFingerprint(workspaceDir: string): Promise<string> {
+  return `${await fileFingerprint(path.join(workspaceDir, "state.json"))}|${await fileFingerprint(path.join(workspaceDir, "metricool-delivery-ledger.json"))}`;
+}
+
+function rememberPublicFeed(cacheKey: string, entry: PublicFeedCacheEntry): void {
+  publicFeedCache.delete(cacheKey);
+  publicFeedCache.set(cacheKey, entry);
+  while (publicFeedCache.size > PUBLIC_FEED_CACHE_LIMIT) {
+    const oldest = publicFeedCache.keys().next().value;
+    if (oldest === undefined) break;
+    publicFeedCache.delete(oldest);
+  }
+}
+
 async function loadPublicWorkspaceSnapshot(workspaceDir: string): Promise<PublicWorkspaceSnapshot> {
   const statePath = path.join(workspaceDir, "state.json");
   const ledgerPath = path.join(workspaceDir, "metricool-delivery-ledger.json");
-  const fingerprint = `${await fileFingerprint(statePath)}|${await fileFingerprint(ledgerPath)}`;
-  const cached = publicWorkspaceSnapshotCache.get(workspaceDir);
-  if (cached?.fingerprint === fingerprint) return cached;
 
   const activeLoad = publicWorkspaceSnapshotLoads.get(workspaceDir);
   if (activeLoad) return activeLoad;
@@ -232,14 +252,9 @@ async function loadPublicWorkspaceSnapshot(workspaceDir: string): Promise<Public
           lastError = new Error("Public local news files changed while being read");
           continue;
         }
-        const snapshot = { fingerprint: after, state, ledger };
-        publicWorkspaceSnapshotCache.set(workspaceDir, snapshot);
-        return snapshot;
+        return { fingerprint: after, state, ledger };
       } catch (error) {
         lastError = error;
-        // A known-good snapshot is safer than a public 500 while the scheduler
-        // replaces a large JSON file. The next request retries the new version.
-        if (cached) return cached;
       }
     }
     throw lastError;
@@ -354,59 +369,85 @@ export async function listPublicLocalNews(options: PublicLocalNewsOptions = {}):
     : options.now
       ? Date.parse(options.now)
       : Date.now();
-  const { state, ledger } = await loadPublicWorkspaceSnapshot(workspaceDir);
-  if (!state || !ledger) return { updatedAt: state?.updatedAt || null, lang, city: options.city || null, articles: [] };
+  const cacheKey = JSON.stringify([workspaceDir, options.city || null, lang, limit, options.now ? new Date(nowMs).toISOString() : "live"]);
+  const currentFingerprint = await publicWorkspaceFingerprint(workspaceDir);
+  const cached = publicFeedCache.get(cacheKey);
+  if (cached?.fingerprint === currentFingerprint && Date.now() - cached.cachedAt <= 30_000) return cached.feed;
+  const activeLoad = publicFeedLoads.get(cacheKey);
+  if (activeLoad) return activeLoad;
 
-  const ledgerByQueueId = new Map<string, LedgerEntry[]>();
-  for (const entry of ledger.entries) {
-    const entries = ledgerByQueueId.get(entry.queueItemId) || [];
-    entries.push(entry);
-    ledgerByQueueId.set(entry.queueItemId, entries);
-  }
-  const eventById = new Map(state.events.map((event) => [event.id, event]));
-  const publishedByEvent = new Map<string, { event: StateEvent; queueItems: StateQueueItem[]; evidence: LedgerEntry[] }>();
-  for (const item of state.queue) {
-    if (!item.autoEligible || item.approvalRequired || item.status !== "auto_eligible") continue;
-    const event = eventById.get(item.eventId);
-    // Only expose the exact current revision after its scheduled publication time.
-    // This prevents stale safe evidence from publishing a later high-risk snapshot.
-    if (!event || event.revision !== item.eventRevision) continue;
-    if (!matchesClipperLocalNewsDeliveryJurisdiction({
-      lane: item.lane,
-      sourceUrl: item.sourceUrl || event.sourceUrl,
-      evidence: item.evidence,
-    })) continue;
-    const sensitive = item.risk === "high" || item.risk === "critical" || event.risk === "high" || event.risk === "critical";
-    if (sensitive && (!hasCompleteLocalNewsCommitteeApproval(item) || !matchesReviewedEventIdentity(item, event))) continue;
-    const evidence = ledgerByQueueId.get(item.id)?.filter((entry) => (
-      entry.platform === item.platform
-      && Date.parse(entry.scheduledFor) <= nowMs
-      && (!sensitive || (
-        entry.eventId === item.eventId
-        && entry.eventRevision === item.eventRevision
-        && entry.lane === item.lane
-        && entry.reviewedCopyHash === hashLocalNewsReviewValue(item.copy)
-        && entry.canonicalEventIdentity === item.canonicalEventIdentity
-        && entry.reviewHash === item.reviewHash
-      ))
-    ));
-    if (!evidence?.length) continue;
-    const existing = publishedByEvent.get(event.id) || {
-      event,
-      queueItems: [] as StateQueueItem[],
-      evidence: [] as LedgerEntry[],
-    };
-    existing.queueItems.push(item);
-    existing.evidence.push(...evidence);
-    publishedByEvent.set(event.id, existing);
-  }
+  const load = (async () => {
+    try {
+      const { fingerprint, state, ledger } = await loadPublicWorkspaceSnapshot(workspaceDir);
+      if (!state || !ledger) {
+        const empty = { updatedAt: state?.updatedAt || null, lang, city: options.city || null, articles: [] };
+        rememberPublicFeed(cacheKey, { fingerprint, cachedAt: Date.now(), feed: empty });
+        return empty;
+      }
 
-  const articles = [...publishedByEvent.values()]
-    .filter(({ event }) => !options.city || cityForLane(event.lane) === options.city)
-    .map(({ event, queueItems, evidence }) => buildArticle(event, queueItems, evidence, lang))
-    .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || a.slug.localeCompare(b.slug))
-    .slice(0, limit);
-  return { updatedAt: state.updatedAt, lang, city: options.city || null, articles };
+      const ledgerByQueueId = new Map<string, LedgerEntry[]>();
+      for (const entry of ledger.entries) {
+        const entries = ledgerByQueueId.get(entry.queueItemId) || [];
+        entries.push(entry);
+        ledgerByQueueId.set(entry.queueItemId, entries);
+      }
+      const eventById = new Map(state.events.map((event) => [event.id, event]));
+      const publishedByEvent = new Map<string, { event: StateEvent; queueItems: StateQueueItem[]; evidence: LedgerEntry[] }>();
+      for (const item of state.queue) {
+        if (!item.autoEligible || item.approvalRequired || item.status !== "auto_eligible") continue;
+        const event = eventById.get(item.eventId);
+        // Only expose the exact current revision after its scheduled publication time.
+        // This prevents stale safe evidence from publishing a later high-risk snapshot.
+        if (!event || event.revision !== item.eventRevision) continue;
+        if (!matchesClipperLocalNewsDeliveryJurisdiction({
+          lane: item.lane,
+          sourceUrl: item.sourceUrl || event.sourceUrl,
+          evidence: item.evidence,
+        })) continue;
+        const sensitive = item.risk === "high" || item.risk === "critical" || event.risk === "high" || event.risk === "critical";
+        if (sensitive && (!hasCompleteLocalNewsCommitteeApproval(item) || !matchesReviewedEventIdentity(item, event))) continue;
+        const evidence = ledgerByQueueId.get(item.id)?.filter((entry) => (
+          entry.platform === item.platform
+          && Date.parse(entry.scheduledFor) <= nowMs
+          && (!sensitive || (
+            entry.eventId === item.eventId
+            && entry.eventRevision === item.eventRevision
+            && entry.lane === item.lane
+            && entry.reviewedCopyHash === hashLocalNewsReviewValue(item.copy)
+            && entry.canonicalEventIdentity === item.canonicalEventIdentity
+            && entry.reviewHash === item.reviewHash
+          ))
+        ));
+        if (!evidence?.length) continue;
+        const existing = publishedByEvent.get(event.id) || {
+          event,
+          queueItems: [] as StateQueueItem[],
+          evidence: [] as LedgerEntry[],
+        };
+        existing.queueItems.push(item);
+        existing.evidence.push(...evidence);
+        publishedByEvent.set(event.id, existing);
+      }
+
+      const articles = [...publishedByEvent.values()]
+        .filter(({ event }) => !options.city || cityForLane(event.lane) === options.city)
+        .map(({ event, queueItems, evidence }) => buildArticle(event, queueItems, evidence, lang))
+        .sort((a, b) => b.publishedAt.localeCompare(a.publishedAt) || a.slug.localeCompare(b.slug))
+        .slice(0, limit);
+      const feed = { updatedAt: state.updatedAt, lang, city: options.city || null, articles };
+      rememberPublicFeed(cacheKey, { fingerprint, cachedAt: Date.now(), feed });
+      return feed;
+    } catch (error) {
+      // Keep the public edition online during a transient read or memory spike,
+      // but cache only the small, already-sanitized response — never the 26 MB state.
+      if (cached) return cached.feed;
+      throw error;
+    }
+  })().finally(() => {
+    publicFeedLoads.delete(cacheKey);
+  });
+  publicFeedLoads.set(cacheKey, load);
+  return load;
 }
 
 export async function getPublicLocalNewsBySlug(slug: string, options: Omit<PublicLocalNewsOptions, "limit"> = {}): Promise<PublicLocalNewsArticle | null> {
