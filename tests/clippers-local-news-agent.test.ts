@@ -181,6 +181,23 @@ test("bootstrap creates all artifacts and clamps schedule to 2-5 minutes", async
   assert.deepEqual(publicSnapshot, { version: 1, updatedAt: "2026-07-21T12:00:00.000Z", events: [], queue: [] });
 });
 
+test("compact public snapshot balances Miami and New York candidates", async (t) => {
+  const workspaceDir = await fixture(t);
+  const now = "2026-07-21T12:00:00Z";
+  const events = Array.from({ length: 20 }, (_, index) => ({
+    ...event,
+    id: `balanced-${index}`,
+    lane: index < 18 ? "ny-news" as const : "miami-news" as const,
+    title: `Official local update ${index}`,
+  }));
+  await ingestClipperLocalNewsEvents({ workspaceDir, now, events });
+  const snapshot = JSON.parse(await readFile(path.join(workspaceDir, "public-news-snapshot.json"), "utf8"));
+  assert.ok(snapshot.queue.some((item: any) => item.lane === "miami-news"));
+  assert.ok(snapshot.queue.some((item: any) => item.lane === "ny-news"));
+  const firstFourLanes = snapshot.queue.slice(0, 4).map((item: any) => item.lane);
+  assert.deepEqual(firstFourLanes, ["miami-news", "ny-news", "miami-news", "ny-news"]);
+});
+
 test("stable dedupe, updates and resolution create one revision per change", async (t) => {
   const workspaceDir = await fixture(t);
   const first = await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", events: [event] });
