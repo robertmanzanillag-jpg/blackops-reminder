@@ -14,6 +14,8 @@ test("production runtime guard rejects untracked entrypoints and files", async (
   const installer = await readFile(installerPath, "utf8");
   assert.match(installer, /status --porcelain --untracked-files=all/);
   assert.match(installer, /ls-files --error-unmatch/);
+  assert.match(installer, /worker did not produce a new report from the installed runtime within 45 seconds/);
+  assert.match(installer, /r\.projectRoot===process\.argv\[2\].*r\.startedAt/);
 });
 
 test("LaunchAgents bind configurable runtime/config roots and persist only explicit non-secret controls", async () => {
@@ -68,6 +70,8 @@ test("LaunchAgents bind configurable runtime/config roots and persist only expli
     assert.match(watchdogPlist, new RegExp(`${repoRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/script/clippers-daily-watchdog\\.mjs`));
     assert.match(watchdogPlist, /<key>StartCalendarInterval<\/key><dict><key>Hour<\/key><integer>10<\/integer><key>Minute<\/key><integer>0<\/integer>/);
     assert.match(watchdogPlist, /watchdog\.error\.log/);
+    assert.match(watchdogPlist, /Library\/Logs\/BlackOps\/Clippers\/daily-watchdog\/watchdog\.error\.log/);
+    assert.doesNotMatch(watchdogPlist, /reports\/clippers-daily-watchdog\/watchdog\.error\.log/);
     assert.doesNotMatch(watchdogPlist, /must-not-persist|METRICOOL_USER_TOKEN|GOOGLE_DRIVE_REFRESH_TOKEN/);
   } finally {
     await rm(home, { recursive: true, force: true });

@@ -1,10 +1,58 @@
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { runClipperFreeLocalWorker } from "../script/clippers-free-local-worker.mjs";
+
+test("writes an observable running report before starting marketplace work", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-free-worker-start-report-"));
+  let observed;
+  await runClipperFreeLocalWorker({
+    projectRoot,
+    run() {
+      if (!observed) {
+        observed = JSON.parse(readFileSync(path.join(projectRoot, "clippers_workspace/reports/free-local-worker/latest.json"), "utf8"));
+      }
+      return { command: "mock", status: 2, signal: null, stdout: "", stderr: "blocked" };
+    },
+  });
+  assert.equal(observed.status, "running");
+  assert.equal(observed.projectRoot, projectRoot);
+  assert.match(observed.startedAt, /^\d{4}-\d{2}-\d{2}T/);
+});
+
+test("recovers a fresh lock left by a dead worker process during reinstall", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-free-worker-dead-lock-"));
+  const stateDir = path.join(projectRoot, "clippers_workspace/reports/free-local-worker");
+  await mkdir(stateDir, { recursive: true });
+  await writeFile(path.join(stateDir, "worker.lock"), JSON.stringify({ pid: 2_147_483_647, startedAt: new Date().toISOString() }));
+  const result = await runClipperFreeLocalWorker({
+    projectRoot,
+    run() {
+      return { command: "mock", status: 2, signal: null, stdout: "", stderr: "blocked" };
+    },
+  });
+  assert.notEqual(result.status, "skipped");
+  assert.equal(result.projectRoot, projectRoot);
+});
+
+test("recovers an empty lock left when a worker dies before writing its pid", async () => {
+  const projectRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-free-worker-empty-lock-"));
+  const stateDir = path.join(projectRoot, "clippers_workspace/reports/free-local-worker");
+  await mkdir(stateDir, { recursive: true });
+  await writeFile(path.join(stateDir, "worker.lock"), "");
+  const result = await runClipperFreeLocalWorker({
+    projectRoot,
+    run() {
+      return { command: "mock", status: 2, signal: null, stdout: "", stderr: "blocked" };
+    },
+  });
+  assert.notEqual(result.status, "skipped");
+  assert.equal(result.projectRoot, projectRoot);
+});
 
 test("stops honestly when no fresh authorized marketplace supply is available", async () => {
   const projectRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-free-worker-no-supply-"));

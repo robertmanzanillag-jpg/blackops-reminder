@@ -132,6 +132,24 @@ test("reports renderer shortfall from a partial worker without calling it a miss
   }
 });
 
+test("reports a long worker startup as running instead of a missing report", async () => {
+  const workspaceRoot = await fixture({
+    worker: { status: "running", startedAt: "2026-08-12T14:55:00.000Z" },
+  });
+  try {
+    const report = await runClippersDailyWatchdog({
+      workspaceRoot,
+      now: new Date("2026-08-12T15:00:00.000Z"),
+      checkHour: 10,
+    });
+    assert.equal(report.worker.stage, "running");
+    assert.deepEqual(report.worker.blockers, []);
+    assert.equal(report.worker.lastRunAgeMinutes, 5);
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
 test("rejects an invalid configured hour", async () => {
   const workspaceRoot = await fixture();
   try {
