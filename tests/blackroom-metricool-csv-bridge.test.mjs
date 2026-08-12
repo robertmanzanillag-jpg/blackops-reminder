@@ -59,3 +59,15 @@ test("deduplicates repeated post IDs and rejects rows without usable view metric
   assert.equal(result?.samples.length, 1);
   assert.equal(result?.samples[0].views, 9);
 });
+
+test("imports engagement and retention analytics across Metricool header variants", () => {
+  const result = extractMetricoolCsvSamples(
+    "youtube-published-videos-posts_range.csv",
+    "Video ID,Published At,Views,Likes,Comments,Shares,Average view duration,Average percentage viewed\nabc123,2026-08-11 20:00,400,20,5,3,18.5,62\n",
+  );
+  assert.deepEqual(result?.samples[0], {
+    id: "abc123", views: 400, publishedAt: "2026-08-11T20:00:00",
+    likes: 20, comments: 5, shares: 3, averageWatchSeconds: 18.5,
+    completionRate: 0.62, engagementRate: 0.07,
+  });
+});

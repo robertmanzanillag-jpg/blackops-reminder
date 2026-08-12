@@ -31,6 +31,14 @@ export interface BlackRoomImportedAnalyticsSample {
   views: number;
   publishedAt?: string;
   durationSeconds?: number;
+  likes?: number;
+  comments?: number;
+  shares?: number;
+  reach?: number;
+  impressions?: number;
+  averageWatchSeconds?: number;
+  completionRate?: number;
+  engagementRate?: number;
 }
 
 export interface BlackRoomAnalyticsImport {
@@ -99,7 +107,21 @@ function normalizeImportedAnalyticsSample(value: unknown): BlackRoomImportedAnal
   const durationSeconds = Number.isSafeInteger(rawDuration) && rawDuration > 0 && rawDuration <= 86_400
     ? rawDuration
     : undefined;
-  return { id, views, ...(publishedAt ? { publishedAt } : {}), ...(durationSeconds ? { durationSeconds } : {}) };
+  const optionalMetric = (name: string, maximum = Number.MAX_SAFE_INTEGER) => {
+    const number = Number(sample[name]);
+    return Number.isFinite(number) && number >= 0 && number <= maximum ? number : undefined;
+  };
+  return {
+    id, views,
+    ...(publishedAt ? { publishedAt } : {}),
+    ...(durationSeconds ? { durationSeconds } : {}),
+    ...Object.fromEntries([
+      ["likes", optionalMetric("likes")], ["comments", optionalMetric("comments")],
+      ["shares", optionalMetric("shares")], ["reach", optionalMetric("reach")],
+      ["impressions", optionalMetric("impressions")], ["averageWatchSeconds", optionalMetric("averageWatchSeconds", 86_400)],
+      ["completionRate", optionalMetric("completionRate", 1)], ["engagementRate", optionalMetric("engagementRate", 1)],
+    ].filter((entry): entry is [string, number] => entry[1] !== undefined)),
+  };
 }
 
 function normalizeAnalyticsImports(value: unknown): BlackRoomRemoteControlState["analyticsImports"] {

@@ -547,6 +547,23 @@ test("keeps Facebook and YouTube learning data when one Metricool network tempor
   assert.match(analytics.networkErrors?.tiktok || "", /reconnecting/);
 });
 
+test("learns per network without letting an empty platform block healthy platforms", async () => {
+  const samples = Array.from({ length: BLACKROOM_CEO_MIN_SAMPLES }, (_, index) => ({
+    id: `yt-${index}`, views: 100 + index, engagementRate: 0.08,
+    completionRate: 0.55, averageWatchSeconds: 22,
+  }));
+  const analytics = await collectBlackRoomMetricoolAnalytics({
+    fetch: async () => { throw new Error("Metricool temporarily unavailable"); },
+    importedSamplesByNetwork: { youtube: samples },
+  });
+  assert.equal(analytics.confidence, "learning");
+  assert.deepEqual(analytics.networkConfidence, { tiktok: "collecting", facebook: "collecting", youtube: "learning" });
+  assert.equal(analytics.networkEngagementRate?.youtube, 0.08);
+  assert.equal(analytics.networkCompletionRate?.youtube, 0.55);
+  assert.equal(analytics.networkAverageWatchSeconds?.youtube, 22);
+  assert.match(analytics.reason, /aprende por red/);
+});
+
 test("CEO keeps the baseline when imported samples are not comparable across all networks", () => {
   const analytics = {
     sampleCount: 21,
