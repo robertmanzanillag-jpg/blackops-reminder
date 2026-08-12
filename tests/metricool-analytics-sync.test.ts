@@ -7,6 +7,7 @@ import {
   createMetricoolAnalyticsScheduler,
   getMetricoolAnalyticsSyncConfig,
   getMetricoolAnalyticsSyncStatus,
+  parseMetricoolMcpPostMetrics,
   parseMetricoolPostMetrics,
   syncMetricoolAnalytics,
 } from "../server/metricool-analytics-sync";
@@ -19,6 +20,70 @@ test("parses Metricool post metrics without trusting a single provider field", (
   const parsed = parseMetricoolPostMetrics({ data: [{ id: "post-1", publicationDate: "2026-07-26T12:00:00Z", views: 42, reactions: 3, comments: 1, shares: 2, linkClicks: 4 }] });
   assert.deepEqual(parsed, [{ postId: "post-1", queueItemId: null, contentHash: null, observedAt: "2026-07-26T12:00:00Z", impressions: 42, engagements: 10, clicks: 4, shares: 2 }]);
   assert.deepEqual(parseMetricoolPostMetrics({ data: [{ postId: "nested-1", publicationDate: { dateTime: "2026-07-26T12:00:00Z" }, metrics: { views: 9, reactions: 1 } }] }), [{ postId: "nested-1", queueItemId: null, contentHash: null, observedAt: "2026-07-26T12:00:00Z", impressions: 9, engagements: 1, clicks: 0, shares: 0 }]);
+});
+
+test("parses official Metricool MCP Facebook post fields", () => {
+  const parsed = parseMetricoolMcpPostMetrics({ content: [{ type: "text", text: JSON.stringify({ rows: [{
+    FBPO02: "2026-08-11T14:00:00-04:00",
+    FBPO03: "Bilingual local update",
+    FBPO04: "facebook-post-1",
+    FBPO08: 2,
+    FBPO09: 3,
+    FBPO11: 120,
+    FBPO13: 5,
+    FBPO14: 1,
+  }] }) }] });
+  assert.deepEqual(parsed, [{
+    postId: "facebook-post-1",
+    queueItemId: null,
+    contentHash: "cd9ca433093a165331dabccc1b3ca1ee3d5488ff0ed3c0024c6252d97d541d32",
+    observedAt: "2026-08-11T14:00:00-04:00",
+    impressions: 120,
+    engagements: 11,
+    clicks: 3,
+    shares: 1,
+  }]);
+});
+
+test("falls back to the official Metricool MCP when the undocumented analytics endpoint is empty", async () => {
+  const workspaceDir = await mkdtemp(path.join(tmpdir(), "metricool-analytics-mcp-"));
+  await writeFile(path.join(workspaceDir, "metricool-delivery-ledger.json"), JSON.stringify({ entries: [{
+    queueItemId: "queue-mcp",
+    eventId: "event-mcp",
+    lane: "miami-news",
+    platform: "facebook",
+    blogId: "miami-1",
+    metricoolPostId: "facebook-post-1",
+    scheduledFor: "2026-08-11T18:00:00.000Z",
+  }] }));
+  let mcpCalls = 0;
+  const result = await syncMetricoolAnalytics({
+    workspaceDir,
+    env: { METRICOOL_USER_TOKEN: "configured-token", METRICOOL_USER_ID: "3558197" },
+    now: () => new Date("2026-08-12T15:00:00Z"),
+    fetch: async (input, init) => {
+      const url = String(input);
+      if (url.includes("simpleProfiles")) return response({ data: [{ blogId: "miami-1", label: "Miami News" }] });
+      if (url.includes("analytics/posts/facebook")) return response({ data: [] });
+      if (url === "https://ai.metricool.com/mcp") {
+        mcpCalls += 1;
+        const request = JSON.parse(String(init?.body));
+        assert.equal(request.params.name, "getAnalyticsDataByMetrics");
+        assert.equal(request.params.arguments.brandId, "miami-1");
+        return response({ result: { content: [{ type: "text", text: JSON.stringify({ rows: [{
+          FBPO02: "2026-08-11T14:00:00-04:00",
+          FBPO04: "facebook-post-1",
+          FBPO11: 120,
+          FBPO13: 5,
+        }] }) }], isError: false } });
+      }
+      return response({ data: [] });
+    },
+  });
+  assert.equal(mcpCalls, 1);
+  assert.equal(result.status, "partial", "the disconnected New York brand remains visible as a partial readiness issue");
+  assert.equal(result.postsSeen, 1);
+  assert.equal(result.metricsRecorded, 1);
 });
 
 test("syncs Facebook analytics for both local-news brands and deduplicates observations", async () => {
@@ -173,5 +238,5 @@ test("serializes overlapping manual and scheduled sync calls", async () => {
 test("server startup wires the Metricool analytics scheduler", async () => {
   const source = await readFile(new URL("../server/index.ts", import.meta.url), "utf8");
   assert.match(source, /import \{ startMetricoolAnalyticsScheduler \} from "\.\/metricool-analytics-sync";/);
-  assert.match(source, /startClipperLocalNewsScheduler\(\);\s+startMetricoolAnalyticsScheduler\(\);/);
+  assert.match(source, /startClipperLocalNewsScheduler\(\);[\s\S]*?startMetricoolAnalyticsScheduler\(\);/);
 });

@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { getSystemUserId } from "./user-context";
 import { recordScheduledAutomationRun } from "./automation-registry";
 import { recordClipperLocalNewsMetrics, type ClipperLocalNewsLane, type ClipperLocalNewsMetricInput } from "./clippers-local-news-agent";
+import { callMetricoolMcpTool } from "./blackroom-metricool-bridge";
 
 const METRICOOL_API = "https://app.metricool.com";
 const DEFAULT_LOOKBACK_DAYS = 30;
@@ -12,6 +13,19 @@ const DEFAULT_MINUTE = 45;
 const DEFAULT_TIMEOUT_MS = 30_000;
 const SYNC_FILE = "metricool-analytics-sync.json";
 const TIME_ZONE = "America/New_York";
+const FACEBOOK_POST_METRIC_FIELDS = [
+  "FBPO02", // publication date with time
+  "FBPO03", // post content
+  "FBPO04", // post id
+  "FBPO08", // comments
+  "FBPO09", // link clicks
+  "FBPO11", // impressions
+  "FBPO12", // reach
+  "FBPO13", // reactions
+  "FBPO14", // shares
+  "FBPO16", // video views
+  "FBPO23", // clicks
+] as const;
 
 type Fetcher = typeof globalThis.fetch;
 
@@ -97,6 +111,7 @@ interface LedgerEntry {
   blogId?: unknown;
   copyHash?: unknown;
   reviewedCopyHash?: unknown;
+  scheduledFor?: unknown;
 }
 
 const LANE_CONFIG: Record<ClipperLocalNewsLane, { label: string; aliases: string[]; envKey: string }> = {
@@ -241,6 +256,52 @@ export function parseMetricoolPostMetrics(value: unknown): Array<{
   return output;
 }
 
+function metricoolMcpJson(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  const content = (value as { content?: unknown }).content;
+  if (!Array.isArray(content)) return value;
+  for (const item of content) {
+    if (!item || typeof item !== "object" || typeof (item as { text?: unknown }).text !== "string") continue;
+    try { return JSON.parse((item as { text: string }).text); } catch { continue; }
+  }
+  return value;
+}
+
+function metricoolMcpRows(value: unknown): Record<string, unknown>[] {
+  const parsed = metricoolMcpJson(value);
+  if (Array.isArray(parsed)) return parsed.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object"));
+  if (!parsed || typeof parsed !== "object") return [];
+  const rows = (parsed as { rows?: unknown }).rows;
+  return Array.isArray(rows) ? rows.filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object")) : [];
+}
+
+function mcpCell(row: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    const value = row[key];
+    if (value && typeof value === "object" && !Array.isArray(value) && "value" in value) return (value as { value: unknown }).value;
+    if (value !== undefined && value !== null) return value;
+  }
+  return undefined;
+}
+
+/** Converts the official Metricool MCP Data Studio fields into the stable local metric shape. */
+export function parseMetricoolMcpPostMetrics(value: unknown): ReturnType<typeof parseMetricoolPostMetrics> {
+  const normalized = metricoolMcpRows(value).map((row) => ({
+    postId: mcpCell(row, "FBPO04", "postId", "id"),
+    publicationDate: mcpCell(row, "FBPO02", "created", "publicationDate", "date"),
+    text: mcpCell(row, "FBPO03", "text", "content", "caption"),
+    comments: mcpCell(row, "FBPO08", "comments"),
+    linkClicks: mcpCell(row, "FBPO09", "linkclicks", "linkClicks"),
+    impressions: mcpCell(row, "FBPO11", "impressions"),
+    reach: mcpCell(row, "FBPO12", "impressionsUnique", "reach"),
+    reactions: mcpCell(row, "FBPO13", "reactions"),
+    shares: mcpCell(row, "FBPO14", "shares"),
+    videoViews: mcpCell(row, "FBPO16", "videoViews"),
+    clicks: mcpCell(row, "FBPO23", "clicks"),
+  }));
+  return parseMetricoolPostMetrics({ rows: normalized });
+}
+
 function isoDateTime(value: string | null, fallback: Date): string {
   if (!value) return fallback.toISOString();
   const parsed = new Date(value);
@@ -291,6 +352,47 @@ function fingerprint(lane: string, blogId: string, metric: ReturnType<typeof par
   return createHash("sha256").update(JSON.stringify([lane, blogId, metric])).digest("hex");
 }
 
+async function fetchFacebookPostAnalytics(
+  fetcher: Fetcher,
+  token: string,
+  userId: string,
+  blogId: string,
+  lane: ClipperLocalNewsLane,
+  from: string,
+  to: string,
+  signal: AbortSignal,
+): Promise<ReturnType<typeof parseMetricoolPostMetrics>> {
+  let directError: unknown = null;
+  try {
+    const url = new URL("/api/v2/analytics/posts/facebook", METRICOOL_API);
+    url.searchParams.set("from", from);
+    url.searchParams.set("to", to);
+    url.searchParams.set("blogId", blogId);
+    url.searchParams.set("userId", userId);
+    url.searchParams.set("integrationSource", "MCP");
+    const response = await fetcher(url, { headers: { Accept: "application/json", "X-Mc-Auth": token }, signal });
+    if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? "metricool_api_access_denied_or_plan_required" : `analytics_http_${lane}_${response.status}`);
+    const posts = parseMetricoolPostMetrics(await safeJson(response));
+    if (posts.length) return posts;
+  } catch (error) {
+    directError = error;
+  }
+
+  try {
+    const boundedFetcher: Fetcher = (request, init) => fetcher(request, { ...init, signal });
+    const result = await callMetricoolMcpTool(boundedFetcher, token, "getAnalyticsDataByMetrics", {
+      brandId: blogId,
+      metrics: [...FACEBOOK_POST_METRIC_FIELDS],
+      from: from.replace(/Z$/, "+00:00"),
+      to: to.replace(/Z$/, "+00:00"),
+    });
+    return parseMetricoolMcpPostMetrics(result);
+  } catch (mcpError) {
+    if (directError) throw new Error(`${safeErrorMessage(directError)}; mcp=${safeErrorMessage(mcpError)}`);
+    throw mcpError;
+  }
+}
+
 async function performMetricoolAnalyticsSync(input: MetricoolAnalyticsSyncDeps = {}): Promise<MetricoolAnalyticsSyncResult> {
   const env = input.env || process.env;
   const config = getMetricoolAnalyticsSyncConfig(env);
@@ -329,17 +431,22 @@ async function performMetricoolAnalyticsSync(input: MetricoolAnalyticsSyncDeps =
     const to = startedAt.toISOString();
     for (const target of targets) {
       if (!target.blogId || !target.connected) continue;
-      const url = new URL("/api/v2/analytics/posts/facebook", METRICOOL_API);
-      url.searchParams.set("from", from);
-      url.searchParams.set("to", to);
-      url.searchParams.set("blogId", target.blogId);
-      url.searchParams.set("userId", userId);
-      url.searchParams.set("integrationSource", "MCP");
       try {
-        const response = await fetcher(url, { headers: { Accept: "application/json", "X-Mc-Auth": token }, signal: controller.signal });
-        if (!response.ok) throw new Error(response.status === 401 || response.status === 403 ? "metricool_api_access_denied_or_plan_required" : `analytics_http_${target.lane}_${response.status}`);
-        const posts = parseMetricoolPostMetrics(await safeJson(response));
-        successfulBrandFetches += 1;
+        const posts = await fetchFacebookPostAnalytics(fetcher, token, userId, target.blogId, target.lane, from, to, controller.signal);
+        const expectedRecentPublication = ledger.some((entry) => {
+          const scheduledFor = new Date(String(entry.scheduledFor || "")).getTime();
+          return normalizeId(entry.lane) === target.lane
+            && normalizeId(entry.platform) === "facebook"
+            && normalizeId(entry.blogId) === target.blogId
+            && Number.isFinite(scheduledFor)
+            && scheduledFor >= new Date(from).getTime()
+            && scheduledFor <= startedAt.getTime();
+        });
+        if (!posts.length && expectedRecentPublication) {
+          brandErrors.push(`metricool_analytics_empty_with_recent_publication_receipts_${target.lane}`);
+        } else {
+          successfulBrandFetches += 1;
+        }
         postsSeen += posts.length;
         for (const post of posts) {
           const ledgerEntry = ledger.find((entry) => (
