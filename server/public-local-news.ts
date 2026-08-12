@@ -3,7 +3,10 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
 import { localNewsArticleSlug } from "./clippers-local-news-growth";
-import { hasCompleteLocalNewsCommitteeApproval } from "./clippers-local-news-metricool";
+import {
+  hasCompleteLocalNewsCommitteeApproval,
+  matchesClipperLocalNewsDeliveryJurisdiction,
+} from "./clippers-local-news-metricool";
 import { detectLocalNewsSensitiveContent, hashLocalNewsCanonicalEventIdentity, hashLocalNewsReviewValue } from "./clippers-local-news-review-committee";
 
 export type PublicLocalNewsCity = "miami" | "new-york";
@@ -42,6 +45,8 @@ const publicQueueItemSchema = z.object({
   lane: z.enum(["miami-news", "ny-news"]),
   platform: z.enum(["x", "facebook"]),
   copy: z.string(),
+  sourceUrl: z.string().url().optional(),
+  evidence: z.array(z.string()).optional(),
   canonicalEventIdentity: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   claimIdentityHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
   reviewHash: z.string().regex(/^[a-f0-9]{64}$/).optional(),
@@ -300,6 +305,11 @@ export async function listPublicLocalNews(options: PublicLocalNewsOptions = {}):
     // Only expose the exact current revision after its scheduled publication time.
     // This prevents stale safe evidence from publishing a later high-risk snapshot.
     if (!event || event.revision !== item.eventRevision) continue;
+    if (!matchesClipperLocalNewsDeliveryJurisdiction({
+      lane: item.lane,
+      sourceUrl: item.sourceUrl || event.sourceUrl,
+      evidence: item.evidence,
+    })) continue;
     const sensitive = item.risk === "high" || item.risk === "critical" || event.risk === "high" || event.risk === "critical";
     if (sensitive && (!hasCompleteLocalNewsCommitteeApproval(item) || !matchesReviewedEventIdentity(item, event))) continue;
     const evidence = ledgerByQueueId.get(item.id)?.filter((entry) => (

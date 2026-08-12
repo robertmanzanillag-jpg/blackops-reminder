@@ -170,7 +170,7 @@ const CONNECTOR_LANES: Record<string, ClipperLocalNewsLane> = {
   "ny-generic": "ny-news",
 };
 
-function evidenceValue(item: QueueItem, key: string): string | null {
+function evidenceValue(item: Pick<QueueItem, "evidence">, key: string): string | null {
   const prefix = `${key}=`;
   const entry = item.evidence?.find((value) => value.startsWith(prefix));
   return entry ? entry.slice(prefix.length).trim() : null;
@@ -181,7 +181,9 @@ function evidenceValue(item: QueueItem, key: string): string | null {
  * Metricool from legacy queue rows created before connector-level filtering
  * was introduced, without trying to infer a city from editorial prose.
  */
-function matchesDeliveryJurisdiction(item: QueueItem): boolean {
+export function matchesClipperLocalNewsDeliveryJurisdiction(
+  item: Pick<QueueItem, "lane" | "sourceUrl" | "evidence">,
+): boolean {
   const connector = evidenceValue(item, "connector");
   if (connector?.startsWith("google-news-")) return false;
   const connectorLane = connector?.startsWith("fhp-miami-")
@@ -812,7 +814,7 @@ export async function deliverClipperLocalNewsToMetricool(
     const fetchedNow = now();
     let safeItems = queue.filter((item) => {
       const platformEnabled = item.platform !== "x" || env.CLIPPERS_LOCAL_NEWS_ENABLE_X === "true";
-      if (!matchesDeliveryJurisdiction(item)) {
+      if (!matchesClipperLocalNewsDeliveryJurisdiction(item)) {
         result.filtered += 1;
         return false;
       }
@@ -899,10 +901,12 @@ export async function deliverClipperLocalNewsToMetricool(
       if (Number.isFinite(scheduled)) {
         // A legacy future backlog remains in the durable ledger for dedupe and
         // cleanup, but must not drag new, current reporting behind it.
-        if (scheduled <= routineHorizonEnd) cursors.set(key, Math.max(cursors.get(key) || 0, scheduled));
-        const occupied = occupiedByAccount.get(key) || [];
-        occupied.push(scheduled);
-        occupiedByAccount.set(key, occupied);
+        if (scheduled <= routineHorizonEnd) {
+          cursors.set(key, Math.max(cursors.get(key) || 0, scheduled));
+          const occupied = occupiedByAccount.get(key) || [];
+          occupied.push(scheduled);
+          occupiedByAccount.set(key, occupied);
+        }
         const dayKey = `${key}|${easternDateKey(entry.scheduledFor)}`;
         scheduledByAccountDay.set(dayKey, (scheduledByAccountDay.get(dayKey) || 0) + 1);
       }
@@ -973,6 +977,7 @@ export async function deliverClipperLocalNewsToMetricool(
           break;
         }
       }
+      if (breaking && scheduledMs !== null && scheduledMs > routineHorizonEnd) scheduledMs = null;
       if (scheduledMs === null) {
         result.deferred += 1;
         continue;
@@ -1077,7 +1082,7 @@ export const __clipperLocalNewsMetricoolInternals = {
   normalizeMetricoolMedia,
   metricoolContentHash,
   metricoolSourceUrlHash,
-  matchesDeliveryJurisdiction,
+  matchesDeliveryJurisdiction: matchesClipperLocalNewsDeliveryJurisdiction,
   breakingSpacingMs,
   nextBreakingSlot,
   scheduleHorizonEndMs,

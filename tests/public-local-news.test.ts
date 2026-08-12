@@ -67,6 +67,18 @@ const highRiskEvent = {
   risk: "high" as const,
 };
 
+const crossJurisdictionEvent = {
+  ...miamiEvent,
+  id: "cross-jurisdiction-event-1234",
+  title: "Chicago federal case update",
+  description: "A case from the Northern District of Illinois.",
+  location: "Miami area",
+  eventType: "Federal case update",
+  source: "U.S. Department of Justice",
+  sourceUrl: "https://www.justice.gov/usao-ndil/pr/chicago-federal-case-update",
+  risk: "low" as const,
+};
+
 function queueItem(overrides: Record<string, unknown>) {
   return {
     id: "queue-default",
@@ -105,7 +117,7 @@ test.before(async () => {
     updatedAt: NOW,
     lastRunAt: NOW,
     scheduleMinutes: 3,
-    events: [miamiEvent, nyEvent, highRiskEvent],
+    events: [miamiEvent, nyEvent, highRiskEvent, crossJurisdictionEvent],
     queue: [
       queueItem({ id: "miami-x", platform: "x" }),
       queueItem({
@@ -127,6 +139,15 @@ test.before(async () => {
       }),
       queueItem({ id: "ny-x", eventId: nyEvent.id, lane: "ny-news", risk: "low" }),
       queueItem({ id: "high-x", eventId: highRiskEvent.id, eventRevision: 1 }),
+      queueItem({
+        id: "cross-jurisdiction-facebook",
+        eventId: crossJurisdictionEvent.id,
+        eventRevision: crossJurisdictionEvent.revision,
+        platform: "facebook",
+        sourceUrl: crossJurisdictionEvent.sourceUrl,
+        evidence: ["connector=none"],
+        risk: "low",
+      }),
       queueItem({ id: "quarantined-ny", eventId: nyEvent.id, eventRevision: 2, lane: "ny-news", platform: "facebook", risk: "low", status: "quarantined", approvalRequired: false, autoEligible: false }),
       queueItem({ id: "rejected-ny", eventId: nyEvent.id, eventRevision: 2, lane: "ny-news", platform: "x", risk: "low", status: "rejected", approvalRequired: false, autoEligible: false }),
     ],
@@ -139,6 +160,7 @@ test.before(async () => {
       { queueItemId: "miami-facebook", lane: "miami-news", platform: "facebook", blogId: "private-blog-id", scheduledFor: "2026-07-21T11:52:00.000Z", scheduledAt: NOW, metricoolPostId: "secret-provider-id-2" },
       { queueItemId: "ny-x", lane: "ny-news", platform: "x", blogId: "private-ny", scheduledFor: "2099-07-21T12:15:00.000Z", scheduledAt: NOW, metricoolPostId: "future-provider-id" },
       { queueItemId: "high-x", lane: "miami-news", platform: "x", blogId: "private-high", scheduledFor: "2026-07-21T11:55:00.000Z", scheduledAt: NOW, metricoolPostId: null },
+      { queueItemId: "cross-jurisdiction-facebook", lane: "miami-news", platform: "facebook", blogId: "private-miami", scheduledFor: "2026-07-21T11:54:00.000Z", scheduledAt: NOW, metricoolPostId: "must-not-publish-cross-city" },
       { queueItemId: "quarantined-ny", lane: "ny-news", platform: "facebook", blogId: "private-quarantine", scheduledFor: "2026-07-21T11:56:00.000Z", scheduledAt: NOW, metricoolPostId: "must-not-publish" },
       { queueItemId: "rejected-ny", lane: "ny-news", platform: "x", blogId: "private-reject", scheduledFor: "2026-07-21T11:57:00.000Z", scheduledAt: NOW, metricoolPostId: "must-not-publish" },
     ],
@@ -192,7 +214,7 @@ test("ledger evidence gates articles and X/Facebook rows deduplicate to one bili
   assert.match(article.translations.es.body, /no pretende ser una traducción completa/);
 
   const serialized = JSON.stringify(feed);
-  for (const forbidden of ["INTERNAL QUEUE COPY", "private-blog-id", "secret-provider-id", "never-public", workspaceDir]) {
+  for (const forbidden of ["INTERNAL QUEUE COPY", "private-blog-id", "secret-provider-id", "never-public", "Chicago federal case update", workspaceDir]) {
     assert.doesNotMatch(serialized, new RegExp(forbidden.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   assert.doesNotMatch(serialized, /high-risk-event|Road Closure/);
