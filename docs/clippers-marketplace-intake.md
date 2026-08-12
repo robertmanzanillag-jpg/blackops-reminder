@@ -1,6 +1,8 @@
 # Clippers marketplace intake
 
-`script/clippers-marketplace-intake.mjs` converts local marketplace snapshots into the campaign catalog consumed by the Clippers CEO. It never logs in, scrapes authenticated pages, calls a paid API, or publishes.
+`script/clippers-marketplace-intake.mjs` converts local marketplace snapshots into the campaign catalog consumed by the Clippers CEO. It never logs in, scrapes authenticated pages, calls a paid API, or publishes. Live acquisition is a separate fail-closed stage, `clippers:marketplace-refresh`, which invokes only explicitly authorized local adapters and then hands their validated snapshots to intake.
+
+The separation is deliberate: adapters own authenticated session access, while intake remains the authority for freshness, rights, destination-account compatibility, expiry, and campaign deduplication. A provider failure cannot relax any of those gates.
 
 Place JSON snapshots in `clippers_workspace/research/marketplace-snapshots/`. Each snapshot has this shape:
 

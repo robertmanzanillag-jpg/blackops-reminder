@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdir, open, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { CLIPPERS_ALLOWED_ENV_KEYS, loadClipperSelectedEnv } from "./clippers-selected-env.mjs";
@@ -98,6 +98,8 @@ export async function runClipperFreeLocalWorker(options = {}) {
     CLIPPERS_TARGET_DAILY_CLIPS: workerEnv.CLIPPERS_TARGET_DAILY_CLIPS || "5",
     CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED: publicMediaUploadAuthorized ? "true" : "false",
     CLIPPERS_PUBLIC_MEDIA_PROVIDER: workerEnv.CLIPPERS_PUBLIC_MEDIA_PROVIDER || "google_drive",
+    CLIPPERS_MARKETPLACE_REFRESH_CONFIG: workerEnv.CLIPPERS_MARKETPLACE_REFRESH_CONFIG || "",
+    CLIPPERS_MARKETPLACE_REFRESH_TIMEOUT_MS: workerEnv.CLIPPERS_MARKETPLACE_REFRESH_TIMEOUT_MS || "120000",
     ...Object.fromEntries(Object.entries(metricoolEnv).filter(([, value]) => typeof value === "string" && value)),
     ...publicMediaEnv,
   });
@@ -109,26 +111,56 @@ export async function runClipperFreeLocalWorker(options = {}) {
     if (publishingAuthorized && !workerEnv.METRICOOL_USER_ID) configurationBlockers.push("metricool_user_id_missing");
     if (publishingAuthorized && !workerEnv.CLIPPERS_METRICOOL_BLOG_ID) configurationBlockers.push("metricool_blog_id_missing");
 
+    // Refresh is best-effort: a provider can be temporarily unavailable while a
+    // still-fresh, rights-verified snapshot remains safe to consume. Intake is
+    // therefore authoritative and always runs after the provider fallback pass.
+    const supplyRefresh = execute("npm", ["run", "clippers:marketplace-refresh"], { cwd: projectRoot, env });
     const supply = execute("npm", ["run", "clippers:marketplace-intake"], { cwd: projectRoot, env });
-    const mediaUpload = supply.status !== 0
-      ? skippedStep("Public media upload skipped", "Marketplace intake failed.")
+    const rendering = supply.status === 0
+      ? execute("npm", ["run", "clippers:render-campaign-drafts"], { cwd: projectRoot, env })
+      : skippedStep("Campaign rendering skipped", "Marketplace intake failed.");
+    let renderingReport = null;
+    if (rendering.status === 0) {
+      try {
+        renderingReport = JSON.parse(await readFile(path.join(workspaceRoot, "reports", "campaign-draft-renderer.json"), "utf8"));
+      } catch {
+        // Older verified draft paths can still proceed through uploader validation.
+      }
+    }
+    const renderingShortfall = renderingReport?.status === "partial"
+      && Number(renderingReport?.summary?.missingAgainstTarget) > 0;
+    const mediaUpload = supply.status !== 0 || rendering.status !== 0
+      ? skippedStep(
+          "Public media upload skipped",
+          supply.status !== 0 ? "Marketplace intake failed." : "Campaign rendering failed.",
+        )
       : publicMediaUploadAuthorized
         ? execute("npm", ["run", "clippers:upload-metricool-media"], { cwd: projectRoot, env })
         : skippedStep("Public media upload skipped", "Public media upload is not authorized.", 0);
-    const planning = supply.status === 0 && mediaUpload.status === 0
+    const planning = supply.status === 0 && rendering.status === 0 && mediaUpload.status === 0
       ? execute("npm", ["run", "clippers:streamer-growth-ceo"], { cwd: projectRoot, env })
-      : skippedStep("CEO planning skipped", supply.status !== 0 ? "Marketplace intake failed." : "Public media upload failed.");
+      : skippedStep(
+          "CEO planning skipped",
+          supply.status !== 0
+            ? "Marketplace intake failed."
+            : rendering.status !== 0
+              ? "Campaign rendering failed."
+              : "Public media upload failed.",
+        );
     const delivery = planning.status === 0 && configurationBlockers.length === 0
       ? execute("node", ["script/clippers-metricool-autopilot.mjs"], { cwd: projectRoot, env })
       : skippedStep(
           "Metricool delivery skipped",
           planning.status !== 0 ? "CEO planning failed." : `Configuration blockers: ${configurationBlockers.join(", ")}.`,
         );
-    const reconciliation = delivery.status === 0 && publishingAuthorized
+    // Reconciliation is independent of today's supply. Previously scheduled
+    // posts must still reach an exact public URL (or a proven terminal failure)
+    // even when every marketplace provider is temporarily unavailable.
+    const reconciliation = publishingAuthorized && configurationBlockers.length === 0
       ? execute("npm", ["run", "clippers:reconcile-publications"], { cwd: projectRoot, env })
       : skippedStep(
           "Publication reconciliation skipped",
-          delivery.status !== 0 ? "Metricool delivery failed or was blocked." : "Metricool publishing is not authorized.",
+          publishingAuthorized ? `Configuration blockers: ${configurationBlockers.join(", ")}.` : "Metricool publishing is not authorized.",
           publishingAuthorized ? null : 0,
         );
     const executeCleanup = workerEnv.CLIPPERS_FREE_WORKER_CLEANUP_EXECUTE === "true";
@@ -137,19 +169,21 @@ export async function runClipperFreeLocalWorker(options = {}) {
       : skippedStep("cleanup skipped", "Planning, delivery, or publication reconciliation failed.");
     const failedStage = supply.status !== 0
       ? "supply"
-      : mediaUpload.status !== 0
-        ? "media_upload"
-        : planning.status !== 0
-          ? "planning"
-          : delivery.status !== 0
-            ? "delivery"
-            : reconciliation.status !== 0
-              ? "reconciliation"
-              : cleanup.status !== 0
-                ? "cleanup"
-                : null;
+      : rendering.status !== 0
+        ? "rendering"
+        : mediaUpload.status !== 0
+          ? "media_upload"
+          : planning.status !== 0
+            ? "planning"
+            : delivery.status !== 0
+              ? "delivery"
+              : reconciliation.status !== 0
+                ? "reconciliation"
+                : cleanup.status !== 0
+                  ? "cleanup"
+                  : null;
     const report = {
-      status: failedStage ? "blocked" : "completed",
+      status: failedStage ? "blocked" : renderingShortfall ? "partial" : "completed",
       startedAt,
       finishedAt: new Date().toISOString(),
       projectRoot,
@@ -157,7 +191,7 @@ export async function runClipperFreeLocalWorker(options = {}) {
       workspaceRoot,
       loadedConfigurationFiles,
       failedStage,
-      retryable: Boolean(failedStage),
+      retryable: Boolean(failedStage || renderingShortfall),
       configurationBlockers,
       paidAiUsed: false,
       paidAiCredentialsPassed: false,
@@ -166,7 +200,11 @@ export async function runClipperFreeLocalWorker(options = {}) {
       metricoolDeliveryEnabled: publishingAuthorized,
       publicMediaUploadEnabled: publicMediaUploadAuthorized,
       cleanupExecuteEnabled: executeCleanup,
+      supplyRefresh,
+      degradedStages: supplyRefresh.status === 0 ? [] : ["supply_refresh"],
       supply,
+      rendering,
+      renderingReport,
       mediaUpload,
       planning,
       delivery,
