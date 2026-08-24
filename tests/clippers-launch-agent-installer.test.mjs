@@ -166,6 +166,16 @@ test("LaunchAgent refuses a dirty development runtime unless the test-only overr
       encoding: "utf8",
     });
     assert.equal(clone.status, 0, clone.stderr);
+    const detachMain = spawnSync("git", ["-C", runtimeRoot, "switch", "--detach", "origin/main"], {
+      encoding: "utf8",
+    });
+    assert.equal(detachMain.status, 0, detachMain.stderr);
+    const headAtMain = spawnSync("git", ["-C", runtimeRoot, "rev-parse", "HEAD", "refs/remotes/origin/main"], {
+      encoding: "utf8",
+    });
+    assert.equal(headAtMain.status, 0, headAtMain.stderr);
+    const [runtimeHead, runtimeOriginMain] = headAtMain.stdout.trim().split(/\r?\n/);
+    assert.equal(runtimeHead, runtimeOriginMain);
     const dirtyMarker = path.join(runtimeRoot, ".clippers-runtime-dirty-test");
     await writeFile(dirtyMarker, "intentional untracked fixture\n");
     const runtimeStatus = spawnSync("git", ["-C", runtimeRoot, "status", "--porcelain", "--untracked-files=all"], {
