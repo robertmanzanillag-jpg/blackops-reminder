@@ -119,6 +119,79 @@ function workerState(worker, supply, now) {
   };
 }
 
+function nonNegativeInteger(value) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function contentLaneState(value) {
+  const lane = value && typeof value === "object" ? value : {};
+  const planned = nonNegativeInteger(lane.planned);
+  const rendered = nonNegativeInteger(lane.rendered);
+  return {
+    channelId: clean(lane.channelId) || null,
+    planned,
+    attempted: nonNegativeInteger(lane.attempted),
+    rendered,
+    shortfall: Math.max(nonNegativeInteger(lane.shortfall), planned - rendered),
+  };
+}
+
+function contentWorkerState(contentWorker, { now, today, timeZone }) {
+  const hasReport = Boolean(contentWorker && typeof contentWorker === "object");
+  const generatedAt = clean(contentWorker?.generatedAt);
+  const generatedMs = Date.parse(generatedAt);
+  const reportDate = dateParts(generatedAt, timeZone)?.date || null;
+  const ageMinutes = Number.isFinite(generatedMs)
+    ? Math.max(0, Math.round((now.getTime() - generatedMs) / 60_000))
+    : null;
+  const es = contentLaneState(contentWorker?.motivation?.es);
+  const en = contentLaneState(contentWorker?.motivation?.en);
+  const sleepValue = contentWorker?.sleep && typeof contentWorker.sleep === "object" ? contentWorker.sleep : {};
+  const sleep = {
+    planned: nonNegativeInteger(sleepValue.planned),
+    attempted: nonNegativeInteger(sleepValue.attempted),
+    generated: nonNegativeInteger(sleepValue.generated),
+    shortfall: Math.max(
+      nonNegativeInteger(sleepValue.shortfall),
+      nonNegativeInteger(sleepValue.planned) - nonNegativeInteger(sleepValue.generated),
+    ),
+  };
+  sleep.status = sleep.generated > 0
+    ? "generated"
+    : sleep.shortfall > 0
+      ? "shortfall"
+      : sleep.planned > 0
+        ? "planned"
+        : "not_planned";
+  const freshForToday = reportDate === today;
+  const parsedApiCostUsd = contentWorker?.apiCostUsd == null ? 0 : Number(contentWorker.apiCostUsd);
+  const apiCostUsd = Number.isFinite(parsedApiCostUsd) ? parsedApiCostUsd : null;
+  const blockers = [];
+  if (!generatedAt) blockers.push("content_worker_report_missing");
+  else if (!freshForToday) blockers.push("content_worker_report_stale");
+  if (hasReport && contentWorker.publishEnabled !== false) blockers.push("content_worker_publish_must_remain_disabled");
+  if (hasReport && contentWorker.networkUsed !== false) blockers.push("content_worker_network_must_remain_disabled");
+  if (hasReport && apiCostUsd !== 0) blockers.push("content_worker_api_cost_must_remain_zero");
+  if (es.shortfall > 0) blockers.push(`motivation_es_shortfall_${es.shortfall}`);
+  if (en.shortfall > 0) blockers.push(`motivation_en_shortfall_${en.shortfall}`);
+  if (sleep.shortfall > 0) blockers.push(`sleep_shortfall_${sleep.shortfall}`);
+  return {
+    status: clean(contentWorker?.status) || "missing",
+    generatedAt: generatedAt || null,
+    reportDate,
+    reportAgeMinutes: ageMinutes,
+    freshForToday,
+    motivation: { es, en },
+    sleep,
+    blockers,
+    networkUsed: hasReport ? contentWorker.networkUsed : null,
+    publishEnabled: hasReport ? contentWorker.publishEnabled : null,
+    apiCostUsd,
+    publicationProof: false,
+  };
+}
+
 function markdown(report) {
   const title = report.alert ? "Clippers daily alert" : "Clippers daily watchdog";
   return [
@@ -132,10 +205,16 @@ function markdown(report) {
     `- Worker stage: ${report.worker.stage}`,
     `- Worker last run age: ${report.worker.lastRunAgeMinutes == null ? "unknown" : `${report.worker.lastRunAgeMinutes} minutes`}`,
     `- Blockers: ${report.worker.blockers.length ? report.worker.blockers.join(", ") : "none"}`,
+    `- Content worker: ${report.contentWorker.status} (${report.contentWorker.freshForToday ? "fresh today" : "missing or stale"})`,
+    `- Motivation ES planned/rendered/shortfall: ${report.contentWorker.motivation.es.planned}/${report.contentWorker.motivation.es.rendered}/${report.contentWorker.motivation.es.shortfall}`,
+    `- Motivation EN planned/rendered/shortfall: ${report.contentWorker.motivation.en.planned}/${report.contentWorker.motivation.en.rendered}/${report.contentWorker.motivation.en.shortfall}`,
+    `- Sleep status: ${report.contentWorker.sleep.status} (planned/generated/shortfall ${report.contentWorker.sleep.planned}/${report.contentWorker.sleep.generated}/${report.contentWorker.sleep.shortfall})`,
+    `- Content blockers: ${report.contentWorker.blockers.length ? report.contentWorker.blockers.join(", ") : "none"}`,
+    "- Content plan/render output is not publication proof; no YouTube upload is claimed.",
     `- Cost: USD ${report.costUsd}`,
     "",
     report.alert
-      ? "No evidence-backed scheduled or published post was found after the configured check hour. This is a local alert only; no message was sent."
+      ? `Local alert only; no message was sent. Causes: ${Object.entries(report.alerts).filter(([, active]) => active).map(([name]) => name).join(", ")}.`
       : report.status === "not_due"
         ? "The configured check hour has not arrived yet."
         : "At least one evidence-backed post was found for today.",
@@ -159,12 +238,37 @@ export async function runClippersDailyWatchdog(options = {}) {
   const ledgerPath = path.join(reportsRoot, "metricool-autopilot-ledger.json");
   const workerPath = path.join(reportsRoot, "free-local-worker", "latest.json");
   const supplyPath = path.join(reportsRoot, "marketplace-supply-report.json");
+  const contentWorkerPath = path.resolve(
+    options.contentWorkerReportPath
+      || env.CLIPPERS_CONTENT_WORKER_REPORT
+      || path.join(reportsRoot, "content-worker", "clippers-content-local-worker-latest.json"),
+  );
   const ledger = await readJson(ledgerPath, []);
   const worker = await readJson(workerPath, null);
   const supply = await readJson(supplyPath, null);
+  const contentWorkerReport = await readJson(contentWorkerPath, null);
   const evidence = collectEvidence(ledger, { today: current.date, timeZone, account });
   const due = current.hour >= checkHour;
-  const alert = due && evidence.length === 0;
+  const contentWorker = contentWorkerState(contentWorkerReport, {
+    now,
+    today: current.date,
+    timeZone,
+  });
+  const alerts = {
+    noEvidenceBackedTikTokPost: due && evidence.length === 0,
+    contentWorkerMissingOrStale: due && !contentWorker.freshForToday,
+    contentWorkerShortfall: due && (
+      contentWorker.motivation.es.shortfall > 0
+      || contentWorker.motivation.en.shortfall > 0
+      || contentWorker.sleep.shortfall > 0
+    ),
+    contentWorkerSafetyViolation: due && (
+      contentWorker.blockers.includes("content_worker_publish_must_remain_disabled")
+      || contentWorker.blockers.includes("content_worker_network_must_remain_disabled")
+      || contentWorker.blockers.includes("content_worker_api_cost_must_remain_zero")
+    ),
+  };
+  const alert = Object.values(alerts).some(Boolean);
   const report = {
     schemaVersion: 1,
     generatedAt: now.toISOString(),
@@ -174,6 +278,7 @@ export async function runClippersDailyWatchdog(options = {}) {
     account: `@${account}`,
     status: !due ? "not_due" : alert ? "alert" : "healthy",
     alert,
+    alerts,
     counts: {
       total: evidence.length,
       scheduled: evidence.filter((row) => row.status === "scheduled").length,
@@ -181,7 +286,8 @@ export async function runClippersDailyWatchdog(options = {}) {
     },
     evidence,
     worker: workerState(worker, supply, now),
-    evidenceFiles: { ledger: ledgerPath, worker: workerPath, supply: supplyPath },
+    contentWorker,
+    evidenceFiles: { ledger: ledgerPath, worker: workerPath, supply: supplyPath, contentWorker: contentWorkerPath },
     notificationSent: false,
     paidSpendAllowed: false,
     costUsd: 0,

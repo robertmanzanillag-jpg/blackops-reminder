@@ -8,7 +8,7 @@ This local tool produces an advisory daily volume plan and a fact-only learning 
 - `sleep_long`: an initial maximum of one asset in any rolling seven-day period. This protects quality and makes each eight-hour video a deliberate test rather than bulk repetitive content.
 - Spanish (`es`) and English (`en`) are evaluated separately. Account, lane, language, and metric observation-window length must all match before rows can be compared.
 
-Mandatory account, rights, candidate-readiness, and quality gates are configured per lane. A closed gate produces a target of zero. Motivation also fails closed when its metrics are missing or stale. With verified but insufficient baseline data, it allows at most one conservative learning post. Sleep permits one conservative cold-start test only when all mandatory gates pass.
+Mandatory account, rights, candidate-readiness, and quality gates are configured per lane. A closed gate produces a target of zero. On a true motivation cold start with no metric rows, passing gates and five eligible candidates produce a controlled plan of five for that channel; the decision remains `cold_start_controlled`, experiments remain inconclusive, and no winner is named. Existing rows with missing or stale metrics fail closed. With verified but insufficient baseline data, volume remains capped by the five-asset editorial target and actual eligible candidates. Sleep permits one conservative cold-start test only when all mandatory gates pass.
 
 ## Ledger schema
 

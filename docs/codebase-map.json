@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-24T07:07:42.366Z",
+  "generatedAt": "2026-08-24T07:15:19.810Z",
   "repoRoot": "/private/tmp/asistente-sleep-clippers",
   "packageName": "rest-express",
   "scripts": {
@@ -98,6 +98,11 @@
     "clippers:metricool-autopilot": "node script/clippers-metricool-autopilot.mjs",
     "clippers:reconcile-publications": "node script/clippers-reconcile-publications.mjs",
     "clippers:free-local-worker": "node script/clippers-free-local-worker.mjs",
+    "clippers:content-learning-ceo": "node script/clippers-content-learning-ceo.mjs",
+    "clippers:motivation-shorts": "node script/clippers-motivation-shorts.mjs",
+    "clippers:sleep-video": "node script/clippers-sleep-video-generator.mjs",
+    "clippers:content-local-worker": "node script/clippers-content-local-worker.mjs",
+    "test:clippers-content": "node --test tests/clippers-content-learning-ceo.test.mjs tests/clippers-motivation-shorts.test.mjs tests/clippers-sleep-video-generator.test.mjs tests/clippers-content-local-worker.test.mjs",
     "clippers:install-free-local-worker": "zsh script/install-clippers-free-local-worker-launch-agent.sh",
     "clippers:local-subtitles": "node script/clippers-local-subtitles.mjs",
     "clippers:cache-local-news-models": "node --import tsx script/cache-local-news-models.mjs",
@@ -110,40 +115,32 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 562,
-    "filesIndexed": 480,
-    "imports": 1798,
+    "filesVisible": 565,
+    "filesIndexed": 483,
+    "imports": 1812,
     "routes": 494,
-    "symbols": 11577
+    "symbols": 11700
   },
   "directories": {
     "docs": {
-      "files": 24,
-      "indexed": 23,
+      "files": 25,
+      "indexed": 24,
       "kinds": {
-        "docs": 24
-      }
-    },
-    "examples/clippers-motivation": {
-      "files": 11,
-      "indexed": 11,
-      "kinds": {
-        "other": 10,
-        "docs": 1
+        "docs": 25
       }
     },
     "script": {
-      "files": 67,
-      "indexed": 63,
+      "files": 68,
+      "indexed": 64,
       "kinds": {
-        "script": 67
+        "script": 68
       }
     },
     "tests": {
-      "files": 107,
-      "indexed": 104,
+      "files": 108,
+      "indexed": 105,
       "kinds": {
-        "test": 107
+        "test": 108
       }
     },
     ".": {
@@ -201,6 +198,14 @@
         "client-hook": 3,
         "client-lib": 7,
         "client-page": 26
+      }
+    },
+    "examples/clippers-motivation": {
+      "files": 11,
+      "indexed": 11,
+      "kinds": {
+        "docs": 1,
+        "other": 10
       }
     },
     "scripts": {
@@ -3938,6 +3943,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-content-local-worker.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-generic-renderer.md",
       "kind": "docs",
       "imports": [],
@@ -4125,7 +4138,7 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motivate-consistency-001.json",
+      "path": "examples/clippers-motivation/motivate-focus-001.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -4133,7 +4146,7 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motivate-discipline-001.json",
+      "path": "examples/clippers-motivation/motivate-fresh-start-001.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -4141,7 +4154,7 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motivate-fear-001.json",
+      "path": "examples/clippers-motivation/motivate-patience-001.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -4149,7 +4162,7 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motivate-late-start-001.json",
+      "path": "examples/clippers-motivation/motivate-self-trust-001.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -4157,7 +4170,7 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motivate-rejection-001.json",
+      "path": "examples/clippers-motivation/motivate-setback-001.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -5086,6 +5099,92 @@
       "routes": []
     },
     {
+      "path": "script/clippers-content-local-worker.mjs",
+      "kind": "script",
+      "imports": [
+        "./clippers-content-learning-ceo.mjs",
+        "./clippers-motivation-shorts.mjs",
+        "./clippers-sleep-video-generator.mjs",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "acquireWorkerLock",
+        "runContentLocalWorker"
+      ],
+      "symbols": [
+        "DAY_MS",
+        "DEFAULT_TIMEOUT_MS",
+        "LANGUAGES",
+        "MAX_TIMEOUT_MS",
+        "acquireWorkerLock",
+        "atomicJson",
+        "base",
+        "candidateIdentity",
+        "candidates",
+        "clean",
+        "cliValue",
+        "config",
+        "configInfo",
+        "configPath",
+        "cutoff",
+        "effectiveSleepPlan",
+        "entry",
+        "existing",
+        "generateSleep",
+        "generated",
+        "handle",
+        "hardCap",
+        "identity",
+        "index",
+        "info",
+        "lane",
+        "lanePlan",
+        "lock",
+        "main",
+        "manifest",
+        "manifestPath",
+        "metricsLedgerPath",
+        "motivation",
+        "plan",
+        "processAlive",
+        "readJson",
+        "recent",
+        "recentSleepRows",
+        "relative",
+        "releaseWorkerLock",
+        "renderShort",
+        "rendered",
+        "report",
+        "reportDir",
+        "reportPath",
+        "requestedSleep",
+        "resolved",
+        "resolvedConfig",
+        "resolvedRoot",
+        "result",
+        "results",
+        "rows",
+        "runCeo",
+        "runContentLocalWorker",
+        "shortChannels",
+        "sleep",
+        "sleepLedger",
+        "sleepLedgerPath",
+        "sleepPlan",
+        "temporary",
+        "timeoutMs",
+        "token",
+        "validateConfig",
+        "withTimeout",
+        "within",
+        "workspaceRoot"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/clippers-daily-watchdog.mjs",
       "kind": "script",
       "imports": [
@@ -5103,17 +5202,26 @@
         "account",
         "ageMinutes",
         "alert",
+        "alerts",
+        "apiCostUsd",
         "atomicWrite",
         "blockers",
         "candidates",
         "checkHour",
         "clean",
         "collectEvidence",
+        "contentLaneState",
+        "contentWorker",
+        "contentWorkerPath",
+        "contentWorkerReport",
+        "contentWorkerState",
         "current",
         "date",
         "dateParts",
         "due",
+        "en",
         "env",
+        "es",
         "escaped",
         "eventDate",
         "evidence",
@@ -5121,22 +5229,35 @@
         "exactPublicUrl",
         "finishedAt",
         "finishedMs",
+        "freshForToday",
+        "generatedAt",
+        "generatedMs",
+        "hasReport",
         "identity",
+        "lane",
         "ledger",
         "ledgerPath",
         "markdown",
+        "nonNegativeInteger",
         "normalizedAccount",
         "now",
         "outputDirectory",
+        "parsed",
+        "parsedApiCostUsd",
         "parts",
+        "planned",
         "publicUrl",
         "published",
         "readJson",
+        "rendered",
         "report",
+        "reportDate",
         "reportsRoot",
         "runClippersDailyWatchdog",
         "scheduled",
         "seen",
+        "sleep",
+        "sleepValue",
         "stage",
         "status",
         "supply",
@@ -7178,6 +7299,7 @@
       "exports": [
         "channelConfigFromEnv",
         "runYouTubeUpload",
+        "sha256FileStream",
         "validateUploadItem"
       ],
       "symbols": [
@@ -7190,6 +7312,7 @@
         "TOKEN_URL",
         "UPLOAD_START_URL",
         "YOUTUBE_CHANNEL_ID",
+        "YOUTUBE_VIDEO_ID",
         "active",
         "appendLedger",
         "arg",
@@ -7213,7 +7336,11 @@
         "env",
         "evidenceBlockers",
         "fetcher",
-        "fileSha256",
+        "hasOpaqueUploadId",
+        "hash",
+        "isOfficialHost",
+        "isResumable",
+        "isYouTubeUploadPath",
         "item",
         "itemBlockers",
         "itemPath",
@@ -7240,6 +7367,7 @@
         "publicBlocker",
         "qaEvidenceValid",
         "qaPath",
+        "readLedger",
         "realRelative",
         "relative",
         "response",
@@ -7253,6 +7381,7 @@
         "safeResumableUrl",
         "secretPresent",
         "sha256Buffer",
+        "sha256FileStream",
         "startedAt",
         "suffix",
         "temporary",
@@ -18399,6 +18528,7 @@
         "immature",
         "insufficient",
         "lane",
+        "lanes",
         "ledgerPath",
         "low",
         "mature",
@@ -18426,6 +18556,41 @@
       "routes": []
     },
     {
+      "path": "tests/clippers-content-local-worker.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-content-learning-ceo.mjs",
+        "../script/clippers-content-local-worker.mjs",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "calls",
+        "config",
+        "configPath",
+        "count",
+        "first",
+        "firstCalls",
+        "fixture",
+        "item",
+        "lockPath",
+        "manifests",
+        "operations",
+        "relative",
+        "reports",
+        "result",
+        "root",
+        "second",
+        "secondCalls"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/clippers-daily-watchdog.test.mjs",
       "kind": "test",
       "imports": [
@@ -18441,7 +18606,9 @@
         "alertJson",
         "alertMarkdown",
         "fixture",
+        "freshContent",
         "latest",
+        "markdown",
         "report",
         "reports",
         "workspaceRoot"
@@ -18489,6 +18656,10 @@
       "exports": [],
       "symbols": [
         "calls",
+        "configDirectory",
+        "configPath",
+        "contentConfig",
+        "contentPlist",
         "env",
         "fakeBin",
         "fakeLaunchctl",
@@ -18503,7 +18674,8 @@
         "result",
         "systemTimeZone",
         "watchdogPlist",
-        "workspaceRoot"
+        "workspaceRoot",
+        "writeContentConfig"
       ],
       "routes": []
     },
@@ -19313,10 +19485,12 @@
         "CHANNELS",
         "allowed",
         "blocked",
+        "bytes",
         "configs",
         "counters",
         "env",
         "fetcher",
+        "file",
         "first",
         "fixture",
         "item",

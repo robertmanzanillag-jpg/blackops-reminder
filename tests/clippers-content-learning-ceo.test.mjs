@@ -35,16 +35,32 @@ function decision(entries, config = {}) {
   });
 }
 
-test("fails closed without real motivation metrics and remains advisory/cost-free", () => {
+test("cold start plans five per gated channel without claiming a winner", () => {
   const result = decision([]);
-  const motivation = result.dailyPlan.lanes.find((lane) => lane.lane === "motivation_short");
-  assert.equal(motivation.target, 0);
-  assert.equal(motivation.reason, "metrics_missing");
+  const motivation = result.dailyPlan.lanes.filter((lane) => lane.lane === "motivation_short");
+  assert.deepEqual(motivation.map((lane) => lane.target), [5, 5]);
+  assert.ok(motivation.every((lane) => lane.action === "cold_start_controlled"));
+  assert.equal(result.experiments.length, 0);
+  assert.equal(result.report.learning.winners.length, 0);
   assert.equal(result.mode, "advisory_only");
   assert.equal(result.networkUsed, false);
   assert.equal(result.publishEnabled, false);
   assert.equal(result.credentialsRead, false);
   assert.equal(result.apiCostUsd, 0);
+});
+
+test("cold start reports exact shortfall independently for ES and EN", () => {
+  const result = decision([], {
+    shortChannels: {
+      es: { ...gates.motivation_short, eligibleCandidates: 5 },
+      en: { ...gates.motivation_short, eligibleCandidates: 2 },
+    },
+  });
+  const lanes = result.dailyPlan.lanes.filter((lane) => lane.lane === "motivation_short");
+  assert.deepEqual(lanes.map(({ language, target, shortfall }) => ({ language, target, shortfall })), [
+    { language: "es", target: 5, shortfall: 0 },
+    { language: "en", target: 2, shortfall: 3 },
+  ]);
 });
 
 test("rejects stale, missing, negative, unverified, unsafe, and malformed rows without inventing metrics", () => {

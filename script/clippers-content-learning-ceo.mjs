@@ -162,13 +162,22 @@ function motivationDecision(rows, config, language) {
   const relevant = rows.filter((row) => row.lane === "motivation_short" && row.language === language);
   const usableRelevant = relevant.filter((row) => row.usable);
   const missingOrStale = relevant.length > 0 && usableRelevant.length === 0;
-  if (gateBlockers.length || !relevant.length || missingOrStale) {
+  if (gateBlockers.length || missingOrStale) {
     return {
       lane: "motivation_short", language, editorialTarget, target: 0, shortfall: editorialTarget, eligibleCandidates,
       advisoryRecommendedDaily: null,
-      action: "pause", reason: gateBlockers.length ? "mandatory_gate_closed" : !relevant.length ? "metrics_missing" : "metrics_missing_or_stale",
-      blockers: [...gateBlockers, ...(!relevant.length ? ["metrics_missing"] : missingOrStale ? ["metrics_missing_or_stale"] : [])],
+      action: "pause", reason: gateBlockers.length ? "mandatory_gate_closed" : "metrics_missing_or_stale",
+      blockers: [...gateBlockers, ...(missingOrStale ? ["metrics_missing_or_stale"] : [])],
       baseline: null, recent: null, performanceRatio: null,
+    };
+  }
+  if (!relevant.length) {
+    const target = Math.min(editorialTarget, eligibleCandidates);
+    return {
+      lane: "motivation_short", language, editorialTarget, target, shortfall: editorialTarget - target, eligibleCandidates,
+      advisoryRecommendedDaily: null,
+      action: "cold_start_controlled", reason: "no_verified_metrics_baseline",
+      blockers: [], baseline: null, recent: null, performanceRatio: null,
     };
   }
   const groups = [...comparableGroups(relevant).values()].sort((a, b) => b.length - a.length);

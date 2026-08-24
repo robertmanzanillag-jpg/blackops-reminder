@@ -6,14 +6,37 @@ import test from "node:test";
 
 import { runClippersDailyWatchdog } from "../script/clippers-daily-watchdog.mjs";
 
-async function fixture({ ledger = [], worker = null, supply = null } = {}) {
+async function fixture({ ledger = [], worker = null, supply = null, content = null } = {}) {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-watchdog-"));
   const reports = path.join(workspaceRoot, "reports");
   await mkdir(path.join(reports, "free-local-worker"), { recursive: true });
   await writeFile(path.join(reports, "metricool-autopilot-ledger.json"), JSON.stringify(ledger));
   if (worker) await writeFile(path.join(reports, "free-local-worker", "latest.json"), JSON.stringify(worker));
   if (supply) await writeFile(path.join(reports, "marketplace-supply-report.json"), JSON.stringify(supply));
+  if (content) {
+    await mkdir(path.join(reports, "content-worker"), { recursive: true });
+    await writeFile(
+      path.join(reports, "content-worker", "clippers-content-local-worker-latest.json"),
+      JSON.stringify(content),
+    );
+  }
   return workspaceRoot;
+}
+
+function freshContent(overrides = {}) {
+  return {
+    generatedAt: "2026-08-12T12:00:00.000Z",
+    status: "completed",
+    networkUsed: false,
+    publishEnabled: false,
+    apiCostUsd: 0,
+    motivation: {
+      es: { channelId: "motivation-es", planned: 5, attempted: 5, rendered: 5, shortfall: 0 },
+      en: { channelId: "motivation-en", planned: 5, attempted: 5, rendered: 5, shortfall: 0 },
+    },
+    sleep: { planned: 0, attempted: 0, generated: 0, shortfall: 0 },
+    ...overrides,
+  };
 }
 
 test("creates a local zero-post alert with worker stage, blocker, and run age", async () => {
@@ -68,6 +91,7 @@ test("counts only evidence-backed posts for the configured account and New York 
       { status: "scheduled", account: "@streamersclipusa", metricoolId: "m-date-only", scheduledFor: "2026-08-12" },
     ],
     worker: { status: "completed", finishedAt: "2026-08-12T13:05:00.000Z" },
+    content: freshContent(),
   });
   try {
     const report = await runClippersDailyWatchdog({
@@ -79,6 +103,8 @@ test("counts only evidence-backed posts for the configured account and New York 
     assert.equal(report.counts.total, 3);
     assert.equal(report.counts.scheduled, 2);
     assert.equal(report.counts.published, 1);
+    assert.equal(report.contentWorker.freshForToday, true);
+    assert.equal(report.contentWorker.publicationProof, false);
     assert.deepEqual(report.evidence.map(({ metricoolId }) => metricoolId), ["m-1", "m-2", "m-date-only"]);
     await assert.rejects(readFile(path.join(
       workspaceRoot,
@@ -157,6 +183,83 @@ test("rejects an invalid configured hour", async () => {
       runClippersDailyWatchdog({ workspaceRoot, checkHour: 24 }),
       /integer from 0 to 23/,
     );
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("reports separate ES and EN render shortfalls without counting plans as publications", async () => {
+  const workspaceRoot = await fixture({
+    ledger: [{
+      status: "scheduled",
+      account: "@streamersclipusa",
+      metricoolId: "tiktok-1",
+      scheduledFor: "2026-08-12T18:00:00.000Z",
+    }],
+    content: freshContent({
+      status: "completed_with_shortfall",
+      motivation: {
+        es: { channelId: "motivation-es", planned: 5, attempted: 5, rendered: 4, shortfall: 1 },
+        en: { channelId: "motivation-en", planned: 5, attempted: 3, rendered: 3, shortfall: 2 },
+      },
+      sleep: { planned: 1, attempted: 1, generated: 0, shortfall: 1 },
+    }),
+  });
+  try {
+    const report = await runClippersDailyWatchdog({
+      workspaceRoot,
+      now: new Date("2026-08-12T15:00:00.000Z"),
+      checkHour: 10,
+    });
+    assert.equal(report.status, "alert");
+    assert.equal(report.alerts.noEvidenceBackedTikTokPost, false);
+    assert.equal(report.alerts.contentWorkerShortfall, true);
+    assert.equal(report.counts.total, 1);
+    assert.deepEqual(report.contentWorker.motivation.es, {
+      channelId: "motivation-es",
+      planned: 5,
+      attempted: 5,
+      rendered: 4,
+      shortfall: 1,
+    });
+    assert.equal(report.contentWorker.motivation.en.shortfall, 2);
+    assert.equal(report.contentWorker.sleep.status, "shortfall");
+    assert.equal(report.contentWorker.publicationProof, false);
+    const markdown = await readFile(path.join(
+      workspaceRoot,
+      "reports/clippers-daily-watchdog/latest.md",
+    ), "utf8");
+    assert.match(markdown, /ES planned\/rendered\/shortfall: 5\/4\/1/);
+    assert.match(markdown, /EN planned\/rendered\/shortfall: 5\/3\/2/);
+    assert.match(markdown, /not publication proof; no YouTube upload is claimed/i);
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("alerts when today's content worker report is missing or violates no-network zero-cost gates", async () => {
+  const workspaceRoot = await fixture({
+    content: freshContent({
+      generatedAt: "2026-08-11T12:00:00.000Z",
+      networkUsed: true,
+      publishEnabled: true,
+      apiCostUsd: 1,
+    }),
+  });
+  try {
+    const report = await runClippersDailyWatchdog({
+      workspaceRoot,
+      now: new Date("2026-08-12T15:00:00.000Z"),
+      checkHour: 10,
+    });
+    assert.equal(report.alerts.contentWorkerMissingOrStale, true);
+    assert.equal(report.alerts.contentWorkerSafetyViolation, true);
+    assert.deepEqual(report.contentWorker.blockers, [
+      "content_worker_report_stale",
+      "content_worker_publish_must_remain_disabled",
+      "content_worker_network_must_remain_disabled",
+      "content_worker_api_cost_must_remain_zero",
+    ]);
   } finally {
     await rm(workspaceRoot, { recursive: true, force: true });
   }

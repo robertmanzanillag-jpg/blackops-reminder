@@ -10,18 +10,32 @@ const installerPath = path.join(repoRoot, "script", "install-clippers-free-local
 const localtimeTarget = spawnSync("readlink", ["/etc/localtime"], { encoding: "utf8" }).stdout.trim();
 const systemTimeZone = localtimeTarget.includes("/zoneinfo/") ? localtimeTarget.split("/zoneinfo/")[1] : "unknown";
 
+async function writeContentConfig(root, mode = 0o600) {
+  const configDirectory = path.join(root, "config");
+  const configPath = path.join(configDirectory, "clippers-content-worker.json");
+  await mkdir(configDirectory, { recursive: true });
+  await writeFile(configPath, "{}\n", { mode });
+  await chmod(configPath, mode);
+  return configPath;
+}
+
 test("production runtime guard rejects untracked entrypoints and files", async () => {
   const installer = await readFile(installerPath, "utf8");
   assert.match(installer, /status --porcelain --untracked-files=all/);
   assert.match(installer, /ls-files --error-unmatch/);
   assert.match(installer, /worker did not produce a new report from the installed runtime within 45 seconds/);
   assert.match(installer, /r\.projectRoot===process\.argv\[2\].*r\.startedAt/);
+  assert.match(installer, /script\/clippers-content-local-worker\.mjs/);
+  assert.match(installer, /script\/clippers-content-learning-ceo\.mjs/);
+  assert.match(installer, /script\/clippers-motivation-shorts\.mjs/);
+  assert.match(installer, /script\/clippers-sleep-video-generator\.mjs/);
 });
 
 test("LaunchAgents bind configurable runtime/config roots and persist only explicit non-secret controls", async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-home-"));
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-workspace-"));
   try {
+    const contentConfig = await writeContentConfig(workspaceRoot);
     const result = spawnSync("zsh", [installerPath], {
       cwd: workspaceRoot,
       encoding: "utf8",
@@ -33,6 +47,7 @@ test("LaunchAgents bind configurable runtime/config roots and persist only expli
         CLIPPERS_RUNTIME_ROOT: repoRoot,
         CLIPPERS_WORKSPACE_ROOT: workspaceRoot,
         CLIPPERS_CONFIG_ROOT: repoRoot,
+        CLIPPERS_CONTENT_WORKER_CONFIG: contentConfig,
         CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
         CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED: "true",
         CLIPPERS_METRICOOL_BLOG_ID: "6431687",
@@ -73,6 +88,18 @@ test("LaunchAgents bind configurable runtime/config roots and persist only expli
     assert.match(watchdogPlist, /Library\/Logs\/BlackOps\/Clippers\/daily-watchdog\/watchdog\.error\.log/);
     assert.doesNotMatch(watchdogPlist, /reports\/clippers-daily-watchdog\/watchdog\.error\.log/);
     assert.doesNotMatch(watchdogPlist, /must-not-persist|METRICOOL_USER_TOKEN|GOOGLE_DRIVE_REFRESH_TOKEN/);
+    const contentPlist = await readFile(
+      path.join(home, "Library", "LaunchAgents", "com.blackops.clippers-content-worker.plist"),
+      "utf8",
+    );
+    assert.match(contentPlist, new RegExp(`${repoRoot.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/script/clippers-content-local-worker\\.mjs`));
+    assert.match(contentPlist, /<string>--config<\/string>/);
+    assert.match(contentPlist, new RegExp(`<string>${contentConfig.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}</string>`));
+    assert.match(contentPlist, /<key>StartCalendarInterval<\/key><dict><key>Hour<\/key><integer>4<\/integer><key>Minute<\/key><integer>0<\/integer>/);
+    assert.match(contentPlist, /Library\/Logs\/BlackOps\/Clippers\/content-worker\/worker\.error\.log/);
+    assert.match(contentPlist, /CLIPPERS_CONTENT_WORKER_CONFIG<\/key>/);
+    assert.doesNotMatch(contentPlist, /CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED|CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED/);
+    assert.doesNotMatch(contentPlist, /must-not-persist|METRICOOL_USER_TOKEN|GOOGLE_DRIVE_REFRESH_TOKEN/);
   } finally {
     await rm(home, { recursive: true, force: true });
     await rm(workspaceRoot, { recursive: true, force: true });
@@ -81,9 +108,12 @@ test("LaunchAgents bind configurable runtime/config roots and persist only expli
 
 test("LaunchAgent does not install or start by default", async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-default-"));
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-default-workspace-"));
   try {
+    const contentConfig = await writeContentConfig(workspaceRoot);
     const env = { ...process.env, HOME: home };
     env.CLIPPERS_LAUNCH_AGENT_ALLOW_DEVELOPMENT_RUNTIME = "true";
+    env.CLIPPERS_CONTENT_WORKER_CONFIG = contentConfig;
     delete env.CLIPPERS_LAUNCH_AGENT_DRY_RUN;
     const result = spawnSync("zsh", [installerPath], {
       cwd: repoRoot,
@@ -94,6 +124,7 @@ test("LaunchAgent does not install or start by default", async () => {
     assert.match(result.stdout, /validated without installation/);
   } finally {
     await rm(home, { recursive: true, force: true });
+    await rm(workspaceRoot, { recursive: true, force: true });
   }
 });
 
@@ -166,9 +197,11 @@ test("LaunchAgent refuses a schedule time zone different from the macOS system t
 
 test("installation verifies both launchd jobs and kickstarts only the worker", async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-install-"));
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-install-workspace-"));
   const fakeBin = path.join(home, "bin");
   const launchctlLog = path.join(home, "launchctl.log");
   try {
+    const contentConfig = await writeContentConfig(workspaceRoot);
     await mkdir(fakeBin, { recursive: true });
     const fakeLaunchctl = path.join(fakeBin, "launchctl");
     await writeFile(fakeLaunchctl, `#!/bin/zsh\nprint -r -- "$*" >> "${launchctlLog}"\nexit 0\n`);
@@ -184,6 +217,7 @@ test("installation verifies both launchd jobs and kickstarts only the worker", a
         CLIPPERS_LAUNCH_AGENT_ALLOW_DEVELOPMENT_RUNTIME: "true",
         CLIPPERS_RUNTIME_ROOT: repoRoot,
         CLIPPERS_CONFIG_ROOT: repoRoot,
+        CLIPPERS_CONTENT_WORKER_CONFIG: contentConfig,
       },
     });
     assert.equal(result.status, 0, result.stderr);
@@ -191,11 +225,42 @@ test("installation verifies both launchd jobs and kickstarts only the worker", a
     const calls = await readFile(launchctlLog, "utf8");
     assert.match(calls, /bootstrap .*com\.blackops\.clippers-free-worker\.plist/);
     assert.match(calls, /bootstrap .*com\.blackops\.clippers-daily-watchdog\.plist/);
+    assert.match(calls, /bootstrap .*com\.blackops\.clippers-content-worker\.plist/);
     assert.match(calls, /print .*com\.blackops\.clippers-free-worker/);
     assert.match(calls, /print .*com\.blackops\.clippers-daily-watchdog/);
+    assert.match(calls, /print .*com\.blackops\.clippers-content-worker/);
     assert.match(calls, /kickstart -k .*com\.blackops\.clippers-free-worker/);
     assert.doesNotMatch(calls, /kickstart -k .*com\.blackops\.clippers-daily-watchdog/);
+    assert.doesNotMatch(calls, /kickstart -k .*com\.blackops\.clippers-content-worker/);
   } finally {
     await rm(home, { recursive: true, force: true });
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("LaunchAgent fails closed when the content worker config is not owner-only", async () => {
+  const home = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-content-config-home-"));
+  const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-content-config-workspace-"));
+  try {
+    const contentConfig = await writeContentConfig(workspaceRoot, 0o644);
+    const result = spawnSync("zsh", [installerPath], {
+      cwd: repoRoot,
+      encoding: "utf8",
+      env: {
+        ...process.env,
+        HOME: home,
+        CLIPPERS_LAUNCH_AGENT_DRY_RUN: "true",
+        CLIPPERS_LAUNCH_AGENT_ALLOW_DEVELOPMENT_RUNTIME: "true",
+        CLIPPERS_RUNTIME_ROOT: repoRoot,
+        CLIPPERS_CONFIG_ROOT: repoRoot,
+        CLIPPERS_CONTENT_WORKER_CONFIG: contentConfig,
+      },
+    });
+    assert.notEqual(result.status, 0);
+    assert.match(result.stderr, /must be owner-only/);
+    await assert.rejects(readFile(path.join(home, "Library", "LaunchAgents", "com.blackops.clippers-content-worker.plist")));
+  } finally {
+    await rm(home, { recursive: true, force: true });
+    await rm(workspaceRoot, { recursive: true, force: true });
   }
 });
