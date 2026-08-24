@@ -56,9 +56,36 @@ export function partitionLocalNewsState<
   const eventCutoff = nowMs - LOCAL_NEWS_STATE_LIMITS.eventRetentionMs;
   const metricCutoff = nowMs - LOCAL_NEWS_STATE_LIMITS.metricRetentionMs;
 
-  const queue = boundedPartition(state.queue, (item) => timestamp(item.createdAt) >= queueCutoff, LOCAL_NEWS_STATE_LIMITS.maxQueueItems, (item) => timestamp(item.createdAt));
-  const referencedEventIds = new Set(queue.active.map((item) => item.eventId).filter((id): id is string => Boolean(id)));
-  const events = boundedPartition(state.events, (event) => referencedEventIds.has(event.id || "") || timestamp(event.updatedAt || event.firstSeenAt) >= eventCutoff, LOCAL_NEWS_STATE_LIMITS.maxEvents, (event) => timestamp(event.updatedAt || event.firstSeenAt));
+  const availableEventIds = new Set(state.events.map((event) => event.id).filter((id): id is string => Boolean(id)));
+  const queueCandidates = state.queue
+    .filter((item) => timestamp(item.createdAt) >= queueCutoff && Boolean(item.eventId && availableEventIds.has(item.eventId)))
+    .sort((a, b) => timestamp(b.createdAt) - timestamp(a.createdAt));
+  const selectedQueue = new Set<Q>();
+  const referencedEventIds = new Set<string>();
+  for (const item of queueCandidates) {
+    if (selectedQueue.size >= LOCAL_NEWS_STATE_LIMITS.maxQueueItems) break;
+    const eventId = item.eventId!;
+    if (!referencedEventIds.has(eventId) && referencedEventIds.size >= LOCAL_NEWS_STATE_LIMITS.maxEvents) continue;
+    selectedQueue.add(item);
+    referencedEventIds.add(eventId);
+  }
+  const queue = {
+    active: state.queue.filter((item) => selectedQueue.has(item)),
+    archived: state.queue.filter((item) => !selectedQueue.has(item)),
+  };
+
+  const selectedEventIds = new Set(referencedEventIds);
+  const recentUnreferencedEvents = state.events
+    .filter((event) => !selectedEventIds.has(event.id || "") && timestamp(event.updatedAt || event.firstSeenAt) >= eventCutoff)
+    .sort((a, b) => timestamp(b.updatedAt || b.firstSeenAt) - timestamp(a.updatedAt || a.firstSeenAt));
+  for (const event of recentUnreferencedEvents) {
+    if (selectedEventIds.size >= LOCAL_NEWS_STATE_LIMITS.maxEvents) break;
+    if (event.id) selectedEventIds.add(event.id);
+  }
+  const events = {
+    active: state.events.filter((event) => Boolean(event.id && selectedEventIds.has(event.id))),
+    archived: state.events.filter((event) => !event.id || !selectedEventIds.has(event.id)),
+  };
   const metrics = boundedPartition(state.metrics, (metric) => timestamp(metric.observedAt || metric.recordedAt) >= metricCutoff, LOCAL_NEWS_STATE_LIMITS.maxMetrics, (metric) => timestamp(metric.observedAt || metric.recordedAt));
 
   return {

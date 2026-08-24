@@ -38,4 +38,24 @@ test("hard caps protect the 512 MiB runtime and archive every overflow record", 
   assert.equal(result.archived.queue.length, 400);
   assert.equal(result.archived.events.length, 300);
   assert.equal(result.archived.metrics.length, 500);
+  const activeEventIds = new Set(result.state.events.map((event) => event.id));
+  assert.equal(result.state.queue.filter((item) => !activeEventIds.has(item.eventId)).length, 0);
+});
+
+test("never leaves an active queue item pointing to an archived or missing event", () => {
+  const createdAt = NOW.toISOString();
+  const state = {
+    events: Array.from({ length: 800 }, (_, index) => ({ id: `event-${index}`, updatedAt: createdAt })),
+    queue: [
+      ...Array.from({ length: 800 }, (_, index) => ({ id: `queue-${index}`, eventId: `event-${index}`, createdAt })),
+      { id: "missing", eventId: "event-missing", createdAt },
+    ],
+    metrics: [],
+  };
+  const result = partitionLocalNewsState(state, NOW);
+  const activeEventIds = new Set(result.state.events.map((event) => event.id));
+  assert.equal(result.state.events.length, LOCAL_NEWS_STATE_LIMITS.maxEvents);
+  assert.equal(result.state.queue.length, LOCAL_NEWS_STATE_LIMITS.maxEvents);
+  assert.equal(result.state.queue.filter((item) => !activeEventIds.has(item.eventId)).length, 0);
+  assert.ok(result.archived.queue.some((item) => item.id === "missing"));
 });
