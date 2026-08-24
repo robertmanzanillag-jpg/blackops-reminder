@@ -96,6 +96,7 @@ async function approvedExistingSleep(item) {
   await writeFile(evidencePath, JSON.stringify(evidence));
   const evidenceHash = sha256(JSON.stringify(evidence));
   const synthesisParameters = { seed: job.seed, durationSeconds: job.durationSeconds };
+  const generatorHash = sha256(await readFile(new URL("../script/clippers-sleep-video-generator.mjs", import.meta.url)));
   const manifest = {
     schemaVersion: 1,
     artifactType: "rights_verified_visual_with_procedural_rain_audio",
@@ -113,7 +114,7 @@ async function approvedExistingSleep(item) {
     },
     provenance: {
       generator: "script/clippers-sleep-video-generator.mjs",
-      generatorSha256: "b".repeat(64),
+      generatorSha256: generatorHash,
       seed: job.seed,
       synthesisParameters,
       synthesisParametersSha256: sha256(JSON.stringify(synthesisParameters)),
@@ -134,8 +135,8 @@ async function approvedExistingSleep(item) {
       status: "passed",
       tool: "ffprobe",
       productionMinimumSeconds: 28_800,
-      sampledMedia: [0, 14_400, 29_098].map((startSeconds, index) => ({
-        startSeconds, sampleDuration: 2, peakDb: -20 - index, rmsDb: -30 - index, frameMd5: String(index + 1).repeat(32),
+      sampledMedia: [0, 3_600, 7_200, 10_800, 14_400, 18_000, 21_600, 25_200, 28_800, 29_098].map((startSeconds, index) => ({
+        startSeconds, sampleDuration: 2, peakDb: -20 - index, rmsDb: -30 - index, frameMd5: ((index + 1) % 16).toString(16).repeat(32),
       })),
     },
   };
@@ -339,6 +340,34 @@ test("adoption rejects a modified master hash before probing", async () => {
     probeExisting: async () => { probed = true; return approved.probeExisting(); },
   }), /sleep_adoption_output_hash_mismatch/);
   assert.equal(probed, false);
+});
+
+test("adoption requires the manifest to pin the exact local generator", async () => {
+  const item = await fixture({ es: 0, en: 0 });
+  const approved = await approvedExistingSleep(item);
+  const manifestPath = `${approved.outputPath}.rights.json`;
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.provenance.generatorSha256 = "b".repeat(64);
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await assert.rejects(adoptExistingSleepVideo({
+    workspaceRoot: item.root,
+    job: { ...approved.job, outputPath: approved.outputPath, visualSource: path.join(item.root, approved.job.visualSource), visualRightsEvidence: path.join(item.root, approved.job.visualRightsEvidence) },
+    probeExisting: approved.probeExisting,
+  }), /sleep_adoption_generator_evidence_invalid/);
+});
+
+test("adoption requires every hourly and final generator QA sample", async () => {
+  const item = await fixture({ es: 0, en: 0 });
+  const approved = await approvedExistingSleep(item);
+  const manifestPath = `${approved.outputPath}.rights.json`;
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.qa.sampledMedia.splice(4, 1);
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await assert.rejects(adoptExistingSleepVideo({
+    workspaceRoot: item.root,
+    job: { ...approved.job, outputPath: approved.outputPath, visualSource: path.join(item.root, approved.job.visualSource), visualRightsEvidence: path.join(item.root, approved.job.visualRightsEvidence) },
+    probeExisting: approved.probeExisting,
+  }), /sleep_adoption_generator_evidence_invalid/);
 });
 
 test("adoption rejects symlinked media even when it points inside the workspace", async () => {

@@ -6,10 +6,10 @@ import { execFile } from "node:child_process";
 import { lstat, mkdir, open, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { runContentLearningCeo } from "./clippers-content-learning-ceo.mjs";
 import { renderMotivationShort } from "./clippers-motivation-shorts.mjs";
-import { generateSleepVideo } from "./clippers-sleep-video-generator.mjs";
+import { buildQaSampleTimes, generateSleepVideo } from "./clippers-sleep-video-generator.mjs";
 
 const LANGUAGES = ["es", "en"];
 const DEFAULT_TIMEOUT_MS = 14 * 60 * 60 * 1000;
@@ -200,14 +200,16 @@ async function safeWorkspaceFile(workspaceRoot, candidate, label) {
 }
 
 function generatorQaSamplesValid(samples, durationSeconds) {
-  if (!Array.isArray(samples) || samples.length < 3) return false;
-  return samples.every((sample) => Number.isFinite(Number(sample?.startSeconds))
-    && Number(sample.startSeconds) >= 0
-    && Number(sample.startSeconds) < durationSeconds
+  const expectedTimes = buildQaSampleTimes(durationSeconds, false);
+  if (!Array.isArray(samples) || samples.length !== expectedTimes.length) return false;
+  return samples.every((sample, index) => Number.isFinite(Number(sample?.startSeconds))
+    && Number(sample.startSeconds) === expectedTimes[index]
     && Number.isFinite(Number(sample?.sampleDuration))
-    && Number(sample.sampleDuration) > 0
+    && Number(sample.sampleDuration) === Math.min(2, Math.max(0.25, durationSeconds - expectedTimes[index]))
     && Number.isFinite(Number(sample?.peakDb))
+    && Number(sample.peakDb) < -0.1
     && Number.isFinite(Number(sample?.rmsDb))
+    && Number(sample.rmsDb) > -60
     && /^[a-f0-9]{32}$/i.test(clean(sample?.frameMd5)));
 }
 
@@ -233,11 +235,13 @@ export async function adoptExistingSleepVideo({ workspaceRoot, job, probeExistin
   if (manifestOutput !== outputPath) throw new Error("sleep_adoption_manifest_output_mismatch");
   const visual = Array.isArray(manifest?.provenance?.externalVisualAssets)
     && manifest.provenance.externalVisualAssets.length === 1 ? manifest.provenance.externalVisualAssets[0] : null;
+  const generatorPath = fileURLToPath(new URL("./clippers-sleep-video-generator.mjs", import.meta.url));
+  const generatorHash = await sha256File(generatorPath);
   if (Number(manifest?.schemaVersion) !== 1
     || manifest?.artifactType !== "rights_verified_visual_with_procedural_rain_audio"
     || clean(manifest?.title) !== job.title
     || manifest?.provenance?.generator !== "script/clippers-sleep-video-generator.mjs"
-    || !SHA256.test(clean(manifest?.provenance?.generatorSha256))
+    || clean(manifest?.provenance?.generatorSha256).toLowerCase() !== generatorHash
     || Number(manifest?.provenance?.seed) !== job.seed
     || Number(manifest?.provenance?.synthesisParameters?.seed) !== job.seed
     || Number(manifest?.provenance?.synthesisParameters?.durationSeconds) !== job.durationSeconds
