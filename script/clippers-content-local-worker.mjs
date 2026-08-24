@@ -435,7 +435,14 @@ export async function runContentLocalWorker({ configPath, now = new Date(), oper
       await atomicJson(sleepLedgerPath, { schemaVersion: 1, items: [...(sleepLedger.items || []), entry] });
       sleepResult = { status: "generated", ...entry };
     } else if (recent.length) {
-      sleepResult = { status: "deduplicated", blockers: ["rolling_seven_day_generation_cap_reached"], duplicateOf: recent.at(-1).outputPath };
+      const existingSleep = recent.at(-1);
+      sleepResult = {
+        status: "generated",
+        reusedExisting: true,
+        blockers: [],
+        duplicateOf: existingSleep.outputPath,
+        ...existingSleep,
+      };
     } else if (config.sleep.enabled && Number(sleepPlan?.target) > 0 && !sleepJob) {
       sleepResult = { status: "blocked", blockers: ["sleep_job_queue_exhausted_or_artifact_exists"] };
     } else if (!config.sleep.enabled) {
@@ -443,7 +450,7 @@ export async function runContentLocalWorker({ configPath, now = new Date(), oper
     }
     const generated = sleepResult.status === "generated" ? 1 : 0;
     const requestedSleep = Math.min(1, Number(sleepPlan?.target) || 0);
-    const effectiveSleepPlan = recent.length ? 0 : requestedSleep;
+    const effectiveSleepPlan = requestedSleep;
     const report = {
       schemaVersion: 1,
       runId: randomUUID(),
