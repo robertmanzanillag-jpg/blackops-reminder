@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -151,6 +151,30 @@ test("blocks existing artifacts without deleting files when the ledger is missin
   assert.deepEqual(result.blockers, ["existing_artifact_without_ledger"]);
   assert.equal(await readFile(existingOutput, "utf8"), "do not delete");
   assert.equal(result.publishEnabled, false);
+});
+
+test("cleans its partial SRT after a transient render failure so a retry can succeed", { timeout: 120_000 }, async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "clippers-motivation-test-"));
+  const { manifestFile } = await writeAuthorizedManifest(workspace);
+  const subtitlePath = path.join(workspace, "motivation", "rendered", "motiva-001", "motiva-001.srt");
+  let failedOnce = false;
+  const transientRun = async (binary, args) => {
+    if (!failedOnce && binary === "ffmpeg" && args.includes("-filter_complex")) {
+      failedOnce = true;
+      throw new Error("transient ffmpeg failure");
+    }
+    return execFileAsync(binary, args, { encoding: "utf8", maxBuffer: 8 * 1024 * 1024 });
+  };
+
+  const failed = await renderMotivationShort({ workspaceRoot: workspace, manifestFile, run: transientRun });
+  assert.equal(failed.status, "blocked");
+  assert.deepEqual(failed.blockers, ["render_failed"]);
+  await assert.rejects(access(subtitlePath));
+
+  const retry = await renderMotivationShort({ workspaceRoot: workspace, manifestFile });
+  assert.equal(retry.status, "rendered", JSON.stringify(retry));
+  assert.notDeepEqual(retry.blockers, ["existing_artifact_without_ledger"]);
+  assert.ok((await stat(subtitlePath)).size > 0);
 });
 
 test("blocks missing voice files without generating or publishing anything", async () => {

@@ -355,6 +355,7 @@ export async function renderMotivationShort({ workspaceRoot, manifestFile, run =
   } catch (error) {
     await rm(tempOutput, { force: true });
     await rm(outputPath, { force: true });
+    await rm(subtitlePath, { force: true });
     await rm(evidenceDir, { recursive: true, force: true });
     const blocker = clean(error?.message) === "render_qa_failed" ? "render_qa_failed" : "render_failed";
     return { status: "blocked", shortId: manifest.shortId, blockers: [blocker], apiCostUsd: 0, publishEnabled: false };
