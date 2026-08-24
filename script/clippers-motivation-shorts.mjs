@@ -24,6 +24,17 @@ const SUPPORTED_LANGUAGES = new Set(["es", "en"]);
 const DAILY_LIMIT_PER_CHANNEL = 5;
 const AUDIO_MODES = new Set(["local_voice", "procedural_original"]);
 const PROCEDURAL_GENERATOR = "ffmpeg_lavfi_anoisesrc_v1";
+const VISUAL_GENERATOR = "ffmpeg_gradients_magick_kinetic_v2";
+const LOCAL_BINARY_ALLOWLIST = new Set(["ffmpeg", "ffprobe", "magick"]);
+const GRADIENT_TYPES = new Set(["linear", "radial", "circular", "spiral", "square"]);
+const VISUAL_THEMES = Object.freeze([
+  { colors: ["070b22", "1d4ed8", "7c3aed", "0f172a"], accent: "38bdf8", type: "radial" },
+  { colors: ["160b2d", "7e22ce", "db2777", "1f1235"], accent: "fbbf24", type: "spiral" },
+  { colors: ["071a18", "047857", "0f766e", "082f49"], accent: "5eead4", type: "circular" },
+  { colors: ["1c0a09", "9a3412", "be123c", "2e1065"], accent: "fb923c", type: "radial" },
+  { colors: ["09090b", "334155", "155e75", "172554"], accent: "a3e635", type: "square" },
+  { colors: ["0c1220", "3730a3", "0369a1", "164e63"], accent: "f472b6", type: "linear" },
+]);
 
 const clean = (value) => String(value ?? "").trim();
 const safeName = (value) => clean(value).toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
@@ -68,6 +79,7 @@ async function containedRegularFile(root, candidate) {
 }
 
 async function runBinary(binary, args) {
+  if (!LOCAL_BINARY_ALLOWLIST.has(binary)) throw new Error("local_binary_not_allowed");
   return execFileAsync(binary, args, { encoding: "utf8", maxBuffer: 8 * 1024 * 1024, windowsHide: true });
 }
 
@@ -160,6 +172,95 @@ export function buildProceduralAudioPlan(audio) {
   };
 }
 
+function colorHex(value, fallback = "111827") {
+  const candidate = clean(value).replace(/^#/, "").toLowerCase();
+  return /^[a-f0-9]{6}$/.test(candidate) ? candidate : fallback;
+}
+
+export function buildMotivationVisualPlan({ seed, language, backgroundColor, durationSeconds }) {
+  const safeSeed = Number(seed);
+  const safeDuration = Number(durationSeconds);
+  if (!Number.isSafeInteger(safeSeed) || safeSeed < 0 || safeSeed > 2_147_483_647) throw new Error("visual_seed_invalid");
+  if (!Number.isFinite(safeDuration) || safeDuration < MIN_SECONDS || safeDuration > MAX_SECONDS) throw new Error("visual_duration_invalid");
+  const themeIndex = safeSeed % VISUAL_THEMES.length;
+  const theme = VISUAL_THEMES[themeIndex];
+  const base = colorHex(backgroundColor, theme.colors[0]);
+  const colors = [base, ...theme.colors.slice(1)];
+  const speed = Number((0.018 + (safeSeed % 9) * 0.003).toFixed(3));
+  const gridSize = 150 + (safeSeed % 5) * 24;
+  const sweepSpeed = 72 + (safeSeed % 7) * 11;
+  const captionFloatAmplitude = 8 + (safeSeed % 5) * 2;
+  const captionFloatRate = Number((0.36 + (safeSeed % 6) * 0.05).toFixed(2));
+  const captionPhase = Number(((safeSeed % 628) / 100).toFixed(2));
+  return {
+    schemaVersion: 1,
+    generator: VISUAL_GENERATOR,
+    seed: safeSeed,
+    language: clean(language).toLowerCase(),
+    dimensions: { width: 1080, height: 1920, frameRate: 30 },
+    safeZone: { left: 150, right: 150, top: 180, bottom: 310 },
+    theme: { index: themeIndex, colors, accent: theme.accent, gradientType: theme.type },
+    motion: { speed, gridSize, sweepSpeed, captionFloatAmplitude, captionFloatRate, captionPhase },
+    progress: { x: 150, y: 1560, width: 780, height: 8 },
+    hook: { startsAtSeconds: 0, emphasisEndsAtSeconds: 0.9 },
+    durationSeconds: safeDuration,
+    provenance: { status: "owned_original", thirdPartyAssets: false, networkUsed: false, paidCostUsd: 0 },
+  };
+}
+
+export function buildMotivationVisualFilters(plan) {
+  const validColors = Array.isArray(plan?.theme?.colors)
+    && plan.theme.colors.length === 4
+    && plan.theme.colors.every((color) => /^[a-f0-9]{6}$/.test(color));
+  const validMotion = Number.isFinite(plan?.motion?.speed) && plan.motion.speed >= 0.01 && plan.motion.speed <= 0.06
+    && Number.isSafeInteger(plan?.motion?.gridSize) && plan.motion.gridSize >= 120 && plan.motion.gridSize <= 300
+    && Number.isSafeInteger(plan?.motion?.sweepSpeed) && plan.motion.sweepSpeed >= 50 && plan.motion.sweepSpeed <= 180
+    && Number.isSafeInteger(plan?.motion?.captionFloatAmplitude) && plan.motion.captionFloatAmplitude >= 0 && plan.motion.captionFloatAmplitude <= 24
+    && Number.isFinite(plan?.motion?.captionFloatRate) && plan.motion.captionFloatRate >= 0.1 && plan.motion.captionFloatRate <= 1
+    && Number.isFinite(plan?.motion?.captionPhase) && plan.motion.captionPhase >= 0 && plan.motion.captionPhase <= 6.28;
+  const validLayout = plan?.dimensions?.width === 1080 && plan?.dimensions?.height === 1920 && plan?.dimensions?.frameRate === 30
+    && plan?.safeZone?.left === 150 && plan?.safeZone?.right === 150 && plan?.safeZone?.top === 180 && plan?.safeZone?.bottom === 310
+    && Number.isSafeInteger(plan?.progress?.x) && Number.isSafeInteger(plan?.progress?.y)
+    && Number.isSafeInteger(plan?.progress?.width) && Number.isSafeInteger(plan?.progress?.height)
+    && plan.progress.x >= plan.safeZone.left
+    && plan.progress.x + plan.progress.width <= plan.dimensions.width - plan.safeZone.right
+    && plan.progress.y + plan.progress.height <= plan.dimensions.height - plan.safeZone.bottom;
+  if (plan?.schemaVersion !== 1
+    || plan?.generator !== VISUAL_GENERATOR
+    || !Number.isSafeInteger(plan?.seed) || plan.seed < 0 || plan.seed > 2_147_483_647
+    || !Number.isFinite(plan?.durationSeconds) || plan.durationSeconds < MIN_SECONDS || plan.durationSeconds > MAX_SECONDS
+    || !validColors
+    || !/^[a-f0-9]{6}$/.test(plan?.theme?.accent || "")
+    || !GRADIENT_TYPES.has(plan?.theme?.gradientType)
+    || !validMotion
+    || !validLayout) throw new Error("visual_plan_invalid");
+  const { colors, accent, gradientType } = plan.theme;
+  const { speed, gridSize, sweepSpeed, captionFloatAmplitude, captionFloatRate, captionPhase } = plan.motion;
+  const { x: progressX, y: progressY, width: progressWidth, height: progressHeight } = plan.progress;
+  const hookWidth = plan.dimensions.width - plan.safeZone.left - plan.safeZone.right;
+  const duration = Number(plan.durationSeconds);
+  const gradientSource = [
+    "gradients=size=1080x1920:rate=30",
+    ...colors.map((color, index) => `c${index}=0x${color}`),
+    `nb_colors=${colors.length}`,
+    `seed=${plan.seed}`,
+    `duration=${duration.toFixed(3)}`,
+    `speed=${speed}`,
+    `type=${gradientType}`,
+  ].join(":");
+  const backgroundFilters = [
+    "vignette=PI/4:eval=frame",
+    `drawgrid=w=${gridSize}:h=${gridSize}:t=2:c=white@0.035`,
+    `drawbox=x='-260+mod(t*${sweepSpeed}\\,1340)':y=0:w=260:h=1920:c=white@0.045:t=fill`,
+    `drawbox=x=${plan.safeZone.left}:y=210:w=${hookWidth}:h=12:c=white@0.12:t=fill`,
+    `drawbox=x=${plan.safeZone.left}:y=210:w=${hookWidth}:h=12:c=0x${accent}@0.95:t=fill:enable='between(t\\,0\\,0.9)'`,
+    `drawbox=x=${progressX}:y=${progressY}:w=${progressWidth}:h=${progressHeight}:c=white@0.18:t=fill`,
+    `drawbox=x=${progressX}:y=${progressY}:w='${progressWidth}*min(t/${duration.toFixed(3)}\\,1)':h=${progressHeight}:c=0x${accent}@0.95:t=fill`,
+  ].join(",");
+  const captionOverlay = `overlay=x=(W-w)/2:y=(H-h)/2+${captionFloatAmplitude}*sin(t*${captionFloatRate}+${captionPhase}):shortest=1`;
+  return { gradientSource, backgroundFilters, captionOverlay };
+}
+
 export function validateManifestShape(manifest) {
   const blockers = [];
   if (Number(manifest?.schemaVersion) !== 1) blockers.push("schema_version_invalid");
@@ -247,6 +348,29 @@ function captionChunks(script, maxChars = 34) {
   return chunks;
 }
 
+export function wrapCaptionText(text, maxChars = 22) {
+  const words = clean(text).split(/\s+/).filter(Boolean);
+  const lines = [];
+  let current = [];
+  for (const word of words) {
+    if (word.length > maxChars) {
+      if (current.length) {
+        lines.push(current.join(" "));
+        current = [];
+      }
+      for (let offset = 0; offset < word.length; offset += maxChars) lines.push(word.slice(offset, offset + maxChars));
+      continue;
+    }
+    if (current.length && [...current, word].join(" ").length > maxChars) {
+      lines.push(current.join(" "));
+      current = [];
+    }
+    current.push(word);
+  }
+  if (current.length) lines.push(current.join(" "));
+  return lines.join("\n");
+}
+
 export function buildSrt(script, durationSeconds) {
   const cues = captionCues(script, durationSeconds);
   return `${cues.map((cue, index) => `${index + 1}\n${srtTime(cue.start)} --> ${srtTime(cue.end)}\n${cue.caption}`).join("\n\n")}\n`;
@@ -265,21 +389,39 @@ function captionCues(script, durationSeconds) {
   });
 }
 
-async function prepareCaptionOverlay(script, durationSeconds, outputPath, run) {
+async function prepareCaptionOverlay(script, durationSeconds, outputPath, visualPlan, run) {
   const tempDir = `${outputPath}.${process.pid}.${Date.now()}.captions`;
   await mkdir(tempDir, { recursive: true });
   const concat = ["ffconcat version 1.0"];
-  for (const [index, cue] of captionCues(script, durationSeconds).entries()) {
+  const cues = captionCues(script, durationSeconds);
+  for (const [index, cue] of cues.entries()) {
     const imagePath = path.join(tempDir, `caption-${String(index).padStart(3, "0")}.png`);
     const safeCaption = cue.caption.replace(/[\u0000-\u001f@%\\]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+    const wrappedCaption = wrapCaptionText(safeCaption);
+    const isHook = index === 0;
+    const isClose = index === cues.length - 1;
+    const pointSize = isHook ? 72 : isClose ? 68 : 62;
+    const accent = `#${visualPlan.theme.accent}`;
+    const label = isHook
+      ? (visualPlan.language === "es" ? "ENFOQUE" : "FOCUS")
+      : isClose
+        ? (visualPlan.language === "es" ? "HAZLO HOY" : "DO IT TODAY")
+        : String(index + 1).padStart(2, "0");
     await run("magick", [
-      "-background", "none", "-fill", "white", "-stroke", "black", "-strokewidth", "3",
-      "-font", "Arial-Bold", "-pointsize", "64", "-gravity", "center", "-size", "900x350",
-      `caption:${safeCaption}`, imagePath,
+      "-size", "900x500", "xc:none",
+      "-fill", "#050816b8", "-stroke", "#ffffff24", "-strokewidth", "2",
+      "-draw", "roundrectangle 60,62 840,438 44,44",
+      "-fill", accent, "-stroke", "none", "-draw", "roundrectangle 92,48 808,64 8,8",
+      "-font", "Arial-Bold", "-pointsize", "25", "-kerning", "4", "-fill", accent,
+      "-gravity", "northwest", "-annotate", "+70+92", label,
+      "-font", "Arial-Bold", "-pointsize", String(pointSize), "-kerning", "-1",
+      "-fill", "white", "-stroke", "#020617", "-strokewidth", "2",
+      "-gravity", "center", "-annotate", "+0+28", wrappedCaption,
+      imagePath,
     ]);
     concat.push(`file '${imagePath}'`, `duration ${(cue.end - cue.start).toFixed(6)}`);
   }
-  const lastImage = path.join(tempDir, `caption-${String(captionCues(script, durationSeconds).length - 1).padStart(3, "0")}.png`);
+  const lastImage = path.join(tempDir, `caption-${String(cues.length - 1).padStart(3, "0")}.png`);
   concat.push(`file '${lastImage}'`);
   const concatPath = path.join(tempDir, "captions.ffconcat");
   await writeFile(concatPath, `${concat.join("\n")}\n`, "utf8");
@@ -412,16 +554,22 @@ export async function renderMotivationShort({ workspaceRoot, manifestFile, run =
     await rm(subtitlePath, { force: true });
     return { status: "blocked", shortId: manifest.shortId, blockers: ["background_color_invalid"], apiCostUsd: 0, publishEnabled: false };
   }
+  const visualSeed = audioMode === "procedural_original"
+    ? proceduralAudioPlan.seed
+    : Number.parseInt(hashText(`${manifest.shortId}:${scriptSha256}`).slice(0, 7), 16);
+  const visualPlan = buildMotivationVisualPlan({ seed: visualSeed, language, backgroundColor: background, durationSeconds });
+  const visualFilters = buildMotivationVisualFilters(visualPlan);
+  const visualPlanSha256 = hashText(JSON.stringify(visualPlan));
   let captionOverlay;
   try {
-    captionOverlay = await prepareCaptionOverlay(script, durationSeconds, outputPath, run);
+    captionOverlay = await prepareCaptionOverlay(script, durationSeconds, outputPath, visualPlan, run);
     const audioInput = audioMode === "local_voice" ? ["-i", voicePath] : ["-f", "lavfi", "-i", proceduralAudioPlan.filter];
     await run("ffmpeg", [
       "-hide_banner", "-loglevel", "error", "-y",
-      "-f", "lavfi", "-i", `color=c=${background}:s=1080x1920:r=30:d=${durationSeconds.toFixed(3)}`,
+      "-f", "lavfi", "-i", visualFilters.gradientSource,
       ...audioInput,
       "-f", "concat", "-safe", "0", "-i", captionOverlay.concatPath,
-      "-filter_complex", "[0:v][2:v]overlay=(W-w)/2:H*0.62-h/2:shortest=1[v]",
+      "-filter_complex", `[0:v]${visualFilters.backgroundFilters}[bg];[bg][2:v]${visualFilters.captionOverlay}[v]`,
       "-map", "[v]", "-map", "1:a:0",
       "-c:v", "libx264", "-preset", "medium", "-crf", "20", "-pix_fmt", "yuv420p",
       "-c:a", "aac", "-b:a", "160k", "-ar", "48000",
@@ -455,6 +603,8 @@ export async function renderMotivationShort({ workspaceRoot, manifestFile, run =
       }),
       outputFile: path.relative(root, outputPath),
       outputSha256,
+      visualPlan,
+      visualPlanSha256,
       subtitleFile: path.relative(root, subtitlePath),
       durationSeconds: Number(outputProbe.durationSeconds.toFixed(3)),
       width: 1080,
