@@ -202,17 +202,44 @@ test("accepts independent ES and EN channel manifests but fails closed without q
   assert.ok(validateManifestShape(english).includes("quality_gate_not_approved"));
 });
 
-test("example content pack contains at least five valid candidates per language", async () => {
+test("example content pack contains seven safe procedural days of five per language channel", async () => {
   const examplesDir = path.join(process.cwd(), "examples", "clippers-motivation");
   const files = (await readdir(examplesDir)).filter((name) => name.endsWith(".json")).sort();
   const manifests = await Promise.all(files.map(async (name) => JSON.parse(await readFile(path.join(examplesDir, name), "utf8"))));
-  assert.ok(manifests.length >= 10);
-  assert.ok(manifests.filter((manifest) => manifest.language === "es" && manifest.channelId === "motivation-es").length >= 5);
-  assert.ok(manifests.filter((manifest) => manifest.language === "en" && manifest.channelId === "motivation-en").length >= 5);
-  for (const manifest of manifests) {
+  const spanish = manifests.filter((manifest) => manifest.language === "es" && manifest.channelId === "motivation-es");
+  const english = manifests.filter((manifest) => manifest.language === "en" && manifest.channelId === "motivation-en");
+  assert.equal(manifests.length, 70);
+  assert.equal(spanish.length, 35);
+  assert.equal(english.length, 35);
+  assert.equal(new Set(manifests.map((manifest) => manifest.shortId)).size, 70);
+  assert.equal(new Set(manifests.map(canonicalScript)).size, 70);
+  assert.equal(new Set(manifests.map((manifest) => manifest.audio?.seed)).size, 70);
+
+  for (const [index, manifest] of manifests.entries()) {
     assert.deepEqual(validateManifestShape(manifest), [], manifest.shortId);
-    assert.match(manifest.voice.file, /^PLACEHOLDER_RECORD_LOCAL_VOICE\//);
-    assert.match(manifest.voice.rightsEvidenceFile, /^PLACEHOLDER_ADD_RIGHTS_EVIDENCE\//);
+    assert.equal(files[index], `${manifest.shortId}.json`);
+    assert.equal(manifest.audio.mode, "procedural_original");
+    assert.equal(manifest.voice, undefined);
+    assert.equal(manifest.audio.file, undefined);
+    assert.equal(manifest.audio.url, undefined);
+    assert.equal(manifest.audio.rightsEvidenceFile, undefined);
+    assert.equal(manifest.audio.provenance.status, "owned_original");
+    assert.equal(manifest.audio.provenance.thirdPartyAssets, false);
+    assert.equal(manifest.audio.provenance.networkUsed, false);
+    assert.equal(manifest.audio.provenance.paidCostUsd, 0);
+    assert.equal(manifest.script.originality.sources.length, 0);
+    assert.ok(Number.isInteger(manifest.launchDay) && manifest.launchDay >= 1 && manifest.launchDay <= 7);
+    assert.ok(Number.isInteger(manifest.launchPosition) && manifest.launchPosition >= 1 && manifest.launchPosition <= 5);
+  }
+
+  for (const [language, channelId] of [["es", "motivation-es"], ["en", "motivation-en"]]) {
+    for (let launchDay = 1; launchDay <= 7; launchDay += 1) {
+      const daily = manifests.filter((manifest) => manifest.language === language
+        && manifest.channelId === channelId
+        && manifest.launchDay === launchDay);
+      assert.equal(daily.length, 5, `${channelId} day ${launchDay}`);
+      assert.deepEqual(daily.map((manifest) => manifest.launchPosition).sort((a, b) => a - b), [1, 2, 3, 4, 5]);
+    }
   }
 });
 
