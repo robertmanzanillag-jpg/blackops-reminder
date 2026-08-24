@@ -45,6 +45,10 @@ async function atomicJson(filePath, value) {
   await rename(temporary, filePath);
 }
 
+async function pathExists(filePath) {
+  return Boolean(await lstat(filePath).catch(() => null));
+}
+
 async function containedRegularFile(root, candidate) {
   const rootPath = path.resolve(root);
   const candidatePath = path.resolve(rootPath, clean(candidate));
@@ -292,6 +296,9 @@ export async function renderMotivationShort({ workspaceRoot, manifestFile, run =
   const outputPath = path.join(outputDir, `${shortId}.mp4`);
   const tempOutput = `${outputPath}.${process.pid}.${Date.now()}.tmp.mp4`;
   const subtitlePath = path.join(outputDir, `${shortId}.srt`);
+  if (await pathExists(outputPath) || await pathExists(subtitlePath) || await pathExists(evidenceDir)) {
+    return { status: "blocked", shortId: manifest.shortId, blockers: ["existing_artifact_without_ledger"], apiCostUsd: 0, publishEnabled: false };
+  }
   await mkdir(outputDir, { recursive: true });
   await writeFile(subtitlePath, buildSrt(script, durationSeconds), "utf8");
   const background = clean(manifest?.style?.backgroundColor || "#111827");

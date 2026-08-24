@@ -52,6 +52,35 @@ function baseManifest() {
   };
 }
 
+async function writeAuthorizedManifest(workspace, manifest = baseManifest()) {
+  await mkdir(path.join(workspace, "input"), { recursive: true });
+  await mkdir(path.join(workspace, "rights"), { recursive: true });
+  await mkdir(path.join(workspace, "manifests"), { recursive: true });
+  const voiceFile = path.join(workspace, manifest.voice.file);
+  await execFileAsync("ffmpeg", [
+    "-hide_banner", "-loglevel", "error", "-y",
+    "-f", "lavfi", "-i", "sine=frequency=330:sample_rate=48000:duration=20",
+    "-c:a", "pcm_s16le", voiceFile,
+  ]);
+  manifest.voice.sha256 = await sha256File(voiceFile);
+  await writeFile(path.join(workspace, manifest.voice.rightsEvidenceFile), `${JSON.stringify({
+    schemaVersion: 1,
+    assetType: "voice_recording",
+    shortId: manifest.shortId,
+    file: manifest.voice.file,
+    sha256: manifest.voice.sha256,
+    rightsStatus: "owned",
+    speakerConsent: true,
+    commercialUseAuthorized: true,
+    provenance: "local_recording",
+    verifiedBy: "Robert",
+    verifiedAt: "2026-08-24T12:00:00.000Z",
+  }, null, 2)}\n`);
+  const manifestPath = path.join(workspace, "manifests", `${manifest.shortId}.json`);
+  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  return { manifest, manifestFile: path.relative(workspace, manifestPath) };
+}
+
 test("validates explicit Spanish original-script manifest and deterministic captions", () => {
   const manifest = baseManifest();
   assert.deepEqual(validateManifestShape(manifest), []);
@@ -93,34 +122,9 @@ test("enforces one render per New York day and five in a rolling seven days", ()
 
 test("renders an authorized local voice to a deduplicated 9:16 Short with QA evidence", { timeout: 120_000 }, async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "clippers-motivation-test-"));
-  await mkdir(path.join(workspace, "input"), { recursive: true });
-  await mkdir(path.join(workspace, "rights"), { recursive: true });
-  await mkdir(path.join(workspace, "manifests"), { recursive: true });
-  const voiceFile = path.join(workspace, "input", "motiva-001.wav");
-  await execFileAsync("ffmpeg", [
-    "-hide_banner", "-loglevel", "error", "-y",
-    "-f", "lavfi", "-i", "sine=frequency=330:sample_rate=48000:duration=20",
-    "-c:a", "pcm_s16le", voiceFile,
-  ]);
-  const manifest = baseManifest();
-  manifest.voice.sha256 = await sha256File(voiceFile);
-  await writeFile(path.join(workspace, manifest.voice.rightsEvidenceFile), `${JSON.stringify({
-    schemaVersion: 1,
-    assetType: "voice_recording",
-    shortId: manifest.shortId,
-    file: manifest.voice.file,
-    sha256: manifest.voice.sha256,
-    rightsStatus: "owned",
-    speakerConsent: true,
-    commercialUseAuthorized: true,
-    provenance: "local_recording",
-    verifiedBy: "Robert",
-    verifiedAt: "2026-08-24T12:00:00.000Z",
-  }, null, 2)}\n`);
-  const manifestPath = path.join(workspace, "manifests", "motiva-001.json");
-  await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  const { manifestFile } = await writeAuthorizedManifest(workspace);
 
-  const result = await renderMotivationShort({ workspaceRoot: workspace, manifestFile: "manifests/motiva-001.json", now: new Date("2026-08-24T13:00:00.000Z") });
+  const result = await renderMotivationShort({ workspaceRoot: workspace, manifestFile, now: new Date("2026-08-24T13:00:00.000Z") });
   assert.equal(result.status, "rendered", JSON.stringify(result));
   assert.equal(result.width, 1080);
   assert.equal(result.height, 1920);
@@ -130,9 +134,23 @@ test("renders an authorized local voice to a deduplicated 9:16 Short with QA evi
   assert.ok((await stat(path.join(workspace, result.outputFile))).size > 1000);
   assert.ok((await stat(path.join(workspace, "evidence-drop", "motivation", "motiva-001", "provenance.json"))).size > 100);
 
-  const duplicate = await renderMotivationShort({ workspaceRoot: workspace, manifestFile: "manifests/motiva-001.json" });
+  const duplicate = await renderMotivationShort({ workspaceRoot: workspace, manifestFile });
   assert.equal(duplicate.status, "duplicate");
   assert.deepEqual(duplicate.blockers, ["already_rendered"]);
+});
+
+test("blocks existing artifacts without deleting files when the ledger is missing", { timeout: 120_000 }, async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "clippers-motivation-test-"));
+  const { manifestFile } = await writeAuthorizedManifest(workspace);
+  const existingOutput = path.join(workspace, "motivation", "rendered", "motiva-001", "motiva-001.mp4");
+  await mkdir(path.dirname(existingOutput), { recursive: true });
+  await writeFile(existingOutput, "do not delete");
+
+  const result = await renderMotivationShort({ workspaceRoot: workspace, manifestFile });
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(result.blockers, ["existing_artifact_without_ledger"]);
+  assert.equal(await readFile(existingOutput, "utf8"), "do not delete");
+  assert.equal(result.publishEnabled, false);
 });
 
 test("blocks missing voice files without generating or publishing anything", async () => {

@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-08-12T21:05:05.024Z
-Repo: `/private/tmp/asistente-radio-production-health`
+Generated: 2026-08-24T06:13:11.911Z
+Repo: `/private/tmp/asistente-sleep-clippers`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 537 | 455 | 1749 | 494 | 11077 |
+| 544 | 462 | 1776 | 494 | 11307 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,10 +30,10 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `server` | 129 | 125 | server:129 |
 | `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
-| `tests` | 103 | 100 | test:103 |
-| `script` | 63 | 59 | script:63 |
+| `tests` | 105 | 102 | test:105 |
+| `script` | 65 | 61 | script:65 |
+| `docs` | 21 | 20 | docs:21 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
-| `docs` | 18 | 17 | docs:18 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `client/public` | 16 | 2 | other:16 |
@@ -209,6 +209,7 @@ Package: `rest-express`
 - `script/clippers-marketplace-intake.mjs` (script; 59 symbols, 3 imports)
 - `script/clippers-marketplace-refresh.mjs` (script; 50 symbols, 4 imports)
 - `script/clippers-metricool-autopilot.mjs` (script; 116 symbols, 4 imports)
+- `script/clippers-motivation-shorts.mjs` (script; 99 symbols, 6 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)
 - `script/clippers-reconcile-publications.mjs` (script; 74 symbols, 3 imports)
@@ -216,6 +217,7 @@ Package: `rest-express`
 - `script/clippers-record-owned-source-rights.mjs` (script; 88 symbols, 3 imports)
 - `script/clippers-render-campaign-drafts.mjs` (script; 118 symbols, 6 imports)
 - `script/clippers-selected-env.mjs` (script; 11 symbols, 2 imports)
+- `script/clippers-sleep-video-generator.mjs` (script; 77 symbols, 6 imports)
 - `script/clippers-streamer-growth-ceo.mjs` (script; 170 symbols, 5 imports)
 - `script/clippers-sync-metricool-source-readiness.mjs` (script; 28 symbols, 3 imports)
 - `script/clippers-tiktok-preflight.ts` (script; 15 symbols, 1 imports)
@@ -231,8 +233,6 @@ Package: `rest-express`
 - `script/native-typescript-loader.mjs` (script; 3 symbols)
 - `script/radio-local-worker.ts` (script; 25 symbols, 2 imports)
 - `script/radio-local-youtube-worker.ts` (script; 25 symbols, 9 imports)
-- `script/radio-video-edits.ts` (script; 12 symbols, 5 imports)
-- `script/register-native-typescript.mjs` (script; 1 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
