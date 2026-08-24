@@ -250,7 +250,7 @@ test("blocks a manifest assigned to the wrong independent channel before render"
   assert.deepEqual(result.motivation.es.results[0].blockers, ["configured_channel_or_language_mismatch"]);
 });
 
-test("generates sleep once per rolling seven days and deduplicates a second run", async () => {
+test("generates sleep once per rolling seven days and reuses it in a second report", async () => {
   const item = await fixture({ es: 0, en: 0 });
   const firstCalls = { shorts: [], sleep: [] };
   const first = await runContentLocalWorker({ configPath: item.configPath, now: NOW, operations: operations(firstCalls) });
@@ -260,11 +260,12 @@ test("generates sleep once per rolling seven days and deduplicates a second run"
   assert.equal(firstCalls.sleep[0].visualSha256, "a".repeat(64));
   const secondCalls = { shorts: [], sleep: [] };
   const second = await runContentLocalWorker({ configPath: item.configPath, now: new Date(NOW.getTime() + 2 * 86_400_000), operations: operations(secondCalls) });
-  assert.equal(second.sleep.generated, 0);
+  assert.equal(second.sleep.generated, 1);
   assert.equal(second.sleep.requestedByCeo, 1);
-  assert.equal(second.sleep.planned, 0);
+  assert.equal(second.sleep.planned, 1);
   assert.equal(second.sleep.shortfall, 0);
-  assert.equal(second.sleep.result.status, "deduplicated");
+  assert.equal(second.sleep.result.status, "generated");
+  assert.equal(second.sleep.result.reusedExisting, true);
   assert.equal(secondCalls.sleep.length, 0);
   const nextWeekCalls = { shorts: [], sleep: [] };
   const nextWeek = await runContentLocalWorker({ configPath: item.configPath, now: new Date(NOW.getTime() + 8 * 86_400_000), operations: operations(nextWeekCalls) });
@@ -349,8 +350,9 @@ test("explicitly adopts a rights-verified existing master into a packager-compat
     now: new Date(NOW.getTime() + DAY_MS_FOR_TEST),
     operations: { ...operations({ shorts: [], sleep: [] }), adoptSleep },
   });
-  assert.equal(second.sleep.result.status, "deduplicated");
-  assert.equal(second.sleep.generated, 0);
+  assert.equal(second.sleep.result.status, "generated");
+  assert.equal(second.sleep.result.reusedExisting, true);
+  assert.equal(second.sleep.generated, 1);
 });
 
 test("existing sleep artifact without explicit adoption remains fail-closed", async () => {
