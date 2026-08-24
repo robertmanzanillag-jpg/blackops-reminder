@@ -32,6 +32,7 @@ export function resolveSessionRuntimeSettings(env: NodeJS.ProcessEnv = process.e
   const production = env.NODE_ENV === "production";
   const secret = env.SESSION_SECRET || (production ? null : DEV_SESSION_SECRET);
   const requestedStore = (env.SESSION_STORE_KIND || env.SESSION_STORE || "").trim().toLowerCase();
+  const databaseAvailable = hasRealDatabaseUrl(env.DATABASE_URL);
 
   if (!secret) {
     return {
@@ -46,7 +47,7 @@ export function resolveSessionRuntimeSettings(env: NodeJS.ProcessEnv = process.e
   return {
     enabled: true,
     secret,
-    storeKind: requestedStore === "postgres" && hasRealDatabaseUrl(env.DATABASE_URL) ? "postgres" : "memory",
+    storeKind: databaseAvailable && (requestedStore === "postgres" || (production && requestedStore !== "memory")) ? "postgres" : "memory",
     production,
     secureCookie: production,
   };

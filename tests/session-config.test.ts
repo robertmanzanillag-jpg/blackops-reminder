@@ -13,7 +13,7 @@ test("disables session auth in production without SESSION_SECRET", () => {
   assert.equal(settings.storeKind, "disabled");
 });
 
-test("uses memory session store by default even when DATABASE_URL is configured", () => {
+test("uses Postgres session store by default in production when DATABASE_URL is configured", () => {
   const settings = resolveSessionRuntimeSettings({
     NODE_ENV: "production",
     SESSION_SECRET: "real-session-secret-with-enough-length",
@@ -21,11 +21,11 @@ test("uses memory session store by default even when DATABASE_URL is configured"
   } as NodeJS.ProcessEnv);
 
   assert.equal(settings.enabled, true);
-  assert.equal(settings.storeKind, "memory");
+  assert.equal(settings.storeKind, "postgres");
   assert.equal(settings.secureCookie, true);
 });
 
-test("uses Postgres session store only when explicitly requested", () => {
+test("honors an explicit Postgres session-store request", () => {
   const settings = resolveSessionRuntimeSettings({
     NODE_ENV: "production",
     SESSION_SECRET: "real-session-secret-with-enough-length",
@@ -35,6 +35,19 @@ test("uses Postgres session store only when explicitly requested", () => {
 
   assert.equal(settings.enabled, true);
   assert.equal(settings.storeKind, "postgres");
+  assert.equal(settings.secureCookie, true);
+});
+
+test("allows an explicit production memory-store override for emergency diagnostics", () => {
+  const settings = resolveSessionRuntimeSettings({
+    NODE_ENV: "production",
+    SESSION_SECRET: "real-session-secret-with-enough-length",
+    DATABASE_URL: "postgres://ceo_user:real-pass@db.internal:5432/blackops",
+    SESSION_STORE_KIND: "memory",
+  } as NodeJS.ProcessEnv);
+
+  assert.equal(settings.enabled, true);
+  assert.equal(settings.storeKind, "memory");
   assert.equal(settings.secureCookie, true);
 });
 
