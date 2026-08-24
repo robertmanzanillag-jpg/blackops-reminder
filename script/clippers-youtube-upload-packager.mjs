@@ -132,7 +132,7 @@ async function mediaQa(mediaPath, lane, run) {
     throw new Error("sleep_media_dimensions_or_duration_invalid");
   }
   try {
-    await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-nostdin", "-i", mediaPath, "-map", "0:v:0", "-map", "0:a:0", "-f", "null", "-"]);
+    await run("ffmpeg", ["-hide_banner", "-loglevel", "error", "-nostdin", "-i", mediaPath, "-map", "0:v", "-map", "0:a", "-f", "null", "-"]);
   } catch {
     throw new Error("full_media_decode_failed");
   }

@@ -141,6 +141,30 @@ test("fails a candidate closed when the complete ffmpeg decode fails", async () 
   assert.equal(result.blocked[0].blocker, "full_media_decode_failed");
 });
 
+test("fully decodes every video and audio stream and blocks a corrupt secondary stream", async () => {
+  const item = await fixture();
+  let decodeCalled = false;
+  const runCommand = async (command, args) => {
+    if (command === "ffprobe") return { stdout: JSON.stringify({
+      streams: [
+        { codec_type: "video", codec_name: "h264", width: 1080, height: 1920, pix_fmt: "yuv420p" },
+        { codec_type: "video", codec_name: "mjpeg", width: 320, height: 180, pix_fmt: "yuvj420p" },
+        { codec_type: "audio", codec_name: "aac", channels: 2, sample_rate: "48000" },
+        { codec_type: "audio", codec_name: "aac", channels: 1, sample_rate: "48000" },
+      ],
+      format: { format_name: "mov,mp4,m4a,3gp,3g2,mj2", duration: "26" },
+    }) };
+    decodeCalled = true;
+    const maps = args.flatMap((value, index) => value === "-map" ? [args[index + 1]] : []);
+    assert.deepEqual(maps, ["0:v", "0:a"]);
+    throw new Error("corrupt secondary audio stream");
+  };
+  const result = await packageYouTubeUploads({ configPath: item.configPath, now: NOW, operations: { runCommand } });
+  assert.equal(decodeCalled, true);
+  assert.equal(result.packaged, 0);
+  assert.equal(result.blocked[0].blocker, "full_media_decode_failed");
+});
+
 test("rejects a rendered file whose hash no longer matches the completed report", async () => {
   const item = await fixture();
   await writeFile(path.join(item.root, item.report.motivation.es.results[0].outputFile), "tampered");
