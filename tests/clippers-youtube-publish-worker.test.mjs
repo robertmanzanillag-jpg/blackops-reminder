@@ -58,7 +58,7 @@ async function setup(specs, { ledger = [], publicQueueAuth = false } = {}) {
     await writeFile(path.join(root, qaFile), `${JSON.stringify(qa)}\n`);
     const privacyStatus = spec.privacyStatus || "private";
     const item = {
-      schemaVersion: 1, itemId, lane: spec.lane, file: mediaFile, sha256: mediaHash,
+      schemaVersion: 1, itemId, lane: spec.lane, channelId: spec.channelId || CHANNELS[spec.lane], file: mediaFile, sha256: mediaHash,
       title: `Title ${itemId}`, description: "Original content", privacyStatus,
       rightsEvidence: { file: rightsFile, sha256: await hashPath(root, rightsFile) },
       qaEvidence: { file: qaFile, sha256: await hashPath(root, qaFile) },
@@ -182,6 +182,21 @@ test("fails closed per lane when channel or OAuth configuration is absent", asyn
   assert.equal(result.items[0].lane, "motivation_es");
   assert.ok(result.items[1].blockers.includes("expected_channel_id_missing_or_invalid"));
   assert.ok(result.items[1].blockers.includes("oauth_refresh_config_missing"));
+});
+
+test("fails closed before upload when reviewed item channel differs from selected lane channel", async () => {
+  const fixture = await setup([{ itemId: "wrong-channel", lane: "motivation_es" }]);
+  const calls = [];
+  const env = envFor("motivation_es");
+  env.CLIPPERS_YOUTUBE_ES_CHANNEL_ID = "UCzzzzzzzzzzzzzzzzzzzzzz";
+  const result = await runYouTubePublishWorker({
+    workspaceRoot: fixture.root,
+    queueFile: fixture.queueFile,
+    env,
+    runUpload: async () => { calls.push("upload"); return { status: "uploaded" }; },
+  });
+  assert.deepEqual(calls, []);
+  assert.ok(result.items[0].blockers.includes("item_channel_does_not_match_selected_channel"));
 });
 
 test("enforces five per motivation lane independently and one sleep upload per rolling week", async () => {

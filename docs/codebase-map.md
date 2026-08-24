@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-08-24T08:07:11.937Z
+Generated: 2026-08-24T08:20:06.098Z
 Repo: `/private/tmp/asistente-sleep-clippers`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 631 | 549 | 1840 | 494 | 12024 |
+| 635 | 552 | 1853 | 494 | 12082 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,10 +30,10 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `server` | 129 | 125 | server:129 |
 | `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
-| `tests` | 110 | 107 | test:110 |
+| `tests` | 111 | 108 | test:111 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `script` | 70 | 66 | script:70 |
-| `docs` | 27 | 26 | docs:27 |
+| `script` | 72 | 67 | script:72 |
+| `docs` | 28 | 27 | docs:28 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `.agents/memory` | 5 | 5 | docs:5 |
@@ -200,7 +200,7 @@ Package: `rest-express`
 - `script/clippers-cleanup-published-vyro-media.mjs` (script; 47 symbols, 4 imports)
 - `script/clippers-content-learning-ceo.mjs` (script; 85 symbols, 3 imports)
 - `script/clippers-content-local-worker.mjs` (script; 74 symbols, 7 imports)
-- `script/clippers-daily-watchdog.mjs` (script; 78 symbols, 3 imports)
+- `script/clippers-daily-watchdog.mjs` (script; 86 symbols, 3 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
 - `script/clippers-free-local-worker.mjs` (script; 41 symbols, 5 imports)
 - `script/clippers-generate-owned-gap-sources.mjs` (script; 30 symbols, 3 imports)
@@ -225,7 +225,8 @@ Package: `rest-express`
 - `script/clippers-sync-metricool-source-readiness.mjs` (script; 28 symbols, 3 imports)
 - `script/clippers-tiktok-preflight.ts` (script; 15 symbols, 1 imports)
 - `script/clippers-upload-metricool-media.ts` (script; 51 symbols, 7 imports)
-- `script/clippers-youtube-publish-worker.mjs` (script; 91 symbols, 6 imports)
+- `script/clippers-youtube-delivery-worker.mjs` (script; 30 symbols, 6 imports)
+- `script/clippers-youtube-publish-worker.mjs` (script; 92 symbols, 6 imports)
 - `script/clippers-youtube-upload-packager.mjs` (script; 103 symbols, 7 imports)
 - `script/clippers-youtube-uploader.mjs` (script; 95 symbols, 5 imports)
 - `script/codebase-map.ts` (script; 43 symbols, 3 imports)
@@ -233,7 +234,6 @@ Package: `rest-express`
 - `script/create-ceo-go-live-task.ts` (script; 13 symbols, 3 imports)
 - `script/create-local-user.ts` (script; 5 symbols, 3 imports)
 - `script/ensure-radio-tiktok-drive-folder.ts` (script; 4 symbols, 3 imports)
-- `script/import-developer-health-inventory.ts` (script; 14 symbols, 4 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

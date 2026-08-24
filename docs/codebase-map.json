@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-24T08:07:11.937Z",
+  "generatedAt": "2026-08-24T08:20:06.098Z",
   "repoRoot": "/private/tmp/asistente-sleep-clippers",
   "packageName": "rest-express",
   "scripts": {
@@ -103,7 +103,10 @@
     "clippers:sleep-video": "node script/clippers-sleep-video-generator.mjs",
     "clippers:content-local-worker": "node script/clippers-content-local-worker.mjs",
     "clippers:youtube-publish-worker": "node script/clippers-youtube-publish-worker.mjs",
+    "clippers:youtube-delivery-worker": "node script/clippers-youtube-delivery-worker.mjs",
     "test:clippers-youtube-publish-worker": "node --test tests/clippers-youtube-publish-worker.test.mjs",
+    "test:clippers-youtube-delivery-worker": "node --test tests/clippers-youtube-delivery-worker.test.mjs",
+    "test:clippers-youtube-upload-packager": "node --test tests/clippers-youtube-upload-packager.test.mjs",
     "test:clippers-content": "node --test tests/clippers-content-learning-ceo.test.mjs tests/clippers-motivation-shorts.test.mjs tests/clippers-sleep-video-generator.test.mjs tests/clippers-content-local-worker.test.mjs",
     "clippers:install-free-local-worker": "zsh script/install-clippers-free-local-worker-launch-agent.sh",
     "clippers:local-subtitles": "node script/clippers-local-subtitles.mjs",
@@ -117,32 +120,32 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 631,
-    "filesIndexed": 549,
-    "imports": 1840,
+    "filesVisible": 635,
+    "filesIndexed": 552,
+    "imports": 1853,
     "routes": 494,
-    "symbols": 12024
+    "symbols": 12082
   },
   "directories": {
     "docs": {
-      "files": 27,
-      "indexed": 26,
+      "files": 28,
+      "indexed": 27,
       "kinds": {
-        "docs": 27
+        "docs": 28
       }
     },
     "script": {
-      "files": 70,
-      "indexed": 66,
+      "files": 72,
+      "indexed": 67,
       "kinds": {
-        "script": 70
+        "script": 72
       }
     },
     "tests": {
-      "files": 110,
-      "indexed": 107,
+      "files": 111,
+      "indexed": 108,
       "kinds": {
-        "test": 110
+        "test": 111
       }
     },
     ".": {
@@ -4017,6 +4020,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-youtube-delivery-worker.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-youtube-publish-worker.md",
       "kind": "docs",
       "imports": [],
@@ -5709,6 +5720,7 @@
         "ageMinutes",
         "alert",
         "alerts",
+        "allowedStatuses",
         "apiCostUsd",
         "atomicWrite",
         "blockers",
@@ -5733,6 +5745,7 @@
         "evidence",
         "evidenceStatus",
         "exactPublicUrl",
+        "exactYouTubeUrl",
         "finishedAt",
         "finishedMs",
         "freshForToday",
@@ -5753,6 +5766,7 @@
         "parsedApiCostUsd",
         "parts",
         "planned",
+        "present",
         "publicUrl",
         "published",
         "readJson",
@@ -5773,13 +5787,18 @@
         "temporary",
         "timeZone",
         "title",
+        "urls",
         "validMotivationLane",
         "validSleepLane",
         "worker",
         "workerPath",
         "workerState",
         "workerStatus",
-        "workspaceRoot"
+        "workspaceRoot",
+        "youtubeDelivery",
+        "youtubeDeliveryPath",
+        "youtubeDeliveryReport",
+        "youtubeDeliveryState"
       ],
       "routes": []
     },
@@ -7811,6 +7830,54 @@
       "routes": []
     },
     {
+      "path": "script/clippers-youtube-delivery-worker.mjs",
+      "kind": "script",
+      "imports": [
+        "./clippers-youtube-publish-worker.mjs",
+        "./clippers-youtube-upload-packager.mjs",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "runYouTubeDeliveryWorker"
+      ],
+      "symbols": [
+        "EMPTY_LOCK_STALE_MS",
+        "YOUTUBE_URL",
+        "absolute",
+        "acquireLock",
+        "atomicJson",
+        "base",
+        "blockers",
+        "clean",
+        "cliValue",
+        "config",
+        "configPath",
+        "handle",
+        "index",
+        "info",
+        "lockPath",
+        "now",
+        "pid",
+        "processAlive",
+        "queueFile",
+        "readDeliveryConfig",
+        "report",
+        "reportPath",
+        "runYouTubeDeliveryWorker",
+        "safeUrls",
+        "staleEmpty",
+        "status",
+        "temporary",
+        "uncertain",
+        "urls",
+        "workspaceRoot"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/clippers-youtube-publish-worker.mjs",
       "kind": "script",
       "imports": [
@@ -7856,6 +7923,7 @@
         "env",
         "evidenceBlockers",
         "exactSourceMatch",
+        "expectedChannelId",
         "expectedLane",
         "handle",
         "hash",
@@ -19373,6 +19441,7 @@
         "alertMarkdown",
         "fixture",
         "freshContent",
+        "freshDelivery",
         "latest",
         "markdown",
         "report",
@@ -19426,6 +19495,8 @@
         "configPath",
         "contentConfig",
         "contentPlist",
+        "deliveryConfig",
+        "deliveryPlist",
         "env",
         "fakeBin",
         "fakeLaunchctl",
@@ -19438,10 +19509,12 @@
         "plist",
         "repoRoot",
         "result",
+        "selectedEnv",
         "systemTimeZone",
         "watchdogPlist",
         "workspaceRoot",
-        "writeContentConfig"
+        "writeContentConfig",
+        "writeYoutubeConfigs"
       ],
       "routes": []
     },
@@ -20244,6 +20317,35 @@
       "routes": []
     },
     {
+      "path": "tests/clippers-youtube-delivery-worker.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-youtube-delivery-worker.mjs",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "calls",
+        "capture",
+        "captured",
+        "config",
+        "configPath",
+        "f",
+        "fixture",
+        "result",
+        "root",
+        "selected",
+        "stored",
+        "wrapper"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/clippers-youtube-publish-worker.test.mjs",
       "kind": "test",
       "imports": [
@@ -20340,6 +20442,7 @@
         "manifest",
         "manifestFile",
         "manifestPath",
+        "maps",
         "media",
         "mediaFile",
         "mediaHash",
@@ -20354,6 +20457,7 @@
         "rights",
         "root",
         "row",
+        "runCommand",
         "second",
         "secondRow",
         "sha",

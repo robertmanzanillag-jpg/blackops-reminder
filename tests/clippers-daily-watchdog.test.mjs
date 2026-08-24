@@ -6,7 +6,7 @@ import test from "node:test";
 
 import { runClippersDailyWatchdog } from "../script/clippers-daily-watchdog.mjs";
 
-async function fixture({ ledger = [], worker = null, supply = null, content = null } = {}) {
+async function fixture({ ledger = [], worker = null, supply = null, content = null, delivery = freshDelivery() } = {}) {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-watchdog-"));
   const reports = path.join(workspaceRoot, "reports");
   await mkdir(path.join(reports, "free-local-worker"), { recursive: true });
@@ -20,7 +20,22 @@ async function fixture({ ledger = [], worker = null, supply = null, content = nu
       JSON.stringify(content),
     );
   }
+  if (delivery) await writeFile(path.join(reports, "youtube-delivery-worker-latest.json"), JSON.stringify(delivery));
   return workspaceRoot;
+}
+
+function freshDelivery(overrides = {}) {
+  return {
+    schemaVersion: 1,
+    finishedAt: "2026-08-12T13:30:00.000Z",
+    status: "completed",
+    stage: "publishing",
+    published: 0,
+    publicUrls: [],
+    blockers: [],
+    apiCostUsd: 0,
+    ...overrides,
+  };
 }
 
 function freshContent(overrides = {}) {
@@ -93,6 +108,7 @@ test("counts only evidence-backed posts for the configured account and New York 
     ],
     worker: { status: "completed", finishedAt: "2026-08-12T13:05:00.000Z" },
     content: freshContent(),
+    delivery: freshDelivery(),
   });
   try {
     const report = await runClippersDailyWatchdog({
@@ -114,6 +130,47 @@ test("counts only evidence-backed posts for the configured account and New York 
   } finally {
     await rm(workspaceRoot, { recursive: true, force: true });
   }
+});
+
+test("reports only exact confirmed YouTube watch URLs as publication proof", async () => {
+  const workspaceRoot = await fixture({
+    content: freshContent(),
+    delivery: freshDelivery({
+      published: 2,
+      publicUrls: [
+        { itemId: "es-1", lane: "motivation_es", privacyStatus: "public", youtubeUrl: "https://www.youtube.com/watch?v=abc123def" },
+        { itemId: "sleep-1", lane: "sleep", privacyStatus: "public", youtubeUrl: "https://youtube.com/watch?v=xyz789abc" },
+      ],
+    }),
+  });
+  try {
+    const report = await runClippersDailyWatchdog({ workspaceRoot, now: new Date("2026-08-12T15:00:00.000Z"), checkHour: 10 });
+    assert.equal(report.youtubeDelivery.schemaValid, true);
+    assert.equal(report.youtubeDelivery.published, 2);
+    assert.equal(report.youtubeDelivery.publicationProof, true);
+    assert.deepEqual(report.youtubeDelivery.publicUrls.map((row) => row.itemId), ["es-1", "sleep-1"]);
+  } finally { await rm(workspaceRoot, { recursive: true, force: true }); }
+});
+
+test("never counts planned, rendered, packaged, or uncertain YouTube rows as published", async () => {
+  const workspaceRoot = await fixture({
+    content: freshContent(),
+    delivery: freshDelivery({
+      status: "completed_with_uncertain_outcomes",
+      published: 0,
+      publicUrls: [],
+      blockers: ["manual_youtube_reconciliation_required"],
+      packaging: { packaged: 10 },
+      publishing: { queued: 10, uploaded: 0, uncertain: 1 },
+    }),
+  });
+  try {
+    const report = await runClippersDailyWatchdog({ workspaceRoot, now: new Date("2026-08-12T15:00:00.000Z"), checkHour: 10 });
+    assert.equal(report.youtubeDelivery.published, 0);
+    assert.equal(report.youtubeDelivery.publicationProof, false);
+    assert.equal(report.alerts.youtubeDeliveryBlockedOrUncertain, true);
+    assert.ok(report.youtubeDelivery.blockers.includes("youtube_delivery_uncertain_outcomes"));
+  } finally { await rm(workspaceRoot, { recursive: true, force: true }); }
 });
 
 test("records not_due before the configurable local check hour", async () => {

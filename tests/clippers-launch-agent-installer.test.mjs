@@ -19,16 +19,29 @@ async function writeContentConfig(root, mode = 0o600) {
   return configPath;
 }
 
+async function writeYoutubeConfigs(root, mode = 0o600) {
+  const configDirectory = path.join(root, "config");
+  await mkdir(configDirectory, { recursive: true });
+  const deliveryConfig = path.join(configDirectory, "clippers-youtube-upload-packager.json");
+  const selectedEnv = path.join(configDirectory, "clippers-youtube-delivery.env");
+  await writeFile(deliveryConfig, "{}\n", { mode });
+  await writeFile(selectedEnv, "CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED=false\n", { mode });
+  await chmod(deliveryConfig, mode);
+  await chmod(selectedEnv, mode);
+  return { deliveryConfig, selectedEnv };
+}
+
 test("production runtime guard rejects untracked entrypoints and files", async () => {
   const installer = await readFile(installerPath, "utf8");
   assert.match(installer, /status --porcelain --untracked-files=all/);
   assert.match(installer, /ls-files --error-unmatch/);
-  assert.match(installer, /worker did not produce a new report from the installed runtime within 45 seconds/);
-  assert.match(installer, /r\.projectRoot===process\.argv\[2\].*r\.startedAt/);
+  assert.match(installer, /installed and verified without kickstart/);
   assert.match(installer, /script\/clippers-content-local-worker\.mjs/);
   assert.match(installer, /script\/clippers-content-learning-ceo\.mjs/);
   assert.match(installer, /script\/clippers-motivation-shorts\.mjs/);
   assert.match(installer, /script\/clippers-sleep-video-generator\.mjs/);
+  assert.match(installer, /script\/clippers-youtube-delivery-worker\.mjs/);
+  assert.match(installer, /script\/run-clippers-youtube-delivery-worker\.sh/);
 });
 
 test("LaunchAgents bind configurable runtime/config roots and persist only explicit non-secret controls", async () => {
@@ -36,6 +49,7 @@ test("LaunchAgents bind configurable runtime/config roots and persist only expli
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-workspace-"));
   try {
     const contentConfig = await writeContentConfig(workspaceRoot);
+    const { deliveryConfig, selectedEnv } = await writeYoutubeConfigs(workspaceRoot);
     const result = spawnSync("zsh", [installerPath], {
       cwd: workspaceRoot,
       encoding: "utf8",
@@ -48,6 +62,8 @@ test("LaunchAgents bind configurable runtime/config roots and persist only expli
         CLIPPERS_WORKSPACE_ROOT: workspaceRoot,
         CLIPPERS_CONFIG_ROOT: repoRoot,
         CLIPPERS_CONTENT_WORKER_CONFIG: contentConfig,
+        CLIPPERS_YOUTUBE_DELIVERY_CONFIG: deliveryConfig,
+        CLIPPERS_YOUTUBE_SELECTED_ENV: selectedEnv,
         CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
         CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED: "true",
         CLIPPERS_METRICOOL_BLOG_ID: "6431687",
@@ -100,6 +116,16 @@ test("LaunchAgents bind configurable runtime/config roots and persist only expli
     assert.match(contentPlist, /CLIPPERS_CONTENT_WORKER_CONFIG<\/key>/);
     assert.doesNotMatch(contentPlist, /CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED|CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED/);
     assert.doesNotMatch(contentPlist, /must-not-persist|METRICOOL_USER_TOKEN|GOOGLE_DRIVE_REFRESH_TOKEN/);
+    const deliveryPlist = await readFile(
+      path.join(home, "Library", "LaunchAgents", "com.blackops.clippers-youtube-delivery-worker.plist"),
+      "utf8",
+    );
+    assert.match(deliveryPlist, /<string>\/bin\/zsh<\/string>/);
+    assert.match(deliveryPlist, /run-clippers-youtube-delivery-worker\.sh/);
+    assert.match(deliveryPlist, /<key>StartCalendarInterval<\/key><dict><key>Hour<\/key><integer>6<\/integer><key>Minute<\/key><integer>30<\/integer>/);
+    assert.match(deliveryPlist, new RegExp(deliveryConfig.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.match(deliveryPlist, new RegExp(selectedEnv.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    assert.doesNotMatch(deliveryPlist, /must-not-persist|CLIENT_SECRET|REFRESH_TOKEN|CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED<\/key>/);
   } finally {
     await rm(home, { recursive: true, force: true });
     await rm(workspaceRoot, { recursive: true, force: true });
@@ -111,9 +137,12 @@ test("LaunchAgent does not install or start by default", async () => {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-default-workspace-"));
   try {
     const contentConfig = await writeContentConfig(workspaceRoot);
+    const { deliveryConfig, selectedEnv } = await writeYoutubeConfigs(workspaceRoot);
     const env = { ...process.env, HOME: home };
     env.CLIPPERS_LAUNCH_AGENT_ALLOW_DEVELOPMENT_RUNTIME = "true";
     env.CLIPPERS_CONTENT_WORKER_CONFIG = contentConfig;
+    env.CLIPPERS_YOUTUBE_DELIVERY_CONFIG = deliveryConfig;
+    env.CLIPPERS_YOUTUBE_SELECTED_ENV = selectedEnv;
     delete env.CLIPPERS_LAUNCH_AGENT_DRY_RUN;
     const result = spawnSync("zsh", [installerPath], {
       cwd: repoRoot,
@@ -195,13 +224,14 @@ test("LaunchAgent refuses a schedule time zone different from the macOS system t
   }
 });
 
-test("installation verifies both launchd jobs and kickstarts only the worker", async () => {
+test("installation verifies all launchd jobs without kickstarting them", async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-install-"));
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-install-workspace-"));
   const fakeBin = path.join(home, "bin");
   const launchctlLog = path.join(home, "launchctl.log");
   try {
     const contentConfig = await writeContentConfig(workspaceRoot);
+    const { deliveryConfig, selectedEnv } = await writeYoutubeConfigs(workspaceRoot);
     await mkdir(fakeBin, { recursive: true });
     const fakeLaunchctl = path.join(fakeBin, "launchctl");
     await writeFile(fakeLaunchctl, `#!/bin/zsh\nprint -r -- "$*" >> "${launchctlLog}"\nexit 0\n`);
@@ -218,6 +248,8 @@ test("installation verifies both launchd jobs and kickstarts only the worker", a
         CLIPPERS_RUNTIME_ROOT: repoRoot,
         CLIPPERS_CONFIG_ROOT: repoRoot,
         CLIPPERS_CONTENT_WORKER_CONFIG: contentConfig,
+        CLIPPERS_YOUTUBE_DELIVERY_CONFIG: deliveryConfig,
+        CLIPPERS_YOUTUBE_SELECTED_ENV: selectedEnv,
       },
     });
     assert.equal(result.status, 0, result.stderr);
@@ -226,12 +258,12 @@ test("installation verifies both launchd jobs and kickstarts only the worker", a
     assert.match(calls, /bootstrap .*com\.blackops\.clippers-free-worker\.plist/);
     assert.match(calls, /bootstrap .*com\.blackops\.clippers-daily-watchdog\.plist/);
     assert.match(calls, /bootstrap .*com\.blackops\.clippers-content-worker\.plist/);
+    assert.match(calls, /bootstrap .*com\.blackops\.clippers-youtube-delivery-worker\.plist/);
     assert.match(calls, /print .*com\.blackops\.clippers-free-worker/);
     assert.match(calls, /print .*com\.blackops\.clippers-daily-watchdog/);
     assert.match(calls, /print .*com\.blackops\.clippers-content-worker/);
-    assert.match(calls, /kickstart -k .*com\.blackops\.clippers-free-worker/);
-    assert.doesNotMatch(calls, /kickstart -k .*com\.blackops\.clippers-daily-watchdog/);
-    assert.doesNotMatch(calls, /kickstart -k .*com\.blackops\.clippers-content-worker/);
+    assert.match(calls, /print .*com\.blackops\.clippers-youtube-delivery-worker/);
+    assert.doesNotMatch(calls, /kickstart/);
   } finally {
     await rm(home, { recursive: true, force: true });
     await rm(workspaceRoot, { recursive: true, force: true });

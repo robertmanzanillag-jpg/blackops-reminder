@@ -71,11 +71,13 @@ function secretPresent(value) {
   return Boolean(normalized && !/^(?:changeme|replace|example|todo|your[-_ ])/i.test(normalized));
 }
 
-function laneAuthBlockers(env, lane) {
+function laneAuthBlockers(env, lane, itemChannelId) {
   const suffix = LANES[lane];
   if (!suffix) return ["lane_invalid"];
   const blockers = [];
-  if (!CHANNEL_ID.test(clean(env[`CLIPPERS_YOUTUBE_${suffix}_CHANNEL_ID`]))) blockers.push("expected_channel_id_missing_or_invalid");
+  const expectedChannelId = clean(env[`CLIPPERS_YOUTUBE_${suffix}_CHANNEL_ID`]);
+  if (!CHANNEL_ID.test(expectedChannelId)) blockers.push("expected_channel_id_missing_or_invalid");
+  else if (clean(itemChannelId) !== expectedChannelId) blockers.push("item_channel_does_not_match_selected_channel");
   if (!["CLIENT_ID", "CLIENT_SECRET", "REFRESH_TOKEN"].every((key) => secretPresent(env[`CLIPPERS_YOUTUBE_${suffix}_${key}`]))) {
     blockers.push("oauth_refresh_config_missing");
   }
@@ -307,7 +309,7 @@ export async function runYouTubePublishWorker(options = {}) {
       const lane = clean(item?.lane) || null;
       if (item && !exactSourceMatch(sourceReport, entry, item, workspaceRoot)) entryProblems.push("item_not_in_completed_content_report");
       if (item) entryProblems.push(...await evidenceBlockers(workspaceRoot, item));
-      if (item) entryProblems.push(...laneAuthBlockers(env, lane));
+      if (item) entryProblems.push(...laneAuthBlockers(env, lane, item.channelId));
       if (item) entryProblems.push(...publicBlockers(item, entry, env));
       const duplicate = item ? duplicateBlocker([...rows, ...acceptedThisRun], item) : null;
       if (duplicate) entryProblems.push(duplicate);
