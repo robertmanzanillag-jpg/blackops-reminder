@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 
-import { randomUUID } from "node:crypto";
-import { lstat, mkdir, open, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { execFile } from "node:child_process";
+import { lstat, mkdir, open, readFile, realpath, rename, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { promisify } from "node:util";
 import { pathToFileURL } from "node:url";
 import { runContentLearningCeo } from "./clippers-content-learning-ceo.mjs";
 import { renderMotivationShort } from "./clippers-motivation-shorts.mjs";
@@ -12,6 +15,9 @@ const LANGUAGES = ["es", "en"];
 const DEFAULT_TIMEOUT_MS = 14 * 60 * 60 * 1000;
 const MAX_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const MINIMUM_SLEEP_SECONDS = 8 * 60 * 60;
+const SHA256 = /^[a-f0-9]{64}$/i;
+const execFileAsync = promisify(execFile);
 
 const clean = (value) => String(value ?? "").trim();
 
@@ -79,6 +85,7 @@ function validateConfig(config, configPath) {
       title: clean(job.title),
       durationSeconds: Number(job.durationSeconds ?? 29_100),
       seed: Number(job.seed ?? 20_260_824 + index),
+      adoptExisting: job.adoptExisting === true,
     };
   });
   if (new Set(sleepJobs.map((job) => job.outputPath)).size !== sleepJobs.length) throw new Error("sleep_job_outputs_must_be_unique");
@@ -163,9 +170,135 @@ async function nextSleepJob(jobs, ledger) {
     if (used.has(job.outputPath)) continue;
     const artifacts = [job.outputPath, `${job.outputPath}.rights.json`, `${job.outputPath}.partial.mp4`];
     const exists = await Promise.all(artifacts.map((filePath) => lstat(filePath).then(() => true).catch(() => false)));
+    if (job.adoptExisting && (exists[0] || exists[1] || exists[2])) return job;
     if (!exists.some(Boolean)) return job;
   }
   return null;
+}
+
+async function sha256File(filePath) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest("hex");
+}
+
+function sha256Text(value) {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+async function safeWorkspaceFile(workspaceRoot, candidate, label) {
+  const resolvedRoot = path.resolve(workspaceRoot);
+  const resolvedFile = path.resolve(candidate);
+  const relative = path.relative(resolvedRoot, resolvedFile);
+  if (!relative || relative.startsWith("..") || path.isAbsolute(relative)) throw new Error(`${label}_outside_workspace`);
+  const info = await lstat(resolvedFile).catch(() => null);
+  if (!info?.isFile() || info.isSymbolicLink()) throw new Error(`${label}_must_be_regular_file`);
+  const [rootReal, fileReal] = await Promise.all([realpath(resolvedRoot), realpath(resolvedFile)]);
+  const realRelative = path.relative(rootReal, fileReal);
+  if (!realRelative || realRelative.startsWith("..") || path.isAbsolute(realRelative)) throw new Error(`${label}_realpath_outside_workspace`);
+  return resolvedFile;
+}
+
+function generatorQaSamplesValid(samples, durationSeconds) {
+  if (!Array.isArray(samples) || samples.length < 3) return false;
+  return samples.every((sample) => Number.isFinite(Number(sample?.startSeconds))
+    && Number(sample.startSeconds) >= 0
+    && Number(sample.startSeconds) < durationSeconds
+    && Number.isFinite(Number(sample?.sampleDuration))
+    && Number(sample.sampleDuration) > 0
+    && Number.isFinite(Number(sample?.peakDb))
+    && Number.isFinite(Number(sample?.rmsDb))
+    && /^[a-f0-9]{32}$/i.test(clean(sample?.frameMd5)));
+}
+
+async function defaultProbeExisting(mediaPath) {
+  const { stdout } = await execFileAsync("ffprobe", [
+    "-v", "error", "-show_streams", "-show_format", "-of", "json", mediaPath,
+  ], { maxBuffer: 16 * 1024 * 1024 });
+  return JSON.parse(stdout);
+}
+
+export async function adoptExistingSleepVideo({ workspaceRoot, job, probeExisting = defaultProbeExisting }) {
+  if (job?.adoptExisting !== true) throw new Error("sleep_adoption_not_explicitly_enabled");
+  const outputPath = await safeWorkspaceFile(workspaceRoot, job.outputPath, "sleep_adoption_output");
+  const manifestPath = await safeWorkspaceFile(workspaceRoot, `${job.outputPath}.rights.json`, "sleep_adoption_manifest");
+  const partialExists = await lstat(`${job.outputPath}.partial.mp4`).then(() => true).catch(() => false);
+  if (partialExists) throw new Error("sleep_adoption_partial_artifact_present");
+  const manifest = await readJson(manifestPath, "sleep_adoption_manifest");
+  const outputHash = await sha256File(outputPath);
+  if (!SHA256.test(clean(manifest?.output?.sha256)) || clean(manifest.output.sha256).toLowerCase() !== outputHash) {
+    throw new Error("sleep_adoption_output_hash_mismatch");
+  }
+  const manifestOutput = await safeWorkspaceFile(workspaceRoot, manifest?.output?.path, "sleep_adoption_manifest_output");
+  if (manifestOutput !== outputPath) throw new Error("sleep_adoption_manifest_output_mismatch");
+  const visual = Array.isArray(manifest?.provenance?.externalVisualAssets)
+    && manifest.provenance.externalVisualAssets.length === 1 ? manifest.provenance.externalVisualAssets[0] : null;
+  if (Number(manifest?.schemaVersion) !== 1
+    || manifest?.artifactType !== "rights_verified_visual_with_procedural_rain_audio"
+    || clean(manifest?.title) !== job.title
+    || manifest?.provenance?.generator !== "script/clippers-sleep-video-generator.mjs"
+    || !SHA256.test(clean(manifest?.provenance?.generatorSha256))
+    || Number(manifest?.provenance?.seed) !== job.seed
+    || Number(manifest?.provenance?.synthesisParameters?.seed) !== job.seed
+    || Number(manifest?.provenance?.synthesisParameters?.durationSeconds) !== job.durationSeconds
+    || clean(manifest?.provenance?.synthesisParametersSha256).toLowerCase() !== sha256Text(JSON.stringify(manifest?.provenance?.synthesisParameters))
+    || !Array.isArray(manifest?.provenance?.externalAudioSamples) || manifest.provenance.externalAudioSamples.length !== 0
+    || !Array.isArray(manifest?.provenance?.paidServicesUsed) || manifest.provenance.paidServicesUsed.length !== 0
+    || manifest?.provenance?.networkAccessRequired !== false
+    || manifest?.provenance?.generatedForTestingOnly !== false
+    || !visual
+    || manifest?.rights?.reviewRequiredBeforePublishing !== true
+    || manifest?.rights?.publicationAuthorizedByThisManifest !== false
+    || manifest?.qa?.status !== "passed"
+    || manifest?.qa?.tool !== "ffprobe"
+    || Number(manifest?.qa?.productionMinimumSeconds) < MINIMUM_SLEEP_SECONDS
+    || Number(manifest?.output?.durationSeconds) !== job.durationSeconds
+    || !generatorQaSamplesValid(manifest?.qa?.sampledMedia, Number(manifest?.output?.durationSeconds))) {
+    throw new Error("sleep_adoption_generator_evidence_invalid");
+  }
+  const visualPath = await safeWorkspaceFile(workspaceRoot, visual.path, "sleep_adoption_visual");
+  const evidencePath = await safeWorkspaceFile(workspaceRoot, visual.evidencePath, "sleep_adoption_visual_evidence");
+  if (visualPath !== job.visualSource || evidencePath !== job.visualRightsEvidence
+    || clean(visual.sha256).toLowerCase() !== clean(job.visualSha256).toLowerCase()
+    || await sha256File(visualPath) !== clean(visual.sha256).toLowerCase()
+    || await sha256File(evidencePath) !== clean(visual.evidenceSha256).toLowerCase()) {
+    throw new Error("sleep_adoption_visual_provenance_mismatch");
+  }
+  const evidence = await readJson(evidencePath, "sleep_adoption_visual_evidence");
+  if (Number(evidence?.schemaVersion) !== 1
+    || evidence?.assetType !== "generated_original_visual"
+    || clean(evidence?.sha256).toLowerCase() !== clean(visual.sha256).toLowerCase()
+    || evidence?.rightsStatus !== "owned_generated_output"
+    || evidence?.commercialUseAuthorized !== true
+    || !Array.isArray(evidence?.thirdPartyAssets) || evidence.thirdPartyAssets.length !== 0
+    || JSON.stringify(evidence) !== JSON.stringify(visual.evidence)) {
+    throw new Error("sleep_adoption_visual_rights_invalid");
+  }
+  const probe = await probeExisting(outputPath);
+  const streams = Array.isArray(probe?.streams) ? probe.streams : [];
+  const video = streams.find((stream) => stream.codec_type === "video");
+  const audio = streams.find((stream) => stream.codec_type === "audio");
+  const durationSeconds = Number(probe?.format?.duration);
+  if (!video || !audio || !clean(probe?.format?.format_name).includes("mp4")
+    || !Number.isFinite(durationSeconds) || durationSeconds < MINIMUM_SLEEP_SECONDS
+    || Number(video.width) <= Number(video.height)
+    || Math.abs(durationSeconds - Number(manifest.output.durationSeconds)) > 1.5
+    || Number(video.width) !== Number(manifest.output.width)
+    || Number(video.height) !== Number(manifest.output.height)
+    || clean(video.codec_name) !== clean(manifest.output.videoCodec)
+    || clean(audio.codec_name) !== clean(manifest.output.audioCodec)
+    || Number(audio.sample_rate) !== Number(manifest.output.audioSampleRate)
+    || Number(audio.channels) !== Number(manifest.output.audioChannels)) {
+    throw new Error("sleep_adoption_ffprobe_validation_failed");
+  }
+  return {
+    outputPath,
+    manifestPath,
+    outputSha256: outputHash,
+    durationSeconds,
+    adoptedExisting: true,
+    validation: "generator_manifest_hash_rights_qa_and_ffprobe_passed",
+  };
 }
 
 export async function runContentLocalWorker({ configPath, now = new Date(), operations = {} }) {
@@ -180,6 +313,7 @@ export async function runContentLocalWorker({ configPath, now = new Date(), oper
   const runCeo = operations.runCeo || runContentLearningCeo;
   const renderShort = operations.renderShort || renderMotivationShort;
   const generateSleep = operations.generateSleep || generateSleepVideo;
+  const adoptSleep = operations.adoptSleep || adoptExistingSleepVideo;
   try {
     const shortChannels = Object.fromEntries(LANGUAGES.map((language) => {
       const lane = config.motivation[language];
@@ -237,21 +371,26 @@ export async function runContentLocalWorker({ configPath, now = new Date(), oper
     let attempted = 0;
     if (config.sleep.enabled && Number(sleepPlan?.target) > 0 && recent.length === 0 && sleepJob) {
       attempted = 1;
-      sleepResult = await withTimeout(() => generateSleep({
-        outputPath: sleepJob.outputPath,
-        durationSeconds: sleepJob.durationSeconds,
-        seed: sleepJob.seed,
-        title: sleepJob.title,
-        width: 1920,
-        height: 1080,
-        fps: 1,
-        testMode: false,
-        overwrite: false,
-        visualSource: sleepJob.visualSource,
-        visualSha256: sleepJob.visualSha256,
-        visualRightsEvidence: sleepJob.visualRightsEvidence,
-      }), config.timeoutMs, "sleep_generation");
-      const entry = { generatedAt: now.toISOString(), outputPath: sleepResult.outputPath, manifestPath: sleepResult.manifestPath };
+      const artifact = sleepJob.adoptExisting
+        ? await withTimeout(() => adoptSleep({ workspaceRoot: config.workspaceRoot, job: sleepJob }), config.timeoutMs, "sleep_adoption")
+        : await withTimeout(() => generateSleep({
+          outputPath: sleepJob.outputPath,
+          durationSeconds: sleepJob.durationSeconds,
+          seed: sleepJob.seed,
+          title: sleepJob.title,
+          width: 1920,
+          height: 1080,
+          fps: 1,
+          testMode: false,
+          overwrite: false,
+          visualSource: sleepJob.visualSource,
+          visualSha256: sleepJob.visualSha256,
+          visualRightsEvidence: sleepJob.visualRightsEvidence,
+        }), config.timeoutMs, "sleep_generation");
+      const entry = {
+        generatedAt: now.toISOString(), outputPath: artifact.outputPath, manifestPath: artifact.manifestPath,
+        ...(artifact.adoptedExisting ? { adoptedExisting: true, outputSha256: artifact.outputSha256, durationSeconds: artifact.durationSeconds, validation: artifact.validation } : {}),
+      };
       await atomicJson(sleepLedgerPath, { schemaVersion: 1, items: [...(sleepLedger.items || []), entry] });
       sleepResult = { status: "generated", ...entry };
     } else if (recent.length) {
