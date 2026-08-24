@@ -162,11 +162,26 @@ test("LaunchAgent refuses a dirty development runtime unless the test-only overr
   const runtimeParent = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-dirty-checkout-"));
   const runtimeRoot = path.join(runtimeParent, "runtime");
   try {
+    const sourceRefs = spawnSync("git", ["-C", repoRoot, "rev-parse", "HEAD", "refs/remotes/origin/main"], {
+      encoding: "utf8",
+    });
+    assert.equal(sourceRefs.status, 0, sourceRefs.stderr);
+    const [sourceHead, sourceOriginMain] = sourceRefs.stdout.trim().split(/\r?\n/);
+    assert.match(sourceHead, /^[a-f0-9]{40}$/);
+    assert.match(sourceOriginMain, /^[a-f0-9]{40}$/);
+    const sourceBasedOnMain = spawnSync("git", ["-C", repoRoot, "merge-base", "--is-ancestor", sourceOriginMain, sourceHead], {
+      encoding: "utf8",
+    });
+    assert.equal(sourceBasedOnMain.status, 0, sourceBasedOnMain.stderr);
     const clone = spawnSync("git", ["clone", "--quiet", "--no-hardlinks", repoRoot, runtimeRoot], {
       encoding: "utf8",
     });
     assert.equal(clone.status, 0, clone.stderr);
-    const detachMain = spawnSync("git", ["-C", runtimeRoot, "switch", "--detach", "origin/main"], {
+    const pinOriginMain = spawnSync("git", ["-C", runtimeRoot, "update-ref", "refs/remotes/origin/main", sourceHead], {
+      encoding: "utf8",
+    });
+    assert.equal(pinOriginMain.status, 0, pinOriginMain.stderr);
+    const detachMain = spawnSync("git", ["-C", runtimeRoot, "switch", "--detach", sourceHead], {
       encoding: "utf8",
     });
     assert.equal(detachMain.status, 0, detachMain.stderr);
@@ -175,7 +190,8 @@ test("LaunchAgent refuses a dirty development runtime unless the test-only overr
     });
     assert.equal(headAtMain.status, 0, headAtMain.stderr);
     const [runtimeHead, runtimeOriginMain] = headAtMain.stdout.trim().split(/\r?\n/);
-    assert.equal(runtimeHead, runtimeOriginMain);
+    assert.equal(runtimeHead, sourceHead);
+    assert.equal(runtimeOriginMain, sourceHead);
     const dirtyMarker = path.join(runtimeRoot, ".clippers-runtime-dirty-test");
     await writeFile(dirtyMarker, "intentional untracked fixture\n");
     const runtimeStatus = spawnSync("git", ["-C", runtimeRoot, "status", "--porcelain", "--untracked-files=all"], {
