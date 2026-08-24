@@ -103,6 +103,8 @@
     "clippers:motivation-shorts": "node script/clippers-motivation-shorts.mjs",
     "clippers:sleep-video": "node script/clippers-sleep-video-generator.mjs",
     "clippers:content-local-worker": "node script/clippers-content-local-worker.mjs",
+    "clippers:youtube-publish-worker": "node script/clippers-youtube-publish-worker.mjs",
+    "test:clippers-youtube-publish-worker": "node --test tests/clippers-youtube-publish-worker.test.mjs",
     "test:clippers-content": "node --test tests/clippers-content-learning-ceo.test.mjs tests/clippers-motivation-shorts.test.mjs tests/clippers-sleep-video-generator.test.mjs tests/clippers-content-local-worker.test.mjs",
     "clippers:install-free-local-worker": "zsh script/install-clippers-free-local-worker-launch-agent.sh",
     "clippers:local-subtitles": "node script/clippers-local-subtitles.mjs",
