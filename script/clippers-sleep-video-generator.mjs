@@ -2,7 +2,7 @@
 
 import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
-import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
@@ -27,7 +27,7 @@ export function parseCliArgs(argv) {
   const options = {
     durationSeconds: DEFAULT_PRODUCTION_DURATION_SECONDS,
     seed: 20260824,
-    title: "Deep Night Rest",
+    title: "Rainy Bedroom Sleep — 8 Hours",
     width: 1920,
     height: 1080,
     fps: 1,
@@ -46,6 +46,9 @@ export function parseCliArgs(argv) {
     else if (arg === "--width") options.width = integer(argv[++index], "width");
     else if (arg === "--height") options.height = integer(argv[++index], "height");
     else if (arg === "--fps") options.fps = integer(argv[++index], "fps");
+    else if (arg === "--visual-source") options.visualSource = argv[++index];
+    else if (arg === "--visual-sha256") options.visualSha256 = argv[++index];
+    else if (arg === "--visual-rights-evidence") options.visualRightsEvidence = argv[++index];
     else throw new Error(`Unknown argument: ${arg}`);
   }
 
@@ -71,6 +74,7 @@ export function validateOptions(input) {
     throw new Error("Production sleep videos must be at least 8 hours (28800 seconds).");
   }
   if (!Number.isInteger(options.seed)) throw new Error("seed must be an integer.");
+  if (options.seed < 0 || options.seed > 0xffffffff) throw new Error("seed must be between 0 and 4294967295.");
   if (typeof options.title !== "string" || !options.title.trim()) throw new Error("title is required.");
   if (!Number.isInteger(options.width) || options.width < 320 || options.width % 2 !== 0) {
     throw new Error("width must be an even integer of at least 320.");
@@ -80,6 +84,17 @@ export function validateOptions(input) {
   }
   if (!Number.isInteger(options.fps) || options.fps < 1 || options.fps > 30) {
     throw new Error("fps must be an integer between 1 and 30.");
+  }
+  const visualFields = [options.visualSource, options.visualSha256, options.visualRightsEvidence];
+  const hasAnyVisualField = visualFields.some(Boolean);
+  if (!options.testMode && !visualFields.every(Boolean)) {
+    throw new Error("Production rain videos require --visual-source, --visual-sha256, and --visual-rights-evidence.");
+  }
+  if (hasAnyVisualField && !visualFields.every(Boolean)) {
+    throw new Error("Visual source, expected SHA-256, and rights evidence must be provided together.");
+  }
+  if (options.visualSha256 && !/^[a-f0-9]{64}$/i.test(options.visualSha256)) {
+    throw new Error("visualSha256 must be a 64-character SHA-256 digest.");
   }
   return options;
 }
@@ -163,7 +178,8 @@ export function buildProceduralPlan(options) {
     "vignette=PI/4",
     "format=yuv420p",
   ].join(",");
-  return { audioExpression, visualFilter, values, background, glow, chapterPlan };
+  const rainSeed = (options.seed ^ 0x7261696e) >>> 0;
+  return { audioExpression, visualFilter, values, background, glow, chapterPlan, rainSeed };
 }
 
 function run(command, args, { capture = false } = {}) {
@@ -266,6 +282,49 @@ async function sha256(filePath) {
   return createHash("sha256").update(await readFile(filePath)).digest("hex");
 }
 
+async function assertSafeRegularFile(filePath, label) {
+  if (filePath.split(path.sep).includes("..")) throw new Error(`${label} path must not contain parent traversal segments.`);
+  const resolvedPath = path.resolve(filePath);
+  const fileStats = await lstat(resolvedPath);
+  if (fileStats.isSymbolicLink()) throw new Error(`${label} must not be a symbolic link.`);
+  if (!fileStats.isFile()) throw new Error(`${label} must be a regular file.`);
+  return resolvedPath;
+}
+
+export async function validateVisualAsset(options) {
+  if (!options.visualSource) return null;
+  const sourcePath = await assertSafeRegularFile(options.visualSource, "Visual source");
+  const evidencePath = await assertSafeRegularFile(options.visualRightsEvidence, "Visual rights evidence");
+  const actualSha256 = await sha256(sourcePath);
+  const expectedSha256 = options.visualSha256.toLowerCase();
+  if (actualSha256 !== expectedSha256) {
+    throw new Error(`Visual source SHA-256 mismatch: expected ${expectedSha256}, received ${actualSha256}.`);
+  }
+  let evidence;
+  try {
+    evidence = JSON.parse(await readFile(evidencePath, "utf8"));
+  } catch (error) {
+    throw new Error(`Visual rights evidence must be valid JSON: ${error instanceof Error ? error.message : error}`);
+  }
+  if (evidence.schemaVersion !== 1 || evidence.assetType !== "generated_original_visual") {
+    throw new Error("Visual rights evidence has an unsupported schema or asset type.");
+  }
+  if (evidence.sha256 !== actualSha256) throw new Error("Visual rights evidence SHA-256 does not match the visual source.");
+  if (evidence.rightsStatus !== "owned_generated_output" || evidence.commercialUseAuthorized !== true) {
+    throw new Error("Visual rights evidence does not authorize commercial use of an owned generated output.");
+  }
+  if (!Array.isArray(evidence.thirdPartyAssets) || evidence.thirdPartyAssets.length !== 0) {
+    throw new Error("Visual rights evidence must confirm that no third-party assets were used.");
+  }
+  return {
+    sourcePath,
+    sourceSha256: actualSha256,
+    evidencePath,
+    evidenceSha256: await sha256(evidencePath),
+    evidence,
+  };
+}
+
 function sha256Text(value) {
   return createHash("sha256").update(value).digest("hex");
 }
@@ -278,22 +337,35 @@ export async function generateSleepVideo(rawOptions) {
   if (!options.overwrite && (existsSync(outputPath) || existsSync(manifestPath))) {
     throw new Error("Output or rights manifest already exists; use --overwrite to replace generated artifacts.");
   }
+  if (existsSync(partialPath)) {
+    throw new Error(`Partial output already exists and was preserved: ${partialPath}`);
+  }
 
   const plan = buildProceduralPlan(options);
+  const visualAsset = await validateVisualAsset(options);
   await mkdir(path.dirname(outputPath), { recursive: true });
-  await rm(partialPath, { force: true });
   try {
+    const videoInput = visualAsset
+      ? ["-loop", "1", "-framerate", String(options.fps), "-i", visualAsset.sourcePath]
+      : ["-f", "lavfi", "-i", plan.visualFilter];
+    const videoFilter = visualAsset
+      ? `[0:v]scale=${options.width + 96}:${options.height + 54}:force_original_aspect_ratio=increase,crop=${options.width}:${options.height},zoompan=z='1.015+0.012*sin(on/7200*PI)':x='iw/2-(iw/zoom/2)+sin(on/1800)*iw*0.0015':y='ih/2-(ih/zoom/2)+cos(on/2100)*ih*0.0015':d=1:s=${options.width}x${options.height}:fps=${options.fps},format=yuv420p[vout]`
+      : "[0:v]null[vout]";
+    const rainFilter = "[2:a]highpass=f=180,lowpass=f=9000,volume='if(isnan(t),0.22,0.20+0.025*sin(2*PI*t/47)+0.015*sin(2*PI*t/113))':eval=frame,pan=stereo|c0=c0|c1=c0[rain]";
+    const audioFilter = "[1:a]volume=0.72[pad];[pad][rain]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.88[aout]";
     await run(options.ffmpegPath || "ffmpeg", [
       "-hide_banner", "-loglevel", "warning", "-nostdin", "-y",
-      "-f", "lavfi", "-i", plan.visualFilter,
+      ...videoInput,
       "-f", "lavfi", "-i", `aevalsrc=exprs=${plan.audioExpression.replaceAll(",", "\\,")}:s=48000:d=${options.durationSeconds}`,
-      "-map", "0:v:0", "-map", "1:a:0",
+      "-f", "lavfi", "-i", `anoisesrc=color=pink:amplitude=0.16:sample_rate=48000:duration=${options.durationSeconds}:seed=${plan.rainSeed}`,
+      "-filter_complex", `${videoFilter};${rainFilter};${audioFilter}`,
+      "-map", "[vout]", "-map", "[aout]",
       "-c:v", "libx264", "-preset", "veryfast", "-tune", "stillimage",
       "-pix_fmt", "yuv420p", "-r", String(options.fps),
       "-c:a", "aac", "-b:a", "128k", "-ar", "48000", "-ac", "2",
       "-t", String(options.durationSeconds), "-movflags", "+faststart",
       "-metadata", `title=${options.title}`,
-      "-metadata", "comment=Original procedural audio and visual; no external samples or media",
+      "-metadata", "comment=Original procedural rain and pads with a rights-verified local visual",
       partialPath,
     ]);
 
@@ -311,10 +383,15 @@ export async function generateSleepVideo(rawOptions) {
       background: plan.background,
       glow: plan.glow,
       chapterPlan: plan.chapterPlan,
+      rain: {
+        method: "Seeded pink noise shaped with high-pass, low-pass, slow gain modulation, and limiting.",
+        seed: plan.rainSeed,
+        externalSamples: [],
+      },
     };
     const manifest = {
       schemaVersion: 1,
-      artifactType: "original_procedural_sleep_video",
+      artifactType: visualAsset ? "rights_verified_visual_with_procedural_rain_audio" : "test_only_procedural_sleep_video",
       generatedAt: new Date().toISOString(),
       title: options.title,
       output: {
@@ -330,9 +407,15 @@ export async function generateSleepVideo(rawOptions) {
         audioChannels: Number(qa.audio.channels),
       },
       provenance: {
-        origin: "Generated locally from deterministic mathematical synthesis and FFmpeg filters.",
+        origin: "Audio generated locally from deterministic mathematical synthesis and FFmpeg filters; visual provenance is recorded separately.",
         externalAudioSamples: [],
-        externalVisualAssets: [],
+        externalVisualAssets: visualAsset ? [{
+          path: visualAsset.sourcePath,
+          sha256: visualAsset.sourceSha256,
+          evidencePath: visualAsset.evidencePath,
+          evidenceSha256: visualAsset.evidenceSha256,
+          evidence: visualAsset.evidence,
+        }] : [],
         networkAccessRequired: false,
         paidServicesUsed: [],
         generator: "script/clippers-sleep-video-generator.mjs",
@@ -340,14 +423,19 @@ export async function generateSleepVideo(rawOptions) {
         seed: options.seed,
         synthesisParameters,
         synthesisParametersSha256: sha256Text(JSON.stringify(synthesisParameters)),
-        audioMethod: "Stereo additive sine synthesis with deterministic breathing envelope.",
-        visualMethod: "Procedural color field, glow geometry, and vignette.",
+        audioMethod: "Stereo additive pads mixed with seeded, filtered procedural rain; no external audio samples.",
+        rainSeed: plan.rainSeed,
+        visualMethod: visualAsset
+          ? "Rights-verified 16:9 local still animated with slow aspect-preserving crop, zoom, and pan."
+          : "Test-only procedural color field, glow geometry, and vignette.",
         chapterPlan: plan.chapterPlan,
         generatedForTestingOnly: options.testMode,
       },
       rights: {
         claimant: "workspace owner",
-        basis: "Original procedural generation with no third-party media inputs.",
+        basis: visualAsset
+          ? "Procedural original audio plus an owned generated visual with SHA-linked rights evidence."
+          : "Test-only procedural generation with no third-party media inputs.",
         reviewRequiredBeforePublishing: true,
         publicationAuthorizedByThisManifest: false,
       },
