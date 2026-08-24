@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-08-24T07:57:50.679Z
+Generated: 2026-08-24T08:07:11.937Z
 Repo: `/private/tmp/asistente-sleep-clippers`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 628 | 546 | 1826 | 494 | 11886 |
+| 631 | 549 | 1840 | 494 | 12024 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,10 +30,10 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `server` | 129 | 125 | server:129 |
 | `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
-| `tests` | 109 | 106 | test:109 |
+| `tests` | 110 | 107 | test:110 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `script` | 69 | 65 | script:69 |
-| `docs` | 26 | 25 | docs:26 |
+| `script` | 70 | 66 | script:70 |
+| `docs` | 27 | 26 | docs:27 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `.agents/memory` | 5 | 5 | docs:5 |
@@ -226,6 +226,7 @@ Package: `rest-express`
 - `script/clippers-tiktok-preflight.ts` (script; 15 symbols, 1 imports)
 - `script/clippers-upload-metricool-media.ts` (script; 51 symbols, 7 imports)
 - `script/clippers-youtube-publish-worker.mjs` (script; 91 symbols, 6 imports)
+- `script/clippers-youtube-upload-packager.mjs` (script; 103 symbols, 7 imports)
 - `script/clippers-youtube-uploader.mjs` (script; 95 symbols, 5 imports)
 - `script/codebase-map.ts` (script; 43 symbols, 3 imports)
 - `script/configure-telegram.ts` (script; 5 symbols, 4 imports)
@@ -233,7 +234,6 @@ Package: `rest-express`
 - `script/create-local-user.ts` (script; 5 symbols, 3 imports)
 - `script/ensure-radio-tiktok-drive-folder.ts` (script; 4 symbols, 3 imports)
 - `script/import-developer-health-inventory.ts` (script; 14 symbols, 4 imports)
-- `script/metricool-plan.ts` (script; 3 symbols, 1 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

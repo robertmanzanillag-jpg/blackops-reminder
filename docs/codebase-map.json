@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-24T07:57:50.679Z",
+  "generatedAt": "2026-08-24T08:07:11.937Z",
   "repoRoot": "/private/tmp/asistente-sleep-clippers",
   "packageName": "rest-express",
   "scripts": {
@@ -117,13 +117,34 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 628,
-    "filesIndexed": 546,
-    "imports": 1826,
+    "filesVisible": 631,
+    "filesIndexed": 549,
+    "imports": 1840,
     "routes": 494,
-    "symbols": 11886
+    "symbols": 12024
   },
   "directories": {
+    "docs": {
+      "files": 27,
+      "indexed": 26,
+      "kinds": {
+        "docs": 27
+      }
+    },
+    "script": {
+      "files": 70,
+      "indexed": 66,
+      "kinds": {
+        "script": 70
+      }
+    },
+    "tests": {
+      "files": 110,
+      "indexed": 107,
+      "kinds": {
+        "test": 110
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -181,26 +202,12 @@
         "client-page": 26
       }
     },
-    "docs": {
-      "files": 26,
-      "indexed": 25,
-      "kinds": {
-        "docs": 26
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
-      }
-    },
-    "script": {
-      "files": 69,
-      "indexed": 65,
-      "kinds": {
-        "script": 69
       }
     },
     "scripts": {
@@ -236,13 +243,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 109,
-      "indexed": 106,
-      "kinds": {
-        "test": 109
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -4018,6 +4018,14 @@
     },
     {
       "path": "docs/clippers-youtube-publish-worker.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/clippers-youtube-upload-packager.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -7908,6 +7916,128 @@
         "uploaded",
         "uploadedResultValid",
         "workspaceRoot"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-youtube-upload-packager.mjs",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:crypto",
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+        "node:url",
+        "node:util"
+      ],
+      "exports": [
+        "packageYouTubeUploads"
+      ],
+      "symbols": [
+        "ACTIVE_UPLOAD_STATES",
+        "CHANNEL_ID",
+        "DAY_MS",
+        "LANES",
+        "PRIVACY",
+        "SHA256",
+        "accepted",
+        "atomicJson",
+        "audio",
+        "authorization",
+        "authorizationBlockers",
+        "beats",
+        "blocked",
+        "blockers",
+        "channel",
+        "clean",
+        "cliValue",
+        "close",
+        "config",
+        "configAbsolute",
+        "configInfo",
+        "configPath",
+        "configProblems",
+        "contentRows",
+        "cutoff",
+        "dayInNewYork",
+        "deduplicated",
+        "description",
+        "durationSeconds",
+        "execFileAsync",
+        "existingQueue",
+        "existingQueueSameSource",
+        "file",
+        "firstFrame",
+        "formatName",
+        "hash",
+        "hook",
+        "index",
+        "item",
+        "itemFile",
+        "itemId",
+        "itemPath",
+        "jsonFile",
+        "ledger",
+        "main",
+        "manifest",
+        "manifestOutput",
+        "manifestPath",
+        "mediaHash",
+        "mediaPath",
+        "mediaQa",
+        "motivationProvenance",
+        "optionalJson",
+        "packageYouTubeUploads",
+        "prior",
+        "priorOutcomes",
+        "privacy",
+        "privacyStatus",
+        "provenance",
+        "provenancePath",
+        "provenanceRelative",
+        "publicAuth",
+        "qa",
+        "qaEvidence",
+        "qaFile",
+        "qaHash",
+        "queue",
+        "queueEntry",
+        "queueItems",
+        "queuePath",
+        "realRelative",
+        "relative",
+        "remainingCapacity",
+        "report",
+        "reportPath",
+        "reserved",
+        "resolved",
+        "resolvedRoot",
+        "result",
+        "rights",
+        "rightsFile",
+        "rightsHash",
+        "root",
+        "rows",
+        "run",
+        "runCommand",
+        "safeFile",
+        "safeRelative",
+        "sha256File",
+        "sleepProvenance",
+        "slug",
+        "source",
+        "sourceFile",
+        "sourceReportSha256",
+        "streams",
+        "temporary",
+        "title",
+        "today",
+        "used",
+        "validateConfig",
+        "video",
+        "visual",
+        "visuals"
       ],
       "routes": []
     },
@@ -20178,6 +20308,58 @@
         "suffix",
         "third",
         "uploadedResult"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clippers-youtube-upload-packager.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-youtube-upload-packager.mjs",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "DAY",
+        "NOW",
+        "approved",
+        "calls",
+        "commands",
+        "config",
+        "configPath",
+        "fakeMediaCommands",
+        "first",
+        "firstRow",
+        "fixture",
+        "item",
+        "manifest",
+        "manifestFile",
+        "manifestPath",
+        "media",
+        "mediaFile",
+        "mediaHash",
+        "missing",
+        "outputPath",
+        "provenanceFile",
+        "publicAuthorization",
+        "qa",
+        "queue",
+        "report",
+        "result",
+        "rights",
+        "root",
+        "row",
+        "second",
+        "secondRow",
+        "sha",
+        "shortId",
+        "sourceReport",
+        "uploadItem"
       ],
       "routes": []
     },
