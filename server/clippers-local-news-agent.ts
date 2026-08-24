@@ -1113,8 +1113,16 @@ function canonicalFetchedStoryKey(raw: ClipperLocalNewsRawEvent, now: string): s
     .replace(/[^a-z0-9]+/g, " ")
     .trim()
     .replace(/\s+/g, " ");
-  if (!titleKey) return `${event.lane}|${event.source.toLowerCase()}|${event.sourceEventId.toLowerCase()}`;
-  return `${event.lane}|${titleKey}`;
+  let federalPressStory = false;
+  try {
+    const url = new URL(event.sourceUrl);
+    federalPressStory = (url.hostname === "www.justice.gov" && url.pathname.startsWith("/usao-"))
+      || (url.hostname === "www.fbi.gov" && url.pathname.includes("/field-offices/"));
+  } catch {
+    federalPressStory = false;
+  }
+  if (federalPressStory && titleKey) return `${event.lane}|federal-press|${titleKey}`;
+  return `${event.lane}|${event.source.toLowerCase()}|${event.sourceEventId.toLowerCase()}|${event.location.toLowerCase()}`;
 }
 
 function fetchedStoryPreference(raw: ClipperLocalNewsRawEvent, now: string): number {

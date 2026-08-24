@@ -805,6 +805,39 @@ test("fetched official stories dedupe numeric and written-number headline varian
   assert.match(deduped[0].sourceUrl, /justice\.gov\/usao-sdny/);
 });
 
+test("fetched alerts preserve same-title events in different locations", () => {
+  const now = "2026-08-24T12:00:00Z";
+  const alerts = [
+    {
+      sourceEventId: "nws-flood-bronx",
+      source: "National Weather Service",
+      sourceUrl: "https://api.weather.gov/alerts/urn:oid:bronx",
+      lane: "ny-news" as const,
+      title: "Flood Warning",
+      description: "Flooding is expected in low-lying areas.",
+      location: "Bronx County",
+      eventType: "Flood Warning",
+      severity: "Severe",
+      urgency: "Immediate",
+    },
+    {
+      sourceEventId: "nws-flood-queens",
+      source: "National Weather Service",
+      sourceUrl: "https://api.weather.gov/alerts/urn:oid:queens",
+      lane: "ny-news" as const,
+      title: "Flood Warning",
+      description: "Flooding is expected in low-lying areas.",
+      location: "Queens County",
+      eventType: "Flood Warning",
+      severity: "Severe",
+      urgency: "Immediate",
+    },
+  ];
+  const deduped = __clipperLocalNewsInternals.dedupeFetchedStoryEvents(alerts, now);
+  assert.equal(deduped.length, 2);
+  assert.deepEqual(deduped.map((item) => item.location), ["Bronx County", "Queens County"]);
+});
+
 test("traffic connectors stay disabled by default and can be explicitly restored", () => {
   const defaultSources = __clipperLocalNewsInternals.sources({});
   const defaultConnectors = __clipperLocalNewsInternals.connectorCatalog({});
