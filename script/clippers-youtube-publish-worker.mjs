@@ -12,7 +12,9 @@ const SHORT_LANES = new Set(["motivation_es", "motivation_en"]);
 const ACTIVE_STATES = new Set(["upload_started", "uncertain_outcome", "uploaded"]);
 const SHA256 = /^[a-f0-9]{64}$/i;
 const CHANNEL_ID = /^UC[A-Za-z0-9_-]{20,30}$/;
+const VIDEO_ID = /^[A-Za-z0-9_-]{6,32}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const EMPTY_LOCK_STALE_MS = 30 * 60 * 1000;
 
 const clean = (value) => String(value ?? "").trim();
 
@@ -25,6 +27,16 @@ async function atomicJson(filePath, value) {
   const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   await rename(temporary, filePath);
+}
+
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
 }
 
 async function sha256File(filePath) {
@@ -205,14 +217,24 @@ function publicBlockers(item, entry, env) {
 
 async function acquireLock(lockPath) {
   await mkdir(path.dirname(lockPath), { recursive: true, mode: 0o700 });
-  try {
-    const handle = await open(lockPath, "wx", 0o600);
-    await handle.writeFile(`${JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() })}\n`);
-    return handle;
-  } catch (error) {
-    if (error?.code === "EEXIST") throw new Error("youtube_publish_worker_already_running");
-    throw error;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const handle = await open(lockPath, "wx", 0o600);
+      await handle.writeFile(`${JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() })}\n`);
+      return handle;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      const [existing, info] = await Promise.all([
+        jsonFile(lockPath).catch(() => null),
+        lstat(lockPath).catch(() => null),
+      ]);
+      const pid = Number(existing?.pid);
+      const isOldEmptyLock = info?.size === 0 && Date.now() - info.mtimeMs > EMPTY_LOCK_STALE_MS;
+      if (processAlive(pid) || (!pid && !isOldEmptyLock)) throw new Error("youtube_publish_worker_already_running");
+      await rm(lockPath, { force: true });
+    }
   }
+  throw new Error("youtube_publish_worker_lock_unavailable");
 }
 
 export async function runYouTubePublishWorker(options = {}) {
@@ -298,13 +320,22 @@ export async function runYouTubePublishWorker(options = {}) {
       reserved[lane] += 1;
       acceptedThisRun.push({ itemId: item.itemId, file: item.file, sha256: item.sha256, lane, status: "upload_started", recordedAt: now.toISOString() });
       const result = await runUpload({ workspaceRoot, itemFile: entry.itemFile, env, now });
+      const returnedStatus = clean(result?.status) || "blocked";
+      const returnedVideoId = clean(result?.youtubeVideoId);
+      const uploadedResultValid = returnedStatus !== "uploaded"
+        || (result?.uploadAttempted === true && VIDEO_ID.test(returnedVideoId));
+      const status = uploadedResultValid ? returnedStatus : "uncertain_outcome";
+      const blockers = uploadedResultValid
+        ? (Array.isArray(result?.blockers) ? result.blockers : [])
+        : ["uploader_result_invalid", "manual_youtube_reconciliation_required"];
+      const confirmedVideoId = status === "uploaded" ? returnedVideoId : null;
       outcomes.push({
         itemId: clean(result?.itemId) || clean(item.itemId), lane,
-        status: clean(result?.status) || "blocked", blockers: Array.isArray(result?.blockers) ? result.blockers : [],
+        status, blockers,
         privacyStatus: clean(result?.privacyStatus) || clean(item.privacyStatus) || "private",
         uploadAttempted: result?.uploadAttempted === true,
-        youtubeVideoId: clean(result?.youtubeVideoId) || null,
-        youtubeUrl: clean(result?.youtubeUrl) || null,
+        youtubeVideoId: confirmedVideoId,
+        youtubeUrl: confirmedVideoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(confirmedVideoId)}` : null,
         apiCostUsd: 0,
       });
     }

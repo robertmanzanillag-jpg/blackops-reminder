@@ -126,6 +126,32 @@ test("uploads independent ES, EN, and sleep lanes and writes only real returned 
   assert.equal(result.apiCostUsd, 0);
 });
 
+test("accepts uploaded only with a confirmed valid ID and constructs the canonical URL", async () => {
+  const canonical = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const good = await runYouTubePublishWorker({
+    workspaceRoot: canonical.root, queueFile: canonical.queueFile, env: envFor("motivation_es"),
+    runUpload: async () => ({
+      status: "uploaded", itemId: "short-es", lane: "motivation_es", uploadAttempted: true,
+      youtubeVideoId: "valid_123", youtubeUrl: "https://attacker.example/fake", blockers: [],
+    }),
+  });
+  assert.equal(good.items[0].status, "uploaded");
+  assert.equal(good.items[0].youtubeUrl, "https://www.youtube.com/watch?v=valid_123");
+
+  const invalid = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const bad = await runYouTubePublishWorker({
+    workspaceRoot: invalid.root, queueFile: invalid.queueFile, env: envFor("motivation_es"),
+    runUpload: async () => ({
+      status: "uploaded", itemId: "short-es", lane: "motivation_es", uploadAttempted: false,
+      youtubeVideoId: null, youtubeUrl: "https://attacker.example/fake", blockers: [],
+    }),
+  });
+  assert.equal(bad.items[0].status, "uncertain_outcome");
+  assert.equal(bad.items[0].youtubeVideoId, null);
+  assert.equal(bad.items[0].youtubeUrl, null);
+  assert.deepEqual(bad.items[0].blockers, ["uploader_result_invalid", "manual_youtube_reconciliation_required"]);
+});
+
 test("does not invoke uploader when exact rights or QA evidence is missing", async () => {
   const fixture = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
   const itemPath = path.join(fixture.root, fixture.entries[0].itemFile);
