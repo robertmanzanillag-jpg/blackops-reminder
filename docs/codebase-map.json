@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-24T08:20:06.098Z",
+  "generatedAt": "2026-08-24T08:21:24.608Z",
   "repoRoot": "/private/tmp/asistente-sleep-clippers",
   "packageName": "rest-express",
   "scripts": {
@@ -127,27 +127,6 @@
     "symbols": 12082
   },
   "directories": {
-    "docs": {
-      "files": 28,
-      "indexed": 27,
-      "kinds": {
-        "docs": 28
-      }
-    },
-    "script": {
-      "files": 72,
-      "indexed": 67,
-      "kinds": {
-        "script": 72
-      }
-    },
-    "tests": {
-      "files": 111,
-      "indexed": 108,
-      "kinds": {
-        "test": 111
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -205,12 +184,26 @@
         "client-page": 26
       }
     },
+    "docs": {
+      "files": 28,
+      "indexed": 27,
+      "kinds": {
+        "docs": 28
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 72,
+      "indexed": 67,
+      "kinds": {
+        "script": 72
       }
     },
     "scripts": {
@@ -246,6 +239,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 111,
+      "indexed": 108,
+      "kinds": {
+        "test": 111
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
