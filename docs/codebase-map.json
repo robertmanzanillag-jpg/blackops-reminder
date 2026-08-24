@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-24T07:15:19.810Z",
+  "generatedAt": "2026-08-24T07:57:50.679Z",
   "repoRoot": "/private/tmp/asistente-sleep-clippers",
   "packageName": "rest-express",
   "scripts": {
@@ -102,6 +102,8 @@
     "clippers:motivation-shorts": "node script/clippers-motivation-shorts.mjs",
     "clippers:sleep-video": "node script/clippers-sleep-video-generator.mjs",
     "clippers:content-local-worker": "node script/clippers-content-local-worker.mjs",
+    "clippers:youtube-publish-worker": "node script/clippers-youtube-publish-worker.mjs",
+    "test:clippers-youtube-publish-worker": "node --test tests/clippers-youtube-publish-worker.test.mjs",
     "test:clippers-content": "node --test tests/clippers-content-learning-ceo.test.mjs tests/clippers-motivation-shorts.test.mjs tests/clippers-sleep-video-generator.test.mjs tests/clippers-content-local-worker.test.mjs",
     "clippers:install-free-local-worker": "zsh script/install-clippers-free-local-worker-launch-agent.sh",
     "clippers:local-subtitles": "node script/clippers-local-subtitles.mjs",
@@ -115,34 +117,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 565,
-    "filesIndexed": 483,
-    "imports": 1812,
+    "filesVisible": 628,
+    "filesIndexed": 546,
+    "imports": 1826,
     "routes": 494,
-    "symbols": 11700
+    "symbols": 11886
   },
   "directories": {
-    "docs": {
-      "files": 25,
-      "indexed": 24,
-      "kinds": {
-        "docs": 25
-      }
-    },
-    "script": {
-      "files": 68,
-      "indexed": 64,
-      "kinds": {
-        "script": 68
-      }
-    },
-    "tests": {
-      "files": 108,
-      "indexed": 105,
-      "kinds": {
-        "test": 108
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -200,12 +181,26 @@
         "client-page": 26
       }
     },
+    "docs": {
+      "files": 26,
+      "indexed": 25,
+      "kinds": {
+        "docs": 26
+      }
+    },
     "examples/clippers-motivation": {
-      "files": 11,
-      "indexed": 11,
+      "files": 71,
+      "indexed": 71,
       "kinds": {
         "docs": 1,
-        "other": 10
+        "other": 70
+      }
+    },
+    "script": {
+      "files": 69,
+      "indexed": 65,
+      "kinds": {
+        "script": 69
       }
     },
     "scripts": {
@@ -241,6 +236,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 109,
+      "indexed": 106,
+      "kinds": {
+        "test": 109
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -4015,6 +4017,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-youtube-publish-worker.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-youtube-uploader.md",
       "kind": "docs",
       "imports": [],
@@ -4098,7 +4108,7 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motiva-consistencia-001.json",
+      "path": "examples/clippers-motivation/motiva-d01-01-disciplina.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -4106,7 +4116,7 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motiva-disciplina-001.json",
+      "path": "examples/clippers-motivation/motiva-d01-02-rechazo.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -4114,7 +4124,7 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motiva-empezar-tarde-001.json",
+      "path": "examples/clippers-motivation/motiva-d01-03-miedo.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -4122,7 +4132,7 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motiva-miedo-001.json",
+      "path": "examples/clippers-motivation/motiva-d01-04-consistencia.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -4130,7 +4140,7 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motiva-rechazo-001.json",
+      "path": "examples/clippers-motivation/motiva-d01-05-empezar-tarde.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -4138,7 +4148,7 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motivate-focus-001.json",
+      "path": "examples/clippers-motivation/motiva-d02-01-perfeccionismo.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -4146,7 +4156,7 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motivate-fresh-start-001.json",
+      "path": "examples/clippers-motivation/motiva-d02-02-procrastinacion.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -4154,7 +4164,7 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motivate-patience-001.json",
+      "path": "examples/clippers-motivation/motiva-d02-03-comparacion.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -4162,7 +4172,7 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motivate-self-trust-001.json",
+      "path": "examples/clippers-motivation/motiva-d02-04-limites.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -4170,7 +4180,487 @@
       "routes": []
     },
     {
-      "path": "examples/clippers-motivation/motivate-setback-001.json",
+      "path": "examples/clippers-motivation/motiva-d02-05-conversacion-dificil.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d03-01-decisiones.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d03-02-distracciones.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d03-03-error.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d03-04-progreso-invisible.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d03-05-pedir-oportunidad.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d04-01-principiante.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d04-02-paciencia.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d04-03-respeto-propio.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d04-04-responsabilidad.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d04-05-incertidumbre.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d05-01-terminar.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d05-02-decir-no.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d05-03-reiniciar-dia.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d05-04-prioridades.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d05-05-promesas-pequenas.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d06-01-critica.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d06-02-confianza.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d06-03-camino-solitario.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d06-04-volver.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d06-05-estandares.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d07-01-tomar-control.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d07-02-adaptabilidad.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d07-03-preparacion.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d07-04-gratitud-activa.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-d07-05-largo-plazo.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d01-01-focus.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d01-02-fresh-start.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d01-03-patience.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d01-04-self-trust.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d01-05-setback.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d02-01-curiosity.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d02-02-first-draft.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d02-03-protect-morning.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d02-04-better-question.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d02-05-be-seen.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d03-01-simplify-system.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d03-02-end-indecision.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d03-03-deliberate-practice.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d03-04-keep-appointments.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d03-05-release-sunk-cost.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d04-01-build-evidence.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d04-02-choose-environment.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d04-03-next-constraint.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d04-04-feedback-identity.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d04-05-finish-before-expand.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d05-01-beginner-question.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d05-02-honest-pace.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d05-03-resist-urgency.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d05-04-work-in-silence.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d05-05-take-initiative.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d06-01-recover-momentum.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d06-02-make-room.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d06-03-standards-not-mood.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d06-04-clarity-writing.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d06-05-direct-message.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d07-01-prepare-pressure.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d07-02-steady-leadership.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d07-03-resourcefulness.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d07-04-choose-responsibility.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-d07-05-next-door.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -5120,6 +5610,7 @@
         "LANGUAGES",
         "MAX_TIMEOUT_MS",
         "acquireWorkerLock",
+        "artifacts",
         "atomicJson",
         "base",
         "candidateIdentity",
@@ -5133,6 +5624,7 @@
         "effectiveSleepPlan",
         "entry",
         "existing",
+        "exists",
         "generateSleep",
         "generated",
         "handle",
@@ -5148,8 +5640,10 @@
         "manifestPath",
         "metricsLedgerPath",
         "motivation",
+        "nextSleepJob",
         "plan",
         "processAlive",
+        "rawSleepJobs",
         "readJson",
         "recent",
         "recentSleepRows",
@@ -5170,13 +5664,17 @@
         "runCeo",
         "runContentLocalWorker",
         "shortChannels",
+        "skippedDuplicates",
         "sleep",
+        "sleepJob",
+        "sleepJobs",
         "sleepLedger",
         "sleepLedgerPath",
         "sleepPlan",
         "temporary",
         "timeoutMs",
         "token",
+        "used",
         "validateConfig",
         "withTimeout",
         "within",
@@ -5232,6 +5730,7 @@
         "freshForToday",
         "generatedAt",
         "generatedMs",
+        "hasNonNegativeIntegerFields",
         "hasReport",
         "identity",
         "lane",
@@ -5255,6 +5754,7 @@
         "reportsRoot",
         "runClippersDailyWatchdog",
         "scheduled",
+        "schemaValid",
         "seen",
         "sleep",
         "sleepValue",
@@ -5265,6 +5765,8 @@
         "temporary",
         "timeZone",
         "title",
+        "validMotivationLane",
+        "validSleepLane",
         "worker",
         "workerPath",
         "workerState",
@@ -6240,6 +6742,7 @@
         "node:util"
       ],
       "exports": [
+        "buildProceduralAudioPlan",
         "buildSrt",
         "canonicalScript",
         "renderMotivationShort",
@@ -6247,18 +6750,27 @@
         "volumeBlocker"
       ],
       "symbols": [
+        "AUDIO_MODES",
         "CHANNEL_ID",
         "DAILY_LIMIT_PER_CHANNEL",
         "MAX_SECONDS",
         "MIN_SECONDS",
+        "PROCEDURAL_GENERATOR",
         "RIGHTS_STATUSES",
         "SHA256",
         "SUPPORTED_LANGUAGES",
+        "allowedAudioKeys",
+        "allowedParameterKeys",
+        "allowedProvenanceKeys",
         "atomicJson",
+        "audioInput",
+        "audioMode",
+        "audioPlanSha256",
         "background",
         "beats",
         "blocker",
         "blockers",
+        "buildProceduralAudioPlan",
         "buildSrt",
         "candidatePath",
         "canonicalScript",
@@ -6278,14 +6790,16 @@
         "cues",
         "date",
         "dayInNewYork",
+        "declared",
         "duplicate",
         "durationSeconds",
         "end",
-        "evidence",
         "evidenceDir",
         "evidenceFrames",
         "execFileAsync",
+        "fadeSeconds",
         "filePath",
+        "filter",
         "frames",
         "hashText",
         "hook",
@@ -6301,6 +6815,7 @@
         "limitBlocker",
         "main",
         "manifest",
+        "manifestAudioMode",
         "manifestFile",
         "manifestPath",
         "manifestSha256",
@@ -6312,16 +6827,18 @@
         "outputPath",
         "outputProbe",
         "outputSha256",
+        "parameters",
         "parsed",
         "pathExists",
         "prepareCaptionOverlay",
         "probe",
+        "proceduralAudioBlockers",
+        "provenance",
         "quality",
         "realRelative",
         "relative",
         "renderMotivationShort",
         "report",
-        "rightsPath",
         "root",
         "rootPath",
         "row",
@@ -6333,6 +6850,7 @@
         "script",
         "scriptSha256",
         "secs",
+        "seed",
         "sha256File",
         "shortId",
         "srtTime",
@@ -6345,8 +6863,6 @@
         "validRows",
         "validateManifestShape",
         "validateVoiceEvidence",
-        "voicePath",
-        "voiceSha256",
         "volumeBlocker",
         "weights",
         "words",
@@ -7287,6 +7803,115 @@
       "routes": []
     },
     {
+      "path": "script/clippers-youtube-publish-worker.mjs",
+      "kind": "script",
+      "imports": [
+        "./clippers-youtube-uploader.mjs",
+        "node:crypto",
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "runYouTubePublishWorker"
+      ],
+      "symbols": [
+        "ACTIVE_STATES",
+        "CHANNEL_ID",
+        "DAY_MS",
+        "EMPTY_LOCK_STALE_MS",
+        "LANES",
+        "SHA256",
+        "SHORT_LANES",
+        "VIDEO_ID",
+        "acceptedThisRun",
+        "acquireLock",
+        "activeRows",
+        "atomicJson",
+        "authorization",
+        "base",
+        "blockers",
+        "candidate",
+        "cap",
+        "capBlocker",
+        "checks",
+        "clean",
+        "cliValue",
+        "confirmedVideoId",
+        "count",
+        "cutoff",
+        "dayInNewYork",
+        "duplicate",
+        "duplicateBlocker",
+        "entryProblems",
+        "env",
+        "evidenceBlockers",
+        "exactSourceMatch",
+        "expectedLane",
+        "handle",
+        "hash",
+        "index",
+        "invalidQueue",
+        "isOldEmptyLock",
+        "itemAuthorized",
+        "itemPath",
+        "jsonFile",
+        "key",
+        "lane",
+        "laneAuthBlockers",
+        "language",
+        "lock",
+        "lockPath",
+        "mediaPath",
+        "normalized",
+        "now",
+        "outcomes",
+        "pid",
+        "processAlive",
+        "publicBlockers",
+        "qaPath",
+        "qaValid",
+        "queueAuthorization",
+        "queueAuthorized",
+        "queueBlockers",
+        "queueFile",
+        "queueItemBlockers",
+        "queuePath",
+        "realRelative",
+        "relative",
+        "report",
+        "reportFile",
+        "reportPath",
+        "reserved",
+        "resolvedRoot",
+        "result",
+        "results",
+        "returnedStatus",
+        "returnedVideoId",
+        "rightsPath",
+        "rightsValid",
+        "row",
+        "rows",
+        "runUpload",
+        "runYouTubePublishWorker",
+        "safeFile",
+        "secretPresent",
+        "sha256File",
+        "sourceReportPath",
+        "status",
+        "suffix",
+        "temporary",
+        "today",
+        "uncertain",
+        "uniqueOutcomes",
+        "uploaded",
+        "uploadedResultValid",
+        "workspaceRoot"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/clippers-youtube-uploader.mjs",
       "kind": "script",
       "imports": [
@@ -7305,6 +7930,7 @@
       "symbols": [
         "ACTIVE_LEDGER_STATES",
         "CHANNELS_URL",
+        "EMPTY_LOCK_STALE_MS",
         "LANES",
         "PRIVACY",
         "RIGHTS",
@@ -7313,6 +7939,7 @@
         "UPLOAD_START_URL",
         "YOUTUBE_CHANNEL_ID",
         "YOUTUBE_VIDEO_ID",
+        "acquireLedgerLock",
         "active",
         "appendLedger",
         "arg",
@@ -7339,6 +7966,7 @@
         "hasOpaqueUploadId",
         "hash",
         "isOfficialHost",
+        "isOldEmptyLock",
         "isResumable",
         "isYouTubeUploadPath",
         "item",
@@ -7350,6 +7978,7 @@
         "ledger",
         "ledgerItems",
         "ledgerPath",
+        "lock",
         "lockPath",
         "lockedDuplicate",
         "mediaPath",
@@ -7360,9 +7989,11 @@
         "parseArgs",
         "parsed",
         "payload",
+        "pid",
         "preflight",
         "privacy",
         "privacyStatus",
+        "processAlive",
         "publicAuthorizationBlocker",
         "publicBlocker",
         "qaEvidenceValid",
@@ -18580,11 +19211,16 @@
         "item",
         "lockPath",
         "manifests",
+        "nextWeek",
+        "nextWeekCalls",
         "operations",
+        "orphanPath",
         "relative",
+        "rendered",
         "reports",
         "result",
         "root",
+        "rotatingOperations",
         "second",
         "secondCalls"
       ],
@@ -19035,18 +19671,27 @@
       "symbols": [
         "baseManifest",
         "blockers",
+        "coerced",
+        "coercionBlockers",
+        "daily",
         "duplicate",
         "english",
         "examplesDir",
         "execFileAsync",
         "existingOutput",
+        "external",
         "failed",
         "files",
         "first",
         "manifest",
+        "manifestFile",
         "manifestPath",
         "manifests",
+        "mixed",
         "now",
+        "proceduralManifest",
+        "provenance",
+        "remote",
         "result",
         "retry",
         "script",
@@ -19465,6 +20110,74 @@
         "sourceDir",
         "sourceName",
         "vyroSubmissionProofPath"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clippers-youtube-publish-worker.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-youtube-publish-worker.mjs",
+        "../script/clippers-youtube-uploader.mjs",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "CHANNELS",
+        "authorized",
+        "bad",
+        "calls",
+        "canonical",
+        "current",
+        "entries",
+        "env",
+        "envFor",
+        "fetcher",
+        "first",
+        "fixture",
+        "good",
+        "hashPath",
+        "invalid",
+        "item",
+        "itemFile",
+        "itemId",
+        "itemPath",
+        "lane",
+        "language",
+        "ledger",
+        "lockPath",
+        "media",
+        "mediaFile",
+        "mediaHash",
+        "noQueueAuth",
+        "old",
+        "privacyStatus",
+        "qa",
+        "qaFile",
+        "queue",
+        "queueFile",
+        "queuePath",
+        "recordedAt",
+        "report",
+        "reportFile",
+        "reportText",
+        "result",
+        "rights",
+        "rightsFile",
+        "root",
+        "rows",
+        "second",
+        "setup",
+        "sha",
+        "stateHistory",
+        "suffix",
+        "third",
+        "uploadedResult"
       ],
       "routes": []
     },
