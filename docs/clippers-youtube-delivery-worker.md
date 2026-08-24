@@ -14,7 +14,7 @@ The LaunchAgent calls `run-clippers-youtube-delivery-worker.sh`. That wrapper re
 - `CLIPPERS_YOUTUBE_{ES,EN,SLEEP}_{CLIENT_ID,CLIENT_SECRET,REFRESH_TOKEN}`
 - `CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED`
 
-The plist contains only paths, schedule controls, and non-secret runtime roots. Neither the delivery JavaScript nor its children read `.env` files. The wrapper does not echo selected values.
+The plist contains only paths, schedule controls, and non-secret runtime roots. Neither the delivery JavaScript nor its children read `.env` files. Before starting Node, the wrapper replaces the inherited environment with a minimal system environment plus the exact allowlist above, and it never echoes selected values.
 
 Run manually only after reviewing the same config and selected environment:
 

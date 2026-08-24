@@ -101,13 +101,13 @@ test("shell wrapper exports only the exact YouTube allowlist and never logs valu
     ].join("\n"), { mode: 0o600 });
     await chmod(config, 0o600);
     await chmod(selected, 0o600);
-    await writeFile(path.join(root, "script/clippers-youtube-delivery-worker.mjs"), `import {writeFileSync} from "node:fs"; writeFileSync(process.env.CAPTURE_FILE, JSON.stringify({channel:process.env.CLIPPERS_YOUTUBE_ES_CHANNEL_ID,clientSecret:process.env.CLIPPERS_YOUTUBE_ES_CLIENT_SECRET,refresh:process.env.CLIPPERS_YOUTUBE_ES_REFRESH_TOKEN,publish:process.env.CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED,metricool:process.env.METRICOOL_USER_TOKEN,unrelated:process.env.UNRELATED_SECRET,args:process.argv.slice(2)}));\n`);
+    await writeFile(path.join(root, "script/clippers-youtube-delivery-worker.mjs"), `import {writeFileSync} from "node:fs"; writeFileSync(${JSON.stringify(capture)}, JSON.stringify({channel:process.env.CLIPPERS_YOUTUBE_ES_CHANNEL_ID,clientSecret:process.env.CLIPPERS_YOUTUBE_ES_CLIENT_SECRET,refresh:process.env.CLIPPERS_YOUTUBE_ES_REFRESH_TOKEN,publish:process.env.CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED,metricool:process.env.METRICOOL_USER_TOKEN,unrelated:process.env.UNRELATED_SECRET,args:process.argv.slice(2)}));\n`);
     const wrapper = path.resolve("script/run-clippers-youtube-delivery-worker.sh");
     const result = spawnSync("zsh", [wrapper], {
       encoding: "utf8",
       env: {
         PATH: process.env.PATH,
-        CAPTURE_FILE: capture,
+        UNRELATED_SECRET: "inherited-secret-must-also-be-scrubbed",
         CLIPPERS_RUNTIME_ROOT: root,
         CLIPPERS_YOUTUBE_DELIVERY_CONFIG: config,
         CLIPPERS_YOUTUBE_SELECTED_ENV: selected,

@@ -9,6 +9,8 @@ SELECTED_ENV="${CLIPPERS_YOUTUBE_SELECTED_ENV:?CLIPPERS_YOUTUBE_SELECTED_ENV is 
 [[ -f "$SELECTED_ENV" && ! -L "$SELECTED_ENV" ]] || { print -u2 "YouTube selected env must be a regular file."; exit 1; }
 [[ "$(stat -f '%Lp' "$SELECTED_ENV")" == [0-7]00 ]] || { print -u2 "YouTube selected env must be owner-only."; exit 1; }
 
+typeset -a YOUTUBE_ENV
+YOUTUBE_ENV=()
 while IFS= read -r raw || [[ -n "$raw" ]]; do
   line="${raw##[[:space:]]#}"
   [[ -z "$line" || "$line" == \#* ]] && continue
@@ -24,9 +26,17 @@ while IFS= read -r raw || [[ -n "$raw" ]]; do
       if [[ ( "$value" == \"*\" && "$value" == *\" ) || ( "$value" == \'*\' && "$value" == *\' ) ]]; then
         value="${value[2,-2]}"
       fi
-      export "$key=$value"
+      YOUTUBE_ENV+=("$key=$value")
       ;;
   esac
 done < "$SELECTED_ENV"
 
-exec "${CLIPPERS_NODE_PATH:-$(command -v node)}" "$RUNTIME_ROOT/script/clippers-youtube-delivery-worker.mjs" --config "$DELIVERY_CONFIG"
+exec /usr/bin/env -i \
+  "PATH=${PATH:-/usr/local/bin:/usr/bin:/bin}" \
+  "HOME=${HOME:-}" \
+  "TMPDIR=${TMPDIR:-/tmp}" \
+  "TZ=${TZ:-America/New_York}" \
+  "${YOUTUBE_ENV[@]}" \
+  "${CLIPPERS_NODE_PATH:-$(command -v node)}" \
+  "$RUNTIME_ROOT/script/clippers-youtube-delivery-worker.mjs" \
+  --config "$DELIVERY_CONFIG"
