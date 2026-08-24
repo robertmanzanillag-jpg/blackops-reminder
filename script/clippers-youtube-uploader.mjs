@@ -18,6 +18,7 @@ const ACTIVE_LEDGER_STATES = new Set(["upload_started", "uncertain_outcome", "up
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const CHANNELS_URL = "https://www.googleapis.com/youtube/v3/channels?part=id&mine=true";
 const UPLOAD_START_URL = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet%2Cstatus";
+const EMPTY_LOCK_STALE_MS = 30 * 60 * 1000;
 
 const clean = (value) => String(value ?? "").trim();
 const sha256Buffer = (value) => createHash("sha256").update(value).digest("hex");
@@ -35,6 +36,16 @@ async function atomicJson(filePath, value) {
   const temporary = `${filePath}.${process.pid}.${Date.now()}.tmp`;
   await writeFile(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   await rename(temporary, filePath);
+}
+
+function processAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    return error?.code === "EPERM";
+  }
 }
 
 async function safeRegularFile(root, relativeFile) {
@@ -161,6 +172,30 @@ async function appendLedger(ledgerPath, row) {
   await atomicJson(ledgerPath, { schemaVersion: 1, items: [...items, row] });
 }
 
+async function acquireLedgerLock(lockPath) {
+  await mkdir(path.dirname(lockPath), { recursive: true });
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    let lock;
+    try {
+      lock = await open(lockPath, "wx", 0o600);
+      await lock.writeFile(`${JSON.stringify({ pid: process.pid, acquiredAt: new Date().toISOString() })}\n`);
+      return lock;
+    } catch (error) {
+      if (error?.code !== "EEXIST") throw error;
+      await lock?.close().catch(() => {});
+      const [existing, info] = await Promise.all([
+        jsonFile(lockPath).catch(() => null),
+        lstat(lockPath).catch(() => null),
+      ]);
+      const pid = Number(existing?.pid);
+      const isOldEmptyLock = info?.size === 0 && Date.now() - info.mtimeMs > EMPTY_LOCK_STALE_MS;
+      if (processAlive(pid) || (!pid && !isOldEmptyLock)) return null;
+      await rm(lockPath, { force: true });
+    }
+  }
+  return null;
+}
+
 async function responseJson(response) {
   try {
     return await response.json();
@@ -277,11 +312,8 @@ export async function runYouTubeUpload(options = {}) {
   if (authBlockers.length) return preflight;
 
   const lockPath = `${ledgerPath}.lock`;
-  await mkdir(path.dirname(lockPath), { recursive: true });
-  let lock;
-  try {
-    lock = await open(lockPath, "wx", 0o600);
-  } catch {
+  const lock = await acquireLedgerLock(lockPath);
+  if (!lock) {
     return { ...resultBase, status: "blocked", blockers: ["upload_lock_busy"], itemId: item.itemId, lane: item.lane };
   }
   try {

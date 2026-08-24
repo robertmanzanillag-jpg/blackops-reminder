@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { runYouTubePublishWorker } from "../script/clippers-youtube-publish-worker.mjs";
+import { runYouTubeUpload } from "../script/clippers-youtube-uploader.mjs";
 
 const CHANNELS = {
   motivation_es: "UC1234567890123456789012",
@@ -289,4 +290,59 @@ test("pins queue to an exact completed content report hash", async () => {
   });
   assert.equal(calls, 0);
   assert.deepEqual(result.blockers, ["source_report_hash_mismatch"]);
+});
+
+test("recovers an orphaned publish worker lock from a dead PID", async () => {
+  const fixture = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  await writeFile(path.join(fixture.root, "reports/youtube-publish-worker.lock"), `${JSON.stringify({
+    pid: 999999,
+    acquiredAt: "2026-08-24T12:00:00.000Z",
+  })}\n`);
+  const calls = [];
+  const result = await runYouTubePublishWorker({
+    workspaceRoot: fixture.root,
+    queueFile: fixture.queueFile,
+    env: envFor("motivation_es"),
+    now: new Date("2026-08-24T15:00:00.000Z"),
+    runUpload: async (options) => { calls.push(options); return uploadedResult(options, calls.length); },
+  });
+  assert.equal(result.uploaded, 1);
+  assert.equal(calls.length, 1);
+});
+
+test("recovers an old empty uploader ledger lock before a verified upload", async () => {
+  const fixture = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const lockPath = path.join(fixture.root, "reports/youtube-upload-ledger.json.lock");
+  await writeFile(lockPath, "");
+  const old = new Date(Date.now() - 31 * 60 * 1000);
+  await utimes(lockPath, old, old);
+  const calls = [];
+  const fetcher = async (url) => {
+    calls.push(String(url));
+    if (String(url).includes("oauth2.googleapis.com/token")) {
+      return Response.json({ access_token: "access-token" });
+    }
+    if (String(url).includes("youtube/v3/channels")) {
+      return Response.json({ items: [{ id: CHANNELS.motivation_es }] });
+    }
+    if (String(url).includes("upload/youtube/v3/videos") && !String(url).includes("upload_id=")) {
+      return new Response("", {
+        status: 200,
+        headers: { location: "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&upload_id=upload123" },
+      });
+    }
+    return Response.json({ id: "video123" });
+  };
+  const result = await runYouTubeUpload({
+    workspaceRoot: fixture.root,
+    itemFile: fixture.entries[0].itemFile,
+    env: envFor("motivation_es"),
+    now: new Date("2026-08-24T15:00:00.000Z"),
+    fetcher,
+  });
+  assert.equal(result.status, "uploaded");
+  assert.equal(result.youtubeUrl, "https://www.youtube.com/watch?v=video123");
+  assert.equal(calls.length, 4);
+  const ledger = JSON.parse(await readFile(path.join(fixture.root, "reports/youtube-upload-ledger.json"), "utf8"));
+  assert.deepEqual(ledger.items.map((item) => item.status), ["upload_started", "uploaded"]);
 });
