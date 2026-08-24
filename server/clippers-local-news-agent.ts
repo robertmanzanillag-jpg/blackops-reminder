@@ -187,7 +187,7 @@ export interface ClipperLocalNewsStatus {
     resolvedRevisions: number;
     cadence: { windowMinutes: 60; facebookPerLane: 6; facebookRoutinePerLane: 2; xPerLane: 8; xRoutinePerLane: 3; facebookRelevantMax: 10; adaptive: "urgency_and_observed_performance" };
     committee: { reviewed: number; unanimous: number; quarantined: number; rejected: number; roles: ClipperLocalNewsCommitteeRole[] };
-    growth: { mode: "zero_cost_organic"; paidAds: false; paidAiPerPost: false; ownedLinks: number; experiments: number; shortFormReady: number; sourceVideos: number; sourceImages: number; highQuality: number; videoFirst: true; localTranslation: { mode: "offline_opus_mt"; monthlyApiCostUsd: 0; requiredInProduction: true } };
+    growth: { mode: "zero_cost_organic"; paidAds: false; paidAiPerPost: true; ownedLinks: number; experiments: number; shortFormReady: number; sourceVideos: number; sourceImages: number; highQuality: number; videoFirst: true; localTranslation: { mode: "hosted_openai_nano_batched"; estimatedMonthlyApiCostUsd: number; requiredInProduction: true } };
     dailyPublishing: { minimumPerAccount: 10; adaptiveMaximum: 14; bilingualSamePost: true; videoFirst: true; accounts: Record<ClipperLocalNewsLane, Record<ClipperLocalNewsPlatform, { queuedToday: number; target: 10 | 12 | 14; deficit: number; performanceMode: "baseline" | "growing" | "breakout" }>> };
   };
   metrics: { total: number; impressions: number; engagements: number; clicks: number; shares: number; revenueUsd: number; costUsd: number; profitUsd: number };
@@ -555,7 +555,9 @@ async function translateEventCopy(event: ClipperLocalNewsEvent, translator: Loca
     ? ["La fuente oficial no proporcionó detalles adicionales.", "Consulta la fuente oficial antes de actuar."]
     : ["Official source provided no additional detail.", "Review the official source before taking action."];
   const fields = [event.title, event.description || sourceFallbacks[0], event.instruction || sourceFallbacks[1]];
-  const translated = await Promise.all(fields.map((field) => translator.translate(field, direction)));
+  // One batched hosted request per story keeps translation cost and latency
+  // bounded while the translator still validates every field independently.
+  const translated = await translator.translateMany(fields, direction);
   const safe = translated.every((result) => result.safe && Boolean(result.translated));
   const issues = translated.flatMap((result) => result.issues);
   const target = translated.map((result) => result.translated || "");
@@ -889,7 +891,7 @@ async function queueFor(event: ClipperLocalNewsEvent, now: string, env: NodeJS.P
     const copyHash = hashLocalNewsReviewValue(copy);
     const publishDecision = (translationGated || !autoEnabled) && committee.publishDecision === "auto_publish" ? "quarantine" as const : committee.publishDecision;
     const status: ClipperLocalNewsQueueStatus = committee.publishDecision === "reject" ? "rejected" : committee.publishDecision === "quarantine" || translationGated ? "quarantined" : !autoEnabled ? "approval_required" : "auto_eligible";
-    const translationEvidence = translationRequired ? bilingual?.safe ? ["local_translation=opus_mt_verified"] : [`local_translation_failed=${(bilingual?.issues || ["unknown"]).join(",")}`] : ["local_translation=disabled_nonproduction"];
+    const translationEvidence = translationRequired ? bilingual?.safe ? ["local_translation=verified"] : [`local_translation_failed=${(bilingual?.issues || ["unknown"]).join(",")}`] : ["local_translation=disabled_nonproduction"];
     const mediaEvidence = event.mediaType === "video" && event.mediaUrl ? ["media=verified_official_video"] : event.mediaType === "image" && event.mediaUrl ? ["media=verified_official_image"] : ["media=none"];
     const evidence = [...committee.evidence, ...translationEvidence, ...mediaEvidence, `qualityScore=${event.qualityScore}`, `copyHash=${copyHash}`];
     const id = digest(`${event.id}|${event.revision}|${platform}`);
@@ -1418,7 +1420,7 @@ export async function getClipperLocalNewsStatus(options: ClipperLocalNewsOptions
       growth: {
         mode: "zero_cost_organic",
         paidAds: false,
-        paidAiPerPost: false,
+        paidAiPerPost: true,
         ownedLinks: state?.queue.filter((item) => Boolean(item.organicGrowth?.ownedArticleUrl)).length || 0,
         experiments: state?.queue.filter((item) => Boolean(item.organicGrowth?.variantId)).length || 0,
         shortFormReady: state?.queue.filter((item) => item.organicGrowth?.shortForm.ready === true).length || 0,
@@ -1426,7 +1428,7 @@ export async function getClipperLocalNewsStatus(options: ClipperLocalNewsOptions
         sourceImages: state?.queue.filter((item) => item.mediaType === "image").length || 0,
         highQuality: state?.queue.filter((item) => (item.qualityScore || 0) >= 70).length || 0,
         videoFirst: true,
-        localTranslation: { mode: "offline_opus_mt", monthlyApiCostUsd: 0, requiredInProduction: true },
+        localTranslation: { mode: "hosted_openai_nano_batched", estimatedMonthlyApiCostUsd: 0.5, requiredInProduction: true },
       },
       dailyPublishing: dailyPublishingStatus(state),
     },

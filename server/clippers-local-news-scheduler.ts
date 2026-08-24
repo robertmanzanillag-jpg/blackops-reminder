@@ -148,7 +148,8 @@ export function createClipperLocalNewsScheduler(deps: ClipperLocalNewsSchedulerD
       await bootstrap({ env });
       const cycle = await runCycle({ env, fetch: boundedFetch });
       if (controller.signal.aborted) throw new Error("cycle_aborted_after_timeout");
-      await deliver({ env, status: cycle.status, fetch: boundedFetch });
+      const delivery = await deliver({ env, status: cycle.status, fetch: boundedFetch });
+      log(`[Clipper local news] cycle completed (sources=${cycle.fetchedSources || 0}; sourceFailures=${cycle.failedSources?.length || 0}; created=${cycle.created || 0}; queued=${cycle.queued || 0}; delivery=${delivery.status}; scheduled=${delivery.scheduled}; alreadyScheduled=${delivery.alreadyScheduled})`);
     })();
     inFlight = work.finally(() => {
       inFlight = null;

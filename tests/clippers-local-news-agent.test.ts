@@ -72,7 +72,7 @@ test("offline OPUS adapter produces substantive Spanish and English in the same 
   assert.match(facebook.copy, /Flood Watch/);
   assert.match(facebook.copy, /Heavy rain is possible/);
   assert.match(x.copy, /Vigilancia de inundaciones/);
-  assert.ok(queue.every((item: any) => item.evidence.includes("local_translation=opus_mt_verified")));
+  assert.ok(queue.every((item: any) => item.evidence.includes("local_translation=verified")));
 });
 
 test("offline translation integrity failure quarantines both platforms", async (t) => {
@@ -110,7 +110,7 @@ test("temporary offline model failure retries on the next duplicate cycle", asyn
   available = true;
   await ingestClipperLocalNewsEvents({ ...options, now: "2026-07-21T12:05:00Z" });
   queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
-  assert.ok(queue.every((item: any) => item.autoEligible === true && item.evidence.includes("local_translation=opus_mt_verified")));
+  assert.ok(queue.every((item: any) => item.autoEligible === true && item.evidence.includes("local_translation=verified")));
 });
 
 test("production cannot bypass required bilingual translation with an off flag", async (t) => {
@@ -166,7 +166,7 @@ test("Spanish events with missing fields use Spanish source fallbacks before tra
   });
   const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
   const facebook = queue.find((item: any) => item.platform === "facebook");
-  assert.ok(queue.every((item: any) => item.status === "auto_eligible" && item.evidence.includes("local_translation=opus_mt_verified")));
+  assert.ok(queue.every((item: any) => item.status === "auto_eligible" && item.evidence.includes("local_translation=verified")));
   assert.match(facebook.copy, /Detalle: La fuente oficial no proporcionó detalles adicionales\./);
   assert.match(facebook.copy, /Detail: The official source provided no additional detail\./);
 });
@@ -387,7 +387,7 @@ test("professional newsroom classifies desks and produces attributed Facebook te
   assert.equal(result.status.editorial.textOnlyFacebook, 1);
   assert.deepEqual(
     { mode: result.status.editorial.growth.mode, paidAds: result.status.editorial.growth.paidAds, paidAi: result.status.editorial.growth.paidAiPerPost },
-    { mode: "zero_cost_organic", paidAds: false, paidAi: false },
+    { mode: "zero_cost_organic", paidAds: false, paidAi: true },
   );
   const growth = JSON.parse(await readFile(path.join(workspaceDir, "organic-growth.json"), "utf8"));
   assert.deepEqual(growth.costPolicy, { paidAds: false, paidAiPerPost: false, generation: "deterministic_local_templates" });

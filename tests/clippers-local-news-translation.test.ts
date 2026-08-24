@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   LocalNewsTranslator,
+  OpenAiLocalNewsTranslationAdapter,
   detectLocalNewsLanguage,
   type LocalNewsTranslationAdapter,
   type LocalNewsTranslationDirection,
@@ -20,6 +21,65 @@ class FakeTranslationAdapter implements LocalNewsTranslationAdapter {
     return this.handler(input, direction);
   }
 }
+
+test("batches all fields from one story into one low-cost OpenAI request", async () => {
+  const requests: any[] = [];
+  const client = {
+    chat: {
+      completions: {
+        create: async (request: unknown) => {
+          requests.push(request);
+          return {
+            choices: [{ message: { content: JSON.stringify({
+              translations: [
+                "Choque cierra I-95",
+                "La carretera está cerrada por una investigación policial.",
+                "Consulta la fuente oficial antes de actuar.",
+              ],
+            }) } }],
+          };
+        },
+      },
+    },
+  } as any;
+  const adapter = new OpenAiLocalNewsTranslationAdapter({
+    client,
+    env: { CLIPPERS_LOCAL_NEWS_OPENAI_MODEL: "gpt-5.4-nano" },
+  });
+  const translator = new LocalNewsTranslator({ enabled: true, adapter });
+  const inputs = [
+    "Crash closes I-95",
+    "The road is closed for a police investigation.",
+    "Review the official source before taking action.",
+  ];
+
+  const first = await translator.translateMany(inputs, "en-es");
+  const second = await translator.translateMany(inputs, "en-es");
+
+  assert.equal(requests.length, 1);
+  assert.equal(requests[0].model, "gpt-5.4-nano");
+  assert.equal(requests[0].reasoning_effort, "none");
+  assert.deepEqual(JSON.parse(requests[0].messages[1].content), { inputs });
+  assert.ok(first.every((result) => result.safe && result.status === "translated"));
+  assert.ok(second.every((result) => result.safe && result.fromCache));
+});
+
+test("hosted batch translation fails closed when its JSON shape is incomplete", async () => {
+  const client = {
+    chat: { completions: { create: async () => ({
+      choices: [{ message: { content: JSON.stringify({ translations: ["Choque cierra I-95"] }) } }],
+    }) } },
+  } as any;
+  const translator = new LocalNewsTranslator({
+    enabled: true,
+    adapter: new OpenAiLocalNewsTranslationAdapter({ client, env: {} }),
+  });
+
+  const results = await translator.translateMany(["Crash closes I-95", "The road is closed."], "en-es");
+
+  assert.ok(results.every((result) => !result.safe && result.status === "unavailable"));
+  assert.ok(results.every((result) => result.issues.includes("local_translation_failed:openai_translation_shape_invalid")));
+});
 
 test("detects common English and Spanish public-safety copy", () => {
   assert.equal(detectLocalNewsLanguage("The road is closed from 8 AM to 10 AM."), "en");
