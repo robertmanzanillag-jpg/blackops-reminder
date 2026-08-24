@@ -266,6 +266,7 @@ const ARCGIS_STALE_MS = 48 * 60 * 60_000;
 const MIAMI_TRANSIT_LOOKBACK_MS = 120 * 24 * 60 * 60_000;
 const MIAMI_TRANSIT_MAX_ACTIVE = 20;
 const FACEBOOK_DETAIL_LIMIT = 700;
+const TRANSLATION_TITLE_LIMIT = 500;
 const PUBLIC_SNAPSHOT_MAX_BYTES = 3 * 1024 * 1024;
 const PUBLIC_SNAPSHOT_MAX_QUEUE_ITEMS = 600;
 const verifiedFetchedEvents = new WeakSet<object>();
@@ -554,7 +555,11 @@ async function translateEventCopy(event: ClipperLocalNewsEvent, translator: Loca
   const sourceFallbacks = sourceLanguage === "es"
     ? ["La fuente oficial no proporcionó detalles adicionales.", "Consulta la fuente oficial antes de actuar."]
     : ["Official source provided no additional detail.", "Review the official source before taking action."];
-  const fields = [event.title, event.description || sourceFallbacks[0], event.instruction || sourceFallbacks[1]];
+  const fields = [
+    truncate(event.title, TRANSLATION_TITLE_LIMIT),
+    truncate(event.description || sourceFallbacks[0], FACEBOOK_DETAIL_LIMIT),
+    truncate(event.instruction || sourceFallbacks[1], FACEBOOK_DETAIL_LIMIT),
+  ];
   // One batched hosted request per story keeps translation cost and latency
   // bounded while the translator still validates every field independently.
   const translated = await translator.translateMany(fields, direction);

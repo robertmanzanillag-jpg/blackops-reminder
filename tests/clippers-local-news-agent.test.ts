@@ -75,6 +75,42 @@ test("offline OPUS adapter produces substantive Spanish and English in the same 
   assert.ok(queue.every((item: any) => item.evidence.includes("local_translation=verified")));
 });
 
+test("translation input is capped before the hosted request to bound cost and latency", async (t) => {
+  const workspaceDir = await fixture(t);
+  let captured: string[] = [];
+  const translator = new LocalNewsTranslator({
+    enabled: true,
+    adapter: {
+      translate: async () => "La fuente oficial publicó una actualización.",
+      translateBatch: async (inputs) => {
+        captured = inputs;
+        return [
+          "Alerta oficial para la comunidad.",
+          "La carretera está cerrada por una investigación policial.",
+          "Consulta la fuente oficial antes de actuar.",
+        ];
+      },
+    },
+  });
+  await ingestClipperLocalNewsEvents({
+    workspaceDir,
+    now: "2026-07-21T12:00:00Z",
+    env: { NODE_ENV: "production" },
+    translator,
+    events: [{
+      ...event,
+      title: `The official public safety alert ${"update ".repeat(100)}`,
+      description: "The road is closed for a police investigation. ".repeat(100),
+      instruction: "Review the official source before taking action. ".repeat(100),
+    }],
+  });
+
+  assert.equal(captured.length, 3);
+  assert.ok(captured[0].length <= 500);
+  assert.ok(captured[1].length <= 700);
+  assert.ok(captured[2].length <= 700);
+});
+
 test("offline translation integrity failure quarantines both platforms", async (t) => {
   const workspaceDir = await fixture(t);
   const translator = new LocalNewsTranslator({ enabled: true, adapter: { translate: async (input) => input.replace("I-95", "I-94") } });
