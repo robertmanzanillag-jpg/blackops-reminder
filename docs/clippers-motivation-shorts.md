@@ -4,7 +4,12 @@ This zero-cost local lane renders original Spanish or English motivational scrip
 
 ## Fail-closed inputs
 
-Every draft requires a version 1 JSON manifest and an audio-only local voice recording. The manifest must declare an original, owned script with no third-party quotes, speeches, or sources. The separate voice evidence JSON must match the short ID, relative file path, and SHA-256, and must document speaker consent and commercial-use authorization. Remote TTS, web audio, attributed speeches, missing evidence, symlinks, path traversal, and mismatched hashes are rejected.
+Every draft requires a version 1 JSON manifest and exactly one audio mode:
+
+- `local_voice` (also inferred for backward-compatible manifests containing `voice`): an audio-only local voice recording. The separate voice evidence JSON must match the short ID, relative file path, and SHA-256, and must document speaker consent and commercial-use authorization.
+- `procedural_original`: a deterministic, non-melodic pink-noise sound bed made locally by FFmpeg. This text-led mode has no voice file, external audio, TTS, network request, paid service, or separate voice-rights file. Its complete seed, filter parameters, generator version, and provenance declaration are recorded with the output.
+
+The manifest must always declare an original, owned script with no third-party quotes, speeches, or sources. Mixed audio modes, remote TTS, web audio, attributed speeches, missing evidence in voice mode, symlinks, path traversal, and mismatched hashes are rejected.
 
 Example manifest:
 
@@ -54,6 +59,35 @@ Example manifest:
 }
 ```
 
+For a text-led Short that has no narration, replace `voice` with:
+
+```json
+{
+  "audio": {
+    "mode": "procedural_original",
+    "durationSeconds": 24,
+    "seed": 20260824,
+    "parameters": {
+      "noiseColor": "pink",
+      "amplitude": 0.12,
+      "highpassHz": 55,
+      "lowpassHz": 3800,
+      "volumeDb": -14,
+      "fadeSeconds": 1
+    },
+    "provenance": {
+      "status": "owned_original",
+      "generator": "ffmpeg_lavfi_anoisesrc_v1",
+      "thirdPartyAssets": false,
+      "networkUsed": false,
+      "paidCostUsd": 0
+    }
+  }
+}
+```
+
+Only the listed procedural fields are accepted. Pink noise is filtered and faded but remains deliberately non-melodic. Change the seed to create a separately documented original realization; reusing an identical audio plan is deduplicated.
+
 The voice evidence schema is:
 
 ```json
@@ -86,6 +120,6 @@ Each channel is language-stable: once a ledger contains a language for a `channe
 
 The editorial structure is explicit: conflict in the hook, core idea in the beats, and one practical action in the close. Celebrity or podcast material, cloned voices, third-party quotes, and wealth or health promises are explicitly excluded. Each piece must also pass the explicit quality gate: first-second hook, actionable close, named reviewer, and `noQuotaFiller: true`.
 
-The renderer uses only local `ffmpeg`/`ffprobe`, embeds deterministic subtitles, verifies audio plus 1080×1920 video and duration, and extracts start/middle/end evidence frames. Provenance is stored under `evidence-drop/motivation/<channel-id>/<short-id>/`; deduplication records are stored in `reports/clippers-motivation-ledger.json`. API cost is always USD 0 and `publishEnabled` is always false.
+The renderer uses only local `ffmpeg`/`ffprobe`, embeds deterministic kinetic caption cues, verifies audio plus 1080×1920 video and duration, and extracts start/middle/end evidence frames. Provenance is stored under `evidence-drop/motivation/<channel-id>/<short-id>/`; deduplication records are stored in `reports/clippers-motivation-ledger.json`. The ledger hashes the script, manifest, output, and either the authorized voice or exact procedural audio plan. API cost is always USD 0 and `publishEnabled` is always false.
 
 No package script was added; integration may call the `.mjs` entrypoint directly or add a package command separately.

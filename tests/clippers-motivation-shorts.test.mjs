@@ -7,7 +7,7 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
-import { buildSrt, canonicalScript, renderMotivationShort, validateManifestShape, volumeBlocker } from "../script/clippers-motivation-shorts.mjs";
+import { buildProceduralAudioPlan, buildSrt, canonicalScript, renderMotivationShort, validateManifestShape, volumeBlocker } from "../script/clippers-motivation-shorts.mjs";
 
 const execFileAsync = promisify(execFile);
 const sha256File = async (file) => createHash("sha256").update(await readFile(file)).digest("hex");
@@ -61,6 +61,32 @@ function baseManifest() {
   };
 }
 
+function proceduralManifest() {
+  const manifest = baseManifest();
+  delete manifest.voice;
+  manifest.audio = {
+    mode: "procedural_original",
+    durationSeconds: 20,
+    seed: 20260824,
+    parameters: {
+      noiseColor: "pink",
+      amplitude: 0.12,
+      highpassHz: 55,
+      lowpassHz: 3800,
+      volumeDb: -14,
+      fadeSeconds: 1,
+    },
+    provenance: {
+      status: "owned_original",
+      generator: "ffmpeg_lavfi_anoisesrc_v1",
+      thirdPartyAssets: false,
+      networkUsed: false,
+      paidCostUsd: 0,
+    },
+  };
+  return manifest;
+}
+
 async function writeAuthorizedManifest(workspace, manifest = baseManifest()) {
   await mkdir(path.join(workspace, "input"), { recursive: true });
   await mkdir(path.join(workspace, "rights"), { recursive: true });
@@ -110,6 +136,39 @@ test("fails closed for non-original material and absent local voice authorizatio
   assert.ok(blockers.includes("third_party_speeches_not_excluded"));
   assert.ok(blockers.includes("external_script_sources_present"));
   assert.ok(blockers.includes("voice_not_local_recording"));
+});
+
+test("accepts an explicit procedural-original bed and builds a deterministic non-melodic plan", () => {
+  const manifest = proceduralManifest();
+  assert.deepEqual(validateManifestShape(manifest), []);
+  const first = buildProceduralAudioPlan(manifest.audio);
+  assert.deepEqual(first, buildProceduralAudioPlan(manifest.audio));
+  assert.equal(first.generator, "ffmpeg_lavfi_anoisesrc_v1");
+  assert.match(first.filter, /^anoisesrc=color=pink:/);
+  assert.match(first.filter, /seed=20260824/);
+  assert.doesNotMatch(first.filter, /sine|music|file|https?/i);
+});
+
+test("rejects mixed voice/procedural inputs and unsafe external audio fields", () => {
+  const mixed = proceduralManifest();
+  mixed.voice = baseManifest().voice;
+  assert.ok(validateManifestShape(mixed).includes("audio_modes_must_not_be_mixed"));
+
+  const external = proceduralManifest();
+  external.audio.file = "downloads/soundtrack.mp3";
+  external.audio.url = "https://example.com/audio.mp3";
+  assert.ok(validateManifestShape(external).includes("procedural_audio_unsafe_or_mixed_fields"));
+
+  const remote = proceduralManifest();
+  remote.audio.provenance.networkUsed = true;
+  assert.ok(validateManifestShape(remote).includes("procedural_audio_provenance_invalid"));
+
+  const coerced = proceduralManifest();
+  coerced.audio.seed = "20260824";
+  coerced.audio.parameters.volumeDb = "-14";
+  const coercionBlockers = validateManifestShape(coerced);
+  assert.ok(coercionBlockers.includes("procedural_audio_seed_invalid"));
+  assert.ok(coercionBlockers.includes("procedural_audio_parameters_invalid"));
 });
 
 test("requires the conflict, idea and action structure plus all content exclusions", () => {
@@ -185,6 +244,33 @@ test("renders an authorized local voice to a deduplicated 9:16 Short with QA evi
   const duplicate = await renderMotivationShort({ workspaceRoot: workspace, manifestFile });
   assert.equal(duplicate.status, "duplicate");
   assert.deepEqual(duplicate.blockers, ["already_rendered"]);
+});
+
+test("renders procedural-original audio without voice files or voice-rights evidence", { timeout: 120_000 }, async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "clippers-motivation-procedural-test-"));
+  await mkdir(path.join(workspace, "manifests"), { recursive: true });
+  const manifest = proceduralManifest();
+  const manifestFile = "manifests/motiva-001.json";
+  await writeFile(path.join(workspace, manifestFile), `${JSON.stringify(manifest, null, 2)}\n`);
+
+  const result = await renderMotivationShort({ workspaceRoot: workspace, manifestFile, now: new Date("2026-08-24T13:00:00.000Z") });
+  assert.equal(result.status, "rendered", JSON.stringify(result));
+  assert.equal(result.audioMode, "procedural_original");
+  assert.equal(result.durationSeconds, 20);
+  assert.equal(result.rights.audio, "owned_original_procedural");
+  assert.equal(result.rights.thirdPartyMaterial, false);
+  assert.equal(result.voiceFile, undefined);
+  assert.equal(result.voiceRightsEvidenceFile, undefined);
+  assert.match(result.audioPlanSha256, /^[a-f0-9]{64}$/);
+  assert.equal(result.audioPlan.seed, 20260824);
+  assert.equal(result.apiCostUsd, 0);
+  assert.equal(result.publishEnabled, false);
+  assert.ok((await stat(path.join(workspace, result.outputFile))).size > 1000);
+
+  const provenance = JSON.parse(await readFile(path.join(workspace, "evidence-drop", "motivation", "motivation-es", "motiva-001", "provenance.json"), "utf8"));
+  assert.equal(provenance.audioMode, "procedural_original");
+  assert.equal(provenance.audioPlan.generator, "ffmpeg_lavfi_anoisesrc_v1");
+  assert.equal(provenance.rights.audio, "owned_original_procedural");
 });
 
 test("blocks existing artifacts without deleting files when the ledger is missing", { timeout: 120_000 }, async () => {
