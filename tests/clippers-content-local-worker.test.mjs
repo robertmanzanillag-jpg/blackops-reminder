@@ -1,12 +1,14 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { createHash } from "node:crypto";
+import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { acquireWorkerLock, runContentLocalWorker } from "../script/clippers-content-local-worker.mjs";
+import { acquireWorkerLock, adoptExistingSleepVideo, runContentLocalWorker } from "../script/clippers-content-local-worker.mjs";
 import { runContentLearningCeo } from "../script/clippers-content-learning-ceo.mjs";
 
 const NOW = new Date("2026-08-24T14:00:00.000Z");
+const DAY_MS_FOR_TEST = 86_400_000;
 
 async function fixture({ es = 5, en = 5, sleep = true } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "content-worker-"));
@@ -64,6 +66,90 @@ function operations(calls) {
       return { outputPath: options.outputPath, manifestPath: `${options.outputPath}.rights.json` };
     },
   };
+}
+
+const sha256 = (value) => createHash("sha256").update(value).digest("hex");
+
+async function approvedExistingSleep(item) {
+  const config = JSON.parse(await readFile(item.configPath, "utf8"));
+  config.sleep.jobs = [config.sleep.jobs[0]];
+  config.sleep.jobs[0].adoptExisting = true;
+  const job = config.sleep.jobs[0];
+  const outputPath = path.join(item.root, job.output);
+  const visualPath = path.join(item.root, job.visualSource);
+  const evidencePath = path.join(item.root, job.visualRightsEvidence);
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  await mkdir(path.dirname(visualPath), { recursive: true });
+  const media = Buffer.from("approved-eight-hour-master");
+  const visual = Buffer.from("owned-generated-visual");
+  await writeFile(outputPath, media);
+  await writeFile(visualPath, visual);
+  job.visualSha256 = sha256(visual);
+  const evidence = {
+    schemaVersion: 1,
+    assetType: "generated_original_visual",
+    sha256: job.visualSha256,
+    rightsStatus: "owned_generated_output",
+    commercialUseAuthorized: true,
+    thirdPartyAssets: [],
+  };
+  await writeFile(evidencePath, JSON.stringify(evidence));
+  const evidenceHash = sha256(JSON.stringify(evidence));
+  const synthesisParameters = { seed: job.seed, durationSeconds: job.durationSeconds };
+  const generatorHash = sha256(await readFile(new URL("../script/clippers-sleep-video-generator.mjs", import.meta.url)));
+  const manifest = {
+    schemaVersion: 1,
+    artifactType: "rights_verified_visual_with_procedural_rain_audio",
+    title: job.title,
+    output: {
+      path: outputPath,
+      sha256: sha256(media),
+      durationSeconds: 29_100,
+      width: 1920,
+      height: 1080,
+      videoCodec: "h264",
+      audioCodec: "aac",
+      audioSampleRate: 48_000,
+      audioChannels: 2,
+    },
+    provenance: {
+      generator: "script/clippers-sleep-video-generator.mjs",
+      generatorSha256: generatorHash,
+      seed: job.seed,
+      synthesisParameters,
+      synthesisParametersSha256: sha256(JSON.stringify(synthesisParameters)),
+      externalAudioSamples: [],
+      paidServicesUsed: [],
+      networkAccessRequired: false,
+      generatedForTestingOnly: false,
+      externalVisualAssets: [{
+        path: visualPath,
+        sha256: job.visualSha256,
+        evidencePath,
+        evidenceSha256: evidenceHash,
+        evidence,
+      }],
+    },
+    rights: { reviewRequiredBeforePublishing: true, publicationAuthorizedByThisManifest: false },
+    qa: {
+      status: "passed",
+      tool: "ffprobe",
+      productionMinimumSeconds: 28_800,
+      sampledMedia: [0, 3_600, 7_200, 10_800, 14_400, 18_000, 21_600, 25_200, 28_800, 29_098].map((startSeconds, index) => ({
+        startSeconds, sampleDuration: 2, peakDb: -20 - index, rmsDb: -30 - index, frameMd5: ((index + 1) % 16).toString(16).repeat(32),
+      })),
+    },
+  };
+  await writeFile(`${outputPath}.rights.json`, JSON.stringify(manifest));
+  await writeFile(item.configPath, JSON.stringify(config), { mode: 0o600 });
+  const probeExisting = async () => ({
+    streams: [
+      { codec_type: "video", codec_name: "h264", width: 1920, height: 1080 },
+      { codec_type: "audio", codec_name: "aac", sample_rate: "48000", channels: 2 },
+    ],
+    format: { format_name: "mov,mp4,m4a,3gp,3g2,mj2", duration: "29100.000000" },
+  });
+  return { config, job, outputPath, probeExisting };
 }
 
 test("cold start prepares five independent candidates per channel and never uploads", async () => {
@@ -199,4 +285,101 @@ test("an orphaned first sleep artifact rotates to the next job without overwrite
   assert.match(calls.sleep[0].outputPath, /output-2\.mp4$/);
   assert.equal(calls.sleep[0].overwrite, false);
   assert.equal(await readFile(orphanPath, "utf8"), "preserve-me");
+});
+
+test("explicitly adopts a rights-verified existing master into a packager-compatible report and rolling ledger", async () => {
+  const item = await fixture({ es: 0, en: 0 });
+  const approved = await approvedExistingSleep(item);
+  const calls = { shorts: [], sleep: [] };
+  const adoptSleep = (options) => adoptExistingSleepVideo({ ...options, probeExisting: approved.probeExisting });
+  const first = await runContentLocalWorker({ configPath: item.configPath, now: NOW, operations: { ...operations(calls), adoptSleep } });
+  assert.equal(calls.sleep.length, 0, "adoption must not rerender");
+  assert.equal(first.sleep.generated, 1);
+  assert.equal(first.sleep.result.status, "generated", "upload packager consumes generated sleep rows");
+  assert.equal(first.sleep.result.adoptedExisting, true);
+  assert.equal(first.sleep.result.outputPath, approved.outputPath);
+  assert.match(first.sleep.result.outputSha256, /^[a-f0-9]{64}$/);
+  assert.equal(first.sleep.result.durationSeconds, 29_100);
+  assert.equal(first.networkUsed, false);
+  assert.equal(first.uploadAttempted, false);
+  assert.equal(first.apiCostUsd, 0);
+  const ledger = JSON.parse(await readFile(path.join(item.reports, "clippers-content-sleep-ledger.json"), "utf8"));
+  assert.equal(ledger.items[0].adoptedExisting, true);
+  const second = await runContentLocalWorker({
+    configPath: item.configPath,
+    now: new Date(NOW.getTime() + DAY_MS_FOR_TEST),
+    operations: { ...operations({ shorts: [], sleep: [] }), adoptSleep },
+  });
+  assert.equal(second.sleep.result.status, "deduplicated");
+  assert.equal(second.sleep.generated, 0);
+});
+
+test("existing sleep artifact without explicit adoption remains fail-closed", async () => {
+  const item = await fixture({ es: 0, en: 0 });
+  const config = JSON.parse(await readFile(item.configPath, "utf8"));
+  config.sleep.jobs = [config.sleep.jobs[0]];
+  await writeFile(item.configPath, JSON.stringify(config));
+  const outputPath = path.join(item.root, config.sleep.jobs[0].output);
+  await mkdir(path.dirname(outputPath), { recursive: true });
+  await writeFile(outputPath, "orphan-must-not-be-adopted");
+  const calls = { shorts: [], sleep: [] };
+  const result = await runContentLocalWorker({ configPath: item.configPath, now: NOW, operations: operations(calls) });
+  assert.equal(calls.sleep.length, 0);
+  assert.equal(result.sleep.result.status, "blocked");
+  assert.deepEqual(result.sleep.result.blockers, ["sleep_job_queue_exhausted_or_artifact_exists"]);
+});
+
+test("adoption rejects a modified master hash before probing", async () => {
+  const item = await fixture({ es: 0, en: 0 });
+  const approved = await approvedExistingSleep(item);
+  await writeFile(approved.outputPath, "modified-after-approval");
+  let probed = false;
+  await assert.rejects(adoptExistingSleepVideo({
+    workspaceRoot: item.root,
+    job: { ...approved.job, outputPath: approved.outputPath, visualSource: path.join(item.root, approved.job.visualSource), visualRightsEvidence: path.join(item.root, approved.job.visualRightsEvidence) },
+    probeExisting: async () => { probed = true; return approved.probeExisting(); },
+  }), /sleep_adoption_output_hash_mismatch/);
+  assert.equal(probed, false);
+});
+
+test("adoption requires the manifest to pin the exact local generator", async () => {
+  const item = await fixture({ es: 0, en: 0 });
+  const approved = await approvedExistingSleep(item);
+  const manifestPath = `${approved.outputPath}.rights.json`;
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.provenance.generatorSha256 = "b".repeat(64);
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await assert.rejects(adoptExistingSleepVideo({
+    workspaceRoot: item.root,
+    job: { ...approved.job, outputPath: approved.outputPath, visualSource: path.join(item.root, approved.job.visualSource), visualRightsEvidence: path.join(item.root, approved.job.visualRightsEvidence) },
+    probeExisting: approved.probeExisting,
+  }), /sleep_adoption_generator_evidence_invalid/);
+});
+
+test("adoption requires every hourly and final generator QA sample", async () => {
+  const item = await fixture({ es: 0, en: 0 });
+  const approved = await approvedExistingSleep(item);
+  const manifestPath = `${approved.outputPath}.rights.json`;
+  const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
+  manifest.qa.sampledMedia.splice(4, 1);
+  await writeFile(manifestPath, JSON.stringify(manifest));
+  await assert.rejects(adoptExistingSleepVideo({
+    workspaceRoot: item.root,
+    job: { ...approved.job, outputPath: approved.outputPath, visualSource: path.join(item.root, approved.job.visualSource), visualRightsEvidence: path.join(item.root, approved.job.visualRightsEvidence) },
+    probeExisting: approved.probeExisting,
+  }), /sleep_adoption_generator_evidence_invalid/);
+});
+
+test("adoption rejects symlinked media even when it points inside the workspace", async () => {
+  const item = await fixture({ es: 0, en: 0 });
+  const approved = await approvedExistingSleep(item);
+  const target = `${approved.outputPath}.target`;
+  await writeFile(target, await readFile(approved.outputPath));
+  await rm(approved.outputPath);
+  await symlink(target, approved.outputPath);
+  await assert.rejects(adoptExistingSleepVideo({
+    workspaceRoot: item.root,
+    job: { ...approved.job, outputPath: approved.outputPath, visualSource: path.join(item.root, approved.job.visualSource), visualRightsEvidence: path.join(item.root, approved.job.visualRightsEvidence) },
+    probeExisting: approved.probeExisting,
+  }), /sleep_adoption_output_must_be_regular_file/);
 });

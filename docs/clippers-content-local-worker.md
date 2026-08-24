@@ -40,6 +40,7 @@ All operational paths must remain inside `workspaceRoot`. The configuration must
     "jobs": [
       {
         "output": "sleep/rendered/2026-08-24-rainy-bedroom-8h05.mp4",
+        "adoptExisting": true,
         "durationSeconds": 29100,
         "seed": 20260824,
         "title": "Rainy Bedroom Sleep — 8 Hours",
@@ -60,6 +61,21 @@ All operational paths must remain inside `workspaceRoot`. The configuration must
   }
 }
 ```
+
+### Adopt an already approved master without rerendering
+
+`adoptExisting: true` is an explicit, per-job migration gate for a completed master that was produced by `clippers-sleep-video-generator.mjs` before the content worker recorded it. It never means “trust any file at this path.” The worker accepts the existing MP4 only when all of these checks pass locally:
+
+- the MP4, its adjacent `.rights.json`, the visual source, and the visual-rights file are regular files whose real paths remain inside `workspaceRoot`; symlinks and path escapes are rejected;
+- no `.partial.mp4` exists;
+- the streamed MP4 SHA-256 matches the generator rights manifest and the manifest points back to that exact MP4;
+- the generator manifest records production output, zero external audio samples, zero paid services, no required network access, owned generated visual rights, no third-party assets, publication still requiring review, and passed generator QA with valid sampled media;
+- the configured visual path/hash/evidence exactly match the manifest, and both visual and evidence files are re-hashed;
+- a fresh local `ffprobe` confirms MP4 video and audio streams, landscape dimensions, matching codecs/audio properties, matching dimensions and duration, and at least 28,800 seconds (8 hours).
+
+On success, the worker does not call the renderer. It writes the same `sleep.result.status: "generated"`, `outputPath`, and `manifestPath` contract consumed by the YouTube upload packager, plus `adoptedExisting`, the rechecked output hash, duration, and validation summary. The same row is atomically added to the sleep ledger, so the normal rolling seven-day cap immediately deduplicates subsequent runs. Reports continue to state `networkUsed: false`, `uploadAttempted: false`, and `apiCostUsd: 0`.
+
+Without `adoptExisting: true`, pre-existing output, manifest, or partial artifacts remain fail-closed: the worker never silently adopts, overwrites, uploads, deletes, or spends money on them.
 
 Candidate manifests still pass every rights, voice, media, quality, channel-language, daily-volume, and deduplication gate in `clippers-motivation-shorts.mjs`. A plan of five does not bypass those gates. On later days the worker walks the configured queue, skips already-rendered candidates, and continues until it renders the daily target or exhausts the approved queue; it never fills with an unapproved candidate. The report records exact rendered shortfalls against five for each channel.
 
