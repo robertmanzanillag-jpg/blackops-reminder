@@ -99,6 +99,10 @@ export default defineConfig({
   build: {
     outDir: path.resolve(import.meta.dirname, "dist/public"),
     emptyOutDir: true,
+    // The Clipper newsroom is intentionally a single lazy route. Its current
+    // compressed payload is ~106 kB; use the uncompressed route budget here so
+    // production builds stay signal-clean until it exceeds the agreed limit.
+    chunkSizeWarningLimit: 900,
   },
   server: {
     host: "0.0.0.0",

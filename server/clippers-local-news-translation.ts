@@ -24,12 +24,16 @@ export interface LocalNewsTranslationResult {
 export interface LocalNewsTranslationAdapter {
   translate(input: string, direction: LocalNewsTranslationDirection): Promise<string>;
   translateBatch?(inputs: string[], direction: LocalNewsTranslationDirection): Promise<string[]>;
+  failureCooldownMs?: number;
+  maxRequestsPerWindow?: number;
+  requestWindowMs?: number;
 }
 
 export interface LocalNewsTranslatorOptions {
   enabled?: boolean;
   adapter?: LocalNewsTranslationAdapter;
   cache?: Map<string, LocalNewsTranslationResult>;
+  now?: () => number;
 }
 
 type TransformersPipeline = (input: string, options?: Record<string, unknown>) => Promise<unknown>;
@@ -49,7 +53,7 @@ const REVISION_BY_DIRECTION: Record<LocalNewsTranslationDirection, string> = {
 };
 
 const DEFAULT_OPENAI_TRANSLATION_MODEL = "gpt-5.4-nano";
-const OPENAI_TRANSLATION_TIMEOUT_MS = 20_000;
+const OPENAI_TRANSLATION_TIMEOUT_MS = 5_000;
 
 type OpenAiTranslationClient = Pick<OpenAI, "chat">;
 
@@ -63,16 +67,22 @@ function createOpenAiTranslationClient(env: NodeJS.ProcessEnv): OpenAiTranslatio
   const apiKey = configuredValue(env.AI_INTEGRATIONS_OPENAI_API_KEY) || configuredValue(env.OPENAI_API_KEY);
   if (!apiKey) throw new Error("openai_translation_not_configured");
   const baseURL = configuredValue(env.AI_INTEGRATIONS_OPENAI_BASE_URL) || undefined;
-  return new OpenAI({ apiKey, baseURL, timeout: OPENAI_TRANSLATION_TIMEOUT_MS, maxRetries: 1 });
+  return new OpenAI({ apiKey, baseURL, timeout: OPENAI_TRANSLATION_TIMEOUT_MS, maxRetries: 0 });
 }
 
 export class OpenAiLocalNewsTranslationAdapter implements LocalNewsTranslationAdapter {
+  readonly failureCooldownMs: number;
+  readonly maxRequestsPerWindow: number;
+  readonly requestWindowMs: number;
   private client: OpenAiTranslationClient | null;
   private readonly env: NodeJS.ProcessEnv;
 
-  constructor(options: { client?: OpenAiTranslationClient; env?: NodeJS.ProcessEnv } = {}) {
+  constructor(options: { client?: OpenAiTranslationClient; env?: NodeJS.ProcessEnv; failureCooldownMs?: number; maxRequestsPerWindow?: number; requestWindowMs?: number } = {}) {
     this.client = options.client || null;
     this.env = options.env || process.env;
+    this.failureCooldownMs = options.failureCooldownMs ?? 60_000;
+    this.maxRequestsPerWindow = options.maxRequestsPerWindow ?? 10;
+    this.requestWindowMs = options.requestWindowMs ?? 60_000;
   }
 
   private getClient(): OpenAiTranslationClient {
@@ -265,11 +275,15 @@ export class LocalNewsTranslator {
   private readonly enabled: boolean;
   private readonly adapter: LocalNewsTranslationAdapter;
   private readonly cache: Map<string, LocalNewsTranslationResult>;
+  private readonly now: () => number;
+  private unavailableUntil = 0;
+  private requestTimestamps: number[] = [];
 
   constructor(options: LocalNewsTranslatorOptions = {}) {
     this.enabled = options.enabled ?? process.env.NODE_ENV === "production";
     this.adapter = options.adapter ?? defaultTranslationAdapter();
     this.cache = options.cache ?? new Map();
+    this.now = options.now ?? Date.now;
   }
 
   async translate(input: string, direction: LocalNewsTranslationDirection): Promise<LocalNewsTranslationResult> {
@@ -308,6 +322,23 @@ export class LocalNewsTranslator {
     }
 
     if (pending.length === 0) return results;
+    const now = this.now();
+    if (now < this.unavailableUntil) {
+      for (const item of pending) {
+        results[item.index] = this.unavailableResult(item, direction, "translation_provider_circuit_open");
+      }
+      return results;
+    }
+    const requestWindowMs = this.adapter.requestWindowMs || 0;
+    const maxRequests = this.adapter.maxRequestsPerWindow || Number.POSITIVE_INFINITY;
+    if (requestWindowMs > 0) this.requestTimestamps = this.requestTimestamps.filter((timestamp) => now - timestamp < requestWindowMs);
+    if (this.requestTimestamps.length >= maxRequests) {
+      for (const item of pending) {
+        results[item.index] = this.unavailableResult(item, direction, "translation_provider_budget_exhausted");
+      }
+      return results;
+    }
+    this.requestTimestamps.push(now);
     try {
       const originals = pending.map((item) => item.original);
       const translated = this.adapter.translateBatch
@@ -327,20 +358,29 @@ export class LocalNewsTranslator {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "unknown_error";
+      this.unavailableUntil = this.now() + (this.adapter.failureCooldownMs || 0);
       for (const item of pending) {
-        results[item.index] = {
-          original: item.original,
-          direction,
-          detectedLanguage: item.detectedLanguage,
-          fromCache: false,
-          status: "unavailable",
-          safe: false,
-          translated: null,
-          issues: [`local_translation_failed:${message}`],
-        };
+        results[item.index] = this.unavailableResult(item, direction, message);
       }
     }
     return results;
+  }
+
+  private unavailableResult(
+    item: { original: string; detectedLanguage: LocalNewsLanguage },
+    direction: LocalNewsTranslationDirection,
+    message: string,
+  ): LocalNewsTranslationResult {
+    return {
+      original: item.original,
+      direction,
+      detectedLanguage: item.detectedLanguage,
+      fromCache: false,
+      status: "unavailable",
+      safe: false,
+      translated: null,
+      issues: [`local_translation_failed:${message}`],
+    };
   }
 
 }

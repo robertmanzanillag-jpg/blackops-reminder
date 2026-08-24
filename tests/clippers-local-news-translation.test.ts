@@ -81,6 +81,53 @@ test("hosted batch translation fails closed when its JSON shape is incomplete", 
   assert.ok(results.every((result) => result.issues.includes("local_translation_failed:openai_translation_shape_invalid")));
 });
 
+test("hosted provider failure opens a circuit for the cycle and recovers after cooldown", async () => {
+  let calls = 0;
+  let now = 1_000;
+  let available = false;
+  const client = {
+    chat: { completions: { create: async () => {
+      calls += 1;
+      if (!available) throw new Error("provider_unavailable");
+      return { choices: [{ message: { content: JSON.stringify({ translations: ["La carretera está cerrada."] }) } }] };
+    } } },
+  } as any;
+  const adapter = new OpenAiLocalNewsTranslationAdapter({ client, env: {}, failureCooldownMs: 60_000 });
+  const translator = new LocalNewsTranslator({ enabled: true, adapter, now: () => now });
+
+  const first = await translator.translate("The road is closed.", "en-es");
+  const held = await translator.translate("The road is closed for police.", "en-es");
+  assert.equal(first.status, "unavailable");
+  assert.ok(held.issues.includes("local_translation_failed:translation_provider_circuit_open"));
+  assert.equal(calls, 1);
+
+  now += 60_001;
+  available = true;
+  const recovered = await translator.translate("The road is closed.", "en-es");
+  assert.equal(recovered.safe, true);
+  assert.equal(calls, 2);
+});
+
+test("hosted translation request budget bounds one scheduler window", async () => {
+  let calls = 0;
+  const client = {
+    chat: { completions: { create: async () => {
+      calls += 1;
+      return { choices: [{ message: { content: JSON.stringify({ translations: ["La carretera está cerrada."] }) } }] };
+    } } },
+  } as any;
+  const adapter = new OpenAiLocalNewsTranslationAdapter({ client, env: {}, maxRequestsPerWindow: 2, requestWindowMs: 60_000 });
+  const translator = new LocalNewsTranslator({ enabled: true, adapter, now: () => 1_000 });
+
+  await translator.translate("The road is closed A.", "en-es");
+  await translator.translate("The road is closed B.", "en-es");
+  const held = await translator.translate("The road is closed C.", "en-es");
+
+  assert.equal(calls, 2);
+  assert.equal(held.status, "unavailable");
+  assert.ok(held.issues.includes("local_translation_failed:translation_provider_budget_exhausted"));
+});
+
 test("detects common English and Spanish public-safety copy", () => {
   assert.equal(detectLocalNewsLanguage("The road is closed from 8 AM to 10 AM."), "en");
   assert.equal(detectLocalNewsLanguage("La carretera está cerrada de 8 AM a 10 AM."), "es");

@@ -213,6 +213,10 @@ test("bootstrap creates all artifacts and clamps schedule to 2-5 minutes", async
   assert.equal(status.bootstrapped, true);
   assert.equal(status.scheduleMinutes, 5);
   for (const artifact of Object.values(status.artifacts)) assert.ok((await readFile(artifact, "utf8")).length > 0);
+  const runbook = await readFile(status.artifacts.runbook, "utf8");
+  assert.match(runbook, /gpt-5\.4-nano/);
+  assert.match(runbook, /10-request\/minute ceiling/);
+  assert.doesNotMatch(runbook, /OPUS-MT|no API or membership cost/);
   const publicSnapshot = JSON.parse(await readFile(path.join(workspaceDir, "public-news-snapshot.json"), "utf8"));
   assert.deepEqual(publicSnapshot, { version: 1, updatedAt: "2026-07-21T12:00:00.000Z", events: [], queue: [] });
 });
@@ -426,7 +430,7 @@ test("professional newsroom classifies desks and produces attributed Facebook te
     { mode: "zero_cost_organic", paidAds: false, paidAi: true },
   );
   const growth = JSON.parse(await readFile(path.join(workspaceDir, "organic-growth.json"), "utf8"));
-  assert.deepEqual(growth.costPolicy, { paidAds: false, paidAiPerPost: false, generation: "deterministic_local_templates" });
+  assert.deepEqual(growth.costPolicy, { paidAds: false, paidAiPerPost: true, generation: "deterministic_local_templates", hostedTranslation: "gpt-5.4-nano_batched", estimatedMonthlyApiCostUsd: 0.5 });
 });
 
 test("adaptive Facebook cadence allows relevant developing coverage and defers conservative overflow", async (t) => {
