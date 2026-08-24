@@ -20,6 +20,8 @@ Before making an OAuth or YouTube request, the uploader requires:
 6. A lane-specific expected YouTube channel ID and lane-specific OAuth refresh configuration.
 7. An exact match between that expected ID and the channel returned by `channels.list(mine=true)`.
 
+Media and evidence hashes are calculated incrementally from file streams, so an eight-hour master is never loaded into memory as one buffer. The resumable `Location` header is accepted only when it is HTTPS and points to the exact official YouTube `/upload/youtube/v3/videos` endpoint with both `uploadType=resumable` and an opaque `upload_id`; other Google API paths are rejected.
+
 The default privacy is `private`. A public item requires both:
 
 - `CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED=true`; and

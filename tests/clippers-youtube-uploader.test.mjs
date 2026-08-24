@@ -5,7 +5,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { channelConfigFromEnv, runYouTubeUpload, validateUploadItem } from "../script/clippers-youtube-uploader.mjs";
+import { channelConfigFromEnv, runYouTubeUpload, sha256FileStream, validateUploadItem } from "../script/clippers-youtube-uploader.mjs";
 
 const CHANNELS = {
   motivation_es: "UC1234567890123456789012",
@@ -59,7 +59,7 @@ function successfulFetch(expectedChannelId, counters = {}) {
     counters.calls = (counters.calls || 0) + 1;
     if (url === "https://oauth2.googleapis.com/token") return Response.json({ access_token: "short-lived-token" });
     if (String(url).includes("channels?")) return Response.json({ items: [{ id: expectedChannelId }] });
-    if (init.method === "POST") return new Response(null, { status: 200, headers: { location: "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=opaque" } });
+    if (init.method === "POST") return new Response(null, { status: 200, headers: { location: "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&upload_id=opaque" } });
     if (init.method === "PUT") return Response.json({ id: "video123" });
     throw new Error("unexpected request");
   };
@@ -75,6 +75,14 @@ test("defines three independent lane configs without exposing shared fallback cr
   assert.equal(channelConfigFromEnv(env, "motivation_es").expectedChannelId, CHANNELS.motivation_es);
   assert.equal(channelConfigFromEnv(env, "motivation_en").clientId, "");
   assert.equal(channelConfigFromEnv(env, "sleep").refreshToken, "");
+});
+
+test("hashes large media incrementally with the same SHA-256 result", async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), "clippers-youtube-hash-"));
+  const bytes = Buffer.alloc(3 * 1024 * 1024 + 17, 0x5a);
+  const file = path.join(root, "large-video.mp4");
+  await writeFile(file, bytes);
+  assert.equal(await sha256FileStream(file), sha(bytes));
 });
 
 test("dry-run validates exact artifacts and reports missing auth without network", async () => {
@@ -113,6 +121,25 @@ test("wrong authenticated channel blocks before creating a resumable session", a
   assert.equal(calls, 2);
 });
 
+test("rejects a non-YouTube googleapis resumable location before media transfer", async () => {
+  const { root, itemFile } = await fixture("motivation_es");
+  let putCalls = 0;
+  const fetcher = async (url, init = {}) => {
+    if (url === "https://oauth2.googleapis.com/token") return Response.json({ access_token: "token" });
+    if (String(url).includes("channels?")) return Response.json({ items: [{ id: CHANNELS.motivation_es }] });
+    if (init.method === "POST") return new Response(null, {
+      status: 200,
+      headers: { location: "https://www.googleapis.com/upload/calendar/v3/events?uploadType=resumable&upload_id=opaque" },
+    });
+    if (init.method === "PUT") putCalls += 1;
+    throw new Error("unexpected request");
+  };
+  const result = await runYouTubeUpload({ workspaceRoot: root, itemFile, env: {}, channelConfigs: configs(), fetcher });
+  assert.equal(result.status, "blocked");
+  assert.deepEqual(result.blockers, ["resumable_session_rejected"]);
+  assert.equal(putCalls, 0);
+});
+
 test("successful private upload writes a dedupe ledger and a second run does no network work", async () => {
   const { root, itemFile } = await fixture("sleep");
   const counters = {};
@@ -136,7 +163,7 @@ test("transport ambiguity is recorded and blocks retry until manual reconciliati
   const fetcher = async (url, init = {}) => {
     if (url === "https://oauth2.googleapis.com/token") return Response.json({ access_token: "token" });
     if (String(url).includes("channels?")) return Response.json({ items: [{ id: CHANNELS.motivation_es }] });
-    if (init.method === "POST") return new Response(null, { status: 200, headers: { location: "https://www.googleapis.com/upload/youtube/v3/videos?upload_id=opaque" } });
+    if (init.method === "POST") return new Response(null, { status: 200, headers: { location: "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&upload_id=opaque" } });
     throw new Error("socket disconnected after bytes were sent");
   };
   const first = await runYouTubeUpload({ workspaceRoot: root, itemFile, env: {}, channelConfigs: configs(), fetcher });

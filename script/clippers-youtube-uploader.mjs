@@ -52,8 +52,10 @@ async function safeRegularFile(root, relativeFile) {
   return realRelative && !realRelative.startsWith("..") && !path.isAbsolute(realRelative) ? candidate : null;
 }
 
-async function fileSha256(filePath) {
-  return sha256Buffer(await readFile(filePath));
+export async function sha256FileStream(filePath) {
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(filePath)) hash.update(chunk);
+  return hash.digest("hex");
 }
 
 function secretPresent(value) {
@@ -194,9 +196,12 @@ async function verifyChannel(accessToken, expectedChannelId, fetcher) {
 function safeResumableUrl(location) {
   try {
     const parsed = new URL(location);
-    return parsed.protocol === "https:" && ["www.googleapis.com", "youtube.googleapis.com"].includes(parsed.hostname)
-      ? parsed.href
-      : null;
+    const isOfficialHost = ["www.googleapis.com", "youtube.googleapis.com"].includes(parsed.hostname);
+    const isYouTubeUploadPath = parsed.pathname === "/upload/youtube/v3/videos";
+    const isResumable = parsed.searchParams.get("uploadType") === "resumable";
+    const hasOpaqueUploadId = Boolean(clean(parsed.searchParams.get("upload_id")));
+    return parsed.protocol === "https:" && isOfficialHost && isYouTubeUploadPath && isResumable && hasOpaqueUploadId
+      ? parsed.href : null;
   } catch {
     return null;
   }
@@ -233,7 +238,7 @@ export async function runYouTubeUpload(options = {}) {
   if (artifactBlockers.length) return { ...resultBase, status: "blocked", blockers: artifactBlockers };
 
   const [actualHash, rightsHash, qaHash, rightsEvidence, qaEvidence, mediaStat] = await Promise.all([
-    fileSha256(mediaPath), fileSha256(rightsPath), fileSha256(qaPath), jsonFile(rightsPath), jsonFile(qaPath), stat(mediaPath),
+    sha256FileStream(mediaPath), sha256FileStream(rightsPath), sha256FileStream(qaPath), jsonFile(rightsPath), jsonFile(qaPath), stat(mediaPath),
   ]);
   const evidenceBlockers = [];
   if (actualHash !== clean(item.sha256).toLowerCase()) evidenceBlockers.push("media_hash_mismatch");
