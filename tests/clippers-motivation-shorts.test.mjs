@@ -7,7 +7,17 @@ import path from "node:path";
 import test from "node:test";
 import { promisify } from "node:util";
 
-import { buildProceduralAudioPlan, buildSrt, canonicalScript, renderMotivationShort, validateManifestShape, volumeBlocker } from "../script/clippers-motivation-shorts.mjs";
+import {
+  buildMotivationVisualFilters,
+  buildMotivationVisualPlan,
+  buildProceduralAudioPlan,
+  buildSrt,
+  canonicalScript,
+  renderMotivationShort,
+  validateManifestShape,
+  volumeBlocker,
+  wrapCaptionText,
+} from "../script/clippers-motivation-shorts.mjs";
 
 const execFileAsync = promisify(execFile);
 const sha256File = async (file) => createHash("sha256").update(await readFile(file)).digest("hex");
@@ -149,6 +159,60 @@ test("accepts an explicit procedural-original bed and builds a deterministic non
   assert.doesNotMatch(first.filter, /sine|music|file|https?/i);
 });
 
+test("builds a deterministic, seed-variable visual plan with explicit safe zones and first-second hook", () => {
+  const input = { seed: 20260824, language: "es", backgroundColor: "#111827", durationSeconds: 24 };
+  const first = buildMotivationVisualPlan(input);
+  assert.deepEqual(first, buildMotivationVisualPlan(input));
+  assert.notDeepEqual(first, buildMotivationVisualPlan({ ...input, seed: 20260825 }));
+  assert.equal(first.generator, "ffmpeg_gradients_magick_kinetic_v2");
+  assert.deepEqual(first.dimensions, { width: 1080, height: 1920, frameRate: 30 });
+  assert.deepEqual(first.safeZone, { left: 150, right: 150, top: 180, bottom: 310 });
+  assert.ok(first.progress.x >= first.safeZone.left);
+  assert.ok(first.progress.x + first.progress.width <= first.dimensions.width - first.safeZone.right);
+  assert.ok(first.progress.y + first.progress.height <= first.dimensions.height - first.safeZone.bottom);
+  assert.equal(first.hook.startsAtSeconds, 0);
+  assert.ok(first.hook.emphasisEndsAtSeconds <= 1);
+  assert.equal(first.provenance.thirdPartyAssets, false);
+  assert.equal(first.provenance.networkUsed, false);
+  assert.equal(first.provenance.paidCostUsd, 0);
+});
+
+test("wraps caption cards without changing their words or exceeding the visual line width", () => {
+  const text = "El problema no es que te falte disciplina para empezar";
+  const wrapped = wrapCaptionText(text);
+  assert.equal(wrapped.replace(/\n/g, " "), text);
+  assert.ok(wrapped.split("\n").every((line) => line.length <= 22));
+  assert.ok(wrapped.includes("\n"));
+
+  const longToken = "AnticonstitucionalmenteAnticonstitucionalmente";
+  const wrappedLongToken = wrapCaptionText(longToken);
+  assert.equal(wrappedLongToken.replace(/\n/g, ""), longToken);
+  assert.ok(wrappedLongToken.split("\n").every((line) => line.length <= 22));
+});
+
+test("uses only the fixed local FFmpeg visual allowlist and includes motion plus progress", () => {
+  const plan = buildMotivationVisualPlan({ seed: 19, language: "en", backgroundColor: "#111827", durationSeconds: 20 });
+  const filters = buildMotivationVisualFilters(plan);
+  assert.match(filters.gradientSource, /^gradients=size=1080x1920:rate=30:/);
+  assert.match(filters.gradientSource, /seed=19/);
+  assert.match(filters.gradientSource, /speed=0\.\d+/);
+  assert.match(filters.backgroundFilters, /vignette=/);
+  assert.match(filters.backgroundFilters, /drawgrid=/);
+  assert.match(filters.backgroundFilters, /mod\(t\*/);
+  assert.match(filters.backgroundFilters, /780\*min\(t\/20\.000/);
+  assert.match(filters.captionOverlay, /^overlay=/);
+  const completePlan = JSON.stringify({ plan, filters });
+  assert.doesNotMatch(completePlan, /https?:|file=|movie=|amovie=|subtitles=|ass=/i);
+  assert.ok(["linear", "radial", "circular", "spiral", "square"].includes(plan.theme.gradientType));
+
+  const injected = structuredClone(plan);
+  injected.theme.colors[0] = "red:movie=https://example.com/a.mp4";
+  assert.throws(() => buildMotivationVisualFilters(injected), /visual_plan_invalid/);
+  const unsafeMotion = structuredClone(plan);
+  unsafeMotion.motion.captionPhase = "0);movie=/tmp/untrusted";
+  assert.throws(() => buildMotivationVisualFilters(unsafeMotion), /visual_plan_invalid/);
+});
+
 test("rejects mixed voice/procedural inputs and unsafe external audio fields", () => {
   const mixed = proceduralManifest();
   mixed.voice = baseManifest().voice;
@@ -263,6 +327,9 @@ test("renders an authorized local voice to a deduplicated 9:16 Short with QA evi
   assert.equal(result.publishEnabled, false);
   assert.equal(result.apiCostUsd, 0);
   assert.equal(result.evidenceFrames.length, 3);
+  assert.equal(new Set(result.evidenceFrames.map((frame) => frame.sha256)).size, 3);
+  assert.equal(result.visualPlan.generator, "ffmpeg_gradients_magick_kinetic_v2");
+  assert.match(result.visualPlanSha256, /^[a-f0-9]{64}$/);
   assert.ok((await stat(path.join(workspace, result.outputFile))).size > 1000);
   assert.equal(result.channelId, "motivation-es");
   assert.equal(result.language, "es");
@@ -290,6 +357,9 @@ test("renders procedural-original audio without voice files or voice-rights evid
   assert.equal(result.voiceRightsEvidenceFile, undefined);
   assert.match(result.audioPlanSha256, /^[a-f0-9]{64}$/);
   assert.equal(result.audioPlan.seed, 20260824);
+  assert.equal(result.visualPlan.seed, 20260824);
+  assert.equal(result.visualPlan.provenance.paidCostUsd, 0);
+  assert.match(result.visualPlanSha256, /^[a-f0-9]{64}$/);
   assert.equal(result.apiCostUsd, 0);
   assert.equal(result.publishEnabled, false);
   assert.ok((await stat(path.join(workspace, result.outputFile))).size > 1000);
