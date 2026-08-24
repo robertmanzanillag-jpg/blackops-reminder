@@ -7,6 +7,7 @@ import { detectLocalNewsSensitiveContent, hashLocalNewsCanonicalEventIdentity, h
 import { buildLocalNewsGrowthPackage, type LocalNewsGrowthPackage, type LocalNewsGrowthVariantId } from "./clippers-local-news-growth";
 import { detectLocalNewsLanguage, getDefaultLocalNewsTranslator, type LocalNewsTranslator } from "./clippers-local-news-translation";
 import { getLocalNewsGrowthScoutPattern } from "./local-news-growth-scout";
+import { archiveAndCompactLocalNewsState } from "./clippers-local-news-state-retention";
 
 export type ClipperLocalNewsLane = "miami-news" | "ny-news";
 export type ClipperLocalNewsPlatform = "x" | "facebook";
@@ -688,6 +689,10 @@ function csv<T extends object>(rows: T[], columns: string[]): string {
 }
 
 async function persist(dir: string, state: LocalNewsState): Promise<void> {
+  const compacted = await archiveAndCompactLocalNewsState(dir, state, state.updatedAt);
+  state.events = compacted.state.events;
+  state.queue = compacted.state.queue;
+  state.metrics = compacted.state.metrics;
   const analytics = summarizeMetrics(state.metrics);
   const queueColumns = ["id", "eventId", "eventRevision", "canonicalEventIdentity", "claimIdentityHash", "lane", "platform", "section", "topicTag", "editorialUrgency", "editorialPriority", "qualityScore", "revisionKind", "risk", "lifecycle", "status", "gateReason", "notBefore", "publishDecision", "consensus", "checkedAt", "reviewHash", "textOnly", "mediaRequired", "mediaType", "mediaUrl", "approvalRequired", "autoEligible", "published", "copy", "source", "sourceUrl", "createdAt"];
   const metricColumns = ["id", "queueItemId", "eventId", "lane", "platform", "variantId", "impressions", "engagements", "clicks", "shares", "revenueUsd", "costUsd", "observedAt", "recordedAt"];
@@ -843,6 +848,10 @@ export async function bootstrapClipperLocalNews(options: ClipperLocalNewsOptions
   await mkdir(dir, { recursive: true });
   let state = await readState(dir);
   if (!state) state = { version: 1, bootstrappedAt: now, updatedAt: now, lastRunAt: null, scheduleMinutes: scheduleMinutes(env), events: [], queue: [], metrics: [], editorialCounters: { duplicates: 0, revisions: 0, corrections: 0, resolvedRevisions: 0, cadenceHeld: 0 } };
+  else {
+    const compacted = await archiveAndCompactLocalNewsState(dir, state, now);
+    state = compacted.state;
+  }
   state.editorialCounters ||= { duplicates: 0, revisions: 0, corrections: 0, resolvedRevisions: 0, cadenceHeld: 0 };
   state.metrics ||= [];
   migrateLegacyCommitteeState(state, now);

@@ -8,7 +8,7 @@ channel = "stable-24_05"
 [deployment]
 deploymentTarget = "vm"
 build = ["npm", "run", "deploy:build"]
-run = ["npm", "run", "start"]
+run = ["node", "script/replit-fast-start.mjs"]
 
 [[ports]]
 localPort = 5000

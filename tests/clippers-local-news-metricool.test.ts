@@ -3,7 +3,7 @@ import { access, mkdtemp, readFile, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { deliverClipperLocalNewsToMetricool, getClipperLocalNewsMetricoolReadiness, hasCompleteLocalNewsCommitteeApproval } from "../server/clippers-local-news-metricool";
+import { __clipperLocalNewsMetricoolInternals, deliverClipperLocalNewsToMetricool, getClipperLocalNewsMetricoolReadiness, hasCompleteLocalNewsCommitteeApproval } from "../server/clippers-local-news-metricool";
 import { hashLocalNewsQueueReview, hashLocalNewsReviewValue } from "../server/clippers-local-news-review-committee";
 
 function rawItem(overrides: Record<string, unknown> = {}) {
@@ -1369,4 +1369,15 @@ test("filters stale queue rows while fresh developing and breaking news keep the
   });
   assert.equal(freshResult.scheduled, 2);
   assert.ok(dates.includes("2026-07-21T12:00:00"), dates.join(", "));
+});
+
+test("bounds Metricool JSON responses before parsing them into memory", async () => {
+  const small = await __clipperLocalNewsMetricoolInternals.safeJson(new Response(JSON.stringify({ id: "ok" })));
+  assert.deepEqual(small, { id: "ok" });
+
+  const oversized = new Response(JSON.stringify({ payload: "x".repeat(1024 * 1024 + 1) }));
+  assert.equal(await __clipperLocalNewsMetricoolInternals.safeJson(oversized), null);
+
+  const declaredOversized = new Response("{}", { headers: { "content-length": String(2 * 1024 * 1024) } });
+  assert.equal(await __clipperLocalNewsMetricoolInternals.safeJson(declaredOversized), null);
 });

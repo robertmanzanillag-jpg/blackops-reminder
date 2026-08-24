@@ -33,6 +33,7 @@ const MEDIA_NORMALIZATION_ATTEMPTS = 3;
 const MEDIA_NORMALIZATION_RETRY_MS = 250;
 const SCHEDULE_ATTEMPTS = 3;
 const SCHEDULE_RETRY_MS = 500;
+const MAX_METRICOOL_JSON_BYTES = 1024 * 1024;
 
 const committeeVerdictSchema = z.object({
   role: z.enum(["source_verifier", "safety_editor", "monetization_editor"]),
@@ -661,8 +662,28 @@ async function scheduleMetricoolPost(
 }
 
 async function safeJson(response: Response): Promise<unknown> {
+  const declaredLength = Number(response.headers.get("content-length") || "0");
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_METRICOOL_JSON_BYTES) {
+    await response.body?.cancel().catch(() => undefined);
+    return null;
+  }
   try {
-    return await response.json();
+    if (!response.body) return null;
+    const reader = response.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_METRICOOL_JSON_BYTES) {
+        await reader.cancel().catch(() => undefined);
+        return null;
+      }
+      chunks.push(value);
+    }
+    const body = Buffer.concat(chunks, total).toString("utf8");
+    return body ? JSON.parse(body) : null;
   } catch {
     return null;
   }
@@ -1087,4 +1108,5 @@ export const __clipperLocalNewsMetricoolInternals = {
   nextBreakingSlot,
   scheduleHorizonEndMs,
   queueItemIsFresh,
+  safeJson,
 };
