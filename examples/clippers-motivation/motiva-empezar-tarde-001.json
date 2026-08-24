@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "shortId": "motiva-empezar-tarde-001",
+  "language": "es",
+  "format": "youtube_short_9x16",
+  "topic": "empezar_tarde",
+  "script": {
+    "hook": "Crees que llegaste tarde porque comparas tu comienzo con el capítulo avanzado de otra persona.",
+    "beats": [
+      "El tiempo que ya pasó no vuelve, pero todavía puedes decidir qué construir con el que tienes.",
+      "Tu experiencia también cuenta: úsala para elegir mejor, evitar ruido y avanzar con intención."
+    ],
+    "close": "Abre hoy una página nueva y termina el primer paso antes de dormir.",
+    "originality": {
+      "status": "owned_original",
+      "author": "Equipo Clippers",
+      "thirdPartyQuotes": false,
+      "thirdPartySpeeches": false,
+      "sources": []
+    },
+    "structure": {
+      "conflict": "hook",
+      "idea": "beats",
+      "action": "close"
+    }
+  },
+  "voice": {
+    "sourceType": "local_recording",
+    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motiva-empezar-tarde-001.wav",
+    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motiva-empezar-tarde-001-voice.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "style": {
+    "backgroundColor": "#422006"
+  },
+  "contentSafety": {
+    "celebrities": false,
+    "podcasts": false,
+    "clonedVoices": false,
+    "thirdPartyQuotes": false,
+    "wealthPromises": false,
+    "healthPromises": false
+  }
+}

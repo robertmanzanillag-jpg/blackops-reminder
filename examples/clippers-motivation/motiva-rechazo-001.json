@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "shortId": "motiva-rechazo-001",
+  "language": "es",
+  "format": "youtube_short_9x16",
+  "topic": "rechazo",
+  "script": {
+    "hook": "Ese no que recibiste duele porque habías imaginado un resultado distinto.",
+    "beats": [
+      "Pero una respuesta no decide tu valor ni cancela todo lo que puedes construir después.",
+      "Toma la información útil, suelta la vergüenza y vuelve con una propuesta más clara."
+    ],
+    "close": "Hoy transforma un rechazo en una mejora concreta y haz el siguiente intento.",
+    "originality": {
+      "status": "owned_original",
+      "author": "Equipo Clippers",
+      "thirdPartyQuotes": false,
+      "thirdPartySpeeches": false,
+      "sources": []
+    },
+    "structure": {
+      "conflict": "hook",
+      "idea": "beats",
+      "action": "close"
+    }
+  },
+  "voice": {
+    "sourceType": "local_recording",
+    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motiva-rechazo-001.wav",
+    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motiva-rechazo-001-voice.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "style": {
+    "backgroundColor": "#312E81"
+  },
+  "contentSafety": {
+    "celebrities": false,
+    "podcasts": false,
+    "clonedVoices": false,
+    "thirdPartyQuotes": false,
+    "wealthPromises": false,
+    "healthPromises": false
+  }
+}
