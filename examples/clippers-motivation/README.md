@@ -1,8 +1,8 @@
 # Paquete de Shorts motivacionales
 
-Estos cinco manifests contienen guiones originales en español para piezas de 20–40 segundos. No contienen citas, discursos, celebridades, podcasts, promesas de riqueza o salud, ni material externo.
+Estos diez manifests contienen guiones originales para piezas de 20-40 segundos: cinco en espanol y cinco en ingles. No contienen citas, discursos, celebridades, podcasts, promesas de riqueza o salud, ni material externo.
 
-Todos usan el identificador estable `channelId: "motivation-es"` y `language: "es"`. El gate editorial declara explícitamente un hook en el primer segundo, una acción concreta y `noQuotaFiller: true`: si un futuro candidato no alcanza ese nivel, se rechaza en vez de rellenar una cuota.
+Los manifests en espanol usan `channelId: "motivation-es"` y `language: "es"`. Los manifests en ingles usan `channelId: "motivation-en"` y `language: "en"`. El gate editorial declara explicitamente un hook en el primer segundo, una accion concreta y `noQuotaFiller: true`: si un futuro candidato no alcanza ese nivel, se rechaza en vez de rellenar una cuota.
 
 Los campos de voz son marcadores deliberados:
 

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "shortId": "motivate-late-start-001",
+  "channelId": "motivation-en",
+  "language": "en",
+  "format": "youtube_short_9x16",
+  "topic": "late start",
+  "script": {
+    "hook": "Starting late only feels embarrassing when you compare your chapter to someone else's timeline.",
+    "beats": [
+      "The delay is real, but it is not a life sentence and it is not a reason to stay still.",
+      "Your job today is not to catch up with everyone; it is to stop abandoning yourself."
+    ],
+    "close": "Choose the first honest step, finish it, and let today become the new starting line.",
+    "originality": {
+      "status": "owned_original",
+      "author": "Equipo Clippers",
+      "thirdPartyQuotes": false,
+      "thirdPartySpeeches": false,
+      "sources": []
+    },
+    "structure": {
+      "conflict": "hook",
+      "idea": "beats",
+      "action": "close"
+    }
+  },
+  "voice": {
+    "sourceType": "local_recording",
+    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motivate-late-start-001.wav",
+    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motivate-late-start-001-voice.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "style": {
+    "backgroundColor": "#164E63"
+  },
+  "contentSafety": {
+    "celebrities": false,
+    "podcasts": false,
+    "clonedVoices": false,
+    "thirdPartyQuotes": false,
+    "wealthPromises": false,
+    "healthPromises": false
+  },
+  "qualityGate": {
+    "approved": true,
+    "hookFirstSecond": true,
+    "actionable": true,
+    "noQuotaFiller": true,
+    "reviewedBy": "Equipo Clippers",
+    "reviewedAt": "2026-08-24T12:00:00.000Z"
+  }
+}

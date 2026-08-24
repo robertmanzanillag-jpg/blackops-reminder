@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "shortId": "motivate-discipline-001",
+  "channelId": "motivation-en",
+  "language": "en",
+  "format": "youtube_short_9x16",
+  "topic": "discipline",
+  "script": {
+    "hook": "The problem is not that you lack motivation; it is that you wait for it to lead.",
+    "beats": [
+      "Motivation changes with sleep, stress, and noise, but a simple rule can stay in charge.",
+      "Do the task you keep avoiding first, even if the first version is ugly and quiet."
+    ],
+    "close": "Set a twenty minute timer, start the hard thing, and keep the promise today.",
+    "originality": {
+      "status": "owned_original",
+      "author": "Equipo Clippers",
+      "thirdPartyQuotes": false,
+      "thirdPartySpeeches": false,
+      "sources": []
+    },
+    "structure": {
+      "conflict": "hook",
+      "idea": "beats",
+      "action": "close"
+    }
+  },
+  "voice": {
+    "sourceType": "local_recording",
+    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motivate-discipline-001.wav",
+    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motivate-discipline-001-voice.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "style": {
+    "backgroundColor": "#111827"
+  },
+  "contentSafety": {
+    "celebrities": false,
+    "podcasts": false,
+    "clonedVoices": false,
+    "thirdPartyQuotes": false,
+    "wealthPromises": false,
+    "healthPromises": false
+  },
+  "qualityGate": {
+    "approved": true,
+    "hookFirstSecond": true,
+    "actionable": true,
+    "noQuotaFiller": true,
+    "reviewedBy": "Equipo Clippers",
+    "reviewedAt": "2026-08-24T12:00:00.000Z"
+  }
+}

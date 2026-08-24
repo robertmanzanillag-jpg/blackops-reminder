@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-08-24T06:48:18.158Z
+Generated: 2026-08-24T07:07:42.366Z
 Repo: `/private/tmp/asistente-sleep-clippers`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 554 | 472 | 1786 | 494 | 11464 |
+| 562 | 480 | 1798 | 494 | 11577 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,12 +30,12 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `server` | 129 | 125 | server:129 |
 | `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
-| `tests` | 106 | 103 | test:106 |
-| `script` | 66 | 62 | script:66 |
-| `docs` | 23 | 22 | docs:23 |
+| `tests` | 107 | 104 | test:107 |
+| `script` | 67 | 63 | script:67 |
+| `docs` | 24 | 23 | docs:24 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
+| `examples/clippers-motivation` | 11 | 11 | other:10, docs:1 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
-| `examples/clippers-motivation` | 6 | 6 | other:5, docs:1 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `client/public` | 16 | 2 | other:16 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
@@ -224,6 +224,7 @@ Package: `rest-express`
 - `script/clippers-sync-metricool-source-readiness.mjs` (script; 28 symbols, 3 imports)
 - `script/clippers-tiktok-preflight.ts` (script; 15 symbols, 1 imports)
 - `script/clippers-upload-metricool-media.ts` (script; 51 symbols, 7 imports)
+- `script/clippers-youtube-uploader.mjs` (script; 82 symbols, 5 imports)
 - `script/codebase-map.ts` (script; 43 symbols, 3 imports)
 - `script/configure-telegram.ts` (script; 5 symbols, 4 imports)
 - `script/create-ceo-go-live-task.ts` (script; 13 symbols, 3 imports)
@@ -233,7 +234,6 @@ Package: `rest-express`
 - `script/metricool-plan.ts` (script; 3 symbols, 1 imports)
 - `script/migrate-user.ts` (script; 16 symbols, 4 imports)
 - `script/native-typescript-loader.mjs` (script; 3 symbols)
-- `script/radio-local-worker.ts` (script; 25 symbols, 2 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

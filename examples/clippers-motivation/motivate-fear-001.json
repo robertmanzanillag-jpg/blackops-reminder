@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "shortId": "motivate-fear-001",
+  "channelId": "motivation-en",
+  "language": "en",
+  "format": "youtube_short_9x16",
+  "topic": "fear",
+  "script": {
+    "hook": "Fear gets louder when the next step stays vague.",
+    "beats": [
+      "You do not need total confidence to move; you need one safe action you can measure.",
+      "Name the thing, shrink it until it feels boring, then prove to yourself that motion is possible."
+    ],
+    "close": "Write the smallest next step, do it today, and let evidence replace the fear.",
+    "originality": {
+      "status": "owned_original",
+      "author": "Equipo Clippers",
+      "thirdPartyQuotes": false,
+      "thirdPartySpeeches": false,
+      "sources": []
+    },
+    "structure": {
+      "conflict": "hook",
+      "idea": "beats",
+      "action": "close"
+    }
+  },
+  "voice": {
+    "sourceType": "local_recording",
+    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motivate-fear-001.wav",
+    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motivate-fear-001-voice.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "style": {
+    "backgroundColor": "#1E1B4B"
+  },
+  "contentSafety": {
+    "celebrities": false,
+    "podcasts": false,
+    "clonedVoices": false,
+    "thirdPartyQuotes": false,
+    "wealthPromises": false,
+    "healthPromises": false
+  },
+  "qualityGate": {
+    "approved": true,
+    "hookFirstSecond": true,
+    "actionable": true,
+    "noQuotaFiller": true,
+    "reviewedBy": "Equipo Clippers",
+    "reviewedAt": "2026-08-24T12:00:00.000Z"
+  }
+}

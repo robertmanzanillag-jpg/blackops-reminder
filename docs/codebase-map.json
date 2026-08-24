@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-24T06:48:18.158Z",
+  "generatedAt": "2026-08-24T07:07:42.366Z",
   "repoRoot": "/private/tmp/asistente-sleep-clippers",
   "packageName": "rest-express",
   "scripts": {
@@ -110,13 +110,42 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 554,
-    "filesIndexed": 472,
-    "imports": 1786,
+    "filesVisible": 562,
+    "filesIndexed": 480,
+    "imports": 1798,
     "routes": 494,
-    "symbols": 11464
+    "symbols": 11577
   },
   "directories": {
+    "docs": {
+      "files": 24,
+      "indexed": 23,
+      "kinds": {
+        "docs": 24
+      }
+    },
+    "examples/clippers-motivation": {
+      "files": 11,
+      "indexed": 11,
+      "kinds": {
+        "other": 10,
+        "docs": 1
+      }
+    },
+    "script": {
+      "files": 67,
+      "indexed": 63,
+      "kinds": {
+        "script": 67
+      }
+    },
+    "tests": {
+      "files": 107,
+      "indexed": 104,
+      "kinds": {
+        "test": 107
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -174,28 +203,6 @@
         "client-page": 26
       }
     },
-    "docs": {
-      "files": 23,
-      "indexed": 22,
-      "kinds": {
-        "docs": 23
-      }
-    },
-    "examples/clippers-motivation": {
-      "files": 6,
-      "indexed": 6,
-      "kinds": {
-        "docs": 1,
-        "other": 5
-      }
-    },
-    "script": {
-      "files": 66,
-      "indexed": 62,
-      "kinds": {
-        "script": 66
-      }
-    },
     "scripts": {
       "files": 4,
       "indexed": 1,
@@ -229,13 +236,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 106,
-      "indexed": 103,
-      "kinds": {
-        "test": 106
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -4002,6 +4002,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-youtube-uploader.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
@@ -4110,6 +4118,46 @@
     },
     {
       "path": "examples/clippers-motivation/motiva-rechazo-001.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-consistency-001.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-discipline-001.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-fear-001.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-late-start-001.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motivate-rejection-001.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -7114,6 +7162,107 @@
         "verifyPublicMetricoolMediaUrl",
         "workspaceRoot",
         "writeJsonAtomic"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-youtube-uploader.mjs",
+      "kind": "script",
+      "imports": [
+        "node:crypto",
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "channelConfigFromEnv",
+        "runYouTubeUpload",
+        "validateUploadItem"
+      ],
+      "symbols": [
+        "ACTIVE_LEDGER_STATES",
+        "CHANNELS_URL",
+        "LANES",
+        "PRIVACY",
+        "RIGHTS",
+        "SHA256",
+        "TOKEN_URL",
+        "UPLOAD_START_URL",
+        "YOUTUBE_CHANNEL_ID",
+        "active",
+        "appendLedger",
+        "arg",
+        "artifactBlockers",
+        "atomicJson",
+        "authBlockers",
+        "authorization",
+        "blockers",
+        "body",
+        "candidate",
+        "channelConfigFromEnv",
+        "checks",
+        "clean",
+        "commonLedger",
+        "config",
+        "configBlockers",
+        "current",
+        "dryRun",
+        "duplicate",
+        "duplicateReason",
+        "env",
+        "evidenceBlockers",
+        "fetcher",
+        "fileSha256",
+        "item",
+        "itemBlockers",
+        "itemPath",
+        "items",
+        "jsonFile",
+        "latestLedger",
+        "ledger",
+        "ledgerItems",
+        "ledgerPath",
+        "lockPath",
+        "lockedDuplicate",
+        "mediaPath",
+        "metadata",
+        "normalized",
+        "now",
+        "oauthAccessToken",
+        "parseArgs",
+        "parsed",
+        "payload",
+        "preflight",
+        "privacy",
+        "privacyStatus",
+        "publicAuthorizationBlocker",
+        "publicBlocker",
+        "qaEvidenceValid",
+        "qaPath",
+        "realRelative",
+        "relative",
+        "response",
+        "responseJson",
+        "resultBase",
+        "rightsEvidenceValid",
+        "rightsPath",
+        "rootPath",
+        "runYouTubeUpload",
+        "safeRegularFile",
+        "safeResumableUrl",
+        "secretPresent",
+        "sha256Buffer",
+        "startedAt",
+        "suffix",
+        "temporary",
+        "title",
+        "uploadPayload",
+        "uploadUrl",
+        "uploadedAt",
+        "validateUploadItem",
+        "verifyChannel",
+        "workspaceRoot"
       ],
       "routes": []
     },
@@ -18716,12 +18865,15 @@
         "blockers",
         "duplicate",
         "english",
+        "examplesDir",
         "execFileAsync",
         "existingOutput",
         "failed",
+        "files",
         "first",
         "manifest",
         "manifestPath",
+        "manifests",
         "now",
         "result",
         "retry",
@@ -19141,6 +19293,51 @@
         "sourceDir",
         "sourceName",
         "vyroSubmissionProofPath"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clippers-youtube-uploader.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-youtube-uploader.mjs",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "CHANNELS",
+        "allowed",
+        "blocked",
+        "configs",
+        "counters",
+        "env",
+        "fetcher",
+        "first",
+        "fixture",
+        "item",
+        "itemFile",
+        "itemId",
+        "ledger",
+        "media",
+        "mediaFile",
+        "missingItem",
+        "qa",
+        "qaBytes",
+        "qaFile",
+        "result",
+        "retry",
+        "rights",
+        "rightsBytes",
+        "rightsFile",
+        "root",
+        "second",
+        "sha",
+        "successfulFetch"
       ],
       "routes": []
     },

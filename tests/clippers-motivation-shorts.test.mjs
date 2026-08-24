@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
-import { access, mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
+import { access, mkdtemp, mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -141,6 +141,20 @@ test("accepts independent ES and EN channel manifests but fails closed without q
   assert.deepEqual(validateManifestShape(english), []);
   english.qualityGate.noQuotaFiller = false;
   assert.ok(validateManifestShape(english).includes("quality_gate_not_approved"));
+});
+
+test("example content pack contains five valid Spanish and five valid English candidates", async () => {
+  const examplesDir = path.join(process.cwd(), "examples", "clippers-motivation");
+  const files = (await readdir(examplesDir)).filter((name) => name.endsWith(".json")).sort();
+  const manifests = await Promise.all(files.map(async (name) => JSON.parse(await readFile(path.join(examplesDir, name), "utf8"))));
+  assert.equal(files.length, 10);
+  assert.equal(manifests.filter((manifest) => manifest.language === "es" && manifest.channelId === "motivation-es").length, 5);
+  assert.equal(manifests.filter((manifest) => manifest.language === "en" && manifest.channelId === "motivation-en").length, 5);
+  for (const manifest of manifests) {
+    assert.deepEqual(validateManifestShape(manifest), [], manifest.shortId);
+    assert.match(manifest.voice.file, /^PLACEHOLDER_RECORD_LOCAL_VOICE\//);
+    assert.match(manifest.voice.rightsEvidenceFile, /^PLACEHOLDER_ADD_RIGHTS_EVIDENCE\//);
+  }
 });
 
 test("fails closed when channel identity or supported language is missing", () => {
