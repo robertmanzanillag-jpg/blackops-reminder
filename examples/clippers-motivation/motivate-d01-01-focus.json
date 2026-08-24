@@ -1,9 +1,11 @@
 {
   "schemaVersion": 1,
-  "shortId": "motivate-focus-001",
+  "shortId": "motivate-d01-01-focus",
   "channelId": "motivation-en",
   "language": "en",
   "format": "youtube_short_9x16",
+  "launchDay": 1,
+  "launchPosition": 1,
   "topic": "focus",
   "script": {
     "hook": "Your attention keeps getting stolen because everything feels equally urgent.",
@@ -25,13 +27,29 @@
       "action": "close"
     }
   },
-  "voice": {
-    "sourceType": "local_recording",
-    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motivate-focus-001.wav",
-    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motivate-focus-001-voice.json",
-    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  "audio": {
+    "mode": "procedural_original",
+    "durationSeconds": 24,
+    "seed": 260824100,
+    "parameters": {
+      "noiseColor": "pink",
+      "amplitude": 0.08,
+      "highpassHz": 45,
+      "lowpassHz": 3200,
+      "volumeDb": -18,
+      "fadeSeconds": 0.8
+    },
+    "provenance": {
+      "status": "owned_original",
+      "generator": "ffmpeg_lavfi_anoisesrc_v1",
+      "thirdPartyAssets": false,
+      "networkUsed": false,
+      "paidCostUsd": 0
+    }
   },
-  "style": { "backgroundColor": "#172554" },
+  "style": {
+    "backgroundColor": "#172554"
+  },
   "contentSafety": {
     "celebrities": false,
     "podcasts": false,

@@ -1,10 +1,12 @@
 {
   "schemaVersion": 1,
-  "shortId": "motivate-self-trust-001",
+  "shortId": "motivate-d01-04-self-trust",
   "channelId": "motivation-en",
   "language": "en",
   "format": "youtube_short_9x16",
-  "topic": "self_trust",
+  "launchDay": 1,
+  "launchPosition": 4,
+  "topic": "self-trust",
   "script": {
     "hook": "You keep asking for more advice because choosing for yourself feels risky.",
     "beats": [
@@ -19,15 +21,35 @@
       "thirdPartySpeeches": false,
       "sources": []
     },
-    "structure": { "conflict": "hook", "idea": "beats", "action": "close" }
+    "structure": {
+      "conflict": "hook",
+      "idea": "beats",
+      "action": "close"
+    }
   },
-  "voice": {
-    "sourceType": "local_recording",
-    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motivate-self-trust-001.wav",
-    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motivate-self-trust-001-voice.json",
-    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  "audio": {
+    "mode": "procedural_original",
+    "durationSeconds": 27,
+    "seed": 260824103,
+    "parameters": {
+      "noiseColor": "pink",
+      "amplitude": 0.11,
+      "highpassHz": 60,
+      "lowpassHz": 3800,
+      "volumeDb": -15,
+      "fadeSeconds": 1.4
+    },
+    "provenance": {
+      "status": "owned_original",
+      "generator": "ffmpeg_lavfi_anoisesrc_v1",
+      "thirdPartyAssets": false,
+      "networkUsed": false,
+      "paidCostUsd": 0
+    }
   },
-  "style": { "backgroundColor": "#3B0764" },
+  "style": {
+    "backgroundColor": "#3B0764"
+  },
   "contentSafety": {
     "celebrities": false,
     "podcasts": false,

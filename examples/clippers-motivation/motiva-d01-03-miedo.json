@@ -1,14 +1,16 @@
 {
   "schemaVersion": 1,
-  "shortId": "motiva-miedo-001",
+  "shortId": "motiva-d01-03-miedo",
   "channelId": "motivation-es",
   "language": "es",
   "format": "youtube_short_9x16",
+  "launchDay": 1,
+  "launchPosition": 3,
   "topic": "miedo",
   "script": {
     "hook": "Tu miedo está pidiendo certeza antes de darte permiso para avanzar.",
     "beats": [
-      "Esa certeza casi nunca llega al principio; aparece cuando pruebas, observas y corriges.",
+      "La certeza casi nunca llega al principio; aparece cuando pruebas, observas y corriges.",
       "Reduce el riesgo, prepara lo necesario y da un paso que puedas repetir mañana."
     ],
     "close": "Escribe la acción segura más pequeña y complétala antes de terminar el día.",
@@ -25,11 +27,25 @@
       "action": "close"
     }
   },
-  "voice": {
-    "sourceType": "local_recording",
-    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motiva-miedo-001.wav",
-    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motiva-miedo-001-voice.json",
-    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  "audio": {
+    "mode": "procedural_original",
+    "durationSeconds": 26,
+    "seed": 260824002,
+    "parameters": {
+      "noiseColor": "pink",
+      "amplitude": 0.1,
+      "highpassHz": 55,
+      "lowpassHz": 3600,
+      "volumeDb": -16,
+      "fadeSeconds": 1.2
+    },
+    "provenance": {
+      "status": "owned_original",
+      "generator": "ffmpeg_lavfi_anoisesrc_v1",
+      "thirdPartyAssets": false,
+      "networkUsed": false,
+      "paidCostUsd": 0
+    }
   },
   "style": {
     "backgroundColor": "#3F1D2E"

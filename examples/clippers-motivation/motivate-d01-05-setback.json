@@ -1,9 +1,11 @@
 {
   "schemaVersion": 1,
-  "shortId": "motivate-setback-001",
+  "shortId": "motivate-d01-05-setback",
   "channelId": "motivation-en",
   "language": "en",
   "format": "youtube_short_9x16",
+  "launchDay": 1,
+  "launchPosition": 5,
   "topic": "setback",
   "script": {
     "hook": "One bad result is trying to convince you that the whole plan was wrong.",
@@ -19,15 +21,35 @@
       "thirdPartySpeeches": false,
       "sources": []
     },
-    "structure": { "conflict": "hook", "idea": "beats", "action": "close" }
+    "structure": {
+      "conflict": "hook",
+      "idea": "beats",
+      "action": "close"
+    }
   },
-  "voice": {
-    "sourceType": "local_recording",
-    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motivate-setback-001.wav",
-    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motivate-setback-001-voice.json",
-    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  "audio": {
+    "mode": "procedural_original",
+    "durationSeconds": 28,
+    "seed": 260824104,
+    "parameters": {
+      "noiseColor": "pink",
+      "amplitude": 0.12,
+      "highpassHz": 65,
+      "lowpassHz": 4000,
+      "volumeDb": -18,
+      "fadeSeconds": 0.8
+    },
+    "provenance": {
+      "status": "owned_original",
+      "generator": "ffmpeg_lavfi_anoisesrc_v1",
+      "thirdPartyAssets": false,
+      "networkUsed": false,
+      "paidCostUsd": 0
+    }
   },
-  "style": { "backgroundColor": "#450A0A" },
+  "style": {
+    "backgroundColor": "#450A0A"
+  },
   "contentSafety": {
     "celebrities": false,
     "podcasts": false,

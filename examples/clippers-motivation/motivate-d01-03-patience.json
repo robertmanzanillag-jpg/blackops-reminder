@@ -1,9 +1,11 @@
 {
   "schemaVersion": 1,
-  "shortId": "motivate-patience-001",
+  "shortId": "motivate-d01-03-patience",
   "channelId": "motivation-en",
   "language": "en",
   "format": "youtube_short_9x16",
+  "launchDay": 1,
+  "launchPosition": 3,
   "topic": "patience",
   "script": {
     "hook": "Slow progress feels like failure when you only measure the finish line.",
@@ -19,15 +21,35 @@
       "thirdPartySpeeches": false,
       "sources": []
     },
-    "structure": { "conflict": "hook", "idea": "beats", "action": "close" }
+    "structure": {
+      "conflict": "hook",
+      "idea": "beats",
+      "action": "close"
+    }
   },
-  "voice": {
-    "sourceType": "local_recording",
-    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motivate-patience-001.wav",
-    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motivate-patience-001-voice.json",
-    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  "audio": {
+    "mode": "procedural_original",
+    "durationSeconds": 26,
+    "seed": 260824102,
+    "parameters": {
+      "noiseColor": "pink",
+      "amplitude": 0.1,
+      "highpassHz": 55,
+      "lowpassHz": 3600,
+      "volumeDb": -16,
+      "fadeSeconds": 1.2
+    },
+    "provenance": {
+      "status": "owned_original",
+      "generator": "ffmpeg_lavfi_anoisesrc_v1",
+      "thirdPartyAssets": false,
+      "networkUsed": false,
+      "paidCostUsd": 0
+    }
   },
-  "style": { "backgroundColor": "#164E63" },
+  "style": {
+    "backgroundColor": "#164E63"
+  },
   "contentSafety": {
     "celebrities": false,
     "podcasts": false,

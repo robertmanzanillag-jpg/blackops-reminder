@@ -1,15 +1,17 @@
 {
   "schemaVersion": 1,
-  "shortId": "motiva-consistencia-001",
+  "shortId": "motiva-d01-04-consistencia",
   "channelId": "motivation-es",
   "language": "es",
   "format": "youtube_short_9x16",
+  "launchDay": 1,
+  "launchPosition": 4,
   "topic": "consistencia",
   "script": {
     "hook": "Un día intenso no compensa una semana completa sin aparecer.",
     "beats": [
-      "El progreso se vuelve visible cuando repites una acción suficientemente pequeña para sobrevivir a tus días difíciles.",
-      "Define un mínimo realista y protégelo; si puedes hacer más, hazlo, pero nunca pierdas la cadena por buscar perfección."
+      "El progreso se vuelve visible cuando repites una acción que también cabe en tus días difíciles.",
+      "Define un mínimo realista y protégelo; si puedes hacer más, hazlo sin convertirlo en obligación."
     ],
     "close": "Decide tu mínimo diario y márcalo como completado hoy.",
     "originality": {
@@ -25,11 +27,25 @@
       "action": "close"
     }
   },
-  "voice": {
-    "sourceType": "local_recording",
-    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motiva-consistencia-001.wav",
-    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motiva-consistencia-001-voice.json",
-    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  "audio": {
+    "mode": "procedural_original",
+    "durationSeconds": 27,
+    "seed": 260824003,
+    "parameters": {
+      "noiseColor": "pink",
+      "amplitude": 0.11,
+      "highpassHz": 60,
+      "lowpassHz": 3800,
+      "volumeDb": -15,
+      "fadeSeconds": 1.4
+    },
+    "provenance": {
+      "status": "owned_original",
+      "generator": "ffmpeg_lavfi_anoisesrc_v1",
+      "thirdPartyAssets": false,
+      "networkUsed": false,
+      "paidCostUsd": 0
+    }
   },
   "style": {
     "backgroundColor": "#134E4A"

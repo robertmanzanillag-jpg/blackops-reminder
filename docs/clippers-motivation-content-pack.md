@@ -1,62 +1,51 @@
-# Clippers: paquete inicial de motivación
+# Clippers: inventario motivacional de siete días
 
-Este paquete editorial incluye quince guiones originales, pensados para narraciones de 20-40 segundos y video vertical 9:16: cinco en espanol y diez concebidos directamente en ingles. El objetivo operativo sigue siendo producir hasta cinco por canal por dia cuando cinco candidatos pasan todos los gates; los candidatos extra en ingles sirven como buffer editorial, no como permiso para publicar mas de cinco.
+El paquete contiene exactamente 70 Shorts originales de texto: 35 ES y 35 EN, organizados en siete jornadas de cinco piezas por canal. Los conceptos ingleses se escribieron de forma nativa y no forman pares de traducción literal con los españoles.
 
-| Manifest | Tema | Acción final |
-| --- | --- | --- |
-| `motiva-disciplina-001.json` | Disciplina sin depender de las ganas | Completar veinte minutos de una tarea pendiente |
-| `motiva-rechazo-001.json` | Convertir el rechazo en información | Mejorar algo concreto y volver a intentar |
-| `motiva-miedo-001.json` | Avanzar sin esperar certeza total | Completar el paso seguro más pequeño |
-| `motiva-consistencia-001.json` | Sostener un mínimo diario | Definir y completar el mínimo del día |
-| `motiva-empezar-tarde-001.json` | Empezar sin compararse | Terminar hoy el primer paso |
-| `motivate-discipline-001.json` | Discipline without waiting for motivation | Run a twenty-minute focused start |
-| `motivate-rejection-001.json` | Turning rejection into signal | Make one concrete improvement and try again |
-| `motivate-fear-001.json` | Shrinking fear into a measurable step | Complete the smallest safe action |
-| `motivate-consistency-001.json` | Building a repeatable minimum | Finish the minimum action before day end |
-| `motivate-late-start-001.json` | Starting without comparison | Complete the first honest step today |
-| `motivate-focus-001.json` | Protecting focused attention | Work on one priority for twenty minutes |
-| `motivate-patience-001.json` | Continuing through slow progress | Record one improvement and return tomorrow |
-| `motivate-self-trust-001.json` | Making a thoughtful independent decision | Own one small decision without reopening it |
-| `motivate-setback-001.json` | Learning from one poor result | Apply one lesson in the next attempt |
-| `motivate-fresh-start-001.json` | Resetting without waiting for a special date | Begin one clean action within five minutes |
+| Día | Temas ES | Themes EN |
+| ---: | --- | --- |
+| 1 | disciplina, rechazo, miedo, consistencia, empezar tarde | focus, fresh start, patience, self-trust, setback |
+| 2 | perfeccionismo, procrastinación, comparación, límites, conversación difícil | curiosity, first draft, protect morning, better question, be seen |
+| 3 | decisiones, distracciones, error, progreso invisible, pedir oportunidad | simplify system, end indecision, deliberate practice, keep appointments, release sunk cost |
+| 4 | principiante, paciencia, respeto propio, responsabilidad, incertidumbre | build evidence, choose environment, next constraint, feedback without identity, finish before expand |
+| 5 | terminar, decir no, reiniciar el día, prioridades, promesas pequeñas | beginner question, honest pace, resist urgency, work in silence, take initiative |
+| 6 | crítica, confianza, camino solitario, volver tras una pausa, estándares | recover momentum, make room, standards over mood, clarity through writing, direct message |
+| 7 | tomar control, adaptabilidad, preparación, gratitud activa, largo plazo | prepare for pressure, steady leadership, resourcefulness, choose responsibility, next door |
 
-Los conceptos en ingles no son traducciones literales de los guiones espanoles: usan temas, desarrollo y acciones escritos directamente para `motivation-en`.
+## Contrato editorial
 
-Cada guion sigue la estructura exigida por `script/clippers-motivation-shorts.mjs`: conflicto especifico en `hook`, desarrollo de la idea en `beats` y una accion practica en `close`. Los guiones ES pertenecen al canal estable `motivation-es`; los EN pertenecen a `motivation-en`. Todos se declaran `owned_original`, sin fuentes externas, citas, discursos, celebridades, podcasts, voces clonadas ni promesas de riqueza o salud.
+Cada manifest declara:
 
-Los quince superan el gate editorial explicito: hook inmediato, cierre accionable, revision identificada y `noQuotaFiller: true`. Una pieza futura que no pase esos criterios debe rechazarse y no reemplazarse por contenido debil para completar una cuota.
+- `launchDay` entre 1 y 7 y `launchPosition` entre 1 y 5;
+- canal estable `motivation-es` o `motivation-en` con el idioma correspondiente;
+- conflicto en `hook`, desarrollo en `beats` y una acción práctica en `close`;
+- guion `owned_original`, sin fuentes, citas ni discursos externos;
+- todas las exclusiones de seguridad requeridas;
+- gate aprobado con hook inmediato, cierre accionable y `noQuotaFiller: true`.
 
-## Estado de los manifests
+Los scripts son distintos por texto, hook, close y tema. Un candidato rechazado en revisión no autoriza una variante débil para completar cinco.
 
-Los JSON de `examples/clippers-motivation/` son validos en esquema, canal, idioma, seguridad y calidad editorial, pero **no estan listos para render ni publicacion**. Los tres campos de voz son placeholders explicitos:
+## Audio procedural
 
-- `voice.file`: ruta `PLACEHOLDER_RECORD_LOCAL_VOICE/...`.
-- `voice.rightsEvidenceFile`: ruta `PLACEHOLDER_ADD_RIGHTS_EVIDENCE/...`.
-- `voice.sha256`: 64 ceros para conservar la forma requerida, no el hash de un archivo real.
+Los 70 manifests sustituyen la voz por `audio.mode: "procedural_original"`. Cada plan usa:
 
-El renderer falla cerrado únicamente porque la grabación señalada no existe. No genera ni publica nada y devuelve `voice_missing_or_unsafe`. No se debe crear un audio vacío o sintético para superar este gate.
+- un seed entero exclusivo;
+- 24–28 segundos;
+- ruido rosa con amplitud 0.08–0.12;
+- high-pass entre 45–75 Hz y low-pass entre 3200–4200 Hz;
+- volumen entre -18 y -15 dB y fades entre 0.8–1.4 segundos;
+- procedencia `owned_original`, generador local `ffmpeg_lavfi_anoisesrc_v1`, sin red, terceros ni costo.
 
-## Activación segura por cada Short
+El renderer crea audio determinista con FFmpeg, verifica MP4 1080×1920 con audio, genera subtítulos y frames de evidencia, deduplica guion/manifest/plan de audio y mantiene `publishEnabled: false` y costo USD 0.
 
-1. Robert graba localmente la lectura del guion, sin imitar a terceros, y confirma que dura entre 20 y 40 segundos.
-2. Se guarda el audio dentro del workspace de ejecución, por ejemplo `input/motiva-disciplina-001.wav`.
-3. Se calcula el SHA-256 real del archivo:
+## Cuotas y secuencia
 
-   ```bash
-   shasum -a 256 input/motiva-disciplina-001.wav
-   ```
+El límite es cinco renders diarios por `channelId` en America/New_York. Por eso cada jornada tiene exactamente cinco ES y cinco EN. Los canales mantienen contadores separados; intentar una sexta pieza del mismo canal y día debe bloquearse con `daily_channel_render_limit_reached`.
 
-4. Se reemplazan la ruta placeholder y los 64 ceros en el manifest.
-5. Se crea la evidencia JSON indicada en `docs/clippers-motivation-shorts.md`, con el mismo `shortId`, archivo y SHA-256; `speakerConsent` y `commercialUseAuthorized` deben ser verdaderos y verificables.
-6. Se ejecuta el renderer local. Este verificará archivo, hash, evidencia, audio-only, duración, resolución, duplicados y límites de volumen.
-7. Se revisan visualmente inicio, centro y final antes de cualquier decisión separada de publicación.
+Antes de programar se debe revisar la salida visual, la legibilidad completa, el ritmo y la cuenta correcta. Este inventario prepara producción; no concede autorización automática de publicación.
 
-La existencia de este paquete no autoriza publicar. El renderer mantiene `publishEnabled: false`, costo API USD 0 y un limite tecnico de cinco renders por `channelId` por dia en America/New_York.
+## Validación local
 
-## Validación estática
+La comprobación estática debe confirmar: 70 archivos, 35 por idioma, siete días completos, cinco por día/canal, forma sin blockers, seeds únicos, planes procedurales únicos, ausencia de `voice`, ausencia de campos externos, hooks/closes/scripts únicos y `noQuotaFiller: true`.
 
-La forma editorial de los quince manifests puede validarse sin crear archivos ni modificar la suite de pruebas:
-
-```bash
-node --input-type=module -e 'import { readdir, readFile } from "node:fs/promises"; import path from "node:path"; import { validateManifestShape } from "./script/clippers-motivation-shorts.mjs"; const dir = "examples/clippers-motivation"; const files = (await readdir(dir)).filter((name) => name.endsWith(".json")).sort(); for (const name of files) { const file = path.join(dir, name); const manifest = JSON.parse(await readFile(file, "utf8")); const blockers = validateManifestShape(manifest); if (blockers.length) throw new Error(`${file}: ${blockers.join(",")}`); console.log(`OK ${file}`); }'
-```
+Como smoke test proporcional, se renderiza un manifest del día 1 por canal en un workspace temporal. Ambos deben producir MP4, audio procedural original, evidencia de derechos propia, costo USD 0 y publicación deshabilitada.

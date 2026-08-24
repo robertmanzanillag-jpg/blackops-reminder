@@ -1,10 +1,12 @@
 {
   "schemaVersion": 1,
-  "shortId": "motiva-empezar-tarde-001",
+  "shortId": "motiva-d01-05-empezar-tarde",
   "channelId": "motivation-es",
   "language": "es",
   "format": "youtube_short_9x16",
-  "topic": "empezar_tarde",
+  "launchDay": 1,
+  "launchPosition": 5,
+  "topic": "empezar-tarde",
   "script": {
     "hook": "Crees que llegaste tarde porque comparas tu comienzo con el capítulo avanzado de otra persona.",
     "beats": [
@@ -25,11 +27,25 @@
       "action": "close"
     }
   },
-  "voice": {
-    "sourceType": "local_recording",
-    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motiva-empezar-tarde-001.wav",
-    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motiva-empezar-tarde-001-voice.json",
-    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  "audio": {
+    "mode": "procedural_original",
+    "durationSeconds": 28,
+    "seed": 260824004,
+    "parameters": {
+      "noiseColor": "pink",
+      "amplitude": 0.12,
+      "highpassHz": 65,
+      "lowpassHz": 4000,
+      "volumeDb": -18,
+      "fadeSeconds": 0.8
+    },
+    "provenance": {
+      "status": "owned_original",
+      "generator": "ffmpeg_lavfi_anoisesrc_v1",
+      "thirdPartyAssets": false,
+      "networkUsed": false,
+      "paidCostUsd": 0
+    }
   },
   "style": {
     "backgroundColor": "#422006"

@@ -1,9 +1,11 @@
 {
   "schemaVersion": 1,
-  "shortId": "motiva-disciplina-001",
+  "shortId": "motiva-d01-01-disciplina",
   "channelId": "motivation-es",
   "language": "es",
   "format": "youtube_short_9x16",
+  "launchDay": 1,
+  "launchPosition": 1,
   "topic": "disciplina",
   "script": {
     "hook": "El problema no es que te falten ganas; es que dependes de ellas para actuar.",
@@ -25,11 +27,25 @@
       "action": "close"
     }
   },
-  "voice": {
-    "sourceType": "local_recording",
-    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motiva-disciplina-001.wav",
-    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motiva-disciplina-001-voice.json",
-    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  "audio": {
+    "mode": "procedural_original",
+    "durationSeconds": 24,
+    "seed": 260824000,
+    "parameters": {
+      "noiseColor": "pink",
+      "amplitude": 0.08,
+      "highpassHz": 45,
+      "lowpassHz": 3200,
+      "volumeDb": -18,
+      "fadeSeconds": 0.8
+    },
+    "provenance": {
+      "status": "owned_original",
+      "generator": "ffmpeg_lavfi_anoisesrc_v1",
+      "thirdPartyAssets": false,
+      "networkUsed": false,
+      "paidCostUsd": 0
+    }
   },
   "style": {
     "backgroundColor": "#111827"

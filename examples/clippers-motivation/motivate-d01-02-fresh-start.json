@@ -1,10 +1,12 @@
 {
   "schemaVersion": 1,
-  "shortId": "motivate-fresh-start-001",
+  "shortId": "motivate-d01-02-fresh-start",
   "channelId": "motivation-en",
   "language": "en",
   "format": "youtube_short_9x16",
-  "topic": "fresh_start",
+  "launchDay": 1,
+  "launchPosition": 2,
+  "topic": "fresh-start",
   "script": {
     "hook": "You do not need a perfect Monday, a new month, or permission to reset.",
     "beats": [
@@ -19,15 +21,35 @@
       "thirdPartySpeeches": false,
       "sources": []
     },
-    "structure": { "conflict": "hook", "idea": "beats", "action": "close" }
+    "structure": {
+      "conflict": "hook",
+      "idea": "beats",
+      "action": "close"
+    }
   },
-  "voice": {
-    "sourceType": "local_recording",
-    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motivate-fresh-start-001.wav",
-    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motivate-fresh-start-001-voice.json",
-    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  "audio": {
+    "mode": "procedural_original",
+    "durationSeconds": 25,
+    "seed": 260824101,
+    "parameters": {
+      "noiseColor": "pink",
+      "amplitude": 0.09,
+      "highpassHz": 50,
+      "lowpassHz": 3400,
+      "volumeDb": -17,
+      "fadeSeconds": 1
+    },
+    "provenance": {
+      "status": "owned_original",
+      "generator": "ffmpeg_lavfi_anoisesrc_v1",
+      "thirdPartyAssets": false,
+      "networkUsed": false,
+      "paidCostUsd": 0
+    }
   },
-  "style": { "backgroundColor": "#365314" },
+  "style": {
+    "backgroundColor": "#365314"
+  },
   "contentSafety": {
     "celebrities": false,
     "podcasts": false,
