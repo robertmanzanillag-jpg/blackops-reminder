@@ -16,6 +16,7 @@ function baseManifest() {
   return {
     schemaVersion: 1,
     shortId: "motiva-001",
+    channelId: "motivation-es",
     language: "es",
     format: "youtube_short_9x16",
     script: {
@@ -41,6 +42,14 @@ function baseManifest() {
       thirdPartyQuotes: false,
       wealthPromises: false,
       healthPromises: false,
+    },
+    qualityGate: {
+      approved: true,
+      hookFirstSecond: true,
+      actionable: true,
+      noQuotaFiller: true,
+      reviewedBy: "Robert",
+      reviewedAt: "2026-08-24T12:00:00.000Z",
     },
     voice: {
       sourceType: "local_recording",
@@ -112,12 +121,35 @@ test("requires the conflict, idea and action structure plus all content exclusio
   assert.ok(blockers.includes("content_safety_exclusions_missing"));
 });
 
-test("enforces one render per New York day and five in a rolling seven days", () => {
+test("allows five daily renders independently for Spanish and English channels", () => {
   const now = new Date("2026-08-24T16:00:00.000Z");
-  assert.equal(volumeBlocker([{ renderedAt: "2026-08-24T12:00:00.000Z" }], now), "daily_render_limit_reached");
-  const priorDays = [1, 2, 3, 4, 5].map((days) => ({ renderedAt: new Date(now.getTime() - days * 86_400_000).toISOString() }));
-  assert.equal(volumeBlocker(priorDays, now), "rolling_seven_day_render_limit_reached");
-  assert.equal(volumeBlocker(priorDays.slice(0, 4), now), null);
+  const spanish = Array.from({ length: 5 }, (_, index) => ({ channelId: "motivation-es", language: "es", renderedAt: new Date(now.getTime() - index * 1000).toISOString() }));
+  const english = Array.from({ length: 4 }, (_, index) => ({ channelId: "motivation-en", language: "en", renderedAt: new Date(now.getTime() - index * 1000).toISOString() }));
+  assert.equal(volumeBlocker([...spanish, ...english], now, "motivation-es"), "daily_channel_render_limit_reached");
+  assert.equal(volumeBlocker([...spanish, ...english], now, "motivation-en"), null);
+  assert.equal(volumeBlocker(spanish, new Date("2026-08-25T16:00:00.000Z"), "motivation-es"), null);
+});
+
+test("accepts independent ES and EN channel manifests but fails closed without quality approval", () => {
+  const spanish = baseManifest();
+  const english = baseManifest();
+  english.shortId = "motivate-001";
+  english.channelId = "motivation-en";
+  english.language = "en";
+  english.script.hook = "You do not need to feel ready before you begin.";
+  assert.deepEqual(validateManifestShape(spanish), []);
+  assert.deepEqual(validateManifestShape(english), []);
+  english.qualityGate.noQuotaFiller = false;
+  assert.ok(validateManifestShape(english).includes("quality_gate_not_approved"));
+});
+
+test("fails closed when channel identity or supported language is missing", () => {
+  const manifest = baseManifest();
+  delete manifest.channelId;
+  manifest.language = "fr";
+  const blockers = validateManifestShape(manifest);
+  assert.ok(blockers.includes("channel_id_invalid"));
+  assert.ok(blockers.includes("language_must_be_es_or_en"));
 });
 
 test("renders an authorized local voice to a deduplicated 9:16 Short with QA evidence", { timeout: 120_000 }, async () => {
@@ -132,7 +164,9 @@ test("renders an authorized local voice to a deduplicated 9:16 Short with QA evi
   assert.equal(result.apiCostUsd, 0);
   assert.equal(result.evidenceFrames.length, 3);
   assert.ok((await stat(path.join(workspace, result.outputFile))).size > 1000);
-  assert.ok((await stat(path.join(workspace, "evidence-drop", "motivation", "motiva-001", "provenance.json"))).size > 100);
+  assert.equal(result.channelId, "motivation-es");
+  assert.equal(result.language, "es");
+  assert.ok((await stat(path.join(workspace, "evidence-drop", "motivation", "motivation-es", "motiva-001", "provenance.json"))).size > 100);
 
   const duplicate = await renderMotivationShort({ workspaceRoot: workspace, manifestFile });
   assert.equal(duplicate.status, "duplicate");
@@ -142,7 +176,7 @@ test("renders an authorized local voice to a deduplicated 9:16 Short with QA evi
 test("blocks existing artifacts without deleting files when the ledger is missing", { timeout: 120_000 }, async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "clippers-motivation-test-"));
   const { manifestFile } = await writeAuthorizedManifest(workspace);
-  const existingOutput = path.join(workspace, "motivation", "rendered", "motiva-001", "motiva-001.mp4");
+  const existingOutput = path.join(workspace, "motivation", "rendered", "motivation-es", "motiva-001", "motiva-001.mp4");
   await mkdir(path.dirname(existingOutput), { recursive: true });
   await writeFile(existingOutput, "do not delete");
 
@@ -156,7 +190,7 @@ test("blocks existing artifacts without deleting files when the ledger is missin
 test("cleans its partial SRT after a transient render failure so a retry can succeed", { timeout: 120_000 }, async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "clippers-motivation-test-"));
   const { manifestFile } = await writeAuthorizedManifest(workspace);
-  const subtitlePath = path.join(workspace, "motivation", "rendered", "motiva-001", "motiva-001.srt");
+  const subtitlePath = path.join(workspace, "motivation", "rendered", "motivation-es", "motiva-001", "motiva-001.srt");
   let failedOnce = false;
   const transientRun = async (binary, args) => {
     if (!failedOnce && binary === "ffmpeg" && args.includes("-filter_complex")) {

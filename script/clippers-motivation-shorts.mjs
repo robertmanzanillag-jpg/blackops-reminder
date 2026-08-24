@@ -18,9 +18,10 @@ const execFileAsync = promisify(execFile);
 const MIN_SECONDS = 20;
 const MAX_SECONDS = 40;
 const SHA256 = /^[a-f0-9]{64}$/i;
+const CHANNEL_ID = /^[a-z0-9][a-z0-9_-]{1,63}$/;
 const RIGHTS_STATUSES = new Set(["owned", "explicitly_authorized"]);
-const DAILY_LIMIT = 1;
-const ROLLING_SEVEN_DAY_LIMIT = 5;
+const SUPPORTED_LANGUAGES = new Set(["es", "en"]);
+const DAILY_LIMIT_PER_CHANNEL = 5;
 
 const clean = (value) => String(value ?? "").trim();
 const safeName = (value) => clean(value).toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80);
@@ -94,7 +95,8 @@ export function validateManifestShape(manifest) {
   const blockers = [];
   if (Number(manifest?.schemaVersion) !== 1) blockers.push("schema_version_invalid");
   if (!safeName(manifest?.shortId)) blockers.push("short_id_invalid");
-  if (clean(manifest?.language).toLowerCase() !== "es") blockers.push("language_must_be_es");
+  if (!CHANNEL_ID.test(clean(manifest?.channelId))) blockers.push("channel_id_invalid");
+  if (!SUPPORTED_LANGUAGES.has(clean(manifest?.language).toLowerCase())) blockers.push("language_must_be_es_or_en");
   if (clean(manifest?.format) !== "youtube_short_9x16") blockers.push("format_invalid");
   const script = canonicalScript(manifest);
   if (script.length < 80 || script.length > 650) blockers.push("script_length_invalid");
@@ -114,6 +116,13 @@ export function validateManifestShape(manifest) {
   } else {
     blockers.push("content_safety_exclusions_missing");
   }
+  const quality = manifest?.qualityGate;
+  if (quality?.approved !== true
+    || quality?.hookFirstSecond !== true
+    || quality?.actionable !== true
+    || quality?.noQuotaFiller !== true
+    || !clean(quality?.reviewedBy)
+    || !Number.isFinite(Date.parse(clean(quality?.reviewedAt)))) blockers.push("quality_gate_not_approved");
   if (clean(manifest?.voice?.sourceType) !== "local_recording") blockers.push("voice_not_local_recording");
   if (!clean(manifest?.voice?.file)) blockers.push("voice_file_missing");
   if (!clean(manifest?.voice?.rightsEvidenceFile)) blockers.push("voice_rights_evidence_missing");
@@ -235,14 +244,11 @@ function dayInNewYork(value) {
   }).format(date);
 }
 
-export function volumeBlocker(rows, now) {
+export function volumeBlocker(rows, now, channelId) {
   const today = dayInNewYork(now);
-  const validRows = rows.filter((row) => Number.isFinite(Date.parse(clean(row?.renderedAt))));
-  if (validRows.filter((row) => dayInNewYork(row.renderedAt) === today).length >= DAILY_LIMIT) return "daily_render_limit_reached";
-  const sevenDaysAgo = now.getTime() - 7 * 24 * 60 * 60 * 1000;
-  if (validRows.filter((row) => Date.parse(row.renderedAt) > sevenDaysAgo && Date.parse(row.renderedAt) <= now.getTime()).length >= ROLLING_SEVEN_DAY_LIMIT) {
-    return "rolling_seven_day_render_limit_reached";
-  }
+  const validRows = rows.filter((row) => clean(row?.channelId) === clean(channelId)
+    && Number.isFinite(Date.parse(clean(row?.renderedAt))));
+  if (validRows.filter((row) => dayInNewYork(row.renderedAt) === today).length >= DAILY_LIMIT_PER_CHANNEL) return "daily_channel_render_limit_reached";
   return null;
 }
 
@@ -287,12 +293,18 @@ export async function renderMotivationShort({ workspaceRoot, manifestFile, run =
   const rows = ledgerRows(ledger);
   const duplicate = rows.find((row) => row.manifestSha256 === manifestSha256 || row.scriptSha256 === scriptSha256 || row.voiceSha256 === voiceSha256);
   if (duplicate) return { status: "duplicate", shortId: manifest.shortId, duplicateOf: duplicate.shortId, blockers: ["already_rendered"], apiCostUsd: 0, publishEnabled: false };
-  const limitBlocker = volumeBlocker(rows, now);
+  const language = clean(manifest.language).toLowerCase();
+  const channelId = clean(manifest.channelId);
+  const channelLanguageMismatch = rows.some((row) => clean(row?.channelId) === channelId
+    && clean(row?.language) && clean(row.language).toLowerCase() !== language);
+  if (channelLanguageMismatch) return { status: "blocked", shortId: manifest.shortId, blockers: ["channel_language_mismatch"], apiCostUsd: 0, publishEnabled: false };
+  const limitBlocker = volumeBlocker(rows, now, channelId);
   if (limitBlocker) return { status: "blocked", shortId: manifest.shortId, blockers: [limitBlocker], apiCostUsd: 0, publishEnabled: false };
 
   const shortId = safeName(manifest.shortId);
-  const outputDir = path.join(root, "motivation", "rendered", shortId);
-  const evidenceDir = path.join(root, "evidence-drop", "motivation", shortId);
+  const channelSlug = safeName(channelId);
+  const outputDir = path.join(root, "motivation", "rendered", channelSlug, shortId);
+  const evidenceDir = path.join(root, "evidence-drop", "motivation", channelSlug, shortId);
   const outputPath = path.join(outputDir, `${shortId}.mp4`);
   const tempOutput = `${outputPath}.${process.pid}.${Date.now()}.tmp.mp4`;
   const subtitlePath = path.join(outputDir, `${shortId}.srt`);
@@ -331,6 +343,8 @@ export async function renderMotivationShort({ workspaceRoot, manifestFile, run =
     const outputSha256 = await sha256File(outputPath);
     const row = {
       shortId: manifest.shortId,
+      channelId,
+      language,
       renderedAt: now.toISOString(),
       manifestFile: path.relative(root, manifestPath),
       manifestSha256,

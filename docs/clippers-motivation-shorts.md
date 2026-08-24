@@ -1,6 +1,6 @@
 # Clippers Motivation Shorts
 
-This zero-cost local lane renders original Spanish motivational scripts into 20–40 second, 9:16 MP4 drafts. It never publishes. Production is capped at one rendered Short per America/New_York day and five per rolling seven days.
+This zero-cost local lane renders original Spanish or English motivational scripts into 20–40 second, 9:16 MP4 drafts. It never publishes. The initial selection target is five strong Shorts per channel per day (five ES and five EN); the hard ceiling is five rendered pieces per independent `channelId` per America/New_York day. A rejected candidate is never replaced with weak quota filler.
 
 ## Fail-closed inputs
 
@@ -12,6 +12,7 @@ Example manifest:
 {
   "schemaVersion": 1,
   "shortId": "motiva-001",
+  "channelId": "motivation-es",
   "language": "es",
   "format": "youtube_short_9x16",
   "script": {
@@ -41,6 +42,14 @@ Example manifest:
     "thirdPartyQuotes": false,
     "wealthPromises": false,
     "healthPromises": false
+  },
+  "qualityGate": {
+    "approved": true,
+    "hookFirstSecond": true,
+    "actionable": true,
+    "noQuotaFiller": true,
+    "reviewedBy": "Robert",
+    "reviewedAt": "2026-08-24T12:00:00.000Z"
   }
 }
 ```
@@ -73,8 +82,10 @@ node script/clippers-motivation-shorts.mjs \
   --manifest manifests/motiva-001.json
 ```
 
-The editorial structure is explicit: conflict in the hook, core idea in the beats, and one practical action in the close. Celebrity or podcast material, cloned voices, third-party quotes, and wealth or health promises are explicitly excluded.
+Each channel is language-stable: once a ledger contains a language for a `channelId`, a manifest in another language is rejected. ES and EN channels have separate daily counters. There is no global or rolling-seven-day cap.
 
-The renderer uses only local `ffmpeg`/`ffprobe`, embeds deterministic Spanish subtitles, verifies audio plus 1080×1920 video and duration, and extracts start/middle/end evidence frames. Provenance is stored under `evidence-drop/motivation/<short-id>/`; deduplication records are stored in `reports/clippers-motivation-ledger.json`. API cost is always USD 0 and `publishEnabled` is always false.
+The editorial structure is explicit: conflict in the hook, core idea in the beats, and one practical action in the close. Celebrity or podcast material, cloned voices, third-party quotes, and wealth or health promises are explicitly excluded. Each piece must also pass the explicit quality gate: first-second hook, actionable close, named reviewer, and `noQuotaFiller: true`.
+
+The renderer uses only local `ffmpeg`/`ffprobe`, embeds deterministic subtitles, verifies audio plus 1080×1920 video and duration, and extracts start/middle/end evidence frames. Provenance is stored under `evidence-drop/motivation/<channel-id>/<short-id>/`; deduplication records are stored in `reports/clippers-motivation-ledger.json`. API cost is always USD 0 and `publishEnabled` is always false.
 
 No package script was added; integration may call the `.mjs` entrypoint directly or add a package command separately.
