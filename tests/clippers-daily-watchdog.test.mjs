@@ -268,12 +268,21 @@ test("alerts when today's content worker report is missing or violates no-networ
 
 test("fails closed on a fresh but malformed content worker report", async () => {
   const workspaceRoot = await fixture({
+    ledger: [{
+      status: "scheduled",
+      account: "@streamersclipusa",
+      metricoolId: "valid-tiktok-evidence",
+      scheduledFor: "2026-08-12T18:00:00.000Z",
+    }],
     content: {
+      schemaVersion: 1,
       generatedAt: "2026-08-12T12:00:00.000Z",
       status: "completed",
       networkUsed: false,
       publishEnabled: false,
       apiCostUsd: 0,
+      motivation: { es: { channelId: "motivation-es" }, en: { channelId: "motivation-en" } },
+      sleep: {},
     },
   });
   try {
@@ -284,6 +293,7 @@ test("fails closed on a fresh but malformed content worker report", async () => 
     });
     assert.equal(report.contentWorker.freshForToday, true);
     assert.equal(report.contentWorker.schemaValid, false);
+    assert.equal(report.alerts.noEvidenceBackedTikTokPost, false);
     assert.equal(report.alerts.contentWorkerInvalidReport, true);
     assert.ok(report.contentWorker.blockers.includes("content_worker_report_schema_invalid"));
   } finally {

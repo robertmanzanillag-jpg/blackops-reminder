@@ -137,14 +137,28 @@ function contentLaneState(value) {
   };
 }
 
+function hasNonNegativeIntegerFields(value, fields) {
+  return Boolean(value && typeof value === "object")
+    && fields.every((field) => Number.isInteger(value[field]) && value[field] >= 0);
+}
+
+function validMotivationLane(value) {
+  return hasNonNegativeIntegerFields(value, ["planned", "attempted", "rendered", "shortfall"])
+    && Boolean(clean(value.channelId));
+}
+
+function validSleepLane(value) {
+  return hasNonNegativeIntegerFields(value, ["planned", "attempted", "generated", "shortfall"]);
+}
+
 function contentWorkerState(contentWorker, { now, today, timeZone }) {
   const hasReport = Boolean(contentWorker && typeof contentWorker === "object");
   const schemaValid = hasReport
     && contentWorker.schemaVersion === 1
     && ["completed", "completed_with_shortfall"].includes(clean(contentWorker.status))
-    && Boolean(contentWorker.motivation?.es && typeof contentWorker.motivation.es === "object")
-    && Boolean(contentWorker.motivation?.en && typeof contentWorker.motivation.en === "object")
-    && Boolean(contentWorker.sleep && typeof contentWorker.sleep === "object");
+    && validMotivationLane(contentWorker.motivation?.es)
+    && validMotivationLane(contentWorker.motivation?.en)
+    && validSleepLane(contentWorker.sleep);
   const generatedAt = clean(contentWorker?.generatedAt);
   const generatedMs = Date.parse(generatedAt);
   const reportDate = dateParts(generatedAt, timeZone)?.date || null;
