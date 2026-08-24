@@ -1,20 +1,20 @@
 {
   "schemaVersion": 1,
-  "shortId": "motivate-fear-001",
+  "shortId": "motivate-focus-001",
   "channelId": "motivation-en",
   "language": "en",
   "format": "youtube_short_9x16",
-  "topic": "fear",
+  "topic": "focus",
   "script": {
-    "hook": "Fear gets louder when the next step stays vague.",
+    "hook": "Your attention keeps getting stolen because everything feels equally urgent.",
     "beats": [
-      "You do not need total confidence to move; you need one safe action you can measure.",
-      "Name the thing, shrink it until it feels boring, then prove to yourself that motion is possible."
+      "Most noise can wait; choose the one task that would make today feel meaningfully complete.",
+      "Close the extra tabs, silence the alerts, and give that task one uninterrupted block of effort."
     ],
-    "close": "Write the smallest next step, do it today, and let evidence replace the fear.",
+    "close": "Name your one priority and work on it for the next twenty minutes.",
     "originality": {
       "status": "owned_original",
-      "author": "Equipo Clippers",
+      "author": "Clippers Team",
       "thirdPartyQuotes": false,
       "thirdPartySpeeches": false,
       "sources": []
@@ -27,13 +27,11 @@
   },
   "voice": {
     "sourceType": "local_recording",
-    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motivate-fear-001.wav",
-    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motivate-fear-001-voice.json",
+    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motivate-focus-001.wav",
+    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motivate-focus-001-voice.json",
     "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
   },
-  "style": {
-    "backgroundColor": "#1E1B4B"
-  },
+  "style": { "backgroundColor": "#172554" },
   "contentSafety": {
     "celebrities": false,
     "podcasts": false,
@@ -47,7 +45,7 @@
     "hookFirstSecond": true,
     "actionable": true,
     "noQuotaFiller": true,
-    "reviewedBy": "Equipo Clippers",
+    "reviewedBy": "Clippers Team",
     "reviewedAt": "2026-08-24T12:00:00.000Z"
   }
 }

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "shortId": "motivate-self-trust-001",
+  "channelId": "motivation-en",
+  "language": "en",
+  "format": "youtube_short_9x16",
+  "topic": "self_trust",
+  "script": {
+    "hook": "You keep asking for more advice because choosing for yourself feels risky.",
+    "beats": [
+      "Collecting opinions can hide the fact that no one else has your exact context.",
+      "Make one thoughtful decision, keep the downside manageable, and let the outcome teach you what another opinion cannot."
+    ],
+    "close": "Choose one small decision today and own it without reopening the debate.",
+    "originality": {
+      "status": "owned_original",
+      "author": "Clippers Team",
+      "thirdPartyQuotes": false,
+      "thirdPartySpeeches": false,
+      "sources": []
+    },
+    "structure": { "conflict": "hook", "idea": "beats", "action": "close" }
+  },
+  "voice": {
+    "sourceType": "local_recording",
+    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motivate-self-trust-001.wav",
+    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motivate-self-trust-001-voice.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "style": { "backgroundColor": "#3B0764" },
+  "contentSafety": {
+    "celebrities": false,
+    "podcasts": false,
+    "clonedVoices": false,
+    "thirdPartyQuotes": false,
+    "wealthPromises": false,
+    "healthPromises": false
+  },
+  "qualityGate": {
+    "approved": true,
+    "hookFirstSecond": true,
+    "actionable": true,
+    "noQuotaFiller": true,
+    "reviewedBy": "Clippers Team",
+    "reviewedAt": "2026-08-24T12:00:00.000Z"
+  }
+}

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "shortId": "motivate-fresh-start-001",
+  "channelId": "motivation-en",
+  "language": "en",
+  "format": "youtube_short_9x16",
+  "topic": "fresh_start",
+  "script": {
+    "hook": "You do not need a perfect Monday, a new month, or permission to reset.",
+    "beats": [
+      "A fresh start can happen in the middle of an ordinary afternoon with one honest choice.",
+      "Clear one unfinished mess, decide what matters next, and stop making yesterday responsible for today."
+    ],
+    "close": "Pick one clean action and begin your reset in the next five minutes.",
+    "originality": {
+      "status": "owned_original",
+      "author": "Clippers Team",
+      "thirdPartyQuotes": false,
+      "thirdPartySpeeches": false,
+      "sources": []
+    },
+    "structure": { "conflict": "hook", "idea": "beats", "action": "close" }
+  },
+  "voice": {
+    "sourceType": "local_recording",
+    "file": "PLACEHOLDER_RECORD_LOCAL_VOICE/motivate-fresh-start-001.wav",
+    "rightsEvidenceFile": "PLACEHOLDER_ADD_RIGHTS_EVIDENCE/motivate-fresh-start-001-voice.json",
+    "sha256": "0000000000000000000000000000000000000000000000000000000000000000"
+  },
+  "style": { "backgroundColor": "#365314" },
+  "contentSafety": {
+    "celebrities": false,
+    "podcasts": false,
+    "clonedVoices": false,
+    "thirdPartyQuotes": false,
+    "wealthPromises": false,
+    "healthPromises": false
+  },
+  "qualityGate": {
+    "approved": true,
+    "hookFirstSecond": true,
+    "actionable": true,
+    "noQuotaFiller": true,
+    "reviewedBy": "Clippers Team",
+    "reviewedAt": "2026-08-24T12:00:00.000Z"
+  }
+}
