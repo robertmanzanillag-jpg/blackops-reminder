@@ -72,7 +72,43 @@ test("offline OPUS adapter produces substantive Spanish and English in the same 
   assert.match(facebook.copy, /Flood Watch/);
   assert.match(facebook.copy, /Heavy rain is possible/);
   assert.match(x.copy, /Vigilancia de inundaciones/);
-  assert.ok(queue.every((item: any) => item.evidence.includes("local_translation=opus_mt_verified")));
+  assert.ok(queue.every((item: any) => item.evidence.includes("local_translation=verified")));
+});
+
+test("translation input is capped before the hosted request to bound cost and latency", async (t) => {
+  const workspaceDir = await fixture(t);
+  let captured: string[] = [];
+  const translator = new LocalNewsTranslator({
+    enabled: true,
+    adapter: {
+      translate: async () => "La fuente oficial publicó una actualización.",
+      translateBatch: async (inputs) => {
+        captured = inputs;
+        return [
+          "Alerta oficial para la comunidad.",
+          "La carretera está cerrada por una investigación policial.",
+          "Consulta la fuente oficial antes de actuar.",
+        ];
+      },
+    },
+  });
+  await ingestClipperLocalNewsEvents({
+    workspaceDir,
+    now: "2026-07-21T12:00:00Z",
+    env: { NODE_ENV: "production" },
+    translator,
+    events: [{
+      ...event,
+      title: `The official public safety alert ${"update ".repeat(100)}`,
+      description: "The road is closed for a police investigation. ".repeat(100),
+      instruction: "Review the official source before taking action. ".repeat(100),
+    }],
+  });
+
+  assert.equal(captured.length, 3);
+  assert.ok(captured[0].length <= 500);
+  assert.ok(captured[1].length <= 700);
+  assert.ok(captured[2].length <= 700);
 });
 
 test("offline translation integrity failure quarantines both platforms", async (t) => {
@@ -110,7 +146,7 @@ test("temporary offline model failure retries on the next duplicate cycle", asyn
   available = true;
   await ingestClipperLocalNewsEvents({ ...options, now: "2026-07-21T12:05:00Z" });
   queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
-  assert.ok(queue.every((item: any) => item.autoEligible === true && item.evidence.includes("local_translation=opus_mt_verified")));
+  assert.ok(queue.every((item: any) => item.autoEligible === true && item.evidence.includes("local_translation=verified")));
 });
 
 test("production cannot bypass required bilingual translation with an off flag", async (t) => {
@@ -166,7 +202,7 @@ test("Spanish events with missing fields use Spanish source fallbacks before tra
   });
   const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
   const facebook = queue.find((item: any) => item.platform === "facebook");
-  assert.ok(queue.every((item: any) => item.status === "auto_eligible" && item.evidence.includes("local_translation=opus_mt_verified")));
+  assert.ok(queue.every((item: any) => item.status === "auto_eligible" && item.evidence.includes("local_translation=verified")));
   assert.match(facebook.copy, /Detalle: La fuente oficial no proporcionó detalles adicionales\./);
   assert.match(facebook.copy, /Detail: The official source provided no additional detail\./);
 });
@@ -177,6 +213,10 @@ test("bootstrap creates all artifacts and clamps schedule to 2-5 minutes", async
   assert.equal(status.bootstrapped, true);
   assert.equal(status.scheduleMinutes, 5);
   for (const artifact of Object.values(status.artifacts)) assert.ok((await readFile(artifact, "utf8")).length > 0);
+  const runbook = await readFile(status.artifacts.runbook, "utf8");
+  assert.match(runbook, /gpt-5\.4-nano/);
+  assert.match(runbook, /10-request\/minute ceiling/);
+  assert.doesNotMatch(runbook, /OPUS-MT|no API or membership cost/);
   const publicSnapshot = JSON.parse(await readFile(path.join(workspaceDir, "public-news-snapshot.json"), "utf8"));
   assert.deepEqual(publicSnapshot, { version: 1, updatedAt: "2026-07-21T12:00:00.000Z", events: [], queue: [] });
 });
@@ -387,10 +427,10 @@ test("professional newsroom classifies desks and produces attributed Facebook te
   assert.equal(result.status.editorial.textOnlyFacebook, 1);
   assert.deepEqual(
     { mode: result.status.editorial.growth.mode, paidAds: result.status.editorial.growth.paidAds, paidAi: result.status.editorial.growth.paidAiPerPost },
-    { mode: "zero_cost_organic", paidAds: false, paidAi: false },
+    { mode: "zero_cost_organic", paidAds: false, paidAi: true },
   );
   const growth = JSON.parse(await readFile(path.join(workspaceDir, "organic-growth.json"), "utf8"));
-  assert.deepEqual(growth.costPolicy, { paidAds: false, paidAiPerPost: false, generation: "deterministic_local_templates" });
+  assert.deepEqual(growth.costPolicy, { paidAds: false, paidAiPerPost: true, generation: "deterministic_local_templates", hostedTranslation: "gpt-5.4-nano_batched", estimatedMonthlyApiCostUsd: 0.5 });
 });
 
 test("adaptive Facebook cadence allows relevant developing coverage and defers conservative overflow", async (t) => {

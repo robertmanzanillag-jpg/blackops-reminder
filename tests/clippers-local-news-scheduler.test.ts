@@ -175,22 +175,25 @@ test("cycle errors are contained without logging their potentially sensitive mes
 test("runs Metricool delivery after a successful cycle using the cycle status", async () => {
   const cycleStatus = { artifacts: { queue: "/tmp/metricool-queue.json" } } as never;
   const order: string[] = [];
+  const logs: string[] = [];
   let deliveredStatus: unknown;
   const scheduler = createClipperLocalNewsScheduler({
     env: {},
     bootstrap: async () => { order.push("bootstrap"); return {} as never; },
-    runCycle: async () => { order.push("cycle"); return { status: cycleStatus } as never; },
+    runCycle: async () => { order.push("cycle"); return { status: cycleStatus, fetchedSources: 8, failedSources: [], created: 3, queued: 6 } as never; },
     deliver: async (options) => {
       order.push("deliver");
       deliveredStatus = options.status;
-      return {} as never;
+      return { status: "ready", scheduled: 4, alreadyScheduled: 2 } as never;
     },
     setTimeout: () => fakeTimer(),
     clearTimeout: () => {},
     logError: () => {},
+    log: (message) => logs.push(message),
   });
 
   assert.equal(await scheduler.runNow(), "completed");
   assert.deepEqual(order, ["bootstrap", "cycle", "deliver"]);
   assert.equal(deliveredStatus, cycleStatus);
+  assert.match(logs[0], /sources=8; sourceFailures=0; created=3; queued=6; delivery=ready; scheduled=4; alreadyScheduled=2/);
 });

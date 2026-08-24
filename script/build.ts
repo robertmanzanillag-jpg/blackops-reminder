@@ -57,8 +57,8 @@ async function canRunPythonPip(): Promise<boolean> {
     ], 30 * 1000, pipInstallEnv(), "ignore");
     return true;
   } catch (error) {
-    console.warn(
-      "[build] skipping bundled yt-dlp: python3 cannot import pip/xml.parsers.expat in this environment.",
+    console.log(
+      "[build] optional yt-dlp bundle unavailable: python3 cannot import pip/xml.parsers.expat in this environment.",
       error instanceof Error ? error.message : error,
     );
     return false;
@@ -82,7 +82,7 @@ async function bundleFreshYtDlp() {
       "curl-cffi>=0.11",
     ], 3 * 60 * 1000, pipInstallEnv());
   } catch (error) {
-    console.warn("[build] could not bundle fresh yt-dlp:", error instanceof Error ? error.message : error);
+    console.log("[build] optional yt-dlp bundle unavailable:", error instanceof Error ? error.message : error);
   }
 }
 
@@ -143,7 +143,10 @@ async function buildAll() {
     },
     minify: true,
     external: externals,
-    logLevel: "info",
+    // The server is deliberately bundled to reduce Replit openat(2) calls.
+    // Errors remain visible; esbuild's generic output-size glyph is not a
+    // release warning for this minified server artifact.
+    logLevel: "error",
   });
 }
 

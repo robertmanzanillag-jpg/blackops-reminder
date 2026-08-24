@@ -187,7 +187,7 @@ export interface ClipperLocalNewsStatus {
     resolvedRevisions: number;
     cadence: { windowMinutes: 60; facebookPerLane: 6; facebookRoutinePerLane: 2; xPerLane: 8; xRoutinePerLane: 3; facebookRelevantMax: 10; adaptive: "urgency_and_observed_performance" };
     committee: { reviewed: number; unanimous: number; quarantined: number; rejected: number; roles: ClipperLocalNewsCommitteeRole[] };
-    growth: { mode: "zero_cost_organic"; paidAds: false; paidAiPerPost: false; ownedLinks: number; experiments: number; shortFormReady: number; sourceVideos: number; sourceImages: number; highQuality: number; videoFirst: true; localTranslation: { mode: "offline_opus_mt"; monthlyApiCostUsd: 0; requiredInProduction: true } };
+    growth: { mode: "zero_cost_organic"; paidAds: false; paidAiPerPost: true; ownedLinks: number; experiments: number; shortFormReady: number; sourceVideos: number; sourceImages: number; highQuality: number; videoFirst: true; localTranslation: { mode: "hosted_openai_nano_batched"; estimatedMonthlyApiCostUsd: number; requiredInProduction: true } };
     dailyPublishing: { minimumPerAccount: 10; adaptiveMaximum: 14; bilingualSamePost: true; videoFirst: true; accounts: Record<ClipperLocalNewsLane, Record<ClipperLocalNewsPlatform, { queuedToday: number; target: 10 | 12 | 14; deficit: number; performanceMode: "baseline" | "growing" | "breakout" }>> };
   };
   metrics: { total: number; impressions: number; engagements: number; clicks: number; shares: number; revenueUsd: number; costUsd: number; profitUsd: number };
@@ -266,6 +266,7 @@ const ARCGIS_STALE_MS = 48 * 60 * 60_000;
 const MIAMI_TRANSIT_LOOKBACK_MS = 120 * 24 * 60 * 60_000;
 const MIAMI_TRANSIT_MAX_ACTIVE = 20;
 const FACEBOOK_DETAIL_LIMIT = 700;
+const TRANSLATION_TITLE_LIMIT = 500;
 const PUBLIC_SNAPSHOT_MAX_BYTES = 3 * 1024 * 1024;
 const PUBLIC_SNAPSHOT_MAX_QUEUE_ITEMS = 600;
 const verifiedFetchedEvents = new WeakSet<object>();
@@ -554,8 +555,14 @@ async function translateEventCopy(event: ClipperLocalNewsEvent, translator: Loca
   const sourceFallbacks = sourceLanguage === "es"
     ? ["La fuente oficial no proporcionó detalles adicionales.", "Consulta la fuente oficial antes de actuar."]
     : ["Official source provided no additional detail.", "Review the official source before taking action."];
-  const fields = [event.title, event.description || sourceFallbacks[0], event.instruction || sourceFallbacks[1]];
-  const translated = await Promise.all(fields.map((field) => translator.translate(field, direction)));
+  const fields = [
+    truncate(event.title, TRANSLATION_TITLE_LIMIT),
+    truncate(event.description || sourceFallbacks[0], FACEBOOK_DETAIL_LIMIT),
+    truncate(event.instruction || sourceFallbacks[1], FACEBOOK_DETAIL_LIMIT),
+  ];
+  // One batched hosted request per story keeps translation cost and latency
+  // bounded while the translator still validates every field independently.
+  const translated = await translator.translateMany(fields, direction);
   const safe = translated.every((result) => result.safe && Boolean(result.translated));
   const issues = translated.flatMap((result) => result.issues);
   const target = translated.map((result) => result.translated || "");
@@ -735,7 +742,7 @@ async function persist(dir: string, state: LocalNewsState): Promise<void> {
     atomicWrite(path.join(dir, FILES.analyticsCsv), csv(state.metrics, metricColumns)),
     atomicWrite(path.join(dir, FILES.growth), `${JSON.stringify({
       generatedAt: state.updatedAt,
-      costPolicy: { paidAds: false, paidAiPerPost: false, generation: "deterministic_local_templates" },
+      costPolicy: { paidAds: false, paidAiPerPost: true, generation: "deterministic_local_templates", hostedTranslation: "gpt-5.4-nano_batched", estimatedMonthlyApiCostUsd: 0.5 },
       items: state.queue.filter((item) => item.organicGrowth).map((item) => ({ queueItemId: item.id, lane: item.lane, platform: item.platform, ...item.organicGrowth })),
     }, null, 2)}\n`),
   ]);
@@ -795,7 +802,7 @@ function sourceSetup(): string {
 }
 
 function runbook(minutes: number): string {
-  return `# Local News Agent Runbook\n\n1. The Local News CEO runs the desk every ${minutes} minutes (supported range: 2–5) using deterministic templates; no story is invented.\n2. Every social post carries substantive Spanish and English in the same publication. Translation inference runs locally with cached, revision-pinned OPUS-MT models and has no API or membership cost. Social copy keeps an original excerpt and the exact official-source link; the event ledger retains the complete original. Translation failures, ambiguous language, or changed/added protected facts are quarantined.\n3. Model assets must be prefetched by the explicit operator command before production; runtime remote model loading remains disabled.\n4. Organic growth uses deterministic headline experiments, owned-site links, brand media and video-first local short-form manifests. Paid ads and paid AI per post remain off.\n5. Every item passes a deterministic three-role committee: source verifier, safety editor, and monetization editor. No paid LLM API is called. Only unanimous approval from an official/authorized source can become \`auto_eligible\`.\n6. Accusations are eligible only from a configured sensitive-capable official connector with complete provenance and neutral presumption-of-innocence language. Identifiable minors, victim private addresses, graphic violence, contradictory information, unconfirmed claims, and unverifiable critical evacuations receive an automatic final \`quarantined\` or \`rejected\` state.\n7. Each connected city/platform account targets at least 10 verified posts per day. The CEO can raise the target to 12 or 14 only from observed performance; relevance, never filler or duplication, unlocks volume. Breaking coverage may exceed the target.\n8. Overflow stays auto-eligible with \`gateReason=cadence\` and a future \`notBefore\`; corrections, updates and resolved/reopened notices create attributed revisions.\n9. Revenue progress toward $10,000 uses observed imported revenue only. Reach, engagement, revenue, cost, and profit are never inferred from queue state. Public incident sources do not guarantee complete road coverage; NY511 still needs its key and agreement.\n`;
+  return `# Local News Agent Runbook\n\n1. The Local News CEO runs the desk every ${minutes} minutes (supported range: 2–5) using deterministic templates; no story is invented.\n2. Every social post carries substantive Spanish and English in the same publication. Translation reuses the configured OpenAI integration with gpt-5.4-nano, one batched request per new story, exact-input caching, and hard 500/700/700-character input caps. Estimated translation usage is capped operationally near $0.50/month; no separate membership is required.\n3. The hosted translator has a five-second request timeout, zero retries, a 10-request/minute ceiling, and a circuit breaker after the first provider failure. Missing credentials, timeout, ambiguous language, or changed/added URLs, numbers, times, routes, or other protected facts are quarantined and retried in a later cycle. No OPUS model assets are loaded or prefetched during deployment.\n4. Organic growth uses deterministic headline experiments, owned-site links, brand media and video-first local short-form manifests. Paid ads, paid generative video, and AI-written facts remain off; only bilingual translation uses the low-cost hosted model.\n5. Every item passes a deterministic three-role committee: source verifier, safety editor, and monetization editor. The committee itself calls no LLM. Only unanimous approval from an official/authorized source can become \`auto_eligible\`.\n6. Accusations are eligible only from a configured sensitive-capable official connector with complete provenance and neutral presumption-of-innocence language. Identifiable minors, victim private addresses, graphic violence, contradictory information, unconfirmed claims, and unverifiable critical evacuations receive an automatic final \`quarantined\` or \`rejected\` state.\n7. Each connected city/platform account targets at least 10 verified posts per day. The CEO can raise the target to 12 or 14 only from observed performance; relevance, never filler or duplication, unlocks volume. Breaking coverage may exceed the target.\n8. Overflow stays auto-eligible with \`gateReason=cadence\` and a future \`notBefore\`; corrections, updates and resolved/reopened notices create attributed revisions.\n9. Revenue progress toward $10,000 uses observed imported revenue only. Reach, engagement, revenue, cost, and profit are never inferred from queue state. Public incident sources do not guarantee complete road coverage; NY511 still needs its key and agreement.\n`;
 }
 
 function migrateLegacyCommitteeState(state: LocalNewsState, now: string): void {
@@ -889,7 +896,7 @@ async function queueFor(event: ClipperLocalNewsEvent, now: string, env: NodeJS.P
     const copyHash = hashLocalNewsReviewValue(copy);
     const publishDecision = (translationGated || !autoEnabled) && committee.publishDecision === "auto_publish" ? "quarantine" as const : committee.publishDecision;
     const status: ClipperLocalNewsQueueStatus = committee.publishDecision === "reject" ? "rejected" : committee.publishDecision === "quarantine" || translationGated ? "quarantined" : !autoEnabled ? "approval_required" : "auto_eligible";
-    const translationEvidence = translationRequired ? bilingual?.safe ? ["local_translation=opus_mt_verified"] : [`local_translation_failed=${(bilingual?.issues || ["unknown"]).join(",")}`] : ["local_translation=disabled_nonproduction"];
+    const translationEvidence = translationRequired ? bilingual?.safe ? ["local_translation=verified"] : [`local_translation_failed=${(bilingual?.issues || ["unknown"]).join(",")}`] : ["local_translation=disabled_nonproduction"];
     const mediaEvidence = event.mediaType === "video" && event.mediaUrl ? ["media=verified_official_video"] : event.mediaType === "image" && event.mediaUrl ? ["media=verified_official_image"] : ["media=none"];
     const evidence = [...committee.evidence, ...translationEvidence, ...mediaEvidence, `qualityScore=${event.qualityScore}`, `copyHash=${copyHash}`];
     const id = digest(`${event.id}|${event.revision}|${platform}`);
@@ -1418,7 +1425,7 @@ export async function getClipperLocalNewsStatus(options: ClipperLocalNewsOptions
       growth: {
         mode: "zero_cost_organic",
         paidAds: false,
-        paidAiPerPost: false,
+        paidAiPerPost: true,
         ownedLinks: state?.queue.filter((item) => Boolean(item.organicGrowth?.ownedArticleUrl)).length || 0,
         experiments: state?.queue.filter((item) => Boolean(item.organicGrowth?.variantId)).length || 0,
         shortFormReady: state?.queue.filter((item) => item.organicGrowth?.shortForm.ready === true).length || 0,
@@ -1426,7 +1433,7 @@ export async function getClipperLocalNewsStatus(options: ClipperLocalNewsOptions
         sourceImages: state?.queue.filter((item) => item.mediaType === "image").length || 0,
         highQuality: state?.queue.filter((item) => (item.qualityScore || 0) >= 70).length || 0,
         videoFirst: true,
-        localTranslation: { mode: "offline_opus_mt", monthlyApiCostUsd: 0, requiredInProduction: true },
+        localTranslation: { mode: "hosted_openai_nano_batched", estimatedMonthlyApiCostUsd: 0.5, requiredInProduction: true },
       },
       dailyPublishing: dailyPublishingStatus(state),
     },
