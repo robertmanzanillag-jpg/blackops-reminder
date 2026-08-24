@@ -163,6 +163,31 @@ function recentSleepRows(ledger, now) {
   return rows.filter((row) => Number.isFinite(Date.parse(row?.generatedAt)) && Date.parse(row.generatedAt) > cutoff);
 }
 
+function dayInNewYork(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(date);
+}
+
+function reusableMotivationRows(ledger, { now, channelId, language, manifestFiles, limit }) {
+  const today = dayInNewYork(now);
+  const allowedManifests = new Set(manifestFiles.map(clean));
+  return (Array.isArray(ledger?.items) ? ledger.items : [])
+    .filter((row) => clean(row?.channelId) === clean(channelId)
+      && clean(row?.language).toLowerCase() === language
+      && allowedManifests.has(clean(row?.manifestFile))
+      && dayInNewYork(row?.renderedAt) === today
+      && clean(row?.outputFile)
+      && SHA256.test(clean(row?.outputSha256)))
+    .slice(0, limit)
+    .map((row) => ({ status: "rendered", reusedExisting: true, ...row }));
+}
+
 async function nextSleepJob(jobs, ledger) {
   const used = new Set((Array.isArray(ledger?.items) ? ledger.items : [])
     .map((row) => clean(row?.outputPath)).filter(Boolean).map((filePath) => path.resolve(filePath)));
@@ -329,12 +354,22 @@ export async function runContentLocalWorker({ configPath, now = new Date(), oper
       now,
       config: { ...config.learning, shortChannels },
     }), config.timeoutMs, "content_learning_ceo");
+    const motivationLedger = await readJson(path.join(config.workspaceRoot, "reports", "clippers-motivation-ledger.json"), "motivation_ledger").catch((error) => {
+      if (error?.code === "ENOENT") return { schemaVersion: 1, items: [] };
+      throw error;
+    });
     const motivation = {};
     for (const language of LANGUAGES) {
       const lanePlan = plan.dailyPlan.lanes.find((lane) => lane.lane === "motivation_short" && lane.language === language);
       const hardCap = Math.min(5, Math.max(0, Number(lanePlan?.target) || 0));
       const candidates = config.motivation[language].manifestFiles;
-      const results = [];
+      const results = reusableMotivationRows(motivationLedger, {
+        now,
+        channelId: config.motivation[language].channelId,
+        language,
+        manifestFiles: candidates,
+        limit: hardCap,
+      });
       for (const manifestFile of candidates) {
         if (results.filter((result) => result?.status === "rendered").length >= hardCap) break;
         const identity = await candidateIdentity(config.workspaceRoot, manifestFile);
@@ -352,13 +387,15 @@ export async function runContentLocalWorker({ configPath, now = new Date(), oper
       }
       const rendered = results.filter((result) => result?.status === "rendered").length;
       const skippedDuplicates = results.filter((result) => result?.status === "duplicate").length;
+      const reusedExisting = results.filter((result) => result?.reusedExisting === true).length;
       motivation[language] = {
         channelId: config.motivation[language].channelId,
         editorialTarget: 5,
         planned: hardCap,
         evaluatedCandidates: results.length,
-        attempted: results.length - skippedDuplicates,
+        attempted: results.length - skippedDuplicates - reusedExisting,
         skippedDuplicates,
+        reusedExisting,
         rendered,
         shortfall: 5 - rendered,
         results,

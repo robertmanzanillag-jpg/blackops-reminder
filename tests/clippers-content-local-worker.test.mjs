@@ -169,6 +169,45 @@ test("cold start prepares five independent candidates per channel and never uplo
   assert.equal((await stat(result.reportPath)).mode & 0o777, 0o600);
 });
 
+test("rerun preserves same-day rendered motivation evidence for packager consumption", async () => {
+  const item = await fixture({ es: 5, en: 5, sleep: false });
+  const renderedRows = [];
+  for (const language of ["es", "en"]) {
+    for (let index = 0; index < 5; index += 1) {
+      renderedRows.push({
+        shortId: `${language}-${index}`,
+        channelId: `motivation-${language}`,
+        language,
+        renderedAt: NOW.toISOString(),
+        manifestFile: `manifests/${language}-${index}.json`,
+        manifestSha256: `${index}`.repeat(64).slice(0, 64),
+        outputFile: `rendered/${language}-${index}.mp4`,
+        outputSha256: `${index + 1}`.repeat(64).slice(0, 64),
+        rights: { script: "owned_original", audio: "owned_original_procedural", thirdPartyMaterial: false },
+        apiCostUsd: 0,
+        publishEnabled: false,
+      });
+    }
+  }
+  await writeFile(path.join(item.root, "reports", "clippers-motivation-ledger.json"), JSON.stringify({ schemaVersion: 1, items: renderedRows }));
+  const result = await runContentLocalWorker({
+    configPath: item.configPath,
+    now: NOW,
+    operations: {
+      runCeo: runContentLearningCeo,
+      renderShort: async () => assert.fail("same-day rendered evidence must be reused instead of rerendered"),
+      generateSleep: async () => assert.fail("sleep is disabled"),
+    },
+  });
+  assert.equal(result.status, "completed_with_shortfall");
+  assert.deepEqual({ es: result.motivation.es.rendered, en: result.motivation.en.rendered }, { es: 5, en: 5 });
+  assert.deepEqual({ es: result.motivation.es.shortfall, en: result.motivation.en.shortfall }, { es: 0, en: 0 });
+  assert.deepEqual({ es: result.motivation.es.reusedExisting, en: result.motivation.en.reusedExisting }, { es: 5, en: 5 });
+  assert.deepEqual({ es: result.motivation.es.attempted, en: result.motivation.en.attempted }, { es: 0, en: 0 });
+  assert.equal(result.motivation.es.results[0].status, "rendered");
+  assert.equal(result.motivation.es.results[0].reusedExisting, true);
+});
+
 test("reports exact per-channel shortfall from eligible manifests", async () => {
   const item = await fixture({ es: 3, en: 1, sleep: false });
   const calls = { shorts: [], sleep: [] };
