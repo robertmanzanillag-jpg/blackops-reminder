@@ -10,17 +10,19 @@ Este paquete editorial incluye cinco guiones originales en español, pensados pa
 | `motiva-consistencia-001.json` | Sostener un mínimo diario | Definir y completar el mínimo del día |
 | `motiva-empezar-tarde-001.json` | Empezar sin compararse | Terminar hoy el primer paso |
 
-Cada guion sigue la estructura exigida por `script/clippers-motivation-shorts.mjs`: conflicto específico en `hook`, desarrollo de la idea en `beats` y una acción práctica en `close`. Todos se declaran `owned_original`, sin fuentes externas, citas, discursos, celebridades, podcasts, voces clonadas ni promesas de riqueza o salud.
+Cada guion sigue la estructura exigida por `script/clippers-motivation-shorts.mjs`: conflicto específico en `hook`, desarrollo de la idea en `beats` y una acción práctica en `close`. Todos pertenecen al canal estable en español `motivation-es`, se declaran `owned_original`, sin fuentes externas, citas, discursos, celebridades, podcasts, voces clonadas ni promesas de riqueza o salud.
+
+Los cinco superan el gate editorial explícito: hook inmediato, cierre accionable, revisión identificada y `noQuotaFiller: true`. Una pieza futura que no pase esos criterios debe rechazarse y no reemplazarse por contenido débil para completar una cuota.
 
 ## Estado de los manifests
 
-Los JSON de `examples/clippers-motivation/` son válidos en estructura editorial, pero **no están listos para render ni publicación**. Los tres campos de voz son placeholders explícitos:
+Los JSON de `examples/clippers-motivation/` son válidos en esquema, canal, idioma, seguridad y calidad editorial, pero **no están listos para render ni publicación**. Los tres campos de voz son placeholders explícitos:
 
 - `voice.file`: ruta `PLACEHOLDER_RECORD_LOCAL_VOICE/...`.
 - `voice.rightsEvidenceFile`: ruta `PLACEHOLDER_ADD_RIGHTS_EVIDENCE/...`.
 - `voice.sha256`: 64 ceros para conservar la forma requerida, no el hash de un archivo real.
 
-El renderer falla cerrado porque la grabación señalada no existe. No genera ni publica nada y devuelve `voice_missing_or_unsafe`. No se debe crear un audio vacío o sintético para superar este gate.
+El renderer falla cerrado únicamente porque la grabación señalada no existe. No genera ni publica nada y devuelve `voice_missing_or_unsafe`. No se debe crear un audio vacío o sintético para superar este gate.
 
 ## Activación segura por cada Short
 

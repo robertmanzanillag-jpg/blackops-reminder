@@ -1,6 +1,7 @@
 {
   "schemaVersion": 1,
   "shortId": "motiva-disciplina-001",
+  "channelId": "motivation-es",
   "language": "es",
   "format": "youtube_short_9x16",
   "topic": "disciplina",
@@ -40,5 +41,13 @@
     "thirdPartyQuotes": false,
     "wealthPromises": false,
     "healthPromises": false
+  },
+  "qualityGate": {
+    "approved": true,
+    "hookFirstSecond": true,
+    "actionable": true,
+    "noQuotaFiller": true,
+    "reviewedBy": "Equipo Clippers",
+    "reviewedAt": "2026-08-24T12:00:00.000Z"
   }
 }
