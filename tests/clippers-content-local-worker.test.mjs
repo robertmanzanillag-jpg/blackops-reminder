@@ -164,3 +164,39 @@ test("rejects unsafe workspace escapes", async () => {
   await writeFile(item.configPath, JSON.stringify(config));
   await assert.rejects(runContentLocalWorker({ configPath: item.configPath, now: NOW, operations: operations({ shorts: [], sleep: [] }) }), /report_dir_outside_workspace/);
 });
+
+test("rejects a sleep job output that escapes the workspace", async () => {
+  const item = await fixture();
+  const config = JSON.parse(await readFile(item.configPath, "utf8"));
+  config.sleep.jobs[0].output = "../outside.mp4";
+  await writeFile(item.configPath, JSON.stringify(config));
+  await assert.rejects(
+    runContentLocalWorker({ configPath: item.configPath, now: NOW, operations: operations({ shorts: [], sleep: [] }) }),
+    /sleep_job_1_output_outside_workspace/,
+  );
+});
+
+test("rejects duplicate sleep job outputs before generation", async () => {
+  const item = await fixture();
+  const config = JSON.parse(await readFile(item.configPath, "utf8"));
+  config.sleep.jobs[1].output = config.sleep.jobs[0].output;
+  await writeFile(item.configPath, JSON.stringify(config));
+  await assert.rejects(
+    runContentLocalWorker({ configPath: item.configPath, now: NOW, operations: operations({ shorts: [], sleep: [] }) }),
+    /sleep_job_outputs_must_be_unique/,
+  );
+});
+
+test("an orphaned first sleep artifact rotates to the next job without overwrite", async () => {
+  const item = await fixture({ es: 0, en: 0 });
+  await mkdir(path.join(item.root, "sleep"), { recursive: true });
+  const orphanPath = path.join(item.root, "sleep", "output-1.mp4");
+  await writeFile(orphanPath, "preserve-me");
+  const calls = { shorts: [], sleep: [] };
+  const result = await runContentLocalWorker({ configPath: item.configPath, now: NOW, operations: operations(calls) });
+  assert.equal(result.sleep.generated, 1);
+  assert.equal(calls.sleep.length, 1);
+  assert.match(calls.sleep[0].outputPath, /output-2\.mp4$/);
+  assert.equal(calls.sleep[0].overwrite, false);
+  assert.equal(await readFile(orphanPath, "utf8"), "preserve-me");
+});
