@@ -159,22 +159,37 @@ test("LaunchAgent does not install or start by default", async () => {
 
 test("LaunchAgent refuses a dirty development runtime unless the test-only override is explicit", async () => {
   const home = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-dirty-runtime-"));
+  const runtimeParent = await mkdtemp(path.join(os.tmpdir(), "clippers-launch-agent-dirty-checkout-"));
+  const runtimeRoot = path.join(runtimeParent, "runtime");
   try {
+    const clone = spawnSync("git", ["clone", "--quiet", "--no-hardlinks", repoRoot, runtimeRoot], {
+      encoding: "utf8",
+    });
+    assert.equal(clone.status, 0, clone.stderr);
+    const dirtyMarker = path.join(runtimeRoot, ".clippers-runtime-dirty-test");
+    await writeFile(dirtyMarker, "intentional untracked fixture\n");
+    const runtimeStatus = spawnSync("git", ["-C", runtimeRoot, "status", "--porcelain", "--untracked-files=all"], {
+      encoding: "utf8",
+    });
+    assert.equal(runtimeStatus.status, 0, runtimeStatus.stderr);
+    assert.match(runtimeStatus.stdout, /\.clippers-runtime-dirty-test/);
     const result = spawnSync("zsh", [installerPath], {
       cwd: repoRoot,
       encoding: "utf8",
       env: {
         ...process.env,
         HOME: home,
-        CLIPPERS_RUNTIME_ROOT: repoRoot,
+        CLIPPERS_RUNTIME_ROOT: runtimeRoot,
         CLIPPERS_CONFIG_ROOT: repoRoot,
         CLIPPERS_LAUNCH_AGENT_DRY_RUN: "true",
       },
     });
     assert.notEqual(result.status, 0);
-    assert.match(result.stderr, /runtime has unstaged changes|exactly at origin\/main/);
+    assert.match(result.stderr, /runtime has untracked or modified files/);
+    assert.doesNotMatch(result.stderr, /CLIPPERS_CONTENT_WORKER_CONFIG/);
   } finally {
     await rm(home, { recursive: true, force: true });
+    await rm(runtimeParent, { recursive: true, force: true });
   }
 });
 
