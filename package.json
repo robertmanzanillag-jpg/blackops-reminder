@@ -107,6 +107,8 @@
     "clippers:tiktok-preflight": "tsx script/clippers-tiktok-preflight.ts",
     "user:migrate": "node --import tsx script/migrate-user.ts",
     "start": "NODE_ENV=production node dist/index.cjs",
+    "start:replit": "NODE_ENV=production node script/replit-fast-start.mjs",
+    "test:replit-fast-start": "node --test tests/replit-fast-start.test.mjs",
     "check": "tsc",
     "db:push": "drizzle-kit push"
   },

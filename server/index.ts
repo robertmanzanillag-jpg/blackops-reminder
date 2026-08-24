@@ -21,13 +21,24 @@ import { shouldStartResourceIntensiveSchedulers } from "./background-scheduler-p
 
 const app = express();
 const httpServer = createServer(app);
+const instanceStartedAt = new Date();
+const instanceId = process.env.REPLIT_DEPLOYMENT_ID || `${process.pid}-${instanceStartedAt.getTime()}`;
 
 if (process.env.NODE_ENV === "production") {
   app.set("trust proxy", 1);
 }
 
 app.get(["/health", "/api/health"], (_req, res) => {
-  res.status(200).json({ status: "ok" });
+  res.status(200).json({
+    status: "ok",
+    ready: true,
+    service: "blackops-reminder",
+    instanceId,
+    checkedAt: new Date().toISOString(),
+    startedAt: instanceStartedAt.toISOString(),
+    uptimeSeconds: Math.round(process.uptime()),
+    memoryRssMb: Math.round(process.memoryUsage().rss / 1024 / 1024),
+  });
 });
 
 async function getStartupMaintenanceUserIds(): Promise<string[]> {
@@ -81,15 +92,6 @@ app.get("/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt", (_req, res) => {
   res
     .type("text/plain")
     .send("tiktok-developers-site-verification=xXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP\n");
-});
-
-app.get("/api/health", (_req, res) => {
-  res.json({
-    status: "ok",
-    service: "blackops-reminder",
-    checkedAt: new Date().toISOString(),
-    uptimeSeconds: Math.round(process.uptime()),
-  });
 });
 
 function renderClipperPublicLegalHtml(title: string, body: string[]): string {
@@ -408,9 +410,6 @@ app.use((req, res, next) => {
       startReminderScheduler();
       startHealthCheckScheduler();
       startMarketNewsScheduler();
-      startPromoVideoDailyScheduler();
-      startCybersecurityScheduler();
-      startAppQaScheduler();
       // Publishing and analytics are revenue-critical and intentionally stay
       // active on the small Replit deployment. The metadata growth scout is the
       // optional memory-heavy process governed by the resource policy below.
@@ -425,13 +424,16 @@ app.use((req, res, next) => {
         log(`Failed to start Metricool analytics scheduler: ${error instanceof Error ? error.message : String(error)}`, "scheduler");
       });
       if (shouldStartResourceIntensiveSchedulers()) {
+        startPromoVideoDailyScheduler();
+        startCybersecurityScheduler();
+        startAppQaScheduler();
         void import("./local-news-growth-scout").then((growthScout) => {
           growthScout.startLocalNewsGrowthScoutScheduler();
         }).catch((error) => {
           log(`Failed to start resource-intensive growth scout: ${error instanceof Error ? error.message : String(error)}`, "scheduler");
         });
       } else {
-        log("Resource-intensive growth scout disabled for the memory-constrained Replit deployment; news publishing and analytics remain active", "scheduler");
+        log("Resource-intensive promo video, cybersecurity, App QA, and growth scout schedulers disabled for the memory-constrained Replit deployment; news publishing and analytics remain active", "scheduler");
       }
       
       runStartupTaskDeduplication().catch(err => {

@@ -86,6 +86,10 @@ function safeError(error: unknown): string {
   return `${error.name}: ${message || "operation_failed"}`;
 }
 
+function memoryRssMb(): number {
+  return Math.round(process.memoryUsage().rss / 1024 / 1024);
+}
+
 export function createClipperLocalNewsScheduler(deps: ClipperLocalNewsSchedulerDeps = {}): ClipperLocalNewsScheduler {
   const env = deps.env || process.env;
   const config = getClipperLocalNewsSchedulerConfig(env);
@@ -145,11 +149,15 @@ export function createClipperLocalNewsScheduler(deps: ClipperLocalNewsSchedulerD
     });
 
     const work = (async () => {
+      log(`[Clipper local news] cycle phase=start rssMb=${memoryRssMb()}`);
       await bootstrap({ env });
+      log(`[Clipper local news] cycle phase=bootstrapped rssMb=${memoryRssMb()}`);
       const cycle = await runCycle({ env, fetch: boundedFetch });
+      log(`[Clipper local news] cycle phase=ingested rssMb=${memoryRssMb()}`);
       if (controller.signal.aborted) throw new Error("cycle_aborted_after_timeout");
       const delivery = await deliver({ env, status: cycle.status, fetch: boundedFetch });
-      log(`[Clipper local news] cycle completed (sources=${cycle.fetchedSources || 0}; sourceFailures=${cycle.failedSources?.length || 0}; created=${cycle.created || 0}; queued=${cycle.queued || 0}; delivery=${delivery.status}; scheduled=${delivery.scheduled}; alreadyScheduled=${delivery.alreadyScheduled})`);
+      log(`[Clipper local news] cycle phase=delivered rssMb=${memoryRssMb()}`);
+      log(`[Clipper local news] cycle completed (sources=${cycle.fetchedSources || 0}; sourceFailures=${cycle.failedSources?.length || 0}; created=${cycle.created || 0}; queued=${cycle.queued || 0}; delivery=${delivery.status}; scheduled=${delivery.scheduled}; alreadyScheduled=${delivery.alreadyScheduled}; rssMb=${memoryRssMb()})`);
     })();
     inFlight = work.finally(() => {
       inFlight = null;

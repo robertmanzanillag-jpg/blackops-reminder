@@ -148,6 +148,16 @@ async function buildAll() {
     // release warning for this minified server artifact.
     logLevel: "error",
   });
+
+  await esbuild({
+    entryPoints: ["script/compact-local-news-state.ts"],
+    platform: "node",
+    bundle: true,
+    format: "cjs",
+    outfile: "dist/compact-local-news-state.cjs",
+    minify: true,
+    logLevel: "error",
+  });
 }
 
 buildAll().catch((err) => {

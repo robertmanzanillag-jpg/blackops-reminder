@@ -15,7 +15,7 @@ test("server startup wires the local-news scheduler alongside existing scheduler
   assert.match(source, /import\("\.\/clippers-local-news-scheduler"\)/);
   assert.match(source, /localNews\.startClipperLocalNewsScheduler\(\);/);
   assert.match(source, /metricoolAnalytics\.startMetricoolAnalyticsScheduler\(\);/);
-  assert.match(source, /if \(shouldStartResourceIntensiveSchedulers\(\)\) \{\s+void import\("\.\/local-news-growth-scout"\)/);
+  assert.match(source, /if \(shouldStartResourceIntensiveSchedulers\(\)\) \{\s+startPromoVideoDailyScheduler\(\);\s+startCybersecurityScheduler\(\);\s+startAppQaScheduler\(\);\s+void import\("\.\/local-news-growth-scout"\)/);
 });
 
 test("uses a five-minute default and clamps configured intervals to the safe two-to-five-minute range", () => {
@@ -195,5 +195,6 @@ test("runs Metricool delivery after a successful cycle using the cycle status", 
   assert.equal(await scheduler.runNow(), "completed");
   assert.deepEqual(order, ["bootstrap", "cycle", "deliver"]);
   assert.equal(deliveredStatus, cycleStatus);
-  assert.match(logs[0], /sources=8; sourceFailures=0; created=3; queued=6; delivery=ready; scheduled=4; alreadyScheduled=2/);
+  assert.match(logs.find((message) => message.includes("cycle completed")) || "", /sources=8; sourceFailures=0; created=3; queued=6; delivery=ready; scheduled=4; alreadyScheduled=2/);
+  assert.deepEqual(logs.filter((message) => message.includes("cycle phase=")).map((message) => message.match(/phase=(\w+)/)?.[1]), ["start", "bootstrapped", "ingested", "delivered"]);
 });
