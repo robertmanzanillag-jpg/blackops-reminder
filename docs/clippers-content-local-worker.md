@@ -37,18 +37,31 @@ All operational paths must remain inside `workspaceRoot`. The configuration must
   },
   "sleep": {
     "enabled": true,
-    "output": "sleep/rendered/rainy-bedroom-8h05.mp4",
-    "durationSeconds": 29100,
-    "seed": 20260824,
-    "title": "Rainy Bedroom Sleep — 8 Hours",
-    "visualSource": "sleep/source-assets/rainy-bedroom.png",
-    "visualSha256": "REPLACE_WITH_64_CHARACTER_SHA256",
-    "visualRightsEvidence": "sleep/source-assets/rainy-bedroom.rights.json"
+    "jobs": [
+      {
+        "output": "sleep/rendered/2026-08-24-rainy-bedroom-8h05.mp4",
+        "durationSeconds": 29100,
+        "seed": 20260824,
+        "title": "Rainy Bedroom Sleep — 8 Hours",
+        "visualSource": "sleep/source-assets/rainy-bedroom.png",
+        "visualSha256": "REPLACE_WITH_64_CHARACTER_SHA256",
+        "visualRightsEvidence": "sleep/source-assets/rainy-bedroom.rights.json"
+      },
+      {
+        "output": "sleep/rendered/2026-08-31-deep-rain-8h05.mp4",
+        "durationSeconds": 29100,
+        "seed": 20260831,
+        "title": "Deep Rain for Sleep — 8 Hours",
+        "visualSource": "sleep/source-assets/deep-rain.png",
+        "visualSha256": "REPLACE_WITH_64_CHARACTER_SHA256",
+        "visualRightsEvidence": "sleep/source-assets/deep-rain.rights.json"
+      }
+    ]
   }
 }
 ```
 
-Candidate manifests still pass every rights, voice, media, quality, channel-language, daily-volume, and deduplication gate in `clippers-motivation-shorts.mjs`. A plan of five does not bypass those gates. The report records exact rendered shortfalls against five for each channel.
+Candidate manifests still pass every rights, voice, media, quality, channel-language, daily-volume, and deduplication gate in `clippers-motivation-shorts.mjs`. A plan of five does not bypass those gates. On later days the worker walks the configured queue, skips already-rendered candidates, and continues until it renders the daily target or exhausts the approved queue; it never fills with an unapproved candidate. The report records exact rendered shortfalls against five for each channel.
 
 Run:
 
@@ -56,4 +69,4 @@ Run:
 node script/clippers-content-local-worker.mjs --config /absolute/path/clippers-content-worker.json
 ```
 
-The production atomic owner-only report is `reports/content-worker/clippers-content-local-worker-latest.json`. The live lock is beside it as `clippers-content-local-worker.lock`; a live PID always wins regardless of lock age. The owner-only sleep generation ledger is also beside it as `clippers-content-sleep-ledger.json`. When that ledger already satisfies the rolling cap, the report preserves `requestedByCeo: 1` but records an effective `planned: 0`, `shortfall: 0`, and a `deduplicated` result so monitoring does not raise a false daily alert. Default operation timeout is 14 hours and can be configured from one minute up to 24 hours.
+The production atomic owner-only report is `reports/content-worker/clippers-content-local-worker-latest.json`. The live lock is beside it as `clippers-content-local-worker.lock`; a live PID always wins regardless of lock age. The owner-only sleep generation ledger is also beside it as `clippers-content-sleep-ledger.json`. Each sleep job has a unique explicit output, title, seed, visual hash, and evidence path. After the seven-day cap expires the worker selects the next unused job rather than overwriting the previous week's artifact. When the rolling cap is already satisfied, the report preserves `requestedByCeo: 1` but records an effective `planned: 0`, `shortfall: 0`, and a `deduplicated` result so monitoring does not raise a false daily alert. Default operation timeout is 14 hours and can be configured from one minute up to 24 hours.

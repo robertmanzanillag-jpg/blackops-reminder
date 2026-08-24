@@ -63,23 +63,28 @@ function validateConfig(config, configPath) {
     };
   }
   const sleep = config.sleep || {};
-  if (sleep.enabled === true) {
+  const rawSleepJobs = sleep.enabled === true
+    ? (Array.isArray(sleep.jobs) ? sleep.jobs : [sleep])
+    : [];
+  if (sleep.enabled === true && rawSleepJobs.length === 0) throw new Error("sleep_jobs_required");
+  const sleepJobs = rawSleepJobs.map((job, index) => {
     for (const field of ["output", "visualSource", "visualSha256", "visualRightsEvidence", "title"]) {
-      if (!clean(sleep[field])) throw new Error(`sleep_${field}_required`);
+      if (!clean(job?.[field])) throw new Error(`sleep_job_${index + 1}_${field}_required`);
     }
-  }
+    return {
+      outputPath: within(workspaceRoot, job.output, `sleep_job_${index + 1}_output`),
+      visualSource: within(workspaceRoot, job.visualSource, `sleep_job_${index + 1}_visual`),
+      visualRightsEvidence: within(workspaceRoot, job.visualRightsEvidence, `sleep_job_${index + 1}_visual_rights`),
+      visualSha256: clean(job.visualSha256),
+      title: clean(job.title),
+      durationSeconds: Number(job.durationSeconds ?? 29_100),
+      seed: Number(job.seed ?? 20_260_824 + index),
+    };
+  });
+  if (new Set(sleepJobs.map((job) => job.outputPath)).size !== sleepJobs.length) throw new Error("sleep_job_outputs_must_be_unique");
   return {
     workspaceRoot, metricsLedgerPath, reportDir, timeoutMs, motivation,
-    sleep: sleep.enabled === true ? {
-      enabled: true,
-      outputPath: within(workspaceRoot, sleep.output, "sleep_output"),
-      visualSource: within(workspaceRoot, sleep.visualSource, "sleep_visual"),
-      visualRightsEvidence: within(workspaceRoot, sleep.visualRightsEvidence, "sleep_visual_rights"),
-      visualSha256: clean(sleep.visualSha256),
-      title: clean(sleep.title),
-      durationSeconds: Number(sleep.durationSeconds ?? 29_100),
-      seed: Number(sleep.seed ?? 20_260_824),
-    } : { enabled: false },
+    sleep: sleep.enabled === true ? { enabled: true, jobs: sleepJobs } : { enabled: false, jobs: [] },
     learning: config.learning || {},
   };
 }
@@ -151,6 +156,18 @@ function recentSleepRows(ledger, now) {
   return rows.filter((row) => Number.isFinite(Date.parse(row?.generatedAt)) && Date.parse(row.generatedAt) > cutoff);
 }
 
+async function nextSleepJob(jobs, ledger) {
+  const used = new Set((Array.isArray(ledger?.items) ? ledger.items : [])
+    .map((row) => clean(row?.outputPath)).filter(Boolean).map((filePath) => path.resolve(filePath)));
+  for (const job of jobs) {
+    if (used.has(job.outputPath)) continue;
+    const artifacts = [job.outputPath, `${job.outputPath}.rights.json`, `${job.outputPath}.partial.mp4`];
+    const exists = await Promise.all(artifacts.map((filePath) => lstat(filePath).then(() => true).catch(() => false)));
+    if (!exists.some(Boolean)) return job;
+  }
+  return null;
+}
+
 export async function runContentLocalWorker({ configPath, now = new Date(), operations = {} }) {
   const resolvedConfig = path.resolve(configPath);
   const configInfo = await lstat(resolvedConfig);
@@ -178,9 +195,10 @@ export async function runContentLocalWorker({ configPath, now = new Date(), oper
     for (const language of LANGUAGES) {
       const lanePlan = plan.dailyPlan.lanes.find((lane) => lane.lane === "motivation_short" && lane.language === language);
       const hardCap = Math.min(5, Math.max(0, Number(lanePlan?.target) || 0));
-      const candidates = config.motivation[language].manifestFiles.slice(0, hardCap);
+      const candidates = config.motivation[language].manifestFiles;
       const results = [];
       for (const manifestFile of candidates) {
+        if (results.filter((result) => result?.status === "rendered").length >= hardCap) break;
         const identity = await candidateIdentity(config.workspaceRoot, manifestFile);
         if (!identity) {
           results.push({ status: "blocked", blockers: ["manifest_missing_or_unsafe"], manifestFile, apiCostUsd: 0, publishEnabled: false });
@@ -195,11 +213,14 @@ export async function runContentLocalWorker({ configPath, now = new Date(), oper
         }), config.timeoutMs, `motivation_${language}`));
       }
       const rendered = results.filter((result) => result?.status === "rendered").length;
+      const skippedDuplicates = results.filter((result) => result?.status === "duplicate").length;
       motivation[language] = {
         channelId: config.motivation[language].channelId,
         editorialTarget: 5,
         planned: hardCap,
-        attempted: results.length,
+        evaluatedCandidates: results.length,
+        attempted: results.length - skippedDuplicates,
+        skippedDuplicates,
         rendered,
         shortfall: 5 - rendered,
         results,
@@ -211,29 +232,32 @@ export async function runContentLocalWorker({ configPath, now = new Date(), oper
       throw error;
     });
     const recent = recentSleepRows(sleepLedger, now);
+    const sleepJob = recent.length ? null : await nextSleepJob(config.sleep.jobs, sleepLedger);
     let sleepResult = { status: "not_planned", blockers: [] };
     let attempted = 0;
-    if (config.sleep.enabled && Number(sleepPlan?.target) > 0 && recent.length === 0) {
+    if (config.sleep.enabled && Number(sleepPlan?.target) > 0 && recent.length === 0 && sleepJob) {
       attempted = 1;
       sleepResult = await withTimeout(() => generateSleep({
-        outputPath: config.sleep.outputPath,
-        durationSeconds: config.sleep.durationSeconds,
-        seed: config.sleep.seed,
-        title: config.sleep.title,
+        outputPath: sleepJob.outputPath,
+        durationSeconds: sleepJob.durationSeconds,
+        seed: sleepJob.seed,
+        title: sleepJob.title,
         width: 1920,
         height: 1080,
         fps: 1,
         testMode: false,
         overwrite: false,
-        visualSource: config.sleep.visualSource,
-        visualSha256: config.sleep.visualSha256,
-        visualRightsEvidence: config.sleep.visualRightsEvidence,
+        visualSource: sleepJob.visualSource,
+        visualSha256: sleepJob.visualSha256,
+        visualRightsEvidence: sleepJob.visualRightsEvidence,
       }), config.timeoutMs, "sleep_generation");
       const entry = { generatedAt: now.toISOString(), outputPath: sleepResult.outputPath, manifestPath: sleepResult.manifestPath };
       await atomicJson(sleepLedgerPath, { schemaVersion: 1, items: [...(sleepLedger.items || []), entry] });
       sleepResult = { status: "generated", ...entry };
     } else if (recent.length) {
       sleepResult = { status: "deduplicated", blockers: ["rolling_seven_day_generation_cap_reached"], duplicateOf: recent.at(-1).outputPath };
+    } else if (config.sleep.enabled && Number(sleepPlan?.target) > 0 && !sleepJob) {
+      sleepResult = { status: "blocked", blockers: ["sleep_job_queue_exhausted_or_artifact_exists"] };
     } else if (!config.sleep.enabled) {
       sleepResult = { status: "disabled", blockers: ["sleep_not_enabled_in_config"] };
     }
@@ -255,7 +279,9 @@ export async function runContentLocalWorker({ configPath, now = new Date(), oper
       motivation,
       sleep: { requestedByCeo: requestedSleep, planned: effectiveSleepPlan, attempted, generated, shortfall: Math.max(0, effectiveSleepPlan - generated), result: sleepResult },
       blockers: [
-        ...LANGUAGES.flatMap((language) => motivation[language].results.flatMap((result) => result?.blockers || [])),
+        ...LANGUAGES.flatMap((language) => motivation[language].results
+          .filter((result) => result?.status !== "duplicate")
+          .flatMap((result) => result?.blockers || [])),
         ...(sleepResult.blockers || []),
       ],
     };

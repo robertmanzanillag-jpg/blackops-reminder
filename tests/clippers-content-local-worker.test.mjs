@@ -36,13 +36,15 @@ async function fixture({ es = 5, en = 5, sleep = true } = {}) {
     learning: { laneGates: { sleep_long: { accountVerified: true, rightsStatus: "owned", qualityPassed: true, candidatesReady: true } } },
     sleep: sleep ? {
       enabled: true,
-      output: "sleep/output.mp4",
-      durationSeconds: 29_100,
-      seed: 1,
-      title: "Rain for sleep",
-      visualSource: "sleep/source.png",
-      visualSha256: "a".repeat(64),
-      visualRightsEvidence: "sleep/source.rights.json",
+      jobs: [1, 2].map((number) => ({
+        output: `sleep/output-${number}.mp4`,
+        durationSeconds: 29_100,
+        seed: number,
+        title: `Rain for sleep ${number}`,
+        visualSource: "sleep/source.png",
+        visualSha256: "a".repeat(64),
+        visualRightsEvidence: "sleep/source.rights.json",
+      })),
     } : { enabled: false },
   };
   const configPath = path.join(root, "config.json");
@@ -90,6 +92,30 @@ test("reports exact per-channel shortfall from eligible manifests", async () => 
   assert.equal(result.status, "completed_with_shortfall");
 });
 
+test("day two skips the first five duplicates and rotates to the next five candidates", async () => {
+  const item = await fixture({ es: 10, en: 0, sleep: false });
+  const rendered = new Set();
+  const rotatingOperations = {
+    runCeo: runContentLearningCeo,
+    renderShort: async ({ manifestFile }) => {
+      if (rendered.has(manifestFile)) return { status: "duplicate", blockers: ["already_rendered"], shortId: manifestFile };
+      rendered.add(manifestFile);
+      return { status: "rendered", shortId: manifestFile, publishEnabled: false, apiCostUsd: 0 };
+    },
+    generateSleep: async () => assert.fail("sleep must remain disabled"),
+  };
+  const first = await runContentLocalWorker({ configPath: item.configPath, now: NOW, operations: rotatingOperations });
+  assert.equal(first.motivation.es.rendered, 5);
+  assert.deepEqual([...rendered], Array.from({ length: 5 }, (_, index) => `manifests/es-${index}.json`));
+  const second = await runContentLocalWorker({ configPath: item.configPath, now: new Date(NOW.getTime() + 86_400_000), operations: rotatingOperations });
+  assert.equal(second.motivation.es.rendered, 5);
+  assert.equal(second.motivation.es.skippedDuplicates, 5);
+  assert.equal(second.motivation.es.attempted, 5);
+  assert.equal(second.motivation.es.shortfall, 0);
+  assert.deepEqual([...rendered], Array.from({ length: 10 }, (_, index) => `manifests/es-${index}.json`));
+  assert.ok(!second.blockers.includes("already_rendered"));
+});
+
 test("blocks a manifest assigned to the wrong independent channel before render", async () => {
   const item = await fixture({ es: 1, en: 0, sleep: false });
   await writeFile(path.join(item.root, "manifests", "es-0.json"), JSON.stringify({ channelId: "motivation-en", language: "en" }));
@@ -115,6 +141,12 @@ test("generates sleep once per rolling seven days and deduplicates a second run"
   assert.equal(second.sleep.shortfall, 0);
   assert.equal(second.sleep.result.status, "deduplicated");
   assert.equal(secondCalls.sleep.length, 0);
+  const nextWeekCalls = { shorts: [], sleep: [] };
+  const nextWeek = await runContentLocalWorker({ configPath: item.configPath, now: new Date(NOW.getTime() + 8 * 86_400_000), operations: operations(nextWeekCalls) });
+  assert.equal(nextWeek.sleep.generated, 1);
+  assert.equal(nextWeek.sleep.shortfall, 0);
+  assert.equal(nextWeekCalls.sleep.length, 1);
+  assert.match(nextWeekCalls.sleep[0].outputPath, /output-2\.mp4$/);
 });
 
 test("a live PID lock remains authoritative regardless of age", async () => {
