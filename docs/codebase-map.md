@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-08-24T06:13:11.911Z
+Generated: 2026-08-24T06:48:18.158Z
 Repo: `/private/tmp/asistente-sleep-clippers`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 544 | 462 | 1776 | 494 | 11307 |
+| 554 | 472 | 1786 | 494 | 11464 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,11 +30,12 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `server` | 129 | 125 | server:129 |
 | `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
-| `tests` | 105 | 102 | test:105 |
-| `script` | 65 | 61 | script:65 |
-| `docs` | 21 | 20 | docs:21 |
+| `tests` | 106 | 103 | test:106 |
+| `script` | 66 | 62 | script:66 |
+| `docs` | 23 | 22 | docs:23 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
+| `examples/clippers-motivation` | 6 | 6 | other:5, docs:1 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `client/public` | 16 | 2 | other:16 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
@@ -197,6 +198,7 @@ Package: `rest-express`
 - `script/ceo-verify-local.mjs` (script; 2 symbols, 1 imports)
 - `script/clippers-account-permission-readiness.mjs` (script; 82 symbols, 2 imports)
 - `script/clippers-cleanup-published-vyro-media.mjs` (script; 47 symbols, 4 imports)
+- `script/clippers-content-learning-ceo.mjs` (script; 85 symbols, 3 imports)
 - `script/clippers-daily-watchdog.mjs` (script; 52 symbols, 3 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
 - `script/clippers-free-local-worker.mjs` (script; 41 symbols, 5 imports)
@@ -209,7 +211,7 @@ Package: `rest-express`
 - `script/clippers-marketplace-intake.mjs` (script; 59 symbols, 3 imports)
 - `script/clippers-marketplace-refresh.mjs` (script; 50 symbols, 4 imports)
 - `script/clippers-metricool-autopilot.mjs` (script; 116 symbols, 4 imports)
-- `script/clippers-motivation-shorts.mjs` (script; 99 symbols, 6 imports)
+- `script/clippers-motivation-shorts.mjs` (script; 104 symbols, 6 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)
 - `script/clippers-reconcile-publications.mjs` (script; 74 symbols, 3 imports)
@@ -217,7 +219,7 @@ Package: `rest-express`
 - `script/clippers-record-owned-source-rights.mjs` (script; 88 symbols, 3 imports)
 - `script/clippers-render-campaign-drafts.mjs` (script; 118 symbols, 6 imports)
 - `script/clippers-selected-env.mjs` (script; 11 symbols, 2 imports)
-- `script/clippers-sleep-video-generator.mjs` (script; 77 symbols, 6 imports)
+- `script/clippers-sleep-video-generator.mjs` (script; 93 symbols, 6 imports)
 - `script/clippers-streamer-growth-ceo.mjs` (script; 170 symbols, 5 imports)
 - `script/clippers-sync-metricool-source-readiness.mjs` (script; 28 symbols, 3 imports)
 - `script/clippers-tiktok-preflight.ts` (script; 15 symbols, 1 imports)
@@ -232,7 +234,6 @@ Package: `rest-express`
 - `script/migrate-user.ts` (script; 16 symbols, 4 imports)
 - `script/native-typescript-loader.mjs` (script; 3 symbols)
 - `script/radio-local-worker.ts` (script; 25 symbols, 2 imports)
-- `script/radio-local-youtube-worker.ts` (script; 25 symbols, 9 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-24T06:13:11.911Z",
+  "generatedAt": "2026-08-24T06:48:18.158Z",
   "repoRoot": "/private/tmp/asistente-sleep-clippers",
   "packageName": "rest-express",
   "scripts": {
@@ -110,34 +110,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 544,
-    "filesIndexed": 462,
-    "imports": 1776,
+    "filesVisible": 554,
+    "filesIndexed": 472,
+    "imports": 1786,
     "routes": 494,
-    "symbols": 11307
+    "symbols": 11464
   },
   "directories": {
-    "docs": {
-      "files": 21,
-      "indexed": 20,
-      "kinds": {
-        "docs": 21
-      }
-    },
-    "script": {
-      "files": 65,
-      "indexed": 61,
-      "kinds": {
-        "script": 65
-      }
-    },
-    "tests": {
-      "files": 105,
-      "indexed": 102,
-      "kinds": {
-        "test": 105
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -195,6 +174,28 @@
         "client-page": 26
       }
     },
+    "docs": {
+      "files": 23,
+      "indexed": 22,
+      "kinds": {
+        "docs": 23
+      }
+    },
+    "examples/clippers-motivation": {
+      "files": 6,
+      "indexed": 6,
+      "kinds": {
+        "docs": 1,
+        "other": 5
+      }
+    },
+    "script": {
+      "files": 66,
+      "indexed": 62,
+      "kinds": {
+        "script": 66
+      }
+    },
     "scripts": {
       "files": 4,
       "indexed": 1,
@@ -228,6 +229,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 106,
+      "indexed": 103,
+      "kinds": {
+        "test": 106
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -3922,6 +3930,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-content-learning-ceo.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-generic-renderer.md",
       "kind": "docs",
       "imports": [],
@@ -3947,6 +3963,14 @@
     },
     {
       "path": "docs/clippers-marketplace-refresh.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/clippers-motivation-content-pack.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -4048,6 +4072,54 @@
         "./server/env-loader",
         "drizzle-kit"
       ],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-consistencia-001.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-disciplina-001.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-empezar-tarde-001.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-miedo-001.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/motiva-rechazo-001.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "examples/clippers-motivation/README.md",
+      "kind": "docs",
+      "imports": [],
       "exports": [],
       "symbols": [],
       "routes": []
@@ -4860,6 +4932,108 @@
         "sourceRoot",
         "vyroProofReady",
         "workspaceRoot"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-content-learning-ceo.mjs",
+      "kind": "script",
+      "imports": [
+        "node:fs/promises",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "buildContentLearningDecision",
+        "evaluateExperiments",
+        "runContentLearningCeo"
+      ],
+      "symbols": [
+        "LANES",
+        "LANGUAGES",
+        "PUBLISHED",
+        "RIGHTS_OK",
+        "ageHours",
+        "args",
+        "atomicJson",
+        "base",
+        "baseline",
+        "baselineRows",
+        "blockers",
+        "boundedInteger",
+        "buildContentLearningDecision",
+        "clean",
+        "comparableGroups",
+        "completionRegression",
+        "config",
+        "contexts",
+        "coverageDays",
+        "current",
+        "cutoff",
+        "decision",
+        "decisionConfig",
+        "editorialTarget",
+        "eligibleCandidates",
+        "evaluateExperiments",
+        "experiments",
+        "finite",
+        "gate",
+        "gateBlockers",
+        "gateConfig",
+        "group",
+        "groups",
+        "guardedTarget",
+        "inWeeklyCooldown",
+        "iso",
+        "key",
+        "lane",
+        "laneGate",
+        "lanes",
+        "language",
+        "lastChangeMs",
+        "latest",
+        "main",
+        "maximumMetricsAgeHours",
+        "median",
+        "metricBlockers",
+        "metrics",
+        "middle",
+        "missingOrStale",
+        "motivationDecision",
+        "normalizedRow",
+        "observedAt",
+        "observedMs",
+        "ordered",
+        "parseCli",
+        "parsed",
+        "planPath",
+        "publishedAt",
+        "ratio",
+        "recent",
+        "recentCount",
+        "recentPublished",
+        "recentRows",
+        "rejected",
+        "relevant",
+        "report",
+        "reportPath",
+        "result",
+        "root",
+        "rows",
+        "rowsFromLedger",
+        "runContentLearningCeo",
+        "safeTarget",
+        "sleepDecision",
+        "sorted",
+        "summary",
+        "target",
+        "temporary",
+        "usableRelevant",
+        "values",
+        "variables",
+        "variants",
+        "views",
+        "windowHours"
       ],
       "routes": []
     },
@@ -5904,12 +6078,13 @@
         "volumeBlocker"
       ],
       "symbols": [
-        "DAILY_LIMIT",
+        "CHANNEL_ID",
+        "DAILY_LIMIT_PER_CHANNEL",
         "MAX_SECONDS",
         "MIN_SECONDS",
         "RIGHTS_STATUSES",
-        "ROLLING_SEVEN_DAY_LIMIT",
         "SHA256",
+        "SUPPORTED_LANGUAGES",
         "atomicJson",
         "background",
         "beats",
@@ -5920,6 +6095,9 @@
         "canonicalScript",
         "captionChunks",
         "captionCues",
+        "channelId",
+        "channelLanguageMismatch",
+        "channelSlug",
         "chunks",
         "clean",
         "cliValue",
@@ -5946,6 +6124,7 @@
         "imagePath",
         "index",
         "jsonFile",
+        "language",
         "lastImage",
         "ledger",
         "ledgerPath",
@@ -5968,6 +6147,7 @@
         "pathExists",
         "prepareCaptionOverlay",
         "probe",
+        "quality",
         "realRelative",
         "relative",
         "renderMotivationShort",
@@ -5984,7 +6164,6 @@
         "script",
         "scriptSha256",
         "secs",
-        "sevenDaysAgo",
         "sha256File",
         "shortId",
         "srtTime",
@@ -6505,16 +6684,20 @@
         "parseCliArgs",
         "probeVideo",
         "sampleMediaQa",
-        "validateOptions"
+        "validateOptions",
+        "validateVisualAsset"
       ],
       "symbols": [
         "DEFAULT_PRODUCTION_DURATION_SECONDS",
         "MAXIMUM_TEST_DURATION_SECONDS",
         "MINIMUM_PRODUCTION_DURATION_SECONDS",
+        "actualSha256",
         "arg",
         "assertProbe",
+        "assertSafeRegularFile",
         "audio",
         "audioExpression",
+        "audioFilter",
         "audioResult",
         "background",
         "base",
@@ -6531,11 +6714,14 @@
         "duration",
         "end",
         "envelope",
+        "evidencePath",
         "evolvingLeft",
         "evolvingRight",
+        "expectedSha256",
         "fadeIn",
         "fadeOut",
         "ffmpegPath",
+        "fileStats",
         "finiteNumber",
         "finitePeaks",
         "finiteRms",
@@ -6544,6 +6730,7 @@
         "generateSleepVideo",
         "glow",
         "harmonic",
+        "hasAnyVisualField",
         "hex",
         "hourly",
         "inset",
@@ -6568,6 +6755,9 @@
         "probe",
         "probeVideo",
         "qa",
+        "rainFilter",
+        "rainSeed",
+        "resolvedPath",
         "result",
         "right",
         "rmsDb",
@@ -6579,11 +6769,17 @@
         "seededValues",
         "sha256",
         "sha256Text",
+        "sourcePath",
         "start",
         "synthesisParameters",
         "validateOptions",
+        "validateVisualAsset",
         "values",
         "video",
+        "videoFilter",
+        "videoInput",
+        "visualAsset",
+        "visualFields",
         "visualFilter"
       ],
       "routes": []
@@ -18027,6 +18223,60 @@
       "routes": []
     },
     {
+      "path": "tests/clippers-content-learning-ceo.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-content-learning-ceo.mjs",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "bad",
+        "capped",
+        "cooldown",
+        "decision",
+        "en",
+        "entries",
+        "es",
+        "experiments",
+        "fresh",
+        "gates",
+        "high",
+        "immature",
+        "insufficient",
+        "lane",
+        "ledgerPath",
+        "low",
+        "mature",
+        "motivation",
+        "multi",
+        "nonComparable",
+        "normalizedResults",
+        "old",
+        "outputDir",
+        "plan",
+        "recent",
+        "regression",
+        "rejected",
+        "report",
+        "result",
+        "results",
+        "root",
+        "row",
+        "samples",
+        "shortWindow",
+        "single",
+        "views",
+        "weak"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/clippers-daily-watchdog.test.mjs",
       "kind": "test",
       "imports": [
@@ -18465,16 +18715,21 @@
         "baseManifest",
         "blockers",
         "duplicate",
+        "english",
         "execFileAsync",
         "existingOutput",
+        "failed",
         "first",
         "manifest",
         "manifestPath",
         "now",
-        "priorDays",
         "result",
+        "retry",
         "script",
         "sha256File",
+        "spanish",
+        "subtitlePath",
+        "transientRun",
         "voiceFile",
         "workspace",
         "writeAuthorizedManifest"
@@ -18749,6 +19004,7 @@
       "imports": [
         "../script/clippers-sleep-video-generator.mjs",
         "node:assert/strict",
+        "node:crypto",
         "node:fs/promises",
         "node:os",
         "node:path",
@@ -18757,16 +19013,24 @@
       "exports": [],
       "symbols": [
         "baseOptions",
+        "createVisualFixture",
         "different",
         "directory",
+        "evidencePath",
         "first",
+        "fixture",
         "manifest",
         "options",
         "outputPath",
+        "pixels",
         "probe",
         "production",
+        "productionVisualFields",
         "result",
-        "second"
+        "second",
+        "sourcePath",
+        "sourceSha256",
+        "symlinkPath"
       ],
       "routes": []
     },
