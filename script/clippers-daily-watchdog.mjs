@@ -139,6 +139,12 @@ function contentLaneState(value) {
 
 function contentWorkerState(contentWorker, { now, today, timeZone }) {
   const hasReport = Boolean(contentWorker && typeof contentWorker === "object");
+  const schemaValid = hasReport
+    && contentWorker.schemaVersion === 1
+    && ["completed", "completed_with_shortfall"].includes(clean(contentWorker.status))
+    && Boolean(contentWorker.motivation?.es && typeof contentWorker.motivation.es === "object")
+    && Boolean(contentWorker.motivation?.en && typeof contentWorker.motivation.en === "object")
+    && Boolean(contentWorker.sleep && typeof contentWorker.sleep === "object");
   const generatedAt = clean(contentWorker?.generatedAt);
   const generatedMs = Date.parse(generatedAt);
   const reportDate = dateParts(generatedAt, timeZone)?.date || null;
@@ -170,6 +176,7 @@ function contentWorkerState(contentWorker, { now, today, timeZone }) {
   const blockers = [];
   if (!generatedAt) blockers.push("content_worker_report_missing");
   else if (!freshForToday) blockers.push("content_worker_report_stale");
+  if (hasReport && !schemaValid) blockers.push("content_worker_report_schema_invalid");
   if (hasReport && contentWorker.publishEnabled !== false) blockers.push("content_worker_publish_must_remain_disabled");
   if (hasReport && contentWorker.networkUsed !== false) blockers.push("content_worker_network_must_remain_disabled");
   if (hasReport && apiCostUsd !== 0) blockers.push("content_worker_api_cost_must_remain_zero");
@@ -182,6 +189,8 @@ function contentWorkerState(contentWorker, { now, today, timeZone }) {
     reportDate,
     reportAgeMinutes: ageMinutes,
     freshForToday,
+    reportPresent: hasReport,
+    schemaValid,
     motivation: { es, en },
     sleep,
     blockers,
@@ -257,6 +266,7 @@ export async function runClippersDailyWatchdog(options = {}) {
   const alerts = {
     noEvidenceBackedTikTokPost: due && evidence.length === 0,
     contentWorkerMissingOrStale: due && !contentWorker.freshForToday,
+    contentWorkerInvalidReport: due && contentWorker.reportPresent && !contentWorker.schemaValid,
     contentWorkerShortfall: due && (
       contentWorker.motivation.es.shortfall > 0
       || contentWorker.motivation.en.shortfall > 0

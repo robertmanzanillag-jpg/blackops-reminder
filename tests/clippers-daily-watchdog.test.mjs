@@ -25,6 +25,7 @@ async function fixture({ ledger = [], worker = null, supply = null, content = nu
 
 function freshContent(overrides = {}) {
   return {
+    schemaVersion: 1,
     generatedAt: "2026-08-12T12:00:00.000Z",
     status: "completed",
     networkUsed: false,
@@ -260,6 +261,31 @@ test("alerts when today's content worker report is missing or violates no-networ
       "content_worker_network_must_remain_disabled",
       "content_worker_api_cost_must_remain_zero",
     ]);
+  } finally {
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("fails closed on a fresh but malformed content worker report", async () => {
+  const workspaceRoot = await fixture({
+    content: {
+      generatedAt: "2026-08-12T12:00:00.000Z",
+      status: "completed",
+      networkUsed: false,
+      publishEnabled: false,
+      apiCostUsd: 0,
+    },
+  });
+  try {
+    const report = await runClippersDailyWatchdog({
+      workspaceRoot,
+      now: new Date("2026-08-12T15:00:00.000Z"),
+      checkHour: 10,
+    });
+    assert.equal(report.contentWorker.freshForToday, true);
+    assert.equal(report.contentWorker.schemaValid, false);
+    assert.equal(report.alerts.contentWorkerInvalidReport, true);
+    assert.ok(report.contentWorker.blockers.includes("content_worker_report_schema_invalid"));
   } finally {
     await rm(workspaceRoot, { recursive: true, force: true });
   }
