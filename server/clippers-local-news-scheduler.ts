@@ -34,6 +34,7 @@ export interface ClipperLocalNewsSchedulerDeps {
   bootstrap?: typeof bootstrapClipperLocalNews;
   runCycle?: typeof runClipperLocalNewsCycle;
   deliver?: typeof deliverClipperLocalNewsToMetricool;
+  fetch?: typeof globalThis.fetch;
   now?: () => Date;
   setInterval?: (callback: () => void, delayMs: number) => TimerHandle;
   clearInterval?: (timer: TimerHandle) => void;
@@ -91,6 +92,7 @@ export function createClipperLocalNewsScheduler(deps: ClipperLocalNewsSchedulerD
   const bootstrap = deps.bootstrap || bootstrapClipperLocalNews;
   const runCycle = deps.runCycle || runClipperLocalNewsCycle;
   const deliver = deps.deliver || deliverClipperLocalNewsToMetricool;
+  const fetcher = deps.fetch || globalThis.fetch;
   const now = deps.now || (() => new Date());
   const scheduleInterval = deps.setInterval || globalThis.setInterval;
   const cancelInterval = deps.clearInterval || globalThis.clearInterval;
@@ -134,11 +136,19 @@ export function createClipperLocalNewsScheduler(deps: ClipperLocalNewsSchedulerD
     lastError = null;
     let timedOut = false;
     let timeout: TimerHandle | null = null;
+    const controller = new AbortController();
+    const boundedFetch: typeof globalThis.fetch = (input, init) => fetcher(input, {
+      ...init,
+      signal: init?.signal
+        ? AbortSignal.any([init.signal, controller.signal])
+        : controller.signal,
+    });
 
     const work = (async () => {
       await bootstrap({ env });
-      const cycle = await runCycle({ env });
-      await deliver({ env, status: cycle.status });
+      const cycle = await runCycle({ env, fetch: boundedFetch });
+      if (controller.signal.aborted) throw new Error("cycle_aborted_after_timeout");
+      await deliver({ env, status: cycle.status, fetch: boundedFetch });
     })();
     inFlight = work.finally(() => {
       inFlight = null;
@@ -148,6 +158,7 @@ export function createClipperLocalNewsScheduler(deps: ClipperLocalNewsSchedulerD
     const deadline = new Promise<"timed_out">((resolve) => {
       timeout = scheduleTimeout(() => {
         timedOut = true;
+        controller.abort();
         timeoutCount += 1;
         lastError = "timeout";
         logError("[Clipper local news] cycle timed out; overlap lock remains active until it settles");

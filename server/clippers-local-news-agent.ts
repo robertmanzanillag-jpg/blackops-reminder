@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { execFile } from "node:child_process";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { z } from "zod";
@@ -229,6 +230,7 @@ export interface ClipperLocalNewsIngestInput extends ClipperLocalNewsOptions {
 export interface ClipperLocalNewsCycleInput extends ClipperLocalNewsOptions {
   events?: ClipperLocalNewsRawEvent[];
   fetch?: typeof globalThis.fetch;
+  officialFeedTextFallback?: (source: { id: string; url: string }) => Promise<string | null>;
   resolveMissing?: boolean;
   snapshotLanes?: ClipperLocalNewsLane[];
 }
@@ -258,6 +260,7 @@ const CADENCE = { windowMinutes: 60 as const, facebookPerLane: 6 as const, faceb
 const FACEBOOK_MAX_RELEVANT_PER_LANE = 10;
 const MONETIZATION_TARGET_USD = 10_000;
 const RSS_STALE_MS = 72 * 60 * 60_000;
+const SENSITIVE_OFFICIAL_RSS_STALE_MS = 7 * 24 * 60 * 60_000;
 const RSS_FUTURE_SKEW_MS = 6 * 60 * 60_000;
 const ARCGIS_STALE_MS = 48 * 60 * 60_000;
 const MIAMI_TRANSIT_LOOKBACK_MS = 120 * 24 * 60 * 60_000;
@@ -788,7 +791,7 @@ function dailyPublishingStatus(state: LocalNewsState | null): ClipperLocalNewsSt
 }
 
 function sourceSetup(): string {
-  return `# Local News Source Setup\n\n- NWS: public, no API key. The agent reads point alerts for Miami and New York City.\n- Notify NYC: official public RSS, no API key. Attribution must make clear that this newsroom is not the issuing agency.\n- Miami-Dade County: official public news RSS, no API key.\n- Miami International Airport: official Latest News RSS; third-party “In the News” aggregation is intentionally excluded.\n- Florida road incidents: public ArcGIS layers for closures, crashes, brush fires and other incidents, restricted to Miami-Dade. This is useful incident coverage, not a claim of every road condition.\n- NY511: optional and subject to its access agreement. Set both \`NY511_API_KEY\` and \`NY511_FEED_URL\`; the key is sent only at request time and is never written here.\n- Optional authorized feeds: \`FL511_FEED_URL\`, \`MIAMI_NEWS_FEED_URL\`, and \`NY_NEWS_FEED_URL\`.\n- FBI Miami and New York: official public RSS for verified federal investigations and enforcement updates; sensitive accusations require the strengthened committee gate.\n- U.S. Attorney SDNY and SDFL: official DOJ press-release RSS; charges remain allegations and every accused person is presumed innocent unless a court rules otherwise.\n- Webhook/manual ingestion: call the ingest function with attributed official/public events.\n\nOnly use official public or authorized feeds. Never copy commercial news articles. Keep secrets in environment variables. Public incident sources do not guarantee complete road coverage.\n`;
+  return `# Local News Source Setup\n\n- NWS: public, no API key. Only high-impact alerts for Miami and New York City survive the hot-news filter.\n- Miami-Dade County: official public news RSS, no API key.\n- Miami International Airport: official Latest News RSS; third-party “In the News” aggregation is intentionally excluded.\n- FBI Miami and New York: official public RSS for verified federal investigations and enforcement updates; sensitive accusations require the strengthened committee gate.\n- U.S. Attorney SDNY and SDFL: district-specific official DOJ press-release RSS; charges remain allegations and every accused person is presumed innocent unless a court rules otherwise.\n- Routine traffic sources (Notify NYC, FL511/FHP, NY511) are disabled by default. Set \`CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC=true\` only for an explicit traffic campaign.\n- Optional authorized news feeds: \`MIAMI_NEWS_FEED_URL\` and \`NY_NEWS_FEED_URL\`.\n- Webhook/manual ingestion: call the ingest function with attributed official/public events.\n\nOnly use official public or authorized feeds. Never copy commercial news articles. Keep secrets in environment variables. The default desk prioritizes verified crime, arrests, kidnapping, immigration, public-safety, and critical-weather updates.\n`;
 }
 
 function runbook(minutes: number): string {
@@ -968,19 +971,20 @@ interface SourceDefinition { id: string; lane: ClipperLocalNewsLane; url: string
 interface ConnectorDefinition { id: string; lane: ClipperLocalNewsLane; configured: boolean; requiresKey: boolean; public: boolean }
 
 function connectorCatalog(env: NodeJS.ProcessEnv): ConnectorDefinition[] {
+  const trafficEnabled = env.CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC === "true";
   return [
     { id: "nws-miami", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "nws-nyc", lane: "ny-news", configured: true, requiresKey: false, public: true },
-    { id: "notify-nyc", lane: "ny-news", configured: true, requiresKey: false, public: true },
+    { id: "notify-nyc", lane: "ny-news", configured: trafficEnabled, requiresKey: false, public: true },
     { id: "fbi-ny", lane: "ny-news", configured: true, requiresKey: false, public: true },
     { id: "doj-sdny", lane: "ny-news", configured: true, requiresKey: false, public: true },
     { id: "fbi-miami", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "doj-sdfl", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "miami-dade-news", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "mia-airport-news", lane: "miami-news", configured: true, requiresKey: false, public: true },
-    { id: "fhp-miami-dade", lane: "miami-news", configured: true, requiresKey: false, public: true },
-    { id: "ny511", lane: "ny-news", configured: Boolean(env.NY511_FEED_URL && env.NY511_API_KEY), requiresKey: true, public: false },
-    { id: "fl511", lane: "miami-news", configured: Boolean(env.FL511_FEED_URL), requiresKey: false, public: false },
+    { id: "fhp-miami-dade", lane: "miami-news", configured: trafficEnabled, requiresKey: false, public: true },
+    { id: "ny511", lane: "ny-news", configured: trafficEnabled && Boolean(env.NY511_FEED_URL && env.NY511_API_KEY), requiresKey: true, public: false },
+    { id: "fl511", lane: "miami-news", configured: trafficEnabled && Boolean(env.FL511_FEED_URL), requiresKey: false, public: false },
     { id: "miami-generic", lane: "miami-news", configured: Boolean(env.MIAMI_NEWS_FEED_URL), requiresKey: false, public: false },
     { id: "ny-generic", lane: "ny-news", configured: Boolean(env.NY_NEWS_FEED_URL), requiresKey: false, public: false },
   ];
@@ -990,21 +994,56 @@ function sources(env: NodeJS.ProcessEnv): SourceDefinition[] {
   const result: SourceDefinition[] = [
     { id: "nws-miami", lane: "miami-news", url: "https://api.weather.gov/alerts/active?point=25.7617,-80.1918", requiresKey: false, sourceName: "National Weather Service" },
     { id: "nws-nyc", lane: "ny-news", url: "https://api.weather.gov/alerts/active?point=40.7128,-74.0060", requiresKey: false, sourceName: "National Weather Service" },
-    { id: "notify-nyc", lane: "ny-news", url: "https://feeds.everbridge.net/feeds/453003085617722/rss/rss.xml", requiresKey: false, format: "rss", sourceName: "Notify NYC" },
     { id: "fbi-ny", lane: "ny-news", url: "https://www.fbi.gov/feeds/new-york-news/rss.xml", requiresKey: false, format: "rss", sourceName: "Federal Bureau of Investigation New York", sensitiveEligible: true },
-    { id: "doj-sdny", lane: "ny-news", url: "https://www.justice.gov/feeds/justice-news.xml?component%5B1981%5D=1981&organization=186051&type%5Bpress_release%5D=press_release", requiresKey: false, format: "rss", sourceName: "U.S. Attorney for the Southern District of New York", sensitiveEligible: true, allowedArticlePathPrefix: "/usao-sdny/" },
+    { id: "doj-sdny", lane: "ny-news", url: "https://www.justice.gov/news/rss?field_component=1981&groupname=441&require_all=0&search_api_language=en&type=press_release", requiresKey: false, format: "rss", sourceName: "U.S. Attorney for the Southern District of New York", sensitiveEligible: true, allowedArticlePathPrefix: "/usao-sdny/" },
     { id: "fbi-miami", lane: "miami-news", url: "https://www.fbi.gov/feeds/miami-news/rss.xml", requiresKey: false, format: "rss", sourceName: "Federal Bureau of Investigation Miami", sensitiveEligible: true },
-    { id: "doj-sdfl", lane: "miami-news", url: "https://www.justice.gov/feeds/justice-news.xml?component%5B1771%5D=1771&organization=185861&type%5Bpress_release%5D=press_release", requiresKey: false, format: "rss", sourceName: "U.S. Attorney for the Southern District of Florida", sensitiveEligible: true, allowedArticlePathPrefix: "/usao-sdfl/" },
+    { id: "doj-sdfl", lane: "miami-news", url: "https://www.justice.gov/news/rss?field_component=1771&require_all=0&search_api_language=en&show_public_archived=0&type=press_release", requiresKey: false, format: "rss", sourceName: "U.S. Attorney for the Southern District of Florida", sensitiveEligible: true, allowedArticlePathPrefix: "/usao-sdfl/" },
     { id: "miami-dade-news", lane: "miami-news", url: "https://www.miamidade.gov/global/rss-news.page", requiresKey: false, format: "rss", sourceName: "Miami-Dade County" },
     { id: "mia-airport-news", lane: "miami-news", url: "https://news.miami-airport.com/tagfeed/en-us/tags/airport%2Clatest__news", requiresKey: false, format: "rss", sourceName: "Miami International Airport" },
   ];
-  const arcGisBase = "https://services.arcgis.com/3wFbqsFPLeKqOlIK/ArcGIS/rest/services/Road_Closures/FeatureServer";
-  ["closures", "crashes", "brush-fires", "other-incidents"].forEach((label, layer) => result.push({ id: `fhp-miami-${label}`, lane: "miami-news", url: `${arcGisBase}/${layer}/query?where=COUNTY%3D%27MIAMI-DADE%27&outFields=*&returnGeometry=false&f=json`, requiresKey: false, sourceName: "Florida Highway Patrol / FL511" }));
-  if (env.NY511_FEED_URL && env.NY511_API_KEY) result.push({ id: "ny511", lane: "ny-news", url: env.NY511_FEED_URL, requiresKey: true, key: env.NY511_API_KEY });
-  if (env.FL511_FEED_URL) result.push({ id: "fl511", lane: "miami-news", url: env.FL511_FEED_URL, requiresKey: false });
+  if (env.CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC === "true") {
+    result.push({ id: "notify-nyc", lane: "ny-news", url: "https://feeds.everbridge.net/feeds/453003085617722/rss/rss.xml", requiresKey: false, format: "rss", sourceName: "Notify NYC" });
+    const arcGisBase = "https://services.arcgis.com/3wFbqsFPLeKqOlIK/ArcGIS/rest/services/Road_Closures/FeatureServer";
+    ["closures", "crashes", "brush-fires", "other-incidents"].forEach((label, layer) => result.push({ id: `fhp-miami-${label}`, lane: "miami-news", url: `${arcGisBase}/${layer}/query?where=COUNTY%3D%27MIAMI-DADE%27&outFields=*&returnGeometry=false&f=json`, requiresKey: false, sourceName: "Florida Highway Patrol / FL511" }));
+    if (env.NY511_FEED_URL && env.NY511_API_KEY) result.push({ id: "ny511", lane: "ny-news", url: env.NY511_FEED_URL, requiresKey: true, key: env.NY511_API_KEY });
+    if (env.FL511_FEED_URL) result.push({ id: "fl511", lane: "miami-news", url: env.FL511_FEED_URL, requiresKey: false });
+  }
   if (env.MIAMI_NEWS_FEED_URL) result.push({ id: "miami-generic", lane: "miami-news", url: env.MIAMI_NEWS_FEED_URL, requiresKey: false });
   if (env.NY_NEWS_FEED_URL) result.push({ id: "ny-generic", lane: "ny-news", url: env.NY_NEWS_FEED_URL, requiresKey: false });
   return result;
+}
+
+function defaultOfficialFeedTextFallback(source: { id: string; url: string }): Promise<string | null> {
+  const allowedIds = new Set(["fbi-ny", "fbi-miami", "doj-sdny", "doj-sdfl"]);
+  if (!allowedIds.has(source.id)) return Promise.resolve(null);
+  let url: URL;
+  try { url = new URL(source.url); } catch { return Promise.resolve(null); }
+  const allowed = (url.hostname === "www.fbi.gov" && /^\/feeds\/(?:new-york|miami)-news\/rss\.xml$/.test(url.pathname))
+    || (url.hostname === "www.justice.gov" && url.pathname === "/news/rss");
+  if (!allowed || url.protocol !== "https:") return Promise.resolve(null);
+
+  return new Promise((resolve, reject) => {
+    execFile("curl", [
+      "--fail",
+      "--silent",
+      "--show-error",
+      "--location",
+      "--max-time", "20",
+      "--max-filesize", "2500000",
+      "--user-agent", "Mozilla/5.0 (compatible; RobertLocalNews/1.0; +https://robertwebsites.com)",
+      url.toString(),
+    ], { encoding: "utf8", maxBuffer: 2_600_000, timeout: 25_000 }, (error, stdout) => {
+      if (error) reject(error);
+      else resolve(stdout || null);
+    });
+  });
+}
+
+function isHotNewsEvent(raw: ClipperLocalNewsRawEvent, now: string): boolean {
+  const event = normalizeClipperLocalNewsEvent(raw, now);
+  if (event.section === "traffic") return false;
+  if (event.topicTag || event.section === "public_safety" || event.section === "breaking") return true;
+  return event.risk === "critical" || (event.section === "weather" && event.risk === "high");
 }
 
 function extractEvents(payload: unknown): ClipperLocalNewsRawEvent[] {
@@ -1042,20 +1081,67 @@ function sourceArticleMatchesConnector(link: string, source: SourceDefinition): 
 
 function rssEvents(xml: string, source: SourceDefinition, now = isoNow()): ClipperLocalNewsRawEvent[] {
   const nowMs = new Date(now).getTime();
+  const staleMs = source.sensitiveEligible ? SENSITIVE_OFFICIAL_RSS_STALE_MS : RSS_STALE_MS;
   return [...xml.matchAll(/<item(?:\s[^>]*)?>([\s\S]*?)<\/item>/gi)].slice(0, MAX_BATCH_SIZE).flatMap((match) => {
     const item = match[1];
     const title = rssTag(item, "title") || "Official local update";
     const description = rssTag(item, "description");
-    const link = rssTag(item, "link") || source.url;
+    const guid = rssTag(item, "guid");
+    const link = rssTag(item, "link") || guid || source.url;
     if (!sourceArticleMatchesConnector(link, source)) return [];
-    const guid = rssTag(item, "guid") || link || digest(`${title}|${description}`);
+    const sourceEventId = guid || link || digest(`${title}|${description}`);
     const media = rssMedia(item);
     const published = rssTag(item, "pubDate") || rssTag(item, "dc:date");
     const publishedDate = published ? new Date(published) : null;
     const publishedMs = publishedDate?.getTime();
-    if (publishedMs && Number.isFinite(publishedMs) && (nowMs - publishedMs > RSS_STALE_MS || publishedMs - nowMs > RSS_FUTURE_SKEW_MS)) return [];
-    return [attachVerifiedProvenance({ sourceEventId: guid, source: source.sourceName || source.id, sourceUrl: safeUrl(link, source.url), lane: source.lane, title, description, eventType: rssTag(item, "category") || title, effective: publishedDate && Number.isFinite(publishedDate.getTime()) ? publishedDate.toISOString() : undefined, ...(media ? { mediaUrl: safeUrl(media.url, ""), mediaType: media.type } : {}) }, source, now)];
+    if (publishedMs && Number.isFinite(publishedMs) && (nowMs - publishedMs > staleMs || publishedMs - nowMs > RSS_FUTURE_SKEW_MS)) return [];
+    return [attachVerifiedProvenance({ sourceEventId, source: source.sourceName || source.id, sourceUrl: safeUrl(link, source.url), lane: source.lane, title, description, eventType: rssTag(item, "category") || title, effective: publishedDate && Number.isFinite(publishedDate.getTime()) ? publishedDate.toISOString() : undefined, ...(media ? { mediaUrl: safeUrl(media.url, ""), mediaType: media.type } : {}) }, source, now)];
   });
+}
+
+function canonicalFetchedStoryKey(raw: ClipperLocalNewsRawEvent, now: string): string {
+  const event = normalizeClipperLocalNewsEvent(raw, now);
+  const numberWords: Record<string, string> = {
+    one: "1", two: "2", three: "3", four: "4", five: "5", six: "6", seven: "7", eight: "8", nine: "9", ten: "10",
+    eleven: "11", twelve: "12", thirteen: "13", fourteen: "14", fifteen: "15", sixteen: "16", seventeen: "17", eighteen: "18", nineteen: "19", twenty: "20",
+  };
+  const titleKey = event.title
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty)\b/g, (match) => numberWords[match] || match)
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (!titleKey) return `${event.lane}|${event.source.toLowerCase()}|${event.sourceEventId.toLowerCase()}`;
+  return `${event.lane}|${titleKey}`;
+}
+
+function fetchedStoryPreference(raw: ClipperLocalNewsRawEvent, now: string): number {
+  const event = normalizeClipperLocalNewsEvent(raw, now);
+  let score = event.editorialPriority + event.qualityScore;
+  try {
+    const url = new URL(event.sourceUrl);
+    if (url.hostname === "www.justice.gov" && url.pathname.startsWith("/usao-")) score += 25;
+    if (url.hostname === "www.fbi.gov" && url.pathname.includes("/field-offices/")) score += 15;
+    if (!url.pathname.includes("/feeds/")) score += 10;
+  } catch {
+    score -= 10;
+  }
+  if (event.mediaType === "video") score += 20;
+  else if (event.mediaType === "image") score += 8;
+  return score;
+}
+
+function dedupeFetchedStoryEvents(events: ClipperLocalNewsRawEvent[], now = isoNow()): ClipperLocalNewsRawEvent[] {
+  const byKey = new Map<string, { event: ClipperLocalNewsRawEvent; score: number; index: number }>();
+  events.forEach((event, index) => {
+    const key = canonicalFetchedStoryKey(event, now);
+    const score = fetchedStoryPreference(event, now);
+    const current = byKey.get(key);
+    if (!current || score > current.score) byKey.set(key, { event, score, index });
+  });
+  return [...byKey.values()].sort((a, b) => a.index - b.index).map((entry) => entry.event);
 }
 
 function englishTranslation(value: unknown): string {
@@ -1211,18 +1297,30 @@ export async function runClipperLocalNewsCycle(input: ClipperLocalNewsCycleInput
   if (!events) {
     events = [];
     const fetcher = input.fetch || globalThis.fetch;
+    const officialFeedTextFallback = input.officialFeedTextFallback || defaultOfficialFeedTextFallback;
+    const hotOnly = env.CLIPPERS_LOCAL_NEWS_HOT_ONLY !== "false";
     for (const source of sources(env)) {
       if (source.requiresKey && !source.key) { failedSources.push({ id: source.id, error: "missing_api_key" }); continue; }
       try {
         const requestUrl = new URL(source.url);
         if (source.id === "ny511" && source.key) requestUrl.searchParams.set("key", source.key);
-        const response = await fetcher(requestUrl, { headers: { Accept: source.format === "rss" ? "application/rss+xml, application/xml, text/xml" : source.format === "miami-transit-bootstrap" ? "text/html" : "application/geo+json, application/json", "User-Agent": "asistente-local-news/1.0" } });
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        let response: Response | null = null;
+        let officialFeedText: string | null = null;
+        try {
+          response = await fetcher(requestUrl, { headers: { Accept: source.format === "rss" ? "application/rss+xml, application/xml, text/xml" : source.format === "miami-transit-bootstrap" ? "text/html" : "application/geo+json, application/json", "User-Agent": "asistente-local-news/1.0" } });
+        } catch (error) {
+          if (source.format === "rss") officialFeedText = await officialFeedTextFallback(source);
+          if (!officialFeedText) throw error;
+        }
+        if (response && !response.ok) {
+          if (source.format === "rss") officialFeedText = await officialFeedTextFallback(source);
+          if (!officialFeedText) throw new Error(`HTTP ${response.status}`);
+        }
         let extracted: ClipperLocalNewsRawEvent[];
-        if (source.format === "rss") extracted = rssEvents(await response.text(), source, now);
-        else if (source.format === "mta-json") extracted = mtaAlertEvents(await response.json(), source, now);
+        if (source.format === "rss") extracted = rssEvents(officialFeedText || await response!.text(), source, now);
+        else if (source.format === "mta-json") extracted = mtaAlertEvents(await response!.json(), source, now);
         else if (source.format === "miami-transit-bootstrap") {
-          const page = await response.text();
+          const page = await response!.text();
           const apiKey = page.match(/<service-updates\b[^>]*\bapikey=["']([^"']+)["']/i)?.[1];
           if (!apiKey) throw new Error("public_transit_key_not_found");
           const transitResponse = await fetcher("https://www.miamidade.gov/apps/dtpw/transitapps/api/serviceupdates", {
@@ -1230,10 +1328,12 @@ export async function runClipperLocalNewsCycle(input: ClipperLocalNewsCycleInput
           });
           if (!transitResponse.ok) throw new Error(`HTTP ${transitResponse.status}`);
           extracted = miamiTransitEvents(await transitResponse.json(), source, now);
-        } else extracted = sourceEvents(await response.json(), source, now);
+        } else extracted = sourceEvents(await response!.json(), source, now);
+        if (hotOnly) extracted = extracted.filter((event) => isHotNewsEvent(event, now));
         events.push(...extracted); fetchedSources += 1;
       } catch (error) { failedSources.push({ id: source.id, error: error instanceof Error ? error.message : "fetch_failed" }); }
     }
+    events = dedupeFetchedStoryEvents(events, now);
   }
   const controlledSnapshot = input.events !== undefined && input.resolveMissing === true;
   const result = await ingestClipperLocalNewsEvents({ ...input, workspaceDir: dir, now, events, resolveMissing: controlledSnapshot, snapshotLanes: controlledSnapshot ? input.snapshotLanes : undefined });
@@ -1337,14 +1437,16 @@ export async function getClipperLocalNewsStatus(options: ClipperLocalNewsOptions
     connectors: connectorCatalog(env),
     coverage: {
       weather: "nws_public",
-      miamiTraffic: env.FL511_FEED_URL || env.MIAMI_NEWS_FEED_URL ? "configured_feed" : "public_incident_feed",
-      nyTraffic: env.NY511_FEED_URL && env.NY511_API_KEY ? "ny511_configured" : "notify_nyc_public",
+      miamiTraffic: env.CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC === "true" ? env.FL511_FEED_URL || env.MIAMI_NEWS_FEED_URL ? "configured_feed" : "public_incident_feed" : "not_configured",
+      nyTraffic: env.CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC === "true" ? env.NY511_FEED_URL && env.NY511_API_KEY ? "ny511_configured" : "notify_nyc_public" : "not_configured",
       roadCoverageComplete: false,
-      note: "Notify NYC and Miami-Dade public incident feeds provide official updates but do not guarantee complete road coverage. NY511 remains optional and requires explicit authorized configuration.",
+      note: env.CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC === "true"
+        ? "Traffic feeds are explicitly enabled for a dedicated campaign; they do not guarantee complete road coverage."
+        : "Traffic feeds are intentionally disabled. The newsroom prioritizes verified crime, public-safety, immigration, and critical-weather reporting.",
     },
     artifacts,
     guardrails: ["Queue state never proves or claims real publication.", "Every social post is bilingual (Spanish and English) in one publication; verified stories are never duplicated merely to hit a quota.", "Only official/public or authorized sources with unanimous committee approval can become auto-eligible; commercial news articles are never scraped.", "Violent crime, kidnapping, and immigration topics receive editorial priority boosts, but never bypass source verification or the safety committee.", "Routine traffic is excluded from automatic Metricool delivery by default; set CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC=true only for an explicit traffic campaign.", "Revenue progress, cost, reach, and engagement include only explicitly recorded observations; no money or performance is inferred.", "Unresolved accusations, identifiable minors, victim private addresses, graphic violence, contradictory information, unconfirmed claims, and unverifiable critical evacuations receive automatic final quarantine/reject decisions, not a human-review wait.", "Each connected city/platform account targets 10 verified posts daily and can rise to 12 or 14 only from observed performance; routine filler and engagement bait remain blocked.", "Cadence overflow remains automatic but cannot publish before its notBefore timestamp.", "Secrets are read from environment variables and never persisted."],
   };
 }
 
-export const __clipperLocalNewsInternals = { riskFor, sectionFor, topicTagFor, editorialUrgencyFor, editorialPriorityFor, sources, connectorCatalog, truncate, xWeightedLength, extractEvents, rssEvents, sourceArticleMatchesConnector, sourceEvents, mtaAlertEvents, miamiTransitEvents, scheduleMinutes };
+export const __clipperLocalNewsInternals = { riskFor, sectionFor, topicTagFor, editorialUrgencyFor, editorialPriorityFor, sources, connectorCatalog, truncate, xWeightedLength, extractEvents, rssEvents, dedupeFetchedStoryEvents, sourceArticleMatchesConnector, sourceEvents, mtaAlertEvents, miamiTransitEvents, scheduleMinutes };

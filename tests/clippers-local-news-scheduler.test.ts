@@ -12,8 +12,10 @@ function fakeTimer() {
 
 test("server startup wires the local-news scheduler alongside existing schedulers", async () => {
   const source = await readFile(new URL("../server/index.ts", import.meta.url), "utf8");
-  assert.match(source, /import \{ startClipperLocalNewsScheduler \} from "\.\/clippers-local-news-scheduler";/);
-  assert.match(source, /startAppQaScheduler\(\);\s+startClipperLocalNewsScheduler\(\);/);
+  assert.match(source, /import\("\.\/clippers-local-news-scheduler"\)/);
+  assert.match(source, /localNews\.startClipperLocalNewsScheduler\(\);/);
+  assert.match(source, /metricoolAnalytics\.startMetricoolAnalyticsScheduler\(\);/);
+  assert.match(source, /if \(shouldStartResourceIntensiveSchedulers\(\)\) \{\s+void import\("\.\/local-news-growth-scout"\)/);
 });
 
 test("uses a five-minute default and clamps configured intervals to the safe two-to-five-minute range", () => {
@@ -104,7 +106,7 @@ test("timeout is isolated and retains the overlap lock until work actually settl
   const scheduler = createClipperLocalNewsScheduler({
     env: { CLIPPERS_LOCAL_NEWS_TIMEOUT_MS: "1000" },
     bootstrap: async () => ({} as never),
-    runCycle: async () => { await cycle; return {} as never; },
+    runCycle: async (options) => { assert.equal(typeof options.fetch, "function"); await cycle; return {} as never; },
     setTimeout: (callback) => { fireTimeout = callback; return fakeTimer(); },
     clearTimeout: () => {},
     logError: (message) => errors.push(message),
@@ -119,6 +121,37 @@ test("timeout is isolated and retains the overlap lock until work actually settl
   assert.equal(errors.length, 1);
   release?.();
   await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(scheduler.status().running, false);
+});
+
+test("timeout aborts outstanding source requests so a hung network call cannot lock every future cycle", async () => {
+  let fireTimeout: (() => void) | undefined;
+  let fetchAborted = false;
+  const scheduler = createClipperLocalNewsScheduler({
+    env: { CLIPPERS_LOCAL_NEWS_TIMEOUT_MS: "1000" },
+    bootstrap: async () => ({} as never),
+    runCycle: async (options) => {
+      await options.fetch?.("https://official.example/news");
+      return {} as never;
+    },
+    fetch: async (_input, init) => new Promise<Response>((_resolve, reject) => {
+      const rejectAborted = () => {
+        fetchAborted = true;
+        reject(new Error("aborted"));
+      };
+      if (init?.signal?.aborted) rejectAborted();
+      else init?.signal?.addEventListener("abort", rejectAborted, { once: true });
+    }),
+    setTimeout: (callback) => { fireTimeout = callback; return fakeTimer(); },
+    clearTimeout: () => {},
+    logError: () => {},
+  });
+
+  const first = scheduler.runNow();
+  fireTimeout?.();
+  assert.equal(await first, "timed_out");
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(fetchAborted, true);
   assert.equal(scheduler.status().running, false);
 });
 
