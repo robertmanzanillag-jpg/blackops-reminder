@@ -283,7 +283,7 @@ test("NWS sources target Miami and NYC coordinates instead of statewide alerts",
   assert.ok(configured.every((source) => !/[?&]area=(FL|NY)/.test(source.url)));
 });
 
-test("status exposes built-in official sources and fetches optional sources only when configured", async (t) => {
+test("hot-news mode fetches official public-safety sources and leaves traffic connectors disabled by default", async (t) => {
   const workspaceDir = await fixture(t);
   const requested: string[] = [];
   const fetcher = async (url: string | URL | Request) => {
@@ -294,27 +294,60 @@ test("status exposes built-in official sources and fetches optional sources only
     return new Response(JSON.stringify({ features: [] }), { status: 200, headers: { "content-type": "application/json" } });
   };
   const cycle = await runClipperLocalNewsCycle({ workspaceDir, now: "2026-07-21T12:00:00Z", env: {}, fetch: fetcher as typeof fetch });
-  assert.equal(requested.length, 13);
-  assert.ok(requested.some((url) => url === "https://feeds.everbridge.net/feeds/453003085617722/rss/rss.xml"));
+  assert.equal(requested.length, 8);
+  assert.ok(requested.every((url) => url !== "https://feeds.everbridge.net/feeds/453003085617722/rss/rss.xml"));
   assert.ok(requested.every((url) => !url.includes("subway-alerts.json")));
   assert.ok(requested.some((url) => url === "https://www.fbi.gov/feeds/new-york-news/rss.xml"));
   assert.ok(requested.some((url) => url === "https://www.fbi.gov/feeds/miami-news/rss.xml"));
-  assert.ok(requested.some((url) => url.includes("justice.gov/feeds/justice-news.xml")));
+  assert.ok(requested.some((url) => url.includes("justice.gov/news/rss?field_component=1981")));
+  assert.ok(requested.some((url) => url.includes("justice.gov/news/rss?field_component=1771")));
   assert.ok(requested.some((url) => url === "https://www.miamidade.gov/global/rss-news.page"));
   assert.ok(requested.every((url) => !url.includes("api/serviceupdates")));
   assert.ok(requested.some((url) => url.includes("news.miami-airport.com/tagfeed")));
-  assert.equal(requested.filter((url) => url.includes("Road_Closures/FeatureServer")).length, 4);
+  assert.equal(requested.filter((url) => url.includes("Road_Closures/FeatureServer")).length, 0);
   const ny511 = cycle.status.connectors.find((connector) => connector.id === "ny511");
   const fl511 = cycle.status.connectors.find((connector) => connector.id === "fl511");
   assert.deepEqual({ configured: ny511?.configured, requiresKey: ny511?.requiresKey }, { configured: false, requiresKey: true });
   assert.equal(fl511?.configured, false);
-  assert.equal(cycle.status.connectors.find((connector) => connector.id === "notify-nyc")?.configured, true);
+  assert.equal(cycle.status.connectors.find((connector) => connector.id === "notify-nyc")?.configured, false);
   assert.equal(cycle.status.connectors.find((connector) => connector.id === "mta-subway-alerts"), undefined);
   assert.equal(cycle.status.connectors.find((connector) => connector.id === "miami-dade-transit"), undefined);
   assert.equal(cycle.status.connectors.find((connector) => connector.id === "mia-airport-news")?.configured, true);
-  assert.equal(cycle.status.connectors.find((connector) => connector.id === "fhp-miami-dade")?.configured, true);
-  assert.equal(cycle.status.coverage.miamiTraffic, "public_incident_feed");
-  assert.equal(cycle.status.coverage.nyTraffic, "notify_nyc_public");
+  assert.equal(cycle.status.connectors.find((connector) => connector.id === "fhp-miami-dade")?.configured, false);
+  assert.equal(cycle.status.coverage.miamiTraffic, "not_configured");
+  assert.equal(cycle.status.coverage.nyTraffic, "not_configured");
+});
+
+test("real-cycle intake recovers blocked official feeds and keeps only high-interest non-traffic news", async (t) => {
+  const workspaceDir = await fixture(t);
+  const emptyRss = "<rss><channel></channel></rss>";
+  const fallbackCalls: string[] = [];
+  const result = await runClipperLocalNewsCycle({
+    workspaceDir,
+    now: "2026-08-24T12:00:00Z",
+    env: { NODE_ENV: "test", CLIPPERS_LOCAL_NEWS_LOCAL_TRANSLATION: "false" },
+    fetch: (async (input) => {
+      const url = String(input);
+      if (url.includes("fbi.gov/feeds/")) return new Response("blocked", { status: 403 });
+      if (url.includes("field_component=1981")) return new Response(`<rss><channel><item><guid>sdny-hot</guid><title>Queens murder defendant sentenced to federal prison</title><description>The defendant was sentenced after a violent robbery case.</description><link>https://www.justice.gov/usao-sdny/pr/queens-murder-defendant-sentenced</link><pubDate>Thu, 20 Aug 2026 14:00:00 GMT</pubDate></item></channel></rss>`);
+      if (url.includes("field_component=1771")) return new Response(`<rss><channel><item><guid>sdfl-hot</guid><title>Ten defendants sentenced in South Florida cocaine trafficking conspiracy</title><description>Federal prosecutors announced prison sentences in a cartel-linked cocaine case.</description><link>https://www.justice.gov/usao-sdfl/pr/ten-defendants-sentenced-south-florida-cocaine-trafficking-conspiracy</link><pubDate>Thu, 20 Aug 2026 14:00:00 GMT</pubDate></item></channel></rss>`);
+      if (url.includes("weather.gov")) return new Response(JSON.stringify({ features: [{ properties: { id: "routine-weather", headline: "Routine weather outlook", description: "Normal conditions.", areaDesc: "Miami", severity: "Minor" } }] }), { headers: { "content-type": "application/json" } });
+      return new Response(emptyRss);
+    }) as typeof fetch,
+    officialFeedTextFallback: async (source) => {
+      fallbackCalls.push(source.id);
+      if (source.id !== "fbi-miami") return emptyRss;
+      return `<rss><channel><item><guid>fbi-miami-hot</guid><title>Miami resident charged in kidnapping investigation</title><description>The charge is an allegation and the case remains pending.</description><pubDate>Wed, 19 Aug 2026 14:00:00 GMT</pubDate></item></channel></rss>`;
+    },
+  });
+
+  assert.deepEqual(fallbackCalls.sort(), ["fbi-miami", "fbi-ny"]);
+  assert.equal(result.failedSources.length, 0);
+  assert.equal(result.created, 3);
+  assert.equal(result.status.events.total, 3);
+  assert.equal(result.status.editorial.sections.traffic.events, 0);
+  assert.equal(result.status.editorial.sections.public_safety.events, 3);
+  assert.ok(result.status.queue.autoEligible >= 3);
 });
 
 test("professional newsroom classifies desks and produces attributed Facebook text without media", async (t) => {
@@ -470,7 +503,7 @@ test("updates, corrections and resolved notices are tracked as newsroom revision
 });
 
 test("FHP ArcGIS mapper uses documented fields and drops stale Miami-Dade incidents", () => {
-  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "fhp-miami-closures")!;
+  const source = __clipperLocalNewsInternals.sources({ CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC: "true" }).find((item) => item.id === "fhp-miami-closures")!;
   const mapped = __clipperLocalNewsInternals.sourceEvents({ features: [
     { attributes: { INCIDENTID: "fresh-1", DATESTR: "07/21/2026", TIMESTR: "07:30", TYPEEVENT: "Road Closure", COUNTY: "MIAMI-DADE", LOCATION: "I-95 NB", REMARKS: "Two lanes closed" } },
     { attributes: { INCIDENTID: "wrong-county-1", DATESTR: "07/21/2026", TIMESTR: "07:30", TYPEEVENT: "Road Closure", COUNTY: "BROWARD", LOCATION: "I-95 NB", REMARKS: "Outside Miami-Dade" } },
@@ -481,7 +514,7 @@ test("FHP ArcGIS mapper uses documented fields and drops stale Miami-Dade incide
 });
 
 test("official RSS adapters normalize attributed XML items without credentials and skip stale/future feed entries", () => {
-  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "notify-nyc")!;
+  const source = __clipperLocalNewsInternals.sources({ CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC: "true" }).find((item) => item.id === "notify-nyc")!;
   const items = __clipperLocalNewsInternals.rssEvents(`<?xml version="1.0"?><rss><channel>
     <item><guid>alert-1</guid><title>Traffic &amp; Transit</title><description><![CDATA[Road closed <b>temporarily</b>.]]></description><link>https://notify.nyc/alert-1</link><pubDate>Tue, 21 Jul 2026 12:00:00 GMT</pubDate></item>
     <item><guid>old-alert</guid><title>Old closure</title><description>Old</description><link>https://notify.nyc/old</link><pubDate>Fri, 17 Jul 2026 12:00:00 GMT</pubDate></item>
@@ -503,7 +536,7 @@ test("DOJ district connectors reject stories from other jurisdictions", () => {
 });
 
 test("official RSS media is kept only when the feed exposes a public video or image", () => {
-  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "notify-nyc")!;
+  const source = __clipperLocalNewsInternals.sources({ CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC: "true" }).find((item) => item.id === "notify-nyc")!;
   const items = __clipperLocalNewsInternals.rssEvents(`<rss><channel>
     <item><guid>video-alert</guid><title>Major closure update</title><description>Video details from the official source.</description><link>https://notify.nyc/video-alert</link><enclosure url="https://notify.nyc/media/closure.mp4" type="video/mp4"/><pubDate>Tue, 21 Jul 2026 12:00:00 GMT</pubDate></item>
     <item><guid>image-alert</guid><title>Image update</title><description>Photo details from the official source.</description><link>https://notify.nyc/image-alert</link><media:content url="https://notify.nyc/media/update.jpg" type="image/jpeg"/><pubDate>Tue, 21 Jul 2026 12:01:00 GMT</pubDate></item>
@@ -600,7 +633,16 @@ test("NY511 sends its key only as an ephemeral query parameter and never persist
     requested.push(new URL(String(url)));
     return new Response(JSON.stringify({ events: [] }), { status: 200, headers: { "content-type": "application/json" } });
   };
-  const result = await runClipperLocalNewsCycle({ workspaceDir, now: "2026-07-21T12:00:00Z", env: { NY511_FEED_URL: "https://example.test/incidents", NY511_API_KEY: secret }, fetch: fetcher as typeof fetch });
+  const result = await runClipperLocalNewsCycle({
+    workspaceDir,
+    now: "2026-07-21T12:00:00Z",
+    env: {
+      CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC: "true",
+      NY511_FEED_URL: "https://example.test/incidents",
+      NY511_API_KEY: secret,
+    },
+    fetch: fetcher as typeof fetch,
+  });
   assert.equal(requested.find((url) => url.hostname === "example.test")?.searchParams.get("key"), secret);
   for (const artifact of Object.values(result.status.artifacts)) assert.doesNotMatch(await readFile(artifact, "utf8"), new RegExp(secret));
 });
@@ -697,6 +739,118 @@ test("official DOJ accusation uses the sensitive connector, public-safety priori
   assert.ok(queue.every((item: any) => /^[a-f0-9]{64}$/.test(item.claimIdentityHash) && /^[a-f0-9]{64}$/.test(item.canonicalEventIdentity)));
   assert.match(queue.find((item: any) => item.platform === "facebook").copy, /se presume inocente/);
   assert.match(queue.find((item: any) => item.platform === "x").copy, /ES: Se presume inocente\. EN: Presumed innocent/);
+});
+
+test("official RSS without link uses guid as article URL instead of the feed URL", () => {
+  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "fbi-ny")!;
+  const fetched = __clipperLocalNewsInternals.rssEvents(`<?xml version="1.0"?><rss><channel><item>
+    <guid>https://www.fbi.gov/contact-us/field-offices/newyork/news/bronx-man-charged-with-federal-hate-crimes</guid>
+    <title>Bronx Man Charged with Federal Hate Crimes for Attack at Manhattan Synagogue</title>
+    <description>Official federal charge update from New York.</description>
+    <pubDate>Tue, 18 Aug 2026 09:30:00 GMT</pubDate>
+  </item></channel></rss>`, source, "2026-08-20T12:00:00Z");
+  assert.equal(fetched.length, 1);
+  assert.equal(fetched[0].sourceUrl, "https://www.fbi.gov/contact-us/field-offices/newyork/news/bronx-man-charged-with-federal-hate-crimes");
+  assert.equal(fetched[0].sourceEventId, fetched[0].sourceUrl);
+});
+
+test("fetched official stories dedupe duplicate FBI and DOJ syndication before queuing", async (t) => {
+  const workspaceDir = await fixture(t);
+  const fbi = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "fbi-ny")!;
+  const doj = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "doj-sdny")!;
+  const now = "2026-08-20T12:00:00Z";
+  const fbiEvent = __clipperLocalNewsInternals.rssEvents(`<?xml version="1.0"?><rss><channel><item>
+    <guid>https://www.fbi.gov/contact-us/field-offices/newyork/news/bronx-man-charged-with-federal-hate-crimes-for-attack-at-manhattan-synagogue</guid>
+    <title>Bronx Man Charged with Federal Hate Crimes for Attack at Manhattan Synagogue</title>
+    <description>Official FBI update.</description>
+    <pubDate>Tue, 18 Aug 2026 09:30:00 GMT</pubDate>
+  </item></channel></rss>`, fbi, now);
+  const dojEvent = __clipperLocalNewsInternals.rssEvents(`<?xml version="1.0"?><rss><channel><item>
+    <guid>https://www.justice.gov/usao-sdny/pr/bronx-man-charged-federal-hate-crimes-attack-manhattan-synagogue</guid>
+    <title>Bronx Man Charged With Federal Hate Crimes For Attack At Manhattan Synagogue</title>
+    <description>Official DOJ update with legal details.</description>
+    <link>https://www.justice.gov/usao-sdny/pr/bronx-man-charged-federal-hate-crimes-attack-manhattan-synagogue</link>
+    <pubDate>Tue, 18 Aug 2026 09:30:00 GMT</pubDate>
+  </item></channel></rss>`, doj, now);
+  const deduped = __clipperLocalNewsInternals.dedupeFetchedStoryEvents([...fbiEvent, ...dojEvent], now);
+  assert.equal(deduped.length, 1);
+  assert.match(deduped[0].sourceUrl, /justice\.gov\/usao-sdny/);
+
+  await ingestClipperLocalNewsEvents({ workspaceDir, now, events: deduped });
+  const state = JSON.parse(await readFile(path.join(workspaceDir, "state.json"), "utf8"));
+  const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
+  assert.equal(state.events.length, 1);
+  assert.equal(queue.length, 2);
+});
+
+test("fetched official stories dedupe numeric and written-number headline variants", () => {
+  const fbi = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "fbi-ny")!;
+  const doj = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "doj-sdny")!;
+  const now = "2026-08-20T12:00:00Z";
+  const written = __clipperLocalNewsInternals.rssEvents(`<?xml version="1.0"?><rss><channel><item>
+    <guid>https://www.fbi.gov/contact-us/field-offices/newyork/news/seventeen-iranians-charged-with-conducting-massive-cyber-theft-campaign</guid>
+    <title>Seventeen Iranians Charged with Conducting Massive Cyber Theft Campaign</title>
+    <description>Official FBI update.</description>
+    <pubDate>Tue, 18 Aug 2026 09:30:00 GMT</pubDate>
+  </item></channel></rss>`, fbi, now);
+  const numeric = __clipperLocalNewsInternals.rssEvents(`<?xml version="1.0"?><rss><channel><item>
+    <guid>https://www.justice.gov/usao-sdny/pr/17-iranians-charged-conducting-massive-cyber-theft-campaign</guid>
+    <title>17 Iranians Charged With Conducting Massive Cyber Theft Campaign</title>
+    <description>Official DOJ update.</description>
+    <link>https://www.justice.gov/usao-sdny/pr/17-iranians-charged-conducting-massive-cyber-theft-campaign</link>
+    <pubDate>Tue, 18 Aug 2026 09:30:00 GMT</pubDate>
+  </item></channel></rss>`, doj, now);
+  const deduped = __clipperLocalNewsInternals.dedupeFetchedStoryEvents([...written, ...numeric], now);
+  assert.equal(deduped.length, 1);
+  assert.match(deduped[0].sourceUrl, /justice\.gov\/usao-sdny/);
+});
+
+test("fetched alerts preserve same-title events in different locations", () => {
+  const now = "2026-08-24T12:00:00Z";
+  const alerts = [
+    {
+      sourceEventId: "nws-flood-bronx",
+      source: "National Weather Service",
+      sourceUrl: "https://api.weather.gov/alerts/urn:oid:bronx",
+      lane: "ny-news" as const,
+      title: "Flood Warning",
+      description: "Flooding is expected in low-lying areas.",
+      location: "Bronx County",
+      eventType: "Flood Warning",
+      severity: "Severe",
+      urgency: "Immediate",
+    },
+    {
+      sourceEventId: "nws-flood-queens",
+      source: "National Weather Service",
+      sourceUrl: "https://api.weather.gov/alerts/urn:oid:queens",
+      lane: "ny-news" as const,
+      title: "Flood Warning",
+      description: "Flooding is expected in low-lying areas.",
+      location: "Queens County",
+      eventType: "Flood Warning",
+      severity: "Severe",
+      urgency: "Immediate",
+    },
+  ];
+  const deduped = __clipperLocalNewsInternals.dedupeFetchedStoryEvents(alerts, now);
+  assert.equal(deduped.length, 2);
+  assert.deepEqual(deduped.map((item) => item.location), ["Bronx County", "Queens County"]);
+});
+
+test("traffic connectors stay disabled by default and can be explicitly restored", () => {
+  const defaultSources = __clipperLocalNewsInternals.sources({});
+  const defaultConnectors = __clipperLocalNewsInternals.connectorCatalog({});
+  assert.equal(defaultSources.some((item) => item.id === "notify-nyc" || item.id.startsWith("fhp-miami-")), false);
+  assert.equal(defaultConnectors.find((item) => item.id === "notify-nyc")?.configured, false);
+  assert.equal(defaultConnectors.find((item) => item.id === "fhp-miami-dade")?.configured, false);
+
+  const trafficSources = __clipperLocalNewsInternals.sources({ CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC: "true" });
+  const trafficConnectors = __clipperLocalNewsInternals.connectorCatalog({ CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC: "true" });
+  assert.equal(trafficSources.some((item) => item.id === "notify-nyc"), true);
+  assert.equal(trafficSources.some((item) => item.id.startsWith("fhp-miami-")), true);
+  assert.equal(trafficConnectors.find((item) => item.id === "notify-nyc")?.configured, true);
+  assert.equal(trafficConnectors.find((item) => item.id === "fhp-miami-dade")?.configured, true);
 });
 
 

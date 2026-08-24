@@ -86,6 +86,42 @@ test("falls back to the official Metricool MCP when the undocumented analytics e
   assert.equal(result.metricsRecorded, 1);
 });
 
+test("splits an oversized Metricool MCP analytics range and merges the smaller responses", async () => {
+  const workspaceDir = await mkdtemp(path.join(tmpdir(), "metricool-analytics-split-"));
+  await writeFile(path.join(workspaceDir, "metricool-delivery-ledger.json"), JSON.stringify({ entries: [
+    { queueItemId: "queue-left", eventId: "event-left", lane: "miami-news", platform: "facebook", blogId: "miami-1", metricoolPostId: "post-left", scheduledFor: "2026-07-25T14:00:00.000Z" },
+    { queueItemId: "queue-right", eventId: "event-right", lane: "miami-news", platform: "facebook", blogId: "miami-1", metricoolPostId: "post-right", scheduledFor: "2026-08-10T14:00:00.000Z" },
+  ] }));
+  let mcpCalls = 0;
+  const result = await syncMetricoolAnalytics({
+    workspaceDir,
+    env: { METRICOOL_USER_TOKEN: "configured-token", METRICOOL_USER_ID: "3558197" },
+    now: () => new Date("2026-08-12T15:00:00Z"),
+    fetch: async (input, init) => {
+      const url = String(input);
+      if (url.includes("simpleProfiles")) return response({ data: [{ blogId: "miami-1", label: "Miami News" }] });
+      if (url.includes("analytics/posts/facebook")) return response({ data: [] });
+      if (url === "https://ai.metricool.com/mcp") {
+        mcpCalls += 1;
+        const request = JSON.parse(String(init?.body));
+        const from = new Date(request.params.arguments.from).getTime();
+        const to = new Date(request.params.arguments.to).getTime();
+        if (to - from > 16 * 86_400_000) {
+          return response({ result: { content: [{ type: "text", text: "The result exceeds maximum allowed size. Narrow the query." }], isError: true } });
+        }
+        const postId = from < new Date("2026-07-28T00:00:00Z").getTime() ? "post-left" : "post-right";
+        const publicationDate = postId === "post-left" ? "2026-07-25T14:00:00Z" : "2026-08-10T14:00:00Z";
+        return response({ result: { content: [{ type: "text", text: JSON.stringify({ rows: [{ FBPO02: publicationDate, FBPO04: postId, FBPO11: 25 }] }) }], isError: false } });
+      }
+      return response({ data: [] });
+    },
+  });
+  assert.equal(mcpCalls, 3);
+  assert.equal(result.postsSeen, 2);
+  assert.equal(result.metricsRecorded, 2);
+  assert.doesNotMatch(result.lastError || "", /maximum allowed size|narrow the query/i);
+});
+
 test("syncs Facebook analytics for both local-news brands and deduplicates observations", async () => {
   const workspaceDir = await mkdtemp(path.join(tmpdir(), "metricool-analytics-"));
   await writeFile(path.join(workspaceDir, "metricool-delivery-ledger.json"), JSON.stringify({ entries: [
@@ -237,6 +273,6 @@ test("serializes overlapping manual and scheduled sync calls", async () => {
 
 test("server startup wires the Metricool analytics scheduler", async () => {
   const source = await readFile(new URL("../server/index.ts", import.meta.url), "utf8");
-  assert.match(source, /import \{ startMetricoolAnalyticsScheduler \} from "\.\/metricool-analytics-sync";/);
-  assert.match(source, /startClipperLocalNewsScheduler\(\);[\s\S]*?startMetricoolAnalyticsScheduler\(\);/);
+  assert.match(source, /import\("\.\/metricool-analytics-sync"\)/);
+  assert.match(source, /localNews\.startClipperLocalNewsScheduler\(\);[\s\S]*?metricoolAnalytics\.startMetricoolAnalyticsScheduler\(\);/);
 });

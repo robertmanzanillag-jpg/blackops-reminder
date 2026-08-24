@@ -411,20 +411,27 @@ app.use((req, res, next) => {
       startPromoVideoDailyScheduler();
       startCybersecurityScheduler();
       startAppQaScheduler();
+      // Publishing and analytics are revenue-critical and intentionally stay
+      // active on the small Replit deployment. The metadata growth scout is the
+      // optional memory-heavy process governed by the resource policy below.
+      void import("./clippers-local-news-scheduler").then((localNews) => {
+        localNews.startClipperLocalNewsScheduler();
+      }).catch((error) => {
+        log(`Failed to start local-news publishing scheduler: ${error instanceof Error ? error.message : String(error)}`, "scheduler");
+      });
+      void import("./metricool-analytics-sync").then((metricoolAnalytics) => {
+        metricoolAnalytics.startMetricoolAnalyticsScheduler();
+      }).catch((error) => {
+        log(`Failed to start Metricool analytics scheduler: ${error instanceof Error ? error.message : String(error)}`, "scheduler");
+      });
       if (shouldStartResourceIntensiveSchedulers()) {
-        void Promise.all([
-          import("./clippers-local-news-scheduler"),
-          import("./local-news-growth-scout"),
-          import("./metricool-analytics-sync"),
-        ]).then(([localNews, growthScout, metricoolAnalytics]) => {
-          localNews.startClipperLocalNewsScheduler();
+        void import("./local-news-growth-scout").then((growthScout) => {
           growthScout.startLocalNewsGrowthScoutScheduler();
-          metricoolAnalytics.startMetricoolAnalyticsScheduler();
         }).catch((error) => {
-          log(`Failed to start resource-intensive schedulers: ${error instanceof Error ? error.message : String(error)}`, "scheduler");
+          log(`Failed to start resource-intensive growth scout: ${error instanceof Error ? error.message : String(error)}`, "scheduler");
         });
       } else {
-        log("Resource-intensive schedulers disabled for the memory-constrained Replit deployment; dedicated/local workers remain available", "scheduler");
+        log("Resource-intensive growth scout disabled for the memory-constrained Replit deployment; news publishing and analytics remain active", "scheduler");
       }
       
       runStartupTaskDeduplication().catch(err => {

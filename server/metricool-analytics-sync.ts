@@ -380,13 +380,37 @@ async function fetchFacebookPostAnalytics(
 
   try {
     const boundedFetcher: Fetcher = (request, init) => fetcher(request, { ...init, signal });
-    const result = await callMetricoolMcpTool(boundedFetcher, token, "getAnalyticsDataByMetrics", {
-      brandId: blogId,
-      metrics: [...FACEBOOK_POST_METRIC_FIELDS],
-      from: from.replace(/Z$/, "+00:00"),
-      to: to.replace(/Z$/, "+00:00"),
-    });
-    return parseMetricoolMcpPostMetrics(result);
+    const fetchWindow = async (windowFrom: string, windowTo: string, depth = 0): Promise<ReturnType<typeof parseMetricoolPostMetrics>> => {
+      try {
+        const result = await callMetricoolMcpTool(boundedFetcher, token, "getAnalyticsDataByMetrics", {
+          brandId: blogId,
+          metrics: [...FACEBOOK_POST_METRIC_FIELDS],
+          from: windowFrom.replace(/Z$/, "+00:00"),
+          to: windowTo.replace(/Z$/, "+00:00"),
+        });
+        return parseMetricoolMcpPostMetrics(result);
+      } catch (error) {
+        const message = safeErrorMessage(error);
+        const startMs = new Date(windowFrom).getTime();
+        const endMs = new Date(windowTo).getTime();
+        const canSplit = /exceeds maximum allowed size|narrow (?:the )?query|response.{0,20}(?:too large|size)|result.{0,20}too large/i.test(message)
+          && Number.isFinite(startMs)
+          && Number.isFinite(endMs)
+          && endMs - startMs > 86_400_000
+          && depth < 8;
+        if (!canSplit) throw error;
+
+        const midpoint = new Date(startMs + Math.floor((endMs - startMs) / 2)).toISOString();
+        const left = await fetchWindow(windowFrom, midpoint, depth + 1);
+        const right = await fetchWindow(midpoint, windowTo, depth + 1);
+        const unique = new Map<string, ReturnType<typeof parseMetricoolPostMetrics>[number]>();
+        for (const metric of [...left, ...right]) {
+          unique.set(JSON.stringify(metric), metric);
+        }
+        return Array.from(unique.values());
+      }
+    };
+    return await fetchWindow(from, to);
   } catch (mcpError) {
     if (directError) throw new Error(`${safeErrorMessage(directError)}; mcp=${safeErrorMessage(mcpError)}`);
     throw mcpError;
