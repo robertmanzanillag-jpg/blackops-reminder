@@ -17,6 +17,10 @@ const fakeClient = {
   },
 };
 
+const uploadScope = "https://www.googleapis.com/auth/youtube.upload";
+const readonlyScope = "https://www.googleapis.com/auth/youtube.readonly";
+const requiredScopes = `${uploadScope} ${readonlyScope}`;
+
 async function fixture() {
   const root = await mkdtemp(path.join(os.tmpdir(), "youtube-oauth-bootstrap-"));
   const credentialsFile = path.join(root, "desktop-client.json");
@@ -28,8 +32,12 @@ async function fixture() {
 
 test("accepts only the official installed desktop OAuth shape", () => {
   assert.equal(parseDesktopOAuthClient(fakeClient).clientId, fakeClient.installed.client_id);
+  assert.equal(parseDesktopOAuthClient({
+    installed: { ...fakeClient.installed, auth_uri: "https://accounts.google.com/o/oauth2/auth" },
+  }).authUri, "https://accounts.google.com/o/oauth2/v2/auth");
   assert.throws(() => parseDesktopOAuthClient({ web: fakeClient.installed }), /desktop_oauth_client_missing_fields/);
   assert.throws(() => parseDesktopOAuthClient({ installed: { ...fakeClient.installed, client_id: "not-a-google-client" } }), /client_id_invalid/);
+  assert.throws(() => parseDesktopOAuthClient({ installed: { ...fakeClient.installed, auth_uri: "https://attacker.invalid/auth" } }), /endpoint_not_official/);
   assert.throws(() => parseDesktopOAuthClient({ installed: { ...fakeClient.installed, token_uri: "https://attacker.invalid/token" } }), /endpoint_not_official/);
 });
 
@@ -47,6 +55,9 @@ test("dry-run validates all lanes without network or output", async () => {
     assert.equal(result.status, "ready");
     assert.equal(result.networkUsed, false);
     assert.equal(result.outputWritten, false);
+    assert.equal(result.publishAuthorized, false);
+    assert.equal(result.apiCostUsd, 0);
+    assert.equal(result.paidSpendAllowed, false);
     assert.equal(fetchCalls, 0);
     await assert.rejects(readFile(f.outputFile), /ENOENT/);
   } finally { await rm(f.root, { recursive: true, force: true }); }
@@ -70,6 +81,9 @@ test("authorizes lanes sequentially and writes compatible owner-only env with pu
       },
     });
     assert.equal(result.status, "completed");
+    assert.equal(result.publishAuthorized, false);
+    assert.equal(result.apiCostUsd, 0);
+    assert.equal(result.paidSpendAllowed, false);
     assert.deepEqual(order, [
       `motivation_es:${DEFAULT_CHANNELS.motivation_es}`,
       `motivation_en:${DEFAULT_CHANNELS.motivation_en}`,
@@ -104,6 +118,9 @@ test("real loopback flow uses PKCE/state, offline consent and verifies the exact
   const f = await fixture();
   const seen = { token: null, channel: null, auth: null };
   try {
+    await writeFile(f.credentialsFile, `${JSON.stringify({
+      installed: { ...fakeClient.installed, auth_uri: "https://accounts.google.com/o/oauth2/auth" },
+    })}\n`, { mode: 0o600 });
     const result = await runYouTubeOAuthBootstrap({
       credentialsFile: f.credentialsFile,
       outputFile: f.outputFile,
@@ -125,7 +142,7 @@ test("real loopback flow uses PKCE/state, offline consent and verifies the exact
           const body = new URLSearchParams(init.body);
           seen.token = body;
           const channel = body.get("code").slice("fake-code-".length);
-          return new Response(JSON.stringify({ access_token: `fake-access-${channel}`, refresh_token: `fake-refresh-${channel}`, scope: "https://www.googleapis.com/auth/youtube.upload" }), { status: 200 });
+          return new Response(JSON.stringify({ access_token: `fake-access-${channel}`, refresh_token: `fake-refresh-${channel}`, scope: requiredScopes }), { status: 200 });
         }
         seen.channel = { url, authorization: init.headers.authorization };
         const channel = init.headers.authorization.slice("Bearer fake-access-".length);
@@ -135,13 +152,46 @@ test("real loopback flow uses PKCE/state, offline consent and verifies the exact
     assert.equal(result.status, "completed");
     assert.equal(seen.auth.searchParams.get("access_type"), "offline");
     assert.equal(seen.auth.searchParams.get("prompt"), "consent");
-    assert.equal(seen.auth.searchParams.get("scope"), "https://www.googleapis.com/auth/youtube.upload");
+    assert.equal(seen.auth.origin + seen.auth.pathname, "https://accounts.google.com/o/oauth2/v2/auth");
+    assert.equal(seen.auth.searchParams.get("scope"), requiredScopes);
     assert.equal(seen.auth.searchParams.get("code_challenge_method"), "S256");
     assert.ok(seen.auth.searchParams.get("state"));
     assert.ok(seen.auth.searchParams.get("code_challenge"));
     assert.ok(seen.token.get("code_verifier"));
     assert.match(seen.channel.url, /channels\?part=id&mine=true/);
   } finally { await rm(f.root, { recursive: true, force: true }); }
+});
+
+test("fails closed without output when Google omits either required scope", async () => {
+  for (const grantedScope of [uploadScope, readonlyScope, ""]) {
+    const f = await fixture();
+    try {
+      await assert.rejects(runYouTubeOAuthBootstrap({
+        credentialsFile: f.credentialsFile,
+        outputFile: f.outputFile,
+        randomBytes: (size) => Buffer.alloc(size, 9),
+        openBrowser: async (href) => {
+          const auth = new URL(href);
+          const callback = new URL(auth.searchParams.get("redirect_uri"));
+          callback.searchParams.set("state", auth.searchParams.get("state"));
+          callback.searchParams.set("code", "fake-code");
+          await new Promise((resolve, reject) => http.get(callback, (response) => {
+            response.resume();
+            response.on("end", resolve);
+          }).on("error", reject));
+        },
+        fetcher: async (url) => {
+          assert.equal(url, fakeClient.installed.token_uri);
+          return new Response(JSON.stringify({
+            access_token: "fake-access",
+            refresh_token: "fake-refresh",
+            scope: grantedScope,
+          }), { status: 200 });
+        },
+      }), /youtube_required_scopes_not_granted/);
+      await assert.rejects(readFile(f.outputFile), /ENOENT/);
+    } finally { await rm(f.root, { recursive: true, force: true }); }
+  }
 });
 
 test("rejects permissive credential files before any OAuth work", async () => {

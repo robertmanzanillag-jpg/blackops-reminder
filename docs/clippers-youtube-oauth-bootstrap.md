@@ -4,9 +4,9 @@
 
 ## Security and release gates
 
-- The downloaded OAuth JSON must be an `installed` (Desktop app) client using Google's official authorization and token endpoints.
+- The downloaded OAuth JSON must be an `installed` (Desktop app) client using Google's official authorization and token endpoints. Google's official legacy authorization URL (`https://accounts.google.com/o/oauth2/auth`) is accepted when present in a downloaded Desktop JSON, but browser authorization is always normalized to the current v2 endpoint (`https://accounts.google.com/o/oauth2/v2/auth`). All other authorization URLs and every non-official token URL are rejected.
 - The credential JSON must be a regular, non-symlink file owned by the current user with mode `0600`.
-- Each authorization uses a new random state and PKCE S256 verifier, requests only `youtube.upload`, and explicitly requests offline consent.
+- Each authorization uses a new random state and PKCE S256 verifier, requests exactly `youtube.upload` for delivery plus `youtube.readonly` to verify `channels.list?mine=true`, and explicitly requests offline consent. The token exchange must confirm both scopes or the bootstrap fails closed.
 - After each grant, `channels.list?mine=true` must return exactly its expected channel ID. A mismatch stops the run.
 - The selected environment is written only after all three lanes pass. The write is atomic and owner-only `0600`; a failed lane leaves no partial file.
 - Client secrets, access tokens, refresh tokens, authorization codes, PKCE values, and authorization URLs are never printed or returned.

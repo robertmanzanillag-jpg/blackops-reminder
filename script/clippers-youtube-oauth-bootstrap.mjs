@@ -8,7 +8,10 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 
 const YOUTUBE_UPLOAD_SCOPE = "https://www.googleapis.com/auth/youtube.upload";
+const YOUTUBE_READONLY_SCOPE = "https://www.googleapis.com/auth/youtube.readonly";
+const REQUIRED_YOUTUBE_SCOPES = Object.freeze([YOUTUBE_UPLOAD_SCOPE, YOUTUBE_READONLY_SCOPE]);
 const OFFICIAL_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
+const LEGACY_OFFICIAL_AUTH_URL = "https://accounts.google.com/o/oauth2/auth";
 const OFFICIAL_TOKEN_URL = "https://oauth2.googleapis.com/token";
 const CHANNELS_URL = "https://www.googleapis.com/youtube/v3/channels?part=id&mine=true";
 const CALLBACK_PATH = "/oauth/callback";
@@ -57,12 +60,17 @@ export function parseDesktopOAuthClient(document) {
   const redirects = Array.isArray(installed?.redirect_uris) ? installed.redirect_uris.map(clean) : [];
   if (!clientId || !clientSecret) throw fixedError("desktop_oauth_client_missing_fields");
   if (!/^[A-Za-z0-9._-]+\.apps\.googleusercontent\.com$/.test(clientId)) throw fixedError("desktop_oauth_client_id_invalid");
-  if (authUri !== OFFICIAL_AUTH_URL || tokenUri !== OFFICIAL_TOKEN_URL) throw fixedError("desktop_oauth_client_endpoint_not_official");
+  if (![OFFICIAL_AUTH_URL, LEGACY_OFFICIAL_AUTH_URL].includes(authUri) || tokenUri !== OFFICIAL_TOKEN_URL) {
+    throw fixedError("desktop_oauth_client_endpoint_not_official");
+  }
   if (!redirects.some((uri) => uri === "http://localhost" || uri === "http://127.0.0.1")) {
     throw fixedError("desktop_oauth_client_loopback_redirect_missing");
   }
   if (![clientId, clientSecret].every((value) => SAFE_ENV_VALUE.test(value))) throw fixedError("desktop_oauth_client_value_unsafe");
-  return { clientId, clientSecret, authUri, tokenUri };
+  // Google still downloads some Desktop clients with its legacy official
+  // authorization URL. Accept that trusted input, but always send the browser
+  // through Google's current v2 endpoint.
+  return { clientId, clientSecret, authUri: OFFICIAL_AUTH_URL, tokenUri };
 }
 
 function normalizedChannels(channels = {}) {
@@ -104,7 +112,9 @@ async function exchangeAuthorizationCode({ client, code, verifier, redirectUri, 
   const refreshToken = clean(payload?.refresh_token);
   if (!accessToken || !refreshToken || !SAFE_ENV_VALUE.test(refreshToken)) throw fixedError("oauth_offline_tokens_missing_or_unsafe");
   const granted = clean(payload?.scope).split(/\s+/).filter(Boolean);
-  if (granted.length && !granted.includes(YOUTUBE_UPLOAD_SCOPE)) throw fixedError("youtube_upload_scope_not_granted");
+  if (!REQUIRED_YOUTUBE_SCOPES.every((scope) => granted.includes(scope))) {
+    throw fixedError("youtube_required_scopes_not_granted");
+  }
   return { accessToken, refreshToken };
 }
 
@@ -168,7 +178,7 @@ async function authorizeLane({ client, expectedChannelId, lane, fetcher, openBro
     client_id: client.clientId,
     redirect_uri: redirectUri,
     response_type: "code",
-    scope: YOUTUBE_UPLOAD_SCOPE,
+    scope: REQUIRED_YOUTUBE_SCOPES.join(" "),
     access_type: "offline",
     prompt: "consent",
     state,
