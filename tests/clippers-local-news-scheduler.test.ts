@@ -22,9 +22,13 @@ test("uses a five-minute default and clamps configured intervals to the safe two
   assert.deepEqual(getClipperLocalNewsSchedulerConfig({}), {
     enabled: true,
     intervalMs: 5 * 60_000,
-    timeoutMs: 90_000,
+    timeoutMs: 240_000,
   });
-  assert.equal(getClipperLocalNewsSchedulerConfig({ CLIPPERS_LOCAL_NEWS_INTERVAL_MINUTES: "1" }).intervalMs, 2 * 60_000);
+  assert.deepEqual(getClipperLocalNewsSchedulerConfig({ CLIPPERS_LOCAL_NEWS_INTERVAL_MINUTES: "1" }), {
+    enabled: true,
+    intervalMs: 2 * 60_000,
+    timeoutMs: 2 * 60_000 - 1_000,
+  });
   assert.equal(getClipperLocalNewsSchedulerConfig({ CLIPPERS_LOCAL_NEWS_INTERVAL_MINUTES: "30" }).intervalMs, 5 * 60_000);
   assert.equal(getClipperLocalNewsSchedulerConfig({ CLIPPERS_LOCAL_NEWS_SCHEDULER_ENABLED: "false" }).enabled, false);
 });
@@ -113,9 +117,12 @@ test("timeout is isolated and retains the overlap lock until work actually settl
   });
 
   const first = scheduler.runNow();
+  await new Promise<void>((resolve) => setImmediate(resolve));
   fireTimeout?.();
   assert.equal(await first, "timed_out");
   assert.equal(scheduler.status().timeoutCount, 1);
+  assert.equal(scheduler.status().lastTimeoutPhase, "ingest");
+  assert.equal(scheduler.status().lastError, "timeout:ingest");
   assert.equal(scheduler.status().running, true);
   assert.equal(await scheduler.runNow(), "skipped");
   assert.equal(errors.length, 1);
@@ -152,6 +159,42 @@ test("timeout aborts outstanding source requests so a hung network call cannot l
   assert.equal(await first, "timed_out");
   await new Promise<void>((resolve) => setImmediate(resolve));
   assert.equal(fetchAborted, true);
+  assert.equal(scheduler.status().running, false);
+});
+
+test("timeout identifies Metricool delivery and releases the lock when its request observes abort", async () => {
+  let fireTimeout: (() => void) | undefined;
+  let deliveryAborted = false;
+  const scheduler = createClipperLocalNewsScheduler({
+    env: { CLIPPERS_LOCAL_NEWS_TIMEOUT_MS: "1000" },
+    bootstrap: async () => ({} as never),
+    runCycle: async () => ({ status: {} } as never),
+    deliver: async (options) => {
+      await options.fetch?.("https://app.metricool.com/api/v2/scheduler/posts");
+      return {} as never;
+    },
+    fetch: async (_input, init) => new Promise<Response>((_resolve, reject) => {
+      const rejectAborted = () => {
+        deliveryAborted = true;
+        reject(new Error("aborted"));
+      };
+      if (init?.signal?.aborted) rejectAborted();
+      else init?.signal?.addEventListener("abort", rejectAborted, { once: true });
+    }),
+    setTimeout: (callback) => { fireTimeout = callback; return fakeTimer(); },
+    clearTimeout: () => {},
+    log: () => {},
+    logError: () => {},
+  });
+
+  const first = scheduler.runNow();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(scheduler.status().currentPhase, "delivery");
+  fireTimeout?.();
+  assert.equal(await first, "timed_out");
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(deliveryAborted, true);
+  assert.equal(scheduler.status().lastTimeoutPhase, "delivery");
   assert.equal(scheduler.status().running, false);
 });
 
