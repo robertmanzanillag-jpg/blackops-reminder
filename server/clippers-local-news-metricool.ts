@@ -695,8 +695,9 @@ async function fetchMetricool(
       callback();
     };
     const onAbort = () => finish(() => reject(new Error("metricool_request_aborted")));
+    // Keep the deadline referenced: it is the only handle that guarantees this
+    // promise settles when a transport ignores abort and exposes no active I/O.
     const timer = setTimeout(() => controller.abort(), timeoutMs);
-    timer.unref?.();
     signal.addEventListener("abort", onAbort, { once: true });
     if (signal.aborted) {
       onAbort();
@@ -742,11 +743,12 @@ async function safeJson(response: Response, timeoutMs = DEFAULT_METRICOOL_RESPON
         clearTimeout(timer);
         resolve(value);
       };
+      // A stalled stream may not keep Node 20 alive by itself, so this bounded
+      // deadline must remain referenced until the body settles or is cancelled.
       const timer = setTimeout(() => {
         void reader.cancel().catch(() => undefined);
         finish(null);
       }, timeoutMs);
-      timer.unref?.();
       void readBody().then(finish, () => finish(null));
     });
   } catch {
