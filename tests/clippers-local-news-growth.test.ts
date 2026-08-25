@@ -53,6 +53,14 @@ test("growth package stays zero-cost and produces an owned tracked link plus a l
   assert.match(growth.ownedArticleUrl || "", /utm_medium=organic_social/);
   assert.match(growth.ownedArticleUrl || "", new RegExp(`utm_content=${growth.variantId}`));
   assert.deepEqual(growth.hashtags, ["#NewYork", "#Trafico"]);
+  assert.deepEqual(growth.facebookOptimization, {
+    captionStyle: "compact_bilingual",
+    sameDayPriority: true,
+    originalContextRequired: true,
+    maxHashtags: 2,
+    targetCaptionCharacters: 1_600,
+    qualifiedViewGoal: "watch_time_and_deep_engagement",
+  });
   assert.deepEqual(
     { ready: growth.shortForm.ready, format: growth.shortForm.format, sound: growth.shortForm.soundRequired, mode: growth.shortForm.renderMode },
     { ready: true, format: "9:16", sound: true, mode: "local_template" },
@@ -65,10 +73,23 @@ test("growth package prefers a verified source video when one is available", () 
 });
 
 test("CEO raises volume only after observed performance clears confidence thresholds", () => {
-  const growing = buildLocalNewsCeoDecision([{ impressions: 600, engagements: 15, clicks: 2, shares: 1 }]);
-  const breakout = buildLocalNewsCeoDecision([{ impressions: 1_200, engagements: 50, clicks: 8, shares: 4 }]);
+  const growing = buildLocalNewsCeoDecision([{ impressions: 600, reach: 500, videoViews: 350, engagements: 15, clicks: 2, shares: 1 }]);
+  const breakout = buildLocalNewsCeoDecision([{ impressions: 1_200, reach: 1_000, videoViews: 800, engagements: 50, clicks: 8, shares: 4 }]);
   assert.deepEqual({ target: growing.dailyTargetPosts, mode: growing.performanceMode }, { target: 12, mode: "growing" });
   assert.deepEqual({ target: breakout.dailyTargetPosts, mode: breakout.performanceMode }, { target: 14, mode: "breakout" });
+  assert.deepEqual({ reach: breakout.observedReach, videoViews: breakout.observedVideoViews }, { reach: 1_000, videoViews: 800 });
+});
+
+test("headline experiment can use observed video views without treating Reddit metadata as performance", () => {
+  const utility = { variantId: "utility" as const, impressions: 0, reach: 0, videoViews: 160, engagements: 5, clicks: 2, shares: 1 };
+  const impact = { variantId: "impact" as const, impressions: 0, reach: 0, videoViews: 120, engagements: 3, clicks: 0, shares: 0 };
+  assert.equal(selectLocalNewsGrowthVariant("video-learning", [utility, impact]), "utility");
+});
+
+test("CEO learns from reach when Metricool omits impressions", () => {
+  const decision = buildLocalNewsCeoDecision([{ impressions: 0, reach: 1_200, videoViews: 900, engagements: 67, clicks: 8, shares: 4 }]);
+  assert.deepEqual({ target: decision.dailyTargetPosts, mode: decision.performanceMode, distribution: decision.observedDistribution }, { target: 14, mode: "breakout", distribution: 1_200 });
+  assert.ok(decision.observedEngagementRate >= 0.06);
 });
 
 test("local-news publishing path contains no paid model SDK or generation calls", async () => {

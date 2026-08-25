@@ -20,6 +20,8 @@ export interface LocalNewsGrowthEvent {
 export interface LocalNewsGrowthMetric {
   variantId?: LocalNewsGrowthVariantId | null;
   impressions: number;
+  reach?: number;
+  videoViews?: number;
   engagements: number;
   clicks: number;
   shares: number;
@@ -30,6 +32,9 @@ export interface LocalNewsCeoDecision {
   dailyTargetPosts: 10 | 12 | 14;
   performanceMode: "baseline" | "growing" | "breakout";
   observedImpressions: number;
+  observedReach: number;
+  observedVideoViews: number;
+  observedDistribution: number;
   observedEngagementRate: number;
   preferredFormat: "video_first";
   learningRule: "observed_metrics_only";
@@ -45,6 +50,14 @@ export interface LocalNewsGrowthPackage {
   hashtags: string[];
   learningSignal: LocalNewsGrowthScoutPattern | null;
   ceoDecision: LocalNewsCeoDecision;
+  facebookOptimization: {
+    captionStyle: "compact_bilingual";
+    sameDayPriority: true;
+    originalContextRequired: true;
+    maxHashtags: 2;
+    targetCaptionCharacters: 1_600;
+    qualifiedViewGoal: "watch_time_and_deep_engagement";
+  };
   shortForm: {
     ready: true;
     format: "9:16";
@@ -83,37 +96,45 @@ function safeBaseUrl(value: string | undefined): string | null {
   }
 }
 
-function variantScore(metrics: LocalNewsGrowthMetric[]): { impressions: number; score: number } {
+function variantScore(metrics: LocalNewsGrowthMetric[]): { observations: number; score: number } {
   const totals = metrics.reduce((result, metric) => ({
     impressions: result.impressions + metric.impressions,
+    videoViews: (result.videoViews || 0) + (metric.videoViews || 0),
     engagements: result.engagements + metric.engagements,
     clicks: result.clicks + metric.clicks,
     shares: result.shares + metric.shares,
-  }), { impressions: 0, engagements: 0, clicks: 0, shares: 0 });
-  if (!totals.impressions) return { impressions: 0, score: 0 };
+  }), { impressions: 0, videoViews: 0, engagements: 0, clicks: 0, shares: 0 });
+  const observations = Math.max(totals.impressions, totals.videoViews || 0);
+  if (!observations) return { observations: 0, score: 0 };
   return {
-    impressions: totals.impressions,
-    score: (totals.clicks + totals.shares * 2 + totals.engagements * 0.25) / totals.impressions,
+    observations,
+    score: (totals.clicks + totals.shares * 2 + totals.engagements * 0.25 + Math.min(totals.videoViews || 0, observations) * 0.1) / observations,
   };
 }
 
 export function buildLocalNewsCeoDecision(metrics: LocalNewsGrowthMetric[]): LocalNewsCeoDecision {
   const totals = metrics.reduce((result, metric) => ({
     impressions: result.impressions + metric.impressions,
+    reach: (result.reach || 0) + (metric.reach || 0),
+    videoViews: (result.videoViews || 0) + (metric.videoViews || 0),
     engagements: result.engagements + metric.engagements,
     clicks: result.clicks + metric.clicks,
     shares: result.shares + metric.shares,
-  }), { impressions: 0, engagements: 0, clicks: 0, shares: 0 });
-  const engagementRate = totals.impressions
-    ? (totals.engagements + totals.clicks * 2 + totals.shares * 3) / totals.impressions
+  }), { impressions: 0, reach: 0, videoViews: 0, engagements: 0, clicks: 0, shares: 0 });
+  const observedDistribution = Math.max(totals.impressions, totals.reach || 0, totals.videoViews || 0);
+  const engagementRate = observedDistribution
+    ? (totals.engagements + totals.clicks * 2 + totals.shares * 3) / observedDistribution
     : 0;
-  const breakout = totals.impressions >= 1_000 && engagementRate >= 0.06;
-  const growing = !breakout && totals.impressions >= 500 && engagementRate >= 0.03;
+  const breakout = observedDistribution >= 1_000 && engagementRate >= 0.06;
+  const growing = !breakout && observedDistribution >= 500 && engagementRate >= 0.03;
   return {
     dailyMinimumPosts: 10,
     dailyTargetPosts: breakout ? 14 : growing ? 12 : 10,
     performanceMode: breakout ? "breakout" : growing ? "growing" : "baseline",
     observedImpressions: totals.impressions,
+    observedReach: totals.reach || 0,
+    observedVideoViews: totals.videoViews || 0,
+    observedDistribution,
     observedEngagementRate: Math.round(engagementRate * 10_000) / 10_000,
     preferredFormat: "video_first",
     learningRule: "observed_metrics_only",
@@ -123,7 +144,7 @@ export function buildLocalNewsCeoDecision(metrics: LocalNewsGrowthMetric[]): Loc
 export function selectLocalNewsGrowthVariant(eventId: string, metrics: LocalNewsGrowthMetric[], scoutPattern?: LocalNewsGrowthScoutPattern | null): LocalNewsGrowthVariantId {
   const utility = variantScore(metrics.filter((metric) => metric.variantId === "utility"));
   const impact = variantScore(metrics.filter((metric) => metric.variantId === "impact"));
-  if (utility.impressions >= 100 && impact.impressions >= 100 && utility.score !== impact.score) {
+  if (utility.observations >= 100 && impact.observations >= 100 && utility.score !== impact.score) {
     return utility.score > impact.score ? "utility" : "impact";
   }
   if (scoutPattern === "explainer" || scoutPattern === "question") return "utility";
@@ -192,6 +213,14 @@ export function buildLocalNewsGrowthPackage(
     hashtags: hashtags(event),
     learningSignal: scoutPattern || null,
     ceoDecision: buildLocalNewsCeoDecision(metrics),
+    facebookOptimization: {
+      captionStyle: "compact_bilingual",
+      sameDayPriority: true,
+      originalContextRequired: true,
+      maxHashtags: 2,
+      targetCaptionCharacters: 1_600,
+      qualifiedViewGoal: "watch_time_and_deep_engagement",
+    },
     shortForm: {
       ready: true,
       format: "9:16",
