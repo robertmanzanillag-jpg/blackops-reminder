@@ -1381,3 +1381,70 @@ test("bounds Metricool JSON responses before parsing them into memory", async ()
   const declaredOversized = new Response("{}", { headers: { "content-length": String(2 * 1024 * 1024) } });
   assert.equal(await __clipperLocalNewsMetricoolInternals.safeJson(declaredOversized), null);
 });
+
+test("bounds a Metricool response body that never finishes streaming", async () => {
+  const hanging = new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"id":"partial'));
+    },
+  }));
+  const startedAt = Date.now();
+  assert.equal(await __clipperLocalNewsMetricoolInternals.safeJson(hanging, 25), null);
+  assert.ok(Date.now() - startedAt < 500);
+});
+
+test("a hanging successful Metricool body cannot retain the delivery lock", async () => {
+  const dir = await workspace([item({ platform: "facebook" })]);
+  const hangingResponse = () => new Response(new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode('{"id":"partial'));
+    },
+  }), { status: 201 });
+
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    responseTimeoutMs: 25,
+    fetch: async () => hangingResponse(),
+  });
+
+  assert.equal(result.status, "completed");
+  assert.equal(result.scheduled, 1);
+  await assert.rejects(access(path.join(dir, "metricool-delivery-ledger.json.lock")), /ENOENT/);
+});
+
+test("bounds a Metricool fetch even when the transport ignores abort", async () => {
+  const startedAt = Date.now();
+  await assert.rejects(
+    __clipperLocalNewsMetricoolInternals.fetchMetricool(
+      async () => new Promise<Response>(() => {}),
+      "https://app.metricool.com/api/v2/scheduler/posts",
+      {},
+      25,
+    ),
+    /metricool_request_aborted/,
+  );
+  assert.ok(Date.now() - startedAt < 500);
+});
+
+test("an ambiguous timed-out Metricool POST is not retried in the same cycle", async () => {
+  const dir = await workspace([item({ platform: "facebook" })]);
+  let calls = 0;
+  const result = await deliverClipperLocalNewsToMetricool({
+    env: { ...credentials, METRICOOL_MIAMI_NEWS_BLOG_ID: "99" },
+    workspaceDir: dir,
+    now: fixedNow,
+    requestTimeoutMs: 100,
+    fetch: async () => {
+      calls += 1;
+      return await new Promise<Response>(() => {});
+    },
+  });
+
+  assert.equal(result.status, "blocked");
+  assert.equal(result.reason, "metricool_schedule_failed");
+  assert.equal(result.failed, 1);
+  assert.equal(calls, 1);
+  await assert.rejects(access(path.join(dir, "metricool-delivery-ledger.json.lock")), /ENOENT/);
+});

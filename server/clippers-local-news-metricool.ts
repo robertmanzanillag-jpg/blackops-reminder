@@ -34,6 +34,8 @@ const MEDIA_NORMALIZATION_RETRY_MS = 250;
 const SCHEDULE_ATTEMPTS = 3;
 const SCHEDULE_RETRY_MS = 500;
 const MAX_METRICOOL_JSON_BYTES = 1024 * 1024;
+const DEFAULT_METRICOOL_REQUEST_TIMEOUT_MS = 8_000;
+const DEFAULT_METRICOOL_RESPONSE_TIMEOUT_MS = 5_000;
 
 const committeeVerdictSchema = z.object({
   role: z.enum(["source_verifier", "safety_editor", "monetization_editor"]),
@@ -292,6 +294,8 @@ export interface ClipperLocalNewsMetricoolOptions {
   now?: () => Date;
   workspaceDir?: string;
   maxPerRun?: number;
+  requestTimeoutMs?: number;
+  responseTimeoutMs?: number;
 }
 
 export interface ClipperLocalNewsMetricoolReadiness {
@@ -608,6 +612,8 @@ async function normalizeMetricoolMedia(
   fetcher: typeof globalThis.fetch,
   token: string,
   mediaUrl: string,
+  requestTimeoutMs: number,
+  responseTimeoutMs: number,
 ): Promise<string | null> {
   // Metricool's public API uses this image normalization route for both image
   // and video URLs before they are attached to scheduler/posts.
@@ -615,8 +621,8 @@ async function normalizeMetricoolMedia(
   url.searchParams.set("url", mediaUrl);
   for (let attempt = 1; attempt <= MEDIA_NORMALIZATION_ATTEMPTS; attempt += 1) {
     try {
-      const response = await fetcher(url, { headers: { Accept: "application/json", "X-Mc-Auth": token } });
-      if (response.ok) return responsePostId(await safeJson(response));
+      const response = await fetchMetricool(fetcher, url, { headers: { Accept: "application/json", "X-Mc-Auth": token } }, requestTimeoutMs);
+      if (response.ok) return responsePostId(await safeJson(response, responseTimeoutMs));
       // Give transient Metricool/media-fetch failures a chance to recover
       // before the scheduler falls back to the verified text. Retry rate
       // limits and server-side failures, but fail fast on a bad URL or an
@@ -644,16 +650,22 @@ async function scheduleMetricoolPost(
   url: URL,
   token: string,
   payload: Record<string, unknown>,
+  requestTimeoutMs: number,
 ): Promise<Response> {
   for (let attempt = 1; attempt <= SCHEDULE_ATTEMPTS; attempt += 1) {
     try {
-      const response = await fetcher(url, {
+      const response = await fetchMetricool(fetcher, url, {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/json", "X-Mc-Auth": token },
         body: JSON.stringify(payload),
-      });
+      }, requestTimeoutMs);
       if (response.ok || (response.status < 500 && response.status !== 429) || attempt === SCHEDULE_ATTEMPTS) return response;
     } catch (error) {
+      // A timed-out POST has an ambiguous remote outcome: Metricool may have
+      // accepted the stable jobId before the response stalled. Do not fan out
+      // immediate duplicate attempts; the durable next cycle can reconcile by
+      // the same jobId/content identity.
+      if (error instanceof Error && error.message === "metricool_request_aborted") throw error;
       if (attempt === SCHEDULE_ATTEMPTS) throw error;
     }
     await new Promise((resolve) => setTimeout(resolve, SCHEDULE_RETRY_MS * attempt));
@@ -661,29 +673,82 @@ async function scheduleMetricoolPost(
   throw new Error("Metricool scheduler retry loop exhausted");
 }
 
-async function safeJson(response: Response): Promise<unknown> {
+async function fetchMetricool(
+  fetcher: typeof globalThis.fetch,
+  input: Parameters<typeof globalThis.fetch>[0],
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const callerSignal = init.signal;
+  const signal = callerSignal
+    ? AbortSignal.any([callerSignal, controller.signal])
+    : controller.signal;
+
+  return await new Promise<Response>((resolve, reject) => {
+    let settled = false;
+    const finish = (callback: () => void) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+      callback();
+    };
+    const onAbort = () => finish(() => reject(new Error("metricool_request_aborted")));
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    timer.unref?.();
+    signal.addEventListener("abort", onAbort, { once: true });
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+    Promise.resolve().then(() => fetcher(input, { ...init, signal })).then(
+      (response) => finish(() => resolve(response)),
+      (error) => finish(() => reject(error)),
+    );
+  });
+}
+
+async function safeJson(response: Response, timeoutMs = DEFAULT_METRICOOL_RESPONSE_TIMEOUT_MS): Promise<unknown> {
   const declaredLength = Number(response.headers.get("content-length") || "0");
   if (Number.isFinite(declaredLength) && declaredLength > MAX_METRICOOL_JSON_BYTES) {
-    await response.body?.cancel().catch(() => undefined);
+    void response.body?.cancel().catch(() => undefined);
     return null;
   }
   try {
     if (!response.body) return null;
     const reader = response.body.getReader();
-    const chunks: Uint8Array[] = [];
-    let total = 0;
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      total += value.byteLength;
-      if (total > MAX_METRICOOL_JSON_BYTES) {
-        await reader.cancel().catch(() => undefined);
-        return null;
+    const readBody = async (): Promise<unknown> => {
+      const chunks: Uint8Array[] = [];
+      let total = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > MAX_METRICOOL_JSON_BYTES) {
+          void reader.cancel().catch(() => undefined);
+          return null;
+        }
+        chunks.push(value);
       }
-      chunks.push(value);
-    }
-    const body = Buffer.concat(chunks, total).toString("utf8");
-    return body ? JSON.parse(body) : null;
+      const body = Buffer.concat(chunks, total).toString("utf8");
+      return body ? JSON.parse(body) : null;
+    };
+    return await new Promise<unknown>((resolve) => {
+      let settled = false;
+      const finish = (value: unknown) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(value);
+      };
+      const timer = setTimeout(() => {
+        void reader.cancel().catch(() => undefined);
+        finish(null);
+      }, timeoutMs);
+      timer.unref?.();
+      void readBody().then(finish, () => finish(null));
+    });
   } catch {
     return null;
   }
@@ -707,13 +772,19 @@ function emptyResult(ledgerPath: string): ClipperLocalNewsMetricoolResult {
   };
 }
 
-async function discoverProfiles(fetcher: typeof globalThis.fetch, token: string, userId: string): Promise<ProfileCandidate[] | null> {
+async function discoverProfiles(
+  fetcher: typeof globalThis.fetch,
+  token: string,
+  userId: string,
+  requestTimeoutMs = DEFAULT_METRICOOL_REQUEST_TIMEOUT_MS,
+  responseTimeoutMs = DEFAULT_METRICOOL_RESPONSE_TIMEOUT_MS,
+): Promise<ProfileCandidate[] | null> {
   const url = new URL("/api/admin/simpleProfiles", METRICOOL_API);
   url.searchParams.set("userId", userId);
   try {
-    const response = await fetcher(url, { headers: { Accept: "application/json", "X-Mc-Auth": token } });
+    const response = await fetchMetricool(fetcher, url, { headers: { Accept: "application/json", "X-Mc-Auth": token } }, requestTimeoutMs);
     if (!response.ok) return null;
-    return collectProfiles(await safeJson(response));
+    return collectProfiles(await safeJson(response, responseTimeoutMs));
   } catch {
     return null;
   }
@@ -833,6 +904,8 @@ export async function deliverClipperLocalNewsToMetricool(
     const scheduledContentKeys = new Set(ledger.entries.map(metricoolLedgerContentKey).filter((key): key is string => Boolean(key)));
     const now = options.now || (() => new Date());
     const fetchedNow = now();
+    const requestTimeoutMs = Math.max(100, Math.min(20_000, options.requestTimeoutMs ?? DEFAULT_METRICOOL_REQUEST_TIMEOUT_MS));
+    const responseTimeoutMs = Math.max(100, Math.min(20_000, options.responseTimeoutMs ?? DEFAULT_METRICOOL_RESPONSE_TIMEOUT_MS));
     let safeItems = queue.filter((item) => {
       const platformEnabled = item.platform !== "x" || env.CLIPPERS_LOCAL_NEWS_ENABLE_X === "true";
       if (!matchesClipperLocalNewsDeliveryJurisdiction(item)) {
@@ -886,7 +959,9 @@ export async function deliverClipperLocalNewsToMetricool(
     }
     const needsDiscovery = (Object.keys(laneConfig) as ClipperLocalNewsLane[])
       .some((lane) => safeItems.some((item) => item.lane === lane) && !hasRealValue(laneConfig[lane].override));
-    const profiles = needsDiscovery ? await discoverProfiles(options.fetch || globalThis.fetch, token, userId) : [];
+    const profiles = needsDiscovery
+      ? await discoverProfiles(options.fetch || globalThis.fetch, token, userId, requestTimeoutMs, responseTimeoutMs)
+      : [];
     if (needsDiscovery && profiles === null) {
       result.reason = "metricool_profile_discovery_failed";
       return result;
@@ -1007,7 +1082,9 @@ export async function deliverClipperLocalNewsToMetricool(
       const mediaUrl = item.mediaUrl || publicBrandMediaUrl(env, item.lane);
       const mediaKey = mediaUrl ? `${item.mediaType || "image"}|${mediaUrl}` : `${item.lane}|none`;
       if (!mediaIds.has(mediaKey)) {
-        mediaIds.set(mediaKey, mediaUrl ? await normalizeMetricoolMedia(fetcher, token, mediaUrl) : null);
+        mediaIds.set(mediaKey, mediaUrl
+          ? await normalizeMetricoolMedia(fetcher, token, mediaUrl, requestTimeoutMs, responseTimeoutMs)
+          : null);
       }
       const mediaId = mediaIds.get(mediaKey) || null;
       const url = new URL("/api/v2/scheduler/posts", METRICOOL_API);
@@ -1035,7 +1112,7 @@ export async function deliverClipperLocalNewsToMetricool(
         draft: false,
       };
       try {
-        const response = await scheduleMetricoolPost(fetcher, url, token, payload);
+        const response = await scheduleMetricoolPost(fetcher, url, token, payload, requestTimeoutMs);
         if (!response.ok) {
           result.failed += 1;
           if (response.status === 400 || response.status === 403 || response.status === 404) {
@@ -1043,7 +1120,7 @@ export async function deliverClipperLocalNewsToMetricool(
           }
           continue;
         }
-        const responseBody = await safeJson(response);
+        const responseBody = await safeJson(response, responseTimeoutMs);
         const ledgerEntry: Ledger["entries"][number] = {
           queueItemId: item.id,
           eventId: item.eventId,
@@ -1109,4 +1186,5 @@ export const __clipperLocalNewsMetricoolInternals = {
   scheduleHorizonEndMs,
   queueItemIsFresh,
   safeJson,
+  fetchMetricool,
 };

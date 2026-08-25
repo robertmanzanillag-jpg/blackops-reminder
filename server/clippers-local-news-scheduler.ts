@@ -7,7 +7,9 @@ import { deliverClipperLocalNewsToMetricool } from "./clippers-local-news-metric
 const DEFAULT_INTERVAL_MINUTES = 5;
 const MIN_INTERVAL_MINUTES = 2;
 const MAX_INTERVAL_MINUTES = 5;
-const DEFAULT_TIMEOUT_MS = 90_000;
+const DEFAULT_TIMEOUT_MS = 240_000;
+
+type ClipperLocalNewsCyclePhase = "bootstrap" | "ingest" | "delivery";
 
 type TimerHandle = ReturnType<typeof setInterval>;
 
@@ -24,6 +26,8 @@ export interface ClipperLocalNewsSchedulerStatus extends ClipperLocalNewsSchedul
   completedCount: number;
   skippedCount: number;
   timeoutCount: number;
+  currentPhase: ClipperLocalNewsCyclePhase | null;
+  lastTimeoutPhase: ClipperLocalNewsCyclePhase | null;
   lastStartedAt: string | null;
   lastFinishedAt: string | null;
   lastError: string | null;
@@ -53,7 +57,8 @@ export interface ClipperLocalNewsScheduler {
 
 function boundedInteger(value: string | undefined, fallback: number, minimum: number, maximum: number): number {
   const parsed = Number.parseInt(value || "", 10);
-  return Number.isFinite(parsed) ? Math.min(maximum, Math.max(minimum, parsed)) : fallback;
+  const candidate = Number.isFinite(parsed) ? parsed : fallback;
+  return Math.min(maximum, Math.max(minimum, candidate));
 }
 
 export function getClipperLocalNewsSchedulerConfig(env: NodeJS.ProcessEnv = process.env): ClipperLocalNewsSchedulerConfig {
@@ -112,6 +117,8 @@ export function createClipperLocalNewsScheduler(deps: ClipperLocalNewsSchedulerD
   let completedCount = 0;
   let skippedCount = 0;
   let timeoutCount = 0;
+  let currentPhase: ClipperLocalNewsCyclePhase | null = null;
+  let lastTimeoutPhase: ClipperLocalNewsCyclePhase | null = null;
   let lastStartedAt: string | null = null;
   let lastFinishedAt: string | null = null;
   let lastError: string | null = null;
@@ -124,6 +131,8 @@ export function createClipperLocalNewsScheduler(deps: ClipperLocalNewsSchedulerD
     completedCount,
     skippedCount,
     timeoutCount,
+    currentPhase,
+    lastTimeoutPhase,
     lastStartedAt,
     lastFinishedAt,
     lastError,
@@ -150,17 +159,21 @@ export function createClipperLocalNewsScheduler(deps: ClipperLocalNewsSchedulerD
 
     const work = (async () => {
       log(`[Clipper local news] cycle phase=start rssMb=${memoryRssMb()}`);
+      currentPhase = "bootstrap";
       await bootstrap({ env });
       log(`[Clipper local news] cycle phase=bootstrapped rssMb=${memoryRssMb()}`);
+      currentPhase = "ingest";
       const cycle = await runCycle({ env, fetch: boundedFetch });
       log(`[Clipper local news] cycle phase=ingested rssMb=${memoryRssMb()}`);
       if (controller.signal.aborted) throw new Error("cycle_aborted_after_timeout");
+      currentPhase = "delivery";
       const delivery = await deliver({ env, status: cycle.status, fetch: boundedFetch });
       log(`[Clipper local news] cycle phase=delivered rssMb=${memoryRssMb()}`);
       log(`[Clipper local news] cycle completed (sources=${cycle.fetchedSources || 0}; sourceFailures=${cycle.failedSources?.length || 0}; created=${cycle.created || 0}; queued=${cycle.queued || 0}; delivery=${delivery.status}; scheduled=${delivery.scheduled}; alreadyScheduled=${delivery.alreadyScheduled}; rssMb=${memoryRssMb()})`);
     })();
     inFlight = work.finally(() => {
       inFlight = null;
+      currentPhase = null;
       if (timeout) cancelTimeout(timeout);
     });
 
@@ -169,8 +182,9 @@ export function createClipperLocalNewsScheduler(deps: ClipperLocalNewsSchedulerD
         timedOut = true;
         controller.abort();
         timeoutCount += 1;
-        lastError = "timeout";
-        logError("[Clipper local news] cycle timed out; overlap lock remains active until it settles");
+        lastTimeoutPhase = currentPhase;
+        lastError = currentPhase ? `timeout:${currentPhase}` : "timeout";
+        logError(`[Clipper local news] cycle timed out during ${currentPhase || "unknown"}; overlap lock remains active until bounded work settles`);
         resolve("timed_out");
       }, config.timeoutMs);
       timeout.unref?.();
