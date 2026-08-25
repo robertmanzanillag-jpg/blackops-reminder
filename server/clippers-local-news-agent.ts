@@ -147,6 +147,8 @@ export interface ClipperLocalNewsMetricInput {
   lane: ClipperLocalNewsLane;
   platform: ClipperLocalNewsPlatform;
   impressions?: number;
+  reach?: number;
+  videoViews?: number;
   engagements?: number;
   clicks?: number;
   shares?: number;
@@ -191,7 +193,7 @@ export interface ClipperLocalNewsStatus {
     growth: { mode: "zero_cost_organic"; paidAds: false; paidAiPerPost: true; ownedLinks: number; experiments: number; shortFormReady: number; sourceVideos: number; sourceImages: number; highQuality: number; videoFirst: true; localTranslation: { mode: "hosted_openai_nano_batched"; estimatedMonthlyApiCostUsd: number; requiredInProduction: true } };
     dailyPublishing: { minimumPerAccount: 10; adaptiveMaximum: 14; bilingualSamePost: true; videoFirst: true; accounts: Record<ClipperLocalNewsLane, Record<ClipperLocalNewsPlatform, { queuedToday: number; target: 10 | 12 | 14; deficit: number; performanceMode: "baseline" | "growing" | "breakout" }>> };
   };
-  metrics: { total: number; impressions: number; engagements: number; clicks: number; shares: number; revenueUsd: number; costUsd: number; profitUsd: number };
+  metrics: { total: number; impressions: number; reach: number; videoViews: number; engagements: number; clicks: number; shares: number; revenueUsd: number; costUsd: number; profitUsd: number };
   monetization: {
     targetUsd: 10000;
     revenueUsd: number;
@@ -267,6 +269,8 @@ const ARCGIS_STALE_MS = 48 * 60 * 60_000;
 const MIAMI_TRANSIT_LOOKBACK_MS = 120 * 24 * 60 * 60_000;
 const MIAMI_TRANSIT_MAX_ACTIVE = 20;
 const FACEBOOK_DETAIL_LIMIT = 700;
+const FACEBOOK_FEED_DETAIL_LIMIT = 260;
+const FACEBOOK_FEED_ACTION_LIMIT = 180;
 const TRANSLATION_TITLE_LIMIT = 500;
 const PUBLIC_SNAPSHOT_MAX_BYTES = 3 * 1024 * 1024;
 const PUBLIC_SNAPSHOT_MAX_QUEUE_ITEMS = 600;
@@ -580,15 +584,13 @@ export function buildClipperLocalNewsCopy(event: ClipperLocalNewsEvent, platform
   const observedAt = event.effective || event.updatedAt;
   const timeEs = new Intl.DateTimeFormat("es-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(observedAt));
   const timeEn = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit", timeZoneName: "short" }).format(new Date(observedAt));
-  const impact = truncate(event.description || "La fuente oficial no publicó detalles adicionales.", FACEBOOK_DETAIL_LIMIT);
-  const action = truncate(event.instruction || "Consulta el enlace oficial antes de tomar una decisión.", FACEBOOK_DETAIL_LIMIT);
   const headlineEs = bilingual?.safe ? bilingual.es.title : growth?.headline.es || event.title;
   const headlineEn = bilingual?.safe ? bilingual.en.title : growth?.headline.en || event.title;
-  const detailEs = bilingual?.safe ? truncate(bilingual.es.detail, FACEBOOK_DETAIL_LIMIT) : `La fuente oficial publicó una actualización para ${event.location} a las ${timeEs}. Conservamos el texto original debajo para no cambiar los hechos.`;
-  const detailEn = bilingual?.safe ? truncate(bilingual.en.detail, FACEBOOK_DETAIL_LIMIT) : `The official source published an update for ${event.location} at ${timeEn}. The original wording is preserved below so the facts are not altered.`;
-  const actionEs = bilingual?.safe ? truncate(bilingual.es.instruction, FACEBOOK_DETAIL_LIMIT) : "Consulta la fuente oficial antes de tomar una decisión.";
-  const actionEn = bilingual?.safe ? truncate(bilingual.en.instruction, FACEBOOK_DETAIL_LIMIT) : "Review the official source before taking action.";
-  const ownedLink = growth?.ownedArticleUrl ? `\nMás detalles / More details: ${growth.ownedArticleUrl}` : "";
+  const detailEs = bilingual?.safe ? truncate(bilingual.es.detail, FACEBOOK_FEED_DETAIL_LIMIT) : `Actualización oficial para ${event.location} a las ${timeEs}.`;
+  const detailEn = bilingual?.safe ? truncate(bilingual.en.detail, FACEBOOK_FEED_DETAIL_LIMIT) : `Official update for ${event.location} at ${timeEn}.`;
+  const actionEs = bilingual?.safe ? truncate(bilingual.es.instruction, FACEBOOK_FEED_ACTION_LIMIT) : "Consulta la fuente oficial antes de actuar.";
+  const actionEn = bilingual?.safe ? truncate(bilingual.en.instruction, FACEBOOK_FEED_ACTION_LIMIT) : "Review the official source before acting.";
+  const ownedLink = growth?.ownedArticleUrl ? `\nContexto completo / Full context: ${growth.ownedArticleUrl}` : "";
   const tags = growth?.hashtags.length ? `\n${growth.hashtags.join(" ")}` : "";
   const sensitive = detectLocalNewsSensitiveContent(event).accusation;
   const legalEs = sensitive ? " Nota legal: una detención, acusación o cargo no equivale a culpabilidad; toda persona se presume inocente hasta que un tribunal determine lo contrario." : "";
@@ -606,7 +608,7 @@ export function buildClipperLocalNewsCopy(event: ClipperLocalNewsEvent, platform
     const englishBudget = Math.max(1, bilingualBudget - spanishBudget - 1);
     return `${truncateXWeighted(es, spanishBudget)}\n${truncateXWeighted(en, englishBudget)}${ending}`;
   }
-  return `ESPAÑOL\n${prefix}: ${headlineEs}\nDetalle: ${detailEs}\nQué hacer: ${actionEs}${legalEs}\n\nENGLISH\n${prefixEn}: ${headlineEn}\nDetail: ${detailEn}\nWhat to do: ${actionEn}${legalEn}\n\nTITULAR ORIGINAL / ORIGINAL HEADLINE\n${event.title}\n\nEXTRACTO ORIGINAL / ORIGINAL EXCERPT\n${impact}\n\nINSTRUCCIÓN ORIGINAL (EXTRACTO) / ORIGINAL INSTRUCTION (EXCERPT)\n${action}${ownedLink}\n\nTexto oficial completo / Full official text — Según / According to ${event.source}. Esta página no es la agencia emisora / This page is not the issuing agency:\n${event.sourceUrl}${tags}`;
+  return `ESPAÑOL · ${prefix}\n${truncate(headlineEs, 220)}\n${detailEs}\n${actionEs}${legalEs}\n\nENGLISH · ${prefixEn}\n${truncate(headlineEn, 220)}\n${detailEn}\n${actionEn}${legalEn}\n\nFuente oficial / Official source: ${event.source}\n${event.sourceUrl}${ownedLink}${tags}`;
 }
 
 const rawEventSchema = z.object({
@@ -652,7 +654,7 @@ const metricPayloadSchema = z.object({
   metrics: z.array(z.object({
     queueItemId: z.string().min(1).max(500).optional(), eventId: z.string().min(1).max(500).optional(),
     lane: z.enum(LANES as [ClipperLocalNewsLane, ...ClipperLocalNewsLane[]]), platform: z.enum(PLATFORMS as [ClipperLocalNewsPlatform, ...ClipperLocalNewsPlatform[]]),
-    impressions: z.number().finite().nonnegative().optional(), engagements: z.number().finite().nonnegative().optional(), clicks: z.number().finite().nonnegative().optional(), shares: z.number().finite().nonnegative().optional(),
+    impressions: z.number().finite().nonnegative().optional(), reach: z.number().finite().nonnegative().optional(), videoViews: z.number().finite().nonnegative().optional(), engagements: z.number().finite().nonnegative().optional(), clicks: z.number().finite().nonnegative().optional(), shares: z.number().finite().nonnegative().optional(),
     revenueUsd: z.number().finite().nonnegative().optional(), costUsd: z.number().finite().nonnegative().optional(),
     observedAt: z.string().datetime({ offset: true }).optional(),
     variantId: z.enum(["utility", "impact"]).optional(),
@@ -695,7 +697,7 @@ async function persist(dir: string, state: LocalNewsState): Promise<void> {
   state.metrics = compacted.state.metrics;
   const analytics = summarizeMetrics(state.metrics);
   const queueColumns = ["id", "eventId", "eventRevision", "canonicalEventIdentity", "claimIdentityHash", "lane", "platform", "section", "topicTag", "editorialUrgency", "editorialPriority", "qualityScore", "revisionKind", "risk", "lifecycle", "status", "gateReason", "notBefore", "publishDecision", "consensus", "checkedAt", "reviewHash", "textOnly", "mediaRequired", "mediaType", "mediaUrl", "approvalRequired", "autoEligible", "published", "copy", "source", "sourceUrl", "createdAt"];
-  const metricColumns = ["id", "queueItemId", "eventId", "lane", "platform", "variantId", "impressions", "engagements", "clicks", "shares", "revenueUsd", "costUsd", "observedAt", "recordedAt"];
+  const metricColumns = ["id", "queueItemId", "eventId", "lane", "platform", "variantId", "impressions", "reach", "videoViews", "engagements", "clicks", "shares", "revenueUsd", "costUsd", "observedAt", "recordedAt"];
   const rankedPublicCandidates = state.queue
     .filter((item) => item.status === "auto_eligible" && item.autoEligible && !item.approvalRequired)
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || a.id.localeCompare(b.id));
@@ -754,7 +756,7 @@ async function persist(dir: string, state: LocalNewsState): Promise<void> {
 }
 
 function summarizeMetrics(metrics: ClipperLocalNewsMetric[]) {
-  const totals = metrics.reduce((summary, metric) => ({ total: summary.total + 1, impressions: summary.impressions + metric.impressions, engagements: summary.engagements + metric.engagements, clicks: summary.clicks + metric.clicks, shares: summary.shares + metric.shares, revenueUsd: summary.revenueUsd + (metric.revenueUsd || 0), costUsd: summary.costUsd + (metric.costUsd || 0) }), { total: 0, impressions: 0, engagements: 0, clicks: 0, shares: 0, revenueUsd: 0, costUsd: 0 });
+  const totals = metrics.reduce((summary, metric) => ({ total: summary.total + 1, impressions: summary.impressions + metric.impressions, reach: summary.reach + (metric.reach || 0), videoViews: summary.videoViews + (metric.videoViews || 0), engagements: summary.engagements + metric.engagements, clicks: summary.clicks + metric.clicks, shares: summary.shares + metric.shares, revenueUsd: summary.revenueUsd + (metric.revenueUsd || 0), costUsd: summary.costUsd + (metric.costUsd || 0) }), { total: 0, impressions: 0, reach: 0, videoViews: 0, engagements: 0, clicks: 0, shares: 0, revenueUsd: 0, costUsd: 0 });
   const revenueUsd = Math.round(totals.revenueUsd * 100) / 100;
   const costUsd = Math.round(totals.costUsd * 100) / 100;
   return { ...totals, revenueUsd, costUsd, profitUsd: Math.round((revenueUsd - costUsd) * 100) / 100 };
@@ -772,7 +774,7 @@ function summarizeMetricsBySection(state: LocalNewsState | null): ClipperLocalNe
     if (!section) continue;
     const current = summaries.get(section) || { postIds: new Set<string>(), reach: 0, engagement: 0, revenueUsd: 0 };
     current.postIds.add(metric.queueItemId || metric.eventId || metric.id);
-    current.reach += metric.impressions;
+    current.reach += metric.reach || metric.impressions;
     current.engagement += metric.engagements;
     current.revenueUsd += metric.revenueUsd;
     summaries.set(section, current);
@@ -1387,7 +1389,7 @@ export async function recordClipperLocalNewsMetrics(input: ClipperLocalNewsMetri
   const now = isoNow(input.now);
   for (const item of input.metrics) {
     if (!LANES.includes(item.lane) || !PLATFORMS.includes(item.platform)) throw new Error("Invalid metric lane or platform");
-    const metric: ClipperLocalNewsMetric = { id: digest(JSON.stringify([item.queueItemId, item.eventId, item.lane, item.platform, item.observedAt || now, state.metrics.length])), queueItemId: item.queueItemId || null, eventId: item.eventId || null, lane: item.lane, platform: item.platform, impressions: nonNegativeInteger(item.impressions, "impressions"), engagements: nonNegativeInteger(item.engagements, "engagements"), clicks: nonNegativeInteger(item.clicks, "clicks"), shares: nonNegativeInteger(item.shares, "shares"), revenueUsd: nonNegativeMoney(item.revenueUsd, "revenueUsd"), costUsd: nonNegativeMoney(item.costUsd, "costUsd"), observedAt: isoNow(item.observedAt || now), recordedAt: now, variantId: item.variantId || null };
+    const metric: ClipperLocalNewsMetric = { id: digest(JSON.stringify([item.queueItemId, item.eventId, item.lane, item.platform, item.observedAt || now, state.metrics.length])), queueItemId: item.queueItemId || null, eventId: item.eventId || null, lane: item.lane, platform: item.platform, impressions: nonNegativeInteger(item.impressions, "impressions"), reach: nonNegativeInteger(item.reach, "reach"), videoViews: nonNegativeInteger(item.videoViews, "videoViews"), engagements: nonNegativeInteger(item.engagements, "engagements"), clicks: nonNegativeInteger(item.clicks, "clicks"), shares: nonNegativeInteger(item.shares, "shares"), revenueUsd: nonNegativeMoney(item.revenueUsd, "revenueUsd"), costUsd: nonNegativeMoney(item.costUsd, "costUsd"), observedAt: isoNow(item.observedAt || now), recordedAt: now, variantId: item.variantId || null };
     state.metrics.push(metric);
   }
   state.updatedAt = now;

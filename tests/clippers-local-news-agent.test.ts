@@ -203,8 +203,8 @@ test("Spanish events with missing fields use Spanish source fallbacks before tra
   const queue = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items;
   const facebook = queue.find((item: any) => item.platform === "facebook");
   assert.ok(queue.every((item: any) => item.status === "auto_eligible" && item.evidence.includes("local_translation=verified")));
-  assert.match(facebook.copy, /Detalle: La fuente oficial no proporcionó detalles adicionales\./);
-  assert.match(facebook.copy, /Detail: The official source provided no additional detail\./);
+  assert.match(facebook.copy, /La fuente oficial no proporcionó detalles adicionales\./);
+  assert.match(facebook.copy, /The official source provided no additional detail\./);
 });
 
 test("bootstrap creates all artifacts and clamps schedule to 2-5 minutes", async (t) => {
@@ -265,11 +265,11 @@ test("risk gate blocks critical events and copy stays platform-specific", async 
   assert.ok(__clipperLocalNewsInternals.xWeightedLength(x.copy) <= 280);
   assert.notEqual(x.copy, facebook.copy);
   assert.match(x.copy, /Fuente \/ Source: https:\/\/weather.gov\/example/);
-  assert.match(facebook.copy, /Esta página no es la agencia emisora/);
+  assert.match(facebook.copy, /Fuente oficial \/ Official source: NWS Miami/);
   assert.equal(facebook.textOnly, true);
   assert.equal(facebook.mediaRequired, false);
-  assert.match(facebook.copy, /Detalle: .* a las .*E[DS]T/);
-  assert.match(facebook.copy, /EXTRACTO ORIGINAL \/ ORIGINAL EXCERPT\nEvacuate immediately/);
+  assert.match(facebook.copy, /Actualización oficial .* a las .*E[DS]T/);
+  assert.doesNotMatch(facebook.copy, /EXTRACTO ORIGINAL|Evacuate immediately\. Evacuate immediately/);
 });
 
 test("X keeps both languages and a valid source when the official URL is unusually long", async (t) => {
@@ -405,10 +405,9 @@ test("professional newsroom classifies desks and produces attributed Facebook te
   assert.equal(persisted.editorialUrgency, "developing");
   assert.deepEqual({ textOnly: facebook.textOnly, mediaRequired: facebook.mediaRequired }, { textOnly: true, mediaRequired: false });
   assert.match(facebook.copy, /^ESPAÑOL/);
-  assert.match(facebook.copy, /\nENGLISH\n/);
-  assert.match(facebook.copy, /TRÁFICO:/);
-  assert.match(facebook.copy, /INSTRUCCIÓN ORIGINAL \(EXTRACTO\) \/ ORIGINAL INSTRUCTION \(EXCERPT\)\nUse an alternate route/);
-  assert.match(facebook.copy, /Según \/ According to Notify NYC/);
+  assert.match(facebook.copy, /\nENGLISH · TRAFFIC\n/);
+  assert.match(facebook.copy, /ESPAÑOL · TRÁFICO/);
+  assert.match(facebook.copy, /Fuente oficial \/ Official source: Notify NYC/);
   assert.match(facebook.copy, /https:\/\/news\.example\.com\/news\/article\//);
   assert.match(facebook.copy, /utm_source=metricool/);
   assert.match(x.copy, /https:\/\/notify\.nyc\/traffic-1/);
@@ -651,9 +650,9 @@ test("Facebook newsroom copy keeps official detail concise for long source descr
     location: "Miami-Dade", eventType: "Traffic advisory",
   }] });
   const facebook = JSON.parse(await readFile(path.join(workspaceDir, "metricool-queue.json"), "utf8")).items.find((item: any) => item.platform === "facebook");
-  assert.ok(facebook.copy.length < 4000);
-  assert.match(facebook.copy, /EXTRACTO ORIGINAL \/ ORIGINAL EXCERPT\nLong detail/);
-  assert.match(facebook.copy, /INSTRUCCIÓN ORIGINAL \(EXTRACTO\) \/ ORIGINAL INSTRUCTION \(EXCERPT\)\nUse alternate route/);
+  assert.ok(facebook.copy.length < 1_600);
+  assert.doesNotMatch(facebook.copy, /EXTRACTO ORIGINAL|INSTRUCCIÓN ORIGINAL/);
+  assert.equal((facebook.copy.match(/https:\/\/miamidade\.gov\/long/g) || []).length, 1);
 });
 
 test("sensitive Spanish and English topics receive automatic final quarantine or rejection", async (t) => {
@@ -728,14 +727,14 @@ test("metrics roll into analytics and status without changing publish claims", a
   const workspaceDir = await fixture(t);
   await ingestClipperLocalNewsEvents({ workspaceDir, now: "2026-07-21T12:00:00Z", events: [event] });
   const result = await recordClipperLocalNewsMetrics({ workspaceDir, now: "2026-07-21T13:00:00Z", metrics: [
-    { eventId: "nws-1", lane: "miami-news", platform: "x", impressions: 100, engagements: 9, clicks: 4, shares: 2, revenueUsd: 12.5, costUsd: 3.25 },
+    { eventId: "nws-1", lane: "miami-news", platform: "x", impressions: 100, reach: 80, videoViews: 75, engagements: 9, clicks: 4, shares: 2, revenueUsd: 12.5, costUsd: 3.25 },
     { eventId: "nws-1", lane: "miami-news", platform: "facebook" },
   ] });
-  assert.deepEqual(result.status.metrics, { total: 2, impressions: 100, engagements: 9, clicks: 4, shares: 2, revenueUsd: 12.5, costUsd: 3.25, profitUsd: 9.25 });
+  assert.deepEqual(result.status.metrics, { total: 2, impressions: 100, reach: 80, videoViews: 75, engagements: 9, clicks: 4, shares: 2, revenueUsd: 12.5, costUsd: 3.25, profitUsd: 9.25 });
   assert.deepEqual(result.status.monetization, {
     targetUsd: 10000, revenueUsd: 12.5, remainingUsd: 9987.5, progressPct: 0.13,
     externalEligibility: "unverified", pagesEligible: null, policyViolations: null, verifiedAt: null,
-    bySection: { weather: { posts: 1, reach: 100, engagement: 9, revenueUsd: 12.5 } },
+    bySection: { weather: { posts: 1, reach: 80, engagement: 9, revenueUsd: 12.5 } },
   });
   assert.equal(result.status.queue.published, 0);
   assert.match(await readFile(result.status.artifacts.analytics, "utf8"), /"impressions": 100/);

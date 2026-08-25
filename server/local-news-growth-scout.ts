@@ -190,10 +190,11 @@ function normalizedSources(env: NodeJS.ProcessEnv = process.env): GrowthScoutSou
     }
   }
   return [
-    { id: "reddit-miami", kind: "reddit", label: "Reddit Miami", url: "https://www.reddit.com/r/Miami/new.json?limit=25&raw_json=1", lane: "miami-news" },
-    { id: "reddit-nyc", kind: "reddit", label: "Reddit NYC", url: "https://www.reddit.com/r/nyc/new.json?limit=25&raw_json=1", lane: "ny-news" },
+    { id: "reddit-miami", kind: "reddit", label: "Reddit Miami", url: "https://www.reddit.com/r/Miami/hot.json?limit=25&raw_json=1", lane: "miami-news" },
+    { id: "reddit-nyc", kind: "reddit", label: "Reddit NYC", url: "https://www.reddit.com/r/nyc/hot.json?limit=25&raw_json=1", lane: "ny-news" },
     { id: "reddit-news", kind: "reddit", label: "Reddit News", url: "https://www.reddit.com/r/news/hot.json?limit=25&raw_json=1", lane: "cross-platform" },
-    { id: "reddit-social-media", kind: "reddit", label: "Reddit Social Media Managers", url: "https://www.reddit.com/r/SocialMediaManagers/hot.json?limit=25&raw_json=1", lane: "cross-platform" },
+    { id: "reddit-facebook", kind: "reddit", label: "Reddit Facebook", url: "https://www.reddit.com/r/facebook/hot.json?limit=25&raw_json=1", lane: "cross-platform" },
+    { id: "reddit-social-media", kind: "reddit", label: "Reddit Social Media", url: "https://www.reddit.com/r/socialmedia/hot.json?limit=25&raw_json=1", lane: "cross-platform" },
     { id: "google-news-miami", kind: "rss", label: "Google News Miami", url: "https://news.google.com/rss/search?q=Miami%20public%20safety%20OR%20breaking%20news&hl=en-US&gl=US&ceid=US:en", lane: "miami-news" },
     { id: "google-news-nyc", kind: "rss", label: "Google News New York", url: "https://news.google.com/rss/search?q=New%20York%20public%20safety%20OR%20breaking%20news&hl=en-US&gl=US&ceid=US:en", lane: "ny-news" },
   ];

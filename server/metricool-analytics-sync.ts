@@ -227,12 +227,14 @@ export function parseMetricoolPostMetrics(value: unknown): Array<{
   contentHash: string | null;
   observedAt: string | null;
   impressions: number;
+  reach: number;
+  videoViews: number;
   engagements: number;
   clicks: number;
   shares: number;
 }> {
   const seen = new Set<string>();
-  const output: Array<{ postId: string | null; queueItemId: string | null; contentHash: string | null; observedAt: string | null; impressions: number; engagements: number; clicks: number; shares: number }> = [];
+  const output: Array<{ postId: string | null; queueItemId: string | null; contentHash: string | null; observedAt: string | null; impressions: number; reach: number; videoViews: number; engagements: number; clicks: number; shares: number }> = [];
   for (const rawRecord of recordObjects(value)) {
     const record = flattenRecord(rawRecord);
     const postId = textFrom(record, [/^id$/i, /post.?id/i, /publication.?id/i, /uuid/i]);
@@ -245,13 +247,15 @@ export function parseMetricoolPostMetrics(value: unknown): Array<{
     const shares = numberFrom(record, [/share/i]);
     const clicks = numberFrom(record, [/link.?click/i, /click/i]);
     const engagements = numberFrom(record, [/^engagements?$/i, /^interactions?$/i]) || reactions + comments + shares + clicks;
-    const impressions = numberFrom(record, [/view/i, /impression/i, /reach/i]);
+    const impressions = numberFrom(record, [/^impressions?$/i, /^views?$/i]);
+    const reach = numberFrom(record, [/^reach$/i, /impressionsUnique/i]);
+    const videoViews = numberFrom(record, [/video.?views?/i]);
     if (!postId && !queueItemId && !observedAt) continue;
     if (!postId && !queueItemId && output.some((existing) => existing.observedAt === observedAt && existing.impressions === impressions && existing.engagements === engagements && existing.clicks === clicks && existing.shares === shares && Boolean(existing.postId || existing.queueItemId))) continue;
-    const key = [postId || "", queueItemId || "", postContentHash || "", observedAt || "", impressions, engagements, clicks, shares].join("|");
+    const key = [postId || "", queueItemId || "", postContentHash || "", observedAt || "", impressions, reach, videoViews, engagements, clicks, shares].join("|");
     if (seen.has(key)) continue;
     seen.add(key);
-    output.push({ postId, queueItemId, contentHash: postContentHash, observedAt, impressions, engagements, clicks, shares });
+    output.push({ postId, queueItemId, contentHash: postContentHash, observedAt, impressions, reach, videoViews, engagements, clicks, shares });
   }
   return output;
 }
@@ -350,6 +354,11 @@ async function readLedger(dir: string): Promise<LedgerEntry[]> {
 
 function fingerprint(lane: string, blogId: string, metric: ReturnType<typeof parseMetricoolPostMetrics>[number]): string {
   return createHash("sha256").update(JSON.stringify([lane, blogId, metric])).digest("hex");
+}
+
+function legacyFingerprint(lane: string, blogId: string, metric: ReturnType<typeof parseMetricoolPostMetrics>[number]): string {
+  const { reach: _reach, videoViews: _videoViews, ...legacyMetric } = metric;
+  return createHash("sha256").update(JSON.stringify([lane, blogId, legacyMetric])).digest("hex");
 }
 
 async function fetchFacebookPostAnalytics(
@@ -479,15 +488,17 @@ async function performMetricoolAnalyticsSync(input: MetricoolAnalyticsSyncDeps =
             || (post.contentHash && [normalizeId(entry.copyHash), normalizeId(entry.reviewedCopyHash)].includes(post.contentHash))
           ) && normalizeId(entry.lane) === target.lane && normalizeId(entry.platform) === "facebook" && normalizeId(entry.blogId) === target.blogId);
           if (!ledgerEntry) { unmatchedSkipped += 1; continue; }
-          const key = fingerprint(target.lane, target.blogId, post);
-          if (seen.has(key)) { duplicatesSkipped += 1; continue; }
-          seen.add(key);
+          const keys = [fingerprint(target.lane, target.blogId, post), legacyFingerprint(target.lane, target.blogId, post)];
+          if (keys.some((key) => seen.has(key))) { duplicatesSkipped += 1; continue; }
+          for (const key of keys) seen.add(key);
           metrics.push({
             queueItemId: normalizeId(ledgerEntry.queueItemId) || post.queueItemId || undefined,
             eventId: normalizeId(ledgerEntry.eventId) || undefined,
             lane: target.lane,
             platform: "facebook",
             impressions: post.impressions,
+            reach: post.reach,
+            videoViews: post.videoViews,
             engagements: post.engagements,
             clicks: post.clicks,
             shares: post.shares,

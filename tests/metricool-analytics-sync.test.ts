@@ -18,8 +18,8 @@ function response(value: unknown, status = 200): Response {
 
 test("parses Metricool post metrics without trusting a single provider field", () => {
   const parsed = parseMetricoolPostMetrics({ data: [{ id: "post-1", publicationDate: "2026-07-26T12:00:00Z", views: 42, reactions: 3, comments: 1, shares: 2, linkClicks: 4 }] });
-  assert.deepEqual(parsed, [{ postId: "post-1", queueItemId: null, contentHash: null, observedAt: "2026-07-26T12:00:00Z", impressions: 42, engagements: 10, clicks: 4, shares: 2 }]);
-  assert.deepEqual(parseMetricoolPostMetrics({ data: [{ postId: "nested-1", publicationDate: { dateTime: "2026-07-26T12:00:00Z" }, metrics: { views: 9, reactions: 1 } }] }), [{ postId: "nested-1", queueItemId: null, contentHash: null, observedAt: "2026-07-26T12:00:00Z", impressions: 9, engagements: 1, clicks: 0, shares: 0 }]);
+  assert.deepEqual(parsed, [{ postId: "post-1", queueItemId: null, contentHash: null, observedAt: "2026-07-26T12:00:00Z", impressions: 42, reach: 0, videoViews: 0, engagements: 10, clicks: 4, shares: 2 }]);
+  assert.deepEqual(parseMetricoolPostMetrics({ data: [{ postId: "nested-1", publicationDate: { dateTime: "2026-07-26T12:00:00Z" }, metrics: { views: 9, reach: 7, videoViews: 6, reactions: 1 } }] }), [{ postId: "nested-1", queueItemId: null, contentHash: null, observedAt: "2026-07-26T12:00:00Z", impressions: 9, reach: 7, videoViews: 6, engagements: 1, clicks: 0, shares: 0 }]);
 });
 
 test("parses official Metricool MCP Facebook post fields", () => {
@@ -30,8 +30,10 @@ test("parses official Metricool MCP Facebook post fields", () => {
     FBPO08: 2,
     FBPO09: 3,
     FBPO11: 120,
+    FBPO12: 100,
     FBPO13: 5,
     FBPO14: 1,
+    FBPO16: 70,
   }] }) }] });
   assert.deepEqual(parsed, [{
     postId: "facebook-post-1",
@@ -39,6 +41,8 @@ test("parses official Metricool MCP Facebook post fields", () => {
     contentHash: "cd9ca433093a165331dabccc1b3ca1ee3d5488ff0ed3c0024c6252d97d541d32",
     observedAt: "2026-08-11T14:00:00-04:00",
     impressions: 120,
+    reach: 100,
+    videoViews: 70,
     engagements: 11,
     clicks: 3,
     shares: 1,
@@ -160,6 +164,30 @@ test("syncs Facebook analytics for both local-news brands and deduplicates obser
   assert.equal(publicStatus.enabled, false);
   assert.equal(publicStatus.configured, false);
   assert.equal("seen" in publicStatus, false);
+});
+
+test("recognizes pre-upgrade analytics fingerprints after reach and video-view fields are added", async () => {
+  const workspaceDir = await mkdtemp(path.join(tmpdir(), "metricool-analytics-legacy-fingerprint-"));
+  const post = { postId: "post-legacy", queueItemId: null, contentHash: null, observedAt: "2026-07-26T12:00:00Z", impressions: 42, engagements: 3, clicks: 0, shares: 0 };
+  const { createHash } = await import("node:crypto");
+  const legacyFingerprint = createHash("sha256").update(JSON.stringify(["miami-news", "miami-1", post])).digest("hex");
+  await writeFile(path.join(workspaceDir, "metricool-delivery-ledger.json"), JSON.stringify({ entries: [
+    { queueItemId: "queue-legacy", eventId: "event-legacy", lane: "miami-news", platform: "facebook", blogId: "miami-1", metricoolPostId: "post-legacy" },
+  ] }));
+  await writeFile(path.join(workspaceDir, "metricool-analytics-sync.json"), JSON.stringify({ seen: [legacyFingerprint] }));
+  const result = await syncMetricoolAnalytics({
+    workspaceDir,
+    env: { METRICOOL_USER_TOKEN: "configured-token", METRICOOL_USER_ID: "3558197" },
+    now: () => new Date("2026-07-27T15:00:00Z"),
+    fetch: async (input) => {
+      const url = String(input);
+      if (url.includes("simpleProfiles")) return response({ data: [{ blogId: "miami-1", label: "Miami News" }] });
+      if (url.includes("blogId=miami-1")) return response({ data: [{ id: "post-legacy", publicationDate: post.observedAt, impressions: 42, reactions: 3 }] });
+      return response({ data: [] });
+    },
+  });
+  assert.equal(result.metricsRecorded, 0);
+  assert.equal(result.duplicatesSkipped, 1);
 });
 
 test("daily scheduler runs at the configured New York time and records a single run per date", async () => {

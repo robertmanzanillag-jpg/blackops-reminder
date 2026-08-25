@@ -33,6 +33,15 @@ test("parses public Reddit metadata without retaining author or post body", () =
   assert.equal("selftext" in rows[0], false);
 });
 
+test("default Reddit discovery uses hot feeds and keeps community content metadata-only", () => {
+  const sources = __localNewsGrowthScoutInternals.normalizedSources({});
+  const reddit = sources.filter((source) => source.kind === "reddit");
+  assert.ok(reddit.length >= 5);
+  assert.ok(reddit.every((source) => source.url.includes("/hot.json")));
+  assert.ok(reddit.some((source) => source.id === "reddit-facebook"));
+  assert.ok(reddit.some((source) => source.id === "reddit-social-media"));
+});
+
 test("scout aggregates Reddit and RSS patterns, persists a safe snapshot, and never marks media as owned", async () => {
   const workspace = await mkdtemp(path.join(os.tmpdir(), "local-news-growth-scout-"));
   try {
@@ -85,7 +94,9 @@ test("growth scout scheduler defaults to hourly, starts immediately, and respect
     log: () => {},
   });
   assert.equal(scheduler.start().intervalMinutes, 60);
-  await new Promise<void>((resolve) => setTimeout(resolve, 25));
+  for (let attempt = 0; attempt < 20 && scheduler.status().running; attempt += 1) {
+    await new Promise<void>((resolve) => setTimeout(resolve, 10));
+  }
   assert.equal(delay, 60 * 60_000);
   assert.equal(runs > 0, true);
   await new Promise<void>((resolve) => setImmediate(resolve));
