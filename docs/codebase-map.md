@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-08-24T08:21:24.608Z
-Repo: `/private/tmp/asistente-sleep-clippers`
+Generated: 2026-08-26T06:35:17.924Z
+Repo: `/private/tmp/asistente-youtube-audit`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 635 | 552 | 1853 | 494 | 12082 |
+| 645 | 562 | 1903 | 493 | 12607 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 129 | 125 | server:129 |
+| `server` | 130 | 126 | server:130 |
 | `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
-| `tests` | 111 | 108 | test:111 |
+| `tests` | 115 | 112 | test:115 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `script` | 72 | 67 | script:72 |
-| `docs` | 28 | 27 | docs:28 |
+| `script` | 75 | 70 | script:75 |
+| `docs` | 30 | 29 | docs:30 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `.agents/memory` | 5 | 5 | docs:5 |
@@ -50,7 +50,7 @@ Package: `rest-express`
 - `client/src/App.tsx`: `/`, `/agents-office`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/tools`
 - `server/assistant.ts`: `/api/assistant/chat`, `/api/assistant/context`, `/api/assistant/transcribe`
 - `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/blackroom`
-- `server/index.ts`: `/api/health`, `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
+- `server/index.ts`: `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
 - `server/replit_integrations/chat/routes.ts`: `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/messages`
 - `server/replit_integrations/image/routes.ts`: `/api/generate-image`
@@ -102,10 +102,12 @@ Package: `rest-express`
 - `tests/clippers-local-news-metricool.test.ts`
 - `tests/clippers-local-news-routes.test.ts`
 - `tests/clippers-local-news-scheduler.test.ts`
+- `tests/clippers-local-news-state-retention.test.ts`
 - `tests/clippers-local-news-translation.test.ts`
 - `tests/clippers-owned-source-scripts.test.ts`
 - `tests/clippers-runtime-status.test.ts`
 - `tests/clippers-upload-metricool-media.test.ts`
+- `tests/clippers-youtube-audit-pages.test.ts`
 - `tests/code-agent-security.test.ts`
 - `tests/cybersecurity-agent.test.ts`
 - `tests/db-config.test.ts`
@@ -179,12 +181,12 @@ Package: `rest-express`
 - `client/src/pages/revenue-engine-simple.tsx` (client-page; 33 symbols, 7 imports)
 - `client/src/pages/tools.tsx` (client-page; 2 symbols, 6 imports)
 - `package.json` (package)
-- `script/blackroom-control-server.mjs` (script; 70 symbols, 9 imports)
+- `script/blackroom-control-server.mjs` (script; 71 symbols, 9 imports)
 - `script/blackroom-daily-agent.ts` (script; 16 symbols, 2 imports)
 - `script/blackroom-deterministic-editor.ts` (script; 59 symbols, 7 imports)
 - `script/blackroom-local-worker.ts` (script; 73 symbols, 7 imports)
 - `script/blackroom-metricool-csv-bridge.mjs` (script; 34 symbols)
-- `script/blackroom-remote-sync.mjs` (script; 16 symbols)
+- `script/blackroom-remote-sync.mjs` (script; 24 symbols)
 - `script/blackroom-worker-ledger.ts` (script; 29 symbols, 4 imports)
 - `script/build.ts` (script; 12 symbols, 4 imports)
 - `script/cache-local-news-models.mjs` (script; 1 symbols)
@@ -199,7 +201,7 @@ Package: `rest-express`
 - `script/clippers-account-permission-readiness.mjs` (script; 82 symbols, 2 imports)
 - `script/clippers-cleanup-published-vyro-media.mjs` (script; 47 symbols, 4 imports)
 - `script/clippers-content-learning-ceo.mjs` (script; 85 symbols, 3 imports)
-- `script/clippers-content-local-worker.mjs` (script; 74 symbols, 7 imports)
+- `script/clippers-content-local-worker.mjs` (script; 112 symbols, 10 imports)
 - `script/clippers-daily-watchdog.mjs` (script; 86 symbols, 3 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
 - `script/clippers-free-local-worker.mjs` (script; 41 symbols, 5 imports)
@@ -212,7 +214,7 @@ Package: `rest-express`
 - `script/clippers-marketplace-intake.mjs` (script; 59 symbols, 3 imports)
 - `script/clippers-marketplace-refresh.mjs` (script; 50 symbols, 4 imports)
 - `script/clippers-metricool-autopilot.mjs` (script; 116 symbols, 4 imports)
-- `script/clippers-motivation-shorts.mjs` (script; 117 symbols, 6 imports)
+- `script/clippers-motivation-shorts.mjs` (script; 157 symbols, 6 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)
 - `script/clippers-reconcile-publications.mjs` (script; 74 symbols, 3 imports)
@@ -226,14 +228,14 @@ Package: `rest-express`
 - `script/clippers-tiktok-preflight.ts` (script; 15 symbols, 1 imports)
 - `script/clippers-upload-metricool-media.ts` (script; 51 symbols, 7 imports)
 - `script/clippers-youtube-delivery-worker.mjs` (script; 30 symbols, 6 imports)
-- `script/clippers-youtube-publish-worker.mjs` (script; 92 symbols, 6 imports)
-- `script/clippers-youtube-upload-packager.mjs` (script; 103 symbols, 7 imports)
-- `script/clippers-youtube-uploader.mjs` (script; 95 symbols, 5 imports)
+- `script/clippers-youtube-oauth-bootstrap.mjs` (script; 75 symbols, 6 imports)
+- `script/clippers-youtube-publish-worker.mjs` (script; 104 symbols, 6 imports)
+- `script/clippers-youtube-upload-packager.mjs` (script; 131 symbols, 7 imports)
+- `script/clippers-youtube-uploader.mjs` (script; 104 symbols, 5 imports)
 - `script/codebase-map.ts` (script; 43 symbols, 3 imports)
+- `script/compact-local-news-state.ts` (script; 9 symbols, 4 imports)
 - `script/configure-telegram.ts` (script; 5 symbols, 4 imports)
 - `script/create-ceo-go-live-task.ts` (script; 13 symbols, 3 imports)
-- `script/create-local-user.ts` (script; 5 symbols, 3 imports)
-- `script/ensure-radio-tiktok-drive-folder.ts` (script; 4 symbols, 3 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

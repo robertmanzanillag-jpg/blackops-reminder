@@ -29,7 +29,7 @@ function fakeMediaCommands({ decodeFails = false, sleep = false } = {}) {
   };
 }
 
-async function fixture({ motivationCount = 1, includeSleep = false, privacy = "private", publicAuth = null } = {}) {
+async function fixture({ motivationCount = 1, includeSleep = false, privacy = "private", publicAuth = null, auditVerified = false } = {}) {
   const root = await mkdtemp(path.join(os.tmpdir(), "youtube-packager-"));
   await Promise.all(["reports/content-worker", "reports", "media", "manifests", "evidence/motivation", "sleep"].map((dir) => mkdir(path.join(root, dir), { recursive: true })));
   const report = {
@@ -89,12 +89,15 @@ async function fixture({ motivationCount = 1, includeSleep = false, privacy = "p
     schemaVersion: 1, workspaceRoot: root, sourceReport,
     authorization: {
       blanketAuthorized: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T15:00:00.000Z",
+      privacyPolicyAccepted: true, privacyPolicyVersion: "2026-08-26",
+      privacyPolicyAcceptedBy: "Robert", privacyPolicyAcceptedAt: "2026-08-26T05:00:00.000Z",
       motivationShortsPerDayPerChannel: 5, sleepVideosPerRollingSevenDays: 1,
+      youtubeApiProjectAuditVerified: auditVerified,
     },
     channels: {
-      motivation_es: { channelId: "UC1234567890123456789012", privacyStatus: privacy, ...(publicAuth ? { publicAuthorization: publicAuth } : {}) },
-      motivation_en: { channelId: "UCabcdefghijklmnopqrstuv", privacyStatus: "private" },
-      sleep: { channelId: "UCZYXWVUTSRQPONMLKJIHGFE", privacyStatus: privacy, ...(publicAuth ? { publicAuthorization: publicAuth } : {}) },
+      motivation_es: { channelId: "UC1234567890123456789012", privacyStatus: privacy, madeForKids: false, ...(publicAuth ? { publicAuthorization: publicAuth } : {}) },
+      motivation_en: { channelId: "UCabcdefghijklmnopqrstuv", privacyStatus: "private", madeForKids: false },
+      sleep: { channelId: "UCZYXWVUTSRQPONMLKJIHGFE", privacyStatus: privacy, madeForKids: false, ...(publicAuth ? { publicAuthorization: publicAuth } : {}) },
     },
   };
   const configPath = path.join(root, "packager-config.json");
@@ -114,6 +117,13 @@ test("packages owned procedural motivation with full-decode QA and native metada
   const uploadItem = JSON.parse(await readFile(path.join(item.root, queue.items[0].itemFile), "utf8"));
   assert.match(uploadItem.description, /Motivación/);
   assert.equal(uploadItem.privacyStatus, "private");
+  assert.equal(uploadItem.madeForKids, false);
+  assert.equal(queue.items[0].madeForKids, false);
+  assert.deepEqual(uploadItem.privacyPolicyAcceptance, {
+    accepted: true, version: "2026-08-26", acceptedBy: "Robert", acceptedAt: "2026-08-26T05:00:00.000Z",
+  });
+  assert.deepEqual(queue.items[0].privacyPolicyAcceptance, uploadItem.privacyPolicyAcceptance);
+  assert.deepEqual(queue.authorization.privacyPolicyAcceptance, uploadItem.privacyPolicyAcceptance);
   const rights = JSON.parse(await readFile(path.join(item.root, uploadItem.rightsEvidence.file), "utf8"));
   assert.equal(rights.sourceProvenance.proceduralAudioGenerator, "ffmpeg_lavfi_anoisesrc_v1");
   const qa = JSON.parse(await readFile(path.join(item.root, uploadItem.qaEvidence.file), "utf8"));
@@ -206,6 +216,32 @@ test("rerun preserves and deduplicates an exact pinned reviewed queue", async ()
   assert.equal(queue.items.length, 1);
 });
 
+test("fails closed when a legacy or tampered reviewed queue lacks audience or privacy evidence", async () => {
+  const audience = await fixture();
+  const first = await packageYouTubeUploads({ configPath: audience.configPath, now: NOW, operations: fakeMediaCommands() });
+  const audienceQueuePath = path.join(audience.root, first.queueFile);
+  const audienceQueue = JSON.parse(await readFile(audienceQueuePath, "utf8"));
+  const audienceItemPath = path.join(audience.root, audienceQueue.items[0].itemFile);
+  const audienceItem = JSON.parse(await readFile(audienceItemPath, "utf8"));
+  delete audienceItem.madeForKids;
+  await writeFile(audienceItemPath, JSON.stringify(audienceItem));
+  await assert.rejects(
+    () => packageYouTubeUploads({ configPath: audience.configPath, now: NOW, operations: fakeMediaCommands() }),
+    /existing_reviewed_queue_audience_invalid/,
+  );
+
+  const privacy = await fixture();
+  const second = await packageYouTubeUploads({ configPath: privacy.configPath, now: NOW, operations: fakeMediaCommands() });
+  const privacyQueuePath = path.join(privacy.root, second.queueFile);
+  const privacyQueue = JSON.parse(await readFile(privacyQueuePath, "utf8"));
+  delete privacyQueue.authorization.privacyPolicyAcceptance;
+  await writeFile(privacyQueuePath, JSON.stringify(privacyQueue));
+  await assert.rejects(
+    () => packageYouTubeUploads({ configPath: privacy.configPath, now: NOW, operations: fakeMediaCommands() }),
+    /existing_reviewed_queue_privacy_policy_acceptance_invalid/,
+  );
+});
+
 test("rerun treats existing reviewed queue item files and hashes as active outcomes", async () => {
   const item = await fixture({ motivationCount: 2 });
   const firstRow = item.report.motivation.es.results[0];
@@ -234,15 +270,139 @@ test("requires the owner-reviewed config file to be mode 0600", async () => {
   await assert.rejects(() => packageYouTubeUploads({ configPath: item.configPath, now: NOW, operations: fakeMediaCommands() }), /config_must_be_owner_only_0600/);
 });
 
+test("requires an explicit boolean madeForKids choice for every channel", async () => {
+  const missing = await fixture();
+  delete missing.config.channels.motivation_en.madeForKids;
+  await writeFile(missing.configPath, JSON.stringify(missing.config), { mode: 0o600 });
+  await assert.rejects(
+    () => packageYouTubeUploads({ configPath: missing.configPath, now: NOW, operations: fakeMediaCommands() }),
+    /motivation_en_made_for_kids_choice_required/,
+  );
+
+  const nonBoolean = await fixture();
+  nonBoolean.config.channels.sleep.madeForKids = "false";
+  await writeFile(nonBoolean.configPath, JSON.stringify(nonBoolean.config), { mode: 0o600 });
+  await assert.rejects(
+    () => packageYouTubeUploads({ configPath: nonBoolean.configPath, now: NOW, operations: fakeMediaCommands() }),
+    /sleep_made_for_kids_choice_required/,
+  );
+});
+
+test("requires Robert's explicit acceptance of the pinned YouTube privacy policy version", async () => {
+  const missing = await fixture();
+  delete missing.config.authorization.privacyPolicyAccepted;
+  await writeFile(missing.configPath, JSON.stringify(missing.config), { mode: 0o600 });
+  await assert.rejects(
+    () => packageYouTubeUploads({ configPath: missing.configPath, now: NOW, operations: fakeMediaCommands() }),
+    /youtube_privacy_policy_acceptance_required/,
+  );
+
+  const stale = await fixture();
+  stale.config.authorization.privacyPolicyVersion = "2026-08-25";
+  await writeFile(stale.configPath, JSON.stringify(stale.config), { mode: 0o600 });
+  await assert.rejects(
+    () => packageYouTubeUploads({ configPath: stale.configPath, now: NOW, operations: fakeMediaCommands() }),
+    /youtube_privacy_policy_acceptance_required/,
+  );
+});
+
+test("copies each explicit madeForKids choice into the uploader item and reviewed queue", async () => {
+  const item = await fixture({ motivationCount: 0, includeSleep: true });
+  item.config.channels.sleep.madeForKids = true;
+  await writeFile(item.configPath, JSON.stringify(item.config), { mode: 0o600 });
+  const result = await packageYouTubeUploads({
+    configPath: item.configPath,
+    now: NOW,
+    operations: fakeMediaCommands({ sleep: true }),
+  });
+  assert.equal(result.packaged, 1);
+  const queue = JSON.parse(await readFile(path.join(item.root, result.queueFile), "utf8"));
+  const uploadItem = JSON.parse(await readFile(path.join(item.root, queue.items[0].itemFile), "utf8"));
+  assert.equal(queue.items[0].madeForKids, true);
+  assert.equal(uploadItem.madeForKids, true);
+});
+
 test("public packaging requires separate explicit Robert authorization and writes it to item and queue", async () => {
   const missing = await fixture({ privacy: "public" });
   await assert.rejects(() => packageYouTubeUploads({ configPath: missing.configPath, now: NOW, operations: fakeMediaCommands() }), /explicit_public_authorization_required/);
   const publicAuthorization = { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T15:30:00.000Z" };
-  const approved = await fixture({ privacy: "public", publicAuth: publicAuthorization });
+  const approved = await fixture({ privacy: "public", publicAuth: publicAuthorization, auditVerified: true });
   const result = await packageYouTubeUploads({ configPath: approved.configPath, now: NOW, operations: fakeMediaCommands() });
   const queue = JSON.parse(await readFile(path.join(approved.root, result.queueFile), "utf8"));
   const uploadItem = JSON.parse(await readFile(path.join(approved.root, queue.items[0].itemFile), "utf8"));
   assert.deepEqual(queue.items[0].publicAuthorization, publicAuthorization);
   assert.deepEqual(uploadItem.publishAuthorization, publicAuthorization);
   assert.equal(result.uploadAttempted, false);
+});
+
+test("schedules five Shorts as private future uploads spaced in America/New_York across DST", async () => {
+  const publicAuthorization = { public: true, authorizedBy: "Robert", authorizedAt: "2026-03-07T20:00:00.000Z" };
+  const item = await fixture({ motivationCount: 5, publicAuth: publicAuthorization, auditVerified: true });
+  item.config.scheduling = { timeZone: "America/New_York" };
+  item.config.channels.motivation_es.schedule = {
+    enabled: true, localTimes: ["08:00", "11:00", "14:00", "17:00", "20:00"],
+  };
+  await writeFile(item.configPath, JSON.stringify(item.config), { mode: 0o600 });
+  const now = new Date("2026-03-08T04:00:00.000Z");
+  const result = await packageYouTubeUploads({ configPath: item.configPath, now, operations: fakeMediaCommands() });
+  assert.equal(result.packaged, 5);
+  const publishTimes = result.items.map((row) => row.publishAt);
+  assert.equal(publishTimes[0], "2026-03-08T12:00:00.000Z");
+  assert.deepEqual(publishTimes.map((value) => new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).format(new Date(value))), ["08:00", "11:00", "14:00", "17:00", "20:00"]);
+  assert.ok(publishTimes.every((value, index) => index === 0 || Date.parse(value) - Date.parse(publishTimes[index - 1]) >= 2 * 60 * 60 * 1000));
+  const queue = JSON.parse(await readFile(path.join(item.root, result.queueFile), "utf8"));
+  for (const entry of queue.items) {
+    const uploadItem = JSON.parse(await readFile(path.join(item.root, entry.itemFile), "utf8"));
+    assert.equal(uploadItem.privacyStatus, "private");
+    assert.equal(uploadItem.youtubeApiProjectAuditVerified, true);
+    assert.deepEqual(entry.publicAuthorization, publicAuthorization);
+  }
+  assert.ok(result.items.every((row) => row.scheduled && row.publicConfirmed === false && row.publicUrl === null));
+});
+
+test("rejects schedules that could bulk-publish Shorts without spacing", async () => {
+  const publicAuthorization = { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T15:30:00.000Z" };
+  const item = await fixture({ motivationCount: 5, publicAuth: publicAuthorization, auditVerified: true });
+  item.config.scheduling = { timeZone: "America/New_York" };
+  item.config.channels.motivation_es.schedule = { enabled: true, localTimes: ["08:00", "08:30", "09:00", "09:30", "10:00"] };
+  await writeFile(item.configPath, JSON.stringify(item.config), { mode: 0o600 });
+  await assert.rejects(() => packageYouTubeUploads({ configPath: item.configPath, now: NOW, operations: fakeMediaCommands() }), /schedule_spacing_too_short/);
+});
+
+test("allows target six only with an evidence-backed CEO learning recommendation", async () => {
+  const publicAuthorization = { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T15:30:00.000Z" };
+  const item = await fixture({ motivationCount: 6, publicAuth: publicAuthorization, auditVerified: true });
+  item.config.authorization.motivationShortsPerDayPerChannel = 6;
+  item.config.scheduling = { timeZone: "America/New_York" };
+  item.config.channels.motivation_es.schedule = {
+    enabled: true, localTimes: ["07:00", "09:30", "12:00", "14:30", "17:00", "19:30"],
+  };
+  await writeFile(item.configPath, JSON.stringify(item.config), { mode: 0o600 });
+  await assert.rejects(() => packageYouTubeUploads({ configPath: item.configPath, now: NOW, operations: fakeMediaCommands() }),
+    /evidence_backed_learning_recommendation_required_above_five/);
+
+  const evidenceFile = "reports/youtube-learning-recommendation.json";
+  const evidence = { schemaVersion: 1, basedOnRealMetrics: true, recommendedTargetPerDay: 6,
+    metrics: [{ name: "median_retention_percent", value: 71 }, { name: "views_per_short", value: 850 }] };
+  await writeFile(path.join(item.root, evidenceFile), `${JSON.stringify(evidence)}\n`);
+  item.config.scheduling.learningRecommendation = {
+    approved: true, targetPerDay: 6, recommendedBy: "Clippers CEO", recommendedAt: "2026-08-24T15:45:00.000Z",
+    evidence: { file: evidenceFile, sha256: sha(await readFile(path.join(item.root, evidenceFile))) },
+  };
+  await writeFile(item.configPath, JSON.stringify(item.config), { mode: 0o600 });
+  const result = await packageYouTubeUploads({ configPath: item.configPath, now: NOW, operations: fakeMediaCommands() });
+  assert.equal(result.items.filter((row) => row.lane === "motivation_es").length, 6);
+  const queue = JSON.parse(await readFile(path.join(item.root, result.queueFile), "utf8"));
+  assert.equal(queue.authorization.motivationShortsPerDayPerChannel, 6);
+  assert.equal(queue.authorization.learningRecommendation.evidence.file, evidenceFile);
+});
+
+test("rejects a daily target above the safe ceiling of ten", async () => {
+  const item = await fixture();
+  item.config.authorization.motivationShortsPerDayPerChannel = 11;
+  await writeFile(item.configPath, JSON.stringify(item.config), { mode: 0o600 });
+  await assert.rejects(() => packageYouTubeUploads({ configPath: item.configPath, now: NOW, operations: fakeMediaCommands() }),
+    /motivation_daily_target_must_be_between_one_and_ten/);
 });

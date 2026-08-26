@@ -14,6 +14,9 @@ const CHANNELS = {
   sleep: "UCZYXWVUTSRQPONMLKJIHGFE",
 };
 const sha = (value) => createHash("sha256").update(value).digest("hex");
+const PRIVACY_POLICY_ACCEPTANCE = Object.freeze({
+  accepted: true, version: "2026-08-26", acceptedBy: "Robert", acceptedAt: "2026-08-26T05:00:00.000Z",
+});
 
 function envFor(...lanes) {
   const env = {};
@@ -60,9 +63,17 @@ async function setup(specs, { ledger = [], publicQueueAuth = false } = {}) {
     const item = {
       schemaVersion: 1, itemId, lane: spec.lane, channelId: spec.channelId || CHANNELS[spec.lane], file: mediaFile, sha256: mediaHash,
       title: `Title ${itemId}`, description: "Original content", privacyStatus,
+      madeForKids: spec.madeForKids ?? false,
+      privacyPolicyAcceptance: PRIVACY_POLICY_ACCEPTANCE,
       rightsEvidence: { file: rightsFile, sha256: await hashPath(root, rightsFile) },
       qaEvidence: { file: qaFile, sha256: await hashPath(root, qaFile) },
       ...(privacyStatus === "public" ? { publishAuthorization: { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T13:00:00.000Z" } } : {}),
+      ...(spec.publishAt ? {
+        publishAt: spec.publishAt,
+        publishAuthorization: { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T13:00:00.000Z" },
+        youtubeApiProjectAuditVerified: true,
+      } : {}),
+      ...(privacyStatus === "public" ? { youtubeApiProjectAuditVerified: true } : {}),
     };
     const itemFile = `youtube/items/${itemId}.json`;
     await writeFile(path.join(root, itemFile), `${JSON.stringify(item)}\n`);
@@ -77,14 +88,23 @@ async function setup(specs, { ledger = [], publicQueueAuth = false } = {}) {
     }
     entries.push({
       itemFile, approved: true, approvedBy: "Robert", approvedAt: "2026-08-24T13:00:00.000Z", source,
+      madeForKids: spec.madeForKids ?? false,
+      privacyPolicyAcceptance: PRIVACY_POLICY_ACCEPTANCE,
       ...(privacyStatus === "public" && publicQueueAuth ? { publicAuthorization: { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T13:00:00.000Z" } } : {}),
+      ...(spec.publishAt && publicQueueAuth ? {
+        publicAuthorization: { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T13:00:00.000Z" },
+        youtubeApiProjectAuditVerified: true,
+      } : {}),
+      ...(privacyStatus === "public" && publicQueueAuth ? { youtubeApiProjectAuditVerified: true } : {}),
     });
   }
   const reportFile = "reports/content-worker/clippers-content-local-worker-latest.json";
   await writeFile(path.join(root, reportFile), `${JSON.stringify(report)}\n`);
   const queue = {
     schemaVersion: 1, reviewed: true, reviewedBy: "Robert", reviewedAt: "2026-08-24T13:00:00.000Z",
-    sourceReport: { file: reportFile, sha256: await hashPath(root, reportFile) }, items: entries,
+    sourceReport: { file: reportFile, sha256: await hashPath(root, reportFile) },
+    authorization: { motivationShortsPerDayPerChannel: 5, privacyPolicyAcceptance: PRIVACY_POLICY_ACCEPTANCE },
+    items: entries,
   };
   const queueFile = "youtube/reviewed-upload-queue.json";
   await writeFile(path.join(root, queueFile), `${JSON.stringify(queue)}\n`);
@@ -137,7 +157,7 @@ test("accepts uploaded only with a confirmed valid ID and constructs the canonic
     }),
   });
   assert.equal(good.items[0].status, "uploaded");
-  assert.equal(good.items[0].youtubeUrl, "https://www.youtube.com/watch?v=valid_123");
+  assert.equal(good.items[0].youtubeUrl, null);
 
   const invalid = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
   const bad = await runYouTubePublishWorker({
@@ -166,6 +186,76 @@ test("does not invoke uploader when exact rights or QA evidence is missing", asy
   });
   assert.equal(calls, 0);
   assert.ok(result.blockers.includes("qa_evidence_missing_or_unsafe"));
+});
+
+test("direct invocation rejects missing or mismatched audience and privacy acceptance", async () => {
+  const audience = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const audienceQueuePath = path.join(audience.root, audience.queueFile);
+  const audienceQueue = JSON.parse(await readFile(audienceQueuePath, "utf8"));
+  audienceQueue.items[0].madeForKids = true;
+  await writeFile(audienceQueuePath, `${JSON.stringify(audienceQueue)}\n`);
+  let calls = 0;
+  const audienceResult = await runYouTubePublishWorker({
+    workspaceRoot: audience.root, queueFile: audience.queueFile, env: envFor("motivation_es"),
+    runUpload: async () => { calls += 1; return {}; },
+  });
+  assert.ok(audienceResult.items[0].blockers.includes("queue_item_audience_mismatch"));
+
+  const missingEntryAudience = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const missingEntryQueuePath = path.join(missingEntryAudience.root, missingEntryAudience.queueFile);
+  const missingEntryQueue = JSON.parse(await readFile(missingEntryQueuePath, "utf8"));
+  delete missingEntryQueue.items[0].madeForKids;
+  await writeFile(missingEntryQueuePath, `${JSON.stringify(missingEntryQueue)}\n`);
+  const missingEntryResult = await runYouTubePublishWorker({
+    workspaceRoot: missingEntryAudience.root, queueFile: missingEntryAudience.queueFile, env: envFor("motivation_es"),
+    runUpload: async () => { calls += 1; return {}; },
+  });
+  assert.ok(missingEntryResult.items[0].blockers.includes("queue_item_audience_choice_required"));
+
+  const itemPrivacy = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const itemPath = path.join(itemPrivacy.root, itemPrivacy.entries[0].itemFile);
+  const item = JSON.parse(await readFile(itemPath, "utf8"));
+  delete item.privacyPolicyAcceptance;
+  await writeFile(itemPath, `${JSON.stringify(item)}\n`);
+  const itemResult = await runYouTubePublishWorker({
+    workspaceRoot: itemPrivacy.root, queueFile: itemPrivacy.queueFile, env: envFor("motivation_es"),
+    runUpload: async () => { calls += 1; return {}; },
+  });
+  assert.ok(itemResult.items[0].blockers.includes("youtube_privacy_policy_acceptance_required"));
+
+  const missingEntryPrivacy = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const missingPrivacyQueuePath = path.join(missingEntryPrivacy.root, missingEntryPrivacy.queueFile);
+  const missingPrivacyQueue = JSON.parse(await readFile(missingPrivacyQueuePath, "utf8"));
+  delete missingPrivacyQueue.items[0].privacyPolicyAcceptance;
+  await writeFile(missingPrivacyQueuePath, `${JSON.stringify(missingPrivacyQueue)}\n`);
+  const missingPrivacyResult = await runYouTubePublishWorker({
+    workspaceRoot: missingEntryPrivacy.root, queueFile: missingEntryPrivacy.queueFile, env: envFor("motivation_es"),
+    runUpload: async () => { calls += 1; return {}; },
+  });
+  assert.ok(missingPrivacyResult.items[0].blockers.includes("queue_item_privacy_policy_acceptance_required"));
+
+  const missingQueuePrivacy = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const missingQueuePath = path.join(missingQueuePrivacy.root, missingQueuePrivacy.queueFile);
+  const missingQueue = JSON.parse(await readFile(missingQueuePath, "utf8"));
+  delete missingQueue.authorization.privacyPolicyAcceptance;
+  await writeFile(missingQueuePath, `${JSON.stringify(missingQueue)}\n`);
+  const missingQueueResult = await runYouTubePublishWorker({
+    workspaceRoot: missingQueuePrivacy.root, queueFile: missingQueuePrivacy.queueFile, env: envFor("motivation_es"),
+    runUpload: async () => { calls += 1; return {}; },
+  });
+  assert.ok(missingQueueResult.blockers.includes("queue_privacy_policy_acceptance_required"));
+
+  const queuePrivacy = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const queuePath = path.join(queuePrivacy.root, queuePrivacy.queueFile);
+  const queue = JSON.parse(await readFile(queuePath, "utf8"));
+  queue.authorization.privacyPolicyAcceptance = { ...PRIVACY_POLICY_ACCEPTANCE, acceptedAt: "2026-08-26T06:00:00.000Z" };
+  await writeFile(queuePath, `${JSON.stringify(queue)}\n`);
+  const queueResult = await runYouTubePublishWorker({
+    workspaceRoot: queuePrivacy.root, queueFile: queuePrivacy.queueFile, env: envFor("motivation_es"),
+    runUpload: async () => { calls += 1; return {}; },
+  });
+  assert.ok(queueResult.items[0].blockers.includes("queue_item_privacy_policy_acceptance_mismatch"));
+  assert.equal(calls, 0);
 });
 
 test("fails closed per lane when channel or OAuth configuration is absent", async () => {
@@ -252,7 +342,7 @@ test("public upload requires global, item, and reviewed queue authorization", as
   let calls = 0;
   const first = await runYouTubePublishWorker({
     workspaceRoot: noQueueAuth.root, queueFile: noQueueAuth.queueFile,
-    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true" },
+    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true", CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED: "true" },
     runUpload: async () => { calls += 1; return {}; },
   });
   assert.equal(calls, 0);
@@ -268,11 +358,79 @@ test("public upload requires global, item, and reviewed queue authorization", as
 
   const third = await runYouTubePublishWorker({
     workspaceRoot: authorized.root, queueFile: authorized.queueFile,
-    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true" },
-    runUpload: async (options) => { calls += 1; return uploadedResult(options, calls); },
+    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true", CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED: "true" },
+    runUpload: async (options) => { calls += 1; return { ...uploadedResult(options, calls), privacyStatus: "public", publicConfirmed: true }; },
   });
   assert.equal(third.uploaded, 1);
   assert.equal(calls, 1);
+});
+
+test("scheduled uploads require all public-intent gates and report scheduled without a public URL", async () => {
+  const publishAt = "2026-08-25T12:00:00.000Z";
+  const missingQueueAuth = await setup([{ itemId: "short-es", lane: "motivation_es", publishAt }]);
+  let calls = 0;
+  const blocked = await runYouTubePublishWorker({
+    workspaceRoot: missingQueueAuth.root, queueFile: missingQueueAuth.queueFile,
+    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true", CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED: "true" },
+    now: new Date("2026-08-24T15:00:00.000Z"), runUpload: async () => { calls += 1; return {}; },
+  });
+  assert.equal(calls, 0);
+  assert.ok(blocked.blockers.includes("per_item_public_authorization_missing"));
+
+  const fixture = await setup([{ itemId: "short-es", lane: "motivation_es", publishAt }], { publicQueueAuth: true });
+  const result = await runYouTubePublishWorker({
+    workspaceRoot: fixture.root, queueFile: fixture.queueFile,
+    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true", CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED: "true" },
+    now: new Date("2026-08-24T15:00:00.000Z"),
+    runUpload: async () => ({ status: "scheduled", itemId: "short-es", lane: "motivation_es", uploadAttempted: true,
+      youtubeVideoId: "scheduled123", privacyStatus: "private", publishAt, blockers: [] }),
+  });
+  assert.equal(result.scheduled, 1);
+  assert.equal(result.uploaded, 0);
+  assert.equal(result.publicConfirmed, 0);
+  assert.equal(result.items[0].youtubeUrl, null);
+  assert.equal(result.items[0].publishAt, publishAt);
+});
+
+test("blocks a sixth scheduled Short per lane/day and schedules are not bulk immediate", async () => {
+  const specs = Array.from({ length: 6 }, (_, index) => ({
+    itemId: `short-es-${index}`, lane: "motivation_es",
+    publishAt: `2026-08-25T${String(10 + index * 2).padStart(2, "0")}:00:00.000Z`,
+  }));
+  const fixture = await setup(specs, { publicQueueAuth: true });
+  const calls = [];
+  const result = await runYouTubePublishWorker({
+    workspaceRoot: fixture.root, queueFile: fixture.queueFile,
+    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true", CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED: "true" },
+    now: new Date("2026-08-24T15:00:00.000Z"),
+    runUpload: async (options) => {
+      calls.push(options.itemFile);
+      const index = calls.length - 1;
+      return { status: "scheduled", itemId: specs[index].itemId, lane: "motivation_es", uploadAttempted: true,
+        youtubeVideoId: `sched${index}id`, privacyStatus: "private", publishAt: specs[index].publishAt, blockers: [] };
+    },
+  });
+  assert.equal(calls.length, 5);
+  assert.equal(result.scheduled, 5);
+  assert.ok(result.items[5].blockers.includes("daily_lane_upload_cap_reached"));
+  assert.ok(result.items.slice(0, 5).every((item) => item.youtubeUrl === null && item.publicConfirmed === false));
+});
+
+test("blocks schedule times closer than two hours in the same lane", async () => {
+  const fixture = await setup([
+    { itemId: "short-es-a", lane: "motivation_es", publishAt: "2026-08-25T12:00:00.000Z" },
+    { itemId: "short-es-b", lane: "motivation_es", publishAt: "2026-08-25T12:30:00.000Z" },
+  ], { publicQueueAuth: true });
+  const calls = [];
+  const result = await runYouTubePublishWorker({
+    workspaceRoot: fixture.root, queueFile: fixture.queueFile,
+    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true", CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED: "true" },
+    now: new Date("2026-08-24T15:00:00.000Z"),
+    runUpload: async (options) => { calls.push(options); return { status: "scheduled", itemId: "short-es-a", lane: "motivation_es",
+      uploadAttempted: true, youtubeVideoId: "schedulea", privacyStatus: "private", publishAt: "2026-08-25T12:00:00.000Z", blockers: [] }; },
+  });
+  assert.equal(calls.length, 1);
+  assert.ok(result.items[1].blockers.includes("scheduled_publish_spacing_too_short"));
 });
 
 test("existing and uncertain outcomes block automatic retry by item, file, or hash", async () => {
@@ -356,7 +514,7 @@ test("recovers an old empty uploader ledger lock before a verified upload", asyn
     fetcher,
   });
   assert.equal(result.status, "uploaded");
-  assert.equal(result.youtubeUrl, "https://www.youtube.com/watch?v=video123");
+  assert.equal(result.youtubeUrl, null);
   assert.equal(calls.length, 4);
   const ledger = JSON.parse(await readFile(path.join(fixture.root, "reports/youtube-upload-ledger.json"), "utf8"));
   assert.deepEqual(ledger.items.map((item) => item.status), ["upload_started", "uploaded"]);

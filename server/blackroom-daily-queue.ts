@@ -561,9 +561,17 @@ export function retryBlackRoomJob(state: BlackRoomQueueState, jobId: string, err
   return job;
 }
 
-export function summarizeBlackRoomQueue(state: BlackRoomQueueState) {
+export function summarizeBlackRoomQueue(state: BlackRoomQueueState, now = new Date()) {
   const totals: Record<BlackRoomDailyJobStatus, number> = { queued: 0, processing: 0, retry: 0, scheduled: 0, completed: 0, cancelled: 0 };
   for (const job of state.jobs) totals[job.status] += 1;
+  const pendingJobs = state.jobs.filter((job) => ["queued", "processing", "retry"].includes(job.status));
+  const remainingPosts = pendingJobs.reduce((sum, job) => sum + Math.max(0, Number(job.requirements?.posts) || 0), 0);
+  const remainingTargetDates = new Set(pendingJobs.map((job) => job.targetDate).filter(Boolean));
+  const lastPendingJob = [...pendingJobs].sort((left, right) => left.targetDate.localeCompare(right.targetDate)).at(-1) || null;
+  const today = localDate(now, state.timezone);
+  const remainingCalendarDays = lastPendingJob
+    ? Math.max(1, Math.ceil((new Date(`${lastPendingJob.targetDate}T12:00:00.000Z`).getTime() - new Date(`${today}T12:00:00.000Z`).getTime()) / 86_400_000) + 1)
+    : 0;
   return {
     enabled: state.enabled,
     pausedAt: state.pausedAt,
@@ -582,6 +590,13 @@ export function summarizeBlackRoomQueue(state: BlackRoomQueueState) {
     },
     analytics: state.analytics,
     totals,
+    progress: {
+      remainingPosts,
+      remainingBatches: pendingJobs.length,
+      remainingDays: remainingTargetDates.size,
+      remainingCalendarDays,
+      estimatedFinishDate: lastPendingJob?.targetDate || null,
+    },
     nextJob: state.jobs.find((job) => ["queued", "retry", "processing"].includes(job.status)) || null,
   };
 }

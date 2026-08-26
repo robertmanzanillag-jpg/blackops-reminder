@@ -22,10 +22,13 @@ Before making an OAuth or YouTube request, the uploader requires:
 
 Media and evidence hashes are calculated incrementally from file streams, so an eight-hour master is never loaded into memory as one buffer. The resumable `Location` header is accepted only when it is HTTPS and points to the exact official YouTube `/upload/youtube/v3/videos` endpoint with both `uploadType=resumable` and an opaque `upload_id`; other Google API paths are rejected.
 
-The default privacy is `private`. A public item requires both:
+The default privacy is `private`. Immediate-public and future-scheduled items require all of:
 
 - `CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED=true`; and
 - `publishAuthorization.public=true`, `authorizedBy`, and `authorizedAt` in that individual item.
+- `CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED=true` and the corresponding audited-project marker in the item.
+
+A scheduled item additionally includes a strictly future RFC3339 `publishAt`. The uploader rejects past/malformed values and any scheduled item whose requested privacy is not `private`. Its YouTube request sends `status.privacyStatus: private` plus `status.publishAt`. The result becomes `scheduled` only when the API response confirms the same publication time and private pre-publication state; otherwise it is `uncertain_outcome` and requires manual reconciliation. A scheduled or private upload never receives a claimed public URL.
 
 An interrupted or non-successful media request after a resumable session has been created is recorded as `uncertain_outcome`. The same item/file/hash cannot be retried until an operator reconciles it in YouTube Studio and resolves the ledger. This avoids duplicate videos.
 
@@ -56,7 +59,7 @@ The OAuth grants must include YouTube upload permission (normally `https://www.g
 
 ## Item and evidence contract
 
-The item JSON has schema version 1 and includes `itemId`, `lane`, `file`, `sha256`, `title`, optional `description`, optional `privacyStatus`, and hashed references to `rightsEvidence` and `qaEvidence`. Rights evidence uses `assetType: youtube_video`. QA evidence uses `assetType: youtube_video_qa` and explicitly approves these checks: `playbackComplete`, `videoValid`, `audioValid`, and `formatAccepted`.
+The item JSON has schema version 1 and includes `itemId`, `lane`, `file`, `sha256`, `title`, optional `description`, optional `privacyStatus`, optional future `publishAt`, and hashed references to `rightsEvidence` and `qaEvidence`. Rights evidence uses `assetType: youtube_video`. QA evidence uses `assetType: youtube_video_qa` and explicitly approves these checks: `playbackComplete`, `videoValid`, `audioValid`, and `formatAccepted`.
 
 Use preflight before enabling any upload:
 

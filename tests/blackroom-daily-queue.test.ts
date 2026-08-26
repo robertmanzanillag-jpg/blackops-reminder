@@ -13,6 +13,7 @@ import {
   recordBlackRoomSourceUsage,
   retryBlackRoomJob,
   startBlackRoomAgent,
+  summarizeBlackRoomQueue,
   readBlackRoomQueue,
   reconcileBlackRoomSchedule,
   writeBlackRoomQueue,
@@ -58,6 +59,37 @@ test("keeps a two-week persistent scheduling buffer", () => {
   assert.equal(state.jobs[0].requirements.djs, 5);
   assert.equal(state.jobs[0].requirements.deleteOnlyAfterMetricoolConfirmation, true);
   assert.deepEqual(state.jobs[0].requirements.durationsSeconds, [15, 30, 60, 120, 300, 600]);
+});
+
+test("summarizes the exact pending post count and campaign finish estimate", () => {
+  const now = new Date("2026-07-20T12:00:00.000Z");
+  const state = createBlackRoomQueueState(now);
+  ensureBlackRoomScheduleBuffer(state, now);
+  state.jobs[0].status = "completed";
+  state.jobs[1].status = "scheduled";
+  state.jobs[2].status = "retry";
+  state.jobs[2].requirements.posts = 7;
+  const summary = summarizeBlackRoomQueue(state, now);
+  assert.equal(summary.progress.remainingBatches, 12);
+  assert.equal(summary.progress.remainingPosts, 62);
+  assert.equal(summary.progress.remainingDays, 12);
+  assert.equal(summary.progress.remainingCalendarDays, 15);
+  assert.equal(summary.progress.estimatedFinishDate, "2026-08-03");
+});
+
+test("reports a completed queue without inventing remaining time", () => {
+  const now = new Date("2026-07-20T12:00:00.000Z");
+  const state = createBlackRoomQueueState(now);
+  ensureBlackRoomScheduleBuffer(state, now);
+  state.jobs.forEach((job) => { job.status = "completed"; });
+  const summary = summarizeBlackRoomQueue(state, now);
+  assert.deepEqual(summary.progress, {
+    remainingPosts: 0,
+    remainingBatches: 0,
+    remainingDays: 0,
+    remainingCalendarDays: 0,
+    estimatedFinishDate: null,
+  });
 });
 
 test("strategy changes replan only queued/retry future jobs and preserve scheduled history", () => {
