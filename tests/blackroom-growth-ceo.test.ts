@@ -81,10 +81,11 @@ test("CSV fallback feeds the CEO without Metricool analytics API availability", 
     now: new Date("2026-07-30T12:00:00.000Z"),
   });
   assert.equal(analytics.sampleCount, 6);
-  assert.equal(analytics.comparableSampleCount, 2);
+  assert.equal(analytics.comparableSampleCount, 0);
   assert.deepEqual(analytics.networkSamples, { tiktok: 2, facebook: 2, youtube: 2 });
   assert.deepEqual(analytics.importedSamplesByNetwork, { tiktok: 2, facebook: 2, youtube: 2 });
-  assert.equal(analytics.tiktokMedianViews, 107);
+  assert.equal(analytics.tiktokMedianViews, 0);
+  assert.deepEqual(analytics.attributedSamplesByNetwork, { tiktok: 0, facebook: 0, youtube: 0 });
   assert.ok(analytics.recommendedTimes.includes("09:30"));
   assert.match(analytics.reason, /puente CSV local aportó 6 resultados sin usar IA ni API pagada/);
 });
@@ -123,7 +124,7 @@ test("collects each network through discovered Metricool MCP tools and totals us
     now: new Date("2026-07-22T12:00:00.000Z"),
   });
   assert.equal(analytics.sampleCount, 9);
-  assert.equal(analytics.comparableSampleCount, 2);
+  assert.equal(analytics.comparableSampleCount, 0);
   assert.deepEqual(analytics.networkSamples, { tiktok: 3, facebook: 2, youtube: 4 });
   assert.deepEqual(analytics.recommendedTimes, ["18:30"]);
   assert.deepEqual(analytics.recommendedTimesByNetwork, { tiktok: ["18:30"], facebook: ["18:30"], youtube: ["18:30"] });
@@ -203,7 +204,7 @@ test("reads the current Metricool analytics contract and supplies metric IDs per
   assert.deepEqual(analytics.networkSamples, { tiktok: 2, facebook: 4, youtube: 2 });
   assert.deepEqual(analytics.historyRequestsByNetwork, { tiktok: 1, facebook: 2, youtube: 1 });
   assert.equal(analytics.sampleCount, 8);
-  assert.equal(analytics.comparableSampleCount, 2);
+  assert.equal(analytics.comparableSampleCount, 0);
   assert.deepEqual(analytics.recommendedTimes, ["19:30"]);
   const availableCalls = calls.filter((call) => call.name === "getAnalyticsAvailableMetrics");
   assert.deepEqual(
@@ -330,8 +331,8 @@ test("joins Metricool's separate views and post-identity timelines by publicatio
 
   assert.deepEqual(analytics.networkSamples, { tiktok: 2, facebook: 4, youtube: 2 });
   assert.equal(analytics.sampleCount, 8);
-  assert.equal(analytics.comparableSampleCount, 2);
-  assert.equal(analytics.tiktokMedianViews, 30);
+  assert.equal(analytics.comparableSampleCount, 0);
+  assert.equal(analytics.tiktokMedianViews, 0);
 });
 
 test("does not join separate Metricool daily aggregate timelines as individual posts", async () => {
@@ -574,7 +575,7 @@ test("keeps Facebook and YouTube learning data when one Metricool network tempor
   assert.match(analytics.networkErrors?.tiktok || "", /reconnecting/);
 });
 
-test("learns per network without letting an empty platform block healthy platforms", async () => {
+test("reports raw per-network metrics but does not learn before attribution", async () => {
   const samples = Array.from({ length: BLACKROOM_CEO_MIN_SAMPLES }, (_, index) => ({
     id: `yt-${index}`, views: 100 + index, engagementRate: 0.08,
     completionRate: 0.55, averageWatchSeconds: 22,
@@ -583,12 +584,62 @@ test("learns per network without letting an empty platform block healthy platfor
     fetch: async () => { throw new Error("Metricool temporarily unavailable"); },
     importedSamplesByNetwork: { youtube: samples },
   });
-  assert.equal(analytics.confidence, "learning");
-  assert.deepEqual(analytics.networkConfidence, { tiktok: "collecting", facebook: "collecting", youtube: "learning" });
+  assert.equal(analytics.confidence, "collecting");
+  assert.deepEqual(analytics.networkConfidence, { tiktok: "collecting", facebook: "collecting", youtube: "collecting" });
   assert.equal(analytics.networkEngagementRate?.youtube, 0.08);
   assert.equal(analytics.networkCompletionRate?.youtube, 0.55);
   assert.equal(analytics.networkAverageWatchSeconds?.youtube, 22);
-  assert.match(analytics.reason, /aprende por red/);
+  assert.deepEqual(analytics.attributedSamplesByNetwork, { tiktok: 0, facebook: 0, youtube: 0 });
+});
+
+test("all unmatched metrics stay collecting at five per day without a creative winner", async () => {
+  const samples = Object.fromEntries((["tiktok", "facebook", "youtube"] as const).map((network) => [
+    network, Array.from({ length: 21 }, (_, index) => ({ id: `${network}-${index}`, views: 1_000 + index })),
+  ]));
+  const analytics = await collectBlackRoomMetricoolAnalytics({
+    fetch: async () => { throw new Error("offline"); },
+    importedSamplesByNetwork: samples,
+    previous: { creativeStrategy: "drop_first", creativeStrategyVersion: 0 },
+  });
+  assert.equal(analytics.sampleCount, 63);
+  assert.equal(analytics.comparableSampleCount, 0);
+  assert.equal(analytics.confidence, "collecting");
+  assert.deepEqual(analytics.networkDailyTargets, { tiktok: 5, facebook: 5, youtube: 5 });
+  assert.equal(analytics.creativeStrategy, "drop_first");
+  assert.equal(analytics.creativeStrategyVersion, 0);
+  assert.ok(analytics.creativePerformance?.every((cohort) => cohort.samples === 0));
+});
+
+test("partial attribution decisions ignore unmatched low-view rows", async () => {
+  const tiktok = [100, 110, 120, 130, 140].map((views, index) => ({ id: `matched-${index}`, views }))
+    .concat([1, 1, 1, 1, 1].map((views, index) => ({ id: `unmatched-${index}`, views })));
+  const experiments = Array.from({ length: 5 }, (_, index) => ({
+    metricoolId: `matched-${index}`, reservationId: `r-${index}`, network: "tiktok",
+    creativeStrategy: "instant_drop" as const, durationSeconds: 30, format: "vertical" as const,
+    language: "en" as const, slot: `0${index}:00`, publishedAt: `2026-08-20T0${index}:00:00`,
+  }));
+  const analytics = await collectBlackRoomMetricoolAnalytics({
+    fetch: async () => { throw new Error("offline"); },
+    importedSamplesByNetwork: { tiktok }, publicationExperiments: experiments,
+    previous: { creativeStrategy: "instant_drop", creativeStrategyVersion: 0 },
+  });
+  assert.equal(analytics.networkSamples.tiktok, 10);
+  assert.equal(analytics.attributedSamplesByNetwork?.tiktok, 5);
+  assert.equal(analytics.tiktokMedianViews, 120);
+  assert.equal(analytics.tiktokLowViewRate, 0);
+  assert.equal(analytics.creativeStrategy, "instant_drop");
+  assert.equal(analytics.creativePerformance?.find((cohort) => cohort.strategy === "instant_drop")?.samples, 5);
+});
+
+test("campaign health treats an exact zero low-view rate as healthy", () => {
+  assert.equal(planBlackRoomCampaignPosts({
+    dayIndex: 2,
+    analytics: {
+      sampleCount: 63, comparableSampleCount: 21,
+      networkMedianViews: { tiktok: 100, facebook: 90, youtube: 5 },
+      networkLowViewRate: { tiktok: 0, facebook: 0, youtube: 1 },
+    },
+  }), 7);
 });
 
 test("CEO keeps the baseline when imported samples are not comparable across all networks", () => {

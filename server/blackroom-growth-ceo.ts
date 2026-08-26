@@ -116,6 +116,9 @@ export interface BlackRoomCeoAnalytics {
   nextCheckAt: string;
   confidence: "collecting" | "learning";
   networkSamples: Record<string, number>;
+  /** Samples safely linked to a publication experiment. Only these may drive
+   * cadence, creative, duration or winner decisions. */
+  attributedSamplesByNetwork?: Record<string, number>;
   networkConfidence?: Record<string, "collecting" | "learning">;
   networkEngagementRate?: Record<string, number>;
   networkCompletionRate?: Record<string, number>;
@@ -494,7 +497,7 @@ export function planBlackRoomCampaignPosts(input: {
   if (sampleCount < BLACKROOM_CEO_MIN_SAMPLES) return BLACKROOM_CEO_DAILY_POSTS;
   const healthyNetworks = BLACKROOM_METRICOOL_NETWORKS.filter((network) =>
     Number(input.analytics.networkMedianViews?.[network] || 0) >= 50
-    && Number(input.analytics.networkLowViewRate?.[network] || 1) <= 0.4,
+    && Number(input.analytics.networkLowViewRate?.[network] ?? 1) <= 0.4,
   ).length;
   // Days 3 and 10 of the rolling fourteen-day plan are the controlled volume
   // experiments. All other days remain comparable five-post baselines.
@@ -1218,10 +1221,12 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const times: string[] = [];
   const recommendedTimesByNetwork: Record<string, string[]> = {};
   const viewsByNetwork: Record<string, number[]> = {};
+  const attributedViewsByNetwork: Record<string, number[]> = {};
+  const attributedPostIdsByNetwork: Record<string, string[]> = {};
+  const networkViewsByStrategy: Record<string, Partial<Record<BlackRoomCreativeStrategy, number[]>>> = {};
   const engagementByNetwork: Record<string, number[]> = {};
   const completionByNetwork: Record<string, number[]> = {};
   const watchByNetwork: Record<string, number[]> = {};
-  const viewsByStrategy: Partial<Record<BlackRoomCreativeStrategy, number[]>> = {};
   const viewsByDuration: Record<string, number[]> = {};
   const viewsByDj: Record<string, number[]> = {};
   const viewsBySourceVideo: Record<string, number[]> = {};
@@ -1237,7 +1242,6 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const historyRequestsByNetwork: Record<string, number> = {};
   const importedCounts: Record<string, number> = {};
   const networkMetricFailures = new Set<string>();
-  let tiktokPostIds: string[] = [];
   for (const network of BLACKROOM_METRICOOL_NETWORKS) {
     const directTools = directMetricoolToolsForNetwork(tools, network);
     const networkHistory = emptyMetricoolHistory(true);
@@ -1313,9 +1317,6 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
         publishedAt: importedById.get(record.id)?.publishedAt,
         durationSeconds: importedById.get(record.id)?.durationSeconds,
       })), options.publicationExperiments || [], network);
-      for (const [strategy, views] of Object.entries(cohorts.viewsByStrategy)) {
-        (viewsByStrategy[strategy as BlackRoomCreativeStrategy] ||= []).push(...views);
-      }
       for (const [duration, views] of Object.entries(cohorts.viewsByDuration)) {
         (viewsByDuration[duration] ||= []).push(...views);
       }
@@ -1325,12 +1326,15 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
       for (const [language, views] of Object.entries(cohorts.viewsByLanguage)) (viewsByLanguage[language] ||= []).push(...views);
       for (const [slot, views] of Object.entries(cohorts.viewsBySlot)) (viewsBySlot[slot] ||= []).push(...views);
       attributionByNetwork[network] = cohorts.attribution;
+      attributedViewsByNetwork[network] = Object.values(cohorts.viewsByStrategy).flat();
+      attributedPostIdsByNetwork[network] = attributedViewsByNetwork[network]
+        .map((views, index) => `${network}:attributed:${index}:${views}`);
+      networkViewsByStrategy[network] = cohorts.viewsByStrategy;
       networkCreativePerformance[network] = BLACKROOM_CREATIVE_STRATEGIES.map((strategy) => {
         const values = cohorts.viewsByStrategy[strategy] || [];
         return { strategy, samples: values.length, medianViews: median(values), totalViews: values.reduce((sum, value) => sum + value, 0), lowViewRate: values.length ? values.filter((value) => value <= BLACKROOM_CEO_LOW_VIEW_THRESHOLD).length / values.length : 0 };
       });
       networkDurationPerformance[network] = planBlackRoomDurationLearning({ viewsByDuration: cohorts.viewsByDuration }).durationPerformance;
-      if (network === "tiktok") tiktokPostIds = viewRecords.map((record) => record.id);
       historyCompleteByNetwork[network] = networkHistory.requests > 0
         && networkHistory.complete
         && connectorErrors.length === 0;
@@ -1348,9 +1352,6 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
         publishedAt: importedById.get(record.id)?.publishedAt,
         durationSeconds: importedById.get(record.id)?.durationSeconds,
       })), options.publicationExperiments || [], network);
-      for (const [strategy, views] of Object.entries(cohorts.viewsByStrategy)) {
-        (viewsByStrategy[strategy as BlackRoomCreativeStrategy] ||= []).push(...views);
-      }
       for (const [duration, views] of Object.entries(cohorts.viewsByDuration)) {
         (viewsByDuration[duration] ||= []).push(...views);
       }
@@ -1360,12 +1361,15 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
       for (const [language, views] of Object.entries(cohorts.viewsByLanguage)) (viewsByLanguage[language] ||= []).push(...views);
       for (const [slot, views] of Object.entries(cohorts.viewsBySlot)) (viewsBySlot[slot] ||= []).push(...views);
       attributionByNetwork[network] = cohorts.attribution;
+      attributedViewsByNetwork[network] = Object.values(cohorts.viewsByStrategy).flat();
+      attributedPostIdsByNetwork[network] = attributedViewsByNetwork[network]
+        .map((views, index) => `${network}:attributed:${index}:${views}`);
+      networkViewsByStrategy[network] = cohorts.viewsByStrategy;
       networkCreativePerformance[network] = BLACKROOM_CREATIVE_STRATEGIES.map((strategy) => {
         const values = cohorts.viewsByStrategy[strategy] || [];
         return { strategy, samples: values.length, medianViews: median(values), totalViews: values.reduce((sum, value) => sum + value, 0), lowViewRate: values.length ? values.filter((value) => value <= BLACKROOM_CEO_LOW_VIEW_THRESHOLD).length / values.length : 0 };
       });
       networkDurationPerformance[network] = planBlackRoomDurationLearning({ viewsByDuration: cohorts.viewsByDuration }).durationPerformance;
-      if (network === "tiktok") tiktokPostIds = viewRecords.map((record) => record.id);
       historyCompleteByNetwork[network] = false;
       historyRequestsByNetwork[network] = networkHistory.requests;
       if (!importedSamples.length) networkMetricFailures.add(network);
@@ -1408,14 +1412,25 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   // network had a temporary empty response, even when Facebook/YouTube data
   // was available and visible in Metricool.
   const sampleCount = BLACKROOM_METRICOOL_NETWORKS.reduce((total, network) => total + (networkSamples[network] || 0), 0);
-  const comparableSampleCount = Math.min(...BLACKROOM_METRICOOL_NETWORKS.map((network) => networkSamples[network] || 0));
+  const attributedSamplesByNetwork = Object.fromEntries(BLACKROOM_METRICOOL_NETWORKS.map((network) => [
+    network, attributionByNetwork[network]?.matchedRecords || 0,
+  ]));
+  const comparableSampleCount = Math.min(...BLACKROOM_METRICOOL_NETWORKS.map((network) => attributedSamplesByNetwork[network] || 0));
   const networkConfidence = Object.fromEntries(BLACKROOM_METRICOOL_NETWORKS.map((network) => [
-    network, (networkSamples[network] || 0) >= BLACKROOM_CEO_MIN_SAMPLES ? "learning" : "collecting",
+    network, (attributedSamplesByNetwork[network] || 0) >= BLACKROOM_CEO_CREATIVE_MIN_SAMPLES ? "learning" : "collecting",
   ])) as Record<string, "collecting" | "learning">;
   const learningNetworkCount = Object.values(networkConfidence).filter((value) => value === "learning").length;
   const recommendedTimes = [...new Set(times)].slice(0, 12);
-  const networkLearning = planBlackRoomNetworkLearning({ viewsByNetwork });
-  const creative = planBlackRoomCreativeLearning({ views: viewsByNetwork.tiktok || [], postIds: tiktokPostIds, viewsByStrategy, previous: options.previous, now });
+  // Raw Metricool data remains visible in networkSamples, but cannot change
+  // strategy until it is safely linked to our own publication experiment.
+  const networkLearning = planBlackRoomNetworkLearning({ viewsByNetwork: attributedViewsByNetwork });
+  const creative = planBlackRoomCreativeLearning({
+    views: attributedViewsByNetwork.tiktok || [],
+    postIds: attributedPostIdsByNetwork.tiktok || [],
+    viewsByStrategy: networkViewsByStrategy.tiktok || {},
+    previous: options.previous,
+    now,
+  });
   const durationLearning = planBlackRoomDurationLearning({ viewsByDuration });
   const attributedRecords = Object.values(attributionByNetwork).reduce((total, item) => total + item.matchedRecords, 0);
   const unmatchedRecords = Object.values(attributionByNetwork).reduce((total, item) => total + item.unmatchedRecords, 0);
@@ -1437,6 +1452,7 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
     nextCheckAt: new Date(now.getTime() + BLACKROOM_CEO_REFRESH_MS).toISOString(),
     confidence: learningNetworkCount > 0 ? "learning" : "collecting",
     networkSamples,
+    attributedSamplesByNetwork,
     networkConfidence,
     networkEngagementRate: Object.fromEntries(BLACKROOM_METRICOOL_NETWORKS.map((network) => [network, median(engagementByNetwork[network] || [])])),
     networkCompletionRate: Object.fromEntries(BLACKROOM_METRICOOL_NETWORKS.map((network) => [network, median(completionByNetwork[network] || [])])),
