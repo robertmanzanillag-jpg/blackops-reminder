@@ -63,6 +63,12 @@ async function setup(specs, { ledger = [], publicQueueAuth = false } = {}) {
       rightsEvidence: { file: rightsFile, sha256: await hashPath(root, rightsFile) },
       qaEvidence: { file: qaFile, sha256: await hashPath(root, qaFile) },
       ...(privacyStatus === "public" ? { publishAuthorization: { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T13:00:00.000Z" } } : {}),
+      ...(spec.publishAt ? {
+        publishAt: spec.publishAt,
+        publishAuthorization: { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T13:00:00.000Z" },
+        youtubeApiProjectAuditVerified: true,
+      } : {}),
+      ...(privacyStatus === "public" ? { youtubeApiProjectAuditVerified: true } : {}),
     };
     const itemFile = `youtube/items/${itemId}.json`;
     await writeFile(path.join(root, itemFile), `${JSON.stringify(item)}\n`);
@@ -78,6 +84,11 @@ async function setup(specs, { ledger = [], publicQueueAuth = false } = {}) {
     entries.push({
       itemFile, approved: true, approvedBy: "Robert", approvedAt: "2026-08-24T13:00:00.000Z", source,
       ...(privacyStatus === "public" && publicQueueAuth ? { publicAuthorization: { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T13:00:00.000Z" } } : {}),
+      ...(spec.publishAt && publicQueueAuth ? {
+        publicAuthorization: { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T13:00:00.000Z" },
+        youtubeApiProjectAuditVerified: true,
+      } : {}),
+      ...(privacyStatus === "public" && publicQueueAuth ? { youtubeApiProjectAuditVerified: true } : {}),
     });
   }
   const reportFile = "reports/content-worker/clippers-content-local-worker-latest.json";
@@ -137,7 +148,7 @@ test("accepts uploaded only with a confirmed valid ID and constructs the canonic
     }),
   });
   assert.equal(good.items[0].status, "uploaded");
-  assert.equal(good.items[0].youtubeUrl, "https://www.youtube.com/watch?v=valid_123");
+  assert.equal(good.items[0].youtubeUrl, null);
 
   const invalid = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
   const bad = await runYouTubePublishWorker({
@@ -252,7 +263,7 @@ test("public upload requires global, item, and reviewed queue authorization", as
   let calls = 0;
   const first = await runYouTubePublishWorker({
     workspaceRoot: noQueueAuth.root, queueFile: noQueueAuth.queueFile,
-    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true" },
+    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true", CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED: "true" },
     runUpload: async () => { calls += 1; return {}; },
   });
   assert.equal(calls, 0);
@@ -268,11 +279,79 @@ test("public upload requires global, item, and reviewed queue authorization", as
 
   const third = await runYouTubePublishWorker({
     workspaceRoot: authorized.root, queueFile: authorized.queueFile,
-    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true" },
-    runUpload: async (options) => { calls += 1; return uploadedResult(options, calls); },
+    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true", CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED: "true" },
+    runUpload: async (options) => { calls += 1; return { ...uploadedResult(options, calls), privacyStatus: "public", publicConfirmed: true }; },
   });
   assert.equal(third.uploaded, 1);
   assert.equal(calls, 1);
+});
+
+test("scheduled uploads require all public-intent gates and report scheduled without a public URL", async () => {
+  const publishAt = "2026-08-25T12:00:00.000Z";
+  const missingQueueAuth = await setup([{ itemId: "short-es", lane: "motivation_es", publishAt }]);
+  let calls = 0;
+  const blocked = await runYouTubePublishWorker({
+    workspaceRoot: missingQueueAuth.root, queueFile: missingQueueAuth.queueFile,
+    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true", CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED: "true" },
+    now: new Date("2026-08-24T15:00:00.000Z"), runUpload: async () => { calls += 1; return {}; },
+  });
+  assert.equal(calls, 0);
+  assert.ok(blocked.blockers.includes("per_item_public_authorization_missing"));
+
+  const fixture = await setup([{ itemId: "short-es", lane: "motivation_es", publishAt }], { publicQueueAuth: true });
+  const result = await runYouTubePublishWorker({
+    workspaceRoot: fixture.root, queueFile: fixture.queueFile,
+    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true", CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED: "true" },
+    now: new Date("2026-08-24T15:00:00.000Z"),
+    runUpload: async () => ({ status: "scheduled", itemId: "short-es", lane: "motivation_es", uploadAttempted: true,
+      youtubeVideoId: "scheduled123", privacyStatus: "private", publishAt, blockers: [] }),
+  });
+  assert.equal(result.scheduled, 1);
+  assert.equal(result.uploaded, 0);
+  assert.equal(result.publicConfirmed, 0);
+  assert.equal(result.items[0].youtubeUrl, null);
+  assert.equal(result.items[0].publishAt, publishAt);
+});
+
+test("blocks a sixth scheduled Short per lane/day and schedules are not bulk immediate", async () => {
+  const specs = Array.from({ length: 6 }, (_, index) => ({
+    itemId: `short-es-${index}`, lane: "motivation_es",
+    publishAt: `2026-08-25T${String(10 + index * 2).padStart(2, "0")}:00:00.000Z`,
+  }));
+  const fixture = await setup(specs, { publicQueueAuth: true });
+  const calls = [];
+  const result = await runYouTubePublishWorker({
+    workspaceRoot: fixture.root, queueFile: fixture.queueFile,
+    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true", CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED: "true" },
+    now: new Date("2026-08-24T15:00:00.000Z"),
+    runUpload: async (options) => {
+      calls.push(options.itemFile);
+      const index = calls.length - 1;
+      return { status: "scheduled", itemId: specs[index].itemId, lane: "motivation_es", uploadAttempted: true,
+        youtubeVideoId: `sched${index}id`, privacyStatus: "private", publishAt: specs[index].publishAt, blockers: [] };
+    },
+  });
+  assert.equal(calls.length, 5);
+  assert.equal(result.scheduled, 5);
+  assert.ok(result.items[5].blockers.includes("daily_lane_upload_cap_reached"));
+  assert.ok(result.items.slice(0, 5).every((item) => item.youtubeUrl === null && item.publicConfirmed === false));
+});
+
+test("blocks schedule times closer than two hours in the same lane", async () => {
+  const fixture = await setup([
+    { itemId: "short-es-a", lane: "motivation_es", publishAt: "2026-08-25T12:00:00.000Z" },
+    { itemId: "short-es-b", lane: "motivation_es", publishAt: "2026-08-25T12:30:00.000Z" },
+  ], { publicQueueAuth: true });
+  const calls = [];
+  const result = await runYouTubePublishWorker({
+    workspaceRoot: fixture.root, queueFile: fixture.queueFile,
+    env: { ...envFor("motivation_es"), CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true", CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED: "true" },
+    now: new Date("2026-08-24T15:00:00.000Z"),
+    runUpload: async (options) => { calls.push(options); return { status: "scheduled", itemId: "short-es-a", lane: "motivation_es",
+      uploadAttempted: true, youtubeVideoId: "schedulea", privacyStatus: "private", publishAt: "2026-08-25T12:00:00.000Z", blockers: [] }; },
+  });
+  assert.equal(calls.length, 1);
+  assert.ok(result.items[1].blockers.includes("scheduled_publish_spacing_too_short"));
 });
 
 test("existing and uncertain outcomes block automatic retry by item, file, or hash", async () => {
@@ -356,7 +435,7 @@ test("recovers an old empty uploader ledger lock before a verified upload", asyn
     fetcher,
   });
   assert.equal(result.status, "uploaded");
-  assert.equal(result.youtubeUrl, "https://www.youtube.com/watch?v=video123");
+  assert.equal(result.youtubeUrl, null);
   assert.equal(calls.length, 4);
   const ledger = JSON.parse(await readFile(path.join(fixture.root, "reports/youtube-upload-ledger.json"), "utf8"));
   assert.deepEqual(ledger.items.map((item) => item.status), ["upload_started", "uploaded"]);

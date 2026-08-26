@@ -9,12 +9,13 @@ import { runYouTubeUpload, validateUploadItem } from "./clippers-youtube-uploade
 
 const LANES = Object.freeze({ motivation_es: "ES", motivation_en: "EN", sleep: "SLEEP" });
 const SHORT_LANES = new Set(["motivation_es", "motivation_en"]);
-const ACTIVE_STATES = new Set(["upload_started", "uncertain_outcome", "uploaded"]);
+const ACTIVE_STATES = new Set(["upload_started", "uncertain_outcome", "uploaded", "scheduled"]);
 const SHA256 = /^[a-f0-9]{64}$/i;
 const CHANNEL_ID = /^UC[A-Za-z0-9_-]{20,30}$/;
 const VIDEO_ID = /^[A-Za-z0-9_-]{6,32}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const EMPTY_LOCK_STALE_MS = 30 * 60 * 1000;
+const MIN_SHORT_SPACING_MS = 2 * 60 * 60 * 1000;
 
 const clean = (value) => String(value ?? "").trim();
 
@@ -92,6 +93,13 @@ function queueBlockers(queue) {
   }
   if (!clean(queue?.sourceReport?.file) || !SHA256.test(clean(queue?.sourceReport?.sha256))) blockers.push("source_report_reference_invalid");
   if (!Array.isArray(queue?.items)) blockers.push("queue_items_invalid");
+  const target = Number(queue?.authorization?.motivationShortsPerDayPerChannel ?? 5);
+  if (!Number.isInteger(target) || target < 1 || target > 10) blockers.push("queue_daily_target_invalid");
+  if (target > 5 && (!clean(queue?.authorization?.learningRecommendation?.evidence?.file)
+    || !SHA256.test(clean(queue?.authorization?.learningRecommendation?.evidence?.sha256))
+    || Number(queue?.authorization?.learningRecommendation?.targetPerDay) !== target)) {
+    blockers.push("queue_learning_recommendation_required_above_five");
+  }
   return blockers;
 }
 
@@ -186,25 +194,30 @@ function duplicateBlocker(rows, item) {
   return null;
 }
 
-function capBlocker(rows, lane, now, reserved) {
+function outcomeTime(row) {
+  return clean(row?.publishAt) || clean(row?.recordedAt);
+}
+
+function capBlocker(rows, item, now, reserved, dailyTarget = 5) {
+  const lane = clean(item?.lane);
   const outcomes = uniqueOutcomes(rows);
   if (SHORT_LANES.has(lane)) {
-    const today = dayInNewYork(now);
-    const count = outcomes.filter((row) => row.lane === lane && Number.isFinite(Date.parse(row.recordedAt))
-      && dayInNewYork(row.recordedAt) === today).length + (reserved[lane] || 0);
-    return count >= 5 ? "daily_lane_upload_cap_reached" : null;
+    const targetDay = dayInNewYork(item.publishAt || now);
+    const count = outcomes.filter((row) => row.lane === lane && Number.isFinite(Date.parse(outcomeTime(row)))
+      && dayInNewYork(outcomeTime(row)) === targetDay).length + (reserved[lane] || 0);
+    return count >= dailyTarget ? "daily_lane_upload_cap_reached" : null;
   }
   if (lane === "sleep") {
-    const cutoff = now.getTime() - 7 * DAY_MS;
-    const count = outcomes.filter((row) => row.lane === lane && Number.isFinite(Date.parse(row.recordedAt))
-      && Date.parse(row.recordedAt) > cutoff).length + (reserved.sleep || 0);
+    const target = Date.parse(item.publishAt || now.toISOString());
+    const count = outcomes.filter((row) => row.lane === lane && Number.isFinite(Date.parse(outcomeTime(row)))
+      && Math.abs(Date.parse(outcomeTime(row)) - target) < 7 * DAY_MS).length + (reserved.sleep || 0);
     return count >= 1 ? "rolling_seven_day_sleep_upload_cap_reached" : null;
   }
   return "lane_invalid";
 }
 
 function publicBlockers(item, entry, env) {
-  if ((clean(item?.privacyStatus) || "private") !== "public") return [];
+  if ((clean(item?.privacyStatus) || "private") !== "public" && !clean(item?.publishAt)) return [];
   const authorization = item?.publishAuthorization;
   const queueAuthorization = entry?.publicAuthorization;
   const itemAuthorized = authorization?.public === true && clean(authorization?.authorizedBy)
@@ -214,7 +227,17 @@ function publicBlockers(item, entry, env) {
   return [
     ...(env.CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED === "true" ? [] : ["global_public_publish_authorization_missing"]),
     ...(itemAuthorized && queueAuthorized ? [] : ["per_item_public_authorization_missing"]),
+    ...(item?.youtubeApiProjectAuditVerified === true && entry?.youtubeApiProjectAuditVerified === true
+      && env.CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED === "true" ? [] : ["youtube_api_project_audit_required"]),
   ];
+}
+
+function scheduleSpacingBlocker(rows, item) {
+  if (!SHORT_LANES.has(clean(item?.lane)) || !clean(item?.publishAt)) return null;
+  const timestamp = Date.parse(item.publishAt);
+  return rows.some((row) => clean(row?.lane) === clean(item.lane) && clean(row?.publishAt)
+    && Math.abs(Date.parse(row.publishAt) - timestamp) < MIN_SHORT_SPACING_MS)
+    ? "scheduled_publish_spacing_too_short" : null;
 }
 
 async function acquireLock(lockPath) {
@@ -270,6 +293,26 @@ export async function runYouTubePublishWorker(options = {}) {
     await atomicJson(reportPath, report);
     return { ...report, reportPath };
   }
+  const dailyTarget = Number(queue?.authorization?.motivationShortsPerDayPerChannel ?? 5);
+  if (dailyTarget > 5) {
+    const evidence = queue.authorization.learningRecommendation.evidence;
+    const evidencePath = await safeFile(workspaceRoot, evidence.file);
+    if (!evidencePath || await sha256File(evidencePath) !== clean(evidence.sha256).toLowerCase()) {
+      const report = { ...base, status: "blocked", blockers: ["learning_recommendation_evidence_missing_or_hash_mismatch"], items: [] };
+      await atomicJson(reportPath, report);
+      return { ...report, reportPath };
+    }
+    let learningEvidence;
+    try { learningEvidence = await jsonFile(evidencePath); } catch { learningEvidence = null; }
+    if (Number(learningEvidence?.schemaVersion) !== 1 || learningEvidence?.basedOnRealMetrics !== true
+      || Number(learningEvidence?.recommendedTargetPerDay) !== dailyTarget || !Array.isArray(learningEvidence?.metrics)
+      || learningEvidence.metrics.length === 0
+      || learningEvidence.metrics.some((metric) => !clean(metric?.name) || !Number.isFinite(Number(metric?.value)))) {
+      const report = { ...base, status: "blocked", blockers: ["learning_recommendation_real_metrics_invalid"], items: [] };
+      await atomicJson(reportPath, report);
+      return { ...report, reportPath };
+    }
+  }
   let sourceReport;
   try { sourceReport = await jsonFile(sourceReportPath); } catch { sourceReport = null; }
   if (Number(sourceReport?.schemaVersion) !== 1 || !["completed", "completed_with_shortfall"].includes(sourceReport?.status)) {
@@ -303,7 +346,7 @@ export async function runYouTubePublishWorker(options = {}) {
       else {
         try {
           item = await jsonFile(itemPath);
-          entryProblems.push(...validateUploadItem(item));
+          entryProblems.push(...validateUploadItem(item, { now }));
         } catch { entryProblems.push("item_manifest_json_invalid"); }
       }
       const lane = clean(item?.lane) || null;
@@ -313,35 +356,45 @@ export async function runYouTubePublishWorker(options = {}) {
       if (item) entryProblems.push(...publicBlockers(item, entry, env));
       const duplicate = item ? duplicateBlocker([...rows, ...acceptedThisRun], item) : null;
       if (duplicate) entryProblems.push(duplicate);
-      const cap = item ? capBlocker(rows, lane, now, reserved) : null;
+      const spacing = item ? scheduleSpacingBlocker([...rows, ...acceptedThisRun], item) : null;
+      if (spacing) entryProblems.push(spacing);
+      const cap = item ? capBlocker(rows, item, now, reserved, dailyTarget) : null;
       if (cap) entryProblems.push(cap);
       if (entryProblems.length) {
         outcomes.push({ itemId: clean(item?.itemId) || null, lane, status: "blocked", blockers: [...new Set(entryProblems)], uploadAttempted: false, apiCostUsd: 0 });
         continue;
       }
       reserved[lane] += 1;
-      acceptedThisRun.push({ itemId: item.itemId, file: item.file, sha256: item.sha256, lane, status: "upload_started", recordedAt: now.toISOString() });
+      acceptedThisRun.push({ itemId: item.itemId, file: item.file, sha256: item.sha256, lane, publishAt: item.publishAt || null, status: "upload_started", recordedAt: now.toISOString() });
       const result = await runUpload({ workspaceRoot, itemFile: entry.itemFile, env, now });
       const returnedStatus = clean(result?.status) || "blocked";
       const returnedVideoId = clean(result?.youtubeVideoId);
-      const uploadedResultValid = returnedStatus !== "uploaded"
+      const confirmedOutcome = ["uploaded", "scheduled"].includes(returnedStatus);
+      const uploadedResultValid = !confirmedOutcome
         || (result?.uploadAttempted === true && VIDEO_ID.test(returnedVideoId));
       const status = uploadedResultValid ? returnedStatus : "uncertain_outcome";
       const blockers = uploadedResultValid
         ? (Array.isArray(result?.blockers) ? result.blockers : [])
         : ["uploader_result_invalid", "manual_youtube_reconciliation_required"];
-      const confirmedVideoId = status === "uploaded" ? returnedVideoId : null;
+      const confirmedVideoId = ["uploaded", "scheduled"].includes(status) ? returnedVideoId : null;
+      const isScheduled = status === "scheduled";
+      const publicConfirmed = status === "uploaded" && result?.publicConfirmed === true
+        && (clean(result?.privacyStatus) || clean(item.privacyStatus)) === "public";
       outcomes.push({
         itemId: clean(result?.itemId) || clean(item.itemId), lane,
         status, blockers,
         privacyStatus: clean(result?.privacyStatus) || clean(item.privacyStatus) || "private",
+        publishAt: clean(result?.publishAt) || clean(item.publishAt) || null,
+        scheduled: isScheduled,
+        publicConfirmed,
         uploadAttempted: result?.uploadAttempted === true,
         youtubeVideoId: confirmedVideoId,
-        youtubeUrl: confirmedVideoId ? `https://www.youtube.com/watch?v=${encodeURIComponent(confirmedVideoId)}` : null,
+        youtubeUrl: publicConfirmed ? `https://www.youtube.com/watch?v=${encodeURIComponent(confirmedVideoId)}` : null,
         apiCostUsd: 0,
       });
     }
     const uploaded = outcomes.filter((item) => item.status === "uploaded").length;
+    const scheduled = outcomes.filter((item) => item.status === "scheduled").length;
     const uncertain = outcomes.filter((item) => item.status === "uncertain_outcome").length;
     const report = {
       ...base,
@@ -349,6 +402,8 @@ export async function runYouTubePublishWorker(options = {}) {
       sourceReport: queue.sourceReport.file,
       queued: queue.items.length,
       uploaded,
+      scheduled,
+      publicConfirmed: outcomes.filter((item) => item.publicConfirmed === true).length,
       uncertain,
       blocked: outcomes.filter((item) => item.status === "blocked").length,
       items: outcomes,

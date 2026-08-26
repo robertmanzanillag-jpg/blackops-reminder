@@ -13,8 +13,10 @@ const LANES = new Set(["motivation_es", "motivation_en", "sleep"]);
 const PRIVACY = new Set(["private", "unlisted", "public"]);
 const SHA256 = /^[a-f0-9]{64}$/i;
 const CHANNEL_ID = /^UC[A-Za-z0-9_-]{20,30}$/;
-const ACTIVE_UPLOAD_STATES = new Set(["upload_started", "uncertain_outcome", "uploaded"]);
+const ACTIVE_UPLOAD_STATES = new Set(["upload_started", "uncertain_outcome", "uploaded", "scheduled"]);
 const DAY_MS = 86_400_000;
+const MIN_SHORT_SPACING_MS = 2 * 60 * 60 * 1000;
+const LOCAL_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
 
 const clean = (value) => String(value ?? "").trim();
 
@@ -71,20 +73,65 @@ function authorizationBlockers(config) {
   if (authorization?.blanketAuthorized !== true
     || clean(authorization?.authorizedBy).toLowerCase() !== "robert"
     || !Number.isFinite(Date.parse(clean(authorization?.authorizedAt)))) blockers.push("robert_blanket_authorization_required");
-  if (Number(authorization?.motivationShortsPerDayPerChannel) !== 5) blockers.push("five_daily_shorts_per_channel_authorization_required");
+  const dailyTarget = Number(authorization?.motivationShortsPerDayPerChannel);
+  if (!Number.isInteger(dailyTarget) || dailyTarget < 1 || dailyTarget > 10) blockers.push("motivation_daily_target_must_be_between_one_and_ten");
   if (Number(authorization?.sleepVideosPerRollingSevenDays) !== 1) blockers.push("one_sleep_video_per_week_authorization_required");
   for (const lane of LANES) {
     const privacy = clean(config?.channels?.[lane]?.privacyStatus);
     if (!PRIVACY.has(privacy)) blockers.push(`${lane}_privacy_choice_required`);
     if (!CHANNEL_ID.test(clean(config?.channels?.[lane]?.channelId))) blockers.push(`${lane}_channel_missing_or_invalid`);
-    if (privacy === "public") {
+    const scheduled = config?.channels?.[lane]?.schedule?.enabled === true;
+    if (privacy === "public" || scheduled) {
+      if (authorization?.youtubeApiProjectAuditVerified !== true) blockers.push("youtube_api_project_audit_required");
       const publicAuth = config?.channels?.[lane]?.publicAuthorization;
       if (publicAuth?.public !== true
         || clean(publicAuth?.authorizedBy).toLowerCase() !== "robert"
         || !Number.isFinite(Date.parse(clean(publicAuth?.authorizedAt)))) blockers.push(`${lane}_explicit_public_authorization_required`);
     }
   }
+  const scheduledChannels = [...LANES].filter((lane) => config?.channels?.[lane]?.schedule?.enabled === true);
+  if (scheduledChannels.length) {
+    if (clean(config?.scheduling?.timeZone) !== "America/New_York") blockers.push("america_new_york_schedule_timezone_required");
+    for (const lane of scheduledChannels) {
+      const times = config.channels[lane].schedule?.localTimes;
+      const required = lane === "sleep" ? 1 : dailyTarget;
+      if (!Array.isArray(times) || times.length !== required || times.some((value) => !LOCAL_TIME.test(clean(value)))) {
+        blockers.push(`${lane}_schedule_local_times_invalid`);
+        continue;
+      }
+      const minutes = times.map((value) => Number(value.slice(0, 2)) * 60 + Number(value.slice(3))).sort((a, b) => a - b);
+      if (new Set(minutes).size !== minutes.length) blockers.push(`${lane}_schedule_local_times_duplicate`);
+      if (lane !== "sleep" && minutes.some((value, index) => index > 0 && value - minutes[index - 1] < MIN_SHORT_SPACING_MS / 60_000)) {
+        blockers.push(`${lane}_schedule_spacing_too_short`);
+      }
+    }
+  }
   return blockers;
+}
+
+async function learningRecommendation(root, config) {
+  const target = Number(config.authorization.motivationShortsPerDayPerChannel);
+  if (target <= 5) return null;
+  const recommendation = config?.scheduling?.learningRecommendation;
+  if (recommendation?.approved !== true || Number(recommendation?.targetPerDay) !== target
+    || !clean(recommendation?.recommendedBy) || !Number.isFinite(Date.parse(clean(recommendation?.recommendedAt)))
+    || !clean(recommendation?.evidence?.file) || !SHA256.test(clean(recommendation?.evidence?.sha256))) {
+    throw new Error("evidence_backed_learning_recommendation_required_above_five");
+  }
+  const evidencePath = await safeFile(root, recommendation.evidence.file);
+  if (!evidencePath || await sha256File(evidencePath) !== clean(recommendation.evidence.sha256).toLowerCase()) {
+    throw new Error("learning_recommendation_evidence_missing_or_hash_mismatch");
+  }
+  const evidence = await jsonFile(evidencePath);
+  if (Number(evidence?.schemaVersion) !== 1 || evidence?.basedOnRealMetrics !== true
+    || Number(evidence?.recommendedTargetPerDay) !== target || !Array.isArray(evidence?.metrics)
+    || evidence.metrics.length === 0 || evidence.metrics.some((metric) => !clean(metric?.name) || !Number.isFinite(Number(metric?.value)))) {
+    throw new Error("learning_recommendation_real_metrics_invalid");
+  }
+  return {
+    targetPerDay: target, recommendedBy: clean(recommendation.recommendedBy), recommendedAt: clean(recommendation.recommendedAt),
+    evidence: { file: safeRelative(root, evidencePath), sha256: clean(recommendation.evidence.sha256).toLowerCase() },
+  };
 }
 
 function validateConfig(config) {
@@ -105,6 +152,46 @@ function dayInNewYork(value) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
   }).format(new Date(value));
+}
+
+function addCalendarDays(dateKey, days) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const value = new Date(Date.UTC(year, month - 1, day + days, 12));
+  return value.toISOString().slice(0, 10);
+}
+
+function newYorkLocalToDate(dateKey, localTime) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+  const [hour, minute] = localTime.split(":").map(Number);
+  let timestamp = Date.UTC(year, month - 1, day, hour, minute);
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+  });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = Object.fromEntries(formatter.formatToParts(new Date(timestamp)).map((part) => [part.type, part.value]));
+    const represented = Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day), Number(parts.hour), Number(parts.minute), Number(parts.second));
+    timestamp += Date.UTC(year, month - 1, day, hour, minute) - represented;
+  }
+  const result = new Date(timestamp);
+  const roundTrip = Object.fromEntries(formatter.formatToParts(result).map((part) => [part.type, part.value]));
+  if (`${roundTrip.year}-${roundTrip.month}-${roundTrip.day}` !== dateKey
+    || `${roundTrip.hour}:${roundTrip.minute}` !== localTime) throw new Error("new_york_local_time_invalid_or_nonexistent");
+  return result;
+}
+
+function scheduleForChannel(channel, now, count) {
+  if (channel?.schedule?.enabled !== true) return [];
+  const times = channel.schedule.localTimes.map(clean).sort();
+  let dateKey = dayInNewYork(now);
+  for (let dayOffset = 0; dayOffset < 370; dayOffset += 1) {
+    const candidates = times.map((time) => newYorkLocalToDate(dateKey, time));
+    if (candidates.length >= count && candidates.every((candidate) => candidate.getTime() > now.getTime())) {
+      return candidates.slice(0, count).map((candidate) => candidate.toISOString());
+    }
+    dateKey = addCalendarDays(dateKey, 1);
+  }
+  throw new Error("future_schedule_unavailable");
 }
 
 async function runCommand(command, args) {
@@ -271,15 +358,19 @@ async function priorOutcomes(root, rootLedger, existingQueue) {
   };
 }
 
-function remainingCapacity(lane, now, ledger, reserved) {
+function remainingCapacity(lane, now, ledger, reserved, publishAt = null, dailyTarget = 5) {
   if (lane === "sleep") {
-    const cutoff = now.getTime() - 7 * DAY_MS;
-    const used = ledger.filter((row) => clean(row.lane) === lane && Number.isFinite(Date.parse(row.recordedAt)) && Date.parse(row.recordedAt) > cutoff).length;
+    const target = Date.parse(publishAt || now.toISOString());
+    const used = ledger.filter((row) => clean(row.lane) === lane
+      && Number.isFinite(Date.parse(clean(row.publishAt) || clean(row.recordedAt)))
+      && Math.abs(Date.parse(clean(row.publishAt) || clean(row.recordedAt)) - target) < 7 * DAY_MS).length;
     return Math.max(0, 1 - used - reserved);
   }
-  const today = dayInNewYork(now);
-  const used = ledger.filter((row) => clean(row.lane) === lane && Number.isFinite(Date.parse(row.recordedAt)) && dayInNewYork(row.recordedAt) === today).length;
-  return Math.max(0, 5 - used - reserved);
+  const targetDay = dayInNewYork(publishAt || now);
+  const used = ledger.filter((row) => clean(row.lane) === lane
+    && Number.isFinite(Date.parse(clean(row.publishAt) || clean(row.recordedAt)))
+    && dayInNewYork(clean(row.publishAt) || clean(row.recordedAt)) === targetDay).length;
+  return Math.max(0, dailyTarget - used - reserved);
 }
 
 function contentRows(report) {
@@ -302,6 +393,7 @@ export async function packageYouTubeUploads({ configPath, now = new Date(), oper
   const configProblems = validateConfig(config);
   if (configProblems.length) throw new Error(configProblems.join(","));
   const root = path.resolve(path.dirname(configAbsolute), config.workspaceRoot);
+  const learnedTarget = await learningRecommendation(root, config);
   const reportPath = await safeFile(root, config.sourceReport);
   if (!reportPath) throw new Error("source_report_missing_or_unsafe");
   const report = await jsonFile(reportPath);
@@ -320,12 +412,20 @@ export async function packageYouTubeUploads({ configPath, now = new Date(), oper
   const blocked = [];
   const deduplicated = [];
   const reserved = { motivation_es: 0, motivation_en: 0, sleep: 0 };
+  const candidates = contentRows(report);
+  const schedules = Object.fromEntries([...LANES].map((lane) => {
+    const laneLimit = lane === "sleep" ? 1 : Number(config.authorization.motivationShortsPerDayPerChannel);
+    const count = Math.min(candidates.filter((candidate) => candidate.lane === lane).length, laneLimit);
+    return [lane, scheduleForChannel(config.channels[lane], now, count)];
+  }));
   const run = operations.runCommand || runCommand;
-  for (const candidate of contentRows(report)) {
+  for (const candidate of candidates) {
     const { lane, row } = candidate;
     try {
       if (!LANES.has(lane)) throw new Error("lane_invalid");
-      if (remainingCapacity(lane, now, prior.ledger, reserved[lane]) <= 0) throw new Error(lane === "sleep" ? "rolling_seven_day_sleep_upload_cap_reached" : "daily_lane_upload_cap_reached");
+      const plannedPublishAt = schedules[lane][reserved[lane]] || null;
+      if (remainingCapacity(lane, now, prior.ledger, reserved[lane], plannedPublishAt,
+        Number(config.authorization.motivationShortsPerDayPerChannel)) <= 0) throw new Error(lane === "sleep" ? "rolling_seven_day_sleep_upload_cap_reached" : "daily_lane_upload_cap_reached");
       const sourceFile = lane === "sleep" ? row.outputPath : row.outputFile;
       const mediaPath = await safeFile(root, sourceFile);
       if (!mediaPath) throw new Error("media_missing_or_unsafe");
@@ -363,18 +463,23 @@ export async function packageYouTubeUploads({ configPath, now = new Date(), oper
       await atomicJson(path.join(root, qaFile), qaEvidence);
       const qaHash = await sha256File(path.join(root, qaFile));
       const privacyStatus = channel.privacyStatus;
+      const publishAt = plannedPublishAt;
+      const publicIntent = privacyStatus === "public" || Boolean(publishAt);
       const item = {
         schemaVersion: 1, itemId, lane, channelId: clean(channel.channelId), file, sha256: mediaHash,
-        title: source.title, description: source.description, privacyStatus,
+        title: source.title, description: source.description, privacyStatus: publishAt ? "private" : privacyStatus,
+        ...(publishAt ? { publishAt } : {}),
         rightsEvidence: { file: rightsFile, sha256: rightsHash },
         qaEvidence: { file: qaFile, sha256: qaHash },
-        ...(privacyStatus === "public" ? { publishAuthorization: channel.publicAuthorization } : {}),
+        ...(publicIntent ? { publishAuthorization: channel.publicAuthorization } : {}),
+        ...(publicIntent ? { youtubeApiProjectAuditVerified: true } : {}),
       };
       await atomicJson(path.join(root, itemFile), item);
       const queueEntry = {
         itemId, itemFile, approved: true, approvedBy: config.authorization.authorizedBy, approvedAt: now.toISOString(),
         source: lane === "sleep" ? { type: "sleep_long" } : { type: "motivation_short", language: candidate.language, shortId: row.shortId },
-        ...(privacyStatus === "public" ? { publicAuthorization: channel.publicAuthorization } : {}),
+        ...(publicIntent ? { publicAuthorization: channel.publicAuthorization } : {}),
+        ...(publicIntent ? { youtubeApiProjectAuditVerified: true } : {}),
       };
       accepted.push({ item, queueEntry });
       reserved[lane] += 1;
@@ -386,8 +491,9 @@ export async function packageYouTubeUploads({ configPath, now = new Date(), oper
     schemaVersion: 1, reviewed: true, reviewedBy: config.authorization.authorizedBy, reviewedAt: now.toISOString(),
     sourceReport: { file: safeRelative(root, reportPath), sha256: sourceReportSha256 },
     authorization: {
-      motivationShortsPerDayPerChannel: 5, sleepVideosPerRollingSevenDays: 1,
+      motivationShortsPerDayPerChannel: Number(config.authorization.motivationShortsPerDayPerChannel), sleepVideosPerRollingSevenDays: 1,
       source: "explicit_owner_config", authorizedAt: config.authorization.authorizedAt,
+      ...(learnedTarget ? { learningRecommendation: learnedTarget } : {}),
     },
     items: [...(existingQueueSameSource ? existingQueue.items : []), ...accepted.map((entry) => entry.queueEntry)],
   };
@@ -396,7 +502,11 @@ export async function packageYouTubeUploads({ configPath, now = new Date(), oper
     schemaVersion: 1, generatedAt: now.toISOString(), status: blocked.length ? "completed_with_blockers" : "completed",
     sourceReport: queue.sourceReport, packaged: accepted.length, deduplicated, blocked, queueFile: safeRelative(root, queuePath),
     uploadAttempted: false, networkUsed: false, credentialsRead: false, apiCostUsd: 0, paidSpendAllowed: false,
-    items: accepted.map((entry) => ({ itemId: entry.item.itemId, lane: entry.item.lane, itemFile: entry.queueEntry.itemFile, privacyStatus: entry.item.privacyStatus })),
+    items: accepted.map((entry) => ({
+      itemId: entry.item.itemId, lane: entry.item.lane, itemFile: entry.queueEntry.itemFile,
+      privacyStatus: entry.item.privacyStatus, publishAt: entry.item.publishAt || null,
+      scheduled: Boolean(entry.item.publishAt), publicConfirmed: false, publicUrl: null,
+    })),
   };
   await atomicJson(path.join(root, "reports", "youtube-upload-packager-latest.json"), result);
   return result;

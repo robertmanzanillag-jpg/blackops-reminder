@@ -42,7 +42,10 @@ async function fixture(lane = "motivation_es", privacyStatus = "private") {
     rightsEvidence: { file: rightsFile, sha256: sha(rightsBytes) },
     qaEvidence: { file: qaFile, sha256: sha(qaBytes) },
   };
-  if (privacyStatus === "public") item.publishAuthorization = { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T12:10:00.000Z" };
+  if (privacyStatus === "public") {
+    item.publishAuthorization = { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T12:10:00.000Z" };
+    item.youtubeApiProjectAuditVerified = true;
+  }
   const itemFile = `items/${itemId}.json`;
   await writeFile(path.join(root, itemFile), `${JSON.stringify(item, null, 2)}\n`);
   return { root, item, itemFile };
@@ -60,7 +63,7 @@ function successfulFetch(expectedChannelId, counters = {}) {
     if (url === "https://oauth2.googleapis.com/token") return Response.json({ access_token: "short-lived-token" });
     if (String(url).includes("channels?")) return Response.json({ items: [{ id: expectedChannelId }] });
     if (init.method === "POST") return new Response(null, { status: 200, headers: { location: "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&upload_id=opaque" } });
-    if (init.method === "PUT") return Response.json({ id: "video123" });
+    if (init.method === "PUT") return Response.json({ id: "video123", status: { privacyStatus: "public" } });
     throw new Error("unexpected request");
   };
 }
@@ -187,9 +190,55 @@ test("public privacy requires both item and global authorization", async () => {
   assert.ok(blocked.blockers.includes("global_public_publish_authorization_missing"));
   assert.equal(calls, 0);
 
-  const allowed = await runYouTubeUpload({ workspaceRoot: root, itemFile, env: { CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true" }, channelConfigs: configs(), fetcher: successfulFetch(CHANNELS.motivation_es) });
+  const allowed = await runYouTubeUpload({ workspaceRoot: root, itemFile, env: {
+    CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true", CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED: "true",
+  }, channelConfigs: configs(), fetcher: successfulFetch(CHANNELS.motivation_es) });
   assert.equal(allowed.status, "uploaded");
   assert.equal(allowed.privacyStatus, "public");
+  assert.equal(allowed.publicConfirmed, true);
+});
+
+test("scheduled publication validates future RFC3339, authorization, and sends private publishAt metadata", async () => {
+  const { root, itemFile, item } = await fixture();
+  item.publishAt = "2026-11-01T13:00:00.000Z";
+  item.publishAuthorization = { public: true, authorizedBy: "Robert", authorizedAt: "2026-10-31T12:00:00.000Z" };
+  item.youtubeApiProjectAuditVerified = true;
+  await writeFile(path.join(root, itemFile), `${JSON.stringify(item, null, 2)}\n`);
+  let requestBody;
+  const fetcher = async (url, init = {}) => {
+    if (url === "https://oauth2.googleapis.com/token") return Response.json({ access_token: "token" });
+    if (String(url).includes("channels?")) return Response.json({ items: [{ id: CHANNELS.motivation_es }] });
+    if (init.method === "POST") {
+      requestBody = JSON.parse(init.body);
+      return new Response(null, { status: 200, headers: { location: "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&upload_id=scheduled" } });
+    }
+    return Response.json({ id: "scheduled123", status: { privacyStatus: "private", publishAt: item.publishAt } });
+  };
+  const result = await runYouTubeUpload({
+    workspaceRoot: root, itemFile, now: new Date("2026-11-01T04:00:00.000Z"), channelConfigs: configs(), fetcher,
+    env: { CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED: "true", CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED: "true" },
+  });
+  assert.equal(result.status, "scheduled");
+  assert.deepEqual(requestBody.status, { privacyStatus: "private", publishAt: item.publishAt, selfDeclaredMadeForKids: false });
+  assert.equal(result.youtubeUrl, null);
+  assert.equal(result.publicConfirmed, false);
+});
+
+test("rejects past or malformed publishAt before authentication", async () => {
+  const { root, itemFile, item } = await fixture();
+  item.publishAt = "2026-08-24 19:00";
+  item.publishAuthorization = { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T12:00:00.000Z" };
+  item.youtubeApiProjectAuditVerified = true;
+  await writeFile(path.join(root, itemFile), `${JSON.stringify(item, null, 2)}\n`);
+  let calls = 0;
+  const now = new Date("2026-08-24T16:00:00.000Z");
+  const malformed = await runYouTubeUpload({ workspaceRoot: root, itemFile, now, env: {}, fetcher: async () => { calls += 1; } });
+  assert.ok(malformed.blockers.includes("publish_at_rfc3339_invalid"));
+  item.publishAt = "2026-08-24T15:59:59.000Z";
+  await writeFile(path.join(root, itemFile), `${JSON.stringify(item, null, 2)}\n`);
+  const past = await runYouTubeUpload({ workspaceRoot: root, itemFile, now, env: {}, fetcher: async () => { calls += 1; } });
+  assert.ok(past.blockers.includes("publish_at_must_be_future"));
+  assert.equal(calls, 0);
 });
 
 test("hash and evidence mismatches fail before authentication", async () => {
