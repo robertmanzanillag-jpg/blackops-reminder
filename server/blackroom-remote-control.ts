@@ -263,6 +263,18 @@ export function appendBlackRoomCeoCommand(
   return state;
 }
 
+export function appendBlackRoomWorkNowCommand(
+  state: BlackRoomRemoteControlState,
+  now = new Date(),
+): BlackRoomRemoteControlState {
+  const createdAt = now.toISOString();
+  state.commands.push({ id: `work-now-${createdAt}`, type: "work_now", createdAt });
+  state.commands = state.commands.slice(-100);
+  state.generation += 1;
+  state.updatedAt = createdAt;
+  return state;
+}
+
 export function isBlackRoomRemoteDeviceOnline(state: BlackRoomRemoteControlState, now = new Date()): boolean {
   if (!state.device?.seenAt) return false;
   const seenAt = new Date(state.device.seenAt).getTime();

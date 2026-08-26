@@ -5,6 +5,7 @@ export type BlackRoomRemoteCommand =
   | { id: string; type: "daily_target"; posts: number; createdAt: string }
   | { id: string; type: "extra_posts"; posts: number; targetDate: string; networks?: Array<"tiktok" | "facebook" | "youtube">; createdAt: string }
   | { id: string; type: "priority_source"; url: string; createdAt: string }
+  | { id: string; type: "work_now"; createdAt: string }
   | { id: string; type: "ceo_schedule"; slotsByDate: Record<string, string[]>; postsByDate?: Record<string, number>; analytics: BlackRoomCeoAnalytics; createdAt: string };
 
 export interface BlackRoomChatResult {
