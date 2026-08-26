@@ -342,6 +342,14 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /remainingCalendarDays/);
   assert.match(blackRoomPage, /Al encender/);
   assert.match(blackRoomPage, /Todo preparado/);
+  assert.match(blackRoomPage, /aria-label="Progreso del agente"/);
+  assert.match(blackRoomPage, /role="progressbar"/);
+  assert.match(blackRoomPage, /id="progressFill"/);
+  assert.match(blackRoomPage, /Procesando un video ahora/);
+  assert.match(blackRoomPage, /Activo · esperando el próximo lote/);
+  assert.match(blackRoomPage, /se reanuda al encender la Mac/);
+  assert.match(blackRoomPage, /aria-valuetext/);
+  assert.match(blackRoomPage, /prefers-reduced-motion/);
   assert.match(blackRoomPage, /Actividad en vivo/);
   assert.doesNotMatch(blackRoomPage, /1 semana/);
   assert.match(blackRoomPage, /segmentos sin repetir ni solapar/);
