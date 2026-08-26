@@ -30,6 +30,7 @@ export interface BlackRoomDailyJob {
   status: BlackRoomDailyJobStatus;
   attempts: number;
   notBefore: string;
+  manualRunRequestedAt: string | null;
   leaseExpiresAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -200,6 +201,7 @@ function createDailyJob(state: BlackRoomQueueState, targetDate: string, dayIndex
     status: "queued",
     attempts: 0,
     notBefore,
+    manualRunRequestedAt: null,
     leaseExpiresAt: null,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -360,6 +362,15 @@ export function applyBlackRoomRemoteCommands(state: BlackRoomQueueState, command
     } else if (command.type === "priority_source") {
       state.prioritySources.push({ id: command.id, url: command.url, videoId: youtubeVideoId(command.url), status: "pending", createdAt: command.createdAt });
       state.prioritySources = state.prioritySources.slice(-50);
+    } else if (command.type === "work_now") {
+      const next = state.jobs
+        .filter((item) => ["queued", "retry"].includes(item.status))
+        .sort((left, right) => left.targetDate.localeCompare(right.targetDate) || left.notBefore.localeCompare(right.notBefore))[0];
+      if (next) {
+        next.notBefore = iso(now);
+        next.manualRunRequestedAt = iso(now);
+        next.updatedAt = iso(now);
+      }
     } else if (command.type === "ceo_schedule") {
       const incomingStrategyVersion = Math.max(0, Number(command.analytics?.creativeStrategyVersion || 0));
       state.analytics = command.analytics;
@@ -528,6 +539,7 @@ export function claimNextBlackRoomJob(state: BlackRoomQueueState, now = new Date
     && new Date(candidate.notBefore).getTime() <= now.getTime());
   if (!job) return null;
   job.status = "processing";
+  job.manualRunRequestedAt = null;
   job.attempts += 1;
   job.updatedAt = iso(now);
   job.leaseExpiresAt = new Date(now.getTime() + Math.max(5, leaseMinutes) * 60_000).toISOString();
@@ -611,8 +623,11 @@ export async function readBlackRoomQueue(filePath = BLACKROOM_QUEUE_PATH, now = 
       // Migrate old persisted queues that were created with every future job
       // immediately actionable. Never delay an active processing job.
       notBefore: ["queued", "retry"].includes(job.status)
-        ? adaptiveReleaseTime(job.targetDate, now, job.status === "retry" ? job.notBefore : undefined)
+        ? job.manualRunRequestedAt
+          ? String(job.manualRunRequestedAt)
+          : adaptiveReleaseTime(job.targetDate, now, job.status === "retry" ? job.notBefore : undefined)
         : job.notBefore,
+      manualRunRequestedAt: job.manualRunRequestedAt || null,
       requirements: ["queued", "retry"].includes(job.status)
         ? {
           ...job.requirements,

@@ -114,6 +114,24 @@ test("strategy changes replan only queued/retry future jobs and preserve schedul
   assert.equal(state.jobs[1].requirements.posts, 5);
 });
 
+test("work-now makes only the next pending batch immediately claimable after persistence", async () => {
+  const now = new Date("2026-08-26T08:30:00.000Z");
+  const state = createBlackRoomQueueState(now);
+  ensureBlackRoomScheduleBuffer(state, now);
+  state.enabled = true;
+  state.jobs.forEach((job, index) => { job.notBefore = new Date(now.getTime() + (index + 1) * 86_400_000).toISOString(); });
+  const nextId = state.jobs[0].id;
+  applyBlackRoomRemoteCommands(state, [{ id: "work-now-1", type: "work_now", createdAt: now.toISOString() }], now);
+  assert.equal(state.jobs[0].notBefore, now.toISOString());
+  assert.ok(new Date(state.jobs[1].notBefore) > now);
+  const directory = await mkdtemp(path.join(tmpdir(), "blackroom-work-now-"));
+  const queuePath = path.join(directory, "queue.json");
+  await writeBlackRoomQueue(state, queuePath);
+  const persisted = await readBlackRoomQueue(queuePath, now);
+  assert.equal(claimNextBlackRoomJob(persisted, now)?.id, nextId);
+  await unlink(queuePath);
+});
+
 test("migrates an old persisted queue into the adaptive release window", async () => {
   const now = new Date("2026-07-20T12:00:00.000Z");
   const state = createBlackRoomQueueState(now);

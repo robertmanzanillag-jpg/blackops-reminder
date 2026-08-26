@@ -183,6 +183,7 @@ async function syncRemoteControl() {
     const currentWorker = await workerState();
     if (Number(control.generation || 0) !== lastAppliedGeneration && Array.isArray(control.commands) && control.commands.length) {
       queue = await serializedCommand("remote-config", { commands: control.commands });
+      if (control.desiredEnabled && control.commands.at(-1)?.type === "work_now") wakeWorker();
     }
     const plan = planBlackRoomRemoteSync({
       control,

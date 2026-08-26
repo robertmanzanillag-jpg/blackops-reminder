@@ -10,6 +10,7 @@ import {
   setBlackRoomRemoteCommand,
   appendBlackRoomRemoteCommand,
   appendBlackRoomCeoCommand,
+  appendBlackRoomWorkNowCommand,
   upsertBlackRoomAnalyticsImports,
 } from "../server/blackroom-remote-control";
 
@@ -46,6 +47,15 @@ test("remote control cannot reduce the campaign below two weeks", () => {
   const state = createBlackRoomRemoteControlState();
   setBlackRoomRemoteCommand(state, true, 1);
   assert.equal(state.weeks, 2);
+});
+
+test("work-now command advances the generation without adding chat history", () => {
+  const now = new Date("2026-08-26T08:30:00.000Z");
+  const state = createBlackRoomRemoteControlState(now);
+  appendBlackRoomWorkNowCommand(state, now);
+  assert.equal(state.generation, 1);
+  assert.equal(state.commands.at(-1)?.type, "work_now");
+  assert.equal(state.chatHistory.length, 0);
 });
 
 test("CSV analytics imports are validated, deduplicated and retained per network", () => {
@@ -150,6 +160,7 @@ test("BlackRoom control mutations and panel data are owner-only", () => {
     'app.get("/api/blackroom-agent"',
     'app.post("/api/blackroom-agent/start"',
     'app.post("/api/blackroom-agent/pause"',
+    'app.post("/api/blackroom-agent/work-now"',
   ]) {
     const start = source.indexOf(signature);
     const nextRoute = source.indexOf("\n  app.", start + signature.length);
@@ -351,6 +362,9 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /function lastSignalText/);
   assert.match(blackRoomPage, /última señal hace/);
   assert.match(blackRoomPage, /Agenda preparada:/);
+  assert.match(blackRoomPage, /▶ Trabajar ahora/);
+  assert.match(blackRoomPage, /\/api\/blackroom-agent\/work-now/);
+  assert.match(blackRoomPage, /els\.workNow\.hidden=/);
   assert.match(blackRoomPage, /aria-valuetext/);
   assert.match(blackRoomPage, /prefers-reduced-motion/);
   assert.match(blackRoomPage, /Actividad en vivo/);
