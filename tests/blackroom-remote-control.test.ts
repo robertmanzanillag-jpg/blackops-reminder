@@ -348,6 +348,9 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /Procesando un video ahora/);
   assert.match(blackRoomPage, /Activo · esperando el próximo lote/);
   assert.match(blackRoomPage, /se reanuda al encender la Mac/);
+  assert.match(blackRoomPage, /function lastSignalText/);
+  assert.match(blackRoomPage, /última señal hace/);
+  assert.match(blackRoomPage, /Agenda preparada:/);
   assert.match(blackRoomPage, /aria-valuetext/);
   assert.match(blackRoomPage, /prefers-reduced-motion/);
   assert.match(blackRoomPage, /Actividad en vivo/);
@@ -367,6 +370,6 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /tabIndex=activity\?0:-1/);
   assert.match(blackRoomPage, /setInterval\(\(\)=>refreshStatus\(\),5000\)/);
   const scripts = [...blackRoomPage.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((match) => match[1]);
-  assert.equal(scripts.length, 2);
+  assert.equal(scripts.length, 1);
   for (const script of scripts) assert.doesNotThrow(() => new Function(script));
 });
