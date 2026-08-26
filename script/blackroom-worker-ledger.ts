@@ -80,7 +80,7 @@ async function main(): Promise<void> {
         .filter((network): network is "tiktok" | "facebook" | "youtube" =>
           network === "tiktok" || network === "facebook" || network === "youtube");
       const creativeStrategy = arg("--creative-strategy") || "drop_first";
-      if (!["drop_first", "instant_drop", "build_then_drop"].includes(creativeStrategy)) throw new Error("unsupported creative strategy");
+      if (!["drop_first", "instant_drop", "build_then_drop", "crowd_reaction_first", "context_open_loop"].includes(creativeStrategy)) throw new Error("unsupported creative strategy");
       if (language !== "en" && language !== "es") throw new Error("language must be en or es");
       if (format !== "vertical" && format !== "horizontal") throw new Error("format must be vertical or horizontal");
       if (![15, 30, 60, 120, 300, 600].includes(durationSeconds)) throw new Error("unsupported duration");
@@ -89,11 +89,17 @@ async function main(): Promise<void> {
       const sourceHistory = Array.isArray(queue.sourceHistory) ? queue.sourceHistory : [];
       result = reserveBlackRoomLedgerEntry(ledger, {
         jobId: arg("--job") || "", slot: arg("--slot") || "", videoId: arg("--video") || "",
+        sourceVideoTitle: arg("--source-title") || undefined,
         dj: arg("--dj") || "", language, format,
         targetNetworks,
         durationSeconds: durationSeconds as 15 | 30 | 60 | 120 | 300 | 600,
         segmentStartSeconds: Number(arg("--segment-start")), segmentEndSeconds: Number(arg("--segment-end")),
-        creativeStrategy: creativeStrategy as "drop_first" | "instant_drop" | "build_then_drop",
+        creativeStrategy: creativeStrategy as any,
+        dropOffsetSeconds: Number.isFinite(Number(arg("--drop-offset"))) ? Number(arg("--drop-offset")) : undefined,
+        hookFamily: arg("--hook-family") || creativeStrategy,
+        captionVariant: arg("--caption-variant") || undefined,
+        creativeArmId: arg("--creative-arm-id") || undefined,
+        allocationMode: arg("--allocation-mode") === "exploit" ? "exploit" : "explore",
         caption: arg("--caption") || "",
         renderPath: path.resolve(renderPathInput), sourcePath: path.resolve(sourcePathInput),
       }, sourceHistory);

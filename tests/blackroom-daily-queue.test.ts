@@ -60,6 +60,28 @@ test("keeps a two-week persistent scheduling buffer", () => {
   assert.deepEqual(state.jobs[0].requirements.durationsSeconds, [15, 30, 60, 120, 300, 600]);
 });
 
+test("strategy changes replan only queued/retry future jobs and preserve scheduled history", () => {
+  const now = new Date("2026-08-20T12:00:00.000Z");
+  const state = createBlackRoomQueueState(now);
+  ensureBlackRoomScheduleBuffer(state, now);
+  state.jobs[0].status = "scheduled";
+  const scheduledSlots = structuredClone(state.jobs[0].slots);
+  state.jobs[1].status = "retry";
+  state.jobs[1].lastError = "old strategy";
+  const analytics = { ...state.analytics, creativeStrategy: "context_open_loop" as const, creativeStrategyVersion: 1 };
+  const target = state.jobs[1].targetDate;
+  applyBlackRoomRemoteCommands(state, [{
+    id: "ceo-v1", type: "ceo_schedule", createdAt: now.toISOString(), analytics,
+    postsByDate: { [target]: 5 }, slotsByDate: { [target]: ["00:30", "05:00", "09:30", "14:00", "19:00"] },
+  }], now);
+  assert.deepEqual(state.jobs[0].slots, scheduledSlots);
+  assert.equal(state.jobs[0].strategyVersion, 0);
+  assert.equal(state.jobs[1].strategyVersion, 1);
+  assert.equal(state.jobs[1].strategyReplannedAt, now.toISOString());
+  assert.equal(state.jobs[1].lastError, null);
+  assert.equal(state.jobs[1].requirements.posts, 5);
+});
+
 test("migrates an old persisted queue into the adaptive release window", async () => {
   const now = new Date("2026-07-20T12:00:00.000Z");
   const state = createBlackRoomQueueState(now);

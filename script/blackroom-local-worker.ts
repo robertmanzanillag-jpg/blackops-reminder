@@ -272,7 +272,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
   await deleteConfirmedMedia(entry);
   const refreshedLedger = await readJson<any>(ledgerPath, { entries: [] });
   const confirmed = (refreshedLedger.entries || []).filter((candidate: any) => candidate.jobId === entry.jobId && candidate.status === "confirmed");
-  if (confirmed.length >= Number(job.requirements?.posts || 10)) await runNpm(["run", "blackroom:agent", "--", "--complete", "--job", entry.jobId]);
+  if (confirmed.length >= Number(job.requirements?.posts || 5)) await runNpm(["run", "blackroom:agent", "--", "--complete", "--job", entry.jobId]);
   await appendLog(`${confirmedDestinations} confirmados para ${entry.reservationId}; archivo local eliminado.`, "completado", "success");
   return true;
 }

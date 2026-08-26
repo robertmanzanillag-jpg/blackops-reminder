@@ -5,6 +5,7 @@ import {
   BLACKROOM_CEO_ANALYTICS_LOOKBACK_DAYS,
   BLACKROOM_CEO_ANALYTICS_HISTORY_START_DATE,
   BLACKROOM_CEO_CREATIVE_MIN_SAMPLES,
+  allocateBlackRoomCreativeArm,
   buildBlackRoomLearningSlots,
   collectBlackRoomMetricoolAnalytics,
   extractBlackRoomExperimentCohorts,
@@ -16,6 +17,7 @@ import {
   planBlackRoomCampaignPosts,
   planBlackRoomNetworkLearning,
   recommendBlackRoomTimesFromImportedSamples,
+  summarizeBlackRoomSnapshotCoverage,
 } from "../server/blackroom-growth-ceo";
 
 function minutes(time: string): number {
@@ -31,6 +33,31 @@ test("five-post baseline exploration slots cover overnight, morning, afternoon a
   assert.ok(slots.some((slot) => minutes(slot) >= 12 * 60 && minutes(slot) < 18 * 60));
   assert.ok(slots.some((slot) => minutes(slot) >= 18 * 60));
   for (let index = 1; index < slots.length; index += 1) assert.ok(minutes(slots[index]) - minutes(slots[index - 1]) >= 90);
+});
+
+test("80/20 allocator exploits only a creative arm with five comparable samples", () => {
+  const unproven = allocateBlackRoomCreativeArm({
+    seed: "slot-1",
+    cohorts: [{ strategy: "instant_drop", samples: 4, medianViews: 500, totalViews: 2_000, lowViewRate: 0 }],
+  });
+  assert.equal(unproven.mode, "explore");
+  const cohorts = [{ strategy: "instant_drop" as const, samples: 5, medianViews: 500, totalViews: 2_500, lowViewRate: 0 }];
+  const allocations = Array.from({ length: 100 }, (_, index) => allocateBlackRoomCreativeArm({ seed: `slot-${index}`, cohorts }));
+  const explored = allocations.filter((item) => item.mode === "explore").length;
+  assert.ok(explored >= 15 && explored <= 25, `expected about 20 exploration slots, got ${explored}`);
+  assert.ok(allocations.filter((item) => item.mode === "exploit").every((item) => item.strategy === "instant_drop"));
+});
+
+test("24h/72h coverage reports eligibility without inventing historical metric values", () => {
+  const coverage = summarizeBlackRoomSnapshotCoverage([
+    { publishedAt: "2026-08-20T12:00:00.000Z" },
+    { publishedAt: "2026-08-23T12:00:00.000Z" },
+    { publishedAt: "2026-08-25T18:00:00.000Z" },
+    {},
+  ], new Date("2026-08-26T12:00:00.000Z"));
+  assert.deepEqual({ available24h: coverage.available24h, available72h: coverage.available72h, missingPublishedAt: coverage.missingPublishedAt },
+    { available24h: 2, available72h: 2, missingPublishedAt: 1 });
+  assert.match(coverage.limitation, /latest cumulative value/);
 });
 
 test("CSV fallback feeds the CEO without Metricool analytics API availability", async () => {

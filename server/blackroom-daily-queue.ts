@@ -35,6 +35,8 @@ export interface BlackRoomDailyJob {
   updatedAt: string;
   completedAt: string | null;
   lastError: string | null;
+  strategyVersion: number;
+  strategyReplannedAt: string | null;
   slots: Array<{ localTime: string; timezone: string; networks?: BlackRoomTargetNetwork[] }>;
   requirements: {
     posts: number;
@@ -203,6 +205,8 @@ function createDailyJob(state: BlackRoomQueueState, targetDate: string, dayIndex
     updatedAt: timestamp,
     completedAt: null,
     lastError: null,
+    strategyVersion: Math.max(0, Number(state.analytics?.creativeStrategyVersion || 0)),
+    strategyReplannedAt: null,
     slots: buildRotatingSlots({
       dayIndex,
       posts: state.postsPerDay,
@@ -357,8 +361,16 @@ export function applyBlackRoomRemoteCommands(state: BlackRoomQueueState, command
       state.prioritySources.push({ id: command.id, url: command.url, videoId: youtubeVideoId(command.url), status: "pending", createdAt: command.createdAt });
       state.prioritySources = state.prioritySources.slice(-50);
     } else if (command.type === "ceo_schedule") {
+      const incomingStrategyVersion = Math.max(0, Number(command.analytics?.creativeStrategyVersion || 0));
       state.analytics = command.analytics;
       for (const job of state.jobs.filter((item) => ["queued", "retry"].includes(item.status))) {
+        if (Number(job.strategyVersion || 0) !== incomingStrategyVersion) {
+          // Only not-yet-completed queue work is replanned. Scheduled/completed
+          // jobs and their Metricool receipts are immutable.
+          job.strategyVersion = incomingStrategyVersion;
+          job.strategyReplannedAt = iso(now);
+          job.lastError = null;
+        }
         const plannedPosts = command.postsByDate?.[job.targetDate];
         if (Number.isFinite(plannedPosts)) resizeJob(state, job, Number(plannedPosts));
         const learnedSlots = command.slotsByDate[job.targetDate];
@@ -579,6 +591,8 @@ export async function readBlackRoomQueue(filePath = BLACKROOM_QUEUE_PATH, now = 
     const parsed = JSON.parse(await readFile(filePath, "utf8"));
     const jobs = Array.isArray(parsed.jobs) ? parsed.jobs.map((job: BlackRoomDailyJob) => ({
       ...job,
+      strategyVersion: Math.max(0, Number(job.strategyVersion ?? parsed.analytics?.creativeStrategyVersion ?? 0)),
+      strategyReplannedAt: job.strategyReplannedAt || null,
       // Migrate old persisted queues that were created with every future job
       // immediately actionable. Never delay an active processing job.
       notBefore: ["queued", "retry"].includes(job.status)

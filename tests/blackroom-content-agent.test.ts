@@ -30,7 +30,7 @@ const videos = (count: number) => Array.from({ length: count }, (_, index) => vi
 test("sanitizes BlackRoom volume to the requested 5-10 daily range", () => {
   assert.equal(sanitizeBlackRoomAgentConfig({ channelId: "UC1", dailyPostTarget: 99 }).dailyPostTarget, 10);
   assert.equal(sanitizeBlackRoomAgentConfig({ channelId: "UC1", dailyPostTarget: 1 }).dailyPostTarget, 5);
-  assert.equal(sanitizeBlackRoomAgentConfig({ channelId: "UC1" }).dailyPostTarget, 8);
+  assert.equal(sanitizeBlackRoomAgentConfig({ channelId: "UC1" }).dailyPostTarget, 5);
   assert.deepEqual(sanitizeBlackRoomAgentConfig({ channelId: "UC1" }).platforms, ["tiktok"]);
   assert.equal(sanitizeBlackRoomAgentConfig({ channelId: "UC1" }).deleteLocalAfterConfirmedUpload, true);
 });

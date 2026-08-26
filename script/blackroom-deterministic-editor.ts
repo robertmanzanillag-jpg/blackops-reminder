@@ -206,10 +206,13 @@ async function reserve(
     async () => {
       await run(npmPath, [
         "run", "blackroom:ledger", "--", "--reserve",
-        "--job", plan.jobId, "--slot", plan.slot, "--video", plan.videoId, "--dj", plan.dj,
+        "--job", plan.jobId, "--slot", plan.slot, "--video", plan.videoId, "--source-title", plan.title, "--dj", plan.dj,
         "--language", plan.language, "--format", plan.format, "--duration", String(plan.durationSeconds),
         "--networks", plan.targetNetworks.join(","),
         "--creative-strategy", plan.creativeStrategy,
+        "--drop-offset", String(offsetSeconds), "--hook-family", plan.hookFamily,
+        "--caption-variant", plan.captionVariant, "--creative-arm-id", plan.creativeArmId,
+        "--allocation-mode", plan.allocationMode,
         "--segment-start", String(segmentStart), "--segment-end", String(segmentEnd), "--caption", plan.caption,
         "--render", renderPath, "--source", sourcePath,
       ]);
