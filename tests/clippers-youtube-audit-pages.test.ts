@@ -20,7 +20,9 @@ test("YouTube privacy policy identifies API use and gives users data controls", 
   assert.match(html, /https:\/\/policies\.google\.com\/privacy/);
   assert.match(html, /https:\/\/myaccount\.google\.com\/permissions/);
   assert.match(html, /https:\/\/security\.google\.com\/settings\/security\/permissions/);
-  assert.match(html, /Audit blocker.*monitored public privacy contact/is);
+  assert.match(html, /mailto:robert\.manzanillag@gmail\.com/i);
+  assert.match(html, /privacy, access, revocation, or deletion requests/i);
+  assert.doesNotMatch(html, /Audit blocker.*public privacy contact/is);
   assert.doesNotMatch(html, /client_secret|refresh_token|access_token/i);
 });
 
@@ -72,7 +74,8 @@ test("early public routes in server index carry the same required compliance lin
   ]) {
     assert.match(source, new RegExp(required.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
-  assert.doesNotMatch(source, /robert\.manzanillag@gmail\.com/i);
+  assert.match(source, /mailto:robert\.manzanillag@gmail\.com/i);
+  assert.doesNotMatch(source, /Audit blocker.*public privacy contact/is);
   assert.doesNotMatch(source, /blackops@reminder\.app/i);
   assert.doesNotMatch(source, /Tokens are encrypted server-side/i);
 });

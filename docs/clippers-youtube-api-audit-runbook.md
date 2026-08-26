@@ -32,6 +32,7 @@ For each URL, capture a dated screenshot and an HTTP 200 response. Confirm that 
 - [ ] Privacy Policy explains deletion requested directly through Clippers within 7 calendar days, and deletion after Google revocation or unverifiable authorization within 30 calendar days.
 - [ ] Privacy Policy states that deleting data from Clippers does not delete related data held by YouTube and directs the owner to YouTube/Google controls.
 - [ ] Privacy Policy provides a monitored contact address for access and deletion requests.
+- [ ] Confirm `robert.manzanillag@gmail.com` is monitored and remains the owner-authorized public privacy contact shown on the Privacy Policy and Terms pages.
 - [ ] Preserve dated evidence that the sole owner/operator reviewed and agreed to the Privacy Policy and Terms before YouTube features were enabled; OAuth consent alone is not this acceptance record.
 - [ ] Terms link the YouTube Terms of Service and state that use is bound by them.
 - [ ] Terms link the YouTube API Services Terms, Developer Policies, Required Minimum Functionality, and Community Guidelines.

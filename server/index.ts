@@ -135,7 +135,7 @@ app.get("/clippers/legal/privacy", (_req, res) => {
     "<h2>Content Rights</h2>",
     "<p>Third-party footage is blocked unless an allowlist or evidence record confirms ownership, license, official-source use, or creator/rightsholder permission.</p>",
     "<h2>Contact</h2>",
-    '<p><strong>Audit blocker:</strong> a monitored public privacy contact has not yet been authorized for publication. Do not submit this client for YouTube API review until the owner supplies and authorizes a functional public contact.</p>',
+    '<p>For privacy, access, revocation, or deletion requests, contact <a href="mailto:robert.manzanillag@gmail.com">robert.manzanillag@gmail.com</a>.</p>',
   ]));
 });
 
@@ -153,7 +153,7 @@ app.get("/clippers/legal/terms", (_req, res) => {
     "<h2>Prohibited Conduct And Data Use</h2>",
     "<p>Clippers must not be used to scrape or download restricted YouTube content, collect YouTube login credentials, circumvent platform restrictions or review, shard quota across projects, access undocumented APIs, impersonate another channel, sell YouTube API Data, profile or surveil users, create unauthorized derived metrics, or share authorized data with unrelated parties.</p>",
     "<h2>Privacy And Revocation</h2>",
-    '<p>Use of the integration is subject to the <a href="/clippers/legal/privacy">Clippers Privacy Policy</a>. Access may be revoked at <a href="https://myaccount.google.com/permissions">Google Account third-party connections</a>. A functional public privacy contact must be authorized before this client is submitted for review.</p>',
+    '<p>Use of the integration is subject to the <a href="/clippers/legal/privacy">Clippers Privacy Policy</a>. Access may be revoked at <a href="https://myaccount.google.com/permissions">Google Account third-party connections</a>. Privacy, access, revocation, or deletion requests may be sent to <a href="mailto:robert.manzanillag@gmail.com">robert.manzanillag@gmail.com</a>.</p>',
     "<h2>Suspension And Changes</h2>",
     "<p>Access may be disabled immediately when authorization, rights, security, API compliance, or channel identity cannot be verified. These terms may be updated to reflect changes in applicable YouTube or Google requirements.</p>",
   ]));
