@@ -14,7 +14,8 @@ const RIGHTS = new Set(["owned", "explicitly_authorized"]);
 const SHA256 = /^[a-f0-9]{64}$/i;
 const YOUTUBE_CHANNEL_ID = /^UC[A-Za-z0-9_-]{20,30}$/;
 const YOUTUBE_VIDEO_ID = /^[A-Za-z0-9_-]{6,32}$/;
-const ACTIVE_LEDGER_STATES = new Set(["upload_started", "uncertain_outcome", "uploaded"]);
+const ACTIVE_LEDGER_STATES = new Set(["upload_started", "uncertain_outcome", "uploaded", "scheduled"]);
+const RFC3339 = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/;
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const CHANNELS_URL = "https://www.googleapis.com/youtube/v3/channels?part=id&mine=true";
 const UPLOAD_START_URL = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet%2Cstatus";
@@ -94,8 +95,18 @@ function configBlockers(config) {
   return blockers;
 }
 
-export function validateUploadItem(item) {
+function publishAtBlockers(item, now) {
+  const publishAt = clean(item?.publishAt);
+  if (!publishAt) return [];
+  if (!RFC3339.test(publishAt) || !Number.isFinite(Date.parse(publishAt))) return ["publish_at_rfc3339_invalid"];
+  if (Date.parse(publishAt) <= now.getTime()) return ["publish_at_must_be_future"];
+  if ((clean(item?.privacyStatus) || "private") !== "private") return ["scheduled_upload_must_be_private"];
+  return [];
+}
+
+export function validateUploadItem(item, options = {}) {
   const blockers = [];
+  const now = options.now instanceof Date ? options.now : new Date();
   if (Number(item?.schemaVersion) !== 1) blockers.push("schema_version_invalid");
   if (!/^[a-z0-9][a-z0-9_-]{1,99}$/.test(clean(item?.itemId))) blockers.push("item_id_invalid");
   if (!LANES[clean(item?.lane)]) blockers.push("lane_invalid");
@@ -108,10 +119,12 @@ export function validateUploadItem(item) {
   if (!PRIVACY.has(privacyStatus)) blockers.push("privacy_status_invalid");
   if (!clean(item?.rightsEvidence?.file) || !SHA256.test(clean(item?.rightsEvidence?.sha256))) blockers.push("rights_evidence_reference_invalid");
   if (!clean(item?.qaEvidence?.file) || !SHA256.test(clean(item?.qaEvidence?.sha256))) blockers.push("qa_evidence_reference_invalid");
-  if (privacyStatus === "public") {
+  blockers.push(...publishAtBlockers(item, now));
+  if (privacyStatus === "public" || clean(item?.publishAt)) {
     const authorization = item?.publishAuthorization;
     if (authorization?.public !== true || !clean(authorization?.authorizedBy)
       || !Number.isFinite(Date.parse(clean(authorization?.authorizedAt)))) blockers.push("per_item_public_authorization_missing");
+    if (item?.youtubeApiProjectAuditVerified !== true) blockers.push("youtube_api_project_audit_required");
   }
   return [...new Set(blockers)];
 }
@@ -244,9 +257,10 @@ function safeResumableUrl(location) {
 
 function publicAuthorizationBlocker(item, env) {
   const privacy = clean(item?.privacyStatus) || "private";
-  return privacy === "public" && env.CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED !== "true"
-    ? "global_public_publish_authorization_missing"
-    : null;
+  const publicIntent = privacy === "public" || Boolean(clean(item?.publishAt));
+  if (!publicIntent) return null;
+  if (env.CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED !== "true") return "global_public_publish_authorization_missing";
+  return env.CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED === "true" ? null : "youtube_api_project_audit_required";
 }
 
 export async function runYouTubeUpload(options = {}) {
@@ -260,7 +274,7 @@ export async function runYouTubeUpload(options = {}) {
   const resultBase = { apiCostUsd: 0, paidSpendAllowed: false, dryRun };
   if (!itemPath) return { ...resultBase, status: "blocked", blockers: ["item_manifest_missing_or_unsafe"] };
   const item = await jsonFile(itemPath);
-  const itemBlockers = validateUploadItem(item);
+  const itemBlockers = validateUploadItem(item, { now });
   if (itemBlockers.length) return { ...resultBase, status: "blocked", blockers: itemBlockers };
 
   const mediaPath = await safeRegularFile(workspaceRoot, item.file);
@@ -300,6 +314,9 @@ export async function runYouTubeUpload(options = {}) {
     itemId: item.itemId,
     lane: item.lane,
     privacyStatus: clean(item.privacyStatus) || "private",
+    publishAt: clean(item.publishAt) || null,
+    scheduled: Boolean(clean(item.publishAt)),
+    publicConfirmed: false,
     expectedChannelId: clean(config?.expectedChannelId) || null,
     file: item.file,
     sha256: actualHash,
@@ -339,7 +356,8 @@ export async function runYouTubeUpload(options = {}) {
         ...(clean(item.categoryId) ? { categoryId: clean(item.categoryId) } : {}),
       },
       status: {
-        privacyStatus,
+        privacyStatus: clean(item.publishAt) ? "private" : privacyStatus,
+        ...(clean(item.publishAt) ? { publishAt: clean(item.publishAt) } : {}),
         selfDeclaredMadeForKids: item.madeForKids === true,
       },
     };
@@ -372,6 +390,7 @@ export async function runYouTubeUpload(options = {}) {
       sha256: actualHash,
       titleHash: sha256Buffer(clean(item.title)),
       privacyStatus,
+      publishAt: clean(item.publishAt) || null,
       sizeBytes: mediaStat.size,
       rightsEvidenceSha256: rightsHash,
       qaEvidenceSha256: qaHash,
@@ -402,17 +421,34 @@ export async function runYouTubeUpload(options = {}) {
       return { ...resultBase, status: "uncertain_outcome", blockers: ["manual_youtube_reconciliation_required"], itemId: item.itemId, lane: item.lane };
     }
     const uploadedAt = new Date().toISOString();
-    await appendLedger(ledgerPath, { ...commonLedger, status: "uploaded", recordedAt: uploadedAt, youtubeVideoId: clean(uploadPayload.id) });
+    const responsePrivacy = clean(uploadPayload?.status?.privacyStatus);
+    const responsePublishAt = clean(uploadPayload?.status?.publishAt);
+    const scheduledConfirmed = Boolean(clean(item.publishAt)) && responsePrivacy === "private"
+      && Date.parse(responsePublishAt) === Date.parse(item.publishAt);
+    const publicConfirmed = privacyStatus === "public" && responsePrivacy === "public";
+    if (clean(item.publishAt) && !scheduledConfirmed) {
+      await appendLedger(ledgerPath, { ...commonLedger, status: "uncertain_outcome", recordedAt: uploadedAt,
+        youtubeVideoId: clean(uploadPayload.id), reason: "scheduled_status_not_confirmed_by_youtube" });
+      return { ...resultBase, status: "uncertain_outcome", blockers: ["manual_youtube_reconciliation_required"],
+        itemId: item.itemId, lane: item.lane, uploadAttempted: true, youtubeVideoId: null, youtubeUrl: null };
+    }
+    const finalStatus = scheduledConfirmed ? "scheduled" : "uploaded";
+    await appendLedger(ledgerPath, { ...commonLedger, status: finalStatus, recordedAt: uploadedAt, youtubeVideoId: clean(uploadPayload.id) });
     return {
       ...resultBase,
-      status: "uploaded",
+      status: finalStatus,
       blockers: [],
       itemId: item.itemId,
       lane: item.lane,
       expectedChannelId: config.expectedChannelId,
       privacyStatus,
+      publishAt: clean(item.publishAt) || null,
+      scheduled: finalStatus === "scheduled",
+      publicConfirmed,
+      responsePrivacyStatus: responsePrivacy || null,
       youtubeVideoId: clean(uploadPayload.id),
-      youtubeUrl: `https://www.youtube.com/watch?v=${encodeURIComponent(clean(uploadPayload.id))}`,
+      youtubeUrl: finalStatus === "uploaded" && publicConfirmed
+        ? `https://www.youtube.com/watch?v=${encodeURIComponent(clean(uploadPayload.id))}` : null,
       file: item.file,
       sha256: actualHash,
       uploadAttempted: true,
