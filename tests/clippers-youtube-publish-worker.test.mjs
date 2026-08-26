@@ -14,6 +14,9 @@ const CHANNELS = {
   sleep: "UCZYXWVUTSRQPONMLKJIHGFE",
 };
 const sha = (value) => createHash("sha256").update(value).digest("hex");
+const PRIVACY_POLICY_ACCEPTANCE = Object.freeze({
+  accepted: true, version: "2026-08-26", acceptedBy: "Robert", acceptedAt: "2026-08-26T05:00:00.000Z",
+});
 
 function envFor(...lanes) {
   const env = {};
@@ -60,6 +63,8 @@ async function setup(specs, { ledger = [], publicQueueAuth = false } = {}) {
     const item = {
       schemaVersion: 1, itemId, lane: spec.lane, channelId: spec.channelId || CHANNELS[spec.lane], file: mediaFile, sha256: mediaHash,
       title: `Title ${itemId}`, description: "Original content", privacyStatus,
+      madeForKids: spec.madeForKids ?? false,
+      privacyPolicyAcceptance: PRIVACY_POLICY_ACCEPTANCE,
       rightsEvidence: { file: rightsFile, sha256: await hashPath(root, rightsFile) },
       qaEvidence: { file: qaFile, sha256: await hashPath(root, qaFile) },
       ...(privacyStatus === "public" ? { publishAuthorization: { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T13:00:00.000Z" } } : {}),
@@ -83,6 +88,8 @@ async function setup(specs, { ledger = [], publicQueueAuth = false } = {}) {
     }
     entries.push({
       itemFile, approved: true, approvedBy: "Robert", approvedAt: "2026-08-24T13:00:00.000Z", source,
+      madeForKids: spec.madeForKids ?? false,
+      privacyPolicyAcceptance: PRIVACY_POLICY_ACCEPTANCE,
       ...(privacyStatus === "public" && publicQueueAuth ? { publicAuthorization: { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T13:00:00.000Z" } } : {}),
       ...(spec.publishAt && publicQueueAuth ? {
         publicAuthorization: { public: true, authorizedBy: "Robert", authorizedAt: "2026-08-24T13:00:00.000Z" },
@@ -95,7 +102,9 @@ async function setup(specs, { ledger = [], publicQueueAuth = false } = {}) {
   await writeFile(path.join(root, reportFile), `${JSON.stringify(report)}\n`);
   const queue = {
     schemaVersion: 1, reviewed: true, reviewedBy: "Robert", reviewedAt: "2026-08-24T13:00:00.000Z",
-    sourceReport: { file: reportFile, sha256: await hashPath(root, reportFile) }, items: entries,
+    sourceReport: { file: reportFile, sha256: await hashPath(root, reportFile) },
+    authorization: { motivationShortsPerDayPerChannel: 5, privacyPolicyAcceptance: PRIVACY_POLICY_ACCEPTANCE },
+    items: entries,
   };
   const queueFile = "youtube/reviewed-upload-queue.json";
   await writeFile(path.join(root, queueFile), `${JSON.stringify(queue)}\n`);
@@ -177,6 +186,76 @@ test("does not invoke uploader when exact rights or QA evidence is missing", asy
   });
   assert.equal(calls, 0);
   assert.ok(result.blockers.includes("qa_evidence_missing_or_unsafe"));
+});
+
+test("direct invocation rejects missing or mismatched audience and privacy acceptance", async () => {
+  const audience = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const audienceQueuePath = path.join(audience.root, audience.queueFile);
+  const audienceQueue = JSON.parse(await readFile(audienceQueuePath, "utf8"));
+  audienceQueue.items[0].madeForKids = true;
+  await writeFile(audienceQueuePath, `${JSON.stringify(audienceQueue)}\n`);
+  let calls = 0;
+  const audienceResult = await runYouTubePublishWorker({
+    workspaceRoot: audience.root, queueFile: audience.queueFile, env: envFor("motivation_es"),
+    runUpload: async () => { calls += 1; return {}; },
+  });
+  assert.ok(audienceResult.items[0].blockers.includes("queue_item_audience_mismatch"));
+
+  const missingEntryAudience = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const missingEntryQueuePath = path.join(missingEntryAudience.root, missingEntryAudience.queueFile);
+  const missingEntryQueue = JSON.parse(await readFile(missingEntryQueuePath, "utf8"));
+  delete missingEntryQueue.items[0].madeForKids;
+  await writeFile(missingEntryQueuePath, `${JSON.stringify(missingEntryQueue)}\n`);
+  const missingEntryResult = await runYouTubePublishWorker({
+    workspaceRoot: missingEntryAudience.root, queueFile: missingEntryAudience.queueFile, env: envFor("motivation_es"),
+    runUpload: async () => { calls += 1; return {}; },
+  });
+  assert.ok(missingEntryResult.items[0].blockers.includes("queue_item_audience_choice_required"));
+
+  const itemPrivacy = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const itemPath = path.join(itemPrivacy.root, itemPrivacy.entries[0].itemFile);
+  const item = JSON.parse(await readFile(itemPath, "utf8"));
+  delete item.privacyPolicyAcceptance;
+  await writeFile(itemPath, `${JSON.stringify(item)}\n`);
+  const itemResult = await runYouTubePublishWorker({
+    workspaceRoot: itemPrivacy.root, queueFile: itemPrivacy.queueFile, env: envFor("motivation_es"),
+    runUpload: async () => { calls += 1; return {}; },
+  });
+  assert.ok(itemResult.items[0].blockers.includes("youtube_privacy_policy_acceptance_required"));
+
+  const missingEntryPrivacy = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const missingPrivacyQueuePath = path.join(missingEntryPrivacy.root, missingEntryPrivacy.queueFile);
+  const missingPrivacyQueue = JSON.parse(await readFile(missingPrivacyQueuePath, "utf8"));
+  delete missingPrivacyQueue.items[0].privacyPolicyAcceptance;
+  await writeFile(missingPrivacyQueuePath, `${JSON.stringify(missingPrivacyQueue)}\n`);
+  const missingPrivacyResult = await runYouTubePublishWorker({
+    workspaceRoot: missingEntryPrivacy.root, queueFile: missingEntryPrivacy.queueFile, env: envFor("motivation_es"),
+    runUpload: async () => { calls += 1; return {}; },
+  });
+  assert.ok(missingPrivacyResult.items[0].blockers.includes("queue_item_privacy_policy_acceptance_required"));
+
+  const missingQueuePrivacy = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const missingQueuePath = path.join(missingQueuePrivacy.root, missingQueuePrivacy.queueFile);
+  const missingQueue = JSON.parse(await readFile(missingQueuePath, "utf8"));
+  delete missingQueue.authorization.privacyPolicyAcceptance;
+  await writeFile(missingQueuePath, `${JSON.stringify(missingQueue)}\n`);
+  const missingQueueResult = await runYouTubePublishWorker({
+    workspaceRoot: missingQueuePrivacy.root, queueFile: missingQueuePrivacy.queueFile, env: envFor("motivation_es"),
+    runUpload: async () => { calls += 1; return {}; },
+  });
+  assert.ok(missingQueueResult.blockers.includes("queue_privacy_policy_acceptance_required"));
+
+  const queuePrivacy = await setup([{ itemId: "short-es", lane: "motivation_es" }]);
+  const queuePath = path.join(queuePrivacy.root, queuePrivacy.queueFile);
+  const queue = JSON.parse(await readFile(queuePath, "utf8"));
+  queue.authorization.privacyPolicyAcceptance = { ...PRIVACY_POLICY_ACCEPTANCE, acceptedAt: "2026-08-26T06:00:00.000Z" };
+  await writeFile(queuePath, `${JSON.stringify(queue)}\n`);
+  const queueResult = await runYouTubePublishWorker({
+    workspaceRoot: queuePrivacy.root, queueFile: queuePrivacy.queueFile, env: envFor("motivation_es"),
+    runUpload: async () => { calls += 1; return {}; },
+  });
+  assert.ok(queueResult.items[0].blockers.includes("queue_item_privacy_policy_acceptance_mismatch"));
+  assert.equal(calls, 0);
 });
 
 test("fails closed per lane when channel or OAuth configuration is absent", async () => {

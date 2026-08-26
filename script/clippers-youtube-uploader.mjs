@@ -20,9 +20,25 @@ const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const CHANNELS_URL = "https://www.googleapis.com/youtube/v3/channels?part=id&mine=true";
 const UPLOAD_START_URL = "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet%2Cstatus";
 const EMPTY_LOCK_STALE_MS = 30 * 60 * 1000;
+const PRIVACY_POLICY_VERSION = "2026-08-26";
 
 const clean = (value) => String(value ?? "").trim();
 const sha256Buffer = (value) => createHash("sha256").update(value).digest("hex");
+
+export function privacyPolicyAcceptanceValid(value) {
+  return value?.accepted === true
+    && clean(value?.version) === PRIVACY_POLICY_VERSION
+    && clean(value?.acceptedBy).toLowerCase() === "robert"
+    && Number.isFinite(Date.parse(clean(value?.acceptedAt)));
+}
+
+export function privacyPolicyAcceptanceMatches(left, right) {
+  return privacyPolicyAcceptanceValid(left)
+    && privacyPolicyAcceptanceValid(right)
+    && clean(left.version) === clean(right.version)
+    && clean(left.acceptedBy).toLowerCase() === clean(right.acceptedBy).toLowerCase()
+    && clean(left.acceptedAt) === clean(right.acceptedAt);
+}
 
 async function jsonFile(filePath, fallback = null) {
   try {
@@ -117,6 +133,8 @@ export function validateUploadItem(item, options = {}) {
   if (clean(item?.description).length > 5_000) blockers.push("description_too_long");
   const privacyStatus = clean(item?.privacyStatus) || "private";
   if (!PRIVACY.has(privacyStatus)) blockers.push("privacy_status_invalid");
+  if (typeof item?.madeForKids !== "boolean") blockers.push("made_for_kids_choice_required");
+  if (!privacyPolicyAcceptanceValid(item?.privacyPolicyAcceptance)) blockers.push("youtube_privacy_policy_acceptance_required");
   if (!clean(item?.rightsEvidence?.file) || !SHA256.test(clean(item?.rightsEvidence?.sha256))) blockers.push("rights_evidence_reference_invalid");
   if (!clean(item?.qaEvidence?.file) || !SHA256.test(clean(item?.qaEvidence?.sha256))) blockers.push("qa_evidence_reference_invalid");
   blockers.push(...publishAtBlockers(item, now));

@@ -5,7 +5,12 @@ import { createReadStream } from "node:fs";
 import { lstat, mkdir, open, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { runYouTubeUpload, validateUploadItem } from "./clippers-youtube-uploader.mjs";
+import {
+  privacyPolicyAcceptanceMatches,
+  privacyPolicyAcceptanceValid,
+  runYouTubeUpload,
+  validateUploadItem,
+} from "./clippers-youtube-uploader.mjs";
 
 const LANES = Object.freeze({ motivation_es: "ES", motivation_en: "EN", sleep: "SLEEP" });
 const SHORT_LANES = new Set(["motivation_es", "motivation_en"]);
@@ -93,6 +98,9 @@ function queueBlockers(queue) {
   }
   if (!clean(queue?.sourceReport?.file) || !SHA256.test(clean(queue?.sourceReport?.sha256))) blockers.push("source_report_reference_invalid");
   if (!Array.isArray(queue?.items)) blockers.push("queue_items_invalid");
+  if (!privacyPolicyAcceptanceValid(queue?.authorization?.privacyPolicyAcceptance)) {
+    blockers.push("queue_privacy_policy_acceptance_required");
+  }
   const target = Number(queue?.authorization?.motivationShortsPerDayPerChannel ?? 5);
   if (!Number.isInteger(target) || target < 1 || target > 10) blockers.push("queue_daily_target_invalid");
   if (target > 5 && (!clean(queue?.authorization?.learningRecommendation?.evidence?.file)
@@ -110,6 +118,25 @@ function queueItemBlockers(entry) {
     blockers.push("item_review_approval_missing");
   }
   if (!entry?.source || !["motivation_short", "sleep_long"].includes(clean(entry.source.type))) blockers.push("content_source_invalid");
+  if (typeof entry?.madeForKids !== "boolean") blockers.push("queue_item_audience_choice_required");
+  if (!privacyPolicyAcceptanceValid(entry?.privacyPolicyAcceptance)) blockers.push("queue_item_privacy_policy_acceptance_required");
+  return blockers;
+}
+
+function queueItemAgreementBlockers(queue, entry, item) {
+  const blockers = [];
+  if (typeof item?.madeForKids === "boolean" && typeof entry?.madeForKids === "boolean"
+    && item.madeForKids !== entry.madeForKids) blockers.push("queue_item_audience_mismatch");
+  if (privacyPolicyAcceptanceValid(item?.privacyPolicyAcceptance)
+    && privacyPolicyAcceptanceValid(entry?.privacyPolicyAcceptance)
+    && !privacyPolicyAcceptanceMatches(item.privacyPolicyAcceptance, entry.privacyPolicyAcceptance)) {
+    blockers.push("queue_item_privacy_policy_acceptance_mismatch");
+  }
+  if (privacyPolicyAcceptanceValid(item?.privacyPolicyAcceptance)
+    && privacyPolicyAcceptanceValid(queue?.authorization?.privacyPolicyAcceptance)
+    && !privacyPolicyAcceptanceMatches(item.privacyPolicyAcceptance, queue.authorization.privacyPolicyAcceptance)) {
+    blockers.push("queue_item_privacy_policy_acceptance_mismatch");
+  }
   return blockers;
 }
 
@@ -347,6 +374,7 @@ export async function runYouTubePublishWorker(options = {}) {
         try {
           item = await jsonFile(itemPath);
           entryProblems.push(...validateUploadItem(item, { now }));
+          entryProblems.push(...queueItemAgreementBlockers(queue, entry, item));
         } catch { entryProblems.push("item_manifest_json_invalid"); }
       }
       const lane = clean(item?.lane) || null;
