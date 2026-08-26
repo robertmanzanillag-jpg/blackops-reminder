@@ -985,7 +985,7 @@ export async function ingestClipperLocalNewsEvents(input: ClipperLocalNewsIngest
   return { created, updated, duplicates, resolved, queued, status: await getClipperLocalNewsStatus({ ...input, workspaceDir: dir }) };
 }
 
-interface SourceDefinition { id: string; lane: ClipperLocalNewsLane; url: string; requiresKey: boolean; key?: string; format?: "json" | "rss" | "mta-json" | "miami-transit-bootstrap"; sourceName?: string; sensitiveEligible?: boolean; allowedArticlePathPrefix?: string }
+interface SourceDefinition { id: string; lane: ClipperLocalNewsLane; url: string; requiresKey: boolean; key?: string; format?: "json" | "rss" | "mta-json" | "miami-transit-bootstrap" | "bso-breaking-html"; sourceName?: string; sensitiveEligible?: boolean; allowedArticlePathPrefix?: string }
 interface ConnectorDefinition { id: string; lane: ClipperLocalNewsLane; configured: boolean; requiresKey: boolean; public: boolean }
 
 function connectorCatalog(env: NodeJS.ProcessEnv): ConnectorDefinition[] {
@@ -999,6 +999,7 @@ function connectorCatalog(env: NodeJS.ProcessEnv): ConnectorDefinition[] {
     { id: "fbi-miami", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "doj-sdfl", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "miami-dade-news", lane: "miami-news", configured: true, requiresKey: false, public: true },
+    { id: "broward-sheriff-breaking", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "mia-airport-news", lane: "miami-news", configured: true, requiresKey: false, public: true },
     { id: "fhp-miami-dade", lane: "miami-news", configured: trafficEnabled, requiresKey: false, public: true },
     { id: "ny511", lane: "ny-news", configured: trafficEnabled && Boolean(env.NY511_FEED_URL && env.NY511_API_KEY), requiresKey: true, public: false },
@@ -1017,6 +1018,7 @@ function sources(env: NodeJS.ProcessEnv): SourceDefinition[] {
     { id: "fbi-miami", lane: "miami-news", url: "https://www.fbi.gov/feeds/miami-news/rss.xml", requiresKey: false, format: "rss", sourceName: "Federal Bureau of Investigation Miami", sensitiveEligible: true },
     { id: "doj-sdfl", lane: "miami-news", url: "https://www.justice.gov/news/rss?field_component=1771&require_all=0&search_api_language=en&show_public_archived=0&type=press_release", requiresKey: false, format: "rss", sourceName: "U.S. Attorney for the Southern District of Florida", sensitiveEligible: true, allowedArticlePathPrefix: "/usao-sdfl/" },
     { id: "miami-dade-news", lane: "miami-news", url: "https://www.miamidade.gov/global/rss-news.page", requiresKey: false, format: "rss", sourceName: "Miami-Dade County" },
+    { id: "broward-sheriff-breaking", lane: "miami-news", url: "https://www.sheriff.org/pio/breaking-news/", requiresKey: false, format: "bso-breaking-html", sourceName: "Broward Sheriff's Office", sensitiveEligible: true },
     { id: "mia-airport-news", lane: "miami-news", url: "https://news.miami-airport.com/tagfeed/en-us/tags/airport%2Clatest__news", requiresKey: false, format: "rss", sourceName: "Miami International Airport" },
   ];
   if (env.CLIPPERS_LOCAL_NEWS_INCLUDE_TRAFFIC === "true") {
@@ -1032,12 +1034,13 @@ function sources(env: NodeJS.ProcessEnv): SourceDefinition[] {
 }
 
 function defaultOfficialFeedTextFallback(source: { id: string; url: string }): Promise<string | null> {
-  const allowedIds = new Set(["fbi-ny", "fbi-miami", "doj-sdny", "doj-sdfl"]);
+  const allowedIds = new Set(["fbi-ny", "fbi-miami", "doj-sdny", "doj-sdfl", "broward-sheriff-breaking"]);
   if (!allowedIds.has(source.id)) return Promise.resolve(null);
   let url: URL;
   try { url = new URL(source.url); } catch { return Promise.resolve(null); }
   const allowed = (url.hostname === "www.fbi.gov" && /^\/feeds\/(?:new-york|miami)-news\/rss\.xml$/.test(url.pathname))
-    || (url.hostname === "www.justice.gov" && url.pathname === "/news/rss");
+    || (url.hostname === "www.justice.gov" && url.pathname === "/news/rss")
+    || (url.hostname === "www.sheriff.org" && url.pathname === "/pio/breaking-news/");
   if (!allowed || url.protocol !== "https:") return Promise.resolve(null);
 
   return new Promise((resolve, reject) => {
@@ -1114,6 +1117,44 @@ function rssEvents(xml: string, source: SourceDefinition, now = isoNow()): Clipp
     const publishedMs = publishedDate?.getTime();
     if (publishedMs && Number.isFinite(publishedMs) && (nowMs - publishedMs > staleMs || publishedMs - nowMs > RSS_FUTURE_SKEW_MS)) return [];
     return [attachVerifiedProvenance({ sourceEventId, source: source.sourceName || source.id, sourceUrl: safeUrl(link, source.url), lane: source.lane, title, description, eventType: rssTag(item, "category") || title, effective: publishedDate && Number.isFinite(publishedDate.getTime()) ? publishedDate.toISOString() : undefined, ...(media ? { mediaUrl: safeUrl(media.url, ""), mediaType: media.type } : {}) }, source, now)];
+  });
+}
+
+function browardSheriffBreakingEvents(html: string, source: SourceDefinition, now = isoNow()): ClipperLocalNewsRawEvent[] {
+  const serialized = html.match(/\blet\s+allNewsItems\s*=\s*(\[[\s\S]*?\]);/)?.[1];
+  if (!serialized) return [];
+  let items: unknown;
+  try { items = JSON.parse(serialized); } catch { return []; }
+  if (!Array.isArray(items)) return [];
+  const nowMs = new Date(now).getTime();
+  return items.slice(0, MAX_BATCH_SIZE).flatMap((value) => {
+    if (!value || typeof value !== "object") return [];
+    const record = value as Record<string, unknown>;
+    const item = record.Item && typeof record.Item === "object" ? record.Item as Record<string, unknown> : {};
+    const relativeUrl = clean(item.Url);
+    const title = clean(item.Name);
+    const dateMatch = clean(record.NewsPublishedDate).match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (!relativeUrl || !title || !dateMatch) return [];
+    const effective = `${dateMatch[3]}-${dateMatch[1]}-${dateMatch[2]}T12:00:00.000Z`;
+    const effectiveMs = new Date(effective).getTime();
+    if (!Number.isFinite(effectiveMs) || nowMs - effectiveMs > SENSITIVE_OFFICIAL_RSS_STALE_MS || effectiveMs - nowMs > RSS_FUTURE_SKEW_MS) return [];
+    let sourceUrl: string;
+    try {
+      const article = new URL(relativeUrl, source.url);
+      if (article.protocol !== "https:" || article.hostname !== "www.sheriff.org" || !article.pathname.startsWith("/pio/breaking-news/")) return [];
+      sourceUrl = article.toString();
+    } catch { return []; }
+    return [attachVerifiedProvenance({
+      sourceEventId: sourceUrl,
+      source: source.sourceName || source.id,
+      sourceUrl,
+      lane: source.lane,
+      title,
+      description: title,
+      location: "Broward County",
+      eventType: "Official public safety release",
+      effective,
+    }, source, now)];
   });
 }
 
@@ -1333,17 +1374,18 @@ export async function runClipperLocalNewsCycle(input: ClipperLocalNewsCycleInput
         let response: Response | null = null;
         let officialFeedText: string | null = null;
         try {
-          response = await fetcher(requestUrl, { headers: { Accept: source.format === "rss" ? "application/rss+xml, application/xml, text/xml" : source.format === "miami-transit-bootstrap" ? "text/html" : "application/geo+json, application/json", "User-Agent": "asistente-local-news/1.0" } });
+          response = await fetcher(requestUrl, { headers: { Accept: source.format === "rss" ? "application/rss+xml, application/xml, text/xml" : source.format === "miami-transit-bootstrap" || source.format === "bso-breaking-html" ? "text/html" : "application/geo+json, application/json", "User-Agent": "asistente-local-news/1.0" } });
         } catch (error) {
-          if (source.format === "rss") officialFeedText = await officialFeedTextFallback(source);
+          if (source.format === "rss" || source.format === "bso-breaking-html") officialFeedText = await officialFeedTextFallback(source);
           if (!officialFeedText) throw error;
         }
         if (response && !response.ok) {
-          if (source.format === "rss") officialFeedText = await officialFeedTextFallback(source);
+          if (source.format === "rss" || source.format === "bso-breaking-html") officialFeedText = await officialFeedTextFallback(source);
           if (!officialFeedText) throw new Error(`HTTP ${response.status}`);
         }
         let extracted: ClipperLocalNewsRawEvent[];
         if (source.format === "rss") extracted = rssEvents(officialFeedText || await response!.text(), source, now);
+        else if (source.format === "bso-breaking-html") extracted = browardSheriffBreakingEvents(officialFeedText || await response!.text(), source, now);
         else if (source.format === "mta-json") extracted = mtaAlertEvents(await response!.json(), source, now);
         else if (source.format === "miami-transit-bootstrap") {
           const page = await response!.text();
@@ -1475,4 +1517,4 @@ export async function getClipperLocalNewsStatus(options: ClipperLocalNewsOptions
   };
 }
 
-export const __clipperLocalNewsInternals = { riskFor, sectionFor, topicTagFor, editorialUrgencyFor, editorialPriorityFor, sources, connectorCatalog, truncate, xWeightedLength, extractEvents, rssEvents, dedupeFetchedStoryEvents, sourceArticleMatchesConnector, sourceEvents, mtaAlertEvents, miamiTransitEvents, scheduleMinutes };
+export const __clipperLocalNewsInternals = { riskFor, sectionFor, topicTagFor, editorialUrgencyFor, editorialPriorityFor, sources, connectorCatalog, truncate, xWeightedLength, extractEvents, rssEvents, browardSheriffBreakingEvents, dedupeFetchedStoryEvents, sourceArticleMatchesConnector, sourceEvents, mtaAlertEvents, miamiTransitEvents, scheduleMinutes };

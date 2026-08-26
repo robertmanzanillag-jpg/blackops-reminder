@@ -601,7 +601,12 @@ export function createMetricoolAnalyticsScheduler(deps: MetricoolAnalyticsSchedu
   };
   const tick = () => {
     const clock = zonedClock(now());
-    if (clock.hour !== config.hour || clock.minute !== config.minute || lastRunDate === clock.dateKey) return;
+    // Replit deployments and autoscale restarts are not guaranteed to be alive
+    // during the exact configured minute. Run once after the daily deadline as
+    // a catch-up instead of silently losing the entire analytics day.
+    const dailyDeadlineReached = clock.hour > config.hour
+      || (clock.hour === config.hour && clock.minute >= config.minute);
+    if (!dailyDeadlineReached || lastRunDate === clock.dateKey) return;
     lastRunDate = clock.dateKey;
     void execute();
   };

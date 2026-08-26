@@ -217,6 +217,32 @@ test("daily scheduler runs at the configured New York time and records a single 
   scheduler.stop();
 });
 
+test("daily scheduler catches up after a Replit restart misses the exact configured minute", async () => {
+  let now = new Date("2026-07-27T15:20:00Z"); // 11:20 America/New_York
+  let tick: (() => void) | undefined;
+  let syncCount = 0;
+  const scheduler = createMetricoolAnalyticsScheduler({
+    env: { METRICOOL_ANALYTICS_SYNC_HOUR: "6", METRICOOL_ANALYTICS_SYNC_MINUTE: "45" },
+    now: () => now,
+    setInterval: (callback) => { tick = callback; return { unref() {} }; },
+    clearInterval: () => {},
+    sync: async () => { syncCount += 1; return { enabled: true, configured: true, lastRunAt: now.toISOString(), lastSuccessAt: now.toISOString(), lastError: null, brands: [], postsSeen: 0, metricsRecorded: 0, duplicatesSkipped: 0, unmatchedSkipped: 0, lookbackDays: 30, source: "metricool", status: "completed" }; },
+    getUserIds: async () => [],
+    recordRun: async () => null,
+    log: () => {},
+  });
+  scheduler.start();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(syncCount, 1);
+  tick?.();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(syncCount, 1, "catch-up remains once per New York date");
+  now = new Date("2026-07-28T10:44:00Z");
+  tick?.();
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(syncCount, 1, "the next date still waits until its configured deadline");
+});
+
 test("uses a daily 06:45 default and can be disabled without touching credentials", () => {
   assert.deepEqual(getMetricoolAnalyticsSyncConfig({}), { enabled: true, hour: 6, minute: 45, lookbackDays: 30, timeoutMs: 30_000 });
   assert.equal(getMetricoolAnalyticsSyncConfig({ METRICOOL_ANALYTICS_SYNC_ENABLED: "false" }).enabled, false);

@@ -334,7 +334,7 @@ test("hot-news mode fetches official public-safety sources and leaves traffic co
     return new Response(JSON.stringify({ features: [] }), { status: 200, headers: { "content-type": "application/json" } });
   };
   const cycle = await runClipperLocalNewsCycle({ workspaceDir, now: "2026-07-21T12:00:00Z", env: {}, fetch: fetcher as typeof fetch });
-  assert.equal(requested.length, 8);
+  assert.equal(requested.length, 9);
   assert.ok(requested.every((url) => url !== "https://feeds.everbridge.net/feeds/453003085617722/rss/rss.xml"));
   assert.ok(requested.every((url) => !url.includes("subway-alerts.json")));
   assert.ok(requested.some((url) => url === "https://www.fbi.gov/feeds/new-york-news/rss.xml"));
@@ -342,6 +342,7 @@ test("hot-news mode fetches official public-safety sources and leaves traffic co
   assert.ok(requested.some((url) => url.includes("justice.gov/news/rss?field_component=1981")));
   assert.ok(requested.some((url) => url.includes("justice.gov/news/rss?field_component=1771")));
   assert.ok(requested.some((url) => url === "https://www.miamidade.gov/global/rss-news.page"));
+  assert.ok(requested.some((url) => url === "https://www.sheriff.org/pio/breaking-news/"));
   assert.ok(requested.every((url) => !url.includes("api/serviceupdates")));
   assert.ok(requested.some((url) => url.includes("news.miami-airport.com/tagfeed")));
   assert.equal(requested.filter((url) => url.includes("Road_Closures/FeatureServer")).length, 0);
@@ -356,6 +357,25 @@ test("hot-news mode fetches official public-safety sources and leaves traffic co
   assert.equal(cycle.status.connectors.find((connector) => connector.id === "fhp-miami-dade")?.configured, false);
   assert.equal(cycle.status.coverage.miamiTraffic, "not_configured");
   assert.equal(cycle.status.coverage.nyTraffic, "not_configured");
+});
+
+test("Broward Sheriff official breaking-news page supplies recent hot Miami-lane stories", () => {
+  const source = __clipperLocalNewsInternals.sources({}).find((item) => item.id === "broward-sheriff-breaking");
+  assert.ok(source);
+  const html = `<script>let allNewsItems = [
+    {"Item":{"Url":"/pio/breaking-news/detectives-investigate-fatal-shooting/","Name":"DETECTIVES INVESTIGATE FATAL SHOOTING"},"NewsPublishedDate":"08/24/2026","NewsPublishedTime":"01:00 PM"},
+    {"Item":{"Url":"https://attacker.example/fake-release/","Name":"SPOOFED RELEASE"},"NewsPublishedDate":"08/24/2026","NewsPublishedTime":"01:00 PM"},
+    {"Item":{"Url":"/pio/breaking-news/old-release/","Name":"OLD RELEASE"},"NewsPublishedDate":"08/01/2026","NewsPublishedTime":"01:00 PM"}
+  ];</script>`;
+  const events = __clipperLocalNewsInternals.browardSheriffBreakingEvents(html, source, "2026-08-26T12:00:00Z");
+  assert.equal(events.length, 1);
+  assert.deepEqual({ lane: events[0].lane, source: events[0].source, title: events[0].title, location: events[0].location }, {
+    lane: "miami-news",
+    source: "Broward Sheriff's Office",
+    title: "DETECTIVES INVESTIGATE FATAL SHOOTING",
+    location: "Broward County",
+  });
+  assert.equal(events[0].sourceUrl, "https://www.sheriff.org/pio/breaking-news/detectives-investigate-fatal-shooting/");
 });
 
 test("real-cycle intake recovers blocked official feeds and keeps only high-interest non-traffic news", async (t) => {
