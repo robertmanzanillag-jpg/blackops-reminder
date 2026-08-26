@@ -6,7 +6,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { classifyMetricoolCsv, extractMetricoolCsvSamples } from "./blackroom-metricool-csv-bridge.mjs";
-import { applyBlackRoomDeliveryCounts, planBlackRoomRemoteSync, summarizeBlackRoomDeliveryLedger } from "./blackroom-remote-sync.mjs";
+import { applyBlackRoomDeliveryCounts, buildBlackRoomPublicationExperiments, planBlackRoomRemoteSync, summarizeBlackRoomDeliveryLedger } from "./blackroom-remote-sync.mjs";
 
 const execFileAsync = promisify(execFile);
 const projectDir = process.cwd();
@@ -68,6 +68,11 @@ async function queueWithDeliveryCounts(queue) {
   } catch {
     return applyBlackRoomDeliveryCounts(queue, { scheduled: 0, completed: 0, confirmed: 0 });
   }
+}
+
+async function publicationExperiments() {
+  try { return buildBlackRoomPublicationExperiments(JSON.parse(await readFile(workerLedgerPath, "utf8"))); }
+  catch { return []; }
 }
 
 function wakeWorker() {
@@ -204,6 +209,7 @@ async function syncRemoteControl() {
       deviceId: "blackroom-mac",
       queue,
       worker: await workerState(),
+      publicationExperiments: await publicationExperiments(),
       lastError,
       appliedGeneration: Math.max(0, lastAppliedGeneration),
     });

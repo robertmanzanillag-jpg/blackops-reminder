@@ -79,11 +79,28 @@ export function recordBlackRoomPublicationExperiment(
   state: BlackRoomRemoteControlState,
   experiment: BlackRoomPublicationExperiment,
 ): BlackRoomRemoteControlState {
-  const normalized = {
-    ...experiment,
+  const strategy = ["drop_first", "instant_drop", "build_then_drop", "crowd_reaction_first", "context_open_loop"].includes(String(experiment.creativeStrategy))
+    ? experiment.creativeStrategy : "drop_first";
+  const finite = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : undefined;
+  const normalized: BlackRoomPublicationExperiment = {
     metricoolId: String(experiment.metricoolId || "").trim(),
     reservationId: String(experiment.reservationId || "").trim(),
     network: String(experiment.network || "").trim(),
+    creativeStrategy: strategy as BlackRoomPublicationExperiment["creativeStrategy"],
+    durationSeconds: Math.max(0, Math.round(Number(experiment.durationSeconds || 0))),
+    format: experiment.format === "horizontal" ? "horizontal" : "vertical",
+    language: experiment.language === "es" ? "es" : "en",
+    slot: String(experiment.slot || "").slice(0, 20),
+    publishedAt: String(experiment.publishedAt || "").slice(0, 40),
+    dj: String(experiment.dj || "unknown").slice(0, 100),
+    sourceVideoId: String(experiment.sourceVideoId || "").slice(0, 200),
+    sourceVideoTitle: String(experiment.sourceVideoTitle || "").slice(0, 300),
+    ...(finite(experiment.segmentStartSeconds) !== undefined ? { segmentStartSeconds: finite(experiment.segmentStartSeconds) } : {}),
+    ...(finite(experiment.segmentEndSeconds) !== undefined ? { segmentEndSeconds: finite(experiment.segmentEndSeconds) } : {}),
+    ...(finite(experiment.dropOffsetSeconds) !== undefined ? { dropOffsetSeconds: finite(experiment.dropOffsetSeconds) } : {}),
+    hookFamily: String(experiment.hookFamily || strategy).slice(0, 100),
+    captionVariant: String(experiment.captionVariant || "legacy").slice(0, 100),
+    creativeArmId: String(experiment.creativeArmId || `${experiment.network}:${strategy}:${experiment.language}:${experiment.format}:${experiment.durationSeconds}`).slice(0, 240),
   };
   if (!normalized.metricoolId || !normalized.reservationId || !normalized.network) return state;
   const existingIndex = state.publicationExperiments.findIndex((item) =>
@@ -254,7 +271,7 @@ export function isBlackRoomRemoteDeviceOnline(state: BlackRoomRemoteControlState
 
 function normalizeRemoteControlState(value: unknown): BlackRoomRemoteControlState {
   const parsed = value && typeof value === "object" ? value as Partial<BlackRoomRemoteControlState> : {};
-  return {
+  const normalized: BlackRoomRemoteControlState = {
     ...createBlackRoomRemoteControlState(),
     ...parsed,
     version: 1,
@@ -265,10 +282,14 @@ function normalizeRemoteControlState(value: unknown): BlackRoomRemoteControlStat
     commands: Array.isArray(parsed.commands) ? parsed.commands.slice(-100) : [],
     chatHistory: Array.isArray(parsed.chatHistory) ? parsed.chatHistory.slice(-40) : [],
     analyticsImports: normalizeAnalyticsImports(parsed.analyticsImports),
-    publicationExperiments: Array.isArray(parsed.publicationExperiments)
-      ? parsed.publicationExperiments.slice(-2_000) as BlackRoomPublicationExperiment[]
-      : [],
+    publicationExperiments: [],
   };
+  if (Array.isArray(parsed.publicationExperiments)) {
+    for (const experiment of parsed.publicationExperiments.slice(-2_000)) {
+      recordBlackRoomPublicationExperiment(normalized, experiment as BlackRoomPublicationExperiment);
+    }
+  }
+  return normalized;
 }
 
 async function database() {

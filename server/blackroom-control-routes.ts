@@ -408,13 +408,19 @@ export function registerBlackRoomControlRoutes(app: Express): void {
   app.post("/api/blackroom-agent/remote", async (req, res) => {
     if (!hasValidBlackRoomRemoteToken(req.get("authorization"))) return res.status(401).json({ error: "Invalid BlackRoom device token" });
     try {
-      const remote = await mutateBlackRoomRemoteControl((current) => recordBlackRoomRemoteHeartbeat(current, {
-        deviceId: req.body?.deviceId,
-        queue: req.body?.queue,
-        worker: req.body?.worker,
-        lastError: req.body?.lastError,
-        appliedGeneration: req.body?.appliedGeneration,
-      }));
+      const remote = await mutateBlackRoomRemoteControl((current) => {
+        recordBlackRoomRemoteHeartbeat(current, {
+          deviceId: req.body?.deviceId,
+          queue: req.body?.queue,
+          worker: req.body?.worker,
+          lastError: req.body?.lastError,
+          appliedGeneration: req.body?.appliedGeneration,
+        });
+        if (Array.isArray(req.body?.publicationExperiments)) {
+          req.body.publicationExperiments.slice(-2_000)
+            .forEach((experiment: any) => recordBlackRoomPublicationExperiment(current, experiment));
+        }
+      });
       res.json({ control: remoteView(remote) });
     } catch (error: any) { res.status(500).json({ error: error.message || "Failed to record device heartbeat" }); }
   });

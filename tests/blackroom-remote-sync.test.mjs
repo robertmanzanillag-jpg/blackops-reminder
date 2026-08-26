@@ -2,9 +2,30 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   applyBlackRoomDeliveryCounts,
+  buildBlackRoomPublicationExperiments,
   planBlackRoomRemoteSync,
   summarizeBlackRoomDeliveryLedger,
 } from "../script/blackroom-remote-sync.mjs";
+
+test("confirmed local network receipts backfill normalized deduplicated experiments", () => {
+  const ledger = { entries: [{
+    status: "confirmed", reservationId: "r1", metricoolId: "tiktok:tt-1|facebook:fb-1|youtube:yt-1",
+    networkReceipts: { tiktok: "tt-1", facebook: "fb-1", youtube: "yt-1" }, publicationDateTime: "2026-08-20T12:00:00",
+    videoId: "source-1", sourceVideoTitle: "DJ A full set", dj: "DJ A", language: "en", format: "vertical", durationSeconds: 30,
+    segmentStartSeconds: 120, segmentEndSeconds: 150, dropOffsetSeconds: 2, captionVariant: "en-1",
+  }, {
+    status: "confirmed", reservationId: "r2", metricoolId: "tiktok:tt-1", networkReceipts: { tiktok: "tt-1" },
+    publicationDateTime: "2026-08-21T12:00:00", videoId: "source-2", dj: "DJ B", language: "es", format: "vertical", durationSeconds: 15,
+    creativeStrategy: "context_open_loop",
+  }, { status: "reserved", reservationId: "ignored", networkReceipts: { tiktok: "nope" } }] };
+  const experiments = buildBlackRoomPublicationExperiments(ledger);
+  assert.equal(experiments.length, 3);
+  const tiktok = experiments.find((item) => item.network === "tiktok");
+  assert.equal(tiktok.reservationId, "r2");
+  assert.equal(tiktok.creativeStrategy, "context_open_loop");
+  assert.equal(experiments.find((item) => item.network === "facebook").sourceVideoTitle, "DJ A full set");
+  assert.equal(experiments.find((item) => item.network === "youtube").creativeStrategy, "drop_first");
+});
 
 test("newer pause cannot be undone by an older play response", () => {
   const play = planBlackRoomRemoteSync({

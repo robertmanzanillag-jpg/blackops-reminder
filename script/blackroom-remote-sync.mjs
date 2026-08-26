@@ -59,3 +59,41 @@ export function applyBlackRoomDeliveryCounts(queue, delivery) {
     },
   };
 }
+
+const creativeStrategies = new Set(["drop_first", "instant_drop", "build_then_drop", "crowd_reaction_first", "context_open_loop"]);
+
+/** Converts immutable, confirmed per-network receipts into the experiment
+ * identities consumed by the remote CEO. No network call and no AI is used. */
+export function buildBlackRoomPublicationExperiments(ledger) {
+  const byReceipt = new Map();
+  for (const entry of Array.isArray(ledger?.entries) ? ledger.entries : []) {
+    if (entry?.status !== "confirmed") continue;
+    const receipts = { ...(entry.networkReceipts && typeof entry.networkReceipts === "object" ? entry.networkReceipts : {}) };
+    for (const part of String(entry.metricoolId || "").split("|")) {
+      const match = /^(tiktok|facebook|youtube):([^|\s]+)$/.exec(part);
+      if (match && !receipts[match[1]]) receipts[match[1]] = match[2];
+    }
+    for (const network of ["tiktok", "facebook", "youtube"]) {
+      const metricoolId = String(receipts[network] || "").trim();
+      const reservationId = String(entry.reservationId || "").trim();
+      if (!metricoolId || !reservationId) continue;
+      const strategy = creativeStrategies.has(entry.creativeStrategy) ? entry.creativeStrategy : "drop_first";
+      const experiment = {
+        metricoolId, reservationId, network, creativeStrategy: strategy,
+        durationSeconds: Number(entry.durationSeconds || 0),
+        format: entry.format === "horizontal" ? "horizontal" : "vertical",
+        language: entry.language === "es" ? "es" : "en",
+        slot: String(entry.slot || ""),
+        publishedAt: String(entry.publicationDateTime || entry.updatedAt || entry.createdAt || ""),
+        dj: String(entry.dj || "unknown"), sourceVideoId: String(entry.videoId || ""),
+        sourceVideoTitle: String(entry.sourceVideoTitle || ""),
+        segmentStartSeconds: Number(entry.segmentStartSeconds), segmentEndSeconds: Number(entry.segmentEndSeconds),
+        dropOffsetSeconds: Number(entry.dropOffsetSeconds), hookFamily: String(entry.hookFamily || strategy),
+        captionVariant: String(entry.captionVariant || "legacy"),
+        creativeArmId: String(entry.creativeArmId || `${network}:${strategy}:${entry.language || "en"}:${entry.format || "vertical"}:${entry.durationSeconds || 0}`),
+      };
+      byReceipt.set(`${network}:${metricoolId}`, experiment);
+    }
+  }
+  return [...byReceipt.values()];
+}

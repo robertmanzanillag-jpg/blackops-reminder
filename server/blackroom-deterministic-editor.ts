@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { BlackRoomDailyJob, BlackRoomQueueState, BlackRoomExperimentDuration, BlackRoomTargetNetwork } from "./blackroom-daily-queue";
-import { BLACKROOM_CEO_CREATIVE_MIN_SAMPLES, BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS } from "./blackroom-growth-ceo";
+import { allocateBlackRoomCreativeArm, BLACKROOM_CEO_CREATIVE_MIN_SAMPLES, BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS } from "./blackroom-growth-ceo";
 import type { BlackRoomLedgerEntry, BlackRoomWorkerLedger } from "./blackroom-local-worker";
 import type { BlackRoomCreativeStrategy } from "./blackroom-growth-ceo";
 
@@ -24,6 +24,7 @@ export interface BlackRoomEditPlan {
   jobId: string; slot: string; targetDate: string; videoId: string; videoUrl: string; title: string; dj: string;
   language: "en" | "es"; format: "vertical" | "horizontal"; durationSeconds: BlackRoomExperimentDuration;
   windowStartSeconds: number; windowEndSeconds: number; caption: string; creativeStrategy: BlackRoomCreativeStrategy; targetNetworks: BlackRoomTargetNetwork[];
+  hookFamily: string; captionVariant: string; creativeArmId: string; allocationMode: "exploit" | "explore";
 }
 
 export async function commitBlackRoomReservation(
@@ -157,11 +158,19 @@ function buildCaption(dj: string, language: "en" | "es", duration: number, seed:
       ? [`No intro. ${dj} goes straight to the drop.`, `${dj} starts at full pressure.`, `The first second belongs to ${dj}.`]
       : strategy === "build_then_drop"
         ? [`Wait for ${dj} to flip this room.`, `The tension before ${dj}'s switch is the point.`, `Stay for the payoff from ${dj}.`]
+        : strategy === "crowd_reaction_first"
+          ? [`Watch the room react when ${dj} lands this.`, `The crowd heard it before the camera caught it.`, `${dj} made the whole room move.`]
+          : strategy === "context_open_loop"
+            ? [`Miami after 2 AM — wait for ${dj}'s switch.`, `You have three seconds to guess the next track.`, `This transition should not work. Stay for the answer.`]
         : [`${dj} found the drop. Stay for the switch.`, `The room changed when ${dj} hit this transition.`, `${duration >= 300 ? "Long-form session" : "Drop incoming"} with ${dj} at BlackRoom.`]
     : strategy === "instant_drop"
       ? [`Sin intro: ${dj} entra directo al drop.`, `${dj} empieza con presión total.`, `El primer segundo es de ${dj}.`]
       : strategy === "build_then_drop"
         ? [`Espera a que ${dj} cambie la sala.`, `La tensión antes del cambio de ${dj} es la clave.`, `Quédate para el golpe de ${dj}.`]
+        : strategy === "crowd_reaction_first"
+          ? [`Mira cómo reacciona la sala cuando ${dj} suelta esto.`, `La gente lo escuchó antes de que la cámara lo captara.`, `${dj} hizo mover toda la sala.`]
+          : strategy === "context_open_loop"
+            ? [`Miami después de las 2 AM: espera el cambio de ${dj}.`, `Tienes tres segundos para adivinar el próximo track.`, `Esta transición no debería funcionar. Quédate para verla.`]
         : [`${dj} encontró el drop. Quédate para el cambio.`, `La sala cambió cuando ${dj} soltó esta transición.`, `${duration >= 300 ? "Sesión extendida" : "Se acerca el drop"} con ${dj} en BlackRoom.`];
   return `${templates[stableNumber(seed) % templates.length]} #BlackRoom #DJSet`;
 }
@@ -209,8 +218,13 @@ export function planBlackRoomDeterministicEdit(input: {
   if (!slotConfig) return null;
   const slot = slotConfig.localTime;
   const jobEntries = activeLedgerEntries.filter((entry) => entry.jobId === job.id);
-  const creativeStrategy: BlackRoomCreativeStrategy = input.queue.analytics?.creativeStrategy || "drop_first";
   const targetNetworks = selectBlackRoomTargetNetworks(job, slotConfig, input.queue);
+  const learningNetwork = targetNetworks.includes("youtube") ? "youtube" : targetNetworks[0] || "facebook";
+  const networkCohorts = input.queue.analytics?.networkCreativePerformance?.[learningNetwork];
+  const allocation = networkCohorts
+    ? allocateBlackRoomCreativeArm({ seed: `${job.id}:${slot}:${learningNetwork}`, cohorts: networkCohorts, fallback: input.queue.analytics?.creativeStrategy || "drop_first" })
+    : { strategy: input.queue.analytics?.creativeStrategy || "drop_first", mode: "explore" as const };
+  const creativeStrategy = allocation.strategy;
   const durationSeconds = chooseDuration(job, jobEntries, input.queue, targetNetworks);
   const format = chooseFormat(durationSeconds, jobEntries, targetNetworks, input.queue);
   const language = chooseLanguage(jobEntries, input.queue);
@@ -265,6 +279,10 @@ export function planBlackRoomDeterministicEdit(input: {
     language, format, durationSeconds, creativeStrategy, targetNetworks, windowStartSeconds,
     windowEndSeconds: windowStartSeconds + windowDuration,
     caption: buildCaption(selected.dj, language, durationSeconds, seed, creativeStrategy),
+    hookFamily: creativeStrategy,
+    captionVariant: `${language}-${stableNumber(`${seed}:caption`) % 3}`,
+    creativeArmId: `${learningNetwork}:${creativeStrategy}:${language}:${format}:${durationSeconds}`,
+    allocationMode: allocation.mode,
   };
 }
 
@@ -296,7 +314,9 @@ export function findBlackRoomDropOffset(
     const rise = current.rmsDb - previous.rmsDb;
     if (current.timeSeconds >= 2 && current.timeSeconds <= maximumStart + 5 && rise > best.rise) best = { rise, timeSeconds: current.timeSeconds };
   }
-  const leadSeconds = strategy === "instant_drop" ? 0.25 : strategy === "build_then_drop" ? 4 : 2;
+  const leadSeconds = strategy === "instant_drop" || strategy === "crowd_reaction_first"
+    ? 0.25
+    : strategy === "build_then_drop" ? 4 : strategy === "context_open_loop" ? 3 : 2;
   return Math.max(0, Math.min(maximumStart, Math.round((best.timeSeconds - leadSeconds) * 10) / 10));
 }
 

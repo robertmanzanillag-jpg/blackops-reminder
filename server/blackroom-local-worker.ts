@@ -60,6 +60,7 @@ export interface BlackRoomLedgerEntry {
   targetNetworks?: BlackRoomReceiptNetwork[];
   slot: string;
   videoId: string;
+  sourceVideoTitle?: string;
   dj: string;
   language: "en" | "es";
   format: "vertical" | "horizontal";
@@ -68,6 +69,11 @@ export interface BlackRoomLedgerEntry {
   segmentEndSeconds: number;
   caption: string;
   creativeStrategy?: import("./blackroom-growth-ceo").BlackRoomCreativeStrategy;
+  dropOffsetSeconds?: number;
+  hookFamily?: string;
+  captionVariant?: string;
+  creativeArmId?: string;
+  allocationMode?: "exploit" | "explore";
   renderPath: string;
   sourcePath: string;
   status: BlackRoomLedgerStatus;

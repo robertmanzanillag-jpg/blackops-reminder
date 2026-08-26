@@ -101,7 +101,7 @@ export function sanitizeBlackRoomAgentConfig(input: Partial<BlackRoomAgentConfig
 
   return {
     channelId: String(input.channelId || "").trim(),
-    dailyPostTarget: clampInteger(input.dailyPostTarget, 5, 10, 8),
+    dailyPostTarget: clampInteger(input.dailyPostTarget, 5, 10, 5),
     platforms: platforms.length ? platforms : ["tiktok"],
     timezone: String(input.timezone || "America/New_York").trim() || "America/New_York",
     explorationShare: Math.min(0.5, Math.max(0.15, Number(input.explorationShare) || 0.25)),
@@ -266,10 +266,10 @@ function distributeSlots(weights: number[], total: number): number[] {
 
 export function scoreBlackRoomFormats(
   records: BlackRoomPerformanceRecord[],
-  dailyPostTarget = 8,
+  dailyPostTarget = 5,
   explorationShare = 0.25,
 ): BlackRoomFormatScore[] {
-  const target = clampInteger(dailyPostTarget, 5, 10, 8);
+  const target = clampInteger(dailyPostTarget, 5, 10, 5);
   const exploration = Math.min(0.5, Math.max(0.15, explorationShare));
   const aggregates = BLACKROOM_DURATION_VARIANTS.map((durationSeconds) => {
     const matches = records.filter((record) => Number(record?.durationSeconds) === durationSeconds && asCount(record?.views) >= 0);
