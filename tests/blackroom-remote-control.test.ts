@@ -215,15 +215,25 @@ test("panel keeps last confirmed delivery counters when the Mac goes offline", (
   } as any;
   const remoteQueue = {
     ...localQueue,
+    progress: undefined,
     totals: { ...localQueue.totals, scheduled: 3, completed: 1 },
     delivery: { scheduled: 3, completed: 1, confirmed: 4 },
   };
 
-  assert.equal(resolveBlackRoomPanelAgent(localQueue, remoteQueue, true), remoteQueue);
-  assert.deepEqual(resolveBlackRoomPanelAgent(localQueue, remoteQueue, false).totals, {
+  const online = resolveBlackRoomPanelAgent(localQueue, remoteQueue, true);
+  assert.deepEqual(online.progress, {
+    remainingPosts: 160,
+    remainingBatches: 16,
+    remainingDays: 16,
+    remainingCalendarDays: 16,
+    estimatedFinishDate: null,
+  });
+  const offline = resolveBlackRoomPanelAgent(localQueue, remoteQueue, false);
+  assert.deepEqual(offline.totals, {
     queued: 15, processing: 0, retry: 1, scheduled: 3, completed: 1,
   });
-  assert.deepEqual(resolveBlackRoomPanelAgent(localQueue, remoteQueue, false).delivery, remoteQueue.delivery);
+  assert.deepEqual(offline.delivery, remoteQueue.delivery);
+  assert.deepEqual(offline.progress, online.progress);
 });
 
 test("panel remains available when Replit has no local queue file but the Mac reported one", async () => {
@@ -322,6 +332,16 @@ test("BlackRoom panel exposes the chat controls", () => {
   assert.match(blackRoomPage, /confirmar todos los destinos requeridos/);
   assert.match(blackRoomPage, /const byId=id=>document\.getElementById\(id\)/);
   assert.match(blackRoomPage, /Trabajando de verdad/);
+  assert.match(blackRoomPage, /Posts por preparar/);
+  assert.match(blackRoomPage, /Días\/lotes pendientes/);
+  assert.match(blackRoomPage, /Tiempo estimado para terminar/);
+  assert.match(blackRoomPage, /id="remainingPosts"/);
+  assert.match(blackRoomPage, /id="remainingBatches"/);
+  assert.match(blackRoomPage, /id="remainingTime"/);
+  assert.match(blackRoomPage, /function remainingTimeLabel/);
+  assert.match(blackRoomPage, /remainingCalendarDays/);
+  assert.match(blackRoomPage, /Al encender/);
+  assert.match(blackRoomPage, /Todo preparado/);
   assert.match(blackRoomPage, /Actividad en vivo/);
   assert.doesNotMatch(blackRoomPage, /1 semana/);
   assert.match(blackRoomPage, /segmentos sin repetir ni solapar/);
