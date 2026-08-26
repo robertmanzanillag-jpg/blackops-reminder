@@ -17,8 +17,24 @@ const ACTIVE_UPLOAD_STATES = new Set(["upload_started", "uncertain_outcome", "up
 const DAY_MS = 86_400_000;
 const MIN_SHORT_SPACING_MS = 2 * 60 * 60 * 1000;
 const LOCAL_TIME = /^(?:[01]\d|2[0-3]):[0-5]\d$/;
+const PRIVACY_POLICY_VERSION = "2026-08-26";
 
 const clean = (value) => String(value ?? "").trim();
+
+function privacyPolicyAcceptanceValid(value) {
+  return value?.accepted === true
+    && clean(value?.version) === PRIVACY_POLICY_VERSION
+    && clean(value?.acceptedBy).toLowerCase() === "robert"
+    && Number.isFinite(Date.parse(clean(value?.acceptedAt)));
+}
+
+function privacyPolicyAcceptanceMatches(left, right) {
+  return privacyPolicyAcceptanceValid(left)
+    && privacyPolicyAcceptanceValid(right)
+    && clean(left.version) === clean(right.version)
+    && clean(left.acceptedBy).toLowerCase() === clean(right.acceptedBy).toLowerCase()
+    && clean(left.acceptedAt) === clean(right.acceptedAt);
+}
 
 async function jsonFile(filePath) {
   return JSON.parse(await readFile(filePath, "utf8"));
@@ -73,6 +89,10 @@ function authorizationBlockers(config) {
   if (authorization?.blanketAuthorized !== true
     || clean(authorization?.authorizedBy).toLowerCase() !== "robert"
     || !Number.isFinite(Date.parse(clean(authorization?.authorizedAt)))) blockers.push("robert_blanket_authorization_required");
+  if (authorization?.privacyPolicyAccepted !== true
+    || clean(authorization?.privacyPolicyVersion) !== PRIVACY_POLICY_VERSION
+    || clean(authorization?.privacyPolicyAcceptedBy).toLowerCase() !== "robert"
+    || !Number.isFinite(Date.parse(clean(authorization?.privacyPolicyAcceptedAt)))) blockers.push("youtube_privacy_policy_acceptance_required");
   const dailyTarget = Number(authorization?.motivationShortsPerDayPerChannel);
   if (!Number.isInteger(dailyTarget) || dailyTarget < 1 || dailyTarget > 10) blockers.push("motivation_daily_target_must_be_between_one_and_ten");
   if (Number(authorization?.sleepVideosPerRollingSevenDays) !== 1) blockers.push("one_sleep_video_per_week_authorization_required");
@@ -80,6 +100,7 @@ function authorizationBlockers(config) {
     const privacy = clean(config?.channels?.[lane]?.privacyStatus);
     if (!PRIVACY.has(privacy)) blockers.push(`${lane}_privacy_choice_required`);
     if (!CHANNEL_ID.test(clean(config?.channels?.[lane]?.channelId))) blockers.push(`${lane}_channel_missing_or_invalid`);
+    if (typeof config?.channels?.[lane]?.madeForKids !== "boolean") blockers.push(`${lane}_made_for_kids_choice_required`);
     const scheduled = config?.channels?.[lane]?.schedule?.enabled === true;
     if (privacy === "public" || scheduled) {
       if (authorization?.youtubeApiProjectAuditVerified !== true) blockers.push("youtube_api_project_audit_required");
@@ -330,6 +351,9 @@ async function priorOutcomes(root, rootLedger, existingQueue) {
     ? rootLedger.items.filter((row) => ACTIVE_UPLOAD_STATES.has(clean(row?.status)))
     : [];
   const queue = Array.isArray(existingQueue?.items) ? existingQueue.items : [];
+  if (queue.length > 0 && !privacyPolicyAcceptanceValid(existingQueue?.authorization?.privacyPolicyAcceptance)) {
+    throw new Error("existing_reviewed_queue_privacy_policy_acceptance_invalid");
+  }
   const queueItems = [];
   for (const entry of queue) {
     const itemPath = await safeFile(root, entry?.itemFile);
@@ -337,6 +361,12 @@ async function priorOutcomes(root, rootLedger, existingQueue) {
     const item = await jsonFile(itemPath);
     if (!clean(item?.itemId) || !clean(item?.file) || !SHA256.test(clean(item?.sha256))) {
       throw new Error("existing_reviewed_queue_item_invalid");
+    }
+    if (typeof item?.madeForKids !== "boolean" || typeof entry?.madeForKids !== "boolean"
+      || item.madeForKids !== entry.madeForKids) throw new Error("existing_reviewed_queue_audience_invalid");
+    if (!privacyPolicyAcceptanceMatches(item?.privacyPolicyAcceptance, entry?.privacyPolicyAcceptance)
+      || !privacyPolicyAcceptanceMatches(item?.privacyPolicyAcceptance, existingQueue.authorization.privacyPolicyAcceptance)) {
+      throw new Error("existing_reviewed_queue_privacy_policy_acceptance_invalid");
     }
     queueItems.push(item);
   }
@@ -392,6 +422,12 @@ export async function packageYouTubeUploads({ configPath, now = new Date(), oper
   const config = await jsonFile(configAbsolute);
   const configProblems = validateConfig(config);
   if (configProblems.length) throw new Error(configProblems.join(","));
+  const privacyPolicyAcceptance = {
+    accepted: true,
+    version: clean(config.authorization.privacyPolicyVersion),
+    acceptedBy: clean(config.authorization.privacyPolicyAcceptedBy),
+    acceptedAt: clean(config.authorization.privacyPolicyAcceptedAt),
+  };
   const root = path.resolve(path.dirname(configAbsolute), config.workspaceRoot);
   const learnedTarget = await learningRecommendation(root, config);
   const reportPath = await safeFile(root, config.sourceReport);
@@ -468,6 +504,8 @@ export async function packageYouTubeUploads({ configPath, now = new Date(), oper
       const item = {
         schemaVersion: 1, itemId, lane, channelId: clean(channel.channelId), file, sha256: mediaHash,
         title: source.title, description: source.description, privacyStatus: publishAt ? "private" : privacyStatus,
+        madeForKids: channel.madeForKids,
+        privacyPolicyAcceptance,
         ...(publishAt ? { publishAt } : {}),
         rightsEvidence: { file: rightsFile, sha256: rightsHash },
         qaEvidence: { file: qaFile, sha256: qaHash },
@@ -477,6 +515,8 @@ export async function packageYouTubeUploads({ configPath, now = new Date(), oper
       await atomicJson(path.join(root, itemFile), item);
       const queueEntry = {
         itemId, itemFile, approved: true, approvedBy: config.authorization.authorizedBy, approvedAt: now.toISOString(),
+        madeForKids: channel.madeForKids,
+        privacyPolicyAcceptance,
         source: lane === "sleep" ? { type: "sleep_long" } : { type: "motivation_short", language: candidate.language, shortId: row.shortId },
         ...(publicIntent ? { publicAuthorization: channel.publicAuthorization } : {}),
         ...(publicIntent ? { youtubeApiProjectAuditVerified: true } : {}),
@@ -493,6 +533,7 @@ export async function packageYouTubeUploads({ configPath, now = new Date(), oper
     authorization: {
       motivationShortsPerDayPerChannel: Number(config.authorization.motivationShortsPerDayPerChannel), sleepVideosPerRollingSevenDays: 1,
       source: "explicit_owner_config", authorizedAt: config.authorization.authorizedAt,
+      privacyPolicyAcceptance,
       ...(learnedTarget ? { learningRecommendation: learnedTarget } : {}),
     },
     items: [...(existingQueueSameSource ? existingQueue.items : []), ...accepted.map((entry) => entry.queueEntry)],
