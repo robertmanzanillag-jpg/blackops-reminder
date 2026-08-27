@@ -34,6 +34,7 @@ const LocalNewsPublicPage = lazy(() => import("@/pages/local-news-public"));
 type AuthMe = {
   authenticated: boolean;
   sessionBacked?: boolean;
+  cookieBacked?: boolean;
   usingDevFallback?: boolean;
   user?: { id: string; username: string };
 };
@@ -64,7 +65,7 @@ function AuthenticatedRouter() {
     queryKey: ["auth-me"],
     queryFn: async () => {
       const localAuth = getLocalPreviewAuth();
-      const response = await fetch("/api/auth/me");
+      const response = await fetch("/api/auth/me", { credentials: "include" });
       const contentType = response.headers.get("content-type") || "";
       if (response.status === 401) return localAuth || { authenticated: false };
       if (!response.ok || !contentType.includes("application/json")) {
@@ -77,7 +78,7 @@ function AuthenticatedRouter() {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
       if (typeof window !== "undefined") {
         window.localStorage.removeItem(LOCAL_AUTH_USER_KEY);
       }
@@ -100,7 +101,7 @@ function AuthenticatedRouter() {
       <div className="fixed right-3 top-3 z-50 flex items-center gap-2 rounded-lg border border-white/10 bg-black/80 px-2 py-1 text-xs text-zinc-300 backdrop-blur">
         <span className="max-w-[160px] truncate">{auth.user?.username || auth.user?.id}</span>
         {auth.usingDevFallback && <span className="rounded border border-amber-400/30 px-1.5 py-0.5 text-amber-200">dev</span>}
-        {(auth.sessionBacked || hasLocalPreviewAuth) && (
+        {(auth.sessionBacked || auth.cookieBacked || hasLocalPreviewAuth) && (
           <Button
             type="button"
             size="sm"

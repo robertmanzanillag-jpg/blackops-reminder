@@ -90,7 +90,7 @@ function readCookieHeader(req: Request): string {
   return typeof header === "string" ? header : "";
 }
 
-function readSignedLocalAuthCookie(req: Request): string | null {
+export function resolveSignedLocalAuthCookieUserId(req: Request): string | null {
   const cookieHeader = readCookieHeader(req);
   const cookies = cookieHeader.split(";").map((part) => part.trim()).filter(Boolean);
   const prefix = `${LOCAL_AUTH_USER_COOKIE_NAME}=`;
@@ -122,7 +122,7 @@ export function resolveCurrentUserId(req: Request): string | null {
     cleanUserId(authReq.session?.user?.id) ||
     cleanUserId(authReq.session?.user?.userId) ||
     cleanUserId(authReq.session?.user?.sub) ||
-    readSignedLocalAuthCookie(req) ||
+    resolveSignedLocalAuthCookieUserId(req) ||
     (requestFallbackAllowed ? cleanUserId(req.header("x-user-id")) : null) ||
     (requestFallbackAllowed ? DEFAULT_DEV_USER_ID : null)
   );
