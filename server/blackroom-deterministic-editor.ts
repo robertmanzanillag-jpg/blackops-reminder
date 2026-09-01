@@ -352,6 +352,10 @@ export function isOwnedBlackRoomMetadata(metadata: { channel_id?: unknown; uploa
 export function buildBlackRoomYtDlpWindowArgs(plan: BlackRoomEditPlan, sourcePath: string, temporaryDirectory: string): string[] {
   return [
     plan.videoUrl,
+    // YouTube currently requires a GVS PO token for the default web_creator
+    // HTTPS formats. web_safari exposes HLS variants that remain compatible
+    // with partial ffmpeg downloads while preserving 1080p video and audio.
+    "--extractor-args", "youtube:player_client=web_safari",
     "--download-sections", `*${plan.windowStartSeconds}-${plan.windowEndSeconds}`,
     "--force-keyframes-at-cuts", "-f", "bestvideo*[height<=1080]+bestaudio/best[height<=1080]",
     // A network stall must fail fast so the local worker can retry the slot instead
