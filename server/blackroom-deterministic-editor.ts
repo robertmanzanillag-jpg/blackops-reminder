@@ -230,11 +230,11 @@ export function planBlackRoomDeterministicEdit(input: {
   const language = chooseLanguage(jobEntries, input.queue);
   const margin = durationSeconds >= 300 ? 180 : 90;
   const windowDuration = durationSeconds + margin;
-  const usedVideos = new Set([
+  const previouslyUsedVideos = new Set([
     ...input.queue.sourceHistory.map((entry) => entry.videoId),
-    ...(input.queue.failedSourceVideos || []).map((entry) => entry.videoId),
     ...activeLedgerEntries.map((entry) => entry.videoId),
   ]);
+  const failedVideos = new Set((input.queue.failedSourceVideos || []).map((entry) => entry.videoId));
   const usedDjs = new Map<string, number>();
   for (const entry of jobEntries) usedDjs.set(entry.dj, (usedDjs.get(entry.dj) || 0) + 1);
   let eligible = input.inventory
@@ -251,15 +251,33 @@ export function planBlackRoomDeterministicEdit(input: {
       return { video, dj, windowStart };
     })
     .filter((candidate): candidate is { video: BlackRoomInventoryVideo; dj: string; windowStart: number } => candidate.windowStart !== null);
+  // Prefer a completely fresh source, but do not deadlock the campaign when a
+  // DJ only has one long set in the channel. A previously used source may be
+  // reused only when every prior segment is known, so availableWindowStart can
+  // guarantee that the next clip is different and non-overlapping.
+  const sourceHasReusableHistory = (videoId: string): boolean => {
+    const history = [
+      ...input.queue.sourceHistory.filter((entry) => entry.videoId === videoId),
+      ...activeLedgerEntries.filter((entry) => entry.videoId === videoId),
+    ];
+    return history.length > 0 && history.every((entry) => Number.isFinite(entry.segmentStartSeconds)
+      && Number.isFinite(entry.segmentEndSeconds)
+      && Number(entry.segmentEndSeconds) > Number(entry.segmentStartSeconds));
+  };
+  const selectable = eligible.filter((candidate) => !failedVideos.has(candidate.video.id));
+  const preferFreshSource = (candidates: typeof selectable): typeof selectable => {
+    const fresh = candidates.filter((candidate) => !previouslyUsedVideos.has(candidate.video.id));
+    if (fresh.length) return fresh;
+    return candidates.filter((candidate) => sourceHasReusableHistory(candidate.video.id));
+  };
   if (usedDjs.size < Math.min(job.requirements.djs, job.requirements.posts)) {
-    const unseen = eligible.filter((candidate) => !usedDjs.has(candidate.dj) && !usedVideos.has(candidate.video.id));
-    if (!unseen.length) throw new Error(`BlackRoom needs ${job.requirements.djs} distinct DJs before reusing one`);
+    const unseen = preferFreshSource(selectable.filter((candidate) => !usedDjs.has(candidate.dj)));
+    if (!unseen.length) throw new Error(`BlackRoom needs ${job.requirements.djs} distinct DJs with a fresh or non-overlapping source segment`);
     eligible = unseen;
   } else {
-    const belowTarget = eligible.filter((candidate) => !usedVideos.has(candidate.video.id)
-      && usedDjs.has(candidate.dj)
-      && (usedDjs.get(candidate.dj) || 0) < job.requirements.postsPerDj);
-    if (!belowTarget.length) throw new Error("No unused source remains for the five selected DJs within the per-DJ quota");
+    const belowTarget = preferFreshSource(selectable.filter((candidate) => usedDjs.has(candidate.dj)
+      && (usedDjs.get(candidate.dj) || 0) < job.requirements.postsPerDj));
+    if (!belowTarget.length) throw new Error("No fresh or non-overlapping source segment remains for the five selected DJs within the per-DJ quota");
     eligible = belowTarget;
   }
   if (!eligible.length) throw new Error(`No unused BlackRoom source can support a ${durationSeconds}s clip`);

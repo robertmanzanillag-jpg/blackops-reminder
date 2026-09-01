@@ -265,6 +265,74 @@ test("planner enforces exact DJ membership and per-DJ quota", () => {
   }), /per-DJ quota/);
 });
 
+test("planner completes the distinct-DJ rotation with a non-overlapping segment from a previously used set", () => {
+  const state = queue();
+  state.sourceHistory = [{
+    videoId: "dj-b-only-set", segmentStartSeconds: 0, segmentEndSeconds: 120,
+  }];
+  state.jobs[0].requirements.djs = 2;
+  state.jobs[0].requirements.postsPerDj = 3;
+  const used = {
+    version: 1,
+    entries: [{
+      jobId: "job-1", slot: "00:30", videoId: "dj-a-set", dj: "DJ A",
+      language: "en", format: "vertical", durationSeconds: 15,
+      segmentStartSeconds: 0, segmentEndSeconds: 105,
+    }],
+  };
+  const plan = planBlackRoomDeterministicEdit({
+    queue: state, ledger: used as any, now: new Date("2026-07-22T12:00:00.000Z"),
+    inventory: [{ id: "dj-b-only-set", title: "DJ B - DJ Set", duration: 3600 }],
+  });
+  assert.equal(plan?.dj, "DJ B");
+  assert.equal(plan?.videoId, "dj-b-only-set");
+  assert.ok((plan?.windowStartSeconds || 0) >= 120);
+});
+
+test("planner still prefers a never-used source over reusing a valid older set", () => {
+  const state = queue();
+  state.sourceHistory = [{
+    videoId: "dj-b-old-set", segmentStartSeconds: 0, segmentEndSeconds: 120,
+  }];
+  state.jobs[0].requirements.djs = 2;
+  state.jobs[0].requirements.postsPerDj = 3;
+  const used = {
+    version: 1,
+    entries: [{
+      jobId: "job-1", slot: "00:30", videoId: "dj-a-set", dj: "DJ A",
+      language: "en", format: "vertical", durationSeconds: 15,
+      segmentStartSeconds: 0, segmentEndSeconds: 105,
+    }],
+  };
+  const plan = planBlackRoomDeterministicEdit({
+    queue: state, ledger: used as any, now: new Date("2026-07-22T12:00:00.000Z"),
+    inventory: [
+      { id: "dj-b-old-set", title: "DJ B - DJ Set", duration: 3600 },
+      { id: "dj-b-fresh-set", title: "DJ B - DJ Set", duration: 3600 },
+    ],
+  });
+  assert.equal(plan?.videoId, "dj-b-fresh-set");
+});
+
+test("planner never reuses a source when its earlier segment boundaries are incomplete", () => {
+  const state = queue();
+  state.sourceHistory = [{ videoId: "dj-b-unknown-segment" }];
+  state.jobs[0].requirements.djs = 2;
+  state.jobs[0].requirements.postsPerDj = 3;
+  const used = {
+    version: 1,
+    entries: [{
+      jobId: "job-1", slot: "00:30", videoId: "dj-a-set", dj: "DJ A",
+      language: "en", format: "vertical", durationSeconds: 15,
+      segmentStartSeconds: 0, segmentEndSeconds: 105,
+    }],
+  };
+  assert.throws(() => planBlackRoomDeterministicEdit({
+    queue: state, ledger: used as any, now: new Date("2026-07-22T12:00:00.000Z"),
+    inventory: [{ id: "dj-b-unknown-segment", title: "DJ B - DJ Set", duration: 3600 }],
+  }), /fresh or non-overlapping source segment/);
+});
+
 test("extracts DJ names and builds correct output filters", () => {
   assert.equal(extractBlackRoomDj("ILLSKIN - Hardgroove DJ Set at BlackRoom"), "ILLSKIN");
   assert.match(buildBlackRoomVideoFilter("vertical"), /crop=1080:1920/);
