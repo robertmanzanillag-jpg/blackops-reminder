@@ -431,6 +431,7 @@ test("command builders keep downloads partial and renders platform-compatible", 
     durationSeconds: 30, format: "vertical",
   };
   const download = buildBlackRoomYtDlpWindowArgs(plan, "/project/sources/a.mp4", "/project/agent/editor-tmp/a");
+  assert.deepEqual(download.slice(1, 3), ["--extractor-args", "youtube:player_client=web_safari"]);
   assert.ok(download.includes("--download-sections"));
   assert.ok(download.includes("*100-220"));
   assert.ok(download.includes("bestvideo*[height<=1080]+bestaudio/best[height<=1080]"));
