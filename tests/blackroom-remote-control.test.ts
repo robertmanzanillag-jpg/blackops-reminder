@@ -215,6 +215,8 @@ test("local worker publishes structured live activity with every heartbeat", () 
   assert.match(control, /syncMetricoolCsvExports/);
   assert.match(control, /\/api\/blackroom-agent\/analytics\/import/);
   assert.match(control, /BLACKROOM_METRICOOL_EXPORT_DIR/);
+  assert.match(control, /for \(const remoteCommand of control\.commands\)/);
+  assert.match(control, /commands: \[remoteCommand\]/);
 });
 
 test("panel keeps last confirmed delivery counters when the Mac goes offline", () => {

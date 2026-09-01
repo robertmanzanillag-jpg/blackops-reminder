@@ -182,7 +182,11 @@ async function syncRemoteControl() {
     queue = await serializedCommand("status");
     const currentWorker = await workerState();
     if (Number(control.generation || 0) !== lastAppliedGeneration && Array.isArray(control.commands) && control.commands.length) {
-      queue = await serializedCommand("remote-config", { commands: control.commands });
+      // Keep each CLI payload small. CEO schedule history can exceed macOS ARG_MAX
+      // when the complete command backlog is encoded into one argument after a restart.
+      for (const remoteCommand of control.commands) {
+        queue = await serializedCommand("remote-config", { commands: [remoteCommand] });
+      }
       if (control.desiredEnabled && control.commands.at(-1)?.type === "work_now") wakeWorker();
     }
     const plan = planBlackRoomRemoteSync({
