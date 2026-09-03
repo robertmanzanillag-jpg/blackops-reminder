@@ -18,6 +18,7 @@ import {
   Megaphone,
   Music2,
   MousePointerClick,
+  Camera,
   TrendingUp,
 } from "lucide-react";
 import { Link } from "wouter";
@@ -72,6 +73,13 @@ const tools = [
     description: "CMO global, clientes internos, skills, posts, calendario, analytics y self-improvement.",
     href: "/marketing-command-center",
     icon: Megaphone,
+    primary: true,
+  },
+  {
+    title: "Social Lab",
+    description: "Analiza cuentas IG, TikTok, Shorts y crea campanas nativas propias.",
+    href: "/instagram-campaign-lab",
+    icon: Camera,
     primary: true,
   },
   {

@@ -26,6 +26,7 @@ const RevenueEnginePage = lazy(() => import("@/pages/revenue-engine-simple"));
 const RevenueEngineAdvancedPage = lazy(() => import("@/pages/revenue-engine"));
 const DropshippingCeoPage = lazy(() => import("@/pages/dropshipping-ceo"));
 const MarketingCommandCenterPage = lazy(() => import("@/pages/marketing-command-center"));
+const InstagramCampaignLabPage = lazy(() => import("@/pages/instagram-campaign-lab"));
 const CybersecurityAgentPage = lazy(() => import("@/pages/cybersecurity-agent"));
 const AppQaAgentPage = lazy(() => import("@/pages/app-qa-agent"));
 const LegalCompliancePage = lazy(() => import("@/pages/legal-compliance"));
@@ -125,6 +126,7 @@ function AuthenticatedRouter() {
           <Route path="/revenue-engine" component={RevenueEnginePage} />
           <Route path="/dropshipping-ceo" component={DropshippingCeoPage} />
           <Route path="/marketing-command-center" component={MarketingCommandCenterPage} />
+          <Route path="/instagram-campaign-lab" component={InstagramCampaignLabPage} />
           <Route path="/cybersecurity-agent" component={CybersecurityAgentPage} />
           <Route path="/app-qa-agent" component={AppQaAgentPage} />
           <Route path="/legal-compliance" component={LegalCompliancePage} />
