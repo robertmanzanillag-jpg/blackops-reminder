@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import { existsSync } from "fs";
 import path from "path";
 import { storage } from "./storage";
-import { getRadioSlotsForMonth, type RadioSlot } from "./radio-agent";
+import { getRadioSlotsForMonth, type RadioCity, type RadioSlot } from "./radio-agent";
 import { ensureRadioDriveFolder, uploadRadioTemplatePng } from "./google-drive";
 import { syncGoogleCalendarToTasks } from "./calendar-sync";
 import { getSystemUserId } from "./user-context";
@@ -123,6 +123,7 @@ export function buildRadioTemplateSourceHash(params: {
   rawDescription?: string | null;
   canvaBrandTemplateId?: string | null;
   canvaDjField?: string | null;
+  city?: RadioCity;
 }): string {
   return createHash("sha256")
     .update(JSON.stringify({
@@ -136,12 +137,14 @@ export function buildRadioTemplateSourceHash(params: {
         (hasRealValue(process.env.CANVA_RADIO_BRAND_TEMPLATE_ID) ? process.env.CANVA_RADIO_BRAND_TEMPLATE_ID : DEFAULT_CANVA_RADIO_BRAND_TEMPLATE_ID),
       canvaDjField: params.canvaDjField || process.env.CANVA_RADIO_DJ_FIELD || DEFAULT_CANVA_DJ_FIELD,
       transparentBackground: CANVA_TRANSPARENT_EXPORT,
-      template: "local-black-room-radio-miami-photo-v4",
+      template: `local-black-room-radio-${params.city || "miami"}-calendar-v1`,
     }))
     .digest("hex");
 }
 
 function getSlotName(slot: RadioSlot, slotHour: number): string | null {
+  const dynamicEntry = slot.lineup.find((entry) => entry.hour === slotHour);
+  if (dynamicEntry) return dynamicEntry.djName;
   if (slotHour === 7) return slot.slot7;
   if (slotHour === 8) return slot.slot8;
   if (slotHour === 9) return slot.slot9;
@@ -153,12 +156,9 @@ function buildFilename(dateKey: string, slotHour: number, djName: string): strin
 }
 
 function getTemplateInputs(slot: RadioSlot): Array<{ slotHour: number; djName: string }> {
-  const inputs: Array<{ slotHour: number; djName: string }> = [];
-  for (const slotHour of [7, 8, 9] as const) {
-    const djName = getSlotName(slot, slotHour);
-    if (djName) inputs.push({ slotHour, djName });
-  }
-  return inputs;
+  return slot.lineup
+    .filter((entry): entry is typeof entry & { djName: string } => Boolean(entry.djName))
+    .map((entry) => ({ slotHour: entry.hour, djName: entry.djName }));
 }
 
 export async function forceTransparentBackground(input: Buffer): Promise<Buffer> {
@@ -202,10 +202,14 @@ export async function forceTransparentBackground(input: Buffer): Promise<Buffer>
     .toBuffer();
 }
 
-function getRadioTemplatePath(): string {
-  const configuredPath = process.env.RADIO_TEMPLATE_IMAGE_PATH;
+function getRadioTemplatePath(city: RadioCity): string {
+  const cityFilename = city === "buenos_aires" ? "buenos-aires.png" : `${city}.png`;
+  const cityEnvName = `RADIO_TEMPLATE_${city.toUpperCase()}_IMAGE_PATH`;
+  const configuredPath = process.env[cityEnvName] || (city === "miami" ? process.env.RADIO_TEMPLATE_IMAGE_PATH : undefined);
   const candidates = [
     configuredPath,
+    path.join(process.cwd(), "client/public/radio-flyers", cityFilename),
+    path.join(process.cwd(), "dist/public/radio-flyers", cityFilename),
     path.join(process.cwd(), "client/public/br-radio-template.png"),
     path.join(process.cwd(), "dist/public/br-radio-template.png"),
     path.join(process.cwd(), "client/public/br-radio-video-template.png"),
@@ -214,7 +218,7 @@ function getRadioTemplatePath(): string {
 
   const found = candidates.find((candidate) => existsSync(candidate));
   if (!found) {
-    throw new Error("Radio template image not found. Add RADIO_TEMPLATE_IMAGE_PATH or keep client/public/br-radio-template.png.");
+    throw new Error(`Radio template image not found for ${city}. Add ${cityEnvName} or keep client/public/radio-flyers/${cityFilename}.`);
   }
 
   return found;
@@ -248,9 +252,9 @@ function buildDjTextOverlay(djName: string): Buffer {
   return Buffer.from(svg);
 }
 
-export async function renderLocalRadioTemplatePng(djName: string): Promise<Buffer> {
+export async function renderLocalRadioTemplatePng(djName: string, city: RadioCity = "miami"): Promise<Buffer> {
   const sharp = await loadSharp();
-  const templatePath = getRadioTemplatePath();
+  const templatePath = getRadioTemplatePath(city);
   const template = await sharp(templatePath)
     .resize(RADIO_TEMPLATE_WIDTH, RADIO_TEMPLATE_HEIGHT, { fit: "fill" })
     .ensureAlpha()
@@ -307,6 +311,7 @@ export async function generateRadioTemplatesForDate(
         rawDescription: slot.rawDescription,
         canvaBrandTemplateId: brandTemplateId,
         canvaDjField: djField,
+        city: slot.city,
       });
       const existing = await storage.getRadioTemplateAsset(userId, slot.eventId, input.slotHour);
       const filename = buildFilename(dateKey, input.slotHour, input.djName);
@@ -353,7 +358,7 @@ export async function generateRadioTemplatesForDate(
           editUrl: readOptionalRealEnv("CANVA_RADIO_TEMPLATE_EDIT_URL"),
           viewUrl: readOptionalRealEnv("CANVA_RADIO_TEMPLATE_VIEW_URL"),
         };
-        const buffer = await renderLocalRadioTemplatePng(input.djName);
+        const buffer = await renderLocalRadioTemplatePng(input.djName, slot.city);
         folderId ||= await ensureRadioDriveFolder(dateFolderName, userId);
         const upload = await uploadRadioTemplatePng({
           buffer,

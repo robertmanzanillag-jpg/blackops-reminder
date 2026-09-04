@@ -60,6 +60,20 @@ test("buildRadioTemplateSourceHash changes when Canva template changes", () => {
   assert.notEqual(first, second);
 });
 
+test("buildRadioTemplateSourceHash changes when the city flyer changes", () => {
+  const base = {
+    eventId: "radio-1",
+    eventDate: new Date("2026-08-13T20:00:00.000Z"),
+    slotHour: 4,
+    djName: "Zamurai",
+  };
+
+  assert.notEqual(
+    buildRadioTemplateSourceHash({ ...base, city: "berlin" }),
+    buildRadioTemplateSourceHash({ ...base, city: "buenos_aires" }),
+  );
+});
+
 test("forceTransparentBackground turns black pixels transparent", async () => {
   const input = await sharp({
     create: {
