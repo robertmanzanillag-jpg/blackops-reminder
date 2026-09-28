@@ -71,3 +71,11 @@ test("imports engagement and retention analytics across Metricool header variant
     completionRate: 0.62, engagementRate: 0.07,
   });
 });
+
+test("Facebook reach and impressions are not silently relabeled as video views", () => {
+  const result = extractMetricoolCsvSamples(
+    "facebook-reels_range.csv",
+    "Reel Link,Date,Impressions,Reach\nhttps://facebook.com/reel/123,2026-09-20 10:00,900,500\n",
+  );
+  assert.equal(result?.samples.length ?? 0, 0);
+});

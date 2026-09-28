@@ -2,6 +2,8 @@ import { eq, sql } from "drizzle-orm";
 import { blackRoomRemoteControl } from "@shared/schema";
 import type { BlackRoomRemoteCommand } from "./blackroom-chat";
 import type { BlackRoomPublicationExperiment } from "./blackroom-growth-ceo";
+import { captureLearningSnapshots, type LearningObservation, type LearningSnapshot } from "./blackroom-learning-observations";
+import { canonicalLearningPostId } from "./blackroom-verified-learning";
 
 export const BLACKROOM_REMOTE_ONLINE_WINDOW_MS = 90_000;
 const BLACKROOM_REMOTE_CONTROL_ID = "blackroom-primary";
@@ -29,6 +31,8 @@ export type BlackRoomAnalyticsNetwork = "tiktok" | "facebook" | "youtube";
 export interface BlackRoomImportedAnalyticsSample {
   id: string;
   views: number;
+  observedAt?: string;
+  learningReference?: string;
   publishedAt?: string;
   durationSeconds?: number;
   likes?: number;
@@ -57,6 +61,7 @@ export interface BlackRoomRemoteControlState {
   commands: BlackRoomRemoteCommand[];
   chatHistory: Array<{ id: string; role: "user" | "assistant"; text: string; createdAt: string }>;
   analyticsImports: Partial<Record<BlackRoomAnalyticsNetwork, BlackRoomAnalyticsImport>>;
+  learningSnapshots?: LearningSnapshot[];
   publicationExperiments: BlackRoomPublicationExperiment[];
 }
 
@@ -71,6 +76,7 @@ export function createBlackRoomRemoteControlState(now = new Date()): BlackRoomRe
     commands: [],
     chatHistory: [],
     analyticsImports: {},
+    learningSnapshots: [],
     publicationExperiments: [],
   };
 }
@@ -84,6 +90,12 @@ export function recordBlackRoomPublicationExperiment(
   const finite = (value: unknown) => Number.isFinite(Number(value)) ? Number(value) : undefined;
   const normalized: BlackRoomPublicationExperiment = {
     metricoolId: String(experiment.metricoolId || "").trim(),
+    platformPostId: String(experiment.platformPostId || "").trim().slice(0, 500),
+    platformPostIdSource: experiment.platformPostIdSource === "reference" ? "reference" : "receipt",
+    learningDecisionIds: String(experiment.learningDecisionIds || "").slice(0, 300),
+    allocationMode: experiment.allocationMode === "exploit" ? "exploit" : "explore",
+    learningTestId: String(experiment.learningTestId || "").trim().slice(0, 100),
+    learningReference: /^BR-[a-f0-9]{12}$/.test(String(experiment.learningReference || "")) ? experiment.learningReference : undefined,
     reservationId: String(experiment.reservationId || "").trim(),
     network: String(experiment.network || "").trim(),
     creativeStrategy: strategy as BlackRoomPublicationExperiment["creativeStrategy"],
@@ -105,31 +117,72 @@ export function recordBlackRoomPublicationExperiment(
   if (!normalized.metricoolId || !normalized.reservationId || !normalized.network) return state;
   const existingIndex = state.publicationExperiments.findIndex((item) =>
     item.network === normalized.network && item.metricoolId === normalized.metricoolId);
-  if (existingIndex >= 0) state.publicationExperiments[existingIndex] = normalized;
+  if (existingIndex >= 0) {
+    if (!normalized.platformPostId) normalized.platformPostIdSource = state.publicationExperiments[existingIndex].platformPostIdSource;
+    normalized.platformPostId ||= state.publicationExperiments[existingIndex].platformPostId;
+    state.publicationExperiments[existingIndex] = normalized;
+  }
   else state.publicationExperiments.push(normalized);
   state.publicationExperiments = state.publicationExperiments.slice(-2_000);
   return state;
 }
 
+/** A short unique campaign reference is included in new captions/exports. This
+ * joins the scheduler receipt to the published platform ID without guessing
+ * from time, DJ names, titles or a truncated video duration. */
+export function reconcileBlackRoomPublishedIdentities(state: BlackRoomRemoteControlState): void {
+  // Recompute derived joins: a later export can reveal an ambiguous reference.
+  // Published receipt identities remain authoritative and are never erased here.
+  for (const experiment of state.publicationExperiments) {
+    if (experiment.platformPostIdSource === "reference") experiment.platformPostId = undefined;
+  }
+  for (const network of ["tiktok", "facebook", "youtube"] as const) {
+    const references = new Map<string, Set<string>>();
+    for (const sample of state.analyticsImports[network]?.samples || []) {
+      if (!sample.learningReference) continue;
+      const id = canonicalLearningPostId(network, sample.id);
+      if (!id) continue;
+      const ids = references.get(sample.learningReference) || new Set();
+      ids.add(id); references.set(sample.learningReference, ids);
+    }
+    for (const [reference, ids] of references) {
+      const experiments = state.publicationExperiments.filter((experiment) => experiment.network === network && experiment.learningReference === reference);
+      if (ids.size !== 1 || experiments.length !== 1) continue;
+      const id = [...ids][0];
+      const experiment = experiments[0];
+      if (!experiment.platformPostId) {
+        experiment.platformPostId = id;
+        experiment.platformPostIdSource = "reference";
+      }
+    }
+  }
+}
+
 function normalizeImportedAnalyticsSample(value: unknown): BlackRoomImportedAnalyticsSample | null {
   const sample = value && typeof value === "object" ? value as Record<string, unknown> : {};
   const id = String(sample.id || "").trim().slice(0, 500);
+  if (sample.views === null || sample.views === undefined || sample.views === "" || typeof sample.views === "boolean") return null;
   const views = Math.floor(Number(sample.views));
   if (!id || !Number.isSafeInteger(views) || views < 0) return null;
   const rawPublishedAt = String(sample.publishedAt || "").trim();
   const publishedAt = rawPublishedAt && Number.isFinite(new Date(rawPublishedAt).getTime())
     ? rawPublishedAt.slice(0, 40)
     : undefined;
+  const observedAt = typeof sample.observedAt === "string" && /(?:Z|[+-]\d{2}:\d{2})$/.test(sample.observedAt)
+    && Number.isFinite(Date.parse(sample.observedAt)) ? sample.observedAt : undefined;
   const rawDuration = Math.round(Number(sample.durationSeconds));
   const durationSeconds = Number.isSafeInteger(rawDuration) && rawDuration > 0 && rawDuration <= 86_400
     ? rawDuration
     : undefined;
   const optionalMetric = (name: string, maximum = Number.MAX_SAFE_INTEGER) => {
+    if (sample[name] === null || sample[name] === undefined || sample[name] === "" || typeof sample[name] === "boolean") return undefined;
     const number = Number(sample[name]);
     return Number.isFinite(number) && number >= 0 && number <= maximum ? number : undefined;
   };
   return {
     id, views,
+    ...(observedAt ? { observedAt } : {}),
+    ...(/^BR-[a-f0-9]{12}$/.test(String(sample.learningReference || "")) ? { learningReference: String(sample.learningReference) } : {}),
     ...(publishedAt ? { publishedAt } : {}),
     ...(durationSeconds ? { durationSeconds } : {}),
     ...Object.fromEntries([
@@ -171,11 +224,24 @@ export function upsertBlackRoomAnalyticsImports(
   const totals = { tiktok: 0, facebook: 0, youtube: 0 };
   for (const input of imports) {
     const current = state.analyticsImports[input.network];
+    const observations: LearningObservation[] = [];
     const byId = new Map((current?.samples || []).map((sample) => [sample.id, sample]));
     for (const value of input.samples.slice(0, 2_000)) {
       const sample = normalizeImportedAnalyticsSample(value);
-      if (sample) byId.set(sample.id, sample);
+      if (!sample) continue;
+      if (sample.observedAt && Date.parse(sample.observedAt) > now.getTime()) continue;
+      const existing = byId.get(sample.id);
+      // An old export or un-timestamped replay must not replace a known newer observation.
+      if (!existing?.observedAt || (sample.observedAt && Date.parse(sample.observedAt) >= Date.parse(existing.observedAt))) {
+        byId.set(sample.id, sample);
+      }
+      if (sample.observedAt && sample.publishedAt) {
+        const observation: LearningObservation = { ...sample, network: input.network, postId: sample.id,
+          publishedAt: sample.publishedAt, observedAt: sample.observedAt };
+        observations.push(observation);
+      }
     }
+    state.learningSnapshots = captureLearningSnapshots(state.learningSnapshots || [], observations, now).slice(-30_000);
     const samples = [...byId.values()]
       .sort((left, right) => String(left.publishedAt || "").localeCompare(String(right.publishedAt || "")))
       .slice(-10_000);
@@ -187,6 +253,7 @@ export function upsertBlackRoomAnalyticsImports(
     totals[input.network] = samples.length;
   }
   state.updatedAt = now.toISOString();
+  reconcileBlackRoomPublishedIdentities(state);
   return totals;
 }
 
@@ -294,6 +361,7 @@ function normalizeRemoteControlState(value: unknown): BlackRoomRemoteControlStat
     commands: Array.isArray(parsed.commands) ? parsed.commands.slice(-100) : [],
     chatHistory: Array.isArray(parsed.chatHistory) ? parsed.chatHistory.slice(-40) : [],
     analyticsImports: normalizeAnalyticsImports(parsed.analyticsImports),
+    learningSnapshots: captureLearningSnapshots(Array.isArray(parsed.learningSnapshots) ? parsed.learningSnapshots.slice(-30_000) : [], [], new Date()),
     publicationExperiments: [],
   };
   if (Array.isArray(parsed.publicationExperiments)) {
@@ -301,6 +369,7 @@ function normalizeRemoteControlState(value: unknown): BlackRoomRemoteControlStat
       recordBlackRoomPublicationExperiment(normalized, experiment as BlackRoomPublicationExperiment);
     }
   }
+  reconcileBlackRoomPublishedIdentities(normalized);
   return normalized;
 }
 
