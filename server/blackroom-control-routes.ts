@@ -1,4 +1,6 @@
 import { type Express, type Request, type Response } from "express";
+import { blackRoomLearningPanelHtml, blackRoomLearningPanelScript } from "./blackroom-learning-panel";
+import { canonicalLearningPostId } from "./blackroom-verified-learning";
 import { randomUUID, timingSafeEqual } from "node:crypto";
 import { createReadStream, createWriteStream } from "node:fs";
 import { mkdir, stat, unlink, writeFile } from "node:fs/promises";
@@ -66,6 +68,7 @@ async function refreshBlackRoomCeoOnce(force: boolean): Promise<void> {
       importedSamplesByNetwork: Object.fromEntries(Object.entries(current.analyticsImports || {})
         .map(([network, imported]) => [network, imported?.samples || []])),
       publicationExperiments: current.publicationExperiments,
+      learningSnapshots: current.learningSnapshots || [],
     });
     const today = blackRoomLocalDate(new Date());
     const currentTarget = Number((current.device?.queue as any)?.postsPerDay || BLACKROOM_CEO_DAILY_POSTS);
@@ -239,13 +242,24 @@ export function summarizeBlackRoomAnalyticsImports(state: BlackRoomRemoteControl
       sampleCount: imported?.samples.length || 0,
       sourceFiles: imported?.sourceFiles || [],
       importedAt: imported?.importedAt || null,
+      observedAt: (imported?.samples || []).map((sample) => sample.observedAt)
+        .filter((stamp): stamp is string => Boolean(stamp) && Date.parse(stamp!) <= Date.now())
+        .sort((a, b) => Date.parse(b) - Date.parse(a))[0] || null,
+      snapshotCoverage: Object.fromEntries([24, 72, 168].map((hours) => [hours,
+        (state.learningSnapshots || []).filter((snapshot) => snapshot.network === network && snapshot.windowHours === hours).length])),
+      exactAttributed: (imported?.samples || []).filter((sample) => {
+        const id = canonicalLearningPostId(network as "tiktok" | "facebook" | "youtube", sample.id);
+        return id && state.publicationExperiments.filter((experiment) => experiment.network === network
+          && canonicalLearningPostId(network as "tiktok" | "facebook" | "youtube", experiment.platformPostId || "") === id).length === 1;
+      }).length,
     },
   ]));
 }
 
 function remoteView(state: BlackRoomRemoteControlState) {
   const analyticsImports = summarizeBlackRoomAnalyticsImports(state);
-  return { ...state, analyticsImports, online: isBlackRoomRemoteDeviceOnline(state) };
+  const { learningSnapshots, ...view } = state;
+  return { ...view, analyticsImports, learningSnapshotCount: learningSnapshots?.length || 0, online: isBlackRoomRemoteDeviceOnline(state) };
 }
 
 function blackRoomCounter(value: unknown): number {
@@ -314,6 +328,8 @@ const byId=id=>document.getElementById(id),els={badge:byId('badge'),weeks:byId('
 </script></body></html>`;
 
 export const blackRoomPage = blackRoomPageTemplate
+  .replace('function render(d){', blackRoomLearningPanelScript + 'function render(d){renderLearning(d);')
+  .replace('<div id="device" class="info">', blackRoomLearningPanelHtml + '<div id="device" class="info">')
   .replace('<option value="1">1 semana</option>', '')
   .replace('videos sin repetir', 'segmentos sin repetir ni solapar')
   .replace('<div id="device" class="info">', '<section id="agentProgress" class="agent-progress" aria-label="Progreso del agente"><div class="agent-progress-head"><div id="progressStatus" class="agent-progress-status"><span class="live-dot" aria-hidden="true"></span><span>Comprobando actividad…</span></div><strong id="progressPercent">0%</strong></div><div id="progressTrack" class="progress-track" role="progressbar" aria-label="Posts preparados" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressFill" class="progress-fill"></div></div><div id="progressDetail" class="progress-detail">Calculando el progreso de la campaña…</div><button id="workNow" class="play agent-progress-action" type="button" hidden>▶ Trabajar ahora</button></section><div id="device" class="info">');

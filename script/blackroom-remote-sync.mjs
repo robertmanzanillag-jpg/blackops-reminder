@@ -80,6 +80,10 @@ export function buildBlackRoomPublicationExperiments(ledger) {
       const strategy = creativeStrategies.has(entry.creativeStrategy) ? entry.creativeStrategy : "drop_first";
       const experiment = {
         metricoolId, reservationId, network, creativeStrategy: strategy,
+        learningTestId: entry.learningTestId,
+        learningReference: entry.learningReference,
+        learningDecisionIds: entry.learningDecisionIds,
+        allocationMode: entry.allocationMode,
         durationSeconds: Number(entry.durationSeconds || 0),
         format: entry.format === "horizontal" ? "horizontal" : "vertical",
         language: entry.language === "es" ? "es" : "en",

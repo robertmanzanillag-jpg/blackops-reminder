@@ -60,6 +60,33 @@ function ledger(): any {
   };
 }
 
+test("controlled learning never lets one network's winner dictate crossposted edits", () => {
+  const state = queue();
+  const now = new Date("2026-07-22T12:00:00Z");
+  state.analytics = { verifiedLearning: {
+    youtube: { winner: "instant_drop", sourceObservedAt: now.toISOString() },
+    tiktok: { winner: null, sourceObservedAt: now.toISOString() },
+    facebook: { winner: "drop_first", sourceObservedAt: now.toISOString() },
+  } };
+  const input = { queue: state, ledger: { version: 1, entries: [] }, now,
+    inventory: [{ id: "set-one", title: "DJ ONE - DJ Set", duration: 3600 }] };
+  const plan = planBlackRoomDeterministicEdit(input)!;
+  assert.equal(plan.allocationMode, "explore");
+  assert.equal(plan.durationSeconds, 15);
+  assert.equal(plan.format, "vertical");
+  assert.equal(plan.language, "en");
+  assert.match(plan.learningReference!, /^BR-[a-f0-9]{12}$/);
+  assert.ok(plan.caption.includes(plan.learningReference!));
+  for (const decision of Object.values(state.analytics.verifiedLearning) as any[]) {
+    decision.winner = "instant_drop";
+    decision.sourceObservedAt = "2026-07-01T00:00:00Z";
+  }
+  const stale = planBlackRoomDeterministicEdit(input)!;
+  assert.equal(stale.allocationMode, "explore");
+  assert.equal(stale.videoId, plan.videoId);
+  assert.equal(stale.windowStartSeconds, plan.windowStartSeconds);
+});
+
 test("deterministic planner chooses an unused source and covers missing long duration", () => {
   const plan = planBlackRoomDeterministicEdit({
     queue: queue(), ledger: ledger(), now: new Date("2026-07-22T12:00:00.000Z"),
@@ -265,6 +292,74 @@ test("planner enforces exact DJ membership and per-DJ quota", () => {
   }), /per-DJ quota/);
 });
 
+test("planner completes the distinct-DJ rotation with a non-overlapping segment from a previously used set", () => {
+  const state = queue();
+  state.sourceHistory = [{
+    videoId: "dj-b-only-set", segmentStartSeconds: 0, segmentEndSeconds: 120,
+  }];
+  state.jobs[0].requirements.djs = 2;
+  state.jobs[0].requirements.postsPerDj = 3;
+  const used = {
+    version: 1,
+    entries: [{
+      jobId: "job-1", slot: "00:30", videoId: "dj-a-set", dj: "DJ A",
+      language: "en", format: "vertical", durationSeconds: 15,
+      segmentStartSeconds: 0, segmentEndSeconds: 105,
+    }],
+  };
+  const plan = planBlackRoomDeterministicEdit({
+    queue: state, ledger: used as any, now: new Date("2026-07-22T12:00:00.000Z"),
+    inventory: [{ id: "dj-b-only-set", title: "DJ B - DJ Set", duration: 3600 }],
+  });
+  assert.equal(plan?.dj, "DJ B");
+  assert.equal(plan?.videoId, "dj-b-only-set");
+  assert.ok((plan?.windowStartSeconds || 0) >= 120);
+});
+
+test("planner still prefers a never-used source over reusing a valid older set", () => {
+  const state = queue();
+  state.sourceHistory = [{
+    videoId: "dj-b-old-set", segmentStartSeconds: 0, segmentEndSeconds: 120,
+  }];
+  state.jobs[0].requirements.djs = 2;
+  state.jobs[0].requirements.postsPerDj = 3;
+  const used = {
+    version: 1,
+    entries: [{
+      jobId: "job-1", slot: "00:30", videoId: "dj-a-set", dj: "DJ A",
+      language: "en", format: "vertical", durationSeconds: 15,
+      segmentStartSeconds: 0, segmentEndSeconds: 105,
+    }],
+  };
+  const plan = planBlackRoomDeterministicEdit({
+    queue: state, ledger: used as any, now: new Date("2026-07-22T12:00:00.000Z"),
+    inventory: [
+      { id: "dj-b-old-set", title: "DJ B - DJ Set", duration: 3600 },
+      { id: "dj-b-fresh-set", title: "DJ B - DJ Set", duration: 3600 },
+    ],
+  });
+  assert.equal(plan?.videoId, "dj-b-fresh-set");
+});
+
+test("planner never reuses a source when its earlier segment boundaries are incomplete", () => {
+  const state = queue();
+  state.sourceHistory = [{ videoId: "dj-b-unknown-segment" }];
+  state.jobs[0].requirements.djs = 2;
+  state.jobs[0].requirements.postsPerDj = 3;
+  const used = {
+    version: 1,
+    entries: [{
+      jobId: "job-1", slot: "00:30", videoId: "dj-a-set", dj: "DJ A",
+      language: "en", format: "vertical", durationSeconds: 15,
+      segmentStartSeconds: 0, segmentEndSeconds: 105,
+    }],
+  };
+  assert.throws(() => planBlackRoomDeterministicEdit({
+    queue: state, ledger: used as any, now: new Date("2026-07-22T12:00:00.000Z"),
+    inventory: [{ id: "dj-b-unknown-segment", title: "DJ B - DJ Set", duration: 3600 }],
+  }), /fresh or non-overlapping source segment/);
+});
+
 test("extracts DJ names and builds correct output filters", () => {
   assert.equal(extractBlackRoomDj("ILLSKIN - Hardgroove DJ Set at BlackRoom"), "ILLSKIN");
   assert.match(buildBlackRoomVideoFilter("vertical"), /crop=1080:1920/);
@@ -363,6 +458,7 @@ test("command builders keep downloads partial and renders platform-compatible", 
     durationSeconds: 30, format: "vertical",
   };
   const download = buildBlackRoomYtDlpWindowArgs(plan, "/project/sources/a.mp4", "/project/agent/editor-tmp/a");
+  assert.deepEqual(download.slice(1, 3), ["--extractor-args", "youtube:player_client=web_safari"]);
   assert.ok(download.includes("--download-sections"));
   assert.ok(download.includes("*100-220"));
   assert.ok(download.includes("bestvideo*[height<=1080]+bestaudio/best[height<=1080]"));

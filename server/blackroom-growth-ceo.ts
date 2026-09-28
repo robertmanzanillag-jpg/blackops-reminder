@@ -7,6 +7,8 @@ import {
   formatMetricoolMcpDate,
 } from "./blackroom-metricool-bridge";
 import type { BlackRoomAnalyticsNetwork, BlackRoomImportedAnalyticsSample } from "./blackroom-remote-control";
+import type { LearningSnapshot, LearningNetwork } from "./blackroom-learning-observations";
+import { evaluateBlackRoomLearning, type VerifiedLearningDecision } from "./blackroom-verified-learning";
 
 export const BLACKROOM_CEO_MIN_SAMPLES = 21;
 export const BLACKROOM_CEO_DAILY_POSTS = 5;
@@ -42,6 +44,12 @@ export type BlackRoomCreativeStrategy = (typeof BLACKROOM_CREATIVE_STRATEGIES)[n
 
 export interface BlackRoomPublicationExperiment {
   metricoolId: string;
+  platformPostId?: string;
+  platformPostIdSource?: "receipt" | "reference";
+  learningDecisionIds?: string;
+  allocationMode?: "exploit" | "explore";
+  learningTestId?: string;
+  learningReference?: string;
   reservationId: string;
   network: string;
   creativeStrategy: BlackRoomCreativeStrategy;
@@ -108,6 +116,7 @@ export interface BlackRoomAttributionStats {
 }
 
 export interface BlackRoomCeoAnalytics {
+  verifiedLearning?: Record<LearningNetwork, VerifiedLearningDecision>;
   /** Total imported posts across all connected networks, for visibility. */
   sampleCount: number;
   /** Smallest usable cohort across the networks, used for cadence/time changes. */
@@ -1178,6 +1187,7 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   previous?: Partial<BlackRoomCeoAnalytics> | null;
   importedSamplesByNetwork?: Partial<Record<BlackRoomAnalyticsNetwork, BlackRoomImportedAnalyticsSample[]>>;
   publicationExperiments?: BlackRoomPublicationExperiment[];
+  learningSnapshots?: LearningSnapshot[];
 } = {}): Promise<BlackRoomCeoAnalytics> {
   const env = options.env || process.env;
   const fetcher = options.fetch || fetch;
@@ -1446,7 +1456,7 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
   const csvReason = importedTotal
     ? `El puente CSV local aportó ${importedTotal} resultados sin usar IA ni API pagada.`
     : "Aún no hay resultados del puente CSV local.";
-  return {
+  const result: BlackRoomCeoAnalytics = {
     sampleCount,
     lastCheckedAt: now.toISOString(),
     nextCheckAt: new Date(now.getTime() + BLACKROOM_CEO_REFRESH_MS).toISOString(),
@@ -1484,4 +1494,34 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
       ? `${csvReason} ${historyReason} ${attributionReason} El CEO aprende por red (${learningNetworkCount}/3 con evidencia suficiente): ${targets}. ${creative.creativeReason}`
       : `${csvReason} ${historyReason} ${attributionReason} Importó ${sampleCount} resultados reales; cada red necesita ${BLACKROOM_CEO_MIN_SAMPLES} muestras antes de optimizarse. ${creative.creativeReason}`,
   };
+  // Historical aggregates remain visible but cannot masquerade as a current
+  // learning loop. Only real age snapshots and exact published identities can
+  // drive the next experiment. Running this planner never refreshes source time.
+  const sourceObservedAt = Object.fromEntries(BLACKROOM_METRICOOL_NETWORKS.map((network) => [network,
+    importedSamplesByNetwork[network as LearningNetwork].map((sample) => sample.observedAt)
+      .filter((value): value is string => Boolean(value) && Number.isFinite(Date.parse(value!)) && Date.parse(value!) <= now.getTime())
+      .sort((a, b) => Date.parse(b) - Date.parse(a))[0] || null,
+  ]));
+  result.verifiedLearning = evaluateBlackRoomLearning({ snapshots: options.learningSnapshots || [],
+    experiments: options.publicationExperiments || [], sourceObservedAt, now });
+  result.networkConfidence = Object.fromEntries(Object.entries(result.verifiedLearning).map(([network, decision]) => [
+    network, decision.status === "testing" ? "learning" : "collecting",
+  ]));
+  result.confidence = Object.values(result.verifiedLearning).some((decision) => decision.status === "testing") ? "learning" : "collecting";
+  result.networkDailyTargets = { ...BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS };
+  // Volume, scheduling, language, DJ and length are controls during the hook
+  // test, not additional simultaneous treatment variables.
+  result.comparableSampleCount = 0;
+  result.recommendedTimes = [];
+  result.recommendedTimesByNetwork = {};
+  result.preferredDurations = [];
+  result.preferredDjs = [];
+  result.preferredSourceVideoIds = [];
+  result.preferredFormats = [];
+  result.preferredLanguages = [];
+  result.networkCreativePerformance = {};
+  result.creativeStrategy = "drop_first";
+  result.creativeReason = "Prueba controlada de inicio; no se promueven acumulados históricos como ganadores.";
+  result.reason = `${csvReason} ${historyReason} ` + Object.entries(result.verifiedLearning).map(([network, decision]) => `${network}: ${decision.reason}`).join(" · ");
+  return result;
 }

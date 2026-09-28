@@ -3,6 +3,8 @@ import type { BlackRoomDailyJob, BlackRoomQueueState, BlackRoomExperimentDuratio
 import { allocateBlackRoomCreativeArm, BLACKROOM_CEO_CREATIVE_MIN_SAMPLES, BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS } from "./blackroom-growth-ceo";
 import type { BlackRoomLedgerEntry, BlackRoomWorkerLedger } from "./blackroom-local-worker";
 import type { BlackRoomCreativeStrategy } from "./blackroom-growth-ceo";
+import { BLACKROOM_HOOK_TEST_ID } from "./blackroom-verified-learning";
+import { learningSourceHealth } from "./blackroom-learning-observations";
 
 export const BLACKROOM_CHANNEL_ID = "UCi__qHBfHLlYg0fu86BUA8g";
 export const BLACKROOM_CHANNEL_HANDLE = "@blackroom_us";
@@ -25,6 +27,9 @@ export interface BlackRoomEditPlan {
   language: "en" | "es"; format: "vertical" | "horizontal"; durationSeconds: BlackRoomExperimentDuration;
   windowStartSeconds: number; windowEndSeconds: number; caption: string; creativeStrategy: BlackRoomCreativeStrategy; targetNetworks: BlackRoomTargetNetwork[];
   hookFamily: string; captionVariant: string; creativeArmId: string; allocationMode: "exploit" | "explore";
+  learningTestId?: string;
+  learningReference?: string;
+  learningDecisionIds?: string;
 }
 
 export async function commitBlackRoomReservation(
@@ -224,17 +229,26 @@ export function planBlackRoomDeterministicEdit(input: {
   const allocation = networkCohorts
     ? allocateBlackRoomCreativeArm({ seed: `${job.id}:${slot}:${learningNetwork}`, cohorts: networkCohorts, fallback: input.queue.analytics?.creativeStrategy || "drop_first" })
     : { strategy: input.queue.analytics?.creativeStrategy || "drop_first", mode: "explore" as const };
-  const creativeStrategy = allocation.strategy;
-  const durationSeconds = chooseDuration(job, jobEntries, input.queue, targetNetworks);
-  const format = chooseFormat(durationSeconds, jobEntries, targetNetworks, input.queue);
-  const language = chooseLanguage(jobEntries, input.queue);
+  const controlledTest = Boolean(input.queue.analytics?.verifiedLearning);
+  const verifiedDecisions = targetNetworks.map((network) => input.queue.analytics?.verifiedLearning?.[network]);
+  const winners = verifiedDecisions.map((decision) => learningSourceHealth(decision?.sourceObservedAt, now).status === "fresh" ? decision?.winner : null);
+  const sharedWinner = winners.length && winners.every((winner) => winner && winner === winners[0]) ? winners[0] : null;
+  // A cross-posted asset may exploit only a winner shared by its destinations;
+  // a YouTube winner must never silently dictate TikTok's editing strategy.
+  const testSeed = stableNumber(`${job.id}:${slot}:controlled-hook`);
+  const testStrategy = sharedWinner && testSeed % 5 !== 0 ? sharedWinner
+    : testSeed % 2 ? "instant_drop" : "drop_first";
+  const creativeStrategy = controlledTest ? testStrategy! : allocation.strategy;
+  const durationSeconds = controlledTest ? 15 : chooseDuration(job, jobEntries, input.queue, targetNetworks);
+  const format = controlledTest ? "vertical" : chooseFormat(durationSeconds, jobEntries, targetNetworks, input.queue);
+  const language = controlledTest ? "en" : chooseLanguage(jobEntries, input.queue);
   const margin = durationSeconds >= 300 ? 180 : 90;
   const windowDuration = durationSeconds + margin;
-  const usedVideos = new Set([
+  const previouslyUsedVideos = new Set([
     ...input.queue.sourceHistory.map((entry) => entry.videoId),
-    ...(input.queue.failedSourceVideos || []).map((entry) => entry.videoId),
     ...activeLedgerEntries.map((entry) => entry.videoId),
   ]);
+  const failedVideos = new Set((input.queue.failedSourceVideos || []).map((entry) => entry.videoId));
   const usedDjs = new Map<string, number>();
   for (const entry of jobEntries) usedDjs.set(entry.dj, (usedDjs.get(entry.dj) || 0) + 1);
   let eligible = input.inventory
@@ -251,15 +265,33 @@ export function planBlackRoomDeterministicEdit(input: {
       return { video, dj, windowStart };
     })
     .filter((candidate): candidate is { video: BlackRoomInventoryVideo; dj: string; windowStart: number } => candidate.windowStart !== null);
+  // Prefer a completely fresh source, but do not deadlock the campaign when a
+  // DJ only has one long set in the channel. A previously used source may be
+  // reused only when every prior segment is known, so availableWindowStart can
+  // guarantee that the next clip is different and non-overlapping.
+  const sourceHasReusableHistory = (videoId: string): boolean => {
+    const history = [
+      ...input.queue.sourceHistory.filter((entry) => entry.videoId === videoId),
+      ...activeLedgerEntries.filter((entry) => entry.videoId === videoId),
+    ];
+    return history.length > 0 && history.every((entry) => Number.isFinite(entry.segmentStartSeconds)
+      && Number.isFinite(entry.segmentEndSeconds)
+      && Number(entry.segmentEndSeconds) > Number(entry.segmentStartSeconds));
+  };
+  const selectable = eligible.filter((candidate) => !failedVideos.has(candidate.video.id));
+  const preferFreshSource = (candidates: typeof selectable): typeof selectable => {
+    const fresh = candidates.filter((candidate) => !previouslyUsedVideos.has(candidate.video.id));
+    if (fresh.length) return fresh;
+    return candidates.filter((candidate) => sourceHasReusableHistory(candidate.video.id));
+  };
   if (usedDjs.size < Math.min(job.requirements.djs, job.requirements.posts)) {
-    const unseen = eligible.filter((candidate) => !usedDjs.has(candidate.dj) && !usedVideos.has(candidate.video.id));
-    if (!unseen.length) throw new Error(`BlackRoom needs ${job.requirements.djs} distinct DJs before reusing one`);
+    const unseen = preferFreshSource(selectable.filter((candidate) => !usedDjs.has(candidate.dj)));
+    if (!unseen.length) throw new Error(`BlackRoom needs ${job.requirements.djs} distinct DJs with a fresh or non-overlapping source segment`);
     eligible = unseen;
   } else {
-    const belowTarget = eligible.filter((candidate) => !usedVideos.has(candidate.video.id)
-      && usedDjs.has(candidate.dj)
-      && (usedDjs.get(candidate.dj) || 0) < job.requirements.postsPerDj);
-    if (!belowTarget.length) throw new Error("No unused source remains for the five selected DJs within the per-DJ quota");
+    const belowTarget = preferFreshSource(selectable.filter((candidate) => usedDjs.has(candidate.dj)
+      && (usedDjs.get(candidate.dj) || 0) < job.requirements.postsPerDj));
+    if (!belowTarget.length) throw new Error("No fresh or non-overlapping source segment remains for the five selected DJs within the per-DJ quota");
     eligible = belowTarget;
   }
   if (!eligible.length) throw new Error(`No unused BlackRoom source can support a ${durationSeconds}s clip`);
@@ -270,19 +302,25 @@ export function planBlackRoomDeterministicEdit(input: {
   eligible.sort((left, right) => left.video.id.localeCompare(right.video.id));
   const preferredEligible = eligible.filter((candidate) => preferredDjs.has(candidate.dj));
   const selectionPool = preferredEligible.length ? preferredEligible : eligible;
-  const seed = `${job.id}:${slot}:${durationSeconds}:${format}:${language}:${creativeStrategy}`;
+  // Source allocation must not change with the hook arm being tested.
+  const seed = `${job.id}:${slot}:${durationSeconds}:${format}:${language}:${controlledTest ? "controlled-source" : creativeStrategy}`;
   const selected = priority || selectionPool[stableNumber(seed) % selectionPool.length];
   const windowStartSeconds = selected.windowStart;
+  const learningReference = controlledTest ? `BR-${createHash("sha256").update(`${job.id}:${slot}:${selected.video.id}`).digest("hex").slice(0, 12)}` : undefined;
   return {
     jobId: job.id, slot, targetDate: job.targetDate, videoId: selected.video.id,
     videoUrl: blackRoomVideoUrl(selected.video), title: selected.video.title, dj: selected.dj,
     language, format, durationSeconds, creativeStrategy, targetNetworks, windowStartSeconds,
     windowEndSeconds: windowStartSeconds + windowDuration,
-    caption: buildCaption(selected.dj, language, durationSeconds, seed, creativeStrategy),
+    caption: controlledTest ? `Feel this drop. ${selected.dj.slice(0, 24)} · ${learningReference} #BlackRoom`
+      : buildCaption(selected.dj, language, durationSeconds, seed, creativeStrategy),
     hookFamily: creativeStrategy,
-    captionVariant: `${language}-${stableNumber(`${seed}:caption`) % 3}`,
+    captionVariant: controlledTest ? "hook-test-fixed-copy-v1" : `${language}-${stableNumber(`${seed}:caption`) % 3}`,
     creativeArmId: `${learningNetwork}:${creativeStrategy}:${language}:${format}:${durationSeconds}`,
-    allocationMode: allocation.mode,
+    allocationMode: controlledTest ? sharedWinner && testSeed % 5 !== 0 ? "exploit" : "explore" : allocation.mode,
+    ...(controlledTest ? { learningTestId: BLACKROOM_HOOK_TEST_ID, learningReference,
+      learningDecisionIds: targetNetworks.map((network) => `${network}:${input.queue.analytics?.verifiedLearning?.[network]?.id || "missing"}`).join(","),
+    } : {}),
   };
 }
 
@@ -334,6 +372,10 @@ export function isOwnedBlackRoomMetadata(metadata: { channel_id?: unknown; uploa
 export function buildBlackRoomYtDlpWindowArgs(plan: BlackRoomEditPlan, sourcePath: string, temporaryDirectory: string): string[] {
   return [
     plan.videoUrl,
+    // YouTube currently requires a GVS PO token for the default web_creator
+    // HTTPS formats. web_safari exposes HLS variants that remain compatible
+    // with partial ffmpeg downloads while preserving 1080p video and audio.
+    "--extractor-args", "youtube:player_client=web_safari",
     "--download-sections", `*${plan.windowStartSeconds}-${plan.windowEndSeconds}`,
     "--force-keyframes-at-cuts", "-f", "bestvideo*[height<=1080]+bestaudio/best[height<=1080]",
     // A network stall must fail fast so the local worker can retry the slot instead

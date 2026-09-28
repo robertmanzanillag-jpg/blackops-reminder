@@ -73,6 +73,9 @@ export interface BlackRoomLedgerEntry {
   hookFamily?: string;
   captionVariant?: string;
   creativeArmId?: string;
+  learningTestId?: string;
+  learningReference?: string;
+  learningDecisionIds?: string;
   allocationMode?: "exploit" | "explore";
   renderPath: string;
   sourcePath: string;
