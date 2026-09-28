@@ -37,6 +37,8 @@ test("delivery continues across networks after an error and keeps batches bounde
   });
   assert.deepEqual(batches, [2000, 1]);
   assert.equal(result.imported, 2001);
+  assert.equal(result.complete, false);
+  assert.deepEqual(result.importedByNetwork, { youtube: 2001 });
   assert.ok(result.errors.tiktok);
   assert.ok(!JSON.stringify(result).includes("private"));
 });
@@ -48,6 +50,46 @@ test("login redirect reports setup required rather than a healthy waiting collec
   }) } });
   assert.equal(result.setupRequired, true);
   assert.equal(result.imports.length, 0);
+});
+
+test("transient delivery retries identical observations, counts once, and bounds retries", async () => {
+  const payloads = [], waits = [];
+  const input = { imports: [{ network: "tiktok", samples: [{ id: "one", observedAt: "2026-09-28T07:00:00Z" }] }] };
+  const result = await deliverMetricoolExports(input, async (body) => {
+    payloads.push(JSON.stringify(body));
+    if (payloads.length < 3) throw Object.assign(new Error("private token"), { status: 503 });
+  }, { sleep: async (ms) => { waits.push(ms); } });
+  assert.equal(new Set(payloads).size, 1);
+  assert.equal(result.imported, 1);
+  assert.deepEqual(result.errors, {});
+  assert.deepEqual(waits, [1000, 2000]);
+  let attempts = 0;
+  const failure = await deliverMetricoolExports(input, async () => {
+    attempts++; throw Object.assign(new Error("private token"), { status: 503 });
+  }, { sleep: async () => {} });
+  assert.equal(attempts, 3);
+  assert.equal(failure.imported, 0);
+  assert.match(failure.errors.tiktok, /HTTP 503/);
+  assert.ok(!JSON.stringify(failure).includes("private"));
+});
+
+test("permanent delivery errors are not retried", async () => {
+  let attempts = 0;
+  const result = await deliverMetricoolExports({ imports: [{ network: "youtube", samples: [{}] }] }, async () => {
+    attempts++; throw Object.assign(new Error("private"), { status: 401 });
+  }, { sleep: async () => { throw new Error("must not retry"); } });
+  assert.equal(attempts, 1);
+  assert.match(result.errors.youtube, /HTTP 401/);
+});
+
+test("complete import requires all three networks, not merely a recent successful delivery", async () => {
+  const imports = ["tiktok", "facebook", "youtube"].map(network => ({ network, samples: [{}] }));
+  const result = await deliverMetricoolExports({ imports }, async () => {});
+  assert.equal(result.complete, true);
+  assert.equal(result.imported, 3);
+  assert.deepEqual(result.importedByNetwork, { tiktok: 1, facebook: 1, youtube: 1 });
+  const partial = await deliverMetricoolExports({ imports: imports.slice(1) }, async () => {});
+  assert.equal(partial.complete, false);
 });
 
 test("bounded network timeouts and cleanup failures preserve earlier successful exports", async () => {
