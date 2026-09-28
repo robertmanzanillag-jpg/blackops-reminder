@@ -26,6 +26,49 @@ import { isPublicApiPath } from "../server/user-context";
 import { DEFAULT_DEV_USER_ID } from "../server/user-context";
 import { isConfiguredSingleUserOwner } from "../server/single-user-owner";
 
+test("analytics imports preserve source timestamps and immutable age snapshots", () => {
+  const state = createBlackRoomRemoteControlState();
+  const now = new Date("2026-09-28T00:00:00Z");
+  const base = { id: "real-post", publishedAt: "2026-09-01T00:00:00Z", views: 100, observedAt: "2026-09-02T00:00:00Z" };
+  upsertBlackRoomAnalyticsImports(state, [{ network: "tiktok", samples: [base] }], now);
+  upsertBlackRoomAnalyticsImports(state, [{ network: "tiktok", samples: [{ ...base, views: 500, observedAt: "2026-09-04T00:00:00Z" }] }], now);
+  upsertBlackRoomAnalyticsImports(state, [{ network: "tiktok", samples: [{ ...base, views: 10, observedAt: undefined }] }], now);
+  assert.equal(state.analyticsImports.tiktok?.samples[0].views, 500);
+  assert.deepEqual(state.learningSnapshots?.map((item) => [item.windowHours, item.views]), [[24, 100], [72, 500]]);
+  assert.equal(state.analyticsImports.tiktok?.samples[0].observedAt, "2026-09-04T00:00:00Z");
+});
+
+test("legacy imports cannot manufacture snapshots or zero-valued missing metrics", () => {
+  const state = createBlackRoomRemoteControlState();
+  upsertBlackRoomAnalyticsImports(state, [{ network: "facebook", samples: [
+    { id: "missing", views: null }, { id: "empty", views: "" },
+    { id: "zero", views: 0, averageWatchSeconds: null, publishedAt: "2026-07-01T00:00:00Z" },
+  ] }]);
+  assert.equal(state.analyticsImports.facebook?.samples.length, 1);
+  assert.equal(state.analyticsImports.facebook?.samples[0].averageWatchSeconds, undefined);
+  assert.deepEqual(state.learningSnapshots, []);
+});
+
+test("exact references join per network and revoke ambiguous derived identities", () => {
+  const state = createBlackRoomRemoteControlState();
+  const learningReference = "BR-012345abcdef";
+  const base = { metricoolId: "scheduler", reservationId: "clip", network: "youtube", durationSeconds: 15,
+    format: "vertical" as const, language: "en" as const, creativeStrategy: "drop_first" as const,
+    slot: "12:00", publishedAt: "2026-09-20T12:00:00Z", learningReference };
+  recordBlackRoomPublicationExperiment(state, base);
+  upsertBlackRoomAnalyticsImports(state, [{ network: "youtube", samples: [{ id: "real-post", views: 20, learningReference }] }]);
+  assert.equal(state.publicationExperiments[0].platformPostId, "real-post");
+  recordBlackRoomPublicationExperiment(state, base);
+  assert.equal(state.publicationExperiments[0].platformPostIdSource, "reference");
+  upsertBlackRoomAnalyticsImports(state, [{ network: "facebook", samples: [{ id: "other-network", views: 20, learningReference }] }]);
+  assert.equal(state.publicationExperiments[0].platformPostId, "real-post");
+  upsertBlackRoomAnalyticsImports(state, [{ network: "youtube", samples: [{ id: "duplicate-post", views: 20, learningReference }] }]);
+  assert.equal(state.publicationExperiments[0].platformPostId, undefined);
+  recordBlackRoomPublicationExperiment(state, { ...base, platformPostId: "receipt-id" });
+  upsertBlackRoomAnalyticsImports(state, []);
+  assert.equal(state.publicationExperiments[0].platformPostId, "receipt-id");
+});
+
 test("tools page links its BlackRoom card directly to the live panel", () => {
   const toolsPage = readFileSync("client/src/pages/tools.tsx", "utf8");
 
@@ -81,6 +124,9 @@ test("CSV analytics imports are validated, deduplicated and retained per network
       sampleCount: 1,
       sourceFiles: ["tiktok-posts_range.csv"],
       importedAt: "2026-07-30T12:00:00.000Z",
+      observedAt: null,
+      snapshotCoverage: { 24: 0, 72: 0, 168: 0 },
+      exactAttributed: 0,
     },
   });
   assert.equal("samples" in (summarizeBlackRoomAnalyticsImports(state).tiktok as object), false);

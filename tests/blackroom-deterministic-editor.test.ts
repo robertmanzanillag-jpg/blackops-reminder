@@ -60,6 +60,33 @@ function ledger(): any {
   };
 }
 
+test("controlled learning never lets one network's winner dictate crossposted edits", () => {
+  const state = queue();
+  const now = new Date("2026-07-22T12:00:00Z");
+  state.analytics = { verifiedLearning: {
+    youtube: { winner: "instant_drop", sourceObservedAt: now.toISOString() },
+    tiktok: { winner: null, sourceObservedAt: now.toISOString() },
+    facebook: { winner: "drop_first", sourceObservedAt: now.toISOString() },
+  } };
+  const input = { queue: state, ledger: { version: 1, entries: [] }, now,
+    inventory: [{ id: "set-one", title: "DJ ONE - DJ Set", duration: 3600 }] };
+  const plan = planBlackRoomDeterministicEdit(input)!;
+  assert.equal(plan.allocationMode, "explore");
+  assert.equal(plan.durationSeconds, 15);
+  assert.equal(plan.format, "vertical");
+  assert.equal(plan.language, "en");
+  assert.match(plan.learningReference!, /^BR-[a-f0-9]{12}$/);
+  assert.ok(plan.caption.includes(plan.learningReference!));
+  for (const decision of Object.values(state.analytics.verifiedLearning) as any[]) {
+    decision.winner = "instant_drop";
+    decision.sourceObservedAt = "2026-07-01T00:00:00Z";
+  }
+  const stale = planBlackRoomDeterministicEdit(input)!;
+  assert.equal(stale.allocationMode, "explore");
+  assert.equal(stale.videoId, plan.videoId);
+  assert.equal(stale.windowStartSeconds, plan.windowStartSeconds);
+});
+
 test("deterministic planner chooses an unused source and covers missing long duration", () => {
   const plan = planBlackRoomDeterministicEdit({
     queue: queue(), ledger: ledger(), now: new Date("2026-07-22T12:00:00.000Z"),

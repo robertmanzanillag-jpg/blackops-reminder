@@ -212,6 +212,7 @@ async function reserve(
         "--creative-strategy", plan.creativeStrategy,
         "--drop-offset", String(offsetSeconds), "--hook-family", plan.hookFamily,
         "--caption-variant", plan.captionVariant, "--creative-arm-id", plan.creativeArmId,
+        ...(plan.learningTestId ? ["--learning-test-id", plan.learningTestId, "--learning-reference", plan.learningReference || "", "--learning-decisions", plan.learningDecisionIds || ""] : []),
         "--allocation-mode", plan.allocationMode,
         "--segment-start", String(segmentStart), "--segment-end", String(segmentEnd), "--caption", plan.caption,
         "--render", renderPath, "--source", sourcePath,

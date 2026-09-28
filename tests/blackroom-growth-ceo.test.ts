@@ -86,7 +86,8 @@ test("CSV fallback feeds the CEO without Metricool analytics API availability", 
   assert.deepEqual(analytics.importedSamplesByNetwork, { tiktok: 2, facebook: 2, youtube: 2 });
   assert.equal(analytics.tiktokMedianViews, 0);
   assert.deepEqual(analytics.attributedSamplesByNetwork, { tiktok: 0, facebook: 0, youtube: 0 });
-  assert.ok(analytics.recommendedTimes.includes("09:30"));
+  assert.deepEqual(analytics.recommendedTimes, []);
+  assert.equal(analytics.verifiedLearning?.tiktok.status, "missing");
   assert.match(analytics.reason, /puente CSV local aportó 6 resultados sin usar IA ni API pagada/);
 });
 
@@ -126,8 +127,8 @@ test("collects each network through discovered Metricool MCP tools and totals us
   assert.equal(analytics.sampleCount, 9);
   assert.equal(analytics.comparableSampleCount, 0);
   assert.deepEqual(analytics.networkSamples, { tiktok: 3, facebook: 2, youtube: 4 });
-  assert.deepEqual(analytics.recommendedTimes, ["18:30"]);
-  assert.deepEqual(analytics.recommendedTimesByNetwork, { tiktok: ["18:30"], facebook: ["18:30"], youtube: ["18:30"] });
+  assert.deepEqual(analytics.recommendedTimes, []);
+  assert.deepEqual(analytics.recommendedTimesByNetwork, {});
   assert.deepEqual(analytics.networkDailyTargets, { tiktok: 5, facebook: 5, youtube: 5 });
   assert.deepEqual(analytics.historyCompleteByNetwork, { tiktok: true, facebook: true, youtube: true });
   assert.deepEqual(analytics.historyRequestsByNetwork, { tiktok: 1, facebook: 1, youtube: 1 });
@@ -205,7 +206,7 @@ test("reads the current Metricool analytics contract and supplies metric IDs per
   assert.deepEqual(analytics.historyRequestsByNetwork, { tiktok: 1, facebook: 2, youtube: 1 });
   assert.equal(analytics.sampleCount, 8);
   assert.equal(analytics.comparableSampleCount, 0);
-  assert.deepEqual(analytics.recommendedTimes, ["19:30"]);
+  assert.deepEqual(analytics.recommendedTimes, []);
   const availableCalls = calls.filter((call) => call.name === "getAnalyticsAvailableMetrics");
   assert.deepEqual(
     availableCalls.map((call) => `${call.args.network}:${call.args.connector}`),
@@ -627,7 +628,8 @@ test("partial attribution decisions ignore unmatched low-view rows", async () =>
   assert.equal(analytics.attributedSamplesByNetwork?.tiktok, 5);
   assert.equal(analytics.tiktokMedianViews, 120);
   assert.equal(analytics.tiktokLowViewRate, 0);
-  assert.equal(analytics.creativeStrategy, "instant_drop");
+  assert.equal(analytics.creativeStrategy, "drop_first");
+  assert.equal(analytics.verifiedLearning?.tiktok.winner, null);
   assert.equal(analytics.creativePerformance?.find((cohort) => cohort.strategy === "instant_drop")?.samples, 5);
 });
 

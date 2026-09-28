@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { classifyMetricoolCsv, extractMetricoolCsvSamples } from "./blackroom-metricool-csv-bridge.mjs";
+import { deliverMetricoolExports } from "./blackroom-metricool-exporter.mjs";
 import { applyBlackRoomDeliveryCounts, buildBlackRoomPublicationExperiments, planBlackRoomRemoteSync, summarizeBlackRoomDeliveryLedger } from "./blackroom-remote-sync.mjs";
 
 const execFileAsync = promisify(execFile);
@@ -16,6 +17,12 @@ const workerStatePath = path.join(projectDir, "clippers_workspace/blackroom/agen
 const workerLedgerPath = path.join(projectDir, "clippers_workspace/blackroom/agent/worker-ledger.json");
 const workerActivityPath = path.join(projectDir, "clippers_workspace/blackroom/agent/activity-log.json");
 const csvBridgeStatePath = path.join(projectDir, "clippers_workspace/blackroom/agent/metricool-csv-imports.json");
+const analyticsRoot = path.resolve(process.env.BLACKROOM_ANALYTICS_STATE_DIR || (process.platform === "darwin"
+  ? path.join(homedir(), "Library/Application Support/BlackRoom/analytics")
+  : path.join(projectDir, "clippers_workspace/blackroom/analytics")));
+let exportRunning = false;
+let nextExportAt = 0;
+let automaticAnalyticsStatus = { running: false, lastCheckedAt: null, lastImportedAt: null, errors: {}, setupRequired: true };
 const csvExportDir = path.resolve(process.env.BLACKROOM_METRICOOL_EXPORT_DIR || path.join(homedir(), "Downloads"));
 const remoteUrl = String(process.env.BLACKROOM_REMOTE_CONTROL_URL || "https://ROBPLANNER.replit.app").replace(/\/$/, "");
 const remoteToken = String(process.env.BLACKROOM_REMOTE_CONTROL_TOKEN || "").trim();
@@ -57,8 +64,37 @@ async function workerState() {
   catch { state = { running: false, pid: null, runs: 0, lastError: null }; }
   try {
     const activity = JSON.parse(await readFile(workerActivityPath, "utf8"));
-    return { ...state, csvBridge: csvBridgeStatus, activity: Array.isArray(activity) ? activity.slice(-80) : [] };
-  } catch { return { ...state, csvBridge: csvBridgeStatus, activity: [] }; }
+    return { ...state, csvBridge: csvBridgeStatus, automaticAnalytics: automaticAnalyticsStatus, activity: Array.isArray(activity) ? activity.slice(-80) : [] };
+  } catch { return { ...state, csvBridge: csvBridgeStatus, automaticAnalytics: automaticAnalyticsStatus, activity: [] }; }
+}
+
+async function syncAutomaticAnalytics() {
+  if (!remoteToken || exportRunning || Date.now() < nextExportAt) return;
+  nextExportAt = Date.now() + 30 * 60_000;
+  const profileExists = await stat(path.join(analyticsRoot, "browser-profile")).then((s) => s.isDirectory()).catch(() => false);
+  if (!profileExists) {
+    automaticAnalyticsStatus = { ...automaticAnalyticsStatus, setupRequired: true,
+      errors: { session: "Falta iniciar sesión una vez en el navegador dedicado de analíticas." } };
+    return;
+  }
+  exportRunning = true;
+  automaticAnalyticsStatus = { ...automaticAnalyticsStatus, running: true, setupRequired: false, lastCheckedAt: new Date().toISOString() };
+  try {
+    // Detached from the heartbeat loop; a slow export never makes the Mac look offline.
+    await execFileAsync(process.execPath, [path.join(projectDir, "script/blackroom-metricool-exporter.mjs")], {
+      cwd: projectDir, timeout: 240_000, maxBuffer: 100_000,
+    });
+    const result = JSON.parse(await readFile(path.join(analyticsRoot, "latest-export.json"), "utf8"));
+    const { imported, errors } = await deliverMetricoolExports(result,
+      (body) => remoteRequest("POST", body, "/api/blackroom-agent/analytics/import"));
+    automaticAnalyticsStatus = { ...automaticAnalyticsStatus, running: false,
+      lastImportedAt: imported ? result.checkedAt : automaticAnalyticsStatus.lastImportedAt,
+      errors, setupRequired: result.setupRequired === true };
+    nextExportAt = Date.now() + (Object.keys(errors).length ? 60 * 60_000 : 6 * 60 * 60_000);
+  } catch {
+    automaticAnalyticsStatus = { ...automaticAnalyticsStatus, running: false,
+      errors: { collector: "Falló la exportación automática o su entrega. No se renovó la fecha de las métricas." } };
+  } finally { exportRunning = false; }
 }
 
 async function queueWithDeliveryCounts(queue) {
@@ -285,6 +321,7 @@ setTimeout(recoverWorker, 1_000);
 setInterval(recoverWorker, 60_000).unref();
 if (remoteToken) {
   const remoteLoop = async () => {
+    void syncAutomaticAnalytics();
     await syncMetricoolCsvExports();
     await syncRemoteControl();
     setTimeout(remoteLoop, remotePollMs).unref();
