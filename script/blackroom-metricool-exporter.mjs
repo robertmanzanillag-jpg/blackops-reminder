@@ -12,22 +12,42 @@ export const METRICOOL_EXPORT_PAGES = {
 };
 
 /** A delivery failure on one network must not discard other successful exports. */
-export async function deliverMetricoolExports(result, send) {
+export async function deliverMetricoolExports(result, send, { sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)) } = {}) {
   const errors = { ...(result.errors || {}) };
+  const importedByNetwork = {};
   let imported = 0;
   for (const item of Array.isArray(result.imports) ? result.imports : []) {
     if (!Object.hasOwn(METRICOOL_EXPORT_PAGES, item?.network) || !Array.isArray(item.samples)) continue;
     try {
       for (let start = 0; start < item.samples.length; start += 2000) {
         const samples = item.samples.slice(start, start + 2000);
-        await send({ imports: [{ ...item, samples }] });
+        for (let attempt = 0; ; attempt++) {
+          try {
+            await send({ imports: [{ ...item, samples }] });
+            break;
+          } catch (error) {
+            const status = Number(error?.status);
+            const transient = [408, 429, 502, 503, 504].includes(status)
+              || ["TimeoutError", "AbortError", "TypeError"].includes(error?.name);
+            if (!transient || attempt >= 2) throw error;
+            // Reuse the same observedAt and samples: the server deduplicates
+            // uncertain deliveries. Never recapture dates to disguise a retry.
+            await sleep(1000 * 2 ** attempt);
+          }
+        }
         imported += samples.length;
+        importedByNetwork[item.network] = (importedByNetwork[item.network] || 0) + samples.length;
       }
-    } catch {
-      errors[item.network] = "La exportación se obtuvo, pero su entrega falló. Se reintentará sin duplicar las muestras.";
+    } catch (error) {
+      const status = Number(error?.status);
+      const detail = Number.isInteger(status) && status >= 400 && status <= 599 ? ` HTTP ${status}.` : "";
+      errors[item.network] = `La exportación se obtuvo, pero su entrega falló.${detail} Se reintentará sin duplicar las muestras.`;
     }
   }
-  return { imported, errors };
+  const complete = Object.keys(METRICOOL_EXPORT_PAGES).every((network) =>
+    result.imports?.some((item) => item.network === network && Array.isArray(item.samples)) && !errors[network])
+    && Object.keys(errors).length === 0 && result.setupRequired !== true;
+  return { imported, importedByNetwork, complete, errors };
 }
 
 /** Convert only explicitly local CSV wall-clock values using the known account
