@@ -22,7 +22,7 @@ const analyticsRoot = path.resolve(process.env.BLACKROOM_ANALYTICS_STATE_DIR || 
   : path.join(projectDir, "clippers_workspace/blackroom/analytics")));
 let exportRunning = false;
 let nextExportAt = 0;
-let automaticAnalyticsStatus = { running: false, lastCheckedAt: null, lastImportedAt: null, errors: {}, setupRequired: true };
+let automaticAnalyticsStatus = { running: false, lastCheckedAt: null, lastImportedAt: null, lastCompleteImportAt: null, importedByNetwork: {}, complete: false, errors: {}, setupRequired: true };
 const csvExportDir = path.resolve(process.env.BLACKROOM_METRICOOL_EXPORT_DIR || path.join(homedir(), "Downloads"));
 const remoteUrl = String(process.env.BLACKROOM_REMOTE_CONTROL_URL || "https://ROBPLANNER.replit.app").replace(/\/$/, "");
 const remoteToken = String(process.env.BLACKROOM_REMOTE_CONTROL_TOKEN || "").trim();
@@ -78,17 +78,19 @@ async function syncAutomaticAnalytics() {
     return;
   }
   exportRunning = true;
-  automaticAnalyticsStatus = { ...automaticAnalyticsStatus, running: true, setupRequired: false, lastCheckedAt: new Date().toISOString() };
+  automaticAnalyticsStatus = { ...automaticAnalyticsStatus, running: true, complete: false, importedByNetwork: {}, setupRequired: false, lastCheckedAt: new Date().toISOString() };
   try {
     // Detached from the heartbeat loop; a slow export never makes the Mac look offline.
     await execFileAsync(process.execPath, [path.join(projectDir, "script/blackroom-metricool-exporter.mjs")], {
       cwd: projectDir, timeout: 240_000, maxBuffer: 100_000,
     });
     const result = JSON.parse(await readFile(path.join(analyticsRoot, "latest-export.json"), "utf8"));
-    const { imported, errors } = await deliverMetricoolExports(result,
+    const { imported, importedByNetwork, complete, errors } = await deliverMetricoolExports(result,
       (body) => remoteRequest("POST", body, "/api/blackroom-agent/analytics/import"));
     automaticAnalyticsStatus = { ...automaticAnalyticsStatus, running: false,
       lastImportedAt: imported ? result.checkedAt : automaticAnalyticsStatus.lastImportedAt,
+      lastCompleteImportAt: complete ? result.checkedAt : automaticAnalyticsStatus.lastCompleteImportAt,
+      importedByNetwork, complete,
       errors, setupRequired: result.setupRequired === true };
     nextExportAt = Date.now() + (Object.keys(errors).length ? 60 * 60_000 : 6 * 60 * 60_000);
   } catch {
@@ -143,7 +145,11 @@ async function remoteRequest(method, body, pathname = "/api/blackroom-agent/remo
     signal: AbortSignal.timeout(10_000),
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.error || `Remote control returned ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(`Remote control returned ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
   return data;
 }
 
