@@ -6,7 +6,7 @@ hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 channel = "stable-24_05"
 
 [deployment]
-deploymentTarget = "vm"
+deploymentTarget = "cloudrun"
 build = ["npm", "run", "deploy:build"]
 run = ["node", "script/replit-fast-start.mjs"]
 
