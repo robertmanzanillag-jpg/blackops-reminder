@@ -1,5 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import vm from "node:vm";
+import path from "node:path";
+import { promisify } from "node:util";
 import { acquireMetricoolExports, buildVerifiedMetricoolExport, deliverMetricoolExports, metricoolPublicationInstant } from "../script/blackroom-metricool-exporter.mjs";
 
 test("export times are explicit source observations and local publication time uses New York DST", () => {
@@ -90,6 +94,48 @@ test("complete import requires all three networks, not merely a recent successfu
   assert.deepEqual(result.importedByNetwork, { tiktok: 1, facebook: 1, youtube: 1 });
   const partial = await deliverMetricoolExports({ imports: imports.slice(1) }, async () => {});
   assert.equal(partial.complete, false);
+});
+
+test("protected status exposes partial and complete automatic delivery without mistaking import for learning", async () => {
+  // Execute the real control-server route with in-memory IO; never start the
+  // production worker, export a real account, or load owner credentials.
+  const source = (await readFile(new URL("../script/blackroom-control-server.mjs", import.meta.url), "utf8"))
+    .replace(/^import .*;\n/gm, "");
+  const observedAt = "2026-09-28T07:00:00Z";
+  const exported = { checkedAt: observedAt, imports: ["tiktok", "facebook", "youtube"].map(network => ({ network, samples: [{ observedAt }] })) };
+  let handler, fail = true;
+  const context = vm.createContext({
+    Buffer, URL, AbortSignal, console, path, promisify, deliverMetricoolExports,
+    process: { cwd: () => "/fixture", platform: "darwin", execPath: "/fixture/node", env: { BLACKROOM_REMOTE_CONTROL_TOKEN: "fixture", BLACKROOM_CONTROL_PORT: "5020" } },
+    homedir: () => "/fixture", randomBytes: () => Buffer.alloc(32), timingSafeEqual: (a, b) => a.equals(b),
+    http: { createServer: (fn) => { handler = fn; return { listen() {} }; } },
+    execFile: (...args) => args.at(-1)(null, { stdout: '{\n  "mode": "blackroom_daily_agent", "summary": {"enabled": true}}' }),
+    stat: async () => ({ isDirectory: () => true }),
+    readFile: async (file) => JSON.stringify(file.endsWith("latest-export.json") ? exported : {}),
+    fetch: async (_url, options) => ({ ok: !(fail && JSON.parse(options.body).imports[0].network === "tiktok"), status: 401, json: async () => ({}) }),
+    setTimeout: () => ({ unref() {} }), setInterval: () => ({ unref() {} }),
+  });
+  vm.runInContext(source, context);
+  const status = async (authorized = true) => {
+    let code, body;
+    await handler({ method: "GET", url: "/api/status", headers: { host: "127.0.0.1:5020", ...(authorized ? { "x-blackroom-control": "00".repeat(32) } : {}) } },
+      { writeHead: (value) => { code = value; }, end: (value) => { body = JSON.parse(value); } });
+    return { code, body };
+  };
+  assert.equal((await status(false)).code, 403);
+  await vm.runInContext("syncAutomaticAnalytics()", context);
+  const partial = await status();
+  assert.equal(partial.code, 200);
+  assert.equal(partial.body.worker.automaticAnalytics.complete, false);
+  assert.equal(partial.body.worker.automaticAnalytics.lastCompleteImportAt, null);
+  assert.deepEqual(partial.body.worker.automaticAnalytics.importedByNetwork, { facebook: 1, youtube: 1 });
+  fail = false;
+  await vm.runInContext("nextExportAt = 0; syncAutomaticAnalytics()", context);
+  const complete = (await status()).body.worker.automaticAnalytics;
+  assert.equal(complete.complete, true);
+  assert.equal(complete.lastCompleteImportAt, observedAt);
+  assert.deepEqual(complete.errors, {});
+  assert.deepEqual(complete.importedByNetwork, { tiktok: 1, facebook: 1, youtube: 1 });
 });
 
 test("bounded network timeouts and cleanup failures preserve earlier successful exports", async () => {
