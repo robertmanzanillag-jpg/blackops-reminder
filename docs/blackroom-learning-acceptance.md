@@ -40,3 +40,9 @@ Preserve existing uncommitted work in the primary checkout. Implement on an isol
 - Independent review found no blocking code findings and reran 146 targeted tests, TypeScript and build. Build reports an optional yt-dlp bundling warning from local Python; runtime downloader verification remains required.
 - CSV-only CEO evaluation with API access deliberately disabled consumed all 232 samples and kept five posts/day per network. All three decisions honestly remain collecting with no winner. Old exports have no new experiment references; this check does not fabricate historical attribution.
 - Draft PR: https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/295 . No merge or deployment performed.
+
+## Visual and downloader follow-up
+
+- CUA in-app browser opened the exact generated `blackRoomPage` on a read-only loopback fixture (port 5099). Screenshots verified the learning section, all three network freshness/coverage rows and progress display without overlap at desktop width. Chat/activity tabs remain operable. These are fixture values, not production statistics; mobile layout and production API delivery are not proved by this check.
+- Optional build bundle warning is a local Python 3.14 `pyexpat`/system libexpat symbol mismatch. No global Python configuration was changed and the warning was not suppressed.
+- BlackRoom local editor uses `BLACKROOM_YTDLP_PATH` or `/opt/homebrew/bin/yt-dlp` directly, not the optional `dist/yt-dlp-python` bundle. The installed binary returned version `2026.08.19`; FFmpeg returned `8.1.1`. These prove executable availability, not a new full video download or publication.
