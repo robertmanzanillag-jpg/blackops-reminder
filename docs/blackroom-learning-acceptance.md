@@ -27,9 +27,9 @@ Preserve existing uncommitted work in the primary checkout. Implement on an isol
 - Added pure `server/blackroom-learning-observations.ts`: network-scoped actual source observations, fixed 24/72/168-hour windows (six-hour acquisition tolerance), immutable earliest snapshots and explicit freshness health.
 - Added import-state snapshot persistence and source-time replay protection in `server/blackroom-remote-control.ts`. Null/empty optional metrics no longer become zero.
 - Full BlackRoom regression: 218 tests passed, with local loopback server permission. Generated panel-script syntax test added and passed separately. Typecheck passed before the latest panel additions; rerun at release gate.
-- Added dedicated WebKit acquisition, source-time plumbing, exact reference-to-platform joins, controlled hook comparison within DJ/set/daypart, and initial evidence panel. These are not yet deployed or live-validated. The dedicated login process remains open awaiting the user's login; do not equate that with authenticated export readiness.
+- Added dedicated WebKit acquisition, source-time plumbing, exact reference-to-platform joins, controlled hook comparison within DJ/set/daypart, and initial evidence panel. Acquisition is now live-validated below; production integration is not deployed.
 - Independent checker identified source-set confounding. Comparison blocks now include sourceVideoId and a regression rejects separated source sets. Recheck requested. Different non-overlapping cuts remain a limitation, explicitly shown in provisional winner reasons.
-- Remaining: live acquisition verification, complete per-network adaptive application beyond the initial shared hook experiment, decision/application audit trail, full collector-error and coverage UI, flexible preparation scheduling, complete App QA/review, PR and human approval, deployment, local-worker and end-to-end verification. Passing isolated tests does not satisfy the full goal.
+- Remaining: complete per-network adaptive application beyond the initial shared hook experiment, complete App QA/review, human approval, deployment, local-worker and production end-to-end verification. Decision IDs and allocation reasons travel with prepared clips, and collector errors and coverage are rendered, but these still need deployed verification. Passing isolated tests does not satisfy the full goal.
 
 ## Live acquisition evidence (September 28)
 
@@ -37,3 +37,6 @@ Preserve existing uncommitted work in the primary checkout. Implement on an isol
 - A separate non-login invocation reopened the persistent browser and exported the same three networks at 21:40 UTC without user interaction. No credential extraction or copying was used.
 - In-memory import of the real export accepted all 232 records with publication and observation timestamps and captured six eligible age snapshots. This is local verification, not proof of production delivery or creative improvement.
 - Current regression: 225 BlackRoom tests pass; TypeScript check passes. Production deployment and end-to-end decision application remain pending.
+- Independent review found no blocking code findings and reran 146 targeted tests, TypeScript and build. Build reports an optional yt-dlp bundling warning from local Python; runtime downloader verification remains required.
+- CSV-only CEO evaluation with API access deliberately disabled consumed all 232 samples and kept five posts/day per network. All three decisions honestly remain collecting with no winner. Old exports have no new experiment references; this check does not fabricate historical attribution.
+- Draft PR: https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/295 . No merge or deployment performed.
