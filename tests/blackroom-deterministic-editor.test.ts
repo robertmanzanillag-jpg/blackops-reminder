@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { evaluateBlackRoomLearning } from "../server/blackroom-verified-learning";
+import { captureLearningSnapshots } from "../server/blackroom-learning-observations";
 import {
   buildBlackRoomVideoFilter,
   buildBlackRoomRenderArgs,
@@ -59,6 +61,45 @@ function ledger(): any {
     })),
   };
 }
+
+test("multi-day controlled planning produces matched evidence without repeating segments or increasing volume", () => {
+  const state = queue();
+  state.sourceHistory = [];
+  state.analytics = { verifiedLearning: {} };
+  const history: any = { version: 1, entries: [] };
+  const experiments: any[] = [];
+  const observations: any[] = [];
+  const inventory = Array.from({ length: 40 }, (_, i) => ({ id: `set-${i}`, title: `DJ${i % 5} - DJ Set`, duration: 7200 }));
+  for (let day = 1; day <= 7; day++) {
+    const date = `2026-09-0${day}`;
+    state.jobs = [{ id: `day-${day}`, targetDate: date, status: "queued", notBefore: "2026-08-31T00:00:00Z",
+      slots: ["00:30", "05:00", "09:30", "14:00", "19:00"].map(localTime => ({ localTime, timezone: "America/New_York" })),
+      requirements: { posts: 5, djs: 5, postsPerDj: 1, durationsSeconds: [15] } }];
+    const djs = new Set();
+    for (let i = 0; i < 5; i++) {
+      const plan = planBlackRoomDeterministicEdit({ queue: state, ledger: history, inventory, now: new Date("2026-08-31T12:00:00Z") })!;
+      assert.ok(plan); djs.add(plan.dj);
+      const start = plan.windowStartSeconds, end = start + 15;
+      for (const entry of history.entries.filter((e: any) => e.videoId === plan.videoId)) assert.ok(end <= entry.segmentStartSeconds || start >= entry.segmentEndSeconds);
+      const id = `post-${day}-${i}`;
+      const publishedAt = `${date}T${plan.slot}:00Z`;
+      history.entries.push({ ...plan, reservationId: id, status: "confirmed", segmentStartSeconds: start, segmentEndSeconds: end,
+        publicationDateTime: publishedAt.slice(0, 19) });
+      experiments.push({ ...plan, metricoolId: id, reservationId: id, network: "youtube", platformPostId: id,
+        sourceVideoId: plan.videoId, publishedAt });
+      observations.push({ network: "youtube", postId: id, publishedAt, observedAt: new Date(Date.parse(publishedAt) + 24 * 3600000).toISOString(),
+        views: plan.creativeStrategy === "instant_drop" ? 400 : 100 });
+    }
+    assert.equal(djs.size, 5);
+    assert.equal(planBlackRoomDeterministicEdit({ queue: state, ledger: history, inventory, now: new Date("2026-08-31T12:00:00Z") }), null);
+  }
+  const now = new Date("2026-09-09T00:00:00Z");
+  const result = evaluateBlackRoomLearning({ experiments, snapshots: captureLearningSnapshots([], observations, now),
+    sourceObservedAt: { youtube: now.toISOString() }, now }).youtube;
+  assert.equal(result.status, "testing");
+  assert.ok(result.matchedBlocks >= 3);
+  assert.equal(result.winner, "instant_drop");
+});
 
 test("controlled learning never lets one network's winner dictate crossposted edits", () => {
   const state = queue();
