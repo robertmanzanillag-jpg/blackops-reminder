@@ -39,6 +39,25 @@ test("stale sources and legacy scheduler IDs never manufacture winners", () => {
   input.experiments.forEach((experiment) => { delete experiment.platformPostId; });
   assert.equal(evaluateBlackRoomLearning(input).youtube.winner, null);
 });
+test("diagnostics distinguish missing tests, missing identities and missing age observations", () => {
+  const input = fixture();
+  input.experiments = [];
+  let result = evaluateBlackRoomLearning(input).youtube;
+  assert.match(result.reason, /Sin clips/);
+  assert.equal(result.windowHours, null);
+  input.experiments = fixture().experiments;
+  input.experiments.forEach(e => { delete e.platformPostId; });
+  result = evaluateBlackRoomLearning(input).youtube;
+  assert.equal(result.declaredExperiments, 12);
+  assert.equal(result.exactIdentities, 0);
+  assert.match(result.reason, /Programado no significa publicado/);
+  input.experiments = fixture().experiments;
+  input.snapshots = [];
+  result = evaluateBlackRoomLearning(input).youtube;
+  assert.equal(result.exactIdentities, 12);
+  assert.match(result.reason, /faltan mediciones/);
+  assert.equal(result.winner, null);
+});
 test("different ages, treatments, confounders and ambiguous identities are excluded", () => {
   for (const variant of ["age", "language", "ambiguous", "test"] as const) {
     const input = fixture();

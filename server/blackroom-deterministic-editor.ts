@@ -238,7 +238,7 @@ export function planBlackRoomDeterministicEdit(input: {
   const testSeed = stableNumber(`${job.id}:${slot}:controlled-hook`);
   const testStrategy = sharedWinner && testSeed % 5 !== 0 ? sharedWinner
     : testSeed % 2 ? "instant_drop" : "drop_first";
-  const creativeStrategy = controlledTest ? testStrategy! : allocation.strategy;
+  let creativeStrategy = controlledTest ? testStrategy! : allocation.strategy;
   const durationSeconds = controlledTest ? 15 : chooseDuration(job, jobEntries, input.queue, targetNetworks);
   const format = controlledTest ? "vertical" : chooseFormat(durationSeconds, jobEntries, targetNetworks, input.queue);
   const language = controlledTest ? "en" : chooseLanguage(jobEntries, input.queue);
@@ -279,7 +279,22 @@ export function planBlackRoomDeterministicEdit(input: {
       && Number(entry.segmentEndSeconds) > Number(entry.segmentStartSeconds));
   };
   const selectable = eligible.filter((candidate) => !failedVideos.has(candidate.video.id));
+  // Complete declared cross-day blocks before opening more unrelated sources.
+  // Segment availability, failed-source exclusion and the DJ quota still apply.
+  const daypart = Math.floor(Number(slot.split(":")[0]) / 6);
+  const comparable = activeLedgerEntries.filter((entry) => controlledTest && !sharedWinner
+    && entry.learningTestId === BLACKROOM_HOOK_TEST_ID && entry.jobId !== job.id
+    && Date.parse(`${job.targetDate}T00:00:00Z`) - Date.parse(`${entry.publicationDateTime?.slice(0, 10)}T00:00:00Z`) > 0
+    && Date.parse(`${job.targetDate}T00:00:00Z`) - Date.parse(`${entry.publicationDateTime?.slice(0, 10)}T00:00:00Z`) <= 21 * 86400_000
+    && entry.durationSeconds === 15 && entry.format === "vertical" && entry.language === "en"
+    && Math.floor(Number(entry.slot.split(":")[0]) / 6) === daypart
+    && targetNetworks.every((network) => entry.targetNetworks?.includes(network))
+    && ["drop_first", "instant_drop"].includes(entry.creativeStrategy || ""));
+  const pairCandidates = selectable.filter((candidate) => sourceHasReusableHistory(candidate.video.id)
+    && comparable.some((entry) => entry.videoId === candidate.video.id));
   const preferFreshSource = (candidates: typeof selectable): typeof selectable => {
+    const pairs = candidates.filter((candidate) => pairCandidates.includes(candidate));
+    if (pairs.length) return pairs;
     const fresh = candidates.filter((candidate) => !previouslyUsedVideos.has(candidate.video.id));
     if (fresh.length) return fresh;
     return candidates.filter((candidate) => sourceHasReusableHistory(candidate.video.id));
@@ -305,6 +320,14 @@ export function planBlackRoomDeterministicEdit(input: {
   // Source allocation must not change with the hook arm being tested.
   const seed = `${job.id}:${slot}:${durationSeconds}:${format}:${language}:${controlledTest ? "controlled-source" : creativeStrategy}`;
   const selected = priority || selectionPool[stableNumber(seed) % selectionPool.length];
+  if (controlledTest && !sharedWinner) {
+    const block = comparable.filter((entry) => entry.videoId === selected.video.id);
+    if (block.length) {
+      const first = block.filter((entry) => entry.creativeStrategy === "drop_first").length;
+      const instant = block.length - first;
+      creativeStrategy = first > instant ? "instant_drop" : first < instant ? "drop_first" : testStrategy!;
+    }
+  }
   const windowStartSeconds = selected.windowStart;
   const learningReference = controlledTest ? `BR-${createHash("sha256").update(`${job.id}:${slot}:${selected.video.id}`).digest("hex").slice(0, 12)}` : undefined;
   return {
