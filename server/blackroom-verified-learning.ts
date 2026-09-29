@@ -21,6 +21,8 @@ export interface VerifiedLearningDecision {
   reason: string;
   /** Exact evidence IDs let operators reproduce a decision. */
   evidencePostIds: string[];
+  declaredExperiments?: number;
+  exactIdentities?: number;
 }
 
 export function canonicalLearningPostId(network: LearningNetwork, value: string): string | null {
@@ -78,11 +80,13 @@ export function evaluateBlackRoomLearning(input: {
     };
     if (health.status !== "fresh") return finish();
     const identities = new Map<string, BlackRoomPublicationExperiment[]>();
+    const declared = new Set<string>();
     for (const experiment of input.experiments) {
       if (experiment.network !== network || experiment.learningTestId !== BLACKROOM_HOOK_TEST_ID) continue;
       if (experiment.durationSeconds !== 15 || experiment.format !== "vertical" || experiment.language !== "en") continue;
       if (!experiment.dj || experiment.dj === "unknown" || !experiment.sourceVideoId) continue;
       if (!["drop_first", "instant_drop"].includes(experiment.creativeStrategy)) continue;
+      declared.add(experiment.reservationId);
       // Platform ID must come from the published receipt, not the scheduler ID.
       const id = canonicalLearningPostId(network, experiment.platformPostId || "");
       if (!id) continue;
@@ -90,6 +94,8 @@ export function evaluateBlackRoomLearning(input: {
       if (!entries.some((entry) => entry.reservationId === experiment.reservationId)) entries.push(experiment);
       identities.set(id, entries);
     }
+    decision.declaredExperiments = declared.size;
+    decision.exactIdentities = [...identities.values()].filter((entries) => entries.length === 1).length;
     const valid = captureLearningSnapshots(input.snapshots, [], input.now).flatMap((snapshot) => {
       if (snapshot.network !== network || Date.parse(snapshot.observedAt) > input.now.getTime()
         || input.now.getTime() - Date.parse(snapshot.publishedAt) > 28 * 86400_000) return [];
@@ -145,6 +151,13 @@ export function evaluateBlackRoomLearning(input: {
           : `Prueba a ${windowHours}h sin mejora consistente; mantener comparación equilibrada, 5 publicaciones/día.`,
       });
       break;
+    }
+    if (decision.status === "collecting") {
+      if (!declared.size) decision.reason = "Sin clips de la prueba declarada; el historial anterior no sustituye una prueba controlada.";
+      else if (!decision.exactIdentities) decision.reason = `${declared.size} clips de prueba registrados; esperando publicación e identidad exacta en las métricas. Programado no significa publicado.`;
+      else if (!decision.matchedSnapshots) decision.reason = "Hay identidades exactas, pero faltan mediciones de la prueba a 24h, 72h o 7 días; no se reconstruyen datos históricos.";
+      else decision.reason = "Faltan parejas comparables: mínimo 5 por edición, 3 días y 3 DJs con el mismo set y franja horaria. Sin ganador todavía.";
+      if (!decision.matchedSnapshots) decision.windowHours = null;
     }
     return finish();
   })) as Record<LearningNetwork, VerifiedLearningDecision>;
