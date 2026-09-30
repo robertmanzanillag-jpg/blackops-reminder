@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-28T07:52:10.510Z",
-  "repoRoot": "/private/tmp/blackroom-learning-20260928",
+  "generatedAt": "2026-09-30T09:48:17.831Z",
+  "repoRoot": "/private/tmp/kong-planner-panel",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -122,39 +122,39 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 654,
-    "filesIndexed": 571,
-    "imports": 1935,
+    "filesVisible": 660,
+    "filesIndexed": 577,
+    "imports": 1948,
     "routes": 495,
-    "symbols": 12800
+    "symbols": 12867
   },
   "directories": {
-    "docs": {
-      "files": 31,
-      "indexed": 30,
+    "client/public": {
+      "files": 19,
+      "indexed": 5,
       "kinds": {
-        "docs": 31
+        "other": 19
+      }
+    },
+    "docs": {
+      "files": 32,
+      "indexed": 31,
+      "kinds": {
+        "docs": 32
       }
     },
     "script": {
-      "files": 76,
-      "indexed": 71,
+      "files": 77,
+      "indexed": 72,
       "kinds": {
-        "script": 76
-      }
-    },
-    "server": {
-      "files": 133,
-      "indexed": 129,
-      "kinds": {
-        "server": 133
+        "script": 77
       }
     },
     "tests": {
-      "files": 119,
-      "indexed": 116,
+      "files": 120,
+      "indexed": 117,
       "kinds": {
-        "test": 119
+        "test": 120
       }
     },
     ".": {
@@ -195,13 +195,6 @@
         "other": 1
       }
     },
-    "client/public": {
-      "files": 16,
-      "indexed": 2,
-      "kinds": {
-        "other": 16
-      }
-    },
     "client/src": {
       "files": 116,
       "indexed": 114,
@@ -227,6 +220,13 @@
       "indexed": 1,
       "kinds": {
         "script": 4
+      }
+    },
+    "server": {
+      "files": 133,
+      "indexed": 129,
+      "kinds": {
+        "server": 133
       }
     },
     "server/replit_integrations": {
@@ -366,6 +366,41 @@
     },
     {
       "path": "client/index.html",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "client/public/kong-directory/index.html",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "client/public/kong-directory/panel.js",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [
+        "button",
+        "c",
+        "cards",
+        "data",
+        "date",
+        "definitions",
+        "error",
+        "number",
+        "refresh",
+        "response"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/public/kong-directory/snapshot.json",
       "kind": "other",
       "imports": [],
       "exports": [],
@@ -4118,6 +4153,14 @@
       "routes": []
     },
     {
+      "path": "docs/kong-panel-publishing.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/metricool-tracking-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -4757,6 +4800,7 @@
       "kind": "script",
       "imports": [
         "./blackroom-metricool-csv-bridge.mjs",
+        "./blackroom-metricool-exporter.mjs",
         "./blackroom-remote-sync.mjs",
         "node:child_process",
         "node:crypto",
@@ -4788,6 +4832,7 @@
         "data",
         "deadline",
         "entries",
+        "error",
         "execFileAsync",
         "expected",
         "extracted",
@@ -5106,18 +5151,25 @@
         "METRICOOL_EXPORT_PAGES",
         "acquireMetricoolExports",
         "buildVerifiedMetricoolExport",
+        "deliverMetricoolExports",
         "metricoolPublicationInstant",
         "runMetricoolExporter"
       ],
       "symbols": [
         "METRICOOL_EXPORT_PAGES",
+        "acquire",
         "acquireMetricoolExports",
         "buildVerifiedMetricoolExport",
+        "complete",
         "context",
         "decoder",
+        "deliverMetricoolExports",
+        "detail",
         "downloadButton",
+        "errors",
         "failure",
         "format",
+        "importedByNetwork",
         "imports",
         "instant",
         "match",
@@ -5132,8 +5184,11 @@
         "result",
         "root",
         "runMetricoolExporter",
+        "samples",
+        "status",
         "stream",
-        "temporary"
+        "temporary",
+        "transient"
       ],
       "routes": []
     },
@@ -8743,6 +8798,25 @@
       "routes": []
     },
     {
+      "path": "script/kong-panel-snapshot.mjs",
+      "kind": "script",
+      "imports": [
+        "node:fs/promises",
+        "node:url"
+      ],
+      "exports": [
+        "sanitizeSnapshot"
+      ],
+      "symbols": [
+        "count",
+        "counts",
+        "sanitizeSnapshot",
+        "snapshot",
+        "value"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/metricool-plan.ts",
       "kind": "script",
       "imports": [
@@ -10152,6 +10226,7 @@
         "./blackroom-learning-panel",
         "./blackroom-metricool-bridge",
         "./blackroom-remote-control",
+        "./blackroom-verified-learning",
         "./single-user-owner",
         "./user-context",
         "express",
@@ -10207,6 +10282,7 @@
         "filePath",
         "hasBlackRoomChatAccess",
         "hasValidBlackRoomRemoteToken",
+        "id",
         "imports",
         "index",
         "info",
@@ -10465,6 +10541,7 @@
         "belowTarget",
         "bitrate",
         "blackRoomVideoUrl",
+        "block",
         "bounded",
         "buildBlackRoomRenderArgs",
         "buildBlackRoomVideoFilter",
@@ -10477,10 +10554,11 @@
         "chooseLanguage",
         "cleaned",
         "commitBlackRoomReservation",
+        "comparable",
         "controlledTest",
         "counts",
-        "creativeStrategy",
         "current",
+        "daypart",
         "distributedSlotSelected",
         "dj",
         "durationSeconds",
@@ -10489,11 +10567,13 @@
         "extractBlackRoomDj",
         "failedVideos",
         "findBlackRoomDropOffset",
+        "first",
         "format",
         "fresh",
         "gap",
         "history",
         "horizontal",
+        "instant",
         "intervals",
         "isActionableJob",
         "isOwnedBlackRoomMetadata",
@@ -10512,6 +10592,8 @@
         "networks",
         "now",
         "occupied",
+        "pairCandidates",
+        "pairs",
         "parseBlackRoomEnergySamples",
         "planBlackRoomDeterministicEdit",
         "preferFreshSource",
@@ -10905,13 +10987,20 @@
       "symbols": [
         "blackRoomLearningPanelHtml",
         "blackRoomLearningPanelScript",
+        "candidates",
+        "collector",
         "content",
+        "coverage",
         "decisions",
+        "detail",
         "item",
         "labels",
+        "latest",
         "lines",
         "observed",
         "renderLearning",
+        "source",
+        "stale",
         "stamp",
         "target"
       ],
@@ -11385,8 +11474,10 @@
         "block",
         "blocks",
         "canonicalLearningPostId",
+        "comparisonBlock",
         "counts",
         "dates",
+        "declared",
         "deduped",
         "entries",
         "evaluateBlackRoomLearning",
@@ -19493,6 +19584,8 @@
       "kind": "test",
       "imports": [
         "../server/blackroom-deterministic-editor",
+        "../server/blackroom-learning-observations",
+        "../server/blackroom-verified-learning",
         "node:assert/strict",
         "node:test"
       ],
@@ -19501,20 +19594,29 @@
         "atQuota",
         "base",
         "committing",
+        "date",
+        "djs",
         "download",
         "explicit",
         "explored",
         "full",
+        "id",
+        "input",
         "inventory",
         "ledger",
         "ledgerPending",
         "next",
+        "now",
         "output",
         "plan",
+        "publishedAt",
         "queue",
         "render",
+        "result",
         "samples",
         "selected",
+        "stale",
+        "start",
         "state",
         "used"
       ],
@@ -19605,6 +19707,7 @@
       "exports": [],
       "symbols": [
         "context",
+        "scripts",
         "target"
       ],
       "routes": []
@@ -19739,11 +19842,30 @@
       "imports": [
         "../script/blackroom-metricool-exporter.mjs",
         "node:assert/strict",
-        "node:test"
+        "node:fs/promises",
+        "node:path",
+        "node:test",
+        "node:util",
+        "node:vm"
       ],
       "exports": [],
       "symbols": [
-        "result"
+        "batches",
+        "complete",
+        "context",
+        "exported",
+        "failure",
+        "imports",
+        "index",
+        "input",
+        "locator",
+        "observedAt",
+        "page",
+        "partial",
+        "payloads",
+        "result",
+        "source",
+        "status"
       ],
       "routes": []
     },
@@ -21845,6 +21967,20 @@
         "snapshotEnv",
         "status",
         "url"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/kong-panel-snapshot.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/kong-panel-snapshot.mjs",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "fixture"
       ],
       "routes": []
     },
