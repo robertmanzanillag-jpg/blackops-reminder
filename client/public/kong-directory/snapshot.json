@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "capturedAt": "2026-09-30T09:47:09.759Z",
+  "lastActivityAt": "2026-09-30T09:44:45.268Z",
+  "counts": {
+    "projectCount": 1462,
+    "collectiveCount": 172,
+    "radioCount": 384,
+    "labelCount": 931,
+    "otherProjectCount": 30,
+    "extraTypeAssignments": 55,
+    "candidateCount": 552,
+    "corroboratedCount": 0,
+    "djCount": 4578
+  },
+  "mode": "snapshot",
+  "note": "Copia de cifras locales; no indica actividad en vivo. Los contactos y candidatos no se publican."
+}
