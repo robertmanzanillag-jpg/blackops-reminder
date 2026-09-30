@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-09-30T09:48:17.831Z",
+  "generatedAt": "2026-09-30T09:51:28.630Z",
   "repoRoot": "/private/tmp/kong-planner-panel",
   "packageName": "rest-express",
   "scripts": {
@@ -122,39 +122,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 660,
-    "filesIndexed": 577,
-    "imports": 1948,
+    "filesVisible": 661,
+    "filesIndexed": 578,
+    "imports": 1950,
     "routes": 495,
-    "symbols": 12867
+    "symbols": 12871
   },
   "directories": {
     "client/public": {
-      "files": 19,
-      "indexed": 5,
+      "files": 20,
+      "indexed": 6,
       "kinds": {
-        "other": 19
-      }
-    },
-    "docs": {
-      "files": 32,
-      "indexed": 31,
-      "kinds": {
-        "docs": 32
-      }
-    },
-    "script": {
-      "files": 77,
-      "indexed": 72,
-      "kinds": {
-        "script": 77
-      }
-    },
-    "tests": {
-      "files": 120,
-      "indexed": 117,
-      "kinds": {
-        "test": 120
+        "other": 20
       }
     },
     ".": {
@@ -207,12 +186,26 @@
         "client-page": 26
       }
     },
+    "docs": {
+      "files": 32,
+      "indexed": 31,
+      "kinds": {
+        "docs": 32
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 77,
+      "indexed": 72,
+      "kinds": {
+        "script": 77
       }
     },
     "scripts": {
@@ -248,6 +241,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 120,
+      "indexed": 117,
+      "kinds": {
+        "test": 120
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -383,7 +383,9 @@
     {
       "path": "client/public/kong-directory/panel.js",
       "kind": "other",
-      "imports": [],
+      "imports": [
+        "./validation.js"
+      ],
       "exports": [],
       "symbols": [
         "button",
@@ -405,6 +407,21 @@
       "imports": [],
       "exports": [],
       "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "client/public/kong-directory/validation.js",
+      "kind": "other",
+      "imports": [],
+      "exports": [
+        "validSnapshot"
+      ],
+      "symbols": [
+        "c",
+        "date",
+        "keys",
+        "validSnapshot"
+      ],
       "routes": []
     },
     {
@@ -21974,6 +21991,7 @@
       "path": "tests/kong-panel-snapshot.test.mjs",
       "kind": "test",
       "imports": [
+        "../client/public/kong-directory/validation.js",
         "../script/kong-panel-snapshot.mjs",
         "node:assert/strict",
         "node:test"

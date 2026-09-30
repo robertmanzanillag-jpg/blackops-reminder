@@ -1,3 +1,4 @@
+import { validSnapshot } from './validation.js';
 const definitions = [
  ['projectCount','Proyectos únicos','Colectivos, radios, sellos y otros proyectos.'],
  ['collectiveCount','Colectivos','Algunos también son radios o sellos.'],
@@ -16,7 +17,7 @@ async function refresh() {
   const response=await fetch('./snapshot.json',{cache:'no-store',signal:AbortSignal.timeout(15000)});
   if (!response.ok) throw new Error('HTTP error');
   const data=await response.json();
-  if(data.version!==1 || data.mode!=='snapshot' || !Number.isFinite(Date.parse(data.capturedAt)) || definitions.some(([key])=>!Number.isSafeInteger(data.counts?.[key]) || data.counts[key]<0)) throw new Error('Invalid snapshot');
+  if(!validSnapshot(data)) throw new Error('Invalid snapshot');
   const cards=document.querySelector('#cards');cards.replaceChildren();
   for(const [key,title,description] of definitions){const card=document.createElement('article');const heading=document.createElement('h2');heading.textContent=title;const value=document.createElement('div');value.className='value';value.textContent=number(data.counts[key]);const detail=document.createElement('p');detail.textContent=description;card.append(heading,value,detail);cards.append(card);}
   document.querySelector('#stamp').textContent=`Copia generada: ${date(data.capturedAt)}. No confirma que la Mac esté conectada ahora.`;

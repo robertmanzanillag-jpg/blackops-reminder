@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-09-30T09:48:17.831Z
+Generated: 2026-09-30T09:51:28.630Z
 Repo: `/private/tmp/kong-planner-panel`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 660 | 577 | 1948 | 495 | 12867 |
+| 661 | 578 | 1950 | 495 | 12871 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -36,8 +36,8 @@ Package: `rest-express`
 | `docs` | 32 | 31 | docs:32 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
+| `client/public` | 20 | 6 | other:20 |
 | `.agents/memory` | 5 | 5 | docs:5 |
-| `client/public` | 19 | 5 | other:19 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `client` | 1 | 1 | other:1 |
 | `scripts` | 4 | 1 | script:4 |
