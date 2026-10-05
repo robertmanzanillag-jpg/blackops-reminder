@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-09-28T07:52:10.510Z
-Repo: `/private/tmp/blackroom-learning-20260928`
+Generated: 2026-10-05T10:11:00.861Z
+Repo: `/workspace/blackops-reminder`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 654 | 571 | 1935 | 495 | 12800 |
+| 662 | 577 | 1957 | 495 | 12857 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 133 | 129 | server:133 |
-| `tests` | 119 | 116 | test:119 |
-| `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
+| `server` | 134 | 130 | server:134 |
+| `tests` | 123 | 119 | test:123 |
+| `client/src` | 117 | 115 | ui-component:55, client-page:26, client-component:22, client-lib:8 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `script` | 76 | 71 | script:76 |
-| `docs` | 31 | 30 | docs:31 |
+| `docs` | 33 | 31 | docs:33 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `.agents/memory` | 5 | 5 | docs:5 |
@@ -72,6 +72,7 @@ Package: `rest-express`
 - `tests/app-qa-agent.test.ts`
 - `tests/assistant-chat-flow.test.ts`
 - `tests/automation-registry.test.ts`
+- `tests/automation-schedule.test.ts`
 - `tests/background-scheduler-policy.test.ts`
 - `tests/blackroom-chat.test.ts`
 - `tests/blackroom-content-agent.test.ts`
@@ -99,7 +100,9 @@ Package: `rest-express`
 - `tests/ceo-readiness-cli.test.ts`
 - `tests/ceo-readiness.test.ts`
 - `tests/ceo-smoke-cli.test.ts`
+- `tests/client-auth-state.test.ts`
 - `tests/clippers-agent.test.ts`
+- `tests/clippers-credential-closeout.test.ts`
 - `tests/clippers-local-news-agent.test.ts`
 - `tests/clippers-local-news-growth.test.ts`
 - `tests/clippers-local-news-metricool.test.ts`
@@ -125,6 +128,7 @@ Package: `rest-express`
 - `tests/google-drive-oauth.test.ts`
 - `tests/legal-compliance-agent.test.ts`
 - `tests/local-auth-cli.test.ts`
+- `tests/local-auth-postgres.integration.test.ts`
 - `tests/local-auth.test.ts`
 - `tests/local-news-growth-scout.test.ts`
 - `tests/local-youtube-queue.test.ts`
@@ -164,7 +168,7 @@ Package: `rest-express`
 - `client/src/pages/agents-office.tsx` (client-page; 146 symbols, 8 imports)
 - `client/src/pages/app-qa-agent.tsx` (client-page; 11 symbols, 8 imports)
 - `client/src/pages/assistant.tsx` (client-page; 49 symbols, 7 imports)
-- `client/src/pages/auth.tsx` (client-page; 44 symbols, 8 imports)
+- `client/src/pages/auth.tsx` (client-page; 6 symbols, 8 imports)
 - `client/src/pages/automation-manager.tsx` (client-page; 13 symbols, 8 imports)
 - `client/src/pages/ceo-dashboard.tsx` (client-page; 40 symbols, 10 imports)
 - `client/src/pages/code-agent.tsx` (client-page; 21 symbols, 7 imports)
@@ -184,12 +188,12 @@ Package: `rest-express`
 - `client/src/pages/revenue-engine-simple.tsx` (client-page; 33 symbols, 7 imports)
 - `client/src/pages/tools.tsx` (client-page; 2 symbols, 6 imports)
 - `package.json` (package)
-- `script/blackroom-control-server.mjs` (script; 75 symbols, 9 imports)
+- `script/blackroom-control-server.mjs` (script; 76 symbols, 10 imports)
 - `script/blackroom-daily-agent.ts` (script; 16 symbols, 2 imports)
 - `script/blackroom-deterministic-editor.ts` (script; 59 symbols, 7 imports)
 - `script/blackroom-local-worker.ts` (script; 73 symbols, 7 imports)
 - `script/blackroom-metricool-csv-bridge.mjs` (script; 38 symbols)
-- `script/blackroom-metricool-exporter.mjs` (script; 24 symbols, 6 imports)
+- `script/blackroom-metricool-exporter.mjs` (script; 33 symbols, 6 imports)
 - `script/blackroom-remote-sync.mjs` (script; 24 symbols)
 - `script/blackroom-worker-ledger.ts` (script; 29 symbols, 4 imports)
 - `script/build.ts` (script; 12 symbols, 4 imports)

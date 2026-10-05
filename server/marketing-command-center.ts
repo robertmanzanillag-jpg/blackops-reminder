@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { getDropshippingCeoSnapshot } from "./dropshipping-ceo";
 
@@ -7,12 +8,15 @@ type MarketingClientStatus = "ready" | "active" | "needs_setup" | "needs_data" |
 type MarketingClientPriority = "high" | "medium" | "low";
 
 export const marketingCommandCenterDaySchema = z.object({
-  focusClientId: z.string().trim().min(1).max(80).optional().default("all"),
+  focusClientId: z.enum(["all", "black-room", "dropshipping", "kong", "clipping"]).optional().default("all"),
+  idempotencyKey: z.string().trim().min(1).max(128).optional(),
 });
 
 type MarketingCommandCenterDayInput = z.infer<typeof marketingCommandCenterDaySchema>;
 
 type MarketingLearningRun = {
+  ownerUserId?: string;
+  idempotencyKey?: string;
   id: string;
   createdAt: string;
   focusClientId: string;
@@ -87,6 +91,8 @@ let learningRunsLoaded = false;
 const learningRuns: MarketingLearningRun[] = [];
 
 const marketingLearningRunPersistedSchema: z.ZodType<MarketingLearningRun, z.ZodTypeDef, unknown> = z.object({
+  ownerUserId: z.string().optional(),
+  idempotencyKey: z.string().optional(),
   id: z.string(),
   createdAt: z.string(),
   focusClientId: z.string(),
@@ -113,7 +119,9 @@ function readLearningRuns() {
 function writeLearningRuns(items: MarketingLearningRun[]) {
   const filePath = getLearningRunsPath();
   fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  fs.writeFileSync(filePath, `${JSON.stringify(items, null, 2)}\n`, "utf8");
+  const temporary = `${filePath}.${randomUUID()}.tmp`;
+  fs.writeFileSync(temporary, `${JSON.stringify(items, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  fs.renameSync(temporary, filePath);
 }
 
 function loadLearningRuns() {
@@ -138,8 +146,8 @@ function safeSnapshot<T>(producer: () => T): T | null {
   }
 }
 
-function learningRulesForClient(clientId: string, fallback: string[]) {
-  const learnedRules = learningRuns
+function learningRulesForClient(runs: MarketingLearningRun[], clientId: string, fallback: string[]) {
+  const learnedRules = runs
     .filter((run) => run.focusClientId === "all" || run.focusClientId === clientId)
     .slice(-3)
     .flatMap((run) => run.rulesUpdated)
@@ -180,11 +188,11 @@ function withReadyHandoff(client: MarketingClient): MarketingClient {
   };
   return {
     ...client,
-    status: "ready",
+    status: client.metrics.signals > 0 ? "ready" : "needs_data",
     detectedSources: sourceMap[client.id] || [client.sourceAgent],
     marketingCapabilities: capabilityMap[client.id] || ["strategy", "content drafts", "analytics", "approval handoff"],
     handoff: {
-      status: "ready",
+      status: client.metrics.signals > 0 ? "ready" : "draft_only",
       inbound: ["objetivo", "audiencia", "asset/contexto", "canales", "budget", "restricciones", "metricas"],
       outbound: ["brief", "posts", "hooks", "calendario", "risk check", "approval request", "learning rules"],
       dataBoundary: `${client.separationKey}: presupuesto, cuentas, assets, metricas y approvals separados.`,
@@ -192,8 +200,10 @@ function withReadyHandoff(client: MarketingClient): MarketingClient {
   };
 }
 
-function buildMarketingClients(): MarketingClient[] {
-  const dropshipping = safeSnapshot(getDropshippingCeoSnapshot);
+function buildMarketingClients(userId: string, runs: MarketingLearningRun[]): MarketingClient[] {
+  // The legacy Dropshipping store has no ownership metadata; only its configured
+  // system owner may consume it until that store supports per-user records.
+  const dropshipping = process.env.DEFAULT_USER_ID?.trim() === userId ? safeSnapshot(getDropshippingCeoSnapshot) : null;
   const dropshippingMetrics = dropshipping?.metrics;
   const dropshippingSpend = dropshippingMetrics?.socialSpendUsd || 0;
   const dropshippingRevenue = dropshippingMetrics?.socialRevenueUsd || dropshippingMetrics?.totalRevenueUsd || 0;
@@ -233,7 +243,7 @@ function buildMarketingClients(): MarketingClient[] {
       },
       nextActions: ["Crear calendario unico para fiesta y radio.", "Mantener flyers, promo videos y links como assets internos del mismo cliente.", "Registrar metricas por evento/post para que el CMO aprenda."],
       risks: ["copyright", "fecha/venue/lineup incorrecto", "link equivocado", "asset no aprobado", "publicar sin approval"],
-      learningRules: learningRulesForClient("black-room", ["Black Room agrupa fiesta y radio; cada evento necesita fecha, venue, asset, CTA, link y approval antes de publicarse."]),
+      learningRules: learningRulesForClient(runs, "black-room", ["Black Room agrupa fiesta y radio; cada evento necesita fecha, venue, asset, CTA, link y approval antes de publicarse."]),
     },
     {
       id: "dropshipping",
@@ -265,7 +275,7 @@ function buildMarketingClients(): MarketingClient[] {
         orders: dropshippingMetrics?.socialOrders || dropshippingMetrics?.orders || 0,
         campaigns: dropshippingMetrics?.marketingCampaigns || 0,
         posts: dropshippingMetrics?.socialPosts || 0,
-        signals: dropshippingMetrics?.queuedSocialPosts || dropshippingMetrics?.publishedSocialPosts || 0,
+        signals: 0,
         roas: dropshippingSpend > 0 ? roundMoney(dropshippingRevenue / dropshippingSpend) : null,
       },
       playbook: {
@@ -277,7 +287,7 @@ function buildMarketingClients(): MarketingClient[] {
       },
       nextActions: [dropshipping?.marketingDepartment?.scorecard?.nextAction || "Crear batch organico de validacion.", "Separar posts por hook y canal para medir ganador.", "Pedir approval antes de publicar o gastar."],
       risks: ["claims de producto", "shipping lento", "proveedor sin backup", "gasto antes de ventas"],
-      learningRules: learningRulesForClient("dropshipping", ["Organico primero; paid test solo si hay cash, margen y approval.", "Matar hooks sin clicks o sin add-to-cart despues de datos suficientes."]),
+      learningRules: learningRulesForClient(runs, "dropshipping", ["Organico primero; paid test solo si hay cash, margen y approval.", "Matar hooks sin clicks o sin add-to-cart despues de datos suficientes."]),
     },
     {
       id: "kong",
@@ -313,7 +323,7 @@ function buildMarketingClients(): MarketingClient[] {
       },
       nextActions: ["Definir segmentos principales.", "Crear plantillas de mensaje por evento.", "Conectar Legal/Control para datos personales."],
       risks: ["privacidad", "datos incorrectos", "contacto sin permiso"],
-      learningRules: learningRulesForClient("kong", ["Todo mensaje externo de Kong necesita segmento, CTA y permiso claro."]),
+      learningRules: learningRulesForClient(runs, "kong", ["Todo mensaje externo de Kong necesita segmento, CTA y permiso claro."]),
     },
     {
       id: "clipping",
@@ -349,7 +359,7 @@ function buildMarketingClients(): MarketingClient[] {
       },
       nextActions: ["Separar cuentas por nicho.", "Crear allowlist de fuentes.", "Importar metricas para activar optimizer."],
       risks: ["copyright", "strikes", "cuentas bloqueadas", "fuentes no permitidas"],
-      learningRules: learningRulesForClient("clipping", ["Ningun clip escala sin fuente permitida y metricas importadas."]),
+      learningRules: learningRulesForClient(runs, "clipping", ["Ningun clip escala sin fuente permitida y metricas importadas."]),
     },
   ];
 
@@ -463,17 +473,18 @@ function buildWorkstreams(clients: MarketingClient[]) {
   ];
 }
 
-function buildSelfImprovement(clients: MarketingClient[]) {
-  const latestRun = learningRuns.at(-1) || null;
+function buildSelfImprovement(clients: MarketingClient[], runs: MarketingLearningRun[]) {
+  const hasSignals = clients.some((client) => client.metrics.signals > 0);
+  const latestRun = runs.at(-1) || null;
   return {
-    status: "active",
+    status: hasSignals ? "active" : "needs_data",
     cadence: "daily_review_plus_after_each_campaign",
     latestRun,
     loops: [
       {
         id: "daily-learning-loop",
         name: "Daily learning loop",
-        status: "active",
+        status: hasSignals ? "active" : "needs_data",
         steps: ["leer metricas", "comparar por cliente", "detectar ganador/perdedor", "actualizar regla", "crear siguiente test"],
       },
       {
@@ -503,7 +514,7 @@ function buildDetectedMarketingApps(clients: MarketingClient[]) {
   return clients.map((client) => ({
     clientId: client.id,
     clientName: client.name,
-    status: "ready" as const,
+    status: client.handoff?.status || "draft_only",
     sourceAgent: client.sourceAgent,
     detectedSources: client.detectedSources || [],
     capabilities: client.marketingCapabilities || [],
@@ -511,9 +522,11 @@ function buildDetectedMarketingApps(clients: MarketingClient[]) {
   }));
 }
 
-export function getMarketingCommandCenterSnapshot() {
+export function getMarketingCommandCenterSnapshot(userId: string) {
+  if (!userId?.trim()) throw new Error("Authenticated owner is required");
   loadLearningRuns();
-  const clients = buildMarketingClients();
+  const runs = learningRuns.filter((run) => run.ownerUserId === userId);
+  const clients = buildMarketingClients(userId, runs);
   const readyClients = clients.filter((client) => client.status === "ready").length;
   const activeClients = clients.filter((client) => client.status === "ready" || client.status === "active" || client.status === "approval_locked").length;
   const totalRevenueUsd = roundMoney(clients.reduce((sum, client) => sum + client.metrics.revenueUsd, 0));
@@ -544,7 +557,7 @@ export function getMarketingCommandCenterSnapshot() {
       totalSpendUsd,
       profitSignalUsd: roundMoney(totalRevenueUsd - totalSpendUsd),
       approvalsNeeded: clients.reduce((sum, client) => sum + (client.status === "approval_locked" ? 1 : 0), 0),
-      learningRuns: learningRuns.length,
+      learningRuns: runs.length,
     },
     operatingModel: {
       mission: "Crear demanda y ventas para todos los trabajos de Robert como una agencia interna con subagentes especializados.",
@@ -562,8 +575,8 @@ export function getMarketingCommandCenterSnapshot() {
     clients,
     detectedMarketingApps: buildDetectedMarketingApps(clients),
     workstreams: buildWorkstreams(clients),
-    selfImprovement: buildSelfImprovement(clients),
-    recentLearningRuns: [...learningRuns].slice(-8).reverse(),
+    selfImprovement: buildSelfImprovement(clients, runs),
+    recentLearningRuns: [...runs].slice(-8).reverse(),
     executiveSummary: {
       headline: `Marketing CMO global activo con ${readyClients}/${clients.length} clientes internos ready.`,
       nextCommand:
@@ -575,23 +588,19 @@ export function getMarketingCommandCenterSnapshot() {
   };
 }
 
-export function runMarketingCommandCenterDay(input: Partial<MarketingCommandCenterDayInput> = {}) {
+export function runMarketingCommandCenterDay(input: Partial<MarketingCommandCenterDayInput>, userId: string) {
   const parsed = marketingCommandCenterDaySchema.parse(input);
   loadLearningRuns();
-  const snapshot = getMarketingCommandCenterSnapshot();
+  const snapshot = getMarketingCommandCenterSnapshot(userId);
   const targetClients = parsed.focusClientId === "all"
     ? snapshot.clients
     : snapshot.clients.filter((client) => client.id === parsed.focusClientId);
   const clientsToReview = targetClients.length ? targetClients : snapshot.clients;
-  const rulesUpdated = clientsToReview.map((client) => {
-    if (client.metrics.orders > 0 || client.metrics.revenueUsd > 0) {
-      return `${client.name}: repetir angulos que generen revenue y medir siguiente batch antes de subir gasto.`;
-    }
-    if (client.status === "needs_setup" || client.status === "needs_data") {
-      return `${client.name}: completar datos base y metricas antes de pedir autoposting o paid ads.`;
-    }
-    return `${client.name}: mantener organic/draft testing y pedir approval solo para acciones externas.`;
-  });
+  const idempotencyKey = parsed.idempotencyKey || new Date().toISOString().slice(0, 10);
+  const previous = learningRuns.find((run) => run.ownerUserId === userId && run.focusClientId === parsed.focusClientId && run.idempotencyKey === idempotencyKey);
+  if (previous) return { status: "completed" as const, summary: previous.summary, safety: { externalActionsBlocked: true, spentUsd: 0, publishedExternally: 0, clientDataMixed: false }, learning: previous, snapshot, reused: true };
+  // A planning review is not evidence of improvement or causal learning.
+  const rulesUpdated: string[] = [];
   const improvementsQueued = clientsToReview.flatMap((client) => client.nextActions.slice(0, 2).map((action) => `${client.name}: ${action}`));
   const safetyBlocks = [
     "Publicacion externa bloqueada.",
@@ -601,17 +610,18 @@ export function runMarketingCommandCenterDay(input: Partial<MarketingCommandCent
     "Mezcla de datos entre clientes bloqueada.",
   ];
   const run: MarketingLearningRun = {
-    id: `mkt-run-${Date.now()}`,
+    id: `mkt-run-${createHash("sha256").update(JSON.stringify([userId, parsed.focusClientId, idempotencyKey])).digest("hex").slice(0, 24)}`,
+    ownerUserId: userId, idempotencyKey,
     createdAt: new Date().toISOString(),
     focusClientId: parsed.focusClientId,
     clientsReviewed: clientsToReview.length,
     improvementsQueued,
     rulesUpdated,
     safetyBlocks,
-    summary: `Marketing CMO reviso ${clientsToReview.length} cliente(s), actualizo ${rulesUpdated.length} regla(s) y dejo ${improvementsQueued.length} mejora(s) en cola sin ejecutar acciones externas.`,
+    summary: `Marketing CMO reviso ${clientsToReview.length} cliente(s), registro ${rulesUpdated.length} aprendizaje(s) verificado(s) y dejo ${improvementsQueued.length} mejora(s) en cola sin ejecutar acciones externas.`,
   };
+  writeLearningRuns([...learningRuns, run]);
   learningRuns.push(run);
-  persistLearningRuns();
 
   return {
     status: "completed" as const,
@@ -623,7 +633,7 @@ export function runMarketingCommandCenterDay(input: Partial<MarketingCommandCent
       clientDataMixed: false,
     },
     learning: run,
-    snapshot: getMarketingCommandCenterSnapshot(),
+    snapshot: getMarketingCommandCenterSnapshot(userId),
   };
 }
 

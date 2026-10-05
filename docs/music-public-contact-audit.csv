@@ -1,0 +1,6 @@
+entity,category,email,purpose,source_url,reviewed_at,status,deliverability,notes
+NTS,radio,press@ntslive.co.uk,press,https://www.nts.live/about,2026-10-05,public_source_confirmed,not_tested,Official about page; not a DJ submission address
+NTS / SOUP.WORLD,radio,hello@soup.world,partnerships,https://www.nts.live/about,2026-10-05,public_source_confirmed,not_tested,Official about page; city not independently verified
+Dispatch Collective,collective,info@dispatchcollective.net,event_accessibility,https://ra.co/events/1598273,2026-10-05,historical_public_listing,not_tested,Promoter event dated 2022-10-29; current validity not verified
+Ray MD,DJ,,booking,https://x.com/DJRAYMD,2026-10-05,source_access_blocked,not_tested,Profile returned 403; search snippet withheld from verified contacts
+Defected Records,label,,events_licensing_press,https://defected.com/,2026-10-05,email_not_readable,not_tested,Official page exposes protected email links; no email guessed

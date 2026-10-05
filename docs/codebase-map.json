@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-28T07:52:10.510Z",
-  "repoRoot": "/private/tmp/blackroom-learning-20260928",
+  "generatedAt": "2026-10-05T10:11:00.861Z",
+  "repoRoot": "/workspace/blackops-reminder",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -122,39 +122,44 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 654,
-    "filesIndexed": 571,
-    "imports": 1935,
+    "filesVisible": 662,
+    "filesIndexed": 577,
+    "imports": 1957,
     "routes": 495,
-    "symbols": 12800
+    "symbols": 12857
   },
   "directories": {
-    "docs": {
-      "files": 31,
-      "indexed": 30,
+    "client/src": {
+      "files": 117,
+      "indexed": 115,
       "kinds": {
-        "docs": 31
+        "client-lib": 8,
+        "other": 3,
+        "client-component": 22,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-page": 26
       }
     },
-    "script": {
-      "files": 76,
-      "indexed": 71,
+    "docs": {
+      "files": 33,
+      "indexed": 31,
       "kinds": {
-        "script": 76
+        "docs": 33
       }
     },
     "server": {
-      "files": 133,
-      "indexed": 129,
+      "files": 134,
+      "indexed": 130,
       "kinds": {
-        "server": 133
+        "server": 134
       }
     },
     "tests": {
-      "files": 119,
-      "indexed": 116,
+      "files": 123,
+      "indexed": 119,
       "kinds": {
-        "test": 119
+        "test": 123
       }
     },
     ".": {
@@ -202,24 +207,19 @@
         "other": 16
       }
     },
-    "client/src": {
-      "files": 116,
-      "indexed": 114,
-      "kinds": {
-        "other": 3,
-        "client-component": 22,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7,
-        "client-page": 26
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 76,
+      "indexed": 71,
+      "kinds": {
+        "script": 76
       }
     },
     "scripts": {
@@ -400,6 +400,7 @@
         "@/components/ui/button",
         "@/components/ui/toaster",
         "@/components/ui/tooltip",
+        "@/lib/auth-state",
         "@/pages/auth",
         "@tanstack/react-query",
         "react",
@@ -422,12 +423,10 @@
         "DropshippingCeoPage",
         "GitHubAgentPage",
         "InvestmentDetail",
-        "LOCAL_AUTH_USER_KEY",
         "LegalCompliancePage",
         "LocalNewsPublicPage",
         "MarketingCommandCenterPage",
         "NotFound",
-        "PREVIEW_USER",
         "PageLoading",
         "Portfolio",
         "Projects",
@@ -438,16 +437,9 @@
         "RevenueEnginePage",
         "Router",
         "ToolsPage",
-        "contentType",
-        "getLocalPreviewAuth",
-        "hasLocalPreviewAuth",
-        "isLocalPreview",
         "isPublicNewsRoute",
-        "localAuth",
         "logoutMutation",
-        "response",
-        "stored",
-        "user"
+        "response"
       ],
       "routes": [
         "/",
@@ -2528,6 +2520,20 @@
       "routes": []
     },
     {
+      "path": "client/src/lib/auth-state.ts",
+      "kind": "client-lib",
+      "imports": [],
+      "exports": [
+        "AuthState",
+        "readAuthState"
+      ],
+      "symbols": [
+        "payload",
+        "readAuthState"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/lib/parse-task.ts",
       "kind": "client-lib",
       "imports": [
@@ -2980,49 +2986,11 @@
       ],
       "symbols": [
         "AuthMode",
-        "LOCAL_AUTH_USER_KEY",
-        "LOCAL_PASSKEY_KEY",
-        "LOCAL_USERS_KEY",
-        "LocalPasskey",
-        "LocalUser",
-        "PREVIEW_USER",
         "authMutation",
-        "binary",
-        "bytes",
         "canSubmit",
-        "cleanUsername",
-        "contentType",
-        "credential",
-        "credentialId",
-        "digest",
-        "enablePasskey",
-        "encoded",
-        "fromBase64Url",
-        "getLocalUsers",
-        "hashPassword",
-        "isLocalPreview",
-        "localSubmitAuth",
-        "loginAsPreviewUser",
-        "loginWithPasskey",
-        "normalized",
-        "padded",
-        "passkey",
-        "passkeyConfigured",
-        "passkeyLoginMutation",
-        "passkeySetupMutation",
-        "passkeySupported",
-        "passwordHash",
         "payload",
-        "previewLoginMutation",
-        "randomBytes",
-        "rawId",
         "response",
-        "setCurrentLocalUser",
-        "stored",
-        "submitAuth",
-        "toBase64Url",
-        "user",
-        "users"
+        "submitAuth"
       ],
       "routes": []
     },
@@ -3910,6 +3878,14 @@
       "routes": []
     },
     {
+      "path": "docs/agents-office-cloud-acceptance.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/assistant-stabilization-plan.md",
       "kind": "docs",
       "imports": [],
@@ -4757,6 +4733,7 @@
       "kind": "script",
       "imports": [
         "./blackroom-metricool-csv-bridge.mjs",
+        "./blackroom-metricool-exporter.mjs",
         "./blackroom-remote-sync.mjs",
         "node:child_process",
         "node:crypto",
@@ -4788,6 +4765,7 @@
         "data",
         "deadline",
         "entries",
+        "error",
         "execFileAsync",
         "expected",
         "extracted",
@@ -5106,18 +5084,25 @@
         "METRICOOL_EXPORT_PAGES",
         "acquireMetricoolExports",
         "buildVerifiedMetricoolExport",
+        "deliverMetricoolExports",
         "metricoolPublicationInstant",
         "runMetricoolExporter"
       ],
       "symbols": [
         "METRICOOL_EXPORT_PAGES",
+        "acquire",
         "acquireMetricoolExports",
         "buildVerifiedMetricoolExport",
+        "complete",
         "context",
         "decoder",
+        "deliverMetricoolExports",
+        "detail",
         "downloadButton",
+        "errors",
         "failure",
         "format",
+        "importedByNetwork",
         "imports",
         "instant",
         "match",
@@ -5132,8 +5117,11 @@
         "result",
         "root",
         "runMetricoolExporter",
+        "samples",
+        "status",
         "stream",
-        "temporary"
+        "temporary",
+        "transient"
       ],
       "routes": []
     },
@@ -9905,6 +9893,7 @@
       "path": "server/automation-registry.ts",
       "kind": "server",
       "imports": [
+        "./automation-schedule",
         "./storage",
         "./trust-policy",
         "@shared/schema"
@@ -9914,7 +9903,7 @@
         "ScheduledAutomationRunOutcome",
         "buildScheduledAutomationRunInput",
         "ensureDefaultAutomations",
-        "getNextRunAt",
+        "getNextRunAt ",
         "recordManualAutomationRun",
         "recordScheduledAutomationRun"
       ],
@@ -9925,20 +9914,47 @@
         "automation",
         "automations",
         "buildScheduledAutomationRunInput",
-        "data",
-        "daysUntil",
+        "definitions",
+        "due",
         "ensureDefaultAutomations",
         "existing",
         "existingAutomation",
-        "getNextRunAt",
         "isRunnable",
+        "metadata",
+        "missed",
+        "nextRunAt",
         "now",
         "pendingAction",
         "recordManualAutomationRun",
         "recordScheduledAutomationRun",
-        "startedAt",
-        "target",
-        "targetDay"
+        "scheduleKind",
+        "startedAt"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/automation-schedule.ts",
+      "kind": "server",
+      "imports": [
+        "./scheduler-time"
+      ],
+      "exports": [
+        "getNextRunAt"
+      ],
+      "symbols": [
+        "calendar",
+        "candidate",
+        "clock",
+        "data",
+        "getNextRunAt",
+        "hour",
+        "instant",
+        "local",
+        "matches",
+        "minutes",
+        "offsets",
+        "previous",
+        "target"
       ],
       "routes": []
     },
@@ -10152,6 +10168,7 @@
         "./blackroom-learning-panel",
         "./blackroom-metricool-bridge",
         "./blackroom-remote-control",
+        "./blackroom-verified-learning",
         "./single-user-owner",
         "./user-context",
         "express",
@@ -10207,6 +10224,7 @@
         "filePath",
         "hasBlackRoomChatAccess",
         "hasValidBlackRoomRemoteToken",
+        "id",
         "imports",
         "index",
         "info",
@@ -10465,6 +10483,7 @@
         "belowTarget",
         "bitrate",
         "blackRoomVideoUrl",
+        "block",
         "bounded",
         "buildBlackRoomRenderArgs",
         "buildBlackRoomVideoFilter",
@@ -10477,10 +10496,11 @@
         "chooseLanguage",
         "cleaned",
         "commitBlackRoomReservation",
+        "comparable",
         "controlledTest",
         "counts",
-        "creativeStrategy",
         "current",
+        "daypart",
         "distributedSlotSelected",
         "dj",
         "durationSeconds",
@@ -10489,11 +10509,13 @@
         "extractBlackRoomDj",
         "failedVideos",
         "findBlackRoomDropOffset",
+        "first",
         "format",
         "fresh",
         "gap",
         "history",
         "horizontal",
+        "instant",
         "intervals",
         "isActionableJob",
         "isOwnedBlackRoomMetadata",
@@ -10512,6 +10534,8 @@
         "networks",
         "now",
         "occupied",
+        "pairCandidates",
+        "pairs",
         "parseBlackRoomEnergySamples",
         "planBlackRoomDeterministicEdit",
         "preferFreshSource",
@@ -10905,13 +10929,20 @@
       "symbols": [
         "blackRoomLearningPanelHtml",
         "blackRoomLearningPanelScript",
+        "candidates",
+        "collector",
         "content",
+        "coverage",
         "decisions",
+        "detail",
         "item",
         "labels",
+        "latest",
         "lines",
         "observed",
         "renderLearning",
+        "source",
+        "stale",
         "stamp",
         "target"
       ],
@@ -11385,8 +11416,10 @@
         "block",
         "blocks",
         "canonicalLearningPostId",
+        "comparisonBlock",
         "counts",
         "dates",
+        "declared",
         "deduped",
         "entries",
         "evaluateBlackRoomLearning",
@@ -11828,6 +11861,7 @@
         "isOverdue",
         "items",
         "latestRun",
+        "missed",
         "now",
         "overdue",
         "overdueRuns",
@@ -15242,6 +15276,7 @@
       "kind": "server",
       "imports": [
         "./dropshipping-ceo",
+        "node:crypto",
         "node:fs",
         "node:path",
         "zod"
@@ -15275,6 +15310,8 @@
         "filePath",
         "getLearningRunsPath",
         "getMarketingCommandCenterSnapshot",
+        "hasSignals",
+        "idempotencyKey",
         "improvementsQueued",
         "latestRun",
         "learnedRules",
@@ -15286,19 +15323,21 @@
         "normalized",
         "parsed",
         "persistLearningRuns",
+        "previous",
         "raw",
         "readLearningRuns",
         "readyClients",
         "resetMarketingCommandCenterForTests",
         "roundMoney",
-        "rulesUpdated",
         "runFocusMatchesRule",
         "runMarketingCommandCenterDay",
+        "runs",
         "safeSnapshot",
         "safetyBlocks",
         "setMarketingCommandCenterLearningPathForTests",
         "snapshot",
         "targetClients",
+        "temporary",
         "totalRevenueUsd",
         "totalSpendUsd",
         "withReadyHandoff",
@@ -15450,6 +15489,7 @@
         "metricoolMcpJson",
         "metricoolMcpRows",
         "midpoint",
+        "missingBrands",
         "nested",
         "normalizeId",
         "normalized",
@@ -15473,6 +15513,7 @@
         "reactions",
         "readLedger",
         "readStoredState",
+        "readinessErrors",
         "record",
         "recordObjects",
         "recorder",
@@ -19345,9 +19386,28 @@
       "exports": [],
       "symbols": [
         "automation",
+        "definitions",
         "finishedAt",
+        "metricool",
+        "originalGet",
+        "originalUpdate",
+        "row",
         "run",
         "startedAt"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/automation-schedule.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/automation-schedule",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "schedule"
       ],
       "routes": []
     },
@@ -19493,6 +19553,8 @@
       "kind": "test",
       "imports": [
         "../server/blackroom-deterministic-editor",
+        "../server/blackroom-learning-observations",
+        "../server/blackroom-verified-learning",
         "node:assert/strict",
         "node:test"
       ],
@@ -19501,20 +19563,29 @@
         "atQuota",
         "base",
         "committing",
+        "date",
+        "djs",
         "download",
         "explicit",
         "explored",
         "full",
+        "id",
+        "input",
         "inventory",
         "ledger",
         "ledgerPending",
         "next",
+        "now",
         "output",
         "plan",
+        "publishedAt",
         "queue",
         "render",
+        "result",
         "samples",
         "selected",
+        "stale",
+        "start",
         "state",
         "used"
       ],
@@ -19605,6 +19676,7 @@
       "exports": [],
       "symbols": [
         "context",
+        "scripts",
         "target"
       ],
       "routes": []
@@ -19739,11 +19811,30 @@
       "imports": [
         "../script/blackroom-metricool-exporter.mjs",
         "node:assert/strict",
-        "node:test"
+        "node:fs/promises",
+        "node:path",
+        "node:test",
+        "node:util",
+        "node:vm"
       ],
       "exports": [],
       "symbols": [
-        "result"
+        "batches",
+        "complete",
+        "context",
+        "exported",
+        "failure",
+        "imports",
+        "index",
+        "input",
+        "locator",
+        "observedAt",
+        "page",
+        "partial",
+        "payloads",
+        "result",
+        "source",
+        "status"
       ],
       "routes": []
     },
@@ -20032,7 +20123,9 @@
       "exports": [],
       "symbols": [
         "automation",
+        "definition",
         "health",
+        "now",
         "run"
       ],
       "routes": []
@@ -20124,6 +20217,20 @@
         "readyBackup",
         "readyDb",
         "report"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/client-auth-state.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/lib/auth-state",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "payload"
       ],
       "routes": []
     },
@@ -21880,6 +21987,35 @@
       "routes": []
     },
     {
+      "path": "tests/local-auth-postgres.integration.test.ts",
+      "kind": "test",
+      "imports": [
+        "express",
+        "node:assert/strict",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "app",
+        "call",
+        "closeServer",
+        "connectionString",
+        "cookie",
+        "logout",
+        "me",
+        "pool",
+        "registered",
+        "server",
+        "start",
+        "stored",
+        "stores",
+        "url",
+        "user"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/local-auth.test.ts",
       "kind": "test",
       "imports": [
@@ -21987,8 +22123,13 @@
       ],
       "exports": [],
       "symbols": [
+        "badPath",
         "blackRoom",
+        "dir",
+        "first",
         "learningPath",
+        "other",
+        "recovered",
         "result",
         "snapshot",
         "testDir"
@@ -22017,6 +22158,7 @@
         "normalized",
         "now",
         "parsed",
+        "persisted",
         "post",
         "postId",
         "publicStatus",
@@ -22684,6 +22826,7 @@
     "tests/app-qa-agent.test.ts",
     "tests/assistant-chat-flow.test.ts",
     "tests/automation-registry.test.ts",
+    "tests/automation-schedule.test.ts",
     "tests/background-scheduler-policy.test.ts",
     "tests/blackroom-chat.test.ts",
     "tests/blackroom-content-agent.test.ts",
@@ -22711,7 +22854,9 @@
     "tests/ceo-readiness-cli.test.ts",
     "tests/ceo-readiness.test.ts",
     "tests/ceo-smoke-cli.test.ts",
+    "tests/client-auth-state.test.ts",
     "tests/clippers-agent.test.ts",
+    "tests/clippers-credential-closeout.test.ts",
     "tests/clippers-local-news-agent.test.ts",
     "tests/clippers-local-news-growth.test.ts",
     "tests/clippers-local-news-metricool.test.ts",
@@ -22737,6 +22882,7 @@
     "tests/google-drive-oauth.test.ts",
     "tests/legal-compliance-agent.test.ts",
     "tests/local-auth-cli.test.ts",
+    "tests/local-auth-postgres.integration.test.ts",
     "tests/local-auth.test.ts",
     "tests/local-news-growth-scout.test.ts",
     "tests/local-youtube-queue.test.ts",

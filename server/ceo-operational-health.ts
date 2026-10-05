@@ -43,6 +43,8 @@ function worstStatus(items: CeoOperationalHealthItem[]): CeoOperationalHealthSta
 
 function isOverdue(definition: AutomationDefinition, now: Date): boolean {
   if (definition.status !== "active") return false;
+  const missed = new Date(String((definition.metadata as { missedRunAt?: string } | null)?.missedRunAt || ""));
+  if (Number.isFinite(missed.getTime()) && missed < now && (!definition.lastRunAt || definition.lastRunAt < missed)) return true;
   if (!definition.nextRunAt) return false;
   return definition.nextRunAt.getTime() < now.getTime();
 }
@@ -69,7 +71,7 @@ export function buildCeoOperationalHealth(input: {
     const overdue = isOverdue(automation, now);
     const status: CeoOperationalHealthStatus = automation.status === "failed" || latestRun?.status === "failed"
       ? "blocked"
-      : overdue || latestRun?.status === "pending_approval" || automation.status === "paused"
+      : overdue || latestRun?.status === "pending_approval" || automation.status === "paused" || (automation.status === "active" && !latestRun && !automation.lastRunAt)
       ? "warning"
       : "ready";
     const detail = automation.status === "failed"
@@ -79,7 +81,7 @@ export function buildCeoOperationalHealth(input: {
       : latestRun?.status === "pending_approval"
       ? "Latest automation run is waiting for approval."
       : overdue
-      ? "Next run time is in the past."
+      ? "A scheduled run is in the past without execution evidence."
       : automation.status === "paused"
       ? "Automation is paused."
       : latestRun

@@ -111,7 +111,7 @@ test("does not use explicit DEFAULT_USER_ID as request authentication", () => {
 test("limits mock fallback to dev/test unless explicitly enabled", () => {
   assert.equal(withEnv({ NODE_ENV: "development", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => allowsDevUserFallback()), true);
   assert.equal(withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => allowsDevUserFallback()), false);
-  assert.equal(withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: "true" }, () => resolveCurrentUserId(requestWithHeader())), DEFAULT_DEV_USER_ID);
+  assert.equal(withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: "true" }, () => resolveCurrentUserId(requestWithHeader())), null);
   assert.equal(withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => resolveCurrentUserId(requestWithHeader())), null);
 });
 
@@ -222,4 +222,13 @@ test("auth middleware rejects protected APIs without user context", () => {
     assert.equal(statusCode, 401);
     assert.deepEqual(body, { error: "Authentication required", reason: "missing_user_context" });
   });
+});
+
+
+test("unset runtime and production override cannot authenticate a mock user", () => {
+  for (const env of [undefined, "production", "staging"]) {
+    for (const flag of [undefined, "true"]) {
+      assert.equal(withEnv({ NODE_ENV: env, ALLOW_DEV_USER_FALLBACK: flag }, () => resolveCurrentUserId(requestWithHeader("spoofed"))), null);
+    }
+  }
 });

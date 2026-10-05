@@ -7587,7 +7587,7 @@ const DEFAULT_ACCOUNTS: ClipperAccount[] = [
     platformAccounts: defaultPlatformAccounts("sportsdailyclips", "Sports Daily Clips"),
     dailyClipTarget: 10,
     weeklyViewsGoal: 1_000_000,
-    lastWeekViews: 286_000,
+    lastWeekViews: 0,
     status: "needs_connection",
     contentPolicy: "Use official highlights, licensed footage, owned commentary, or creator-approved clips.",
   },
@@ -7599,7 +7599,7 @@ const DEFAULT_ACCOUNTS: ClipperAccount[] = [
     platformAccounts: defaultPlatformAccounts("memeradarclips", "Meme Radar"),
     dailyClipTarget: 12,
     weeklyViewsGoal: 1_000_000,
-    lastWeekViews: 412_000,
+    lastWeekViews: 0,
     status: "needs_connection",
     contentPolicy: "Use original edits, permissioned templates, public-domain media, or remix-safe assets.",
   },
@@ -7611,7 +7611,7 @@ const DEFAULT_ACCOUNTS: ClipperAccount[] = [
     platformAccounts: defaultPlatformAccounts("streamerpulseclips", "Streamer Pulse"),
     dailyClipTarget: 8,
     weeklyViewsGoal: 1_000_000,
-    lastWeekViews: 198_000,
+    lastWeekViews: 0,
     status: "needs_connection",
     contentPolicy: "Use creator allowlists, owned VODs, or explicit clip permission before publishing.",
   },
@@ -38393,16 +38393,18 @@ function buildRobertEvidenceCloseoutQueue(fixPack: ClipperLaunchEvidenceFixPackS
   };
 }
 
-function buildRobertCredentialCloseoutQueue(credentialSetup: ClipperCredentialSetupSummary): ClipperRobertCredentialCloseoutQueue {
+export function buildRobertCredentialCloseoutQueue(credentialSetup: ClipperCredentialSetupSummary): ClipperRobertCredentialCloseoutQueue {
   const diagnostic = credentialSetup.credentialDropDiagnostic;
-  const pendingEnvVars = uniqueStrings(diagnostic.files.flatMap((file) => file.pendingEnvVars)).sort();
+  const filePendingEnvVars = uniqueStrings(diagnostic.files.flatMap((file) => file.pendingEnvVars)).sort();
   const checkedEnvVars = uniqueStrings([
     ...diagnostic.acceptedEnvVars,
-    ...pendingEnvVars,
+    ...filePendingEnvVars,
     ...CREDENTIAL_ENV_REQUIREMENTS.flatMap((requirement) => requirement.requiredEnvVars),
     "GOOGLE_DRIVE_REFRESH_TOKEN",
   ]).sort();
   const configuredEnvVars = checkedEnvVars.filter((envVar) => hasRealValue(process.env[envVar]));
+  const missingEnvVars = checkedEnvVars.filter((envVar) => !configuredEnvVars.includes(envVar));
+  const pendingEnvVars = uniqueStrings([...filePendingEnvVars, ...missingEnvVars]).filter((envVar) => !configuredEnvVars.includes(envVar)).sort();
   const localEnvFiles = LOCAL_ENV_FILES.filter((fileName) => existsSync(path.join(process.cwd(), fileName)));
   return {
     status: diagnostic.status,
@@ -38412,7 +38414,7 @@ function buildRobertCredentialCloseoutQueue(credentialSetup: ClipperCredentialSe
     runtimeEnv: {
       checkedEnvVars,
       configuredEnvVars,
-      missingEnvVars: checkedEnvVars.filter((envVar) => !configuredEnvVars.includes(envVar)),
+      missingEnvVars,
       localEnvFiles,
     },
     acceptedEnvVars: diagnostic.acceptedEnvVars,
@@ -38440,7 +38442,7 @@ function buildRobertCredentialCloseoutQueue(credentialSetup: ClipperCredentialSe
       rootCandidates: diagnostic.totals.rootCandidates,
       importEligible: diagnostic.totals.importEligible,
       templateFiles: diagnostic.totals.templateFiles,
-      pendingEnvVars: diagnostic.totals.pendingEnvVars,
+      pendingEnvVars: pendingEnvVars.length,
       fileErrors: diagnostic.totals.fileErrors,
     },
     files: diagnostic.files.slice(0, 10).map((file) => ({
@@ -38454,7 +38456,7 @@ function buildRobertCredentialCloseoutQueue(credentialSetup: ClipperCredentialSe
       issue: file.issue,
       nextStep: file.nextStep,
     })),
-    nextStep: diagnostic.nextStep,
+    nextStep: missingEnvVars.length ? `Faltan ${missingEnvVars.length} variables de configuración en el runtime; revisar el estado antes de activar conexiones.` : diagnostic.nextStep,
   };
 }
 
