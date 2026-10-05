@@ -124,12 +124,15 @@ test("Shopify connection routes are gated to the configured single-user owner", 
 
 test("shared GitHub and Shopify connector routes reject authenticated non-owners at runtime", async () => {
   const previousDefaultUserId = process.env.DEFAULT_USER_ID;
-  const previousAllowDevFallback = process.env.ALLOW_DEV_USER_FALLBACK;
   process.env.DEFAULT_USER_ID = "connector-owner";
-  process.env.ALLOW_DEV_USER_FALLBACK = "true";
 
   const app = express();
   app.use(express.json());
+  // Supply an authenticated request fixture; dev headers are not authentication.
+  app.use((req, _res, next) => {
+    (req as typeof req & { user: { id: string } }).user = { id: "authenticated-non-owner" };
+    next();
+  });
   const server = createServer(app);
   await registerRoutes(server, app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -149,7 +152,7 @@ test("shared GitHub and Shopify connector routes reject authenticated non-owners
     for (const [method, route] of requests) {
       const response = await fetch(`${baseUrl}${route}`, {
         method,
-        headers: { "content-type": "application/json", "x-user-id": "authenticated-non-owner" },
+        headers: { "content-type": "application/json" },
       });
       assert.equal(response.status, 403, `${method} ${route} should reject a non-owner`);
     }
@@ -157,8 +160,6 @@ test("shared GitHub and Shopify connector routes reject authenticated non-owners
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     if (previousDefaultUserId === undefined) delete process.env.DEFAULT_USER_ID;
     else process.env.DEFAULT_USER_ID = previousDefaultUserId;
-    if (previousAllowDevFallback === undefined) delete process.env.ALLOW_DEV_USER_FALLBACK;
-    else process.env.ALLOW_DEV_USER_FALLBACK = previousAllowDevFallback;
   }
 });
 
