@@ -94,6 +94,13 @@ app.get("/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt", (_req, res) => {
     .send("tiktok-developers-site-verification=xXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP\n");
 });
 
+app.get("/google057a15d5c243008e.html", (_req, res) => {
+  res
+    .status(200)
+    .type("text/plain")
+    .send("google-site-verification: google057a15d5c243008e.html");
+});
+
 function renderClipperPublicLegalHtml(title: string, body: string[]): string {
   const escapedTitle = title.replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return [
@@ -166,15 +173,15 @@ app.get("/clippers/review-demo", (_req, res) => {
     "<head>",
     '<meta charset="utf-8" />',
     '<meta name="viewport" content="width=device-width, initial-scale=1" />',
-    "<title>Clippers App Review Demo</title>",
+    "<title>Clippers Creator Autopilot</title>",
     '<style>body{font-family:Inter,Arial,sans-serif;margin:0;background:#09090b;color:#f4f4f5}main{max-width:980px;margin:0 auto;padding:40px 20px 56px}.hero,.card{border:1px solid #27272a;background:#18181b;border-radius:8px;padding:24px;margin:14px 0}h1,h2{line-height:1.15}p,li{line-height:1.65;color:#d4d4d8}a{color:#67e8f9}.tag{color:#a7f3d0;font-size:12px}</style>',
     "</head>",
     "<body>",
     "<main>",
     '<section class="hero">',
-    '<p class="tag">Public reviewer demo, no login required</p>',
-    "<h1>Clippers App Review Demo</h1>",
-    "<p>Clippers is an internal, owner-only uploader for channels owned or managed by the operator. It prepares videos, verifies rights and QA evidence, checks the exact authorized YouTube channel through OAuth, uploads approved files and metadata, and reconciles the exact status returned by YouTube.</p>",
+    '<p class="tag">Public home, no login required</p>',
+    "<h1>Clippers Creator Autopilot</h1>",
+    "<p>This is the public home of Clippers Creator Autopilot, an internal, owner-only YouTube uploader for channels owned or managed by the operator. There is no public signup or login. It prepares videos, verifies rights and QA evidence, checks the exact authorized YouTube channel through OAuth, uploads approved files and metadata, and reconciles the exact status returned by YouTube.</p>",
     "<p>This demo page is read-only. It does not expose tokens, secrets, private user data, or live publishing controls.</p>",
     "<p><strong>Compliance status:</strong> this page documents the client for review; it does not claim Google or YouTube approval. Public or scheduled publishing remains blocked until any required API compliance audit is actually approved and recorded.</p>",
     "</section>",

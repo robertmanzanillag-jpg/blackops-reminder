@@ -79,3 +79,34 @@ test("early public routes in server index carry the same required compliance lin
   assert.doesNotMatch(source, /blackops@reminder\.app/i);
   assert.doesNotMatch(source, /Tokens are encrypted server-side/i);
 });
+
+test("public review route uses the exact app name and identifies the owner-only homepage", async () => {
+  const source = await readFile(new URL("../server/index.ts", import.meta.url), "utf8");
+  const route = source.match(
+    /app\.get\("\/clippers\/review-demo"[\s\S]*?\n\}\);/,
+  )?.[0];
+
+  assert.ok(route, "expected the public review route to exist");
+  assert.match(route, /<title>Clippers Creator Autopilot<\/title>/);
+  assert.match(route, /<h1>Clippers Creator Autopilot<\/h1>/);
+  assert.match(route, /public home of Clippers Creator Autopilot/i);
+  assert.match(route, /owner-only YouTube uploader/i);
+  assert.match(route, /no public signup or login/i);
+  assert.match(route, /Public home, no login required/i);
+  assert.doesNotMatch(route, /<title>Clippers App Review Demo<\/title>/);
+});
+
+test("Google Search Console verification route returns the exact public file contract", async () => {
+  const source = await readFile(new URL("../server/index.ts", import.meta.url), "utf8");
+  const route = source.match(
+    /app\.get\("\/google057a15d5c243008e\.html"[\s\S]*?\n\}\);/,
+  )?.[0];
+
+  assert.ok(route, "expected the Google verification route to exist");
+  assert.match(route, /\.status\(200\)/);
+  assert.match(route, /\.type\("text\/plain"\)/);
+  assert.match(
+    route,
+    /\.send\("google-site-verification: google057a15d5c243008e\.html"\)/,
+  );
+});
