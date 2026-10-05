@@ -1843,7 +1843,7 @@ export async function runAppQaScan(
     incidents: await storage.getAppIncidentsForProject(app.id),
     errors: await storage.getAppErrorEvents(app.id, 20),
   })));
-  const visualReport = shouldRunVisualScout({ userId, notify, allowDailyDigest, targetContext, now: startedAt })
+  const visualReport = (notify || recordHistory || allowDailyDigest) && shouldRunVisualScout({ userId, notify, allowDailyDigest, targetContext, now: startedAt })
     ? await runVisualClickScout()
     : buildSkippedVisualScoutReport();
 
@@ -1902,7 +1902,8 @@ export async function runAppQaScan(
     improvementIdeas,
   };
 
-  if (notify || shouldSendAutomaticAlert(userId, result)) {
+  // Passive status scans must neither send alerts nor consume alert cooldown.
+  if (notify || (recordHistory && shouldSendAutomaticAlert(userId, result))) {
     const telegramConfig = await storage.getTelegramConfig(userId);
     const botToken = getTelegramBotToken();
     if (telegramConfig?.enabled && telegramConfig.chatId && botToken) {
