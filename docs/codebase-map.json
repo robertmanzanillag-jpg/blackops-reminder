@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-05T10:39:40.091Z",
+  "generatedAt": "2026-10-05T23:43:27.672Z",
   "repoRoot": "/workspace/blackops-reminder",
   "packageName": "rest-express",
   "scripts": {
@@ -122,20 +122,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 663,
-    "filesIndexed": 578,
-    "imports": 1957,
-    "routes": 495,
-    "symbols": 12857
+    "filesVisible": 670,
+    "filesIndexed": 585,
+    "imports": 1991,
+    "routes": 497,
+    "symbols": 12931
   },
   "directories": {
-    "docs": {
-      "files": 34,
-      "indexed": 32,
-      "kinds": {
-        "docs": 34
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -193,6 +186,13 @@
         "client-page": 26
       }
     },
+    "docs": {
+      "files": 34,
+      "indexed": 32,
+      "kinds": {
+        "docs": 34
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -216,10 +216,10 @@
       }
     },
     "server": {
-      "files": 134,
-      "indexed": 130,
+      "files": 136,
+      "indexed": 132,
       "kinds": {
-        "server": 134
+        "server": 136
       }
     },
     "server/replit_integrations": {
@@ -244,10 +244,10 @@
       }
     },
     "tests": {
-      "files": 123,
-      "indexed": 119,
+      "files": 128,
+      "indexed": 124,
       "kinds": {
-        "test": 123
+        "test": 128
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -6773,6 +6773,7 @@
         "account",
         "acquireAutopilotLock",
         "addDedupeKeys",
+        "ambiguousDeliveryKeys",
         "attempts",
         "attentionRequired",
         "blockers",
@@ -6781,7 +6782,6 @@
         "callMetricoolMcp",
         "campaignExpiresAt",
         "candidates",
-        "candidatesById",
         "caption",
         "captionHasTag",
         "captionTags",
@@ -6806,6 +6806,7 @@
         "expectedHash",
         "expiresAt",
         "fetcher",
+        "foreignDestination",
         "formatter",
         "found",
         "hasDedupeCollision",
@@ -6839,6 +6840,8 @@
         "parts",
         "payload",
         "pendingByItemId",
+        "pendingForDestination",
+        "platform",
         "providers",
         "publication",
         "publicationDateTime",
@@ -6848,7 +6851,9 @@
         "queuedKeys",
         "raw",
         "receipt",
+        "receiptAccount",
         "receiptBase",
+        "receiptUserId",
         "reportDir",
         "requiredEnv",
         "requiredHashtags",
@@ -6875,6 +6880,8 @@
         "validateMediaReceipt",
         "validation",
         "value",
+        "verificationPending",
+        "verifiedDestination",
         "verifiedRecordId",
         "verifyMetricoolSchedule",
         "visit",
@@ -13265,15 +13272,53 @@
       "routes": []
     },
     {
+      "path": "server/db-pool.ts",
+      "kind": "server",
+      "imports": [
+        "node:perf_hooks",
+        "pg"
+      ],
+      "exports": [
+        "DatabasePoolCounts",
+        "DatabasePoolEvent",
+        "ObservedDatabasePool",
+        "databasePoolCounts",
+        "resolveDatabasePoolSettings",
+        "summarizeDatabaseError"
+      ],
+      "symbols": [
+        "ConnectCallback",
+        "DEFAULT_CONNECTION_TIMEOUT_MS",
+        "ObservedDatabasePool",
+        "PoolReporter",
+        "SLOW_ACQUISITION_MS",
+        "candidate",
+        "code",
+        "connectionTimeoutMillis",
+        "countsAtStart",
+        "databasePoolCounts",
+        "durationMs",
+        "message",
+        "raw",
+        "reason",
+        "record",
+        "resolveDatabasePoolSettings",
+        "startedAt",
+        "summarizeDatabaseError"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/db.ts",
       "kind": "server",
       "imports": [
         "./database-url",
-        "drizzle-orm/node-postgres",
-        "pg"
+        "./db-pool",
+        "drizzle-orm/node-postgres"
       ],
       "exports": [
-        "db"
+        "db",
+        "pool"
       ],
       "symbols": [
         "db",
@@ -14747,6 +14792,9 @@
       "kind": "server",
       "imports": [
         "./ceo-doctor-cli",
+        "./db",
+        "./db-pool",
+        "./project-monitor",
         "./push-notifications",
         "./storage",
         "./telegram",
@@ -14774,6 +14822,7 @@
         "isNowOffline",
         "message",
         "project",
+        "projectMonitor",
         "projects",
         "resolved",
         "response",
@@ -15783,6 +15832,29 @@
         "weekStart",
         "weeklyTasks",
         "yearlyGoals"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/project-monitor.ts",
+      "kind": "server",
+      "imports": [
+        "./db-pool",
+        "node:perf_hooks"
+      ],
+      "exports": [
+        "ProjectMonitorEvent",
+        "createProjectMonitor"
+      ],
+      "symbols": [
+        "Timer",
+        "cancel",
+        "createProjectMonitor",
+        "now",
+        "report",
+        "reporter",
+        "runNow",
+        "schedule"
       ],
       "routes": []
     },
@@ -17922,6 +17994,7 @@
       "kind": "server",
       "imports": [
         "./database-url",
+        "./db-pool",
         "./session-config-core",
         "connect-pg-simple",
         "express-session"
@@ -19338,6 +19411,34 @@
       "routes": []
     },
     {
+      "path": "tests/app-qa-status-readonly.test.mjs",
+      "kind": "test",
+      "imports": [
+        "esbuild",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test",
+        "node:url"
+      ],
+      "exports": [],
+      "symbols": [
+        "modules",
+        "notified",
+        "previousFetch",
+        "previousToken",
+        "previousVisual",
+        "registration",
+        "routes",
+        "temp"
+      ],
+      "routes": [
+        "/api/app-qa-agent/scan",
+        "/api/app-qa-agent/status"
+      ]
+    },
+    {
       "path": "tests/assistant-chat-flow.test.ts",
       "kind": "test",
       "imports": [
@@ -20158,7 +20259,6 @@
         "clippersSource",
         "indexSource",
         "localAuthSource",
-        "previousAllowDevFallback",
         "previousDefaultUserId",
         "promoSource",
         "requests",
@@ -20853,6 +20953,34 @@
         "result",
         "retry",
         "slots",
+        "workspaceRoot"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clippers-metricool-destination-safety.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-metricool-autopilot.mjs",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "confirmed",
+        "data",
+        "env",
+        "item",
+        "ledger",
+        "mediaReceipt",
+        "original",
+        "pending",
+        "preview",
+        "result",
+        "withWorkspace",
         "workspaceRoot"
       ],
       "routes": []
@@ -22576,6 +22704,70 @@
       "routes": []
     },
     {
+      "path": "tests/stability-db-pool.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/db-pool",
+        "node:assert/strict",
+        "node:events",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "FailedAuthClient",
+        "FakeClient",
+        "StalledClient",
+        "client",
+        "config",
+        "error",
+        "fakePool",
+        "keepAlive",
+        "pending",
+        "pool",
+        "result",
+        "reused"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/stability-project-monitor.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/project-monitor",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "counts",
+        "monitor",
+        "next",
+        "tick"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/stability-session-pool.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/session-config",
+        "node:assert/strict",
+        "node:events",
+        "node:test",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "FakePool",
+        "middleware",
+        "originalPool",
+        "previousTimeout",
+        "previousUrl"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/telegram-chat-flow.test.ts",
       "kind": "test",
       "imports": [
@@ -22912,6 +23104,9 @@
     "tests/revenue-stripe.test.ts",
     "tests/session-config.test.ts",
     "tests/shopify-oauth.test.ts",
+    "tests/stability-db-pool.test.ts",
+    "tests/stability-project-monitor.test.ts",
+    "tests/stability-session-pool.test.ts",
     "tests/telegram-chat-flow.test.ts",
     "tests/telegram-chat-handler.test.ts",
     "tests/telegram-command.test.ts",
