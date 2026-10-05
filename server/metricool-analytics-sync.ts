@@ -596,7 +596,13 @@ export function createMetricoolAnalyticsScheduler(deps: MetricoolAnalyticsSchedu
       lastFinishedAt = now().toISOString();
       return result.status;
     })();
-    inFlight = work.then(() => undefined).catch((error) => { lastError = error instanceof Error ? error.message : "analytics_scheduler_failed"; lastFinishedAt = now().toISOString(); logError(`[Metricool analytics] ${lastError}`); throw error; }).finally(() => { inFlight = null; });
+    // This bookkeeping promise is not awaited by the scheduler. Record failures
+    // without rethrowing here; execute() still returns "failed" for rejected work.
+    inFlight = work.then(() => undefined).catch((error) => {
+      lastError = error instanceof Error ? error.message : "analytics_scheduler_failed";
+      lastFinishedAt = now().toISOString();
+      logError(`[Metricool analytics] ${lastError}`);
+    }).finally(() => { inFlight = null; });
     try { return await work; } catch { return "failed"; }
   };
   const tick = () => {

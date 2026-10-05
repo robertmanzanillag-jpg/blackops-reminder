@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -247,6 +248,111 @@ test("uses a daily 06:45 default and can be disabled without touching credential
   assert.deepEqual(getMetricoolAnalyticsSyncConfig({}), { enabled: true, hour: 6, minute: 45, lookbackDays: 30, timeoutMs: 30_000 });
   assert.equal(getMetricoolAnalyticsSyncConfig({ METRICOOL_ANALYTICS_SYNC_ENABLED: "false" }).enabled, false);
 });
+
+for (const scenario of ["manual-timeout", "scheduled-timeout", "manual-rejection"]) {
+  test(`scheduler contains ${scenario} failure without terminating HTTP service`, { timeout: 25_000 }, () => {
+    // A separate strict Node process proves there is no unhandled rejection.
+    // All integration dependencies are fake; no app startup or credentials.
+    const script = `
+      import assert from "node:assert/strict";
+      import { createServer } from "node:http";
+      import { createMetricoolAnalyticsScheduler } from "./server/metricool-analytics-sync.ts";
+      const scenario = ${JSON.stringify(scenario)};
+      const errors = [];
+      const recorded = [];
+      let recover = false;
+      let syncCount = 0;
+      let tick;
+      const now = () => new Date("2026-07-27T15:20:00Z");
+      const scheduler = createMetricoolAnalyticsScheduler({
+        env: { METRICOOL_ANALYTICS_SYNC_TIMEOUT_MS: "5000" },
+        now,
+        sync: async () => {
+          syncCount++;
+          if (!recover) {
+            if (scenario === "manual-rejection") throw new Error("provider_unavailable");
+            return new Promise(() => {});
+          }
+          return {
+            enabled: true, configured: true, lastRunAt: now().toISOString(),
+            lastSuccessAt: now().toISOString(), lastError: null, brands: [],
+            postsSeen: 0, metricsRecorded: 0, duplicatesSkipped: 0,
+            unmatchedSkipped: 0, lookbackDays: 30, source: "metricool",
+            status: "completed",
+          };
+        },
+        setInterval: callback => { tick = callback; return { unref() {} }; },
+        clearInterval: () => {},
+        getUserIds: async () => ["test-user"],
+        recordRun: async (...args) => { recorded.push(args[3]); return null; },
+        log: () => {},
+        logError: message => errors.push(message),
+      });
+      const server = createServer((_req, res) => res.end("still alive"));
+      await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
+      const url = "http://127.0.0.1:" + server.address().port;
+      const assertServing = async () => {
+        const response = await fetch(url);
+        assert.equal(response.status, 200);
+        assert.equal(await response.text(), "still alive");
+      };
+      try {
+        await assertServing();
+        if (scenario === "scheduled-timeout") {
+          scheduler.start(); // exercise the unawaited catch-up path
+          const deadline = Date.now() + 10_000;
+          while (!scheduler.status().lastError) {
+            assert.ok(Date.now() < deadline, "scheduler did not report its failure");
+            await new Promise(resolve => setTimeout(resolve, 10));
+          }
+        } else {
+          assert.equal(await scheduler.runNow(), "failed");
+        }
+        // Let Node process rejected promises before proving HTTP still works.
+        await new Promise(resolve => setImmediate(resolve));
+        await new Promise(resolve => setImmediate(resolve));
+        const error = scenario === "manual-rejection" ? "provider_unavailable" : "analytics_sync_timeout";
+        assert.equal(scheduler.status().lastError, error);
+        assert.equal(scheduler.status().completedCount, 0);
+        assert.equal(scheduler.status().runCount, 1);
+        assert.equal(scheduler.status().running, false);
+        assert.ok(scheduler.status().lastFinishedAt);
+        assert.deepEqual(errors, ["[Metricool analytics] " + error]);
+        assert.equal(recorded.length, 0, "failure must not record a successful run");
+        await assertServing();
+        if (tick) {
+          tick();
+          assert.equal(syncCount, 1, "failure must not add automatic retries");
+        }
+        recover = true;
+        assert.equal(await scheduler.runNow(), "completed");
+        await new Promise(resolve => setImmediate(resolve));
+        assert.equal(scheduler.status().completedCount, 1);
+        assert.equal(scheduler.status().lastError, null);
+        assert.equal(recorded.length, 1);
+        assert.equal(recorded[0].status, "success");
+        await assertServing();
+        console.log("FAILURE_CONTAINED_HTTP_ALIVE_RECOVERY_OK");
+      } finally {
+        scheduler.stop();
+        server.closeAllConnections();
+        await new Promise(resolve => server.close(resolve));
+      }
+    `;
+    const child = spawnSync(process.execPath, [
+      "--unhandled-rejections=strict", "--import", "tsx", "--input-type=module", "--eval", script,
+    ], {
+      cwd: process.cwd(),
+      env: { PATH: process.env.PATH, NODE_ENV: "test" },
+      encoding: "utf8",
+      timeout: 20_000,
+    });
+    assert.ifError(child.error);
+    assert.equal(child.signal, null, child.stderr);
+    assert.equal(child.status, 0, child.stderr);
+    assert.match(child.stdout, /FAILURE_CONTAINED_HTTP_ALIVE_RECOVERY_OK/);
+  });
+}
 
 test("fails closed when credentials exist but neither local-news brand is connected", async () => {
   const workspaceDir = await mkdtemp(path.join(tmpdir(), "metricool-analytics-blocked-"));
