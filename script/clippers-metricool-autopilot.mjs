@@ -100,6 +100,8 @@ async function verifyMetricoolSchedule(fetcher, token, userId, blogId, caption, 
     if (!response.ok) throw new Error(`Metricool verification failed with HTTP ${response.status}`);
     const value = JSON.parse(await response.text());
     const match = objects(value).find((record) => {
+      if (!Array.isArray(record.providers)
+        || !record.providers.some((provider) => normalized(provider?.network) === "tiktok")) return false;
       const text = String(record.text ?? record.caption ?? record.content ?? "");
       const publication = record.publicationDate;
       const dateTime = typeof publication === "string"
@@ -240,11 +242,12 @@ function verifiedRecordId(record) {
 export function validateAutopilotItem(item, expectedAccount) {
   const requiredHashtags = normalizeTags(item.requiredHashtags);
   const caption = String(item.caption || "").trim();
-  const account = String(item.account || "").replace(/^@/, "").toLowerCase();
+  const account = normalized(item.account).replace(/^@/, "");
   const blockers = [
     item.publishAllowed !== true ? "publish_not_authorized" : null,
     item.status !== "ready_for_metricool_autopilot" ? "queue_status_not_ready" : null,
-    account !== expectedAccount.toLowerCase() ? "wrong_account" : null,
+    account !== normalized(expectedAccount).replace(/^@/, "") ? "wrong_account" : null,
+    normalized(item.platform) && normalized(item.platform) !== "tiktok" ? "wrong_platform" : null,
     !validPublicMediaUrl(item.mediaUrl) ? "public_https_media_required" : null,
     !caption ? "caption_missing" : null,
     requiredHashtags.some((tag) => !captionHasTag(caption, tag)) ? "required_hashtag_missing" : null,
@@ -329,31 +332,31 @@ export async function runMetricoolAutopilot(options = {}) {
   const targetDailyClips = Math.max(0, Math.min(8, Math.trunc(Number(queue.targetDailyClips) || 0)));
   const now = options.now || new Date();
   const deliveredKeys = new Set();
+  const ambiguousDeliveryKeys = new Set();
   const pendingByItemId = new Map();
   for (const row of Array.isArray(ledger) ? ledger : []) {
     const status = normalized(row?.status);
-    if (["scheduled", "published"].includes(status)) addDedupeKeys(row, deliveredKeys);
+    if (["scheduled", "published"].includes(status)) {
+      const account = normalized(row.account).replace(/^@/, "");
+      const blogId = Number(row.metricoolBlogId ?? row.blogId);
+      const receiptUserId = String(row.metricoolUserId || "");
+      const platform = normalized(row.platform);
+      const foreignDestination = (account && account !== normalized(expectedAccount).replace(/^@/, ""))
+        || (Number.isInteger(blogId) && blogId > 0 && blogId !== expectedBlogId)
+        || (receiptUserId && receiptUserId !== userId)
+        || (platform && platform !== "tiktok");
+      if (!foreignDestination) {
+        const verifiedDestination = account && blogId === expectedBlogId && receiptUserId === userId && platform === "tiktok";
+        addDedupeKeys(row, verifiedDestination ? deliveredKeys : ambiguousDeliveryKeys);
+      }
+    }
     if (status === "verification_pending" && row?.itemId) pendingByItemId.set(String(row.itemId), row);
   }
-  const candidatesById = new Map();
+  const candidates = [];
   const results = [];
   const queuedKeys = new Set();
   for (const rawItem of Array.isArray(queue.items) ? queue.items : []) {
     const item = { ...rawItem, itemId: queueItemId(rawItem) };
-    if (hasDedupeCollision(item, deliveredKeys)) {
-      results.push({ itemId: item.itemId, status: "deduplicated", reason: "equivalent_delivery_already_recorded" });
-      continue;
-    }
-    if (pendingByItemId.has(item.itemId)) continue;
-    if (hasDedupeCollision(item, queuedKeys)) {
-      results.push({ itemId: item.itemId, status: "deduplicated", reason: "equivalent_queue_item" });
-      continue;
-    }
-    addDedupeKeys(item, queuedKeys);
-    candidatesById.set(item.itemId, item);
-  }
-  const candidates = [];
-  for (const item of candidatesById.values()) {
     const validation = validateAutopilotItem(item, expectedAccount);
     const mediaValidation = validateMediaReceipt(item, Array.isArray(mediaReceipts) ? mediaReceipts : []);
     const blogId = Number(item.blogId || expectedBlogId);
@@ -369,16 +372,43 @@ export async function runMetricoolAutopilot(options = {}) {
     ].filter(Boolean);
     if (blockers.length) {
       results.push({ itemId: item.itemId, status: "blocked", blockers });
+      continue;
+    }
+    if (hasDedupeCollision(item, deliveredKeys)) {
+      results.push({ itemId: item.itemId, status: "deduplicated", reason: "equivalent_delivery_already_recorded" });
+      continue;
+    }
+    if (hasDedupeCollision(item, ambiguousDeliveryKeys)) {
+      results.push({ itemId: item.itemId, status: "blocked", blockers: ["legacy_delivery_destination_unverified_retry_suppressed"] });
+      continue;
+    }
+    if (pendingByItemId.has(item.itemId)) continue;
+    if (hasDedupeCollision(item, queuedKeys)) {
+      results.push({ itemId: item.itemId, status: "deduplicated", reason: "equivalent_queue_item" });
+      continue;
+    }
+    addDedupeKeys(item, queuedKeys);
+    candidates.push({ item, validation, blogId, mediaReceipt: mediaValidation.receipt });
+  }
+  const pendingForDestination = new Map();
+  for (const [itemId, pending] of pendingByItemId) {
+    const receiptAccount = normalized(pending.account).replace(/^@/, "");
+    if (receiptAccount !== normalized(expectedAccount).replace(/^@/, "")
+      || Number(pending.metricoolBlogId) !== expectedBlogId
+      || String(pending.metricoolUserId || "") !== userId
+      || normalized(pending.platform) !== "tiktok") {
+      results.push({ ...pending, status: "verification_pending", reason: "pending_receipt_destination_mismatch_retry_suppressed" });
     } else {
-      candidates.push({ item, validation, blogId, mediaReceipt: mediaValidation.receipt });
+      pendingForDestination.set(itemId, pending);
     }
   }
-  if (!candidates.length && !pendingByItemId.size) {
+  if (!candidates.length && !pendingForDestination.size) {
+    const verificationPending = results.filter((row) => row.status === "verification_pending").length;
     return {
-      status: "blocked",
+      status: verificationPending ? "attention_required" : "blocked",
       scheduled: 0,
-      blocked: results.length,
-      verificationPending: 0,
+      blocked: results.filter((row) => row.status === "blocked").length,
+      verificationPending,
       results,
       ledgerPath,
     };
@@ -393,6 +423,7 @@ export async function runMetricoolAutopilot(options = {}) {
         campaignId: item.campaignId,
         draftFile: item.draftFile,
         account: validation.account,
+        platform: "tiktok",
         metricoolBlogId: blogId,
         mediaReceiptFileId: mediaReceipt.fileId,
         scheduledFor: schedule[index],
@@ -420,7 +451,7 @@ export async function runMetricoolAutopilot(options = {}) {
     startDate,
     endDate,
   );
-  for (const [itemId, pending] of pendingByItemId) {
+  for (const [itemId, pending] of pendingForDestination) {
     const match = existingSchedule.find((row) => row.id
       && normalized(row.caption) === normalized(pending.caption)
       && (!pending.scheduledFor || row.dateTime === pending.scheduledFor));
@@ -472,6 +503,7 @@ export async function runMetricoolAutopilot(options = {}) {
         campaignId: item.campaignId,
         draftFile: item.draftFile,
         account: validation.account,
+        platform: "tiktok",
         caption: validation.caption,
         mediaUrl: item.mediaUrl,
         mediaSha256: mediaReceipt.sha256,
@@ -517,6 +549,7 @@ export async function runMetricoolAutopilot(options = {}) {
       campaignId: item.campaignId,
       draftFile: item.draftFile,
       account: validation.account,
+      platform: "tiktok",
       caption: validation.caption,
       requiredHashtags: validation.requiredHashtags,
       strategyId: item.strategyId,
