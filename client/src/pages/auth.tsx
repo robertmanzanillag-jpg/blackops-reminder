@@ -91,6 +91,7 @@ async function submitAuth(mode: AuthMode, username: string, password: string) {
     const response = await fetch(`/api/auth/${mode}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      credentials: "include",
       body: JSON.stringify({ username, password }),
     });
 

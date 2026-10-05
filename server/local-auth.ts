@@ -6,6 +6,7 @@ import {
   DEFAULT_DEV_USER_ID,
   LOCAL_AUTH_USER_COOKIE_NAME,
   resolveCurrentUserId,
+  resolveSignedLocalAuthCookieUserId,
 } from "./user-context";
 import { createRateLimiter } from "./rate-limit";
 import { hasRealValue } from "./ceo-doctor-cli";
@@ -65,14 +66,15 @@ function localAuthCookieOptions() {
   };
 }
 
-function setLocalAuthUserCookie(res: Response, userId: string): void {
+function setLocalAuthUserCookie(res: Response, userId: string): boolean {
   const value = createSignedLocalAuthCookieValue(userId);
-  if (!value) return;
+  if (!value) return false;
 
   res.cookie(LOCAL_AUTH_USER_COOKIE_NAME, value, {
     ...localAuthCookieOptions(),
     maxAge: LOCAL_AUTH_COOKIE_MAX_AGE_MS,
   });
+  return true;
 }
 
 function clearLocalAuthUserCookie(res: Response): void {
@@ -133,7 +135,7 @@ function requireJsonAuthRequest(req: Request, res: Response, next: () => void): 
   next();
 }
 
-function saveLocalAuthSession(req: RequestWithSession): Promise<void> {
+export function saveLocalAuthSession(req: RequestWithSession): Promise<void> {
   if (!req.session?.save) return Promise.resolve();
 
   return new Promise((resolve, reject) => {
@@ -147,11 +149,25 @@ function saveLocalAuthSession(req: RequestWithSession): Promise<void> {
   });
 }
 
+async function persistLocalAuthSession(req: RequestWithSession): Promise<boolean> {
+  try {
+    await saveLocalAuthSession(req);
+    return true;
+  } catch (error) {
+    console.warn(
+      "[Auth] Session store save failed; continuing with the signed 30-day auth cookie:",
+      error instanceof Error ? error.message : "unknown session-store error",
+    );
+    return false;
+  }
+}
+
 export function registerLocalAuthRoutes(app: Express): void {
   app.get("/api/auth/me", async (req: RequestWithSession, res: Response) => {
     try {
       if (!req.session?.userId) {
-        const resolvedUserId = resolveCurrentUserId(req);
+        const cookieUserId = resolveSignedLocalAuthCookieUserId(req);
+        const resolvedUserId = cookieUserId || resolveCurrentUserId(req);
         if (!resolvedUserId) {
           return res.status(401).json({ authenticated: false });
         }
@@ -160,6 +176,7 @@ export function registerLocalAuthRoutes(app: Express): void {
         return res.json({
           authenticated: true,
           sessionBacked: false,
+          cookieBacked: Boolean(cookieUserId),
           usingDevFallback: resolvedUserId === DEFAULT_DEV_USER_ID && !hasRealValue(process.env.DEFAULT_USER_ID),
           user: user ? sanitizeAuthUser(user) : { id: resolvedUserId, username: resolvedUserId },
         });
@@ -171,7 +188,7 @@ export function registerLocalAuthRoutes(app: Express): void {
         return res.status(401).json({ authenticated: false });
       }
 
-      res.json({ authenticated: true, sessionBacked: true, usingDevFallback: false, user: sanitizeAuthUser(user) });
+      res.json({ authenticated: true, sessionBacked: true, cookieBacked: false, usingDevFallback: false, user: sanitizeAuthUser(user) });
     } catch (error) {
       res.status(500).json({ error: "Failed to get current user" });
     }
@@ -196,13 +213,9 @@ export function registerLocalAuthRoutes(app: Express): void {
         password: await hashPassword(body.password),
       });
       if (req.session) req.session.userId = user.id;
-      setLocalAuthUserCookie(res, user.id);
-      try {
-        await saveLocalAuthSession(req);
-      } catch {
-        return res.status(500).json({ error: "Session save failed" });
-      }
-      res.status(201).json({ authenticated: true, sessionBacked: true, usingDevFallback: false, user: sanitizeAuthUser(user) });
+      const cookieBacked = setLocalAuthUserCookie(res, user.id);
+      const sessionBacked = await persistLocalAuthSession(req);
+      res.status(201).json({ authenticated: true, sessionBacked, cookieBacked, usingDevFallback: false, user: sanitizeAuthUser(user) });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors });
@@ -225,13 +238,9 @@ export function registerLocalAuthRoutes(app: Express): void {
       }
 
       if (req.session) req.session.userId = user.id;
-      setLocalAuthUserCookie(res, user.id);
-      try {
-        await saveLocalAuthSession(req);
-      } catch {
-        return res.status(500).json({ error: "Session save failed" });
-      }
-      res.json({ authenticated: true, sessionBacked: true, usingDevFallback: false, user: sanitizeAuthUser(user) });
+      const cookieBacked = setLocalAuthUserCookie(res, user.id);
+      const sessionBacked = await persistLocalAuthSession(req);
+      res.json({ authenticated: true, sessionBacked, cookieBacked, usingDevFallback: false, user: sanitizeAuthUser(user) });
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors });
