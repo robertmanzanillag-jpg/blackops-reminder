@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-05T10:11:00.861Z",
+  "generatedAt": "2026-10-05T10:39:40.091Z",
   "repoRoot": "/workspace/blackops-reminder",
   "packageName": "rest-express",
   "scripts": {
@@ -122,44 +122,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 662,
-    "filesIndexed": 577,
+    "filesVisible": 663,
+    "filesIndexed": 578,
     "imports": 1957,
     "routes": 495,
     "symbols": 12857
   },
   "directories": {
-    "client/src": {
-      "files": 117,
-      "indexed": 115,
-      "kinds": {
-        "client-lib": 8,
-        "other": 3,
-        "client-component": 22,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-page": 26
-      }
-    },
     "docs": {
-      "files": 33,
-      "indexed": 31,
+      "files": 34,
+      "indexed": 32,
       "kinds": {
-        "docs": 33
-      }
-    },
-    "server": {
-      "files": 134,
-      "indexed": 130,
-      "kinds": {
-        "server": 134
-      }
-    },
-    "tests": {
-      "files": 123,
-      "indexed": 119,
-      "kinds": {
-        "test": 123
+        "docs": 34
       }
     },
     ".": {
@@ -207,6 +181,18 @@
         "other": 16
       }
     },
+    "client/src": {
+      "files": 117,
+      "indexed": 115,
+      "kinds": {
+        "other": 3,
+        "client-component": 22,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 8,
+        "client-page": 26
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -229,6 +215,13 @@
         "script": 4
       }
     },
+    "server": {
+      "files": 134,
+      "indexed": 130,
+      "kinds": {
+        "server": 134
+      }
+    },
     "server/replit_integrations": {
       "files": 9,
       "indexed": 9,
@@ -248,6 +241,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 123,
+      "indexed": 119,
+      "kinds": {
+        "test": 123
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -3879,6 +3879,14 @@
     },
     {
       "path": "docs/agents-office-cloud-acceptance.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/agents-office-publication-deployment-plan.md",
       "kind": "docs",
       "imports": [],
       "exports": [],

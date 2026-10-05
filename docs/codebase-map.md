@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-10-05T10:11:00.861Z
+Generated: 2026-10-05T10:39:40.091Z
 Repo: `/workspace/blackops-reminder`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 662 | 577 | 1957 | 495 | 12857 |
+| 663 | 578 | 1957 | 495 | 12857 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -33,7 +33,7 @@ Package: `rest-express`
 | `client/src` | 117 | 115 | ui-component:55, client-page:26, client-component:22, client-lib:8 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `script` | 76 | 71 | script:76 |
-| `docs` | 33 | 31 | docs:33 |
+| `docs` | 34 | 32 | docs:34 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `.agents/memory` | 5 | 5 | docs:5 |
