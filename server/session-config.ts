@@ -1,6 +1,7 @@
 import session, { type SessionOptions } from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { resolveDatabaseConnectionString } from "./database-url";
+import { resolveDatabasePoolSettings, summarizeDatabaseError } from "./db-pool";
 import { resolveSessionRuntimeSettings, type SessionRuntimeSettings } from "./session-config-core";
 
 export { resolveSessionRuntimeSettings };
@@ -26,7 +27,11 @@ export function createSessionMiddleware(settings = resolveSessionRuntimeSettings
   if (settings.storeKind === "postgres") {
     const PgSession = connectPgSimple(session);
     options.store = new PgSession({
-      conString: resolveDatabaseConnectionString(),
+      conObject: {
+        connectionString: resolveDatabaseConnectionString(),
+        ...resolveDatabasePoolSettings(),
+      },
+      errorLog: (_message, error) => console.warn("[database-session]", summarizeDatabaseError(error)),
       createTableIfMissing: true,
       tableName: "user_sessions",
     });
