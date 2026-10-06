@@ -1,3 +1,4 @@
+import type { QaMissionBreakdown, QaMissionStatus } from '@shared/app-qa-missions';
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -53,6 +54,7 @@ type QaScan = {
   githubConnected: boolean;
   githubError: string | null;
   totalRoutes: number;
+  missionBreakdown?: QaMissionBreakdown;
   totalChecks: number;
   failCount: number;
   warnCount: number;
@@ -175,6 +177,9 @@ const statusStyle: Record<QaStatus, string> = {
   warn: "border-amber-300/35 bg-amber-500/10 text-amber-100",
   fail: "border-red-400/40 bg-red-500/12 text-red-100",
 };
+
+const missionStatusLabels: Record<QaMissionStatus, string> = { pass: 'Verificada', warn: 'Avisos', fail: 'Fallos', pending: 'Verificación pendiente' };
+const missionStatusStyle = { ...statusStyle, pending: 'border-zinc-400/30 bg-zinc-500/10 text-zinc-200' };
 
 const agentIcon: Record<string, typeof Route> = {
   "route-scout": Route,
@@ -558,34 +563,27 @@ export default function AppQaAgentPage() {
           </CardContent>
         </Card>
 
-        <Card className="mt-5 border-white/10 bg-[#0a1118]/86">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-white">
-              <Route className="h-5 w-5 text-emerald-200" />
-              Mapa de paginas y clicks esperados
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            {scan?.routeMap?.map((route) => (
-              <div key={route.path} className="rounded-lg border border-white/10 bg-black/24 p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <div>
-                    <p className="font-semibold text-white">{route.label}</p>
-                    <p className="text-xs text-zinc-500">{route.path}</p>
-                  </div>
-                  <Badge className={cn("border", statusStyle[route.status])}>{route.status}</Badge>
-                </div>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {route.expectedClicks.map((click) => (
-                    <span key={click} className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-xs text-zinc-300">
-                      {click}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
+        <section className="mt-5" aria-label="Cobertura y resultados por misión">
+          <h2 className="mb-3 text-xl font-semibold text-white">Cobertura y resultados por misión</h2>
+          {!scan?.missionBreakdown ? <p role="status" className="rounded-lg border border-amber-300/30 p-4 text-sm text-amber-100">Resumen por misiones no disponible. Espera el reporte del servidor; no se acredita cobertura ni verificación.</p> : <>
+            <p className="mb-4 text-sm text-zinc-300">{scan.missionBreakdown.coverage.classifiedRoutes}/{scan.missionBreakdown.coverage.totalRoutes} rutas clasificadas. Inventariar una ruta no acredita su ejecución. Los resultados del navegador se muestran por separado.</p>
+            {!!(scan.missionBreakdown.coverage.unclassifiedPaths.length + scan.missionBreakdown.coverage.duplicatePaths.length + scan.missionBreakdown.coverage.missingPaths.length) && <p role="alert" className="mb-4 rounded-lg border border-red-300/30 p-4 text-sm text-red-100">Cobertura incompleta. Sin misión: {scan.missionBreakdown.coverage.unclassifiedPaths.join(', ') || 'ninguna'}. Duplicadas: {scan.missionBreakdown.coverage.duplicatePaths.join(', ') || 'ninguna'}. Sin inventariar: {scan.missionBreakdown.coverage.missingPaths.join(', ') || 'ninguna'}.</p>}
+            <p className="mb-4 text-sm text-zinc-400">Hallazgos globales: {scan.missionBreakdown.globalFindingIds.length}. Dependencias, APIs y apps externas siguen en el gate y afectan el estado de las misiones.</p>
+            <div className="grid gap-4 lg:grid-cols-2">
+              {scan.missionBreakdown.missions.map(mission => <Card key={mission.id} className="min-w-0 border-white/10 bg-[#0a1118]/86" data-testid={`qa-mission-${mission.id}`}>
+                <CardHeader><CardTitle className="flex flex-wrap items-center justify-between gap-2 text-base text-white"><span>{mission.label}</span><Badge className={cn('border', missionStatusStyle[mission.status])}>{missionStatusLabels[mission.status]}</Badge></CardTitle></CardHeader>
+                <CardContent>
+                  <p className="mb-3 text-sm text-zinc-300">Navegador: {mission.reviewedRoutes}/{mission.routeCount} rutas revisadas · {mission.passedRoutes} sin fallos. Hallazgos de misión: {mission.localFindingCount}; globales: {mission.globalFindingCount}.</p>
+                  <ul className="space-y-3">{mission.routes.map(route => <li key={route.path} className="rounded-lg border border-white/10 bg-black/25 p-3">
+                    <p className="font-medium text-white">{route.label}</p><p className="break-all text-xs text-zinc-400">{route.path}</p>
+                    <p className="mt-2 text-xs text-zinc-300">Inventario: {route.inventoryStatus}. Navegador: {missionStatusLabels[route.visualStatus]}.</p>
+                    <div className="mt-2 flex flex-wrap gap-2">{scan.routeMap.find(item => item.path === route.path)?.expectedClicks.map(click => <span key={click} className="rounded-full border border-white/10 px-2 py-1 text-xs text-zinc-300">{click}</span>)}</div>
+                  </li>)}</ul>
+                </CardContent>
+              </Card>)}
+            </div>
+          </>}
+        </section>
       </main>
     </div>
   );

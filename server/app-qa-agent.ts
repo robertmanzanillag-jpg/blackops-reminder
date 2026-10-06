@@ -1,3 +1,4 @@
+import { buildMissionBreakdown, missionForRoute, routeMissionCoverage, type QaMissionBreakdown } from '../shared/app-qa-missions';
 import type { AppErrorEvent, AppHealthCheck, AppIncident, AppProject } from "@shared/schema";
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
@@ -87,6 +88,7 @@ export type AppQaScanResult = {
   council: AppQaCouncilReport;
   subAgents: AppQaSubAgentReport[];
   routeMap: AppQaRouteProbe[];
+  missionBreakdown?: QaMissionBreakdown;
   visualScans: AppQaVisualRouteScan[];
   githubApps: AppQaGithubRepoCheck[];
   bugPatrol: BugPatrolReport;
@@ -228,7 +230,7 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
   { path: "/assistant", label: "Assistant", expectedClicks: ["Enviar mensaje"], status: "pass", notes: [] },
   { path: "/ceo", label: "CEO Dashboard", expectedClicks: ["Approvals", "Salud operacional"], status: "pass", notes: [] },
   { path: "/tools", label: "Tools", expectedClicks: ["Abrir herramienta", "Ajustes"], status: "pass", notes: [] },
-  { path: "/agents-office", label: "Agents Office", expectedClicks: ["Seleccionar agente", "Abrir agente"], status: "pass", notes: [] },
+  { path: "/agents-office", label: "Agents Office", expectedClicks: ["Dirección", "Ingeniería", "Contratar scout simulado", "Guardar", "Avanzar un día"], status: "pass", notes: [] },
   { path: "/projects", label: "Apps / Projects", expectedClicks: ["Agregar proyecto", "Check manual"], status: "pass", notes: [] },
   { path: "/cybersecurity-agent", label: "Cybersecurity Agent", expectedClicks: ["Escanear", "Importar apps"], status: "pass", notes: [] },
   { path: "/legal-compliance", label: "Legal Compliance", expectedClicks: ["Ver reportes"], status: "pass", notes: [] },
@@ -291,6 +293,15 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
   { path: "/radio", label: "Radio", expectedClicks: ["Generar flyer", "Enviar resumen"], status: "pass", notes: [] },
   { path: "/promo-video", label: "Promo Video", expectedClicks: ["Importar videos", "Editar"], status: "pass", notes: [] },
   { path: "/clippers", label: "Clippers", expectedClicks: ["Preflight", "Publishing queue"], status: "pass", notes: [] },
+  { path: '/dashboard', label: 'Dashboard (alias)', expectedClicks: ['Ver agentes', 'Herramientas'], status: 'pass', notes: [] },
+  { path: '/revenue-engine/advanced', label: 'Revenue Engine avanzado', expectedClicks: ['Pipeline', 'QA entrega'], status: 'pass', notes: [] },
+  { path: '/app-qa-agent', label: 'App QA Agent', expectedClicks: ['Correr patrulla', 'Cobertura y resultados por misión'], status: 'pass', notes: [] },
+  { path: '/automations', label: 'Automation Manager', expectedClicks: ['Pausar', 'Reanudar'], status: 'pass', notes: [] },
+  { path: '/portfolio/:symbol', label: 'Detalle de inversión', expectedClicks: ['Volver', 'Actualizar historial'], status: 'pass', notes: ['Ruta dinámica: validar con un símbolo real autorizado.'] },
+  { path: '/news', label: 'Noticias públicas', expectedClicks: ['Ver edición'], status: 'pass', notes: [] },
+  { path: '/news/miami', label: 'Noticias Miami', expectedClicks: ['Ver edición'], status: 'pass', notes: [] },
+  { path: '/news/new-york', label: 'Noticias New York', expectedClicks: ['Ver edición'], status: 'pass', notes: [] },
+  { path: '/news/article/:slug', label: 'Artículo público', expectedClicks: ['Volver a las noticias de hoy'], status: 'pass', notes: ['Ruta dinámica: validar con un artículo real autorizado.'] },
 ];
 
 function getTelegramBotToken(): string | null {
@@ -717,6 +728,7 @@ function buildAppQaStorageUnavailableResult(error: unknown, startedAt = new Date
     council,
     subAgents,
     routeMap: LOCAL_ROUTE_MAP,
+    missionBreakdown: buildMissionBreakdown(LOCAL_ROUTE_MAP, visualReport.visualScans, findings, getVisualBaseUrl()),
     visualScans: visualReport.visualScans,
     githubApps: [],
     bugPatrol: emptyBugPatrolReport(),
@@ -1061,6 +1073,10 @@ export function analyzeRoutes(routes = LOCAL_ROUTE_MAP): AppQaSubAgentReport {
     }
   }
 
+  const coverage = routeMissionCoverage(routes);
+  for (const routePath of [...coverage.unclassifiedPaths, ...coverage.duplicatePaths]) {
+    findings.push(createFinding(syntheticApp, 'route-scout', 'Cobertura por misión', 'high', 'Ruta sin clasificación única', `La ruta ${routePath} es desconocida o está duplicada.`, 'Asignar una misión explícita y conservar una única entrada de inventario.', routePath));
+  }
   return {
     id: "route-scout",
     name: "Route Scout",
@@ -1158,24 +1174,16 @@ export function analyzeImprovementIdeas(apps: AppProject[], routes = LOCAL_ROUTE
       "improvement-scout",
       "QA loop",
       "info",
-      "Agregar corredor visual con navegador",
-      "La version actual sabe que clicks debe probar y revisa URLs/telemetria; para click real conviene sumar Playwright cuando este permitido instalarlo.",
-      "Crear un runner de browser que abra cada ruta, capture consola, haga click en botones seguros y guarde screenshots.",
+      "Inventariar el punto de acceso de App QA",
+      "El corredor visual existe, pero su página de control no está incluida en este inventario de rutas.",
+      "Incluir /app-qa-agent en el inventario y verificar sus controles con una sesión real.",
       "/app-qa-agent"
     ));
   }
 
-  if (routes.length >= 12) {
-    findings.push(createFinding(
-      syntheticApp,
-      "improvement-scout",
-      "Navigation",
-      "low",
-      "Separar rutas por misiones",
-      `Hay ${routes.length} rutas principales. El agente puede agruparlas por negocio, operaciones, seguridad y contenido para reportes mas claros.`,
-      "Mostrar score por area y no solo una lista plana de findings.",
-      "/tools"
-    ));
+  const coverage = routeMissionCoverage(routes);
+  if (coverage.unclassifiedPaths.length || coverage.duplicatePaths.length || coverage.missingPaths.length) {
+    findings.push(createFinding(syntheticApp, 'improvement-scout', 'Cobertura por misión', 'low', 'Clasificación por misiones incompleta', `Sin misión: ${coverage.unclassifiedPaths.join(', ') || 'ninguna'}. Duplicadas: ${coverage.duplicatePaths.join(', ') || 'ninguna'}. Sin inventariar: ${coverage.missingPaths.join(', ') || 'ninguna'}.`, 'Completar la clasificación y el inventario; mantener visibles cobertura y resultados por misión.', '/app-qa-agent'));
   }
 
   for (const app of apps.filter((app) => app.environment === "production" && app.priority !== "low")) {
@@ -1312,17 +1320,7 @@ export async function runVisualClickScout(
       ignoreHTTPSErrors: true,
     });
 
-    await context.addInitScript(() => {
-      try {
-        if (window.location.protocol === "http:" || window.location.protocol === "https:") {
-          window.localStorage.setItem("blackops-local-auth-user", JSON.stringify({ id: "visual-qa-user", username: "visual-qa" }));
-          (window as any).__visualQaAuthSeeded = true;
-        }
-      } catch {
-        (window as any).__visualQaAuthSeedError = true;
-        // Some browser-internal documents deny storage access before the app page loads.
-      }
-    });
+    // Authentication must come from a backend session; localStorage is not evidence.
 
     for (const route of routes) {
       const url = new URL(route.path, baseUrl).toString();
@@ -1349,20 +1347,12 @@ export async function runVisualClickScout(
         const statusCode = response?.status?.() || 0;
         const bodySnapshots = await collectVisualRouteTextSnapshots(page, route);
         const bodyText = bodySnapshots.map((snapshot) => snapshot.bodyText).join("\n");
-        const authSeed = await page.evaluate(() => ({
-          seeded: Boolean((window as any).__visualQaAuthSeeded),
-          errored: Boolean((window as any).__visualQaAuthSeedError),
-          hasUser: Boolean(window.localStorage.getItem("blackops-local-auth-user")),
-        })).catch(() => ({ seeded: false, errored: true, hasUser: false }));
 
         if (statusCode >= 400) {
           status = "fail";
           notes.push(`HTTP ${statusCode}`);
         }
-        if (!authSeed.seeded || authSeed.errored || !authSeed.hasUser) {
-          status = "fail";
-          notes.push("No se pudo sembrar auth local para QA visual");
-        }
+
         if (isVisualAuthScreen(bodyText)) {
           status = "fail";
           notes.push("QA visual cayo en pantalla de login");
@@ -1400,6 +1390,10 @@ export async function runVisualClickScout(
         notes.push(error?.message || "Fallo abriendo pagina");
       }
 
+      if (consoleErrors.length && status !== 'fail') {
+        status = 'fail';
+        notes.push(`${consoleErrors.length} errores de consola durante navegación`);
+      }
       if (status === "fail") {
         screenshotPath = path.join(VISUAL_SCREENSHOT_DIR, screenshotName(route.path));
         await page.screenshot({ path: screenshotPath, fullPage: true }).catch(() => undefined);
@@ -1843,7 +1837,7 @@ export async function runAppQaScan(
     incidents: await storage.getAppIncidentsForProject(app.id),
     errors: await storage.getAppErrorEvents(app.id, 20),
   })));
-  const visualReport = shouldRunVisualScout({ userId, notify, allowDailyDigest, targetContext, now: startedAt })
+  const visualReport = (notify || recordHistory || allowDailyDigest) && shouldRunVisualScout({ userId, notify, allowDailyDigest, targetContext, now: startedAt })
     ? await runVisualClickScout()
     : buildSkippedVisualScoutReport();
 
@@ -1895,6 +1889,7 @@ export async function runAppQaScan(
     council,
     subAgents,
     routeMap: LOCAL_ROUTE_MAP,
+    missionBreakdown: buildMissionBreakdown(LOCAL_ROUTE_MAP, visualReport.visualScans, findings, getVisualBaseUrl()),
     visualScans: visualReport.visualScans,
     githubApps: githubReport.githubApps,
     bugPatrol,
@@ -1902,7 +1897,8 @@ export async function runAppQaScan(
     improvementIdeas,
   };
 
-  if (notify || shouldSendAutomaticAlert(userId, result)) {
+  // Passive status scans must neither send alerts nor consume alert cooldown.
+  if (notify || (recordHistory && shouldSendAutomaticAlert(userId, result))) {
     const telegramConfig = await storage.getTelegramConfig(userId);
     const botToken = getTelegramBotToken();
     if (telegramConfig?.enabled && telegramConfig.chatId && botToken) {
@@ -1992,6 +1988,8 @@ export function startAppQaScheduler(): void {
 
 export const __appQaAgentInternals = {
   LOCAL_ROUTE_MAP,
+  buildMissionBreakdown,
+  routeMissionCoverage,
   analyzeRoutes,
   analyzeAppTelemetry,
   analyzeGithubAppRepos,

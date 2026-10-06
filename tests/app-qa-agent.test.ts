@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { QA_MISSIONS, missionForRoute, routeMissionCoverage, buildMissionBreakdown } from '../shared/app-qa-missions';
 import assert from "node:assert/strict";
 import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -804,4 +806,53 @@ test("storage unavailable result keeps useful AggregateError details", () => {
 
   assert.match(result.summary, /ECONNREFUSED/);
   assert.match(result.findings[0].detail, /127\.0\.0\.1:5432/);
+});
+
+
+test("mission inventory covers every explicit client route exactly once", () => {
+  const source = readFileSync('client/src/App.tsx', 'utf8');
+  const paths = [...source.matchAll(/<Route path="([^"]+)"/g)].map(m => m[1]);
+  const catalog = __appQaAgentInternals.LOCAL_ROUTE_MAP;
+  assert.deepEqual(catalog.map(r => r.path).sort(), paths.sort());
+  assert.equal(new Set(QA_MISSIONS.flatMap(m => [...m.paths])).size, paths.length);
+  assert.deepEqual(routeMissionCoverage(catalog), {totalRoutes:26,classifiedRoutes:26,unclassifiedPaths:[],duplicatePaths:[],missingPaths:[]});
+  assert.equal(analyzeImprovementIdeas([appProject()], catalog).findings.length,0);
+  assert.equal(missionForRoute('/portfolio/AAPL?range=1'), 'business');
+  assert.equal(missionForRoute('/news/article/example'), 'content');
+  assert.equal(missionForRoute('/unknown'), null);
+});
+
+test("unknown and duplicate routes remain findings rather than gaining mission coverage", () => {
+  const catalog = __appQaAgentInternals.LOCAL_ROUTE_MAP;
+  const unknown = [...catalog, {...catalog[0], path:'/unknown'}];
+  assert.equal(__appQaAgentInternals.analyzeRoutes(unknown).status,'fail');
+  assert.ok(analyzeImprovementIdeas([],unknown).findings.length);
+  assert.deepEqual(routeMissionCoverage([...catalog,catalog[0]]).duplicatePaths,['/']);
+  assert.ok(routeMissionCoverage(catalog.slice(1)).missingPaths.includes('/'));
+  assert.equal(buildMissionBreakdown(unknown,[],[]).missions.at(-1)?.status,'fail');
+});
+
+test("mission results keep pending browser work and propagate local and global failures", () => {
+  const catalog = __appQaAgentInternals.LOCAL_ROUTE_MAP;
+  assert.ok(buildMissionBreakdown(catalog,[],[]).missions.every(m=>m.status==='pending'));
+  const partial=buildMissionBreakdown(catalog,[{path:'/agents-office',status:'pass'}],[]);
+  assert.equal(partial.missions.find(m=>m.id==='direction')?.reviewedRoutes,1);
+  assert.equal(partial.missions.find(m=>m.id==='direction')?.status,'pending');
+  const scoped=buildMissionBreakdown(catalog,[],[{id:'local',severity:'high',url:'/agents-office'}]);
+  assert.equal(scoped.missions.find(m=>m.id==='direction')?.status,'fail');
+  assert.equal(scoped.missions.find(m=>m.id==='content')?.status,'pending');
+  const global=buildMissionBreakdown(catalog,[],[{id:'db',severity:'high',url:null},{id:'external',severity:'high',url:'https://external.invalid/news'}]);
+  assert.ok(global.missions.every(m=>m.status==='fail'));
+  assert.deepEqual(global.globalFindingIds,['db','external']);
+  const late=buildMissionBreakdown(catalog,[{path:'/agents-office',status:'pass',consoleErrors:['after click']}],[]);
+  assert.equal(late.missions.find(m=>m.id==='direction')?.status,'fail');
+});
+
+test("actual storage outages propagate to all missions and parent pages cannot verify detail pages", () => {
+  const unavailable=__appQaAgentInternals.buildAppQaStorageUnavailableResult(new Error('fixture DB outage'));
+  assert.equal(unavailable.failCount,5);
+  assert.ok(unavailable.missionBreakdown?.missions.every(m=>m.status==='fail' && m.globalFindingCount===5));
+  const catalog=__appQaAgentInternals.LOCAL_ROUTE_MAP;
+  const report=buildMissionBreakdown(catalog,[{path:'/portfolio',status:'pass'}],[]);
+  assert.equal(report.missions.find(m=>m.id==='business')?.routes.find(r=>r.path==='/portfolio/:symbol')?.visualStatus,'pending');
 });
