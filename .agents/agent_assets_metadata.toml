@@ -14,3 +14,17 @@ mtime_ms = 1791283326883
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:996097da-891f-490f-b35f-c02f361c4e34/4ca71730-9dd5-433a-b1da-8445b5af825b/a716d860-885f-4471-b50b-04f8672e6c1d"
 storage_version_token = "1791283447907960"
 content_type = "text/html"
+
+[[outputs]]
+id = "htBMPMQoFxWeMiI_I-9gH"
+uri = "file://.local/office-evidence/closeout-report.html"
+type = "html"
+title = "Control previo a publicación: BLOQUEADO"
+description = "Evidencia de pruebas, conciliación de los ocho cambios, límites de verificación y requisitos pendientes. No se publicó ni se ejecutaron migraciones o entregas."
+logical_id = "a9d28872-ea94-467b-9d32-de01cb338c85"
+content_hash = "sha256:dd246e0a4ba38a22fd1068b7d0ab5877753785953e1bbadaa5eeceb656769b1c"
+size = 7421
+mtime_ms = 1791285068805
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:996097da-891f-490f-b35f-c02f361c4e34/a9d28872-ea94-467b-9d32-de01cb338c85/cf7ab401-2d8b-4a34-932a-cee7303cc8ae"
+storage_version_token = "1791285168224022"
+content_type = "text/html"

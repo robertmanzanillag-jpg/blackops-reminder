@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-06T10:40:43.030Z",
+  "generatedAt": "2026-10-06T11:03:09.219Z",
   "repoRoot": "/home/runner/workspace",
   "packageName": "rest-express",
   "scripts": {
@@ -125,50 +125,31 @@
     "filesVisible": 678,
     "filesIndexed": 594,
     "imports": 2029,
-    "routes": 507,
-    "symbols": 13079
+    "routes": 510,
+    "symbols": 13081
   },
   "directories": {
+    ".": {
+      "files": 34,
+      "indexed": 18,
+      "kinds": {
+        "other": 22,
+        "docs": 11,
+        "package": 1
+      }
+    },
+    ".agents": {
+      "files": 1,
+      "indexed": 0,
+      "kinds": {
+        "other": 1
+      }
+    },
     ".agents/memory": {
       "files": 8,
       "indexed": 8,
       "kinds": {
         "docs": 8
-      }
-    },
-    ".": {
-      "files": 35,
-      "indexed": 18,
-      "kinds": {
-        "other": 23,
-        "docs": 11,
-        "package": 1
-      }
-    },
-    "client/src": {
-      "files": 122,
-      "indexed": 120,
-      "kinds": {
-        "client-component": 26,
-        "client-lib": 9,
-        "other": 3,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-page": 26
-      }
-    },
-    "shared": {
-      "files": 3,
-      "indexed": 3,
-      "kinds": {
-        "shared": 3
-      }
-    },
-    "tests": {
-      "files": 127,
-      "indexed": 124,
-      "kinds": {
-        "test": 127
       }
     },
     ".agents/skills": {
@@ -198,6 +179,18 @@
       "indexed": 2,
       "kinds": {
         "other": 16
+      }
+    },
+    "client/src": {
+      "files": 122,
+      "indexed": 120,
+      "kinds": {
+        "other": 3,
+        "client-component": 26,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 9,
+        "client-page": 26
       }
     },
     "config": {
@@ -250,11 +243,25 @@
         "server": 9
       }
     },
+    "shared": {
+      "files": 3,
+      "indexed": 3,
+      "kinds": {
+        "shared": 3
+      }
+    },
     "shared/models": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 127,
+      "indexed": 124,
+      "kinds": {
+        "test": 127
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -19587,6 +19594,7 @@
       "exports": [],
       "symbols": [
         "app",
+        "concrete",
         "context",
         "envKeys",
         "evidenceDir",
@@ -19600,6 +19608,7 @@
         "passive",
         "pendingVisual",
         "previous",
+        "protectedRoutes",
         "runtime",
         "serveMode",
         "temp",
@@ -19611,6 +19620,9 @@
         "/api/ceo/go-live",
         "/api/ceo/readiness",
         "/api/fixture-owner-boundary",
+        "/api/github/repos",
+        "/api/github/repos/fixture/office-fixture/contents",
+        "/api/github/status",
         "/api/legal-compliance/reports",
         "/api/monthly-goals",
         "/api/projects",

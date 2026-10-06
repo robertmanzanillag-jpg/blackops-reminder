@@ -44,6 +44,11 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   app.get('/api/fixture-owner-boundary',async(req,res)=>{if(!await runtime.isConfiguredSingleUserOwner(req.fixtureUserId))return res.status(403).json({error:'Owner only'});res.json({scope:'fixture owner'});});
   app.get('/api/monthly-goals',(req,res)=>res.json([{id:req.fixtureUserId+'-goal',title:'Meta LOCAL · '+req.fixtureUserId,completed:false}]));
   app.get('/api/projects',(_req,res)=>res.json([]));app.get('/api/legal-compliance/reports',(_req,res)=>res.json({reports:[],summary:{critico:0,revisar:0,info:0}}));
+  // Explicit synthetic read adapters for the affected GitHub handoff consumer.
+  // No real connection, repository, AI request, commit or push is used.
+  app.get('/api/github/status',(_req,res)=>res.json({connected:true,user:{login:'fixture',name:'Synthetic read adapter',avatar_url:'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E'}}));
+  app.get('/api/github/repos',(_req,res)=>res.json([{id:1,name:'office-fixture',full_name:'fixture/office-fixture',private:true,description:'Isolated QA fixture',language:'TypeScript'}]));
+  app.get('/api/github/repos/fixture/office-fixture/contents',(_req,res)=>res.json([]));
   app.get('/api/ceo/go-live',(_req,res)=>res.json({status:'blocked',checks:[],scope:'LOCAL fixture only'}));
   app.get('/api/ceo/readiness',(_req,res)=>res.json({status:'blocked',checks:[],scope:'LOCAL fixture only'}));
   app.get('/api/ceo/conversation-history',(_req,res)=>res.json({messages:[]}));
@@ -71,6 +76,14 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   const context=await browser.newContext({viewport:{width:1440,height:1080},reducedMotion:'reduce'});await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.fulfill({status:200,contentType:'text/css',body:''}));const page=await context.newPage();page.setDefaultTimeout(8000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.addInitScript(()=>localStorage.setItem('blackops-local-auth-user',JSON.stringify({id:'fixture-owner',username:'fixture-owner'})));
   await page.goto(base+'/agents-office');await page.getByLabel('Usuario',{exact:true}).waitFor();assert.equal(await page.locator('.company-office').count(),0);
+  const protectedRoutes=runtime.__appQaAgentInternals.LOCAL_ROUTE_MAP.filter(r=>!r.path.startsWith('/news'));
+  for(const route of protectedRoutes){
+   const concrete=route.path.replace(':symbol','FIXTURE');
+   await page.goto(base+concrete);await page.getByLabel('Usuario',{exact:true}).waitFor();
+   assert.equal(await page.getByRole('button',{name:'Salir',exact:true}).count(),0);
+  }
+  await writeFile(path.join(evidenceDir,'affected-route-auth-guards.json'),JSON.stringify({scope:'Actual compiled auth gate, anonymous browser, isolated backend; not signed-in page certification',routes:protectedRoutes.map(r=>({path:r.path,status:'pass',check:'real login required'}))},null,2));
+  await page.goto(base+'/agents-office');await page.getByLabel('Usuario',{exact:true}).waitFor();
   await page.getByLabel('Usuario',{exact:true}).fill('fixture-member');await page.getByLabel('Password',{exact:true}).fill(fixturePassword);await page.getByRole('button',{name:'Entrar',exact:true}).last().click();
   await page.getByRole('heading',{name:'Tu empresa, en movimiento.'}).waitFor();await page.getByText(/Meta LOCAL · fixture-member/).waitFor();
   await page.getByLabel('Objetivo',{exact:true}).fill('Plan privado del miembro LOCAL');
@@ -98,6 +111,27 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   await page.getByLabel('Usuario',{exact:true}).fill('fixture-owner');await page.getByLabel('Password',{exact:true}).fill(fixturePassword);await page.getByRole('button',{name:'Entrar',exact:true}).last().click();
   await page.getByText(/Meta LOCAL · fixture-owner/).waitFor();
   assert.notEqual(await page.getByLabel('Objetivo',{exact:true}).inputValue(),'Plan privado del miembro LOCAL');
+  await page.evaluate(()=>{
+   localStorage.setItem('office.githubAgentHandoff:owner:fixture-member',JSON.stringify({repo:'fixture/office-fixture',task:'MEMBER-ONLY fixture handoff'}));
+   localStorage.setItem('office.githubAgentHandoff:owner:fixture-owner',JSON.stringify({repo:'fixture/office-fixture',task:'OWNER-ONLY fixture handoff'}));
+   localStorage.setItem('office.githubAgentHandoff',JSON.stringify({repo:'fixture/office-fixture',task:'UNOWNED legacy fixture handoff'}));
+  });
+  await page.goto(base+'/github-agent?repo=fixture%2Foffice-fixture');
+  await page.getByTestId('github-agent-page').waitFor();
+  await page.locator('textarea').waitFor();
+  await page.waitForFunction(()=>document.querySelector('textarea')?.value==='OWNER-ONLY fixture handoff');
+  assert.equal(await page.getByText('MEMBER-ONLY fixture handoff',{exact:false}).count(),0);
+  assert.equal(await page.getByText('UNOWNED legacy fixture handoff',{exact:false}).count(),0);
+  await page.screenshot({path:path.join(evidenceDir,'github-owner-handoff.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+  await page.screenshot({path:path.join(evidenceDir,'github-owner-handoff-mobile.png'),fullPage:true});
+  await page.getByRole('button',{name:'Salir',exact:true}).click();await page.getByLabel('Usuario',{exact:true}).waitFor();
+  await page.getByLabel('Usuario',{exact:true}).fill('fixture-member');await page.getByLabel('Password',{exact:true}).fill(fixturePassword);await page.getByRole('button',{name:'Entrar',exact:true}).last().click();
+  await page.waitForFunction(()=>document.querySelector('textarea')?.value==='MEMBER-ONLY fixture handoff');
+  assert.equal(await page.getByText('OWNER-ONLY fixture handoff',{exact:false}).count(),0);
+  assert.deepEqual(errors,[]);
+  await writeFile(path.join(evidenceDir,'github-handoff-verification.json'),JSON.stringify({scope:'Real compiled consumer and backend sessions; synthetic read-only repository adapters',status:'pass',ownerAndMemberSeparated:true,unownedStateIgnored:true,externalActions:0},null,2));
   await context.close();await browser.close();browser=null;
   const passive=await runtime.runAppQaScan('fixture-owner',false,false,false);assert.equal(passive.failCount,0);assert.equal(passive.warnCount,0);assert.equal(passive.improvementIdeas.length,0);assert.equal(passive.telegramSent,false);assert.equal(passive.dailyDigestSent,false);
   for(const id of ['route-scout','link-click-scout','api-scout','error-scout'])assert.equal(passive.subAgents.find(s=>s.id===id).status,'pass');
@@ -106,7 +140,7 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   const officeRoute=runtime.__appQaAgentInternals.LOCAL_ROUTE_MAP.filter(r=>r.path==='/agents-office');
   const pendingVisual=await runtime.runVisualClickScout(officeRoute,{loadPlaywright:async()=>({chromium:{launch:options=>chromium.launch({...options,executablePath})}})});
   assert.equal(pendingVisual.status,'warn');assert.equal(pendingVisual.checked,0);assert.equal(pendingVisual.visualScans[0].status,'pending');assert.equal(pendingVisual.findings.some(f=>f.severity==='high'),false);
-  const visual=await runtime.runVisualClickScout([...officeRoute,runtime.__appQaAgentInternals.LOCAL_ROUTE_MAP.find(r=>r.path==='/app-qa-agent')],{loadPlaywright:async()=>nativePlaywright});
+   const visual=await runtime.runVisualClickScout([...officeRoute,...runtime.__appQaAgentInternals.LOCAL_ROUTE_MAP.filter(r=>['/app-qa-agent','/github-agent'].includes(r.path))],{loadPlaywright:async()=>nativePlaywright});
   await writeFile(path.join(evidenceDir,'integrated-app-qa-local.json'),JSON.stringify({scope:'LOCAL memory fixtures; no production DB, GitHub or telemetry certified',passive,visual,pendingVisual,requests},null,2));
   assert.equal(visual.status,'pass',JSON.stringify(visual.findings));assert.deepEqual(visual.visualScans.flatMap(s=>s.consoleErrors),[]);
  } finally {
