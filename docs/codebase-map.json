@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-08-26T06:35:17.924Z",
-  "repoRoot": "/private/tmp/asistente-youtube-audit",
+  "generatedAt": "2026-10-06T07:56:27.369Z",
+  "repoRoot": "/private/tmp/agents-office-company-simulation",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -122,25 +122,30 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 645,
-    "filesIndexed": 562,
-    "imports": 1903,
-    "routes": 493,
-    "symbols": 12607
+    "filesVisible": 649,
+    "filesIndexed": 567,
+    "imports": 1914,
+    "routes": 495,
+    "symbols": 12705
   },
   "directories": {
-    "docs": {
-      "files": 30,
-      "indexed": 29,
+    "client/src": {
+      "files": 119,
+      "indexed": 117,
       "kinds": {
-        "docs": 30
+        "client-component": 25,
+        "other": 3,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 7,
+        "client-page": 26
       }
     },
     "tests": {
-      "files": 115,
-      "indexed": 112,
+      "files": 116,
+      "indexed": 113,
       "kinds": {
-        "test": 115
+        "test": 116
       }
     },
     ".": {
@@ -188,16 +193,11 @@
         "other": 16
       }
     },
-    "client/src": {
-      "files": 116,
-      "indexed": 114,
+    "docs": {
+      "files": 30,
+      "indexed": 30,
       "kinds": {
-        "other": 3,
-        "client-component": 22,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7,
-        "client-page": 26
+        "docs": 30
       }
     },
     "examples/clippers-motivation": {
@@ -499,6 +499,84 @@
       ],
       "symbols": [
         "AssistantChat"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/company-office/company-office.css",
+      "kind": "client-component",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/company-office/company-office.tsx",
+      "kind": "client-component",
+      "imports": [
+        "./company-office.css",
+        "./company-simulation",
+        "@tanstack/react-query",
+        "framer-motion",
+        "lucide-react",
+        "react",
+        "wouter"
+      ],
+      "exports": [
+        "CompanyOffice"
+      ],
+      "symbols": [
+        "CompanyOffice",
+        "capacity",
+        "department",
+        "name",
+        "news",
+        "progress",
+        "projection",
+        "realGoals",
+        "reduced",
+        "response",
+        "running",
+        "selectDepartment",
+        "team"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/company-office/company-simulation.ts",
+      "kind": "client-component",
+      "imports": [],
+      "exports": [
+        "DepartmentId",
+        "SIMULATION_KEY",
+        "SimulationState",
+        "advanceDay",
+        "dailyCapacity",
+        "departments",
+        "hireAgent",
+        "hireCost",
+        "newSimulation",
+        "nextMonth",
+        "parseSimulation",
+        "upgradeCost",
+        "upgradeDepartment"
+      ],
+      "symbols": [
+        "SIMULATION_KEY",
+        "advanceDay",
+        "cost",
+        "dailyCapacity",
+        "departments",
+        "hireAgent",
+        "hireCost",
+        "initialMap",
+        "integer",
+        "newSimulation",
+        "nextMonth",
+        "parseSimulation",
+        "upgradeCost",
+        "upgradeDepartment",
+        "value"
       ],
       "routes": []
     },
@@ -2701,6 +2779,7 @@
       "path": "client/src/pages/agents-office.tsx",
       "kind": "client-page",
       "imports": [
+        "@/components/company-office/company-office",
         "@/components/ui/button",
         "@/lib/utils",
         "@shared/schema",
@@ -2735,6 +2814,7 @@
         "LegalAppReport",
         "LegalBridgeReport",
         "LegalComplianceRun",
+        "LiveAgentsOffice",
         "OFFICE_AGENT_LOCATIONS_KEY",
         "OFFICE_AGENT_OFFSETS_KEY",
         "OFFICE_GITHUB_HANDOFF_KEY",
@@ -4063,6 +4143,14 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.json",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -8167,6 +8255,7 @@
         "queueAuthorized",
         "queueBlockers",
         "queueFile",
+        "queueItemAgreementBlockers",
         "queueItemBlockers",
         "queuePath",
         "realRelative",
@@ -8230,6 +8319,7 @@
         "LOCAL_TIME",
         "MIN_SHORT_SPACING_MS",
         "PRIVACY",
+        "PRIVACY_POLICY_VERSION",
         "SHA256",
         "accepted",
         "addCalendarDays",
@@ -8295,6 +8385,9 @@
         "prior",
         "priorOutcomes",
         "privacy",
+        "privacyPolicyAcceptance",
+        "privacyPolicyAcceptanceMatches",
+        "privacyPolicyAcceptanceValid",
         "privacyStatus",
         "provenance",
         "provenancePath",
@@ -8369,6 +8462,8 @@
       ],
       "exports": [
         "channelConfigFromEnv",
+        "privacyPolicyAcceptanceMatches",
+        "privacyPolicyAcceptanceValid",
         "runYouTubeUpload",
         "sha256FileStream",
         "validateUploadItem"
@@ -8379,6 +8474,7 @@
         "EMPTY_LOCK_STALE_MS",
         "LANES",
         "PRIVACY",
+        "PRIVACY_POLICY_VERSION",
         "RFC3339",
         "RIGHTS",
         "SHA256",
@@ -8440,6 +8536,8 @@
         "pid",
         "preflight",
         "privacy",
+        "privacyPolicyAcceptanceMatches",
+        "privacyPolicyAcceptanceValid",
         "privacyStatus",
         "processAlive",
         "publicAuthorizationBlocker",
@@ -10109,7 +10207,6 @@
         "BLACKROOM_UPLOAD_TTL_MS",
         "BlackRoomUpload",
         "acceptedNetworks",
-        "activityNode",
         "addUtcDays",
         "analytics",
         "analyticsImports",
@@ -10148,6 +10245,7 @@
         "number",
         "parseBlackRoomMediaRange",
         "partPath",
+        "pendingBatches",
         "postsByDate",
         "previous",
         "publicOrigin",
@@ -10183,11 +10281,13 @@
         "token",
         "totalBytes",
         "totalChunks",
+        "totals",
         "uncertain",
         "upload",
         "uploadId",
         "value",
-        "verifyOnly"
+        "verifyOnly",
+        "withBlackRoomProgressFallback"
       ],
       "routes": [
         "/api/blackroom-agent",
@@ -10202,6 +10302,7 @@
         "/api/blackroom-agent/pause",
         "/api/blackroom-agent/remote",
         "/api/blackroom-agent/start",
+        "/api/blackroom-agent/work-now",
         "/blackroom"
       ]
     },
@@ -10291,6 +10392,7 @@
         "job",
         "jobs",
         "lastExisting",
+        "lastPendingJob",
         "learned",
         "learnedSlots",
         "localDate",
@@ -10298,6 +10400,7 @@
         "lockStat",
         "minutes",
         "minutesToTime",
+        "next",
         "noonUtc",
         "normalized",
         "normalizedVideoId",
@@ -10307,6 +10410,7 @@
         "parsed",
         "parts",
         "pauseBlackRoomAgent",
+        "pendingJobs",
         "plannedPosts",
         "posts",
         "readBlackRoomQueue",
@@ -10317,7 +10421,10 @@
         "recoverInterruptedBlackRoomJobs",
         "recovered",
         "releaseAt",
+        "remainingCalendarDays",
         "remainingCapacity",
+        "remainingPosts",
+        "remainingTargetDates",
         "resizeJob",
         "restoreExplicitNetworkTargets",
         "retryBlackRoomJob",
@@ -10402,9 +10509,12 @@
         "durations",
         "encoderOptions",
         "extractBlackRoomDj",
+        "failedVideos",
         "findBlackRoomDropOffset",
         "format",
+        "fresh",
         "gap",
+        "history",
         "horizontal",
         "intervals",
         "isActionableJob",
@@ -10425,11 +10535,13 @@
         "occupied",
         "parseBlackRoomEnergySamples",
         "planBlackRoomDeterministicEdit",
+        "preferFreshSource",
         "preferred",
         "preferredCount",
         "preferredDjs",
         "preferredEligible",
         "prefix",
+        "previouslyUsedVideos",
         "priority",
         "proven",
         "provenDurations",
@@ -10440,6 +10552,7 @@
         "rms",
         "seed",
         "selectBlackRoomTargetNetworks",
+        "selectable",
         "selected",
         "selectionPool",
         "shortMinimum",
@@ -10448,6 +10561,7 @@
         "slotConfig",
         "slotIndex",
         "sorted",
+        "sourceHasReusableHistory",
         "stableNumber",
         "supplied",
         "targetNetworks",
@@ -10458,7 +10572,6 @@
         "unexplored",
         "unseen",
         "usedDjs",
-        "usedVideos",
         "vertical",
         "windowDuration",
         "windowStart",
@@ -11135,6 +11248,7 @@
         "BlackRoomRemoteDeviceStatus",
         "appendBlackRoomCeoCommand",
         "appendBlackRoomRemoteCommand",
+        "appendBlackRoomWorkNowCommand",
         "createBlackRoomRemoteControlState",
         "initializeBlackRoomRemoteControlPersistence",
         "isBlackRoomRemoteDeviceOnline",
@@ -11151,6 +11265,7 @@
         "activity",
         "appendBlackRoomCeoCommand",
         "appendBlackRoomRemoteCommand",
+        "appendBlackRoomWorkNowCommand",
         "byId",
         "createBlackRoomRemoteControlState",
         "createdAt",
@@ -19213,8 +19328,10 @@
         "lockPath",
         "migrated",
         "mutate",
+        "nextId",
         "now",
         "overnight",
+        "persisted",
         "queuePath",
         "recorded",
         "result",
@@ -19223,6 +19340,7 @@
         "slots",
         "start",
         "state",
+        "summary",
         "target",
         "targetDate",
         "terminal",
@@ -19493,6 +19611,8 @@
         "localQueue",
         "nextRoute",
         "now",
+        "offline",
+        "online",
         "pausing",
         "previousFallback",
         "range",
@@ -19516,6 +19636,7 @@
         "/api/blackroom-agent/analytics/import",
         "/api/blackroom-agent/pause",
         "/api/blackroom-agent/start",
+        "/api/blackroom-agent/work-now",
         "/blackroom"
       ]
     },
@@ -21005,6 +21126,11 @@
       "exports": [],
       "symbols": [
         "CHANNELS",
+        "PRIVACY_POLICY_ACCEPTANCE",
+        "audience",
+        "audienceQueue",
+        "audienceQueuePath",
+        "audienceResult",
         "authorized",
         "bad",
         "blocked",
@@ -21025,6 +21151,8 @@
         "itemFile",
         "itemId",
         "itemPath",
+        "itemPrivacy",
+        "itemResult",
         "lane",
         "language",
         "ledger",
@@ -21032,7 +21160,19 @@
         "media",
         "mediaFile",
         "mediaHash",
+        "missingEntryAudience",
+        "missingEntryPrivacy",
+        "missingEntryQueue",
+        "missingEntryQueuePath",
+        "missingEntryResult",
+        "missingPrivacyQueue",
+        "missingPrivacyQueuePath",
+        "missingPrivacyResult",
+        "missingQueue",
         "missingQueueAuth",
+        "missingQueuePath",
+        "missingQueuePrivacy",
+        "missingQueueResult",
         "noQueueAuth",
         "old",
         "privacyStatus",
@@ -21042,6 +21182,8 @@
         "queue",
         "queueFile",
         "queuePath",
+        "queuePrivacy",
+        "queueResult",
         "recordedAt",
         "report",
         "reportFile",
@@ -21079,6 +21221,11 @@
         "DAY",
         "NOW",
         "approved",
+        "audience",
+        "audienceItem",
+        "audienceItemPath",
+        "audienceQueue",
+        "audienceQueuePath",
         "calls",
         "commands",
         "config",
@@ -21098,8 +21245,12 @@
         "mediaFile",
         "mediaHash",
         "missing",
+        "nonBoolean",
         "now",
         "outputPath",
+        "privacy",
+        "privacyQueue",
+        "privacyQueuePath",
         "provenanceFile",
         "publicAuthorization",
         "publishTimes",
@@ -21116,6 +21267,7 @@
         "sha",
         "shortId",
         "sourceReport",
+        "stale",
         "uploadItem"
       ],
       "routes": []
@@ -21135,7 +21287,9 @@
       "exports": [],
       "symbols": [
         "CHANNELS",
+        "PRIVACY_POLICY_ACCEPTANCE",
         "allowed",
+        "audienceResult",
         "blocked",
         "bytes",
         "configs",
@@ -21150,11 +21304,15 @@
         "itemId",
         "ledger",
         "malformed",
+        "malformedAudience",
+        "malformedResult",
         "media",
         "mediaFile",
+        "missingAudience",
         "missingItem",
         "now",
         "past",
+        "privacyResult",
         "qa",
         "qaBytes",
         "qaFile",
@@ -21166,6 +21324,7 @@
         "root",
         "second",
         "sha",
+        "stalePrivacy",
         "successfulFetch"
       ],
       "routes": []
@@ -21191,6 +21350,22 @@
         "unsafeCreate",
         "unsafeDefault",
         "validRead"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/company-office-simulation.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/components/company-office/company-simulation",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "next",
+        "rollover",
+        "valid"
       ],
       "routes": []
     },
@@ -22379,6 +22554,7 @@
     "tests/clippers-upload-metricool-media.test.ts",
     "tests/clippers-youtube-audit-pages.test.ts",
     "tests/code-agent-security.test.ts",
+    "tests/company-office-simulation.test.ts",
     "tests/cybersecurity-agent.test.ts",
     "tests/db-config.test.ts",
     "tests/developer-autopilot-wiring.test.ts",

@@ -1,3 +1,4 @@
+import { CompanyOffice } from "@/components/company-office/company-office";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
@@ -1610,7 +1611,7 @@ function RoomPresenceDot({ item, label }: { item: RoomPresence; label: string })
   );
 }
 
-export default function AgentsOfficePage() {
+function LiveAgentsOffice() {
   const officeMapRef = useRef<HTMLDivElement | null>(null);
   const walkingTimersRef = useRef<Partial<Record<AgentId, number>>>({});
   const [selectedAgent, setSelectedAgent] = useState<Agent>(agents[0]);
@@ -3048,4 +3049,17 @@ export default function AgentsOfficePage() {
       </section>
       </div>
   );
+}
+
+export default function AgentsOfficePage() {
+  const [showLive, setShowLive] = useState(false);
+  return <div className="bg-[#080e18]">
+    <CompanyOffice />
+    <section className="mx-4 mb-8 rounded-xl border border-white/10 bg-slate-900 p-4 text-slate-200">
+      <button type="button" aria-expanded={showLive} aria-controls="live-office-control" onClick={() => setShowLive(value => !value)} className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-200">
+        {showLive ? "Ocultar" : "Abrir"} centro operativo existente · proyectos, agentes y reportes reales
+      </button>
+      {showLive && <div id="live-office-control" className="mt-4"><LiveAgentsOffice /></div>}
+    </section>
+  </div>;
 }
