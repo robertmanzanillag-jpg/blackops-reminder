@@ -1,3 +1,5 @@
+import { getNextRunAt } from "./automation-schedule";
+export { getNextRunAt } from "./automation-schedule";
 import { storage } from "./storage";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import type { AutomationDefinition, AutomationRun, AutomationRunStatus, InsertAutomationDefinition, InsertAutomationRun } from "@shared/schema";
@@ -302,53 +304,28 @@ export async function ensureDefaultAutomations(userId: string): Promise<Automati
   for (const seed of DEFAULT_AUTOMATIONS) {
     const existingAutomation = existing.find((automation) => (automation.metadata as any)?.key === seed.key);
     if (existingAutomation) {
-      if (seed.key === "metricool-daily-analytics-sync" && existingAutomation.status === "paused") {
-        await storage.updateAutomationDefinition(existingAutomation.id, {
-          status: "active",
-          description: seed.description,
-          metadata: { ...(existingAutomation.metadata as object), ...(seed.metadata as object) },
-        });
-      }
       continue;
     }
     const { key, ...automation } = seed;
     await storage.createAutomationDefinition(userId, {
       ...automation,
-      nextRunAt: getNextRunAt(automation.schedule),
+      nextRunAt: automation.status === "active" ? getNextRunAt(automation.schedule, automation.timezone) : null,
       metadata: { ...(automation.metadata as object), key },
     });
   }
 
-  return storage.getAutomationDefinitions(userId);
-}
-
-export function getNextRunAt(schedule: unknown): Date | null {
-  if (!schedule || typeof schedule !== "object") return null;
-  const data = schedule as Record<string, any>;
+  const definitions = await storage.getAutomationDefinitions(userId);
   const now = new Date();
-
-  if (data.kind === "interval" && Number(data.everyMinutes) > 0) {
-    return new Date(now.getTime() + Number(data.everyMinutes) * 60 * 1000);
+  for (const automation of definitions) {
+    const scheduleKind = (automation.schedule as { kind?: string } | null)?.kind;
+    if (automation.status === "active" && scheduleKind === "interval" && automation.nextRunAt && new Date(automation.nextRunAt) > now) continue;
+    const nextRunAt = automation.status === "active" ? getNextRunAt(automation.schedule, automation.timezone, now, automation.lastRunAt) : null;
+    const due = automation.nextRunAt && new Date(automation.nextRunAt);
+    const missed = automation.status === "active" && due && due <= now && (!automation.lastRunAt || new Date(automation.lastRunAt) < due);
+    const metadata = missed ? { ...(automation.metadata as object), missedRunAt: due.toISOString() } : automation.metadata;
+    if (due?.getTime() !== nextRunAt?.getTime() || missed) await storage.updateAutomationDefinition(automation.id, { nextRunAt, metadata });
   }
-
-  if (data.kind === "daily_time") {
-    const target = new Date(now);
-    target.setHours(Number(data.hour || 0), Number(data.minute || 0), 0, 0);
-    if (target <= now) target.setDate(target.getDate() + 1);
-    return target;
-  }
-
-  if (data.kind === "weekly_time") {
-    const target = new Date(now);
-    const targetDay = Number(data.dayOfWeek || 0);
-    const daysUntil = (targetDay - target.getDay() + 7) % 7;
-    target.setDate(target.getDate() + daysUntil);
-    target.setHours(Number(data.hour || 0), Number(data.minute || 0), 0, 0);
-    if (target <= now) target.setDate(target.getDate() + 7);
-    return target;
-  }
-
-  return null;
+  return storage.getAutomationDefinitions(userId);
 }
 
 export async function recordManualAutomationRun(

@@ -193,7 +193,7 @@ const EMPTY_DASHBOARD: CeoDashboardData = {
   kongDropkitStatus: { projects: [], connectedToGithub: false, needsBusinessUnitModel: true },
   automationFailures: [],
   operationalHealth: {
-    status: "ready",
+    status: "warning",
     totals: { automations: 0, active: 0, paused: 0, failedDefinitions: 0, failedRuns: 0, pendingApprovalRuns: 0, overdueRuns: 0 },
     recentRuns: [],
     items: [],

@@ -84,3 +84,17 @@ test("warns for overdue active automations", () => {
   assert.equal(health.totals.overdueRuns, 1);
   assert.match(health.items[0].detail, /past/);
 });
+
+test("a future schedule without execution evidence is not ready", () => {
+  const health = buildCeoOperationalHealth({ automations: [automation()], runs: [], now: new Date("2026-06-17T12:00:00Z") });
+  assert.equal(health.status, "warning");
+  assert.match(health.items[0].detail, /No run history/);
+});
+
+test("projected future dates cannot erase a missed run; newer execution clears it", () => {
+  const definition = automation({ lastRunAt: new Date("2026-06-16T10:00:00Z"), metadata: { missedRunAt: "2026-06-17T10:00:00Z" } });
+  const now = new Date("2026-06-17T12:00:00Z");
+  assert.equal(buildCeoOperationalHealth({ automations: [definition], runs: [], now }).totals.overdueRuns, 1);
+  definition.lastRunAt = new Date("2026-06-17T11:00:00Z");
+  assert.equal(buildCeoOperationalHealth({ automations: [definition], runs: [run({ startedAt: definition.lastRunAt })], now }).totals.overdueRuns, 0);
+});

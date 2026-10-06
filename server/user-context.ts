@@ -105,9 +105,10 @@ function readSignedLocalAuthCookie(req: Request): string | null {
 }
 
 export function allowsDevUserFallback(): boolean {
+  if (!DEV_FALLBACK_ENVS.has(process.env.NODE_ENV || "")) return false;
   if (process.env.ALLOW_DEV_USER_FALLBACK === "true") return true;
   if (process.env.ALLOW_DEV_USER_FALLBACK === "false") return false;
-  return DEV_FALLBACK_ENVS.has(process.env.NODE_ENV || "development");
+  return true;
 }
 
 export function resolveCurrentUserId(req: Request): string | null {

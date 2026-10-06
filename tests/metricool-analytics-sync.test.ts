@@ -88,6 +88,7 @@ test("falls back to the official Metricool MCP when the undocumented analytics e
   assert.equal(result.status, "partial", "the disconnected New York brand remains visible as a partial readiness issue");
   assert.equal(result.postsSeen, 1);
   assert.equal(result.metricsRecorded, 1);
+  assert.equal(result.lastError, "metricool_news_brands_not_connected:ny-news");
 });
 
 test("splits an oversized Metricool MCP analytics range and merges the smaller responses", async () => {
@@ -329,4 +330,57 @@ test("server startup wires the Metricool analytics scheduler", async () => {
   const source = await readFile(new URL("../server/index.ts", import.meta.url), "utf8");
   assert.match(source, /import\("\.\/metricool-analytics-sync"\)/);
   assert.match(source, /localNews\.startClipperLocalNewsScheduler\(\);[\s\S]*?metricoolAnalytics\.startMetricoolAnalyticsScheduler\(\);/);
+});
+
+test("failed discovery clears prior attempt counters without erasing last success", async () => {
+  const workspaceDir = await mkdtemp(path.join(tmpdir(), "metricool-stale-counters-"));
+  await writeFile(path.join(workspaceDir, "metricool-analytics-sync.json"), JSON.stringify({
+    lastSuccessAt: "2026-10-03T15:00:00.000Z", metricsRecorded: 9, postsSeen: 12,
+    duplicatesSkipped: 2, unmatchedSkipped: 1, source: "metricool",
+    brands: [{ lane: "miami-news", blogId: "old", label: "Miami News", connected: true }], seen: [],
+  }));
+  const result = await syncMetricoolAnalytics({
+    workspaceDir, env: { METRICOOL_USER_TOKEN: "configured-token", METRICOOL_USER_ID: "test-user" },
+    fetch: async () => response({}, 503), now: () => new Date("2026-10-05T15:00:00Z"),
+  });
+  assert.equal(result.status, "partial");
+  assert.equal(result.lastError, "brand_discovery_http_503");
+  assert.equal(result.lastSuccessAt, "2026-10-03T15:00:00.000Z");
+  assert.deepEqual([result.postsSeen, result.metricsRecorded, result.duplicatesSkipped, result.unmatchedSkipped], [0, 0, 0, 0]);
+  assert.deepEqual(result.brands, []);
+  assert.equal(result.source, "none");
+  const persisted = await getMetricoolAnalyticsSyncStatus({ workspaceDir, env: {} });
+  assert.equal(persisted.metricsRecorded, 0);
+});
+
+test("scheduler preserves partial coverage and zero-record reasons in its run evidence", async () => {
+  let recorded: any;
+  const scheduler = createMetricoolAnalyticsScheduler({
+    env: {}, now: () => new Date("2026-10-05T15:00:00Z"),
+    sync: async () => ({ enabled: true, configured: true, lastRunAt: null, lastSuccessAt: null,
+      lastError: "metricool_news_brands_not_connected:ny-news", brands: [{ lane: "ny-news", blogId: "", label: "NY News", connected: false }],
+      postsSeen: 4, metricsRecorded: 0, duplicatesSkipped: 3, unmatchedSkipped: 1, lookbackDays: 30, source: "metricool", status: "partial" }),
+    getUserIds: async () => ["test-owner"], recordRun: async (_owner, _key, _date, outcome) => { recorded = outcome; return null; },
+  });
+  assert.equal(await scheduler.runNow(), "partial");
+  assert.equal(recorded.status, "failed", "partial coverage remains a release warning");
+  assert.equal(recorded.metadata.syncStatus, "partial");
+  assert.equal(recorded.metadata.brands[0].connected, false);
+  assert.match(recorded.resultSummary, /4 post\(s\) seen; 3 duplicate\(s\); 1 unmatched/);
+  assert.equal(scheduler.status().lastError, recorded.errorMessage);
+});
+
+test("scheduler handles a rejected sync and permits the next manual attempt", async () => {
+  const scheduler = createMetricoolAnalyticsScheduler({
+    env: {}, now: () => new Date("2026-10-05T15:00:00Z"),
+    sync: async () => { throw new Error("provider_unavailable"); },
+    getUserIds: async () => [], logError: () => {},
+  });
+  assert.equal(await scheduler.runNow(), "failed");
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(scheduler.status().running, false);
+  assert.equal(scheduler.status().lastError, "provider_unavailable");
+  assert.equal(await scheduler.runNow(), "failed");
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(scheduler.status().runCount, 2);
 });

@@ -3,6 +3,9 @@ import { sendTelegramMessage } from "./telegram";
 import { sendPushNotification } from "./push-notifications";
 import type { MonitoredProject } from "@shared/schema";
 import { hasRealValue } from "./ceo-doctor-cli";
+import { pool } from "./db";
+import { databasePoolCounts } from "./db-pool";
+import { createProjectMonitor } from "./project-monitor";
 
 const CHECK_INTERVAL_MS = 60 * 1000; // Check every minute
 
@@ -142,45 +145,40 @@ async function handleStatusChange(
 }
 
 async function checkAllProjects(): Promise<void> {
-  try {
-    const projects = await storage.getAllMonitoredProjects();
-    
-    for (const project of projects) {
-      const result = await checkProjectHealth(project.url);
-      
-      // Log the health check
-      await storage.createHealthCheckLog({
-        projectId: project.id,
-        status: result.status,
-        responseTime: result.responseTime,
-        statusCode: result.statusCode,
-        errorMessage: result.errorMessage,
-      });
-      
-      // Handle status changes
-      await handleStatusChange(project, result);
-      
-      // Update project status
-      await storage.updateMonitoredProject(project.id, {
-        status: result.status,
-        lastCheck: new Date(),
-        lastOnline: result.status === "online" ? new Date() : project.lastOnline,
-        responseTime: result.responseTime,
-      });
-    }
-  } catch (error) {
-    console.error("Error checking projects:", error);
+  const projects = await storage.getAllMonitoredProjects();
+
+  for (const project of projects) {
+    const result = await checkProjectHealth(project.url);
+
+    // Log the health check
+    await storage.createHealthCheckLog({
+      projectId: project.id,
+      status: result.status,
+      responseTime: result.responseTime,
+      statusCode: result.statusCode,
+      errorMessage: result.errorMessage,
+    });
+
+    // Handle status changes
+    await handleStatusChange(project, result);
+
+    // Update project status
+    await storage.updateMonitoredProject(project.id, {
+      status: result.status,
+      lastCheck: new Date(),
+      lastOnline: result.status === "online" ? new Date() : project.lastOnline,
+      responseTime: result.responseTime,
+    });
   }
 }
 
+const projectMonitor = createProjectMonitor({
+  run: checkAllProjects,
+  getPoolCounts: () => databasePoolCounts(pool),
+}, CHECK_INTERVAL_MS);
+
 export function startHealthCheckScheduler(): void {
-  console.log("Health check scheduler started");
-  
-  // Run immediately on start
-  checkAllProjects();
-  
-  // Then run every minute
-  setInterval(checkAllProjects, CHECK_INTERVAL_MS);
+  projectMonitor.start();
 }
 
 export async function checkSingleProject(projectId: string): Promise<HealthCheckResult | null> {

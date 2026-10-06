@@ -100,3 +100,34 @@ test("registers the Metricool analytics sync as active Facebook-only automation"
   assert.deepEqual((automation.metadata as any).networks, ["facebook"]);
   assert.equal((automation.metadata as any).xEnabled, false);
 });
+
+test("listing defaults preserves pauses, repairs expired dates and clears inactive schedules", async () => {
+  const { storage } = await import("../server/storage");
+  const { ensureDefaultAutomations } = await import("../server/automation-registry");
+  const definitions = DEFAULT_AUTOMATIONS.map((seed, index) => automation({
+    ...seed, id: `definition-${index}`, metadata: { ...seed.metadata as object, key: seed.key },
+    nextRunAt: new Date("2026-06-01T00:00:00Z"),
+    ...(seed.key === "metricool-daily-analytics-sync" ? { status: "paused" as const } : {}),
+  }));
+  const originalGet = storage.getAutomationDefinitions;
+  const originalUpdate = storage.updateAutomationDefinition;
+  storage.getAutomationDefinitions = async () => definitions;
+  storage.updateAutomationDefinition = async (id, updates) => {
+    const row = definitions.find((entry) => entry.id === id)!;
+    Object.assign(row, updates);
+    return row;
+  };
+  try {
+    await ensureDefaultAutomations("user-1");
+    const metricool = definitions.find((entry) => (entry.metadata as any).key === "metricool-daily-analytics-sync")!;
+    assert.equal(metricool.status, "paused");
+    assert.equal(metricool.nextRunAt, null);
+    for (const entry of definitions.filter((row) => row.status === "active" && (row.schedule as any).kind !== "manual")) {
+      assert.ok(entry.nextRunAt && entry.nextRunAt > new Date());
+      assert.equal((entry.metadata as any).missedRunAt, "2026-06-01T00:00:00.000Z");
+    }
+  } finally {
+    storage.getAutomationDefinitions = originalGet;
+    storage.updateAutomationDefinition = originalUpdate;
+  }
+});

@@ -434,7 +434,8 @@ async function performMetricoolAnalyticsSync(input: MetricoolAnalyticsSyncDeps =
   const prior = await readStoredState(stateFile, env);
   const now = input.now || (() => new Date());
   const startedAt = now();
-  const result: MetricoolAnalyticsSyncResult = { ...prior, enabled: config.enabled, lookbackDays: config.lookbackDays, lastRunAt: startedAt.toISOString(), status: "blocked" };
+  // Counters describe this attempt, never the previous successful run.
+  const result: MetricoolAnalyticsSyncResult = { ...prior, ...emptyStatus(env, config), lastSuccessAt: prior.lastSuccessAt, lastRunAt: startedAt.toISOString(), status: "blocked" };
   if (!config.enabled) { result.lastError = "disabled_by_configuration"; await atomicWrite(stateFile, { ...result, seen: prior.seen }); return result; }
   const token = env.METRICOOL_USER_TOKEN;
   const userId = env.METRICOOL_USER_ID;
@@ -514,7 +515,9 @@ async function performMetricoolAnalyticsSync(input: MetricoolAnalyticsSyncDeps =
     result.status = connectedCount === 0 ? "blocked" : brandErrors.length || connectedCount < targets.length ? "partial" : "completed";
     result.source = "metricool";
     result.lastSuccessAt = successfulBrandFetches > 0 ? startedAt.toISOString() : result.lastSuccessAt;
-    result.lastError = connectedCount === 0 ? "metricool_news_brands_not_connected" : brandErrors.length ? brandErrors.join("; ").slice(0, 240) : null;
+    const missingBrands = targets.filter((target) => !target.connected).map((target) => target.lane);
+    const readinessErrors = missingBrands.length ? [`metricool_news_brands_not_connected:${missingBrands.join(",")}`] : [];
+    result.lastError = connectedCount === 0 ? "metricool_news_brands_not_connected" : [...readinessErrors, ...brandErrors].join("; ").slice(0, 240) || null;
     result.postsSeen = postsSeen;
     result.metricsRecorded = metrics.length;
     result.duplicatesSkipped = duplicatesSkipped;
@@ -588,15 +591,16 @@ export function createMetricoolAnalyticsScheduler(deps: MetricoolAnalyticsSchedu
       const recorder = deps.recordRun || recordScheduledAutomationRun;
       await Promise.all(users.map((userId) => recorder(userId, "metricool-daily-analytics-sync", startedAt, {
         status: result.status === "completed" ? "success" : result.status === "blocked" ? "skipped" : "failed",
-        resultSummary: `Metricool analytics sync ${result.status}: ${result.metricsRecorded} metric(s) recorded.`,
+        resultSummary: `Metricool analytics sync ${result.status}: ${result.metricsRecorded} metric(s) recorded; ${result.postsSeen} post(s) seen; ${result.duplicatesSkipped} duplicate(s); ${result.unmatchedSkipped} unmatched.`,
         errorMessage: result.lastError,
-        metadata: { postsSeen: result.postsSeen, metricsRecorded: result.metricsRecorded, duplicatesSkipped: result.duplicatesSkipped, unmatchedSkipped: result.unmatchedSkipped, source: result.source },
+        metadata: { syncStatus: result.status, brands: result.brands, postsSeen: result.postsSeen, metricsRecorded: result.metricsRecorded, duplicatesSkipped: result.duplicatesSkipped, unmatchedSkipped: result.unmatchedSkipped, source: result.source },
       })));
       if (result.status === "completed") completedCount += 1;
+      lastError = result.lastError;
       lastFinishedAt = now().toISOString();
       return result.status;
     })();
-    inFlight = work.then(() => undefined).catch((error) => { lastError = error instanceof Error ? error.message : "analytics_scheduler_failed"; lastFinishedAt = now().toISOString(); logError(`[Metricool analytics] ${lastError}`); throw error; }).finally(() => { inFlight = null; });
+    inFlight = work.then(() => undefined).catch((error) => { lastError = safeErrorMessage(error); lastFinishedAt = now().toISOString(); logError(`[Metricool analytics] ${lastError}`); }).finally(() => { inFlight = null; });
     try { return await work; } catch { return "failed"; }
   };
   const tick = () => {

@@ -1,10 +1,11 @@
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Pool } from "pg";
 import { resolveDatabaseConnectionString } from "./database-url";
+import { ObservedDatabasePool, resolveDatabasePoolSettings } from "./db-pool";
 
-const pool = new Pool({
+export const pool = new ObservedDatabasePool({
   connectionString: resolveDatabaseConnectionString(),
   allowExitOnIdle: true,
+  ...resolveDatabasePoolSettings(),
 });
 
 export const db = drizzle(pool);

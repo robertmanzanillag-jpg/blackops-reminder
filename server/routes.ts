@@ -4375,7 +4375,7 @@ export async function registerRoutes(
           ...runs.filter((run) => run.status === "failed").slice(0, 5).map((run) => ({ type: "run", run })),
         ],
         nextRuns: automations
-          .filter((automation) => automation.nextRunAt)
+          .filter((automation) => automation.status === "active" && automation.nextRunAt && new Date(automation.nextRunAt) > new Date())
           .sort((a, b) => new Date(a.nextRunAt!).getTime() - new Date(b.nextRunAt!).getTime())
           .slice(0, 10),
       });
@@ -4386,9 +4386,9 @@ export async function registerRoutes(
 
   // ==================== MARKETING COMMAND CENTER ====================
 
-  app.get("/api/marketing-command-center", async (_req, res) => {
+  app.get("/api/marketing-command-center", async (req, res) => {
     try {
-      res.json(getMarketingCommandCenterSnapshot());
+      res.json(getMarketingCommandCenterSnapshot(getCurrentUserId(req)));
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch marketing command center snapshot" });
     }
@@ -4397,7 +4397,7 @@ export async function registerRoutes(
   app.post("/api/marketing-command-center/run-day", async (req, res) => {
     try {
       const input = marketingCommandCenterDaySchema.partial().parse(req.body || {});
-      res.json(runMarketingCommandCenterDay(input));
+      res.json(runMarketingCommandCenterDay(input, getCurrentUserId(req)));
     } catch (error) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: error.errors });

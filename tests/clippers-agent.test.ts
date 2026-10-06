@@ -1931,7 +1931,7 @@ test("prepareClipperAccountCreationPack writes executable account creation CSV a
     assert.equal(accountCreationPack.claimSheet.length, accountCreationPack.items.length);
     assert.equal(accountCreationPack.platformBatches.length, 3);
     assert.equal(accountCreationPack.totals.platformBatches, accountCreationPack.platformBatches.length);
-    assert.ok(accountCreationPack.platformBatches.some((batch) => batch.platform === "instagram" && batch.handles.includes("@sportsdaily")));
+    assert.ok(accountCreationPack.platformBatches.some((batch) => batch.platform === "instagram" && batch.handles.includes("@sportsdailyclips")));
     assert.ok(accountCreationPack.platformBatches.every((batch) => batch.copyBlock.includes("Accounts:")));
     assert.ok(accountCreationPack.platformBatches.every((batch) => batch.evidenceRecipeRows.length === batch.profiles));
     assert.ok(accountCreationPack.platformBatches.every((batch) => batch.submittedEvidenceRows.every((row) => row.includes(",\"submitted\","))));
@@ -3081,9 +3081,9 @@ test("prepareClipperExternalExecutionSession writes lane-based execution pack", 
     assert.ok(externalExecutionSession.closeoutRun.packPath.endsWith("clippers-external-closeout-pack.json"));
     assert.ok(externalExecutionSession.closeoutRun.evidenceCsvPath.endsWith("external-closeout-evidence-import.csv"));
     assert.equal(externalExecutionSession.closeoutRun.totals.metricoolReadyToSend, 0);
-    assert.equal(externalExecutionSession.closeoutRun.metricoolPublishMode, "approval_required");
+    assert.equal(externalExecutionSession.closeoutRun.metricoolPublishMode, "missing", "an unprepared publishing mode must remain missing");
     if (externalExecutionSession.closeoutRun.status !== "not_prepared") {
-      assert.equal(externalExecutionSession.closeoutRun.totals.rows, 16);
+      assert.equal(externalExecutionSession.closeoutRun.totals.rows, 18);
       assert.equal(externalExecutionSession.closeoutRun.nextItems.length, 8);
       assert.ok(externalExecutionSession.closeoutRun.nextItems.every((item) => item.proofPath.includes("external-closeout-proofs")));
       assert.ok(externalExecutionSession.closeoutRun.nextItems.every((item) => item.evidenceCsvRow.startsWith("\"")));
@@ -3140,7 +3140,7 @@ test("prepareClipperExternalExecutionSession writes lane-based execution pack", 
     assert.ok(rawMarkdown.includes("Clippers External Execution Session"));
     assert.ok(rawMarkdown.includes("Launch Evidence Import"));
     assert.ok(rawMarkdown.includes("External Closeout Run"));
-    assert.ok(rawMarkdown.includes("Metricool: approval_required; ready_to_send 0"));
+    assert.ok(rawMarkdown.includes("Metricool: missing; ready_to_send 0"));
     assert.ok(rawMarkdown.includes("Focus Run"));
     assert.ok(rawMarkdown.includes("Unlock Board"));
     assert.ok(rawMarkdown.includes("Portal Batches"));
@@ -6342,7 +6342,7 @@ test("prepareClipperRobertNextActions writes dynamic current-state action pack",
       lane.nextLocalActions.length > 0 &&
       lane.nextStep.length > 0
     ));
-    assert.ok(robertNextActions.connectNow.postConnectActivationBridge.some((lane) => lane.platform === "tiktok" && lane.handle === "@sportsdaily"));
+    assert.ok(robertNextActions.connectNow.postConnectActivationBridge.some((lane) => lane.platform === "tiktok" && lane.handle === "@sportsdailyclips"));
     assert.ok(robertNextActions.connectNow.postConnectActivationBridge.some((lane) => lane.blockers.length > 0));
     assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.length <= 12);
     assert.ok(robertNextActions.connectNow.accountCloseout.nextItems.some((item) => item.lane === "account"));
