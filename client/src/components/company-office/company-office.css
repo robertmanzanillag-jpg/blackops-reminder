@@ -3,3 +3,25 @@
 .office-upgrade{position:absolute;right:9px;top:70px;display:grid;place-items:center;width:42px;height:29px;border:2px solid var(--department);border-radius:5px;color:var(--department);background:#122836;box-shadow:0 9px 0 #0a1624;font-size:12px;font-style:normal}.building-furniture{filter:brightness(calc(1 + var(--level,0)*.1))}
 
 .company-real-goals{margin-top:20px}.company-real-goals ul{display:flex;flex-wrap:wrap;gap:12px;margin-top:16px;list-style:none;padding:0}.company-real-goals li{font-size:12px;padding:10px 14px;border:1px solid #ffffff12;border-radius:8px}.company-real-goals li span{font-size:10px;color:#b4edcc;margin-right:10px}.company-real-goals>p button{color:#b4edcc;text-decoration:underline;margin-left:8px}
+
+/* Keep the original isometric campus fully framed; zoom remains scrollable. */
+.company-office{padding-top:64px}.company-layout>*,.company-panel>*{min-width:0}
+.company-map-scroll{height:auto;max-height:850px;min-height:220px;overscroll-behavior:contain}
+.company-scene-frame{position:relative;margin:0 auto;flex-shrink:0}
+.company-scene{width:1280px;height:960px;margin:0;position:absolute;top:0;left:0;transform:scale(var(--scene-scale));transform-origin:top left}
+.company-campus{top:70px;left:115px}
+.company-departments{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;padding:12px;background:#0c1727;border-bottom:1px solid #273348}
+.company-departments button{display:flex;align-items:center;gap:7px;min-height:40px;border:1px solid #35465c;border-radius:8px;padding:8px 10px;color:#cfdbeb;background:#142132;font-size:12px;text-align:left;cursor:pointer}
+.company-departments button span{font-size:10px;color:var(--department)}
+.company-departments button[aria-pressed=true]{border-color:var(--department);background:#203448;color:#fff}
+.company-person[aria-pressed=true] .person-name{background:#e1f9ef;color:#071b17;border-color:var(--department)}
+.company-map-scroll:focus-visible{outline:2px solid #a7f3d0;outline-offset:-4px}
+.department-team button{min-height:36px;padding:8px 10px;font-size:12px;cursor:pointer}
+.company-selected-agent small,.company-muted,.company-real-link,.company-card label{font-size:11px;line-height:1.6}
+.company-action{min-height:44px;font-size:12px}.company-action span{font-size:10px}
+.company-real-goals>p button{min-height:44px;padding:8px}.company-real-link{min-height:36px}
+.company-selected-agent a{display:grid;place-items:center;min-width:36px;min-height:36px}
+.company-stats strong{overflow-wrap:anywhere}.company-status{line-height:1.6}
+@media(min-width:1600px){.company-map-scroll{height:auto}.company-scene{top:0}}
+@media(max-width:1100px){.company-map-scroll{height:auto}}
+@media(max-width:600px){.company-office{padding-top:64px}.company-header{flex-wrap:wrap}.company-header>.company-link{display:flex}.company-map-scroll{height:auto}.company-departments{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;padding:10px}.company-departments button{font-size:11px;min-height:44px}.company-map-toolbar{flex-wrap:wrap}.company-map-actions{margin-left:auto}.company-map-actions button{min-height:36px}.company-map-actions input{width:65px}.company-map-footer{font-size:11px}.company-scene-frame{margin:0}.company-brand h1{font-size:23px}.company-news article>small{font-size:10px}}

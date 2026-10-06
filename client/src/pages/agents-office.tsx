@@ -2,7 +2,7 @@ import { CompanyOffice } from "@/components/company-office/company-office";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent, ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { motion, MotionConfig } from "framer-motion";
 import {
   ArrowLeft,
   BadgeDollarSign,
@@ -52,10 +52,10 @@ const agents = [
     href: "/assistant",
     icon: Bot,
     station: "Recepcion",
-    status: "Listo",
-    activity: "Recibiendo solicitudes y organizando agenda",
+    status: "Sin verificar",
+    activity: "Función prevista: Recibiendo solicitudes y organizando agenda",
     shortAction: "Agenda",
-    mode: "working",
+    mode: "break",
     color: "from-sky-400 to-cyan-300",
     outfit: "bg-sky-500",
     hair: "bg-zinc-900",
@@ -70,10 +70,10 @@ const agents = [
     href: "/ceo",
     icon: BriefcaseBusiness,
     station: "Sala principal",
-    status: "Revisando",
-    activity: "Definiendo prioridades del dia",
+    status: "Sin verificar",
+    activity: "Función prevista: Definiendo prioridades del dia",
     shortAction: "Prioridades",
-    mode: "working",
+    mode: "break",
     color: "from-amber-300 to-orange-400",
     outfit: "bg-amber-500",
     hair: "bg-stone-800",
@@ -88,10 +88,10 @@ const agents = [
     href: "/revenue-engine",
     icon: BadgeDollarSign,
     station: "Deals + Websites",
-    status: "Armando pipeline",
-    activity: "Buscando deals, creando landing pages y preparando websites de oportunidad",
+    status: "Sin verificar",
+    activity: "Función prevista: Buscando deals, creando landing pages y preparando websites de oportunidad",
     shortAction: "Deals",
-    mode: "working",
+    mode: "break",
     color: "from-emerald-300 to-sky-400",
     outfit: "bg-emerald-500",
     hair: "bg-zinc-950",
@@ -106,10 +106,10 @@ const agents = [
     href: "/dropshipping-ceo",
     icon: Store,
     station: "Dropshipping Lab",
-    status: "Validando",
-    activity: "Buscando productos virales, margen, suppliers y contenido sin comprar inventario",
+    status: "Sin verificar",
+    activity: "Función prevista: Buscando productos virales, margen, suppliers y contenido sin comprar inventario",
     shortAction: "Dropship",
-    mode: "working",
+    mode: "break",
     color: "from-emerald-200 to-lime-400",
     outfit: "bg-emerald-400",
     hair: "bg-zinc-950",
@@ -124,10 +124,10 @@ const agents = [
     href: "/marketing-command-center",
     icon: Megaphone,
     station: "Marketing HQ",
-    status: "Produciendo",
-    activity: "Dirigiendo marketing para todos los clientes internos con skills, analytics, safety y aprendizaje separado",
+    status: "Sin verificar",
+    activity: "Función prevista: Dirigiendo marketing para todos los clientes internos con skills, analytics, safety y aprendizaje separado",
     shortAction: "Marketing",
-    mode: "working",
+    mode: "break",
     color: "from-lime-300 to-emerald-400",
     outfit: "bg-lime-500",
     hair: "bg-zinc-950",
@@ -142,10 +142,10 @@ const agents = [
     href: "/code-agent",
     icon: Code2,
     station: "Mesa tecnica",
-    status: "En foco",
-    activity: "Trabajando cambios y revisando codigo",
+    status: "Sin verificar",
+    activity: "Función prevista: Trabajando cambios y revisando codigo",
     shortAction: "Codigo",
-    mode: "working",
+    mode: "break",
     color: "from-emerald-300 to-teal-400",
     outfit: "bg-emerald-500",
     hair: "bg-zinc-950",
@@ -160,10 +160,10 @@ const agents = [
     href: "/github-agent",
     icon: Github,
     station: "Control de versiones",
-    status: "Sincronizando",
-    activity: "Mirando PRs, ramas y checks",
+    status: "Sin verificar",
+    activity: "Función prevista: Mirando PRs, ramas y checks",
     shortAction: "PRs",
-    mode: "working",
+    mode: "break",
     color: "from-zinc-200 to-zinc-500",
     outfit: "bg-zinc-300",
     hair: "bg-zinc-900",
@@ -178,10 +178,10 @@ const agents = [
     href: "/github-agent",
     icon: Sparkles,
     station: "Dev + GitHub",
-    status: "Auditando",
-    activity: "Revisando cambios de Codex con criterio independiente antes de QA",
+    status: "Sin verificar",
+    activity: "Función prevista: Revisando cambios de Codex con criterio independiente antes de QA",
     shortAction: "Review",
-    mode: "working",
+    mode: "break",
     color: "from-orange-200 to-rose-300",
     outfit: "bg-orange-400",
     hair: "bg-stone-900",
@@ -196,10 +196,10 @@ const agents = [
     href: "/portfolio",
     icon: LineChart,
     station: "Pantalla de mercado",
-    status: "Monitoreando",
-    activity: "Analizando cartera y senales de mercado",
+    status: "Sin verificar",
+    activity: "Función prevista: Analizando cartera y senales de mercado",
     shortAction: "Mercado",
-    mode: "working",
+    mode: "break",
     color: "from-lime-300 to-green-500",
     outfit: "bg-lime-500",
     hair: "bg-stone-700",
@@ -214,10 +214,10 @@ const agents = [
     href: "/radio",
     icon: Radio,
     station: "Cabina creativa",
-    status: "Produciendo",
-    activity: "Preparando radio, flyers y calendario creativo",
+    status: "Sin verificar",
+    activity: "Función prevista: Preparando radio, flyers y calendario creativo",
     shortAction: "Radio",
-    mode: "working",
+    mode: "break",
     color: "from-fuchsia-300 to-rose-400",
     outfit: "bg-rose-500",
     hair: "bg-violet-950",
@@ -232,10 +232,10 @@ const agents = [
     href: "/clippers",
     icon: Clapperboard,
     station: "War room social",
-    status: "Planeando",
-    activity: "Organizando cuentas, fuentes permitidas, drafts diarios y reportes de views",
+    status: "Sin verificar",
+    activity: "Función prevista: Organizando cuentas, fuentes permitidas, drafts diarios y reportes de views",
     shortAction: "Clips",
-    mode: "working",
+    mode: "break",
     color: "from-amber-300 to-rose-400",
     outfit: "bg-amber-500",
     hair: "bg-zinc-950",
@@ -250,8 +250,8 @@ const agents = [
     href: "/automations",
     icon: Zap,
     station: "Rack operativo",
-    status: "Vigilando",
-    activity: "Esperando el proximo job programado",
+    status: "Sin verificar",
+    activity: "Función prevista: Esperando el proximo job programado",
     shortAction: "Rutinas",
     mode: "break",
     color: "from-violet-300 to-indigo-400",
@@ -268,10 +268,10 @@ const agents = [
     href: "/cybersecurity-agent",
     icon: ShieldAlert,
     station: "Security ops",
-    status: "Monitoreando",
-    activity: "Revisando apps, HTTPS, incidentes, repos y alertas por Telegram",
+    status: "Sin verificar",
+    activity: "Función prevista: Revisando apps, HTTPS, incidentes, repos y alertas por Telegram",
     shortAction: "Threats",
-    mode: "working",
+    mode: "break",
     color: "from-cyan-200 to-blue-400",
     outfit: "bg-cyan-500",
     hair: "bg-zinc-950",
@@ -286,10 +286,10 @@ const agents = [
     href: "/app-qa-agent",
     icon: MousePointerClick,
     station: "QA lab",
-    status: "Patrullando",
-    activity: "Entrando a paginas, revisando links, clicks esperados, APIs, errores e ideas de mejora",
+    status: "Sin verificar",
+    activity: "Función prevista: Entrando a paginas, revisando links, clicks esperados, APIs, errores e ideas de mejora",
     shortAction: "QA",
-    mode: "working",
+    mode: "break",
     color: "from-emerald-200 to-teal-400",
     outfit: "bg-emerald-500",
     hair: "bg-zinc-950",
@@ -304,10 +304,10 @@ const agents = [
     href: "/legal-compliance",
     icon: Scale,
     station: "Legal desk",
-    status: "Auditando",
-    activity: "Revisando contratos, privacidad, copyright, terminos, riesgos regulatorios y alertas criticas",
+    status: "Sin verificar",
+    activity: "Función prevista: Revisando contratos, privacidad, copyright, terminos, riesgos regulatorios y alertas criticas",
     shortAction: "Legal",
-    mode: "working",
+    mode: "break",
     color: "from-violet-200 to-indigo-400",
     outfit: "bg-indigo-400",
     hair: "bg-zinc-950",
@@ -322,10 +322,10 @@ const agents = [
     href: "/tools",
     icon: ShieldCheck,
     station: "Puerta segura",
-    status: "Activo",
-    activity: "Revisando permisos y acciones sensibles",
+    status: "Sin verificar",
+    activity: "Función prevista: Revisando permisos y acciones sensibles",
     shortAction: "Permisos",
-    mode: "working",
+    mode: "break",
     color: "from-red-300 to-stone-300",
     outfit: "bg-red-500",
     hair: "bg-stone-900",
@@ -1683,13 +1683,13 @@ function LiveAgentsOffice() {
     refetchInterval: 60000,
   });
   useEffect(() => {
-    window.localStorage.setItem(OFFICE_LAYOUT_KEY, JSON.stringify(officeRooms));
+    try { window.localStorage.setItem(OFFICE_LAYOUT_KEY, JSON.stringify(officeRooms)); } catch { /* Keep layout in memory when storage is unavailable. */ }
   }, [officeRooms]);
   useEffect(() => {
-    window.localStorage.setItem(OFFICE_AGENT_LOCATIONS_KEY, JSON.stringify(agentLocations));
+    try { window.localStorage.setItem(OFFICE_AGENT_LOCATIONS_KEY, JSON.stringify(agentLocations)); } catch { /* Keep layout in memory when storage is unavailable. */ }
   }, [agentLocations]);
   useEffect(() => {
-    window.localStorage.setItem(OFFICE_AGENT_OFFSETS_KEY, JSON.stringify(agentOffsets));
+    try { window.localStorage.setItem(OFFICE_AGENT_OFFSETS_KEY, JSON.stringify(agentOffsets)); } catch { /* Keep layout in memory when storage is unavailable. */ }
   }, [agentOffsets]);
   useEffect(() => {
     return () => {
@@ -1885,7 +1885,7 @@ function LiveAgentsOffice() {
       if (current[nextContact.id]?.length) return current;
       return {
         ...current,
-        [nextContact.id]: [{ role: "agent", text: buildAgentGreeting(nextContact) }],
+        [nextContact.id]: [{ role: "agent", text: `Vista del rol; ejecución sin verificar. ${buildAgentGreeting(nextContact)}` }],
       };
     });
     setDirectMessage("");
@@ -1898,10 +1898,10 @@ function LiveAgentsOffice() {
       isDevReviewContact && selectedTarget
         ? `\n\nRepo objetivo: ${selectedTarget.label} (${selectedTarget.repo}).`
         : "";
-    const reply = buildAgentReply(contact, `${text}${repoContext}`);
+    const reply = `Borrador local de orientación; no se ejecutó ningún agente. ${buildAgentReply(contact, `${text}${repoContext}`)}`;
     if (isDevReviewContact && targetRepo !== "workspace") {
       setLastRemoteTask(text);
-      window.localStorage.setItem(
+      try { window.localStorage.setItem(
         OFFICE_GITHUB_HANDOFF_KEY,
         JSON.stringify({
           repo: selectedTarget.repo,
@@ -1910,7 +1910,7 @@ function LiveAgentsOffice() {
           task: text,
           createdAt: new Date().toISOString(),
         })
-      );
+      ); } catch { /* Draft remains in memory; nothing is dispatched. */ }
     }
     setActiveChatContact(contact);
     setSelectedContact(contact);
@@ -2101,7 +2101,7 @@ function LiveAgentsOffice() {
                         <span className={cn("h-2 w-2 rounded-full bg-gradient-to-br", agent.color)} />
                         <span className="truncate">{agent.name.toLowerCase()}-agent</span>
                       </span>
-                      <span className="text-cyan-300">{agent.mode === "working" ? "A" : "I"}</span>
+                      <span className="text-cyan-300">?</span>
                     </button>
                   ))}
                   <p className="mt-3 text-slate-300">▾ workflows</p>
@@ -3057,9 +3057,9 @@ export default function AgentsOfficePage() {
     <CompanyOffice />
     <section className="mx-4 mb-8 rounded-xl border border-white/10 bg-slate-900 p-4 text-slate-200">
       <button type="button" aria-expanded={showLive} aria-controls="live-office-control" onClick={() => setShowLive(value => !value)} className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-200">
-        {showLive ? "Ocultar" : "Abrir"} centro operativo existente · proyectos, agentes y reportes reales
+        {showLive ? "Ocultar" : "Abrir"} centro operativo existente · consulta de proyectos y herramientas
       </button>
-      {showLive && <div id="live-office-control" className="mt-4"><LiveAgentsOffice /></div>}
+      <div id="live-office-control" hidden={!showLive} className="mt-4">{showLive && <><p role="note" className="mb-4 rounded-lg border border-amber-300/30 p-3 text-sm text-amber-100">Vista anterior: movimientos, conversaciones y aprobaciones locales son demostraciones. No prueban trabajo real ni ejecutan tareas. Solo los reportes recibidos de las API son datos de consulta; las herramientas enlazadas conservan sus propios permisos.</p><MotionConfig reducedMotion="user"><LiveAgentsOffice /></MotionConfig></>}</div>
     </section>
   </div>;
 }

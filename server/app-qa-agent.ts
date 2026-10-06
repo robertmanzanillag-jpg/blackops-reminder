@@ -228,7 +228,7 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
   { path: "/assistant", label: "Assistant", expectedClicks: ["Enviar mensaje"], status: "pass", notes: [] },
   { path: "/ceo", label: "CEO Dashboard", expectedClicks: ["Approvals", "Salud operacional"], status: "pass", notes: [] },
   { path: "/tools", label: "Tools", expectedClicks: ["Abrir herramienta", "Ajustes"], status: "pass", notes: [] },
-  { path: "/agents-office", label: "Agents Office", expectedClicks: ["Seleccionar agente", "Abrir agente"], status: "pass", notes: [] },
+  { path: "/agents-office", label: "Agents Office", expectedClicks: ["Dirección", "Ingeniería", "Contratar scout simulado", "Guardar", "Avanzar un día"], status: "pass", notes: [] },
   { path: "/projects", label: "Apps / Projects", expectedClicks: ["Agregar proyecto", "Check manual"], status: "pass", notes: [] },
   { path: "/cybersecurity-agent", label: "Cybersecurity Agent", expectedClicks: ["Escanear", "Importar apps"], status: "pass", notes: [] },
   { path: "/legal-compliance", label: "Legal Compliance", expectedClicks: ["Ver reportes"], status: "pass", notes: [] },
@@ -1312,17 +1312,7 @@ export async function runVisualClickScout(
       ignoreHTTPSErrors: true,
     });
 
-    await context.addInitScript(() => {
-      try {
-        if (window.location.protocol === "http:" || window.location.protocol === "https:") {
-          window.localStorage.setItem("blackops-local-auth-user", JSON.stringify({ id: "visual-qa-user", username: "visual-qa" }));
-          (window as any).__visualQaAuthSeeded = true;
-        }
-      } catch {
-        (window as any).__visualQaAuthSeedError = true;
-        // Some browser-internal documents deny storage access before the app page loads.
-      }
-    });
+    // Authentication must come from a backend session; localStorage is not evidence.
 
     for (const route of routes) {
       const url = new URL(route.path, baseUrl).toString();
@@ -1349,20 +1339,12 @@ export async function runVisualClickScout(
         const statusCode = response?.status?.() || 0;
         const bodySnapshots = await collectVisualRouteTextSnapshots(page, route);
         const bodyText = bodySnapshots.map((snapshot) => snapshot.bodyText).join("\n");
-        const authSeed = await page.evaluate(() => ({
-          seeded: Boolean((window as any).__visualQaAuthSeeded),
-          errored: Boolean((window as any).__visualQaAuthSeedError),
-          hasUser: Boolean(window.localStorage.getItem("blackops-local-auth-user")),
-        })).catch(() => ({ seeded: false, errored: true, hasUser: false }));
 
         if (statusCode >= 400) {
           status = "fail";
           notes.push(`HTTP ${statusCode}`);
         }
-        if (!authSeed.seeded || authSeed.errored || !authSeed.hasUser) {
-          status = "fail";
-          notes.push("No se pudo sembrar auth local para QA visual");
-        }
+
         if (isVisualAuthScreen(bodyText)) {
           status = "fail";
           notes.push("QA visual cayo en pantalla de login");
@@ -1843,7 +1825,7 @@ export async function runAppQaScan(
     incidents: await storage.getAppIncidentsForProject(app.id),
     errors: await storage.getAppErrorEvents(app.id, 20),
   })));
-  const visualReport = shouldRunVisualScout({ userId, notify, allowDailyDigest, targetContext, now: startedAt })
+  const visualReport = (notify || recordHistory || allowDailyDigest) && shouldRunVisualScout({ userId, notify, allowDailyDigest, targetContext, now: startedAt })
     ? await runVisualClickScout()
     : buildSkippedVisualScoutReport();
 
@@ -1902,7 +1884,8 @@ export async function runAppQaScan(
     improvementIdeas,
   };
 
-  if (notify || shouldSendAutomaticAlert(userId, result)) {
+  // Passive status scans must neither send alerts nor consume alert cooldown.
+  if (notify || (recordHistory && shouldSendAutomaticAlert(userId, result))) {
     const telegramConfig = await storage.getTelegramConfig(userId);
     const botToken = getTelegramBotToken();
     if (telegramConfig?.enabled && telegramConfig.chatId && botToken) {

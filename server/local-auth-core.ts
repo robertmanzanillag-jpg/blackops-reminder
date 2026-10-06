@@ -21,13 +21,13 @@ export function isLocalAuthEnabled(): boolean {
   if (process.env.LOCAL_AUTH_ENABLED === "true") return true;
   if (process.env.LOCAL_AUTH_ENABLED === "false") return false;
   if (process.env.NODE_ENV === "production" && process.env.SESSION_SECRET) return true;
-  return ["development", "test"].includes(process.env.NODE_ENV || "development");
+  return ["development", "test"].includes(process.env.NODE_ENV || "");
 }
 
 export function isLocalAuthRegistrationAllowed(): boolean {
   if (process.env.ALLOW_LOCAL_AUTH_REGISTRATION === "true") return true;
   if (process.env.ALLOW_LOCAL_AUTH_REGISTRATION === "false") return false;
-  return ["development", "test"].includes(process.env.NODE_ENV || "development");
+  return ["development", "test"].includes(process.env.NODE_ENV || "");
 }
 
 export async function hashPassword(password: string): Promise<string> {
