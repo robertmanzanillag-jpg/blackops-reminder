@@ -5,3 +5,4 @@
 - [Telegram webhook auto-setup](telegram-webhook-autosetup.md) — servidor auto-genera TELEGRAM_WEBHOOK_SECRET en process.env si falta; webhook siempre se registra al startup sin flag adicional.
 - [Dropshipping CEO start flow](dropshipping-ceo-start.md) — POST /api/dropshipping-ceo/start corre ciclo + envía Telegram con blocker de Shopify; guardrails de aprobación intactos.
 - [Local news authorization](local-news-operation-authorization.md) — solo seguridad, sin publicar/activar; destinos pendientes y conciliación compartida antes de una operación futura.
+- [News diagnostic evidence](local-news-diagnostic-evidence.md) — no atribuir fallos desde totales; pruebas simuladas no certifican feeds reales y la telemetría no debe detener ingesta.

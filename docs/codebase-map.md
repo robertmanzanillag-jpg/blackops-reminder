@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-10-06T08:09:44.262Z
+Generated: 2026-10-06T09:23:57.086Z
 Repo: `/home/runner/workspace`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 659 | 576 | 1967 | 495 | 12920 |
+| 664 | 581 | 1985 | 495 | 13020 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,21 +28,21 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 135 | 131 | server:135 |
-| `tests` | 120 | 117 | test:120 |
-| `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
+| `server` | 136 | 132 | server:136 |
+| `tests` | 121 | 118 | test:121 |
+| `client/src` | 117 | 115 | ui-component:55, client-page:26, client-component:23, client-lib:7 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `script` | 76 | 71 | script:76 |
 | `docs` | 31 | 30 | docs:31 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
-| `.agents/memory` | 6 | 6 | docs:6 |
+| `.agents/memory` | 7 | 7 | docs:7 |
 | `client/public` | 16 | 2 | other:16 |
+| `shared` | 2 | 2 | shared:2 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `client` | 1 | 1 | other:1 |
 | `config` | 1 | 1 | other:1 |
 | `scripts` | 4 | 1 | script:4 |
-| `shared` | 1 | 1 | shared:1 |
 | `shared/models` | 1 | 1 | shared:1 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 | `bin` | 1 | 0 | other:1 |
@@ -129,6 +129,7 @@ Package: `rest-express`
 - `tests/local-auth.test.ts`
 - `tests/local-news-delivery-safety.test.ts`
 - `tests/local-news-growth-scout.test.ts`
+- `tests/local-news-source-diagnostics.test.ts`
 - `tests/local-youtube-queue.test.ts`
 - `tests/local-youtube-worker-queue.test.ts`
 - `tests/marketing-command-center.test.ts`

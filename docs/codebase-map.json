@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-06T08:09:44.262Z",
+  "generatedAt": "2026-10-06T09:23:57.086Z",
   "repoRoot": "/home/runner/workspace",
   "packageName": "rest-express",
   "scripts": {
@@ -122,39 +122,51 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 659,
-    "filesIndexed": 576,
-    "imports": 1967,
+    "filesVisible": 664,
+    "filesIndexed": 581,
+    "imports": 1985,
     "routes": 495,
-    "symbols": 12920
+    "symbols": 13020
   },
   "directories": {
     ".agents/memory": {
-      "files": 6,
-      "indexed": 6,
+      "files": 7,
+      "indexed": 7,
       "kinds": {
-        "docs": 6
+        "docs": 7
       }
     },
-    "config": {
-      "files": 1,
-      "indexed": 1,
+    "client/src": {
+      "files": 117,
+      "indexed": 115,
       "kinds": {
-        "other": 1
+        "client-component": 23,
+        "other": 3,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 7,
+        "client-page": 26
       }
     },
     "server": {
-      "files": 135,
-      "indexed": 131,
+      "files": 136,
+      "indexed": 132,
       "kinds": {
-        "server": 135
+        "server": 136
+      }
+    },
+    "shared": {
+      "files": 2,
+      "indexed": 2,
+      "kinds": {
+        "shared": 2
       }
     },
     "tests": {
-      "files": 120,
-      "indexed": 117,
+      "files": 121,
+      "indexed": 118,
       "kinds": {
-        "test": 120
+        "test": 121
       }
     },
     ".": {
@@ -195,16 +207,11 @@
         "other": 16
       }
     },
-    "client/src": {
-      "files": 116,
-      "indexed": 114,
+    "config": {
+      "files": 1,
+      "indexed": 1,
       "kinds": {
-        "other": 3,
-        "client-component": 22,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7,
-        "client-page": 26
+        "other": 1
       }
     },
     "docs": {
@@ -250,13 +257,6 @@
         "shared": 1
       }
     },
-    "shared": {
-      "files": 1,
-      "indexed": 1,
-      "kinds": {
-        "shared": 1
-      }
-    },
     "tutorials/dropshipping-ceo-tutorial": {
       "files": 8,
       "indexed": 1,
@@ -269,6 +269,14 @@
   "files": [
     {
       "path": ".agents/memory/drive-oauth-autoscale.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/local-news-diagnostic-evidence.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -514,6 +522,28 @@
       ],
       "symbols": [
         "AssistantChat"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/clippers/local-news-source-diagnostics.tsx",
+      "kind": "client-component",
+      "imports": [
+        "../../../../shared/local-news-source-diagnostics"
+      ],
+      "exports": [
+        "LocalNewsSourceDiagnostics"
+      ],
+      "symbols": [
+        "LocalNewsSourceDiagnostics",
+        "LocalNewsSourceDiagnosticsProps",
+        "ObservationRow",
+        "SourceErrorDetails",
+        "boundedSources",
+        "date",
+        "displayCount",
+        "formatTimestamp",
+        "storedDiagnostics"
       ],
       "routes": []
     },
@@ -12040,11 +12070,13 @@
       "path": "server/clippers-local-news-agent.ts",
       "kind": "server",
       "imports": [
+        "../shared/local-news-source-diagnostics",
         "./clippers-local-news-growth",
         "./clippers-local-news-review-committee",
         "./clippers-local-news-state-retention",
         "./clippers-local-news-translation",
         "./local-news-growth-scout",
+        "./local-news-source-diagnostics",
         "node:child_process",
         "node:crypto",
         "node:fs/promises",
@@ -12109,9 +12141,12 @@
         "SourceDefinition",
         "TRANSLATION_TITLE_LIMIT",
         "__clipperLocalNewsInternals",
+        "accepted",
+        "acceptedRevisions",
         "accounts",
         "actionEn",
         "actionEs",
+        "activeIds",
         "alert",
         "allowed",
         "allowedIds",
@@ -12140,12 +12175,15 @@
         "certainty",
         "claimIdentityHash",
         "clean",
+        "collection",
         "combined",
         "committee",
         "committeeGated",
         "committeeItems",
         "compacted",
         "connectorCatalog",
+        "contributionCandidates",
+        "contributions",
         "controlledSnapshot",
         "converted",
         "copy",
@@ -12170,6 +12208,7 @@
         "detailEs",
         "detected",
         "detectedSourceLanguage",
+        "diagnosticItems",
         "digest",
         "dir",
         "direction",
@@ -12268,17 +12307,20 @@
         "now",
         "nowMs",
         "number",
+        "observation",
         "observed",
         "observedAt",
         "observedBoost",
         "officialFeedTextFallback",
         "organicGrowth",
         "original",
+        "originalDate",
         "originalPublishedAt",
         "ownedLink",
         "page",
         "parsed",
         "parts",
+        "payload",
         "periods",
         "persist",
         "point",
@@ -12287,6 +12329,7 @@
         "prefixEn",
         "previous",
         "primaryPeriod",
+        "priorRevisions",
         "props",
         "provenance",
         "publicEventIds",
@@ -12331,6 +12374,7 @@
         "rssEvents",
         "rssMedia",
         "rssTag",
+        "rssValid",
         "runClipperLocalNewsCycle",
         "runbook",
         "safe",
@@ -12349,6 +12393,7 @@
         "snapshotFieldsSchema",
         "source",
         "sourceArticleMatchesConnector",
+        "sourceDiagnostics",
         "sourceEventId",
         "sourceEvents",
         "sourceFallbacks",
@@ -12361,6 +12406,7 @@
         "staleMs",
         "start",
         "state",
+        "status",
         "suffix",
         "summaries",
         "summarizeMetrics",
@@ -12403,7 +12449,8 @@
         "verifiedFetchedEvents",
         "windowStart",
         "workspace",
-        "xWeightedLength"
+        "xWeightedLength",
+        "xml"
       ],
       "routes": []
     },
@@ -15231,6 +15278,69 @@
         "url",
         "value",
         "work"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/local-news-source-diagnostics.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/local-news-source-diagnostics",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "zod"
+      ],
+      "exports": [
+        "finalizeSourceObservation",
+        "readSourceDiagnostics",
+        "recordSourceObservation",
+        "sanitizeSourceError",
+        "sourceObservation"
+      ],
+      "symbols": [
+        "Catalog",
+        "DAY",
+        "ErrorCode",
+        "FILE",
+        "MAX_BYTES",
+        "State",
+        "age",
+        "at",
+        "codes",
+        "cutoff",
+        "date",
+        "describeError",
+        "e",
+        "errorSchema",
+        "file",
+        "finalizeSourceObservation",
+        "http",
+        "index",
+        "key",
+        "latest",
+        "load",
+        "loaded",
+        "locks",
+        "message",
+        "newer",
+        "next",
+        "observationSchema",
+        "previous",
+        "raw",
+        "readSourceDiagnostics",
+        "recordSourceObservation",
+        "safe",
+        "sanitizeSourceError",
+        "seen",
+        "sourceObservation",
+        "state",
+        "stateSchema",
+        "storageError",
+        "stored",
+        "tmp",
+        "value",
+        "writeFailures"
       ],
       "routes": []
     },
@@ -18978,6 +19088,21 @@
       "routes": []
     },
     {
+      "path": "shared/local-news-source-diagnostics.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "SourceDiagnostic",
+        "SourceDiagnostics",
+        "SourceError",
+        "SourceErrorCategory",
+        "SourceObservation",
+        "SourceOutcome"
+      ],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "shared/models/chat.ts",
       "kind": "shared",
       "imports": [
@@ -22132,6 +22257,60 @@
       "routes": []
     },
     {
+      "path": "tests/local-news-source-diagnostics.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/clippers-local-news-agent",
+        "../server/clippers-local-news-metricool",
+        "../server/clippers-local-news-translation",
+        "../server/local-news-source-diagnostics",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Component",
+        "a",
+        "at",
+        "candidate",
+        "catalog",
+        "child",
+        "contributor",
+        "cycle",
+        "delivery",
+        "dir",
+        "end",
+        "errors",
+        "file",
+        "first",
+        "fixture",
+        "fresh",
+        "link",
+        "localNewsSection",
+        "missing",
+        "mount",
+        "ny",
+        "o",
+        "observed",
+        "options",
+        "outfile",
+        "page",
+        "queueEvidence",
+        "r",
+        "second",
+        "section",
+        "source",
+        "status",
+        "translator",
+        "url"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/local-youtube-queue.test.ts",
       "kind": "test",
       "imports": [
@@ -22959,6 +23138,7 @@
     "tests/local-auth.test.ts",
     "tests/local-news-delivery-safety.test.ts",
     "tests/local-news-growth-scout.test.ts",
+    "tests/local-news-source-diagnostics.test.ts",
     "tests/local-youtube-queue.test.ts",
     "tests/local-youtube-worker-queue.test.ts",
     "tests/marketing-command-center.test.ts",
