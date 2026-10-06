@@ -63,3 +63,7 @@ KONG corrida única240/240 con PostgreSQL/HTTP/Chromium y providers simulados; t
 Lectura pública acotada actual: NTS publica press@ntslive.co.uk para prensa y hello@soup.world para partnerships (https://www.nts.live/about), con show proposals por formulario. No son direcciones de submissions ni entregabilidad probada. Las otras páginas intentadas no fueron accesibles; no se añadieron emails ni métricas por ello. ZIP Library403 sigue bloqueado, sin reintentos alternativos ni checksum verificado.
 
 Siguiente bloqueo: autorización para push/apertura de PRs. Merge, despliegue, migraciones productivas y reanudación de procesos necesitan autorización específica posterior, además de confirmar el destino BlackOps y runtime/backup. No hay cierre global.
+
+## Autorización actualizada — 6 octubre 2026
+
+La actualización de las ramas de PR299 y PR251 existentes está expresamente autorizada; la restricción provisional de nuevos pushes queda revocada solo para esos destinos. Las etapas de merge, deploy, migraciones productivas, posts/email, gastos, credenciales e inicio de workers siguen separadas. Ver aceptación consolidada para cambios de timeout, AppQA y posts. El hotfix Metricool productivo coordinado por el parent es un artefacto separado: no se declara incorporado por esta publicación.

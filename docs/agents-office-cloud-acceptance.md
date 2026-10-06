@@ -45,3 +45,15 @@ La segunda fase obtuvo el checkout completo KONG por git autorizado, integró ma
 ## Límites de salida
 
 No hubo push, PR, merge, deploy, campañas, emails, posts, OAuth ni migraciones de producción. No se modificaron credenciales ni configuración de cuentas. El repo exige PR y QA para considerarlo listo para entrega: sin autorización de PR, este trabajo permanece local y no está aprobado para release. Revertir los archivos del diff revierte la reparación; no hay migraciones ni cambios productivos que revertir.
+
+## Consolidación autorizada del 6 octubre 2026 — PR299 existente
+
+El usuario autorizó actualizar esta misma rama/PR con las reparaciones revisadas. No autorizó merge, despliegue, cambios de infraestructura, credenciales, publicaciones sociales ni activación de agentes. La autorización anterior de publicación GitHub se amplía a estos commits; no se abren otros PRs.
+
+Prioridad posts: validación completa de destino/plataforma/blog/media/expiración antes de deduplicar; recibos confirmados separados por cuenta/blog/usuario/red; pendientes ambiguos no se reenvían ni se declaran publicados.39/39 pruebas con proveedores simulados y checker independiente. No existe clippers_workspace operativo en cloud: drafts, media, derechos, captions, calendario, historial y recibos actuales requieren inventario de producción. Los70specs de motivación son ejemplos, no posts operativos.
+
+Office16roles y chat local explican que no acreditan ejecución. GET AppQA omite alertas/cooldown/historial/clics visuales incluso en every_scan, conservando lecturas HTTP/GitHub; POST/scheduler conservan sus efectos existentes.27/27 pruebas y checker.
+
+Estabilidad: timeout PG nativo10segundos, configurable DB_CONNECTION_TIMEOUT_MS1..120000, conserva max10/idle10segundos. Métricas y errores saneados; monitor con start idempotente y guard por proceso.18/18 fixtures y revisión de pg/connect-pg-simple. No reintentos de escrituras ni prueba de resolución de la causa productiva. Arranque frío puede necesitar un límite mayor; sessionpool no expone counts. Typecheck y build final cloud pasaron.
+
+Sin workflows GitHub en la rama/base inspeccionados; no se declara CI verde cuando no hay checks. Los anteriores commits y main permanecen. Antes de producción: confirmar cuenta/perfil, estilo histórico, materiales/derechos y calendario; preparar cola revisable; obtener autorización concreta de despliegue/arranque y ejecutar gates de salud/sessionDB. Registrar publicación real y métricas fechadas antes de atribuir aprendizaje CEO. No activar todos los schedulers por defecto para validar. Rollback: revertir los commits nuevos y conservar datos/sesiones/ledgers; ninguna migración nueva en esta consolidación.
