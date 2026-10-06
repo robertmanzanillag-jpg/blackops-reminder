@@ -45,6 +45,7 @@ test("starts immediately, schedules every five minutes, unrefs the timer, and ca
     env: {},
     bootstrap: async () => { bootstrapCount += 1; return {} as never; },
     runCycle: async () => { cycleCount += 1; return {} as never; },
+    deliver: async () => ({ status: "paused" } as never),
     setInterval: (callback, delay) => { scheduledCallback = callback; scheduledDelay = delay; return interval; },
     clearInterval: (timer) => { assert.equal(timer, interval); clearCount += 1; },
     setTimeout: () => fakeTimer(),

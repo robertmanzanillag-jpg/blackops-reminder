@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-09-28T07:52:10.510Z
-Repo: `/private/tmp/blackroom-learning-20260928`
+Generated: 2026-10-06T08:09:44.262Z
+Repo: `/home/runner/workspace`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 654 | 571 | 1935 | 495 | 12800 |
+| 659 | 576 | 1967 | 495 | 12920 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,18 +28,19 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 133 | 129 | server:133 |
-| `tests` | 119 | 116 | test:119 |
+| `server` | 135 | 131 | server:135 |
+| `tests` | 120 | 117 | test:120 |
 | `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `script` | 76 | 71 | script:76 |
 | `docs` | 31 | 30 | docs:31 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
-| `.agents/memory` | 5 | 5 | docs:5 |
+| `.agents/memory` | 6 | 6 | docs:6 |
 | `client/public` | 16 | 2 | other:16 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `client` | 1 | 1 | other:1 |
+| `config` | 1 | 1 | other:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `shared` | 1 | 1 | shared:1 |
 | `shared/models` | 1 | 1 | shared:1 |
@@ -126,6 +127,7 @@ Package: `rest-express`
 - `tests/legal-compliance-agent.test.ts`
 - `tests/local-auth-cli.test.ts`
 - `tests/local-auth.test.ts`
+- `tests/local-news-delivery-safety.test.ts`
 - `tests/local-news-growth-scout.test.ts`
 - `tests/local-youtube-queue.test.ts`
 - `tests/local-youtube-worker-queue.test.ts`
@@ -184,12 +186,12 @@ Package: `rest-express`
 - `client/src/pages/revenue-engine-simple.tsx` (client-page; 33 symbols, 7 imports)
 - `client/src/pages/tools.tsx` (client-page; 2 symbols, 6 imports)
 - `package.json` (package)
-- `script/blackroom-control-server.mjs` (script; 75 symbols, 9 imports)
+- `script/blackroom-control-server.mjs` (script; 76 symbols, 10 imports)
 - `script/blackroom-daily-agent.ts` (script; 16 symbols, 2 imports)
 - `script/blackroom-deterministic-editor.ts` (script; 59 symbols, 7 imports)
 - `script/blackroom-local-worker.ts` (script; 73 symbols, 7 imports)
 - `script/blackroom-metricool-csv-bridge.mjs` (script; 38 symbols)
-- `script/blackroom-metricool-exporter.mjs` (script; 24 symbols, 6 imports)
+- `script/blackroom-metricool-exporter.mjs` (script; 33 symbols, 6 imports)
 - `script/blackroom-remote-sync.mjs` (script; 24 symbols)
 - `script/blackroom-worker-ledger.ts` (script; 29 symbols, 4 imports)
 - `script/build.ts` (script; 12 symbols, 4 imports)

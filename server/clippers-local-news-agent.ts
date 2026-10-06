@@ -68,6 +68,7 @@ export interface ClipperLocalNewsProvenance {
 }
 
 export interface ClipperLocalNewsEvent {
+  originalPublishedAt?: string | null;
   id: string;
   sourceEventId: string;
   source: string;
@@ -102,6 +103,7 @@ export interface ClipperLocalNewsEvent {
 }
 
 export interface ClipperLocalNewsQueueItem {
+  originalPublishedAt?: string | null;
   id: string;
   eventId: string;
   eventRevision: number;
@@ -913,10 +915,11 @@ async function queueFor(event: ClipperLocalNewsEvent, now: string, env: NodeJS.P
     const id = digest(`${event.id}|${event.revision}|${platform}`);
     const claimIdentityHash = hashLocalNewsReviewValue(event.provenance?.claimHash || event.fingerprint);
     const canonicalEventIdentity = hashLocalNewsCanonicalEventIdentity({ eventId: event.id, eventRevision: event.revision, lane: event.lane, title: event.title, description: event.description, instruction: event.instruction, location: event.location, eventType: event.eventType, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, effective: event.effective, expires: event.expires, claimIdentityHash });
-    const reviewHash = hashLocalNewsQueueReview({ queueItemId: id, eventId: event.id, eventRevision: event.revision, lane: event.lane, copy, platform, risk: event.risk, canonicalEventIdentity, claimIdentityHash, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, checkedAt: committee.checkedAt });
+    const originalPublishedAt = "originalPublishedAt" in event ? event.originalPublishedAt ?? null : event.effective;
+    const reviewHash = hashLocalNewsQueueReview({ queueItemId: id, eventId: event.id, eventRevision: event.revision, lane: event.lane, copy, platform, risk: event.risk, canonicalEventIdentity, claimIdentityHash, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, checkedAt: committee.checkedAt, originalPublishedAt, expires: event.expires });
     const translationUnavailable = Boolean(translationGated && bilingual?.issues.some((issue) => issue.startsWith("local_translation_failed:")));
     const reasons = translationGated ? [...committee.reasons, translationUnavailable ? "local_translation_unavailable" : "local_translation_integrity_failed"] : !autoEnabled && committee.publishDecision === "auto_publish" ? [...committee.reasons, "operator_disabled_automatic_publication"] : committee.reasons;
-    return { id, eventId: event.id, eventRevision: event.revision, canonicalEventIdentity, claimIdentityHash, lane: event.lane, platform, copy, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, section: event.section, topicTag: event.topicTag, editorialUrgency: event.editorialUrgency, editorialPriority: event.editorialPriority, revisionKind: event.revisionKind, textOnly: !event.mediaUrl, mediaRequired: false, mediaUrl: event.mediaUrl, mediaType: event.mediaType, qualityScore: event.qualityScore, gateReason, notBefore, status, approvalRequired: status === "approval_required", autoEligible: !gated, published: false, createdAt: now, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, reasons, checkedAt: committee.checkedAt, reviewHash, organicGrowth };
+    return { id, eventId: event.id, eventRevision: event.revision, canonicalEventIdentity, claimIdentityHash, lane: event.lane, platform, copy, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, effective: event.effective, originalPublishedAt, expires: event.expires, section: event.section, topicTag: event.topicTag, editorialUrgency: event.editorialUrgency, editorialPriority: event.editorialPriority, revisionKind: event.revisionKind, textOnly: !event.mediaUrl, mediaRequired: false, mediaUrl: event.mediaUrl, mediaType: event.mediaType, qualityScore: event.qualityScore, gateReason, notBefore, status, approvalRequired: status === "approval_required", autoEligible: !gated, published: false, createdAt: now, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, reasons, checkedAt: committee.checkedAt, reviewHash, organicGrowth };
   }));
 }
 
@@ -947,7 +950,10 @@ export async function ingestClipperLocalNewsEvents(input: ClipperLocalNewsIngest
       duplicates += 1; state.editorialCounters.duplicates += 1; continue;
     }
     const revisionKind: ClipperLocalNewsRevisionKind = normalized.revisionKind === "correction" ? "correction" : normalized.lifecycle === "resolved" ? "resolved" : previous ? "update" : "original";
-    const event: ClipperLocalNewsEvent = { ...normalized, revisionKind, firstSeenAt: previous?.firstSeenAt || now, updatedAt: now, resolvedAt: normalized.lifecycle === "resolved" ? now : null, revision: (previous?.revision || 0) + 1 };
+    const originalPublishedAt = previous
+      ? "originalPublishedAt" in previous ? previous.originalPublishedAt ?? null : previous.effective
+      : typeof raw.properties?.sent === "string" ? raw.properties.sent : normalized.effective;
+    const event: ClipperLocalNewsEvent = { ...normalized, originalPublishedAt, revisionKind, firstSeenAt: previous?.firstSeenAt || now, updatedAt: now, resolvedAt: normalized.lifecycle === "resolved" ? now : null, revision: (previous?.revision || 0) + 1 };
     byId.set(event.id, event);
     previous ? updated += 1 : created += 1;
     if (previous) state.editorialCounters.revisions += 1;

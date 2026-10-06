@@ -4,3 +4,4 @@
 - [YouTube bot-block fix](yt-dlp-impersonate.md) — --impersonate chrome via curl-cffi bypasses TLS bot detection on datacenter IPs; bin/yt-dlp v2026.06.09 in workspace
 - [Telegram webhook auto-setup](telegram-webhook-autosetup.md) — servidor auto-genera TELEGRAM_WEBHOOK_SECRET en process.env si falta; webhook siempre se registra al startup sin flag adicional.
 - [Dropshipping CEO start flow](dropshipping-ceo-start.md) — POST /api/dropshipping-ceo/start corre ciclo + envía Telegram con blocker de Shopify; guardrails de aprobación intactos.
+- [Local news authorization](local-news-operation-authorization.md) — solo seguridad, sin publicar/activar; destinos pendientes y conciliación compartida antes de una operación futura.

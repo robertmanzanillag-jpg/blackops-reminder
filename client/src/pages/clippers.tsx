@@ -255,6 +255,8 @@ interface ClipperLocalNewsQueueSummary {
 }
 
 interface ClipperLocalNewsStatus {
+  deliveryPolicy?: { paused: boolean; reason: string };
+  deliverySummary?: { status: string; scheduled: number; publicationConfirmed: number; pendingReconciliation: number };
   generatedAt?: string;
   rootDir?: string;
   workspaceDir?: string;
@@ -8211,7 +8213,7 @@ export default function ClippersPage() {
       const review = data.totals?.reviewRequired ?? queue?.reviewRequired ?? queue?.approvalRequired ?? 0;
       toast({
         title: "Ciclo Local News completado",
-        description: `${queued} en cola; ${review} requieren revisión. Nada se cuenta publicado sin evidencia y métricas.`,
+        description: `${queued} en cola; ${review} requieren revisión. ${data.deliverySummary?.status === "paused" ? "Entregas PAUSADAS: no se programó ni publicó nada." : data.deliverySummary?.pendingReconciliation ? "Resultado incierto: exige conciliación, sin reenvío automático." : "Nada se cuenta publicado sin evidencia y métricas."}`,
       });
     },
     onError: (error: Error) => {
@@ -12735,6 +12737,12 @@ export default function ClippersPage() {
                 </div>
               </div>
 
+              <div className="mt-3 rounded-md border border-amber-400/40 bg-amber-950/20 p-3 text-xs text-amber-100" data-testid="local-news-delivery-pause">
+                {localNews?.deliveryPolicy?.paused !== false
+                  ? "Entregas de Miami y New York PAUSADAS. Los ciclos no autorizan programación ni publicación."
+                  : "La entrega requiere identidad, red y permiso vigentes."}
+                <p>{localNews?.deliveryPolicy?.reason}</p>
+              </div>
               <div className={cn(
                 "mt-3 rounded-md border p-3 text-xs leading-5",
                 localNews?.metricool?.platforms?.facebook?.ready

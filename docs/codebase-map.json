@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-09-28T07:52:10.510Z",
-  "repoRoot": "/private/tmp/blackroom-learning-20260928",
+  "generatedAt": "2026-10-06T08:09:44.262Z",
+  "repoRoot": "/home/runner/workspace",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -122,39 +122,39 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 654,
-    "filesIndexed": 571,
-    "imports": 1935,
+    "filesVisible": 659,
+    "filesIndexed": 576,
+    "imports": 1967,
     "routes": 495,
-    "symbols": 12800
+    "symbols": 12920
   },
   "directories": {
-    "docs": {
-      "files": 31,
-      "indexed": 30,
+    ".agents/memory": {
+      "files": 6,
+      "indexed": 6,
       "kinds": {
-        "docs": 31
+        "docs": 6
       }
     },
-    "script": {
-      "files": 76,
-      "indexed": 71,
+    "config": {
+      "files": 1,
+      "indexed": 1,
       "kinds": {
-        "script": 76
+        "other": 1
       }
     },
     "server": {
-      "files": 133,
-      "indexed": 129,
+      "files": 135,
+      "indexed": 131,
       "kinds": {
-        "server": 133
+        "server": 135
       }
     },
     "tests": {
-      "files": 119,
-      "indexed": 116,
+      "files": 120,
+      "indexed": 117,
       "kinds": {
-        "test": 119
+        "test": 120
       }
     },
     ".": {
@@ -164,13 +164,6 @@
         "other": 22,
         "docs": 11,
         "package": 1
-      }
-    },
-    ".agents/memory": {
-      "files": 5,
-      "indexed": 5,
-      "kinds": {
-        "docs": 5
       }
     },
     ".agents/skills": {
@@ -214,12 +207,26 @@
         "client-page": 26
       }
     },
+    "docs": {
+      "files": 31,
+      "indexed": 30,
+      "kinds": {
+        "docs": 31
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 76,
+      "indexed": 71,
+      "kinds": {
+        "script": 76
       }
     },
     "scripts": {
@@ -262,6 +269,14 @@
   "files": [
     {
       "path": ".agents/memory/drive-oauth-autoscale.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/local-news-operation-authorization.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -3894,6 +3909,14 @@
       "routes": []
     },
     {
+      "path": "config/local-news-delivery-policy.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "design-qa.md",
       "kind": "docs",
       "imports": [],
@@ -4757,6 +4780,7 @@
       "kind": "script",
       "imports": [
         "./blackroom-metricool-csv-bridge.mjs",
+        "./blackroom-metricool-exporter.mjs",
         "./blackroom-remote-sync.mjs",
         "node:child_process",
         "node:crypto",
@@ -4788,6 +4812,7 @@
         "data",
         "deadline",
         "entries",
+        "error",
         "execFileAsync",
         "expected",
         "extracted",
@@ -5106,18 +5131,25 @@
         "METRICOOL_EXPORT_PAGES",
         "acquireMetricoolExports",
         "buildVerifiedMetricoolExport",
+        "deliverMetricoolExports",
         "metricoolPublicationInstant",
         "runMetricoolExporter"
       ],
       "symbols": [
         "METRICOOL_EXPORT_PAGES",
+        "acquire",
         "acquireMetricoolExports",
         "buildVerifiedMetricoolExport",
+        "complete",
         "context",
         "decoder",
+        "deliverMetricoolExports",
+        "detail",
         "downloadButton",
+        "errors",
         "failure",
         "format",
+        "importedByNetwork",
         "imports",
         "instant",
         "match",
@@ -5132,8 +5164,11 @@
         "result",
         "root",
         "runMetricoolExporter",
+        "samples",
+        "status",
         "stream",
-        "temporary"
+        "temporary",
+        "transient"
       ],
       "routes": []
     },
@@ -10152,6 +10187,7 @@
         "./blackroom-learning-panel",
         "./blackroom-metricool-bridge",
         "./blackroom-remote-control",
+        "./blackroom-verified-learning",
         "./single-user-owner",
         "./user-context",
         "express",
@@ -10207,6 +10243,7 @@
         "filePath",
         "hasBlackRoomChatAccess",
         "hasValidBlackRoomRemoteToken",
+        "id",
         "imports",
         "index",
         "info",
@@ -10465,6 +10502,7 @@
         "belowTarget",
         "bitrate",
         "blackRoomVideoUrl",
+        "block",
         "bounded",
         "buildBlackRoomRenderArgs",
         "buildBlackRoomVideoFilter",
@@ -10477,10 +10515,11 @@
         "chooseLanguage",
         "cleaned",
         "commitBlackRoomReservation",
+        "comparable",
         "controlledTest",
         "counts",
-        "creativeStrategy",
         "current",
+        "daypart",
         "distributedSlotSelected",
         "dj",
         "durationSeconds",
@@ -10489,11 +10528,13 @@
         "extractBlackRoomDj",
         "failedVideos",
         "findBlackRoomDropOffset",
+        "first",
         "format",
         "fresh",
         "gap",
         "history",
         "horizontal",
+        "instant",
         "intervals",
         "isActionableJob",
         "isOwnedBlackRoomMetadata",
@@ -10512,6 +10553,8 @@
         "networks",
         "now",
         "occupied",
+        "pairCandidates",
+        "pairs",
         "parseBlackRoomEnergySamples",
         "planBlackRoomDeterministicEdit",
         "preferFreshSource",
@@ -10905,13 +10948,20 @@
       "symbols": [
         "blackRoomLearningPanelHtml",
         "blackRoomLearningPanelScript",
+        "candidates",
+        "collector",
         "content",
+        "coverage",
         "decisions",
+        "detail",
         "item",
         "labels",
+        "latest",
         "lines",
         "observed",
         "renderLearning",
+        "source",
+        "stale",
         "stamp",
         "target"
       ],
@@ -11385,8 +11435,10 @@
         "block",
         "blocks",
         "canonicalLearningPostId",
+        "comparisonBlock",
         "counts",
         "dates",
+        "declared",
         "deduped",
         "entries",
         "evaluateBlackRoomLearning",
@@ -12222,6 +12274,7 @@
         "officialFeedTextFallback",
         "organicGrowth",
         "original",
+        "originalPublishedAt",
         "ownedLink",
         "page",
         "parsed",
@@ -12417,6 +12470,8 @@
       "imports": [
         "./clippers-local-news-agent",
         "./clippers-local-news-review-committee",
+        "./local-news-delivery-attempts",
+        "./local-news-delivery-safety",
         "node:crypto",
         "node:fs/promises",
         "node:path",
@@ -12456,8 +12511,6 @@
         "MIN_SPACING_MS",
         "ProfileCandidate",
         "QueueItem",
-        "SCHEDULE_ATTEMPTS",
-        "SCHEDULE_RETRY_MS",
         "STALE_LOCK_MS",
         "STANDARD_SPACING_MS",
         "TIME_ZONE",
@@ -12524,6 +12577,7 @@
         "evidenceValue",
         "expectedCopyHash",
         "expectedReviewHash",
+        "expires",
         "explicitTopLevelNetworks",
         "facebookConnected",
         "facebookReady",
@@ -12531,6 +12585,7 @@
         "fetchedNow",
         "fetcher",
         "filename",
+        "finalPolicy",
         "finish",
         "getClipperLocalNewsMetricoolReadiness",
         "group",
@@ -12540,11 +12595,12 @@
         "hasCompleteLocalNewsCommitteeApproval",
         "hasRealValue",
         "highImpactTraffic",
+        "historicalItem",
         "hostname",
         "hours",
+        "identity",
         "info",
         "isHighImpactTraffic",
-        "isNewerRevision",
         "isRoutineTransitNoise",
         "item",
         "key",
@@ -12585,6 +12641,7 @@
         "occupied",
         "occupiedByAccount",
         "onAbort",
+        "original",
         "override",
         "ownerId",
         "parsed",
@@ -12592,7 +12649,10 @@
         "parts",
         "payload",
         "platformEnabled",
+        "policy",
+        "postId",
         "prefix",
+        "previousAttempts",
         "profile",
         "profileFromRecord",
         "profiles",
@@ -12605,6 +12665,7 @@
         "queuePath",
         "readBody",
         "readLedger",
+        "readPolicy",
         "reader",
         "record",
         "remainingAfterThis",
@@ -14988,6 +15049,65 @@
       ]
     },
     {
+      "path": "server/local-news-delivery-attempts.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto",
+        "node:fs/promises"
+      ],
+      "exports": [
+        "NewsDeliveryAttempt",
+        "readNewsDeliveryAttempts",
+        "saveNewsDeliveryAttempts"
+      ],
+      "symbols": [
+        "parsed",
+        "readNewsDeliveryAttempts",
+        "saveNewsDeliveryAttempts",
+        "temp"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/local-news-delivery-safety.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "zod"
+      ],
+      "exports": [
+        "LocalNewsDeliveryPolicy",
+        "NewsPolicyReader",
+        "canonicalNewsArticleUrl",
+        "destinationIdentityVerified",
+        "destinationNetworkVerified",
+        "newsArticleIdentity",
+        "newsSourceMatchesCity",
+        "readLocalNewsDeliveryPolicy"
+      ],
+      "symbols": [
+        "canonical",
+        "canonicalNewsArticleUrl",
+        "connector",
+        "destination",
+        "destinationIdentityVerified",
+        "destinationNetworkVerified",
+        "expected",
+        "host",
+        "newsArticleIdentity",
+        "newsSourceMatchesCity",
+        "policySchema",
+        "readLocalNewsDeliveryPolicy",
+        "rule",
+        "target",
+        "trackingParameter",
+        "url"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/local-news-growth-scout.ts",
       "kind": "server",
       "imports": [
@@ -17075,6 +17195,7 @@
         "./google-drive-oauth",
         "./health-check",
         "./legal-compliance-agent",
+        "./local-news-delivery-safety",
         "./local-news-growth-scout",
         "./market-news",
         "./marketing-command-center",
@@ -19493,6 +19614,8 @@
       "kind": "test",
       "imports": [
         "../server/blackroom-deterministic-editor",
+        "../server/blackroom-learning-observations",
+        "../server/blackroom-verified-learning",
         "node:assert/strict",
         "node:test"
       ],
@@ -19501,20 +19624,29 @@
         "atQuota",
         "base",
         "committing",
+        "date",
+        "djs",
         "download",
         "explicit",
         "explored",
         "full",
+        "id",
+        "input",
         "inventory",
         "ledger",
         "ledgerPending",
         "next",
+        "now",
         "output",
         "plan",
+        "publishedAt",
         "queue",
         "render",
+        "result",
         "samples",
         "selected",
+        "stale",
+        "start",
         "state",
         "used"
       ],
@@ -19605,6 +19737,7 @@
       "exports": [],
       "symbols": [
         "context",
+        "scripts",
         "target"
       ],
       "routes": []
@@ -19739,11 +19872,30 @@
       "imports": [
         "../script/blackroom-metricool-exporter.mjs",
         "node:assert/strict",
-        "node:test"
+        "node:fs/promises",
+        "node:path",
+        "node:test",
+        "node:util",
+        "node:vm"
       ],
       "exports": [],
       "symbols": [
-        "result"
+        "batches",
+        "complete",
+        "context",
+        "exported",
+        "failure",
+        "imports",
+        "index",
+        "input",
+        "locator",
+        "observedAt",
+        "page",
+        "partial",
+        "payloads",
+        "result",
+        "source",
+        "status"
       ],
       "routes": []
     },
@@ -20469,6 +20621,7 @@
       "imports": [
         "../server/clippers-local-news-metricool",
         "../server/clippers-local-news-review-committee",
+        "../server/local-news-delivery-safety",
         "node:assert/strict",
         "node:fs/promises",
         "node:os",
@@ -20477,37 +20630,48 @@
       ],
       "exports": [],
       "symbols": [
+        "attempts",
         "base",
         "checkedAt",
         "competing",
         "credentials",
         "declaredOversized",
+        "deliverClipperLocalNewsToMetricool",
         "dir",
         "filledToday",
         "filledTomorrow",
         "first",
         "firstPromise",
         "fixedNow",
+        "fixtureOptions",
         "freshDir",
         "freshResult",
+        "getClipperLocalNewsMetricoolReadiness",
         "hanging",
         "hangingResponse",
         "holdPost",
         "item",
         "items",
+        "label",
+        "lane",
         "ledger",
         "ledgerEntry",
         "legacyBacklog",
         "lockPath",
         "modes",
         "nowMs",
+        "ny",
         "options",
+        "originalFetch",
         "oversized",
         "payload",
         "postStarted",
+        "profiles",
         "queued",
         "rawItem",
         "readiness",
+        "register",
+        "response",
         "result",
         "reviewHash",
         "reviewed",
@@ -20521,6 +20685,7 @@
         "startedAt",
         "unanimouslyReviewedItem",
         "url",
+        "value",
         "workspace"
       ],
       "routes": []
@@ -21898,6 +22063,48 @@
       "routes": []
     },
     {
+      "path": "tests/local-news-delivery-safety.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/clippers-local-news-agent",
+        "../server/clippers-local-news-metricool",
+        "../server/clippers-local-news-review-committee",
+        "../server/clippers-local-news-scheduler",
+        "../server/local-news-delivery-safety",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "ambiguous",
+        "article",
+        "attempts",
+        "before",
+        "child",
+        "config",
+        "dir",
+        "event",
+        "file",
+        "first",
+        "fixture",
+        "item",
+        "items",
+        "now",
+        "options",
+        "other",
+        "result",
+        "reviewed",
+        "scheduler",
+        "second",
+        "state"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/local-news-growth-scout.test.ts",
       "kind": "test",
       "imports": [
@@ -22000,17 +22207,25 @@
       "kind": "test",
       "imports": [
         "../server/metricool-analytics-sync",
+        "./server/metricool-analytics-sync.ts",
         "node:assert/strict",
+        "node:child_process",
         "node:fs/promises",
+        "node:http",
         "node:os",
         "node:path",
         "node:test"
       ],
       "exports": [],
       "symbols": [
+        "assertServing",
+        "child",
         "copy",
         "copyHash",
+        "deadline",
         "env",
+        "error",
+        "errors",
         "first",
         "from",
         "legacyFingerprint",
@@ -22021,11 +22236,15 @@
         "postId",
         "publicStatus",
         "publicationDate",
+        "recorded",
         "request",
         "response",
         "result",
+        "scenario",
         "scheduler",
+        "script",
         "second",
+        "server",
         "source",
         "state",
         "to",
@@ -22738,6 +22957,7 @@
     "tests/legal-compliance-agent.test.ts",
     "tests/local-auth-cli.test.ts",
     "tests/local-auth.test.ts",
+    "tests/local-news-delivery-safety.test.ts",
     "tests/local-news-growth-scout.test.ts",
     "tests/local-youtube-queue.test.ts",
     "tests/local-youtube-worker-queue.test.ts",
