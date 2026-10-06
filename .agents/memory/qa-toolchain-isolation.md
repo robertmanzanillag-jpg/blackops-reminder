@@ -14,3 +14,9 @@ If the specialized testing callback reports an unsupported kind, use the existin
 **Why:** The local testing instructions were present, but the callback rejected the specialized kind in this environment.
 
 **How to apply:** Report which checker actually ran. Do not claim a specialized tester verdict or weaken authentication to obtain screenshots.
+
+The durable PTC v1 runtime can reject both `Date.now()` and argument-free `new Date()`, despite the tool description describing them as supported.
+
+**Why:** Evidence recording encountered both disabled APIs; retrying an explicit Date constructor did not bypass the restriction.
+
+**How to apply:** Obtain an evidence timestamp through the read-only shell `date -u +%FT%TZ` callback instead of repeating Date API attempts. This is a sandbox limitation, not an application fault.

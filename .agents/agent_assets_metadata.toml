@@ -28,3 +28,17 @@ mtime_ms = 1791285068805
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:996097da-891f-490f-b35f-c02f361c4e34/a9d28872-ea94-467b-9d32-de01cb338c85/cf7ab401-2d8b-4a34-932a-cee7303cc8ae"
 storage_version_token = "1791285168224022"
 content_type = "text/html"
+
+[[outputs]]
+id = "Wg--hAjAAYqSywkw3n3i4"
+uri = "file://.local/office-evidence/session-runtime-readonly-report-2026-10-06.html"
+type = "html"
+title = "Sesiones publicadas y cinco fallas Reddit: diagnóstico de lectura"
+description = "Destino runtime–réplica aún sin confirmar; evidencia sanitizada, distinción de errores y procedimiento condicional sin ejecutar cambios de base de datos."
+logical_id = "9b43f376-3fd8-44bc-8dd1-1b9ac37862b4"
+content_hash = "sha256:33e74479b83374bc577431bf3ef7466800f71414819b45be915dc65da6dfa2a7"
+size = 10693
+mtime_ms = 1791286064199
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:996097da-891f-490f-b35f-c02f361c4e34/9b43f376-3fd8-44bc-8dd1-1b9ac37862b4/f72bf065-d55f-4ed9-a7f5-d4ee8cc2be75"
+storage_version_token = "1791286134122131"
+content_type = "text/html"
