@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { evaluateBlackRoomLearning } from "../server/blackroom-verified-learning";
+import { captureLearningSnapshots } from "../server/blackroom-learning-observations";
 import {
   buildBlackRoomVideoFilter,
   buildBlackRoomRenderArgs,
@@ -59,6 +61,72 @@ function ledger(): any {
     })),
   };
 }
+
+test("multi-day controlled planning produces matched evidence without repeating segments or increasing volume", () => {
+  const state = queue();
+  state.sourceHistory = [];
+  state.analytics = { verifiedLearning: {} };
+  const history: any = { version: 1, entries: [] };
+  const experiments: any[] = [];
+  const observations: any[] = [];
+  const inventory = Array.from({ length: 40 }, (_, i) => ({ id: `set-${i}`, title: `DJ${i % 5} - DJ Set`, duration: 7200 }));
+  for (let day = 1; day <= 7; day++) {
+    const date = `2026-09-0${day}`;
+    state.jobs = [{ id: `day-${day}`, targetDate: date, status: "queued", notBefore: "2026-08-31T00:00:00Z",
+      slots: ["00:30", "05:00", "09:30", "14:00", "19:00"].map(localTime => ({ localTime, timezone: "America/New_York" })),
+      requirements: { posts: 5, djs: 5, postsPerDj: 1, durationsSeconds: [15] } }];
+    const djs = new Set();
+    for (let i = 0; i < 5; i++) {
+      const plan = planBlackRoomDeterministicEdit({ queue: state, ledger: history, inventory, now: new Date("2026-08-31T12:00:00Z") })!;
+      assert.ok(plan); djs.add(plan.dj);
+      const start = plan.windowStartSeconds, end = start + 15;
+      for (const entry of history.entries.filter((e: any) => e.videoId === plan.videoId)) assert.ok(end <= entry.segmentStartSeconds || start >= entry.segmentEndSeconds);
+      const id = `post-${day}-${i}`;
+      const publishedAt = `${date}T${plan.slot}:00Z`;
+      history.entries.push({ ...plan, reservationId: id, status: "confirmed", segmentStartSeconds: start, segmentEndSeconds: end,
+        publicationDateTime: publishedAt.slice(0, 19) });
+      experiments.push({ ...plan, metricoolId: id, reservationId: id, network: "youtube", platformPostId: id,
+        sourceVideoId: plan.videoId, publishedAt });
+      observations.push({ network: "youtube", postId: id, publishedAt, observedAt: new Date(Date.parse(publishedAt) + 24 * 3600000).toISOString(),
+        views: plan.creativeStrategy === "instant_drop" ? 400 : 100 });
+    }
+    assert.equal(djs.size, 5);
+    assert.equal(planBlackRoomDeterministicEdit({ queue: state, ledger: history, inventory, now: new Date("2026-08-31T12:00:00Z") }), null);
+  }
+  const now = new Date("2026-09-09T00:00:00Z");
+  const result = evaluateBlackRoomLearning({ experiments, snapshots: captureLearningSnapshots([], observations, now),
+    sourceObservedAt: { youtube: now.toISOString() }, now }).youtube;
+  assert.equal(result.status, "testing");
+  assert.ok(result.matchedBlocks >= 3);
+  assert.equal(result.winner, "instant_drop");
+});
+
+test("controlled learning never lets one network's winner dictate crossposted edits", () => {
+  const state = queue();
+  const now = new Date("2026-07-22T12:00:00Z");
+  state.analytics = { verifiedLearning: {
+    youtube: { winner: "instant_drop", sourceObservedAt: now.toISOString() },
+    tiktok: { winner: null, sourceObservedAt: now.toISOString() },
+    facebook: { winner: "drop_first", sourceObservedAt: now.toISOString() },
+  } };
+  const input = { queue: state, ledger: { version: 1, entries: [] }, now,
+    inventory: [{ id: "set-one", title: "DJ ONE - DJ Set", duration: 3600 }] };
+  const plan = planBlackRoomDeterministicEdit(input)!;
+  assert.equal(plan.allocationMode, "explore");
+  assert.equal(plan.durationSeconds, 15);
+  assert.equal(plan.format, "vertical");
+  assert.equal(plan.language, "en");
+  assert.match(plan.learningReference!, /^BR-[a-f0-9]{12}$/);
+  assert.ok(plan.caption.includes(plan.learningReference!));
+  for (const decision of Object.values(state.analytics.verifiedLearning) as any[]) {
+    decision.winner = "instant_drop";
+    decision.sourceObservedAt = "2026-07-01T00:00:00Z";
+  }
+  const stale = planBlackRoomDeterministicEdit(input)!;
+  assert.equal(stale.allocationMode, "explore");
+  assert.equal(stale.videoId, plan.videoId);
+  assert.equal(stale.windowStartSeconds, plan.windowStartSeconds);
+});
 
 test("deterministic planner chooses an unused source and covers missing long duration", () => {
   const plan = planBlackRoomDeterministicEdit({
@@ -431,6 +499,7 @@ test("command builders keep downloads partial and renders platform-compatible", 
     durationSeconds: 30, format: "vertical",
   };
   const download = buildBlackRoomYtDlpWindowArgs(plan, "/project/sources/a.mp4", "/project/agent/editor-tmp/a");
+  assert.deepEqual(download.slice(1, 3), ["--extractor-args", "youtube:player_client=web_safari"]);
   assert.ok(download.includes("--download-sections"));
   assert.ok(download.includes("*100-220"));
   assert.ok(download.includes("bestvideo*[height<=1080]+bestaudio/best[height<=1080]"));

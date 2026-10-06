@@ -15,6 +15,16 @@ function cleanNumber(value) {
   return Number.isFinite(number) && number >= 0 ? number : null;
 }
 
+function cleanSeconds(value) {
+  const raw = String(value ?? "").trim();
+  if (/^\d+:\d{2}(?::\d{2})?$/.test(raw)) {
+    const parts = raw.split(":").map(Number);
+    if (parts.slice(1).some((part) => part >= 60)) return null;
+    return parts.reduce((seconds, part) => seconds * 60 + part, 0);
+  }
+  return cleanNumber(value);
+}
+
 function first(row, names) {
   const normalizedRow = new Map(Object.entries(row).map(([key, value]) => [
     String(key).toLowerCase().replace(/[^a-z0-9]/g, ""), value,
@@ -95,22 +105,25 @@ export function extractMetricoolCsvSamples(filename, text) {
     const views = network === "tiktok"
       ? cleanNumber(first(row, ["Views"]))
       : network === "facebook"
-        ? cleanNumber(first(row, ["VideoViews", "Video Views", "Impressions", "Reach"]))
+        ? cleanNumber(first(row, ["VideoViews", "Video Views"]))
         : cleanNumber(first(row, ["views"]));
     if (!id || views == null) continue;
-    const durationSeconds = cleanNumber(first(row, ["Duration", "Video duration", "Video duration (seconds)"]));
+    const durationSeconds = cleanSeconds(first(row, ["Duration", "Video duration", "Video duration (seconds)"]));
     const optionalMetric = (names) => cleanNumber(first(row, names));
     const likes = optionalMetric(["Likes", "Reactions"]);
     const comments = optionalMetric(["Comments"]);
     const shares = optionalMetric(["Shares"]);
     const reach = optionalMetric(["Reach"]);
     const impressions = optionalMetric(["Impressions"]);
-    const averageWatchSeconds = optionalMetric(["Avg. time watched (Seconds)", "Average watch time", "Average view duration"]);
-    const completionRate = optionalMetric(["Completion rate", "Watched full video percentage", "Average percentage viewed"]);
+    const averageWatchSeconds = cleanSeconds(first(row, ["Avg. time watched (Seconds)", "Average watch time", "Average view duration", "Avg. views duration", "Average time watched"]));
+    const rawCompletion = first(row, ["Completion rate", "Watched full video percentage", "Average percentage viewed"]);
+    const completionRate = cleanNumber(rawCompletion.replace(/%$/, ""));
     const engagements = [likes, comments, shares].reduce((total, value) => total + (value || 0), 0);
     const engagementRate = views > 0 && engagements > 0 ? engagements / views : undefined;
+    const references = [...new Set(Object.values(row).flatMap((value) => String(value).match(/\bBR-[a-f0-9]{12}\b/g) || []))];
     samples.set(id, {
       id,
+      ...(references.length === 1 ? { learningReference: references[0] } : {}),
       views: Math.floor(views),
       publishedAt: isoDate(first(row, ["Date", "publishedAt"])),
       ...(durationSeconds != null && durationSeconds > 0
@@ -122,7 +135,7 @@ export function extractMetricoolCsvSamples(filename, text) {
       ...(reach != null ? { reach: Math.floor(reach) } : {}),
       ...(impressions != null ? { impressions: Math.floor(impressions) } : {}),
       ...(averageWatchSeconds != null ? { averageWatchSeconds } : {}),
-      ...(completionRate != null ? { completionRate: completionRate > 1 ? completionRate / 100 : completionRate } : {}),
+      ...(completionRate != null ? { completionRate: completionRate > 1 || rawCompletion.endsWith("%") ? completionRate / 100 : completionRate } : {}),
       ...(engagementRate != null ? { engagementRate } : {}),
     });
   }

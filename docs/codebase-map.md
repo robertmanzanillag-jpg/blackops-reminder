@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-10-06T08:29:59.951Z
+Generated: 2026-10-06T08:30:20.017Z
 Repo: `/workspace/agents-office-review`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 653 | 570 | 1933 | 502 | 12686 |
+| 666 | 581 | 1973 | 502 | 12864 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 130 | 126 | server:130 |
+| `server` | 133 | 129 | server:133 |
+| `tests` | 123 | 120 | test:123 |
 | `client/src` | 120 | 118 | ui-component:55, client-page:26, client-component:25, client-lib:8 |
-| `tests` | 119 | 116 | test:119 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `script` | 75 | 70 | script:75 |
-| `docs` | 30 | 29 | docs:30 |
+| `script` | 76 | 71 | script:76 |
+| `docs` | 35 | 32 | docs:35 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `.agents/memory` | 5 | 5 | docs:5 |
@@ -81,10 +81,13 @@ Package: `rest-express`
 - `tests/blackroom-deterministic-editor.integration.test.ts`
 - `tests/blackroom-deterministic-editor.test.ts`
 - `tests/blackroom-growth-ceo.test.ts`
+- `tests/blackroom-learning-observations.test.ts`
+- `tests/blackroom-learning-panel.test.ts`
 - `tests/blackroom-links.test.ts`
 - `tests/blackroom-local-worker.test.ts`
 - `tests/blackroom-metricool-bridge.test.ts`
 - `tests/blackroom-remote-control.test.ts`
+- `tests/blackroom-verified-learning.test.ts`
 - `tests/ceo-backup-check-cli.test.ts`
 - `tests/ceo-brief-cli.test.ts`
 - `tests/ceo-briefing.test.ts`
@@ -185,11 +188,12 @@ Package: `rest-express`
 - `client/src/pages/revenue-engine-simple.tsx` (client-page; 33 symbols, 7 imports)
 - `client/src/pages/tools.tsx` (client-page; 2 symbols, 6 imports)
 - `package.json` (package)
-- `script/blackroom-control-server.mjs` (script; 71 symbols, 9 imports)
+- `script/blackroom-control-server.mjs` (script; 76 symbols, 10 imports)
 - `script/blackroom-daily-agent.ts` (script; 16 symbols, 2 imports)
 - `script/blackroom-deterministic-editor.ts` (script; 59 symbols, 7 imports)
 - `script/blackroom-local-worker.ts` (script; 73 symbols, 7 imports)
-- `script/blackroom-metricool-csv-bridge.mjs` (script; 34 symbols)
+- `script/blackroom-metricool-csv-bridge.mjs` (script; 38 symbols)
+- `script/blackroom-metricool-exporter.mjs` (script; 33 symbols, 6 imports)
 - `script/blackroom-remote-sync.mjs` (script; 24 symbols)
 - `script/blackroom-worker-ledger.ts` (script; 29 symbols, 4 imports)
 - `script/build.ts` (script; 12 symbols, 4 imports)
@@ -239,7 +243,6 @@ Package: `rest-express`
 - `script/codebase-map.ts` (script; 43 symbols, 3 imports)
 - `script/compact-local-news-state.ts` (script; 9 symbols, 4 imports)
 - `script/configure-telegram.ts` (script; 5 symbols, 4 imports)
-- `script/create-ceo-go-live-task.ts` (script; 13 symbols, 3 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
