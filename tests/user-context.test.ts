@@ -89,8 +89,8 @@ test("rejects tampered signed local auth cookies", () => {
   assert.equal(userId, null);
 });
 
-test("allows x-user-id as a development bridge only when request fallbacks are enabled", () => {
-  const userId = withEnv({ NODE_ENV: "development", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () =>
+test("allows a request identity bridge only with explicit isolated test opt-in", () => {
+  const userId = withEnv({ NODE_ENV: "test", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: "true" }, () =>
     resolveCurrentUserId(requestWithHeader("user-from-header")),
   );
 
@@ -108,17 +108,20 @@ test("does not use explicit DEFAULT_USER_ID as request authentication", () => {
   assert.equal(userId, null);
 });
 
-test("limits mock fallback to dev/test unless explicitly enabled", () => {
-  assert.equal(withEnv({ NODE_ENV: "development", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => allowsDevUserFallback()), true);
+test("request mock identity requires explicit isolated test opt-in, never the configured dev workflow", () => {
+  assert.equal(withEnv({ NODE_ENV: "development", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => allowsDevUserFallback()), false);
+  assert.equal(withEnv({ NODE_ENV: "development", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: "true" }, () => resolveCurrentUserId(requestWithHeader("other-owner"))), null);
+  assert.equal(withEnv({ NODE_ENV: "test", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => resolveCurrentUserId(requestWithHeader("other-owner"))), null);
   assert.equal(withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => allowsDevUserFallback()), false);
-  assert.equal(withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: "true" }, () => resolveCurrentUserId(requestWithHeader())), DEFAULT_DEV_USER_ID);
+  assert.equal(withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: "true" }, () => resolveCurrentUserId(requestWithHeader())), null);
   assert.equal(withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => resolveCurrentUserId(requestWithHeader())), null);
 });
 
 test("requires DEFAULT_USER_ID for system jobs when dev fallback is disabled", () => {
-  assert.equal(withEnv({ NODE_ENV: "test", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => getSystemUserId()), DEFAULT_DEV_USER_ID);
+  assert.equal(withEnv({ NODE_ENV: "test", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: "true" }, () => getSystemUserId()), DEFAULT_DEV_USER_ID);
   assert.equal(withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: "system-user", ALLOW_DEV_USER_FALLBACK: undefined }, () => getSystemUserId()), "system-user");
-  assert.equal(withEnv({ NODE_ENV: "test", DEFAULT_USER_ID: "<real-user-id>", ALLOW_DEV_USER_FALLBACK: undefined }, () => getSystemUserId()), DEFAULT_DEV_USER_ID);
+  assert.equal(withEnv({ NODE_ENV: "test", DEFAULT_USER_ID: "<real-user-id>", ALLOW_DEV_USER_FALLBACK: "true" }, () => getSystemUserId()), DEFAULT_DEV_USER_ID);
+  assert.throws(() => withEnv({ NODE_ENV: "test", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => getSystemUserId()), /DEFAULT_USER_ID is required/);
   assert.throws(
     () => withEnv({ NODE_ENV: "production", DEFAULT_USER_ID: undefined, ALLOW_DEV_USER_FALLBACK: undefined }, () => getSystemUserId()),
     /DEFAULT_USER_ID is required/,
@@ -222,4 +225,13 @@ test("auth middleware rejects protected APIs without user context", () => {
     assert.equal(statusCode, 401);
     assert.deepEqual(body, { error: "Authentication required", reason: "missing_user_context" });
   });
+});
+
+
+test("unset runtime and production override cannot authenticate a mock user", () => {
+  for (const env of [undefined, "production", "staging"]) {
+    for (const flag of [undefined, "true"]) {
+      assert.equal(withEnv({ NODE_ENV: env, ALLOW_DEV_USER_FALLBACK: flag }, () => resolveCurrentUserId(requestWithHeader("spoofed"))), null);
+    }
+  }
 });

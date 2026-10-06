@@ -1,6 +1,6 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
-import { mkdir, rm, readFile } from "fs/promises";
+import { mkdir, rm, readFile, copyFile } from "fs/promises";
 import { spawn } from "child_process";
 
 function pipInstallEnv(): NodeJS.ProcessEnv {
@@ -121,6 +121,10 @@ async function buildAll() {
 
   console.log("building client...");
   await viteBuild();
+
+  // connect-pg-simple resolves this resource relative to the bundled __dirname.
+  // Copying the library schema does not execute SQL or touch the database.
+  await copyFile("node_modules/connect-pg-simple/table.sql", "dist/table.sql");
 
   await bundleFreshYtDlp();
 

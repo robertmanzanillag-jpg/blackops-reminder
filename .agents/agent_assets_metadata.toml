@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "yPXQ2PTQZG9kh3f34pyFX"
+uri = "file://.local/office-evidence/validation-report.html"
+type = "html"
+title = "Agents Office — informe de integración y QA"
+description = "Referencia exacta, pruebas, revisión independiente, límites de la validación y rutas de recuperación. Sin publicación ni activación de servicios."
+logical_id = "4ca71730-9dd5-433a-b1da-8445b5af825b"
+content_hash = "sha256:c982a5180e3ed95b45d588202b9547b79e2b714e4247f0f08662c15b5c8a7c9c"
+size = 5808
+mtime_ms = 1791283326883
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:996097da-891f-490f-b35f-c02f361c4e34/4ca71730-9dd5-433a-b1da-8445b5af825b/a716d860-885f-4471-b50b-04f8672e6c1d"
+storage_version_token = "1791283447907960"
+content_type = "text/html"
