@@ -40,6 +40,7 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   app.get('/api/fixture-owner-boundary',async(req,res)=>{if(!await runtime.isConfiguredSingleUserOwner(req.fixtureUserId))return res.status(403).json({error:'Owner only'});res.json({scope:'fixture owner'});});
   app.get('/api/monthly-goals',(req,res)=>res.json([{id:req.fixtureUserId+'-goal',title:'Meta LOCAL · '+req.fixtureUserId,completed:false}]));
   app.get('/api/projects',(_req,res)=>res.json([]));app.get('/api/legal-compliance/reports',(_req,res)=>res.json({reports:[],summary:{critico:0,revisar:0,info:0}}));
+  app.get('/api/app-qa-agent/status',async(req,res)=>res.json(await runtime.runAppQaScan(req.fixtureUserId,false,false,false)));
   app.use('/api',(req,res)=>req.method==='GET'?res.json([]):res.status(403).json({error:'Mutation outside local QA scope'}));
   // Serve the actual production build, not a dev proxy with HMR noise.
   await access(path.resolve('dist/public/index.html'));
@@ -63,15 +64,16 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   await page.getByRole('navigation',{name:'Departamentos'}).getByRole('button',{name:/Ingeniería/}).click();await page.getByRole('button',{name:'App QA',exact:true}).click();
   await page.screenshot({path:'/workspace/office-evidence/integrated-session-desktop.png',fullPage:true});
   await page.setViewportSize({width:390,height:844});await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:'/workspace/office-evidence/integrated-session-mobile.png',fullPage:true});
+  await page.goto(base+'/app-qa-agent');await page.getByRole('heading',{name:'Cobertura y resultados por misión'}).waitFor();await page.getByText('26/26 rutas clasificadas.',{exact:false}).waitFor();assert.equal(await page.locator('[data-testid^=qa-mission-]').count(),5);await page.setViewportSize({width:1440,height:1080});await page.screenshot({path:'/workspace/office-evidence/missions-desktop.png',fullPage:true});await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:'/workspace/office-evidence/missions-mobile.png',fullPage:true});await page.goto(base+'/agents-office');await page.locator('.company-office').waitFor();
   await page.route('**/api/auth/logout',route=>route.fulfill({status:503,json:{error:'Fixture logout unavailable'}}));await page.getByRole('button',{name:'Salir',exact:true}).click();await page.getByRole('alert').filter({hasText:/No se pudo cerrar/}).waitFor();assert.equal(await page.locator('.company-office').count(),1);await page.unroute('**/api/auth/logout');
   await page.getByRole('button',{name:'Salir',exact:true}).click();await page.getByLabel('Usuario',{exact:true}).waitFor();assert.equal(await page.locator('.company-office').count(),0);assert.equal((await context.request.get(base+'/api/monthly-goals')).status(),401);assert.deepEqual(errors,[]);
   await context.close();await browser.close();browser=null;
-  const passive=await runtime.runAppQaScan('fixture-owner',false,false,false);assert.equal(passive.failCount,0);assert.equal(passive.telegramSent,false);assert.equal(passive.dailyDigestSent,false);
+  const passive=await runtime.runAppQaScan('fixture-owner',false,false,false);assert.equal(passive.failCount,0);assert.equal(passive.warnCount,0);assert.equal(passive.improvementIdeas.length,0);assert.equal(passive.telegramSent,false);assert.equal(passive.dailyDigestSent,false);
   for(const id of ['route-scout','link-click-scout','api-scout','error-scout'])assert.equal(passive.subAgents.find(s=>s.id===id).status,'pass');
   // Native visual scout gets an actual logged-in session via its existing dependency seam.
   const nativePlaywright={chromium:{launch:async options=>{const real=await chromium.launch({...options,executablePath:'/usr/bin/chromium'});const original=real.newContext.bind(real);real.newContext=async settings=>{const ctx=await original(settings);await ctx.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.fulfill({status:200,contentType:'text/css',body:''}));const response=await ctx.request.post(base+'/api/auth/login',{data:{username:'fixture-member',password:fixturePassword}});assert.equal(response.status(),200);return ctx;};return real;}}};
   const officeRoute=runtime.__appQaAgentInternals.LOCAL_ROUTE_MAP.filter(r=>r.path==='/agents-office');
-  const visual=await runtime.runVisualClickScout(officeRoute,{loadPlaywright:async()=>nativePlaywright});
+  const visual=await runtime.runVisualClickScout([...officeRoute,runtime.__appQaAgentInternals.LOCAL_ROUTE_MAP.find(r=>r.path==='/app-qa-agent')],{loadPlaywright:async()=>nativePlaywright});
   await writeFile('/workspace/office-evidence/integrated-app-qa-local.json',JSON.stringify({scope:'LOCAL memory fixtures; no production DB, GitHub or telemetry certified',passive,visual,requests},null,2));
   assert.equal(visual.status,'pass',JSON.stringify(visual.findings));assert.deepEqual(visual.visualScans.flatMap(s=>s.consoleErrors),[]);
  } finally {

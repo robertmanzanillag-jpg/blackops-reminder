@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-06T08:30:20.017Z",
+  "generatedAt": "2026-10-06T08:51:26.603Z",
   "repoRoot": "/workspace/agents-office-review",
   "packageName": "rest-express",
   "scripts": {
@@ -122,13 +122,20 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 666,
-    "filesIndexed": 581,
-    "imports": 1973,
-    "routes": 502,
-    "symbols": 12864
+    "filesVisible": 663,
+    "filesIndexed": 580,
+    "imports": 1977,
+    "routes": 504,
+    "symbols": 12896
   },
   "directories": {
+    "shared": {
+      "files": 2,
+      "indexed": 2,
+      "kinds": {
+        "shared": 2
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -187,10 +194,10 @@
       }
     },
     "docs": {
-      "files": 35,
-      "indexed": 32,
+      "files": 31,
+      "indexed": 30,
       "kinds": {
-        "docs": 35
+        "docs": 31
       }
     },
     "examples/clippers-motivation": {
@@ -230,13 +237,6 @@
       }
     },
     "shared/models": {
-      "files": 1,
-      "indexed": 1,
-      "kinds": {
-        "shared": 1
-      }
-    },
-    "shared": {
       "files": 1,
       "indexed": 1,
       "kinds": {
@@ -2962,6 +2962,7 @@
         "@/components/ui/card",
         "@/lib/queryClient",
         "@/lib/utils",
+        "@shared/app-qa-missions",
         "@tanstack/react-query",
         "lucide-react",
         "wouter"
@@ -2977,6 +2978,7 @@
         "QaSeverity",
         "QaStatus",
         "QaSubAgent",
+        "missionStatusStyle",
         "response",
         "scan",
         "scanMutation",
@@ -4123,22 +4125,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -9433,6 +9419,7 @@
       "path": "server/app-qa-agent.ts",
       "kind": "server",
       "imports": [
+        "../shared/app-qa-missions",
         "./ceo-doctor-cli",
         "./github-client",
         "./scheduler-time",
@@ -9526,6 +9513,7 @@
         "controller",
         "council",
         "countExpectedVisualControls",
+        "coverage",
         "createFinding",
         "dateKey",
         "describeAppQaStorageError",
@@ -18953,6 +18941,45 @@
       "routes": []
     },
     {
+      "path": "shared/app-qa-missions.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "QA_MISSIONS",
+        "QaMissionBreakdown",
+        "QaMissionId",
+        "QaMissionReport",
+        "QaMissionStatus",
+        "buildMissionBreakdown",
+        "missionForRoute",
+        "routeMissionCoverage"
+      ],
+      "symbols": [
+        "Finding",
+        "QA_MISSIONS",
+        "Route",
+        "Visual",
+        "buildMissionBreakdown",
+        "clean",
+        "findingMission",
+        "globalFindings",
+        "items",
+        "localFindings",
+        "missionForRoute",
+        "missions",
+        "parts",
+        "paths",
+        "relevant",
+        "routeMissionCoverage",
+        "routeParts",
+        "scans",
+        "status",
+        "url",
+        "visualStatus"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/models/chat.ts",
       "kind": "shared",
       "imports": [
@@ -19326,6 +19353,7 @@
         "visual"
       ],
       "routes": [
+        "/api/app-qa-agent/status",
         "/api/fixture-owner-boundary",
         "/api/legal-compliance/reports",
         "/api/monthly-goals",
@@ -19370,8 +19398,10 @@
       "kind": "test",
       "imports": [
         "../server/app-qa-agent",
+        "../shared/app-qa-missions",
         "@shared/schema",
         "node:assert/strict",
+        "node:fs",
         "node:fs/promises",
         "node:os",
         "node:path",
@@ -19384,6 +19414,7 @@
         "baseBody",
         "body",
         "bugPatrol",
+        "catalog",
         "council",
         "digest",
         "errorEvent",
@@ -19391,13 +19422,17 @@
         "fakeChromiumPath",
         "genericBody",
         "githubApp",
+        "global",
         "healthCheck",
         "incident",
+        "late",
         "message",
         "notes",
         "now",
+        "partial",
         "partialReleaseBody",
         "partialSalesBody",
+        "paths",
         "previousBaseUrl",
         "previousExecutablePath",
         "previousHours",
@@ -19418,10 +19453,16 @@
         "salesNotes",
         "salesOnlyBody",
         "scan",
+        "scoped",
         "skipMorningRepeat",
-        "tempDir"
+        "source",
+        "tempDir",
+        "unavailable",
+        "unknown"
       ],
-      "routes": []
+      "routes": [
+        "([^"
+      ]
     },
     {
       "path": "tests/app-qa-status-readonly.test.mjs",
