@@ -42,3 +42,45 @@ mtime_ms = 1791286064199
 storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:996097da-891f-490f-b35f-c02f361c4e34/9b43f376-3fd8-44bc-8dd1-1b9ac37862b4/f72bf065-d55f-4ed9-a7f5-d4ee8cc2be75"
 storage_version_token = "1791286134122131"
 content_type = "text/html"
+
+[[outputs]]
+id = "HtvoUkRVazqXp7GvTXqIm"
+uri = "file://attached_assets/posting-owner_66047c25_ce93d45f.zip"
+type = "unspecified"
+title = "Corte aislado POSTING · ce93d45f"
+description = "Export exacto de 401 KB: fuentes, preimágenes, diff, manifiesto y logs. Lector runtime sin datos por ownership no probado; aprobación independiente final pendiente."
+logical_id = "c96366dd-bb96-4415-9767-a07a6b0956ae"
+content_hash = "sha256:69dc8fbc9e07d346f62ceb8687201f2218851a6836c6ff4a2562f899bf7d9ddf"
+size = 401267
+mtime_ms = 1791517747234
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:996097da-891f-490f-b35f-c02f361c4e34/c96366dd-bb96-4415-9767-a07a6b0956ae/1762c1f5-552e-44bd-972b-e3796ecfc107"
+storage_version_token = "1791517781238756"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "CAjeEjTElIDtjArsGuId9"
+uri = "file://attached_assets/posting-owner_66047c25_ce93d45f.manifest.json"
+type = "unspecified"
+title = "Manifiesto · fuentes, guardas y validación"
+description = "Base/final, SHA-256/bytes, 236 archivos protegidos sin cambios, 21 tests, 106 checks UI interceptados y build seguro. Incluye revisión inicial FAIL y evidencia de corrección, no aprobación final."
+logical_id = "e3e66c3a-45a4-4ae8-8f19-1e0014257d2b"
+content_hash = "sha256:644436cba6fb10079c8e916f7d7a157c1646a57afb996a39cba7e03fe07c2f81"
+size = 89490
+mtime_ms = 1791517747249
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:996097da-891f-490f-b35f-c02f361c4e34/e3e66c3a-45a4-4ae8-8f19-1e0014257d2b/0f6c2bef-6b42-4e94-a1c8-41dc0eefee11"
+storage_version_token = "1791517781937665"
+content_type = "application/octet-stream"
+
+[[outputs]]
+id = "Q7DO3tG2RHk6Wdp-ORfoY"
+uri = "file://attached_assets/posting-owner_66047c25_ce93d45f.zip.b64.txt"
+type = "text"
+title = "Export exacto · base64"
+description = "Base64 verificado contra el ZIP exacto del candidato aislado; sin activación ni publicación."
+logical_id = "ec1dbccf-2f54-438b-9d39-32d5b0d0baaf"
+content_hash = "sha256:e0336594bf5b4261dee0034f8393b3e2d746103d581ee4b446bdb57a0e167815"
+size = 542064
+mtime_ms = 1791517747244
+storage_uri = "gcs://replit-rams-assets-kirk/rams/assets/repl:996097da-891f-490f-b35f-c02f361c4e34/ec1dbccf-2f54-438b-9d39-32d5b0d0baaf/bf220090-7356-41b9-8f84-9a418545f196"
+storage_version_token = "1791517782561373"
+content_type = "text/plain"
