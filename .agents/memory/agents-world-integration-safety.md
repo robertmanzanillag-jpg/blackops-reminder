@@ -14,3 +14,9 @@ Las declaraciones locales mínimas de Three usadas en validación offline deben 
 **Why:** la integración debía compilar sin instalar paquetes y el runtime instalado carecía de declaraciones; dos contratos de las mismas clases pueden entrar en conflicto.
 
 **How to apply:** al autorizar una actualización de herramientas de tipos, revisar y retirar el contrato local antes de añadir el completo.
+
+Cada área del mundo es un DEPARTAMENTO, no solo un proyecto. Marca/proyecto es una dimensión separada. Los roles CTO y Entrenador/evaluador de IA son propuestas de catálogo, no agentes creados ni entrenamiento activo.
+
+**Why:** aclaración explícita del usuario; la representación visual no debe inventar plantilla, personal, KPIs ni autorizaciones.
+
+**How to apply:** conservar clasificación desconocida cuando no exista correspondencia verificable. Describir revisión, despliegue autorizado y costes sin convertirlos en ejecución o permisos.

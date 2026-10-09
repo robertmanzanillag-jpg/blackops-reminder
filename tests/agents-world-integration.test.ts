@@ -12,7 +12,7 @@ const entities = () => buildWorld('fixture-user', empty, empty, denied, now);
 
 test('catalog and disconnected content roles never imply real activity', () => {
   const world = entities();
-  assert.equal(world.length, 24);
+  assert.equal(world.length, 26);
   const roles = world.filter(entity => entity.area === 'Contenido' && entity.id.startsWith('content-'));
   assert.equal(roles.length, 5);
   assert.ok(roles.every(entity => entity.connection === 'No conectado' && entity.result === 'No verificado'));
@@ -57,8 +57,8 @@ test('owner verification fails closed on expired or mismatched native session', 
 });
 test('filters and placement remain deterministic across large inventory', () => {
   const base = entities();
-  assert.equal(filterWorld(base, 'publicación', 'Contenido', 'Todas')[0].id, 'content-publication');
-  assert.equal(filterWorld(base, 'not-found', 'Todas', 'Todas').length, 0);
+  assert.equal(filterWorld(base, 'publicación', 'Contenido', 'Todas', 'Todas')[0].id, 'content-publication');
+  assert.equal(filterWorld(base, 'not-found', 'Todos', 'Todas', 'Todas').length, 0);
   assert.deepEqual(stationLayout(base), stationLayout(base));
   const large = Array.from({ length: 1000 }, (_, index) => ({ ...base[0], id: `fixture:${index}` }));
   assert.equal(stationLayout(large).length, 1000);
@@ -69,6 +69,41 @@ test('decorative motion and render budgets honor pause and device limits', () =>
   assert.notDeepEqual(visualMotion(0, 1, true), visualMotion(0, 2, true));
   assert.deepEqual(renderBudget(true, 3), { fps: 20, pixelRatio: 1 });
   assert.deepEqual(renderBudget(false, 3), { fps: 30, pixelRatio: 1.5 });
+});
+test('proposed CTO/evaluator stay disconnected with unknown activity and no operational link', () => {
+  const world = entities();
+  for (const name of ['CTO', 'Entrenador/evaluador de IA']) {
+    const role = world.find(entity => entity.name === name)!;
+    assert.ok(role);
+    assert.equal(role.catalogStatus, 'Propuesto · No conectado');
+    assert.equal(role.connection, 'No conectado');
+    assert.equal(role.href, undefined);
+    assert.equal(role.signal, 'Sin señal');
+    assert.equal(role.result, 'No verificado');
+    assert.equal(role.lastSignal, undefined);
+    assert.equal(role.task, 'Sin tarea actual verificada');
+    assert.match(role.evidence, /No se ha creado un agente/);
+  }
+  assert.equal(world.find(entity => entity.id === 'cto')!.department, 'Ingeniería');
+  assert.equal(world.find(entity => entity.id === 'ai-evaluator')!.department, 'IA y evaluación');
+});
+test('department and brand/project filters are independent; names do not invent KONG membership', () => {
+  const world = buildWorld('fixture-user', { state: 'ready', data: [
+    { id: 'own', name: 'KONG fixture', userId: 'fixture-user' },
+    { id: 'assigned', name: 'Owned project', userId: 'fixture-user', department: 'Ingeniería' },
+    { id: 'invalid', name: 'Unknown classification', userId: 'fixture-user', department: 'KONG' },
+    { id: 'foreign', name: 'PRIVATE', userId: 'other', department: 'Ingeniería' },
+  ] }, empty, denied, now);
+  const own = world.find(entity => entity.id === 'project:own')!;
+  assert.equal(own.department, 'Desconocido');
+  assert.equal(own.brandProject, 'KONG fixture');
+  assert.equal(world.find(entity => entity.id === 'project:invalid')!.department, 'Desconocido');
+  assert.deepEqual(filterWorld(world, '', 'Ingeniería', 'Owned project', 'Todas').map(entity => entity.id), ['project:assigned']);
+  assert.equal(filterWorld(world, '', 'Ingeniería', 'KONG fixture', 'Todas').length, 0);
+  assert.deepEqual(filterWorld(world, '', 'Desconocido', 'KONG fixture', 'Sin señal').map(entity => entity.id), ['project:own']);
+  assert.deepEqual(filterWorld(world, '', 'Todos', 'KONG', 'Todas').map(entity => entity.id), ['kong']);
+  assert.equal(filterWorld(world, 'PRIVATE', 'Todos', 'Todas', 'Todas').length, 0);
+  assert.ok(!stationLayout(world).some(station => station.entity.id === 'project:own'));
 });
 test('transport enforces allowlist before fetch and explicit response failures', async () => {
   assert.deepEqual(worldReadAllowlist, ['/api/auth/me', '/api/projects', '/api/tasks']);

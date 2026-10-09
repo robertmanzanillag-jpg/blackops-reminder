@@ -1,15 +1,22 @@
-import { areas, type Area, type Entity } from './agents-world';
-export const rooms: Record<Area, { x: number; z: number; width: number; depth: number; color: string }> = {
-  Oficina: { x: -14, z: -12, width: 24, depth: 20, color: '#46c9c0' },
-  KONG: { x: 14, z: -12, width: 24, depth: 20, color: '#ab94ec' },
-  'Black Room': { x: -14, z: 11, width: 24, depth: 20, color: '#e79ebf' },
-  'Daily Planner': { x: 14, z: 11, width: 24, depth: 20, color: '#efc47f' },
-  Contenido: { x: 0, z: 31, width: 52, depth: 14, color: '#8fbeed' },
+import { departments, type Department, type Entity } from './agents-world';
+export const rooms: Record<Department, { x: number; z: number; width: number; depth: number; color: string }> = {
+  Dirección: { x: -21, z: -12, width: 13, depth: 18, color: '#46c9c0' },
+  Ingresos: { x: -7, z: -12, width: 13, depth: 18, color: '#efc47f' },
+  Marketing: { x: 7, z: -12, width: 13, depth: 18, color: '#8fbeed' },
+  Ingeniería: { x: 21, z: -12, width: 13, depth: 18, color: '#ab94ec' },
+  Seguridad: { x: -21, z: 9, width: 13, depth: 18, color: '#e79ebf' },
+  Calidad: { x: -7, z: 9, width: 13, depth: 18, color: '#83c6ad' },
+  Finanzas: { x: 7, z: 9, width: 13, depth: 18, color: '#d8ad7c' },
+  Contenido: { x: 21, z: 9, width: 13, depth: 18, color: '#8fbeed' },
+  Operaciones: { x: -21, z: 30, width: 13, depth: 18, color: '#9bb6c8' },
+  'IA y evaluación': { x: -7, z: 30, width: 13, depth: 18, color: '#b6a4d8' },
+  Legal: { x: 7, z: 30, width: 13, depth: 18, color: '#c2b28c' },
+  Coordinación: { x: 21, z: 30, width: 13, depth: 18, color: '#79b7b3' },
 };
 /** Deterministic conceptual placement. Never interpreted as presence or work. */
 export function stationLayout(entities: Entity[]) {
-  return areas.flatMap(area => {
-    const items=entities.filter(entity=>entity.area===area), room=rooms[area];
+  return departments.flatMap(department => {
+    const items=entities.filter(entity=>entity.department===department), room=rooms[department];
     const cols=Math.max(1,Math.ceil(Math.sqrt(items.length*room.width/room.depth)));
     const rows=Math.max(1,Math.ceil(items.length/cols));
     return items.map((entity,i)=>({entity,color:room.color,

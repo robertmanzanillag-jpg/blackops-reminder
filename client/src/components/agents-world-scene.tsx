@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { areas, type Area, type Entity } from '@/lib/agents-world';
+import { departments, type Department, type Entity } from '@/lib/agents-world';
 import { renderBudget, rooms, stationLayout, visualMotion } from '@/lib/agents-world-layout';
 
 type Props={entities:Entity[];visible:Entity[];selectedId?:string;suspended?:boolean;onSelect:(entity:Entity,target:HTMLElement)=>void};
-type Engine={zoom:(factor:number)=>void;rotate:(angle:number)=>void;tilt:(angle:number)=>void;pan:(x:number,z:number)=>void;reset:()=>void;area:(area:Area)=>void;draw:()=>void};
+type Engine={zoom:(factor:number)=>void;rotate:(angle:number)=>void;tilt:(angle:number)=>void;pan:(x:number,z:number)=>void;reset:()=>void;department:(department:Department)=>void;draw:()=>void};
 /** Actual WebGL perspective scene. All character motion is decorative. */
 export function AgentsWorldScene(props:Props) {
   const live=useRef(props); live.current=props;
@@ -16,7 +16,7 @@ export function AgentsWorldScene(props:Props) {
   const [reduced,setReduced]=useState(()=>window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const [motion,setMotion]=useState(true),[zoomLabel,setZoomLabel]=useState(100);
   const animationAllowed=useRef(false); animationAllowed.current=motion&&!reduced&&!props.suspended;
-  const sceneKey=useMemo(()=>props.entities.map(e=>[e.id,e.name,e.area].join(':')).join('|'),[props.entities]);
+  const sceneKey=useMemo(()=>props.entities.map(e=>[e.id,e.name,e.department].join(':')).join('|'),[props.entities]);
   useEffect(()=>{
     const media=window.matchMedia('(prefers-reduced-motion: reduce)');const update=()=>setReduced(media.matches);
     media.addEventListener('change',update);return()=>media.removeEventListener('change',update);
@@ -53,8 +53,8 @@ export function AgentsWorldScene(props:Props) {
     cube(scene,0,2.3,-24,59,4.6,.6,'#315069');cube(scene,-29,2.3,8,.6,4.6,65,'#284256');
     for(let x=-25;x<28;x+=8)cube(scene,x,2.8,-23.62,5,2.4,.12,'#74b2c4');
     for(let z=-19;z<35;z+=10)cube(scene,-28.62,2.8,z,.12,2.4,5,'#5d99b2');
-    for(const area of areas){const r=rooms[area];cube(scene,r.x,.19,r.z,r.width,.2,r.depth,r.color);cube(scene,r.x,.31,r.z,r.width-.5,.05,r.depth-.5,'#2b3e50');
-      text(area.toUpperCase(),r.x,4.9,r.z-r.depth/2+1,r.color,area==='Contenido'?23:14);
+     for(const department of departments){const r=rooms[department];cube(scene,r.x,.19,r.z,r.width,.2,r.depth,r.color);cube(scene,r.x,.31,r.z,r.width-.5,.05,r.depth-.5,'#2b3e50');
+       text(department.toUpperCase(),r.x,4.9,r.z-r.depth/2+1,r.color,14);
       // Low partitions define zones without hiding stations or pretending connections.
       cube(scene,r.x,.8,r.z-r.depth/2,r.width,1,.18,'#4d667a');
     }
@@ -96,7 +96,7 @@ export function AgentsWorldScene(props:Props) {
     engine.current={draw:()=>{dirty=true;draw();},zoom:factor=>manipulate(()=>{const v=camera.position.clone().sub(controls.target);v.setLength(Math.max(30,Math.min(230,v.length()*factor)));camera.position.copy(controls.target).add(v);}),rotate:angle=>orbit(angle),tilt:angle=>orbit(0,angle),
       pan:(x,z)=>manipulate(()=>{const dx=Math.max(-32,Math.min(32,controls.target.x+x))-controls.target.x,dz=Math.max(-26,Math.min(40,controls.target.z+z))-controls.target.z;controls.target.add(new THREE.Vector3(dx,0,dz));camera.position.add(new THREE.Vector3(dx,0,dz));}),
       reset:()=>manipulate(()=>{controls.target.set(0,0,8);camera.position.copy(initial);}),
-      area:area=>manipulate(()=>{const r=rooms[area],offset=camera.position.clone().sub(controls.target).normalize().multiplyScalar(mobile?Math.max(62,r.width*2.3):Math.max(45,r.width*1.5));controls.target.set(r.x,0,r.z);camera.position.copy(controls.target).add(offset);}),
+       department:department=>manipulate(()=>{const r=rooms[department],offset=camera.position.clone().sub(controls.target).normalize().multiplyScalar(mobile?Math.max(62,r.width*2.3):Math.max(45,r.width*1.5));controls.target.set(r.x,0,r.z);camera.position.copy(controls.target).add(offset);}),
     };
     const tick=(timestamp:number)=>{if(!alive)return;raf=requestAnimationFrame(tick);
       const moving=animationAllowed.current&&visible&&inViewport;
@@ -129,13 +129,13 @@ export function AgentsWorldScene(props:Props) {
       <button aria-label="Desplazar escenario a la izquierda" onClick={()=>engine.current?.pan(-4,0)}>←</button><button aria-label="Desplazar escenario a la derecha" onClick={()=>engine.current?.pan(4,0)}>→</button><button aria-label="Desplazar escenario arriba" onClick={()=>engine.current?.pan(0,-4)}>↑</button><button aria-label="Desplazar escenario abajo" onClick={()=>engine.current?.pan(0,4)}>↓</button>
       <button aria-pressed={motion&&!reduced} disabled={reduced} onClick={()=>setMotion(m=>!m)}>{reduced?'Movimiento reducido':motion?'Pausar decoración':'Activar decoración'}</button>
     </div>
-    <div className="ops-scene-areas" role="group" aria-label="Ir a un área">{areas.map(area=><button key={area} onClick={()=>engine.current?.area(area)}>{area}</button>)}</div>
+     <div className="ops-scene-areas" role="group" aria-label="Ir a un departamento">{departments.map(department=><button key={department} onClick={()=>engine.current?.department(department)}>{department}</button>)}</div>
     <div className="ops-3d-stage" role="group" aria-label="Mundo 3D de agentes">
       {availability!=='unavailable'&&<canvas ref={canvasRef} tabIndex={0} aria-label="Cámara 3D: flechas desplazan, + y − zoom, Inicio reinicia" onKeyDown={event=>{const key=event.key;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','+','=','-','Home'].includes(key))event.preventDefault();if(key==='Home')engine.current?.reset();if(key==='+'||key==='=')engine.current?.zoom(1/1.2);if(key==='-')engine.current?.zoom(1.2);if(key==='ArrowLeft')engine.current?.pan(-4,0);if(key==='ArrowRight')engine.current?.pan(4,0);if(key==='ArrowUp')engine.current?.pan(0,-4);if(key==='ArrowDown')engine.current?.pan(0,4);}}/>}
-      {availability==='ready'&&<div className="ops-3d-labels">{props.visible.filter(entity=>props.entities.slice(0,mobile?32:48).some(e=>e.id===entity.id)).map(entity=><button key={entity.id} ref={element=>{if(element)labels.current.set(entity.id,element);else labels.current.delete(entity.id);}} data-entity-id={entity.id} className="ops-3d-label" aria-label={`${entity.name} ${entity.role} ${entity.signal}`} aria-pressed={entity.id===props.selectedId} title={`${entity.name} · ${entity.connection}`} onClick={event=>select(entity,event.currentTarget)}><span>{entity.name}</span><small>{entity.connection==='No conectado'?'No conectado':entity.signal}</small></button>)}</div>}
+      {availability==='ready'&&<div className="ops-3d-labels">{props.visible.filter(entity=>entity.department!=='Desconocido'&&props.entities.slice(0,mobile?32:48).some(e=>e.id===entity.id)).map(entity=><button key={entity.id} ref={element=>{if(element)labels.current.set(entity.id,element);else labels.current.delete(entity.id);}} data-entity-id={entity.id} className="ops-3d-label" aria-label={`${entity.name} ${entity.role} ${entity.signal}`} aria-pressed={entity.id===props.selectedId} title={`${entity.name} · ${entity.connection}`} onClick={event=>select(entity,event.currentTarget)}><span>{entity.name}</span><small>{entity.catalogStatus==='Propuesto · No conectado'?entity.catalogStatus:entity.connection==='No conectado'?'No conectado':entity.signal}</small></button>)}</div>}
       {availability==='unavailable'&&<div className="ops-webgl-fallback" role="status">WebGL no disponible. Directorio accesible de las mismas fuentes, sin movimiento.<ul>{props.visible.map(entity=><li key={entity.id}><button className="ops-entity" data-entity-id={entity.id} aria-label={`${entity.name} ${entity.role} ${entity.signal}`} aria-pressed={entity.id===props.selectedId} onClick={event=>select(entity,event.currentTarget)}>{entity.name} · {entity.connection} · {entity.signal}</button></li>)}</ul></div>}
     </div>
-    <p className="ops-motion-notice">La escena muestra hasta 32 estaciones en móvil y 48 en escritorio. Todas las entidades siguen disponibles en el selector y la Lista.</p><label className="ops-station-picker">Seleccionar entidad (también fuera de cámara)<select aria-label="Seleccionar entidad 3D" value={props.selectedId||''} onChange={event=>{const entity=props.visible.find(e=>e.id===event.target.value);if(entity)select(entity,event.currentTarget);}}><option value="">Elige agente, proyecto o tarea</option>{props.visible.map(entity=><option value={entity.id} key={entity.id}>{entity.name} · {entity.connection}</option>)}</select></label>
+     <p className="ops-motion-notice">La escena muestra hasta 32 estaciones en móvil y 48 en escritorio. Los registros sin departamento verificable permanecen en el selector y la Lista.</p><label className="ops-station-picker">Seleccionar entidad (también fuera de cámara)<select aria-label="Seleccionar entidad 3D" value={props.selectedId||''} onChange={event=>{const entity=props.visible.find(e=>e.id===event.target.value);if(entity)select(entity,event.currentTarget);}}><option value="">Elige rol, proyecto o tarea</option>{props.visible.map(entity=><option value={entity.id} key={entity.id}>{entity.name} · {entity.connection}</option>)}</select></label>
     <p className="ops-scene-help">Arrastra para girar. Dos dedos permiten zoom y desplazamiento. Flechas, + / − e Inicio controlan la cámara. Selecciona una figura, su etiqueta o el selector accesible. Las posiciones y el movimiento son decorativos; las fichas usan fuentes verificables.</p>
   </div>;
 }

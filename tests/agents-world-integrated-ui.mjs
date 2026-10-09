@@ -72,7 +72,7 @@ async function scenario(options = {}) {
     return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(fixtures[pathname]) });
   });
   await page.goto(`${origin}/agents-office`);
-  await page.getByRole('heading', { name: 'Mundo 3D · catálogo y fuentes' }).waitFor();
+  await page.getByRole('heading', { name: 'Mundo 3D · departamentos y evidencia' }).waitFor();
   const world = page.locator('.company-agents-world');
   await page.waitForFunction(() => !document.querySelector('.world-sources')?.textContent.includes('Consultando'));
   check(await page.getByRole('button', { name: /Abrir centro operativo existente/ }).getAttribute('aria-expanded') === 'false', 'legacy center stays closed');
@@ -82,7 +82,7 @@ async function scenario(options = {}) {
   check(await world.getByText('Movimiento ambiental decorativo', { exact: true }).isVisible(), 'decorative motion disclaimer');
   if (options.fallback) {
     await world.getByRole('status').filter({ hasText: 'WebGL no disponible' }).waitFor();
-    check(await world.locator('.ops-webgl-fallback button').count() >= 24, 'WebGL fallback selects same entities');
+    check(await world.locator('.ops-webgl-fallback button').count() >= 26, 'WebGL fallback selects same entities');
     await world.locator('.ops-webgl-fallback button').filter({ hasText: 'Publicación' }).click();
     await world.getByRole('heading', { name: 'Publicación', exact: true }).waitFor();
   } else {
@@ -122,8 +122,32 @@ async function scenario(options = {}) {
   check((await world.locator('.world-detail').innerText()).includes('No conectado'), 'selected content role stays disconnected');
   check((await world.locator('.world-detail').innerText()).includes('Sin evidencia de ejecución') || (await world.locator('.world-detail').innerText()).includes('sin identidad operativa'), 'detail does not fabricate execution');
   await world.getByRole('button', { name: 'Lista accesible' }).click();
-  check(await world.locator('.world-directory button').count() >= 24, 'accessible list connected to same data');
-  if (options.large) check(await world.locator('.world-directory button').count() === 1026, 'large inventory retained outside render cap');
+  check(await world.locator('.world-directory button').count() >= 26, 'accessible list connected to same data');
+  if (options.large) check(await world.locator('.world-directory button').count() === 1028, 'large inventory retained outside render cap');
+  const departmentFilter = world.getByLabel('Departamento', { exact: true });
+  const brandFilter = world.getByLabel('Marca / proyecto', { exact: true });
+  check(!(await departmentFilter.innerText()).includes('KONG'), 'departments do not double as brand/project options');
+  await departmentFilter.selectOption('Ingeniería');
+  await world.locator('.world-directory button[data-entity-id="cto"]').waitFor();
+  check(await world.locator('.world-directory button[data-entity-id="cto"]').count() === 1, 'CTO belongs to conceptual engineering department');
+  await brandFilter.selectOption('KONG');
+  await world.getByText('Sin entidades para estos filtros.', { exact: false }).waitFor();
+  check(await world.locator('.world-directory button').count() === 0, 'brand/project and department filters combine independently');
+  await departmentFilter.selectOption('Desconocido');
+  await world.locator('.world-directory button[data-entity-id="kong"]').waitFor();
+  check(await world.locator('.world-directory button').count() === 1, 'catalog brand reference keeps unknown department');
+  await brandFilter.selectOption('Todas');
+  await departmentFilter.selectOption('Todos');
+  for (const [id, name] of [['cto', 'CTO'], ['ai-evaluator', 'Entrenador/evaluador de IA']]) {
+    await world.locator(`.world-directory button[data-entity-id="${id}"]`).click();
+    await world.getByRole('heading', { name, exact: true }).waitFor();
+    const detail = world.locator('.world-detail');
+    check((await detail.innerText()).includes('Propuesto · No conectado'), `${name} visibly proposed and disconnected`);
+    check((await detail.innerText()).includes('Sin tarea actual verificada') && (await detail.innerText()).includes('No verificado'), `${name} does not claim execution/training`);
+    check(await detail.locator('a').count() === 0, `${name} has no operational action`);
+  }
+  check((await world.getByLabel('Proceso de autorización').innerText()).includes('Revisión independiente'), 'descriptive review process visible');
+  check((await world.locator('.world-governance').innerText()).includes('no son presupuestos'), 'cost criteria never grant budget or spending');
   await world.getByLabel('Buscar entidad').fill('not-found-fixture');
   check(await world.getByText('Sin entidades para estos filtros.', { exact: false }).isVisible(), 'empty filter state');
   await world.getByLabel('Buscar entidad').fill('');
@@ -132,7 +156,7 @@ async function scenario(options = {}) {
   if (!options.expired && !options.empty) {
     state.empty = true;
     await world.getByRole('button', { name: 'Actualizar lecturas' }).click();
-    await page.waitForFunction(() => document.querySelectorAll('.world-directory button').length === 24);
+    await page.waitForFunction(() => document.querySelectorAll('.world-directory button').length === 26);
     check(!(await world.innerText()).includes('TEST FIXTURE task'), 'refresh removes old rows');
     state.refreshError = true;
     await world.getByRole('button', { name: 'Actualizar lecturas' }).click();
