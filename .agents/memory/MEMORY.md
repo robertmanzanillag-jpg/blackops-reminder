@@ -8,3 +8,4 @@
 - [News diagnostic evidence](local-news-diagnostic-evidence.md) — no atribuir fallos desde totales; pruebas simuladas no certifican feeds reales y la telemetría no debe detener ingesta.
 - [QA toolchain isolation](qa-toolchain-isolation.md) — preserve build toolchain metadata; keep runtime tests isolated and report unavailable checker tools honestly.
 - [Diagnóstico de sesiones](production-session-diagnosis.md) — confirmar destino y esquema del runtime antes de proponer DDL; las pruebas de sesión pueden escribir aunque parezcan lecturas.
+- [Integración del mundo 3D](agents-world-integration-safety.md) — separar UI de autorización operativa; probar el montaje real y no inferir actividad de animaciones.

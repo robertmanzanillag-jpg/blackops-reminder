@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-10-06T11:03:09.219Z",
-  "repoRoot": "/home/runner/workspace",
+  "generatedAt": "2026-10-09T01:39:37.437Z",
+  "repoRoot": "/home/runner/workspace/.local/worktrees/agents-world-3d",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -122,13 +122,60 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 678,
-    "filesIndexed": 594,
-    "imports": 2029,
-    "routes": 510,
-    "symbols": 13081
+    "filesVisible": 693,
+    "filesIndexed": 609,
+    "imports": 2065,
+    "routes": 511,
+    "symbols": 13259
   },
   "directories": {
+    ".agents/memory": {
+      "files": 10,
+      "indexed": 10,
+      "kinds": {
+        "docs": 10
+      }
+    },
+    "client/src": {
+      "files": 130,
+      "indexed": 128,
+      "kinds": {
+        "client-component": 29,
+        "client-lib": 13,
+        "other": 4,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-page": 26
+      }
+    },
+    "docs": {
+      "files": 32,
+      "indexed": 31,
+      "kinds": {
+        "docs": 32
+      }
+    },
+    "script": {
+      "files": 77,
+      "indexed": 72,
+      "kinds": {
+        "script": 77
+      }
+    },
+    "tests": {
+      "files": 129,
+      "indexed": 126,
+      "kinds": {
+        "test": 129
+      }
+    },
+    "tests/harness": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "test": 1
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -143,13 +190,6 @@
       "indexed": 0,
       "kinds": {
         "other": 1
-      }
-    },
-    ".agents/memory": {
-      "files": 8,
-      "indexed": 8,
-      "kinds": {
-        "docs": 8
       }
     },
     ".agents/skills": {
@@ -181,30 +221,11 @@
         "other": 16
       }
     },
-    "client/src": {
-      "files": 122,
-      "indexed": 120,
-      "kinds": {
-        "other": 3,
-        "client-component": 26,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 9,
-        "client-page": 26
-      }
-    },
     "config": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "other": 1
-      }
-    },
-    "docs": {
-      "files": 31,
-      "indexed": 30,
-      "kinds": {
-        "docs": 31
       }
     },
     "examples/clippers-motivation": {
@@ -213,13 +234,6 @@
       "kinds": {
         "docs": 1,
         "other": 70
-      }
-    },
-    "script": {
-      "files": 76,
-      "indexed": 71,
-      "kinds": {
-        "script": 76
       }
     },
     "scripts": {
@@ -257,13 +271,6 @@
         "shared": 1
       }
     },
-    "tests": {
-      "files": 127,
-      "indexed": 124,
-      "kinds": {
-        "test": 127
-      }
-    },
     "tutorials/dropshipping-ceo-tutorial": {
       "files": 8,
       "indexed": 1,
@@ -274,6 +281,14 @@
     }
   },
   "files": [
+    {
+      "path": ".agents/memory/agents-world-integration-safety.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
     {
       "path": ".agents/memory/drive-oauth-autoscale.md",
       "kind": "docs",
@@ -316,6 +331,14 @@
     },
     {
       "path": ".agents/memory/pr15-deploy.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/production-session-diagnosis.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -517,6 +540,74 @@
       "routes": []
     },
     {
+      "path": "client/src/components/agents-world-scene.tsx",
+      "kind": "client-component",
+      "imports": [
+        "@/lib/agents-world",
+        "@/lib/agents-world-layout",
+        "react",
+        "three",
+        "three/addons/controls/OrbitControls.js"
+      ],
+      "exports": [
+        "AgentsWorldScene"
+      ],
+      "symbols": [
+        "AgentsWorldScene",
+        "Engine",
+        "Props",
+        "animationAllowed",
+        "avatar",
+        "box",
+        "budget",
+        "cached",
+        "camera",
+        "canvas",
+        "canvasRef",
+        "changed",
+        "controls",
+        "cube",
+        "down",
+        "draw",
+        "g",
+        "geometries",
+        "id",
+        "ids",
+        "inFrame",
+        "initial",
+        "intersection",
+        "label",
+        "legs",
+        "live",
+        "lost",
+        "m",
+        "manipulate",
+        "material",
+        "media",
+        "moving",
+        "orbit",
+        "raycaster",
+        "rect",
+        "release",
+        "resize",
+        "ring",
+        "ringGeometry",
+        "round",
+        "scene",
+        "sceneKey",
+        "select",
+        "setCameraStatus",
+        "stations",
+        "text",
+        "texture",
+        "tick",
+        "up",
+        "visibility",
+        "x"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/components/assistant-chat.tsx",
       "kind": "client-component",
       "imports": [
@@ -555,6 +646,47 @@
       "routes": []
     },
     {
+      "path": "client/src/components/company-office/agents-world-office.css",
+      "kind": "client-component",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/company-office/agents-world-office.tsx",
+      "kind": "client-component",
+      "imports": [
+        "./agents-world-office.css",
+        "@/lib/agents-world",
+        "@/lib/agents-world-learning",
+        "@/lib/agents-world-session",
+        "react",
+        "wouter"
+      ],
+      "exports": [
+        "AgentsWorldOffice"
+      ],
+      "symbols": [
+        "AgentsWorldOffice",
+        "AgentsWorldScene",
+        "auth",
+        "controller",
+        "detail",
+        "entities",
+        "initialSources",
+        "learning",
+        "select",
+        "selected",
+        "sourceLabels",
+        "sourcePaths",
+        "timer",
+        "values",
+        "visible"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/components/company-office/company-office.css",
       "kind": "client-component",
       "imports": [],
@@ -566,6 +698,7 @@
       "path": "client/src/components/company-office/company-office.tsx",
       "kind": "client-component",
       "imports": [
+        "./agents-world-office",
         "./company-simulation",
         "@/lib/owner-office-storage",
         "@tanstack/react-query",
@@ -2632,6 +2765,112 @@
       "routes": []
     },
     {
+      "path": "client/src/lib/agents-world-layout.ts",
+      "kind": "client-lib",
+      "imports": [
+        "./agents-world"
+      ],
+      "exports": [
+        "renderBudget",
+        "rooms",
+        "stationLayout",
+        "visualMotion"
+      ],
+      "symbols": [
+        "cols",
+        "items",
+        "renderBudget",
+        "rows",
+        "stationLayout",
+        "t",
+        "visualMotion"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/agents-world-learning.ts",
+      "kind": "client-lib",
+      "imports": [
+        "./agents-world"
+      ],
+      "exports": [
+        "readLearning"
+      ],
+      "symbols": [
+        "analytics",
+        "candidate",
+        "commands",
+        "d",
+        "data",
+        "evidence",
+        "obj",
+        "readLearning",
+        "recent",
+        "str",
+        "validWindow"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/agents-world-session.ts",
+      "kind": "client-lib",
+      "imports": [
+        "./agents-world"
+      ],
+      "exports": [
+        "worldOwnerMatches"
+      ],
+      "symbols": [
+        "data",
+        "worldOwnerMatches"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/agents-world.ts",
+      "kind": "client-lib",
+      "imports": [],
+      "exports": [
+        "Area",
+        "Entity",
+        "Signal",
+        "Source",
+        "areas",
+        "buildWorld",
+        "filterWorld",
+        "freshness",
+        "readSource",
+        "worldReadAllowlist"
+      ],
+      "symbols": [
+        "blank",
+        "buildWorld",
+        "catalog",
+        "data",
+        "entities",
+        "entity",
+        "event",
+        "events",
+        "filterWorld",
+        "freshness",
+        "kong",
+        "p",
+        "planner",
+        "query",
+        "readSource",
+        "record",
+        "remote",
+        "response",
+        "room",
+        "sourceEvidence",
+        "t",
+        "text",
+        "timestamp",
+        "worldReadAllowlist"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/lib/api.ts",
       "kind": "client-lib",
       "imports": [
@@ -4025,6 +4264,71 @@
       "routes": []
     },
     {
+      "path": "client/src/types/agents-world-three.d.ts",
+      "kind": "other",
+      "imports": [
+        "three"
+      ],
+      "exports": [
+        "BoxGeometry",
+        "BufferGeometry",
+        "Camera",
+        "CanvasTexture",
+        "CylinderGeometry",
+        "DirectionalLight",
+        "Fog",
+        "Group",
+        "HemisphereLight",
+        "Material",
+        "Mesh",
+        "MeshStandardMaterial",
+        "Object3D",
+        "OrbitControls",
+        "PerspectiveCamera",
+        "Raycaster",
+        "SRGBColorSpace",
+        "Scene",
+        "SphereGeometry",
+        "Spherical",
+        "Sprite",
+        "SpriteMaterial",
+        "Texture",
+        "TorusGeometry",
+        "Vector2",
+        "Vector3",
+        "WebGLRenderer"
+      ],
+      "symbols": [
+        "BoxGeometry",
+        "BufferGeometry",
+        "Camera",
+        "CanvasTexture",
+        "CylinderGeometry",
+        "DirectionalLight",
+        "Fog",
+        "Group",
+        "HemisphereLight",
+        "Material",
+        "Mesh",
+        "MeshStandardMaterial",
+        "Object3D",
+        "OrbitControls",
+        "PerspectiveCamera",
+        "Raycaster",
+        "Scene",
+        "SphereGeometry",
+        "Spherical",
+        "Sprite",
+        "SpriteMaterial",
+        "Texture",
+        "TorusGeometry",
+        "Vector2",
+        "Vector3",
+        "WebGLRenderer"
+      ],
+      "routes": []
+    },
+    {
       "path": "components.json",
       "kind": "other",
       "imports": [],
@@ -4050,6 +4354,14 @@
     },
     {
       "path": "docs/agent-kanban-clippers-ceo-runtime-ready.json",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/agents-world-integration-review.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -5375,6 +5687,19 @@
         "temporary",
         "writeLedger"
       ],
+      "routes": []
+    },
+    {
+      "path": "script/build-agents-world-client.mjs",
+      "kind": "script",
+      "imports": [
+        "@tailwindcss/vite",
+        "@vitejs/plugin-react",
+        "node:path",
+        "vite"
+      ],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {
@@ -19630,6 +19955,77 @@
       ]
     },
     {
+      "path": "tests/agents-world-integrated-ui.mjs",
+      "kind": "test",
+      "imports": [
+        "esbuild",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:path",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "browser",
+        "camera",
+        "canvas",
+        "check",
+        "context",
+        "css",
+        "fixtures",
+        "frames",
+        "html",
+        "js",
+        "label",
+        "origin",
+        "original",
+        "output",
+        "page",
+        "pose",
+        "request",
+        "requests",
+        "results",
+        "scenario",
+        "state",
+        "status",
+        "timestamp",
+        "world",
+        "zoomed"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/agents-world-integration.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/lib/agents-world",
+        "../client/src/lib/agents-world-layout",
+        "../client/src/lib/agents-world-learning",
+        "../client/src/lib/agents-world-session",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "base",
+        "decision",
+        "denied",
+        "empty",
+        "entities",
+        "large",
+        "now",
+        "original",
+        "projects",
+        "roles",
+        "room",
+        "signal",
+        "source",
+        "tasks",
+        "world"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-cost-notifications.test.ts",
       "kind": "test",
       "imports": [
@@ -22395,6 +22791,25 @@
       "routes": []
     },
     {
+      "path": "tests/harness/agents-world-integrated.tsx",
+      "kind": "test",
+      "imports": [
+        "../../client/src/pages/agents-office",
+        "@tanstack/react-query",
+        "react",
+        "react-dom/client",
+        "wouter"
+      ],
+      "exports": [],
+      "symbols": [
+        "Harness",
+        "client"
+      ],
+      "routes": [
+        "/agents-office"
+      ]
+    },
+    {
       "path": "tests/legal-compliance-agent.test.ts",
       "kind": "test",
       "imports": [
@@ -23357,6 +23772,7 @@
     "tests/._radio-youtube-command.test.ts",
     "tests/._rate-limit.test.ts",
     "tests/._user-context.test.ts",
+    "tests/agents-world-integration.test.ts",
     "tests/ai-cost-notifications.test.ts",
     "tests/ai-router-cost-override.test.ts",
     "tests/app-qa-agent.test.ts",

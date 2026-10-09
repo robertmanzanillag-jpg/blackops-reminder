@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-10-06T11:03:09.219Z
-Repo: `/home/runner/workspace`
+Generated: 2026-10-09T01:39:37.437Z
+Repo: `/home/runner/workspace/.local/worktrees/agents-world-3d`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 678 | 594 | 2029 | 510 | 13081 |
+| 693 | 609 | 2065 | 511 | 13259 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,14 +29,14 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `server` | 136 | 132 | server:136 |
-| `tests` | 127 | 124 | test:127 |
-| `client/src` | 122 | 120 | ui-component:55, client-component:26, client-page:26, client-lib:9 |
+| `client/src` | 130 | 128 | ui-component:55, client-component:29, client-page:26, client-lib:13 |
+| `tests` | 129 | 126 | test:129 |
+| `script` | 77 | 72 | script:77 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `script` | 76 | 71 | script:76 |
-| `docs` | 31 | 30 | docs:31 |
+| `docs` | 32 | 31 | docs:32 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
+| `.agents/memory` | 10 | 10 | docs:10 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
-| `.agents/memory` | 8 | 8 | docs:8 |
 | `shared` | 3 | 3 | shared:3 |
 | `client/public` | 16 | 2 | other:16 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
@@ -44,6 +44,7 @@ Package: `rest-express`
 | `config` | 1 | 1 | other:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `shared/models` | 1 | 1 | shared:1 |
+| `tests/harness` | 1 | 1 | test:1 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 | `.agents` | 1 | 0 | other:1 |
 | `bin` | 1 | 0 | other:1 |
@@ -66,12 +67,14 @@ Package: `rest-express`
 - `tests/blackroom-remote-control.test.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
 - `tests/clippers-owned-source-scripts.test.ts`: `/api/clippers/external-closeout-next-action`, `/api/clippers/external-closeout-operator-queue`, `/api/clippers/external-closeout-pack`, `/api/clippers/external-closeout-proof-todo`, `/api/clippers/external-closeout-repair-work-packet`, `/api/clippers/operational-readiness`, `/api/clippers/prepare-external-closeout-pack`, `/api/clippers/prepare-operational-readiness`, `/api/clippers/run-intake-refresh-sweep`, `/api/clippers/run-post-connect-activation-sweep`
 - `tests/developer-autopilot-wiring.test.ts`: `/api/revenue-engine/delivery-workspaces/app-qa-gate`, `/api/revenue-engine/delivery-workspaces/github-handoff`, `/api/revenue-engine/delivery-workspaces/pr-status`, `/api/revenue-engine/delivery-workspaces/release-gate`
+- `tests/harness/agents-world-integrated.tsx`: `/agents-office`
 
 ## Test Inventory
 - `tests/._dropshipping-ceo.test.ts`
 - `tests/._radio-youtube-command.test.ts`
 - `tests/._rate-limit.test.ts`
 - `tests/._user-context.test.ts`
+- `tests/agents-world-integration.test.ts`
 - `tests/ai-cost-notifications.test.ts`
 - `tests/ai-router-cost-override.test.ts`
 - `tests/app-qa-agent.test.ts`
@@ -202,6 +205,7 @@ Package: `rest-express`
 - `script/blackroom-metricool-exporter.mjs` (script; 33 symbols, 6 imports)
 - `script/blackroom-remote-sync.mjs` (script; 24 symbols)
 - `script/blackroom-worker-ledger.ts` (script; 29 symbols, 4 imports)
+- `script/build-agents-world-client.mjs` (script; 4 imports)
 - `script/build.ts` (script; 12 symbols, 4 imports)
 - `script/cache-local-news-models.mjs` (script; 1 symbols)
 - `script/ceo-db-check.ts` (script; 8 symbols, 3 imports)
@@ -248,7 +252,6 @@ Package: `rest-express`
 - `script/clippers-youtube-uploader.mjs` (script; 107 symbols, 5 imports)
 - `script/codebase-map.ts` (script; 43 symbols, 3 imports)
 - `script/compact-local-news-state.ts` (script; 9 symbols, 4 imports)
-- `script/configure-telegram.ts` (script; 5 symbols, 4 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

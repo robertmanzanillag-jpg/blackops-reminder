@@ -6,6 +6,7 @@ import { ArrowUpRight, Building2, ChevronRight, Pause, Play, Plus, Target, Users
 import { departments, newSimulation, parseSimulation, SIMULATION_KEY, dailyCapacity, advanceDay, hireAgent, hireCost, upgradeCost, upgradeDepartment, nextMonth } from './company-simulation';
 import './company-office.css';
 import { ownerOfficeStorageKey } from '@/lib/owner-office-storage';
+import { AgentsWorldOffice } from './agents-world-office';
 const news = [
   ['Growth → Dirección', 'Encontramos una oportunidad. Validamos margen antes de avanzar.'],
   ['Ingeniería → Seguridad', 'Nueva entrega preparada. Necesitamos revisión y QA.'],
@@ -63,6 +64,7 @@ export function CompanyOffice({ ownerId }: { ownerId: string }) {
       <Link href="/dashboard" className="company-link">Dashboard <ArrowUpRight size={15}/></Link>
     </header>
     <div className="company-intro"><p>Explora seis departamentos y planifica un mes de 30 días. Actividad y resultados simulados.</p><span className="simulation-badge">SIMULACIÓN · sin gasto real</span></div>
+    <AgentsWorldOffice key={ownerId} ownerId={ownerId} suspended={!running} />
     <div className="company-stats">
       <div><span>Equipo simulado</span><strong>{team} <small>agentes</small></strong></div>
       <div><span>Recursos simulados</span><strong>{state.credits.toLocaleString('es')} <small>créditos</small></strong></div>
