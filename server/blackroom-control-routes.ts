@@ -15,6 +15,7 @@ import {
   appendBlackRoomCeoCommand,
   appendBlackRoomWorkNowCommand,
   readBlackRoomRemoteControl,
+  readExistingBlackRoomRemoteControl,
   recordBlackRoomPublicationExperiment,
   recordBlackRoomRemoteHeartbeat,
   setBlackRoomRemoteCommand,
@@ -23,7 +24,8 @@ import {
   type BlackRoomRemoteControlState,
 } from "./blackroom-remote-control";
 import { executeBlackRoomChatMessage } from "./blackroom-chat-service";
-import { BlackRoomMetricoolUncertainError, scheduleBlackRoomMetricoolPost } from "./blackroom-metricool-bridge";
+import { BlackRoomMetricoolUncertainError, scheduleBlackRoomMetricoolPost, type BlackRoomMetricoolReceipt } from "./blackroom-metricool-bridge";
+import { BlackRoomPublicationBlockedError } from "./blackroom-publication-guard";
 import { BLACKROOM_CEO_DAILY_POSTS, BLACKROOM_CEO_MAX_DAILY_POSTS, BLACKROOM_CEO_REFRESH_MS, buildBlackRoomLearningSlots, collectBlackRoomMetricoolAnalytics, planBlackRoomCampaignPosts } from "./blackroom-growth-ceo";
 import { getCurrentUserId } from "./user-context";
 import { isConfiguredSingleUserOwner } from "./single-user-owner";
@@ -37,6 +39,7 @@ type BlackRoomUpload = {
   reservationId: string;
   expiresAt: number;
   ready: boolean;
+  retainForReconciliation?: boolean;
   totalBytes?: number;
   totalChunks?: number;
   nextChunk?: number;
@@ -119,9 +122,9 @@ async function removeBlackRoomUpload(uploadId: string): Promise<void> {
   await unlink(upload.filePath).catch(() => undefined);
 }
 
-function cleanupExpiredBlackRoomUploads(): void {
+function cleanupExpiredBlackRoomUploads(now = Date.now()): void {
   for (const [uploadId, upload] of blackRoomUploads) {
-    if (upload.expiresAt <= Date.now()) void removeBlackRoomUpload(uploadId);
+    if (!upload.retainForReconciliation && upload.expiresAt <= now) void removeBlackRoomUpload(uploadId);
   }
 }
 
@@ -570,10 +573,14 @@ export function registerBlackRoomControlRoutes(app: Express): void {
     if (!['tiktok', 'facebook', 'youtube'].includes(network)) return res.status(400).json({ error: "Invalid BlackRoom Metricool network" });
     const upload = verifyOnly ? null : blackRoomUploads.get(uploadId);
     if (!verifyOnly && (!upload?.ready || upload.reservationId !== reservationId)) return res.status(404).json({ error: "BlackRoom upload not found" });
+    // Pin before IO, including in-flight requests. Release only after a receipt.
+    if (upload) upload.retainForReconciliation = true;
+    let confirmedReceipt: BlackRoomMetricoolReceipt | undefined;
     try {
       const publicOrigin = `${req.protocol}://${req.get("host")}`;
       const receipt = await scheduleBlackRoomMetricoolPost({
         caption: String(req.body?.caption || ""),
+        jobId: String(req.body?.jobId || ""),
         language: req.body?.language === "es" ? "es" : "en",
         sourceVideoId: String(req.body?.sourceVideoId || ""),
         durationSeconds: Number(req.body?.durationSeconds),
@@ -582,7 +589,13 @@ export function registerBlackRoomControlRoutes(app: Express): void {
         publicationDateTime: String(req.body?.publicationDateTime || ""),
         timezone: String(req.body?.timezone || "America/New_York"),
         mediaUrl: verifyOnly ? "https://localhost.invalid/blackroom-verification-only.mp4" : `${publicOrigin}/api/blackroom-agent/media/${uploadId}.mp4`,
-      }, { verifyOnly, networks: [network as "tiktok" | "facebook" | "youtube"] });
+      }, { verifyOnly, networks: [network as "tiktok" | "facebook" | "youtube"],
+        readPublicationControl: async () => ({
+          desiredEnabled: (await readExistingBlackRoomRemoteControl())?.desiredEnabled,
+          queue: await readBlackRoomQueue(),
+        }),
+      });
+      confirmedReceipt = receipt;
       const receiptId = String(receipt.platformReceipts?.[network as "tiktok" | "facebook" | "youtube"] || receipt.metricoolId || "").trim();
       if (receiptId) {
         await mutateBlackRoomRemoteControl((state) => recordBlackRoomPublicationExperiment(state, {
@@ -603,9 +616,20 @@ export function registerBlackRoomControlRoutes(app: Express): void {
       if (!verifyOnly) await removeBlackRoomUpload(uploadId);
       res.status(201).json({ receipt });
     } catch (error: any) {
+      // Auxiliary persistence/cleanup cannot turn a confirmed receipt into a
+      // rejection: doing so would instruct the device to publish it again.
+      if (confirmedReceipt) {
+        res.status(201).json({ receipt: confirmedReceipt, warning: "Publication verified; auxiliary persistence or cleanup pending" });
+        return;
+      }
       const uncertain = error instanceof BlackRoomMetricoolUncertainError || error?.uncertain === true;
-      if (!verifyOnly && !uncertain) await removeBlackRoomUpload(uploadId);
-      res.status(uncertain ? 409 : 502).json({ error: error.message || "Metricool scheduling failed", uncertain });
+      const blocked = error instanceof BlackRoomPublicationBlockedError;
+      if (!verifyOnly && !uncertain && !blocked) await removeBlackRoomUpload(uploadId);
+      res.status(uncertain ? 409 : blocked ? 423 : 502).json({
+        error: error.message || "Metricool scheduling failed", uncertain,
+        ...(uncertain ? { platformReceipts: error.platformReceipts || {} } : {}),
+        ...(blocked ? { blocked: true, retainAttempt: true, definitelyNotSubmitted: true } : {}),
+      });
     }
   });
   const ceoTimer = setInterval(() => {

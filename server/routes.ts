@@ -26,7 +26,7 @@ import { getCurrentUserId, getSystemUserId, isPublicApiRequest } from "./user-co
 import { syncGoogleCalendarToTasks } from "./calendar-sync";
 import { executeApprovedPendingAction } from "./trust-executor";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
-import { ensureDefaultAutomations, recordManualAutomationRun } from "./automation-registry";
+import { getExistingAutomations, recordManualAutomationRun } from "./automation-registry";
 import { getMetricoolAnalyticsSyncStatus, getMetricoolAnalyticsSchedulerStatus, syncMetricoolAnalytics } from "./metricool-analytics-sync";
 import { getMeetingPrepById, getUpcomingMeetingPreps } from "./meeting-intelligence";
 import { buildCeoOperationalHealth } from "./ceo-operational-health";
@@ -4198,7 +4198,7 @@ export async function registerRoutes(
 
   app.get("/api/automations", async (req, res) => {
     try {
-      const automations = await ensureDefaultAutomations(getCurrentUserId(req));
+      const automations = await getExistingAutomations(getCurrentUserId(req));
       res.json(automations);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch automations" });
@@ -4363,7 +4363,7 @@ export async function registerRoutes(
   app.get("/api/automation-manager/summary", async (req, res) => {
     try {
       const userId = getCurrentUserId(req);
-      const automations = await ensureDefaultAutomations(userId);
+      const automations = await getExistingAutomations(userId);
       const runs = await storage.getAutomationRuns(userId, undefined, 25);
       const active = automations.filter((automation) => automation.status === "active");
       const paused = automations.filter((automation) => automation.status === "paused");
@@ -6576,7 +6576,7 @@ export async function registerRoutes(
         safe(storage.getAgentActions(userId), []),
         safe(storage.getScheduledReminders(userId), []),
         safe(storage.getDjContacts(userId), []),
-        safe(ensureDefaultAutomations(userId), []),
+        safe(getExistingAutomations(userId), []),
         safe(storage.getAutomationRuns(userId, undefined, 25), []),
         safe(getUpcomingMeetingPreps(userId, 5), []),
         safe(storage.getUserProfileDataByCategory(userId, "decision"), []),
@@ -6972,7 +6972,7 @@ export async function registerRoutes(
   app.get("/api/app-qa-agent/history", async (req, res) => {
     try {
       const userId = getCurrentUserId(req);
-      const automations = await ensureDefaultAutomations(userId);
+      const automations = await getExistingAutomations(userId);
       const qaAutomation = automations.find((automation) => (automation.metadata as any)?.key === "app-qa-council");
       if (!qaAutomation) return res.json([]);
       const limit = Math.min(Number(req.query.limit || 20), 100);

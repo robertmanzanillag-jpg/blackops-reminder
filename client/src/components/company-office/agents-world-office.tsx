@@ -7,7 +7,7 @@ import './agents-world-office.css';
 
 const AgentsWorldScene = lazy(() => import('@/components/agents-world-scene').then(module => ({ default: module.AgentsWorldScene })));
 const sourcePaths = ['/api/projects', '/api/tasks', '/api/blackroom-agent'] as const;
-const initialSources = (): Source[] => sourcePaths.map(() => ({ state: 'loading' }));
+const initialSources = (): Source[] => [{ state: 'loading' }, { state: 'loading' }, { state: 'error' }];
 const sourceLabels = { loading: 'Consultando', ready: 'Lectura disponible', denied: 'Sin permiso', error: 'Fuente no disponible' };
 
 /** Read-only client projection. Never mounts the legacy operational center. */
@@ -32,12 +32,14 @@ export function AgentsWorldOffice({ ownerId, suspended = false }: { ownerId: str
         setSources(sourcePaths.map(() => ({ state: auth.state === 'error' ? 'error' : 'denied' })));
         return;
       }
-      const values = await Promise.all(sourcePaths.map(path => readSource(path, controller.signal)));
+      // BlackRoom GET can initialize persistence. No automatic request until a
+      // separately reviewed passive owner-only endpoint is available.
+      const values = await Promise.all(sourcePaths.slice(0, 2).map(path => readSource(path, controller.signal)));
       if (controller.signal.aborted) return;
       // An expired session invalidates the whole batch, even if another read succeeded.
       setSources(values[0].state === 'denied' || values[1].state === 'denied'
         ? sourcePaths.map(() => ({ state: 'denied' }))
-        : values);
+        : [...values, { state: 'error' }]);
       setNow(Date.now());
     })();
     return () => controller.abort();
@@ -60,6 +62,7 @@ export function AgentsWorldOffice({ ownerId, suspended = false }: { ownerId: str
       <button type="button" onClick={() => setRefresh(value => value + 1)}>Actualizar lecturas</button>
     </header>
     <ul className="world-sources" aria-label="Estado de fuentes">{sourcePaths.map((path, index) => <li key={path}><code>{path}</code> · {sourceLabels[sources[index].state]}</li>)}</ul>
+    <p>BlackRoom: lectura automática deshabilitada; su GET puede inicializar persistencia. Fuente no disponible.</p>
     <div className="world-filters">
       <label>Buscar entidad<input type="search" value={search} onChange={event => setSearch(event.target.value)} /></label>
       <label>Área<select value={area} onChange={event => setArea(event.target.value)}>{['Todas', ...areas].map(value => <option key={value}>{value}</option>)}</select></label>

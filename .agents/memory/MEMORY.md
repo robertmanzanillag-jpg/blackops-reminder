@@ -1,3 +1,4 @@
+- [Legacy reconciliation](legacy-publication-reconciliation.md) — bloqueos sin envío no son incertidumbre; retención de evidencia prima sobre caducidad automática.
 - [Build command migration](build-cmd-migration.md) — deployment build is ["npm","run","build"] (script/build.ts), not script/build-server.js (deleted)
 - [git-fetch-blocked](git-fetch-blocked.md) — git fetch/destructive ops blocked in main agent; use project_tasks for fetching new remote commits
 - [Nix pip install fix](nix-pip-fix.md) — remove --isolated + add PIP_CONFIG_FILE=/dev/null; else "Can not combine --user and --target" on Replit Nix

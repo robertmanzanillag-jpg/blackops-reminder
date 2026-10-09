@@ -97,8 +97,11 @@ async function remoteJson(url: string, init: RequestInit & { duplex?: "half" }, 
   const response = await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
   const data = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(data.error || `BlackRoom bridge returned HTTP ${response.status}`) as Error & { uncertain?: boolean };
+    const error = new Error(data.error || `BlackRoom bridge returned HTTP ${response.status}`) as Error & { uncertain?: boolean; retainAttempt?: boolean; definitelyNotSubmitted?: boolean };
     error.uncertain = data.uncertain === true;
+    error.retainAttempt = data.retainAttempt === true;
+    error.definitelyNotSubmitted = response.status === 423 && data.blocked === true
+      && data.retainAttempt === true && data.definitelyNotSubmitted === true;
     throw error;
   }
   return data;
@@ -230,6 +233,7 @@ async function publishOneReservedEntry(): Promise<boolean> {
           verifyOnly,
           network,
           reservationId: entry.reservationId,
+          jobId: entry.jobId,
           caption: entry.caption,
           language: entry.language,
           sourceVideoId: entry.videoId,
@@ -242,11 +246,14 @@ async function publishOneReservedEntry(): Promise<boolean> {
         }),
       });
     } catch (error) {
-      if (!(error as Error & { uncertain?: boolean })?.uncertain) {
-        await runNpm(["run", "blackroom:ledger", "--", "--network-reset", "--reservation", entry.reservationId,
-          "--network", network]).catch(() => undefined);
-        delete entry.networkAttempts[network];
+      if (!verifyOnly && (error as { definitelyNotSubmitted?: boolean })?.definitelyNotSubmitted === true) {
+        // Persist proof of a pre-dispatch veto, not a reset. An already-uncertain
+        // invocation is verification-only and can never be downgraded here.
+        await runNpm(["run", "blackroom:ledger", "--", "--network-blocked", "--reservation", entry.reservationId,
+          "--network", network]);
+        entry.networkAttempts[network] = "blocked";
       }
+      // Transport loss/unknown 5xx may follow acceptance: never auto-reset.
       throw error;
     }
     const networkId = String(scheduled?.receipt?.platformReceipts?.[network] || scheduled?.receipt?.metricoolId || "").trim();

@@ -106,7 +106,7 @@ export function filterWorld(entities: Entity[], search: string, area: string, si
   return entities.filter(e => (area === "Todas" || e.area === area) && (signal === "Todas" || e.signal === signal) && `${e.name} ${e.role} ${e.area} ${e.task}`.toLocaleLowerCase().includes(query));
 }
 // GET is not a safety contract. Only these source-reviewed reads are permitted.
-export const worldReadAllowlist = ["/api/auth/me", "/api/projects", "/api/tasks", "/api/blackroom-agent"] as const;
+export const worldReadAllowlist = ["/api/auth/me", "/api/projects", "/api/tasks"] as const;
 export async function readSource(endpoint: string, signal: AbortSignal): Promise<Source> {
   if (!(worldReadAllowlist as readonly string[]).includes(endpoint)) return { state: "denied" };
   try {

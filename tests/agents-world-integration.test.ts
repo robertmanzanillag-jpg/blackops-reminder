@@ -71,7 +71,7 @@ test('decorative motion and render budgets honor pause and device limits', () =>
   assert.deepEqual(renderBudget(false, 3), { fps: 30, pixelRatio: 1.5 });
 });
 test('transport enforces allowlist before fetch and explicit response failures', async () => {
-  assert.deepEqual(worldReadAllowlist, ['/api/auth/me', '/api/projects', '/api/tasks', '/api/blackroom-agent']);
+  assert.deepEqual(worldReadAllowlist, ['/api/auth/me', '/api/projects', '/api/tasks']);
   const original = globalThis.fetch;
   let calls = 0;
   const signal = new AbortController().signal;

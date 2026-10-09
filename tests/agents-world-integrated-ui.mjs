@@ -62,14 +62,13 @@ async function scenario(options = {}) {
         ...(options.large ? Array.from({ length: 1000 }, (_, index) => ({ id: `large:${index}`, userId: 'fixture-user', name: `Inventory fixture ${index}` })) : []),
       ],
       '/api/tasks': state.empty ? [] : [{ id: 'fixture-task', userId: 'fixture-user', title: 'TEST FIXTURE task', updatedAt: '2020-01-01T00:00:00Z', completed: true }],
-      '/api/blackroom-agent': { remote: { desiredEnabled: true, online: true, device: { seenAt: timestamp, worker: { activity: [] } } } },
       // Existing CompanyOffice read retained, not added to the world transport.
       '/api/monthly-goals': [{ id: `goal:${state.owner}`, title: `TEST FIXTURE goal ${state.owner}`, completed: false }],
     };
     if (!(pathname in fixtures)) { forbidden.push(pathname); return route.abort(); }
     const status = pathname === '/api/auth/me' && state.expired ? 401
-      : pathname === '/api/blackroom-agent' && options.denied ? 403
-      : pathname === '/api/projects' && state.refreshError ? 500 : 200;
+      : pathname === '/api/projects' && state.refreshError ? 500
+      : pathname === '/api/projects' && options.denied ? 403 : 200;
     return route.fulfill({ status, contentType: 'application/json', body: JSON.stringify(fixtures[pathname]) });
   });
   await page.goto(`${origin}/agents-office`);
@@ -79,6 +78,7 @@ async function scenario(options = {}) {
   check(await page.getByRole('button', { name: /Abrir centro operativo existente/ }).getAttribute('aria-expanded') === 'false', 'legacy center stays closed');
   check(await page.locator('.company-stats').count() === 1, 'existing CompanyOffice simulation preserved');
   check(!(await world.innerText()).includes('PRIVATE FOREIGN'), 'foreign project excluded');
+  check(requests.every(request => request.path !== '/api/blackroom-agent'), 'no automatic BlackRoom GET or persistence initialization');
   check(await world.getByText('Movimiento ambiental decorativo', { exact: true }).isVisible(), 'decorative motion disclaimer');
   if (options.fallback) {
     await world.getByRole('status').filter({ hasText: 'WebGL no disponible' }).waitFor();
@@ -136,8 +136,8 @@ async function scenario(options = {}) {
     check(!(await world.innerText()).includes('TEST FIXTURE task'), 'refresh removes old rows');
     state.refreshError = true;
     await world.getByRole('button', { name: 'Actualizar lecturas' }).click();
-    await page.waitForFunction(() => document.querySelector('.world-sources')?.textContent.includes('Fuente no disponible'));
-    check((await world.locator('.world-sources').innerText()).includes('Fuente no disponible'), 'HTTP failure not silently shown as success');
+    await page.waitForFunction(() => document.querySelector('.world-sources li:first-child')?.textContent?.includes('Fuente no disponible'));
+    check((await world.locator('.world-sources li:first-child').innerText()).includes('Fuente no disponible'), 'projects HTTP failure not masked by permanently disconnected BlackRoom');
     state.owner = 'second-user';
     await page.evaluate(() => window.setFixtureOwner('second-user'));
     await page.locator('.company-real-goals').getByText('TEST FIXTURE goal second-user', { exact: false }).waitFor();
