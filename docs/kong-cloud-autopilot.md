@@ -67,6 +67,8 @@ Built-in planning records baseline metadata, actual source IDs, layout and a des
 
 ## Existing infrastructure evidence and remaining source/render blockers
 
+The default production adapter now reconciles uncertain Drive uploads using an exact SHA-256 filename, configured folder and user, bounded paginated lookup, and a complete anonymous MP4 hash check. Reconciliation never uploads, updates or shares a file. Duplicates, incomplete lookup, private files and mismatched bytes remain unresolved; they are not permission to retry a write. Existing operator reconciliation overrides remain supported. Live Drive authorization, quota and a real upload/restart/reconciliation run still require verification.
+
 The repository's `.replit` declares a VM deployment and PostgreSQL module. `replit.nix` declares ffmpeg, yt-dlp and ImageMagick, so the repository has a possible no-new-service render host, but these declarations do not prove the running deployment contains usable binaries or spare capacity. No production availability claim is made from configuration alone.
 
 On 2026-10-28, the Replit connector reported Daily Planner deployed successfully at `https://robertwebsites.com` and br-website-ai at `https://blackroomus.com`. A read-only **Daily Planner development workspace** probe confirmed ffmpeg/ffprobe and presence (not values) of database and Metricool configuration. Pexels API, KONG catalog and media-origin configuration were absent. The public health probe redirected to Replit Shield, so live health, production capacity and production configuration remain unverified. No paid Replit Agent request, deployment or credentials change was made.

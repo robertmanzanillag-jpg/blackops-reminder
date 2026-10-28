@@ -322,6 +322,30 @@ async function findFileInFolder(drive: any, filename: string, folderId: string):
   return response.data.files?.[0]?.id || null;
 }
 
+/** Read-only reconciliation of an immutable KONG upload. Never picks the first
+ * duplicate and never creates files or changes sharing permissions. */
+export async function findUniqueDriveHashFile(params: { sha256: string; folderId: string; userId: string },
+  list?: (request: Record<string, unknown>, options: { timeout: number }) => Promise<{ data: { files?: { id?: string | null; name?: string | null; mimeType?: string | null; parents?: string[] | null }[]; nextPageToken?: string | null; incompleteSearch?: boolean | null } }>): Promise<{ fileId: string } | null> {
+  if (!/^[a-f0-9]{64}$/.test(params.sha256) || !/^[A-Za-z0-9_-]{10,160}$/.test(params.folderId) || !params.userId.trim()) throw Error("invalid_drive_reconciliation_identity");
+  const filename = `${params.sha256}.mp4`;
+  const invoke = list || (async (request, options) => (await getDriveClient(params.userId)).files.list(request, options));
+  const ids = new Set<string>(), tokens = new Set<string>(); let pageToken: string | undefined;
+  for (let page = 0; page < 5; page++) {
+    const response = await invoke({ q: `name = '${filename}' and '${params.folderId}' in parents and trashed = false and mimeType = 'video/mp4'`,
+      fields: "files(id,name,mimeType,parents),nextPageToken,incompleteSearch", spaces: "drive", pageSize: 100, pageToken }, { timeout: 30_000 });
+    const data = response.data;
+    if (!data || data.incompleteSearch || !Array.isArray(data.files) || data.files.length > 100) throw Error("drive_reconciliation_incomplete");
+    for (const file of data.files) {
+      if (!file.id || !/^[A-Za-z0-9_-]{10,160}$/.test(file.id) || file.name !== filename || file.mimeType !== "video/mp4" || !file.parents?.includes(params.folderId)) throw Error("drive_reconciliation_invalid_match");
+      ids.add(file.id); if (ids.size > 1) throw Error("drive_reconciliation_duplicate_hash_filename");
+    }
+    if (!data.nextPageToken) return ids.size ? { fileId: [...ids][0] } : null;
+    if (tokens.has(data.nextPageToken)) throw Error("drive_reconciliation_repeated_page");
+    tokens.add(data.nextPageToken); pageToken = data.nextPageToken;
+  }
+  throw Error("drive_reconciliation_page_limit");
+}
+
 function sanitizeDriveDownloadFilename(value: string, fallback: string, mimeType?: string | null): string {
   const cleaned = value
     .normalize("NFD")

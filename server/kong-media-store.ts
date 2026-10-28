@@ -18,6 +18,28 @@ export interface MediaStoreDependencies {
   publicUrl(fileId: string, userId: string): Promise<string>;
   fetch: typeof fetch;
 }
+export interface MediaReconciliationDependencies {
+  find(input: { sha256: string; folderId: string; userId: string }): Promise<{ fileId: string } | null>;
+  fetch: typeof fetch;
+  downloadUrl?(fileId: string): string;
+}
+/** Unknown writes reconcile by exact hash filename and anonymous complete bytes.
+ * No upload/publicUrl/permission mutation is reachable through this interface. */
+export async function reconcileRenderedMedia(input: { sha256: string; folderId: string; userId: string;
+  approvedPublicOrigins: string[]; authorizedForPublicDistribution: boolean }, deps?: MediaReconciliationDependencies) {
+  if (input.authorizedForPublicDistribution !== true || !/^[a-f0-9]{64}$/.test(input.sha256)
+    || !/^[A-Za-z0-9_-]{10,160}$/.test(input.folderId) || !input.userId?.trim()) return null;
+  try {
+    const drive = deps ? undefined : await import("./google-drive");
+    const adapter: MediaReconciliationDependencies = deps || { find: drive!.findUniqueDriveHashFile, downloadUrl: drive!.buildGoogleDrivePublicDownloadUrl, fetch };
+    const found = await boundedStorageOperation(adapter.find({ sha256: input.sha256, folderId: input.folderId, userId: input.userId }));
+    if (!found || !/^[A-Za-z0-9_-]{10,160}$/.test(found.fileId)) return null;
+    const mediaUrl = adapter.downloadUrl ? adapter.downloadUrl(found.fileId)
+      : `https://drive.usercontent.google.com/download?id=${encodeURIComponent(found.fileId)}&export=download&authuser=0&confirm=t`;
+    await verifyImmutableMedia(mediaUrl, input.sha256, input.approvedPublicOrigins, adapter.fetch);
+    return { fileId: found.fileId, mediaUrl, sha256: input.sha256, verifiedAt: new Date().toISOString() };
+  } catch { return null; }
+}
 /** Follows only exact operator-approved origins, without forwarding credentials.
  * The complete anonymous body must equal the rendered hash, not just be a 200 page. */
 export async function verifyImmutableMedia(url: string, expectedHash: string, origins: string[], fetcher: typeof fetch = fetch) {

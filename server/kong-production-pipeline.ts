@@ -5,7 +5,7 @@ import path from "node:path";
 import { assetProblem, assetSchema, type Asset } from "./kong-autopilot-core";
 import { discoverPexelsFootage, downloadFootage, type OnlineFootage } from "./kong-online-sources";
 import { renderKongVideo, type RenderInput } from "./kong-cloud-renderer";
-import { storeRenderedMedia } from "./kong-media-store";
+import { storeRenderedMedia, reconcileRenderedMedia } from "./kong-media-store";
 
 type Rights = Asset["footageRights"];
 export interface EditorialTask {
@@ -189,7 +189,9 @@ export function createProductionAdapters(config: {
   save: ProductionDependencies["save"]; review?: ProductionDependencies["review"];
   reconcileUpload?: ProductionDependencies["reconcileUpload"];
 }): ProductionDependencies {
-  return { save: config.save, review: config.review, reconcileUpload: config.reconcileUpload,
+  return { save: config.save, review: config.review, reconcileUpload: config.reconcileUpload || (async job => job.artifact
+    ? reconcileRenderedMedia({ sha256: job.artifact.sha256, folderId: config.folderId, userId: config.userId,
+      approvedPublicOrigins: config.approvedPublicOrigins, authorizedForPublicDistribution: job.task.authorizedForPublicDistribution }) : null),
     discover: (cursor, seenIds) => discoverPexelsFootage({ apiKey: config.apiKey, cursor, seenIds }),
     async render(job) {
       if (!config.soundtrack.rightsEvidence.includes(job.task.musicRights.evidenceUrl)) throw Error("soundtrack_evidence_mismatch");

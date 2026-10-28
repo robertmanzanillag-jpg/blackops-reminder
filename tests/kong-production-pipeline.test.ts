@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { emptyProductionState, runProductionCycle, type EditorialTask, type ProductionDependencies, type ProductionState } from "../server/kong-production-pipeline";
+import { emptyProductionState, runProductionCycle, createProductionAdapters, type EditorialTask, type ProductionDependencies, type ProductionState } from "../server/kong-production-pipeline";
 import type { OnlineFootage } from "../server/kong-online-sources";
 const now = new Date("2026-10-28T14:00:00Z"), sha = "a".repeat(64);
 const rights = { evidenceUrl: "https://example.com/permission", confirmedBy: "Owner", expiresAt: "2026-11-10T00:00:00Z" };
@@ -46,6 +46,17 @@ test("test source identity cannot differ from actual footage", async () => {
   const f = fixture();
   const result = await runProductionCycle(f.state(), [{ ...task, creativeTest: { testId: "test", kind: "exploration", hookStyle: "pov", sourceIds: ["unrelated"] } }], f.deps, { now });
   assert.equal(result.jobs[0].error, "invalid_test_metadata"); assert.equal(f.renders(), 0); assert.equal(f.uploads(), 0);
+});
+test("production adapter supplies read-only reconciliation by default and preserves explicit override", async () => {
+  const config = { soundtrack: { path: "/tmp/music.wav", rightsEvidence: "authorized" }, logo: { path: "/tmp/logo.png", approvedSha256: sha }, fontPath: "/tmp/font.ttf",
+    folderId: "folder-123456789", userId: "owner", approvedPublicOrigins: ["https://drive.usercontent.google.com"], save: async () => undefined };
+  const defaults = createProductionAdapters(config);
+  assert.equal(typeof defaults.reconcileUpload, "function");
+  const f = fixture(), state = await runProductionCycle(f.state(), [task], { ...f.deps, render: async () => { throw Error("fixture"); } }, { now });
+  assert.equal(await defaults.reconcileUpload!(state.jobs[0]), null);
+  let calls = 0; const override = async () => { calls++; return null; };
+  const injected = createProductionAdapters({ ...config, reconcileUpload: override });
+  assert.equal(injected.reconcileUpload, override); await injected.reconcileUpload!(state.jobs[0]); assert.equal(calls, 1);
 });
 test("failed save of upload intent prevents public upload", async () => {
   const f = fixture(), save = f.deps.save;

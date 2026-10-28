@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { mkdtemp, writeFile, readFile, rm, access } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { verifyImmutableMedia, storeRenderedMedia } from "../server/kong-media-store";
+import { verifyImmutableMedia, storeRenderedMedia, reconcileRenderedMedia } from "../server/kong-media-store";
 const bytes = Buffer.from("synthetic-mp4-transport-fixture");
 const sha = createHash("sha256").update(bytes).digest("hex");
 const origin = "https://drive.usercontent.google.com";
@@ -54,4 +54,21 @@ test("failed public verification also cleans upload copy and preserves source", 
     }),/invalid_public_video_response/);
     await assert.rejects(access(uploadedPath)); assert.deepEqual(await readFile(filePath),bytes);
   } finally { await rm(directory,{recursive:true,force:true}); }
+});
+test("unknown upload reconciles by read-only lookup and anonymous complete hash", async () => {
+  let finds = 0, reads = 0;
+  const result = await reconcileRenderedMedia({ sha256: sha, folderId: "valid-folder-123", userId: "owner", approvedPublicOrigins: [origin], authorizedForPublicDistribution: true }, {
+    find: async request => { finds++; assert.equal(request.sha256, sha); assert.equal(request.folderId, "valid-folder-123"); return { fileId: "known-file-123" }; },
+    fetch: (async (_url, options) => { reads++; assert.equal(options?.headers, undefined); assert.equal(options?.method, undefined); return new Response(bytes, { headers: { "content-type": "video/mp4" } }); }) as typeof fetch,
+  });
+  assert.equal(result?.sha256, sha); assert.equal(result?.fileId, "known-file-123"); assert.equal(finds, 1); assert.equal(reads, 1);
+});
+test("missing duplicate private corrupt or unauthorized uncertain upload remains unresolved", async () => {
+  const input = { sha256: sha, folderId: "valid-folder-123", userId: "owner", approvedPublicOrigins: [origin], authorizedForPublicDistribution: true };
+  const noFetch = (async () => { throw Error("must_not_read"); }) as typeof fetch;
+  assert.equal(await reconcileRenderedMedia(input, { find: async () => null, fetch: noFetch }), null);
+  assert.equal(await reconcileRenderedMedia(input, { find: async () => { throw Error("duplicate"); }, fetch: noFetch }), null);
+  for (const response of [new Response("private", { status: 403 }), new Response("changed", { headers: { "content-type": "video/mp4" } })])
+    assert.equal(await reconcileRenderedMedia(input, { find: async () => ({ fileId: "known-file-123" }), fetch: (async () => response) as typeof fetch }), null);
+  assert.equal(await reconcileRenderedMedia({ ...input, authorizedForPublicDistribution: false }, { find: async () => { throw Error("must_not_lookup"); }, fetch: noFetch }), null);
 });
