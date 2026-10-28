@@ -30,6 +30,8 @@ Event, app, table, guestlist, yacht and car claims require a source URL, verifie
 
 ## Remaining activation work
 
+`server/kong-content-learning.ts` now provides a pure, tested learning component, **not yet wired to this runtime**. It preserves unavailable metrics separately from zero, deduplicates snapshots, compares networks separately at 24–26h, 72–78h and 168–180h, and requires at least three group posts plus five comparison posts. Creative recommendations reserve at least 40% for exploration. These descriptive comparisons do not prove causality or guarantee virality. A provider adapter and durable snapshot collection are still needed; old lifetime totals cannot become historical 24-hour snapshots.
+
 1. Configure a cloud catalog with real licensed footage **and music** and verified current offers. Finding public viral clips alone does not establish reuse rights.
 2. Build/wire online discovery, deterministic editing and fresh event ingestion; this lane expects already edited clips and honestly reports those stages as unavailable.
 3. Connect provider analytics with 24-hour/72-hour/7-day observations, per-network scoring, tests and future-creative replacement. This lane does not claim learning.
@@ -42,6 +44,8 @@ Run `node --import tsx --test tests/kong-autopilot.test.ts`. Roll back startup r
 ## Existing infrastructure evidence and remaining source/render blockers
 
 The repository's `.replit` declares a VM deployment and PostgreSQL module. `replit.nix` declares ffmpeg, yt-dlp and ImageMagick, so the repository has a possible no-new-service render host, but these declarations do not prove the running deployment contains usable binaries or spare capacity. No production availability claim is made from configuration alone.
+
+On 2026-10-28, the Replit connector reported Daily Planner deployed successfully at `https://robertwebsites.com` and br-website-ai at `https://blackroomus.com`. A read-only **Daily Planner development workspace** probe confirmed ffmpeg/ffprobe and presence (not values) of database and Metricool configuration. Pexels API, KONG catalog and media-origin configuration were absent. The public health probe redirected to Replit Shield, so live health, production capacity and production configuration remain unverified. No paid Replit Agent request, deployment or credentials change was made.
 
 `script/blackroom-deterministic-editor.ts` has reusable editing logic but defaults its binaries to `/opt/homebrew/bin` and uses BlackRoom-specific source/render folders and queue/ledger. It is not connected to this KONG server runtime. Merely having the script does not make cloud KONG editing operational.
 
