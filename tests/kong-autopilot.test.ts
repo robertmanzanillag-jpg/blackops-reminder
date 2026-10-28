@@ -32,9 +32,9 @@ test("pre-submit blocked slots recover when fresh authorized supply appears", ()
   assert.equal(state.jobs.find(j => j.id === blocked.id)!.state, "planned");
   assert.equal(state.jobs.find(j => j.id === blocked.id)!.asset.id, "asset-2");
 });
-test("verified TikTok works independently of missing YouTube", () => {
+test("verified TikTok works independently of missing Facebook", () => {
   const r = readiness({ KONG_METRICOOL_ACCOUNTS_VERIFIED: "tiktok" });
-  assert.deepEqual(r.verifiedNetworks, ["tiktok"]); assert.deepEqual(r.blockedNetworks, ["youtube"]);
+  assert.deepEqual(r.verifiedNetworks, ["tiktok"]); assert.deepEqual(r.blockedNetworks, ["facebook"]);
   assert.equal(r.blockers.includes("verify_kong_accounts"), false);
 });
 test("rights, claims, QA and prohibited copy gates", () => {
@@ -83,4 +83,29 @@ test("brand-safe payload has no BlackRoom CTA and labels own-brand promotion", a
   const info = JSON.parse(body.params.arguments.info);
   assert.equal(info.tiktokData.commercialContentOwnBrand, true);
   assert.equal(info.text.includes("blackroom"), false);
+});
+test("Facebook adapter creates one KONG Reel with website CTA", async () => {
+  let body: any;
+  const fake = (async (_url: unknown, init: any) => { body = JSON.parse(init.body); return new Response(JSON.stringify({ result: {} }), { headers: { "content-type": "application/json" } }); }) as typeof fetch;
+  const j = job(); j.network = "facebook";
+  await createDelivery({ METRICOOL_USER_TOKEN: "test", METRICOOL_USER_ID: "1" }, fake).create(j);
+  const info = JSON.parse(body.params.arguments.info);
+  assert.deepEqual(info.providers, [{ network: "facebook" }]);
+  assert.equal(info.facebookData.type, "REEL");
+  assert.ok(info.text.includes("https://kongnightlife.com"));
+  assert.equal(info.youtubeData, undefined);
+});
+test("old YouTube and Instagram jobs can never read or mutate a provider", async () => {
+  const r = readiness({ KONG_METRICOOL_ACCOUNTS_VERIFIED: "tiktok,youtube,instagram,facebook" });
+  assert.deepEqual(r.verifiedNetworks, ["tiktok", "facebook"]);
+  for (const network of ["youtube", "instagram"]) {
+    const j = { ...job(), network } as unknown as Job;
+    let calls = 0;
+    await deliverJob(j, { find: async () => { calls++; return undefined; }, create: async () => { calls++; } }, async () => { calls++; }, now);
+    assert.equal(calls, 0);
+    const adapter = createDelivery({}, (async () => { calls++; throw Error("unexpected"); }) as typeof fetch);
+    await assert.rejects(adapter.create(j), /unsupported_kong_network/);
+    await assert.rejects(adapter.find(j), /unsupported_kong_network/);
+    assert.equal(calls, 0);
+  }
 });

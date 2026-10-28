@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 
-export const networks = ["tiktok", "youtube"] as const;
+export const networks = ["tiktok", "facebook"] as const;
 export type Network = typeof networks[number];
+export const isKongNetwork = (value: unknown): value is Network => typeof value === "string" && (networks as readonly string[]).includes(value);
 export const families = ["lineup", "pov", "humor", "app", "dancefloor", "tables", "guestlist", "yacht", "car"] as const;
 const iso = z.string().datetime({ offset: true });
 const url = z.string().url().refine(value => new URL(value).protocol === "https:");
@@ -11,7 +12,7 @@ export const assetSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/), sourceUrl: url, mediaUrl: url,
   sha256: z.string().regex(/^[a-f0-9]{64}$/), family: z.enum(families), hook: z.string().min(1).max(180),
   caption: z.string().min(1).max(2000), title: z.string().min(1).max(100),
-  durationSeconds: z.number().min(3).max(178), width: z.literal(1080), height: z.literal(1920),
+  durationSeconds: z.number().min(3).max(90), width: z.literal(1080), height: z.literal(1920),
   footageRights: rights, musicRights: rights,
   qa: z.object({ reviewedBy: z.string().min(1), reviewedAt: iso, officialWhiteLogo: z.literal(true),
     noLogoBackgroundOrShadow: z.literal(true), safeZones: z.literal(true), audioChecked: z.literal(true),
@@ -45,10 +46,10 @@ export function assetProblem(asset: Asset, instant: Date, checkedAt = instant): 
 
 // Seed slots are explicitly hypotheses, not inferred best hours. Offset conversion is
 // injected from the existing timezone-tested Metricool helper to handle DST.
-const hours: Record<Network, string[]> = { tiktok: ["12:15", "15:15", "18:15", "20:15", "22:15"], youtube: ["11:45", "14:45", "17:45", "19:45", "21:45"] };
+const hours: Record<Network, string[]> = { tiktok: ["12:15", "15:15", "18:15", "20:15", "22:15"], facebook: ["11:45", "14:45", "17:45", "19:45", "21:45"] };
 export function fillPlan(state: State, assets: Asset[], now: Date, toOffset: (wall: string) => string): State {
   const today = dayInNewYork(now);
-  for (const job of state.jobs) if (job.state === "planned" && Date.parse(job.at) <= +now) { job.state = "expired"; job.reason = "missed_slot"; }
+  for (const job of state.jobs) if (isKongNetwork(job.network) && job.state === "planned" && Date.parse(job.at) <= +now) { job.state = "expired"; job.reason = "missed_slot"; }
   for (let d = 0; d < 14; d++) for (const network of networks) for (let slot = 0; slot < 5; slot++) {
     const day = dayPlus(today, d), at = toOffset(`${day}T${hours[network][slot]}:00`);
     if (Date.parse(at) <= +now + 15 * 60_000) continue;
@@ -90,6 +91,7 @@ export interface Delivery {
 // Persist intent before remote mutation. Unknown outcomes are reconcile-only forever;
 // automatic retries are limited to read failures, preventing duplicate remote posts.
 export async function deliverJob(job: Job, delivery: Delivery, save: () => Promise<void>, now: Date) {
+  if (!isKongNetwork(job.network)) return;
   if (!["planned", "submitting", "uncertain"].includes(job.state)) return;
   if (job.nextAttemptAt && Date.parse(job.nextAttemptAt) > +now) return;
   const uncertain = job.state !== "planned";

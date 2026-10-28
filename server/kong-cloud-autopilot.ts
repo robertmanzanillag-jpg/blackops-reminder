@@ -2,13 +2,13 @@ import { Pool } from "pg";
 import type { Express } from "express";
 import { resolveCurrentUserId } from "./user-context";
 import { callMetricoolMcpTool, formatMetricoolMcpDate } from "./blackroom-metricool-bridge";
-import { assetProblem, catalogSchema, contentHash, coverage, deliverJob, emptyState, fillPlan, type Delivery, type Job, type State } from "./kong-autopilot-core";
+import { assetProblem, catalogSchema, contentHash, coverage, deliverJob, emptyState, fillPlan, isKongNetwork, networks, type Delivery, type Job, type State } from "./kong-autopilot-core";
 
 const BRAND = 6475033;
 const INTERVAL = 15 * 60_000;
 const LOCK = 6475033;
 type Env = Record<string, string | undefined>;
-const verifiedNetworks = (env: Env) => (env.KONG_METRICOOL_ACCOUNTS_VERIFIED || "").split(",").filter(n => ["tiktok", "youtube"].includes(n));
+const verifiedNetworks = (env: Env) => (env.KONG_METRICOOL_ACCOUNTS_VERIFIED || "").split(",").map(n => n.trim()).filter(isKongNetwork);
 
 export function readiness(env: Env) {
   const blockers: string[] = [];
@@ -16,8 +16,8 @@ export function readiness(env: Env) {
     if (!env[key]?.trim()) blockers.push(`missing_${key.toLowerCase()}`);
   if (!verifiedNetworks(env).length) blockers.push("verify_kong_accounts");
   if (env.KONG_AUTOPUBLISH_ENABLED !== "true") blockers.push("autopublishing_disabled");
-  return { enabled: env.KONG_AUTOPILOT_ENABLED === "true", blockers, brandId: BRAND, networks: ["tiktok", "youtube"],
-    verifiedNetworks: verifiedNetworks(env), blockedNetworks: ["tiktok", "youtube"].filter(n => !verifiedNetworks(env).includes(n)),
+  return { enabled: env.KONG_AUTOPILOT_ENABLED === "true", blockers, brandId: BRAND, networks,
+    verifiedNetworks: verifiedNetworks(env), blockedNetworks: networks.filter(n => !verifiedNetworks(env).includes(n)),
     sourceMode: "remote_reviewed_catalog", discovery: "not_implemented", rendering: "not_implemented", learning: "not_implemented", paidAiCalls: 0 };
 }
 
@@ -52,6 +52,7 @@ export function createDelivery(env: Env, fetcher: typeof fetch = fetch): Deliver
   const token = env.METRICOOL_USER_TOKEN!;
   return {
     async find(job) {
+      if (!isKongNetwork(job.network)) throw new Error("unsupported_kong_network");
       const params = new URLSearchParams({ blogId: String(BRAND), userId: env.METRICOOL_USER_ID!, integrationSource: "MCP",
         start: `${job.day}T00:00:00`, end: `${job.day}T23:59:59`, timezone: "America/New_York", extendedRange: "false" });
       const response = await fetcher(`https://app.metricool.com/api/v2/scheduler/posts?${params}`, {
@@ -65,6 +66,8 @@ export function createDelivery(env: Env, fetcher: typeof fetch = fetch): Deliver
       return matched[0] ? String(matched[0].id) : undefined;
     },
     async create(job) {
+      if (!isKongNetwork(job.network)) throw new Error("unsupported_kong_network");
+      if (!Number.isFinite(job.asset.durationSeconds) || job.asset.durationSeconds < 3 || job.asset.durationSeconds > 90) throw new Error("unsupported_reel_duration");
       const info: Record<string, unknown> = { autoPublish: true, draft: false, text: job.asset.caption,
         providers: [{ network: job.network }], publicationDate: { dateTime: job.at.slice(0, 19), timezone: "America/New_York" },
         shortener: false, mediaAltText: [], descendants: [], firstCommentText: "", hasNotReadNotes: false,
@@ -72,7 +75,7 @@ export function createDelivery(env: Env, fetcher: typeof fetch = fetch): Deliver
       if (job.network === "tiktok") info.tiktokData = { title: job.asset.title, privacyOption: "PUBLIC_TO_EVERYONE",
         commercialContentOwnBrand: true, commercialContentThirdParty: false, autoAddMusic: false,
         disableComment: false, disableDuet: false, disableStitch: false, photoCoverIndex: 0 };
-      else info.youtubeData = { title: job.asset.title, type: "short", privacy: "public", madeForKids: false, category: "ENTERTAINMENT", tags: ["KONG", "Nightlife", "Shorts"] };
+      else info.facebookData = { title: job.asset.title, type: "REEL" };
       await callMetricoolMcpTool(fetcher, token, "createScheduledPost", { date: job.at, blogId: String(BRAND),
         info: JSON.stringify(info), mediaFiles: [{ download_url: job.asset.mediaUrl, file_id: `${job.asset.sha256}-${job.network}.mp4` }] });
     },
