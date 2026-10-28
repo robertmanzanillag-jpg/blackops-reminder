@@ -1,5 +1,8 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
+import type { LearningLedger } from "./kong-content-learning";
+import type { PublishedCreative } from "./kong-metricool-learning";
+import type { ProductionState } from "./kong-production-pipeline";
 
 export const networks = ["tiktok", "facebook"] as const;
 export type Network = typeof networks[number];
@@ -24,7 +27,10 @@ export type Asset = z.infer<typeof assetSchema>;
 export interface Job { id: string; day: string; network: Network; slot: number; at: string; asset: Asset;
   state: "planned" | "submitting" | "scheduled" | "uncertain" | "expired" | "blocked";
   receipt?: string; attempts: number; nextAttemptAt?: string; lastReconciledAt?: string; reason?: string; }
-export interface State { version: 1; jobs: Job[]; lastCycleAt?: string; lastError?: string; }
+export interface State { version: 1; jobs: Job[]; lastCycleAt?: string; lastError?: string;
+  learning?: LearningLedger; publishedCreatives?: PublishedCreative[];
+  learningCheckedAt?: string; learningError?: string;
+  production?: ProductionState; productionError?: string; productionNextAttemptAt?: string; catalogError?: string; }
 export const emptyState = (): State => ({ version: 1, jobs: [] });
 export const dayInNewYork = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
 export function dayPlus(day: string, days: number) { const d = new Date(`${day}T12:00:00Z`); d.setUTCDate(d.getUTCDate() + days); return d.toISOString().slice(0, 10); }

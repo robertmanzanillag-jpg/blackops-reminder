@@ -2,8 +2,11 @@ import { Pool } from "pg";
 import type { Express } from "express";
 import { resolveCurrentUserId } from "./user-context";
 import { verifyImmutableMedia } from "./kong-media-store";
+import { collectMetricoolObservations, dueLearningRegistry } from "./kong-metricool-learning";
+import { analyzeLearning, emptyLearningLedger, ingestLearning } from "./kong-content-learning";
+import { emptyProductionState, runProductionCycle, type EditorialTask, type ProductionDependencies, type ProductionState } from "./kong-production-pipeline";
 import { callMetricoolMcpTool, formatMetricoolMcpDate } from "./blackroom-metricool-bridge";
-import { assetProblem, catalogSchema, coverage, deliverJob, emptyState, fillPlan, isKongNetwork, networks, type Delivery, type Job, type State } from "./kong-autopilot-core";
+import { assetProblem, catalogSchema, coverage, deliverJob, emptyState, fillPlan, isKongNetwork, networks, type Asset, type Delivery, type Job, type State } from "./kong-autopilot-core";
 
 const BRAND = 6475033;
 const INTERVAL = 15 * 60_000;
@@ -11,15 +14,21 @@ const LOCK = 6475033;
 type Env = Record<string, string | undefined>;
 const verifiedNetworks = (env: Env) => (env.KONG_METRICOOL_ACCOUNTS_VERIFIED || "").split(",").map(n => n.trim()).filter(isKongNetwork);
 
-export function readiness(env: Env) {
+export function readiness(env: Env, production?: KongRuntimeOptions["production"]) {
   const blockers: string[] = [];
-  for (const key of ["DATABASE_URL", "KONG_OWNER_USER_ID", "KONG_CATALOG_URL", "KONG_MEDIA_ORIGINS", "METRICOOL_USER_TOKEN", "METRICOOL_USER_ID"])
+  for (const key of ["DATABASE_URL", "KONG_OWNER_USER_ID", "KONG_MEDIA_ORIGINS", "METRICOOL_USER_TOKEN", "METRICOOL_USER_ID"])
     if (!env[key]?.trim()) blockers.push(`missing_${key.toLowerCase()}`);
   if (!verifiedNetworks(env).length) blockers.push("verify_kong_accounts");
   if (env.KONG_AUTOPUBLISH_ENABLED !== "true") blockers.push("autopublishing_disabled");
   return { enabled: env.KONG_AUTOPILOT_ENABLED === "true", blockers, brandId: BRAND, networks,
     verifiedNetworks: verifiedNetworks(env), blockedNetworks: networks.filter(n => !verifiedNetworks(env).includes(n)),
-    sourceMode: "remote_reviewed_catalog", discovery: "not_implemented", rendering: "not_implemented", learning: "not_implemented", paidAiCalls: 0 };
+    sourceMode: production ? "cloud_production_and_reviewed_assets" : "remote_reviewed_catalog",
+    sourceBlockers: !production && !env.KONG_CATALOG_URL ? ["production_not_configured"] : [],
+    discovery: production?.dependencies.discover ? "adapter_configured" : "not_configured",
+    rendering: production ? "adapter_configured" : "not_configured",
+    productionEnabled: env.KONG_PRODUCTION_ENABLED === "true" && Boolean(production),
+    review: production?.dependencies.review ? "adapter_configured" : "pending_review_adapter",
+    learning: "partial_registry_gated", paidAiCalls: 0 };
 }
 
 // Only deployment-configured origins may supply catalogs/media. No arbitrary URL
@@ -31,8 +40,8 @@ export function approvedUrl(value: string, origins: string[]): string {
     || /^172\.(1[6-9]|2\d|3[01])\./.test(u.hostname)) throw new Error("unapproved_remote_origin");
   return u.href;
 }
-async function bytesAt(url: string, maxBytes: number): Promise<Uint8Array> {
-  const response = await fetch(url, { redirect: "error", signal: AbortSignal.timeout(60_000) });
+async function bytesAt(url: string, maxBytes: number, fetcher = fetch): Promise<Uint8Array> {
+  const response = await fetcher(url, { redirect: "error", signal: AbortSignal.timeout(60_000) });
   if (!response.ok || !response.body) throw new Error("remote_read_failed");
   const chunks: Uint8Array[] = []; let length = 0;
   for await (const chunk of response.body as any) {
@@ -83,10 +92,18 @@ export function createDelivery(env: Env, fetcher: typeof fetch = fetch): Deliver
   };
 }
 
-export function createKongCloudRuntime(env: Env = process.env) {
+export interface KongRuntimeOptions {
+  production?: { dependencies: Omit<ProductionDependencies, "save">;
+    tasks(state: ProductionState, now: Date): Promise<EditorialTask[]>; maxJobs?: number };
+  pool?: Pick<Pool, "connect" | "query" | "end">;
+  fetch?: typeof fetch; delivery?: Delivery; now?: () => Date;
+  verifyMedia?: typeof verifyImmutableMedia;
+}
+export function createKongCloudRuntime(env: Env = process.env, options: KongRuntimeOptions = {}) {
   let pool: Pool | undefined, timer: ReturnType<typeof setInterval> | undefined, running = false;
   let lastError: string | undefined, lastCycleAt: string | undefined;
-  const getPool = () => pool ||= new Pool({ connectionString: env.DATABASE_URL, max: 2, connectionTimeoutMillis: 10_000, statement_timeout: 30_000 });
+  const getPool = () => options.pool || (pool ||= new Pool({ connectionString: env.DATABASE_URL, max: 2, connectionTimeoutMillis: 10_000, statement_timeout: 30_000 }));
+  const fetcher = options.fetch || fetch, nowAt = options.now || (() => new Date());
   async function cycle() {
     if (running || env.KONG_AUTOPILOT_ENABLED !== "true" || !env.DATABASE_URL) return;
     running = true;
@@ -99,29 +116,79 @@ export function createKongCloudRuntime(env: Env = process.env) {
       const stored = (await client.query("SELECT state FROM kong_cloud_autopilot WHERE id='kong'")).rows[0]?.state;
       const state: State = stored || emptyState();
       if (state.version !== 1 || !Array.isArray(state.jobs)) throw new Error("invalid_persisted_state");
-      const save = async () => { await client!.query("INSERT INTO kong_cloud_autopilot(id,state) VALUES('kong',$1::jsonb) ON CONFLICT(id) DO UPDATE SET state=EXCLUDED.state", [JSON.stringify(state)]); };
-      const now = new Date();
+      let persistenceFailed = false;
+      const save = async () => {
+        try { await client!.query("INSERT INTO kong_cloud_autopilot(id,state) VALUES('kong',$1::jsonb) ON CONFLICT(id) DO UPDATE SET state=EXCLUDED.state", [JSON.stringify(state)]); }
+        catch (error) { persistenceFailed = true; throw error; }
+      };
+      const now = nowAt();
       lastError = undefined;
+      // Analytics runs independently of catalog availability and publishing flags.
+      // Only actual published IDs/URLs may label metrics; scheduler IDs are not enough.
+      if (env.METRICOOL_USER_TOKEN && state.publishedCreatives?.length &&
+        (!state.learningCheckedAt || +now - Date.parse(state.learningCheckedAt) >= 3600_000)) {
+        state.learningError = undefined;
+        for (const network of networks) {
+          try {
+            const due = dueLearningRegistry(state.publishedCreatives.filter(p => p.network === network), state.learning || emptyLearningLedger(), now);
+            if (!due.length) continue;
+            const result = await collectMetricoolObservations({ network, registry:due, now,
+              call:(name,args)=>callMetricoolMcpTool(fetcher,env.METRICOOL_USER_TOKEN!,name,args) });
+            const added = ingestLearning(state.learning || emptyLearningLedger(), result.observations, now);
+            state.learning = added.ledger;
+            if (result.rejected.some(r => !/unregistered/.test(r.reason)) || added.rejected.length) state.learningError = "analytics_rows_need_reconciliation";
+          } catch { state.learningError = "analytics_collection_failed"; }
+        }
+        state.learningCheckedAt = now.toISOString(); await save();
+      }
       // First reconcile outstanding intents even when the source catalog is down.
-      const ready = readiness(env);
-      const delivery = createDelivery(env);
-      if (!ready.blockers.length) for (const job of state.jobs.filter(j => ready.verifiedNetworks.includes(j.network) && ["submitting", "uncertain"].includes(j.state))
+      const ready = readiness(env, options.production);
+      const delivery = options.delivery || createDelivery(env, fetcher);
+      const canReadReceipts = Boolean(env.METRICOOL_USER_TOKEN && env.METRICOOL_USER_ID);
+      if (canReadReceipts) for (const job of state.jobs.filter(j => ready.verifiedNetworks.includes(j.network) && ["submitting", "uncertain"].includes(j.state))
         .sort((a, b) => (a.lastReconciledAt || "").localeCompare(b.lastReconciledAt || "")).slice(0, 10)) {
         job.lastReconciledAt = now.toISOString();
         await save();
-        try { await deliverJob(job, delivery, save, now); } catch { lastError = "metricool_reconciliation_failed"; }
+        try { await deliverJob(job, delivery, save, now); } catch { if (persistenceFailed) throw Error("persistence_failed"); lastError = "metricool_reconciliation_failed"; }
       }
-      if (!env.KONG_CATALOG_URL || !env.KONG_MEDIA_ORIGINS) throw new Error("remote_catalog_not_configured");
-      const origins = env.KONG_MEDIA_ORIGINS.split(",").map(v => v.trim());
-      const catalogUrl = approvedUrl(env.KONG_CATALOG_URL, origins);
-      const catalog = catalogSchema.parse(JSON.parse(Buffer.from(await bytesAt(catalogUrl, 2_000_000)).toString("utf8")));
-      const assets = catalog.assets.filter(a => { try { approvedUrl(a.mediaUrl, origins); return !assetProblem(a, now); } catch { return false; } });
+      // Production shares this DB lease and row. No local heartbeat or second
+      // process can race its upload intents when every worker uses this lock.
+      if (options.production && env.KONG_PRODUCTION_ENABLED === "true" && !ready.blockers.length
+        && (!state.productionNextAttemptAt || Date.parse(state.productionNextAttemptAt) <= +now)) {
+        try {
+          const current = state.production || emptyProductionState();
+          let tasks: EditorialTask[] = [], tasksUnavailable = false;
+          try { tasks = await options.production.tasks(structuredClone(current), now); }
+          catch { tasksUnavailable = true; }
+          await runProductionCycle(current, tasks, { ...options.production.dependencies,
+            save: async production => { state.production = production; await save(); } }, { now, maxJobs: options.production.maxJobs });
+          state.productionError = tasksUnavailable ? "editorial_tasks_unavailable" : undefined;
+          state.productionNextAttemptAt = tasksUnavailable ? new Date(+now + INTERVAL).toISOString() : undefined; await save();
+        } catch {
+          if (persistenceFailed) throw Error("persistence_failed");
+          state.productionError = "production_cycle_failed";
+          state.productionNextAttemptAt = new Date(+now + INTERVAL).toISOString(); await save();
+        }
+      }
+      const origins = (env.KONG_MEDIA_ORIGINS || "").split(",").map(v => v.trim()).filter(Boolean);
+      let catalogAssets: Asset[] = [];
+      state.catalogError = undefined;
+      if (env.KONG_CATALOG_URL) {
+        try {
+          const catalogUrl = approvedUrl(env.KONG_CATALOG_URL, origins);
+          catalogAssets = catalogSchema.parse(JSON.parse(Buffer.from(await bytesAt(catalogUrl, 2_000_000, fetcher)).toString("utf8"))).assets;
+        } catch { state.catalogError = "catalog_unavailable"; }
+      }
+      const assets = [...catalogAssets, ...(state.production?.assets || [])].filter((a, i, all) => {
+        try { approvedUrl(a.mediaUrl, origins); return !assetProblem(a, now) && all.findIndex(other => other.sha256 === a.sha256) === i; } catch { return false; }
+      });
       fillPlan(state, assets, now, wall => formatMetricoolMcpDate(wall, "America/New_York"));
       state.lastCycleAt = now.toISOString(); await save();
       if (!ready.blockers.length) {
         for (const job of state.jobs.filter(j => j.state === "planned" && ready.verifiedNetworks.includes(j.network)
           && (!j.nextAttemptAt || Date.parse(j.nextAttemptAt) <= +now)).sort((a, b) => (a.nextAttemptAt || "").localeCompare(b.nextAttemptAt || "")).slice(0, 10)) {
           const current = assets.find(a => a.sha256 === job.asset.sha256 && a.id === job.asset.id);
+          if (!current && state.catalogError) { job.nextAttemptAt = new Date(+now + INTERVAL).toISOString(); job.reason = "catalog_temporarily_unavailable"; await save(); continue; }
           if (!current || assetProblem(current, new Date(job.at), now)) { job.state = "blocked"; job.reason = "asset_removed_or_evidence_expired"; await save(); continue; }
           // Pre-submit jobs use the full current reviewed catalog record. Intents
           // already sent to Metricool keep their exact reconciliation snapshot.
@@ -129,9 +196,10 @@ export function createKongCloudRuntime(env: Env = process.env) {
           if (job.nextAttemptAt && Date.parse(job.nextAttemptAt) > +now) continue;
           try {
             approvedUrl(job.asset.mediaUrl, origins);
-            await verifyImmutableMedia(job.asset.mediaUrl, job.asset.sha256, origins);
+            await (options.verifyMedia || verifyImmutableMedia)(job.asset.mediaUrl, job.asset.sha256, origins, fetcher);
             await deliverJob(job, delivery, save, now);
           } catch {
+            if (persistenceFailed) throw Error("persistence_failed");
             job.nextAttemptAt = new Date(+now + INTERVAL).toISOString();
             job.reason = "preflight_or_persistence_failed";
             await save();
@@ -153,14 +221,20 @@ export function createKongCloudRuntime(env: Env = process.env) {
       if (env.DATABASE_URL && env.KONG_AUTOPILOT_ENABLED === "true") {
         try { state = (await getPool().query("SELECT state FROM kong_cloud_autopilot WHERE id='kong'")).rows[0]?.state; } catch { /* Read-only status never initializes schema. */ }
       }
-      return { ...readiness(env), running, lastCycleAt: state?.lastCycleAt || lastCycleAt, lastError,
+      return { ...readiness(env, options.production), running, lastCycleAt: state?.lastCycleAt || lastCycleAt, lastError,
+        productionStatus: { jobs: state?.production?.jobs.length || 0, reviewedAssets: state?.production?.assets.length || 0,
+          pendingQa: state?.production?.jobs.filter(j => j.stage === "qa_pending").length || 0,
+          error: state?.productionError, nextAttemptAt: state?.productionNextAttemptAt, catalogError: state?.catalogError },
+        learningStatus: { collection: state?.publishedCreatives?.length ? "registered_posts_only" : "waiting_for_verified_publication_registry",
+          lastCheckedAt:state?.learningCheckedAt, error:state?.learningError,
+          reports:state?.learning ? networks.flatMap(network => (["24h","72h","7d"] as const).map(horizon => analyzeLearning(state.learning!,network,horizon,new Date()))) : [] },
         localLedgerCoverage: state ? coverage(state, new Date()) : null, remoteCoverageVerified: false,
         receipts: state?.jobs.filter(j => j.receipt).map(j => ({ id: j.id, receipt: j.receipt, at: j.at })) || [] };
     },
   };
 }
-export function registerKongCloudAutopilot(app: Express) {
-  const runtime = createKongCloudRuntime();
+export function registerKongCloudAutopilot(app: Express, options: KongRuntimeOptions = {}) {
+  const runtime = createKongCloudRuntime(process.env, options);
   app.get("/api/kong-autopilot/status", async (req, res) => {
     if (!process.env.KONG_OWNER_USER_ID || resolveCurrentUserId(req) !== process.env.KONG_OWNER_USER_ID) { res.status(403).json({ error: "owner_required" }); return; }
     try { res.json(await runtime.status()); } catch { res.status(503).json({ error: "status_unavailable" }); }
