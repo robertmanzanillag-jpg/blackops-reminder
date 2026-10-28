@@ -18,6 +18,9 @@ export const assetSchema = z.object({
     return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === day;
   }).optional(),
   sha256: z.string().regex(/^[a-f0-9]{64}$/), family: z.enum(families), hook: z.string().min(1).max(180),
+  creativeTest: z.object({ testId: z.string().min(1).max(100), kind: z.enum(["baseline", "exploration", "variation"]),
+    hypothesis: z.string().min(1).max(500).optional(), primaryVariable: z.enum(["hook_text", "layout", "duration"]).optional(),
+    hookStyle: z.string().min(1).max(100), sourceIds: z.array(z.string().min(1).max(200)).min(1).max(6) }).optional(),
   caption: z.string().min(1).max(2000), title: z.string().min(1).max(100),
   durationSeconds: z.number().min(3).max(90), width: z.literal(1080), height: z.literal(1920),
   footageRights: rights, musicRights: rights,
@@ -32,6 +35,7 @@ export interface Job { id: string; day: string; network: Network; slot: number; 
   state: "planned" | "submitting" | "scheduled" | "uncertain" | "expired" | "blocked";
   receipt?: string; attempts: number; nextAttemptAt?: string; lastReconciledAt?: string; reason?: string; }
 export interface State { version: 1; jobs: Job[]; lastCycleAt?: string; lastError?: string;
+  selectionDecisions?: SelectionDecision[];
   learning?: LearningLedger; publishedCreatives?: PublishedCreative[];
   learningCheckedAt?: string; learningError?: string;
   production?: ProductionState; productionError?: string; productionNextAttemptAt?: string; catalogError?: string; }
@@ -57,7 +61,11 @@ export function assetProblem(asset: Asset, instant: Date, checkedAt = instant): 
 // Seed slots are explicitly hypotheses, not inferred best hours. Offset conversion is
 // injected from the existing timezone-tested Metricool helper to handle DST.
 const hours: Record<Network, string[]> = { tiktok: ["12:15", "15:15", "18:15", "20:15", "22:15"], facebook: ["11:45", "14:45", "17:45", "19:45", "21:45"] };
-export function fillPlan(state: State, assets: Asset[], now: Date, toOffset: (wall: string) => string): State {
+export interface SelectionDecision { jobId: string; network: Network; at: string; mode: "baseline" | "exploration" | "variation" | "gap";
+  reason: string; assetId?: string; horizon?: "72h" | "7d";
+  evidence?: { dimension: string; value: string; metric: string; ratio: number; count: number; referenceCount: number }[]; }
+export type AssetSelector = (input: { jobId: string; network: Network; eligible: Asset[]; daily: Job[]; recent: Job[] }) => { asset?: Asset; decision: SelectionDecision };
+export function fillPlan(state: State, assets: Asset[], now: Date, toOffset: (wall: string) => string, select?: AssetSelector): State {
   const today = dayInNewYork(now);
   for (const job of state.jobs) if (isKongNetwork(job.network) && job.state === "planned" && Date.parse(job.at) <= +now) { job.state = "expired"; job.reason = "missed_slot"; }
   for (let d = 0; d < 14; d++) for (const network of networks) for (let slot = 0; slot < 5; slot++) {
@@ -71,9 +79,17 @@ export function fillPlan(state: State, assets: Asset[], now: Date, toOffset: (wa
     const hooks = new Set(recent.map(j => j.asset.hook.toLowerCase().trim()));
     const daily = recent.filter(j => j.day === day);
     const previous = recent.at(-1)?.asset.family;
-    const asset = assets.find(a => (!a.plannedDay || a.plannedDay === day) && !used.has(a.sha256) && !hooks.has(a.hook.toLowerCase().trim())
+    const eligible = assets.filter(a => (!a.plannedDay || a.plannedDay === day) && !used.has(a.sha256) && !hooks.has(a.hook.toLowerCase().trim())
       && a.family !== previous && daily.filter(j => j.asset.family === a.family).length < 2
       && !assetProblem(a, new Date(at), now));
+    const selection = select?.({ jobId: id, network, eligible, daily, recent });
+    if (selection) {
+      const history = state.selectionDecisions ||= [];
+      const previousDecision = history.filter(r => r.jobId === id).at(-1);
+      const semantic = ({ at: _at, ...decision }: SelectionDecision) => JSON.stringify(decision);
+      if (!previousDecision || semantic(previousDecision) !== semantic(selection.decision)) history.push(selection.decision);
+    }
+    const asset = selection ? eligible.find(a => a === selection.asset) : eligible[0];
     if (!asset) continue;
     const next: Job = { id, day, network, slot, at, asset, state: "planned", attempts: 0 };
     if (existing) Object.assign(existing, next, { reason: undefined, nextAttemptAt: undefined });

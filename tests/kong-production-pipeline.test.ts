@@ -32,6 +32,21 @@ test("real render receipt stays QA pending until explicit hash-bound review", as
   state = await runProductionCycle(state, [], { ...f.deps, review: async () => qa }, { now });
   assert.equal(state.jobs[0].stage, "ready"); assert.equal(state.assets.length, 1); assert.equal(f.uploads(), 1);
 });
+test("explicit test metadata survives persisted restart and reviewed asset conversion", async () => {
+  const f = fixture();
+  const creativeTest = { testId: "baseline-record", kind: "baseline" as const, hookStyle: "pov", sourceIds: [...task.sourceIds],
+    primaryVariable: "hook_text" as const, hypothesis: "Establish baseline outcomes without claiming a winner." };
+  await runProductionCycle(f.state(), [{ ...task, creativeTest }], f.deps, { now });
+  assert.deepEqual(f.state().jobs[0].task.creativeTest, creativeTest);
+  const restarted = await runProductionCycle(f.state(), [], { ...f.deps, review: async () => qa }, { now });
+  assert.deepEqual(restarted.assets[0].creativeTest, creativeTest);
+  assert.equal(f.renders(), 1); assert.equal(f.uploads(), 1);
+});
+test("test source identity cannot differ from actual footage", async () => {
+  const f = fixture();
+  const result = await runProductionCycle(f.state(), [{ ...task, creativeTest: { testId: "test", kind: "exploration", hookStyle: "pov", sourceIds: ["unrelated"] } }], f.deps, { now });
+  assert.equal(result.jobs[0].error, "invalid_test_metadata"); assert.equal(f.renders(), 0); assert.equal(f.uploads(), 0);
+});
 test("failed save of upload intent prevents public upload", async () => {
   const f = fixture(), save = f.deps.save;
   f.deps.save = async state => { if (state.jobs.some(j => j.stage === "upload_intent")) throw Error("db_down"); await save(state); };

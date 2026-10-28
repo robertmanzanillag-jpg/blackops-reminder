@@ -11,11 +11,17 @@ const rightsSchema = z.object({ evidenceUrl: z.string().url().refine(s => new UR
 const eventSchema = z.object({ title: z.string().trim().min(1).max(65), startsAt: z.string().datetime({ offset: true }),
   sourceUrl: z.string().url().refine(s => new URL(s).protocol === "https:"), verifiedAt: z.string().datetime({ offset: true }), validUntil: z.string().datetime({ offset: true }) });
 export type VerifiedEditorialEvent = z.infer<typeof eventSchema>;
+const protocolSchema = z.object({ id: z.string().regex(/^[a-zA-Z0-9_-]{1,60}$/), primaryVariable: z.literal("hook_text"),
+  layout: z.enum(["pov", "reveal", "montage"]), durationSeconds: z.number().int().min(3).max(30),
+  baselineHook: z.string().min(1).max(120), challengerHooks: z.array(z.string().min(1).max(120)).min(1).max(20),
+  hypothesis: z.string().trim().min(10).max(300) }).strict();
 export interface EditorialPlanInput {
   now: Date; musicRights?: Rights; footageRights?: Rights; authorizedForPublicDistribution?: boolean;
   events?: unknown[];
   /** Calendar target only. Rights/facts freshness always uses the real `now`. */
   targetDay?: string;
+  /** Optional explicit comparison protocol; never inferred from missing data. */
+  experimentProtocol?: unknown;
 }
 const openers = ["Your group", "The dancefloor", "Tonight's plan", "The last track", "That one friend", "The first drop", "This weekend", "The group chat"];
 const endings = ["understood the assignment", "changed the whole mood", "found a second wind", "needed one more track", "made it past midnight", "had other plans", "picked the right moment", "turned into a story", "took the scenic route", "kept the night going"];
@@ -41,6 +47,12 @@ function sourceEligible(source: OnlineFootage, now: Date) {
 export function planDailyEditorial(state: ProductionState, input: EditorialPlanInput) {
   if (state.version !== 1 || !Number.isFinite(+input.now)) throw Error("invalid_editorial_state_or_clock");
   const now = input.now, today = dayInNewYork(now), day = input.targetDay || today, tasks: EditorialTask[] = [];
+  const protocol = input.experimentProtocol === undefined ? undefined : protocolSchema.parse(input.experimentProtocol);
+  if (protocol) {
+    const hooks = [protocol.baselineHook, ...protocol.challengerHooks];
+    if (new Set(hooks.map(normalize)).size !== hooks.length || hooks.some(h => !safeCopy(h))) throw Error("invalid_experiment_protocol_hooks");
+    hooks.forEach(wrapRenderText);
+  }
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < today || day > dayPlus(today, 13)) throw Error("invalid_editorial_target_day");
   const targetStart = new Date(formatMetricoolMcpDate(`${day}T00:00:00`, "America/New_York"));
   const targetEnd = new Date(+new Date(formatMetricoolMcpDate(`${dayPlus(day, 1)}T00:00:00`, "America/New_York")) - 1);
@@ -102,9 +114,15 @@ export function planDailyEditorial(state: ProductionState, input: EditorialPlanI
     // misrepresent the factual event card, so remove it by choosing POV instead.
     if (family === "lineup" && layout === "reveal") { task.layout = "pov"; task.reveal = undefined; }
     if (task.layout === previousLayout) { reasons.push("event_layout_would_repeat"); continue; }
+    const matchesProtocol = protocol && task.family !== "lineup" && task.layout === protocol.layout && task.durationSeconds === protocol.durationSeconds;
+    const challenger = !!matchesProtocol && protocol!.challengerHooks.some(h => normalize(h) === normalize(task.hook));
+    const control = !!matchesProtocol && normalize(protocol!.baselineHook) === normalize(task.hook);
+    task.creativeTest = { testId: challenger || control ? protocol!.id : `baseline-${task.id}`,
+      kind: challenger ? "exploration" : "baseline", hookStyle: challenger || control ? `${protocol!.id}:${challenger ? "challenger" : "control"}` : task.layout,
+      sourceIds: [...task.sourceIds], primaryVariable: "hook_text",
+      hypothesis: challenger || control ? protocol!.hypothesis : "Establish a descriptive baseline for this hook and layout; no improvement or novelty is claimed." };
     tasks.push(task); usedHooks.add(normalize(hook)); sources.forEach(s => usedSources.add(s.id)); previousLayout = task.layout;
-    experiments.push({ taskId: task.id, classification: tasks.length % 2 === 1 ? "exploration" : "baseline",
-      hypothesis: tasks.length % 2 === 1 ? "Test a new hook with a controlled layout; compare equal-age outcomes by network." : "Maintain a baseline format for comparison; this is not a claimed historical winner." });
+    experiments.push({ taskId: task.id, classification: challenger ? "exploration" : "baseline", hypothesis: task.creativeTest.hypothesis! });
   }
   return { day, tasks, experiments, missing: Math.max(0, 5 - todays.length - tasks.length), reasons: [...new Set(reasons)] };
 }

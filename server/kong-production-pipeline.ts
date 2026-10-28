@@ -10,6 +10,7 @@ import { storeRenderedMedia } from "./kong-media-store";
 type Rights = Asset["footageRights"];
 export interface EditorialTask {
   plannedDay?: string;
+  creativeTest?: Asset["creativeTest"];
   id: string; sourceIds: string[]; layout: RenderInput["layout"]; hook: string; reveal?: string;
   durationSeconds: number; title: string; caption: string; family: Asset["family"];
   footageRights: Rights; musicRights: Rights; facts?: Asset["facts"];
@@ -55,6 +56,8 @@ function eligibility(job: ProductionJob, now: Date): string | undefined {
   if (!job.sources.length || job.sources.some(s => !s.rightsEvidence?.trim() || !https(s.sourceUrl)
     || !(Date.parse(s.rightsExpiresAt) > +now) || Date.parse(t.footageRights.expiresAt) > Date.parse(s.rightsExpiresAt))) return "source_evidence_missing_or_expired";
   if (new Set(t.sourceIds).size !== t.sourceIds.length || t.sourceIds.some(id => !job.sources.some(s => s.id === id))) return "invalid_source_selection";
+  if (t.creativeTest && (!assetSchema.shape.creativeTest.safeParse(t.creativeTest).success
+    || JSON.stringify(t.creativeTest.sourceIds) !== JSON.stringify(t.sourceIds))) return "invalid_test_metadata";
   if (t.layout === "montage" ? job.sources.length < 3 || job.sources.length > 6 : job.sources.length !== 1) return "invalid_source_count";
   if (!Number.isFinite(t.durationSeconds) || t.durationSeconds < 3 || t.durationSeconds > 30) return "invalid_render_duration";
   const copy = `${t.title} ${t.hook} ${t.reveal || ""} ${t.caption}`;

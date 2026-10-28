@@ -50,12 +50,18 @@ The local codebase map refresh was attempted in the isolated archive and could n
 
 1. Configure a cloud catalog with real licensed footage **and music** and verified current offers. Finding public viral clips alone does not establish reuse rights.
 2. Provision and pass actual production adapters at startup: online source credentials, authorized soundtrack, official logo, font, Drive authorization/reconciliation and genuine review, plus the explicit editorial policy. Wire current event ingestion. Rolling backfill and durable archival have injected integration tests, not a verified production run. No credentials are included in this change.
-3. Populate the verified public-post registry from actual publication evidence and connect per-network learning to future-creative selection/replacement. No learning result is claimed without observations.
+3. Populate the verified public-post registry from actual publication evidence and configure genuinely controlled candidate supply. New-slot selection is wired, but baseline production is not a closed-loop optimizer; automatic creative replacement remains incomplete. No learning result is claimed without observations.
 4. Verify the actual TikTok/Facebook account connection, adapter response shape, one controlled scheduled post and eventual publication in the production Metricool account. No live mutation was used in unit tests.
 5. Add actionable monitoring for no-supply, database outage and uncertain provider outcomes. Current status endpoint makes failures visible but does not send notifications.
 6. PR review and explicit Replit deployment approval remain required. No deployment/activation is performed by this patch.
 
 Run `node --import tsx --test tests/kong-autopilot.test.ts`. Roll back startup registration or set both KONG enable flags false; preserve the database ledger for reconciliation.
+
+## Measured selection and experiment provenance
+
+`kong-learning-selection.ts` is wired into new-slot planning. It uses adequately sampled, network-specific 72h/7d descriptive evidence, reserves at least 40 percent explicit exploration in a controlled pool, and rejects variations with weak primary outcomes (including TikTok shares). It never changes already assigned public posts. Material decision transitions are append-only; identical repeated gap decisions do not inflate the log. Missing evidence or baseline/unclassified supply retains baseline selection with an explicit reason, not an optimization claim.
+
+Built-in planning records baseline metadata, actual source IDs, layout and a descriptive hypothesis through task, render/restart and reviewed asset. Optional hook protocols label only exact matching hook/layout/duration candidates; they do not control footage/audio or prove causality. The previous ordinal exploration labels were removed. No protocol or publication registry is automatically configured in production. The complete targeted suite passes 95 tests including a synthetic ffmpeg render; full repository typecheck remains unverified because the isolated dependencies lack required node/react/react-dom/vite type definitions.
 
 ## Existing infrastructure evidence and remaining source/render blockers
 

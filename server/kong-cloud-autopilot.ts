@@ -5,6 +5,7 @@ import { resolveCurrentUserId } from "./user-context";
 import { verifyImmutableMedia } from "./kong-media-store";
 import { collectMetricoolObservations, dueLearningRegistry } from "./kong-metricool-learning";
 import { analyzeLearning, emptyLearningLedger, ingestLearning } from "./kong-content-learning";
+import { createLearningSelector } from "./kong-learning-selection";
 import { emptyProductionState, runProductionCycle, type EditorialTask, type ProductionDependencies, type ProductionState } from "./kong-production-pipeline";
 import { appendProductionArchive, archiveProductionHistory } from "./kong-production-archive";
 import { callMetricoolMcpTool, formatMetricoolMcpDate } from "./blackroom-metricool-bridge";
@@ -196,7 +197,7 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
       const assets = [...catalogAssets, ...(state.production?.assets || [])].filter((a, i, all) => {
         try { approvedUrl(a.mediaUrl, origins); return !assetProblem(a, now) && all.findIndex(other => other.sha256 === a.sha256) === i; } catch { return false; }
       });
-      fillPlan(state, assets, now, wall => formatMetricoolMcpDate(wall, "America/New_York"));
+      fillPlan(state, assets, now, wall => formatMetricoolMcpDate(wall, "America/New_York"), createLearningSelector(state.learning, now));
       state.lastCycleAt = now.toISOString(); await save();
       if (!ready.blockers.length) {
         for (const job of state.jobs.filter(j => j.state === "planned" && ready.verifiedNetworks.includes(j.network)

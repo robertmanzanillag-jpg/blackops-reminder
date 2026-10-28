@@ -15,17 +15,34 @@ test("empty rights never generate tasks or implied approval", () => {
   assert.equal(planDailyEditorial(state(), { ...options, musicRights: undefined }).tasks.length, 0);
   assert.equal(planDailyEditorial(state(), { ...options, authorizedForPublicDistribution: false }).tasks.length, 0);
 });
-test("five bounded varied deterministic tasks contain site CTA and40% exploration", () => {
+test("five bounded varied deterministic tasks contain site CTA and truthful baseline metadata", () => {
   const s = state(), before = JSON.stringify(s), plan = planDailyEditorial(s, options);
   assert.equal(plan.tasks.length, 5); assert.deepEqual(plan, planDailyEditorial(s, options)); assert.equal(JSON.stringify(s), before);
   assert.ok(new Set(plan.tasks.map(t => t.layout)).size >= 3);
-  assert.ok(plan.experiments.filter(e => e.classification === "exploration").length / plan.tasks.length >= .4);
+  assert.ok(plan.experiments.every(e => e.classification === "baseline"));
+  assert.ok(plan.tasks.every(t => t.creativeTest?.kind === "baseline" && t.creativeTest.hookStyle === t.layout));
+  assert.ok(plan.tasks.every(t => JSON.stringify(t.creativeTest!.sourceIds) === JSON.stringify(t.sourceIds)));
   assert.equal(new Set(plan.tasks.flatMap(t => t.sourceIds)).size, plan.tasks.flatMap(t => t.sourceIds).length);
   for (let i = 0; i < plan.tasks.length; i++) {
     assert.ok(plan.tasks[i].caption.includes("https://kongnightlife.com"));
     assert.ok(["pov", "humor", "dancefloor"].includes(plan.tasks[i].family));
     if (i) assert.notEqual(plan.tasks[i].layout, plan.tasks[i - 1].layout);
   }
+});
+test("explicit hook comparison labels only the matching challenger with fixed layout and duration", () => {
+  const baseline = planDailyEditorial(state(), options).tasks;
+  const challenger = baseline[0];
+  const experimentProtocol = { id: "hook-test-1", primaryVariable: "hook_text", layout: challenger.layout,
+    durationSeconds: challenger.durationSeconds, baselineHook: "The group made a plan", challengerHooks: [challenger.hook],
+    hypothesis: "A group-focused hook may increase equal-age shares relative to the control hook." };
+  const planned = planDailyEditorial(state(), { ...options, experimentProtocol });
+  assert.equal(planned.tasks[0].creativeTest!.kind, "exploration");
+  assert.equal(planned.tasks[0].creativeTest!.hypothesis, experimentProtocol.hypothesis);
+  assert.equal(planned.tasks[0].creativeTest!.hookStyle, "hook-test-1:challenger");
+  assert.ok(planned.tasks.slice(1).every(t => t.creativeTest!.kind === "baseline"));
+  assert.ok(planDailyEditorial(state(), { ...options, experimentProtocol: { ...experimentProtocol, durationSeconds: 10 } }).tasks.every(t => t.creativeTest!.kind === "baseline"));
+  assert.ok(planDailyEditorial(state(), { ...options, experimentProtocol: { ...experimentProtocol, layout: "reveal" } }).tasks.every(t => t.creativeTest!.kind === "baseline"));
+  assert.throws(() => planDailyEditorial(state(), { ...options, experimentProtocol: { ...experimentProtocol, primaryVariable: "everything" } }));
 });
 test("reject stale/future/expired online candidates", () => {
   const s = state(); s.candidates = [source(0), source(1), source(2)];
