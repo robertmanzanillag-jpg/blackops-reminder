@@ -23,6 +23,7 @@ export interface ProductionJob {
   id: string; task: EditorialTask; sources: OnlineFootage[];
   stage: "queued" | "rendering" | "rendered" | "upload_intent" | "upload_uncertain" | "qa_pending" | "ready" | "blocked";
   artifact?: ProductionArtifact; receipt?: ProductionReceipt; error?: string; createdAt: string; updatedAt: string;
+  renderAttempts?: number; nextRenderAttemptAt?: string;
 }
 export interface ProductionState {
   version: 1; sourceCursor: number; candidates: OnlineFootage[]; jobs: ProductionJob[]; assets: Asset[];
@@ -80,6 +81,13 @@ export async function runProductionCycle(initial: ProductionState, tasks: Editor
   options: { now?: Date; maxJobs?: number; discover?: boolean } = {}): Promise<ProductionState> {
   const state = clone(initial), now = options.now || new Date();
   if (state.version !== 1 || !Array.isArray(state.jobs) || !Array.isArray(state.assets) || !Array.isArray(state.candidates)) throw Error("invalid_production_state");
+  // This is only the discovery cache. Jobs keep immutable provenance snapshots.
+  const cacheFresh = (source: OnlineFootage) => {
+    const discovered = Date.parse(source.discoveredAt);
+    return Number.isFinite(discovered) && discovered <= +now && +now - discovered <= 7 * 86400_000
+      && Date.parse(source.rightsExpiresAt) > +now;
+  };
+  state.candidates = state.candidates.filter(cacheFresh);
   const budget = Math.min(5, Math.max(1, Math.floor(options.maxJobs || 2)));
   const save = () => deps.save(clone(state)); // Save errors intentionally abort before further provider calls.
   const error = (code: string, job?: ProductionJob) => {
@@ -88,11 +96,12 @@ export async function runProductionCycle(initial: ProductionState, tasks: Editor
   };
   if (deps.discover && options.discover !== false) {
     let found: Awaited<ReturnType<NonNullable<ProductionDependencies["discover"]>>> | undefined;
-    try { found = await deps.discover(state.sourceCursor, state.candidates.map(s => s.id)); }
+    const seenIds = [...new Set([...state.candidates.map(s => s.id), ...state.jobs.flatMap(j => j.sources.map(s => s.id))])];
+    try { found = await deps.discover(state.sourceCursor, seenIds); }
     catch { error("source_discovery_failed"); }
     if (found) {
       if (!Number.isSafeInteger(found.nextCursor) || found.nextCursor < state.sourceCursor || !Array.isArray(found.candidates)) throw Error("invalid_discovery_result");
-      for (const candidate of found.candidates) if (!state.candidates.some(s => s.id === candidate.id) && state.candidates.length < 500) state.candidates.push(clone(candidate));
+      for (const candidate of found.candidates) if (cacheFresh(candidate) && !state.candidates.some(s => s.id === candidate.id) && state.candidates.length < 500) state.candidates.push(clone(candidate));
       state.sourceCursor = found.nextCursor;
     }
     await save();
@@ -110,6 +119,7 @@ export async function runProductionCycle(initial: ProductionState, tasks: Editor
   await save();
   let count = 0;
   for (const job of [...state.jobs].sort((a, b) => a.updatedAt.localeCompare(b.updatedAt))) {
+    if (["queued", "rendering", "rendered"].includes(job.stage) && job.nextRenderAttemptAt && Date.parse(job.nextRenderAttemptAt) > +now) continue;
     if (["ready", "blocked"].includes(job.stage) || (job.stage === "qa_pending" && !deps.review) || count++ >= budget) continue;
     job.updatedAt = now.toISOString();
     if (["upload_intent", "upload_uncertain"].includes(job.stage)) {
@@ -125,11 +135,20 @@ export async function runProductionCycle(initial: ProductionState, tasks: Editor
     if (["queued", "rendering", "rendered"].includes(job.stage)) {
       const exists = job.artifact && validArtifact(job.artifact) && await (deps.artifactExists || (async a => stat(a.outputPath).then(s => s.isFile(), () => false)))(job.artifact);
       if (!exists) {
+        if ((job.renderAttempts || 0) >= 3) {
+          job.stage = "blocked"; job.nextRenderAttemptAt = undefined; error("render_attempts_exhausted", job); await save(); continue;
+        }
+        job.renderAttempts = (job.renderAttempts || 0) + 1;
         job.stage = "rendering"; job.artifact = undefined; await save();
         let rendered: ProductionArtifact;
         try { rendered = await deps.render(clone(job)); if (!validArtifact(rendered) || Math.abs(rendered.durationSeconds - job.task.durationSeconds) > .25) throw Error("invalid_render_artifact"); }
-        catch { job.stage = "queued"; error("render_failed", job); await save(); continue; }
-        job.artifact = rendered; job.stage = "rendered"; await save();
+        catch {
+          const exhausted = job.renderAttempts >= 3;
+          job.stage = exhausted ? "blocked" : "queued";
+          job.nextRenderAttemptAt = exhausted ? undefined : new Date(+now + 15 * 60_000 * 2 ** (job.renderAttempts - 1)).toISOString();
+          error(exhausted ? "render_attempts_exhausted" : "render_failed", job); await save(); continue;
+        }
+        job.artifact = rendered; job.stage = "rendered"; job.nextRenderAttemptAt = undefined; await save();
       }
       if (state.jobs.some(j => j.id !== job.id && j.artifact?.sha256 === job.artifact!.sha256 && ["upload_intent", "upload_uncertain", "qa_pending", "ready"].includes(j.stage))) {
         job.stage = "blocked"; error("duplicate_render_hash", job); await save(); continue;

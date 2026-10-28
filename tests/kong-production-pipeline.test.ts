@@ -86,6 +86,45 @@ test("bad QA and duplicate rendered hashes never create second publishable asset
   state = await runProductionCycle(state, [], { ...f.deps, review: async () => ({ ...qa, renderedSha256: "c".repeat(64) }) }, { now });
   assert.equal(state.assets.length, 0); assert.equal(state.jobs[0].stage, "qa_pending");
 });
+
+test("render retries persist backoff and quarantine after three failures", async () => {
+  const f = fixture(); let attempts = 0;
+  const deps = { ...f.deps, render: async () => { attempts++; throw Error("ffmpeg_failed"); } };
+  let state = await runProductionCycle(f.state(), [task], deps, { now });
+  assert.equal(state.jobs[0].renderAttempts, 1); assert.equal(state.jobs[0].stage, "queued");
+  assert.equal(state.jobs[0].nextRenderAttemptAt, new Date(+now + 15 * 60_000).toISOString());
+  state = await runProductionCycle(f.state(), [], deps, { now: new Date(+now + 60_000) });
+  assert.equal(attempts, 1);
+  state = await runProductionCycle(f.state(), [], deps, { now: new Date(+now + 15 * 60_000) });
+  assert.equal(state.jobs[0].renderAttempts, 2);
+  assert.equal(state.jobs[0].nextRenderAttemptAt, new Date(+now + 45 * 60_000).toISOString());
+  state = await runProductionCycle(f.state(), [], deps, { now: new Date(+now + 45 * 60_000) });
+  assert.equal(state.jobs[0].stage, "blocked"); assert.equal(state.jobs[0].error, "render_attempts_exhausted");
+  state = await runProductionCycle(f.state(), [], deps, { now: new Date(+now + 3600_000) });
+  assert.equal(attempts, 3); assert.equal(f.uploads(), 0); assert.equal(state.jobs.length, 1);
+});
+
+test("interrupted third render is quarantined on restart instead of a fourth render", async () => {
+  const f = fixture(); let state = await runProductionCycle(f.state(), [task], { ...f.deps, render: async () => { throw Error("fail"); } }, { now });
+  state.jobs[0].stage = "rendering"; state.jobs[0].renderAttempts = 3; state.jobs[0].nextRenderAttemptAt = undefined;
+  state = await runProductionCycle(state, [], f.deps, { now });
+  assert.equal(state.jobs[0].stage, "blocked"); assert.equal(f.renders(), 0);
+});
+
+test("expired and old cache entries are evicted but immutable job provenance remains", async () => {
+  const f = fixture();
+  let state = await runProductionCycle(f.state(), [task], f.deps, { now });
+  const originalEvidence = structuredClone(state.jobs[0].sources);
+  state.candidates[0].discoveredAt = new Date(+now - 8 * 86400_000).toISOString();
+  state.candidates.push({ ...source, id: "expired", rightsExpiresAt: new Date(+now - 1).toISOString() });
+  let seen: string[] = [];
+  state = await runProductionCycle(state, [], { ...f.deps, discover: async (_cursor, ids) => {
+    seen = ids; return { nextCursor: 1, candidates: [{ ...source, id: "new-source" }] };
+  } }, { now });
+  assert.deepEqual(state.candidates.map(s => s.id), ["new-source"]);
+  assert.deepEqual(state.jobs[0].sources, originalEvidence);
+  assert.ok(seen.includes(source.id)); assert.equal(state.jobs.length, 1); assert.equal(f.uploads(), 1);
+});
 test("reveal copy cannot bypass prohibited terms or claim evidence", async () => {
   for (const reveal of ["Join guestlist tonight", "Complimentary entry tonight", "FREE tonight"]) {
     const f = fixture();
