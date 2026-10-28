@@ -35,6 +35,7 @@ export interface Job { id: string; day: string; network: Network; slot: number; 
   state: "planned" | "submitting" | "scheduled" | "uncertain" | "expired" | "blocked";
   receipt?: string; attempts: number; nextAttemptAt?: string; lastReconciledAt?: string; reason?: string; }
 export interface State { version: 1; jobs: Job[]; lastCycleAt?: string; lastError?: string;
+  calendarAudit?: Awaited<ReturnType<typeof import("./kong-calendar-audit").auditKongCalendar>>;
   selectionDecisions?: SelectionDecision[];
   learning?: LearningLedger; publishedCreatives?: PublishedCreative[];
   learningCheckedAt?: string; learningError?: string;

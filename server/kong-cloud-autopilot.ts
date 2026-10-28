@@ -1,4 +1,5 @@
 import { Pool } from "pg";
+import { auditKongCalendar } from "./kong-calendar-audit";
 import { planRollingEditorial, type EditorialPlanInput } from "./kong-editorial-planner";
 import type { Express } from "express";
 import { resolveCurrentUserId } from "./user-context";
@@ -97,6 +98,7 @@ export function createDelivery(env: Env, fetcher: typeof fetch = fetch): Deliver
 }
 
 export interface KongRuntimeOptions {
+  auditCalendar?: typeof auditKongCalendar;
   production?: { dependencies: Omit<ProductionDependencies, "save">;
     tasks?(state: ProductionState, now: Date): Promise<EditorialTask[]>;
     editorial?: Omit<EditorialPlanInput, "now" | "targetDay">; maxJobs?: number };
@@ -127,6 +129,7 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
         catch (error) { persistenceFailed = true; throw error; }
       };
       const now = nowAt();
+      let calendarChanged = false;
       lastError = undefined;
       // Durable append completes before the active JSON row is trimmed. A crash
       // between these saves replays the same archive IDs without losing evidence.
@@ -160,7 +163,7 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
         .sort((a, b) => (a.lastReconciledAt || "").localeCompare(b.lastReconciledAt || "")).slice(0, 10)) {
         job.lastReconciledAt = now.toISOString();
         await save();
-        try { await deliverJob(job, delivery, save, now); } catch { if (persistenceFailed) throw Error("persistence_failed"); lastError = "metricool_reconciliation_failed"; }
+        try { calendarChanged = true; await deliverJob(job, delivery, save, now); } catch { if (persistenceFailed) throw Error("persistence_failed"); lastError = "metricool_reconciliation_failed"; }
       }
       // Production shares this DB lease and row. No local heartbeat or second
       // process can race its upload intents when every worker uses this lock.
@@ -212,6 +215,7 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
           try {
             approvedUrl(job.asset.mediaUrl, origins);
             await (options.verifyMedia || verifyImmutableMedia)(job.asset.mediaUrl, job.asset.sha256, origins, fetcher);
+            calendarChanged = true;
             await deliverJob(job, delivery, save, now);
           } catch {
             if (persistenceFailed) throw Error("persistence_failed");
@@ -220,6 +224,14 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
             await save();
           }
         }
+      }
+      // Read-only audit after mutations: local receipts are not current coverage.
+      if (canReadReceipts && ready.verifiedNetworks.length && (calendarChanged || !state.calendarAudit
+        || ready.verifiedNetworks.some(n => !state.calendarAudit?.verifiedNetworks?.includes(n))
+        || +now - Date.parse(state.calendarAudit.checkedAt) >= 3600_000)) {
+        state.calendarAudit = await (options.auditCalendar || auditKongCalendar)({ now, jobs: state.jobs,
+          token: env.METRICOOL_USER_TOKEN!, userId: env.METRICOOL_USER_ID!, verifiedNetworks: ready.verifiedNetworks }, fetcher);
+        await save();
       }
       lastCycleAt = state.lastCycleAt;
     } catch { lastError = "cycle_failed_check_catalog_database_and_provider"; }
@@ -244,7 +256,11 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
         learningStatus: { collection: state?.publishedCreatives?.length ? "registered_posts_only" : "waiting_for_verified_publication_registry",
           lastCheckedAt:state?.learningCheckedAt, error:state?.learningError,
           reports:state?.learning ? networks.flatMap(network => (["24h","72h","7d"] as const).map(horizon => analyzeLearning(state.learning!,network,horizon,new Date()))) : [] },
-        localLedgerCoverage: state ? coverage(state, new Date()) : null, remoteCoverageVerified: false,
+        localLedgerCoverage: state ? coverage(state, nowAt()) : null,
+        calendarAudit: state?.calendarAudit || null,
+        remoteCoverageVerified: Boolean(networks.every(n => verifiedNetworks(env).includes(n) && state?.calendarAudit?.verifiedNetworks?.includes(n)) && state?.calendarAudit?.complete && +nowAt() >= Date.parse(state.calendarAudit.checkedAt)
+          && state.calendarAudit.days.every(day => networks.every(n => day.networks[n].missing !== null))
+          && +nowAt() - Date.parse(state.calendarAudit.checkedAt) < 3600_000),
         receipts: state?.jobs.filter(j => j.receipt).map(j => ({ id: j.id, receipt: j.receipt, at: j.at })) || [] };
     },
   };

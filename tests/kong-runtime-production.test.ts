@@ -1,6 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createKongCloudRuntime, readiness, type KongRuntimeOptions } from "../server/kong-cloud-autopilot";
+import { createKongCloudRuntime as createRuntime, readiness, type KongRuntimeOptions } from "../server/kong-cloud-autopilot";
+import { auditKongCalendar } from "../server/kong-calendar-audit";
+const createKongCloudRuntime: typeof createRuntime = (env, options = {}) => createRuntime(env, {
+  auditCalendar: input => auditKongCalendar(input, async () => new Response(JSON.stringify({ data: [] }))), ...options });
 import { emptyState, type State, type Asset, type Job } from "../server/kong-autopilot-core";
 import { emptyProductionState, type EditorialTask } from "../server/kong-production-pipeline";
 const now = new Date("2026-10-28T12:00:00Z"), hash = "a".repeat(64);
@@ -89,6 +92,40 @@ test("readiness distinguishes absent adapters and configured production", () => 
   const db = database(); const ready = readiness(env, production(db, { uploads: 0 }));
   assert.equal(ready.productionEnabled, true); assert.equal(ready.rendering, "adapter_configured");
   assert.equal(ready.review, "pending_review_adapter");
+});
+test("remote audit persists with publishing disabled, throttles and expires honestly", async () => {
+  const db = database(); let clock = new Date(now), reads = 0;
+  const runtime = createKongCloudRuntime({ ...env, KONG_AUTOPUBLISH_ENABLED: "false" }, {
+    pool: db.pool, now: () => clock,
+    auditCalendar: input => { reads++; return auditKongCalendar(input, async () => new Response(JSON.stringify({ data: [] }))); }
+  });
+  await runtime.cycle();
+  assert.equal(db.state().calendarAudit?.days[0].networks.tiktok.missing, 5);
+  assert.equal((await runtime.status()).remoteCoverageVerified, true);
+  await runtime.cycle(); assert.equal(reads, 1);
+  clock = new Date(+now + 3600_000);
+  assert.equal((await runtime.status()).remoteCoverageVerified, false);
+  await runtime.cycle(); assert.equal(reads, 2);
+});
+test("audit outage does not falsely verify local receipts", async () => {
+  const db = database();
+  const runtime = createKongCloudRuntime({ ...env, KONG_AUTOPUBLISH_ENABLED: "false" }, {
+    pool: db.pool, now: () => now,
+    auditCalendar: input => auditKongCalendar(input, async () => { throw Error("offline"); })
+  });
+  await runtime.cycle();
+  assert.equal((await runtime.status()).remoteCoverageVerified, false);
+  assert.equal(db.state().calendarAudit?.days[0].networks.facebook.missing, null);
+});
+test("adding a verified network invalidates single-network cached audit", async () => {
+  const db = database();
+  await createKongCloudRuntime({ ...env, KONG_AUTOPUBLISH_ENABLED: "false", KONG_METRICOOL_ACCOUNTS_VERIFIED: "tiktok" }, {
+    pool: db.pool, now: () => now }).cycle();
+  const runtime = createKongCloudRuntime({ ...env, KONG_AUTOPUBLISH_ENABLED: "false" }, { pool: db.pool, now: () => now });
+  assert.equal((await runtime.status()).remoteCoverageVerified, false);
+  await runtime.cycle();
+  assert.equal((await runtime.status()).remoteCoverageVerified, true);
+  assert.equal(db.state().calendarAudit?.days[0].networks.facebook.missing, 5);
 });
 test("configured runtime uses built-in rolling planner and persists seventy dated tasks", async () => {
   const initial = emptyState(); initial.production = emptyProductionState();
