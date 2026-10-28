@@ -1,8 +1,9 @@
 import { Pool } from "pg";
 import type { Express } from "express";
 import { resolveCurrentUserId } from "./user-context";
+import { verifyImmutableMedia } from "./kong-media-store";
 import { callMetricoolMcpTool, formatMetricoolMcpDate } from "./blackroom-metricool-bridge";
-import { assetProblem, catalogSchema, contentHash, coverage, deliverJob, emptyState, fillPlan, isKongNetwork, networks, type Delivery, type Job, type State } from "./kong-autopilot-core";
+import { assetProblem, catalogSchema, coverage, deliverJob, emptyState, fillPlan, isKongNetwork, networks, type Delivery, type Job, type State } from "./kong-autopilot-core";
 
 const BRAND = 6475033;
 const INTERVAL = 15 * 60_000;
@@ -128,8 +129,7 @@ export function createKongCloudRuntime(env: Env = process.env) {
           if (job.nextAttemptAt && Date.parse(job.nextAttemptAt) > +now) continue;
           try {
             approvedUrl(job.asset.mediaUrl, origins);
-            const bytes = await bytesAt(job.asset.mediaUrl, 100_000_000);
-            if (contentHash(bytes) !== job.asset.sha256) { job.state = "blocked"; job.reason = "media_hash_changed"; await save(); continue; }
+            await verifyImmutableMedia(job.asset.mediaUrl, job.asset.sha256, origins);
             await deliverJob(job, delivery, save, now);
           } catch {
             job.nextAttemptAt = new Date(+now + INTERVAL).toISOString();

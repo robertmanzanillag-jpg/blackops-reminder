@@ -30,6 +30,14 @@ Event, app, table, guestlist, yacht and car claims require a source URL, verifie
 
 ## Remaining activation work
 
+### Online source and durable-media components (not yet a production pipeline)
+
+`kong-online-sources.ts` supports the current Pexels video-search API with rotating queries, used-source IDs, provenance and license references. It requires an explicitly configured API key and makes no request without it. An alternative owner-authorized online manifest requires rights evidence and expiry. Discovery is not visual clearance: remove source audio, check depiction/brand restrictions and review the finished creative before publication. No arbitrary social-video download is authorized by this adapter.
+
+`kong-media-store.ts` reuses existing Google Drive upload/sharing helpers, copies reviewed bytes into a hash-named temporary file, and checks the complete anonymous MP4 response against the render hash. The scheduler now uses this verifier, permitting only exact configured origins through at most four redirects. Drive upload/sharing calls are bounded, but a timeout is an **unknown write outcome**: reconcile the hash filename before any retry. The future orchestration layer must persist upload intent and receipt. The module alone does not establish a working Drive connection, quota, zero incremental cost or restart-safe orchestration.
+
+The local codebase map refresh was attempted in the isolated archive and could not run because it requires a Git checkout. Regenerate it in the PR checkout before merge; no inaccurate replacement map was generated.
+
 `server/kong-content-learning.ts` now provides a pure, tested learning component, **not yet wired to this runtime**. It preserves unavailable metrics separately from zero, deduplicates snapshots, compares networks separately at 24–26h, 72–78h and 168–180h, and requires at least three group posts plus five comparison posts. Creative recommendations reserve at least 40% for exploration. These descriptive comparisons do not prove causality or guarantee virality. A provider adapter and durable snapshot collection are still needed; old lifetime totals cannot become historical 24-hour snapshots.
 
 1. Configure a cloud catalog with real licensed footage **and music** and verified current offers. Finding public viral clips alone does not establish reuse rights.
