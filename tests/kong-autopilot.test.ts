@@ -26,6 +26,13 @@ test("rolling plan creates distinct five daily jobs per network and handles DST"
 test("short catalog reports gaps by leaving jobs absent, never duplicates content", () => {
   assert.equal(fillPlan(emptyState(), [asset()], now, convert).jobs.length, 2);
 });
+test("future-day creative cannot silently fill a different day", () => {
+  const a = { ...asset(), plannedDay: "2026-11-02" };
+  const state = fillPlan(emptyState(), [a], now, convert);
+  assert.equal(state.jobs.length, 2);
+  assert.ok(state.jobs.every(job => job.day === a.plannedDay));
+  assert.equal(assetProblem({ ...a, plannedDay: "2026-02-30" }, now), "invalid_asset");
+});
 test("pre-submit blocked slots recover when fresh authorized supply appears", () => {
   const state = emptyState(); const blocked = job(); blocked.id = "kong:2026-10-28:tiktok:0"; blocked.state = "blocked"; state.jobs.push(blocked);
   fillPlan(state, [asset(2)], now, convert);

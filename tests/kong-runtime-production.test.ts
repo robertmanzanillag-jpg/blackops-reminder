@@ -15,15 +15,17 @@ const env = { DATABASE_URL: "injected-only", KONG_OWNER_USER_ID: "owner", KONG_M
   KONG_AUTOPUBLISH_ENABLED: "true", KONG_METRICOOL_ACCOUNTS_VERIFIED: "tiktok,facebook", KONG_PRODUCTION_ENABLED: "true" };
 function database(initial: State = emptyState()) {
   let stored = structuredClone(initial), locked = false, rejectSave: ((state: State) => boolean) | undefined;
+  const archives = new Map<string, unknown>();
   const query = async (sql: string, args?: any[]) => {
     if (sql.includes("pg_try_advisory_lock")) { if (locked) return { rows: [{ locked: false }] }; locked = true; return { rows: [{ locked: true }] }; }
     if (sql.includes("pg_advisory_unlock")) { locked = false; return { rows: [] }; }
     if (sql.startsWith("SELECT state")) return { rows: [{ state: structuredClone(stored) }] };
-    if (sql.startsWith("INSERT INTO")) { const next = JSON.parse(args![0]); if (rejectSave?.(next)) throw Error("db_failed"); stored = next; }
+    if (sql.startsWith("INSERT INTO kong_production_archive")) { assert.equal(locked, true); if (!archives.has(args![0])) archives.set(args![0], JSON.parse(args![2])); }
+    if (sql.startsWith("INSERT INTO kong_cloud_autopilot")) { const next = JSON.parse(args![0]); if (rejectSave?.(next)) throw Error("db_failed"); stored = next; }
     return { rows: [] };
   };
   return { pool: { query, connect: async () => ({ query, release() {} }), end: async () => {} } as unknown as NonNullable<KongRuntimeOptions["pool"]>,
-    state: () => structuredClone(stored), isLocked: () => locked, reject: (fn: (state: State) => boolean) => { rejectSave = fn; } };
+    archives, state: () => structuredClone(stored), isLocked: () => locked, reject: (fn: (state: State) => boolean) => { rejectSave = fn; } };
 }
 function transport() {
   const created = new Map<string, string>();
@@ -87,4 +89,36 @@ test("readiness distinguishes absent adapters and configured production", () => 
   const db = database(); const ready = readiness(env, production(db, { uploads: 0 }));
   assert.equal(ready.productionEnabled, true); assert.equal(ready.rendering, "adapter_configured");
   assert.equal(ready.review, "pending_review_adapter");
+});
+test("configured runtime uses built-in rolling planner and persists seventy dated tasks", async () => {
+  const initial = emptyState(); initial.production = emptyProductionState();
+  const fixtureDb = database(), p = production(fixtureDb, { uploads: 0 });
+  const discovered = await p.dependencies.discover!(0, []);
+  initial.production.candidates = Array.from({ length: 110 }, (_, i) => ({ ...discovered.candidates[0], id: `rolling-${i}`, durationSeconds: 12 }));
+  const db = database(initial), t = transport();
+  delete p.tasks;
+  p.editorial = { musicRights: rights, footageRights: rights, authorizedForPublicDistribution: true };
+  p.dependencies.render = async () => { throw Error("test_render_offline"); };
+  const runtime = createKongCloudRuntime(env, { pool: db.pool, now: () => now, production: p, ...t });
+  await runtime.cycle();
+  assert.equal(db.state().production?.jobs.length, 70);
+  assert.equal(new Set(db.state().production?.jobs.map(j => j.task.plannedDay)).size, 14);
+  assert.equal((await runtime.status()).editorialPlanning, "rolling_14_days");
+  await runtime.cycle();
+  assert.equal(db.state().production?.jobs.length, 70);
+  assert.equal(t.created.size, 0);
+});
+
+test("runtime archives under lease before trimming and safely recovers trim persistence failure", async () => {
+  const state = emptyState(); state.production = emptyProductionState();
+  state.production.jobs.push({ id: asset.id, stage: "ready", createdAt: "2026-09-01T00:00:00Z", updatedAt: "2026-09-02T00:00:00Z",
+    task: { id: "old" }, sources: [{ rightsEvidence: "preserved" }], receipt: { fileId: "old-receipt" } } as any);
+  state.production.assets.push(asset);
+  const db = database(state), t = transport();
+  db.reject(next => next.production?.jobs.length === 0);
+  await createKongCloudRuntime(env, { pool: db.pool, now: () => now, ...t }).cycle();
+  assert.equal(db.archives.size, 1); assert.equal(db.state().production?.jobs.length, 1); assert.equal(t.created.size, 0);
+  db.reject(() => false);
+  await createKongCloudRuntime(env, { pool: db.pool, now: () => now, ...t }).cycle();
+  assert.equal(db.archives.size, 1); assert.equal(db.state().production?.jobs.length, 0); assert.equal(db.state().production?.assets.length, 0);
 });

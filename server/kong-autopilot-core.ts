@@ -13,6 +13,10 @@ const url = z.string().url().refine(value => new URL(value).protocol === "https:
 const rights = z.object({ evidenceUrl: url, confirmedBy: z.string().min(1), expiresAt: iso });
 export const assetSchema = z.object({
   id: z.string().regex(/^[a-zA-Z0-9_-]{1,100}$/), sourceUrl: url, mediaUrl: url,
+  plannedDay: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(day => {
+    const timestamp = Date.parse(`${day}T12:00:00Z`);
+    return Number.isFinite(timestamp) && new Date(timestamp).toISOString().slice(0, 10) === day;
+  }).optional(),
   sha256: z.string().regex(/^[a-f0-9]{64}$/), family: z.enum(families), hook: z.string().min(1).max(180),
   caption: z.string().min(1).max(2000), title: z.string().min(1).max(100),
   durationSeconds: z.number().min(3).max(90), width: z.literal(1080), height: z.literal(1920),
@@ -67,7 +71,7 @@ export function fillPlan(state: State, assets: Asset[], now: Date, toOffset: (wa
     const hooks = new Set(recent.map(j => j.asset.hook.toLowerCase().trim()));
     const daily = recent.filter(j => j.day === day);
     const previous = recent.at(-1)?.asset.family;
-    const asset = assets.find(a => !used.has(a.sha256) && !hooks.has(a.hook.toLowerCase().trim())
+    const asset = assets.find(a => (!a.plannedDay || a.plannedDay === day) && !used.has(a.sha256) && !hooks.has(a.hook.toLowerCase().trim())
       && a.family !== previous && daily.filter(j => j.asset.family === a.family).length < 2
       && !assetProblem(a, new Date(at), now));
     if (!asset) continue;

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { planDailyEditorial } from "../server/kong-editorial-planner";
+import { planDailyEditorial, planRollingEditorial } from "../server/kong-editorial-planner";
 import type { ProductionState } from "../server/kong-production-pipeline";
 import type { OnlineFootage } from "../server/kong-online-sources";
 const now = new Date("2026-10-28T14:00:00Z");
@@ -38,10 +38,50 @@ test("persisted daily tasks prevent overfill; fourteen-day source/hook history p
   const s = state(), plan = planDailyEditorial(s, options);
   s.jobs = plan.tasks.map(task => ({ id: task.id, task, sources: [], stage: "queued", createdAt: now.toISOString(), updatedAt: now.toISOString() }));
   assert.equal(planDailyEditorial(s, options).tasks.length, 0);
-  s.jobs.forEach(j => { j.createdAt = "2026-10-27T14:00:00Z"; });
+  s.jobs.forEach(j => { j.createdAt = "2026-10-27T14:00:00Z"; j.task.plannedDay = "2026-10-27"; });
   const next = planDailyEditorial(s, options);
   assert.equal(next.tasks.length, 5);
   assert.ok(next.tasks.every(t => !plan.tasks.some(p => p.hook === t.hook || p.sourceIds.some(id => t.sourceIds.includes(id)))));
+});
+test("rolling horizon fills70 slots deterministically and persisted tasks prevent overfill", () => {
+  const s = state(); s.candidates = Array.from({ length: 140 }, (_, i) => source(i));
+  const original = JSON.stringify(s), plan = planRollingEditorial(s, options);
+  assert.equal(plan.tasks.length, 70); assert.equal(plan.missing, 0); assert.equal(plan.days.length, 14);
+  assert.ok(plan.days.every(d => d.tasks.length === 5));
+  assert.equal(plan.days[13].day, "2026-11-10");
+  assert.equal(new Set(plan.tasks.map(t => t.hook)).size, 70);
+  assert.equal(new Set(plan.tasks.flatMap(t => t.sourceIds)).size, plan.tasks.flatMap(t => t.sourceIds).length);
+  assert.deepEqual(plan, planRollingEditorial(s, options)); assert.equal(JSON.stringify(s), original);
+  s.jobs = plan.tasks.map(task => ({ id: task.id, task, sources: [], stage: "queued", createdAt: now.toISOString(), updatedAt: now.toISOString() }));
+  assert.equal(planRollingEditorial(s, options).tasks.length, 0);
+  assert.equal(planRollingEditorial(s, options).missing, 0);
+});
+test("blocked source is replaced with new source and cannot poison the exact task digest again", () => {
+  const s = state(), first = planDailyEditorial(s, options);
+  s.jobs = first.tasks.map((task, i) => ({ id: task.id, task, sources: [], stage: i === 0 ? "blocked" : "ready", createdAt: now.toISOString(), updatedAt: now.toISOString() }));
+  const replacement = planDailyEditorial(s, options);
+  assert.equal(replacement.tasks.length, 1); assert.equal(replacement.missing, 0);
+  assert.notEqual(replacement.tasks[0].id, first.tasks[0].id);
+  assert.ok(replacement.tasks.every(t => !t.sourceIds.some(id => first.tasks[0].sourceIds.includes(id))));
+});
+test("future target requires rights through end of day and freshness uses actual now", () => {
+  const s = state(); s.candidates = [source(0)];
+  const targetDay = "2026-11-10";
+  assert.equal(planDailyEditorial(s, { ...options, targetDay }).tasks.length, 1);
+  s.candidates[0].rightsExpiresAt = "2026-11-10T20:00:00Z";
+  assert.equal(planDailyEditorial(s, { ...options, targetDay }).tasks.length, 0);
+  s.candidates[0] = source(0);
+  assert.equal(planDailyEditorial(s, { ...options, targetDay, musicRights: { ...rights, expiresAt: "2026-11-10T20:00:00Z" } }).tasks.length, 0);
+  s.candidates[0].discoveredAt = "2026-11-10T10:00:00Z";
+  assert.equal(planDailyEditorial(s, { ...options, targetDay }).tasks.length, 0);
+});
+test("rolling events retain real verification timestamp and expire before future target days", () => {
+  const s = state(); s.candidates = Array.from({ length: 140 }, (_, i) => source(i));
+  const event = { title: "Friday Night Session", startsAt: "2026-10-30T23:00:00Z", sourceUrl: "https://kongnightlife.com/events/friday", verifiedAt: now.toISOString(), validUntil: "2026-10-31T04:00:00Z" };
+  const plan = planRollingEditorial(s, { ...options, events: [event] });
+  assert.ok(plan.tasks.some(t => t.facts));
+  assert.ok(plan.tasks.filter(t => t.facts).every(t => t.facts!.verifiedAt === now.toISOString() && t.plannedDay! <= "2026-10-30"));
+  assert.ok(planRollingEditorial(s, { ...options, events: [{ ...event, verifiedAt: "2026-10-26T10:00:00Z" }] }).tasks.every(t => !t.facts));
 });
 test("unverified/stale events never become claims; concrete verified event preserves source/date", () => {
   const event = { title: "Friday Night Session", startsAt: "2026-10-30T23:00:00Z", sourceUrl: "https://kongnightlife.com/events/friday", verifiedAt: now.toISOString(), validUntil: "2026-10-31T00:00:00Z" };

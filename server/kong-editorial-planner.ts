@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
-import { dayInNewYork, type Asset } from "./kong-autopilot-core";
+import { dayInNewYork, dayPlus, type Asset } from "./kong-autopilot-core";
+import { formatMetricoolMcpDate } from "./blackroom-metricool-bridge";
 import type { EditorialTask, ProductionState } from "./kong-production-pipeline";
 import type { OnlineFootage } from "./kong-online-sources";
 import { wrapRenderText } from "./kong-cloud-renderer";
@@ -13,6 +14,8 @@ export type VerifiedEditorialEvent = z.infer<typeof eventSchema>;
 export interface EditorialPlanInput {
   now: Date; musicRights?: Rights; footageRights?: Rights; authorizedForPublicDistribution?: boolean;
   events?: unknown[];
+  /** Calendar target only. Rights/facts freshness always uses the real `now`. */
+  targetDay?: string;
 }
 const openers = ["Your group", "The dancefloor", "Tonight's plan", "The last track", "That one friend", "The first drop", "This weekend", "The group chat"];
 const endings = ["understood the assignment", "changed the whole mood", "found a second wind", "needed one more track", "made it past midnight", "had other plans", "picked the right moment", "turned into a story", "took the scenic route", "kept the night going"];
@@ -37,23 +40,31 @@ function sourceEligible(source: OnlineFootage, now: Date) {
  * persists returned tasks before requesting another plan. No provider mutations. */
 export function planDailyEditorial(state: ProductionState, input: EditorialPlanInput) {
   if (state.version !== 1 || !Number.isFinite(+input.now)) throw Error("invalid_editorial_state_or_clock");
-  const now = input.now, day = dayInNewYork(now), tasks: EditorialTask[] = [];
+  const now = input.now, today = dayInNewYork(now), day = input.targetDay || today, tasks: EditorialTask[] = [];
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day < today || day > dayPlus(today, 13)) throw Error("invalid_editorial_target_day");
+  const targetStart = new Date(formatMetricoolMcpDate(`${day}T00:00:00`, "America/New_York"));
+  const targetEnd = new Date(+new Date(formatMetricoolMcpDate(`${dayPlus(day, 1)}T00:00:00`, "America/New_York")) - 1);
   const experiments: { taskId: string; classification: "exploration" | "baseline"; hypothesis: string }[] = [];
   const reasons: string[] = [];
-  if (!validRights(input.musicRights, now) || !validRights(input.footageRights, now) || input.authorizedForPublicDistribution !== true)
+  if (!validRights(input.musicRights, targetEnd) || !validRights(input.footageRights, targetEnd) || input.authorizedForPublicDistribution !== true)
     return { day, tasks, experiments, missing: 5, reasons: ["recorded_footage_music_and_distribution_authorization_required"] };
-  const recent = state.jobs.filter(j => +now - Date.parse(j.createdAt) >= 0 && +now - Date.parse(j.createdAt) < 14 * 86400_000 && j.stage !== "blocked");
-  const todays = recent.filter(j => dayInNewYork(new Date(j.createdAt)) === day);
+  const jobDay = (j: ProductionState["jobs"][number]) => j.task.plannedDay || dayInNewYork(new Date(j.createdAt));
+  const recent = state.jobs.filter(j => jobDay(j) >= dayPlus(day, -13) && jobDay(j) <= dayPlus(day, 13));
+  const eligibleTask = (j: ProductionState["jobs"][number]) => j.stage !== "blocked" && j.task.authorizedForPublicDistribution
+    && validRights(j.task.musicRights, targetEnd) && validRights(j.task.footageRights, targetEnd)
+    && (!j.task.facts || (Date.parse(j.task.facts.validUntil) > +targetEnd && Date.parse(j.task.facts.verifiedAt) <= +now
+      && +now - Date.parse(j.task.facts.verifiedAt) <= 86400_000));
+  const todays = recent.filter(j => jobDay(j) === day && eligibleTask(j));
   const remaining = Math.max(0, 5 - todays.length);
-  const usedSources = new Set(recent.flatMap(j => j.task.sourceIds));
+  const usedSources = new Set([...recent, ...state.jobs.filter(j => j.stage === "blocked")].flatMap(j => j.task.sourceIds));
   const usedHooks = new Set(recent.map(j => normalize(j.task.hook)));
-  let previousLayout = recent.at(-1)?.task.layout;
-  const candidates = [...new Map(state.candidates.filter(s => sourceEligible(s, now)).map(s => [s.id, s])).values()]
+  let previousLayout = recent.filter(j => j.stage !== "blocked" && jobDay(j) <= day).at(-1)?.task.layout;
+  const candidates = [...new Map(state.candidates.filter(s => sourceEligible(s, now) && Date.parse(s.rightsExpiresAt) > +targetEnd).map(s => [s.id, s])).values()]
     .sort((a, b) => b.discoveredAt.localeCompare(a.discoveredAt) || a.id.localeCompare(b.id));
   const eligibleEvents = (input.events || []).slice(0, 50).flatMap(raw => {
     const parsed = eventSchema.safeParse(raw); if (!parsed.success) return [];
     const e = parsed.data;
-    if (Date.parse(e.startsAt) <= +now || Date.parse(e.validUntil) <= +now || Date.parse(e.validUntil) < Date.parse(e.startsAt)
+    if (Date.parse(e.startsAt) <= Math.max(+now, +targetStart) || Date.parse(e.validUntil) <= +targetEnd || Date.parse(e.validUntil) < Date.parse(e.startsAt)
       || +now - Date.parse(e.verifiedAt) < 0 || +now - Date.parse(e.verifiedAt) > 86400_000 || !safeCopy(e.title)) return [];
     try { wrapRenderText(e.title); return [e]; } catch { return []; }
   });
@@ -82,7 +93,7 @@ export function planDailyEditorial(state: ProductionState, input: EditorialPlanI
       caption = `${e.title} — ${eventDate}. Event details: ${e.sourceUrl}. Discover your next night with KONG: https://kongnightlife.com`;
     }
     const durationSeconds = layout === "montage" ? 9 : Math.min(12, Math.floor(sources[0].durationSeconds ?? 9));
-    const task: EditorialTask = { id: `kong-${day}-${slot}-${hash(sources.map(s => s.id).join("|") + hook).slice(0, 12)}`,
+    const task: EditorialTask = { id: `kong-${day}-${slot}-${hash(sources.map(s => s.id).join("|") + hook).slice(0, 12)}`, plannedDay: day,
       sourceIds: sources.map(s => s.id), layout, hook, reveal: layout === "reveal" ? reveals[slot % reveals.length] : undefined,
       durationSeconds, title: hook, caption, family, facts,
       footageRights: { ...input.footageRights, expiresAt: new Date(Math.min(Date.parse(input.footageRights.expiresAt), ...sources.map(s => Date.parse(s.rightsExpiresAt)))).toISOString() },
@@ -96,4 +107,22 @@ export function planDailyEditorial(state: ProductionState, input: EditorialPlanI
       hypothesis: tasks.length % 2 === 1 ? "Test a new hook with a controlled layout; compare equal-age outcomes by network." : "Maintain a baseline format for comparison; this is not a claimed historical winner." });
   }
   return { day, tasks, experiments, missing: Math.max(0, 5 - todays.length - tasks.length), reasons: [...new Set(reasons)] };
+}
+
+/** Generates a bounded rolling horizon without pretending future verification.
+ * Synthetic queued rows exist only in this local copy to reserve source/hook
+ * choices; callers persist returned tasks through the production ledger. */
+export function planRollingEditorial(state: ProductionState, input: EditorialPlanInput) {
+  const virtual: ProductionState = { ...state, jobs: [...state.jobs] };
+  const tasks: EditorialTask[] = [];
+  const days: ReturnType<typeof planDailyEditorial>[] = [];
+  const today = dayInNewYork(input.now);
+  for (let offset = 0; offset < 14; offset++) {
+    const plan = planDailyEditorial(virtual, { ...input, targetDay: dayPlus(today, offset) });
+    days.push(plan); tasks.push(...plan.tasks);
+    for (const task of plan.tasks) virtual.jobs.push({ id: `planned-${task.id}`, task,
+      sources: state.candidates.filter(s => task.sourceIds.includes(s.id)), stage: "queued",
+      createdAt: input.now.toISOString(), updatedAt: input.now.toISOString() });
+  }
+  return { asOf: input.now.toISOString(), tasks, days, missing: days.reduce((total, d) => total + d.missing, 0) };
 }

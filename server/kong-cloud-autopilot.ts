@@ -1,10 +1,12 @@
 import { Pool } from "pg";
+import { planRollingEditorial, type EditorialPlanInput } from "./kong-editorial-planner";
 import type { Express } from "express";
 import { resolveCurrentUserId } from "./user-context";
 import { verifyImmutableMedia } from "./kong-media-store";
 import { collectMetricoolObservations, dueLearningRegistry } from "./kong-metricool-learning";
 import { analyzeLearning, emptyLearningLedger, ingestLearning } from "./kong-content-learning";
 import { emptyProductionState, runProductionCycle, type EditorialTask, type ProductionDependencies, type ProductionState } from "./kong-production-pipeline";
+import { appendProductionArchive, archiveProductionHistory } from "./kong-production-archive";
 import { callMetricoolMcpTool, formatMetricoolMcpDate } from "./blackroom-metricool-bridge";
 import { assetProblem, catalogSchema, coverage, deliverJob, emptyState, fillPlan, isKongNetwork, networks, type Asset, type Delivery, type Job, type State } from "./kong-autopilot-core";
 
@@ -26,6 +28,7 @@ export function readiness(env: Env, production?: KongRuntimeOptions["production"
     sourceBlockers: !production && !env.KONG_CATALOG_URL ? ["production_not_configured"] : [],
     discovery: production?.dependencies.discover ? "adapter_configured" : "not_configured",
     rendering: production ? "adapter_configured" : "not_configured",
+    editorialPlanning: production?.tasks ? "custom_provider" : production?.editorial ? "rolling_14_days" : "not_configured",
     productionEnabled: env.KONG_PRODUCTION_ENABLED === "true" && Boolean(production),
     review: production?.dependencies.review ? "adapter_configured" : "pending_review_adapter",
     learning: "partial_registry_gated", paidAiCalls: 0 };
@@ -94,7 +97,8 @@ export function createDelivery(env: Env, fetcher: typeof fetch = fetch): Deliver
 
 export interface KongRuntimeOptions {
   production?: { dependencies: Omit<ProductionDependencies, "save">;
-    tasks(state: ProductionState, now: Date): Promise<EditorialTask[]>; maxJobs?: number };
+    tasks?(state: ProductionState, now: Date): Promise<EditorialTask[]>;
+    editorial?: Omit<EditorialPlanInput, "now" | "targetDay">; maxJobs?: number };
   pool?: Pick<Pool, "connect" | "query" | "end">;
   fetch?: typeof fetch; delivery?: Delivery; now?: () => Date;
   verifyMedia?: typeof verifyImmutableMedia;
@@ -123,6 +127,12 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
       };
       const now = nowAt();
       lastError = undefined;
+      // Durable append completes before the active JSON row is trimmed. A crash
+      // between these saves replays the same archive IDs without losing evidence.
+      if (state.production) await archiveProductionHistory(state.production, state.jobs, {
+        archive: records => appendProductionArchive(client!, records),
+        saveActive: async production => { state.production = production; await save(); },
+      }, now);
       // Analytics runs independently of catalog availability and publishing flags.
       // Only actual published IDs/URLs may label metrics; scheduler IDs are not enough.
       if (env.METRICOOL_USER_TOKEN && state.publishedCreatives?.length &&
@@ -158,7 +168,11 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
         try {
           const current = state.production || emptyProductionState();
           let tasks: EditorialTask[] = [], tasksUnavailable = false;
-          try { tasks = await options.production.tasks(structuredClone(current), now); }
+          try {
+            if (options.production.tasks) tasks = await options.production.tasks(structuredClone(current), now);
+            else if (options.production.editorial) tasks = planRollingEditorial(current, { ...options.production.editorial, now }).tasks;
+            else tasksUnavailable = true;
+          }
           catch { tasksUnavailable = true; }
           await runProductionCycle(current, tasks, { ...options.production.dependencies,
             save: async production => { state.production = production; await save(); } }, { now, maxJobs: options.production.maxJobs });
@@ -223,6 +237,7 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
       }
       return { ...readiness(env, options.production), running, lastCycleAt: state?.lastCycleAt || lastCycleAt, lastError,
         productionStatus: { jobs: state?.production?.jobs.length || 0, reviewedAssets: state?.production?.assets.length || 0,
+          archivePolicy: "terminal_older_than_30d_durable_append_before_trim",
           pendingQa: state?.production?.jobs.filter(j => j.stage === "qa_pending").length || 0,
           error: state?.productionError, nextAttemptAt: state?.productionNextAttemptAt, catalogError: state?.catalogError },
         learningStatus: { collection: state?.publishedCreatives?.length ? "registered_posts_only" : "waiting_for_verified_publication_registry",

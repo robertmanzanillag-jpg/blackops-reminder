@@ -9,6 +9,7 @@ import { storeRenderedMedia } from "./kong-media-store";
 
 type Rights = Asset["footageRights"];
 export interface EditorialTask {
+  plannedDay?: string;
   id: string; sourceIds: string[]; layout: RenderInput["layout"]; hook: string; reveal?: string;
   durationSeconds: number; title: string; caption: string; family: Asset["family"];
   footageRights: Rights; musicRights: Rights; facts?: Asset["facts"];
