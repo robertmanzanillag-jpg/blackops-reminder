@@ -10,6 +10,24 @@ export interface PublishedCreative {
   network: Network; postId: string; publicUrl: string; publishedAt: string;
   family: Observation["family"]; hookStyle: string;
 }
+/** Import owner-verified public-post evidence. Scheduler IDs and naive dates are
+ * never converted into publication evidence. Conflicts abort the whole import. */
+export function mergePublishedRegistry(existing: PublishedCreative[], incoming: unknown, now: Date): PublishedCreative[] {
+  if (!Array.isArray(incoming) || incoming.length > 5000) throw Error("invalid_publication_registry");
+  const merged = new Map<string, PublishedCreative>();
+  for (const raw of [...existing, ...incoming]) {
+    const row = observationSchema.parse({ network: raw?.network, postId: raw?.postId, sourceUrl: raw?.publicUrl,
+      publishedAt: raw?.publishedAt, observedAt: now.toISOString(), family: raw?.family, hookStyle: raw?.hookStyle, metrics: {} });
+    const publicUrl = canonicalPostUrl(row.sourceUrl, row.network);
+    if (publicUrl.split("/").at(-1) !== row.postId) throw Error("public_post_id_mismatch");
+    const item: PublishedCreative = { network: row.network, postId: row.postId, publicUrl,
+      publishedAt: new Date(row.publishedAt).toISOString(), family: row.family, hookStyle: row.hookStyle };
+    const key = `${item.network}:${item.postId}`, prior = merged.get(key);
+    if (prior && JSON.stringify(prior) !== JSON.stringify(item)) throw Error("publication_registry_conflict");
+    merged.set(key, item);
+  }
+  return [...merged.values()];
+}
 /** Collect once inside each comparable age window, not hourly lifetime totals.
  * Prior history remains intact; missed windows are never backfilled with late totals. */
 export function dueLearningRegistry(registry: PublishedCreative[], ledger: LearningLedger | undefined, now: Date) {

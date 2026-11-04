@@ -39,6 +39,7 @@ export interface State { version: 1; jobs: Job[]; lastCycleAt?: string; lastErro
   selectionDecisions?: SelectionDecision[];
   learning?: LearningLedger; publishedCreatives?: PublishedCreative[];
   learningCheckedAt?: string; learningError?: string;
+  publicationRegistryError?: string;
   production?: ProductionState; productionError?: string; productionNextAttemptAt?: string; catalogError?: string; }
 export const emptyState = (): State => ({ version: 1, jobs: [] });
 export const dayInNewYork = (date: Date) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);

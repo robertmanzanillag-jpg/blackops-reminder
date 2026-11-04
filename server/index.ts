@@ -3,6 +3,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { registerBlackRoomControlRoutes } from "./blackroom-control-routes";
 import { registerKongCloudAutopilot } from "./kong-cloud-autopilot";
+import { loadKongStartup } from "./kong-startup";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startReminderScheduler } from "./reminder-scheduler";
@@ -392,7 +393,8 @@ app.use((req, res, next) => {
   await initializeBlackRoomRemoteControlPersistence();
   await registerRoutes(httpServer, app);
   registerBlackRoomControlRoutes(app);
-  registerKongCloudAutopilot(app);
+  const kongStartup = await loadKongStartup(process.env);
+  registerKongCloudAutopilot(app, { ...kongStartup.options, startupBlockers: kongStartup.blockers });
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     if (res.headersSent) return next(err);

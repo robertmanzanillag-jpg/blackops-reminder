@@ -159,3 +159,16 @@ test("runtime archives under lease before trimming and safely recovers trim pers
   await createKongCloudRuntime(env, { pool: db.pool, now: () => now, ...t }).cycle();
   assert.equal(db.archives.size, 1); assert.equal(db.state().production?.jobs.length, 0); assert.equal(db.state().production?.assets.length, 0);
 });
+test("runtime imports publication evidence before analytics and retains registry on bad replacement", async () => {
+  const db = database();
+  const published = { network: "tiktok" as const, postId: "123", publicUrl: "https://www.tiktok.com/@kongnightlife/video/123",
+    publishedAt: "2026-10-28T11:00:00Z", family: "pov" as const, hookStyle: "question" };
+  const runtime = createKongCloudRuntime({ ...env, KONG_AUTOPUBLISH_ENABLED: "false" }, {
+    pool: db.pool, now: () => now, publishedRegistry: async () => [published] });
+  await runtime.cycle();
+  assert.deepEqual(db.state().publishedCreatives, [{ ...published, publishedAt: "2026-10-28T11:00:00.000Z" }]);
+  await createKongCloudRuntime({ ...env, KONG_AUTOPUBLISH_ENABLED: "false" }, {
+    pool: db.pool, now: () => now, publishedRegistry: async () => [{ ...published, family: "humor" }] }).cycle();
+  assert.equal(db.state().publishedCreatives?.[0].family, "pov");
+  assert.equal((await runtime.status()).learningStatus.registryError, "publication_registry_import_failed");
+});

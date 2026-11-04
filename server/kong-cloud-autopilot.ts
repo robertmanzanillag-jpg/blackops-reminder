@@ -4,7 +4,7 @@ import { planRollingEditorial, type EditorialPlanInput } from "./kong-editorial-
 import type { Express } from "express";
 import { resolveCurrentUserId } from "./user-context";
 import { verifyImmutableMedia } from "./kong-media-store";
-import { collectMetricoolObservations, dueLearningRegistry } from "./kong-metricool-learning";
+import { collectMetricoolObservations, dueLearningRegistry, mergePublishedRegistry, type PublishedCreative } from "./kong-metricool-learning";
 import { analyzeLearning, emptyLearningLedger, ingestLearning } from "./kong-content-learning";
 import { createLearningSelector } from "./kong-learning-selection";
 import { emptyProductionState, runProductionCycle, type EditorialTask, type ProductionDependencies, type ProductionState } from "./kong-production-pipeline";
@@ -98,6 +98,8 @@ export function createDelivery(env: Env, fetcher: typeof fetch = fetch): Deliver
 }
 
 export interface KongRuntimeOptions {
+  startupBlockers?: string[];
+  publishedRegistry?: () => Promise<PublishedCreative[]>;
   auditCalendar?: typeof auditKongCalendar;
   production?: { dependencies: Omit<ProductionDependencies, "save">;
     tasks?(state: ProductionState, now: Date): Promise<EditorialTask[]>;
@@ -129,6 +131,17 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
         catch (error) { persistenceFailed = true; throw error; }
       };
       const now = nowAt();
+      if (options.publishedRegistry) {
+        try {
+          state.publishedCreatives = mergePublishedRegistry(state.publishedCreatives || [], await options.publishedRegistry(), now);
+          state.publicationRegistryError = undefined;
+          await save();
+        } catch {
+          if (persistenceFailed) throw Error("persistence_failed");
+          state.publicationRegistryError = "publication_registry_import_failed";
+          await save();
+        }
+      }
       let calendarChanged = false;
       lastError = undefined;
       // Durable append completes before the active JSON row is trimmed. A crash
@@ -248,12 +261,13 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
       if (env.DATABASE_URL && env.KONG_AUTOPILOT_ENABLED === "true") {
         try { state = (await getPool().query("SELECT state FROM kong_cloud_autopilot WHERE id='kong'")).rows[0]?.state; } catch { /* Read-only status never initializes schema. */ }
       }
-      return { ...readiness(env, options.production), running, lastCycleAt: state?.lastCycleAt || lastCycleAt, lastError,
+      return { ...readiness(env, options.production), startupBlockers: options.startupBlockers || [], schedulerActive: Boolean(timer), running, lastCycleAt: state?.lastCycleAt || lastCycleAt, lastError,
         productionStatus: { jobs: state?.production?.jobs.length || 0, reviewedAssets: state?.production?.assets.length || 0,
           archivePolicy: "terminal_older_than_30d_durable_append_before_trim",
           pendingQa: state?.production?.jobs.filter(j => j.stage === "qa_pending").length || 0,
           error: state?.productionError, nextAttemptAt: state?.productionNextAttemptAt, catalogError: state?.catalogError },
         learningStatus: { collection: state?.publishedCreatives?.length ? "registered_posts_only" : "waiting_for_verified_publication_registry",
+          registryError: state?.publicationRegistryError,
           lastCheckedAt:state?.learningCheckedAt, error:state?.learningError,
           reports:state?.learning ? networks.flatMap(network => (["24h","72h","7d"] as const).map(horizon => analyzeLearning(state.learning!,network,horizon,new Date()))) : [] },
         localLedgerCoverage: state ? coverage(state, nowAt()) : null,

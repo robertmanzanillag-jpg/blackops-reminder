@@ -47,3 +47,18 @@ test("conflicting duplicate observations are both excluded",()=>{
   const result=mapMetricoolObservations({rows:[row,changed]},"tiktok",[known],now);
   assert.equal(result.observations.length,0); assert.equal(result.rejected.length,2);
 });
+import { mergePublishedRegistry } from "../server/kong-metricool-learning";
+
+test("publication evidence imports idempotently and rejects scheduler IDs, naive dates and conflicts", () => {
+  const now = new Date("2026-11-04T12:00:00Z");
+  const row = { network: "tiktok" as const, postId: "123", publicUrl: "https://www.tiktok.com/@kongnightlife/video/123?tracking=1",
+    publishedAt: "2026-11-03T18:00:00-05:00", family: "pov" as const, hookStyle: "question" };
+  const registry = mergePublishedRegistry([], [row], now);
+  assert.equal(registry[0].publicUrl, "https://www.tiktok.com/@kongnightlife/video/123");
+  assert.deepEqual(mergePublishedRegistry(registry, [row], now), registry);
+  for (const invalid of [{ ...row, postId: "scheduler-456" }, { ...row, publishedAt: "2026-11-03T18:00:00" },
+    { ...row, publicUrl: "https://www.tiktok.com/@blackroom/video/123" }, { ...row, publishedAt: "2026-11-05T18:00:00Z" }]) {
+    assert.throws(() => mergePublishedRegistry([], [invalid], now));
+  }
+  assert.throws(() => mergePublishedRegistry(registry, [{ ...row, family: "humor" }], now), /conflict/);
+});
