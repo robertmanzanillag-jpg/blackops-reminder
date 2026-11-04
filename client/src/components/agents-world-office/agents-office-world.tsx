@@ -115,7 +115,11 @@ export function AgentsOfficeWorld({
       ? { state: "error", label: "La ultima ronda fallo", detail: council.view.lastCycleError }
       : council.view.cycles === 0
         ? { state: "checking", label: "Primera ronda pendiente" }
-        : { state: "working", label: `${(council.view.proposals || []).filter((p) => p.kind === "repair" && p.status === "submitted").length} reparaciones abiertas`, activity: Object.values(careers).filter((c) => c.battery < 30).slice(0, 4).map((c) => `Revisando ${c.agentId} (${c.battery}%)`) };
+        : council.view.enabled === false
+          ? { state: "offline", label: "Consejo apagado" }
+          : !council.view.lastCycleAt || Date.now() - Date.parse(council.view.lastCycleAt) > 45 * 60_000
+            ? { state: "offline", label: "Sin rondas recientes", detail: "El servidor no ha corrido el consejo en los ultimos 45 minutos." }
+            : { state: "working", label: `${(council.view.proposals || []).filter((p) => p.kind === "repair" && p.status === "submitted").length} reparaciones abiertas`, activity: Object.values(careers).filter((c) => c.battery < 30).slice(0, 4).map((c) => `Revisando ${c.agentId} (${c.battery}%)`) };
   for (const member of kongTeam) {
     statuses[`kong:${member.name}`] = { state: "offline", label: "Sin backend propio", detail: "Responde con guias locales; no ejecuta tareas en Kong.", activity: ["Esperando su backend", "Guia local activa"] };
   }
@@ -344,7 +348,7 @@ export function AgentsOfficeWorld({
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200">Canal directo con el CEO</p>
             <button type="button" onClick={() => setOverlay("none")} className="text-xs text-zinc-400 hover:text-white">✕</button>
           </div>
-          <p className="mt-1 text-[11px] text-zinc-400">Escribe lo que necesitas; el CEO lo reparte al departamento correcto. Cuando este hecho, marcalo y los agentes ganan puntos.</p>
+          <p className="mt-1 text-[11px] text-zinc-400">Escribe lo que necesitas y el CEO lo asigna al departamento correcto. Queda anotado como tarea: los agentes no la ejecutan solos. Cuando este hecha, marcala y ganan puntos los que estaban trabajando.</p>
           <div className="mt-3 flex gap-2">
             <input
               value={orderText}
@@ -365,7 +369,7 @@ export function AgentsOfficeWorld({
                 <div className="mt-1.5 flex flex-wrap gap-1">
                   {order.assignees.map((assignee) => (
                     <span key={assignee.agentId} title={assignee.note} className={cn("rounded-full border px-2 py-0.5 text-[10px]", assignee.status === "hecha" ? "border-emerald-300/40 text-emerald-200" : assignee.status === "en_curso" ? "border-sky-300/40 text-sky-100" : "border-rose-300/40 text-rose-200")}>
-                      {nameOf(assignee.agentId)} · {assignee.status === "en_curso" ? "en curso" : assignee.status}
+                      {nameOf(assignee.agentId)} · {assignee.status === "en_curso" ? "asignada" : assignee.status === "bloqueada" ? "agente parado" : assignee.status}
                     </span>
                   ))}
                 </div>

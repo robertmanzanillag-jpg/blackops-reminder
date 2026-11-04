@@ -611,22 +611,33 @@ export function pruneProposals(proposals: CouncilProposal[]): CouncilProposal[] 
   return [...open, ...closed.slice(0, Math.max(0, MAX_PROPOSALS - open.length))];
 }
 
-// The Mechanic: an agent below 30% battery that is not working gets ONE repair proposal per
-// generation (PR-first brief with what its own endpoint says is wrong). $0: no AI, no code edits.
+export const MAX_OPEN_REPAIR_PROPOSALS = 3;
+const REPAIR_COOLDOWN_MS = 7 * 24 * 60 * 60_000;
+const REPAIR_OPEN = ["pending_submit", "submitted", "not_submitted", "approved"];
+
+// The Mechanic: an agent below 30% battery that is not working gets ONE open repair proposal
+// (PR-first brief with what its own endpoint says is wrong), at most 3 open at once.
+// Agents without an endpoint of their own (exempt) are never "repaired". $0: no AI, no code edits.
 export function deriveRepairProposals(
   state: CouncilState,
   statuses: Record<string, AgentLiveStatus>,
   now: number,
-  names: Record<string, string> = {}
+  names: Record<string, string> = {},
+  exempt: string[] = []
 ): CouncilProposal[] {
   const iso = new Date(now).toISOString();
   const created: CouncilProposal[] = [];
+  const openRepairs = () => [...state.proposals, ...created].filter((proposal) => proposal.kind === "repair" && REPAIR_OPEN.includes(proposal.status)).length;
   for (const career of Object.values(state.company.careers)) {
+    if (exempt.includes(career.agentId)) continue;
     const status = statuses[career.agentId];
     if (!status || status.state === "working" || status.state === "checking" || career.inTrainingUntilGeneration) continue;
     if (career.battery >= 30) continue;
-    const key = `repair:${career.agentId}#${career.generation}`;
-    if (hasOpenOrRecent([...state.proposals, ...created], key, now)) continue;
+    if (openRepairs() >= MAX_OPEN_REPAIR_PROPOSALS) break;
+    const prefix = `repair:${career.agentId}#`;
+    const previous = [...state.proposals, ...created].filter((proposal) => proposal.key.startsWith(prefix));
+    if (previous.some((proposal) => REPAIR_OPEN.includes(proposal.status) || now - toMs(proposal.closedAt || proposal.createdAt) < REPAIR_COOLDOWN_MS)) continue;
+    const key = `${prefix}${iso.slice(0, 10)}`;
     const name = names[career.agentId] || career.agentId;
     const evidence = [`Estado: ${status.label}`, status.detail || "", `Bateria ${career.battery}% · ${career.points} puntos`].filter(Boolean);
     created.push({

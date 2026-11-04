@@ -25,6 +25,7 @@ import {
   hasProposal,
   parseCouncilState,
   pruneProposals,
+  toMs,
   runCrossChecks,
   type CouncilProposal,
   type CouncilSignals,
@@ -61,6 +62,9 @@ export type CouncilDeps = {
 
 export const KONG_TEAM = ["KONG AI", "Promoters + Mesas", "Venues", "Kong Legal"];
 const KONG_IDS = KONG_TEAM.map((name) => `kong:${name}`);
+const EXEMPT_IDS = [...KONG_IDS, "mechanic"];
+// Order routing only trusts live states from a recent council cycle.
+const STATUS_FRESH_MS = 45 * 60_000;
 
 export const AGENT_NAMES: Record<string, string> = {
   assistant: "Asistente",
@@ -131,14 +135,17 @@ const DB_TIMEOUT_MS = 10_000;
 
 function advanceCompanyCycle(state: CouncilState, statuses: Record<string, AgentLiveStatus>, curriculum: CurriculumModule[], now: number): CouncilState {
   const compact = Object.fromEntries(Object.entries(statuses).map(([id, status]) => [id, { state: status.state, label: status.label }]));
-  let company = advanceCompany(state.company, { now, statuses: compact, roles: AGENT_NAMES, exempt: [...KONG_IDS, "mechanic"] }).state;
+  let company = advanceCompany(state.company, { now, statuses: compact, roles: AGENT_NAMES, exempt: EXEMPT_IDS }).state;
   // Approved hires (agent factory) start in the academy.
   for (const proposal of state.proposals) {
     if (proposal.kind !== "new_agent" || proposal.status !== "applied") continue;
     const forAgentId = proposal.key.replace(/^new_agent:helper-/, "");
     company = enrollTrainee(company, { id: proposal.key, forAgentId, role: proposal.title.replace(/^Contratar /, ""), now });
   }
-  if (curriculum.length) company = advanceAcademy(company, () => curriculum, now);
+  // If the docs can't be read this cycle, the academy still advances on the core rules so nobody
+  // stays in training forever.
+  const modules = curriculum.length ? curriculum : [{ id: "core-rules", title: "Reglas basicas", summary: "PR-first, QA antes de publicar, nada de gasto sin aprobacion de Robert." }];
+  company = advanceAcademy(company, () => modules, now);
   return { ...state, company, lastStatuses: compact };
 }
 
@@ -216,12 +223,11 @@ export function createAgentCouncil(deps: CouncilDeps) {
         const signals: CouncilSignals = { ...collected, now };
         const findings = runCrossChecks(signals);
         const statuses: Record<string, AgentLiveStatus> = { ...everyone, ...statusesFromSignals(signals) };
-        // The council itself: the Mechanic works whenever the council meets.
-        statuses.mechanic = { state: "working", label: "Revisando a todos los agentes" };
-        for (const id of KONG_IDS) statuses[id] = { state: "offline", label: "Sin backend propio" };
+        // Kong guides and the Mechanic have no endpoint of their own: they never earn or lose
+        // points, never get hiring/repair proposals, and are only reported (honestly) to the UI.
         let next = finishCycle(state, { findings, statuses, now, agentNames: AGENT_NAMES });
         next = advanceCompanyCycle(next, statuses, curriculum, now);
-        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, statuses, now, AGENT_NAMES), ...next.proposals]) };
+        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, statuses, now, AGENT_NAMES, EXEMPT_IDS), ...next.proposals]) };
         return syncProposals(next, userId);
       });
     } catch (error) {
@@ -284,7 +290,11 @@ export function createAgentCouncil(deps: CouncilDeps) {
   function placeOrder(text: string) {
     return mutate((state) => {
       const available = Object.keys(AGENT_NAMES).filter((id) => !id.startsWith("kong:") && id !== "kong");
-      const result = createOrder(state.company, { text, now: deps.now(), statuses: state.lastStatuses, available, names: AGENT_NAMES });
+      const now = deps.now();
+      const fresh = state.lastCycleAt && now - toMs(state.lastCycleAt) < STATUS_FRESH_MS && !state.lastCycleError;
+      const statuses: Record<string, { state: AgentLiveStatus["state"]; label: string }> = fresh ? { ...state.lastStatuses } : {};
+      if (fresh) statuses.mechanic = { state: "working", label: "Reviso a todos en el ultimo consejo" };
+      const result = createOrder(state.company, { text, now, statuses, available, names: AGENT_NAMES });
       return { ...state, company: result.state };
     });
   }
@@ -401,6 +411,18 @@ async function collectReal(userId: string): Promise<Omit<CouncilSignals, "now">>
 
 // Every agent's real status, from the same functions its own endpoint uses (read-only; no scans,
 // no ensureDefaultAutomations). An agent whose source throws is reported as an error, never as working.
+// Reports that call external APIs (GitHub overview of every repo, market prices) are reused for
+// an hour instead of re-running every 15-minute cycle.
+const SLOW_READ_TTL_MS = 60 * 60_000;
+const slowReads = new Map<string, { at: number; body: unknown }>();
+async function cachedSlowRead(key: string, work: () => Promise<unknown>): Promise<unknown> {
+  const hit = slowReads.get(key);
+  if (hit && Date.now() - hit.at < SLOW_READ_TTL_MS) return hit.body;
+  const body = await work();
+  slowReads.set(key, { at: Date.now(), body });
+  return body;
+}
+
 async function collectStatusesReal(userId: string): Promise<Record<string, AgentLiveStatus>> {
   const now = Date.now();
   const statuses: Record<string, AgentLiveStatus> = {};
@@ -442,9 +464,9 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
       };
       return { ready: Object.values(checks).every(Boolean), checks };
     }),
-    read(["portfolio"], async () => (await import("./portfolio-agent")).getPortfolioSummary(userId)),
+    read(["portfolio"], () => cachedSlowRead(`portfolio:${userId}`, async () => (await import("./portfolio-agent")).getPortfolioSummary(userId))),
     read(["radio"], async () => (await import("./radio-agent")).getRadioSlotsForMonth(userId)),
-    read(["legal"], async () => (await import("./legal-compliance-agent")).runLegalComplianceReports(userId)),
+    read(["legal"], () => cachedSlowRead(`legal:${userId}`, async () => (await import("./legal-compliance-agent")).runLegalComplianceReports(userId))),
     read(["news"], async () => (await import("./clippers-local-news-agent")).getClipperLocalNewsStatus()),
     read(["kong-videos"], async () => (await import("./promo-video-agent")).getPromoVideoStatus(userId)),
     read(["blackroom-videos"], async () => {

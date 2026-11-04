@@ -63,11 +63,13 @@ const MAX_MEMORY = 12;
 const MAX_ORDERS = 60;
 const MAX_EVENTS = 40;
 const MAX_TRAINEES = 30;
+const NEEDS_SETUP_FLOOR = 20;
 
 // Points / battery per council cycle, by real state.
 const DELTA: Record<AgentLiveState, { points: number; battery: number }> = {
   working: { points: 10, battery: 6 },
-  "needs-setup": { points: 0, battery: -4 },
+  // Waiting on Robert (a key, an account): it slowly drains but never gets fired for it.
+  "needs-setup": { points: 0, battery: -2 },
   error: { points: -5, battery: -10 },
   offline: { points: -2, battery: -6 },
   checking: { points: 0, battery: 0 },
@@ -90,6 +92,13 @@ function hash(text: string) {
   let h = 2166136261;
   for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619);
   return Math.abs(h);
+}
+
+// Graduates are history and can be trimmed; someone still studying is never dropped.
+function capTrainees(trainees: Trainee[]): Trainee[] {
+  const studying = trainees.filter((trainee) => !trainee.graduatedAt);
+  const graduated = trainees.filter((trainee) => trainee.graduatedAt);
+  return [...studying, ...graduated.slice(0, Math.max(0, MAX_TRAINEES - studying.length))];
 }
 
 function usedNicknames(careers: Record<string, AgentCareer>, trainees: Trainee[], exceptAgentId?: string): Set<string> {
@@ -127,8 +136,18 @@ export function emptyCompanyState(): CompanyState {
 
 export function parseCompanyState(value: unknown): CompanyState {
   const v = value as Partial<CompanyState> | null;
-  if (!v || v.version !== 1 || typeof v.careers !== "object" || !Array.isArray(v.trainees) || !Array.isArray(v.orders)) return emptyCompanyState();
-  return { version: 1, careers: v.careers as Record<string, AgentCareer>, trainees: v.trainees, orders: v.orders, events: Array.isArray(v.events) ? v.events : [] };
+  if (!v || v.version !== 1 || !v.careers || typeof v.careers !== "object" || Array.isArray(v.careers) || !Array.isArray(v.trainees) || !Array.isArray(v.orders)) return emptyCompanyState();
+  const careers: Record<string, AgentCareer> = {};
+  for (const [id, career] of Object.entries(v.careers as Record<string, unknown>)) {
+    const c = career as Partial<AgentCareer> | null;
+    if (c && typeof c === "object" && typeof c.agentId === "string" && typeof c.nickname === "string" && Number.isFinite(c.points) && Number.isFinite(c.battery)) {
+      careers[id] = { ...(c as AgentCareer), memory: Array.isArray(c.memory) ? c.memory : [] };
+    }
+  }
+  const trainees = v.trainees.filter((t): t is Trainee => Boolean(t) && typeof t === "object" && typeof t.id === "string" && Array.isArray(t.modulesDone) && Array.isArray(t.knowledge));
+  const orders = v.orders.filter((o): o is CompanyOrder => Boolean(o) && typeof o === "object" && typeof o.id === "string" && typeof o.text === "string" && Array.isArray(o.assignees));
+  const events = Array.isArray(v.events) ? v.events.filter((e) => Boolean(e) && typeof e === "object" && typeof e.text === "string") : [];
+  return { version: 1, careers, trainees, orders, events };
 }
 
 function remember(memory: MemoryEntry[], at: string, text: string) {
@@ -162,6 +181,8 @@ export function advanceCompany(
   let events = [...state.events];
 
   for (const [agentId, status] of Object.entries(input.statuses)) {
+    // Agents without an endpoint of their own are shown, but never scored, fired or ranked.
+    if (input.exempt?.includes(agentId)) continue;
     const existing = careers[agentId];
     let career: AgentCareer = existing
       ? { ...existing }
@@ -186,7 +207,8 @@ export function advanceCompany(
     }
     const delta = DELTA[status.state];
     career.points = Math.max(0, career.points + delta.points);
-    career.battery = Math.max(0, Math.min(BATTERY_MAX, career.battery + delta.battery));
+    const floor = status.state === "needs-setup" ? Math.min(career.battery, NEEDS_SETUP_FLOOR) : 0;
+    career.battery = Math.max(floor, Math.min(BATTERY_MAX, career.battery + delta.battery));
     career.cyclesTotal += 1;
     if (status.state === "working") career.cyclesWorking += 1;
     if (career.lastState !== status.state) {
@@ -216,7 +238,8 @@ export function advanceCompany(
         trainees = [
           { id: `${agentId}#${nextGeneration}`, forAgentId: agentId, role: input.roles[agentId] || agentId, nickname: replacement.nickname, startedAt: iso, modulesDone: [], knowledge: [] },
           ...trainees,
-        ].slice(0, MAX_TRAINEES);
+        ];
+        trainees = capTrainees(trainees);
       }
     }
     careers[agentId] = career;
@@ -252,7 +275,7 @@ export function enrollTrainee(state: CompanyState, input: { id: string; forAgent
   const nickname = uniqueNickname(personalityFor(input.id, 1).nickname, usedNicknames(state.careers, state.trainees));
   return {
     ...state,
-    trainees: [{ id: input.id, forAgentId: input.forAgentId, role: input.role, nickname, startedAt: iso, modulesDone: [], knowledge: [] }, ...state.trainees].slice(0, MAX_TRAINEES),
+    trainees: capTrainees([{ id: input.id, forAgentId: input.forAgentId, role: input.role, nickname, startedAt: iso, modulesDone: [], knowledge: [] }, ...state.trainees]),
     events: [{ at: iso, text: `${nickname} entro a la academia para ${input.role}.` }, ...state.events].slice(0, MAX_EVENTS),
   };
 }
@@ -308,7 +331,9 @@ export function createOrder(
       return {
         agentId,
         status: working ? "en_curso" : "bloqueada",
-        note: working ? "Recibida: la tiene en su cola." : `No puede tomarla ahora (${status?.label || "sin estado"}); el Mecanico revisa por que.`,
+        note: working
+          ? "Asignada a un agente activo. Queda anotada: los agentes no ejecutan ordenes solos; tu la marcas como hecha."
+          : `Asignada, pero el agente no esta trabajando (${status?.label || "sin estado reciente"}). Hay que arreglarlo antes.`,
       };
     }),
   };
@@ -338,13 +363,14 @@ export function completeOrder(state: CompanyState, orderId: string, now: number)
   for (const assignee of order.assignees) {
     const career = careers[assignee.agentId];
     if (!career) continue;
-    const earned = assignee.status === "en_curso" ? 25 : 5;
+    // Points only for agents that were actually working when the order came in.
+    const earned = assignee.status === "en_curso" ? 25 : 0;
     careers[assignee.agentId] = {
       ...career,
       points: career.points + earned,
-      battery: Math.min(BATTERY_MAX, career.battery + 10),
-      ordersDone: career.ordersDone + 1,
-      memory: remember(career.memory, iso, `Robert aprobo la orden "${order.text.slice(0, 60)}" (+${earned} puntos).`),
+      battery: earned ? Math.min(BATTERY_MAX, career.battery + 10) : career.battery,
+      ordersDone: career.ordersDone + (earned ? 1 : 0),
+      memory: remember(career.memory, iso, earned ? `Robert marco hecha la orden "${order.text.slice(0, 60)}" (+${earned} puntos).` : `La orden "${order.text.slice(0, 60)}" se cerro sin que yo estuviera trabajando (0 puntos).`),
     };
   }
   return {

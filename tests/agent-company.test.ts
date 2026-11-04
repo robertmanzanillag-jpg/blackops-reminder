@@ -54,7 +54,7 @@ test("empty battery: the CEO fires the agent, a replacement trains in the academ
   assert.equal(during.careers.clippers.battery, 60, "no penalty while training");
 });
 
-test("exempt agents (no backend yet) lose battery but are never fired in a loop", () => {
+test("exempt agents (no backend yet) are never scored, fired or ranked", () => {
   let company = emptyCompanyState();
   let firedTotal = 0;
   for (let i = 0; i < 40; i++) {
@@ -63,7 +63,30 @@ test("exempt agents (no backend yet) lose battery but are never fired in a loop"
     firedTotal += result.fired.length;
   }
   assert.equal(firedTotal, 0);
-  assert.equal(company.careers["kong-ai"].battery, 0);
+  assert.equal(company.careers["kong-ai"], undefined);
+  assert.equal(leaderboard(company).length, 0);
+});
+
+test("needs-setup (waiting on Robert) drains slowly but is never fired for it", () => {
+  let company = emptyCompanyState();
+  let firedTotal = 0;
+  for (let i = 0; i < 200; i++) {
+    const result = advanceCompany(company, { now: NOW + i * 15 * MIN, statuses: { revenue: s("needs-setup") }, roles });
+    company = result.state;
+    firedTotal += result.fired.length;
+  }
+  assert.equal(firedTotal, 0);
+  assert.equal(company.careers.revenue.battery, 20);
+});
+
+test("state from disk: malformed careers/orders never crash, legacy shapes reset", () => {
+  assert.deepEqual(parseCompanyState({ version: 1, careers: null, trainees: [], orders: [] }).careers, {});
+  const parsed = parseCompanyState({ version: 1, careers: { a: { agentId: "a", nickname: "Vale", points: 3, battery: 50 }, b: null, c: { agentId: "c" } }, trainees: [null, { id: "t" }], orders: [{ id: "o", text: "x" }, null], events: [null, { at: "x", text: "ok" }] });
+  assert.deepEqual(Object.keys(parsed.careers), ["a"]);
+  assert.deepEqual(parsed.careers.a.memory, []);
+  assert.equal(parsed.trainees.length, 0);
+  assert.equal(parsed.orders.length, 0);
+  assert.equal(parsed.events.length, 1);
 });
 
 test("academy: one real module per cycle, then graduation puts the agent back to work", () => {
@@ -101,7 +124,7 @@ test("orders: working agents take them, others are blocked; Robert's OK gives po
   assert.match(order.assignees[1].note, /GitHub sin conectar/);
   company = completeOrder(state, order.id, NOW + 2 * MIN);
   assert.equal(company.careers.radio.points, 10 + 25);
-  assert.equal(company.careers.legal.points, 5);
+  assert.equal(company.careers.legal.points, 0, "no points for an order the agent could not work on");
   assert.equal(company.careers.radio.ordersDone, 1);
   assert.equal(completeOrder(company, order.id, NOW + 3 * MIN).careers.radio.points, 35, "completing twice does not pay twice");
 });
