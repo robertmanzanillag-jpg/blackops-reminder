@@ -252,3 +252,8 @@
   0%, 100% { transform: rotateY(-3deg); }
   50% { transform: rotateY(3deg); }
 }
+
+@keyframes world-progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}

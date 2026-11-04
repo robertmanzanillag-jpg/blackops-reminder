@@ -18,12 +18,14 @@ import {
   SCOUT_WATCHLIST,
   applyApprovedProposal,
   applyLessons,
+  deriveRepairProposals,
   diffScoutReleases,
   emptyCouncilState,
   finishCycle,
   hasProposal,
   parseCouncilState,
   pruneProposals,
+  toMs,
   runCrossChecks,
   type CouncilProposal,
   type CouncilSignals,
@@ -31,6 +33,16 @@ import {
   type CouncilState,
 } from "@shared/agent-council";
 import { agentProbes, summarizeProbe, type AgentLiveStatus } from "@shared/agent-live-status";
+import {
+  advanceAcademy,
+  advanceCompany,
+  completeOrder,
+  createOrder,
+  enrollTrainee,
+  leaderboard,
+  personalityFor,
+  type CurriculumModule,
+} from "@shared/agent-company";
 
 export type CouncilDeps = {
   now: () => number;
@@ -42,7 +54,17 @@ export type CouncilDeps = {
   getPendingActionStatus: (id: string) => Promise<string | null>;
   fetchLatestRelease: (repo: string) => Promise<{ tag: string; url: string; publishedAt: string | null } | null>;
   log: (message: string) => void;
+  // Real status of every agent (same data its endpoint serves). Optional so tests can stay small.
+  collectStatuses?: (userId: string) => Promise<Record<string, AgentLiveStatus>>;
+  // Real documents the academy teaches.
+  loadCurriculum?: () => Promise<CurriculumModule[]>;
 };
+
+export const KONG_TEAM = ["KONG AI", "Promoters + Mesas", "Venues", "Kong Legal"];
+const KONG_IDS = KONG_TEAM.map((name) => `kong:${name}`);
+const EXEMPT_IDS = [...KONG_IDS, "mechanic"];
+// Order routing only trusts live states from a recent council cycle.
+const STATUS_FRESH_MS = 45 * 60_000;
 
 export const AGENT_NAMES: Record<string, string> = {
   assistant: "Asistente",
@@ -64,6 +86,11 @@ export const AGENT_NAMES: Record<string, string> = {
   "skills-scout": "Skills Scout",
   "agent-factory": "Fabrica de agentes",
   kong: "Equipo Kong",
+  "blackroom-videos": "Videos Black Room",
+  news: "Noticias",
+  "kong-videos": "Videos Kong",
+  mechanic: "Mecanico",
+  ...Object.fromEntries(KONG_TEAM.map((name) => [`kong:${name}`, name])),
 };
 
 function statusesFromSignals(signals: CouncilSignals): Record<string, AgentLiveStatus> {
@@ -105,6 +132,22 @@ function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T>
   return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
 }
 const DB_TIMEOUT_MS = 10_000;
+
+function advanceCompanyCycle(state: CouncilState, statuses: Record<string, AgentLiveStatus>, curriculum: CurriculumModule[], now: number): CouncilState {
+  const compact = Object.fromEntries(Object.entries(statuses).map(([id, status]) => [id, { state: status.state, label: status.label }]));
+  let company = advanceCompany(state.company, { now, statuses: compact, roles: AGENT_NAMES, exempt: EXEMPT_IDS }).state;
+  // Approved hires (agent factory) start in the academy.
+  for (const proposal of state.proposals) {
+    if (proposal.kind !== "new_agent" || proposal.status !== "applied") continue;
+    const forAgentId = proposal.key.replace(/^new_agent:helper-/, "");
+    company = enrollTrainee(company, { id: proposal.key, forAgentId, role: proposal.title.replace(/^Contratar /, ""), now });
+  }
+  // If the docs can't be read this cycle, the academy still advances on the core rules so nobody
+  // stays in training forever.
+  const modules = curriculum.length ? curriculum : [{ id: "core-rules", title: "Reglas basicas", summary: "PR-first, QA antes de publicar, nada de gasto sin aprobacion de Robert." }];
+  company = advanceAcademy(company, () => modules, now);
+  return { ...state, company, lastStatuses: compact };
+}
 
 export function createAgentCouncil(deps: CouncilDeps) {
   let cached: CouncilState | null = null;
@@ -173,12 +216,18 @@ export function createAgentCouncil(deps: CouncilDeps) {
     try {
       // Slow reads happen outside the queue; the state change itself is serialized.
       const collected = await deps.collect(userId);
+      const everyone = deps.collectStatuses ? await deps.collectStatuses(userId).catch(() => ({} as Record<string, AgentLiveStatus>)) : {};
+      const curriculum = deps.loadCurriculum ? await deps.loadCurriculum().catch(() => [] as CurriculumModule[]) : [];
       return await mutate(async (state) => {
         const now = deps.now();
         const signals: CouncilSignals = { ...collected, now };
         const findings = runCrossChecks(signals);
-        const statuses = statusesFromSignals(signals);
-        const next = finishCycle(state, { findings, statuses, now, agentNames: AGENT_NAMES });
+        const statuses: Record<string, AgentLiveStatus> = { ...everyone, ...statusesFromSignals(signals) };
+        // Kong guides and the Mechanic have no endpoint of their own: they never earn or lose
+        // points, never get hiring/repair proposals, and are only reported (honestly) to the UI.
+        let next = finishCycle(state, { findings, statuses, now, agentNames: AGENT_NAMES });
+        next = advanceCompanyCycle(next, statuses, curriculum, now);
+        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, statuses, now, AGENT_NAMES, EXEMPT_IDS), ...next.proposals]) };
         return syncProposals(next, userId);
       });
     } catch (error) {
@@ -238,10 +287,32 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
   }
 
+  function placeOrder(text: string) {
+    return mutate((state) => {
+      const available = Object.keys(AGENT_NAMES).filter((id) => !id.startsWith("kong:") && id !== "kong");
+      const now = deps.now();
+      const fresh = state.lastCycleAt && now - toMs(state.lastCycleAt) < STATUS_FRESH_MS && !state.lastCycleError;
+      const statuses: Record<string, { state: AgentLiveStatus["state"]; label: string }> = fresh ? { ...state.lastStatuses } : {};
+      if (fresh) statuses.mechanic = { state: "working", label: "Reviso a todos en el ultimo consejo" };
+      const result = createOrder(state.company, { text, now, statuses, available, names: AGENT_NAMES });
+      return { ...state, company: result.state };
+    });
+  }
+
+  function finishOrder(orderId: string) {
+    return mutate((state) => {
+      if (!state.company.orders.some((order) => order.id === orderId)) throw new Error("Orden no encontrada");
+      return { ...state, company: completeOrder(state.company, orderId, deps.now()) };
+    });
+  }
+
   async function view() {
     const state = await load();
+    const personalities = Object.fromEntries(Object.values(state.company.careers).map((career) => [career.agentId, personalityFor(career.agentId, career.generation)]));
     return {
       ...state,
+      leaderboard: leaderboard(state.company, ["ceo", ...EXEMPT_IDS]),
+      personalities,
       overrides: applyLessons(state.debates, state.lessons),
       nextCycleInMs: state.lastCycleAt ? Math.max(0, Date.parse(state.lastCycleAt) + COUNCIL_CYCLE_MS - deps.now()) : 0,
       costUsd: 0,
@@ -249,7 +320,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
     };
   }
 
-  return { runCycle, runScout, approveFromTrustCenter, view, load };
+  return { runCycle, runScout, approveFromTrustCenter, view, load, placeOrder, finishOrder };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {
@@ -338,6 +409,104 @@ async function collectReal(userId: string): Promise<Omit<CouncilSignals, "now">>
   };
 }
 
+// Every agent's real status, from the same functions its own endpoint uses (read-only; no scans,
+// no ensureDefaultAutomations). An agent whose source throws is reported as an error, never as working.
+// Reports that call external APIs (GitHub overview of every repo, market prices) are reused for
+// an hour instead of re-running every 15-minute cycle.
+const SLOW_READ_TTL_MS = 60 * 60_000;
+const slowReads = new Map<string, { at: number; body: unknown }>();
+async function cachedSlowRead(key: string, work: () => Promise<unknown>): Promise<unknown> {
+  const hit = slowReads.get(key);
+  if (hit && Date.now() - hit.at < SLOW_READ_TTL_MS) return hit.body;
+  const body = await work();
+  slowReads.set(key, { at: Date.now(), body });
+  return body;
+}
+
+async function collectStatusesReal(userId: string): Promise<Record<string, AgentLiveStatus>> {
+  const now = Date.now();
+  const statuses: Record<string, AgentLiveStatus> = {};
+  const summarize = (agentId: string, body: unknown) => {
+    statuses[agentId] = summarizeProbe(agentProbes[agentId], { ok: true, status: 200, body: JSON.parse(JSON.stringify(body ?? null)) }, now);
+  };
+  const read = async (agentIds: string[], work: () => Promise<unknown>) => {
+    try {
+      const body = await work();
+      agentIds.forEach((agentId) => summarize(agentId, body));
+    } catch (error) {
+      const detail = error instanceof Error ? error.message.slice(0, 120) : "sin detalle";
+      agentIds.forEach((agentId) => { statuses[agentId] = { state: "error", label: "Con error", detail }; });
+    }
+  };
+  const hasValue = (value: string | undefined) => Boolean(value && value.trim() && !/^(changeme|placeholder|xxx)/i.test(value.trim()));
+  await Promise.all([
+    read(["assistant"], async () => ({ google: await (await import("./google-calendar")).isGoogleCalendarConnected(), zoho: false })),
+    read(["code", "github", "claude-reviewer"], async () => {
+      const gh = await import("./github-client");
+      const connected = await gh.isGitHubConnected();
+      return connected ? { connected: true, user: await gh.getAuthenticatedUser() } : { connected: false };
+    }),
+    read(["ceo"], async () => {
+      const { storage } = await import("./storage");
+      const config = await storage.getTelegramConfig(userId);
+      const checks = { telegram: hasValue(process.env.TELEGRAM_BOT_TOKEN) && Boolean(config?.enabled && config.chatId), ai: hasValue(process.env.AI_INTEGRATIONS_GEMINI_API_KEY) || hasValue(process.env.OPENAI_API_KEY) };
+      return { ready: Object.values(checks).every(Boolean), checks };
+    }),
+    read(["revenue"], async () => {
+      const { storage } = await import("./storage");
+      const config = await storage.getTelegramConfig(userId).catch(() => undefined);
+      const accountId = process.env.REVENUE_STRIPE_ACCOUNT_ID?.trim() || "";
+      const webhookSecret = process.env.REVENUE_STRIPE_WEBHOOK_SECRET?.trim() || "";
+      const checks = {
+        accountSeparated: /^acct_[A-Za-z0-9]+$/.test(accountId),
+        signedWebhook: webhookSecret.startsWith("whsec_") && webhookSecret.length >= 24,
+        telegram: Boolean(process.env.TELEGRAM_BOT_TOKEN?.trim() && config?.enabled && config.chatId),
+      };
+      return { ready: Object.values(checks).every(Boolean), checks };
+    }),
+    read(["portfolio"], () => cachedSlowRead(`portfolio:${userId}`, async () => (await import("./portfolio-agent")).getPortfolioSummary(userId))),
+    read(["radio"], async () => (await import("./radio-agent")).getRadioSlotsForMonth(userId)),
+    read(["legal"], () => cachedSlowRead(`legal:${userId}`, async () => (await import("./legal-compliance-agent")).runLegalComplianceReports(userId))),
+    read(["news"], async () => (await import("./clippers-local-news-agent")).getClipperLocalNewsStatus()),
+    read(["kong-videos"], async () => (await import("./promo-video-agent")).getPromoVideoStatus(userId)),
+    read(["blackroom-videos"], async () => {
+      const remoteModule = await import("./blackroom-remote-control");
+      const routesModule = await import("./blackroom-control-routes");
+      const remote = await remoteModule.readBlackRoomRemoteControl();
+      const remoteQueue = (remote as unknown as { device?: { queue?: Record<string, unknown> } }).device?.queue;
+      const online = remoteModule.isBlackRoomRemoteDeviceOnline(remote);
+      const local = await routesModule.readBlackRoomPanelQueue(remoteQueue as never);
+      return { agent: routesModule.resolveBlackRoomPanelAgent(local, remoteQueue as never, online), remote: { online } };
+    }),
+  ]);
+  return statuses;
+}
+
+// The academy teaches the company's real documents and database map.
+async function loadCurriculumReal(root = process.cwd()): Promise<CurriculumModule[]> {
+  const modules: CurriculumModule[] = [];
+  const doc = async (id: string, title: string, file: string) => {
+    const raw = await readFile(path.join(root, file), "utf8").catch(() => null);
+    if (!raw) return;
+    const headings = Array.from(raw.matchAll(/^#{1,3}\s+(.+)$/gm)).map((match) => match[1].trim()).slice(0, 4);
+    modules.push({ id, title, summary: `${file} (${raw.length} caracteres)${headings.length ? `: ${headings.join(" · ")}` : ""}` });
+  };
+  await doc("rules", "Reglas de la empresa", "AGENTS.md");
+  await doc("claude", "Como trabajamos con IA y costos", "CLAUDE.md");
+  await doc("map", "Mapa del codigo", "docs/codebase-map.md");
+  await doc("ceo-plan", "Plan del CEO Assistant", "CEO_ASSISTANT_PLAN.md");
+  try {
+    const schema = await import("@shared/schema");
+    const tables = Object.entries(schema).filter(([, value]) => value && typeof value === "object" && Symbol.for("drizzle:Name") in (value as object)).map(([name]) => name);
+    modules.push({ id: "database", title: "Base de datos", summary: `${tables.length} tablas: ${tables.slice(0, 8).join(", ")}${tables.length > 8 ? "..." : ""}` });
+  } catch {
+    // Schema unavailable: the academy simply skips this module.
+  }
+  const docs = await readSkillDocs(root).catch(() => null);
+  if (docs) modules.push({ id: "skills", title: "Skills de la empresa", summary: docs.skills.map((skill) => skill.name).join(", ") });
+  return modules;
+}
+
 async function fetchLatestReleaseReal(repo: string) {
   const { getConfiguredGitHubToken } = await import("./github-client");
   const token = getConfiguredGitHubToken();
@@ -394,6 +563,8 @@ export function getAgentCouncil() {
     },
     fetchLatestRelease: fetchLatestReleaseReal,
     log: (message) => console.warn(`[agent-council] ${message}`),
+    collectStatuses: collectStatusesReal,
+    loadCurriculum: () => loadCurriculumReal(),
   });
   return council;
 }

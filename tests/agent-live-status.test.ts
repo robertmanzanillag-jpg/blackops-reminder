@@ -130,3 +130,21 @@ test("runProbe maps fetch outcomes without throwing", async () => {
   assert.deepEqual(await runProbe("/api/x", fake(new Response("not json", { status: 502 }))), { ok: false, status: 502, body: null });
   assert.deepEqual(await runProbe("/api/x", fake(new Error("offline"))), { ok: false, status: 0, body: null, networkError: true });
 });
+
+test("new real agents: Black Room videos, news and Kong videos", () => {
+  const now = Date.parse("2026-11-04T12:00:00Z");
+  const br = (online: boolean, totals: Record<string, number>) => ({ ok: true as const, status: 200, body: { agent: { totals }, remote: { online } } });
+  assert.equal(summarizeProbe(agentProbes["blackroom-videos"], br(false, { queued: 3 }), now).label, "Publicador desconectado");
+  assert.equal(summarizeProbe(agentProbes["blackroom-videos"], br(true, { queued: 2, processing: 1, scheduled: 4 }), now).state, "working");
+  assert.equal(summarizeProbe(agentProbes["blackroom-videos"], br(true, { retry: 2 }), now).state, "error");
+  assert.equal(summarizeProbe(agentProbes["blackroom-videos"], br(true, {}), now).state, "offline");
+  const news = (lastRunAt: string | null) => ({ ok: true as const, status: 200, body: { bootstrapped: true, lastRunAt, events: { active: 3 }, queue: { total: 2, approvalRequired: 1 } } });
+  assert.equal(summarizeProbe(agentProbes.news, news(new Date(now - 3_600_000).toISOString()), now).state, "working");
+  assert.equal(summarizeProbe(agentProbes.news, news(new Date(now - 30 * 3_600_000).toISOString()), now).state, "needs-setup");
+  const kong = (outputs: Array<{ name: string; modifiedAt: string }>) => ({ ok: true as const, status: 200, body: { outputVideos: outputs, inputVideos: [] } });
+  const fresh = kong([{ name: "kong-1.mp4", modifiedAt: new Date(now - 3_600_000).toISOString() }]);
+  assert.equal(summarizeProbe(agentProbes["kong-videos"], fresh, now).state, "working");
+  assert.match((summarizeProbe(agentProbes["kong-videos"], fresh, now).activity || []).join(" "), /kong-1\.mp4/);
+  assert.equal(summarizeProbe(agentProbes["kong-videos"], kong([]), now).state, "needs-setup");
+  assert.equal(summarizeProbe(agentProbes["kong-videos"], kong([{ name: "old", modifiedAt: new Date(now - 72 * 3_600_000).toISOString() }]), now).state, "offline");
+});

@@ -15,6 +15,30 @@ export function registerAgentCouncilRoutes(app: Express) {
     }
   });
 
+  // CEO channel: Robert writes, the CEO routes the order to the right agents ($0, no AI).
+  app.post("/api/agent-company/orders", async (req, res) => {
+    try {
+      const text = typeof req.body?.text === "string" ? req.body.text.trim() : "";
+      if (!text) return res.status(400).json({ error: "Escribe la orden para el CEO." });
+      if (text.length > 500) return res.status(400).json({ error: "La orden es muy larga (maximo 500 caracteres)." });
+      const council = getAgentCouncil();
+      const state = await council.placeOrder(text);
+      res.json({ order: state.company.orders[0] });
+    } catch (error) {
+      res.status(500).json({ error: error instanceof Error ? error.message : "No se pudo crear la orden" });
+    }
+  });
+
+  app.post("/api/agent-company/orders/:id/done", async (req, res) => {
+    try {
+      const state = await getAgentCouncil().finishOrder(String(req.params.id));
+      res.json({ order: state.company.orders.find((order) => order.id === req.params.id) || null });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "No se pudo cerrar la orden";
+      res.status(message === "Orden no encontrada" ? 404 : 500).json({ error: message });
+    }
+  });
+
   app.post("/api/agent-council/run", async (_req, res) => {
     try {
       if (!isAgentCouncilEnabled()) {

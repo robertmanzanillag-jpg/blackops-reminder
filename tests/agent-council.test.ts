@@ -344,3 +344,33 @@ test("atomic file writes: 50 concurrent writes all succeed and the file is alway
   const saved = parseCouncilState(await readFile(file, "utf8"));
   assert.ok(saved.cycles >= 0 && saved.cycles < 50);
 });
+
+test("company over 4 days: repairs stay bounded, never for exempt agents, mechanic is not ranked", async () => {
+  const fake = fakeDeps({
+    collect: async () => ({}),
+    collectStatuses: async () => ({
+      revenue: { state: "needs-setup", label: "Falta Stripe" },
+      clippers: { state: "error", label: "Worker con error" },
+      radio: { state: "offline", label: "Sin conexion" },
+      legal: { state: "error", label: "GitHub fallo" },
+      dropshipping: { state: "error", label: "Proveedor caido" },
+      code: { state: "working", label: "GitHub conectado" },
+    }),
+    loadCurriculum: async () => [],
+  });
+  const council = createAgentCouncil(fake.deps);
+  let state = await council.runCycle();
+  for (let i = 0; i < 400; i++) {
+    fake.tick(15 * 60_000);
+    state = await council.runCycle();
+  }
+  const repairs = state.proposals.filter((proposal) => proposal.kind === "repair");
+  const open = repairs.filter((proposal) => ["pending_submit", "submitted", "not_submitted", "approved"].includes(proposal.status));
+  assert.ok(open.length <= 3, `open repairs: ${open.length}`);
+  assert.ok(repairs.every((proposal) => !proposal.key.startsWith("repair:kong:") && !proposal.key.startsWith("repair:mechanic")));
+  assert.equal(new Set(open.map((proposal) => proposal.key.split("#")[0])).size, open.length, "one open repair per agent");
+  assert.equal(state.company.careers.revenue.firedCount, 0, "waiting on a key is not a firing offense");
+  assert.equal(state.company.careers.mechanic, undefined);
+  const view = await council.view();
+  assert.ok(!view.leaderboard.some((row) => row.agentId === "mechanic" || row.agentId.startsWith("kong:")));
+});
