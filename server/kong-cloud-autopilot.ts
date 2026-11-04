@@ -1,4 +1,4 @@
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import { auditKongCalendar } from "./kong-calendar-audit";
 import { planRollingEditorial, type EditorialPlanInput } from "./kong-editorial-planner";
 import type { Express } from "express";
@@ -120,7 +120,7 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
   async function cycle() {
     if (running || env.KONG_AUTOPILOT_ENABLED !== "true" || !env.DATABASE_URL) return;
     running = true;
-    let client: Awaited<ReturnType<Pool["connect"]>> | undefined, locked = false;
+    let client: PoolClient | undefined, locked = false;
     try {
       client = await getPool().connect();
       locked = (await client.query("SELECT pg_try_advisory_lock($1) AS locked", [LOCK])).rows[0].locked;
