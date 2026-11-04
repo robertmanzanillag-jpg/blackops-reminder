@@ -24,6 +24,7 @@ import {
   type BlackRoomLedgerEntry,
 } from "../server/blackroom-local-worker";
 import { BLACKROOM_QUEUE_PATH } from "../server/blackroom-daily-queue";
+import { refreshOrganicPeerScout } from "./organic-peer-scout.mjs";
 
 const projectDir = path.resolve(process.env.BLACKROOM_PROJECT_DIR || process.cwd());
 const queuePath = path.join(projectDir, process.env.BLACKROOM_QUEUE_PATH || BLACKROOM_QUEUE_PATH);
@@ -321,6 +322,9 @@ async function runLocalEditor(state: BlackRoomLocalWorkerState): Promise<void> {
 }
 
 async function main(): Promise<void> {
+  // Best-effort public metadata scout, daily cache; never blocks or mutates publishing.
+  void refreshOrganicPeerScout(path.dirname(ledgerPath)).catch(() => {});
+  setInterval(() => { void refreshOrganicPeerScout(path.dirname(ledgerPath)).catch(() => {}); }, 86400000).unref();
   await mkdir(path.dirname(lockPath), { recursive: true });
   let lock;
   for (let attempt = 0; attempt < 2; attempt += 1) {
