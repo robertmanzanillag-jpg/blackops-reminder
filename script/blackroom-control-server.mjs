@@ -58,13 +58,15 @@ function serializedCommand(name, options) {
   return next;
 }
 
-async function workerState() {
+async function workerState(includeLocalEvidence = true) {
   let state;
   try { state = JSON.parse(await readFile(workerStatePath, "utf8")); }
   catch { state = { running: false, pid: null, runs: 0, lastError: null }; }
-  const report = await readFile(path.join(path.dirname(workerLedgerPath), "local-ceo-report.json"), "utf8")
-    .then(JSON.parse).catch(() => null);
-  state.localEvidence = report?.scope === "local-evidence" ? report : null;
+  if (includeLocalEvidence) {
+    const report = await readFile(path.join(path.dirname(workerLedgerPath), "local-ceo-report.json"), "utf8")
+      .then(JSON.parse).catch(() => null);
+    state.localEvidence = report?.scope === "local-evidence" ? report : null;
+  }
   try {
     const activity = JSON.parse(await readFile(workerActivityPath, "utf8"));
     return { ...state, csvBridge: csvBridgeStatus, automaticAnalytics: automaticAnalyticsStatus, activity: Array.isArray(activity) ? activity.slice(-80) : [] };
@@ -278,7 +280,7 @@ async function syncRemoteControl() {
     await remoteRequest("POST", {
       deviceId: "blackroom-mac",
       queue,
-      worker: await workerState(),
+      worker: await workerState(false),
       publicationExperiments: await publicationExperiments(),
       lastError,
       appliedGeneration: Math.max(0, lastAppliedGeneration),

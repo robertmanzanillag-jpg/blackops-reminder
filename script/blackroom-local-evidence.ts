@@ -31,15 +31,20 @@ export async function refreshLocalBlackRoomEvidence(root: string, agentDir: stri
     const { archive, report } = assessLocalBlackRoomExports(prior, latest.imports, buildBlackRoomPublicationExperiments(ledger), now);
     // A planner receipt without an official platform ID is pending context,
     // never a measurement or evidence for the controlled hook experiment.
-    const manual = await jsonFile(process.env.BLACKROOM_MANUAL_RECEIPTS_PATH || path.join(agentDir, "manual-planner-receipts.json"), null);
     const keys = new Set<string>();
-    if (String(manual?.brandId) === "6585226" && manual?.state === "scheduled_not_published" && Array.isArray(manual.rows)) {
-      for (const row of manual.rows.slice(-2000)) {
-        if (!/^\d+$/.test(String(row?.plannerId || "")) || !Array.isArray(row.networks)) continue;
-        for (const net of row.networks) if (["tiktok", "facebook", "youtube"].includes(net)) keys.add(row.plannerId + ":" + net);
+    const receiptPaths = (process.env.BLACKROOM_MANUAL_RECEIPTS_PATH || path.join(agentDir, "manual-planner-receipts.json"))
+      .split(path.delimiter).filter(Boolean).slice(0, 16);
+    let unreadableReceiptFiles = 0;
+    for (const file of receiptPaths) {
+      const manual = await jsonFile(file, null).catch(() => { unreadableReceiptFiles++; return null; });
+      if (String(manual?.brandId) === "6585226" && manual?.state === "scheduled_not_published" && Array.isArray(manual.rows)) {
+        for (const row of manual.rows.slice(-2000)) {
+          if (!/^\d+$/.test(String(row?.plannerId || "")) || !Array.isArray(row.networks)) continue;
+          for (const net of row.networks) if (["tiktok", "facebook", "youtube"].includes(net)) keys.add(row.plannerId + ":" + net);
+        }
       }
     }
-    const summary = { ...report, unverifiedManualDeliveries: keys.size };
+    const summary = { ...report, unverifiedManualDeliveries: keys.size, unreadableReceiptFiles };
     await saveAtomic(archiveFile, archive);
     await saveAtomic(path.join(agentDir, "local-ceo-report.json"), summary);
     return summary;
