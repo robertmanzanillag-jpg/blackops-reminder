@@ -2,6 +2,8 @@ import "./env-loader";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { registerBlackRoomControlRoutes } from "./blackroom-control-routes";
+import { registerKongCloudAutopilot } from "./kong-cloud-autopilot";
+import { loadKongStartup } from "./kong-startup";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startReminderScheduler } from "./reminder-scheduler";
@@ -391,6 +393,19 @@ app.use((req, res, next) => {
   await initializeBlackRoomRemoteControlPersistence();
   await registerRoutes(httpServer, app);
   registerBlackRoomControlRoutes(app);
+  const kongStartup = await loadKongStartup(process.env);
+  registerKongCloudAutopilot(app, { ...kongStartup.options, startupBlockers: kongStartup.blockers,
+    ...(process.env.KONG_ALERTS_ENABLED === "true" && process.env.KONG_OWNER_USER_ID ? {
+      notify: async (notice: import("./kong-operational-alerts").OperationalNotice) => {
+        const { sendPushNotification } = await import("./push-notifications");
+        const result = await sendPushNotification(process.env.KONG_OWNER_USER_ID!, {
+          title: notice.kind === "problem" ? "KONG necesita atención" : "KONG: incidencias resueltas",
+          body: notice.message, tag: "kong-operational-status", url: "/automations",
+        });
+        return result.success > 0;
+      },
+    } : {}),
+  });
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     if (res.headersSent) return next(err);

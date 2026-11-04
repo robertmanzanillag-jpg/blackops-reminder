@@ -1,6 +1,6 @@
 // Google Calendar Integration - using Replit connector
-let connectionSettings: any;
-let connectionSettingsCacheKey: string | null = null;
+type GoogleConnectorName = "google-calendar" | "google-drive";
+const connectorCache = new Map<GoogleConnectorName, { key: string; connection: any }>();
 
 async function getGoogleApis() {
   return (await import("googleapis")).google;
@@ -41,17 +41,13 @@ function isConnectorTokenFresh(connection: any): boolean {
   return Number.isFinite(expiryTime) && expiryTime > Date.now();
 }
 
-function selectGoogleConnector(items: any[] = []) {
-  const connected = items.filter((item) => readConnectorAccessToken(item));
-  return (
-    connected.find((item) => String(item?.name || item?.connector_name || "").includes("google-drive")) ||
-    connected.find((item) => String(item?.name || item?.connector_name || "").includes("google")) ||
-    connected[0] ||
-    null
-  );
+function selectGoogleConnector(items: any[], connectorName: GoogleConnectorName) {
+  return items.find((item) =>
+    String(item?.connector_name || item?.name || "") === connectorName && readConnectorAccessToken(item)
+  ) || null;
 }
 
-export async function getGoogleAccessToken() {
+export async function getGoogleAccessToken(connectorName: GoogleConnectorName = "google-calendar") {
   const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
   const xReplitToken = process.env.REPL_IDENTITY 
     ? 'repl ' + process.env.REPL_IDENTITY 
@@ -60,8 +56,9 @@ export async function getGoogleAccessToken() {
     : null;
 
   const cacheKey = `${hostname || ""}:${xReplitToken || ""}`;
-  if (connectionSettings && connectionSettingsCacheKey === cacheKey && isConnectorTokenFresh(connectionSettings)) {
-    const cachedToken = readConnectorAccessToken(connectionSettings);
+  const cached = connectorCache.get(connectorName);
+  if (cached && cached.key === cacheKey && isConnectorTokenFresh(cached.connection)) {
+    const cachedToken = readConnectorAccessToken(cached.connection);
     if (cachedToken) return cachedToken;
   }
 
@@ -69,29 +66,32 @@ export async function getGoogleAccessToken() {
     throw new Error('X_REPLIT_TOKEN not found for repl/depl');
   }
 
-  connectionSettings = await fetch(
-    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=google-drive,google-calendar',
+  const response = await fetch(
+    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=' + connectorName,
     {
       headers: {
         'Accept': 'application/json',
         'X_REPLIT_TOKEN': xReplitToken
       }
     }
-  ).then(res => res.json()).then(data => selectGoogleConnector(data.items || []));
-  connectionSettingsCacheKey = cacheKey;
+  );
+  if (!response.ok) throw new Error(`Google connector not connected (${connectorName}, HTTP ${response.status})`);
+  const data = await response.json();
+  const connectionSettings = selectGoogleConnector(Array.isArray(data.items) ? data.items : [], connectorName);
 
   const accessToken = readConnectorAccessToken(connectionSettings);
 
   if (!connectionSettings || !accessToken) {
     throw new Error('Google connector not connected');
   }
+  connectorCache.set(connectorName, { key: cacheKey, connection: connectionSettings });
   return accessToken;
 }
 
-export async function hasConnectedReplitGoogleConnector(): Promise<boolean> {
+export async function hasConnectedReplitGoogleConnector(connectorName: GoogleConnectorName = "google-calendar"): Promise<boolean> {
   if (!hasReplitGoogleConnectorEnv()) return false;
   try {
-    await getGoogleAccessToken();
+    await getGoogleAccessToken(connectorName);
     return true;
   } catch {
     return false;

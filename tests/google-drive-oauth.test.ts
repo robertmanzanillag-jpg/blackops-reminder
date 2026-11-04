@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import { mock, test } from "node:test";
 import type { Request } from "express";
 import { createGoogleDriveAuthorizationUrl, getGoogleDriveOAuthStatus, resolveGoogleDriveRedirectUri } from "../server/google-drive-oauth";
 
@@ -49,6 +49,25 @@ function mockRequest(host = "127.0.0.1:5013"): Request {
     protocol: "http",
   } as Request;
 }
+
+test("Drive OAuth status does not report Calendar-only Replit access as connected", async () => {
+  const names = [...GOOGLE_DRIVE_ALIAS_ENV_VARS, "REPLIT_CONNECTORS_HOSTNAME", "REPL_IDENTITY", "WEB_REPL_RENEWAL"];
+  const snapshot = snapshotEnv(names);
+  clearEnv(names);
+  process.env.REPLIT_CONNECTORS_HOSTNAME = "drive-status-scoped.example.test";
+  process.env.REPL_IDENTITY = "drive-status-test-identity";
+  const fetchMock = mock.method(globalThis, "fetch", async () => new Response(JSON.stringify({ items: [
+    { name: "google-calendar", settings: { access_token: "calendar-status-only" } },
+  ] })));
+  try {
+    const status = await getGoogleDriveOAuthStatus("test-user");
+    assert.equal(status.configured, true);
+    assert.equal(status.connected, false);
+    assert.equal(status.provider, null);
+    assert.match(String(fetchMock.mock.calls[0].arguments[0]), /connector_names=google-drive$/);
+    assert.equal(JSON.stringify(status).includes("calendar-status-only"), false);
+  } finally { fetchMock.mock.restore(); restoreEnv(snapshot); }
+});
 
 test("Google Drive OAuth accepts extended client aliases", async () => {
   const snapshot = snapshotEnv(GOOGLE_DRIVE_ALIAS_ENV_VARS);
