@@ -124,7 +124,7 @@ async function getDriveClient(userId: string) {
 
   let accessToken: string;
   try {
-    accessToken = await getGoogleAccessToken();
+    accessToken = await getGoogleAccessToken("google-drive");
   } catch (error: any) {
     if (/Google connector not connected/i.test(error?.message || "")) {
       throw new Error("Google Drive connector is not connected. Open /api/google-drive/auth or reconnect the Google Drive Replit connector before asking the agent to save videos there.");

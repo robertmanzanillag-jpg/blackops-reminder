@@ -1,5 +1,11 @@
 # KONG activation evidence — 2026-11-04
 
+Latest repair checkpoint: the Google connector selector requested both services and preferred any Drive/Google token, allowing Calendar-only access to be reported as a Drive connection. Calendar and Drive now request and cache their exact service separately; the Drive client and OAuth status explicitly require Drive. Direct OAuth/refresh-token precedence is unchanged. Local connector, OAuth, Drive reconciliation and runtime checks pass 28/28; independent connector/OAuth review passes 11/11. A broader local folder-command test did not finish module initialization and was cancelled; it is not a passing check. Host-wide typecheck initially timed out at 60 seconds; a separately logged host recheck is pending. This remains a draft, not a release-ready claim.
+
+Actual host access test at 2026-11-04T10:52:16.362Z: Calendar connector lookup returned 200, then a read-only request for the exact KONG Drive folder returned 403 PERMISSION_DENIED/insufficientPermissions. This proves the tested Calendar token cannot read the folder. Global Drive is Active with no apps connected; app association remains unresolved. Do not broaden scopes, guess integration versions, or treat this code repair as granting access.
+
+Latest Metricool reconciliation at approximately 06:05 NY confirms 42 pending posts: five distinct videos per network on November 4–7, one per network on November 8, and none on November 9–18. Four new November 7 finals passed independent visual/hash/full-decode review and were archived privately in KONG Drive. This is four covered dates, not seven future full days or a continuously running cloud service.
+
 The requested outcome remains **not achieved**: five distinct daily videos per TikTok/Facebook network, ongoing production, publication verification, daily competitive study and measured improvements, with adaptive volume above a floor of five.
 
 Current code repair connects an explicitly configured curated production pipeline at server startup, preserves hash-bound QA, imports owner-verified public-post evidence for age-window analytics, and reports scheduler registration separately from an executing cycle. It does not generate operator manifests or automate visual review.
