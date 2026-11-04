@@ -46,6 +46,18 @@ test("only a newer, fresh decision of the same test overlays the in-memory edito
   assert.equal(preferFreshLocalEvidence(local, remote, seen)?.youtube, local.youtube);
 });
 
+test("a conflicting measured duration vetoes exact reference attribution across exports", () => {
+  const bad = assess([{ ...sample, durationSeconds: 60 }]);
+  assert.equal(bad.report.decisions.youtube.exactIdentities, 0);
+  assert.equal(bad.report.decisions.youtube.matchedSnapshots, 0);
+  const later = new Date("2026-11-04T13:00:00Z");
+  const missing = assess([{ ...sample, observedAt: later.toISOString(), durationSeconds: undefined }], bad.archive, later);
+  assert.equal(missing.report.decisions.youtube.matchedSnapshots, 0);
+  const contradicts = assess([{ ...sample, observedAt: later.toISOString(), durationSeconds: 15 }], bad.archive, later);
+  assert.equal(contradicts.report.decisions.youtube.exactIdentities, 0);
+  assert.equal(assess([{ ...sample, durationSeconds:16 }]).report.decisions.youtube.exactIdentities, 1);
+});
+
 test("local archive is crash-safe on invalid input; repeated refreshes do not touch publishing or mark remote import", async () => {
   const dir = await mkdtemp(path.join(tmpdir(), "br-local-evidence-test-"));
   try {

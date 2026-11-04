@@ -2,7 +2,7 @@ import { captureLearningSnapshots, isLearningObservation, learningSourceHealth, 
 import { BLACKROOM_LEARNING_NETWORKS, canonicalLearningPostId, evaluateBlackRoomLearning, type VerifiedLearningDecision } from "./blackroom-verified-learning";
 import type { BlackRoomPublicationExperiment } from "./blackroom-growth-ceo";
 
-type SourcePost = LearningObservation & { references: string[]; durationSeconds?: number };
+type SourcePost = LearningObservation & { references: string[]; durationSeconds?: number; minDuration?: number; maxDuration?: number };
 type Decisions = Record<LearningNetwork, VerifiedLearningDecision>;
 export type EvidenceArchive = { version: 1; posts: SourcePost[]; snapshots: LearningSnapshot[] };
 export const emptyEvidence = (): EvidenceArchive => ({ version: 1, posts: [], snapshots: [] });
@@ -18,7 +18,11 @@ export function assessLocalBlackRoomExports(previous: EvidenceArchive, imports: 
     if (!id || !isLearningObservation(post) || Date.parse(post.observedAt) > now.getTime()) return;
     const k = post.network + ":" + id, old = byId.get(k);
     const latest = !old || Date.parse(post.observedAt) > Date.parse(old.observedAt) ? post : old;
-    byId.set(k, { ...latest, postId: id, references: [...new Set([...(old?.references || []), ...post.references.filter(validReference)])].slice(0, 2) });
+    const durations = [old?.durationSeconds, old?.minDuration, old?.maxDuration, post.durationSeconds, post.minDuration, post.maxDuration]
+      .filter((v): v is number => typeof v === "number" && Number.isFinite(v) && v > 0 && v <= 86400);
+    byId.set(k, { ...latest, postId: id, ...(durations.length ? {
+      durationSeconds: latest.durationSeconds ?? durations[0], minDuration: Math.min(...durations), maxDuration: Math.max(...durations),
+    } : {}), references: [...new Set([...(old?.references || []), ...post.references.filter(validReference)])] });
   };
   for (const post of previous.posts) add(post);
   for (const raw of imports) {
@@ -63,7 +67,13 @@ export function assessLocalBlackRoomExports(previous: EvidenceArchive, imports: 
   for (const e of experiments) {
     if (!validReference(e.learningReference)) continue;
     const key = e.network + ":" + e.learningReference;
-    if (receiptCounts.get(key) === 1) e.platformPostId = unique.get(key)?.postId;
+    const post = unique.get(key);
+    // Providers can round an encoded duration by one second. A material
+    // contradiction in any observation vetoes the reference match, even if
+    // the most recent export omitted duration. Never turn a 60s clip into
+    // evidence for the controlled 15s test merely because its caption matches.
+    if (post && receiptCounts.get(key) === 1 && [post.minDuration, post.maxDuration]
+      .every(seconds => seconds === undefined || Math.abs(seconds - e.durationSeconds) <= 1)) e.platformPostId = post.postId;
   }
   const decisions = evaluateBlackRoomLearning({ snapshots, experiments, sourceObservedAt, now });
   // Descriptive, same-age ranges only. Do not call a duration a winner from
