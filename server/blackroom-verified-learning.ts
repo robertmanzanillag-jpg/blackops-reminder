@@ -3,6 +3,183 @@ import { captureLearningSnapshots, learningSourceHealth, type LearningNetwork, t
 import type { BlackRoomPublicationExperiment } from "./blackroom-growth-ceo";
 
 export const BLACKROOM_HOOK_TEST_ID = "hook-15s-en-vertical-v1";
+export const BLACKROOM_DURATION_TEST_ID = "duration-15-30-60-v1";
+export const DURATION_ARMS = [15, 30, 60] as const;
+type Arm = (typeof DURATION_ARMS)[number];
+export interface DurationDecision {
+  sourceObservedAt: string | null;
+  declared: number;
+  exact: number;
+  matchedBlocks: number;
+  windowHours: LearningWindowHours | null;
+  recommendedSeconds: Arm | null;
+  reason: string;
+  evidencePostIds: string[];
+}
+
+/** Duration is tested independently of the hook. Require all arms in the
+ * same DJ/set/local six-hour daypart on distinct dates, and rotate which arm
+ * runs first across sets. Lifetime counts and scheduled times never qualify. */
+export function evaluateDurationLearning(
+  input: Parameters<typeof evaluateBlackRoomLearning>[0],
+): Record<LearningNetwork, DurationDecision> {
+  const local = new Intl.DateTimeFormat("sv-SE", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+  });
+  const snapshots = captureLearningSnapshots(input.snapshots, [], input.now);
+  return Object.fromEntries(
+    BLACKROOM_LEARNING_NETWORKS.map((network) => {
+      const sourceObservedAt = input.sourceObservedAt[network] || null;
+      const d: DurationDecision = {
+        sourceObservedAt,
+        declared: 0,
+        exact: 0,
+        matchedBlocks: 0,
+        windowHours: null,
+        recommendedSeconds: null,
+        evidencePostIds: [],
+        reason: "Sin pruebas declaradas de duración.",
+      };
+      if (learningSourceHealth(sourceObservedAt, input.now).status !== "fresh") {
+        d.reason = "Sin métricas recientes.";
+        return [network, d];
+      }
+      const identities = new Map<string, BlackRoomPublicationExperiment[]>();
+      const declared = new Set<string>();
+      for (const e of input.experiments) {
+        if (e.network !== network) continue;
+        const id = canonicalLearningPostId(network, e.platformPostId || "");
+        if (e.learningTestId === BLACKROOM_DURATION_TEST_ID) declared.add(e.reservationId);
+        if (!id) continue;
+        const found = identities.get(id) || [];
+        if (
+          !found.some(
+            (x) =>
+              x.reservationId === e.reservationId &&
+              x.durationSeconds === e.durationSeconds &&
+              x.learningTestId === e.learningTestId &&
+              x.dj === e.dj &&
+              x.sourceVideoId === e.sourceVideoId,
+          )
+        )
+          found.push(e);
+        identities.set(id, found);
+      }
+      d.declared = declared.size;
+      const valid = new Map(
+        [...identities].flatMap(([id, es]) => {
+          const e = es[0];
+          return es.length === 1 &&
+            e.learningTestId === BLACKROOM_DURATION_TEST_ID &&
+            DURATION_ARMS.includes(e.durationSeconds as Arm) &&
+            e.dj &&
+            e.dj !== "unknown" &&
+            e.sourceVideoId &&
+            e.format === "vertical" &&
+            e.language === "en" &&
+            e.creativeStrategy === "drop_first"
+            ? [[id, e] as const]
+            : [];
+        }),
+      );
+      const reservations = new Map<string, number>();
+      for (const e of valid.values()) reservations.set(e.reservationId, (reservations.get(e.reservationId) || 0) + 1);
+      for (const [id, e] of valid) if (reservations.get(e.reservationId) !== 1) valid.delete(id);
+      d.exact = valid.size;
+      if (d.declared)
+        d.reason = d.exact
+          ? "Faltan observaciones comparables a 24, 72 o 168 horas."
+          : "Esperando identificar publicaciones reales.";
+      for (const window of [168, 72, 24] as const) {
+        type Row = { id: string; date: string; part: number; arm: Arm; views: number; dj: string };
+        const groups = new Map<string, Row[]>(),
+          seen = new Set<string>();
+        for (const snap of snapshots) {
+          const id = canonicalLearningPostId(network, snap.postId);
+          if (
+            snap.network !== network ||
+            snap.windowHours !== window ||
+            !id ||
+            seen.has(id) ||
+            input.now.getTime() - Date.parse(snap.publishedAt) > 28 * 86400_000
+          )
+            continue;
+          const e = valid.get(id);
+          if (!e) continue;
+          seen.add(id);
+          const parts = local.formatToParts(new Date(snap.publishedAt));
+          const date = parts
+            .filter((p) => ["year", "month", "day"].includes(p.type))
+            .map((p) => p.value)
+            .join("-");
+          const part = Math.floor(Number(parts.find((p) => p.type === "hour")?.value) / 6),
+            dj = e.dj!;
+          const key = JSON.stringify([dj, e.sourceVideoId, part]),
+            group = groups.get(key) || [];
+          group.push({ id, date, part, dj, views: snap.views, arm: e.durationSeconds as Arm });
+          groups.set(key, group);
+        }
+        const blocks: Row[][] = [];
+        for (const group of groups.values()) {
+          group.sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+          // Pick earliest arm on distinct days without looking at outcome.
+          const used = new Set<string>(),
+            arms = new Set<Arm>(),
+            chosen: Row[] = [];
+          for (const r of group)
+            if (!used.has(r.date) && !arms.has(r.arm)) {
+              chosen.push(r);
+              used.add(r.date);
+              arms.add(r.arm);
+            }
+          if (chosen.length === 3) blocks.push(chosen);
+        }
+        if (seen.size && (d.windowHours === null || blocks.length > d.matchedBlocks)) {
+          d.windowHours = window;
+          d.matchedBlocks = blocks.length;
+          d.reason = "Faltan 5 bloques completos, 3 DJs, 2 franjas y rotación del orden de las 3 duraciones.";
+        }
+        if (
+          blocks.length < 5 ||
+          new Set(blocks.map((b) => b[0].dj)).size < 3 ||
+          new Set(blocks.map((b) => b[0].part)).size < 2 ||
+          new Set(blocks.map((b) => b[0].arm)).size < 3
+        )
+          continue;
+        d.windowHours = window;
+        d.matchedBlocks = blocks.length;
+        d.evidencePostIds = blocks
+          .flat()
+          .map((r) => r.id)
+          .sort();
+        for (const a of DURATION_ARMS) {
+          if (
+            DURATION_ARMS.filter((x) => x !== a).every((other) => {
+              const ratios = blocks.map(
+                (b) => (1 + b.find((r) => r.arm === a)!.views) / (1 + b.find((r) => r.arm === other)!.views),
+              );
+              return median(ratios) >= 1.3 && ratios.filter((x) => x > 1).length / ratios.length >= 2 / 3;
+            }) &&
+            median(blocks.map((b) => b.find((r) => r.arm === a)!.views)) >= 20
+          ) {
+            d.recommendedSeconds = a;
+            break;
+          }
+        }
+        d.reason = d.recommendedSeconds
+          ? `Preferencia provisional de ${d.recommendedSeconds}s por vistas a ${window}h; mantener exploración.`
+          : "Sin ventaja consistente entre las tres duraciones.";
+        break;
+      }
+      return [network, d];
+    }),
+  ) as Record<LearningNetwork, DurationDecision>;
+}
 export const BLACKROOM_LEARNING_NETWORKS: LearningNetwork[] = ["tiktok", "facebook", "youtube"];
 export type VerifiedLearningStatus = "missing" | "stale" | "collecting" | "testing";
 export interface VerifiedLearningDecision {
