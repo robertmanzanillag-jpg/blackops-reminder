@@ -46,7 +46,7 @@ function readPositiveInt(name: string, fallback: number, min: number, max: numbe
   return Math.min(max, Math.max(min, Math.round(value)));
 }
 
-function skillLimits() {
+export function skillLimits() {
   return {
     maxSkills: readPositiveInt("BLACKOPS_SKILLS_MAX_ACTIVE", DEFAULT_MAX_SKILLS, 1, 6),
     maxBodyChars: readPositiveInt("BLACKOPS_SKILLS_MAX_BODY_CHARS", DEFAULT_MAX_BODY_CHARS, 400, 4000),
@@ -56,7 +56,7 @@ function skillLimits() {
   };
 }
 
-function extractFrontmatter(raw: string): { metadata: Record<string, string>; body: string } {
+export function extractFrontmatter(raw: string): { metadata: Record<string, string>; body: string } {
   const match = raw.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?/);
   if (!match) return { metadata: {}, body: raw.trim() };
   const metadata: Record<string, string> = {};
@@ -88,7 +88,7 @@ function scoreSkill(skill: ClaudeSkill, message: string): number {
   return score;
 }
 
-function compactSkillBody(body: string, maxChars: number): string {
+export function compactSkillBody(body: string, maxChars: number): string {
   const cleaned = body
     .split(/\r?\n/)
     .filter((line) => {
