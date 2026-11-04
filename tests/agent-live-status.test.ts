@@ -86,9 +86,10 @@ test("automations read recent runs, not the seeding summary", () => {
   const run = (status: string, hoursAgo: number) => ({ status, startedAt: new Date(NOW - hoursAgo * 3_600_000).toISOString() });
   assert.equal(summarizeProbe(agentProbes.automations, ok([run("success", 1), run("failed", 2)]), NOW).state, "error");
   assert.equal(summarizeProbe(agentProbes.automations, ok([run("success", 40)]), NOW).state, "offline");
+  assert.equal(summarizeProbe(agentProbes.automations, ok([run("skipped", 1), run("skipped", 2)]), NOW).state, "offline");
   const working = summarizeProbe(agentProbes.automations, ok([run("success", 1), run("success", 3), run("pending_approval", 4)]), NOW);
   assert.equal(working.state, "working");
-  assert.equal(working.label, "3 corridas en 24 h");
+  assert.equal(working.label, "2 corridas en 24 h");
   assert.equal(working.detail, "1 aprobacion pendiente");
 });
 

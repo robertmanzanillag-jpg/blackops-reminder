@@ -212,7 +212,8 @@ export function summarizeProbe(probe: AgentProbe, result: ProbeResult | undefine
       const dayAgo = now - 26 * 60 * 60_000;
       const recent = runs.filter((run) => {
         const started = Date.parse(str(run.startedAt) || "");
-        return Number.isFinite(started) && started >= dayAgo;
+        // Skipped runs did no work; pending approvals are counted separately.
+        return Number.isFinite(started) && started >= dayAgo && (run.status === "success" || run.status === "failed");
       });
       const failed = recent.filter((run) => run.status === "failed").length;
       const pending = runs.filter((run) => run.status === "pending_approval").length;
