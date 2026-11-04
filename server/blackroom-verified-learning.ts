@@ -18,6 +18,12 @@ export interface DurationDecision {
   evidencePostIds: string[];
 }
 
+/** Reproducible evidence fingerprint bound to a test and network, not a
+ * credential. Local reports must still come from the private worker path. */
+export function durationDecisionId(network: LearningNetwork, decision: DurationDecision): string {
+  return createHash("sha256").update(JSON.stringify([BLACKROOM_DURATION_TEST_ID, network, { ...decision, id: "" }])).digest("hex").slice(0,20);
+}
+
 /** Duration is tested independently of the hook. Require all arms in the
  * same DJ/set/local six-hour daypart on distinct dates, and rotate which arm
  * runs first across sets. Lifetime counts and scheduled times never qualify. */
@@ -48,7 +54,7 @@ export function evaluateDurationLearning(
         reason: "Sin pruebas declaradas de duración.",
       };
       const finish = () => {
-        d.id = createHash("sha256").update(JSON.stringify([BLACKROOM_DURATION_TEST_ID, network, d])).digest("hex").slice(0,20);
+        d.id = durationDecisionId(network, d);
         return [network, d];
       };
       if (learningSourceHealth(sourceObservedAt, input.now).status !== "fresh") {

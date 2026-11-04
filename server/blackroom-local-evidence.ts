@@ -1,6 +1,6 @@
 import { captureLearningSnapshots, isLearningObservation, learningSourceHealth, type LearningObservation, type LearningNetwork, type LearningSnapshot } from "./blackroom-learning-observations";
-import { BLACKROOM_LEARNING_NETWORKS, canonicalLearningPostId, evaluateBlackRoomLearning, type VerifiedLearningDecision } from "./blackroom-verified-learning";
-import type { BlackRoomPublicationExperiment } from "./blackroom-growth-ceo";
+import { BLACKROOM_LEARNING_NETWORKS, BLACKROOM_DURATION_TEST_ID, DURATION_ARMS, canonicalLearningPostId, durationDecisionId, evaluateBlackRoomLearning, evaluateDurationLearning, type VerifiedLearningDecision, type DurationDecision } from "./blackroom-verified-learning";
+import type { BlackRoomCeoAnalytics, BlackRoomPublicationExperiment } from "./blackroom-growth-ceo";
 
 type SourcePost = LearningObservation & { references: string[]; durationSeconds?: number; minDuration?: number; maxDuration?: number };
 type Decisions = Record<LearningNetwork, VerifiedLearningDecision>;
@@ -75,7 +75,9 @@ export function assessLocalBlackRoomExports(previous: EvidenceArchive, imports: 
     if (post && receiptCounts.get(key) === 1 && [post.minDuration, post.maxDuration]
       .every(seconds => seconds === undefined || Math.abs(seconds - e.durationSeconds) <= 1)) e.platformPostId = post.postId;
   }
-  const decisions = evaluateBlackRoomLearning({ snapshots, experiments, sourceObservedAt, now });
+  const input = { snapshots, experiments, sourceObservedAt, now };
+  const decisions = evaluateBlackRoomLearning(input);
+  const durationDecisions = evaluateDurationLearning(input);
   // Descriptive, same-age ranges only. Do not call a duration a winner from
   // unmatched DJs, small samples, or lifetime views across different networks.
   const durations = new Map(posts.map(p => [p.network + ":" + p.postId, p.durationSeconds]));
@@ -95,6 +97,7 @@ export function assessLocalBlackRoomExports(previous: EvidenceArchive, imports: 
   return {
     archive: { version: 1 as const, posts, snapshots },
     report: { version: 1 as const, scope: "local-evidence" as const, evaluatedAt: now.toISOString(), decisions,
+      durationTestId: BLACKROOM_DURATION_TEST_ID, durationDecisions,
       networkSamples: Object.fromEntries(BLACKROOM_LEARNING_NETWORKS.map(net => [net, posts.filter(p => p.network === net).length])),
       snapshotCount: snapshots.length, observedDurationCohorts },
   };
@@ -111,4 +114,29 @@ export function preferFreshLocalEvidence(remote: Decisions | undefined, local: D
     if (!current.sourceObservedAt || Date.parse(candidate.sourceObservedAt!) > Date.parse(current.sourceObservedAt)) selected[net] = candidate;
   }
   return selected;
+}
+
+export function applyLocalEditorialReport(
+  remote: BlackRoomCeoAnalytics, report: Partial<ReturnType<typeof assessLocalBlackRoomExports>["report"]> | null, now: Date,
+): BlackRoomCeoAnalytics {
+  if (!remote?.verifiedLearning || report?.scope !== "local-evidence" || report.version !== 1) return remote;
+  const verifiedLearning = preferFreshLocalEvidence(remote.verifiedLearning, report.decisions, now);
+  let durationLearning = remote.durationLearning;
+  if (report.durationTestId === BLACKROOM_DURATION_TEST_ID && report.durationDecisions) {
+    let overlay: Record<LearningNetwork, DurationDecision> | undefined;
+    for (const net of BLACKROOM_LEARNING_NETWORKS) {
+      const d = report.durationDecisions[net], current = remote.durationLearning?.[net];
+      if (!d || d.id !== durationDecisionId(net, d) || learningSourceHealth(d.sourceObservedAt, now).status !== "fresh") continue;
+      if (current?.sourceObservedAt && Date.parse(current.sourceObservedAt) >= Date.parse(d.sourceObservedAt!)) continue;
+      if (d.recommendedSeconds !== null && (!DURATION_ARMS.includes(d.recommendedSeconds) || d.matchedBlocks < 5 || !Array.isArray(d.evidencePostIds)
+        || new Set(d.evidencePostIds).size < 15)) continue;
+      overlay ||= remote.durationLearning ? { ...remote.durationLearning } : evaluateDurationLearning({ snapshots: [], experiments: [], sourceObservedAt: {}, now });
+      overlay[net] = d;
+    }
+    durationLearning = overlay ?? durationLearning;
+  }
+  // Only the two editorial experiment fields can be overlaid; an old remote
+  // hook-only deployment can now rotate durations when fresh local evidence
+  // exists. Unknown destinations remain without a preference.
+  return { ...remote, verifiedLearning, ...(durationLearning ? { durationLearning } : {}) };
 }

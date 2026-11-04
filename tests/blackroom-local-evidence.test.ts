@@ -3,8 +3,11 @@ import assert from "node:assert/strict";
 import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
 import path from "node:path";
 import { tmpdir } from "node:os";
-import { assessLocalBlackRoomExports, emptyEvidence, preferFreshLocalEvidence } from "../server/blackroom-local-evidence";
-import { BLACKROOM_HOOK_TEST_ID } from "../server/blackroom-verified-learning";
+import { assessLocalBlackRoomExports, emptyEvidence, preferFreshLocalEvidence, applyLocalEditorialReport } from "../server/blackroom-local-evidence";
+import { BLACKROOM_HOOK_TEST_ID, BLACKROOM_DURATION_TEST_ID, DURATION_ARMS } from "../server/blackroom-verified-learning";
+import { planBlackRoomDeterministicEdit } from "../server/blackroom-deterministic-editor";
+import { buildBlackRoomPublicationExperiments } from "../script/blackroom-remote-sync.mjs";
+import { buildVerifiedMetricoolExport } from "../script/blackroom-metricool-exporter.mjs";
 import { refreshLocalBlackRoomEvidence } from "../script/blackroom-local-evidence";
 
 const ref = "BR-111111111111";
@@ -80,4 +83,63 @@ test("local archive is crash-safe on invalid input; repeated refreshes do not to
     await assert.rejects(refreshLocalBlackRoomEvidence(dir, dir, seen));
     assert.equal(await readFile(path.join(dir,"local-ceo-evidence.json"),"utf8"), "{bad");
   } finally { await rm(dir, { recursive:true, force:true }); }
+});
+
+test("CSV data and actual confirmed receipts feed duration planning offline; disagreement never exploits a shared edit", () => {
+  const now = new Date("2026-11-04T22:00:00Z");
+  const networks = ["tiktok", "facebook", "youtube"] as const;
+  const makeReport = (mixed = false, durationMismatch = false) => {
+    const imports = [], entries = [];
+    for (let group = 0; group < 5; group++) for (let day = 0; day < 3; day++) {
+      const num = 1000 + group * 3 + day, arm = DURATION_ARMS[(group+day)%3], dj = "DJ-" + group;
+      const date = "2026-11-0" + (day+1), hour = group%2 ? "19" : "09";
+      const publishedAt = date + "T" + hour + ":00:00Z";
+      const reference = "BR-" + num.toString(16).padStart(12,"0");
+      entries.push({ status:"confirmed", reservationId:"owned-"+num, networkReceipts:Object.fromEntries(networks.map(n=>[n,"scheduler-"+num])),
+        learningTestId:BLACKROOM_DURATION_TEST_ID, learningReference:reference, videoId:"set-"+group, dj, language:"en", format:"vertical",
+        durationSeconds:arm, publicationDateTime:publishedAt, slot:hour+":00", creativeStrategy:"drop_first" });
+      for (const net of networks) {
+        const views = arm === (mixed && net === "facebook" ? 60 : 30) ? 350 : 100;
+        const measuredSeconds = durationMismatch && arm === 30 ? 15 : arm;
+        const filename = { tiktok:"tiktok-posts_range.csv", facebook:"facebook-reels_range.csv", youtube:"youtube-published-videos-posts_range.csv" }[net];
+        const text = "URL,PostLink,videoId,Date,Views,VideoViews,Duration,Caption\n" +
+          [`https://tiktok.com/@blackroom.clipss/video/${num}`, `https://facebook.com/reel/${num}`, "yt"+num, publishedAt,views,views,measuredSeconds,reference].join(",");
+        imports.push(buildVerifiedMetricoolExport({ filename,network:net,text,observedAt:new Date(Date.parse(publishedAt)+86400_000).toISOString() }));
+      }
+    }
+    return assessLocalBlackRoomExports(emptyEvidence(), imports, buildBlackRoomPublicationExperiments({entries}), now).report;
+  };
+  const consensus = makeReport(), mixed = makeReport(true), mismatch = makeReport(false,true);
+  assert.equal(consensus.durationDecisions.tiktok.exact, 15);
+  assert.equal(consensus.decisions.tiktok.declaredExperiments, 0); // duration observations never train the hook
+  for (const n of networks) {
+    assert.equal(consensus.durationDecisions[n].recommendedSeconds, 30);
+    assert.equal(mismatch.durationDecisions[n].exact, 10);
+    assert.equal(mismatch.durationDecisions[n].recommendedSeconds, null);
+  }
+  assert.equal(mixed.durationDecisions.facebook.recommendedSeconds, 60);
+  const initial = { verifiedLearning:structuredClone(consensus.decisions), networkDailyTargets:{tiktok:4,facebook:4,youtube:4} } as any;
+  const analytics = applyLocalEditorialReport(initial, consensus, now);
+  assert.equal(initial.durationLearning, undefined);
+  assert.deepEqual(analytics.networkDailyTargets,initial.networkDailyTargets);
+  assert.equal(analytics.durationLearning?.youtube.recommendedSeconds,30);
+  const bad = structuredClone(consensus); bad.durationDecisions.youtube = bad.durationDecisions.facebook;
+  assert.equal(applyLocalEditorialReport(initial,bad,now).durationLearning?.youtube.recommendedSeconds,null);
+  assert.equal(applyLocalEditorialReport(initial,consensus,new Date("2026-11-08")).durationLearning, undefined);
+  assert.deepEqual(applyLocalEditorialReport(analytics,mixed,now).durationLearning,analytics.durationLearning); // Equal-time replay cannot supersede.
+  const divergent = applyLocalEditorialReport(initial,mixed,now);
+  const dayNum = Math.floor(now.getTime()/86400_000);
+  const date = new Date((dayNum+(6-dayNum%6)%6)*86400_000).toISOString().slice(0,10);
+  const plan = (evidence: typeof analytics, id: string) => planBlackRoomDeterministicEdit({ now, ledger:{version:1,entries:[]},
+    inventory:[{id:"source",title:"DJ NEW - DJ Set",duration:3600}],queue:{enabled:true, sourceHistory:[], prioritySources:[], analytics:evidence,
+      jobs:[{id,targetDate:date,status:"queued",slots:[{localTime:"12:00",networks:[...networks]}],requirements:{posts:1,djs:1,postsPerDj:1,durationsSeconds:[15,30,60]}}]} as any });
+  let exploited = false;
+  for (let i=0;i<50 && !exploited;i++) {
+    const id="duration-"+i, p=plan(analytics,id)!;
+    const q=plan(divergent,id)!;
+    assert.equal(q.allocationMode,"explore");
+    assert.equal(q.learningTestId,BLACKROOM_DURATION_TEST_ID);
+    if (p.allocationMode==="exploit") { assert.equal(p.durationSeconds,30); assert.notEqual(p.learningTestId,BLACKROOM_DURATION_TEST_ID); exploited=true; }
+  }
+  assert.ok(exploited);
 });
