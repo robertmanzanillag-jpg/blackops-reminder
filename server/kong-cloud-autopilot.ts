@@ -7,10 +7,12 @@ import { verifyImmutableMedia } from "./kong-media-store";
 import { collectMetricoolObservations, dueLearningRegistry, mergePublishedRegistry, type PublishedCreative } from "./kong-metricool-learning";
 import { analyzeLearning, emptyLearningLedger, ingestLearning } from "./kong-content-learning";
 import { createLearningSelector } from "./kong-learning-selection";
+import { operationalIssues, recordOperationalNotice, type OperationalNotice, type OperationalState } from "./kong-operational-alerts";
+import { evaluateKongVolumePolicy, volumeTargets } from "./kong-volume-policy";
 import { emptyProductionState, runProductionCycle, type EditorialTask, type ProductionDependencies, type ProductionState } from "./kong-production-pipeline";
 import { appendProductionArchive, archiveProductionHistory } from "./kong-production-archive";
 import { callMetricoolMcpTool, formatMetricoolMcpDate } from "./blackroom-metricool-bridge";
-import { assetProblem, catalogSchema, coverage, deliverJob, emptyState, fillPlan, isKongNetwork, networks, type Asset, type Delivery, type Job, type State } from "./kong-autopilot-core";
+import { assetProblem, catalogSchema, coverage, deliverJob, emptyState, fillPlan, isKongNetwork, networks, dayInNewYork, type Asset, type Delivery, type Job, type State } from "./kong-autopilot-core";
 
 const BRAND = 6475033;
 const INTERVAL = 15 * 60_000;
@@ -100,6 +102,7 @@ export function createDelivery(env: Env, fetcher: typeof fetch = fetch): Deliver
 export interface KongRuntimeOptions {
   startupBlockers?: string[];
   publishedRegistry?: () => Promise<PublishedCreative[]>;
+  notify?: (notice: OperationalNotice) => Promise<boolean>;
   auditCalendar?: typeof auditKongCalendar;
   production?: { dependencies: Omit<ProductionDependencies, "save">;
     tasks?(state: ProductionState, now: Date): Promise<EditorialTask[]>;
@@ -111,6 +114,7 @@ export interface KongRuntimeOptions {
 export function createKongCloudRuntime(env: Env = process.env, options: KongRuntimeOptions = {}) {
   let pool: Pool | undefined, timer: ReturnType<typeof setInterval> | undefined, running = false;
   let lastError: string | undefined, lastCycleAt: string | undefined;
+  let cycleFailureOperations: OperationalState | undefined;
   const getPool = () => options.pool || (pool ||= new Pool({ connectionString: env.DATABASE_URL, max: 2, connectionTimeoutMillis: 10_000, statement_timeout: 30_000 }));
   const fetcher = options.fetch || fetch, nowAt = options.now || (() => new Date());
   async function cycle() {
@@ -213,7 +217,27 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
       const assets = [...catalogAssets, ...(state.production?.assets || [])].filter((a, i, all) => {
         try { approvedUrl(a.mediaUrl, origins); return !assetProblem(a, now) && all.findIndex(other => other.sha256 === a.sha256) === i; } catch { return false; }
       });
-      fillPlan(state, assets, now, wall => formatMetricoolMcpDate(wall, "America/New_York"), createLearningSelector(state.learning, now));
+      const volume = evaluateKongVolumePolicy(state.volumePolicy, state.learning, state.publishedCreatives || [], now);
+      // A descriptive signal cannot create source supply. Dry-plan the proposed
+      // increase against reviewed assets before changing any live target.
+      if (networks.some(n => volume.networks[n].target > (state.volumePolicy?.networks[n].target || 5))) {
+        const proposed = structuredClone(state);
+        fillPlan(proposed, assets, now, wall => formatMetricoolMcpDate(wall,"America/New_York"),createLearningSelector(state.learning,now),volumeTargets(volume));
+        const available = coverage(proposed,now,volumeTargets(volume)).slice(1,8);
+        for (const network of networks) if (volume.networks[network].target > (state.volumePolicy?.networks[network].target || 5)
+          && available.some(d => {
+            const row = d.networks[network] as {scheduled:number;prepared:number;uncertain:number;target:number};
+            return row.uncertain > 0 || row.scheduled + row.prepared < row.target;
+          })) {
+          volume.networks[network].target = state.volumePolicy?.networks[network].target || 5;
+          volume.networks[network].lastChangedAt = state.volumePolicy?.networks[network].lastChangedAt;
+          volume.networks[network].reason = "reviewed_supply_insufficient_for_volume_trial";
+        }
+      }
+      if (!state.volumePolicy || networks.some(n=>state.volumePolicy!.networks[n].target!==volume.networks[n].target))
+        (state.volumeHistory ||= []).push(structuredClone(volume));
+      state.volumePolicy = volume;
+      fillPlan(state, assets, now, wall => formatMetricoolMcpDate(wall, "America/New_York"), createLearningSelector(state.learning, now),volumeTargets(volume));
       state.lastCycleAt = now.toISOString(); await save();
       if (!ready.blockers.length) {
         for (const job of state.jobs.filter(j => j.state === "planned" && ready.verifiedNetworks.includes(j.network)
@@ -241,13 +265,27 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
       // Read-only audit after mutations: local receipts are not current coverage.
       if (canReadReceipts && ready.verifiedNetworks.length && (calendarChanged || !state.calendarAudit
         || ready.verifiedNetworks.some(n => !state.calendarAudit?.verifiedNetworks?.includes(n))
+        || networks.some(n => (state.calendarAudit?.targets?.[n] || 5) !== volume.networks[n].target)
+        || dayInNewYork(new Date(state.calendarAudit.checkedAt)) !== dayInNewYork(now)
         || +now - Date.parse(state.calendarAudit.checkedAt) >= 3600_000)) {
         state.calendarAudit = await (options.auditCalendar || auditKongCalendar)({ now, jobs: state.jobs,
-          token: env.METRICOOL_USER_TOKEN!, userId: env.METRICOOL_USER_ID!, verifiedNetworks: ready.verifiedNetworks }, fetcher);
+          token: env.METRICOOL_USER_TOKEN!, userId: env.METRICOOL_USER_ID!, verifiedNetworks: ready.verifiedNetworks,targets:volumeTargets(volume) }, fetcher);
         await save();
       }
+      state.operations = await recordOperationalNotice(state.operations, operationalIssues({state,
+        startupBlockers:options.startupBlockers || [],blockers:ready.blockers,now}),now,{
+        save:async operations=>{state.operations=operations;await save();},notify:options.notify,
+      });
       lastCycleAt = state.lastCycleAt;
-    } catch { lastError = "cycle_failed_check_catalog_database_and_provider"; }
+      cycleFailureOperations = undefined;
+    } catch {
+      lastError = "cycle_failed_check_catalog_database_and_provider";
+      // Database failures cannot be persisted to that database. Retain a
+      // process-local incident and use the same owner push tag as normal alerts.
+      try { cycleFailureOperations = await recordOperationalNotice(cycleFailureOperations,[{code:"cycle_failed"}],nowAt(),{
+        save:async value=>{cycleFailureOperations=value;},notify:options.notify,
+      }); } catch { /* Cycle failure remains visible in status. */ }
+    }
     finally {
       if (client) { if (locked) await client.query("SELECT pg_advisory_unlock($1)", [LOCK]).catch(() => {}); client.release(); }
       running = false;
@@ -262,6 +300,8 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
         try { state = (await getPool().query("SELECT state FROM kong_cloud_autopilot WHERE id='kong'")).rows[0]?.state; } catch { /* Read-only status never initializes schema. */ }
       }
       return { ...readiness(env, options.production), startupBlockers: options.startupBlockers || [], schedulerActive: Boolean(timer), running, lastCycleAt: state?.lastCycleAt || lastCycleAt, lastError,
+        operationalStatus:{notificationAdapter:options.notify?"configured":"not_configured",...state?.operations},
+        cycleFailureNotification:cycleFailureOperations || null,
         productionStatus: { jobs: state?.production?.jobs.length || 0, reviewedAssets: state?.production?.assets.length || 0,
           archivePolicy: "terminal_older_than_30d_durable_append_before_trim",
           pendingQa: state?.production?.jobs.filter(j => j.stage === "qa_pending").length || 0,
@@ -270,7 +310,9 @@ export function createKongCloudRuntime(env: Env = process.env, options: KongRunt
           registryError: state?.publicationRegistryError,
           lastCheckedAt:state?.learningCheckedAt, error:state?.learningError,
           reports:state?.learning ? networks.flatMap(network => (["24h","72h","7d"] as const).map(horizon => analyzeLearning(state.learning!,network,horizon,new Date()))) : [] },
-        localLedgerCoverage: state ? coverage(state, nowAt()) : null,
+        volumePolicy: state?.volumePolicy || null,
+        volumeHistory: state?.volumeHistory || [],
+        localLedgerCoverage: state ? coverage(state, nowAt(),state.volumePolicy ? volumeTargets(state.volumePolicy) : undefined) : null,
         calendarAudit: state?.calendarAudit || null,
         remoteCoverageVerified: Boolean(networks.every(n => verifiedNetworks(env).includes(n) && state?.calendarAudit?.verifiedNetworks?.includes(n)) && state?.calendarAudit?.complete && +nowAt() >= Date.parse(state.calendarAudit.checkedAt)
           && state.calendarAudit.days.every(day => networks.every(n => day.networks[n].missing !== null))

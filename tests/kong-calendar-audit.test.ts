@@ -91,3 +91,13 @@ test("known validated exact video job or explicit media metadata proves video ty
   assert.equal(conflict.days[0].networks.tiktok.unverifiedMediaPosts, 1);
   assert.equal(conflict.days[0].networks.tiktok.missing, null);
 });
+test("per-network adaptive targets clamp to five-seven and never report negative shortfall",async()=>{
+  const now=new Date("2026-11-04T13:00:00Z");
+  const result=await auditKongCalendar({now,jobs:[],userId:"test",token:"test",verifiedNetworks:["tiktok","facebook"],targets:{tiktok:6,facebook:7}},
+    async()=>new Response(JSON.stringify({data:[]})));
+  assert.equal(result.days[1].networks.tiktok.missing,6);assert.equal(result.days[1].networks.facebook.missing,7);
+  assert.deepEqual(result.targets,{tiktok:6,facebook:7});
+  const clamped=await auditKongCalendar({now,jobs:[],userId:"test",token:"test",verifiedNetworks:["tiktok","facebook"],targets:{tiktok:0,facebook:99}},
+    async()=>new Response(JSON.stringify({data:[]})));
+  assert.deepEqual(clamped.targets,{tiktok:5,facebook:7});
+});

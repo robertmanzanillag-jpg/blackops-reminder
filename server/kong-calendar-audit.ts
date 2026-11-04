@@ -1,8 +1,8 @@
-import { assetSchema, dayInNewYork, dayPlus, networks, type Job, type Network } from "./kong-autopilot-core";
+import { assetSchema, dayInNewYork, dayPlus, networks, dailyTarget, type VolumeTargets, type Job, type Network } from "./kong-autopilot-core";
 import { formatMetricoolMcpDate } from "./blackroom-metricool-bridge";
 
 const brandId = 6475033;
-export interface CalendarAuditInput { now: Date; jobs: Job[]; userId: string; token: string; verifiedNetworks: Network[]; }
+export interface CalendarAuditInput { now: Date; jobs: Job[]; userId: string; token: string; verifiedNetworks: Network[]; targets?:VolumeTargets; }
 type Row = Record<string, any>;
 export interface CalendarDayNetwork { scheduled: number; scheduledPosts: number; verifiedVideoPosts: number; unverifiedMediaPosts: number;
   missing: number | null; duplicates: number; errors: number; unmatched: number; }
@@ -103,8 +103,8 @@ export async function auditKongCalendar(input: CalendarAuditInput, fetcher: type
     else bucket.unverifiedMediaPosts++;
   }
   for (const day of days) for (const network of networks) if (complete && input.verifiedNetworks.includes(network) && !day.networks[network].unverifiedMediaPosts)
-    day.networks[network].missing = Math.max(0, 5 - day.networks[network].verifiedVideoPosts);
-  return { checkedAt: input.now.toISOString(), brandId, start, end, complete, verifiedNetworks: [...new Set(input.verifiedNetworks.filter(n => networks.includes(n)))], issues: [...new Set(issues)], days, jobResults,
-    interpretation: "Read-only scheduler coverage, not proof of publication or distribution. Scheduled counts all posts; missing counts the five-video target and is unknown for unverified media or incomplete responses." };
+    day.networks[network].missing = Math.max(0, dailyTarget(input.targets,network) - day.networks[network].verifiedVideoPosts);
+  return { checkedAt: input.now.toISOString(), brandId, start, end, complete, targets:{tiktok:dailyTarget(input.targets,"tiktok"),facebook:dailyTarget(input.targets,"facebook")}, verifiedNetworks: [...new Set(input.verifiedNetworks.filter(n => networks.includes(n)))], issues: [...new Set(issues)], days, jobResults,
+    interpretation: "Read-only scheduler coverage, not proof of publication or distribution. Missing counts each network's five-to-seven-video target and is unknown for unverified media or incomplete responses." };
 }
 export type CalendarAudit = Awaited<ReturnType<typeof auditKongCalendar>>;

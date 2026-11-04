@@ -172,3 +172,35 @@ test("runtime imports publication evidence before analytics and retains registry
   assert.equal(db.state().publishedCreatives?.[0].family, "pov");
   assert.equal((await runtime.status()).learningStatus.registryError, "publication_registry_import_failed");
 });
+test("measured volume trial holds at five when reviewed future supply is insufficient",async()=>{
+  const state=emptyState();state.learning={version:1,observations:[]};state.publishedCreatives=[];state.learningCheckedAt=now.toISOString();
+  for(let day=0;day<14;day++)for(let slot=0;slot<5;slot++){
+    const publishedAt=new Date(+now-(16-day)*86400_000).toISOString(),postId=String(1000+day*5+slot),publicUrl=`https://www.tiktok.com/@kongnightlife/video/${postId}`;
+    state.publishedCreatives.push({network:"tiktok",postId,publicUrl,publishedAt,family:"pov",hookStyle:"question"});
+    state.learning.observations.push({network:"tiktok",postId,sourceUrl:publicUrl,publishedAt,observedAt:new Date(Date.parse(publishedAt)+72*3600_000).toISOString(),
+      family:"pov",hookStyle:"question",metrics:{views:day<7?100:200,shares:day<7?1:4}});
+  }
+  const db=database(state);const runtime=createKongCloudRuntime({...env,KONG_AUTOPUBLISH_ENABLED:"false"},{pool:db.pool,now:()=>now});
+  await runtime.cycle();assert.equal(db.state().volumePolicy?.networks.tiktok.target,5);
+  assert.equal(db.state().volumePolicy?.networks.tiktok.reason,"reviewed_supply_insufficient_for_volume_trial");
+  assert.equal(db.state().volumePolicy?.networks.tiktok.lastChangedAt,undefined);
+});
+
+test("runtime persists and deduplicates actionable coverage notices",async()=>{
+  const db=database();let sent=0;
+  const runtime=createKongCloudRuntime({...env,KONG_AUTOPUBLISH_ENABLED:"false"},{pool:db.pool,now:()=>now,notify:async()=>{
+    assert.equal(db.state().operations?.notices.at(-1)?.delivery,"sending");sent++;return true;
+  }});
+  await runtime.cycle();await runtime.cycle();assert.equal(sent,1);
+  assert.equal(db.state().operations?.notices.length,1);
+  assert.equal((await runtime.status()).operationalStatus.notificationAdapter,"configured");
+});
+test("database outage emits a bounded process-local owner incident",async()=>{
+  let calls=0;
+  const pool={connect:async()=>{throw Error("db_down");},query:async()=>{throw Error("db_down");},end:async()=>{}};
+  const runtime=createKongCloudRuntime(env,{pool,now:()=>now,notify:async()=>{calls++;return true;}});
+  await runtime.cycle();await runtime.cycle();
+  const status=await runtime.status();assert.equal(calls,1);
+  assert.equal(status.cycleFailureNotification?.notices[0].delivery,"sent");
+  assert.match(status.lastError||"",/cycle_failed/);
+});

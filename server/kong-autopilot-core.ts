@@ -35,6 +35,9 @@ export interface Job { id: string; day: string; network: Network; slot: number; 
   state: "planned" | "submitting" | "scheduled" | "uncertain" | "expired" | "blocked";
   receipt?: string; attempts: number; nextAttemptAt?: string; lastReconciledAt?: string; reason?: string; }
 export interface State { version: 1; jobs: Job[]; lastCycleAt?: string; lastError?: string;
+  volumePolicy?: import("./kong-volume-policy").VolumePolicyState;
+  volumeHistory?: import("./kong-volume-policy").VolumePolicyState[];
+  operations?: import("./kong-operational-alerts").OperationalState;
   calendarAudit?: Awaited<ReturnType<typeof import("./kong-calendar-audit").auditKongCalendar>>;
   selectionDecisions?: SelectionDecision[];
   learning?: LearningLedger; publishedCreatives?: PublishedCreative[];
@@ -62,15 +65,20 @@ export function assetProblem(asset: Asset, instant: Date, checkedAt = instant): 
 
 // Seed slots are explicitly hypotheses, not inferred best hours. Offset conversion is
 // injected from the existing timezone-tested Metricool helper to handle DST.
-const hours: Record<Network, string[]> = { tiktok: ["12:15", "15:15", "18:15", "20:15", "22:15"], facebook: ["11:45", "14:45", "17:45", "19:45", "21:45"] };
+const hours: Record<Network, string[]> = { tiktok: ["12:15", "15:15", "18:15", "20:15", "22:15", "09:15", "07:15"], facebook: ["11:45", "14:45", "17:45", "19:45", "21:45", "09:00", "07:00"] };
+export type VolumeTargets = Partial<Record<Network,number>>;
+export const dailyTarget = (targets:VolumeTargets|undefined,network:Network):number => {
+  const n=targets?.[network];return typeof n==="number" && Number.isFinite(n) ? Math.min(7,Math.max(5,Math.floor(n))) : 5;
+};
 export interface SelectionDecision { jobId: string; network: Network; at: string; mode: "baseline" | "exploration" | "variation" | "gap";
   reason: string; assetId?: string; horizon?: "72h" | "7d";
   evidence?: { dimension: string; value: string; metric: string; ratio: number; count: number; referenceCount: number }[]; }
 export type AssetSelector = (input: { jobId: string; network: Network; eligible: Asset[]; daily: Job[]; recent: Job[] }) => { asset?: Asset; decision: SelectionDecision };
-export function fillPlan(state: State, assets: Asset[], now: Date, toOffset: (wall: string) => string, select?: AssetSelector): State {
+export function fillPlan(state: State, assets: Asset[], now: Date, toOffset: (wall: string) => string, select?: AssetSelector, targets?:VolumeTargets): State {
   const today = dayInNewYork(now);
   for (const job of state.jobs) if (isKongNetwork(job.network) && job.state === "planned" && Date.parse(job.at) <= +now) { job.state = "expired"; job.reason = "missed_slot"; }
-  for (let d = 0; d < 14; d++) for (const network of networks) for (let slot = 0; slot < 5; slot++) {
+  for(const job of state.jobs) if(isKongNetwork(job.network) && job.slot>=dailyTarget(targets,job.network) && job.state==="planned" && job.attempts===0){job.state="blocked";job.reason="volume_target_reduced";}
+  for (let d = 0; d < 14; d++) for (const network of networks) for (let slot = 0; slot < dailyTarget(targets,network); slot++) {
     const day = dayPlus(today, d), at = toOffset(`${day}T${hours[network][slot]}:00`);
     if (Date.parse(at) <= +now + 15 * 60_000) continue;
     const id = `kong:${day}:${network}:${slot}`;
@@ -99,14 +107,14 @@ export function fillPlan(state: State, assets: Asset[], now: Date, toOffset: (wa
   }
   return state;
 }
-export function coverage(state: State, now: Date) {
+export function coverage(state: State, now: Date, targets?:VolumeTargets) {
   const today = dayInNewYork(now);
   return Array.from({ length: 14 }, (_, i) => { const day = dayPlus(today, i);
     return { day, networks: Object.fromEntries(networks.map(network => {
       const rows = state.jobs.filter(j => j.day === day && j.network === network);
       const scheduled = rows.filter(j => j.state === "scheduled").length;
-      return [network, { scheduled, prepared: rows.filter(j => j.state === "planned").length,
-        missingScheduled: 5 - scheduled, uncertain: rows.filter(j => ["submitting", "uncertain"].includes(j.state)).length }];
+      return [network, { target:dailyTarget(targets,network), scheduled, prepared: rows.filter(j => j.state === "planned").length,
+        missingScheduled: Math.max(0,dailyTarget(targets,network) - scheduled), uncertain: rows.filter(j => ["submitting", "uncertain"].includes(j.state)).length }];
     })) };
   });
 }

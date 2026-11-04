@@ -18,8 +18,12 @@ Remaining activation requirements:
 - Supply enough varied authorized media; curated manifest plumbing is not autonomous discovery or editorial production.
 - Verify fresh events and service facts, actual visual/audio QA, and immutable online media.
 - Prove production, restart persistence, uncertain-write reconciliation, scheduled receipt and eventual public publication on each network.
-- Implement adaptive volume (the current runtime planner has five fixed slots) and actionable operational alerts.
+- Verify the newly implemented adaptive volume and opt-in owner operational alerts on the target host; source supply and actual push delivery remain unverified.
 - Verify the full application build and App QA route/link/API/error/improvement gate on the target server.
 - Obtain deployment approval after the PR/QA summary, then deploy and observe real cycles. Do not activate a partial pipeline merely to obtain a running timer.
 
 Rollback: disable KONG enable flags or remove its startup registration. Preserve the persistent ledger and remote scheduled posts for reconciliation.
+
+Second repair checkpoint: adaptive5–7daily quantities with a five-video floor, measured evidence and reviewed-supply gate; stable time slots; per-network audit targets; persisted owner incident notices with bounded retries and a process-local DB-outage fallback. Independent checker initially found low-view rollback and midnight date-selection defects; both fixed. Complete KONG suite now145/145 passing with real synthetic rendering, no skips. Independent focused re-review43/43 passing. This is still not live operation or complete production supply.
+
+Additional host inspection: development HEAD283cc9ec8f2dd2c684be31fadc831b60aee6b5f5 on `publish/agents-world-reviewed-381ae4da`, clean worktree, no `origin` remote. That commit is unavailable from the GitHub repository, but read-only access to the KONG PR branch by explicit GitHub URL succeeds. Integration must preserve this divergent host state; do not replace it with the older repository tree or deploy the whole PR blindly.
