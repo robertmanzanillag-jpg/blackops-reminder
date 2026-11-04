@@ -32,7 +32,10 @@ export type AgentProbe = {
     | "clippers"
     | "automations"
     | "dev-health"
-    | "legal";
+    | "legal"
+    | "blackroom-videos"
+    | "news"
+    | "kong-videos";
   onDemandNote?: string;
 };
 
@@ -69,6 +72,9 @@ export const agentProbes: Record<string, AgentProbe> = {
     onDemandNote: "Lee el registro de salud guardado; el escaneo completo de QA corre bajo demanda desde su pagina.",
   },
   control: { key: "dev-health-dashboard", url: "/api/developer-health/dashboard", intervalMs: 2 * MINUTE, kind: "dev-health" },
+  "blackroom-videos": { key: "blackroom-agent", url: "/api/blackroom-agent", intervalMs: 2 * MINUTE, kind: "blackroom-videos" },
+  news: { key: "local-news-status", url: "/api/clippers/local-news/status", intervalMs: 2 * MINUTE, kind: "news" },
+  "kong-videos": { key: "promo-video-status", url: "/api/promo-video/status", intervalMs: 5 * MINUTE, kind: "kong-videos" },
   // Not fetched by the building: it reuses the legal query the office page already runs.
   legal: { key: "legal-compliance-reports", url: "/api/legal-compliance/reports", intervalMs: MINUTE, kind: "legal" },
 };
@@ -190,6 +196,31 @@ export function extractActivity(probe: AgentProbe, raw: unknown, now: number = D
       return list(body?.apps).map((app) => clip(`${str(app.name) || "App"}: ${word(app.status)}`));
     case "legal":
       return list(body?.reports).map((report) => clip(`${str(report.appName) || "App"}: ${word(report.severity)}`));
+    case "blackroom-videos": {
+      const totals = asObject(asObject(body?.agent)?.totals);
+      const online = asObject(body?.remote)?.online === true;
+      return [
+        online ? "Dispositivo de publicacion en linea" : "Dispositivo de publicacion desconectado",
+        totals ? `Cola: ${num(totals.queued) ?? 0} en espera · ${num(totals.processing) ?? 0} editando` : "",
+        totals ? `${num(totals.scheduled) ?? 0} programados · ${num(totals.completed) ?? 0} publicados` : "",
+      ];
+    }
+    case "news": {
+      const queue = asObject(body?.queue);
+      const events = asObject(body?.events);
+      return [
+        str(body?.lastRunAt) ? `Ultima ronda ${hoursAgo(str(body?.lastRunAt), now)}` : "Sin rondas todavia",
+        events ? `${num(events.active) ?? 0} noticias activas` : "",
+        queue ? `${num(queue.total) ?? 0} en cola · ${num(queue.approvalRequired) ?? 0} esperan aprobacion` : "",
+      ];
+    }
+    case "kong-videos": {
+      const outputs = list(body?.outputVideos).sort((a, b) => (str(b.modifiedAt) || "").localeCompare(str(a.modifiedAt) || ""));
+      return [
+        `${outputs.length} videos editados · ${list(body?.inputVideos).length} por editar`,
+        ...outputs.slice(0, 3).map((video) => clip(`${str(video.name) || "video"} · ${hoursAgo(str(video.modifiedAt), now) || ""}`)),
+      ];
+    }
   }
 }
 
@@ -334,6 +365,32 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
         label: open > 0 ? `${plural(open, "incidente abierto", "incidentes abiertos")}` : `${plural(apps, "app sana", "apps sanas")}`,
         detail: note,
       };
+    }
+    case "blackroom-videos": {
+      const agent = asObject(body?.agent);
+      const totals = asObject(agent?.totals);
+      const online = asObject(body?.remote)?.online === true;
+      if (!totals) return { state: "error", label: "Estado desconocido" };
+      const active = (num(totals.processing) ?? 0) + (num(totals.queued) ?? 0) + (num(totals.retry) ?? 0);
+      if (!online) return { state: "needs-setup", label: "Publicador desconectado", detail: "El dispositivo que sube los videos de Black Room no esta en linea." };
+      if ((num(totals.retry) ?? 0) > 0) return { state: "error", label: `${num(totals.retry)} videos reintentando` };
+      if (active === 0 && (num(totals.scheduled) ?? 0) === 0) return { state: "offline", label: "Cola vacia", detail: "No hay videos de Black Room pendientes." };
+      return { state: "working", label: `${active} en cola · ${num(totals.scheduled) ?? 0} programados` };
+    }
+    case "news": {
+      const last = Date.parse(str(body?.lastRunAt) || "");
+      if (body?.bootstrapped === false) return { state: "needs-setup", label: "Sin configurar", detail: "El agente de noticias no ha corrido nunca." };
+      if (!Number.isFinite(last)) return { state: "needs-setup", label: "Sin rondas todavia" };
+      if (now - last > 26 * 60 * 60_000) return { state: "needs-setup", label: "Sin rondas en 24 h" };
+      return { state: "working", label: "Publicando noticias" };
+    }
+    case "kong-videos": {
+      if (!Array.isArray(body?.outputVideos)) return { state: "error", label: "Estado desconocido" };
+      const videos = Array.isArray(body?.outputVideos) ? (body!.outputVideos as unknown[]).map(asObject).filter(Boolean) as Json[] : [];
+      const newest = videos.map((video) => Date.parse(str(video.modifiedAt) || "")).filter(Number.isFinite).sort((a, b) => b - a)[0];
+      if (!newest) return { state: "needs-setup", label: "Sin videos editados", detail: "Agrega videos fuente para que edite los de Kong." };
+      if (now - newest > 48 * 60 * 60_000) return { state: "offline", label: "Sin videos nuevos en 48 h" };
+      return { state: "working", label: "Editando videos de Kong" };
     }
     case "legal": {
       const summary = asObject(body?.summary);

@@ -41,7 +41,7 @@ export const buildingFloors: Floor[] = [
   { id: "seguridad", level: "2", name: "Seguridad y legal", agentIds: ["cybersecurity", "legal"] },
 ];
 const KONG_LEVEL = "1";
-const OPERATIONS_AGENT_IDS = ["automations"];
+export const OPERATIONS_AGENT_IDS = ["automations"];
 
 const stateStyle: Record<AgentLiveState, { dot: string; chip: string; text: string; screen: string; line: string }> = {
   working: { dot: "bg-emerald-400", chip: "border-emerald-300/30 bg-emerald-400/10", text: "text-emerald-100", screen: "border-cyan-200/50 shadow-[0_0_22px_rgba(34,211,238,0.35)]", line: "text-cyan-100" },
@@ -60,7 +60,7 @@ const workMode: Record<AgentLiveState, { body: string; hands: string; verb: stri
   checking: { body: "motion-safe:animate-[agent-breathe_2s_ease-in-out_infinite]", hands: "", verb: "Conectando" },
 };
 
-type CouncilView = CouncilState & { overrides: Record<string, { label: string; detail: string }>; nextCycleInMs: number; costUsd: number; enabled?: boolean };
+export type CouncilView = CouncilState & { overrides: Record<string, { label: string; detail: string }>; nextCycleInMs: number; costUsd: number; enabled?: boolean };
 
 export function useAgentLiveStatuses(
   agentIds: string[],
@@ -108,7 +108,7 @@ export function useAgentLiveStatuses(
   return statuses;
 }
 
-function useCouncil() {
+export function useCouncil() {
   const query = useQuery({
     queryKey: ["agent-council-state"],
     queryFn: () => runProbe("/api/agent-council/state"),
@@ -331,7 +331,7 @@ function DebateRoom({ council, names, onRun, running, runError }: { council: Ret
   );
 }
 
-function councilDeskStatus(view: CouncilView | null, kind: "scout" | "factory", error: string | null): AgentLiveStatus {
+export function councilDeskStatus(view: CouncilView | null, kind: "scout" | "factory", error: string | null): AgentLiveStatus {
   if (!view) return error ? { state: "offline", label: "Sin conexion", detail: error } : { state: "checking", label: "Verificando..." };
   if (kind === "scout") {
     const last = view.scout.lastRunAt ? Date.parse(view.scout.lastRunAt) : 0;

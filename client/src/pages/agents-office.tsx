@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { MonitoredProject } from "@shared/schema";
 import { AgentsBuilding } from "@/components/agents-building/agents-building";
+import { AgentsOfficeWorld } from "@/components/agents-world-office/agents-office-world";
 import type { AgentLiveStatus } from "@/lib/agent-live-status";
 
 type GitHubOverview = Record<
@@ -437,8 +438,8 @@ const OFFICE_GITHUB_HANDOFF_KEY = "office.githubAgentHandoff";
 const OFFICE_LAYOUT_KEY = "agentsOffice.roomLayout.v1";
 const OFFICE_AGENT_LOCATIONS_KEY = "agentsOffice.agentLocations.v1";
 const OFFICE_AGENT_OFFSETS_KEY = "agentsOffice.agentOffsets.v1";
-const OFFICE_VIEW_KEY = "agentsOffice.view.v1";
-type OfficeView = "building" | "office";
+const OFFICE_VIEW_KEY = "agentsOffice.view.v2";
+type OfficeView = "world" | "building" | "office";
 const AGENT_WALK_MS = 1800;
 const defaultOfficeRooms: OfficeRoom[] = [
   { id: "reception", label: "Recepcion", x: 10, y: 19, w: 18, h: 29 },
@@ -1624,16 +1625,17 @@ export default function AgentsOfficePage() {
   const [directMessage, setDirectMessage] = useState("");
   const [editRooms, setEditRooms] = useState(false);
   const [officeView, setOfficeView] = useState<OfficeView>(() => {
-    if (typeof window === "undefined") return "building";
+    if (typeof window === "undefined") return "world";
     try {
-      return window.localStorage.getItem(OFFICE_VIEW_KEY) === "office" ? "office" : "building";
+      const stored = window.localStorage.getItem(OFFICE_VIEW_KEY);
+      return stored === "office" || stored === "building" ? stored : "world";
     } catch {
-      return "building";
+      return "world";
     }
   });
   const changeOfficeView = (view: OfficeView) => {
     setOfficeView(view);
-    if (view === "building") setEditRooms(false);
+    if (view !== "office") setEditRooms(false);
     try {
       window.localStorage.setItem(OFFICE_VIEW_KEY, view);
     } catch {
@@ -2141,7 +2143,7 @@ export default function AgentsOfficePage() {
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <div className="flex rounded-2xl border border-white/10 bg-[#0c1018]/90 p-1 shadow-xl shadow-black/30" role="group" aria-label="Vista de la oficina">
-                {(["building", "office"] as const).map((view) => (
+                {(["world", "building", "office"] as const).map((view) => (
                   <button
                     key={view}
                     type="button"
@@ -2153,7 +2155,7 @@ export default function AgentsOfficePage() {
                       officeView === view ? "bg-cyan-100 text-slate-950" : "text-slate-300 hover:bg-white/10"
                     )}
                   >
-                    {view === "building" ? "Edificio" : "Oficina 3D"}
+                    {view === "world" ? "Oficina 3D" : view === "building" ? "Edificio" : "Clasica"}
                   </button>
                 ))}
               </div>
@@ -2221,6 +2223,23 @@ export default function AgentsOfficePage() {
         </div>
 
         <div ref={officeMapRef} className="relative h-full min-h-[620px] w-full [perspective:1400px]">
+          {officeView === "world" && (
+            <AgentsOfficeWorld
+              agents={agents}
+              kongTeam={githubAppTeams.find((team) => team.app === "Kong")?.agents ?? []}
+              legal={{ data: legalCompliance, isError: legalComplianceError }}
+              selectedAgentId={selectedContact?.id}
+              onSelectAgent={(agentId, status) => {
+                const agent = agentById[agentId as AgentId];
+                if (agent) handleSelectAgent(agent, status);
+              }}
+              onSelectKongAgent={(name) => {
+                const team = githubAppTeams.find((item) => item.app === "Kong");
+                const member = team?.agents.find((item) => item.name === name);
+                if (team && member) handleSelectTeamAgent(team, member);
+              }}
+            />
+          )}
           {officeView === "building" && (
             <div className="absolute inset-0 overflow-y-auto px-4 pb-10 pt-24">
               <AgentsBuilding

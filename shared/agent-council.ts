@@ -7,6 +7,7 @@
 // itself: approved items become playbook lessons or PR-first handoff briefs.
 
 import { agentProbes, summarizeProbe, type AgentLiveStatus } from "./agent-live-status";
+import { emptyCompanyState, parseCompanyState, type CompanyState } from "./agent-company";
 
 export type Severity = "low" | "medium" | "high";
 export type Verdict = "escalado" | "confirmado" | "descartado";
@@ -55,7 +56,7 @@ export type CouncilDebate = CouncilFinding & {
   resolvedAt?: string;
 };
 
-export type ProposalKind = "lesson" | "skill_update" | "new_agent";
+export type ProposalKind = "lesson" | "skill_update" | "new_agent" | "repair";
 export type ProposalStatus = "pending_submit" | "submitted" | "approved" | "applied" | "rejected" | "not_submitted";
 
 export type CouncilProposal = {
@@ -89,6 +90,8 @@ export type CouncilState = {
   lessons: CouncilLesson[];
   agentStates: Record<string, { working: boolean; since: string }>;
   scout: { lastRunAt: string | null; lastSeen: Record<string, string>; latest: ScoutRelease[]; error: string | null };
+  company: CompanyState;
+  lastStatuses: Record<string, { state: AgentLiveStatus["state"]; label: string }>;
 };
 
 export const COUNCIL_CYCLE_MS = 15 * 60_000;
@@ -123,6 +126,8 @@ export function emptyCouncilState(): CouncilState {
     lessons: [],
     agentStates: {},
     scout: { lastRunAt: null, lastSeen: {}, latest: [], error: null },
+    company: emptyCompanyState(),
+    lastStatuses: {},
   };
 }
 
@@ -159,6 +164,8 @@ export function parseCouncilState(raw: string | null): CouncilState {
       lessons: Array.isArray(value.lessons) ? value.lessons : [],
       resolvedDebates: Array.isArray(value.resolvedDebates) ? value.resolvedDebates : [],
       scout: { ...base.scout, ...value.scout, lastSeen: obj(value.scout.lastSeen) ? value.scout.lastSeen : {} },
+      company: parseCompanyState(value.company),
+      lastStatuses: obj(value.lastStatuses) ? value.lastStatuses : {},
     };
   } catch {
     return emptyCouncilState();
@@ -602,4 +609,42 @@ export function pruneProposals(proposals: CouncilProposal[]): CouncilProposal[] 
   const open = proposals.filter((proposal) => ["pending_submit", "submitted", "approved", "not_submitted"].includes(proposal.status));
   const closed = proposals.filter((proposal) => !open.includes(proposal));
   return [...open, ...closed.slice(0, Math.max(0, MAX_PROPOSALS - open.length))];
+}
+
+// The Mechanic: an agent below 30% battery that is not working gets ONE repair proposal per
+// generation (PR-first brief with what its own endpoint says is wrong). $0: no AI, no code edits.
+export function deriveRepairProposals(
+  state: CouncilState,
+  statuses: Record<string, AgentLiveStatus>,
+  now: number,
+  names: Record<string, string> = {}
+): CouncilProposal[] {
+  const iso = new Date(now).toISOString();
+  const created: CouncilProposal[] = [];
+  for (const career of Object.values(state.company.careers)) {
+    const status = statuses[career.agentId];
+    if (!status || status.state === "working" || status.state === "checking" || career.inTrainingUntilGeneration) continue;
+    if (career.battery >= 30) continue;
+    const key = `repair:${career.agentId}#${career.generation}`;
+    if (hasOpenOrRecent([...state.proposals, ...created], key, now)) continue;
+    const name = names[career.agentId] || career.agentId;
+    const evidence = [`Estado: ${status.label}`, status.detail || "", `Bateria ${career.battery}% · ${career.points} puntos`].filter(Boolean);
+    created.push({
+      key,
+      kind: "repair",
+      owner: "mechanic",
+      title: `Reparar a ${name}`,
+      description: `El Mecanico detecto que ${name} (${career.nickname}) no esta trabajando y se esta quedando sin bateria. Si apruebas, queda listo el brief para repararlo.`,
+      evidence,
+      handoffBrief: buildHandoffBrief({
+        title: `Reparar el agente ${name}`,
+        goal: `Haz que ${name} vuelva a trabajar. Su propio estado dice: ${status.label}${status.detail ? ` (${status.detail})` : ""}. Corrige la causa (configuracion, conexion o codigo) sin inventar datos.`,
+        evidence,
+        constraints: ["Si falta una credencial o cuenta, dilo en vez de simularla.", "Sin gasto de API."],
+      }),
+      createdAt: iso,
+      status: "pending_submit",
+    });
+  }
+  return created;
 }
