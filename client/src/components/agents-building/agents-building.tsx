@@ -121,7 +121,7 @@ function Monitor({ state }: { state: AgentLiveState }) {
           <span className="h-1.5 w-1.5 rounded-full bg-sky-300 motion-safe:animate-pulse" />
         </span>
       ) : null}
-      <span className="absolute -bottom-0 left-1/2 h-1 w-4 -translate-x-1/2 bg-zinc-700" />
+      <span className="absolute bottom-0 left-1/2 h-1 w-4 -translate-x-1/2 bg-zinc-700" />
     </span>
   );
 }
@@ -297,8 +297,9 @@ export function AgentsBuilding({
                 role={member.job}
                 color="from-lime-300 to-emerald-400"
                 status={{ state: "offline", label: "Sin backend propio", detail: "Responde con guias locales; no ejecuta tareas en Kong." }}
+                selected={selectedAgentId === `Kong-${member.name}`}
                 onSelect={() => onSelectKongAgent(member.name)}
-                testId={`building-kong-${member.name}`}
+                testId={`building-kong-${member.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
               />
             ))}
           </FloorShell>
@@ -326,13 +327,14 @@ export function AgentsBuilding({
 
       <div className="mt-3 flex flex-wrap justify-center gap-3 text-[11px] text-zinc-400">
         <Legend state="working" label={`Trabajando (${counts.working})`} />
-        <Legend state="needs-setup" label={`Falta configuracion (${counts["needs-setup"]})`} />
+        <Legend state="needs-setup" label={`Requiere atencion (${counts["needs-setup"]})`} />
         <Legend state="error" label={`Con error (${counts.error})`} />
-        <Legend state="offline" label={`Sin respuesta (${counts.offline})`} />
+        <Legend state="offline" label={`En espera o sin respuesta (${counts.offline})`} />
+        <Legend state="offline" label={`Kong: guias sin backend (${kongTeam.length})`} />
         {counts.checking > 0 && <Legend state="checking" label={`Verificando (${counts.checking})`} />}
       </div>
       <p className="mt-2 text-center text-[10px] text-zinc-600">
-        El estado sale del endpoint real de cada agente y se actualiza solo cada 1-2 minutos.
+        El estado sale del endpoint real de cada agente (solo lectura) y se actualiza solo cada 1-5 minutos.
       </p>
     </div>
   );
