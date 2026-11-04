@@ -68,7 +68,8 @@ test("real planner rotates duration within DJ/set/daypart; delayed, cross-platfo
   );
   const state = queue();
   state.sourceHistory = [];
-  state.analytics = { verifiedLearning: {}, durationLearning: {} };
+  const decisions = (prefix: string) => Object.fromEntries(["tiktok","facebook","youtube"].map(network=>[network,{id:prefix+"-"+network}]));
+  state.analytics = { verifiedLearning: decisions("hook"), durationLearning: decisions("duration") };
   const history: any = { entries: [], version: 1 },
     experiments: any[] = [],
     observations: any[] = [];
@@ -118,6 +119,7 @@ test("real planner rotates duration within DJ/set/daypart; delayed, cross-platfo
         views: p.durationSeconds === 30 ? 250 : 100,
       });
       if (p.learningTestId === BLACKROOM_DURATION_TEST_ID) assert.equal(p.creativeStrategy, "drop_first");
+      assert.equal(p.learningDecisionIds, p.targetNetworks.map(network=>network+":"+(p.learningTestId===BLACKROOM_DURATION_TEST_ID?"duration":"hook")+"-"+network).join(","));
     }
   }
   const now = new Date("2026-09-22T12:00:00Z"),
@@ -128,6 +130,16 @@ test("real planner rotates duration within DJ/set/daypart; delayed, cross-platfo
   assert.equal(result.tiktok.recommendedSeconds, null);
   assert.ok(result.youtube.matchedBlocks >= 5);
   assert.equal(result.youtube.windowHours, 24);
+  assert.match(result.youtube.id,/^[a-f0-9]{20}$/);
+  for(const conflict of [{format:"horizontal"}, {language:"es"}, {creativeStrategy:"instant_drop"}]) {
+    const duplicates=experiments.map(e=>({...e,...conflict}));
+    for(const records of [[...experiments,...duplicates],[...duplicates,...experiments]]) {
+      const incompatible=evaluateDurationLearning({...input,experiments:records}).youtube;
+      assert.equal(incompatible.exact,0);
+      assert.equal(incompatible.recommendedSeconds,null);
+      assert.notEqual(incompatible.id,result.youtube.id);
+    }
+  }
   assert.equal(evaluateDurationLearning({ ...input, snapshots: [] }).youtube.recommendedSeconds, null);
   assert.equal(
     evaluateDurationLearning({ ...input, sourceObservedAt: { youtube: "2026-09-18T12:00:00Z" } }).youtube

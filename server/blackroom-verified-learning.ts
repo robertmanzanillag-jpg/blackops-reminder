@@ -7,6 +7,7 @@ export const BLACKROOM_DURATION_TEST_ID = "duration-15-30-60-v1";
 export const DURATION_ARMS = [15, 30, 60] as const;
 type Arm = (typeof DURATION_ARMS)[number];
 export interface DurationDecision {
+  id: string;
   sourceObservedAt: string | null;
   declared: number;
   exact: number;
@@ -36,6 +37,7 @@ export function evaluateDurationLearning(
     BLACKROOM_LEARNING_NETWORKS.map((network) => {
       const sourceObservedAt = input.sourceObservedAt[network] || null;
       const d: DurationDecision = {
+        id: "",
         sourceObservedAt,
         declared: 0,
         exact: 0,
@@ -45,9 +47,13 @@ export function evaluateDurationLearning(
         evidencePostIds: [],
         reason: "Sin pruebas declaradas de duración.",
       };
+      const finish = () => {
+        d.id = createHash("sha256").update(JSON.stringify([BLACKROOM_DURATION_TEST_ID, network, d])).digest("hex").slice(0,20);
+        return [network, d];
+      };
       if (learningSourceHealth(sourceObservedAt, input.now).status !== "fresh") {
         d.reason = "Sin métricas recientes.";
-        return [network, d];
+        return finish();
       }
       const identities = new Map<string, BlackRoomPublicationExperiment[]>();
       const declared = new Set<string>();
@@ -63,6 +69,9 @@ export function evaluateDurationLearning(
               x.reservationId === e.reservationId &&
               x.durationSeconds === e.durationSeconds &&
               x.learningTestId === e.learningTestId &&
+              x.format === e.format &&
+              x.language === e.language &&
+              x.creativeStrategy === e.creativeStrategy &&
               x.dj === e.dj &&
               x.sourceVideoId === e.sourceVideoId,
           )
@@ -176,7 +185,7 @@ export function evaluateDurationLearning(
           : "Sin ventaja consistente entre las tres duraciones.";
         break;
       }
-      return [network, d];
+      return finish();
     }),
   ) as Record<LearningNetwork, DurationDecision>;
 }

@@ -354,7 +354,10 @@ export function planBlackRoomDeterministicEdit(input: {
     creativeArmId: `${learningNetwork}:${creativeStrategy}:${language}:${format}:${durationSeconds}`,
     allocationMode: durationStudy ? exploitDuration ? "exploit" : "explore" : controlledTest ? sharedWinner && testSeed % 5 !== 0 ? "exploit" : "explore" : allocation.mode,
     ...(controlledTest ? { learningTestId: durationStudy ? exploitDuration ? "duration-followup" : BLACKROOM_DURATION_TEST_ID : BLACKROOM_HOOK_TEST_ID, learningReference,
-      learningDecisionIds: targetNetworks.map((network) => `${network}:${input.queue.analytics?.verifiedLearning?.[network]?.id || "missing"}`).join(","),
+      learningDecisionIds: targetNetworks.map(network => {
+        const decisions = durationStudy ? input.queue.analytics?.durationLearning : input.queue.analytics?.verifiedLearning;
+        return `${network}:${decisions?.[network]?.id || "missing"}`;
+      }).join(","),
     } : {}),
   };
 }
