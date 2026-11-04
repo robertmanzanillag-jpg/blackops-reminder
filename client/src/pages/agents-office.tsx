@@ -29,6 +29,8 @@ import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { MonitoredProject } from "@shared/schema";
+import { AgentsBuilding } from "@/components/agents-building/agents-building";
+import type { AgentLiveStatus } from "@/lib/agent-live-status";
 
 type GitHubOverview = Record<
   string,
@@ -435,6 +437,8 @@ const OFFICE_GITHUB_HANDOFF_KEY = "office.githubAgentHandoff";
 const OFFICE_LAYOUT_KEY = "agentsOffice.roomLayout.v1";
 const OFFICE_AGENT_LOCATIONS_KEY = "agentsOffice.agentLocations.v1";
 const OFFICE_AGENT_OFFSETS_KEY = "agentsOffice.agentOffsets.v1";
+const OFFICE_VIEW_KEY = "agentsOffice.view.v1";
+type OfficeView = "building" | "office";
 const AGENT_WALK_MS = 1800;
 const defaultOfficeRooms: OfficeRoom[] = [
   { id: "reception", label: "Recepcion", x: 10, y: 19, w: 18, h: 29 },
@@ -1619,6 +1623,23 @@ export default function AgentsOfficePage() {
   const [agentChats, setAgentChats] = useState<Record<string, ChatMessage[]>>({});
   const [directMessage, setDirectMessage] = useState("");
   const [editRooms, setEditRooms] = useState(false);
+  const [officeView, setOfficeView] = useState<OfficeView>(() => {
+    if (typeof window === "undefined") return "building";
+    try {
+      return window.localStorage.getItem(OFFICE_VIEW_KEY) === "office" ? "office" : "building";
+    } catch {
+      return "building";
+    }
+  });
+  const changeOfficeView = (view: OfficeView) => {
+    setOfficeView(view);
+    if (view === "building") setEditRooms(false);
+    try {
+      window.localStorage.setItem(OFFICE_VIEW_KEY, view);
+    } catch {
+      // Storage can be unavailable (private mode); the view still switches for this visit.
+    }
+  };
   const [walkingAgents, setWalkingAgents] = useState<Partial<Record<AgentId, boolean>>>({});
   const [closedConversationBubbles, setClosedConversationBubbles] = useState<Record<string, boolean>>({});
   const [officeRooms, setOfficeRooms] = useState<OfficeRoom[]>(() => {
@@ -1675,7 +1696,7 @@ export default function AgentsOfficePage() {
     retry: false,
     refetchInterval: 60000,
   });
-  const { data: legalCompliance } = useQuery<LegalComplianceRun>({
+  const { data: legalCompliance, isError: legalComplianceError } = useQuery<LegalComplianceRun>({
     queryKey: ["legal-compliance-reports"],
     queryFn: () => fetch("/api/legal-compliance/reports").then((response) => response.json()),
     retry: false,
@@ -1924,7 +1945,7 @@ export default function AgentsOfficePage() {
     setSentMessages((current) => [{ to: contact.name, text }, ...current].slice(0, 3));
     setDirectMessage("");
   };
-  const handleSelectAgent = (agent: Agent) => {
+  const handleSelectAgent = (agent: Agent, liveStatus?: AgentLiveStatus) => {
     setSelectedAgent(agent);
     setClosedConversationBubbles({});
     openContactChat({
@@ -1932,8 +1953,8 @@ export default function AgentsOfficePage() {
       name: agent.name,
       role: agent.role,
       station: getAgentStation(agent),
-      status: agent.status,
-      activity: agent.activity,
+      status: liveStatus ? liveStatus.label : agent.status,
+      activity: liveStatus?.detail ? `${agent.activity}. Ahora: ${liveStatus.detail}` : agent.activity,
       href: agent.href,
       icon: agent.icon,
       color: agent.color,
@@ -1955,7 +1976,7 @@ export default function AgentsOfficePage() {
       name: agent.name,
       role: agent.job,
       station: team.app,
-      status: "Conectado",
+      status: "Guia local (sin backend propio)",
       activity: activityByName[agent.name] || `Trabaja en ${team.app} conectado al repo ${team.repo}.`,
       href: "/projects",
       icon: Github,
@@ -2119,6 +2140,24 @@ export default function AgentsOfficePage() {
               <span className="ml-auto rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px]">⌘ K</span>
             </div>
             <div className="flex shrink-0 items-center gap-2">
+              <div className="flex rounded-2xl border border-white/10 bg-[#0c1018]/90 p-1 shadow-xl shadow-black/30" role="group" aria-label="Vista de la oficina">
+                {(["building", "office"] as const).map((view) => (
+                  <button
+                    key={view}
+                    type="button"
+                    onClick={() => changeOfficeView(view)}
+                    aria-pressed={officeView === view}
+                    data-testid={`button-office-view-${view}`}
+                    className={cn(
+                      "rounded-xl px-3 py-1.5 text-xs font-semibold transition",
+                      officeView === view ? "bg-cyan-100 text-slate-950" : "text-slate-300 hover:bg-white/10"
+                    )}
+                  >
+                    {view === "building" ? "Edificio" : "Oficina 3D"}
+                  </button>
+                ))}
+              </div>
+              {officeView === "office" && (
               <Button
                 type="button"
                 variant={editRooms ? "secondary" : "outline"}
@@ -2127,7 +2166,8 @@ export default function AgentsOfficePage() {
               >
                 {editRooms ? "Terminar edicion" : "Editar oficina"}
               </Button>
-              {editRooms && (
+              )}
+              {officeView === "office" && editRooms && (
                 <Button
                   type="button"
                   variant="ghost"
@@ -2181,6 +2221,27 @@ export default function AgentsOfficePage() {
         </div>
 
         <div ref={officeMapRef} className="relative h-full min-h-[620px] w-full [perspective:1400px]">
+          {officeView === "building" && (
+            <div className="absolute inset-0 overflow-y-auto px-4 pb-10 pt-24">
+              <AgentsBuilding
+                agents={agents}
+                kongTeam={githubAppTeams.find((team) => team.app === "Kong")?.agents ?? []}
+                legal={{ data: legalCompliance, isError: legalComplianceError }}
+                selectedAgentId={selectedContact?.id}
+                onSelectAgent={(agentId, status) => {
+                  const agent = agentById[agentId as AgentId];
+                  if (agent) handleSelectAgent(agent, status);
+                }}
+                onSelectKongAgent={(name) => {
+                  const team = githubAppTeams.find((item) => item.app === "Kong");
+                  const member = team?.agents.find((item) => item.name === name);
+                  if (team && member) handleSelectTeamAgent(team, member);
+                }}
+              />
+            </div>
+          )}
+          {officeView === "office" && (
+          <>
           <div className="absolute left-[9%] top-[7%] h-[68%] w-[78%] [transform:rotateX(58deg)_rotateZ(-34deg)] [transform-style:preserve-3d]">
             <div className="absolute inset-0 rounded-[34px] border border-cyan-100/10 bg-[linear-gradient(145deg,#151f2c_0%,#0b1018_58%,#05070c_100%)] shadow-[0_90px_130px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.09)]" />
             <div className="absolute left-5 right-5 top-5 bottom-5 rounded-[28px] border border-cyan-100/10 bg-[linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),radial-gradient(circle_at_35%_25%,rgba(34,211,238,0.16),transparent_32%)] bg-[size:54px_54px,54px_54px,auto]" />
@@ -2309,6 +2370,8 @@ export default function AgentsOfficePage() {
                 onSelect={() => handleSelectTeamAgent(team, agent)}
               />
             ))
+          )}
+          </>
           )}
           {selectedContact && (
             <div className="contents">
