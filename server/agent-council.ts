@@ -21,6 +21,7 @@ import {
   diffScoutReleases,
   emptyCouncilState,
   finishCycle,
+  hasProposal,
   parseCouncilState,
   pruneProposals,
   runCrossChecks,
@@ -95,10 +96,21 @@ function statusesFromSignals(signals: CouncilSignals): Record<string, AgentLiveS
   return statuses;
 }
 
+// The queue must never hang on a stuck database call.
+function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(`${label}: sin respuesta en ${ms / 1000}s`)), ms);
+  });
+  return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
+}
+const DB_TIMEOUT_MS = 10_000;
+
 export function createAgentCouncil(deps: CouncilDeps) {
+  let cached: CouncilState | null = null;
+  let queue: Promise<unknown> = Promise.resolve();
   let running: Promise<CouncilState> | null = null;
   let scouting: Promise<void> | null = null;
-  let cached: CouncilState | null = null;
 
   async function load(): Promise<CouncilState> {
     if (cached) return cached;
@@ -106,17 +118,26 @@ export function createAgentCouncil(deps: CouncilDeps) {
     return cached;
   }
 
-  async function save(state: CouncilState) {
-    cached = state;
-    await deps.writeState(JSON.stringify(state, null, 2));
+  // Every state change goes through this queue and starts from the latest state,
+  // so the 15-minute cycle, the daily scout and Trust Center approvals never overwrite each other.
+  function mutate(change: (state: CouncilState) => Promise<CouncilState> | CouncilState): Promise<CouncilState> {
+    const job = queue.then(async () => {
+      const next = await change(await load());
+      cached = next;
+      await deps.writeState(JSON.stringify(next, null, 2));
+      return next;
+    });
+    queue = job.catch(() => undefined);
+    return job;
   }
 
   async function syncProposals(state: CouncilState, userId: string): Promise<CouncilState> {
+    const iso = new Date(deps.now()).toISOString();
     const proposals: CouncilProposal[] = [];
     for (const proposal of state.proposals) {
       if (proposal.status === "pending_submit" || proposal.status === "not_submitted") {
         try {
-          const id = await deps.submitProposal(userId, proposal);
+          const id = await withTimeout(deps.submitProposal(userId, proposal), DB_TIMEOUT_MS, "Trust Center");
           proposals.push({ ...proposal, status: "submitted", pendingActionId: id, note: "En el Trust Center esperando tu aprobacion." });
         } catch (error) {
           proposals.push({ ...proposal, status: "not_submitted", note: `No se pudo enviar al Trust Center: ${error instanceof Error ? error.message : String(error)}` });
@@ -124,12 +145,16 @@ export function createAgentCouncil(deps: CouncilDeps) {
         continue;
       }
       if (proposal.status === "submitted" && proposal.pendingActionId) {
-        const status = await deps.getPendingActionStatus(proposal.pendingActionId).catch(() => null);
-        if (status === "rejected" || status === "expired") {
-          proposals.push({ ...proposal, status: "rejected", note: "Rechazada en el Trust Center." });
+        const status = await withTimeout(deps.getPendingActionStatus(proposal.pendingActionId), DB_TIMEOUT_MS, "Trust Center").catch(() => null);
+        if (status === "rejected" || status === "expired" || status === "cancelled") {
+          proposals.push({ ...proposal, status: "rejected", closedAt: iso, note: status === "rejected" ? "Rechazada en el Trust Center." : `Cerrada en el Trust Center (${status}).` });
           continue;
         }
-        if (status === "approved" || status === "executed") {
+        if (status === "failed") {
+          proposals.push({ ...proposal, status: "rejected", closedAt: iso, note: "La ejecucion fallo en el Trust Center; se puede volver a proponer en 30 dias." });
+          continue;
+        }
+        if (status === "approved" || status === "executing" || status === "executed" || status === "completed") {
           proposals.push({ ...proposal, status: "approved" });
           continue;
         }
@@ -144,23 +169,22 @@ export function createAgentCouncil(deps: CouncilDeps) {
   }
 
   async function runCycleOnce(): Promise<CouncilState> {
-    const state = await load();
     const userId = deps.userId();
-    const now = deps.now();
     try {
+      // Slow reads happen outside the queue; the state change itself is serialized.
       const collected = await deps.collect(userId);
-      const signals: CouncilSignals = { ...collected, now };
-      const findings = runCrossChecks(signals);
-      const statuses = statusesFromSignals(signals);
-      let next = finishCycle(state, { findings, statuses, now, agentNames: AGENT_NAMES });
-      next = await syncProposals(next, userId);
-      await save(next);
-      return next;
+      return await mutate(async (state) => {
+        const now = deps.now();
+        const signals: CouncilSignals = { ...collected, now };
+        const findings = runCrossChecks(signals);
+        const statuses = statusesFromSignals(signals);
+        const next = finishCycle(state, { findings, statuses, now, agentNames: AGENT_NAMES });
+        return syncProposals(next, userId);
+      });
     } catch (error) {
-      const failed = { ...state, lastCycleError: error instanceof Error ? error.message : String(error) };
-      await save(failed).catch(() => undefined);
-      deps.log(`agent council cycle failed: ${failed.lastCycleError}`);
-      return failed;
+      const message = error instanceof Error ? error.message : String(error);
+      deps.log(`agent council cycle failed: ${message}`);
+      return mutate((state) => ({ ...state, lastCycleError: message })).catch(() => load());
     }
   }
 
@@ -171,10 +195,9 @@ export function createAgentCouncil(deps: CouncilDeps) {
   }
 
   async function runScoutOnce(force = false) {
-    const state = await load();
-    const now = deps.now();
-    const last = state.scout.lastRunAt ? Date.parse(state.scout.lastRunAt) : 0;
-    if (!force && now - last < SCOUT_INTERVAL_MS) return;
+    const before = await load();
+    const last = before.scout.lastRunAt ? Date.parse(before.scout.lastRunAt) : 0;
+    if (!force && deps.now() - last < SCOUT_INTERVAL_MS) return;
     const releases: Array<{ repo: string; tag: string; url: string; publishedAt: string | null }> = [];
     const errors: string[] = [];
     for (const item of SCOUT_WATCHLIST) {
@@ -185,17 +208,19 @@ export function createAgentCouncil(deps: CouncilDeps) {
         errors.push(`${item.repo}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
-    const current = await load();
-    const diff = diffScoutReleases(current.scout.lastSeen, releases, current.proposals, now);
-    await save({
-      ...current,
-      proposals: pruneProposals([...diff.proposals, ...current.proposals]),
-      scout: {
-        lastRunAt: new Date(now).toISOString(),
-        lastSeen: diff.lastSeen,
-        latest: diff.latest.length ? diff.latest : current.scout.latest,
-        error: errors.length ? errors.slice(0, 3).join(" | ") : null,
-      },
+    await mutate((current) => {
+      const now = deps.now();
+      const diff = diffScoutReleases(current.scout.lastSeen, releases, current.proposals, now);
+      return {
+        ...current,
+        proposals: pruneProposals([...diff.proposals, ...current.proposals]),
+        scout: {
+          lastRunAt: new Date(now).toISOString(),
+          lastSeen: diff.lastSeen,
+          latest: diff.latest.length ? diff.latest : current.scout.latest,
+          error: errors.length ? errors.slice(0, 3).join(" | ") : null,
+        },
+      };
     });
   }
 
@@ -204,11 +229,13 @@ export function createAgentCouncil(deps: CouncilDeps) {
     return scouting;
   }
 
-  async function approveFromTrustCenter(key: string): Promise<CouncilState> {
-    const state = await load();
-    const next = applyApprovedProposal(state, key, deps.now());
-    await save(next);
-    return next;
+  // Called by the Trust Center executor. Fails loudly if the proposal is unknown,
+  // so the Trust Center never shows "executed" for something that was not recorded.
+  function approveFromTrustCenter(key: string): Promise<CouncilState> {
+    return mutate((state) => {
+      if (!hasProposal(state, key)) throw new Error(`Propuesta del consejo no encontrada: ${key}`);
+      return applyApprovedProposal(state, key, deps.now());
+    });
   }
 
   async function view() {
@@ -218,10 +245,15 @@ export function createAgentCouncil(deps: CouncilDeps) {
       overrides: applyLessons(state.debates, state.lessons),
       nextCycleInMs: state.lastCycleAt ? Math.max(0, Date.parse(state.lastCycleAt) + COUNCIL_CYCLE_MS - deps.now()) : 0,
       costUsd: 0,
+      enabled: isAgentCouncilEnabled(),
     };
   }
 
   return { runCycle, runScout, approveFromTrustCenter, view, load };
+}
+
+export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {
+  return String(env.AGENT_COUNCIL_ENABLED || "").trim().toLowerCase() !== "false";
 }
 
 // ---------- Real dependencies ----------
@@ -229,11 +261,16 @@ export function createAgentCouncil(deps: CouncilDeps) {
 const DATA_DIR = process.env.AGENT_COUNCIL_DATA_DIR || path.join(process.cwd(), "agent_council_data");
 const STATE_FILE = path.join(DATA_DIR, "state.json");
 
-async function writeStateAtomic(raw: string) {
-  await mkdir(DATA_DIR, { recursive: true });
-  const tmp = `${STATE_FILE}.${process.pid}.tmp`;
+// Unique temp name per write + rename: a reader never sees a half-written file.
+export async function writeFileAtomic(file: string, raw: string) {
+  await mkdir(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
   await writeFile(tmp, raw, "utf8");
-  await rename(tmp, STATE_FILE);
+  await rename(tmp, file);
+}
+
+function writeStateAtomic(raw: string) {
+  return writeFileAtomic(STATE_FILE, raw);
 }
 
 async function exists(file: string) {
@@ -284,20 +321,20 @@ async function collectReal(userId: string): Promise<Omit<CouncilSignals, "now">>
     import("./dropshipping-ceo"),
     import("./marketing-command-center"),
   ]);
+  // Database rows carry Date objects; the rules read JSON, like the HTTP endpoints do.
+  const plain = <T,>(value: T): T => (value === undefined ? value : JSON.parse(JSON.stringify(value)));
   const docs = await safe("skills", () => readSkillDocs());
   const projects = await safe("app projects", () => storage.getAppProjects(userId));
   return {
     clippers: await safe("clippers", () => clippersRuntime.getClipperWorkerRuntimeStatus()),
     dropshipping: await safe("dropshipping", () => dropshipping.getDropshippingLaunchReadiness()),
     marketing: await safe("marketing", () => marketing.getMarketingCommandCenterSnapshot()),
-    automationRuns: await safe("automation runs", () => storage.getAutomationRuns(userId, undefined, 50)),
+    automationRuns: plain(await safe("automation runs", () => storage.getAutomationRuns(userId, undefined, 50))),
     appProjects: projects?.map((app) => ({ id: app.id, name: app.name, status: app.status })),
-    appIncidents: await safe("incidents", () => storage.getAppIncidents(userId)),
+    appIncidents: plain(await safe("incidents", () => storage.getAppIncidents(userId))),
     skills: docs?.skills,
     skillsListedInClaudeMd: docs?.listedInClaudeMd,
     maxSkillBodyChars: docs?.maxBodyChars,
-    // The Kong desks in the building have no backend of their own (see agents-office githubAppTeams).
-    kongTeam: ["KONG AI", "Promoters + Mesas", "Venues", "Kong Legal"].map((name) => ({ name, hasBackend: false })),
   };
 }
 
@@ -372,16 +409,17 @@ function systemUserId(): string {
 }
 
 export async function startAgentCouncilScheduler(env: NodeJS.ProcessEnv = process.env) {
-  if (String(env.AGENT_COUNCIL_ENABLED || "").trim().toLowerCase() === "false") {
+  if (!isAgentCouncilEnabled(env)) {
     console.log("[agent-council] disabled by AGENT_COUNCIL_ENABLED=false");
     return;
   }
   const { getSystemUserId } = await import("./user-context");
   setAgentCouncilUser(getSystemUserId());
   const instance = getAgentCouncil();
+  // Errors are logged, never thrown: an unhandled rejection here would stop the whole server.
   const tick = () => {
-    void instance.runCycle();
-    void instance.runScout();
+    instance.runCycle().catch((error) => console.warn("[agent-council] cycle error:", error instanceof Error ? error.message : error));
+    instance.runScout().catch((error) => console.warn("[agent-council] scout error:", error instanceof Error ? error.message : error));
   };
   setTimeout(tick, 60_000).unref?.();
   setInterval(tick, COUNCIL_CYCLE_MS).unref?.();

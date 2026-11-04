@@ -1,5 +1,5 @@
 import type { Express } from "express";
-import { getAgentCouncil, setAgentCouncilUser } from "./agent-council";
+import { getAgentCouncil, isAgentCouncilEnabled, setAgentCouncilUser } from "./agent-council";
 import { getSystemUserId } from "./user-context";
 
 const MANUAL_RUN_MIN_INTERVAL_MS = 60_000;
@@ -17,6 +17,9 @@ export function registerAgentCouncilRoutes(app: Express) {
 
   app.post("/api/agent-council/run", async (_req, res) => {
     try {
+      if (!isAgentCouncilEnabled()) {
+        return res.status(409).json({ error: "El consejo esta apagado (AGENT_COUNCIL_ENABLED=false)." });
+      }
       setAgentCouncilUser(getSystemUserId());
       const council = getAgentCouncil();
       const current = await council.load();

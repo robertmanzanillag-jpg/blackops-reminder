@@ -30,7 +30,6 @@ export type CouncilSignals = {
   appIncidents?: Array<{ appProjectId?: string | null; status?: string | null; severity?: string | null; title?: string | null }>;
   skills?: CouncilSkillDoc[];
   skillsListedInClaudeMd?: string[];
-  kongTeam?: Array<{ name: string; hasBackend: boolean }>;
   maxSkillBodyChars?: number;
 };
 
@@ -71,6 +70,7 @@ export type CouncilProposal = {
   status: ProposalStatus;
   pendingActionId?: string;
   note?: string;
+  closedAt?: string;
   lesson?: { ruleId: string; subject: string; label: string };
 };
 
@@ -94,11 +94,11 @@ export type CouncilState = {
 export const COUNCIL_CYCLE_MS = 15 * 60_000;
 export const SCOUT_INTERVAL_MS = 24 * 60 * 60_000;
 export const LESSON_STREAK = 3;
-export const HELPER_AGENT_AFTER_MS = 3 * 24 * 60 * 60_000;
+export const HELPER_AGENT_AFTER_MS = 7 * 24 * 60 * 60_000;
 export const REJECTED_COOLDOWN_MS = 30 * 24 * 60 * 60_000;
 const MAX_RESOLVED = 20;
 const MAX_PROPOSALS = 60;
-const MAX_OPEN_NEW_AGENT_PROPOSALS = 3;
+const MAX_OPEN_NEW_AGENT_PROPOSALS = 2;
 
 // Public release feeds the Skills Scout watches. Free: GitHub's public API.
 export const SCOUT_WATCHLIST: Array<{ repo: string; skills: string[]; why: string }> = [
@@ -131,6 +131,20 @@ const obj = (value: unknown): Json | null => (value && typeof value === "object"
 const text = (value: unknown): string | null => (typeof value === "string" && value.trim() ? value.trim() : null);
 const number = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null);
 const arr = (value: unknown): Json[] => (Array.isArray(value) ? (value.map(obj).filter(Boolean) as Json[]) : []);
+// Database rows carry Date objects; JSON carries ISO strings. Accept both.
+export function toMs(value: unknown): number {
+  if (value instanceof Date) return value.getTime();
+  if (typeof value === "number") return value;
+  if (typeof value === "string") return Date.parse(value);
+  return Number.NaN;
+}
+// Evidence ends up in the state file and the Trust Center: keep it short and never copy token-like strings.
+export function safeText(value: unknown, max = 120): string {
+  const raw = typeof value === "string" ? value : value === null || value === undefined ? "" : String(value);
+  // UUIDs (record ids) stay readable; other long token-like strings are hidden.
+  const cleaned = raw.replace(/[A-Za-z0-9_\-]{24,}/g, (match) => (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(match) ? match : "[redactado]")).replace(/\s+/g, " ").trim();
+  return cleaned.length > max ? `${cleaned.slice(0, max - 1)}…` : cleaned;
+}
 
 export function parseCouncilState(raw: string | null): CouncilState {
   if (!raw) return emptyCouncilState();
@@ -175,45 +189,21 @@ export function runCrossChecks(signals: CouncilSignals): CouncilFinding[] {
   const findings: CouncilFinding[] = [];
   const now = signals.now;
 
-  // App QA reviews Clippers: "done" with blockers is not done.
+  // App QA reviews Clippers: a "completed" run that still has configuration blockers is not done.
   const clippers = obj(signals.clippers);
-  if (clippers) {
-    const status = text(clippers.status);
-    const blockers = Array.isArray(clippers.configurationBlockers) ? (clippers.configurationBlockers as unknown[]).map(String) : [];
-    const failedStage = text(clippers.failedStage);
-    const self = subjectStatus("clippers", clippers);
-    if ((status === "completed" || status === "running") && (blockers.length > 0 || failedStage)) {
+  if (clippers && text(clippers.status) === "completed") {
+    const blockers = Array.isArray(clippers.configurationBlockers) ? (clippers.configurationBlockers as unknown[]).map((b) => safeText(b, 60)) : [];
+    if (blockers.length > 0) {
       findings.push(finding({
         ruleId: "clippers-done-with-blockers",
         reviewer: "app-qa",
         subject: "clippers",
         severity: "high",
         topic: "Clippers reporta corrida OK con bloqueos",
-        claim: `Clippers dice "${status}" pero tiene ${blockers.length} bloqueo(s) de configuracion${failedStage ? ` y fallo en ${failedStage}` : ""}.`,
-        evidence: [...blockers.map((b) => `Bloqueo: ${b}`), ...(failedStage ? [`Etapa fallida: ${failedStage}`] : [])],
-        defense: text(obj(clippers.nextAction)?.message) || "Clippers no explica el bloqueo.",
-        subjectSaysWorking: self?.state === "working",
-      }));
-    }
-  }
-
-  // Control reviews Dropshipping: never "ready" while Profit Guard stops spend.
-  const drop = obj(signals.dropshipping);
-  if (drop) {
-    const readiness = obj(drop.launchReadiness);
-    const guard = obj(obj(drop.snapshot)?.profitGuard);
-    const canSpend = number(guard?.canSpendUsd);
-    if (text(readiness?.status) === "ready_for_test_order" && (text(guard?.status) === "pause_spend" || (canSpend !== null && canSpend <= 0))) {
-      findings.push(finding({
-        ruleId: "dropshipping-ready-without-budget",
-        reviewer: "control",
-        subject: "dropshipping",
-        severity: "high",
-        topic: "Dropshipping listo para orden sin presupuesto",
-        claim: "Dropshipping dice estar listo para orden de prueba, pero Profit Guard no permite gastar.",
-        evidence: [`Profit Guard: ${text(guard?.status) || "?"}`, `Puede gastar: ${canSpend ?? "?"} USD`],
-        defense: text(readiness?.summary) || "Sin explicacion.",
-        subjectSaysWorking: subjectStatus("dropshipping", drop)?.state === "working",
+        claim: `Clippers dice "completed" pero tiene ${blockers.length} bloqueo(s) de configuracion.`,
+        evidence: blockers.map((b) => `Bloqueo: ${b}`),
+        defense: safeText(obj(clippers.nextAction)?.message) || "Clippers no explica el bloqueo.",
+        subjectSaysWorking: subjectStatus("clippers", clippers)?.state === "working",
       }));
     }
   }
@@ -222,7 +212,7 @@ export function runCrossChecks(signals: CouncilSignals): CouncilFinding[] {
   if (signals.automationRuns) {
     const runs = arr(signals.automationRuns);
     const self = subjectStatus("automations", signals.automationRuns);
-    const failed = runs.filter((run) => run.status === "failed" && now - Date.parse(text(run.startedAt) || "") <= 26 * 3_600_000);
+    const failed = runs.filter((run) => run.status === "failed" && now - toMs(run.startedAt) <= 26 * 3_600_000);
     if (failed.length > 0) {
       findings.push(finding({
         ruleId: "automations-failed-runs",
@@ -231,12 +221,12 @@ export function runCrossChecks(signals: CouncilSignals): CouncilFinding[] {
         severity: "medium",
         topic: "Automatizaciones con corridas fallidas",
         claim: `${failed.length} corrida(s) fallaron en las ultimas 24 h.`,
-        evidence: failed.slice(0, 3).map((run) => `${text(run.automationId) || "?"}: ${text(run.errorMessage) || "sin mensaje"}`),
+        evidence: failed.slice(0, 3).map((run) => `${(text(run.automationId) || "").slice(0, 40) || "?"}: ${safeText(run.errorMessage) || "sin mensaje"}`),
         defense: "Autos registra el error en cada corrida.",
         subjectSaysWorking: self?.state === "working",
       }));
     }
-    const stuck = runs.filter((run) => run.status === "pending_approval" && now - Date.parse(text(run.startedAt) || "") > 48 * 3_600_000);
+    const stuck = runs.filter((run) => run.status === "pending_approval" && now - toMs(run.startedAt) > 48 * 3_600_000);
     if (stuck.length > 0) {
       findings.push(finding({
         ruleId: "automations-stuck-approvals",
@@ -245,7 +235,7 @@ export function runCrossChecks(signals: CouncilSignals): CouncilFinding[] {
         severity: "medium",
         topic: "Aprobaciones estancadas",
         claim: `${stuck.length} corrida(s) esperan aprobacion hace mas de 48 h.`,
-        evidence: stuck.slice(0, 3).map((run) => `${text(run.automationId) || "?"} desde ${text(run.startedAt)}`),
+        evidence: stuck.slice(0, 3).map((run) => `${(text(run.automationId) || "").slice(0, 40) || "?"} desde ${new Date(toMs(run.startedAt)).toISOString()}`),
         defense: "Autos no puede seguir sin tu aprobacion.",
         subjectSaysWorking: self?.state === "working",
       }));
@@ -299,40 +289,22 @@ export function runCrossChecks(signals: CouncilSignals): CouncilFinding[] {
     }
   }
 
-  // Claude Reviewer reviews Marketing: a client can't be "ready" if its handoff needs setup.
-  const marketing = obj(signals.marketing);
-  if (marketing) {
-    const contradictory = arr(marketing.clients).filter((client) => client.status === "ready" && obj(client.handoff)?.status === "needs_setup");
-    if (contradictory.length > 0) {
-      findings.push(finding({
-        ruleId: "marketing-ready-handoff-missing",
-        reviewer: "claude-reviewer",
-        subject: "marketing-cmo",
-        severity: "medium",
-        topic: "Clientes 'listos' con handoff sin configurar",
-        claim: `${contradictory.length} cliente(s) marcados listos tienen el handoff en "falta setup".`,
-        evidence: contradictory.slice(0, 4).map((client) => `${text(client.name) || "?"}: listo, handoff falta setup`),
-        defense: "El CMO cuenta listo por estrategia, no por conexion de cuentas.",
-        subjectSaysWorking: subjectStatus("marketing-cmo", marketing)?.state === "working",
-      }));
-    }
-  }
-
   // Claude Reviewer verifies the skill documents the agents read.
+  const truncated = (signals.skills || []).filter((skill) => skill.truncatedInChat);
+  if (truncated.length > 0) {
+    findings.push(finding({
+      ruleId: "skills-truncated",
+      reviewer: "claude-reviewer",
+      subject: "skills-scout",
+      severity: "medium",
+      topic: `${truncated.length} skill(s) se cortan en el chat de BlackOps`,
+      claim: `El puente de skills del chat (web y Telegram) recibe estas skills recortadas al limite de ${signals.maxSkillBodyChars ?? 900} caracteres; en Claude Code se leen completas.`,
+      evidence: truncated.map((skill) => `${skill.path}: se recorta`),
+      defense: "Las skills se escribieron para Claude Code, donde no hay recorte.",
+      subjectSaysWorking: true,
+    }));
+  }
   for (const skill of signals.skills || []) {
-    if (skill.truncatedInChat) {
-      findings.push(finding({
-        ruleId: `skill-truncated:${skill.name}`,
-        reviewer: "claude-reviewer",
-        subject: "skills-scout",
-        severity: "medium",
-        topic: `Skill ${skill.name} se corta en el chat`,
-        claim: `${skill.path} tiene ${skill.bodyChars} caracteres; el puente de skills la recorta a ${signals.maxSkillBodyChars ?? 900}.`,
-        evidence: [`${skill.path}: ${skill.bodyChars} caracteres`, "El chat recibe la skill con [Skill truncated for token budget]"],
-        defense: "La skill se escribio para Claude Code, donde no hay recorte.",
-        subjectSaysWorking: true,
-      }));
-    }
     if (!skill.description) {
       findings.push(finding({
         ruleId: `skill-no-description:${skill.name}`,
@@ -376,22 +348,6 @@ export function runCrossChecks(signals: CouncilSignals): CouncilFinding[] {
         subjectSaysWorking: true,
       }));
     }
-  }
-
-  // CEO reviews the Kong team: a desk without backend is a hiring gap.
-  const withoutBackend = (signals.kongTeam || []).filter((member) => !member.hasBackend);
-  if (withoutBackend.length > 0) {
-    findings.push(finding({
-      ruleId: "kong-team-without-backend",
-      reviewer: "ceo",
-      subject: "kong",
-      severity: "low",
-      topic: "Equipo Kong sin backend",
-      claim: `${withoutBackend.length} agente(s) de Kong solo responden con guias locales.`,
-      evidence: withoutBackend.map((member) => `${member.name}: sin backend`),
-      defense: "Kong vive en otro repo (kong-nightlife); el autopilot esta en una rama sin mergear.",
-      subjectSaysWorking: false,
-    }));
   }
 
   return findings;
@@ -462,7 +418,7 @@ function hasOpenOrRecent(proposals: CouncilProposal[], key: string, now: number)
   const existing = proposals.find((proposal) => proposal.key === key);
   if (!existing) return false;
   if (existing.status !== "rejected") return true;
-  return now - Date.parse(existing.createdAt) < REJECTED_COOLDOWN_MS;
+  return now - Date.parse(existing.closedAt || existing.createdAt) < REJECTED_COOLDOWN_MS;
 }
 
 export function deriveProposals(state: CouncilState, statuses: Record<string, AgentLiveStatus>, now: number, agentNames: Record<string, string> = {}): CouncilProposal[] {
@@ -473,7 +429,7 @@ export function deriveProposals(state: CouncilState, statuses: Record<string, Ag
 
   for (const debate of state.debates) {
     // Repeated conflict -> lesson for the subject's playbook.
-    if (debate.verdict === "escalado" && debate.streak >= LESSON_STREAK && !debate.ruleId.startsWith("skill-")) {
+    if (debate.verdict === "escalado" && debate.streak >= LESSON_STREAK && !debate.ruleId.startsWith("skill") && debate.ruleId !== "claude-md-missing-skills") {
       const key = `lesson:${debate.key}`;
       const alreadyLearned = state.lessons.some((lesson) => lesson.ruleId === debate.ruleId && lesson.subject === debate.subject);
       if (!alreadyLearned && !hasOpenOrRecent(all(), key, now)) {
@@ -497,7 +453,7 @@ export function deriveProposals(state: CouncilState, statuses: Record<string, Ag
       }
     }
     // Document problems -> concrete skill update proposal.
-    if (debate.ruleId.startsWith("skill-") || debate.ruleId === "claude-md-missing-skills") {
+    if (debate.ruleId.startsWith("skill") || debate.ruleId === "claude-md-missing-skills") {
       const key = `skill:${debate.ruleId}`;
       if (!hasOpenOrRecent(all(), key, now)) {
         created.push({
@@ -509,7 +465,7 @@ export function deriveProposals(state: CouncilState, statuses: Record<string, Ag
           evidence: debate.evidence,
           handoffBrief: buildHandoffBrief({
             title: debate.topic,
-            goal: debate.ruleId.startsWith("skill-truncated")
+            goal: debate.ruleId === "skills-truncated"
               ? "Deja la skill bajo el limite del puente: mueve lo esencial (Purpose, Operating Rules, Output) arriba y resume el resto."
               : debate.claim,
             evidence: debate.evidence,
@@ -526,27 +482,7 @@ export function deriveProposals(state: CouncilState, statuses: Record<string, Ag
   // Agent factory (CEO): hire a helper for agents stuck outside "working" for days.
   const openNewAgent = all().filter((proposal) => proposal.kind === "new_agent" && ["pending_submit", "submitted"].includes(proposal.status)).length;
   if (openNewAgent < MAX_OPEN_NEW_AGENT_PROPOSALS) {
-    const kong = state.debates.find((debate) => debate.ruleId === "kong-team-without-backend");
     const candidates: CouncilProposal[] = [];
-    if (kong) {
-      candidates.push({
-        key: "new_agent:kong-ops",
-        kind: "new_agent",
-        owner: "ceo",
-        title: "Contratar agente Kong Ops",
-        description: "El CEO propone un agente con backend real para Kong: vigila la salud de kong-nightlife, el autopilot de reels y reporta al edificio.",
-        evidence: kong.evidence,
-        handoffBrief: buildHandoffBrief({
-          title: "Crear agente Kong Ops",
-          goal: "Agregar un agente con endpoint de estado de solo lectura para Kong (salud de kong-nightlife + estado del autopilot) y conectarlo al edificio.",
-          evidence: kong.evidence,
-          files: ["shared/agent-live-status.ts", "client/src/pages/agents-office.tsx", "server/developer-health-inventory.ts"],
-          constraints: ["Sin gasto de API.", "El autopilot de Kong sigue apagado hasta tu aprobacion."],
-        }),
-        createdAt: iso,
-        status: "pending_submit",
-      });
-    }
     for (const [agentId, info] of Object.entries(state.agentStates)) {
       if (info.working || now - Date.parse(info.since) < HELPER_AGENT_AFTER_MS) continue;
       const status = statuses[agentId];
@@ -556,7 +492,7 @@ export function deriveProposals(state: CouncilState, statuses: Record<string, Ag
         kind: "new_agent",
         owner: "ceo",
         title: `Contratar asistente de configuracion para ${name}`,
-        description: `${name} lleva mas de 3 dias sin trabajar (${status?.label || "sin estado"}). El CEO propone un agente que guie y verifique esa configuracion paso a paso.`,
+        description: `${name} lleva mas de 7 dias sin trabajar (${status?.label || "sin estado"}). El CEO propone un agente que guie y verifique esa configuracion paso a paso.`,
         evidence: [status?.label || "sin estado", status?.detail || "", `Sin trabajar desde ${info.since}`].filter(Boolean),
         handoffBrief: buildHandoffBrief({
           title: `Asistente de configuracion para ${name}`,
@@ -616,6 +552,10 @@ export function diffScoutReleases(
   return { lastSeen: next, latest, proposals };
 }
 
+export function hasProposal(state: CouncilState, key: string) {
+  return state.proposals.some((proposal) => proposal.key === key);
+}
+
 export function applyApprovedProposal(state: CouncilState, key: string, now: number): CouncilState {
   const iso = new Date(now).toISOString();
   const proposal = state.proposals.find((item) => item.key === key);
@@ -629,7 +569,7 @@ export function applyApprovedProposal(state: CouncilState, key: string, now: num
   return {
     ...state,
     lessons,
-    proposals: state.proposals.map((item) => (item.key === key ? { ...item, status: "applied", note } : item)),
+    proposals: state.proposals.map((item) => (item.key === key && item.status !== "rejected" ? { ...item, status: "applied", note, closedAt: iso } : item)),
   };
 }
 
@@ -640,8 +580,12 @@ export function finishCycle(state: CouncilState, input: {
   agentNames?: Record<string, string>;
 }): CouncilState {
   const { active, resolved } = mergeDebates(state.debates, input.findings, input.now);
+  const proposalsInCooldown = state.proposals.filter(
+    (proposal) => proposal.status !== "rejected" || input.now - Date.parse(proposal.closedAt || proposal.createdAt) < REJECTED_COOLDOWN_MS
+  );
   const next: CouncilState = {
     ...state,
+    proposals: proposalsInCooldown,
     cycles: state.cycles + 1,
     lastCycleAt: new Date(input.now).toISOString(),
     lastCycleError: null,

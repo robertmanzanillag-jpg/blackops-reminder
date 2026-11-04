@@ -18,7 +18,8 @@ import {
   type CouncilProposal,
   type CouncilSignals,
 } from "../shared/agent-council";
-import { createAgentCouncil, readSkillDocs, type CouncilDeps } from "../server/agent-council";
+import { createAgentCouncil, readSkillDocs, writeFileAtomic, type CouncilDeps } from "../server/agent-council";
+import { readFile } from "node:fs/promises";
 
 const NOW = Date.parse("2026-11-04T12:00:00Z");
 const HOUR = 3_600_000;
@@ -29,20 +30,19 @@ test("clean signals produce no debates", () => {
   assert.deepEqual(
     runCrossChecks(base({
       clippers: { status: "completed", configurationBlockers: [], failedStage: null },
-      dropshipping: { launchReadiness: { status: "ready_for_test_order" }, snapshot: { profitGuard: { status: "ok", canSpendUsd: 50 } } },
+      dropshipping: { launchReadiness: { status: "ready_for_test_order" }, snapshot: { profitGuard: { status: "ok", canSpendUsd: 0 } } },
       automationRuns: [{ status: "success", startedAt: new Date(NOW - HOUR).toISOString() }],
       appProjects: [{ id: "a", name: "Kong", status: "healthy" }],
       appIncidents: [],
       marketing: { clients: [{ name: "Kong", status: "ready", handoff: { status: "ready" } }] },
       skills: [{ name: "qa-gate", path: ".claude/skills/qa-gate/SKILL.md", description: "x", truncatedInChat: false, bodyChars: 500, missingPaths: [] }],
       skillsListedInClaudeMd: ["qa-gate"],
-      kongTeam: [{ name: "KONG AI", hasBackend: true }],
     })),
     []
   );
 });
 
-test("App QA catches Clippers claiming success with blockers, and the CEO escalates it", () => {
+test("App QA catches Clippers claiming 'completed' with blockers", () => {
   const [finding] = runCrossChecks(base({ clippers: { status: "completed", configurationBlockers: ["metricool_user_token_missing"], nextAction: { message: "Conectar Metricool" } } }));
   assert.equal(finding.reviewer, "app-qa");
   assert.equal(finding.subject, "clippers");
@@ -50,12 +50,11 @@ test("App QA catches Clippers claiming success with blockers, and the CEO escala
   // Clippers' own status already says "needs-setup" for blockers, so the CEO confirms instead of escalating.
   assert.equal(finding.verdict, "confirmado");
   assert.deepEqual(rules(base({ clippers: { status: "never_run", configurationBlockers: ["x"] } })), []);
+  assert.deepEqual(rules(base({ clippers: { status: "running", configurationBlockers: ["left over from last report"] } })), [], "running shows the previous report's blockers");
 });
 
-test("Control stops Dropshipping from claiming ready without budget", () => {
-  const findings = runCrossChecks(base({ dropshipping: { launchReadiness: { status: "ready_for_test_order", summary: "listo" }, snapshot: { profitGuard: { status: "ok", canSpendUsd: 0 } } } }));
-  assert.equal(findings[0].ruleId, "dropshipping-ready-without-budget");
-  assert.equal(findings[0].verdict, "escalado", "subject says working while a peer has evidence against it");
+test("healthy Dropshipping with no money collected yet is not flagged (canSpendUsd is 0 until a sale)", () => {
+  assert.deepEqual(rules(base({ dropshipping: { launchReadiness: { status: "ready_for_test_order" }, snapshot: { profitGuard: { status: "ok", canSpendUsd: 0 } } } })), []);
 });
 
 test("CEO reviews automations: failures in 24 h and approvals stuck > 48 h", () => {
@@ -67,6 +66,21 @@ test("CEO reviews automations: failures in 24 h and approvals stuck > 48 h", () 
   const findings = runCrossChecks(base({ automationRuns: runs }));
   assert.deepEqual(findings.map((f) => f.ruleId).sort(), ["automations-failed-runs", "automations-stuck-approvals"]);
   assert.equal(findings.find((f) => f.ruleId === "automations-failed-runs")!.claim, "1 corrida(s) fallaron en las ultimas 24 h.");
+});
+
+test("database rows with Date objects are read correctly (not only ISO strings)", () => {
+  const runs = [
+    { status: "failed", automationId: "metricool", errorMessage: "token FAKEtokenFAKEtokenFAKEtoken12345 vencido", startedAt: new Date(NOW - HOUR) },
+    { status: "pending_approval", automationId: "post", startedAt: new Date(NOW - 50 * HOUR) },
+  ];
+  const findings = runCrossChecks(base({ automationRuns: runs }));
+  assert.deepEqual(findings.map((f) => f.ruleId).sort(), ["automations-failed-runs", "automations-stuck-approvals"]);
+  const evidence = findings.find((f) => f.ruleId === "automations-failed-runs")!.evidence.join(" ");
+  assert.match(evidence, /\[redactado\]/, "token-like strings never reach the state file or Trust Center");
+  assert.doesNotMatch(evidence, /FAKEtoken/);
+  const uuid = "3f2b8c1e-9a4d-4c7e-8f10-2b3c4d5e6f70";
+  const withId = runCrossChecks(base({ automationRuns: [{ status: "failed", automationId: uuid, errorMessage: `run ${uuid} failed`, startedAt: new Date(NOW - HOUR) }] }));
+  assert.match(withId[0].evidence[0], new RegExp(`^${uuid}: run ${uuid} failed$`), "record ids stay readable");
 });
 
 test("Cybersecurity cross-checks app status against incidents", () => {
@@ -95,7 +109,7 @@ test("Claude Reviewer verifies skill documents and CLAUDE.md promises", () => {
     ],
     skillsListedInClaudeMd: ["long", "nodesc", "ghost"],
   }));
-  assert.deepEqual(ids, ["claude-md-missing-skills", "skill-missing-paths:nodesc", "skill-no-description:nodesc", "skill-truncated:long"]);
+  assert.deepEqual(ids, ["claude-md-missing-skills", "skill-missing-paths:nodesc", "skill-no-description:nodesc", "skills-truncated"]);
 });
 
 test("debates keep a streak across cycles and resolve when the problem disappears", () => {
@@ -110,7 +124,7 @@ test("debates keep a streak across cycles and resolve when the problem disappear
 });
 
 test("repeated escalations become ONE lesson proposal; approval changes how the agent is shown", () => {
-  const findings = runCrossChecks(base({ dropshipping: { launchReadiness: { status: "ready_for_test_order" }, snapshot: { profitGuard: { status: "pause_spend" } } } }));
+  const findings = runCrossChecks(base({ appProjects: [{ id: "a", name: "Kong", status: "down" }], appIncidents: [] }));
   let state = emptyCouncilState();
   for (let i = 0; i < LESSON_STREAK + 3; i++) state = finishCycle(state, { findings, statuses: {}, now: NOW + i * HOUR });
   const lessons = state.proposals.filter((p) => p.kind === "lesson");
@@ -118,43 +132,48 @@ test("repeated escalations become ONE lesson proposal; approval changes how the 
   assert.equal(Object.keys(applyLessons(state.debates, state.lessons)).length, 0, "nothing changes before approval");
   state = applyApprovedProposal(state, lessons[0].key, NOW + 10 * HOUR);
   assert.equal(state.lessons.length, 1);
-  assert.match(applyLessons(state.debates, state.lessons).dropshipping.label, /Requiere atencion/);
+  assert.match(applyLessons(state.debates, state.lessons).control.label, /Requiere atencion/);
   state = applyApprovedProposal(state, lessons[0].key, NOW + 11 * HOUR);
   assert.equal(state.lessons.length, 1, "approving twice does not duplicate the lesson");
   for (let i = 0; i < 3; i++) state = finishCycle(state, { findings, statuses: {}, now: NOW + (12 + i) * HOUR });
   assert.equal(state.proposals.filter((p) => p.kind === "lesson").length, 1, "learned lessons are not proposed again");
 });
 
-test("skill findings become one skill_update proposal each, with a PR-first brief", () => {
-  const findings = runCrossChecks(base({ skills: [{ name: "long", path: ".claude/skills/long/SKILL.md", description: "x", truncatedInChat: true, bodyChars: 2000, missingPaths: [] }] }));
+test("all truncated skills become ONE grouped skill_update proposal with a PR-first brief", () => {
+  const skill = (name: string) => ({ name, path: `.claude/skills/${name}/SKILL.md`, description: "x", truncatedInChat: true, bodyChars: 2000, missingPaths: [] });
+  const findings = runCrossChecks(base({ skills: [skill("a"), skill("b"), skill("c")] }));
+  assert.equal(findings.length, 1);
   let state = finishCycle(emptyCouncilState(), { findings, statuses: {}, now: NOW });
   state = finishCycle(state, { findings, statuses: {}, now: NOW + HOUR });
   const updates = state.proposals.filter((p) => p.kind === "skill_update");
   assert.equal(updates.length, 1);
   assert.match(updates[0].handoffBrief, /PR-first/);
-  assert.match(updates[0].handoffBrief, /\.claude\/skills\/long\/SKILL\.md/);
+  assert.match(updates[0].handoffBrief, /\.claude\/skills\/b\/SKILL\.md/);
 });
 
-test("agent factory: CEO proposes Kong Ops and helpers for agents stuck > 3 days, capped at 3 open", () => {
-  const kong = runCrossChecks(base({ kongTeam: [{ name: "KONG AI", hasBackend: false }] }));
+test("agent factory: the CEO proposes helpers only for agents stuck > 7 days, max 2 open", () => {
   let state = emptyCouncilState();
   const stuck = { state: "needs-setup" as const, label: "Falta config" };
   const statuses = { clippers: stuck, revenue: stuck, radio: stuck, portfolio: stuck };
-  state = finishCycle(state, { findings: kong, statuses, now: NOW });
-  assert.deepEqual(state.proposals.filter((p) => p.kind === "new_agent").map((p) => p.key), ["new_agent:kong-ops"]);
-  state = finishCycle(state, { findings: kong, statuses, now: NOW + 4 * 24 * HOUR, agentNames: { clippers: "Clippers" } });
+  state = finishCycle(state, { findings: [], statuses, now: NOW });
+  state = finishCycle(state, { findings: [], statuses, now: NOW + 3 * 24 * HOUR });
+  assert.equal(state.proposals.filter((p) => p.kind === "new_agent").length, 0, "no hiring before 7 days");
+  state = finishCycle(state, { findings: [], statuses, now: NOW + 8 * 24 * HOUR, agentNames: { clippers: "Clippers" } });
   const hires = state.proposals.filter((p) => p.kind === "new_agent");
-  assert.equal(hires.length, 3, "never more than 3 open hiring proposals");
+  assert.equal(hires.length, 2, "never more than 2 open hiring proposals");
   assert.ok(hires.some((p) => p.title === "Contratar asistente de configuracion para Clippers"));
-  assert.equal(finishCycle(state, { findings: kong, statuses, now: NOW + 5 * 24 * HOUR }).proposals.filter((p) => p.kind === "new_agent").length, 3);
+  assert.equal(finishCycle(state, { findings: [], statuses, now: NOW + 9 * 24 * HOUR }).proposals.filter((p) => p.kind === "new_agent").length, 2);
 });
 
-test("rejected proposals are not re-proposed for 30 days", () => {
+test("rejected proposals wait 30 days from the rejection, then come back once with the same key", () => {
   const findings = runCrossChecks(base({ skills: [{ name: "long", path: "p", description: "x", truncatedInChat: true, bodyChars: 2000, missingPaths: [] }] }));
   let state = finishCycle(emptyCouncilState(), { findings, statuses: {}, now: NOW });
-  state = { ...state, proposals: state.proposals.map((p) => ({ ...p, status: "rejected" as const })) };
-  assert.equal(finishCycle(state, { findings, statuses: {}, now: NOW + 24 * HOUR }).proposals.length, 1);
-  assert.equal(finishCycle(state, { findings, statuses: {}, now: NOW + 31 * 24 * HOUR }).proposals.length, 2);
+  const rejectedAt = new Date(NOW + 10 * 24 * HOUR).toISOString();
+  state = { ...state, proposals: state.proposals.map((p) => ({ ...p, status: "rejected" as const, closedAt: rejectedAt })) };
+  assert.equal(finishCycle(state, { findings, statuses: {}, now: NOW + 35 * 24 * HOUR }).proposals.length, 1, "cooldown counts from the rejection");
+  const back = finishCycle(state, { findings, statuses: {}, now: NOW + 41 * 24 * HOUR }).proposals;
+  assert.equal(back.length, 1, "old rejected entry is replaced, keys stay unique");
+  assert.equal(back[0].status, "pending_submit");
 });
 
 test("pruning never drops open proposals", () => {
@@ -280,4 +299,48 @@ test("skill document reader flags real truncation and missing files", async () =
   assert.deepEqual(byName.short.missingPaths, ["docs/gone.md"]);
   assert.equal(byName.long.truncatedInChat, true);
   assert.deepEqual(docs.listedInClaudeMd.sort(), ["ghost", "long", "short"]);
+});
+
+test("council IO: a cycle and the scout running together never overwrite each other", async () => {
+  const fake = fakeDeps({ fetchLatestRelease: async () => { await new Promise((r) => setTimeout(r, 5)); return { tag: "v1", url: "u", publishedAt: null }; } });
+  const council = createAgentCouncil(fake.deps);
+  await Promise.all([council.runCycle(), council.runScout()]);
+  const state = parseCouncilState(fake.stored());
+  assert.equal(state.cycles, 1);
+  assert.ok(state.scout.lastRunAt, "scout result kept");
+  assert.equal(Object.keys(state.scout.lastSeen).length, SCOUT_WATCHLIST.length);
+});
+
+test("council IO: writes are serialized (never two at once)", async () => {
+  let active = 0;
+  let maxActive = 0;
+  const fake = fakeDeps({
+    writeState: async () => { active++; maxActive = Math.max(maxActive, active); await new Promise((r) => setTimeout(r, 10)); active--; },
+  });
+  const council = createAgentCouncil(fake.deps);
+  await Promise.all([council.runCycle(), council.runScout()]);
+  await assert.rejects(council.approveFromTrustCenter("does-not-exist"), /no encontrada/);
+  assert.equal(maxActive, 1);
+});
+
+test("council IO: approving an unknown proposal fails loudly; cancelled/failed Trust Center actions close the proposal", async () => {
+  const fake = fakeDeps();
+  const council = createAgentCouncil(fake.deps);
+  await council.runCycle();
+  await assert.rejects(council.approveFromTrustCenter("ghost"), /no encontrada/);
+  fake.pending.set("pa-1", "cancelled");
+  fake.tick(HOUR);
+  const state = await council.runCycle();
+  assert.equal(state.proposals[0].status, "rejected");
+  assert.ok(state.proposals[0].closedAt);
+});
+
+test("atomic file writes: 50 concurrent writes all succeed and the file is always valid JSON", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "council-write-"));
+  const file = path.join(dir, "state.json");
+  const payloads = Array.from({ length: 50 }, (_, i) => JSON.stringify({ ...emptyCouncilState(), cycles: i }));
+  const results = await Promise.allSettled(payloads.map((raw) => writeFileAtomic(file, raw)));
+  assert.equal(results.filter((r) => r.status === "rejected").length, 0);
+  const saved = parseCouncilState(await readFile(file, "utf8"));
+  assert.ok(saved.cycles >= 0 && saved.cycles < 50);
 });

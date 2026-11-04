@@ -54,13 +54,13 @@ const stateStyle: Record<AgentLiveState, { dot: string; chip: string; text: stri
 // What each agent is visibly doing at its desk. Everyone keeps moving; the label stays honest.
 const workMode: Record<AgentLiveState, { body: string; hands: string; verb: string }> = {
   working: { body: "motion-safe:animate-[agent-bob_2.4s_ease-in-out_infinite]", hands: "motion-safe:animate-[agent-hands_0.35s_ease-in-out_infinite]", verb: "Trabajando" },
-  "needs-setup": { body: "motion-safe:animate-[agent-scan_3.2s_ease-in-out_infinite]", hands: "motion-safe:animate-[agent-hands_0.9s_ease-in-out_infinite]", verb: "Revisando su checklist" },
+  "needs-setup": { body: "motion-safe:animate-[agent-scan_3.2s_ease-in-out_infinite]", hands: "motion-safe:animate-[agent-hands_0.9s_ease-in-out_infinite]", verb: "Esperando lo pendiente" },
   error: { body: "motion-safe:animate-[agent-bob_1.2s_ease-in-out_infinite]", hands: "motion-safe:animate-[agent-hands_0.22s_ease-in-out_infinite]", verb: "Investigando un error" },
   offline: { body: "motion-safe:animate-[agent-breathe_4.5s_ease-in-out_infinite]", hands: "", verb: "En espera" },
   checking: { body: "motion-safe:animate-[agent-breathe_2s_ease-in-out_infinite]", hands: "", verb: "Conectando" },
 };
 
-type CouncilView = CouncilState & { overrides: Record<string, { label: string; detail: string }>; nextCycleInMs: number; costUsd: number };
+type CouncilView = CouncilState & { overrides: Record<string, { label: string; detail: string }>; nextCycleInMs: number; costUsd: number; enabled?: boolean };
 
 export function useAgentLiveStatuses(
   agentIds: string[],
@@ -295,7 +295,10 @@ function DebateRoom({ council, names, onRun, running, runError }: { council: Ret
         </p>
       )}
       <div className="mt-2 flex flex-col gap-1.5">
-        {view && debates.length === 0 && <p className="text-[11px] text-emerald-200">Sin desacuerdos: los agentes revisaron el trabajo de sus pares y todo cuadra.</p>}
+        {view && view.enabled === false && <p className="text-[11px] text-zinc-400">El consejo esta apagado (AGENT_COUNCIL_ENABLED=false).</p>}
+        {view && view.lastCycleError && <p className="text-[11px] text-rose-200" data-testid="council-cycle-error">La ultima reunion fallo: {view.lastCycleError}</p>}
+        {view && view.enabled !== false && view.cycles === 0 && <p className="text-[11px] text-zinc-400">Primera reunion en camino (el consejo se reune cada 15 min).</p>}
+        {view && view.cycles > 0 && !view.lastCycleError && debates.length === 0 && <p className="text-[11px] text-emerald-200">Sin desacuerdos: los agentes revisaron el trabajo de sus pares y todo cuadra.</p>}
         {debates.slice(0, 4).map((debate) => (
           <div key={debate.key} className="rounded-lg border border-white/[0.06] bg-black/30 p-2" data-testid="council-debate">
             <div className="flex flex-wrap items-center gap-1 text-[10px]">
@@ -344,6 +347,7 @@ function councilDeskStatus(view: CouncilView | null, kind: "scout" | "factory", 
       activity,
     };
   }
+  if (view.cycles === 0) return { state: "checking", label: "Esperando la primera reunion", activity: ["Busca huecos entre los agentes", "Propone agentes nuevos al CEO"] };
   const hires = view.proposals.filter((p) => p.kind === "new_agent");
   const open = hires.filter((p) => ["submitted", "pending_submit", "not_submitted"].includes(p.status));
   return {
@@ -376,6 +380,7 @@ export function AgentsBuilding({
   const [runError, setRunError] = useState<string | null>(null);
   const [tilt, setTilt] = useState({ x: 4, y: -10 });
   const stageRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<number | null>(null);
   const agentById = useMemo(() => new Map(agents.map((agent) => [agent.id, agent])), [agents]);
   const names = useMemo(() => ({
     ...Object.fromEntries(agents.map((agent) => [agent.id, agent.name])),
@@ -411,12 +416,17 @@ export function AgentsBuilding({
   };
 
   const onPointerMove = (event: PointerEvent<HTMLDivElement>) => {
-    if (event.pointerType !== "mouse") return;
+    if (event.pointerType !== "mouse" || frameRef.current !== null) return;
+    if (typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect) return;
     const px = (event.clientX - rect.left) / rect.width - 0.5;
     const py = (event.clientY - rect.top) / Math.max(rect.height, 1) - 0.5;
-    setTilt({ x: 4 - py * 4, y: -10 + px * 16 });
+    // One tilt update per animation frame keeps re-renders cheap.
+    frameRef.current = window.requestAnimationFrame(() => {
+      frameRef.current = null;
+      setTilt({ x: 4 - py * 4, y: -10 + px * 16 });
+    });
   };
 
   const renderAgent = (id: string) => {
