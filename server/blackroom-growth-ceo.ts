@@ -8,7 +8,7 @@ import {
 } from "./blackroom-metricool-bridge";
 import type { BlackRoomAnalyticsNetwork, BlackRoomImportedAnalyticsSample } from "./blackroom-remote-control";
 import type { LearningSnapshot, LearningNetwork } from "./blackroom-learning-observations";
-import { evaluateBlackRoomLearning, type VerifiedLearningDecision } from "./blackroom-verified-learning";
+import { evaluateBlackRoomLearning, evaluateDurationLearning, type DurationDecision, type VerifiedLearningDecision } from "./blackroom-verified-learning";
 
 export const BLACKROOM_CEO_MIN_SAMPLES = 21;
 export const BLACKROOM_CEO_DAILY_POSTS = 5;
@@ -116,6 +116,7 @@ export interface BlackRoomAttributionStats {
 }
 
 export interface BlackRoomCeoAnalytics {
+  durationLearning?: Record<LearningNetwork, DurationDecision>;
   verifiedLearning?: Record<LearningNetwork, VerifiedLearningDecision>;
   /** Total imported posts across all connected networks, for visibility. */
   sampleCount: number;
@@ -1503,6 +1504,8 @@ export async function collectBlackRoomMetricoolAnalytics(options: {
       .sort((a, b) => Date.parse(b) - Date.parse(a))[0] || null,
   ]));
   result.verifiedLearning = evaluateBlackRoomLearning({ snapshots: options.learningSnapshots || [],
+    experiments: options.publicationExperiments || [], sourceObservedAt, now });
+  result.durationLearning = evaluateDurationLearning({ snapshots: options.learningSnapshots || [],
     experiments: options.publicationExperiments || [], sourceObservedAt, now });
   result.networkConfidence = Object.fromEntries(Object.entries(result.verifiedLearning).map(([network, decision]) => [
     network, decision.status === "testing" ? "learning" : "collecting",
