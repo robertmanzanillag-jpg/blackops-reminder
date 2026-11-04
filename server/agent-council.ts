@@ -311,7 +311,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
     const personalities = Object.fromEntries(Object.values(state.company.careers).map((career) => [career.agentId, personalityFor(career.agentId, career.generation)]));
     return {
       ...state,
-      leaderboard: leaderboard(state.company),
+      leaderboard: leaderboard(state.company, ["ceo", ...EXEMPT_IDS]),
       personalities,
       overrides: applyLessons(state.debates, state.lessons),
       nextCycleInMs: state.lastCycleAt ? Math.max(0, Date.parse(state.lastCycleAt) + COUNCIL_CYCLE_MS - deps.now()) : 0,

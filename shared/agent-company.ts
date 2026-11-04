@@ -64,6 +64,11 @@ const MAX_ORDERS = 60;
 const MAX_EVENTS = 40;
 const MAX_TRAINEES = 30;
 const NEEDS_SETUP_FLOOR = 20;
+const MIN_TENURE_MS = 24 * 60 * 60_000;
+function toMsSafe(value: string | undefined): number {
+  const ms = value ? Date.parse(value) : NaN;
+  return Number.isFinite(ms) ? ms : 0;
+}
 
 // Points / battery per council cycle, by real state.
 const DELTA: Record<AgentLiveState, { points: number; battery: number }> = {
@@ -217,7 +222,8 @@ export function advanceCompany(
     career.lastState = status.state;
 
     const exempt = input.exempt?.includes(agentId);
-    if (!exempt && career.battery === 0) {
+    // A new hire gets at least a day on the job before it can be fired again.
+    if (!exempt && career.battery === 0 && input.now - toMsSafe(career.hiredAt) >= MIN_TENURE_MS) {
       const reason = `Bateria en cero (${status.label}).`;
       fired.push({ agentId, nickname: career.nickname, generation: career.generation, reason });
       events = [{ at: iso, text: `El CEO despidio a ${career.nickname} (${input.roles[agentId] || agentId}). ${reason} Entra un reemplazo a la academia.` }, ...events];

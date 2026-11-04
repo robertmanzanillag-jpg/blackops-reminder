@@ -37,12 +37,14 @@ test("'checking' gives no points and no penalty (no evidence yet)", () => {
 test("empty battery: the CEO fires the agent, a replacement trains in the academy and is protected while studying", () => {
   let company = emptyCompanyState();
   let fired: Array<{ agentId: string }> = [];
-  for (let i = 0; i < 10 && fired.length === 0; i++) {
+  let i = 0;
+  for (; i < 200 && fired.length === 0; i++) {
     const result = advanceCompany(company, { now: NOW + i * 15 * MIN, statuses: { clippers: s("error", "Worker con error") }, roles });
     company = result.state;
     fired = result.fired;
   }
   assert.equal(fired.length, 1);
+  assert.ok((i - 1) * 15 * MIN >= 24 * 60 * MIN, "a new hire gets at least a day before being fired");
   const career = company.careers.clippers;
   assert.equal(career.generation, 2);
   assert.equal(career.firedCount, 1);
@@ -50,7 +52,7 @@ test("empty battery: the CEO fires the agent, a replacement trains in the academ
   assert.equal(career.inTrainingUntilGeneration, 2);
   assert.equal(company.trainees.length, 1);
   assert.match(company.events[0].text, /despidio/);
-  const during = advanceCompany(company, { now: NOW + 20 * 15 * MIN, statuses: { clippers: s("error") }, roles }).state;
+  const during = advanceCompany(company, { now: NOW + (i + 20) * 15 * MIN, statuses: { clippers: s("error") }, roles }).state;
   assert.equal(during.careers.clippers.battery, 60, "no penalty while training");
 });
 
