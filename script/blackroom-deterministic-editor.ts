@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { applyLocalEditorialReport } from "../server/blackroom-local-evidence";
 import {
   BLACKROOM_CHANNEL_VIDEOS_URL,
   buildBlackRoomYtDlpAuthArgs,
@@ -232,6 +233,12 @@ async function main(): Promise<void> {
   await cleanupUnreservedGeneratedMedia(ledger);
   const queue = await readJson<BlackRoomQueueState>(queuePath);
   if (queue.enabled !== true) return;
+  const localReport = await readJson<any>(path.join(path.dirname(ledgerPath), "local-ceo-report.json")).catch(() => null);
+  if (localReport?.scope === "local-evidence" && localReport.version === 1 && queue.analytics?.verifiedLearning) {
+    // Only this edit plan sees the overlay. No local recommendation mutates
+    // the remote queue or authorizes a schedule, upload, or cleanup.
+    queue.analytics = applyLocalEditorialReport(queue.analytics, localReport, new Date());
+  }
   const sources = await loadInventory(queue);
   const plan = planBlackRoomDeterministicEdit({ queue, ledger, ...sources });
   if (!plan) return;

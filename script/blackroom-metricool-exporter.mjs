@@ -45,7 +45,7 @@ export async function deliverMetricoolExports(result, send, { sleep = (ms) => ne
     }
   }
   const complete = Object.keys(METRICOOL_EXPORT_PAGES).every((network) =>
-    result.imports?.some((item) => item.network === network && Array.isArray(item.samples)) && !errors[network])
+    importedByNetwork[network] > 0 && !errors[network])
     && Object.keys(errors).length === 0 && result.setupRequired !== true;
   return { imported, importedByNetwork, complete, errors };
 }

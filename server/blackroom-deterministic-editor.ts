@@ -3,7 +3,7 @@ import type { BlackRoomDailyJob, BlackRoomQueueState, BlackRoomExperimentDuratio
 import { allocateBlackRoomCreativeArm, BLACKROOM_CEO_CREATIVE_MIN_SAMPLES, BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS } from "./blackroom-growth-ceo";
 import type { BlackRoomLedgerEntry, BlackRoomWorkerLedger } from "./blackroom-local-worker";
 import type { BlackRoomCreativeStrategy } from "./blackroom-growth-ceo";
-import { BLACKROOM_HOOK_TEST_ID } from "./blackroom-verified-learning";
+import { BLACKROOM_HOOK_TEST_ID, BLACKROOM_DURATION_TEST_ID, DURATION_ARMS } from "./blackroom-verified-learning";
 import { learningSourceHealth } from "./blackroom-learning-observations";
 
 export const BLACKROOM_CHANNEL_ID = "UCi__qHBfHLlYg0fu86BUA8g";
@@ -238,8 +238,19 @@ export function planBlackRoomDeterministicEdit(input: {
   const testSeed = stableNumber(`${job.id}:${slot}:controlled-hook`);
   const testStrategy = sharedWinner && testSeed % 5 !== 0 ? sharedWinner
     : testSeed % 2 ? "instant_drop" : "drop_first";
-  let creativeStrategy = controlledTest ? testStrategy! : allocation.strategy;
-  const durationSeconds = controlledTest ? 15 : chooseDuration(job, jobEntries, input.queue, targetNetworks);
+  // Rotate three-day blocks; old analytics payloads preserve the previous hook
+  // campaign until a duration evaluator is actually available.
+  const dayNumber = Math.floor(Date.parse(job.targetDate + "T00:00:00Z") / 86400_000);
+  const durationStudy = controlledTest && !!input.queue.analytics?.durationLearning && dayNumber % 6 < 3;
+  const armDuration = DURATION_ARMS[(dayNumber + job.slots.indexOf(slotConfig)) % 3];
+  const preferences = targetNetworks.map(network => input.queue.analytics?.durationLearning?.[network]);
+  const commonDuration = preferences[0]?.recommendedSeconds;
+  // Keep a full rotation even after a provisional winner. Exploit on only
+  // one in five designated slots; never label those clips as test evidence.
+  const exploitDuration = durationStudy && commonDuration && testSeed % 5 === 0 && preferences.every(d =>
+    d?.recommendedSeconds === commonDuration && learningSourceHealth(d.sourceObservedAt, now).status === "fresh") ? commonDuration : null;
+  let creativeStrategy = durationStudy ? "drop_first" as const : controlledTest ? testStrategy! : allocation.strategy;
+  const durationSeconds = durationStudy ? exploitDuration || armDuration : controlledTest ? 15 : chooseDuration(job, jobEntries, input.queue, targetNetworks);
   const format = controlledTest ? "vertical" : chooseFormat(durationSeconds, jobEntries, targetNetworks, input.queue);
   const language = controlledTest ? "en" : chooseLanguage(jobEntries, input.queue);
   const margin = durationSeconds >= 300 ? 180 : 90;
@@ -282,16 +293,17 @@ export function planBlackRoomDeterministicEdit(input: {
   // Complete declared cross-day blocks before opening more unrelated sources.
   // Segment availability, failed-source exclusion and the DJ quota still apply.
   const daypart = Math.floor(Number(slot.split(":")[0]) / 6);
-  const comparable = activeLedgerEntries.filter((entry) => controlledTest && !sharedWinner
-    && entry.learningTestId === BLACKROOM_HOOK_TEST_ID && entry.jobId !== job.id
+  const comparable = activeLedgerEntries.filter((entry) => controlledTest && (durationStudy || !sharedWinner)
+    && entry.learningTestId === (durationStudy ? BLACKROOM_DURATION_TEST_ID : BLACKROOM_HOOK_TEST_ID) && entry.jobId !== job.id
     && Date.parse(`${job.targetDate}T00:00:00Z`) - Date.parse(`${entry.publicationDateTime?.slice(0, 10)}T00:00:00Z`) > 0
     && Date.parse(`${job.targetDate}T00:00:00Z`) - Date.parse(`${entry.publicationDateTime?.slice(0, 10)}T00:00:00Z`) <= 21 * 86400_000
-    && entry.durationSeconds === 15 && entry.format === "vertical" && entry.language === "en"
+    && (durationStudy ? DURATION_ARMS.some(d=>d===entry.durationSeconds) : entry.durationSeconds === 15) && entry.format === "vertical" && entry.language === "en"
     && Math.floor(Number(entry.slot.split(":")[0]) / 6) === daypart
     && targetNetworks.every((network) => entry.targetNetworks?.includes(network))
     && ["drop_first", "instant_drop"].includes(entry.creativeStrategy || ""));
   const pairCandidates = selectable.filter((candidate) => sourceHasReusableHistory(candidate.video.id)
-    && comparable.some((entry) => entry.videoId === candidate.video.id));
+    && comparable.some((entry) => entry.videoId === candidate.video.id)
+    && (!durationStudy || !comparable.some(entry=>entry.videoId===candidate.video.id && entry.durationSeconds===durationSeconds)));
   const preferFreshSource = (candidates: typeof selectable): typeof selectable => {
     const pairs = candidates.filter((candidate) => pairCandidates.includes(candidate));
     if (pairs.length) return pairs;
@@ -320,7 +332,7 @@ export function planBlackRoomDeterministicEdit(input: {
   // Source allocation must not change with the hook arm being tested.
   const seed = `${job.id}:${slot}:${durationSeconds}:${format}:${language}:${controlledTest ? "controlled-source" : creativeStrategy}`;
   const selected = priority || selectionPool[stableNumber(seed) % selectionPool.length];
-  if (controlledTest && !sharedWinner) {
+  if (controlledTest && !durationStudy && !sharedWinner) {
     const block = comparable.filter((entry) => entry.videoId === selected.video.id);
     if (block.length) {
       const first = block.filter((entry) => entry.creativeStrategy === "drop_first").length;
@@ -340,9 +352,12 @@ export function planBlackRoomDeterministicEdit(input: {
     hookFamily: creativeStrategy,
     captionVariant: controlledTest ? "hook-test-fixed-copy-v1" : `${language}-${stableNumber(`${seed}:caption`) % 3}`,
     creativeArmId: `${learningNetwork}:${creativeStrategy}:${language}:${format}:${durationSeconds}`,
-    allocationMode: controlledTest ? sharedWinner && testSeed % 5 !== 0 ? "exploit" : "explore" : allocation.mode,
-    ...(controlledTest ? { learningTestId: BLACKROOM_HOOK_TEST_ID, learningReference,
-      learningDecisionIds: targetNetworks.map((network) => `${network}:${input.queue.analytics?.verifiedLearning?.[network]?.id || "missing"}`).join(","),
+    allocationMode: durationStudy ? exploitDuration ? "exploit" : "explore" : controlledTest ? sharedWinner && testSeed % 5 !== 0 ? "exploit" : "explore" : allocation.mode,
+    ...(controlledTest ? { learningTestId: durationStudy ? exploitDuration ? "duration-followup" : BLACKROOM_DURATION_TEST_ID : BLACKROOM_HOOK_TEST_ID, learningReference,
+      learningDecisionIds: targetNetworks.map(network => {
+        const decisions = durationStudy ? input.queue.analytics?.durationLearning : input.queue.analytics?.verifiedLearning;
+        return `${network}:${decisions?.[network]?.id || "missing"}`;
+      }).join(","),
     } : {}),
   };
 }
