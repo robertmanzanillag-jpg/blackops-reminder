@@ -3122,15 +3122,16 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
 export default function AgentsOfficePage() {
   const queryClient = useQueryClient();
   const ownerId = queryClient.getQueryData<{ user?: { id: string } }>(["auth-me"])?.user?.id;
-  const [showLive, setShowLive] = useState(false);
+  const [showWorld, setShowWorld] = useState(false);
   if (!ownerId) return <p role="alert">No se pudo verificar el propietario de la sesión.</p>;
+  // Robert asked for the agents building as the main view: live status first, the Company World simulation below.
   return <div className="bg-[#080e18]">
-    <CompanyOffice key={ownerId} ownerId={ownerId} />
-    <section className="mx-4 mb-8 rounded-xl border border-white/10 bg-slate-900 p-4 text-slate-200">
-      <button type="button" aria-expanded={showLive} aria-controls="live-office-control" onClick={() => setShowLive(value => !value)} className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-200">
-        {showLive ? "Ocultar" : "Abrir"} centro operativo existente · consulta de proyectos y herramientas
+    <MotionConfig reducedMotion="user"><LiveAgentsOffice key={ownerId} ownerId={ownerId} /></MotionConfig>
+    <section className="mx-4 my-8 rounded-xl border border-white/10 bg-slate-900 p-4 text-slate-200">
+      <button type="button" aria-expanded={showWorld} aria-controls="company-world" onClick={() => setShowWorld(value => !value)} className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-200">
+        {showWorld ? "Ocultar" : "Abrir"} Company World · simulación de departamentos (sin gasto real)
       </button>
-      <div id="live-office-control" hidden={!showLive} className="mt-4">{showLive && <><p role="note" className="mb-4 rounded-lg border border-amber-300/30 p-3 text-sm text-amber-100">Vista anterior: movimientos, conversaciones y aprobaciones locales son demostraciones. No prueban trabajo real ni ejecutan tareas. Solo los reportes recibidos de las API son datos de consulta; las herramientas enlazadas conservan sus propios permisos.</p><MotionConfig reducedMotion="user"><LiveAgentsOffice key={ownerId} ownerId={ownerId} /></MotionConfig></>}</div>
+      <div id="company-world" hidden={!showWorld} className="mt-4">{showWorld && <CompanyOffice key={ownerId} ownerId={ownerId} />}</div>
     </section>
   </div>;
 }
