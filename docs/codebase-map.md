@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-09-28T07:52:10.510Z
-Repo: `/private/tmp/blackroom-learning-20260928`
+Generated: 2026-11-04T21:40:46.514Z
+Repo: `/private/tmp/br-ceo-pr.C1j7zP0e`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 654 | 571 | 1935 | 495 | 12800 |
+| 657 | 574 | 1962 | 495 | 12901 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,11 +28,11 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 133 | 129 | server:133 |
-| `tests` | 119 | 116 | test:119 |
+| `server` | 134 | 130 | server:134 |
+| `tests` | 120 | 117 | test:120 |
 | `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
+| `script` | 77 | 72 | script:77 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `script` | 76 | 71 | script:76 |
 | `docs` | 31 | 30 | docs:31 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
@@ -82,6 +82,7 @@ Package: `rest-express`
 - `tests/blackroom-learning-observations.test.ts`
 - `tests/blackroom-learning-panel.test.ts`
 - `tests/blackroom-links.test.ts`
+- `tests/blackroom-local-evidence.test.ts`
 - `tests/blackroom-local-worker.test.ts`
 - `tests/blackroom-metricool-bridge.test.ts`
 - `tests/blackroom-remote-control.test.ts`
@@ -184,12 +185,13 @@ Package: `rest-express`
 - `client/src/pages/revenue-engine-simple.tsx` (client-page; 33 symbols, 7 imports)
 - `client/src/pages/tools.tsx` (client-page; 2 symbols, 6 imports)
 - `package.json` (package)
-- `script/blackroom-control-server.mjs` (script; 75 symbols, 9 imports)
+- `script/blackroom-control-server.mjs` (script; 78 symbols, 10 imports)
 - `script/blackroom-daily-agent.ts` (script; 16 symbols, 2 imports)
-- `script/blackroom-deterministic-editor.ts` (script; 59 symbols, 7 imports)
+- `script/blackroom-deterministic-editor.ts` (script; 60 symbols, 8 imports)
+- `script/blackroom-local-evidence.ts` (script; 9 symbols, 7 imports)
 - `script/blackroom-local-worker.ts` (script; 73 symbols, 7 imports)
 - `script/blackroom-metricool-csv-bridge.mjs` (script; 38 symbols)
-- `script/blackroom-metricool-exporter.mjs` (script; 24 symbols, 6 imports)
+- `script/blackroom-metricool-exporter.mjs` (script; 33 symbols, 6 imports)
 - `script/blackroom-remote-sync.mjs` (script; 24 symbols)
 - `script/blackroom-worker-ledger.ts` (script; 29 symbols, 4 imports)
 - `script/build.ts` (script; 12 symbols, 4 imports)
@@ -238,7 +240,6 @@ Package: `rest-express`
 - `script/clippers-youtube-uploader.mjs` (script; 107 symbols, 5 imports)
 - `script/codebase-map.ts` (script; 43 symbols, 3 imports)
 - `script/compact-local-news-state.ts` (script; 9 symbols, 4 imports)
-- `script/configure-telegram.ts` (script; 5 symbols, 4 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
