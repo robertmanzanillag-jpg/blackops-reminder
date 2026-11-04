@@ -232,3 +232,23 @@
   0%, 100% { top: calc(100% - 3rem); }
   45%, 55% { top: 0.5rem; }
 }
+
+@keyframes agent-scan {
+  0%, 100% { transform: rotate(-4deg); }
+  50% { transform: rotate(4deg); }
+}
+
+@keyframes agent-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+@keyframes screen-scroll {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+@keyframes building-sway {
+  0%, 100% { transform: rotateY(-3deg); }
+  50% { transform: rotateY(3deg); }
+}

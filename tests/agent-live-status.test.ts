@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { agentProbes, runProbe, summarizeProbe } from "../client/src/lib/agent-live-status";
+import { agentProbes, runProbe, summarizeProbe } from "../shared/agent-live-status";
 
 // Fixtures mirror the real server responses:
 // - CEO: server/ceo-readiness.ts buildCeoReadinessReport -> { ready, status, checks: [{ id, label, status }] }
