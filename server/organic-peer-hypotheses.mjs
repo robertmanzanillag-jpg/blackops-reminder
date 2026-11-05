@@ -24,10 +24,12 @@ export function buildOrganicPeerHypotheses(input, now = new Date()) {
     brands: ['blackroom', 'kong'].map(brand => {
       const evidence = rows.filter(row => row.relevantTo === brand);
       const eligible = evidence.length >= 3;
-      return { brand, status: eligible ? 'hypothesis' : 'insufficient_evidence', evidence,
-        proposal: eligible ? 'Test 15/30/60-second own-content variants; competitor views are not causal evidence.' : null,
+      const durations = evidence.map(e => e.durationSeconds).sort((a,b)=>a-b);
+      const medianSeconds = durations.length ? durations[Math.floor(durations.length/2)] : null;
+      return { brand, reasoningMode:'deterministic_observational', medianSeconds, status: eligible ? 'hypothesis' : 'insufficient_evidence', evidence,
+        proposal: eligible ? `Observed median duration ${medianSeconds}s; test nearby own-content durations against the existing control, not a winner claim.` : null,
         peer: brand === 'blackroom' ? 'kong' : 'blackroom',
-        challenge: 'Different audiences, distribution and publication ages prevent transferring a competitor winner.',
+        challenge: brand === 'blackroom' ? 'KONG perspective: a DJ-set clip does not measure local event intent; views cannot justify changing event promotion.' : 'BlackRoom perspective: local venue promotion cannot establish a DJ-set retention winner.',
         experiment: eligible ? { durations: [15, 30, 60], outcome: 'own_network_matched_age_results',
           controls: ['source', 'language', 'orientation', 'hook', 'daypart'], replaceVerifiedWinner: false } : null };
     }) };
