@@ -25,6 +25,7 @@ export type AgentProbe = {
     | "calendar"
     | "ready-checks"
     | "github"
+    | "claude-worker"
     | "dropshipping"
     | "marketing"
     | "portfolio"
@@ -50,7 +51,7 @@ export const agentProbes: Record<string, AgentProbe> = {
   "marketing-cmo": { key: "marketing-snapshot", url: "/api/marketing-command-center", intervalMs: 2 * MINUTE, kind: "marketing" },
   code: { key: "github-status", url: "/api/github/status", intervalMs: 2 * MINUTE, kind: "github" },
   github: { key: "github-status", url: "/api/github/status", intervalMs: 2 * MINUTE, kind: "github" },
-  "claude-reviewer": { key: "github-status", url: "/api/github/status", intervalMs: 2 * MINUTE, kind: "github" },
+  "claude-reviewer": { key: "claude-worker", url: "/api/agents-office/connections", intervalMs: 2 * MINUTE, kind: "claude-worker" },
   portfolio: { key: "portfolio-summary", url: "/api/portfolio/summary", intervalMs: 2 * MINUTE, kind: "portfolio" },
   radio: { key: "radio-slots", url: "/api/radio/slots", intervalMs: 2 * MINUTE, kind: "radio" },
   clippers: { key: "clippers-runtime", url: "/api/clippers/runtime-status", intervalMs: MINUTE, kind: "clippers" },
@@ -169,6 +170,8 @@ export function extractActivity(probe: AgentProbe, raw: unknown, now: number = D
       const login = str(asObject(body?.user)?.login);
       return login ? [`Sesion GitHub @${login}`, "Leyendo repos, PRs y CI"] : [];
     }
+    case "claude-worker":
+      return [];
     case "dropshipping": {
       const readiness = asObject(body?.launchReadiness);
       const blockers = Array.isArray(readiness?.blockers) ? (readiness!.blockers as unknown[]).map(str).filter(Boolean) as string[] : [];
@@ -270,6 +273,13 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       if (body?.connected !== true) return { state: "needs-setup", label: "GitHub sin conectar" };
       const login = str(asObject(body.user)?.login);
       return { state: "working", label: "Conectado a GitHub", detail: login ? `@${login}` : undefined };
+    }
+    case "claude-worker": {
+      if (body?.workerEnabled === false) return { state: "offline", label: "Ejecutor de Claude desactivado" };
+      if (asObject(body?.worker)?.status !== "ready" || asObject(body?.claude)?.status !== "ready") {
+        return { state: "needs-setup", label: "Claude sin ejecutor verificado" };
+      }
+      return { state: "offline", label: "Claude disponible bajo demanda", detail: "La conexión está lista. La actividad se confirma en el registro de ejecuciones." };
     }
     case "dropshipping": {
       const readiness = asObject(body?.launchReadiness);

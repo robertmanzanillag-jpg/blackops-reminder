@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildOfficeCityRooms, officeCityCountries, officeCityEvidenceExpiresAt, officeCityPage, parseOfficeCityDirectory, selectLatestOfficeKongAudit, OFFICE_CITY_CATEGORIES } from "../client/src/lib/office-city-agents";
+import { buildOfficeCityRooms, officeCityCountries, officeCityEvidenceExpiresAt, parseOfficeCityDirectory, selectLatestOfficeKongAudit, OFFICE_CITY_CATEGORIES } from "../client/src/lib/office-city-agents";
+import { officeCityMapPosition } from "../client/src/components/agents-world-office/office-scene";
 
 const now = Date.parse("2026-11-05T14:00:00Z");
 const stamp = (delta: number) => new Date(now + delta).toISOString();
@@ -9,19 +10,16 @@ const ba = { id: "buenos-aires", name: "Buenos Aires", countryCode: "AR", timeZo
 const job = (category: string, state = "healthy", options: Record<string, unknown> = {}) => ({ category, state, evidence: "persisted", lastRunAt: stamp(-90000), lastSuccessAt: stamp(-90000), lastStartedAt: stamp(-100000), nextRunAt: stamp(50000), leaseUntil: state === "running" ? stamp(360000) : null, issues: [], ...options });
 const run = (cities: unknown[], options: Record<string, unknown> = {}) => ({ id: "audit-1", kind: "kong_audit", status: "completed", createdAt: stamp(-3000), completedAt: stamp(-1000), evidence: { generatedAt: stamp(-2000), citySnapshotCheckedAt: stamp(-1000), cityAgentsEnabled: true, cities, ...options } });
 
-test("every registered city is reachable with seven distinct roles and only 35 figures on a page", () => {
+test("all 25 registered cities have separate map positions and seven distinct roles", () => {
   const cities = [miami, ...Array.from({ length: 23 }, (_, n) => ({ ...miami, id: `fixture-${n}`, name: `Fixture city ${n}` })), ba];
   const rooms = buildOfficeCityRooms(parseOfficeCityDirectory(cities), [], now);
   assert.equal(rooms.length, 25);
   assert.equal(new Set(rooms.flatMap(room => room.agents.map(agent => agent.id))).size, 175);
-  for (let page = 0; page < 5; page++) {
-    const visible = officeCityPage(rooms, page);
-    assert.equal(visible.length, 5);
-    assert.equal(visible.flatMap(room => room.agents).length, 35);
-    for (const room of visible) assert.deepEqual(room.agents.map(agent => agent.category), OFFICE_CITY_CATEGORIES.map(category => category.id));
-  }
-  assert.equal(officeCityPage(rooms, 0)[0].name, "Miami");
-  assert.equal(officeCityPage(rooms, 4).at(-1)?.name, "Buenos Aires");
+  const positions = rooms.map((_, index) => officeCityMapPosition(index, rooms.length));
+  assert.equal(new Set(positions.map(({ x, z }) => `${x},${z}`)).size, 25);
+  assert.equal(new Set(positions.map(({ x }) => x)).size, 5);
+  assert.equal(new Set(positions.map(({ z }) => z)).size, 5);
+  for (const room of rooms) assert.deepEqual(room.agents.map(agent => agent.category), OFFICE_CITY_CATEGORIES.map(category => category.id));
 });
 
 test("fresh evidence animates only running jobs; completed jobs are distinct and missing jobs stay gray", () => {
@@ -94,7 +92,6 @@ test("missing or invalid public registry yields no invented cities", () => {
   for (const value of [undefined, null, { cities: [miami] }, [miami, miami], [{ ...miami, currency: "" }]]) {
     assert.deepEqual(buildOfficeCityRooms(parseOfficeCityDirectory(value), [], now), []);
   }
-  assert.deepEqual(officeCityPage([], 4), []);
 });
 
 test("country filter options come only from the roster and preserve city counts", () => {

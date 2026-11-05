@@ -1,7 +1,6 @@
 import { z } from "zod";
 import type { AgentLiveStatus } from "./agent-live-status";
 
-export const OFFICE_CITY_PAGE_SIZE = 5;
 export const OFFICE_CITY_CATEGORIES = [
   { id: "clubs", name: "Clubs" }, { id: "vip", name: "Mesas VIP" },
   { id: "restaurants", name: "Restaurantes" }, { id: "events", name: "Eventos" },
@@ -115,9 +114,4 @@ export function buildOfficeCityRoomsFromSnapshot(directory: OfficeCityDirectoryE
     });
     return { id: `kong-city:${city.id}`, name: city.name, city, agents };
   });
-}
-
-export function officeCityPage(rooms: OfficeCityRoom[], page: number): OfficeCityRoom[] {
-  const index = Math.min(Math.max(0, Math.floor(page)), Math.max(0, Math.ceil(rooms.length / OFFICE_CITY_PAGE_SIZE) - 1));
-  return rooms.slice(index * OFFICE_CITY_PAGE_SIZE, (index + 1) * OFFICE_CITY_PAGE_SIZE);
 }

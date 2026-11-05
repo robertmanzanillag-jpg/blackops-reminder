@@ -114,15 +114,36 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   await loginForm('fixture-member');
   await page.getByTestId('world-kong-wing').click();
   await page.getByTestId('world-city-country-count').filter({hasText:'1 países · 25 ciudades'}).waitFor();
-  await page.getByTestId('world-city-overview-activity-unavailable').waitFor();
+  await page.getByTestId('world-city-activity-unavailable').waitFor();
+  const cityMarkers=page.locator('[data-testid^="world-dept-kong-city:"]');
+  const mapFallback=page.getByTestId('world-city-map-fallback');
+  await cityMarkers.first().or(mapFallback).waitFor();
+  const hasMap=await cityMarkers.count()>0;
   const cityCards=page.getByTestId('world-city-overview-city');
-  assert.equal(await cityCards.count(),25);
-  await cityCards.filter({hasText:'Ciudad de prueba 25'}).click();
+  if(hasMap){
+   assert.equal(await cityMarkers.count(),25);
+   await page.waitForFunction(()=>{
+    const host=document.querySelector('[data-testid="world-canvas-host"]')?.getBoundingClientRect();
+    const markers=[...document.querySelectorAll('[data-testid^="world-dept-kong-city:"]')];
+    return host&&markers.length===25&&markers.every(marker=>{
+     const bounds=marker.getBoundingClientRect();
+     return bounds.width>0&&bounds.height>0&&bounds.left>=host.left&&bounds.right<=host.right&&bounds.top>=host.top&&bounds.bottom<=host.bottom;
+    });
+   });
+   assert.equal(await page.locator('[data-testid^="world-avatar-kong-city:"]').count(),0);
+   await page.getByTestId('world-dept-kong-city:fixture-city-25').click();
+  } else {
+   assert.equal(await cityCards.count(),25);
+   await cityCards.filter({hasText:'Ciudad de prueba 25'}).click();
+  }
   assert.equal(await page.getByTestId('world-city-overview').count(),0);
   const selectedAgents=page.locator('[data-testid^="world-agent-row-kong-city:fixture-city-25:"]');
   await selectedAgents.first().waitFor();
   assert.equal(await selectedAgents.count(),7);
   assert.match(await selectedAgents.first().innerText(),/Sin evidencia/);
+  if(hasMap)assert.equal(await page.locator('[data-testid^="world-avatar-kong-city:fixture-city-25:"]').count(),7);
+  await page.getByTestId('world-city-return-map').click();
+  if(hasMap)await cityMarkers.first().waitFor();
   await page.getByTestId('world-overview').click();
   assert.equal(await cityCards.count(),25);
   await page.getByRole('button',{name:'Minimizar todas las ciudades'}).click();

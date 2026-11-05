@@ -2,7 +2,8 @@ import type { Express, Request, Response } from "express";
 import { getAuthenticatedCurrentUserId, getSystemUserId } from "./user-context";
 import { officeRuntime, officeTaskSchema, usesOfficeCloudRuntime } from "./office-runtime";
 import { probeOfficeClaude } from "./office-claude";
-import { probeOfficeKong, loadOfficeKongDirectory, runOfficeKongReadOnly, type OfficeKongAuditResult, type OfficeKongCityDirectoryEntry } from "./office-kong";
+import { OfficeKongError, probeOfficeKong, loadOfficeKongDirectory, runOfficeKongReadOnly, type OfficeKongAuditResult, type OfficeKongCityDirectoryEntry } from "./office-kong";
+import { buildOfficeKongCollaboration } from "./office-kong-collaboration";
 
 function owner(req: Request, res: Response): string | null {
   const userId = getAuthenticatedCurrentUserId(req);
@@ -29,6 +30,8 @@ export function registerOfficeRoutes(app: Express, dependencies: {
   kongProbe?: typeof probeOfficeKong;
   directoryReader?: typeof loadOfficeKongDirectory;
   snapshotReader?: typeof runOfficeKongReadOnly;
+  analyzeRadio?: typeof import("./radio-agent").analyzeRadioEvents;
+  loadPullRequest?: typeof import("./office-github").loadOfficePullRequest;
   now?: () => number;
 } = {}) {
   const runtime = dependencies.runtime || officeRuntime;
@@ -39,20 +42,51 @@ export function registerOfficeRoutes(app: Express, dependencies: {
   let snapshot: { expiresAt: number; value: OfficeKongAuditResult } | undefined;
   let snapshotPending: Promise<OfficeKongAuditResult> | undefined;
   let retrySnapshotAt = 0;
+  let snapshotFailureCode = "UNAVAILABLE";
+  app.post("/api/agents-office/contact-action", async (req, res) => {
+    const userId = owner(req, res);
+    if (!userId) return;
+    if (!officeSameOrigin(req)) return res.status(403).json({ error: "La solicitud debe salir de esta oficina." });
+    res.set("Cache-Control", "no-store");
+    const { action, prUrl } = req.body ?? {};
+    try {
+      if (action === "radio_analysis") {
+        const analyzeRadioEvents = dependencies.analyzeRadio ?? (await import("./radio-agent")).analyzeRadioEvents;
+        const result = await analyzeRadioEvents(userId);
+        return res.json({ agentId: "radio", checkedAt: new Date(now()).toISOString(), summary: `Radio analizó ${result.totalEvents} eventos. ${result.eventsWithEmptySlots} tienen horarios vacíos.` });
+      }
+      if (action === "github_pull_request" && typeof prUrl === "string" && prUrl.length <= 300) {
+        const { loadOfficePullRequest, parseOfficePrUrl } = await import("./office-github");
+        try { parseOfficePrUrl(prUrl); } catch { return res.status(400).json({ error: "Usa el enlace canónico de un PR de GitHub." }); }
+        const result = await (dependencies.loadPullRequest ?? loadOfficePullRequest)(prUrl);
+        return res.json({ agentId: "github", checkedAt: new Date(now()).toISOString(), summary: `GitHub comprobó el PR ${result.prUrl}. Revisión exacta: ${result.headSha}. Huella del diff: ${result.diffSha256}.` });
+      }
+      return res.status(400).json({ error: "Esa acción individual no está disponible." });
+    } catch {
+      return res.status(503).json({ error: "El servicio del agente no pudo completar la consulta." });
+    }
+  });
   app.get("/api/agents-office/kong-snapshot", async (req, res) => {
     try {
       if (!owner(req, res)) return;
       res.set("Cache-Control", "no-store");
-      if (snapshot && snapshot.expiresAt > now()) { res.json(snapshot.value); return; }
-      if (retrySnapshotAt > now()) throw new Error("KONG_SNAPSHOT_BACKOFF");
-      snapshotPending ||= Promise.resolve().then(dependencies.snapshotReader || runOfficeKongReadOnly)
-        .then(value => { snapshot = { expiresAt: now() + 45_000, value }; retrySnapshotAt = 0; return value; })
-        .catch(error => { retrySnapshotAt = now() + 30_000; throw error; })
-        .finally(() => { snapshotPending = undefined; });
-      res.json(await snapshotPending);
+      let value = snapshot && snapshot.expiresAt > now() ? snapshot.value : undefined;
+      if (!value) {
+        if (retrySnapshotAt > now()) throw new Error("KONG_SNAPSHOT_BACKOFF");
+        snapshotPending ||= Promise.resolve().then(dependencies.snapshotReader || runOfficeKongReadOnly)
+          .then(value => { snapshot = { expiresAt: now() + 45_000, value }; retrySnapshotAt = 0; return value; })
+          .catch(error => {
+            retrySnapshotAt = now() + 30_000;
+            snapshotFailureCode = error instanceof OfficeKongError ? error.code : "UNAVAILABLE";
+            throw error;
+          })
+          .finally(() => { snapshotPending = undefined; });
+        value = await snapshotPending;
+      }
+      res.json({ ...value, collaboration: buildOfficeKongCollaboration(value.evidence, now()) });
     } catch {
       res.set("Retry-After", String(Math.max(1, Math.ceil((retrySnapshotAt - now()) / 1000))));
-      res.status(503).json({ error: "No se pudo consultar la actividad registrada de KONG." });
+      res.status(503).json({ error: "No se pudo consultar la actividad registrada de KONG.", code: snapshotFailureCode });
     }
   });
   app.get("/api/agents-office/cities", async (req, res) => {

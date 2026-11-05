@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-05T05:45:00.508Z",
-  "repoRoot": "/home/runner/workspace/.local/worktrees/office-cloud-qa-20261105",
+  "generatedAt": "2026-11-05T08:08:41.521Z",
+  "repoRoot": "/home/runner/workspace/.local/worktrees/office-teams-b9f9fb5",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -126,65 +126,11 @@
   "totals": {
     "filesVisible": 749,
     "filesIndexed": 660,
-    "imports": 2247,
-    "routes": 518,
-    "symbols": 14670
+    "imports": 2257,
+    "routes": 524,
+    "symbols": 14748
   },
   "directories": {
-    ".office-cli-qa.guzTJp": {
-      "files": 2,
-      "indexed": 2,
-      "kinds": {
-        "other": 2
-      }
-    },
-    "client/src": {
-      "files": 136,
-      "indexed": 134,
-      "kinds": {
-        "client-component": 33,
-        "client-lib": 15,
-        "other": 4,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-page": 26
-      }
-    },
-    "docs": {
-      "files": 35,
-      "indexed": 34,
-      "kinds": {
-        "docs": 35
-      }
-    },
-    "script": {
-      "files": 82,
-      "indexed": 77,
-      "kinds": {
-        "script": 82
-      }
-    },
-    "server": {
-      "files": 147,
-      "indexed": 143,
-      "kinds": {
-        "server": 147
-      }
-    },
-    "shared": {
-      "files": 7,
-      "indexed": 7,
-      "kinds": {
-        "shared": 7
-      }
-    },
-    "tests": {
-      "files": 146,
-      "indexed": 143,
-      "kinds": {
-        "test": 146
-      }
-    },
     ".": {
       "files": 35,
       "indexed": 18,
@@ -244,11 +190,30 @@
         "other": 16
       }
     },
+    "client/src": {
+      "files": 136,
+      "indexed": 134,
+      "kinds": {
+        "other": 4,
+        "client-component": 33,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 15,
+        "client-page": 26
+      }
+    },
     "config": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "other": 1
+      }
+    },
+    "docs": {
+      "files": 35,
+      "indexed": 34,
+      "kinds": {
+        "docs": 35
       }
     },
     "examples/clippers-motivation": {
@@ -259,11 +224,25 @@
         "other": 70
       }
     },
+    "script": {
+      "files": 82,
+      "indexed": 77,
+      "kinds": {
+        "script": 82
+      }
+    },
     "scripts": {
       "files": 4,
       "indexed": 1,
       "kinds": {
         "script": 4
+      }
+    },
+    "server": {
+      "files": 148,
+      "indexed": 144,
+      "kinds": {
+        "server": 148
       }
     },
     "server/replit_integrations": {
@@ -273,11 +252,25 @@
         "server": 9
       }
     },
+    "shared": {
+      "files": 7,
+      "indexed": 7,
+      "kinds": {
+        "shared": 7
+      }
+    },
     "shared/models": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 147,
+      "indexed": 144,
+      "kinds": {
+        "test": 147
       }
     },
     "tests/fixtures": {
@@ -395,22 +388,6 @@
     {
       "path": ".agents/skills/codebase-overview/SKILL.md",
       "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": ".office-cli-qa.guzTJp/package-lock.json",
-      "kind": "other",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": ".office-cli-qa.guzTJp/package.json",
-      "kind": "other",
       "imports": [],
       "exports": [],
       "symbols": [],
@@ -698,18 +675,15 @@
         "CompanyView",
         "PanelAgent",
         "activeCityCountry",
-        "activeCityPage",
         "career",
-        "changeCityPage",
         "changeWing",
         "cityCountries",
         "cityDirectory",
-        "cityEvidenceRuns",
-        "cityPageCount",
+        "cityEvidence",
         "cityRegistered",
         "cityRooms",
         "cityRunning",
-        "cityRuns",
+        "citySnapshot",
         "colorFromGradient",
         "company",
         "companyIds",
@@ -740,6 +714,7 @@
         "match",
         "name",
         "nameOf",
+        "openCityFromOverview",
         "pageAgentIds",
         "panelAgent",
         "panelAgents",
@@ -752,18 +727,20 @@
         "probedIds",
         "proposals",
         "queryClient",
+        "recorded",
         "reducedMotion",
         "refreshCouncil",
         "result",
         "runCouncil",
+        "running",
         "sceneKey",
         "sceneRef",
+        "selectedCity",
         "sendOrder",
         "sourceMap",
         "sources",
         "text",
         "timer",
-        "visibleCityRooms",
         "workingCount"
       ],
       "routes": []
@@ -779,9 +756,11 @@
         "SceneData",
         "SceneDebate",
         "SceneDepartment",
-        "createOfficeScene"
+        "createOfficeScene",
+        "officeCityMapPosition"
       ],
       "symbols": [
+        "CITY_SPACING",
         "DESK_SPACING_X",
         "DESK_SPACING_Z",
         "DeskRuntime",
@@ -794,6 +773,7 @@
         "applyViewOffset",
         "area",
         "armGeometry",
+        "aspect",
         "avatarMotion",
         "b",
         "back",
@@ -808,16 +788,20 @@
         "book",
         "build",
         "buildDesk",
+        "building",
         "busy",
         "camera",
         "canvas",
         "cityJob",
+        "cityOverview",
+        "cityPosition",
         "clearDynamic",
         "clock",
         "col",
         "color",
         "colorNum",
         "cols",
+        "columns",
         "core",
         "count",
         "createOfficeScene",
@@ -844,10 +828,13 @@
         "end",
         "fill",
         "floor",
+        "flow",
         "flowColor",
         "focusDepartment",
         "frame",
+        "frameCityOverview",
         "from",
+        "frustumScale",
         "glow",
         "goalTarget",
         "grid",
@@ -856,6 +843,8 @@
         "h",
         "hasProblem",
         "head",
+        "headerSpace",
+        "height",
         "hexToNumber",
         "hit",
         "hub",
@@ -875,9 +864,11 @@
         "lines",
         "live",
         "materials",
+        "maxRadius",
         "mid",
         "motion",
         "name",
+        "officeCityMapPosition",
         "offset",
         "onPointerDown",
         "onPointerMove",
@@ -898,6 +889,8 @@
         "playhead",
         "pointer",
         "points",
+        "priorCount",
+        "priorLayout",
         "projected",
         "pulse",
         "raycaster",
@@ -907,6 +900,7 @@
         "rightArm",
         "ring",
         "row",
+        "rowSize",
         "rows",
         "scene",
         "screen",
@@ -915,6 +909,7 @@
         "seed",
         "shirt",
         "slab",
+        "span",
         "speed",
         "stage",
         "stand",
@@ -1492,6 +1487,7 @@
       "kind": "client-component",
       "imports": [
         "../../../server/office-kong",
+        "../../../server/office-kong-collaboration",
         "@/components/ui/button",
         "@/lib/office-city-agents",
         "@/lib/queryClient",
@@ -1506,22 +1502,27 @@
         "OfficeConnectionsPanel",
         "Probe",
         "Run",
-        "auditBusy",
         "busy",
+        "collaboration",
         "connections",
+        "delay",
         "enabled",
         "fresh",
         "isActive",
         "kongAgents",
         "kongEvidence",
         "kongEvidenceFresh",
-        "latestAudit",
         "mutation",
+        "nextExpiry",
         "pending",
+        "probe",
         "response",
         "runs",
         "signature",
+        "snapshot",
         "supervision",
+        "teams",
+        "timer",
         "workerReady"
       ],
       "routes": []
@@ -3381,25 +3382,25 @@
       ],
       "exports": [
         "OFFICE_CITY_CATEGORIES",
-        "OFFICE_CITY_PAGE_SIZE",
         "OfficeCityAgent",
         "OfficeCityCountry",
         "OfficeCityDirectoryEntry",
         "OfficeCityRoom",
         "buildOfficeCityRooms",
+        "buildOfficeCityRoomsFromSnapshot",
         "officeCityCountries",
         "officeCityEvidenceExpiresAt",
-        "officeCityPage",
+        "officeCitySnapshotExpiresAt",
         "parseOfficeCityDirectory",
         "selectLatestOfficeKongAudit"
       ],
       "symbols": [
         "MAX_AGE_MS",
         "OFFICE_CITY_CATEGORIES",
-        "OFFICE_CITY_PAGE_SIZE",
         "OfficeAuditIdentity",
         "agents",
         "buildOfficeCityRooms",
+        "buildOfficeCityRoomsFromSnapshot",
         "candidates",
         "categorySchema",
         "cityEvidenceSchema",
@@ -3410,14 +3411,13 @@
         "evidenceSchema",
         "fresh",
         "future",
-        "index",
         "job",
         "latest",
         "leaseExpiry",
         "matches",
         "officeCityCountries",
         "officeCityEvidenceExpiresAt",
-        "officeCityPage",
+        "officeCitySnapshotExpiresAt",
         "parseOfficeCityDirectory",
         "parsed",
         "readCityEvidence",
@@ -3624,6 +3624,7 @@
         "@/components/ui/button",
         "@/lib/agent-live-status",
         "@/lib/owner-office-storage",
+        "@/lib/queryClient",
         "@/lib/utils",
         "@shared/schema",
         "@tanstack/react-query",
@@ -3679,6 +3680,7 @@
         "SkillSuggestion",
         "SpeakerIcon",
         "Workstation",
+        "action",
         "active",
         "activeIndex",
         "activeMessages",
@@ -3687,6 +3689,7 @@
         "agents",
         "appAgentPositions",
         "appAgents",
+        "append",
         "approved",
         "asksForNext",
         "baseContact",
@@ -3705,10 +3708,12 @@
         "columns",
         "connectedProjects",
         "contact",
+        "contactId",
         "conversation",
         "currentRoomId",
         "currentTimer",
         "cx",
+        "dispatch",
         "dx",
         "dy",
         "fallbackLegalAppReports",
@@ -3750,9 +3755,11 @@
         "overview",
         "ownerId",
         "parsed",
+        "pr",
         "projectText",
         "projects",
         "queryClient",
+        "radio",
         "remoteRepos",
         "renameRoom",
         "reply",
@@ -3768,6 +3775,7 @@
         "selectedTarget",
         "slot",
         "speaker",
+        "specialist",
         "startAgentEdit",
         "startRoom",
         "startRoomEdit",
@@ -10840,6 +10848,7 @@
         "describeAppQaStorageError",
         "detail",
         "details",
+        "disclosure",
         "dynamicImport",
         "emptyBugPatrolReport",
         "escapeRegExp",
@@ -17418,6 +17427,37 @@
       "routes": []
     },
     {
+      "path": "server/office-kong-collaboration.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/office-kong-supervisor",
+        "./office-kong"
+      ],
+      "exports": [
+        "OfficeKongCollaboration",
+        "buildOfficeKongCollaboration"
+      ],
+      "symbols": [
+        "Exchange",
+        "Kind",
+        "MAX_EXCHANGES",
+        "attempts",
+        "buildOfficeKongCollaboration",
+        "closed",
+        "completedAt",
+        "jobs",
+        "needsReassignmentReview",
+        "nextStep",
+        "observedAt",
+        "priority",
+        "proposal",
+        "startedAt",
+        "successAt",
+        "supervision"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/office-kong.ts",
       "kind": "server",
       "imports": [
@@ -17503,6 +17543,7 @@
       "imports": [
         "./office-claude",
         "./office-kong",
+        "./office-kong-collaboration",
         "./office-runtime",
         "./user-context",
         "express"
@@ -17513,20 +17554,27 @@
       ],
       "symbols": [
         "allowed",
+        "analyzeRadioEvents",
+        "checkedAt",
         "code",
         "input",
+        "now",
         "officeSameOrigin",
         "origin",
         "owner",
         "pending",
         "registerOfficeRoutes",
+        "result",
         "run",
         "runtime",
-        "userId"
+        "userId",
+        "workerDisabled"
       ],
       "routes": [
         "/api/agents-office/cities",
         "/api/agents-office/connections",
+        "/api/agents-office/contact-action",
+        "/api/agents-office/kong-snapshot",
         "/api/agents-office/runs"
       ]
     },
@@ -21790,27 +21838,44 @@
       "exports": [],
       "symbols": [
         "app",
+        "auth",
+        "blocked",
+        "bounds",
+        "cityCards",
+        "cityMarkers",
+        "company",
         "concrete",
         "context",
         "envKeys",
         "evidenceDir",
         "fixturePassword",
+        "hasMap",
+        "host",
         "login",
+        "loginForm",
+        "mapFallback",
+        "markers",
         "memberGoals",
         "modules",
         "nativePlaywright",
         "officeRoute",
+        "openCompany",
         "ownerCookie",
         "passive",
         "pendingVisual",
         "previous",
         "protectedRoutes",
         "runtime",
+        "selectedAgents",
         "serveMode",
         "temp",
         "visual"
       ],
       "routes": [
+        "/api/agent-council/state",
+        "/api/agents-office/cities",
+        "/api/agents-office/connections",
+        "/api/agents-office/kong-snapshot",
         "/api/app-qa-agent/status",
         "/api/ceo/conversation-history",
         "/api/ceo/go-live",
@@ -25085,6 +25150,7 @@
       "path": "tests/office-city-agents.test.ts",
       "kind": "test",
       "imports": [
+        "../client/src/components/agents-world-office/office-scene",
         "../client/src/lib/office-city-agents",
         "node:assert/strict",
         "node:test"
@@ -25105,12 +25171,12 @@
         "old",
         "options",
         "pending",
+        "positions",
         "rooms",
         "run",
         "runs",
         "sameTime",
         "stamp",
-        "visible",
         "wrongCity"
       ],
       "routes": []
@@ -25266,6 +25332,27 @@
       "routes": []
     },
     {
+      "path": "tests/office-kong-collaboration.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-kong",
+        "../server/office-kong-collaboration",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "at",
+        "evidence",
+        "fixture",
+        "incomplete",
+        "missing",
+        "now",
+        "result"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-kong-supervisor.test.ts",
       "kind": "test",
       "imports": [
@@ -25353,11 +25440,19 @@
       "symbols": [
         "app",
         "base",
+        "checkedAt",
+        "connections",
+        "contact",
         "cookie",
         "directoryResponse",
+        "ownerHeaders",
         "post",
+        "prReceipt",
+        "readSnapshot",
+        "results",
         "saved",
         "server",
+        "snapshot",
         "task"
       ],
       "routes": []
@@ -26190,6 +26285,7 @@
     "tests/office-cloud-runtime.test.ts",
     "tests/office-cloud-store.test.ts",
     "tests/office-github.test.ts",
+    "tests/office-kong-collaboration.test.ts",
     "tests/office-kong-supervisor.test.ts",
     "tests/office-kong.test.ts",
     "tests/office-routes.test.ts",

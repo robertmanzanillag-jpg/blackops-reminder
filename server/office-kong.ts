@@ -115,6 +115,7 @@ export interface OfficeKongCityCategory {
   issues: string[];
   evidence: "persisted" | "missing";
   recordedFailure?: boolean;
+  attemptsSinceSuccess?: number;
   leaseUntil?: string | null;
 }
 export interface OfficeKongCity {
@@ -229,6 +230,7 @@ function cityEvidence(snapshot: z.infer<typeof citiesSchema>, at: Date): OfficeK
       else state = at.getTime() - lastSuccess > job.interval_ms * 2 ? "stale" : "healthy";
       return { category, state, lastRunAt: job.last_completed_at, lastSuccessAt: job.last_success_at, lastStartedAt: job.last_started_at,
         nextRunAt: job.next_run_at, intervalMs: job.interval_ms, issues, evidence: "persisted", recordedFailure: Boolean(job.last_error),
+        attemptsSinceSuccess: job.attempts,
         leaseUntil: state === "running" ? job.lease_until : null };
     });
     return { id: city.id, name: city.name, countryCode: city.countryCode, timeZone: city.timeZone, currency: city.currency,

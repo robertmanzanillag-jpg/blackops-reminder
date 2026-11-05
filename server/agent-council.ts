@@ -472,11 +472,12 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
   const hasValue = (value: string | undefined) => Boolean(value && value.trim() && !/^(changeme|placeholder|xxx)/i.test(value.trim()));
   await Promise.all([
     read(["assistant"], async () => ({ google: await (await import("./google-calendar")).isGoogleCalendarConnected(), zoho: false })),
-    read(["code", "github", "claude-reviewer"], async () => {
+    read(["code", "github"], async () => {
       const gh = await import("./github-client");
       const connected = await gh.isGitHubConnected();
       return connected ? { connected: true, user: await gh.getAuthenticatedUser() } : { connected: false };
     }),
+    read(["claude-reviewer"], async () => ({ workerEnabled: process.env.OFFICE_WORKER_ENABLED !== "false" })),
     read(["ceo"], async () => {
       const { storage } = await import("./storage");
       const config = await storage.getTelegramConfig(userId);
