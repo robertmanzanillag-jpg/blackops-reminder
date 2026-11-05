@@ -16,6 +16,7 @@ export type SceneAgent = {
   color: string;
   screen: "timeline" | "chart" | "code" | "list";
   activity: string[];
+  cityRole?: string;
   // Company layer: nickname/battery shown on the floating label, crown for the deputy.
   badge?: string;
   battery?: number;
@@ -54,25 +55,25 @@ const STATE_HEX: Record<SceneAgentState, string> = {
 const RING_RADIUS = 17;
 const DESK_SPACING_X = 3.1;
 const DESK_SPACING_Z = 3.6;
-const CITY_SPACING = 8;
+const CITY_RING_SPACING = 12;
 
 export function officeCityMapPosition(index: number, count: number) {
-  const columns = Math.ceil(Math.sqrt(Math.max(1, count)));
-  const rows = Math.ceil((count + 1) / columns);
-  const hubRow = Math.floor((rows - 1) / 2);
-  const hubColumn = Math.floor(columns / 2);
-  const hubIndex = hubRow * columns + hubColumn;
-  const slot = index >= hubIndex ? index + 1 : index;
-  const row = Math.floor(slot / columns);
-  const lastRowSize = count + 1 - (rows - 1) * columns;
-  return {
-    x: (slot % columns - (row === rows - 1 && row !== hubRow ? (lastRowSize - 1) / 2 : hubColumn)) * CITY_SPACING,
-    z: (row - hubRow) * CITY_SPACING,
-    width: columns * CITY_SPACING,
-    depth: rows * CITY_SPACING,
-    centerX: ((columns - 1) / 2 - hubColumn) * CITY_SPACING,
-    centerZ: ((rows - 1) / 2 - hubRow) * CITY_SPACING,
-  };
+  let start = 0;
+  let x = 0;
+  let z = 0;
+  let radius = 0;
+  for (let ring = 0; start < count; ring++) {
+    const slots = Math.min(8 + ring * 9, count - start);
+    radius = (ring + 1) * CITY_RING_SPACING;
+    if (index >= start && index < start + slots) {
+      const angle = -Math.PI / 2 + ((index - start + (ring % 2) * 0.5) / slots) * Math.PI * 2;
+      x = radius * Math.cos(angle);
+      z = radius * Math.sin(angle);
+    }
+    start += slots;
+  }
+  const span = radius * 2 + 8;
+  return { x, z, width: span, depth: span, centerX: 0, centerZ: 0 };
 }
 
 export function officeCityDeskPosition(index: number) {
@@ -447,7 +448,10 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
 
     const label = document.createElement("div");
     label.className = "pointer-events-none absolute -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-white/15 bg-black/75 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-lg";
-    if (agent.id.startsWith("kong-city:")) label.dataset.testid = `world-avatar-${agent.id}`;
+    if (agent.cityRole) {
+      label.dataset.testid = `world-avatar-${agent.id}`;
+      label.className += " flex max-w-[88px] items-center gap-1 overflow-hidden";
+    }
     labelLayer.appendChild(label);
 
     const ctx = canvas.getContext("2d");
@@ -460,6 +464,16 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     const color = STATE_HEX[desk.agent.state];
     desk.label.innerHTML = "";
     const name = document.createElement("span");
+    if (desk.agent.cityRole) {
+      name.className = "min-w-0 truncate";
+      name.textContent = desk.agent.cityRole;
+      const dot = document.createElement("span");
+      dot.className = "size-1.5 shrink-0 rounded-full";
+      dot.style.backgroundColor = color;
+      desk.label.setAttribute("aria-label", `${desk.agent.name} · ${desk.agent.label}`);
+      desk.label.append(dot, name);
+      return;
+    }
     name.textContent = desk.agent.deputy ? `👑 ${desk.agent.name}` : desk.agent.name;
     const dot = document.createElement("span");
     dot.style.cssText = `display:inline-block;width:6px;height:6px;border-radius:9999px;margin:0 5px 1px 6px;background:${color}`;
@@ -501,6 +515,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     const tabletops = instance(new THREE.BoxGeometry(1.16, 0.16, 0.74), 0xd6c7a8);
     const bases = instance(new THREE.BoxGeometry(0.87, 0.59, 0.53), 0x344258);
     const screens = instance(new THREE.BoxGeometry(0.85, 0.57, 0.14), 0xffffff);
+    const screenLines = instance(new THREE.BoxGeometry(0.55, 0.065, 0.025), 0xffffff, desks.length * 2);
     const chairs = instance(new THREE.BoxGeometry(0.49, 0.73, 0.25), 0x243145);
     const bodies = instance(new THREE.CapsuleGeometry(0.16, 0.26, 2, 6), 0xffffff);
     const heads = instance(new THREE.SphereGeometry(0.17, 8, 6), 0xc58b5c);
@@ -524,7 +539,11 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       bodies.setColorAt(index, shirt);
       arms.setColorAt(index * 2, shirt);
       arms.setColorAt(index * 2 + 1, shirt);
-      screens.setColorAt(index, new THREE.Color(agent.state === "working" ? 0x34d399 : 0x26364e));
+      screens.setColorAt(index, new THREE.Color(0x152034));
+      set(screenLines, index * 2, x - 0.05, 1.12, z - 0.48);
+      set(screenLines, index * 2 + 1, x + 0.03, 0.96, z - 0.48);
+      screenLines.setColorAt(index * 2, new THREE.Color(STATE_HEX[agent.state]));
+      screenLines.setColorAt(index * 2 + 1, new THREE.Color(0x64748b));
     });
     if (running.length && !options.reducedMotion) arms.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     scene.add(group);
@@ -550,8 +569,8 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     cityMapSize = officeCityMapPosition(0, data.departments.length);
     hub.visible = cityLayout !== "detail";
     hub.scale.setScalar(cityOverview ? 0.78 : 1);
-    beam.visible = !cityLayout;
-    hubLabel.textContent = cityOverview ? "CEO · KONG" : "CEO · ORQUESTADOR";
+    beam.visible = cityLayout !== "detail";
+    hubLabel.textContent = "CEO · ORQUESTADOR";
     if (!cityOverview) {
       scene.fog.near = 45;
       scene.fog.far = 110;
@@ -622,7 +641,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       label.addEventListener("pointerleave", () => { hoveringLabel = false; });
       labelLayer.appendChild(label);
 
-      if (cityLayout) {
+      if (cityLayout === "detail") {
         platforms.push({ department, group, center: new THREE.Vector3(cx, 0, cz), angle, label, desks, size: { width, depth } });
         return;
       }
@@ -631,10 +650,10 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       const start = new THREE.Vector3(0, 2, 0);
       const end = new THREE.Vector3(cx * 0.82, 0.4, cz * 0.82);
       const mid = start.clone().lerp(end, 0.5);
-      mid.y = 7;
+      mid.y = cityOverview ? 2.5 : 7;
       const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
       const points = curve.getPoints(48);
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineDashedMaterial({ color: colorNum, dashSize: 0.35, gapSize: 0.35, transparent: true, opacity: 0.55 }));
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineDashedMaterial({ color: colorNum, dashSize: 0.35, gapSize: 0.35, transparent: true, opacity: cityOverview && !working ? 0.26 : 0.55 }));
       line.computeLineDistances();
       const lineHolder = new THREE.Group();
       lineHolder.add(line);
@@ -643,7 +662,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       const busy = department.agents.filter((agent) => agent.state === "working").length / Math.max(1, department.agents.length);
       const hasProblem = department.agents.some((agent) => agent.state === "error" || agent.state === "needs-setup");
       const flowColor = busy > 0 ? department.color : "#52525b";
-      const particles = Array.from({ length: busy > 0 ? 6 : 2 }, () => {
+      const particles = Array.from({ length: cityOverview ? (working ? 3 : 0) : (busy > 0 ? 6 : 2) }, () => {
         const particle = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), new THREE.MeshBasicMaterial({ color: hexToNumber(flowColor), transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
         scene.add(particle);
         return particle;
@@ -773,7 +792,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       if (element.style.display !== "none") element.style.display = "none";
       return;
     }
-    if (element.style.display !== "block") element.style.display = "block";
+    if (element.style.display === "none") element.style.removeProperty("display");
     // Whole pixels only: avoids sub-pixel jitter that makes labels hard to click.
     const left = `${Math.round(((projected.x + 1) / 2) * host.clientWidth)}px`;
     const top = `${Math.round(((1 - projected.y) / 2) * host.clientHeight)}px`;

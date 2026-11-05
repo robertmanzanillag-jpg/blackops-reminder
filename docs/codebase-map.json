@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-05T09:49:02.586Z",
-  "repoRoot": "/home/runner/workspace/.local/worktrees/office-visual-48b02e2",
+  "generatedAt": "2026-11-05T10:07:50.480Z",
+  "repoRoot": "/home/runner/workspace/.local/worktrees/office-central-0cb220d",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -128,7 +128,7 @@
     "filesIndexed": 660,
     "imports": 2259,
     "routes": 524,
-    "symbols": 14781
+    "symbols": 14778
   },
   "directories": {
     ".": {
@@ -761,7 +761,7 @@
         "officeCityMapPosition"
       ],
       "symbols": [
-        "CITY_SPACING",
+        "CITY_RING_SPACING",
         "DESK_SPACING_X",
         "DESK_SPACING_Z",
         "DeskRuntime",
@@ -806,7 +806,6 @@
         "color",
         "colorNum",
         "cols",
-        "columns",
         "core",
         "count",
         "createOfficeScene",
@@ -855,18 +854,14 @@
         "hexToNumber",
         "hit",
         "hub",
-        "hubColumn",
-        "hubIndex",
         "hubLabel",
         "hubLight",
         "hubMotion",
-        "hubRow",
         "indent",
         "instance",
         "keepFocus",
         "key",
         "label",
-        "lastRowSize",
         "left",
         "leftArm",
         "leg",
@@ -921,6 +916,7 @@
         "running",
         "scene",
         "screen",
+        "screenLines",
         "screens",
         "scroll",
         "seat",
@@ -928,7 +924,7 @@
         "set",
         "shirt",
         "slab",
-        "slot",
+        "slots",
         "span",
         "speed",
         "stage",
@@ -21871,6 +21867,7 @@
       "symbols": [
         "app",
         "auth",
+        "avatars",
         "blocked",
         "bounds",
         "cityCards",
