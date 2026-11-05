@@ -394,14 +394,16 @@ function containsWord(text: string, word: string): boolean {
 }
 
 export function orderTopic(text: string): string {
-  // Whole words only ("solicita" is not "cita", "producto" is not "pr").
-  const lower = text.toLowerCase();
+  // Whole words only ("solicita" is not "cita", "producto" is not "pr"), accents ignored
+  // ("campaña" = "campana"). Synonyms share one topic: the group's first word ("reel" -> "video").
+  const lower = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
   let brand: string | null = null;
   for (const route of ROUTES) {
     const word = route.words.find((candidate) => containsWord(lower, candidate));
     if (!word) continue;
-    if (!BRAND_WORDS.has(word.trim())) return word.trim();
-    brand = brand || word.trim();
+    const topic = route.words[0].trim();
+    if (!BRAND_WORDS.has(topic)) return topic;
+    brand = brand || topic;
   }
   return brand || "general";
 }

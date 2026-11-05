@@ -259,3 +259,10 @@ test("specialists never take unrelated orders through a substring (pr / producto
   assert.notEqual(orderTopic("solicita el contrato"), "cita");
   assert.equal(orderTopic("revisa el PR de la app"), "app", "work words win; whole words only");
 });
+
+test("order topics merge synonyms and ignore accents", () => {
+  assert.equal(orderTopic("sube el reel de hoy"), "video");
+  assert.equal(orderTopic("agenda una cita con el DJ"), "radio", "work words win over brands; first matching group");
+  assert.equal(orderTopic("lanza la campaña de anuncios"), "marketing");
+  assert.equal(orderTopic("una reunion para el viernes"), "agenda");
+});
