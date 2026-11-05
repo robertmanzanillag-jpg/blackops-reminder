@@ -1,11 +1,37 @@
 import type { Express } from "express";
 import { OrderEvidenceError, getAgentCouncil, isAgentCouncilEnabled, setAgentCouncilUser } from "./agent-council";
 import { getCurrentUserId, getSystemUserId } from "./user-context";
+import { agentProbes, summarizeProbe } from "@shared/agent-live-status";
+import { createKongSupervisorConversation } from "./kong-supervisor-conversation";
+import { registerKongSupervisorRoutes } from "./kong-supervisor-routes";
 
 const MANUAL_RUN_MIN_INTERVAL_MS = 60_000;
 
 // Read-only view + a rate-limited manual cycle. Both sit behind requireAppUser (server/index.ts).
 export function registerAgentCouncilRoutes(app: Express) {
+  // Supervisor KONG (PR #315): owner-only chat and read-only readiness review.
+  // It reads the Kong video status; it never edits, publishes or runs commercial orders.
+  const kongConversation = createKongSupervisorConversation({
+    now: () => Date.now(),
+    commit: (change) => getAgentCouncil().updateKongSupervision(change),
+    read: () => getAgentCouncil().readKongSupervision(),
+    readVideoStatus: async () => {
+      const { getPromoVideoStatus } = await import("./promo-video-agent");
+      const body = await getPromoVideoStatus(getSystemUserId());
+      return summarizeProbe(agentProbes["kong-videos"], { ok: true, status: 200, body: JSON.parse(JSON.stringify(body ?? null)) });
+    },
+  });
+  registerKongSupervisorRoutes(app, kongConversation, {
+    requestUserId: (req) => {
+      try {
+        return getCurrentUserId(req);
+      } catch {
+        return null;
+      }
+    },
+    ownerUserId: () => getSystemUserId(),
+  });
+
   app.get("/api/agent-council/state", async (_req, res) => {
     try {
       res.set("Cache-Control", "no-store");

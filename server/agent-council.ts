@@ -10,6 +10,7 @@
 // Trust Center pending actions for proposals. Approving a proposal records a
 // lesson or marks a PR-first brief as ready; it does not change code or skills.
 
+import { reviewKongReadiness } from "@shared/kong-supervisor";
 import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { resolveDatabaseConnectionString } from "./database-url";
@@ -332,6 +333,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
         const scored = Object.fromEntries(Object.entries(statuses).filter(([id]) => !unscored.includes(id)));
         let next = finishCycle(state, { findings, statuses: scored, now, agentNames: AGENT_NAMES });
         next = advanceCompanyCycle(next, statuses, curriculum, now, integrations);
+        // This completes only a read-only readiness review, never the worker's commercial task.
+        next = { ...next, kongSupervision: reviewKongReadiness(state.kongSupervision, everyone, now) };
         next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, statuses, now, AGENT_NAMES, unscored), ...next.proposals]) };
         wroteRound = true;
         return next;
@@ -443,7 +446,18 @@ export function createAgentCouncil(deps: CouncilDeps) {
     };
   }
 
-  return { runCycle, runScout, approveFromTrustCenter, view, load, placeOrder, finishOrder };
+  // KONG supervisor (PR #315): its conversation and read-only reviews are committed through the same
+  // serialized, revision-checked mutate as everything else. The change may be replayed on a conflict.
+  async function updateKongSupervision(change: (current: CouncilState["kongSupervision"]) => Promise<CouncilState["kongSupervision"]>) {
+    const state = await mutate(async (current) => ({ ...current, kongSupervision: await change(current.kongSupervision) }));
+    return state.kongSupervision;
+  }
+
+  async function readKongSupervision() {
+    return (await load()).kongSupervision;
+  }
+
+  return { runCycle, runScout, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {

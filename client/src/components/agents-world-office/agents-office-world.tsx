@@ -14,6 +14,7 @@ import { personalityFor, type AgentCareer, type CompanyOrder, type CompanyState,
 import { CITY_NEWS_AGENTS } from "@shared/agent-live-status";
 import { INTEGRATION_LABEL, effectiveIntegrations, integrationFor, type AgentIntegration } from "@shared/agent-integrations";
 import { createOfficeScene, type SceneData, type SceneDepartment } from "./office-scene";
+import { KongSupervisorPanel } from "@/components/kong-supervisor-panel";
 
 export type WorldAgent = BuildingAgent & { activity?: string; href?: string };
 
@@ -346,6 +347,7 @@ export function AgentsOfficeWorld({
           <button type="button" onClick={() => sceneRef.current?.focusDepartment(null)} className="rounded-full border border-white/15 bg-black/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10" data-testid="world-overview">Vista general</button>
           <button type="button" onClick={() => setOverlay(overlay === "ceo" ? "none" : "ceo")} className="rounded-full border border-amber-200/40 bg-amber-400/20 px-3 py-1.5 text-xs font-semibold text-amber-50 hover:bg-amber-400/35" data-testid="world-ceo-channel">Canal con el CEO</button>
           <button type="button" onClick={() => setOverlay(overlay === "ranking" ? "none" : "ranking")} className="rounded-full border border-emerald-200/40 bg-emerald-400/15 px-3 py-1.5 text-xs font-semibold text-emerald-50 hover:bg-emerald-400/30" data-testid="world-ranking">Tabla de posiciones</button>
+          <KongSupervisorPanel />
           <button type="button" onClick={runCouncil} disabled={busy || !council.view} className="rounded-full border border-violet-200/40 bg-violet-500/20 px-3 py-1.5 text-xs font-semibold text-violet-50 hover:bg-violet-500/35 disabled:opacity-50" data-testid="world-council-run">Reunir consejo</button>
         </div>
         <nav className="pointer-events-auto mt-2 flex max-w-full gap-1.5 overflow-x-auto pb-1" aria-label="Departamentos" data-testid="world-deptnav">
