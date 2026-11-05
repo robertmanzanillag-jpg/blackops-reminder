@@ -122,6 +122,11 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   await mainPanelToggle.click();
   assert.equal(await page.getByTestId('world-kong-wing').isVisible(),true);
   await page.getByTestId('world-kong-wing').click();
+  const cityOfficeEntry=page.getByTestId('world-open-city-office');
+  if(await cityOfficeEntry.count()){
+   assert.equal(await page.getByTestId('world-dept-consejo').count(),1);
+   await cityOfficeEntry.click();
+  }
   await page.getByTestId('world-city-country-count').filter({hasText:'1 países · 25 ciudades'}).waitFor();
   await page.getByTestId('world-city-activity-unavailable').waitFor();
   assert.equal(await page.getByTestId('world-city-active-work').count(),0);
@@ -131,8 +136,7 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   const hasMap=await cityMarkers.count()>0;
   const cityCards=page.getByTestId('world-city-overview-city');
   if(hasMap){
-   assert.equal(await page.getByTestId('world-dept-consejo').count(),1);
-   assert.equal(await page.getByTestId('world-dept-kong').count(),1);
+   assert.equal(await page.getByTestId('world-dept-consejo').count(),0);
    assert.equal(await cityMarkers.count(),25);
    await page.waitForFunction(()=>{
     const host=document.querySelector('[data-testid="world-canvas-host"]')?.getBoundingClientRect();
@@ -146,7 +150,7 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
    assert.equal(await mapHost.getAttribute('data-city-desk-count'),'175');
    assert.equal(await mapHost.getAttribute('data-city-running-desk-count'),'0');
    await page.getByTestId('world-ceo-orb').filter({hasText:'CEO · ORQUESTADOR'}).waitFor();
-   await page.getByTestId('world-city-director-orb').click();
+   await page.getByTestId('world-ceo-orb').click();
    const director=page.getByTestId('world-city-director-panel');
    await director.getByText('Sin evidencia vigente para asignar puntos o proponer relevos.').waitFor();
    assert.equal(await director.getByRole('listitem').count(),7);
@@ -187,9 +191,13 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   });
   await page.reload();
   await page.getByTestId('world-kong-wing').click();
+  if(await cityOfficeEntry.count())await cityOfficeEntry.click();
   const runningWork=page.getByTestId('world-city-active-work');
   await runningWork.getByRole('button',{name:/Ciudad de prueba 1.*Fotos y media.*Audita imágenes/}).click();
   await page.getByTestId('world-agent-card').getByText('Ciudad de prueba 1 · Fotos y media',{exact:true}).waitFor();
+  await page.getByLabel('Chat de estado',{exact:true}).fill('¿Qué estás haciendo?');
+  await page.getByRole('button',{name:'Preguntar',exact:true}).click();
+  await page.getByRole('status').filter({hasText:/Audita imágenes y flyers/}).waitFor();
   await page.getByTestId('world-city-director-toggle').click();
   const scoredDirector=page.getByTestId('world-city-director-panel');
   await scoredDirector.getByText(/Puntaje parcial: 100\/100 · 1\/7 puestos verificados/).waitFor();

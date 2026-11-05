@@ -117,8 +117,8 @@ export function AgentsOfficeWorld({
   const [cityDetailsOpen, setCityDetailsOpen] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => { if (failed && officeWing === "kong") setCityOverviewOpen(true); }, [failed, officeWing]);
-  const cityDirectory = useQuery<unknown>({ queryKey: ["/api/agents-office/cities"], staleTime: 60_000, refetchInterval: cityRefreshInterval, retry: false });
-  const citySnapshot = useQuery<OfficeKongAuditResult & { collaboration?: OfficeKongCollaboration }>({ queryKey: ["/api/agents-office/kong-snapshot"], staleTime: 45_000, refetchInterval: cityRefreshInterval, retry: false });
+  const cityDirectory = useQuery<unknown>({ queryKey: ["/api/agents-office/cities"], enabled: officeWing === "kong", staleTime: 60_000, refetchInterval: cityRefreshInterval, retry: false });
+  const citySnapshot = useQuery<OfficeKongAuditResult & { collaboration?: OfficeKongCollaboration }>({ queryKey: ["/api/agents-office/kong-snapshot"], enabled: officeWing === "kong", staleTime: 45_000, refetchInterval: cityRefreshInterval, retry: false });
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 15_000); return () => window.clearInterval(timer); }, []);
   const cityEvidence = cityDirectory.isError || citySnapshot.isError ? undefined : citySnapshot.data?.evidence;
   const evidenceExpiresAt = useMemo(() => officeCitySnapshotExpiresAt(cityEvidence, clock), [cityEvidence, clock]);
@@ -144,11 +144,10 @@ export function AgentsOfficeWorld({
   const directorScore = citySupervision?.cities.find(city => city.id === directorCity?.city.id);
   const reassignmentProposals = citySupervision?.verified ? citySnapshot.data?.collaboration?.exchanges.filter(exchange => exchange.proposal.action === "review_reassignment") ?? [] : [];
   const changeWing = (wing: "main" | "kong") => {
-    const department = wing === "kong" ? "kong" : null;
-    setOfficeWing(wing); setFocusedDepartment(department); setPanelAgentId(null); setOverlay("none");
+    setOfficeWing(wing); setFocusedDepartment(null); setPanelAgentId(null); setOverlay("none");
     setCityControlsOpen(false); setCityDetailsOpen(false); setCityCountry("");
     setCityOverviewOpen(Boolean(failed));
-    sceneRef.current?.focusDepartment(department);
+    sceneRef.current?.focusDepartment(null);
   };
   const focusRoom = (id: string | null) => {
     setFocusedDepartment(id); setPanelAgentId(null); sceneRef.current?.focusDepartment(id);
@@ -194,11 +193,11 @@ export function AgentsOfficeWorld({
     ...DEPARTMENTS,
     ...(trainees.length ? [{ id: "academia", name: "Academia", color: "#60a5fa", agentIds: trainees.map((trainee) => `trainee:${trainee.id}`) }] : []),
   ];
-  const departments = [...mainDepartments, ...filteredCityRooms.map(room => ({
+  const departments = officeWing === "main" ? mainDepartments : filteredCityRooms.map(room => ({
       id: room.id, name: room.name,
       color: CITY_COUNTRY_COLORS[room.city.countryCode] ?? "#a78bfa",
       agentIds: room.agents.map(agent => agent.id),
-    }))];
+    }));
   // City jobs never inherit council careers, lessons or optimistic live probes.
   for (const room of filteredCityRooms) for (const agent of room.agents) panelAgents.set(agent.id, {
     id: agent.id, name: agent.name, role: agent.role, description: `${agent.role} de ${room.city.name} · ${room.city.countryCode} · ${room.city.timeZone} · ${room.city.currency}`,
@@ -216,9 +215,8 @@ export function AgentsOfficeWorld({
   }
 
   const sceneData: SceneData = {
-    cityAnnex: true,
-    cityAnnexFocus: selectedCity?.id,
-    departments: departments.map((department) => ({
+    cityLayout: officeWing === "kong" ? selectedCity ? "detail" : "overview" : undefined,
+    departments: departments.filter(department => !selectedCity || officeWing !== "kong" || department.id === selectedCity.id).map((department) => ({
       id: department.id,
       name: department.name,
       color: department.color,
@@ -263,7 +261,6 @@ export function AgentsOfficeWorld({
           sceneRef.current = createOfficeScene(THREE, host, labels, {
             onFocusDepartment: (id) => {
               setFocusedDepartment(id);
-              if (id === "kong") { setOfficeWing("kong"); setCityDetailsOpen(true); }
               if (id?.startsWith("kong-city:")) {
                 setOfficeWing("kong");
                 setPanelAgentId(null);
@@ -402,7 +399,7 @@ export function AgentsOfficeWorld({
         </p>}
         {officeWing === "main" && company?.events?.[0] && <p className="mt-1 truncate text-[11px] text-violet-200" data-testid="world-last-event">Ultimo: {company.events[0].text}</p>}
         <div className={cn("pointer-events-auto flex flex-wrap gap-2", officeWing === "kong" ? "mt-2" : "mt-3")}>
-          <button type="button" onClick={() => changeWing(officeWing === "kong" ? "main" : "kong")} className={cn("rounded-full border-2 border-violet-200 bg-violet-500 font-bold text-white hover:bg-violet-400", officeWing === "kong" ? "px-3 py-1 text-[11px]" : "px-4 py-2 text-sm")} data-testid="world-kong-wing">{officeWing === "kong" ? "Ver controles generales" : "Ver equipo KONG"}</button>
+          <button type="button" onClick={() => officeWing === "kong" ? changeWing("main") : focusRoom("kong")} className={cn("rounded-full border-2 border-violet-200 bg-violet-500 font-bold text-white hover:bg-violet-400", officeWing === "kong" ? "px-3 py-1 text-[11px]" : "px-4 py-2 text-sm")} data-testid="world-kong-wing">{officeWing === "kong" ? "Volver a la oficina principal" : "Ver equipo KONG"}</button>
           {officeWing === "kong" ? (
             <>
               <button type="button" aria-expanded={cityOverviewOpen} aria-controls="world-city-overview" onClick={() => setCityOverviewOpen(open => !open)} className="rounded-full border border-white/15 bg-black/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10" data-testid="world-overview">Todas las ciudades</button>
@@ -444,7 +441,7 @@ export function AgentsOfficeWorld({
             <button
               key={department.id}
               type="button"
-              onClick={() => department.id === "kong" ? changeWing("kong") : focusRoom(department.id)}
+              onClick={() => focusRoom(department.id)}
               className={cn(
                 "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold text-white/90 hover:bg-white/10",
                 focusedDepartment === department.id ? "bg-white/15" : "bg-black/50",
@@ -583,6 +580,7 @@ export function AgentsOfficeWorld({
 
       {focused && (
         <aside className={cn("absolute bottom-3 right-3 z-20 flex flex-col rounded-2xl border border-white/10 bg-[#070b14]/95 text-white shadow-2xl backdrop-blur", selectedCity ? cn("max-h-[min(38vh,350px)] overflow-hidden p-2.5", cityDetailsOpen ? "w-[min(320px,calc(100vw-1.5rem))]" : "w-fit max-w-[min(320px,calc(100vw-1.5rem))]") : "top-[42%] w-[min(390px,calc(100vw-1.5rem))] overflow-y-auto p-4 sm:top-20")} data-testid="world-panel">
+          {focused.id === "kong" && <button type="button" data-testid="world-open-city-office" className="mb-3 self-start rounded-full border border-lime-300/50 bg-lime-400/15 px-3 py-1.5 text-xs font-bold text-lime-100" onClick={() => changeWing("kong")}>Ver oficina de las ciudades</button>}
           <div className="flex shrink-0 items-start justify-between gap-2">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.24em]" style={{ color: focused.color }}>{focused.name}</p>
@@ -665,6 +663,7 @@ export function AgentsOfficeWorld({
                 <div className="col-span-2"><dt className="text-zinc-500">Bloqueo / limite actual</dt><dd>{panelAgent.cityAgent.blocker}</dd></div>
                 <div><dt className="text-zinc-500">Auditoria consultada</dt><dd>{formatCityTime(panelAgent.cityAgent.snapshotAt)}</dd></div>
               </dl>}
+              {(panelAgent.cityAgent || (!panelAgent.kong && !pageAgentIds.includes(panelAgent.id))) && <OfficeAgentStatusChat key={panelAgent.id} agent={panelAgent} />}
               {panelCareer && panelCareer.memory.length > 0 && (
                 <div className="mt-2 rounded-lg border border-violet-300/15 bg-violet-500/5 p-2 text-[10px] leading-4 text-zinc-300" data-testid="world-brain">
                   <p className="mb-1 text-[9px] uppercase tracking-[0.18em] text-violet-200">Cerebro · lo que recuerda</p>
@@ -677,7 +676,7 @@ export function AgentsOfficeWorld({
                   {panelOrders.map((order) => <p key={order.id} className="truncate">· {order.text} <span className="text-zinc-500">({order.doneAt ? "hecha" : order.assignees.find((a) => a.agentId === panelAgent.id)?.status})</span></p>)}
                 </div>
               )}
-              {!panelAgent.cityAgent && <div className="mt-3 flex gap-2">
+              {!panelAgent.cityAgent && (panelAgent.kong || pageAgentIds.includes(panelAgent.id)) && <div className="mt-3 flex gap-2">
                 <button
                   type="button"
                   onClick={() => (panelAgent.kong ? onSelectKongAgent(panelAgent.name) : pageAgentIds.includes(panelAgent.id) && onSelectAgent(panelAgent.id, panelAgent.status))}
@@ -732,6 +731,32 @@ function colorFromGradient(gradient: string): string {
   const match = gradient.match(/from-([a-z]+)-/);
   return (match && TAILWIND_HEX[match[1]]) || "#94a3b8";
 }
+function OfficeAgentStatusChat({ agent }: { agent: PanelAgent }) {
+  const [message, setMessage] = useState("");
+  const [reply, setReply] = useState<{ question: string; answer: string }>();
+  return <form className="mt-3 space-y-1 rounded-lg border border-cyan-200/20 p-2 text-[11px]" onSubmit={event => {
+    event.preventDefault();
+    const question = message.trim();
+    if (!question) return;
+    const city = agent.cityAgent;
+    const text = question.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+    let answer = `${agent.status.label}. ${agent.status.detail ?? ""}`.trim();
+    if (city && /proxim|turno|cuando/.test(text)) answer = city.nextWorkAt ? `Mi próximo turno registrado es ${formatCityTime(city.nextWorkAt)}.` : "KONG no muestra un próximo turno verificable.";
+    else if (city && /ultim|anterior|terminaste/.test(text)) answer = city.lastWorkAt ? `Mi último cierre registrado fue ${formatCityTime(city.lastWorkAt)}. Estado actual: ${agent.status.label}.` : "KONG no muestra un cierre reciente verificable.";
+    else if (city && /tarea|haces|haciendo|funcion/.test(text)) answer = agent.status.state === "working" ? OFFICE_KONG_CITY_TASKS[city.category] + "." : `Mi tarea asignada es: ${OFFICE_KONG_CITY_TASKS[city.category]}. Ahora: ${agent.status.label}.`;
+    else if (!/estado|trabaj|bloque|error|problema|hola/.test(text)) answer = "Puedo responder sobre mi estado registrado, mi tarea y, en KONG, mis turnos. Esta consulta no inicia ni cambia trabajos.";
+    setReply({ question, answer });
+    setMessage("");
+  }}>
+    <label htmlFor="world-status-chat-input" className="block font-semibold text-cyan-100">Chat de estado</label>
+    {reply && <div role="status" className="space-y-1"><p className="break-words text-slate-400">Tú · {reply.question}</p><p>{agent.role} · {reply.answer}</p></div>}
+    <div className="flex gap-1">
+      <input id="world-status-chat-input" value={message} onChange={event => setMessage(event.target.value)} maxLength={240} placeholder="¿Qué estás haciendo?" className="min-w-0 flex-1 rounded border border-white/20 bg-black px-2 py-1" />
+      <button type="submit" disabled={!message.trim()} className="rounded bg-cyan-100 px-2 py-1 font-semibold text-slate-950 disabled:opacity-50">Preguntar</button>
+    </div>
+  </form>;
+}
+
 function formatCityTime(value: string | null): string {
   if (!value || !Number.isFinite(Date.parse(value))) return "Sin registro verificable";
   return new Date(value).toLocaleString("es", { dateStyle: "medium", timeStyle: "short" });
