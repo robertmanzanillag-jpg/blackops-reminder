@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-05T04:31:01.289Z
+Generated: 2026-11-05T05:21:30.240Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-04\quioer-qu-echeck-el-trabajo-que\work\office-current`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 724 | 641 | 2226 | 517 | 14483 |
+| 730 | 647 | 2246 | 518 | 14661 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,16 +29,16 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `server` | 147 | 143 | server:147 |
-| `tests` | 143 | 140 | test:143 |
-| `script` | 81 | 76 | script:81 |
+| `tests` | 146 | 143 | test:146 |
+| `script` | 82 | 77 | script:82 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
 | `docs` | 32 | 31 | docs:32 |
 | `client/src/components` | 24 | 24 | client-component:24 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
-| `client/src/lib` | 14 | 14 | client-lib:14 |
-| `shared` | 6 | 6 | shared:6 |
+| `client/src/lib` | 15 | 15 | client-lib:15 |
+| `shared` | 7 | 7 | shared:7 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `client/src/components/company-office` | 5 | 5 | client-component:5 |
 | `server/replit_integrations/chat` | 4 | 4 | server:4 |
@@ -60,7 +60,7 @@ Package: `rest-express`
 - `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
 - `server/index.ts`: `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
-- `server/office-routes.ts`: `/api/agents-office/connections`, `/api/agents-office/runs`
+- `server/office-routes.ts`: `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/runs`
 - `server/replit_integrations/chat/routes.ts`: `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/messages`
 - `server/replit_integrations/image/routes.ts`: `/api/generate-image`
 - `server/revenue-stripe-routes.ts`: `/api/stripe/revenue-readiness`, `/api/stripe/revenue-webhook`
@@ -154,10 +154,12 @@ Package: `rest-express`
 - `tests/marketing-command-center.test.ts`
 - `tests/metricool-analytics-sync.test.ts`
 - `tests/metricool-tracking.test.ts`
+- `tests/office-city-agents.test.ts`
 - `tests/office-claude.test.ts`
 - `tests/office-cloud-runtime.test.ts`
 - `tests/office-cloud-store.test.ts`
 - `tests/office-github.test.ts`
+- `tests/office-kong-supervisor.test.ts`
 - `tests/office-kong.test.ts`
 - `tests/office-routes.test.ts`
 - `tests/office-runtime.test.ts`

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T04:31:01.289Z",
+  "generatedAt": "2026-11-05T05:21:30.240Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-04\\quioer-qu-echeck-el-trabajo-que\\work\\office-current",
   "packageName": "rest-express",
   "scripts": {
@@ -8,6 +8,7 @@
     "build": "node --import tsx script/build.ts",
     "deploy:build": "npm run build",
     "office:worker": "node dist/office-worker.cjs",
+    "office:cloud": "node script/office-cloud-launch.mjs",
     "codebase:map": "node --import tsx script/codebase-map.ts",
     "test:dropshipping-ceo": "node --import tsx --test tests/dropshipping-ceo.test.ts",
     "test:ceo": "node --import tsx --test tests/ceo-briefing.test.ts",
@@ -123,13 +124,34 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 724,
-    "filesIndexed": 641,
-    "imports": 2226,
-    "routes": 517,
-    "symbols": 14483
+    "filesVisible": 730,
+    "filesIndexed": 647,
+    "imports": 2246,
+    "routes": 518,
+    "symbols": 14661
   },
   "directories": {
+    "client/src/lib": {
+      "files": 15,
+      "indexed": 15,
+      "kinds": {
+        "client-lib": 15
+      }
+    },
+    "shared": {
+      "files": 7,
+      "indexed": 7,
+      "kinds": {
+        "shared": 7
+      }
+    },
+    "tests": {
+      "files": 146,
+      "indexed": 143,
+      "kinds": {
+        "test": 146
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -244,13 +266,6 @@
         "client-hook": 3
       }
     },
-    "client/src/lib": {
-      "files": 14,
-      "indexed": 14,
-      "kinds": {
-        "client-lib": 14
-      }
-    },
     "client/src/pages": {
       "files": 26,
       "indexed": 24,
@@ -281,10 +296,10 @@
       }
     },
     "script": {
-      "files": 81,
-      "indexed": 76,
+      "files": 82,
+      "indexed": 77,
       "kinds": {
-        "script": 81
+        "script": 82
       }
     },
     "scripts": {
@@ -322,25 +337,11 @@
         "server": 3
       }
     },
-    "shared": {
-      "files": 6,
-      "indexed": 6,
-      "kinds": {
-        "shared": 6
-      }
-    },
     "shared/models": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 143,
-      "indexed": 140,
-      "kinds": {
-        "test": 143
       }
     },
     "tests/fixtures": {
@@ -674,6 +675,7 @@
         "./office-scene",
         "@/components/agents-building/agents-building",
         "@/lib/agent-live-status",
+        "@/lib/office-city-agents",
         "@/lib/utils",
         "@shared/agent-company",
         "@tanstack/react-query",
@@ -687,7 +689,19 @@
         "AgentsOfficeWorld",
         "CompanyView",
         "PanelAgent",
+        "activeCityCountry",
+        "activeCityPage",
         "career",
+        "changeCityPage",
+        "changeWing",
+        "cityCountries",
+        "cityDirectory",
+        "cityEvidenceRuns",
+        "cityPageCount",
+        "cityRegistered",
+        "cityRooms",
+        "cityRunning",
+        "cityRuns",
         "colorFromGradient",
         "company",
         "companyIds",
@@ -695,17 +709,25 @@
         "council",
         "current",
         "debates",
+        "delay",
         "departments",
         "deputyId",
+        "directory",
+        "evidenceExpiresAt",
+        "filteredCityRooms",
+        "focusRoom",
         "focused",
         "focusedAgents",
         "focusedIds",
+        "formatCityTime",
         "host",
         "hostRef",
         "labels",
         "labelsRef",
+        "latestSceneKey",
         "leaderboardRows",
         "liveStatuses",
+        "mainDepartments",
         "markDone",
         "match",
         "name",
@@ -732,6 +754,8 @@
         "sourceMap",
         "sources",
         "text",
+        "timer",
+        "visibleCityRooms",
         "workingCount"
       ],
       "routes": []
@@ -762,6 +786,7 @@
         "applyViewOffset",
         "area",
         "armGeometry",
+        "avatarMotion",
         "b",
         "back",
         "badge",
@@ -778,6 +803,7 @@
         "busy",
         "camera",
         "canvas",
+        "cityJob",
         "clearDynamic",
         "clock",
         "col",
@@ -1457,8 +1483,10 @@
       "path": "client/src/components/office-connections-panel.tsx",
       "kind": "client-component",
       "imports": [
+        "../../../server/office-kong",
         "@/components/ui/button",
         "@/lib/queryClient",
+        "@shared/office-kong-supervisor",
         "@tanstack/react-query",
         "react"
       ],
@@ -1466,22 +1494,25 @@
         "OfficeConnectionsPanel"
       ],
       "symbols": [
-        "City",
         "OfficeConnectionsPanel",
         "Probe",
         "Run",
+        "auditBusy",
         "busy",
         "connections",
         "enabled",
         "fresh",
+        "isActive",
         "kongAgents",
         "kongEvidence",
         "kongEvidenceFresh",
+        "latestAudit",
         "mutation",
         "pending",
         "response",
         "runs",
         "signature",
+        "supervision",
         "workerReady"
       ],
       "routes": []
@@ -3329,6 +3360,61 @@
       "symbols": [
         "payload",
         "readAuthState"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/office-city-agents.ts",
+      "kind": "client-lib",
+      "imports": [
+        "./agent-live-status",
+        "zod"
+      ],
+      "exports": [
+        "OFFICE_CITY_CATEGORIES",
+        "OFFICE_CITY_PAGE_SIZE",
+        "OfficeCityAgent",
+        "OfficeCityCountry",
+        "OfficeCityDirectoryEntry",
+        "OfficeCityRoom",
+        "buildOfficeCityRooms",
+        "officeCityCountries",
+        "officeCityEvidenceExpiresAt",
+        "officeCityPage",
+        "parseOfficeCityDirectory"
+      ],
+      "symbols": [
+        "MAX_AGE_MS",
+        "OFFICE_CITY_CATEGORIES",
+        "OFFICE_CITY_PAGE_SIZE",
+        "agents",
+        "buildOfficeCityRooms",
+        "candidates",
+        "categorySchema",
+        "cityEvidenceSchema",
+        "confirmed",
+        "counts",
+        "directoryCitySchema",
+        "evidence",
+        "evidenceSchema",
+        "fresh",
+        "future",
+        "index",
+        "job",
+        "latest",
+        "leaseExpiry",
+        "matches",
+        "officeCityCountries",
+        "officeCityEvidenceExpiresAt",
+        "officeCityPage",
+        "parseOfficeCityDirectory",
+        "parsed",
+        "readCityEvidence",
+        "record",
+        "snapshotAt",
+        "snapshotExpiry",
+        "timestamp",
+        "usable"
       ],
       "routes": []
     },
@@ -9727,6 +9813,42 @@
       "routes": []
     },
     {
+      "path": "script/office-cloud-launch.mjs",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "createOfficeCloudLauncher"
+      ],
+      "symbols": [
+        "child",
+        "children",
+        "clearTimer",
+        "createOfficeCloudLauncher",
+        "cwd",
+        "env",
+        "executable",
+        "finish",
+        "graceMs",
+        "killGroup",
+        "launch",
+        "onInt",
+        "onTerm",
+        "platform",
+        "record",
+        "setTimer",
+        "shutdown",
+        "signalChildren",
+        "signals",
+        "spawnImpl",
+        "stop"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/office-postgres-qa.ts",
       "kind": "script",
       "imports": [
@@ -9763,12 +9885,15 @@
         "exists",
         "expiredOwner",
         "first",
+        "history",
         "identity",
         "marker",
         "retained",
         "retainedTask",
         "root",
         "runOfficePostgresQa",
+        "scheduled",
+        "scheduledClaim",
         "second",
         "socket",
         "storeA",
@@ -9786,7 +9911,8 @@
       "path": "script/office-worker.ts",
       "kind": "script",
       "imports": [
-        "../server/office-cloud-runtime"
+        "../server/office-cloud-runtime",
+        "../server/user-context"
       ],
       "exports": [],
       "symbols": [
@@ -17109,16 +17235,19 @@
         "execute",
         "heartbeat",
         "known",
+        "kong",
         "latest",
         "now",
         "officeCloudRuntime",
         "output",
         "overdue",
+        "probeAge",
         "probeOfficeWorker",
         "provider",
         "publicRun",
         "runs",
         "store",
+        "time",
         "unavailable",
         "workerId"
       ],
@@ -17160,15 +17289,18 @@
         "database",
         "date",
         "decode",
+        "digest",
         "encoded",
         "fail",
         "find",
         "guarded",
         "hash",
+        "hex",
         "input",
         "inserted",
         "inspect",
         "jsonResult",
+        "key",
         "leaseMs",
         "officeCloudStore",
         "owner",
@@ -17179,6 +17311,7 @@
         "requestHash",
         "result",
         "safe",
+        "slot",
         "task",
         "taskSchema",
         "timestamp",
@@ -17243,6 +17376,7 @@
       "path": "server/office-kong.ts",
       "kind": "server",
       "imports": [
+        "../shared/office-kong-supervisor",
         "zod"
       ],
       "exports": [
@@ -17251,12 +17385,14 @@
         "OfficeKongAuditResult",
         "OfficeKongCity",
         "OfficeKongCityCategory",
+        "OfficeKongCityDirectoryEntry",
         "OfficeKongError",
         "OfficeKongProbe",
         "createOfficeKongConnector"
       ],
       "symbols": [
         "CITY_AGENTS_URL",
+        "CITY_DIRECTORY_URL",
         "MAX_BODY_BYTES",
         "MAX_FUTURE_SKEW_MS",
         "MAX_SNAPSHOT_AGE_MS",
@@ -17283,6 +17419,7 @@
         "counts",
         "createOfficeKongConnector",
         "declaredSize",
+        "directorySchema",
         "futureEvidence",
         "ids",
         "issues",
@@ -17290,6 +17427,7 @@
         "jobSchema",
         "lastSuccess",
         "liveLease",
+        "loadOfficeKongDirectory",
         "now",
         "nullableTimestamp",
         "operationsCityIds",
@@ -17335,12 +17473,14 @@
         "officeSameOrigin",
         "origin",
         "owner",
+        "pending",
         "registerOfficeRoutes",
         "run",
         "runtime",
         "userId"
       ],
       "routes": [
+        "/api/agents-office/cities",
         "/api/agents-office/connections",
         "/api/agents-office/runs"
       ]
@@ -21098,6 +21238,55 @@
       "routes": []
     },
     {
+      "path": "shared/office-kong-supervisor.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "OFFICE_KONG_SCORE_DEDUCTIONS",
+        "OFFICE_KONG_SUPERVISED_CATEGORIES",
+        "OfficeKongCategoryScore",
+        "OfficeKongCityScore",
+        "OfficeKongCountryScore",
+        "OfficeKongSupervision",
+        "OfficeKongSupervisorSnapshot",
+        "OfficeKongSupervisorState",
+        "scoreOfficeKongSnapshot"
+      ],
+      "symbols": [
+        "Category",
+        "CategoryEvidence",
+        "MAX_CLOCK_SKEW_MS",
+        "MAX_SNAPSHOT_AGE_MS",
+        "MISSED_GRACE_MS",
+        "OFFICE_KONG_SCORE_DEDUCTIONS",
+        "OFFICE_KONG_SUPERVISED_CATEGORIES",
+        "ScoreAggregate",
+        "aggregate",
+        "categories",
+        "cities",
+        "completed",
+        "countries",
+        "deduction",
+        "due",
+        "group",
+        "groups",
+        "isFresh",
+        "lease",
+        "matches",
+        "parse",
+        "points",
+        "score",
+        "scoreCategory",
+        "scoreOfficeKongSnapshot",
+        "snapshotAt",
+        "snapshotTime",
+        "started",
+        "success",
+        "verified"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/schema.ts",
       "kind": "shared",
       "imports": [
@@ -24847,6 +25036,38 @@
       "routes": []
     },
     {
+      "path": "tests/office-city-agents.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/lib/office-city-agents",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "ba",
+        "cities",
+        "duplicateCategory",
+        "expiry",
+        "futureStart",
+        "job",
+        "jobs",
+        "latest",
+        "miami",
+        "noStart",
+        "now",
+        "old",
+        "options",
+        "rooms",
+        "run",
+        "runs",
+        "stamp",
+        "visible",
+        "wrongCity"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-claude.test.ts",
       "kind": "test",
       "imports": [
@@ -24869,6 +25090,31 @@
         "success",
         "tokenAuth",
         "tokenEnvironment"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-cloud-launch.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/office-cloud-launch.mjs",
+        "node:assert/strict",
+        "node:events",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "calls",
+        "child",
+        "children",
+        "ended",
+        "f",
+        "fixture",
+        "g",
+        "kills",
+        "options",
+        "running",
+        "signals"
       ],
       "routes": []
     },
@@ -24929,13 +25175,17 @@
         "id",
         "input",
         "insert",
+        "owned",
         "pool",
         "predecessor",
         "restarted",
         "row",
         "runs",
+        "scheduled",
         "sql",
-        "submitted"
+        "store",
+        "submitted",
+        "task"
       ],
       "routes": []
     },
@@ -24968,6 +25218,33 @@
       "routes": []
     },
     {
+      "path": "tests/office-kong-supervisor.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/office-kong-supervisor",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Category",
+        "City",
+        "MINUTE",
+        "NOW",
+        "at",
+        "city",
+        "evidence",
+        "expired",
+        "failed",
+        "job",
+        "noLease",
+        "recorded",
+        "result",
+        "snapshot"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-kong.test.ts",
       "kind": "test",
       "imports": [
@@ -24978,6 +25255,7 @@
       "exports": [],
       "symbols": [
         "CITIES_URL",
+        "DIRECTORY_URL",
         "NOW",
         "TOKEN",
         "audit",
@@ -24986,8 +25264,11 @@
         "c",
         "citiesFixture",
         "cityData",
+        "client",
         "connector",
+        "directory",
         "disabled",
+        "entries",
         "huge",
         "ids",
         "invalidState",
@@ -25022,6 +25303,7 @@
         "app",
         "base",
         "cookie",
+        "directoryResponse",
         "post",
         "saved",
         "server",
@@ -25091,8 +25373,10 @@
       "exports": [],
       "symbols": [
         "capabilities",
+        "disabled",
         "heartbeat",
         "now",
+        "options",
         "probe",
         "status",
         "store",
@@ -25850,10 +26134,12 @@
     "tests/marketing-command-center.test.ts",
     "tests/metricool-analytics-sync.test.ts",
     "tests/metricool-tracking.test.ts",
+    "tests/office-city-agents.test.ts",
     "tests/office-claude.test.ts",
     "tests/office-cloud-runtime.test.ts",
     "tests/office-cloud-store.test.ts",
     "tests/office-github.test.ts",
+    "tests/office-kong-supervisor.test.ts",
     "tests/office-kong.test.ts",
     "tests/office-routes.test.ts",
     "tests/office-runtime.test.ts",

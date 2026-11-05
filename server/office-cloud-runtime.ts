@@ -60,6 +60,7 @@ export function createOfficeCloudWorker(options: {
   workerId?: string;
   probeClaude?: typeof probeOfficeClaude;
   probeKong?: typeof probeOfficeKong;
+  scheduledKongOwner?: string;
   now?: () => Date;
 } = {}) {
   const store = options.store || officeCloudStore;
@@ -72,6 +73,7 @@ export function createOfficeCloudWorker(options: {
   let capabilities: OfficeWorkerCapabilities | undefined;
   let checkingCapabilities: Promise<void> | undefined;
   let maintenance: Promise<void> | undefined;
+  let lastScheduleCheck: number | undefined;
   const overdue = () => {
     if (active && executionDeadline !== undefined && now().getTime() >= executionDeadline) quarantined = true;
     return quarantined;
@@ -117,6 +119,16 @@ export function createOfficeCloudWorker(options: {
         if (overdue()) throw new Error("OFFICE_WORKER_PROGRESS_STALLED");
         await heartbeat();
         if (overdue()) throw new Error("OFFICE_WORKER_PROGRESS_STALLED");
+        const time = now().getTime();
+        const kong = capabilities?.kong;
+        const probeAge = kong ? time - Date.parse(kong.checkedAt) : NaN;
+        if (options.scheduledKongOwner && kong?.status === "ready" && probeAge >= -30_000 && probeAge <= 90_000 &&
+            (lastScheduleCheck === undefined || time - lastScheduleCheck >= 30_000)) {
+          lastScheduleCheck = time;
+          try { await store.enqueueScheduledKongAudit(options.scheduledKongOwner); }
+          catch { console.error("Office worker could not confirm its recurring KONG audit"); }
+          if (overdue()) throw new Error("OFFICE_WORKER_PROGRESS_STALLED");
+        }
         const claimed = await store.claim(workerId);
         // A late claim may have committed while its response was uncertain.
         // Never replace its expired admission deadline with a new lease budget.

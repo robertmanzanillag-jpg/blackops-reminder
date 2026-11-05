@@ -28,7 +28,7 @@ const runSchema = z.object({
   error: z.object({ code: z.string().max(100), reason: z.string().max(1000) }).strict().optional(),
   review: reviewSchema.optional(), evidence: z.unknown().optional(),
 }).strict();
-export type OfficeRun = Omit<z.infer<typeof runSchema>, "evidence"> & { evidence?: OfficeKongAuditResult["evidence"] };
+export type OfficeRun = Omit<z.infer<typeof runSchema>, "evidence"> & { evidence?: OfficeKongAuditResult["evidence"]; source?: "scheduled" };
 export class OfficeRuntimeError extends Error {
   constructor(public readonly code: string, message: string) { super(message); this.name = "OfficeRuntimeError"; }
 }

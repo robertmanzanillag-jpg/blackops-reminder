@@ -35,8 +35,20 @@ class ContractPool implements OfficeCloudPool {
     const copy = (rows: Record<string, unknown>[]) => ({ rows: JSON.parse(JSON.stringify(rows)), rowCount: rows.length });
     if (["BEGIN", "COMMIT", "ROLLBACK"].includes(sql) || sql.includes("office:owner-lock")) return copy([]);
     if (sql.includes("office:find-key")) return copy(this.rows.filter(row => row.owner_key === parameters[0] && row.idempotency_key === parameters[1]));
-    if (sql.includes("office:submit")) {
+    if (sql.includes("office:kong-schedule-slot")) return copy([{ slot: String(Math.floor(this.time / 240_000)) }]);
+    if (sql.includes("office:kong-schedule-retention")) {
+      assert.match(sql, /input->>'source'='scheduled'/);
+      this.rows = this.rows.filter(row => row.owner_key !== parameters[0] || (row.input as { source?: string }).source !== "scheduled" ||
+        ["pending", "running"].includes(String(row.status)) || Date.parse(String(row.created_at)) >= this.time - 86_400_000);
+      return copy([]);
+    }
+    if (sql.includes("office:submit") || sql.includes("office:kong-schedule*/")) {
       const [id, owner_key, idempotency_key, request_hash, input] = parameters;
+      if (sql.includes("office:kong-schedule*/") && this.rows.some(row => {
+        const task = row.input as { kind: string; source?: string };
+        return row.owner_key === owner_key && task.kind === "kong_audit" && (["pending", "running"].includes(String(row.status)) ||
+          (task.source === "scheduled" && Date.parse(String(row.created_at)) > this.time - 180_000));
+      })) return copy([]);
       if (this.rows.some(row => row.owner_key === owner_key && row.idempotency_key === idempotency_key)) return copy([]);
       const row = { id, owner_key, idempotency_key, request_hash, input: JSON.parse(input as string), status: "pending", created_at: new Date(this.time++).toISOString() };
       this.rows.push(row); return copy([row]);
@@ -62,7 +74,10 @@ class ContractPool implements OfficeCloudPool {
     }
     if (sql.includes("office:list")) {
       assert.match(sql, /WHERE owner_key=\$1/);
-      return copy(this.rows.filter(row => row.owner_key === parameters[0]).reverse().slice(0, 200));
+      const owned = this.rows.filter(row => row.owner_key === parameters[0]).reverse();
+      const scheduled = (row: Record<string, unknown>) => (row.input as { source?: string }).source === "scheduled";
+      return copy([...owned.filter(row => !scheduled(row)).slice(0, 200), ...owned.filter(scheduled).slice(0, 3)]
+        .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at))));
     }
     if (sql.includes("office:heartbeat")) {
       const id = String(parameters[0]);
@@ -75,6 +90,29 @@ class ContractPool implements OfficeCloudPool {
   }
 }
 const input = () => ({ kind: "claude_chat" as const, message: "Review my task", key: randomUUID() });
+
+test("recurring audits use one database slot across workers, preserve fences and avoid backlog", async () => {
+  const pool = new ContractPool();
+  pool.time = 240_000_000;
+  const store = createOfficeCloudStore({ pool });
+  const restarted = createOfficeCloudStore({ pool });
+  await Promise.all([store.enqueueScheduledKongAudit("owner"), restarted.enqueueScheduledKongAudit("owner")]);
+  const first = (await store.claim("worker-1"))!;
+  assert.equal(first.source, "scheduled");
+  assert.equal(first.kind, "kong_audit");
+  assert.equal(await restarted.claim("worker-2"), undefined);
+  assert.equal((await store.complete(first.id, "worker-1", first.fence!, { status: "completed", text: "Confirmed" }))?.source, "scheduled");
+  pool.time += 181_000;
+  await restarted.enqueueScheduledKongAudit("owner");
+  assert.equal(pool.rows.length, 1, "a restart cannot create another audit in the same slot");
+  pool.time += 60_000;
+  await restarted.enqueueScheduledKongAudit("owner");
+  pool.time += 600_000;
+  await restarted.enqueueScheduledKongAudit("owner");
+  assert.equal(pool.rows.length, 2, "pending audit prevents accumulation across slots");
+  assert.deepEqual(await store.list("other"), []);
+  await assert.rejects(store.submit("owner", { kind: "kong_audit", key: randomUUID(), source: "scheduled" } as never), /tarea/);
+});
 
 test("prepared migration has permanent owner/key uniqueness and lease indexes; no automatic DDL", async () => {
   const sql = createOfficeCloudSchemaSql();

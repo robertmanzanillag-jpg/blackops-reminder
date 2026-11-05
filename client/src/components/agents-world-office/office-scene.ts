@@ -662,18 +662,20 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     platforms.forEach((platform) => {
       platform.desks.forEach((desk) => {
         const state = desk.agent.state;
+        const cityJob = desk.agent.id.startsWith("kong-city:");
+        const avatarMotion = cityJob && state !== "working" ? 0 : motion;
         const speed = state === "working" ? 1 : state === "error" ? 0.3 : state === "needs-setup" ? 0.45 : 0.18;
         const p = t * 6 * speed + desk.phase;
-        // Only working agents type. A broken one stops and its light blinks like an alarm.
-        desk.body.position.y = 1.12 + Math.sin(p * 0.35) * 0.03 * motion;
-        desk.head.position.y = 1.72 + Math.sin(p * 0.35) * 0.03 * motion;
-        desk.head.rotation.y = state === "working" ? Math.sin(p * 0.2) * 0.25 * motion : Math.sin(p * 0.1) * 0.6 * motion;
-        const typing = state === "working" ? 1 : state === "error" ? 0 : 0.25;
-        desk.leftArm.position.y = 1.18 + Math.max(0, Math.sin(p * 2)) * 0.06 * typing * motion;
-        desk.rightArm.position.y = 1.18 + Math.max(0, Math.sin(p * 2 + Math.PI)) * 0.06 * typing * motion;
-        const pulse = 0.75 + Math.sin(t * 3 + desk.phase) * 0.25 * motion;
+        // City figures only move during verified work; retain the main office's ambient motion.
+        desk.body.position.y = 1.12 + Math.sin(p * 0.35) * 0.03 * avatarMotion;
+        desk.head.position.y = 1.72 + Math.sin(p * 0.35) * 0.03 * avatarMotion;
+        desk.head.rotation.y = state === "working" ? Math.sin(p * 0.2) * 0.25 * avatarMotion : Math.sin(p * 0.1) * 0.6 * avatarMotion;
+        const typing = state === "working" ? 1 : cityJob || state === "error" ? 0 : 0.25;
+        desk.leftArm.position.y = 1.18 + Math.max(0, Math.sin(p * 2)) * 0.06 * typing * avatarMotion;
+        desk.rightArm.position.y = 1.18 + Math.max(0, Math.sin(p * 2 + Math.PI)) * 0.06 * typing * avatarMotion;
+        const pulse = 0.75 + Math.sin(t * 3 + desk.phase) * 0.25 * avatarMotion;
         const alarm = Math.sin(t * 8 + desk.phase) > 0 ? 1.15 : 0.45;
-        desk.light.scale.setScalar(state === "working" ? pulse : state === "error" ? (motion ? alarm : 1) : 0.8);
+        desk.light.scale.setScalar(state === "working" ? pulse : state === "error" ? (avatarMotion ? alarm : 1) : 0.8);
         tmp.copy(desk.worldPos).setY(3.25);
         placeLabel(desk.label, tmp, focused ? focused === platform.department.id : radius < 24);
       });

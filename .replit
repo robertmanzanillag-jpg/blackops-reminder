@@ -25,6 +25,7 @@ OFFICE_WORKER_ENABLED = "true"
 OFFICE_HOSTING_MODE = "reserved-vm"
 OFFICE_RUNTIME_MODE = "postgres"
 OFFICE_CLAUDE_AUTH_MODE = "subscription-token"
+OFFICE_KONG_AUDIT_SCHEDULE_ENABLED = "true"
 
 [workflows]
 runButton = "Project"

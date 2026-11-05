@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { OFFICE_KONG_SUPERVISED_CATEGORIES } from "../shared/office-kong-supervisor";
 
 // This is the existing authenticated KONG read contract, not a dispatch route.
 const OPERATIONS_URL = "https://kongnightlife.com/api/admin/ceo/operations";
@@ -66,7 +67,7 @@ const operationsSchema = z.object({
 // known evidence contract validated and discard all unrecognized root fields.
 }).strip();
 
-export const OFFICE_KONG_CITY_CATEGORIES = ["clubs", "vip", "restaurants", "events", "sports", "experiences", "media"] as const;
+export const OFFICE_KONG_CITY_CATEGORIES = OFFICE_KONG_SUPERVISED_CATEGORIES;
 const categorySchema = z.enum(OFFICE_KONG_CITY_CATEGORIES);
 const jobSchema = z.object({
   city_id: z.string().min(1).max(200),
@@ -113,6 +114,8 @@ export interface OfficeKongCityCategory {
   intervalMs: number | null;
   issues: string[];
   evidence: "persisted" | "missing";
+  recordedFailure?: boolean;
+  leaseUntil?: string | null;
 }
 export interface OfficeKongCity {
   id: string;
@@ -225,7 +228,8 @@ function cityEvidence(snapshot: z.infer<typeof citiesSchema>, at: Date): OfficeK
       else if (lastSuccess === null || !job.last_completed_at || job.report.status !== "healthy") state = "unknown";
       else state = at.getTime() - lastSuccess > job.interval_ms * 2 ? "stale" : "healthy";
       return { category, state, lastRunAt: job.last_completed_at, lastSuccessAt: job.last_success_at, lastStartedAt: job.last_started_at,
-        nextRunAt: job.next_run_at, intervalMs: job.interval_ms, issues, evidence: "persisted" };
+        nextRunAt: job.next_run_at, intervalMs: job.interval_ms, issues, evidence: "persisted", recordedFailure: Boolean(job.last_error),
+        leaseUntil: state === "running" ? job.lease_until : null };
     });
     return { id: city.id, name: city.name, countryCode: city.countryCode, timeZone: city.timeZone, currency: city.currency,
       status: city.status === "healthy" && categories.every(category => category.state === "healthy") ? "healthy" : "needs_attention", categories };

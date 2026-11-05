@@ -58,3 +58,36 @@ test("worker refresh persists only sanitized probe fields and ordinary heartbeat
   assert.deepEqual(payloads[1], payloads[0]);
   assert.ok(!JSON.stringify(payloads).includes("agents"));
 });
+
+test("the scheduler needs an opted-in owner and a recent KONG probe while normal claims continue", async () => {
+  const admissions: string[] = [];
+  let claims = 0;
+  let clock = now.getTime();
+  let kongProbe = probe("blocked");
+  const store = {
+    heartbeat: async () => heartbeat(),
+    markExpiredUnknown: async () => 0,
+    enqueueScheduledKongAudit: async (owner: string) => { admissions.push(owner); },
+    claim: async () => { claims++; return undefined; },
+  } as unknown as typeof officeCloudStore;
+  const options = { store, now: () => new Date(clock), probeClaude: async () => probe("blocked"), probeKong: async () => kongProbe };
+  const worker = createOfficeCloudWorker({ ...options, scheduledKongOwner: "configured-owner" });
+  await worker.tick();
+  await worker.refreshCapabilities();
+  await worker.tick();
+  assert.deepEqual(admissions, []);
+  kongProbe = probe();
+  await worker.refreshCapabilities();
+  await worker.tick();
+  await worker.tick();
+  assert.deepEqual(admissions, ["configured-owner"]);
+  clock += 90_001;
+  await worker.tick();
+  assert.deepEqual(admissions, ["configured-owner"]);
+  kongProbe = probe("ready", new Date(clock).toISOString());
+  const disabled = createOfficeCloudWorker(options);
+  await disabled.refreshCapabilities();
+  await disabled.tick();
+  assert.deepEqual(admissions, ["configured-owner"]);
+  assert.equal(claims, 6);
+});

@@ -157,12 +157,38 @@ export async function runOfficePostgresQa(): Promise<{ status: "passed"; checks:
     assert.deepEqual((await storeA.getHeartbeat())?.capabilities, capabilities);
     checks++;
 
+    await Promise.all(Array.from({ length: 12 }, (_, index) =>
+      (index % 2 ? storeA : storeB).enqueueScheduledKongAudit("qa-retention")));
+    const scheduled = (await storeA.list("qa-retention"))[0];
+    assert.equal((await storeB.list("qa-retention")).length, 1);
+    assert.equal(scheduled.kind, "kong_audit");
+    assert.equal(scheduled.source, "scheduled");
+    const scheduledClaim = await storeB.claim("qa-worker-scheduled");
+    assert.equal(scheduledClaim?.id, scheduled.id);
+    assert.ok(scheduledClaim?.fence);
+    await storeA.enqueueScheduledKongAudit("qa-retention");
+    assert.equal(await storeA.claim("qa-worker-no-duplicate"), undefined);
+    assert.equal((await storeB.complete(scheduled.id, "qa-worker-scheduled", scheduledClaim.fence, completed))?.source, "scheduled");
+    await storeB.enqueueScheduledKongAudit("qa-retention");
+    assert.deepEqual((await storeA.list("qa-retention")).map(run => run.id), [scheduled.id]);
+    checks++;
+
     const retainedTask = { ...task, key: randomUUID() };
     const retained = await storeA.submit("qa-retention", retainedTask);
     for (let index = 0; index < 200; index++) await storeB.submit("qa-retention", { ...task, key: randomUUID(), message: `Retention fixture ${index}` });
-    assert.equal((await storeA.list("qa-retention")).length, 200);
+    const history = await storeA.list("qa-retention");
+    assert.equal(history.filter(run => run.source === "scheduled").length, 1);
+    assert.equal(history.filter(run => run.source === undefined).length, 200);
     assert.equal((await storeB.submit("qa-retention", retainedTask)).id, retained.id);
-    assert.equal((await pool.query("SELECT count(*)::int AS count FROM agent_office_cloud_jobs")).rows[0].count, 203);
+    assert.equal((await pool.query("SELECT count(*)::int AS count FROM agent_office_cloud_jobs")).rows[0].count, 204);
+    checks++;
+
+    // Only in this owned cluster, age a completed automatic receipt and a
+    // manual idempotency record to exercise the automatic retention boundary.
+    await pool.query("UPDATE agent_office_cloud_jobs SET created_at=CURRENT_TIMESTAMP - interval '25 hours' WHERE id=ANY($1::uuid[])", [[scheduled.id, retained.id]]);
+    await storeB.enqueueScheduledKongAudit("qa-retention");
+    assert.equal((await pool.query("SELECT count(*)::int AS count FROM agent_office_cloud_jobs WHERE id=$1", [scheduled.id])).rows[0].count, 0);
+    assert.equal((await storeA.submit("qa-retention", retainedTask)).id, retained.id);
     checks++;
   } finally {
     if (pool) await pool.end().catch(() => { cleanupFailed = true; });

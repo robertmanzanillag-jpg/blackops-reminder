@@ -17,6 +17,7 @@ const completionSchema = z.object({
 export type OfficeCloudCompletion = z.infer<typeof completionSchema>;
 export interface OfficeCloudRun {
   id: string; key: string; kind: OfficeTaskInput["kind"]; message?: string; prUrl?: string;
+  source?: "scheduled";
   status: "pending" | "running" | "completed" | "blocked" | "failed" | "unknown";
   createdAt: string; startedAt?: string; completedAt?: string;
   workerId?: string; fence?: string; leaseExpiresAt?: string;
@@ -87,9 +88,11 @@ const timestamp = (value: unknown) => {
   return date.toISOString();
 };
 function decode(row: Record<string, unknown>): OfficeCloudRun {
-  const input = taskSchema.safeParse(row.input);
+  const { source, ...task } = (row.input ?? {}) as Record<string, unknown>;
+  const input = taskSchema.safeParse(task);
   if (!input.success || !z.string().uuid().safeParse(row.id).success || !["pending", "running", "completed", "blocked", "failed", "unknown"].includes(String(row.status))) return fail("INVALID_STORED_RESULT", "El registro de la nube no es verificable.");
   const run: OfficeCloudRun = { ...input.data, id: row.id as string, status: row.status as OfficeCloudRun["status"], createdAt: timestamp(row.created_at) };
+  if (source === "scheduled" && run.kind === "kong_audit") run.source = source;
   if (row.started_at) run.startedAt = timestamp(row.started_at);
   if (row.completed_at) run.completedAt = timestamp(row.completed_at);
   if (row.worker_id) run.workerId = String(row.worker_id);
@@ -218,6 +221,33 @@ FROM candidate WHERE job.id=candidate.id AND job.status='pending' RETURNING job.
         return claimed.rows[0] ? decode(claimed.rows[0]) : undefined;
       });
     },
+    async enqueueScheduledKongAudit(userId: string): Promise<void> {
+      const owner = ownerKey(userId);
+      await transaction(async client => {
+        await client.query("/*office:owner-lock*/ SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [owner]);
+        // PostgreSQL time gives every worker the same four-minute slot.
+        const slot = (await client.query("/*office:kong-schedule-slot*/ SELECT floor(extract(epoch FROM clock_timestamp()) / 240)::text AS slot")).rows[0]?.slot;
+        if (typeof slot !== "string" || !/^\d+$/.test(slot)) return fail("INVALID_SCHEDULE_SLOT", "No se pudo verificar el intervalo de auditoria.");
+        const digest = createHash("sha256").update(`office:kong-schedule:v1:${owner}:${slot}`).digest();
+        digest[6] = (digest[6] & 0x0f) | 0x40;
+        digest[8] = (digest[8] & 0x3f) | 0x80;
+        const hex = digest.subarray(0, 16).toString("hex");
+        const key = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+        const input = { kind: "kong_audit", key, source: "scheduled" };
+        // No accumulation when the queue is busy. Manual audits also satisfy
+        // the immediate need for a check while one is pending or executing.
+        await client.query(`/*office:kong-schedule*/ INSERT INTO agent_office_cloud_jobs (id, owner_key, idempotency_key, request_hash, input, created_at, updated_at)
+SELECT $1::uuid,$2::text,$3::uuid,$4::text,$5::jsonb,clock_timestamp(),clock_timestamp() WHERE NOT EXISTS (
+  SELECT 1 FROM agent_office_cloud_jobs WHERE owner_key=$2 AND input->>'kind'='kong_audit'
+    AND (status IN ('pending','running') OR (input->>'source'='scheduled' AND created_at > clock_timestamp() - interval '3 minutes'))
+) ON CONFLICT (owner_key,idempotency_key) DO NOTHING`, [randomUUID(), owner, key, hash('{"kind":"kong_audit"}'), JSON.stringify(input)]);
+        // Keep the last day of automatic observations and leave manual jobs,
+        // active work, and their idempotency records intact.
+        await client.query(`/*office:kong-schedule-retention*/ DELETE FROM agent_office_cloud_jobs
+WHERE owner_key=$1 AND input->>'source'='scheduled' AND input->>'kind'='kong_audit'
+  AND status NOT IN ('pending','running') AND created_at < CURRENT_TIMESTAMP - interval '1 day'`, [owner]);
+      });
+    },
     async complete(runId: string, workerId: string, fence: string, result: OfficeCloudCompletion): Promise<OfficeCloudRun | undefined> {
       if (!z.string().uuid().safeParse(runId).success || !z.string().uuid().safeParse(fence).success) return fail("INVALID_FENCE", "La referencia de ejecucion no es valida.");
       const workerIdSafe = worker(workerId);
@@ -230,7 +260,11 @@ WHERE id=$1 AND worker_id=$2 AND fence=$3 AND status='running' AND lease_expires
     },
     async list(userId: string): Promise<OfficeCloudRun[]> {
       const owner = ownerKey(userId);
-      return guarded(async () => (await (await pool()).query("/*office:list*/ SELECT * FROM agent_office_cloud_jobs WHERE owner_key=$1 ORDER BY created_at DESC, id DESC LIMIT 200", [owner])).rows.map(decode));
+      return guarded(async () => (await (await pool()).query(`/*office:list*/ SELECT * FROM (
+  (SELECT * FROM agent_office_cloud_jobs WHERE owner_key=$1 AND input->>'source' IS DISTINCT FROM 'scheduled' ORDER BY created_at DESC, id DESC LIMIT 200)
+  UNION ALL
+  (SELECT * FROM agent_office_cloud_jobs WHERE owner_key=$1 AND input->>'source'='scheduled' ORDER BY created_at DESC, id DESC LIMIT 3)
+) office_runs ORDER BY created_at DESC, id DESC`, [owner])).rows.map(decode));
     },
     async markExpiredUnknown(): Promise<number> {
       return guarded(async () => {

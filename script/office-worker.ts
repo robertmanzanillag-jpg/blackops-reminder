@@ -1,9 +1,15 @@
 import "../server/env-loader";
 import { createOfficeCloudWorker } from "../server/office-cloud-runtime";
+import { getSystemUserId } from "../server/user-context";
 
 async function main() {
 if (process.env.OFFICE_WORKER_ENABLED !== "true") throw new Error("OFFICE_WORKER_ENABLED=true is required for the dedicated office worker.");
-const worker = createOfficeCloudWorker();
+let scheduledKongOwner: string | undefined;
+if (process.env.OFFICE_KONG_AUDIT_SCHEDULE_ENABLED === "true") {
+  try { scheduledKongOwner = getSystemUserId(); }
+  catch { console.error("Recurring KONG audits require a configured office owner"); }
+}
+const worker = createOfficeCloudWorker({ scheduledKongOwner });
 let stopping = false;
 process.on("SIGTERM", () => { stopping = true; });
 process.on("SIGINT", () => { stopping = true; });
