@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-05T21:11:35.532Z
-Repo: `/private/tmp/br-office-release-20261105`
+Generated: 2026-11-05T21:35:58.948Z
+Repo: `/private/tmp/br-office-reconcile-20261105`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 763 | 680 | 2373 | 526 | 15364 |
+| 772 | 689 | 2409 | 532 | 15588 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,18 +28,19 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 158 | 155 | test:158 |
-| `server` | 156 | 152 | server:156 |
-| `client/src` | 138 | 136 | ui-component:55, client-component:35, client-page:26, client-lib:15 |
+| `tests` | 161 | 158 | test:161 |
+| `server` | 158 | 154 | server:158 |
+| `client/src` | 140 | 138 | ui-component:55, client-component:36, client-page:26, client-lib:16 |
 | `script` | 85 | 80 | script:85 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `docs` | 36 | 35 | docs:36 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
-| `shared` | 10 | 10 | shared:10 |
+| `shared` | 11 | 11 | shared:11 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `client/public` | 16 | 2 | other:16 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
+| `.local/office-evidence` | 1 | 1 | other:1 |
 | `client` | 1 | 1 | other:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `shared/models` | 1 | 1 | shared:1 |
@@ -54,6 +55,7 @@ Package: `rest-express`
 - `server/assistant.ts`: `/api/assistant/chat`, `/api/assistant/context`, `/api/assistant/transcribe`
 - `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
 - `server/index.ts`: `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
+- `server/kong-operations-routes.ts`: `/api/kong-ops/cards`, `/api/kong-ops/lease`, `/api/kong-ops/metrics`, `/api/kong-ops/publications`, `/api/kong-ops/reconcile`, `/api/kong-ops/state`
 - `server/kong-supervisor-routes.ts`: `/api/kong-supervisor/chat`, `/api/kong-supervisor/state`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
 - `server/office-routes.ts`: `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/contact-action`, `/api/agents-office/kong-snapshot`, `/api/agents-office/runs`
@@ -142,6 +144,8 @@ Package: `rest-express`
 - `tests/google-connector.test.ts`
 - `tests/google-drive-folder-command.test.ts`
 - `tests/google-drive-oauth.test.ts`
+- `tests/kong-operations-routes.test.ts`
+- `tests/kong-operations.test.ts`
 - `tests/legacy-publication-containment.test.ts`
 - `tests/legal-compliance-agent.test.ts`
 - `tests/local-auth-cli.test.ts`
@@ -159,6 +163,7 @@ Package: `rest-express`
 - `tests/office-cloud-runtime.test.ts`
 - `tests/office-cloud-store.test.ts`
 - `tests/office-github.test.ts`
+- `tests/office-kong-central-agents.test.ts`
 - `tests/office-kong-collaboration.test.ts`
 - `tests/office-kong-supervisor.test.ts`
 - `tests/office-kong.test.ts`
@@ -196,7 +201,7 @@ Package: `rest-express`
 ## Key Files
 - `client/src/pages/._assistant.tsx` (client-page)
 - `client/src/pages/._dropshipping-ceo.tsx` (client-page)
-- `client/src/pages/agents-office.tsx` (client-page; 167 symbols, 16 imports)
+- `client/src/pages/agents-office.tsx` (client-page; 167 symbols, 17 imports)
 - `client/src/pages/app-qa-agent.tsx` (client-page; 12 symbols, 9 imports)
 - `client/src/pages/assistant.tsx` (client-page; 49 symbols, 7 imports)
 - `client/src/pages/auth.tsx` (client-page; 6 symbols, 8 imports)

@@ -151,12 +151,17 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
    assert.equal(await page.getByTestId('world-dept-consejo').count(),1);
     const centralRows=page.locator('[data-testid^="world-agent-row-kong"]');
     await page.getByTestId('world-agent-row-kong-videos').waitFor();
-    assert.equal(await centralRows.count(),5);
+    assert.equal(await centralRows.count(),6);
+    assert.equal(await page.getByTestId('world-agent-row-kong-metrics').count(),1,'preserve the separate KONG metrics desk');
     await page.getByTestId('world-agent-row-kong-videos').click();
-    await page.getByTestId('world-kong-native-evidence-kong-videos').getByText('Ejecución actual verificada').waitFor();
+    await page.getByTestId('world-kong-native-evidence-kong-videos').getByText('Ejecución actual reportada por KONG Native').waitFor();
+    assert.equal(await page.getByTestId('world-talk').isEnabled(),true);
     await page.getByLabel('Chat de estado',{exact:true}).fill('¿Qué estás haciendo?');
     await page.getByRole('button',{name:'Preguntar',exact:true}).click();
     await page.getByRole('status').filter({hasText:/no incluye el detalle de la tarea/}).waitFor();
+    await page.getByTestId('world-talk').click();
+    await page.getByRole('heading',{name:'Videos Kong',exact:true}).waitFor();
+    await page.getByTestId('button-close-agent-card').click();
    await cityOfficeEntry.click();
   }
   await page.getByTestId('world-city-country-count').filter({hasText:'1 países · 25 ciudades'}).waitFor();

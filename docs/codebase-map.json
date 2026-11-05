@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-05T21:11:35.532Z",
-  "repoRoot": "/private/tmp/br-office-release-20261105",
+  "generatedAt": "2026-11-05T21:35:58.948Z",
+  "repoRoot": "/private/tmp/br-office-reconcile-20261105",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,18 +124,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 763,
-    "filesIndexed": 680,
-    "imports": 2373,
-    "routes": 526,
-    "symbols": 15364
+    "filesVisible": 772,
+    "filesIndexed": 689,
+    "imports": 2409,
+    "routes": 532,
+    "symbols": 15588
   },
   "directories": {
-    "docs": {
-      "files": 36,
-      "indexed": 35,
+    ".local/office-evidence": {
+      "files": 1,
+      "indexed": 1,
       "kinds": {
-        "docs": 36
+        "other": 1
       }
     },
     ".": {
@@ -184,15 +184,22 @@
       }
     },
     "client/src": {
-      "files": 138,
-      "indexed": 136,
+      "files": 140,
+      "indexed": 138,
       "kinds": {
         "other": 4,
-        "client-component": 35,
+        "client-component": 36,
         "ui-component": 55,
         "client-hook": 3,
-        "client-lib": 15,
+        "client-lib": 16,
         "client-page": 26
+      }
+    },
+    "docs": {
+      "files": 36,
+      "indexed": 35,
+      "kinds": {
+        "docs": 36
       }
     },
     "examples/clippers-motivation": {
@@ -218,10 +225,10 @@
       }
     },
     "server": {
-      "files": 156,
-      "indexed": 152,
+      "files": 158,
+      "indexed": 154,
       "kinds": {
-        "server": 156
+        "server": 158
       }
     },
     "server/replit_integrations": {
@@ -232,10 +239,10 @@
       }
     },
     "shared": {
-      "files": 10,
-      "indexed": 10,
+      "files": 11,
+      "indexed": 11,
       "kinds": {
-        "shared": 10
+        "shared": 11
       }
     },
     "shared/models": {
@@ -246,10 +253,10 @@
       }
     },
     "tests": {
-      "files": 158,
-      "indexed": 155,
+      "files": 161,
+      "indexed": 158,
       "kinds": {
-        "test": 158
+        "test": 161
       }
     },
     "tests/fixtures": {
@@ -319,6 +326,14 @@
     {
       "path": ".agents/skills/codebase-overview/SKILL.md",
       "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".local/office-evidence/affected-route-auth-guards.json",
+      "kind": "other",
       "imports": [],
       "exports": [],
       "symbols": [],
@@ -586,6 +601,7 @@
         "@/components/agents-building/agents-building",
         "@/lib/agent-live-status",
         "@/lib/office-city-agents",
+        "@/lib/office-kong-central-agents",
         "@/lib/utils",
         "@shared/agent-company",
         "@shared/agent-integrations",
@@ -608,6 +624,8 @@
         "activeCityAgents",
         "activeCityCountry",
         "career",
+        "centralSignalById",
+        "centralSignals",
         "changeWing",
         "city",
         "cityCountries",
@@ -655,6 +673,7 @@
         "match",
         "name",
         "nameOf",
+        "notice",
         "openCityFromOverview",
         "pageAgentIds",
         "panelAgent",
@@ -679,8 +698,10 @@
         "running",
         "sceneKey",
         "sceneRef",
+        "seat",
         "selectedCity",
         "sendOrder",
+        "signal",
         "sourceMap",
         "sources",
         "specialists",
@@ -1303,6 +1324,29 @@
       "symbols": [
         "InfoCard",
         "InfoCardProps"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/kong-operations-panel.tsx",
+      "kind": "client-component",
+      "imports": [
+        "@/components/ui/button",
+        "@/components/ui/dialog",
+        "@shared/kong-operations",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "exports": [
+        "KongOperationsPanel"
+      ],
+      "symbols": [
+        "KongOperationsPanel",
+        "View",
+        "date",
+        "query",
+        "view",
+        "when"
       ],
       "routes": []
     },
@@ -3462,6 +3506,36 @@
       "routes": []
     },
     {
+      "path": "client/src/lib/office-kong-central-agents.ts",
+      "kind": "client-lib",
+      "imports": [
+        "../../../server/office-kong",
+        "./office-city-agents"
+      ],
+      "exports": [
+        "OFFICE_KONG_CENTRAL_SEATS",
+        "OfficeKongCentralSignal",
+        "OfficeKongCentralSignalKind",
+        "buildOfficeKongCentralSignals",
+        "officeCityEvidenceNotice"
+      ],
+      "symbols": [
+        "OFFICE_KONG_CENTRAL_SEATS",
+        "agent",
+        "base",
+        "buildOfficeKongCentralSignals",
+        "issues",
+        "matches",
+        "normalize",
+        "officeCityEvidenceNotice",
+        "snapshotFresh",
+        "snapshotTime",
+        "uniqueMatches",
+        "validTimestamp"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/lib/owner-office-storage.ts",
       "kind": "client-lib",
       "imports": [],
@@ -3650,6 +3724,7 @@
         "@/components/agents-building/agents-building",
         "@/components/agents-world-office/agents-office-world",
         "@/components/company-office/company-office",
+        "@/components/kong-operations-panel",
         "@/components/kong-supervisor-panel",
         "@/components/office-connections-panel",
         "@/components/ui/button",
@@ -13103,10 +13178,12 @@
         "count",
         "d",
         "decisions",
+        "events",
         "exactAttributed",
         "generationApplied",
         "id",
         "identities",
+        "latest",
         "learning",
         "object",
         "online",
@@ -13115,15 +13192,16 @@
         "queue",
         "readBlackRoomOfficeOperations",
         "readRemote",
-        "recentEvents",
         "reservations",
         "sampleIds",
         "samples",
         "seenAt",
         "sourceObservedAt",
+        "successfulStages",
         "timestamps",
         "totals",
-        "worker"
+        "worker",
+        "workerFailed"
       ],
       "routes": []
     },
@@ -16761,6 +16839,85 @@
       ]
     },
     {
+      "path": "server/kong-operations-routes.ts",
+      "kind": "server",
+      "imports": [
+        "./kong-operations",
+        "@shared/kong-operations",
+        "express",
+        "zod"
+      ],
+      "exports": [
+        "KongOpsOwnerAuth",
+        "registerKongOperationsRoutes"
+      ],
+      "symbols": [
+        "allow",
+        "body",
+        "cardsBody",
+        "count",
+        "fail",
+        "holder",
+        "leaseBody",
+        "leaseId",
+        "metricsBody",
+        "publicationBody",
+        "reconcileBody",
+        "registerKongOperationsRoutes",
+        "userId",
+        "uuid"
+      ],
+      "routes": [
+        "/api/kong-ops/cards",
+        "/api/kong-ops/lease",
+        "/api/kong-ops/metrics",
+        "/api/kong-ops/publications",
+        "/api/kong-ops/reconcile",
+        "/api/kong-ops/state"
+      ]
+    },
+    {
+      "path": "server/kong-operations.ts",
+      "kind": "server",
+      "imports": [
+        "./database-url",
+        "@shared/kong-operations",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "KongOpsStateConflict",
+        "KongOpsStore",
+        "createKongOperations",
+        "defaultKongOpsStore",
+        "emptyKongOperations ",
+        "getKongOperations"
+      ],
+      "symbols": [
+        "DB_TIMEOUT_MS",
+        "FILE",
+        "KongOpsStateConflict",
+        "STATE_KIND",
+        "STATE_OWNER",
+        "adapter",
+        "createKongOperations",
+        "current",
+        "defaultKongOpsStore",
+        "getKongOperations",
+        "job",
+        "load",
+        "mutate",
+        "out",
+        "row",
+        "rows",
+        "state",
+        "tmp",
+        "withTimeout"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/kong-supervisor-conversation.ts",
       "kind": "server",
       "imports": [
@@ -19678,6 +19835,8 @@
         "./google-drive",
         "./google-drive-oauth",
         "./health-check",
+        "./kong-operations",
+        "./kong-operations-routes",
         "./legal-compliance-agent",
         "./local-news-delivery-safety",
         "./local-news-growth-scout",
@@ -21849,12 +22008,14 @@
         "ready",
         "recent",
         "response",
+        "results",
         "review",
         "runProbe",
         "runs",
         "scorecard",
         "slots",
         "started",
+        "state",
         "status",
         "str",
         "summarizeProbe",
@@ -21923,6 +22084,141 @@
       ],
       "symbols": [
         "BLACKROOM_OFFICE_POLICY"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/kong-operations.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "CARD_MAX_AGE_MS",
+        "ExternalPost",
+        "KONG_CARD_AUTHORS",
+        "KONG_METRICS_AGENT",
+        "KONG_VIDEOS_AGENT",
+        "KongCard",
+        "KongOperationsState",
+        "KongOpsError",
+        "LEASE_TTL_MS",
+        "PostMetricsRow",
+        "Publication",
+        "PublicationResult",
+        "PublicationStatus",
+        "PublisherLease",
+        "RECONCILE_GRACE_MS",
+        "VideoBrief",
+        "cardVersion",
+        "claimLease",
+        "deliverCards",
+        "emptyKongOperations",
+        "kongCardSchema",
+        "kongOperationsStatus",
+        "measurePublications",
+        "parseKongOperations",
+        "personalDataIn",
+        "planPublication",
+        "reconcileByUuid",
+        "recordAttempt",
+        "releaseLease",
+        "uuidOf",
+        "verifyCard"
+      ],
+      "symbols": [
+        "CARD_MAX_AGE_MS",
+        "EMAIL",
+        "KONG_CARD_AUTHORS",
+        "KONG_METRICS_AGENT",
+        "KONG_VIDEOS_AGENT",
+        "KongOpsError",
+        "LEASE_TTL_MS",
+        "MAX_CARDS",
+        "MAX_EVENTS",
+        "MAX_INBOX",
+        "MAX_LEDGER",
+        "MAX_REJECTED",
+        "METRICS_MAX_AGE_MS",
+        "METRIC_FIELDS",
+        "NOT_A_PHONE",
+        "RECONCILE_GRACE_MS",
+        "ambiguous",
+        "assertHolder",
+        "at",
+        "brief",
+        "briefId",
+        "card",
+        "cardId",
+        "cardVersion",
+        "check",
+        "claimLease",
+        "cleaned",
+        "confirmed",
+        "containsPhone",
+        "counts",
+        "current",
+        "deliverCards",
+        "duplicates",
+        "emptyKongOperations",
+        "event",
+        "existing",
+        "found",
+        "freshSource",
+        "id",
+        "identities",
+        "iso",
+        "keep",
+        "kept",
+        "key",
+        "kongCardSchema",
+        "kongOperationsStatus",
+        "latest",
+        "leaseValid",
+        "list",
+        "live",
+        "match",
+        "measurePublications",
+        "measured",
+        "metricKey",
+        "metricsFresh",
+        "name",
+        "network",
+        "observed",
+        "observedTime",
+        "other",
+        "parseKongOperations",
+        "parsed",
+        "patch",
+        "personalDataIn",
+        "planPublication",
+        "previous",
+        "publication",
+        "publicationIdentityCounts",
+        "published",
+        "reconcileByUuid",
+        "recordAttempt",
+        "releaseLease",
+        "renewing",
+        "resolved",
+        "resultMatches",
+        "room",
+        "row",
+        "seen",
+        "shortText",
+        "text",
+        "time",
+        "trimLedger",
+        "updated",
+        "uuid",
+        "uuidOf",
+        "v",
+        "validMetrics",
+        "verifiedAt",
+        "verifyCard",
+        "version",
+        "waiting",
+        "withPublication"
       ],
       "routes": []
     },
@@ -22509,6 +22805,7 @@
       "symbols": [
         "NOW",
         "blocked",
+        "body",
         "br",
         "checks",
         "fake",
@@ -22558,6 +22855,10 @@
         "avatars",
         "blocked",
         "bounds",
+        "category",
+        "centralAgents",
+        "centralRows",
+        "cities",
         "cityCards",
         "cityMarkers",
         "cityOfficeEntry",
@@ -22570,6 +22871,7 @@
         "fixturePassword",
         "hasMap",
         "host",
+        "lastRunAt",
         "liveSnapshot",
         "login",
         "loginForm",
@@ -22580,6 +22882,7 @@
         "memberGoals",
         "modules",
         "nativePlaywright",
+        "nextRunAt",
         "now",
         "officeRoute",
         "openCompany",
@@ -22588,6 +22891,7 @@
         "pendingVisual",
         "previous",
         "protectedRoutes",
+        "running",
         "runningWork",
         "runtime",
         "scoredDirector",
@@ -25687,6 +25991,91 @@
       ]
     },
     {
+      "path": "tests/kong-operations-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/kong-operations-routes",
+        "express",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "endpoint",
+        "post",
+        "response",
+        "row",
+        "server"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/kong-operations.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/kong-operations",
+        "../shared/agent-company",
+        "../shared/agent-live-status",
+        "../shared/kong-operations",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "MIN",
+        "NOW",
+        "U",
+        "a",
+        "again",
+        "at",
+        "b",
+        "bad",
+        "base",
+        "briefId",
+        "briefOf",
+        "changed",
+        "check",
+        "current",
+        "dup",
+        "empty",
+        "epoch",
+        "first",
+        "invalid",
+        "late",
+        "later",
+        "leaks",
+        "measuredFixture",
+        "metricRow",
+        "now",
+        "out",
+        "outcomes",
+        "parsed",
+        "posts",
+        "promoBrief",
+        "promoter",
+        "publication",
+        "reconciled",
+        "rejected",
+        "result",
+        "results",
+        "row",
+        "rows",
+        "settled",
+        "sharedStore",
+        "stale",
+        "state",
+        "status",
+        "store",
+        "venue",
+        "venueBrief",
+        "view",
+        "withInbox"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/kong-supervisor-conversation.test.mjs",
       "kind": "test",
       "imports": [
@@ -26308,6 +26697,29 @@
         "result",
         "secret",
         "setup"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-kong-central-agents.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/lib/office-city-agents",
+        "../client/src/lib/office-kong-central-agents",
+        "../server/office-kong",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "agent",
+        "at",
+        "cityAgent",
+        "duplicated",
+        "future",
+        "now",
+        "signals",
+        "stale"
       ],
       "routes": []
     },
@@ -27307,6 +27719,8 @@
     "tests/google-connector.test.ts",
     "tests/google-drive-folder-command.test.ts",
     "tests/google-drive-oauth.test.ts",
+    "tests/kong-operations-routes.test.ts",
+    "tests/kong-operations.test.ts",
     "tests/legacy-publication-containment.test.ts",
     "tests/legal-compliance-agent.test.ts",
     "tests/local-auth-cli.test.ts",
@@ -27324,6 +27738,7 @@
     "tests/office-cloud-runtime.test.ts",
     "tests/office-cloud-store.test.ts",
     "tests/office-github.test.ts",
+    "tests/office-kong-central-agents.test.ts",
     "tests/office-kong-collaboration.test.ts",
     "tests/office-kong-supervisor.test.ts",
     "tests/office-kong.test.ts",

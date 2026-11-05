@@ -818,7 +818,7 @@ export function AgentsOfficeWorld({
                 <p className="text-zinc-400">La lectura disponible no identifica entregas ni ejecuciones bajo demanda por separado.</p>
               </div>}
               {panelAgent.cityAgent && officeCityEvidenceNotice(panelAgent.cityAgent) && <p className="mt-2 text-[10px] text-amber-200" data-testid="world-city-evidence-notice">{officeCityEvidenceNotice(panelAgent.cityAgent)?.label}</p>}
-              {(panelAgent.cityAgent || panelAgent.kong || (!pageAgentIds.includes(panelAgent.id) && !panelAgent.kongEvidence)) && <OfficeAgentStatusChat key={panelAgent.id} agent={panelAgent} />}
+              {(panelAgent.cityAgent || panelAgent.kong || !pageAgentIds.includes(panelAgent.id)) && <OfficeAgentStatusChat key={panelAgent.id} agent={panelAgent} />}
               {panelCareer && panelCareer.memory.length > 0 && (
                 <div className="mt-2 rounded-lg border border-violet-300/15 bg-violet-500/5 p-2 text-[10px] leading-4 text-zinc-300" data-testid="world-brain">
                   <p className="mb-1 text-[9px] uppercase tracking-[0.18em] text-violet-200">Cerebro · lo que recuerda</p>
@@ -831,7 +831,7 @@ export function AgentsOfficeWorld({
                   {panelOrders.map((order) => <p key={order.id} className="truncate">· {order.text} <span className="text-zinc-500">({order.doneAt ? "hecha" : order.assignees.find((a) => a.agentId === panelAgent.id)?.status})</span></p>)}
                 </div>
               )}
-              {!panelAgent.cityAgent && (panelAgent.kong || pageAgentIds.includes(panelAgent.id)) && <div className="mt-3 flex gap-2">
+              {!panelAgent.cityAgent && (panelAgent.kong || pageAgentIds.includes(panelAgent.id) || Boolean(onOpenContact)) && <div className="mt-3 flex gap-2">
                 <button
                   type="button"
                   onClick={() => {
