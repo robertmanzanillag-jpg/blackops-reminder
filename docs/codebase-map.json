@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T21:05:50.740Z",
+  "generatedAt": "2026-11-05T21:11:35.532Z",
   "repoRoot": "/private/tmp/br-office-release-20261105",
   "packageName": "rest-express",
   "scripts": {
@@ -125,12 +125,19 @@
   },
   "totals": {
     "filesVisible": 763,
-    "filesIndexed": 678,
-    "imports": 2363,
+    "filesIndexed": 680,
+    "imports": 2373,
     "routes": 526,
-    "symbols": 15321
+    "symbols": 15364
   },
   "directories": {
+    "docs": {
+      "files": 36,
+      "indexed": 35,
+      "kinds": {
+        "docs": 36
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -188,13 +195,6 @@
         "client-page": 26
       }
     },
-    "docs": {
-      "files": 39,
-      "indexed": 36,
-      "kinds": {
-        "docs": 39
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -218,10 +218,10 @@
       }
     },
     "server": {
-      "files": 155,
-      "indexed": 151,
+      "files": 156,
+      "indexed": 152,
       "kinds": {
-        "server": 155
+        "server": 156
       }
     },
     "server/replit_integrations": {
@@ -232,10 +232,10 @@
       }
     },
     "shared": {
-      "files": 9,
-      "indexed": 9,
+      "files": 10,
+      "indexed": 10,
       "kinds": {
-        "shared": 9
+        "shared": 10
       }
     },
     "shared/models": {
@@ -246,10 +246,10 @@
       }
     },
     "tests": {
-      "files": 157,
-      "indexed": 154,
+      "files": 158,
+      "indexed": 155,
       "kinds": {
-        "test": 157
+        "test": 158
       }
     },
     "tests/fixtures": {
@@ -4959,6 +4959,14 @@
       "routes": []
     },
     {
+      "path": "docs/blackroom-office-release.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/blackroom-release-integration.md",
       "kind": "docs",
       "imports": [],
@@ -5112,22 +5120,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -10669,6 +10661,7 @@
       "path": "server/agent-council.ts",
       "kind": "server",
       "imports": [
+        "./blackroom-office-operations",
         "./database-url",
         "@shared/agent-company",
         "@shared/agent-council",
@@ -11798,6 +11791,7 @@
         "./blackroom-growth-ceo",
         "./blackroom-learning-panel",
         "./blackroom-metricool-bridge",
+        "./blackroom-office-operations",
         "./blackroom-publication-guard",
         "./blackroom-remote-control",
         "./blackroom-verified-learning",
@@ -13085,6 +13079,51 @@
         "visit",
         "wait",
         "youtubeChannel"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-office-operations.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/blackroom-office-operations",
+        "./blackroom-learning-observations",
+        "./blackroom-remote-control",
+        "./blackroom-verified-learning"
+      ],
+      "exports": [
+        "buildBlackRoomOfficeOperations",
+        "readBlackRoomOfficeOperations"
+      ],
+      "symbols": [
+        "HEARTBEAT_MAX_AGE_MS",
+        "action",
+        "age",
+        "buildBlackRoomOfficeOperations",
+        "count",
+        "d",
+        "decisions",
+        "exactAttributed",
+        "generationApplied",
+        "id",
+        "identities",
+        "learning",
+        "object",
+        "online",
+        "processing",
+        "progress",
+        "queue",
+        "readBlackRoomOfficeOperations",
+        "readRemote",
+        "recentEvents",
+        "reservations",
+        "sampleIds",
+        "samples",
+        "seenAt",
+        "sourceObservedAt",
+        "timestamps",
+        "totals",
+        "worker"
       ],
       "routes": []
     },
@@ -21749,8 +21788,10 @@
         "MINUTE",
         "account",
         "accounts",
+        "actions",
         "active",
         "activity",
+        "age",
         "agent",
         "approvals",
         "apps",
@@ -21771,6 +21812,7 @@
         "detail",
         "down",
         "events",
+        "evidence",
         "extra",
         "extractActivity",
         "extractProblems",
@@ -21781,6 +21823,7 @@
         "lane",
         "last",
         "lastRun",
+        "learning",
         "list",
         "listed",
         "login",
@@ -21794,6 +21837,7 @@
         "obj",
         "online",
         "open",
+        "operations",
         "outputs",
         "pending",
         "plural",
@@ -21823,6 +21867,7 @@
         "unknown",
         "videos",
         "word",
+        "worker",
         "zoho"
       ],
       "routes": []
@@ -21863,6 +21908,21 @@
         "status",
         "url",
         "visualStatus"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/blackroom-office-operations.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "BLACKROOM_OFFICE_POLICY",
+        "BlackRoomOfficeAction",
+        "BlackRoomOfficeNetwork",
+        "BlackRoomOfficeOperations"
+      ],
+      "symbols": [
+        "BLACKROOM_OFFICE_POLICY"
       ],
       "routes": []
     },
@@ -22465,6 +22525,9 @@
         "now",
         "ny",
         "ok",
+        "operations",
+        "probe",
+        "result",
         "run",
         "status",
         "unsafeOnGet",
@@ -23399,6 +23462,25 @@
         "result",
         "source",
         "status"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-office-operations.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-office-operations",
+        "../server/blackroom-remote-control",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "experiment",
+        "fixture",
+        "now",
+        "result",
+        "state"
       ],
       "routes": []
     },
@@ -27183,6 +27265,7 @@
     "tests/blackroom-manual-exploration.test.ts",
     "tests/blackroom-manual-observations.test.ts",
     "tests/blackroom-metricool-bridge.test.ts",
+    "tests/blackroom-office-operations.test.ts",
     "tests/blackroom-remote-control.test.ts",
     "tests/blackroom-verified-learning.test.ts",
     "tests/ceo-backup-check-cli.test.ts",

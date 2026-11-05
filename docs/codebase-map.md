@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-05T21:05:50.740Z
+Generated: 2026-11-05T21:11:35.532Z
 Repo: `/private/tmp/br-office-release-20261105`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 763 | 678 | 2363 | 526 | 15321 |
+| 763 | 680 | 2373 | 526 | 15364 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,15 +28,15 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 157 | 154 | test:157 |
-| `server` | 155 | 151 | server:155 |
+| `tests` | 158 | 155 | test:158 |
+| `server` | 156 | 152 | server:156 |
 | `client/src` | 138 | 136 | ui-component:55, client-component:35, client-page:26, client-lib:15 |
 | `script` | 85 | 80 | script:85 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 39 | 36 | docs:39 |
+| `docs` | 36 | 35 | docs:36 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
+| `shared` | 10 | 10 | shared:10 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
-| `shared` | 9 | 9 | shared:9 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `client/public` | 16 | 2 | other:16 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
@@ -100,6 +100,7 @@ Package: `rest-express`
 - `tests/blackroom-manual-exploration.test.ts`
 - `tests/blackroom-manual-observations.test.ts`
 - `tests/blackroom-metricool-bridge.test.ts`
+- `tests/blackroom-office-operations.test.ts`
 - `tests/blackroom-remote-control.test.ts`
 - `tests/blackroom-verified-learning.test.ts`
 - `tests/ceo-backup-check-cli.test.ts`

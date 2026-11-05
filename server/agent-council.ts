@@ -11,6 +11,7 @@
 // lesson or marks a PR-first brief as ready; it does not change code or skills.
 
 import { reviewKongReadiness } from "@shared/kong-supervisor";
+import { buildBlackRoomOfficeOperations } from "./blackroom-office-operations";
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -737,7 +738,7 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
       const remoteQueue = (remote as unknown as { device?: { queue?: Record<string, unknown> } }).device?.queue;
       const online = remoteModule.isBlackRoomRemoteDeviceOnline(remote);
       const local = await routesModule.readBlackRoomPanelQueue(remoteQueue as never);
-      return { agent: routesModule.resolveBlackRoomPanelAgent(local, remoteQueue as never, online), remote: { online } };
+      return { agent: routesModule.resolveBlackRoomPanelAgent(local, remoteQueue as never, online), remote: { online }, operations: buildBlackRoomOfficeOperations(remote) };
     }),
   ]);
   return statuses;

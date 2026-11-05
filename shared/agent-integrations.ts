@@ -28,9 +28,9 @@ export const INTEGRATION_LABEL: Record<IntegrationMode, string> = {
 // Only exceptions are listed; every other agent is "activa" and owned internally.
 export const DEFAULT_INTEGRATIONS: Record<string, AgentIntegration> = {
   "blackroom-videos": {
-    mode: "pausada",
+    mode: "activa",
     owner: "interno",
-    reason: "La publicacion de BlackRoom en TikTok esta en pausa. No pierde vida mientras siga en pausa.",
+    reason: "Supervisa el publicador unico de BlackRoom. La actividad y el aprendizaje requieren evidencia reciente; activar la supervision no inicia ni duplica publicaciones.",
   },
   "kong-videos": {
     mode: "externa",
