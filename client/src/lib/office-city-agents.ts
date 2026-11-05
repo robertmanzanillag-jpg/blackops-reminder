@@ -60,7 +60,12 @@ function readCityEvidence(runs: unknown) {
 }
 
 export function officeCityEvidenceExpiresAt(runs: unknown, now = Date.now()): number | undefined {
-  const evidence = readCityEvidence(runs);
+  return officeCitySnapshotExpiresAt(readCityEvidence(runs), now);
+}
+
+export function officeCitySnapshotExpiresAt(snapshot: unknown, now = Date.now()): number | undefined {
+  const parsed = evidenceSchema.safeParse(snapshot);
+  const evidence = parsed.success ? parsed.data : undefined;
   if (!evidence) return undefined;
   const snapshotExpiry = Math.min(Date.parse(evidence.generatedAt), Date.parse(evidence.citySnapshotCheckedAt || evidence.generatedAt)) + MAX_AGE_MS;
   let nextExpiry = snapshotExpiry;
@@ -73,7 +78,12 @@ export function officeCityEvidenceExpiresAt(runs: unknown, now = Date.now()): nu
 }
 
 export function buildOfficeCityRooms(directory: OfficeCityDirectoryEntry[], runs: unknown, now = Date.now()): OfficeCityRoom[] {
-  const evidence = readCityEvidence(runs);
+  return buildOfficeCityRoomsFromSnapshot(directory, readCityEvidence(runs), now);
+}
+
+export function buildOfficeCityRoomsFromSnapshot(directory: OfficeCityDirectoryEntry[], snapshot: unknown, now = Date.now()): OfficeCityRoom[] {
+  const parsed = evidenceSchema.safeParse(snapshot);
+  const evidence = parsed.success ? parsed.data : undefined;
   const usable = Boolean(evidence && fresh(evidence.generatedAt, now) && (!evidence.citySnapshotCheckedAt || fresh(evidence.citySnapshotCheckedAt, now)));
   const snapshotAt = evidence?.citySnapshotCheckedAt || evidence?.generatedAt || null;
   return directory.map(city => {

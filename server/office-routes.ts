@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { getAuthenticatedCurrentUserId, getSystemUserId } from "./user-context";
 import { officeRuntime, officeTaskSchema, usesOfficeCloudRuntime } from "./office-runtime";
 import { probeOfficeClaude } from "./office-claude";
-import { probeOfficeKong, loadOfficeKongDirectory, type OfficeKongCityDirectoryEntry } from "./office-kong";
+import { probeOfficeKong, loadOfficeKongDirectory, runOfficeKongReadOnly, type OfficeKongAuditResult, type OfficeKongCityDirectoryEntry } from "./office-kong";
 
 function owner(req: Request, res: Response): string | null {
   const userId = getAuthenticatedCurrentUserId(req);
@@ -28,10 +28,33 @@ export function registerOfficeRoutes(app: Express, dependencies: {
   claudeProbe?: typeof probeOfficeClaude;
   kongProbe?: typeof probeOfficeKong;
   directoryReader?: typeof loadOfficeKongDirectory;
+  snapshotReader?: typeof runOfficeKongReadOnly;
+  now?: () => number;
 } = {}) {
   const runtime = dependencies.runtime || officeRuntime;
+  const workerDisabled = () => process.env.OFFICE_WORKER_ENABLED === "false";
   let probe: { expiresAt: number; promise: Promise<unknown> } | undefined;
   let directory: { expiresAt: number; promise: Promise<OfficeKongCityDirectoryEntry[]> } | undefined;
+  const now = dependencies.now || Date.now;
+  let snapshot: { expiresAt: number; value: OfficeKongAuditResult } | undefined;
+  let snapshotPending: Promise<OfficeKongAuditResult> | undefined;
+  let retrySnapshotAt = 0;
+  app.get("/api/agents-office/kong-snapshot", async (req, res) => {
+    try {
+      if (!owner(req, res)) return;
+      res.set("Cache-Control", "no-store");
+      if (snapshot && snapshot.expiresAt > now()) { res.json(snapshot.value); return; }
+      if (retrySnapshotAt > now()) throw new Error("KONG_SNAPSHOT_BACKOFF");
+      snapshotPending ||= Promise.resolve().then(dependencies.snapshotReader || runOfficeKongReadOnly)
+        .then(value => { snapshot = { expiresAt: now() + 45_000, value }; retrySnapshotAt = 0; return value; })
+        .catch(error => { retrySnapshotAt = now() + 30_000; throw error; })
+        .finally(() => { snapshotPending = undefined; });
+      res.json(await snapshotPending);
+    } catch {
+      res.set("Retry-After", String(Math.max(1, Math.ceil((retrySnapshotAt - now()) / 1000))));
+      res.status(503).json({ error: "No se pudo consultar la actividad registrada de KONG." });
+    }
+  });
   app.get("/api/agents-office/cities", async (req, res) => {
     try {
       if (!owner(req, res)) return;
@@ -50,6 +73,16 @@ export function registerOfficeRoutes(app: Express, dependencies: {
     try {
       if (!owner(req, res)) return;
       res.set("Cache-Control", "no-store");
+      if (workerDisabled()) {
+        const checkedAt = new Date(now()).toISOString();
+        res.json({
+          workerEnabled: false,
+          worker: { status: "blocked", reason: "El ejecutor está desactivado.", checkedAt },
+          claude: { status: "blocked", reason: "Claude necesita el ejecutor.", checkedAt },
+          kong: { status: "blocked", reason: "Consulta la actividad de KONG en el panel.", checkedAt },
+        });
+        return;
+      }
       if (!probe || probe.expiresAt < Date.now()) {
         probe = {
           expiresAt: Date.now() + 30_000,
@@ -67,6 +100,7 @@ export function registerOfficeRoutes(app: Express, dependencies: {
       const userId = owner(req, res);
       if (!userId) return;
       res.set("Cache-Control", "no-store");
+      if (workerDisabled()) { res.json([]); return; }
       res.json(await runtime.list(userId));
     } catch { res.status(503).json({ error: "El registro de ejecuciones no esta disponible." }); }
   });
@@ -75,6 +109,7 @@ export function registerOfficeRoutes(app: Express, dependencies: {
       const userId = owner(req, res);
       if (!userId) return;
       if (!officeSameOrigin(req)) return res.status(403).json({ error: "La solicitud debe salir de esta oficina." });
+      if (workerDisabled()) return res.status(503).json({ error: "El ejecutor está desactivado. No se registró la tarea." });
       const input = officeTaskSchema.safeParse(req.body);
       if (!input.success) return res.status(400).json({ error: "La tarea no es valida." });
       const run = await runtime.submit(userId, input.data);

@@ -58,6 +58,10 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
    res.json({claude:blocked,kong:blocked,worker:blocked});
   });
   app.get('/api/agents-office/cities',(_req,res)=>res.json([{id:'fixture-city',name:'Ciudad de prueba',countryCode:'US',timeZone:'America/New_York',currency:'USD'}]));
+  app.get('/api/agents-office/kong-snapshot',(_req,res)=>{
+   const checkedAt=new Date().toISOString();
+   res.json({text:'Isolated read-only fixture',completedAt:checkedAt,evidence:{generatedAt:checkedAt,citySnapshotCheckedAt:checkedAt,cityAgentsEnabled:false,cityCoverageComplete:false,agents:[],cities:[]}});
+  });
   app.get('/api/agent-council/state',(_req,res)=>res.json({enabled:false,cycles:0,debates:[],proposals:[],overrides:{},scout:{lastRunAt:null,latest:[],error:null}}));
   app.get('/api/app-qa-agent/status',async(req,res)=>res.json(await runtime.runAppQaScan(req.fixtureUserId,false,false,false)));
   app.use('/api',(req,res)=>req.method==='GET'?res.json([]):res.status(403).json({error:'Mutation outside local QA scope'}));

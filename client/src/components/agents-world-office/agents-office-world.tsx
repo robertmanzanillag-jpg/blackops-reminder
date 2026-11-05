@@ -12,7 +12,7 @@ import {
 } from "@/components/agents-building/agents-building";
 import type { AgentCareer, CompanyOrder, CompanyState, LeaderboardRow, Personality, Trainee } from "@shared/agent-company";
 import { createOfficeScene, type SceneData, type SceneDepartment } from "./office-scene";
-import { buildOfficeCityRooms, officeCityCountries, officeCityEvidenceExpiresAt, officeCityPage, parseOfficeCityDirectory, OFFICE_CITY_PAGE_SIZE, type OfficeCityAgent } from "@/lib/office-city-agents";
+import { buildOfficeCityRoomsFromSnapshot, officeCityCountries, officeCitySnapshotExpiresAt, officeCityPage, parseOfficeCityDirectory, OFFICE_CITY_PAGE_SIZE, type OfficeCityAgent } from "@/lib/office-city-agents";
 
 export type WorldAgent = BuildingAgent & { activity?: string; href?: string };
 
@@ -107,11 +107,11 @@ export function AgentsOfficeWorld({
   const [cityControlsOpen, setCityControlsOpen] = useState(false);
   const [cityDetailsOpen, setCityDetailsOpen] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
-  const cityDirectory = useQuery<unknown>({ queryKey: ["/api/agents-office/cities"], staleTime: 60_000, refetchInterval: 60_000, retry: false });
-  const cityRuns = useQuery<unknown>({ queryKey: ["/api/agents-office/runs"], staleTime: 15_000, refetchInterval: 15_000, retry: false });
+  const cityDirectory = useQuery<unknown>({ queryKey: ["/api/agents-office/cities"], enabled: officeWing === "kong", staleTime: 60_000, refetchInterval: 60_000, retry: false });
+  const citySnapshot = useQuery<{ evidence: unknown }>({ queryKey: ["/api/agents-office/kong-snapshot"], enabled: officeWing === "kong", staleTime: 45_000, refetchInterval: 60_000, retry: false });
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 15_000); return () => window.clearInterval(timer); }, []);
-  const cityEvidenceRuns = cityDirectory.isError || cityRuns.isError ? undefined : cityRuns.data;
-  const evidenceExpiresAt = useMemo(() => officeCityEvidenceExpiresAt(cityEvidenceRuns, clock), [cityEvidenceRuns, clock]);
+  const cityEvidence = cityDirectory.isError || citySnapshot.isError ? undefined : citySnapshot.data?.evidence;
+  const evidenceExpiresAt = useMemo(() => officeCitySnapshotExpiresAt(cityEvidence, clock), [cityEvidence, clock]);
   useEffect(() => {
     if (evidenceExpiresAt === undefined || !Number.isFinite(evidenceExpiresAt)) return;
     const delay = evidenceExpiresAt - Date.now();
@@ -121,7 +121,7 @@ export function AgentsOfficeWorld({
     return () => window.clearTimeout(timer);
   }, [evidenceExpiresAt]);
   const directory = useMemo(() => clock - cityDirectory.dataUpdatedAt <= 5 * 60_000 ? parseOfficeCityDirectory(cityDirectory.data) : [], [clock, cityDirectory.data, cityDirectory.dataUpdatedAt]);
-  const cityRooms = useMemo(() => buildOfficeCityRooms(directory, cityEvidenceRuns, clock), [directory, cityEvidenceRuns, clock]);
+  const cityRooms = useMemo(() => buildOfficeCityRoomsFromSnapshot(directory, cityEvidence, clock), [directory, cityEvidence, clock]);
   const cityCountries = useMemo(() => officeCityCountries(directory), [directory]);
   const activeCityCountry = cityCountries.some(country => country.code === cityCountry) ? cityCountry : "";
   const filteredCityRooms = activeCityCountry ? cityRooms.filter(room => room.city.countryCode === activeCityCountry) : cityRooms;
@@ -364,7 +364,7 @@ export function AgentsOfficeWorld({
         </div>
         {officeWing === "kong" && <div id="world-city-controls-content" hidden={!cityControlsOpen} className="pointer-events-auto mt-2 space-y-2" data-testid="world-city-controls">
           <p className="text-xs text-zinc-300">{cityRooms.length} ciudades · 7 agentes por ciudad · {cityRegistered} con registro reciente. Completado no significa trabajando.</p>
-          {(cityDirectory.isError || cityRuns.isError) && <p role="status" className="text-xs text-amber-200">{cityDirectory.isError ? "No se pudo actualizar el directorio. Solo se conserva su ultima lectura reciente." : "No hay acceso a una auditoria autenticada. Los agentes aparecen sin evidencia."}</p>}
+          {(cityDirectory.isError || citySnapshot.isError) && <p role="status" className="text-xs text-amber-200">{cityDirectory.isError ? "No se pudo actualizar el directorio. Solo se conserva su ultima lectura reciente." : "No se pudo consultar la actividad registrada de KONG. Los agentes aparecen sin evidencia."}</p>}
           {cityDirectory.isLoading && <p className="text-xs text-zinc-400">Consultando ciudades configuradas…</p>}
           {!cityDirectory.isLoading && cityRooms.length === 0 && <p role="status" className="text-xs text-amber-200">Directorio no disponible. No se inventaran ciudades ni agentes.</p>}
           <label className="block text-[11px] text-zinc-300" htmlFor="world-city-country-select">Filtrar por país</label>

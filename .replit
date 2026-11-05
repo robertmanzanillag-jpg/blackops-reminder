@@ -1,4 +1,4 @@
-modules = ["nodejs-22", "web", "python-3.11", "postgresql-16"]
+modules = ["nodejs-20", "web", "python-3.11", "postgresql-16"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
@@ -6,9 +6,9 @@ hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 channel = "stable-24_05"
 
 [deployment]
-deploymentTarget = "vm"
+deploymentTarget = "cloudrun"
 build = ["npm", "run", "deploy:build"]
-run = ["npm", "run", "office:cloud"]
+run = ["node", "script/replit-fast-start.mjs"]
 
 [[ports]]
 localPort = 5000
@@ -21,11 +21,8 @@ externalPort = 3000
 [env]
 PORT = "5000"
 PUBLIC_BASE_URL = "https://robplanner.replit.app"
-OFFICE_WORKER_ENABLED = "true"
-OFFICE_HOSTING_MODE = "reserved-vm"
-OFFICE_RUNTIME_MODE = "postgres"
-OFFICE_CLAUDE_AUTH_MODE = "subscription-token"
-OFFICE_KONG_AUDIT_SCHEDULE_ENABLED = "true"
+OFFICE_WORKER_ENABLED = "false"
+OFFICE_KONG_AUDIT_SCHEDULE_ENABLED = "false"
 
 [workflows]
 runButton = "Project"

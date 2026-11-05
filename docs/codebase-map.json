@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T05:21:30.240Z",
+  "generatedAt": "2026-11-05T05:59:24.800Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-04\\quioer-qu-echeck-el-trabajo-que\\work\\office-current",
   "packageName": "rest-express",
   "scripts": {
@@ -124,32 +124,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 730,
-    "filesIndexed": 647,
+    "filesVisible": 739,
+    "filesIndexed": 650,
     "imports": 2246,
-    "routes": 518,
-    "symbols": 14661
+    "routes": 523,
+    "symbols": 14687
   },
   "directories": {
-    "client/src/lib": {
-      "files": 15,
-      "indexed": 15,
+    ".local/office-evidence": {
+      "files": 9,
+      "indexed": 3,
       "kinds": {
-        "client-lib": 15
-      }
-    },
-    "shared": {
-      "files": 7,
-      "indexed": 7,
-      "kinds": {
-        "shared": 7
-      }
-    },
-    "tests": {
-      "files": 146,
-      "indexed": 143,
-      "kinds": {
-        "test": 146
+        "other": 9
       }
     },
     ".": {
@@ -266,6 +252,13 @@
         "client-hook": 3
       }
     },
+    "client/src/lib": {
+      "files": 15,
+      "indexed": 15,
+      "kinds": {
+        "client-lib": 15
+      }
+    },
     "client/src/pages": {
       "files": 26,
       "indexed": 24,
@@ -337,11 +330,25 @@
         "server": 3
       }
     },
+    "shared": {
+      "files": 7,
+      "indexed": 7,
+      "kinds": {
+        "shared": 7
+      }
+    },
     "shared/models": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 146,
+      "indexed": 143,
+      "kinds": {
+        "test": 146
       }
     },
     "tests/fixtures": {
@@ -411,6 +418,30 @@
     {
       "path": ".agents/skills/codebase-overview/SKILL.md",
       "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".local/office-evidence/affected-route-auth-guards.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".local/office-evidence/github-handoff-verification.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".local/office-evidence/integrated-app-qa-local.json",
+      "kind": "other",
       "imports": [],
       "exports": [],
       "symbols": [],
@@ -696,12 +727,12 @@
         "changeWing",
         "cityCountries",
         "cityDirectory",
-        "cityEvidenceRuns",
+        "cityEvidence",
         "cityPageCount",
         "cityRegistered",
         "cityRooms",
         "cityRunning",
-        "cityRuns",
+        "citySnapshot",
         "colorFromGradient",
         "company",
         "companyIds",
@@ -1497,7 +1528,6 @@
         "OfficeConnectionsPanel",
         "Probe",
         "Run",
-        "auditBusy",
         "busy",
         "connections",
         "enabled",
@@ -1506,12 +1536,13 @@
         "kongAgents",
         "kongEvidence",
         "kongEvidenceFresh",
-        "latestAudit",
         "mutation",
         "pending",
+        "probe",
         "response",
         "runs",
         "signature",
+        "snapshot",
         "supervision",
         "workerReady"
       ],
@@ -3378,17 +3409,22 @@
         "OfficeCityDirectoryEntry",
         "OfficeCityRoom",
         "buildOfficeCityRooms",
+        "buildOfficeCityRoomsFromSnapshot",
         "officeCityCountries",
         "officeCityEvidenceExpiresAt",
         "officeCityPage",
-        "parseOfficeCityDirectory"
+        "officeCitySnapshotExpiresAt",
+        "parseOfficeCityDirectory",
+        "selectLatestOfficeKongAudit"
       ],
       "symbols": [
         "MAX_AGE_MS",
         "OFFICE_CITY_CATEGORIES",
         "OFFICE_CITY_PAGE_SIZE",
+        "OfficeAuditIdentity",
         "agents",
         "buildOfficeCityRooms",
+        "buildOfficeCityRoomsFromSnapshot",
         "candidates",
         "categorySchema",
         "cityEvidenceSchema",
@@ -3407,12 +3443,15 @@
         "officeCityCountries",
         "officeCityEvidenceExpiresAt",
         "officeCityPage",
+        "officeCitySnapshotExpiresAt",
         "parseOfficeCityDirectory",
         "parsed",
         "readCityEvidence",
         "record",
+        "selectLatestOfficeKongAudit",
         "snapshotAt",
         "snapshotExpiry",
+        "time",
         "timestamp",
         "usable"
       ],
@@ -10795,6 +10834,7 @@
         "describeAppQaStorageError",
         "detail",
         "details",
+        "disclosure",
         "dynamicImport",
         "emptyBugPatrolReport",
         "escapeRegExp",
@@ -17470,6 +17510,7 @@
         "allowed",
         "code",
         "input",
+        "now",
         "officeSameOrigin",
         "origin",
         "owner",
@@ -17477,11 +17518,13 @@
         "registerOfficeRoutes",
         "run",
         "runtime",
-        "userId"
+        "userId",
+        "workerDisabled"
       ],
       "routes": [
         "/api/agents-office/cities",
         "/api/agents-office/connections",
+        "/api/agents-office/kong-snapshot",
         "/api/agents-office/runs"
       ]
     },
@@ -21270,6 +21313,7 @@
         "due",
         "group",
         "groups",
+        "interval",
         "isFresh",
         "lease",
         "matches",
@@ -21744,16 +21788,22 @@
       "exports": [],
       "symbols": [
         "app",
+        "auth",
+        "blocked",
+        "checkedAt",
+        "company",
         "concrete",
         "context",
         "envKeys",
         "evidenceDir",
         "fixturePassword",
         "login",
+        "loginForm",
         "memberGoals",
         "modules",
         "nativePlaywright",
         "officeRoute",
+        "openCompany",
         "ownerCookie",
         "passive",
         "pendingVisual",
@@ -21765,6 +21815,10 @@
         "visual"
       ],
       "routes": [
+        "/api/agent-council/state",
+        "/api/agents-office/cities",
+        "/api/agents-office/connections",
+        "/api/agents-office/kong-snapshot",
         "/api/app-qa-agent/status",
         "/api/ceo/conversation-history",
         "/api/ceo/go-live",
@@ -25058,9 +25112,11 @@
         "now",
         "old",
         "options",
+        "pending",
         "rooms",
         "run",
         "runs",
+        "sameTime",
         "stamp",
         "visible",
         "wrongCity"
@@ -25232,11 +25288,14 @@
         "MINUTE",
         "NOW",
         "at",
+        "categories",
         "city",
         "evidence",
         "expired",
         "failed",
+        "interrupted",
         "job",
+        "neverStarted",
         "noLease",
         "recorded",
         "result",
@@ -25302,11 +25361,17 @@
       "symbols": [
         "app",
         "base",
+        "checkedAt",
+        "connections",
         "cookie",
         "directoryResponse",
+        "ownerHeaders",
         "post",
+        "readSnapshot",
+        "results",
         "saved",
         "server",
+        "snapshot",
         "task"
       ],
       "routes": []

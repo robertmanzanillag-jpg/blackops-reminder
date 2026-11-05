@@ -11,11 +11,19 @@ test("execution HTTP endpoints require authenticated owner, origin, and strict t
   t.after(() => { for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key]; Object.assign(process.env, saved); });
   const app = express(); app.use(express.json());
   let submissions = 0;
+  let historyReads = 0;
   let directoryReads = 0;
+  let snapshotReads = 0;
+  let clock = Date.now();
+  let failSnapshot = false;
+  const checkedAt = new Date(clock).toISOString();
+  const snapshot = { text: "KONG fixture", completedAt: checkedAt, evidence: { generatedAt: checkedAt, agents: [], cities: [], citySnapshotCheckedAt: checkedAt, cityAgentsEnabled: true, cityCoverageComplete: false } };
+  delete process.env.OFFICE_WORKER_ENABLED;
   registerOfficeRoutes(app, { runtime: {
-    list: async () => [],
+    list: async () => { historyReads++; return []; },
     submit: async (_owner, task: any) => { submissions++; return { id: "accepted-id", ...task, status: "accepted", createdAt: new Date().toISOString() } as any; },
-  }, directoryReader: async () => { directoryReads++; return [{ id: "buenos-aires", name: "Buenos Aires", countryCode: "AR", timeZone: "America/Argentina/Buenos_Aires", currency: "ARS" }]; } });
+  }, directoryReader: async () => { directoryReads++; return [{ id: "buenos-aires", name: "Buenos Aires", countryCode: "AR", timeZone: "America/Argentina/Buenos_Aires", currency: "ARS" }]; },
+  now: () => clock, snapshotReader: async () => { snapshotReads++; if (failSnapshot) throw new Error("fixture upstream error"); return snapshot; } });
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>(resolve => server.once("listening", resolve));
   t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
@@ -41,4 +49,32 @@ test("execution HTTP endpoints require authenticated owner, origin, and strict t
   assert.equal((await post({ cookie: cookie("office-owner") })).status, 202);
   assert.equal(submissions, 1);
   assert.equal((await fetch(`${base}/api/agents-office/runs`, { headers: { cookie: cookie("office-owner") } })).headers.get("cache-control"), "no-store");
+  process.env.OFFICE_WORKER_ENABLED = "false";
+  const ownerHeaders = { cookie: cookie("office-owner") };
+  const readSnapshot = (headers: Record<string, string> = ownerHeaders) => fetch(`${base}/api/agents-office/kong-snapshot`, { headers });
+  assert.equal((await readSnapshot({})).status, 401);
+  assert.equal((await readSnapshot({ cookie: cookie("someone-else") })).status, 403);
+  assert.equal(snapshotReads, 0);
+  const results = await Promise.all([readSnapshot(), readSnapshot()]);
+  for (const result of results) {
+    assert.equal(result.status, 200);
+    assert.equal(result.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await result.json(), snapshot);
+  }
+  assert.equal(snapshotReads, 1);
+  clock += 45_001;
+  failSnapshot = true;
+  assert.equal((await readSnapshot()).status, 503);
+  assert.equal((await readSnapshot()).headers.get("retry-after"), "30");
+  assert.equal(snapshotReads, 2);
+  clock += 30_000;
+  failSnapshot = false;
+  assert.equal((await readSnapshot()).status, 200);
+  assert.equal(snapshotReads, 3);
+  assert.deepEqual(await (await fetch(`${base}/api/agents-office/runs`, { headers: ownerHeaders })).json(), []);
+  assert.equal(historyReads, 1);
+  assert.equal((await post(ownerHeaders)).status, 503);
+  assert.equal(submissions, 1);
+  const connections = await (await fetch(`${base}/api/agents-office/connections`, { headers: ownerHeaders })).json();
+  assert.equal(connections.worker.status, "blocked");
 });
