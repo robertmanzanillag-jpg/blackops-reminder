@@ -432,7 +432,11 @@ export function createAgentCouncil(deps: CouncilDeps) {
   }
 
   async function view() {
-    const state = await load();
+    const loaded = await load();
+    // The KONG conversation is owner-only (served by /api/kong-supervisor/state with an owner check).
+    // This view is readable by any signed-in user, so it only carries the readiness records.
+    const { messages: _privateMessages, ...kongSupervisionPublic } = loaded.kongSupervision;
+    const state = { ...loaded, kongSupervision: kongSupervisionPublic };
     const personalities = Object.fromEntries(Object.values(state.company.careers).map((career) => [career.agentId, personalityFor(career.agentId, career.generation)]));
     return {
       ...state,

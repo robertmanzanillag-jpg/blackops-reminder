@@ -23,6 +23,9 @@ test('council cycle persists and reloads readiness review without scoring unconn
   assert.equal(state.kongSupervision.records[0].result, 'blocked');
   assert.equal(state.company.careers['kong:KONG AI'], undefined);
   const reloaded = await createAgentCouncil(deps).view();
-  assert.deepEqual(reloaded.kongSupervision, state.kongSupervision);
+  // The public council view carries the readiness records but never the owner-only conversation.
+  const { messages, ...publicPart } = state.kongSupervision;
+  assert.deepEqual(reloaded.kongSupervision, publicPart);
+  assert.equal(reloaded.kongSupervision.messages, undefined);
   assert.equal(JSON.parse(raw).kongSupervision.owner, 'kong-supervisor');
 });

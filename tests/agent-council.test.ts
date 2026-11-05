@@ -474,7 +474,7 @@ test("order evidence is verified on the server: wrong owner, failed run or reuse
 });
 
 test("single publisher: the supervisor never imports or calls publishing code", async () => {
-  const files = ["server/agent-council.ts", "server/agent-council-routes.ts", "shared/agent-company.ts", "shared/agent-integrations.ts", "shared/agent-live-status.ts", "shared/agent-council.ts"];
+  const files = ["server/agent-council.ts", "server/agent-council-routes.ts", "shared/agent-company.ts", "shared/agent-integrations.ts", "shared/agent-live-status.ts", "shared/agent-council.ts", "shared/kong-supervisor.ts", "server/kong-supervisor-conversation.ts", "server/kong-supervisor-routes.ts"];
   for (const file of files) {
     const source = await readFile(path.join(process.cwd(), file), "utf8");
     const imports = [...source.matchAll(/(?:from\s+|import\()\s*["']([^"']+)["']/g)].map((match) => match[1]);
@@ -506,4 +506,17 @@ test("two instances never send the same proposal to the Trust Center twice", asy
   a.tick(MIN_CYCLE_GAP_MS + 1000);
   await first.runCycle();
   assert.deepEqual(submitted, ["skill:skills-truncated"]);
+});
+
+test("the public council view never carries the owner-only KONG conversation", async () => {
+  const council = createAgentCouncil(fakeDeps({ collect: async () => ({}) }).deps);
+  await council.updateKongSupervision(async (current) => ({
+    ...current,
+    messages: [{ id: "r1-user", requestId: "request-0001", agentId: "kong-supervisor", at: new Date(NOW).toISOString(), role: "user", text: "privado" }],
+  }));
+  const view = await council.view();
+  assert.equal((view.kongSupervision as { messages?: unknown }).messages, undefined);
+  assert.ok(Array.isArray(view.kongSupervision.records));
+  assert.equal((await council.readKongSupervision()).messages.length, 1, "the owner route still reads it");
+  assert.doesNotMatch(JSON.stringify(view), /privado/);
 });
