@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-05T11:11:36.789Z
+Generated: 2026-11-05T11:36:01.803Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-04\quioer-qu-echeck-el-trabajo-que\work\office-current`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 741 | 652 | 2262 | 524 | 14809 |
+| 741 | 652 | 2262 | 524 | 14798 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -196,7 +196,7 @@ Package: `rest-express`
 ## Key Files
 - `client/src/pages/._assistant.tsx` (client-page)
 - `client/src/pages/._dropshipping-ceo.tsx` (client-page)
-- `client/src/pages/agents-office.tsx` (client-page; 165 symbols, 15 imports)
+- `client/src/pages/agents-office.tsx` (client-page; 167 symbols, 15 imports)
 - `client/src/pages/app-qa-agent.tsx` (client-page; 12 symbols, 9 imports)
 - `client/src/pages/assistant.tsx` (client-page; 49 symbols, 7 imports)
 - `client/src/pages/auth.tsx` (client-page; 6 symbols, 8 imports)

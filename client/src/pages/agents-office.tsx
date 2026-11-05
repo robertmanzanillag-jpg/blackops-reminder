@@ -349,6 +349,7 @@ type OfficeContact = {
   role: string;
   station: string;
   status: string;
+  statusSignal?: AgentLiveStatus;
   activity: string;
   href?: string;
   icon: Agent["icon"];
@@ -1947,8 +1948,12 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
       isDevReviewContact && selectedTarget
         ? `\n\nRepo objetivo: ${selectedTarget.label} (${selectedTarget.repo}).`
         : "";
-    const reply = `Este chat no tiene una acción conectada para esa solicitud. Puedes pedir «analizar horarios de radio» o «consultar PR» seguido del enlace. Orientación local: ${buildAgentReply(contact, `${text}${repoContext}`)}`;
-    if (isDevReviewContact && targetRepo !== "workspace") {
+    const asksStatus = /^(?:¿\s*)?(?:estado|como estas|que estas haciendo|estas trabajando)(?:[?!.\s]*)$/i.test(text.normalize("NFD").replace(/\p{Diacritic}/gu, ""));
+    const signal = contact.statusSignal;
+    const reply = asksStatus
+      ? signal ? `Última señal disponible: ${signal.label}. ${signal.detail ?? ""}`.trim() : `Mi función asignada es ${contact.role}. Esta conversación aún no tiene una señal de ejecución verificada.`
+      : `Este chat no tiene una acción conectada para esa solicitud. Puedes pedir «analizar horarios de radio» o «consultar PR» seguido del enlace. Orientación local: ${buildAgentReply(contact, `${text}${repoContext}`)}`;
+    if (!asksStatus && isDevReviewContact && targetRepo !== "workspace") {
       setLastRemoteTask(text);
       try { window.localStorage.setItem(
         handoffKey,
@@ -1983,6 +1988,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
       role: agent.role,
       station: getAgentStation(agent),
       status: liveStatus ? liveStatus.label : agent.status,
+      statusSignal: liveStatus,
       activity: liveStatus?.detail ? `${agent.activity}. Ahora: ${liveStatus.detail}` : agent.activity,
       href: agent.href,
       icon: agent.icon,
