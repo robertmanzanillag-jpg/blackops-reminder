@@ -8,6 +8,10 @@ import {
   emptyCompanyState,
   enrollTrainee,
   evidenceAlreadyUsed,
+  learnLessons,
+  specialistNeeds,
+  tailoredModules,
+  SPECIALIST_PREFIX,
   leaderboard,
   parseCompanyState,
   personalityFor,
@@ -173,4 +177,56 @@ test("orders closed by hand are recorded with no points; one evidence closes onl
   const third = createOrder(company, { text: "Radio del domingo", now: NOW + 5 * MIN, statuses: { radio: s("working") }, available: ["radio"], names: roles });
   const reused = completeOrder(third.state, third.order.id, NOW + 6 * MIN, evidence);
   assert.equal(reused.careers.radio.points, 35, "the same run never pays twice");
+});
+
+// ---------- Academy from real work, skills, specialists ----------
+
+test("the academy teaches each trainee its own job first: why it failed, its orders, its lessons", () => {
+  let company = advanceCompany(emptyCompanyState(), { now: NOW, statuses: { clippers: s("working") }, roles }).state;
+  company = createOrder(company, { text: "Sube el clip del viernes", now: NOW + MIN, statuses: { clippers: s("error", "Worker con error") }, available: ["clippers"], names: roles }).state;
+  const modules = tailoredModules(company, "clippers", { status: s("error", "Worker con error"), lessons: [{ key: "l1", subject: "clippers", label: "Configura el token antes de publicar" }] });
+  assert.deepEqual(modules.map((module) => module.id.split(":")[0]), ["puesto", "orden", "leccion"]);
+  assert.match(modules[0].summary, /Worker con error/);
+  // A trainee for that job studies those first and graduates with them as skills.
+  company = enrollTrainee(company, { id: "new_agent:helper-clippers", forAgentId: "clippers", role: "Ayudante de Clippers", now: NOW + 2 * MIN });
+  const general = [{ id: "rules", title: "Reglas", summary: "PR-first" }];
+  for (let i = 0; i < 6; i++) company = advanceAcademy(company, () => [...modules, ...general], NOW + (3 + i) * MIN);
+  const titles = (company.careers.clippers.skills || []).map((skill) => skill.title);
+  assert.ok(titles.includes("Por que este puesto no estaba trabajando"), titles.join(" | "));
+  assert.ok(titles.some((title) => title.startsWith("Orden: Sube el clip")));
+  assert.ok(titles.some((title) => title.startsWith("Leccion:")));
+  assert.ok(!titles.includes("Reglas"), "general docs are not job skills");
+});
+
+test("skills are earned by closing orders with evidence and by approved lessons; uses are counted", () => {
+  let company = advanceCompany(emptyCompanyState(), { now: NOW, statuses: { radio: s("working") }, roles }).state;
+  for (let i = 0; i < 2; i++) {
+    const placed = createOrder(company, { text: `Programa la radio ${i}`, now: NOW + i * MIN, statuses: { radio: s("working") }, available: ["radio"], names: roles });
+    company = completeOrder(placed.state, placed.order.id, NOW + i * MIN + 1, { ref: `automation_run:r${i}`, source: "automation_run", summary: "ok", at: new Date(NOW).toISOString() });
+  }
+  const skill = company.careers.radio.skills?.find((item) => item.id === "orden:radio");
+  assert.equal(skill?.uses, 2);
+  const byHand = createOrder(company, { text: "Programa la radio otra vez", now: NOW + 9 * MIN, statuses: { radio: s("working") }, available: ["radio"], names: roles });
+  assert.equal(completeOrder(byHand.state, byHand.order.id, NOW + 10 * MIN).careers.radio.skills?.find((item) => item.id === "orden:radio")?.uses, 2, "no skill without evidence");
+  company = learnLessons(company, [{ key: "l2", subject: "radio", label: "Revisa la hora antes de programar" }], NOW + 11 * MIN);
+  company = learnLessons(company, [{ key: "l2", subject: "radio", label: "Revisa la hora antes de programar" }], NOW + 12 * MIN);
+  assert.equal(company.careers.radio.skills?.filter((item) => item.source === "leccion").length, 1);
+});
+
+test("recurring blocked work creates a specialist: proposal need, academy, new agent that takes those orders", () => {
+  let company = emptyCompanyState();
+  for (let i = 0; i < 3; i++) company = createOrder(company, { text: `Sube el video ${i} a tiktok`, now: NOW + i * MIN, statuses: {}, available: ["clippers"], names: roles }).state;
+  const needs = specialistNeeds(company, NOW + 10 * MIN);
+  assert.equal(needs.length, 1);
+  assert.equal(needs[0].topic, "video");
+  assert.equal(specialistNeeds(company, NOW + 20 * 24 * 60 * MIN).length, 0, "old orders do not count");
+  company = enrollTrainee(company, { id: "new_agent:specialist-video", forAgentId: `${SPECIALIST_PREFIX}video`, role: "Especialista en video", now: NOW + 11 * MIN });
+  const curriculum = () => [...tailoredModules(company, `${SPECIALIST_PREFIX}video`, { topic: "video" }), { id: "rules", title: "Reglas", summary: "PR-first" }];
+  for (let i = 0; i < 6; i++) company = advanceAcademy(company, curriculum, NOW + (12 + i) * MIN);
+  const specialist = company.careers[`${SPECIALIST_PREFIX}video`];
+  assert.ok(specialist, "the specialist exists after graduating");
+  assert.ok((specialist.skills || []).filter((skill) => skill.id.startsWith("orden:")).length >= 3);
+  const next = createOrder(company, { text: "Sube el video nuevo", now: NOW + 30 * MIN, statuses: {}, available: ["clippers"], names: roles });
+  const assignee = next.order.assignees.find((item) => item.agentId === `${SPECIALIST_PREFIX}video`);
+  assert.equal(assignee?.status, "en_curso");
 });

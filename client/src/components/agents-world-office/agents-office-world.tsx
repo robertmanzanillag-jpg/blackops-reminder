@@ -10,7 +10,7 @@ import {
   type BuildingAgent,
   type BuildingTeamAgent,
 } from "@/components/agents-building/agents-building";
-import { personalityFor, type AgentCareer, type CompanyOrder, type CompanyState, type LeaderboardRow, type Personality, type Trainee } from "@shared/agent-company";
+import { SPECIALIST_PREFIX, personalityFor, type AgentCareer, type CompanyOrder, type CompanyState, type LeaderboardRow, type Personality, type Trainee } from "@shared/agent-company";
 import { OFFICE_KONG_CITY_TASKS, scoreOfficeKongSnapshot } from "@shared/office-kong-supervisor";
 import type { OfficeKongAuditResult } from "../../../../server/office-kong";
 import type { OfficeKongCollaboration } from "../../../../server/office-kong-collaboration";
@@ -214,9 +214,23 @@ export function AgentsOfficeWorld({
   for (const member of kongTeam) panelAgents.set(`kong:${member.name}`, { id: `kong:${member.name}`, name: member.name, role: member.job, description: "Equipo de kong-nightlife: guia local, todavia sin backend propio.", status: statuses[`kong:${member.name}`], kong: true, color: "#a3e635" });
 
   const trainees: Trainee[] = (company?.trainees || []).filter((trainee) => !trainee.graduatedAt);
+  // Specialists the academy created for recurring work (approved by Robert in the Trust Center).
+  const specialists = Object.values(careers).filter((career) => career.agentId.startsWith(SPECIALIST_PREFIX));
+  for (const career of specialists) {
+    const topic = career.agentId.slice(SPECIALIST_PREFIX.length);
+    panelAgents.set(career.agentId, {
+      id: career.agentId,
+      name: `Especialista en ${topic}`,
+      role: "Creado por la academia",
+      description: `Agente nuevo formado con las ordenes de "${topic}" que nadie podia tomar. Recibe esas ordenes; sus puntos solo cuentan con evidencia.`,
+      status: { state: "needs-setup", label: `Listo: espera ordenes de ${topic}`, activity: (career.skills || []).slice(0, 4).map((skill) => skill.title) },
+      color: "#93c5fd",
+    });
+  }
+  const academyIds = [...trainees.map((trainee) => `trainee:${trainee.id}`), ...specialists.map((career) => career.agentId)];
   const mainDepartments = [
     ...DEPARTMENTS,
-    ...(trainees.length ? [{ id: "academia", name: "Academia", color: "#60a5fa", agentIds: trainees.map((trainee) => `trainee:${trainee.id}`) }] : []),
+    ...(academyIds.length ? [{ id: "academia", name: "Academia", color: "#60a5fa", agentIds: academyIds }] : []),
   ];
   const departments = officeWing === "main" ? mainDepartments : filteredCityRooms.map(room => ({
       id: room.id, name: room.name,
@@ -233,7 +247,7 @@ export function AgentsOfficeWorld({
       id: `trainee:${trainee.id}`,
       name: trainee.nickname,
       role: `En formacion: ${trainee.role}`,
-      description: `Estudia los documentos y la base de datos de la empresa antes de trabajar. Lleva ${trainee.modulesDone.length} ${trainee.modulesDone.length === 1 ? "modulo" : "modulos"}.`,
+      description: `Primero estudia su propio puesto (por que fallo, sus ordenes y lecciones), despues los documentos y la base de datos. Lleva ${trainee.modulesDone.length} ${trainee.modulesDone.length === 1 ? "modulo" : "modulos"}, ${(trainee.learned || []).length} sobre su puesto.`,
       status: { state: "checking", label: `Estudiando · ${trainee.modulesDone.length} ${trainee.modulesDone.length === 1 ? "modulo" : "modulos"}`, activity: trainee.knowledge.slice(0, 4) },
       color: "#60a5fa",
     });
@@ -713,7 +727,7 @@ export function AgentsOfficeWorld({
                   <div className="rounded-lg bg-black/40 p-1.5"><p className="text-[9px] uppercase text-zinc-500">Confiable</p><p className="text-sm font-bold text-white">{panelRank?.reliability ?? 0}%</p></div>
                 </div>
               )}
-              {panelCareer && panelIntegration?.mode === "activa" && !COUNCIL_AGENTS[panelAgent.id] && panelAgent.id !== "ceo" && (
+              {panelCareer && panelIntegration?.mode === "activa" && !COUNCIL_AGENTS[panelAgent.id] && panelAgent.id !== "ceo" && !panelAgent.id.startsWith(SPECIALIST_PREFIX) && (
                 <p className="mt-1 text-[10px] text-zinc-500" data-testid="world-rotation">
                   Rotacion: si su vida llega a 0% el CEO lo reemplaza y el nuevo pasa por la academia.{panelCareer.firedCount ? ` Ya rotado ${panelCareer.firedCount} ${panelCareer.firedCount === 1 ? "vez" : "veces"}.` : ""}
                 </p>
@@ -752,6 +766,18 @@ export function AgentsOfficeWorld({
                 <div><dt className="text-zinc-500">Auditoria consultada</dt><dd>{formatCityTime(panelAgent.cityAgent.snapshotAt)}</dd></div>
               </dl>}
               {(panelAgent.cityAgent || (!panelAgent.kong && !pageAgentIds.includes(panelAgent.id))) && <OfficeAgentStatusChat key={panelAgent.id} agent={panelAgent} />}
+              {panelCareer && (panelCareer.skills || []).length > 0 && (
+                <div className="mt-2 rounded-lg border border-sky-300/15 bg-sky-500/5 p-2 text-[10px] leading-4 text-zinc-300" data-testid="world-skills">
+                  <p className="mb-1 text-[9px] uppercase tracking-[0.18em] text-sky-200">Skills ganadas</p>
+                  <div className="flex flex-wrap gap-1">
+                    {(panelCareer.skills || []).slice(0, 8).map((skill) => (
+                      <span key={skill.id} className="rounded-full border border-sky-200/20 bg-black/40 px-2 py-0.5" title={`${skill.source === "academia" ? "Aprendida en la academia" : skill.source === "orden" ? "Ordenes cerradas con evidencia" : "Leccion aprobada en el Trust Center"} · ${skill.uses} ${skill.uses === 1 ? "vez" : "veces"}`}>
+                        {skill.title}{skill.uses > 1 ? ` ×${skill.uses}` : ""}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               {panelCareer && panelCareer.memory.length > 0 && (
                 <div className="mt-2 rounded-lg border border-violet-300/15 bg-violet-500/5 p-2 text-[10px] leading-4 text-zinc-300" data-testid="world-brain">
                   <p className="mb-1 text-[9px] uppercase tracking-[0.18em] text-violet-200">Cerebro · lo que recuerda</p>

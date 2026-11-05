@@ -415,7 +415,7 @@ test("company over 4 days: repairs stay bounded, never for exempt agents, mechan
 
 // ---------- Supervisor: integrations, shared storage, evidence ----------
 
-import { CouncilStateConflict, OrderEvidenceError, MIN_CYCLE_GAP_MS } from "../server/agent-council";
+import { CouncilStateConflict, OrderEvidenceError, MIN_CYCLE_GAP_MS, CYCLE_WATCHDOG_MS } from "../server/agent-council";
 import { effectiveIntegrations, parseIntegrationOverrides } from "../shared/agent-integrations";
 
 function sharedStore() {
@@ -557,4 +557,52 @@ test("the public council view never carries the owner-only KONG conversation", a
   assert.ok(Array.isArray(view.kongSupervision.records));
   assert.equal((await council.readKongSupervision()).messages.length, 1, "the owner route still reads it");
   assert.doesNotMatch(JSON.stringify(view), /privado/);
+});
+
+test("a hung read never freezes the council: the round fails with a clear error and the next one runs", async () => {
+  let calls = 0;
+  const fake = fakeDeps({
+    collectTimeoutMs: 50,
+    // First round: the source never answers (what froze production at round 44).
+    collect: () => (++calls === 1 ? new Promise(() => undefined) : Promise.resolve({})),
+  });
+  const council = createAgentCouncil(fake.deps);
+  const first = await council.runCycle();
+  assert.match(first.lastCycleError || "", /sin respuesta/);
+  fake.tick(MIN_CYCLE_GAP_MS + 1000);
+  const second = await council.runCycle();
+  assert.equal(second.lastCycleError, null);
+  assert.equal(second.cycles, 1);
+});
+
+test("watchdog: a round stuck past the limit no longer blocks a new one", async () => {
+  let release: () => void = () => undefined;
+  let calls = 0;
+  const fake = fakeDeps({
+    collectTimeoutMs: 60 * 60_000,
+    collect: () => (++calls === 1 ? new Promise((resolve) => { release = () => resolve({}); }) : Promise.resolve({})),
+  });
+  const council = createAgentCouncil(fake.deps);
+  const stuck = council.runCycle();
+  await new Promise((resolve) => setTimeout(resolve, 5));
+  fake.tick(CYCLE_WATCHDOG_MS + 1000);
+  const fresh = await council.runCycle();
+  assert.equal(fresh.cycles, 1, "a new round ran while the old one was stuck");
+  release();
+  await stuck;
+});
+
+test("agent factory: recurring blocked orders become one 'hire a specialist' proposal for Robert", async () => {
+  const fake = fakeDeps({ collect: async () => ({}), collectStatuses: async () => ({ clippers: { state: "error", label: "Worker con error" } }) });
+  const council = createAgentCouncil(fake.deps);
+  await council.runCycle();
+  for (let i = 0; i < 3; i++) await council.placeOrder(`Sube el video ${i} de Black Room`);
+  fake.tick(MIN_CYCLE_GAP_MS + 1000);
+  const state = await council.runCycle();
+  const specialists = state.proposals.filter((proposal) => proposal.key.startsWith("new_agent:specialist-"));
+  assert.deepEqual(specialists.map((proposal) => proposal.key), ["new_agent:specialist-video"]);
+  assert.equal(specialists[0].status, "submitted", "it goes to the Trust Center, Robert decides");
+  fake.tick(MIN_CYCLE_GAP_MS + 1000);
+  const again = await council.runCycle();
+  assert.equal(again.proposals.filter((proposal) => proposal.key.startsWith("new_agent:specialist-")).length, 1, "never proposed twice");
 });

@@ -28,6 +28,7 @@ import {
   hasProposal,
   parseCouncilState,
   pruneProposals,
+  safeText,
   toMs,
   runCrossChecks,
   type CouncilProposal,
@@ -51,6 +52,10 @@ import {
   createOrder,
   enrollTrainee,
   evidenceAlreadyUsed,
+  learnLessons,
+  specialistNeeds,
+  tailoredModules,
+  SPECIALIST_PREFIX,
   type OrderEvidence,
   leaderboard,
   personalityFor,
@@ -73,6 +78,8 @@ export type CouncilDeps = {
   loadCurriculum?: () => Promise<CurriculumModule[]>;
   // Which agents are paused / external / not built (never scored). Defaults to the shared table + env overrides.
   integrations?: () => Record<string, AgentIntegration>;
+  // Deadline for the round's reads (tests use a short one). Defaults to 90 s.
+  collectTimeoutMs?: number;
   // Reads one automation run of the user (read-only), to verify order evidence.
   verifyRun?: (userId: string, runId: string) => Promise<{ id: string; status: string; summary: string | null; at: string | null } | null>;
   // Shared, versioned storage (production database). When present it replaces readState/writeState:
@@ -164,6 +171,14 @@ function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T>
   return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
 }
 const DB_TIMEOUT_MS = 10_000;
+// Every read of another agent's data has a deadline: one slow or hung source (a remote device,
+// GitHub, a market API) must never freeze the council. Production stopped at round 44 because a
+// read without a deadline kept the round "running" forever, so no later round could start.
+export const READ_TIMEOUT_MS = 20_000;
+const COLLECT_TIMEOUT_MS = 90_000;
+const CURRICULUM_TIMEOUT_MS = 30_000;
+// Last resort: a round that has not finished after this long no longer blocks the next one.
+export const CYCLE_WATCHDOG_MS = 5 * 60_000;
 
 function advanceCompanyCycle(
   state: CouncilState,
@@ -180,23 +195,65 @@ function advanceCompanyCycle(
     const integration = integrationFor(id, integrations);
     if (integration.mode !== "activa" && compact[id]) compact[id] = { state: "offline", label: `${INTEGRATION_LABEL[integration.mode]}: ${integration.reason}` };
   }
-  // Approved hires (agent factory) start in the academy.
+  // Approved hires (agent factory) start in the academy. A specialist becomes a new agent.
   for (const proposal of state.proposals) {
     if (proposal.kind !== "new_agent" || proposal.status !== "applied") continue;
-    const forAgentId = proposal.key.replace(/^new_agent:helper-/, "");
+    const specialist = proposal.key.match(/^new_agent:specialist-(.+)$/);
+    const forAgentId = specialist ? `${SPECIALIST_PREFIX}${specialist[1]}` : proposal.key.replace(/^new_agent:helper-/, "");
     company = enrollTrainee(company, { id: proposal.key, forAgentId, role: proposal.title.replace(/^Contratar /, ""), now });
   }
+  // Skills from the lessons Robert approved about each agent.
+  company = learnLessons(company, state.lessons, now);
   // If the docs can't be read this cycle, the academy still advances on the core rules so nobody
-  // stays in training forever.
+  // stays in training forever. Each trainee first studies its own job (why it failed, its orders,
+  // its lessons), then the general docs.
   const modules = curriculum.length ? curriculum : [{ id: "core-rules", title: "Reglas basicas", summary: "PR-first, QA antes de publicar, nada de gasto sin aprobacion de Robert." }];
-  company = advanceAcademy(company, () => modules, now);
+  const academyBase = company;
+  company = advanceAcademy(
+    company,
+    (trainee) => [
+      ...tailoredModules(academyBase, trainee.forAgentId, {
+        status: compact[trainee.forAgentId],
+        lessons: state.lessons,
+        topic: trainee.forAgentId.startsWith(SPECIALIST_PREFIX) ? trainee.forAgentId.slice(SPECIALIST_PREFIX.length) : undefined,
+      }),
+      ...modules,
+    ],
+    now
+  );
   return { ...state, company, lastStatuses: compact };
+}
+
+// Agent factory: recurring work nobody could take becomes a "hire a specialist" proposal for Robert.
+const MAX_OPEN_SPECIALIST_PROPOSALS = 2;
+function deriveSpecialistProposals(state: CouncilState, now: number): CouncilProposal[] {
+  const iso = new Date(now).toISOString();
+  const open = state.proposals.filter((proposal) => proposal.key.startsWith("new_agent:specialist-") && !["applied", "rejected"].includes(proposal.status)).length;
+  const created: CouncilProposal[] = [];
+  for (const need of specialistNeeds(state.company, now)) {
+    if (open + created.length >= MAX_OPEN_SPECIALIST_PROPOSALS) break;
+    const key = `new_agent:specialist-${need.topic.replace(/[^a-z0-9]+/g, "-")}`;
+    if (state.proposals.some((proposal) => proposal.key === key) || state.company.careers[`${SPECIALIST_PREFIX}${need.topic}`]) continue;
+    created.push({
+      key,
+      kind: "new_agent",
+      owner: "agent-factory",
+      title: `Contratar Especialista en ${need.topic}`,
+      description: `${need.orders.length} ordenes sobre "${need.topic}" en 14 dias quedaron sin nadie que pudiera tomarlas. Propongo un especialista que estudie esas ordenes en la academia y las reciba despues.`,
+      evidence: need.orders.slice(0, 5).map((order) => `${order.createdAt.slice(0, 10)}: ${safeText(order.text).slice(0, 120)}`),
+      handoffBrief: `Si apruebas, entra a la academia: estudia estas ordenes y las reglas de la empresa, se gradua como agente nuevo con esas skills y recibe las ordenes de "${need.topic}". Sus puntos solo cuentan con evidencia. Costo: $0.`,
+      createdAt: iso,
+      status: "pending_submit",
+    });
+  }
+  return created;
 }
 
 export function createAgentCouncil(deps: CouncilDeps) {
   let cached: CouncilState | null = null;
   let queue: Promise<unknown> = Promise.resolve();
   let running: Promise<CouncilState> | null = null;
+  let runningSince = 0;
   let scouting: Promise<void> | null = null;
   const integrationsNow = () => (deps.integrations ? deps.integrations() : effectiveIntegrations(parseIntegrationOverrides(process.env.AGENT_INTEGRATION_OVERRIDES)));
 
@@ -316,9 +373,14 @@ export function createAgentCouncil(deps: CouncilDeps) {
       const before = await load();
       if (recent(before)) return before;
       // Slow reads happen outside the queue; the state change itself is serialized.
-      const collected = await deps.collect(userId);
-      const everyone = deps.collectStatuses ? await deps.collectStatuses(userId).catch(() => ({} as Record<string, AgentLiveStatus>)) : {};
-      const curriculum = deps.loadCurriculum ? await deps.loadCurriculum().catch(() => [] as CurriculumModule[]) : [];
+      const collectTimeout = deps.collectTimeoutMs ?? COLLECT_TIMEOUT_MS;
+      const collected = await withTimeout(deps.collect(userId), collectTimeout, "lectura de senales");
+      const everyone = deps.collectStatuses
+        ? await withTimeout(deps.collectStatuses(userId), collectTimeout, "estado de los agentes").catch(() => ({} as Record<string, AgentLiveStatus>))
+        : {};
+      const curriculum = deps.loadCurriculum
+        ? await withTimeout(deps.loadCurriculum(), CURRICULUM_TIMEOUT_MS, "academia").catch(() => [] as CurriculumModule[])
+        : [];
       let wroteRound = false;
       const written = await mutate(async (state) => {
         wroteRound = false;
@@ -336,7 +398,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
         next = advanceCompanyCycle(next, statuses, curriculum, now, integrations);
         // This completes only a read-only readiness review, never the worker's commercial task.
         next = { ...next, kongSupervision: reviewKongReadiness(state.kongSupervision, everyone, now) };
-        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, statuses, now, AGENT_NAMES, unscored), ...next.proposals]) };
+        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, statuses, now, AGENT_NAMES, unscored), ...deriveSpecialistProposals(next, now), ...next.proposals]) };
         wroteRound = true;
         return next;
       });
@@ -354,7 +416,17 @@ export function createAgentCouncil(deps: CouncilDeps) {
   // Overlapping triggers (scheduler + manual button) share one run instead of duplicating work.
   // force: the manual button (already rate limited) runs even if a round just happened.
   function runCycle(options: { force?: boolean } = {}): Promise<CouncilState> {
-    if (!running) running = runCycleOnce(Boolean(options.force)).finally(() => { running = null; });
+    if (running && deps.now() - runningSince > CYCLE_WATCHDOG_MS) {
+      deps.log(`agent council round stuck for more than ${CYCLE_WATCHDOG_MS / 60_000} min; starting a new one`);
+      running = null;
+    }
+    if (!running) {
+      runningSince = deps.now();
+      const current: Promise<CouncilState> = runCycleOnce(Boolean(options.force)).finally(() => {
+        if (running === current) running = null;
+      });
+      running = current;
+    }
     return running;
   }
 
@@ -409,7 +481,10 @@ export function createAgentCouncil(deps: CouncilDeps) {
       const fresh = state.lastCycleAt && now - toMs(state.lastCycleAt) < STATUS_FRESH_MS && !state.lastCycleError;
       const statuses: Record<string, { state: AgentLiveStatus["state"]; label: string }> = fresh ? { ...state.lastStatuses } : {};
       if (fresh) statuses.mechanic = { state: "working", label: "Reviso a todos en el ultimo consejo" };
-      const result = createOrder(state.company, { text, now, statuses, available, names: AGENT_NAMES });
+      const specialistNames = Object.fromEntries(
+        Object.keys(state.company.careers).filter((id) => id.startsWith(SPECIALIST_PREFIX)).map((id) => [id, `Especialista en ${id.slice(SPECIALIST_PREFIX.length)}`])
+      );
+      const result = createOrder(state.company, { text, now, statuses, available, names: { ...AGENT_NAMES, ...specialistNames } });
       return { ...state, company: result.state };
     });
   }
@@ -552,7 +627,7 @@ export async function readSkillDocs(root = process.cwd()): Promise<{ skills: Cou
 async function collectReal(userId: string): Promise<Omit<CouncilSignals, "now">> {
   const safe = async <T,>(label: string, work: () => Promise<T> | T): Promise<T | undefined> => {
     try {
-      return await work();
+      return await withTimeout(Promise.resolve().then(work), READ_TIMEOUT_MS, label);
     } catch (error) {
       console.warn(`[agent-council] ${label} unavailable:`, error instanceof Error ? error.message : error);
       return undefined;
@@ -603,7 +678,7 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
   };
   const read = async (agentIds: string[], work: () => Promise<unknown>) => {
     try {
-      const body = await work();
+      const body = await withTimeout(Promise.resolve().then(work), READ_TIMEOUT_MS, agentIds.join(", "));
       agentIds.forEach((agentId) => summarize(agentId, body));
     } catch (error) {
       const detail = error instanceof Error ? error.message.slice(0, 120) : "sin detalle";
