@@ -550,7 +550,9 @@ export function kongOperationsStatus(state: KongOperationsState, now: number) {
     [KONG_METRICS_AGENT]: !confirmed.length
       ? { state: "needs-setup" as const, label: "Sin publicaciones confirmadas que medir" }
       : metricsFresh
-        ? { state: "working" as const, label: `${measured}/${confirmed.length} publicaciones medidas` }
+        // Available data is not a new completed task. Until a durable one-use
+        // receipt drives career scoring, repeated reads must never earn points.
+        ? { state: "checking" as const, label: `${measured}/${confirmed.length} publicaciones medidas · sin trabajo nuevo acreditado` }
         : { state: "needs-setup" as const, label: `${measured}/${confirmed.length} publicaciones con metricas de las ultimas 48 h` },
     inbox: state.inbox.filter((brief) => brief.status === "pendiente").length,
     duplicates,

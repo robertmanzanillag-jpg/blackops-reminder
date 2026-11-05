@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { advanceCompany, emptyCompanyState } from "../shared/agent-company";
+import { agentProbes, summarizeProbe } from "../shared/agent-live-status";
 import {
   KongOpsError,
   LEASE_TTL_MS,
@@ -169,7 +171,7 @@ test("metrics agent: results per confirmed publication from the Metricool rows",
   assert.equal(state.results[0].uuid, U.pub1);
   assert.equal(state.results[0].impressions, 1200, "latest observation wins");
   assert.equal(state.results[0].title, "Venue: Club Prueba (Miami)");
-  assert.equal(kongOperationsStatus(state, NOW + 3 * 60 * MIN)["kong-metrics"].state, "working");
+  assert.equal(kongOperationsStatus(state, NOW + 3 * 60 * MIN)["kong-metrics"].state, "checking");
 });
 
 test("state from disk: unknown or broken shapes never crash", () => {
@@ -226,7 +228,7 @@ test("service: the same card delivered by two instances at once lands once; reco
   assert.deepEqual(reconciled.confirmed, [U.pub1]);
   const results = await b.measure([{ network: "instagram", postId: "ig-9", observedAt: at(NOW), impressions: 50, reach: 40, videoViews: 30, engagements: 5, clicks: 1, shares: 1 }]);
   assert.equal(results.length, 1);
-  assert.equal((await a.view()).status["kong-metrics"].state, "working");
+  assert.equal((await a.view()).status["kong-metrics"].state, "checking");
 });
 
 // ---------- Review regressions ----------
@@ -376,4 +378,18 @@ test("one official identity cannot measure two confirmed publication UUIDs", () 
   state.publications.push({ ...state.publications[0], uuid: U.pub2 });
   assert.equal(kongOperationsStatus(state, NOW)["kong-metrics"].state, "needs-setup");
   assert.equal(measurePublications(state, [metricRow()], NOW).results.length, 0);
+});
+
+test("repeated fresh metric reads never award company points, battery or completed work", () => {
+  const state = measurePublications(measuredFixture(), [metricRow()], NOW);
+  let company = emptyCompanyState();
+  for (let cycle = 0; cycle < 3; cycle++) {
+    const now = NOW + cycle * 15 * MIN;
+    const status = summarizeProbe(agentProbes["kong-metrics"], { ok: true, status: 200, body: { ...state, status: kongOperationsStatus(state, now) } }, now);
+    assert.equal(status.state, "checking");
+    company = advanceCompany(company, { now, statuses: { "kong-metrics": status }, roles: { "kong-metrics": "Metricas KONG" } }).state;
+  }
+  assert.equal(company.careers["kong-metrics"].points, 0);
+  assert.equal(company.careers["kong-metrics"].battery, 80);
+  assert.equal(company.careers["kong-metrics"].cyclesWorking, 0);
 });

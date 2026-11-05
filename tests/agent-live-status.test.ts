@@ -202,8 +202,9 @@ test("KONG metrics agent: status and results come from the operations state, fai
   const now = Date.parse("2026-11-05T12:00:00Z");
   const body = { status: { "kong-metrics": { state: "working", label: "1/1 publicaciones medidas" } }, results: [{ title: "Venue: Club Prueba (Miami)", network: "instagram", impressions: 1200, engagements: 97 }] };
   const status = summarizeProbe(agentProbes["kong-metrics"], ok(body), now);
-  assert.equal(status.state, "working");
+  assert.equal(status.state, "checking", "legacy working snapshots never earn repeat points");
   assert.match(status.activity?.[0] || "", /1200 vistas/);
+  assert.equal(summarizeProbe(agentProbes["kong-metrics"], ok({ ...body, status: { "kong-metrics": { state: "checking", label: "Datos disponibles" } } }), now).state, "checking");
   assert.equal(summarizeProbe(agentProbes["kong-metrics"], ok({ status: { "kong-metrics": { state: "working?" } } }), now).state, "error");
   assert.equal(summarizeProbe(agentProbes["kong-metrics"], { ok: false, status: 403, body: null }, now).state, "needs-setup");
 });

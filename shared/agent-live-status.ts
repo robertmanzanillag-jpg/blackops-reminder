@@ -470,7 +470,10 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
     case "kong-metrics": {
       const status = asObject(asObject(body?.status)?.["kong-metrics"]);
       const state = str(status?.state);
-      if (state === "working" || state === "needs-setup") return { state, label: str(status?.label) || "Sin datos" };
+      if (state === "needs-setup") return { state, label: str(status?.label) || "Sin datos" };
+      // Legacy servers may say "working" for a fresh metrics snapshot. Reading
+      // that same snapshot again is not new work and must not earn career points.
+      if (state === "checking" || state === "working") return { state: "checking", label: str(status?.label) || "Metricas disponibles", detail: "Datos disponibles; no acredita trabajo nuevo ni puntos por cada lectura." };
       return { state: "error", label: "Estado de metricas ilegible" };
     }
     case "city-news": {
