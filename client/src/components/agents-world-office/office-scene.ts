@@ -770,8 +770,8 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     if (!hit) return;
     const { agentId, departmentId } = hit.object.userData || {};
     if (departmentId && departmentId !== focused) focusDepartment(departmentId);
-    // Clicking the floor of the room that is already focused asks again (KONG reopens its office).
-    else if (departmentId && !agentId) callbacks.onFocusDepartment(departmentId);
+    // Clicking the floor of the already-focused KONG room reopens its office (other rooms keep their panels).
+    else if (departmentId === "kong" && !agentId) callbacks.onFocusDepartment(departmentId);
     if (agentId) callbacks.onSelectAgent(agentId);
   };
   const onWheel = (event: WheelEvent) => {

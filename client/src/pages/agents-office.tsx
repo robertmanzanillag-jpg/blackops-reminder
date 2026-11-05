@@ -2203,7 +2203,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
               <div data-testid="office-kong-supervisor-slot">
                 <KongSupervisorPanel />
               </div>
-              <button type="button" onClick={() => setKongOfficeOpen(true)} className="rounded-xl border border-lime-300/35 bg-lime-400/10 px-3 py-2 text-xs font-semibold text-lime-100">
+              <button type="button" data-testid="button-kong-office" onClick={() => setKongOfficeOpen(true)} className="rounded-xl border border-lime-300/35 bg-lime-400/10 px-3 py-2 text-xs font-semibold text-lime-100">
                 Oficina KONG
               </button>
               {kongOfficeOpen && <KongTeamOffice onClose={() => setKongOfficeOpen(false)} />}
