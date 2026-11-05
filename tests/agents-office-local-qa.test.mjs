@@ -81,9 +81,11 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
      id:'fixture-city-'+(index+1),name:'Ciudad de prueba '+(index+1),countryCode:'US',timeZone:'America/New_York',currency:'USD',
      status:'needs_attention',categories:Array.from({length:7},(_,categoryIndex)=>{
       const category=['clubs','vip','restaurants','events','sports','experiences','media'][categoryIndex];
-      const running=index===0&&category==='media';
-      return {category,state:running?'running':'unknown',evidence:'persisted',lastRunAt:null,lastSuccessAt:null,lastStartedAt:running?new Date(now-1000).toISOString():null,
-       nextRunAt:running?nextRunAt:null,leaseUntil:running?new Date(now+90_000).toISOString():null,intervalMs:86_400_000,recordedFailure:false,issues:[]};
+      // A persisted running flag is not current work after its lease expires.
+      // The later liveSnapshot fixture separately verifies a valid active lease.
+      const expiredRun=index===0&&category==='media';
+      return {category,state:expiredRun?'running':'unknown',evidence:expiredRun?'persisted':'missing',lastRunAt:null,lastSuccessAt:null,lastStartedAt:expiredRun?new Date(now-120_000).toISOString():null,
+       nextRunAt:expiredRun?nextRunAt:null,leaseUntil:expiredRun?new Date(now-30_000).toISOString():null,intervalMs:86_400_000,recordedFailure:false,issues:[]};
      }),
     }));
     res.json({text:'Synthetic KONG Native read fixture.',completedAt:new Date(now).toISOString(),evidence:{generatedAt:new Date(now).toISOString(),citySnapshotCheckedAt:new Date(now).toISOString(),agents:centralAgents,
