@@ -482,3 +482,28 @@ test("single publisher: the supervisor never imports or calls publishing code", 
     assert.doesNotMatch(source, /\b(publish\w*|schedulePost\w*|uploadToDrive\w*|postTo\w*)\s*\(/, `${file} calls a publishing function`);
   }
 });
+
+test("two instances never send the same proposal to the Trust Center twice", async () => {
+  const shared = sharedStore();
+  const submitted: string[] = [];
+  const collect = async () => ({ skills: [{ name: "long", path: "p", description: "x", truncatedInChat: true, bodyChars: 2000, missingPaths: [] }] });
+  const submitProposal = async (_user: string, proposal: CouncilProposal) => {
+    submitted.push(proposal.key);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    return `pa-${submitted.length}`;
+  };
+  const a = fakeDeps({ versioned: shared.store, collect, submitProposal });
+  const b = fakeDeps({ versioned: shared.store, collect, submitProposal });
+  const first = createAgentCouncil(a.deps);
+  const second = createAgentCouncil(b.deps);
+  await Promise.all([first.runCycle(), second.runCycle(), first.placeOrder("Orden durante la ronda"), second.placeOrder("Otra orden")]);
+  assert.deepEqual(submitted, ["skill:skills-truncated"]);
+  const state = parseCouncilState(shared.raw());
+  assert.equal(state.proposals[0].status, "submitted");
+  assert.equal(state.proposals[0].pendingActionId, "pa-1", "the id that was created is the one saved");
+  assert.equal(state.company.orders.length, 2, "orders placed meanwhile are kept");
+  // Next round (after the gap) reads the saved id and does not submit again.
+  a.tick(MIN_CYCLE_GAP_MS + 1000);
+  await first.runCycle();
+  assert.deepEqual(submitted, ["skill:skills-truncated"]);
+});

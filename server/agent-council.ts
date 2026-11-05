@@ -246,41 +246,64 @@ export function createAgentCouncil(deps: CouncilDeps) {
     return job;
   }
 
-  async function syncProposals(state: CouncilState, userId: string): Promise<CouncilState> {
+  // Talks to the Trust Center for a snapshot of the proposals, WITHOUT holding the state lock:
+  // creates approval requests for new proposals and reads the status of submitted ones.
+  // Returns per-key patches that are merged into the latest state afterwards (mergeProposalSync).
+  type ProposalPatch = { expect: "unsubmitted" | { pendingActionId: string }; patch: Partial<CouncilProposal> };
+  async function syncProposalsNetwork(snapshot: CouncilState, userId: string): Promise<Map<string, ProposalPatch>> {
     const iso = new Date(deps.now()).toISOString();
-    const proposals: CouncilProposal[] = [];
-    for (const proposal of state.proposals) {
+    const patches = new Map<string, ProposalPatch>();
+    for (const proposal of snapshot.proposals) {
       if (proposal.status === "pending_submit" || proposal.status === "not_submitted") {
         try {
           const id = await withTimeout(deps.submitProposal(userId, proposal), DB_TIMEOUT_MS, "Trust Center");
-          proposals.push({ ...proposal, status: "submitted", pendingActionId: id, note: "En el Trust Center esperando tu aprobacion." });
+          patches.set(proposal.key, { expect: "unsubmitted", patch: { status: "submitted", pendingActionId: id, note: "En el Trust Center esperando tu aprobacion." } });
         } catch (error) {
-          proposals.push({ ...proposal, status: "not_submitted", note: `No se pudo enviar al Trust Center: ${error instanceof Error ? error.message : String(error)}` });
+          patches.set(proposal.key, { expect: "unsubmitted", patch: { status: "not_submitted", note: `No se pudo enviar al Trust Center: ${error instanceof Error ? error.message : String(error)}` } });
         }
         continue;
       }
       if (proposal.status === "submitted" && proposal.pendingActionId) {
         const status = await withTimeout(deps.getPendingActionStatus(proposal.pendingActionId), DB_TIMEOUT_MS, "Trust Center").catch(() => null);
+        const expect = { pendingActionId: proposal.pendingActionId };
         if (status === "rejected" || status === "expired" || status === "cancelled") {
-          proposals.push({ ...proposal, status: "rejected", closedAt: iso, note: status === "rejected" ? "Rechazada en el Trust Center." : `Cerrada en el Trust Center (${status}).` });
-          continue;
-        }
-        if (status === "failed") {
-          proposals.push({ ...proposal, status: "rejected", closedAt: iso, note: "La ejecucion fallo en el Trust Center; se puede volver a proponer en 30 dias." });
-          continue;
-        }
-        if (status === "approved" || status === "executing" || status === "executed" || status === "completed") {
-          proposals.push({ ...proposal, status: "approved" });
-          continue;
+          patches.set(proposal.key, { expect, patch: { status: "rejected", closedAt: iso, note: status === "rejected" ? "Rechazada en el Trust Center." : `Cerrada en el Trust Center (${status}).` } });
+        } else if (status === "failed") {
+          patches.set(proposal.key, { expect, patch: { status: "rejected", closedAt: iso, note: "La ejecucion fallo en el Trust Center; se puede volver a proponer en 30 dias." } });
+        } else if (status === "approved" || status === "executing" || status === "executed" || status === "completed") {
+          patches.set(proposal.key, { expect, patch: { status: "approved" } });
         }
       }
-      proposals.push(proposal);
     }
-    let next: CouncilState = { ...state, proposals };
+    return patches;
+  }
+
+  // Applies the Trust Center results to the LATEST state. A patch only lands if the proposal is still
+  // in the state it was read in, so a result never overwrites what another instance already recorded.
+  function mergeProposalSync(fresh: CouncilState, patches: Map<string, ProposalPatch>): CouncilState {
+    let changed = false;
+    const proposals = fresh.proposals.map((proposal) => {
+      const entry = patches.get(proposal.key);
+      if (!entry) return proposal;
+      const matches = entry.expect === "unsubmitted"
+        ? (proposal.status === "pending_submit" || proposal.status === "not_submitted") && !proposal.pendingActionId
+        : proposal.status === "submitted" && proposal.pendingActionId === entry.expect.pendingActionId;
+      if (!matches) return proposal;
+      changed = true;
+      return { ...proposal, ...entry.patch };
+    });
+    if (!changed) return fresh;
+    let next: CouncilState = { ...fresh, proposals };
     for (const proposal of proposals) {
       if (proposal.status === "approved") next = applyApprovedProposal(next, proposal.key, deps.now());
     }
     return next;
+  }
+
+  async function syncProposals(state: CouncilState, userId: string): Promise<CouncilState> {
+    const patches = await syncProposalsNetwork(state, userId);
+    if (!patches.size) return state;
+    return mutate((fresh) => mergeProposalSync(fresh, patches));
   }
 
   async function runCycleOnce(force: boolean): Promise<CouncilState> {
@@ -294,7 +317,9 @@ export function createAgentCouncil(deps: CouncilDeps) {
       const collected = await deps.collect(userId);
       const everyone = deps.collectStatuses ? await deps.collectStatuses(userId).catch(() => ({} as Record<string, AgentLiveStatus>)) : {};
       const curriculum = deps.loadCurriculum ? await deps.loadCurriculum().catch(() => [] as CurriculumModule[]) : [];
-      return await mutate(async (state) => {
+      let wroteRound = false;
+      const written = await mutate(async (state) => {
+        wroteRound = false;
         if (recent(state)) return SKIP;
         const now = deps.now();
         const signals: CouncilSignals = { ...collected, now };
@@ -308,8 +333,13 @@ export function createAgentCouncil(deps: CouncilDeps) {
         let next = finishCycle(state, { findings, statuses: scored, now, agentNames: AGENT_NAMES });
         next = advanceCompanyCycle(next, statuses, curriculum, now, integrations);
         next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, statuses, now, AGENT_NAMES, unscored), ...next.proposals]) };
-        return syncProposals(next, userId);
+        wroteRound = true;
+        return next;
       });
+      // Only the instance whose round was actually written talks to the Trust Center, and only after
+      // the write: a retried or skipped round never creates approval requests (no duplicates).
+      if (!wroteRound) return written;
+      return await syncProposals(written, userId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       deps.log(`agent council cycle failed: ${message}`);
@@ -686,6 +716,14 @@ export function getAgentCouncil() {
     },
     collect: collectReal,
     submitProposal: async (userId, proposal) => {
+      // Never two open approval requests for the same proposal: reuse the pending one if it exists.
+      const [{ db }, { pendingActions }, { and, eq, inArray }] = await Promise.all([import("./db"), import("@shared/schema"), import("drizzle-orm")]);
+      const [existing] = await db
+        .select({ id: pendingActions.id })
+        .from(pendingActions)
+        .where(and(eq(pendingActions.userId, userId), eq(pendingActions.resourceType, "agent_council_proposal"), eq(pendingActions.resourceId, proposal.key), inArray(pendingActions.status, ["draft", "pending", "edited", "snoozed"])))
+        .limit(1);
+      if (existing) return existing.id;
       const { createPendingActionForApproval } = await import("./trust-policy");
       const action = await createPendingActionForApproval({
         userId,

@@ -117,6 +117,8 @@ export function AgentsOfficeWorld({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [orderText, setOrderText] = useState("");
+  // Bumped after every close attempt so a failed pick can be selected again.
+  const [evidenceResetKey, setEvidenceResetKey] = useState(0);
 
   // Approved council lessons change how an agent is reported (same rule as the building).
   const statuses: Record<string, AgentLiveStatus> = { ...liveStatuses };
@@ -267,6 +269,7 @@ export function AgentsOfficeWorld({
     const result = await post(`/api/agent-company/orders/${encodeURIComponent(orderId)}/done`, evidenceRunId ? { evidenceRunId } : {});
     setMessage(result.ok ? (evidenceRunId ? "Orden cerrada con evidencia: puntos para quien trabajaba." : "Orden cerrada a mano: queda anotada, sin puntos.") : (result.body as { error?: string } | null)?.error || "No se pudo cerrar la orden.");
     await refreshCouncil();
+    setEvidenceResetKey((value) => value + 1);
     setBusy(false);
   };
 
@@ -318,7 +321,9 @@ export function AgentsOfficeWorld({
           ? "Parte del consejo: revisa a los demas y no se mide a si mismo."
           : panelAgent.id === "ceo"
             ? "El CEO dirige; no compite en la tabla."
-            : "Se le abre la carrera en la proxima ronda del consejo (cada 15 min).";
+            : panelAgent.status.state === "checking"
+              ? "Todavia no hay lectura de su trabajo; la vida empieza cuando el consejo lo mida."
+              : "Se le abre la carrera en la proxima ronda del consejo (cada 15 min).";
   const evidenceRuns = ((queryClient.getQueryData(["agents-building-probe", "automation-runs"]) as { ok?: boolean; body?: unknown } | undefined)?.body as Array<{ id?: string; status?: string; resultSummary?: string | null; startedAt?: string }> | undefined || [])
     .filter((run) => run && typeof run.id === "string" && run.status === "success")
     .slice(0, 10);
@@ -421,6 +426,7 @@ export function AgentsOfficeWorld({
                 {!order.doneAt && (
                   <div className="mt-1.5 flex flex-wrap items-center gap-2">
                     <select
+                      key={`${order.id}-${evidenceResetKey}`}
                       defaultValue=""
                       disabled={busy || evidenceRuns.length === 0}
                       onChange={(event) => { if (event.target.value) void markDone(order.id, event.target.value); }}
