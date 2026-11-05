@@ -5,6 +5,7 @@ import { apiRequest, queryClient } from "@/lib/queryClient";
 import { scoreOfficeKongSnapshot } from "@shared/office-kong-supervisor";
 import { officeCitySnapshotExpiresAt } from "@/lib/office-city-agents";
 import type { OfficeKongAuditResult } from "../../../server/office-kong";
+import type { OfficeKongCollaboration } from "../../../server/office-kong-collaboration";
 
 type Probe = { status: "ready" | "blocked"; reason: string; checkedAt: string };
 type Run = { id: string; key: string; kind: string; status: string; source?: "scheduled"; text?: string; createdAt: string; completedAt?: string; sessionId?: string; evidence?: OfficeKongAuditResult["evidence"]; error?: { reason: string }; review?: { verdict: string; headSha: string } };
@@ -23,7 +24,7 @@ export function OfficeConnectionsPanel() {
   const fresh = (probe?: Probe) => !connections.isError && Boolean(probe && Date.now() - Date.parse(probe.checkedAt) >= -30_000 && Date.now() - Date.parse(probe.checkedAt) < 90_000);
   const workerReady = fresh(connections.data?.worker) && connections.data?.worker?.status === "ready";
   const runs = useQuery<Run[]>({ queryKey: ["/api/agents-office/runs"], enabled: open && workerReady, refetchInterval: 2_000 });
-  const snapshot = useQuery<OfficeKongAuditResult>({ queryKey: ["/api/agents-office/kong-snapshot"], enabled: open, staleTime: 45_000, refetchInterval: 60_000, retry: false });
+  const snapshot = useQuery<OfficeKongAuditResult & { collaboration?: OfficeKongCollaboration }>({ queryKey: ["/api/agents-office/kong-snapshot"], enabled: open, staleTime: 45_000, refetchInterval: 60_000, retry: false });
   const mutation = useMutation({
     mutationFn: async (input: { kind: string; message?: string; prUrl?: string }) => {
       const signature = JSON.stringify(input);
@@ -53,6 +54,9 @@ export function OfficeConnectionsPanel() {
   const supervision = scoreOfficeKongSnapshot(kongEvidence);
   const kongAgents = kongEvidence?.agents;
   const kongEvidenceFresh = supervision.verified;
+  const collaboration = kongEvidenceFresh ? snapshot.data?.collaboration : undefined;
+  const teams = supervision.cities.filter(city => city.points !== null && city.scoredCategories === city.totalCategories)
+    .sort((a, b) => (b.points ?? 0) - (a.points ?? 0) || a.name.localeCompare(b.name));
   return (
     <aside className={`absolute right-3 top-16 z-[110] rounded-xl border border-cyan-200/25 bg-[#080d18]/95 px-2.5 py-1 text-white shadow-xl backdrop-blur ${open ? "w-[min(340px,calc(100vw-1.5rem))]" : "w-fit"}`} aria-label="Conexiones reales de la oficina">
       <div className="flex items-center justify-between gap-3">
@@ -88,6 +92,27 @@ export function OfficeConnectionsPanel() {
             <p className="text-slate-400">Última revisión: {supervision.snapshotAt ? new Date(supervision.snapshotAt).toLocaleString() : "Sin registro"}</p>
             {supervision.countries.map(country => <p key={country.countryCode}><strong>{country.countryCode}</strong> · {country.points === null ? "Sin puntuación" : `${country.points}/100`} · {country.scoredCategories}/{country.totalCategories} verificados</p>)}
           </div>}
+        </details>
+        <details className="rounded-lg border border-cyan-200/20 p-2 text-xs" data-testid="office-kong-teams">
+          <summary className="cursor-pointer font-semibold">Clasificación de ciudades</summary>
+          <p className="mt-2 text-slate-300">Cada equipo tiene un puntaje de 100. La clasificación requiere evidencia verificable de los siete puestos.</p>
+          {teams.length === 0 && <p className="mt-2 text-slate-400">Todavía no hay equipos con evidencia completa para clasificar.</p>}
+          {teams.length > 0 && <ol className="mt-2 space-y-1">
+            {teams.map(team => <li key={team.id}>{teams.findIndex(entry => entry.points === team.points) + 1}. {team.name} · {team.points}/100</li>)}
+          </ol>}
+          {supervision.verified && supervision.cities.length > teams.length && <p className="mt-2 text-slate-400">Equipos pendientes de verificación completa: {supervision.cities.length - teams.length}.</p>}
+        </details>
+        <details className="rounded-lg border border-cyan-200/20 p-2 text-xs" data-testid="office-kong-team-review">
+          <summary className="cursor-pointer font-semibold">Mesa de equipos · propuestas para el CEO</summary>
+          <p className="mt-2 text-slate-300">El supervisor señala incidencias registradas y Operaciones propone cómo revisarlas.</p>
+          {!collaboration?.verified && <p className="mt-2 text-amber-200">Sin auditoría vigente para generar propuestas.</p>}
+          {collaboration?.verified && collaboration.totalFindings === 0 && <p className="mt-2 text-slate-400">La última revisión no registró incidencias que requieran una propuesta.</p>}
+          {collaboration?.verified && collaboration.exchanges.map(exchange => <article key={exchange.id} className="mt-2 border-t border-white/10 pt-2">
+            <p className="font-semibold">{kongEvidence?.cities?.find(city => city.id === exchange.cityId)?.name ?? exchange.cityId} · {categoryNames[exchange.category] ?? exchange.category}</p>
+            <time className="text-slate-400" dateTime={exchange.evidenceAt}>{new Date(exchange.evidenceAt).toLocaleString()}</time>
+            {exchange.comments.map(comment => <p key={comment.author} className="mt-1"><strong>{comment.author === "supervisor" ? "Supervisor" : "Operaciones"}</strong> · {comment.text}</p>)}
+            {exchange.proposal.action === "review_reassignment" && <p className="mt-1 text-amber-200"><strong>Para revisión del CEO</strong> · {exchange.proposal.text}</p>}
+          </article>)}
         </details>
         {kongEvidence?.cities && <section aria-label="Agentes de KONG por ciudad" className="space-y-2">
           <h3 className="text-sm font-semibold">{kongEvidence.cities.length} ciudades · {kongEvidence.cities.reduce((count, city) => count + city.categories.length, 0)} agentes por categoria</h3>

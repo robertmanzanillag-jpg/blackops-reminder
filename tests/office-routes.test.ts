@@ -14,6 +14,7 @@ test("execution HTTP endpoints require authenticated owner, origin, and strict t
   let historyReads = 0;
   let directoryReads = 0;
   let snapshotReads = 0;
+  let directReads = 0;
   let clock = Date.now();
   let failSnapshot = false;
   const checkedAt = new Date(clock).toISOString();
@@ -23,7 +24,12 @@ test("execution HTTP endpoints require authenticated owner, origin, and strict t
     list: async () => { historyReads++; return []; },
     submit: async (_owner, task: any) => { submissions++; return { id: "accepted-id", ...task, status: "accepted", createdAt: new Date().toISOString() } as any; },
   }, directoryReader: async () => { directoryReads++; return [{ id: "buenos-aires", name: "Buenos Aires", countryCode: "AR", timeZone: "America/Argentina/Buenos_Aires", currency: "ARS" }]; },
-  now: () => clock, snapshotReader: async () => { snapshotReads++; if (failSnapshot) throw new Error("fixture upstream error"); return snapshot; } });
+  now: () => clock, snapshotReader: async () => { snapshotReads++; if (failSnapshot) throw new Error("fixture upstream error"); return snapshot; },
+  analyzeRadio: async userId => {
+    assert.equal(userId, "office-owner");
+    directReads++;
+    return { totalEvents: 2, eventsWithEmptySlots: 1, slotsToFill: [], upcomingEvents: [] };
+  }, loadPullRequest: async prUrl => { directReads++; return { prUrl, headSha: "a".repeat(40), diffSha256: "b".repeat(64), diff: "private fixture" }; } });
   const server = app.listen(0, "127.0.0.1");
   await new Promise<void>(resolve => server.once("listening", resolve));
   t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
@@ -51,6 +57,19 @@ test("execution HTTP endpoints require authenticated owner, origin, and strict t
   assert.equal((await fetch(`${base}/api/agents-office/runs`, { headers: { cookie: cookie("office-owner") } })).headers.get("cache-control"), "no-store");
   process.env.OFFICE_WORKER_ENABLED = "false";
   const ownerHeaders = { cookie: cookie("office-owner") };
+  const contact = (body: unknown, headers: Record<string, string> = ownerHeaders) => fetch(`${base}/api/agents-office/contact-action`, {
+    method: "POST", headers: { "content-type": "application/json", origin: base, ...headers }, body: JSON.stringify(body),
+  });
+  assert.equal((await contact({ action: "radio_analysis" }, {})).status, 401);
+  assert.equal((await contact({ action: "radio_analysis" }, { ...ownerHeaders, origin: "https://untrusted.example" })).status, 403);
+  assert.equal((await contact({ action: "github_pull_request", prUrl: "https://untrusted.example" })).status, 400);
+  assert.equal(directReads, 0);
+  assert.match((await (await contact({ action: "radio_analysis" })).json()).summary, /2 eventos.*1 tienen/);
+  const prReceipt = await (await contact({ action: "github_pull_request", prUrl: "https://github.com/owner/repo/pull/12" })).json();
+  assert.equal(prReceipt.agentId, "github");
+  assert.match(prReceipt.summary, /aaaaaaaaaa/);
+  assert.doesNotMatch(JSON.stringify(prReceipt), /private fixture/);
+  assert.equal(directReads, 2);
   const readSnapshot = (headers: Record<string, string> = ownerHeaders) => fetch(`${base}/api/agents-office/kong-snapshot`, { headers });
   assert.equal((await readSnapshot({})).status, 401);
   assert.equal((await readSnapshot({ cookie: cookie("someone-else") })).status, 403);
@@ -59,7 +78,7 @@ test("execution HTTP endpoints require authenticated owner, origin, and strict t
   for (const result of results) {
     assert.equal(result.status, 200);
     assert.equal(result.headers.get("cache-control"), "no-store");
-    assert.deepEqual(await result.json(), snapshot);
+    assert.deepEqual(await result.json(), { ...snapshot, collaboration: { verified: false, observedAt: checkedAt, totalFindings: 0, exchanges: [] } });
   }
   assert.equal(snapshotReads, 1);
   clock += 45_001;

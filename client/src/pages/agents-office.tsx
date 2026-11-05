@@ -30,6 +30,7 @@ import {
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { OfficeConnectionsPanel } from "@/components/office-connections-panel";
+import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { MonitoredProject } from "@shared/schema";
 import { AgentsBuilding } from "@/components/agents-building/agents-building";
@@ -1922,12 +1923,31 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   const handleSendDirectMessage = () => {
     const text = directMessage.trim();
     if (!text) return;
+    const pr = /^(?:consultar pr\s+)?(https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/[1-9]\d*)$/i.exec(text);
+    const radio = /^analizar horarios(?: de radio)?[.!]?$/i.test(text);
+    const action = pr ? { action: "github_pull_request", prUrl: pr[1] } : radio ? { action: "radio_analysis" } : null;
+    if (action) {
+      const specialist = pr ? { id: "github", name: "GitHub" } : { id: "radio", name: "Radio" };
+      const contactId = contact.id;
+      const append = (messages: ChatMessage[]) => setAgentChats(current => ({ ...current, [contactId]: [...(current[contactId] || []), ...messages] }));
+      const dispatch = contactId === specialist.id ? `${specialist.name} está consultando sus datos.` : `Derivé la consulta a ${specialist.name}. Esperando su resultado.`;
+      append([{ role: "user", text }, { role: "agent", text: dispatch }]);
+      setDirectMessage("");
+      void apiRequest("POST", "/api/agents-office/contact-action", action)
+        .then(response => response.json() as Promise<{ agentId: string; summary: string; checkedAt: string }>)
+        .then(result => {
+          if (result.agentId !== specialist.id || typeof result.summary !== "string" || !Number.isFinite(Date.parse(result.checkedAt))) throw new Error("Invalid receipt");
+          append([{ role: "agent", text: `${result.summary} Comprobado ${new Date(result.checkedAt).toLocaleString()}.` }]);
+        })
+        .catch(() => append([{ role: "agent", text: `${specialist.name} no pudo completar la consulta. Puedes reintentar o abrir su herramienta.` }]));
+      return;
+    }
     const isDevReviewContact = contact.name === "Code" || contact.name === "GitHub" || contact.id === "claude-reviewer";
     const repoContext =
       isDevReviewContact && selectedTarget
         ? `\n\nRepo objetivo: ${selectedTarget.label} (${selectedTarget.repo}).`
         : "";
-    const reply = `Borrador local de orientación; no se ejecutó ningún agente. ${buildAgentReply(contact, `${text}${repoContext}`)}`;
+    const reply = `Este chat no tiene una acción conectada para esa solicitud. Puedes pedir «analizar horarios de radio» o «consultar PR» seguido del enlace. Orientación local: ${buildAgentReply(contact, `${text}${repoContext}`)}`;
     if (isDevReviewContact && targetRepo !== "workspace") {
       setLastRemoteTask(text);
       try { window.localStorage.setItem(
