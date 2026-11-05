@@ -37,6 +37,7 @@ import { AgentsBuilding } from "@/components/agents-building/agents-building";
 import { AgentsOfficeWorld } from "@/components/agents-world-office/agents-office-world";
 import { KongSupervisorPanel } from "@/components/kong-supervisor-panel";
 import { KongOperationsPanel } from "@/components/kong-operations-panel";
+import { KongTeamOffice } from "@/components/kong-team-office";
 import type { AgentLiveStatus } from "@/lib/agent-live-status";
 
 type GitHubOverview = Record<
@@ -1635,6 +1636,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   const [agentChats, setAgentChats] = useState<Record<string, ChatMessage[]>>({});
   const [directMessage, setDirectMessage] = useState("");
   const [editRooms, setEditRooms] = useState(false);
+  const [kongOfficeOpen, setKongOfficeOpen] = useState(false);
   const [officeView, setOfficeView] = useState<OfficeView>(() => {
     if (typeof window === "undefined") return "world";
     try {
@@ -2178,8 +2180,8 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
               <span>Type a command or search...</span>
               <span className="ml-auto rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px]">⌘ K</span>
             </div>
-            {/* On phones the row wraps to the left so it never covers "Trabajo real" (top right). */}
-            <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 lg:shrink-0 lg:justify-end">
+            {/* On phones the row wraps to the left and leaves the top-right corner free for "Trabajo real". */}
+            <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 max-sm:pr-24 lg:shrink-0 lg:justify-end">
               <div className="flex rounded-2xl border border-white/10 bg-[#0c1018]/90 p-1 shadow-xl shadow-black/30" role="group" aria-label="Vista de la oficina">
                 {(["world", "building", "office"] as const).map((view) => (
                   <button
@@ -2201,6 +2203,10 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
               <div data-testid="office-kong-supervisor-slot">
                 <KongSupervisorPanel />
               </div>
+              <button type="button" data-testid="button-kong-office" onClick={() => setKongOfficeOpen(true)} className="rounded-xl border border-lime-300/35 bg-lime-400/10 px-3 py-2 text-xs font-semibold text-lime-100">
+                Oficina KONG
+              </button>
+              {kongOfficeOpen && <KongTeamOffice onClose={() => setKongOfficeOpen(false)} />}
               <div data-testid="office-kong-operations-slot">
                 <KongOperationsPanel />
               </div>
@@ -2270,6 +2276,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
         <div ref={officeMapRef} className="relative h-full min-h-[620px] w-full [perspective:1400px]">
           {officeView === "world" && (
             <AgentsOfficeWorld
+              onOpenKongOffice={() => setKongOfficeOpen(true)}
               agents={agents}
               kongTeam={githubAppTeams.find((team) => team.app === "Kong")?.agents ?? []}
               legal={{ data: legalCompliance, isError: legalComplianceError }}
