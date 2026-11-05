@@ -7,6 +7,7 @@
 // itself: approved items become playbook lessons or PR-first handoff briefs.
 
 import { agentProbes, summarizeProbe, type AgentLiveStatus } from "./agent-live-status";
+import { emptyKongSupervision, parseKongSupervision, type KongSupervision } from "./kong-supervisor";
 import { emptyCompanyState, parseCompanyState, type CompanyState } from "./agent-company";
 
 export type Severity = "low" | "medium" | "high";
@@ -81,6 +82,7 @@ export type ScoutRelease = { repo: string; tag: string; url: string; publishedAt
 
 export type CouncilState = {
   version: 1;
+  kongSupervision: KongSupervision;
   cycles: number;
   lastCycleAt: string | null;
   lastCycleError: string | null;
@@ -117,6 +119,7 @@ export const SCOUT_WATCHLIST: Array<{ repo: string; skills: string[]; why: strin
 export function emptyCouncilState(): CouncilState {
   return {
     version: 1,
+    kongSupervision: emptyKongSupervision(),
     cycles: 0,
     lastCycleAt: null,
     lastCycleError: null,
@@ -165,6 +168,7 @@ export function parseCouncilState(raw: string | null): CouncilState {
       resolvedDebates: Array.isArray(value.resolvedDebates) ? value.resolvedDebates : [],
       scout: { ...base.scout, ...value.scout, lastSeen: obj(value.scout.lastSeen) ? value.scout.lastSeen : {} },
       company: parseCompanyState(value.company),
+      kongSupervision: parseKongSupervision(value.kongSupervision),
       lastStatuses: obj(value.lastStatuses) ? value.lastStatuses : {},
     };
   } catch {

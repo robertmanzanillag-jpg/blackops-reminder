@@ -148,3 +148,38 @@ test("new real agents: Black Room videos, news and Kong videos", () => {
   assert.equal(summarizeProbe(agentProbes["kong-videos"], kong([]), now).state, "needs-setup");
   assert.equal(summarizeProbe(agentProbes["kong-videos"], kong([{ name: "old", modifiedAt: new Date(now - 72 * 3_600_000).toISOString() }]), now).state, "offline");
 });
+
+// Shape of GET /api/clippers/local-news/status (server/clippers-local-news-agent.ts ClipperLocalNewsStatus).
+const localNews = (overrides: Record<string, unknown> = {}) => ({
+  bootstrapped: true,
+  lastRunAt: new Date(Date.parse("2026-11-04T12:00:00Z") - 30 * 60_000).toISOString(),
+  lanes: { "miami-news": { active: 3, resolved: 5, queued: 2 }, "ny-news": { active: 0, resolved: 1, queued: 0 } },
+  editorial: { dailyPublishing: { accounts: {
+    "miami-news": { facebook: { queuedToday: 4, target: 10, deficit: 6 }, x: { queuedToday: 10, target: 10, deficit: 0 } },
+    "ny-news": { facebook: { queuedToday: 10, target: 10, deficit: 0 } },
+  } } },
+  connectors: [{ id: "fl511", lane: "miami-news", configured: false, requiresKey: true, public: false }, { id: "nws", lane: "ny-news", configured: true, requiresKey: false, public: true }],
+  coverage: { miamiTraffic: "not_configured", nyTraffic: "notify_nyc_public" },
+  ...overrides,
+});
+
+test("city desks: each city reports its own work and its own real problems", () => {
+  const now = Date.parse("2026-11-04T12:00:00Z");
+  const miami = summarizeProbe(agentProbes["news:miami-news"], ok(localNews()), now);
+  assert.equal(miami.state, "working");
+  assert.match(miami.label, /3 noticias · 2 en cola/);
+  assert.deepEqual(miami.problems, ["Facebook: 4/10 hoy (faltan 6)", "Fuentes sin configurar: fl511", "Trafico sin cobertura configurada"]);
+  const ny = summarizeProbe(agentProbes["news:ny-news"], ok(localNews()), now);
+  assert.equal(ny.state, "working", "a quiet city with fresh rounds is not a failure");
+  assert.match(ny.label, /Vigilando/);
+  assert.equal(ny.problems, undefined);
+  assert.equal(agentProbes["news:miami-news"].key, agentProbes.news.key, "cities reuse the news request");
+});
+
+test("city desks fail closed: missing city, stale rounds or never bootstrapped are not working", () => {
+  const now = Date.parse("2026-11-04T12:00:00Z");
+  assert.equal(summarizeProbe(agentProbes["news:ny-news"], ok(localNews({ lanes: { "miami-news": { active: 1, resolved: 0, queued: 0 } } })), now).state, "error");
+  assert.equal(summarizeProbe(agentProbes["news:ny-news"], ok(localNews({ lastRunAt: "2026-11-02T00:00:00Z" })), now).state, "needs-setup");
+  assert.equal(summarizeProbe(agentProbes["news:miami-news"], ok(localNews({ bootstrapped: false })), now).state, "needs-setup");
+  assert.equal(summarizeProbe(agentProbes["news:miami-news"], { ok: false, status: 500, body: null }, now).state, "error");
+});
