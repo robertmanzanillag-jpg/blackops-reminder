@@ -57,11 +57,10 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
    const blocked={status:'blocked',reason:'Isolated fixture. No provider connection.',checkedAt:new Date().toISOString()};
    res.json({claude:blocked,kong:blocked,worker:blocked});
   });
-  app.get('/api/agents-office/cities',(_req,res)=>res.json([{id:'fixture-city',name:'Ciudad de prueba',countryCode:'US',timeZone:'America/New_York',currency:'USD'}]));
-  app.get('/api/agents-office/kong-snapshot',(_req,res)=>{
-   const checkedAt=new Date().toISOString();
-   res.json({text:'Isolated read-only fixture',completedAt:checkedAt,evidence:{generatedAt:checkedAt,citySnapshotCheckedAt:checkedAt,cityAgentsEnabled:false,cityCoverageComplete:false,agents:[],cities:[]}});
-  });
+  app.get('/api/agents-office/cities',(_req,res)=>res.json(Array.from({length:25},(_,index)=>({
+   id:'fixture-city-'+(index+1),name:'Ciudad de prueba '+(index+1),countryCode:'US',timeZone:'America/New_York',currency:'USD',
+  }))));
+  app.get('/api/agents-office/kong-snapshot',(_req,res)=>res.status(503).json({error:'Isolated fixture without KONG activity access.'}));
   app.get('/api/agent-council/state',(_req,res)=>res.json({enabled:false,cycles:0,debates:[],proposals:[],overrides:{},scout:{lastRunAt:null,latest:[],error:null}}));
   app.get('/api/app-qa-agent/status',async(req,res)=>res.json(await runtime.runAppQaScan(req.fixtureUserId,false,false,false)));
   app.use('/api',(req,res)=>req.method==='GET'?res.json([]):res.status(403).json({error:'Mutation outside local QA scope'}));
@@ -114,11 +113,22 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   await page.goto(base+'/agents-office');await page.getByLabel('Usuario',{exact:true}).waitFor();
   await loginForm('fixture-member');
   await page.getByTestId('world-kong-wing').click();
-  await page.getByTestId('world-city-country-count').filter({hasText:'1 países · 1 ciudades'}).waitFor();
+  await page.getByTestId('world-city-country-count').filter({hasText:'1 países · 25 ciudades'}).waitFor();
+  await page.getByTestId('world-city-overview-activity-unavailable').waitFor();
+  const cityCards=page.getByTestId('world-city-overview-city');
+  assert.equal(await cityCards.count(),25);
+  await cityCards.filter({hasText:'Ciudad de prueba 25'}).click();
+  assert.equal(await page.getByTestId('world-city-overview').count(),0);
+  const selectedAgents=page.locator('[data-testid^="world-agent-row-kong-city:fixture-city-25:"]');
+  await selectedAgents.first().waitFor();
+  assert.equal(await selectedAgents.count(),7);
+  assert.match(await selectedAgents.first().innerText(),/Sin evidencia/);
+  await page.getByTestId('world-overview').click();
+  assert.equal(await cityCards.count(),25);
+  await page.getByRole('button',{name:'Minimizar todas las ciudades'}).click();
   await page.getByTestId('world-city-controls-toggle').click();
-  await page.getByTestId('world-city-select').selectOption('kong-city:fixture-city');
-  await page.getByTestId('world-city-details-toggle').click();
-  assert.equal(await page.locator('[data-testid^="world-agent-row-kong-city:fixture-city:"]').count(),7);
+  await page.getByTestId('world-city-select').selectOption('kong-city:fixture-city-1');
+  assert.equal(await page.locator('[data-testid^="world-agent-row-kong-city:fixture-city-1:"]').count(),7);
   await page.getByTestId('world-kong-wing').click();
   await openCompany();await company.getByText(/Meta LOCAL · fixture-member/).waitFor();
   await page.getByLabel('Objetivo',{exact:true}).fill('Plan privado del miembro LOCAL');
