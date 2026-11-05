@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-05T03:52:00.916Z
+Generated: 2026-11-05T04:31:01.289Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-04\quioer-qu-echeck-el-trabajo-que\work\office-current`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 723 | 640 | 2215 | 517 | 14429 |
+| 724 | 641 | 2226 | 517 | 14483 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,7 +30,7 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `server` | 147 | 143 | server:147 |
 | `tests` | 143 | 140 | test:143 |
-| `script` | 80 | 75 | script:80 |
+| `script` | 81 | 76 | script:81 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
 | `docs` | 32 | 31 | docs:32 |
@@ -226,7 +226,7 @@ Package: `rest-express`
 - `script/blackroom-worker-ledger.ts` (script; 29 symbols, 4 imports)
 - `script/build-agents-world-client.mjs` (script; 4 imports)
 - `script/build-containment-static.mjs` (script; 7 symbols, 5 imports)
-- `script/build.ts` (script; 12 symbols, 5 imports)
+- `script/build.ts` (script; 12 symbols, 6 imports)
 - `script/cache-local-news-models.mjs` (script; 1 symbols)
 - `script/ceo-db-check.ts` (script; 8 symbols, 3 imports)
 - `script/ceo-doctor.ts` (script; 3 symbols, 1 imports)

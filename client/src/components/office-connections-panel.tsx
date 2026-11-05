@@ -50,7 +50,7 @@ export function OfficeConnectionsPanel() {
         {connections.isError && <p role="alert" className="text-sm text-amber-200">No se pudieron comprobar las conexiones. No se considera conectado ningun agente.</p>}
         {!connections.data && !connections.isError && <p className="text-sm text-slate-300">Comprobando conexiones…</p>}
         {connections.data && (["worker", "claude", "kong"] as const).map(name => <div key={name} className="rounded-xl border border-white/10 p-3">
-          <p className="text-sm font-semibold">{name === "claude" ? "Claude" : name === "kong" ? "KONG" : "Ejecutor"} · {fresh(connections.data[name]) && connections.data[name].status === "ready" ? "Acceso verificado" : "Pendiente de conexion"}</p>
+          <p className="text-sm font-semibold">{name === "claude" ? "Claude" : name === "kong" ? "KONG" : "Ejecutor"} · {fresh(connections.data[name]) && connections.data[name].status === "ready" ? (name === "claude" ? "Inicio de sesion configurado" : name === "worker" ? "Ejecutor responde" : "Acceso verificado") : "Pendiente de conexion"}</p>
           <p className="mt-1 text-xs leading-5 text-slate-300">{connections.data[name].reason}</p>
           <p className="text-[10px] text-slate-500">Comprobado: {new Date(connections.data[name].checkedAt).toLocaleString()}</p>
         </div>)}
@@ -75,7 +75,7 @@ export function OfficeConnectionsPanel() {
         <div className="space-y-2">
           <label htmlFor="office-live-message" className="text-sm">Hablar con Claude</label>
           <textarea id="office-live-message" value={message} onChange={e => setMessage(e.target.value)} maxLength={16000} className="min-h-20 w-full rounded-lg border border-white/15 bg-black/50 p-2 text-sm" placeholder="Escribe una tarea de analisis o una pregunta" />
-          <p className="text-xs text-slate-400">Claude responde de verdad con tu suscripcion. En este flujo analiza texto; no modifica archivos ni envia mensajes.</p>
+          <p className="text-xs text-slate-400">Cada respuesta necesita una sesion real registrada de Claude. Este flujo analiza texto; no modifica archivos ni envia mensajes.</p>
           <Button disabled={!enabled || busy || !message.trim()} onClick={() => mutation.mutate({ kind: "claude_chat", message: message.trim() })}>Enviar a Claude</Button>
         </div>
         <div className="space-y-2">

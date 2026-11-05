@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T03:52:00.916Z",
+  "generatedAt": "2026-11-05T04:31:01.289Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-04\\quioer-qu-echeck-el-trabajo-que\\work\\office-current",
   "packageName": "rest-express",
   "scripts": {
@@ -123,11 +123,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 723,
-    "filesIndexed": 640,
-    "imports": 2215,
+    "filesVisible": 724,
+    "filesIndexed": 641,
+    "imports": 2226,
     "routes": 517,
-    "symbols": 14429
+    "symbols": 14483
   },
   "directories": {
     ".": {
@@ -281,10 +281,10 @@
       }
     },
     "script": {
-      "files": 80,
-      "indexed": 75,
+      "files": 81,
+      "indexed": 76,
       "kinds": {
-        "script": 80
+        "script": 81
       }
     },
     "scripts": {
@@ -6150,6 +6150,7 @@
         "child_process",
         "esbuild",
         "fs/promises",
+        "node:module",
         "vite"
       ],
       "exports": [],
@@ -9726,6 +9727,62 @@
       "routes": []
     },
     {
+      "path": "script/office-postgres-qa.ts",
+      "kind": "script",
+      "imports": [
+        "../server/office-cloud-store",
+        "node:assert/strict",
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:url",
+        "pg"
+      ],
+      "exports": [
+        "runOfficePostgresQa"
+      ],
+      "symbols": [
+        "MARKER",
+        "PORT",
+        "PREFIX",
+        "allowed",
+        "bob",
+        "canonicalRoot",
+        "capabilities",
+        "capabilityTime",
+        "child",
+        "childEnvironment",
+        "claims",
+        "command",
+        "completed",
+        "consume",
+        "data",
+        "duplicate",
+        "exists",
+        "expiredOwner",
+        "first",
+        "identity",
+        "marker",
+        "retained",
+        "retainedTask",
+        "root",
+        "runOfficePostgresQa",
+        "second",
+        "socket",
+        "storeA",
+        "storeB",
+        "task",
+        "temporaryParent",
+        "timer",
+        "user",
+        "verifyOwnedData",
+        "verifyOwnedRoot"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/office-worker.ts",
       "kind": "script",
       "imports": [
@@ -10253,6 +10310,7 @@
         "@shared/agent-company",
         "@shared/agent-council",
         "@shared/agent-live-status",
+        "node:crypto",
         "node:fs/promises",
         "node:path"
       ],
@@ -10289,6 +10347,7 @@
         "cachedSlowRead",
         "checks",
         "claudeMd",
+        "code",
         "collectReal",
         "collectStatusesReal",
         "collected",
@@ -10299,6 +10358,7 @@
         "count",
         "createAgentCouncil",
         "curriculum",
+        "destination",
         "detail",
         "diff",
         "dir",
@@ -10309,6 +10369,7 @@
         "exists",
         "fetchLatestReleaseReal",
         "file",
+        "fileWriteQueues",
         "findings",
         "finishOrder",
         "forAgentId",
@@ -10324,6 +10385,7 @@
         "isAgentCouncilEnabled",
         "iso",
         "job",
+        "key",
         "last",
         "listedInClaudeMd",
         "load",
@@ -10336,9 +10398,11 @@
         "now",
         "online",
         "open",
+        "operation",
         "personalities",
         "placeOrder",
         "plain",
+        "previous",
         "projects",
         "raw",
         "read",
@@ -10348,6 +10412,7 @@
         "remote",
         "remoteModule",
         "remoteQueue",
+        "replaceFileAtomic",
         "response",
         "result",
         "routesModule",
@@ -10358,6 +10423,7 @@
         "safe",
         "schema",
         "setAgentCouncilUser",
+        "settled",
         "slowReads",
         "startAgentCouncilScheduler",
         "state",
@@ -16991,8 +17057,11 @@
         "SAFE_SETTINGS",
         "allowed",
         "auth",
+        "authMode",
         "child",
         "collect",
+        "config",
+        "correctMethod",
         "createOfficeClaude",
         "cwd",
         "executable",
@@ -17001,13 +17070,15 @@
         "now",
         "officeClaude",
         "probe",
+        "probeConfiguredClaude",
         "probeOfficeClaude",
         "result",
         "runOfficeClaude",
         "runner",
         "source",
         "subscriptionEnvironment",
-        "timer"
+        "timer",
+        "value"
       ],
       "routes": []
     },
@@ -21411,6 +21482,7 @@
         "payloads",
         "pending",
         "pruned",
+        "reader",
         "rejectedAt",
         "repairs",
         "repo",
@@ -21426,6 +21498,7 @@
         "stuck",
         "updates",
         "uuid",
+        "value",
         "view",
         "withId"
       ],
@@ -24785,13 +24858,17 @@
       "symbols": [
         "auth",
         "date",
+        "env",
         "fixture",
         "next",
         "office",
         "probe",
         "prompt",
         "record",
-        "success"
+        "subscriptionToken",
+        "success",
+        "tokenAuth",
+        "tokenEnvironment"
       ],
       "routes": []
     },
