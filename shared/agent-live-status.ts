@@ -137,6 +137,10 @@ const PLATFORM_NAMES: Record<string, string> = { facebook: "Facebook", x: "X", i
 
 // Problems come only from fields the agent itself reports; nothing is guessed.
 function extractProblems(probe: AgentProbe, raw: unknown): string[] {
+  if (probe.kind === "blackroom-videos") {
+    const actions = asObject(asObject(raw)?.operations)?.actions;
+    return (Array.isArray(actions) ? actions : []).map((action) => str(asObject(action)?.message) || "").filter(Boolean);
+  }
   if (probe.kind !== "city-news" || !probe.lane) return [];
   const body = asObject(raw);
   const problems: string[] = [];
@@ -236,6 +240,18 @@ export function extractActivity(probe: AgentProbe, raw: unknown, now: number = D
     case "legal":
       return list(body?.reports).map((report) => clip(`${str(report.appName) || "App"}: ${word(report.severity)}`));
     case "blackroom-videos": {
+      const operations = asObject(body?.operations);
+      if (operations) {
+        const worker = asObject(operations.worker);
+        const learning = asObject(operations.learning);
+        return [
+          worker?.online === true ? "Publicador existente conectado; no se crea otro publicador" : "Publicador desconectado: la oficina no puede editar sin el trabajador",
+          ...["tiktok", "facebook", "youtube"].map((network) => {
+            const evidence = asObject(learning?.[network]);
+            return `${network}: ${str(evidence?.status) || "sin evidencia"} · ${num(evidence?.exactAttributed) ?? 0} resultados asociados`;
+          }),
+        ];
+      }
       const totals = asObject(asObject(body?.agent)?.totals);
       const online = asObject(body?.remote)?.online === true;
       return [
@@ -421,6 +437,19 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       };
     }
     case "blackroom-videos": {
+      const operations = asObject(body?.operations);
+      if (operations) {
+        const worker = asObject(operations.worker);
+        const age = now - Date.parse(str(operations.checkedAt) || "");
+        if (!Number.isFinite(age) || age < 0 || age > 90_000) return { state: "needs-setup", label: "Evidencia desactualizada" };
+        if (operations.state === "paused") return { state: "checking", label: "BlackRoom pausado", detail: "Se respeta la pausa; la supervision no inicia publicaciones." };
+        if (worker?.online !== true) return { state: "needs-setup", label: "Publicador desconectado" };
+        if (operations.state === "blocked") return { state: "needs-setup", label: "BlackRoom requiere atencion" };
+        // Activity is visible, but must not earn repeated career points until a
+        // durable, single-use completion receipt is connected to company scoring.
+        if (operations.state === "working" && worker?.processing === true && str(worker.progressEventId)) return { state: "checking", label: "Actividad reciente · resultado pendiente", detail: "No otorga puntos ni declara una publicacion completada." };
+        return { state: "checking", label: "Conectado · sin avance confirmado", detail: "Una cola preparada no demuestra trabajo nuevo ni aprendizaje." };
+      }
       const agent = asObject(body?.agent);
       const totals = asObject(agent?.totals);
       const online = asObject(body?.remote)?.online === true;
@@ -429,7 +458,7 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       if (!online) return { state: "needs-setup", label: "Publicador desconectado", detail: "El dispositivo que sube los videos de Black Room no esta en linea." };
       if ((num(totals.retry) ?? 0) > 0) return { state: "error", label: `${num(totals.retry)} videos reintentando` };
       if (active === 0 && (num(totals.scheduled) ?? 0) === 0) return { state: "offline", label: "Cola vacia", detail: "No hay videos de Black Room pendientes." };
-      return { state: "working", label: `${active} en cola · ${num(totals.scheduled) ?? 0} programados` };
+      return { state: "checking", label: `${active} en cola · avance sin verificar`, detail: "Falta evidencia reciente del trabajador; no se otorgan puntos por tener cola." };
     }
     case "city-news": {
       const last = Date.parse(str(body?.lastRunAt) || "");

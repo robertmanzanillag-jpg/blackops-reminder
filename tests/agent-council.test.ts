@@ -449,7 +449,7 @@ test("paused, external and not-built agents are never penalized, fired or repair
       radio: { state: "working", label: "Programando" },
     }),
     loadCurriculum: async () => [],
-    integrations: () => effectiveIntegrations(),
+    integrations: () => effectiveIntegrations({ "blackroom-videos": "pausada" }),
   });
   const council = createAgentCouncil(fake.deps);
   let state = await council.runCycle();
