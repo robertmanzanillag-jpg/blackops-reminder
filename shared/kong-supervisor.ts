@@ -29,7 +29,8 @@ export function reviewKongReadiness(previous: KongSupervision, statuses: Record<
     if (agentId !== "kong-videos") return { ...base, result: "blocked", reason: "Integracion no conectada a este supervisor. No se ha ejecutado una orden ni evaluado al productor externo." };
     const signal = statuses[agentId];
     if (!signal || signal.state === "checking") return { ...base, result: "blocked", reason: "No hay una lectura de estado disponible en este ciclo." };
-    if (["error", "offline"].includes(signal.state)) return { ...base, result: "failed", reason: "La lectura de estado del servicio de video no esta disponible." };
+    if (signal.state === "offline") return { ...base, result: "blocked", reason: "El servicio informa contenido desactualizado; requiere una entrega reciente." };
+    if (signal.state === "error") return { ...base, result: "failed", reason: "La lectura de estado del servicio de video no esta disponible." };
     if (signal.state === "needs-setup") return { ...base, result: "blocked", reason: "El servicio de video informa dependencias o contenido pendientes." };
     if (signal.state !== "working") return { ...base, result: "blocked", reason: "El servicio no aporta un estado reconocido." };
     return { ...base, result: "completed", reason: "Revision de disponibilidad completada con una lectura del servicio. No se produjo ni publico contenido." };
