@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-05T00:18:27.086Z",
-  "repoRoot": "/private/tmp/br-manual-reconciliation",
+  "generatedAt": "2026-11-05T00:25:27.921Z",
+  "repoRoot": "/private/tmp/br-release-integration",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -122,32 +122,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 664,
-    "filesIndexed": 581,
-    "imports": 1990,
+    "filesVisible": 669,
+    "filesIndexed": 586,
+    "imports": 2005,
     "routes": 495,
-    "symbols": 13087
+    "symbols": 13125
   },
   "directories": {
     "docs": {
-      "files": 33,
-      "indexed": 32,
+      "files": 34,
+      "indexed": 33,
       "kinds": {
-        "docs": 33
-      }
-    },
-    "server": {
-      "files": 136,
-      "indexed": 132,
-      "kinds": {
-        "server": 136
-      }
-    },
-    "tests": {
-      "files": 122,
-      "indexed": 119,
-      "kinds": {
-        "test": 122
+        "docs": 34
       }
     },
     ".": {
@@ -216,10 +202,10 @@
       }
     },
     "script": {
-      "files": 78,
-      "indexed": 73,
+      "files": 79,
+      "indexed": 74,
       "kinds": {
-        "script": 78
+        "script": 79
       }
     },
     "scripts": {
@@ -227,6 +213,13 @@
       "indexed": 1,
       "kinds": {
         "script": 4
+      }
+    },
+    "server": {
+      "files": 137,
+      "indexed": 133,
+      "kinds": {
+        "server": 137
       }
     },
     "server/replit_integrations": {
@@ -248,6 +241,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 124,
+      "indexed": 121,
+      "kinds": {
+        "test": 124
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -3942,6 +3942,14 @@
       "routes": []
     },
     {
+      "path": "docs/blackroom-release-integration.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/ceo-assistant-go-live-task.md",
       "kind": "docs",
       "imports": [],
@@ -4775,6 +4783,7 @@
         "./blackroom-metricool-csv-bridge.mjs",
         "./blackroom-metricool-exporter.mjs",
         "./blackroom-remote-sync.mjs",
+        "./organic-peer-scout.mjs",
         "node:child_process",
         "node:crypto",
         "node:fs/promises",
@@ -4850,6 +4859,7 @@
         "server",
         "start",
         "state",
+        "stopScout",
         "stopWorker",
         "syncAutomaticAnalytics",
         "syncMetricoolCsvExports",
@@ -8911,6 +8921,42 @@
       "routes": []
     },
     {
+      "path": "script/organic-peer-scout.mjs",
+      "kind": "script",
+      "imports": [
+        "../server/organic-peer-hypotheses.mjs",
+        "node:child_process",
+        "node:fs/promises",
+        "node:path",
+        "node:util"
+      ],
+      "exports": [
+        "SOURCES",
+        "refreshOrganicPeerScout",
+        "startOrganicPeerScout"
+      ],
+      "symbols": [
+        "SOURCES",
+        "channel",
+        "collect",
+        "controller",
+        "data",
+        "elapsed",
+        "exec",
+        "file",
+        "inFlight",
+        "observations",
+        "refreshOrganicPeerScout",
+        "report",
+        "startOrganicPeerScout",
+        "temp",
+        "tick",
+        "timer",
+        "work"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/radio-local-worker.ts",
       "kind": "script",
       "imports": [
@@ -10559,6 +10605,7 @@
         "buildBlackRoomYtDlpAuthArgs",
         "buildBlackRoomYtDlpWindowArgs",
         "commitBlackRoomReservation",
+        "downloadBlackRoomWindowWithFallback",
         "extractBlackRoomDj",
         "findBlackRoomDropOffset",
         "isOwnedBlackRoomMetadata",
@@ -10600,8 +10647,10 @@
         "dayNumber",
         "daypart",
         "decisions",
+        "diagnostic",
         "distributedSlotSelected",
         "dj",
+        "downloadBlackRoomWindowWithFallback",
         "durationSeconds",
         "durationStudy",
         "durations",
@@ -15893,6 +15942,28 @@
         "OPENAI_TRANSCRIPTION_MODEL",
         "apiKey",
         "getOpenAIClient"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/organic-peer-hypotheses.mjs",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "buildOrganicPeerHypotheses"
+      ],
+      "symbols": [
+        "buildOrganicPeerHypotheses",
+        "cutoff",
+        "durations",
+        "eligible",
+        "evidence",
+        "key",
+        "medianSeconds",
+        "observed",
+        "rows",
+        "seen",
+        "u"
       ],
       "routes": []
     },
@@ -22518,6 +22589,42 @@
         "nyNews",
         "plan",
         "ready"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/organic-peer-hypotheses.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../server/organic-peer-hypotheses.mjs",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "now",
+        "row"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/organic-peer-scout.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/organic-peer-scout.mjs",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "c",
+        "dir",
+        "r",
+        "run",
+        "stop"
       ],
       "routes": []
     },

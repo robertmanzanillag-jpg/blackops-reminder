@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-05T00:18:27.086Z
-Repo: `/private/tmp/br-manual-reconciliation`
+Generated: 2026-11-05T00:25:27.921Z
+Repo: `/private/tmp/br-release-integration`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 664 | 581 | 1990 | 495 | 13087 |
+| 669 | 586 | 2005 | 495 | 13125 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 136 | 132 | server:136 |
-| `tests` | 122 | 119 | test:122 |
+| `server` | 137 | 133 | server:137 |
+| `tests` | 124 | 121 | test:124 |
 | `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
-| `script` | 78 | 73 | script:78 |
+| `script` | 79 | 74 | script:79 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 33 | 32 | docs:33 |
+| `docs` | 34 | 33 | docs:34 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `.agents/memory` | 5 | 5 | docs:5 |
@@ -187,7 +187,7 @@ Package: `rest-express`
 - `client/src/pages/revenue-engine-simple.tsx` (client-page; 33 symbols, 7 imports)
 - `client/src/pages/tools.tsx` (client-page; 2 symbols, 6 imports)
 - `package.json` (package)
-- `script/blackroom-control-server.mjs` (script; 78 symbols, 10 imports)
+- `script/blackroom-control-server.mjs` (script; 79 symbols, 11 imports)
 - `script/blackroom-daily-agent.ts` (script; 16 symbols, 2 imports)
 - `script/blackroom-deterministic-editor.ts` (script; 60 symbols, 8 imports)
 - `script/blackroom-local-evidence.ts` (script; 30 symbols, 10 imports)
