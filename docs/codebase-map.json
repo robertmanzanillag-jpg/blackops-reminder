@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T10:05:49.619Z",
+  "generatedAt": "2026-11-05T10:57:10.420Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-04\\quioer-qu-echeck-el-trabajo-que\\work\\office-current",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 652,
     "imports": 2259,
     "routes": 524,
-    "symbols": 14778
+    "symbols": 14780
   },
   "directories": {
     ".local/office-evidence": {
@@ -720,6 +720,7 @@
         "AgentsOfficeWorld",
         "CompanyView",
         "PanelAgent",
+        "activeCityAgents",
         "activeCityCountry",
         "career",
         "changeWing",
@@ -1580,6 +1581,7 @@
         "nextExpiry",
         "pending",
         "probe",
+        "qualityChecks",
         "response",
         "runs",
         "signature",
@@ -21375,6 +21377,7 @@
         "zod"
       ],
       "exports": [
+        "OFFICE_KONG_CITY_TASKS",
         "OFFICE_KONG_SCORE_DEDUCTIONS",
         "OFFICE_KONG_SUPERVISED_CATEGORIES",
         "OfficeKongCategoryScore",

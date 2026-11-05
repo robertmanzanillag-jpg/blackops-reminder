@@ -130,7 +130,8 @@ export function AgentsOfficeWorld({
   const activeCityCountry = cityCountries.some(country => country.code === cityCountry) ? cityCountry : "";
   const filteredCityRooms = activeCityCountry ? cityRooms.filter(room => room.city.countryCode === activeCityCountry) : cityRooms;
   const selectedCity = filteredCityRooms.find(room => room.id === focusedDepartment);
-  const cityRunning = cityRooms.reduce((count, room) => count + room.agents.filter(agent => agent.status.state === "working").length, 0);
+  const activeCityAgents = cityRooms.flatMap(room => room.agents.filter(agent => agent.status.state === "working"));
+  const cityRunning = activeCityAgents.length;
   const cityRegistered = cityRooms.reduce((count, room) => count + room.agents.filter(agent => agent.hasDurableEvidence).length, 0);
   const changeWing = (wing: "main" | "kong") => {
     setOfficeWing(wing); setFocusedDepartment(null); setPanelAgentId(null); setOverlay("none");
@@ -367,6 +368,14 @@ export function AgentsOfficeWorld({
         </div>
         <p className={cn("mt-1 font-black text-white", officeWing === "kong" ? "text-sm" : "text-lg sm:text-2xl")} data-testid="world-working-count">{officeWing === "kong" ? `${cityRooms.length * 7} puestos · ${cityRunning} en ejecución verificada` : `${workingCount} de ${companyIds.length} con señales operativas`}</p>
         {officeWing === "kong" && <p className="mt-1 text-[11px] text-zinc-300" data-testid="world-city-country-count">{cityCountries.length} países · {cityRooms.length} ciudades · colores por país</p>}
+        {officeWing === "kong" && activeCityAgents.length > 0 && <ul aria-label="Trabajos en curso verificados" className="mt-2 space-y-1" data-testid="world-city-active-work">
+          {activeCityAgents.map(agent => <li key={agent.id}>
+            <button type="button" className="pointer-events-auto w-full rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2 py-1.5 text-left text-[11px] text-emerald-100 hover:bg-emerald-400/20" onClick={() => { openCityFromOverview(`kong-city:${agent.cityId}`); setPanelAgentId(agent.id); }}>
+              <strong className="block">{agent.cityName} · {agent.role}</strong>
+              <span>{agent.status.detail}</span>
+            </button>
+          </li>)}
+        </ul>}
         {officeWing === "kong" && citySnapshot.isError && <p role="status" className="mt-1 text-[11px] text-amber-200" data-testid="world-city-activity-unavailable">Actividad de KONG sin conectar.</p>}
         {officeWing === "kong" && failed && <p role="status" className="mt-1 text-[11px] text-zinc-300" data-testid="world-city-map-fallback">Mapa 3D no disponible. Usa la lista de ciudades.</p>}
         {officeWing === "kong" && !cityRooms.length && <p role="status" className="mt-1 text-[11px] text-zinc-300">{cityDirectory.isLoading ? "Consultando el directorio de KONG…" : "Directorio de ciudades no disponible."}</p>}

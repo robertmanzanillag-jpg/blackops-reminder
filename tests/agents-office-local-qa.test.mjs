@@ -115,6 +115,7 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   await page.getByTestId('world-kong-wing').click();
   await page.getByTestId('world-city-country-count').filter({hasText:'1 países · 25 ciudades'}).waitFor();
   await page.getByTestId('world-city-activity-unavailable').waitFor();
+  assert.equal(await page.getByTestId('world-city-active-work').count(),0);
   const cityMarkers=page.locator('[data-testid^="world-dept-kong-city:"]');
   const mapFallback=page.getByTestId('world-city-map-fallback');
   await cityMarkers.first().or(mapFallback).waitFor();
@@ -159,6 +160,21 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   await page.getByTestId('world-city-controls-toggle').click();
   await page.getByTestId('world-city-select').selectOption('kong-city:fixture-city-1');
   assert.equal(await page.locator('[data-testid^="world-agent-row-kong-city:fixture-city-1:"]').count(),7);
+  const liveSnapshot = '**/api/agents-office/kong-snapshot';
+  await page.route(liveSnapshot, route => {
+   const now=Date.now();
+   return route.fulfill({json:{evidence:{generatedAt:new Date(now).toISOString(),cityAgentsEnabled:true,cities:[{
+    id:'fixture-city-1',name:'Ciudad de prueba 1',countryCode:'US',timeZone:'America/New_York',currency:'USD',categories:[{
+     category:'media',state:'running',evidence:'persisted',lastRunAt:null,lastSuccessAt:null,lastStartedAt:new Date(now-1000).toISOString(),nextRunAt:null,leaseUntil:new Date(now+90000).toISOString(),issues:[],
+    }],
+   }]}}});
+  });
+  await page.reload();
+  await page.getByTestId('world-kong-wing').click();
+  const runningWork=page.getByTestId('world-city-active-work');
+  await runningWork.getByRole('button',{name:/Ciudad de prueba 1.*Fotos y media.*Audita imágenes/}).click();
+  await page.getByTestId('world-agent-card').getByText('Ciudad de prueba 1 · Fotos y media',{exact:true}).waitFor();
+  await page.unroute(liveSnapshot);
   await page.getByTestId('world-kong-wing').click();
   await openCompany();await company.getByText(/Meta LOCAL · fixture-member/).waitFor();
   await page.getByLabel('Objetivo',{exact:true}).fill('Plan privado del miembro LOCAL');

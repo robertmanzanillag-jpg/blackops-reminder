@@ -32,6 +32,7 @@ test("fresh evidence animates only running jobs; completed jobs are distinct and
   const jobs = rooms[0].agents;
   assert.deepEqual(jobs.filter(agent => agent.status.state === "working").map(agent => agent.category), ["clubs"]);
   assert.equal(jobs[0].lastStartedAt, stamp(-100000));
+  assert.equal(jobs[0].status.detail, "Comprueba fuentes y fichas de clubes");
   assert.equal(jobs[1].status.label, "Completado · no ejecutando");
   assert.equal(jobs[1].status.state, "offline");
   assert.equal(jobs[1].lastWorkAt, stamp(-90000));

@@ -7,6 +7,15 @@ export const officeKongEventLoadSchema = z.object({
 }).refine(value => (value.upcomingEvents === null) === (value.checkedAt === null));
 
 export const OFFICE_KONG_SUPERVISED_CATEGORIES = ["clubs", "vip", "restaurants", "events", "sports", "experiences", "media"] as const;
+export const OFFICE_KONG_CITY_TASKS: Record<typeof OFFICE_KONG_SUPERVISED_CATEGORIES[number], string> = {
+  clubs: "Comprueba fuentes y fichas de clubes",
+  vip: "Verifica canales oficiales para reservas VIP",
+  restaurants: "Comprueba fuentes y fichas de restaurantes",
+  events: "Consulta calendarios oficiales y actualiza eventos verificables",
+  sports: "Consulta calendarios de equipos y partidos locales",
+  experiences: "Busca y comprueba fichas de experiencias locales",
+  media: "Audita imágenes y flyers contra la fuente del evento",
+};
 export const OFFICE_KONG_SCORE_DEDUCTIONS = { failed: 25, stale: 20, missed: 15, completed_with_warnings: 5 } as const;
 const MAX_SNAPSHOT_AGE_MS = 5 * 60_000;
 const MAX_CLOCK_SKEW_MS = 30_000;
