@@ -193,8 +193,12 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
    await page.getByTestId('world-ceo-orb').filter({hasText:'CEO · ORQUESTADOR'}).waitFor();
    await page.getByTestId('world-ceo-orb').click();
    const director=page.getByTestId('world-city-director-panel');
-   await director.getByText('Sin evidencia vigente para asignar puntos o proponer relevos.').waitFor();
+   await director.waitFor();
+   // A fresh snapshot can contain no scoreable jobs. It must not invent points.
+   assert.equal(await director.getByText(/Puntos del equipo|Puntaje parcial/).count(),0);
    assert.equal(await director.getByRole('listitem').count(),7);
+   assert.equal(await director.getByRole('listitem').filter({hasText:'Sin puntuación'}).count(),7);
+   await director.getByText('Relevos propuestos · 0',{exact:true}).waitFor();
    await director.getByRole('button',{name:'Cerrar',exact:true}).click();
    assert.equal(await page.locator('[data-testid^="world-avatar-kong-city:"]').count(),0);
    await page.getByTestId('world-dept-kong-city:fixture-city-25').click();
@@ -309,6 +313,6 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   await writeFile(path.join(evidenceDir,'integrated-app-qa-local.json'),JSON.stringify({scope:'LOCAL memory fixtures; no production DB, GitHub or telemetry certified',passive,visual,pendingVisual,requests},null,2));
   assert.equal(visual.status,'pass',JSON.stringify(visual.findings));assert.deepEqual(visual.visualScans.flatMap(s=>s.consoleErrors),[]);
  } finally {
-  if(browser)await browser.close();if(server)await new Promise(resolve=>server.close(resolve));for(const [k,v]of previous){if(v===undefined)delete process.env[k];else process.env[k]=v;}delete globalThis.__officeLocalStorage;delete globalThis.__officeLocalBase;await rm(temp,{recursive:true,force:true});
+  if(browser)await browser.close();if(server)await new Promise(resolve=>{server.close(resolve);server.closeAllConnections();});for(const [k,v]of previous){if(v===undefined)delete process.env[k];else process.env[k]=v;}delete globalThis.__officeLocalStorage;delete globalThis.__officeLocalBase;await rm(temp,{recursive:true,force:true});
  }
 });
