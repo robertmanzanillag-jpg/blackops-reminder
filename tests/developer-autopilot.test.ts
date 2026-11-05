@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { OfficeRun } from "../server/office-runtime";
 import {
   DEVELOPER_AUTOPILOT_POLICY,
   buildCodexDispatchComment,
@@ -14,6 +15,14 @@ import {
   parseDeveloperAutopilotRequest,
   parseSubscriptionHandoffRequest,
 } from "../server/developer-autopilot";
+
+function verifiedClaudeReview(prUrl: string, headSha = "a".repeat(40)): OfficeRun {
+  return {
+    id: "aaaaaaaa-aaaa-4aaa-aaaa-aaaaaaaaaaaa", key: "bbbbbbbb-bbbb-4bbb-bbbb-bbbbbbbbbbbb",
+    kind: "claude_review", status: "completed", createdAt: new Date().toISOString(), completedAt: new Date().toISOString(),
+    sessionId: "claude-session", review: { prUrl, headSha, diffSha256: "f".repeat(64), verdict: "pass", findings: [], summary: "No blockers" },
+  };
+}
 
 test("developer autopilot policy is PR-first and subscription-based", () => {
   assert.equal(DEVELOPER_AUTOPILOT_POLICY.codexBillingMode, "chatgpt_subscription");
@@ -59,7 +68,7 @@ test("release gate requires all App QA subagents to pass and still blocks Replit
         { id: "api-scout", name: "API Scout", status: "pass", summary: "ok", checked: 1, findings: [] },
       ],
     },
-    { prUrl: "https://github.com/robert/asistente/pull/12" },
+    { prUrl: "https://github.com/robert/asistente/pull/12", prHeadSha: "a".repeat(40), prDiffSha256: "f".repeat(64), claudeReview: verifiedClaudeReview("https://github.com/robert/asistente/pull/12") },
   );
 
   assert.equal(gate.status, "pass");
@@ -176,10 +185,30 @@ test("release gate passes required App QA target only with matching visual scan"
     {
       prUrl: "https://github.com/robert/client-site/pull/2",
       requiredTargetContext,
+      prHeadSha: "a".repeat(40),
+      prDiffSha256: "f".repeat(64),
+      claudeReview: verifiedClaudeReview("https://github.com/robert/client-site/pull/2"),
     },
   );
 
   assert.equal(gate.status, "pass");
+});
+
+test("release gate rejects missing, stale and changed-head Claude evidence", () => {
+  const prUrl = "https://github.com/robert/asistente/pull/12";
+  const scan = { failCount: 0, warnCount: 0, summary: "QA passed", subAgents: [{ id: "route-scout", name: "Route Scout", status: "pass" as const, summary: "ok", checked: 1, findings: [] }] };
+  const review = verifiedClaudeReview(prUrl);
+  const cases = [
+    undefined,
+    { ...review, completedAt: new Date(Date.now() - 90_000_000).toISOString() },
+    { ...review, review: { ...review.review!, headSha: "b".repeat(40) } },
+    { ...review, review: { ...review.review!, findings: ["A blocker was found"] } },
+  ];
+  for (const claudeReview of cases) {
+    const gate = evaluateDeveloperReleaseGate(scan, { prUrl, prHeadSha: "a".repeat(40), prDiffSha256: "f".repeat(64), claudeReview });
+    assert.equal(gate.canSendForApproval, false);
+    assert.match(gate.reasons.join(" "), /verified Claude review/);
+  }
 });
 
 test("release gate blocks required App QA target when visual scan was skipped", () => {
