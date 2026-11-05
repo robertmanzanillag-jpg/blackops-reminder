@@ -53,6 +53,7 @@ export type AppQaRouteProbe = {
     activationControls?: string[];
   }>;
   visualTextTabs?: string[];
+  visualDisclosure?: { buttonName: string; panelSelector: string };
   status: AppQaStatus;
   notes: string[];
 };
@@ -230,7 +231,7 @@ const LOCAL_ROUTE_MAP: AppQaRouteProbe[] = [
   { path: "/assistant", label: "Assistant", expectedClicks: ["Enviar mensaje"], status: "pass", notes: [] },
   { path: "/ceo", label: "CEO Dashboard", expectedClicks: ["Approvals", "Salud operacional"], status: "pass", notes: [] },
   { path: "/tools", label: "Tools", expectedClicks: ["Abrir herramienta", "Ajustes"], status: "pass", notes: [] },
-  { path: "/agents-office", label: "Agents Office", expectedClicks: ["Dirección", "Ingeniería", "Contratar scout simulado", "Guardar", "Avanzar un día"], status: "pass", notes: [] },
+  { path: "/agents-office", label: "Agents Office", expectedClicks: ["Dirección", "Ingeniería", "Contratar scout simulado", "Guardar", "Avanzar un día"], visualDisclosure: { buttonName: "Abrir Company World · simulación de departamentos (sin gasto real)", panelSelector: "#company-world .company-office" }, status: "pass", notes: [] },
   { path: "/projects", label: "Apps / Projects", expectedClicks: ["Agregar proyecto", "Check manual"], status: "pass", notes: [] },
   { path: "/cybersecurity-agent", label: "Cybersecurity Agent", expectedClicks: ["Escanear", "Importar apps"], status: "pass", notes: [] },
   { path: "/legal-compliance", label: "Legal Compliance", expectedClicks: ["Ver reportes"], status: "pass", notes: [] },
@@ -988,6 +989,14 @@ async function collectVisualRouteTextSnapshots(page: any, route: AppQaRouteProbe
   };
 
   await readBody("initial");
+  if (route.visualDisclosure) {
+    const disclosure = page.getByRole("button", { name: route.visualDisclosure.buttonName, exact: true });
+    if (await disclosure.count()) {
+      await disclosure.click({ timeout: 5000 });
+      await page.locator(route.visualDisclosure.panelSelector).waitFor({ state: "visible", timeout: 5000 });
+      await readBody(route.visualDisclosure.buttonName);
+    }
+  }
   for (const tabLabel of route.visualTextTabs || []) {
     const tab = page.getByRole("tab", { name: tabLabel }).first();
     if (!(await tab.count().catch(() => 0))) continue;

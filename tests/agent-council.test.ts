@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readdir, rmdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -343,6 +343,44 @@ test("atomic file writes: 50 concurrent writes all succeed and the file is alway
   assert.equal(results.filter((r) => r.status === "rejected").length, 0);
   const saved = parseCouncilState(await readFile(file, "utf8"));
   assert.ok(saved.cycles >= 0 && saved.cycles < 50);
+  assert.equal(saved.cycles, 49, "the last submitted state must be the final replacement");
+  assert.deepEqual(await readdir(dir), ["state.json"], "successful replacements leave no temporary files");
+});
+
+test("polling readers never observe missing or partial JSON during concurrent replacements", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "council-read-write-"));
+  const file = path.join(dir, "state.json");
+  await writeFileAtomic(file, JSON.stringify({ value: -1 }));
+  let done = false;
+  let reads = 0;
+  const reader = (async () => {
+    while (!done) {
+      const value = JSON.parse(await readFile(file, "utf8"));
+      assert.equal(typeof value.value, "number");
+      reads++;
+      // Polling leaves the handle closed between reads. A Windows process that
+      // continuously reopens/locks a file can legitimately exhaust bounded
+      // replacement retries; writers must report that lock instead of deleting.
+      await new Promise(resolve => setTimeout(resolve, 2));
+    }
+  })();
+  try {
+    await Promise.all(Array.from({ length: 50 }, (_, value) => writeFileAtomic(file, JSON.stringify({ value }))));
+  } finally { done = true; await reader; }
+  assert.ok(reads > 0);
+  assert.deepEqual(JSON.parse(await readFile(file, "utf8")), { value: 49 });
+});
+
+test("failed atomic replacement cleans its temporary file and does not poison later writes", async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), "council-write-recovery-"));
+  const file = path.join(dir, "state.json");
+  await mkdir(file); // A directory is an intentionally invalid file destination.
+  await assert.rejects(writeFileAtomic(file, JSON.stringify({ value: 1 })));
+  assert.deepEqual(await readdir(dir), ["state.json"]);
+  await rmdir(file);
+  await writeFileAtomic(file, JSON.stringify({ value: 2 }));
+  assert.deepEqual(JSON.parse(await readFile(file, "utf8")), { value: 2 });
+  assert.deepEqual(await readdir(dir), ["state.json"]);
 });
 
 test("company over 4 days: repairs stay bounded, never for exempt agents, mechanic is not ranked", async () => {
