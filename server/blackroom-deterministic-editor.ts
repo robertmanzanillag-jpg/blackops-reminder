@@ -413,13 +413,13 @@ export function isOwnedBlackRoomMetadata(metadata: { channel_id?: unknown; uploa
     || String(metadata.uploader_id || "").toLowerCase() === BLACKROOM_CHANNEL_HANDLE.toLowerCase();
 }
 
-export function buildBlackRoomYtDlpWindowArgs(plan: BlackRoomEditPlan, sourcePath: string, temporaryDirectory: string): string[] {
+export function buildBlackRoomYtDlpWindowArgs(plan: BlackRoomEditPlan, sourcePath: string, temporaryDirectory: string, client: "web_safari" | "default" = "web_safari"): string[] {
   return [
     plan.videoUrl,
     // YouTube currently requires a GVS PO token for the default web_creator
     // HTTPS formats. web_safari exposes HLS variants that remain compatible
     // with partial ffmpeg downloads while preserving 1080p video and audio.
-    "--extractor-args", "youtube:player_client=web_safari",
+    ...(client === "web_safari" ? ["--extractor-args", "youtube:player_client=web_safari"] : []),
     "--download-sections", `*${plan.windowStartSeconds}-${plan.windowEndSeconds}`,
     "--force-keyframes-at-cuts", "-f", "bestvideo*[height<=1080]+bestaudio/best[height<=1080]",
     // A network stall must fail fast so the local worker can retry the slot instead
@@ -428,6 +428,22 @@ export function buildBlackRoomYtDlpWindowArgs(plan: BlackRoomEditPlan, sourcePat
     "--merge-output-format", "mp4", "--no-playlist", "--no-warnings", "--force-overwrites",
     "--paths", `temp:${temporaryDirectory}`, "-o", sourcePath,
   ];
+}
+
+/** Retry only format negotiation, before any media is selected or downloaded. */
+export async function downloadBlackRoomWindowWithFallback(
+  plan: BlackRoomEditPlan, sourcePath: string, temporaryDirectory: string, authArgs: string[],
+  run: (args: string[]) => Promise<unknown>,
+): Promise<void> {
+  try {
+    await run([...authArgs, ...buildBlackRoomYtDlpWindowArgs(plan, sourcePath, temporaryDirectory)]);
+  } catch (error) {
+    const diagnostic = String((error as { stderr?: unknown } | null)?.stderr ?? error);
+    if (!/Requested format is not available/i.test(diagnostic)) throw error;
+    // Public channel ownership has already been verified by the caller. Let yt-dlp
+    // negotiate current public clients without injecting Chrome or user config.
+    await run(["--ignore-config", ...buildBlackRoomYtDlpWindowArgs(plan, sourcePath, temporaryDirectory, "default")]);
+  }
 }
 
 export function buildBlackRoomRenderArgs(

@@ -7,7 +7,7 @@ import {
   BLACKROOM_CHANNEL_VIDEOS_URL,
   buildBlackRoomYtDlpAuthArgs,
   buildBlackRoomRenderArgs,
-  buildBlackRoomYtDlpWindowArgs,
+  downloadBlackRoomWindowWithFallback,
   commitBlackRoomReservation,
   findBlackRoomDropOffset,
   parseBlackRoomEnergySamples,
@@ -120,12 +120,8 @@ function mediaStem(plan: BlackRoomEditPlan): string {
 
 async function downloadWindow(plan: BlackRoomEditPlan, sourcePath: string, temporaryDirectory: string): Promise<void> {
   await appendActivity(`Descargando una ventana parcial de ${plan.dj} en 1080p con audio.`, "descarga");
-  await run(
-    ytDlpPath,
-    [...ytDlpAuthArgs, ...buildBlackRoomYtDlpWindowArgs(plan, sourcePath, temporaryDirectory)],
-    128 * 1024 * 1024,
-    ytDlpTimeoutMs,
-  );
+  await downloadBlackRoomWindowWithFallback(plan, sourcePath, temporaryDirectory, ytDlpAuthArgs,
+    (args) => run(ytDlpPath, args, 128 * 1024 * 1024, ytDlpTimeoutMs));
   const info = await stat(sourcePath);
   if (!info.isFile() || info.size <= 0) throw new Error("yt-dlp produced an empty BlackRoom source window");
 }

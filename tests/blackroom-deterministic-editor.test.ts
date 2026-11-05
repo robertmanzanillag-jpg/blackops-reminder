@@ -7,6 +7,7 @@ import {
   buildBlackRoomRenderArgs,
   buildBlackRoomYtDlpAuthArgs,
   buildBlackRoomYtDlpWindowArgs,
+  downloadBlackRoomWindowWithFallback,
   commitBlackRoomReservation,
   extractBlackRoomDj,
   findBlackRoomDropOffset,
@@ -614,6 +615,27 @@ test("command builders keep downloads partial and renders platform-compatible", 
 test("YouTube downloads use the local Chrome session by default and can be disabled", () => {
   assert.deepEqual(buildBlackRoomYtDlpAuthArgs(), ["--cookies-from-browser", "chrome"]);
   assert.deepEqual(buildBlackRoomYtDlpAuthArgs("none"), []);
+});
+
+test("retry unavailable formats once with public default clients and the same audio and window requirements", async () => {
+  const plan = { videoUrl: "https://www.youtube.com/watch?v=owned", windowStartSeconds: 20, windowEndSeconds: 65 } as any;
+  const calls: string[][] = [];
+  await downloadBlackRoomWindowWithFallback(plan, "/source.mp4", "/tmp/work", ["--cookies-from-browser", "chrome"], async args => {
+    calls.push(args);
+    if (calls.length === 1) throw Object.assign(new Error("yt-dlp failed"), { stderr: "ERROR: Requested format is not available." });
+  });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[1], ["--ignore-config", ...calls[0].filter(v => !["--cookies-from-browser", "chrome", "--extractor-args", "youtube:player_client=web_safari"].includes(v))]);
+  assert.ok(calls[1].includes("*20-65"));
+  assert.ok(calls[1].includes("bestvideo*[height<=1080]+bestaudio/best[height<=1080]"));
+  for (const [message, expectedCalls] of [["disk full", 1], ["Requested format is not available", 2]] as const) {
+    let attempts = 0;
+    await assert.rejects(downloadBlackRoomWindowWithFallback(plan, "/source.mp4", "/tmp/work", [], async () => {
+      attempts++;
+      throw new Error(message);
+    }), new RegExp(message));
+    assert.equal(attempts, expectedCalls);
+  }
 });
 
 test("owned-source validation accepts only the official BlackRoom channel", () => {
