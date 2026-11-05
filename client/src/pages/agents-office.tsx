@@ -504,156 +504,6 @@ const agentById = agents.reduce<Record<AgentId, Agent>>((lookup, agent) => {
   return lookup;
 }, {} as Record<AgentId, Agent>);
 
-function buildRadioAgentReply(contact: OfficeContact, message: string): string {
-  const text = message.toLowerCase();
-  const opener =
-    contact.station.toLowerCase().includes("black room")
-      ? "Black Room activo. "
-      : `Estoy en ${contact.station}, Black Room activo. `;
-  const asksForNext = "Dime fecha, venue, hora, DJ/artista y que asset tienes listo, y te lo devuelvo como plan de publicacion.";
-
-  if (text.includes("hola") || text.includes("hey") || text.includes("buenas")) {
-    return `${opener}Estoy aqui. Puedo ayudarte con evento, flyer, copy, calendario, DJs, video o recordatorios. ${asksForNext}`;
-  }
-
-  if (text.includes("publicar") || text.includes("caption") || text.includes("copy") || text.includes("instagram")) {
-    return `${opener}Te puedo escribir el caption. Base recomendada: una linea con energia, fecha/venue, lineup o detalle fuerte, CTA para RSVP/DM, y hashtags minimos. Pasame el nombre del evento y te hago 2 versiones: elegante y agresiva.`;
-  }
-
-  if (text.includes("flyer") || text.includes("arte") || text.includes("diseño") || text.includes("diseno") || text.includes("post")) {
-    return `${opener}Para el flyer haria esto: 1) confirmar lineup y venue, 2) definir formato IG post/story, 3) preparar copy corto, 4) revisar que fecha/hora/precio esten visibles, 5) dejarlo listo para publicar. Si me pasas los detalles, te escribo el copy y checklist.`;
-  }
-
-  if (text.includes("dj") || text.includes("lineup") || text.includes("slot") || text.includes("artista")) {
-    return `${opener}Para DJs/slots necesito separar confirmados, pendientes y huecos. Mandame los nombres o horarios que tienes y te respondo con una lista tipo: confirmado, falta confirmar, mensaje para mandar y siguiente accion.`;
-  }
-
-  if (text.includes("calendario") || text.includes("calendar") || text.includes("fecha") || text.includes("evento")) {
-    return `${opener}Lo organizo como calendario: fecha, venue, responsables, assets, posts pendientes y recordatorios. Si el evento ya existe, dime cual; si es nuevo, mandame fecha/hora/venue y lo convierto en tareas claras.`;
-  }
-
-  if (text.includes("video") || text.includes("reel") || text.includes("clip") || text.includes("tiktok")) {
-    return `${opener}Para video/reel prepararia: hook de 2 segundos, nombre del evento visible, cortes rapidos, CTA final y version 9:16. Si tienes video base o flyer, dime cual y te armo instrucciones de edicion.`;
-  }
-
-  if (text.includes("que falta") || text.includes("pendiente") || text.includes("todo") || text.includes("checklist")) {
-    return `${opener}Checklist Radio: confirmar fecha/venue, cerrar lineup, revisar flyer, escribir copy, preparar story, programar post, avisar a DJs/promoters y revisar el dia antes. Si me dices el evento, te marco exactamente que falta.`;
-  }
-
-  return `${opener}Si lo que quieres es "${message.trim()}", lo convierto en ejecucion de Radio. Mi siguiente paso seria armar: objetivo, asset necesario, copy, responsable y deadline. ${asksForNext}`;
-}
-
-function buildAgentReply(contact: OfficeContact, message: string): string {
-  const text = message.toLowerCase();
-  const opener = `Estoy en ${contact.station}. `;
-
-  if (text.includes("oficina") || text.includes("sala") || text.includes("room") || text.includes("diseno") || text.includes("diseño")) {
-    if (contact.name === "CEO") {
-      return `${opener}Mi opinion: la oficina debe ayudarte a decidir rapido, no distraerte. Yo la dejaria con pocos rooms claros, nombres grandes, agentes separados y un panel de chat que no tape el mapa.`;
-    }
-    if (contact.name === "Code") {
-      return `${opener}Lo puedo resolver desde UI: reducir elementos superpuestos, ordenar posiciones, hacer labels persistentes y probar que cada click abra el chat correcto.`;
-    }
-    if (contact.id === "control") {
-      return `${opener}Desde control, lo importante es que no confundas roles. Si un agente no tiene trabajo real, mejor convertirlo en herramienta dentro de otro agente.`;
-    }
-  }
-
-  if (contact.name === "Asistente") {
-    return `${opener}Lo tomo contigo como tarea: primero aclaro que quieres lograr, luego lo convierto en pasos y te ayudo a moverlo al calendario o pendientes. Para empezar: dime fecha, prioridad y si depende de alguien.`;
-  }
-  if (contact.name === "CEO") {
-    return `${opener}Lo miro como decision: impacto, urgencia y riesgo. Mi recomendacion inicial es separar esto en: que hay que decidir hoy, que puede esperar y que dato falta para no improvisar.`;
-  }
-  if (contact.name === "Revenue") {
-    return `${opener}Lo convierto en pipeline: area, nicho, leads con evidencia, mockup, outreach en draft, propuesta y QA. Si falta un dato critico, pregunto antes de gastar o contactar.`;
-  }
-  if (contact.id === "dropshipping") {
-    if (text.includes("stock") || text.includes("inventario") || text.includes("comprar")) {
-      return `${opener}No compramos inventario para empezar. Trabajo con modelo conectado a supplier: investigo producto, margen, shipping y riesgo; solo pido aprobacion si hay que gastar, publicar, ordenar sample o contactar proveedor.`;
-    }
-    if (text.includes("producto") || text.includes("viral") || text.includes("tiktok")) {
-      return `${opener}Mi siguiente batch es buscar productos virales con evidencia, margen mayor a 45%, shipping razonable y proveedor backup. Si pasa, lo dejo como launch draft, no publicado.`;
-    }
-    if (text.includes("budget") || text.includes("presupuesto") || text.includes("100")) {
-      return `${opener}Profit Guard manda: budget inicial $100, no gasto mas de lo cobrado, y cualquier gasto va a approval. La meta operativa es llegar a $1k/mes sin quemar caja.`;
-    }
-    return `${opener}Dirijo Shopify + social sin inventario propio: Product Scout, Supplier Analyst, Profit Guard, Social Manager, Legal/Security y Learning Analyst. Puedo investigar y preparar drafts; dinero/publicacion/contacto pasan por aprobacion.`;
-  }
-  if (contact.id === "marketing-cmo") {
-    if (text.includes("post") || text.includes("contenido") || text.includes("copy") || text.includes("reel")) {
-      return `${opener}Marketing HQ prepara posts por cliente: hook, copy, visual brief, calendario, CTA y safety check. Nada se publica fuera del app hasta que conectes redes y apruebes autoposting para ese cliente.`;
-    }
-    if (text.includes("ads") || text.includes("anuncio") || text.includes("budget") || text.includes("presupuesto")) {
-      return `${opener}Trabajo con presupuesto minimo por cliente. Primero organico, luego test pequeno solo si hay cash/senales y approval tuyo para gastar en ese proyecto.`;
-    }
-    if (text.includes("analitica") || text.includes("resultado") || text.includes("ventas") || text.includes("mejorar")) {
-      return `${opener}Mi Analytics subagent compara posts, hooks, plataformas, clicks, ordenes y ROAS por cliente. Lo que funcione se repite; lo que no, se pausa y se convierte en aprendizaje separado.`;
-    }
-    return `${opener}Soy el CMO global: manejo Dropshipping, Revenue, Radio, Clippers, Kong y futuros clientes como una agencia interna. Cada cliente tiene budget, cuentas, metricas, calendario y approvals separados.`;
-  }
-  if (contact.name === "Code") {
-    return `${opener}Lo reviso como problema tecnico.${text.includes("repo objetivo") ? " Voy a trabajar con el repo objetivo que seleccionaste, no con todos a la vez." : ""} Necesito: que pantalla falla, que esperabas, que paso realmente y si hay error visible. Con eso preparo un cambio pequeno y verificable.`;
-  }
-  if (contact.name === "GitHub") {
-    return `${opener}Lo veo desde repos/PRs/checks.${text.includes("repo objetivo") ? " Ya tengo el repo objetivo seleccionado." : " Si hablas de un proyecto, dime cual repo o rama."} Yo revisaria estado remoto, cambios pendientes, issues y si hay CI fallando.`;
-  }
-  if (contact.id === "claude-reviewer") {
-    return `${opener}Yo hago el segundo chequeo independiente: leo el objetivo, comparo el diff, busco riesgos que Codex pudo pasar por alto y dejo una lista corta de bloquear, corregir o aprobar. No publico ni despliego; reviso antes de App QA.`;
-  }
-  if (contact.name === "Portfolio") {
-    return `${opener}Lo traduzco a lectura financiera: posicion, riesgo, noticia relevante y accion posible. Si me das ticker o captura, lo organizo como mantener, revisar o actuar.`;
-  }
-  if (contact.name === "Radio") {
-    return buildRadioAgentReply(contact, message);
-  }
-  if (contact.name === "Clippers") {
-    return `${opener}Lo manejo como sistema de clips: cuentas por categoria, fuentes con permiso, drafts diarios, programacion y reportes. Para escalar bien necesito conectar plataformas oficiales y una allowlist clara de videos/creadores.`;
-  }
-  if (contact.id === "legal") {
-    return `${opener}Lo reviso como Legal / Compliance: privacidad, terminos, copyright, contratos, mensajes externos, datos de usuarios y riesgos de multa. Si encuentro algo critico, lo marco como alerta y recomiendo hablar con abogado real antes de ejecutar.`;
-  }
-  if (contact.name === "Autos") {
-    return `${opener}Puedo convertir esto en una rutina. Dime cada cuanto debe correr, que condicion dispara la accion y como quieres que te avise si falla.`;
-  }
-  if (contact.id === "control") {
-    return `${opener}Lo reviso como permisos y riesgo. Antes de ejecutar, confirmo: que accion se hara, que datos toca, si se puede deshacer y si necesita aprobacion tuya.`;
-  }
-  if (contact.name === "KONG AI") {
-    return `${opener}Lo tomo como chat central de Kong. Puedo coordinar venues, promoters, mesas y contexto del app. Si el problema es operativo, dime si toca eventos, mesas o usuarios.`;
-  }
-  if (contact.name === "Promoters + Mesas") {
-    return `${opener}Lo veo como flujo de promoters/mesas. Yo separaria: quien falta confirmar, que mesa/promoter esta pendiente y que mensaje hay que mandar.`;
-  }
-  if (contact.name === "Venues") {
-    return `${opener}Lo reviso como venues/eventos. Si quieres resolverlo bien, dime venue, fecha aproximada y si hay una fuente donde mirar eventos nuevos.`;
-  }
-
-  if (text.includes("error") || text.includes("falla") || text.includes("problema")) {
-    return `${opener}Voy a tratarlo como problema: dime que paso, donde paso y que resultado esperabas. Con eso preparo el siguiente paso desde mi area.`;
-  }
-  return `${opener}Entendido. Desde mi rol (${contact.role}) puedo ayudarte a ordenar esto, proponer el siguiente paso y decirte que dato necesito para resolverlo.`;
-}
-
-function buildAgentGreeting(contact: OfficeContact): string {
-  if (contact.name === "CEO") return "Estoy aqui. Dime que decision o problema quieres ordenar y lo bajo a prioridades.";
-  if (contact.id === "dropshipping") return "Dropshipping CEO activo. Empiezo sin stock: producto viral, proveedor, margen, contenido draft y approvals para dinero/publicacion.";
-  if (contact.id === "marketing-cmo") return "Marketing HQ global activo. Manejo clientes internos separados, skills fuertes, learning loop, analytics y safety antes de publicar o gastar.";
-  if (contact.name === "Code") return "Listo. Cuentame que quieres cambiar o que esta fallando y lo reviso como trabajo de codigo.";
-  if (contact.name === "GitHub") return "Estoy mirando el lado de repos, PRs y branches. Dime que repo o cambio quieres revisar.";
-  if (contact.id === "claude-reviewer") return "Estoy listo para doble chequeo. Pasame el PR, diff o repo objetivo y reviso riesgos, tests faltantes y puntos que Codex debe corregir.";
-  if (contact.name === "Autos") return "Estoy listo para convertir algo repetitivo en una rutina o recordatorio.";
-  if (contact.name === "Radio") return "Estoy en Black Room. Dime si hablamos de evento, flyer, calendario o media.";
-  if (contact.name === "Clippers") return "Estoy en el war room social. Puedo preparar cuentas, drafts diarios, fuentes permitidas y reportes de views.";
-  if (contact.id === "cybersecurity") return "Estoy monitoreando tus apps, HTTPS, incidentes, repos y señales raras. Puedo escanear y mandarte reporte por Telegram.";
-  if (contact.id === "legal") return "Estoy aqui para revisar riesgos legales, privacidad, copyright, contratos y posibles multas antes de que algo se vuelva problema.";
-  if (contact.id === "control") return "Estoy aqui para revisar permisos, riesgo y acciones sensibles antes de ejecutar.";
-  if (contact.name === "KONG AI") return "Estoy conectado al contexto de Kong. Dime si el tema es eventos, mesas, promoters, venues o usuarios.";
-  if (contact.name === "Promoters + Mesas") return "Estoy con promoters y mesas. Dime quien falta por confirmar o que seguimiento quieres hacer.";
-  if (contact.name === "Venues") return "Estoy revisando venues/eventos. Dime venue, fecha o fuente y lo organizo.";
-  return `Estoy aqui como ${contact.name}. Dime que necesitas resolver en mi area.`;
-}
-
 const officeThreads: Record<AgentId, { from: AgentId; to?: AgentId; text: string }[]> = {
   assistant: [
     { from: "assistant", to: "ceo", text: "Tengo la agenda y los pendientes de Robert listos para priorizar." },
@@ -1475,7 +1325,7 @@ function AgentSpeechBubble({
       </button>
       <div className="mb-1 flex items-center gap-2">
         <span className={cn("h-2 w-2 rounded-full bg-gradient-to-br", agent.color)} />
-        <p className="truncate text-[10px] font-black uppercase tracking-wide text-cyan-100">{agent.name}</p>
+        <p className="truncate text-[10px] font-black uppercase tracking-wide text-cyan-100">Ejemplo: {agent.name}</p>
       </div>
       <p className="line-clamp-3 text-xs leading-4">{text}</p>
       <span className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-inherit bg-[#050a12]" />
@@ -1884,7 +1734,7 @@ export default function AgentsOfficePage() {
       if (current[nextContact.id]?.length) return current;
       return {
         ...current,
-        [nextContact.id]: [{ role: "agent", text: buildAgentGreeting(nextContact) }],
+        [nextContact.id]: [{ role: "agent", text: `Este panel guarda notas locales para ${nextContact.name}. Usa Abrir para entrar a su herramienta; escribir aqui no ejecuta al agente.` }],
       };
     });
     setDirectMessage("");
@@ -1897,7 +1747,7 @@ export default function AgentsOfficePage() {
       isDevReviewContact && selectedTarget
         ? `\n\nRepo objetivo: ${selectedTarget.label} (${selectedTarget.repo}).`
         : "";
-    const reply = buildAgentReply(contact, `${text}${repoContext}`);
+    const reply = "Nota temporal preparada. Se pierde al salir de esta pagina. No se ha enviado a un agente ni ejecutado una tarea. Usa Abrir para continuar en la herramienta correspondiente.";
     if (isDevReviewContact && targetRepo !== "workspace") {
       setLastRemoteTask(text);
       window.localStorage.setItem(
@@ -1955,8 +1805,8 @@ export default function AgentsOfficePage() {
       name: agent.name,
       role: agent.job,
       station: team.app,
-      status: "Conectado",
-      activity: activityByName[agent.name] || `Trabaja en ${team.app} conectado al repo ${team.repo}.`,
+      status: "Conexion sin verificar",
+      activity: activityByName[agent.name] || `Rol definido para ${team.app}, repo ${team.repo}. Actividad actual sin verificar.`,
       href: "/projects",
       icon: Github,
       color: "from-cyan-300 to-lime-300",
@@ -2115,8 +1965,8 @@ export default function AgentsOfficePage() {
         <div className="absolute left-20 right-4 top-5 z-[75] flex items-center justify-between gap-4">
             <div className="flex h-12 min-w-[260px] flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-[#0c1018]/90 px-4 text-sm text-slate-400 shadow-xl shadow-black/30 backdrop-blur lg:max-w-[620px]">
               <Sparkles className="h-4 w-4 text-cyan-200" />
-              <span>Type a command or search...</span>
-              <span className="ml-auto rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px]">⌘ K</span>
+              <span>Mapa de roles · actividad sin verificar</span>
+              <span className="ml-auto rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px]">Vista</span>
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <Button
@@ -2156,7 +2006,7 @@ export default function AgentsOfficePage() {
                   />
                 ))}
               </div>
-              <p className="mt-2 text-[11px] text-emerald-300">{agents.length} agents active</p>
+              <p className="mt-2 text-[11px] text-slate-300">{agents.length} roles definidos · actividad sin verificar</p>
             </div>
         </div>
 
@@ -2175,7 +2025,7 @@ export default function AgentsOfficePage() {
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/25 p-3">
                 <p className="text-white">{selectedAgent.name}</p>
-                <p className="mt-1 text-slate-500">{selectedAgent.activity}</p>
+                <p className="mt-1 text-slate-500">Rol previsto: {selectedAgent.role}</p>
               </div>
             </div>
         </div>
@@ -2347,12 +2197,12 @@ export default function AgentsOfficePage() {
                 </div>
                 <div className="rounded-md border border-white/10 bg-black/35 p-3">
                   <p className="text-[10px] uppercase tracking-wide text-zinc-500">Estado</p>
-                  <p className="mt-1 text-sm font-medium">{contact.status}</p>
+                  <p className="mt-1 text-sm font-medium">Actividad sin verificar</p>
                 </div>
               </div>
               <div className="mt-2 rounded-md border border-white/10 bg-black/35 p-3">
-                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Que hace</p>
-                <p className="mt-1 text-sm leading-5 text-zinc-200">{contact.activity}</p>
+                <p className="text-[10px] uppercase tracking-wide text-zinc-500">Rol previsto</p>
+                <p className="mt-1 text-sm leading-5 text-zinc-200">{contact.role}</p>
               </div>
               {contact.id in agentById && (
                 <div className="mt-2 rounded-md border border-cyan-200/15 bg-cyan-950/10 p-3">
@@ -2408,11 +2258,14 @@ export default function AgentsOfficePage() {
                   </select>
                   <p className="mt-2 text-xs leading-4 text-zinc-400">
                     {targetRepo === "workspace"
-                      ? "Code aplica cambios locales; Claude Reviewer hace doble chequeo antes de App QA."
-                      : "Para apps de GitHub, abre GitHub Agent con ese repo; Codex trabaja PR-first y Claude revisa antes de App QA."}
+                      ? "Flujo previsto: Codex prepara el cambio, Claude lo revisa y App QA comprueba el resultado. Este panel no inicia ese flujo."
+                      : "Abre GitHub Agent con el repo seleccionado para preparar el trabajo. Guardar una nota aqui no crea un PR ni inicia a Codex o Claude."}
                   </p>
                 </div>
               )}
+              <p className="mt-3 text-xs leading-5 text-amber-200" data-testid="office-local-notes-status">
+                Notas temporales: se pierden al salir. La conexion y la ejecucion de este agente no estan verificadas desde este panel.
+              </p>
               {isChatOpen && (
                 <div className="mt-3 max-h-56 space-y-2 overflow-y-auto rounded-md border border-cyan-200/15 bg-black/40 p-3">
                   {activeMessages.map((message, index) => (
@@ -2426,7 +2279,7 @@ export default function AgentsOfficePage() {
                       )}
                     >
                       <p className="mb-1 text-[10px] uppercase tracking-wide text-zinc-500">
-                        {message.role === "user" ? "Tu" : contact.name}
+                        {message.role === "user" ? "Tu" : "Oficina · nota local"}
                       </p>
                       {message.text}
                     </div>
@@ -2436,7 +2289,7 @@ export default function AgentsOfficePage() {
               <textarea
                 value={directMessage}
                 onChange={(event) => setDirectMessage(event.target.value)}
-                placeholder={isChatOpen ? `Seguir hablando con ${contact.name}` : `Escribirle a ${contact.name}`}
+                placeholder={`Preparar una nota para ${contact.name}`}
                 className="mt-3 min-h-24 w-full resize-none rounded-md border border-white/10 bg-black/45 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-cyan-200/40 focus:outline-none"
                 data-testid="textarea-office-agent-popup-message"
               />
@@ -2448,7 +2301,7 @@ export default function AgentsOfficePage() {
                   data-testid="button-office-agent-popup-send"
                 >
                   <Send className="mr-2 h-4 w-4" />
-                  {isChatOpen ? "Responder" : "Abrir chat"}
+                  Preparar nota temporal
                 </Button>
                 {openHref && (
                   <Link href={openHref}>
@@ -2482,13 +2335,13 @@ export default function AgentsOfficePage() {
               </div>
               <div className="rounded-lg border border-white/10 bg-black/35 p-3">
                 <p className="text-[11px] uppercase tracking-wide text-zinc-500">Estado</p>
-                <p className="mt-1 text-sm font-medium text-white">{selectedAgent.status}</p>
+                <p className="mt-1 text-sm font-medium text-white">Actividad sin verificar</p>
               </div>
             </div>
 
             <div className="mt-3 rounded-lg border border-white/10 bg-black/35 p-3">
-              <p className="text-[11px] uppercase tracking-wide text-zinc-500">Funcion actual</p>
-              <p className="mt-1 text-sm font-medium text-white">{selectedAgent.activity}</p>
+              <p className="text-[11px] uppercase tracking-wide text-zinc-500">Funcion prevista</p>
+              <p className="mt-1 text-sm font-medium text-white">Rol previsto: {selectedAgent.role}</p>
             </div>
 
             <Link href={selectedAgent.href}>
@@ -2503,7 +2356,7 @@ export default function AgentsOfficePage() {
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-cyan-200" />
-                <p className="text-sm font-medium text-zinc-300">Notas de la oficina</p>
+                <p className="text-sm font-medium text-zinc-300">Ejemplos de la oficina</p>
               </div>
               <span className="rounded-full border border-white/10 bg-black/35 px-2 py-1 text-[11px] text-zinc-500">
                 Se pueden cerrar
@@ -2520,7 +2373,7 @@ export default function AgentsOfficePage() {
                   >
                     <X className="h-3 w-3" />
                   </button>
-                  <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-[#7a522a]">Chat interno</p>
+                  <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-[#7a522a]">Ejemplo de chat interno</p>
                   <p className="mt-2 text-sm font-medium leading-5">{conversation[0].text}</p>
                 </div>
               )}
@@ -2535,7 +2388,7 @@ export default function AgentsOfficePage() {
                     <X className="h-3 w-3" />
                   </button>
                   <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-[#7a522a]">
-                    {agentById[conversation[1].from].name} responde
+                    Ejemplo: {agentById[conversation[1].from].name}
                   </p>
                   <p className="mt-2 text-sm font-medium leading-5">{conversation[1].text}</p>
                 </div>
@@ -2550,7 +2403,7 @@ export default function AgentsOfficePage() {
                   >
                     <X className="h-3 w-3" />
                   </button>
-                  <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-[#7a522a]">Break room catch-up</p>
+                  <p className="font-mono text-[10px] font-bold uppercase tracking-wide text-[#7a522a]">Ejemplo de reunion</p>
                   <div className="mt-2 space-y-2">
                     {breakRoomThreads.map((item) => (
                       <p key={`${item.from}-${item.text}`} className="text-xs font-medium leading-4">
@@ -2950,12 +2803,12 @@ export default function AgentsOfficePage() {
           <div className="rounded-lg border border-white/10 bg-zinc-950/80 p-4">
             <div className="mb-3 flex items-center gap-2">
               <Send className="h-4 w-4 text-cyan-200" />
-              <p className="text-sm font-medium text-zinc-300">Escribir directo</p>
+              <p className="text-sm font-medium text-zinc-300">Nota temporal · se pierde al salir</p>
             </div>
             <textarea
               value={directMessage}
               onChange={(event) => setDirectMessage(event.target.value)}
-              placeholder={`Mensaje para ${contact.name}`}
+              placeholder={`Preparar una nota para ${contact.name}`}
               className="min-h-24 w-full resize-none rounded-md border border-white/10 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-zinc-600 focus:border-white/30 focus:outline-none"
               data-testid="textarea-direct-agent-message"
             />
@@ -2966,7 +2819,7 @@ export default function AgentsOfficePage() {
               data-testid="button-send-direct-agent-message"
             >
               <Send className="mr-2 h-4 w-4" />
-              Enviar a {contact.name}
+              Preparar nota para {contact.name}
             </Button>
             {sentMessages.length > 0 && (
               <div className="mt-3 space-y-2">
@@ -2983,7 +2836,7 @@ export default function AgentsOfficePage() {
             <div className="mb-3 flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <MessageSquare className="h-4 w-4 text-cyan-200" />
-                <p className="text-sm font-medium text-zinc-300">Conversacion</p>
+                <p className="text-sm font-medium text-zinc-300">Ejemplos de conversacion</p>
               </div>
               <span className="rounded-full border border-white/10 bg-black/35 px-2 py-1 text-[11px] text-zinc-500">
                 {agents.length} agentes
@@ -3037,7 +2890,7 @@ export default function AgentsOfficePage() {
                     <Icon className="h-4 w-4 shrink-0 text-zinc-300" />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-sm font-medium text-white">{agent.name}</span>
-                      <span className="block truncate text-xs text-zinc-500">{agent.activity}</span>
+                      <span className="block truncate text-xs text-zinc-500">Rol previsto: {agent.role}</span>
                     </span>
                   </button>
                 );
