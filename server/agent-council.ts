@@ -109,6 +109,7 @@ const EXEMPT_IDS = [...KONG_IDS, "mechanic"];
 const STATUS_FRESH_MS = 45 * 60_000;
 
 export const AGENT_NAMES: Record<string, string> = {
+  "kong-metrics": "Metricas KONG",
   ...Object.fromEntries(CITY_NEWS_AGENTS.map((agent) => [agent.id, agent.name])),
   assistant: "Asistente",
   ceo: "CEO",
@@ -730,6 +731,7 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
     read(["legal"], () => cachedSlowRead(`legal:${userId}`, async () => (await import("./legal-compliance-agent")).runLegalComplianceReports(userId))),
     read(["news", ...CITY_NEWS_AGENTS.map((agent) => agent.id)], async () => (await import("./clippers-local-news-agent")).getClipperLocalNewsStatus()),
     read(["kong-videos"], async () => (await import("./promo-video-agent")).getPromoVideoStatus(userId)),
+    read(["kong-metrics"], async () => (await import("./kong-operations")).getKongOperations().view()),
     read(["blackroom-videos"], async () => {
       const remoteModule = await import("./blackroom-remote-control");
       const routesModule = await import("./blackroom-control-routes");

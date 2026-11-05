@@ -24,7 +24,8 @@ export type WorldAgent = BuildingAgent & { activity?: string; href?: string };
 // Real agents that live in the backend but not in the classic office list.
 const EXTRA_AGENTS: Array<{ id: string; name: string; role: string; description: string; color: string; href?: string }> = [
   { id: "blackroom-videos", name: "Videos Black Room", role: "Sube los videos de Black Room", description: "Edita y programa los videos de Black Room con su dispositivo de publicacion.", color: "#e879f9", href: "/clippers" },
-  { id: "kong-videos", name: "Videos Kong", role: "Edita los videos de Kong", description: "Edita los videos de Kong y los guarda en Drive (Videos de Kong).", color: "#a3e635", href: "/promo-video" },
+  { id: "kong-videos", name: "Videos Kong", role: "Edita los videos de Kong", description: "Edita los videos de Kong y los guarda en Drive (Videos de Kong). Recibe las fichas verificadas de Venues y Promoters en su bandeja.", color: "#a3e635", href: "/promo-video" },
+  { id: "kong-metrics", name: "Metricas KONG", role: "Resultados por publicacion", description: "Agente separado: mide cada publicacion confirmada de KONG (vistas, alcance, interacciones) con los datos de Metricool, enlazados por UUID.", color: "#bef264" },
   { id: "news", name: "Noticias", role: "Jefe de noticias locales", description: "Coordina las mesas de cada ciudad y el comite de revision antes de publicar.", color: "#38bdf8", href: "/news" },
   ...CITY_NEWS_AGENTS.map((agent) => ({
     id: agent.id,
@@ -47,7 +48,7 @@ const DEPARTMENTS: Array<{ id: string; name: string; color: string; agentIds: st
   { id: "direccion", name: "Direccion", color: "#fbbf24", agentIds: ["ceo", "assistant", "control"] },
   { id: "negocios", name: "Negocios", color: "#34d399", agentIds: ["revenue", "dropshipping", "portfolio"] },
   { id: "blackroom", name: "Black Room", color: "#e879f9", agentIds: ["blackroom-videos", "radio"] },
-  { id: "kong", name: "Kong", color: "#a3e635", agentIds: ["kong-videos", "kong:KONG AI", "kong:Promoters + Mesas", "kong:Venues", "kong:Kong Legal"] },
+  { id: "kong", name: "Kong", color: "#a3e635", agentIds: ["kong-videos", "kong-metrics", "kong:KONG AI", "kong:Promoters + Mesas", "kong:Venues", "kong:Kong Legal"] },
   { id: "medios", name: "Marketing y medios", color: "#f472b6", agentIds: ["marketing-cmo", "clippers"] },
   { id: "noticias-ciudad", name: "Noticias por ciudad", color: "#fb923c", agentIds: ["news", ...CITY_NEWS_AGENTS.map((agent) => agent.id)] },
   { id: "ingenieria", name: "Ingenieria y app", color: "#38bdf8", agentIds: ["code", "github", "claude-reviewer", "app-qa"] },
@@ -56,7 +57,7 @@ const DEPARTMENTS: Array<{ id: string; name: string; color: string; agentIds: st
 ];
 
 const SCREEN_KIND: Record<string, SceneDepartment["agents"][number]["screen"]> = {
-  radio: "timeline", clippers: "timeline", "blackroom-videos": "timeline", "kong-videos": "timeline", "news:miami-news": "list", "news:ny-news": "list",
+  radio: "timeline", clippers: "timeline", "blackroom-videos": "timeline", "kong-videos": "timeline", "kong-metrics": "chart", "news:miami-news": "list", "news:ny-news": "list",
   revenue: "chart", portfolio: "chart", "marketing-cmo": "chart", dropshipping: "chart", news: "chart",
   code: "code", github: "code", "claude-reviewer": "code", "app-qa": "code", cybersecurity: "code", mechanic: "code",
 };
@@ -70,7 +71,7 @@ const SOURCE_NAME: Record<string, string> = {
   portfolio: "Mercados", "marketing-cmo": "Clientes de marketing", clippers: "Worker de clips", radio: "Calendario de radio",
   code: "GitHub", github: "GitHub", "claude-reviewer": "GitHub", "app-qa": "Salud de apps", cybersecurity: "Salud de apps",
   legal: "Reportes legales", automations: "Automatizaciones", "skills-scout": "Releases de GitHub", "agent-factory": "Consejo de agentes",
-  mechanic: "Consejo de agentes", "blackroom-videos": "Publicador Black Room", news: "Noticias locales", "kong-videos": "Publicador externo KONG (Codex)",
+  mechanic: "Consejo de agentes", "blackroom-videos": "Publicador Black Room", news: "Noticias locales", "kong-videos": "Publicador externo KONG (Codex)", "kong-metrics": "Metricool (lectura) · registro por UUID",
   "news:miami-news": "Noticias locales", "news:ny-news": "Noticias locales",
 };
 
@@ -92,6 +93,7 @@ export function AgentsOfficeWorld({
   selectedAgentId,
   onSelectAgent,
   onSelectKongAgent,
+  onOpenKongOffice,
   onOpenContact,
 }: {
   agents: WorldAgent[];
@@ -100,6 +102,7 @@ export function AgentsOfficeWorld({
   selectedAgentId?: string;
   onSelectAgent: (agentId: string, status: AgentLiveStatus) => void;
   onSelectKongAgent: (name: string) => void;
+  onOpenKongOffice: () => void;
   // Opens the same local chat for agents that are not in the classic list (cities, new agents, trainees).
   onOpenContact?: (contact: WorldContact) => void;
 }) {
@@ -115,6 +118,8 @@ export function AgentsOfficeWorld({
   const integrations = companyView.integrations || effectiveIntegrations();
   const deputyId = leaderboardRows[0]?.points ? leaderboardRows[0].agentId : null;
   const queryClient = useQueryClient();
+  const openKongOfficeRef = useRef(onOpenKongOffice);
+  useEffect(() => { openKongOfficeRef.current = onOpenKongOffice; }, [onOpenKongOffice]);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const labelsRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<ReturnType<typeof createOfficeScene> | null>(null);
@@ -168,6 +173,7 @@ export function AgentsOfficeWorld({
   };
   const focusRoom = (id: string | null) => {
     setFocusedDepartment(id); setPanelAgentId(null); sceneRef.current?.focusDepartment(id);
+    if (id === "kong") onOpenKongOffice();
   };
   const openCityFromOverview = (id: string) => {
     if (!filteredCityRooms.some(room => room.id === id)) setCityCountry("");
@@ -302,12 +308,13 @@ export function AgentsOfficeWorld({
           sceneRef.current = createOfficeScene(THREE, host, labels, {
             onFocusDepartment: (id) => {
               setFocusedDepartment(id);
+              if (id === "kong") { openKongOfficeRef.current(); return; }
               if (id?.startsWith("kong-city:")) {
                 setOfficeWing("kong");
                 setPanelAgentId(null);
                 setCityDetailsOpen(true);
                 setCityOverviewOpen(false);
-              } else if (id && id !== "kong") {
+              } else if (id) {
                 setOfficeWing("main");
                 setOverlay(value => value === "city-director" ? "none" : value);
                 setPanelAgentId(null);
@@ -378,7 +385,8 @@ export function AgentsOfficeWorld({
         <p className="mx-auto mb-4 max-w-[900px] rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-xs text-amber-100" data-testid="world-fallback">
           Este navegador no pudo abrir la oficina 3D ({failed}). Te muestro el edificio con los mismos datos en vivo.
         </p>
-        <button type="button" onClick={() => changeWing("kong")} className="mx-auto mb-4 block rounded-full bg-violet-500 px-5 py-3 font-bold text-white" data-testid="world-kong-wing">Ver oficina KONG</button>
+        <button type="button" onClick={onOpenKongOffice} className="mx-auto mb-4 block rounded-full bg-violet-500 px-5 py-3 font-bold text-white" data-testid="world-kong-wing">Ver oficina KONG</button>
+        <button type="button" onClick={() => changeWing("kong")} className="mx-auto mb-4 block rounded-full border border-lime-300/50 px-5 py-2 text-lime-100">Ver mapa y director de ciudades</button>
         <AgentsBuilding agents={agents} kongTeam={kongTeam} legal={legal} selectedAgentId={selectedAgentId} onSelectAgent={onSelectAgent} onSelectKongAgent={onSelectKongAgent} />
       </div>
     );

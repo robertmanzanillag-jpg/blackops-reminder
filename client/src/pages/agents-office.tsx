@@ -36,6 +36,8 @@ import type { MonitoredProject } from "@shared/schema";
 import { AgentsBuilding } from "@/components/agents-building/agents-building";
 import { AgentsOfficeWorld } from "@/components/agents-world-office/agents-office-world";
 import { KongSupervisorPanel } from "@/components/kong-supervisor-panel";
+import { KongOperationsPanel } from "@/components/kong-operations-panel";
+import { KongTeamOffice } from "@/components/kong-team-office";
 import type { AgentLiveStatus } from "@/lib/agent-live-status";
 
 type GitHubOverview = Record<
@@ -1634,6 +1636,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   const [agentChats, setAgentChats] = useState<Record<string, ChatMessage[]>>({});
   const [directMessage, setDirectMessage] = useState("");
   const [editRooms, setEditRooms] = useState(false);
+  const [kongOfficeOpen, setKongOfficeOpen] = useState(false);
   const [officeView, setOfficeView] = useState<OfficeView>(() => {
     if (typeof window === "undefined") return "world";
     try {
@@ -2170,15 +2173,15 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
             </div>
         </aside>
 
-        <div className="absolute left-20 right-4 top-5 z-[75] flex items-start justify-start gap-4 md:items-center md:justify-between">
-            {/* Decorative search box: hidden on phones so the view toggle and Supervisor KONG fit on screen. */}
-            <div className="hidden h-12 min-w-[260px] flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-[#0c1018]/90 px-4 text-sm text-slate-400 shadow-xl shadow-black/30 backdrop-blur md:flex lg:max-w-[620px]">
+        <div className="absolute left-20 right-4 top-5 z-[75] flex items-start justify-start gap-4 lg:items-center lg:justify-between">
+            {/* Decorative search box: hidden below 1024px so the view toggle and the KONG buttons fit on screen. */}
+            <div className="hidden h-12 min-w-[260px] flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-[#0c1018]/90 px-4 text-sm text-slate-400 shadow-xl shadow-black/30 backdrop-blur lg:flex lg:max-w-[620px]">
               <Sparkles className="h-4 w-4 text-cyan-200" />
               <span>Type a command or search...</span>
               <span className="ml-auto rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px]">⌘ K</span>
             </div>
             {/* On phones the row wraps to the left so it never covers "Trabajo real" (top right). */}
-            <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 md:shrink-0 md:justify-end">
+            <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 lg:shrink-0 lg:justify-end">
               <div className="flex rounded-2xl border border-white/10 bg-[#0c1018]/90 p-1 shadow-xl shadow-black/30" role="group" aria-label="Vista de la oficina">
                 {(["world", "building", "office"] as const).map((view) => (
                   <button
@@ -2199,6 +2202,13 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
               {/* One button for every view (3D, Edificio, Clasica and the no-WebGL fallback). */}
               <div data-testid="office-kong-supervisor-slot">
                 <KongSupervisorPanel />
+              </div>
+              <button type="button" onClick={() => setKongOfficeOpen(true)} className="rounded-xl border border-lime-300/35 bg-lime-400/10 px-3 py-2 text-xs font-semibold text-lime-100">
+                Oficina KONG
+              </button>
+              {kongOfficeOpen && <KongTeamOffice onClose={() => setKongOfficeOpen(false)} />}
+              <div data-testid="office-kong-operations-slot">
+                <KongOperationsPanel />
               </div>
               {officeView === "office" && (
               <Button
@@ -2266,6 +2276,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
         <div ref={officeMapRef} className="relative h-full min-h-[620px] w-full [perspective:1400px]">
           {officeView === "world" && (
             <AgentsOfficeWorld
+              onOpenKongOffice={() => setKongOfficeOpen(true)}
               agents={agents}
               kongTeam={githubAppTeams.find((team) => team.app === "Kong")?.agents ?? []}
               legal={{ data: legalCompliance, isError: legalComplianceError }}

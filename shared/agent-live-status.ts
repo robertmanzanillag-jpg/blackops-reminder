@@ -39,7 +39,8 @@ export type AgentProbe = {
     | "blackroom-videos"
     | "news"
     | "city-news"
-    | "kong-videos";
+    | "kong-videos"
+    | "kong-metrics";
   onDemandNote?: string;
   // city-news: which local-news lane (city) this desk owns.
   lane?: "miami-news" | "ny-news";
@@ -89,6 +90,8 @@ export const agentProbes: Record<string, AgentProbe> = {
   "news:miami-news": { key: "local-news-status", url: "/api/clippers/local-news/status", intervalMs: 2 * MINUTE, kind: "city-news", lane: "miami-news" },
   "news:ny-news": { key: "local-news-status", url: "/api/clippers/local-news/status", intervalMs: 2 * MINUTE, kind: "city-news", lane: "ny-news" },
   "kong-videos": { key: "promo-video-status", url: "/api/promo-video/status", intervalMs: 5 * MINUTE, kind: "kong-videos" },
+  // KONG metrics agent: results per confirmed publication (owner-only state; read-only here).
+  "kong-metrics": { key: "kong-ops-state", url: "/api/kong-ops/state", intervalMs: 5 * MINUTE, kind: "kong-metrics" },
   // Not fetched by the building: it reuses the legal query the office page already runs.
   legal: { key: "legal-compliance-reports", url: "/api/legal-compliance/reports", intervalMs: MINUTE, kind: "legal" },
 };
@@ -243,6 +246,10 @@ export function extractActivity(probe: AgentProbe, raw: unknown, now: number = D
         totals ? `Cola: ${num(totals.queued) ?? 0} en espera · ${num(totals.processing) ?? 0} editando` : "",
         totals ? `${num(totals.scheduled) ?? 0} programados · ${num(totals.completed) ?? 0} publicados` : "",
       ];
+    }
+    case "kong-metrics": {
+      const results = Array.isArray(body?.results) ? (body!.results as unknown[]).map(asObject).filter(Boolean) as Json[] : [];
+      return results.slice(0, 3).map((result) => `${str(result.title) || "Publicacion"} · ${str(result.network)}: ${num(result.impressions) ?? 0} vistas, ${num(result.engagements) ?? 0} interacciones`);
     }
     case "city-news": {
       const lane = asObject(asObject(body?.lanes)?.[probe.lane || ""]);
@@ -430,6 +437,12 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       if ((num(totals.retry) ?? 0) > 0) return { state: "error", label: `${num(totals.retry)} videos reintentando` };
       if (active === 0 && (num(totals.scheduled) ?? 0) === 0) return { state: "offline", label: "Cola vacia", detail: "No hay videos de Black Room pendientes." };
       return { state: "working", label: `${active} en cola · ${num(totals.scheduled) ?? 0} programados` };
+    }
+    case "kong-metrics": {
+      const status = asObject(asObject(body?.status)?.["kong-metrics"]);
+      const state = str(status?.state);
+      if (state === "working" || state === "needs-setup") return { state, label: str(status?.label) || "Sin datos" };
+      return { state: "error", label: "Estado de metricas ilegible" };
     }
     case "city-news": {
       const last = Date.parse(str(body?.lastRunAt) || "");
