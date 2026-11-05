@@ -1,6 +1,7 @@
 import "../server/env-loader";
 import { createOfficeCloudWorker } from "../server/office-cloud-runtime";
 
+async function main() {
 if (process.env.OFFICE_WORKER_ENABLED !== "true") throw new Error("OFFICE_WORKER_ENABLED=true is required for the dedicated office worker.");
 const worker = createOfficeCloudWorker();
 let stopping = false;
@@ -16,3 +17,8 @@ try {
     if (!stopping) await new Promise(resolve => setTimeout(resolve, 5000));
   }
 } finally { clearInterval(heartbeat); clearInterval(capabilities); }
+}
+void main().catch(() => {
+  console.error("Office worker stopped: configuration or persistent execution is unavailable.");
+  process.exitCode = 1;
+});

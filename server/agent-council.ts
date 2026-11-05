@@ -10,7 +10,8 @@
 // Trust Center pending actions for proposals. Approving a proposal records a
 // lesson or marks a PR-first brief as ready; it does not change code or skills.
 
-import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import {
   COUNCIL_CYCLE_MS,
@@ -332,12 +333,42 @@ export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {
 const DATA_DIR = process.env.AGENT_COUNCIL_DATA_DIR || path.join(process.cwd(), "agent_council_data");
 const STATE_FILE = path.join(DATA_DIR, "state.json");
 
-// Unique temp name per write + rename: a reader never sees a half-written file.
-export async function writeFileAtomic(file: string, raw: string) {
-  await mkdir(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2)}.tmp`;
-  await writeFile(tmp, raw, "utf8");
-  await rename(tmp, file);
+const fileWriteQueues = new Map<string, Promise<void>>();
+async function replaceFileAtomic(source: string, destination: string): Promise<void> {
+  for (let attempt = 0; ; attempt++) {
+    try { await rename(source, destination); return; }
+    catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      // Windows readers and security scanners can hold a replacement lock
+      // briefly. Never delete the destination or fall back to a partial write.
+      if (process.platform !== "win32" || !["EPERM", "EACCES", "EBUSY"].includes(code || "") || attempt >= 7) throw error;
+      await new Promise(resolve => setTimeout(resolve, Math.min(250, 10 * 2 ** attempt)));
+    }
+  }
+}
+
+// Unique temporary files protect readers. A per-destination queue also avoids
+// simultaneous Windows replacements and preserves submission order. This is
+// process-local coordination; it does not provide a distributed writer lock.
+export function writeFileAtomic(file: string, raw: string): Promise<void> {
+  const destination = path.resolve(file);
+  const key = process.platform === "win32" ? destination.toLowerCase() : destination;
+  const previous = fileWriteQueues.get(key) || Promise.resolve();
+  const operation = previous.then(async () => {
+    await mkdir(path.dirname(destination), { recursive: true });
+    const tmp = `${destination}.${process.pid}.${randomUUID()}.tmp`;
+    try {
+      await writeFile(tmp, raw, { encoding: "utf8", flag: "wx", mode: 0o600 });
+      await replaceFileAtomic(tmp, destination);
+    } finally {
+      await unlink(tmp).catch(() => undefined);
+    }
+  });
+  // A failed write must reject its own caller without poisoning later writes.
+  const settled = operation.then(() => undefined, () => undefined);
+  fileWriteQueues.set(key, settled);
+  void settled.then(() => { if (fileWriteQueues.get(key) === settled) fileWriteQueues.delete(key); });
+  return operation;
 }
 
 function writeStateAtomic(raw: string) {

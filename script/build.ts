@@ -1,7 +1,8 @@
 import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
-import { mkdir, rm, readFile, copyFile } from "fs/promises";
+import { mkdir, rm, readFile, copyFile, writeFile } from "fs/promises";
 import { spawn } from "child_process";
+import { createOfficeCloudSchemaSql } from "../server/office-cloud-store";
 
 function pipInstallEnv(): NodeJS.ProcessEnv {
   return {
@@ -162,6 +163,20 @@ async function buildAll() {
     minify: true,
     logLevel: "error",
   });
+
+  await esbuild({
+    entryPoints: ["script/office-worker.ts"],
+    platform: "node",
+    bundle: true,
+    format: "cjs",
+    outfile: "dist/office-worker.cjs",
+    define: { "process.env.NODE_ENV": '"production"' },
+    minify: true,
+    external: externals,
+    logLevel: "error",
+  });
+  // Prepared artifact only: building never applies this migration.
+  await writeFile("dist/office-cloud-schema.sql", createOfficeCloudSchemaSql(), "utf8");
 }
 
 buildAll().catch((err) => {
