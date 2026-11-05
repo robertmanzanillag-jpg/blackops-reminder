@@ -7,6 +7,20 @@ const exec = promisify(execFile);
 // Fixed public discovery targets, never accepts URLs from page content or private reports.
 export const SOURCES = ['https://www.youtube.com/channel/UCGBpxWJr9FNOcFYA5GkKrMg/shorts'];
 const inFlight = new Map();
+export function startOrganicPeerScout(dir, { refresh = refreshOrganicPeerScout, interval = setInterval, clear = clearInterval } = {}) {
+  const controller = new AbortController();
+  let stopped = false;
+  let pending;
+  const tick = () => {
+    if (stopped || pending) return pending;
+    pending = Promise.resolve().then(() => refresh(dir, {signal:controller.signal})).catch(() => {}).finally(() => {pending = undefined;});
+    return pending;
+  };
+  const timer = interval(tick, 60_000);
+  timer.unref?.();
+  void tick();
+  return async () => { stopped = true; clear(timer); controller.abort(); await pending; };
+}
 export function refreshOrganicPeerScout(dir, options = {}) {
   dir = path.resolve(dir);
   if (inFlight.has(dir)) return inFlight.get(dir);

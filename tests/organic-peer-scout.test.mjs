@@ -3,7 +3,15 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
-import {refreshOrganicPeerScout} from '../script/organic-peer-scout.mjs';
+import {refreshOrganicPeerScout,startOrganicPeerScout} from '../script/organic-peer-scout.mjs';
+test('supervisor tick remains independent of jobs and cancels on stop',async()=>{
+ let tick,signal,calls=0,cleared=false;
+ const stop=startOrganicPeerScout('/unused',{interval:fn=>{tick=fn;return {unref(){}}},clear:()=>{cleared=true},refresh:async(_,options)=>{calls++;signal=options.signal;}});
+ await tick();assert.equal(calls,1);
+ await tick();assert.equal(calls,2);
+ await stop();assert.ok(cleared);assert.ok(signal.aborted);
+ await tick();assert.equal(calls,2);
+});
 test('success pins channel, deduplicates concurrency, does not invent KONG evidence',async()=>{
  const dir=await mkdtemp(path.join(tmpdir(),'scout-ok-'));let calls=0;
  try {const now=new Date('2026-11-04T12:00:00Z'), channel='UCGBpxWJr9FNOcFYA5GkKrMg';

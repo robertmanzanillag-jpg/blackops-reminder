@@ -24,7 +24,6 @@ import {
   type BlackRoomLedgerEntry,
 } from "../server/blackroom-local-worker";
 import { BLACKROOM_QUEUE_PATH } from "../server/blackroom-daily-queue";
-import { refreshOrganicPeerScout } from "./organic-peer-scout.mjs";
 
 const projectDir = path.resolve(process.env.BLACKROOM_PROJECT_DIR || process.cwd());
 const queuePath = path.join(projectDir, process.env.BLACKROOM_QUEUE_PATH || BLACKROOM_QUEUE_PATH);
@@ -344,20 +343,12 @@ async function main(): Promise<void> {
     }
   }
   if (!lock) return;
-  const scoutAbort = new AbortController();
-  const scout = () => refreshOrganicPeerScout(path.dirname(ledgerPath), { signal: scoutAbort.signal }).catch(() => {});
-  let scoutWork = scout();
-  const scoutTimer = setInterval(() => { scoutWork = scout(); }, 86400000);
-  scoutTimer.unref();
   const state = await readJson(statePath, createBlackRoomLocalWorkerState());
   state.workerPid = process.pid;
   await writeJson(statePath, state);
   const stop = async (interrupted = false) => {
     if (stopping) return;
     stopping = true;
-    clearInterval(scoutTimer);
-    scoutAbort.abort();
-    await scoutWork;
     if (activeChild?.pid) {
       await terminateChildGroup(activeChild);
     }
