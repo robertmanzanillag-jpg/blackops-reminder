@@ -12,7 +12,8 @@ import { pathToFileURL } from 'node:url';
 test('office local QA: actual sessions, owner isolation and native scouts with fixture storage', async () => {
  const serveMode=process.argv.includes('--serve');
  const evidenceDir=path.resolve('.local/office-evidence');await mkdir(evidenceDir,{recursive:true});
- let executablePath;try { executablePath=execFileSync('which',['chromium'],{encoding:'utf8'}).trim(); } catch { executablePath=undefined; }
+ let executablePath=process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+ if(!executablePath&&process.platform!=='win32'){try { executablePath=execFileSync('which',['chromium'],{encoding:'utf8'}).trim(); } catch { executablePath=undefined; }}
  const temp=await mkdtemp(path.join(process.cwd(),'.local-office-qa-'));
  const envKeys=['NODE_ENV','ALLOW_DEV_USER_FALLBACK','DEFAULT_USER_ID','APP_QA_BASE_URL','APP_QA_VISUAL_MODE'];
  const previous=new Map(envKeys.map(k=>[k,process.env[k]]));
@@ -52,6 +53,12 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   app.get('/api/ceo/go-live',(_req,res)=>res.json({status:'blocked',checks:[],scope:'LOCAL fixture only'}));
   app.get('/api/ceo/readiness',(_req,res)=>res.json({status:'blocked',checks:[],scope:'LOCAL fixture only'}));
   app.get('/api/ceo/conversation-history',(_req,res)=>res.json({messages:[]}));
+  app.get('/api/agents-office/connections',(_req,res)=>{
+   const blocked={status:'blocked',reason:'Isolated fixture. No provider connection.',checkedAt:new Date().toISOString()};
+   res.json({claude:blocked,kong:blocked,worker:blocked});
+  });
+  app.get('/api/agents-office/cities',(_req,res)=>res.json([{id:'fixture-city',name:'Ciudad de prueba',countryCode:'US',timeZone:'America/New_York',currency:'USD'}]));
+  app.get('/api/agent-council/state',(_req,res)=>res.json({enabled:false,cycles:0,debates:[],proposals:[],overrides:{},scout:{lastRunAt:null,latest:[],error:null}}));
   app.get('/api/app-qa-agent/status',async(req,res)=>res.json(await runtime.runAppQaScan(req.fixtureUserId,false,false,false)));
   app.use('/api',(req,res)=>req.method==='GET'?res.json([]):res.status(403).json({error:'Mutation outside local QA scope'}));
   // Serve the actual production build, not a dev proxy with HMR noise.
@@ -74,6 +81,23 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   assert.equal((await fetch(base+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json',origin:'https://wrong-origin.invalid'},body:JSON.stringify({username:'fixture-owner',password:fixturePassword})})).status,403);
   browser=await chromium.launch({executablePath,args:['--no-sandbox']});
   const context=await browser.newContext({viewport:{width:1440,height:1080},reducedMotion:'reduce'});await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.fulfill({status:200,contentType:'text/css',body:''}));const page=await context.newPage();page.setDefaultTimeout(8000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const loginForm=async username=>{
+   await page.getByLabel('Usuario',{exact:true}).fill(username);
+   await page.getByLabel('Password',{exact:true}).fill(fixturePassword);
+   const [loggedIn,session]=await Promise.all([
+    page.waitForResponse(r=>r.url()===base+'/api/auth/login'&&r.request().method()==='POST'),
+    page.waitForResponse(r=>r.url()===base+'/api/auth/me'&&r.request().method()==='GET'),
+    page.getByRole('button',{name:'Entrar',exact:true}).last().click(),
+   ]);
+   assert.equal(loggedIn.status(),200);assert.equal(session.status(),200);
+   const auth=await session.json();assert.equal(auth.sessionBacked,true);assert.equal(auth.user?.id,username);
+  };
+  const company=page.locator('.company-office');
+  const openCompany=async()=>{
+   await page.getByTestId('button-back-home').waitFor();
+   await page.getByRole('button',{name:/^Abrir Company World/}).click();
+   await company.getByRole('heading',{name:'Tu empresa, en movimiento.'}).waitFor();
+  };
   await page.addInitScript(()=>localStorage.setItem('blackops-local-auth-user',JSON.stringify({id:'fixture-owner',username:'fixture-owner'})));
   await page.goto(base+'/agents-office');await page.getByLabel('Usuario',{exact:true}).waitFor();assert.equal(await page.locator('.company-office').count(),0);
   const protectedRoutes=runtime.__appQaAgentInternals.LOCAL_ROUTE_MAP.filter(r=>!r.path.startsWith('/news'));
@@ -84,31 +108,38 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   }
   await writeFile(path.join(evidenceDir,'affected-route-auth-guards.json'),JSON.stringify({scope:'Actual compiled auth gate, anonymous browser, isolated backend; not signed-in page certification',routes:protectedRoutes.map(r=>({path:r.path,status:'pass',check:'real login required'}))},null,2));
   await page.goto(base+'/agents-office');await page.getByLabel('Usuario',{exact:true}).waitFor();
-  await page.getByLabel('Usuario',{exact:true}).fill('fixture-member');await page.getByLabel('Password',{exact:true}).fill(fixturePassword);await page.getByRole('button',{name:'Entrar',exact:true}).last().click();
-  await page.getByRole('heading',{name:'Tu empresa, en movimiento.'}).waitFor();await page.getByText(/Meta LOCAL · fixture-member/).waitFor();
+  await loginForm('fixture-member');
+  await page.getByTestId('world-kong-wing').click();
+  await page.getByTestId('world-city-country-count').filter({hasText:'1 países · 1 ciudades'}).waitFor();
+  await page.getByTestId('world-city-controls-toggle').click();
+  await page.getByTestId('world-city-select').selectOption('kong-city:fixture-city');
+  await page.getByTestId('world-city-details-toggle').click();
+  assert.equal(await page.locator('[data-testid^="world-agent-row-kong-city:fixture-city:"]').count(),7);
+  await page.getByTestId('world-kong-wing').click();
+  await openCompany();await company.getByText(/Meta LOCAL · fixture-member/).waitFor();
   await page.getByLabel('Objetivo',{exact:true}).fill('Plan privado del miembro LOCAL');
   await page.getByRole('button',{name:'Guardar',exact:true}).click();
   await page.getByRole('status').filter({hasText:'Meta simulada guardada.'}).waitFor();
-  assert.equal(await page.getByRole('navigation',{name:'Departamentos'}).getByRole('button').count(),6);
+  assert.equal(await company.getByRole('navigation',{name:'Departamentos'}).getByRole('button').count(),6);
   assert.equal(await page.locator('.company-office').getAttribute('data-paused'),'true');
   assert.equal(await page.getByRole('button',{name:'Reanudar movimiento'}).isDisabled(),true);
   await page.getByRole('slider',{name:'Zoom del campus'}).focus();
   await page.getByRole('slider',{name:'Zoom del campus'}).press('End');
   assert.equal(await page.getByRole('slider',{name:'Zoom del campus'}).inputValue(),'1.2');
   for(let i=0;i<4;i++){
-   await page.getByRole('button',{name:/Abrir centro operativo existente/}).click();
-   assert.equal(await page.locator('#live-office-control').isVisible(),true);
-   await page.getByRole('note').filter({hasText:/Vista anterior/}).waitFor();
-   await page.getByRole('button',{name:/Ocultar centro operativo existente/}).click();
-   assert.equal(await page.locator('#live-office-control').isVisible(),false);
+   await page.getByRole('button',{name:/^Ocultar Company World/}).click();
+   assert.equal(await company.count(),0);
+   assert.equal(await page.getByTestId('button-back-home').isVisible(),true);
+   await openCompany();
+   assert.equal(await company.getByLabel('Objetivo',{exact:true}).inputValue(),'Plan privado del miembro LOCAL');
   }
-  await page.getByRole('navigation',{name:'Departamentos'}).getByRole('button',{name:/Ingeniería/}).click();await page.getByRole('button',{name:'App QA',exact:true}).click();
+  await company.getByRole('navigation',{name:'Departamentos'}).getByRole('button',{name:/Ingeniería/}).click();await company.getByRole('button',{name:'App QA',exact:true}).click();
   await page.screenshot({path:path.join(evidenceDir,'integrated-session-desktop.png'),fullPage:true});
   await page.setViewportSize({width:390,height:844});await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(evidenceDir,'integrated-session-mobile.png'),fullPage:true});
-  await page.goto(base+'/app-qa-agent');await page.getByRole('heading',{name:'Cobertura y resultados por misión'}).waitFor();await page.getByText('26/26 rutas clasificadas.',{exact:false}).waitFor();assert.equal(await page.locator('[data-testid^=qa-mission-]').count(),5);await page.setViewportSize({width:1440,height:1080});await page.screenshot({path:path.join(evidenceDir,'missions-desktop.png'),fullPage:true});await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:path.join(evidenceDir,'missions-mobile.png'),fullPage:true});await page.goto(base+'/agents-office');await page.locator('.company-office').waitFor();
+  await page.goto(base+'/app-qa-agent');await page.getByRole('heading',{name:'Cobertura y resultados por misión'}).waitFor();await page.getByText('26/26 rutas clasificadas.',{exact:false}).waitFor();assert.equal(await page.locator('[data-testid^=qa-mission-]').count(),5);await page.setViewportSize({width:1440,height:1080});await page.screenshot({path:path.join(evidenceDir,'missions-desktop.png'),fullPage:true});await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:path.join(evidenceDir,'missions-mobile.png'),fullPage:true});await page.goto(base+'/agents-office');await openCompany();
   await page.route('**/api/auth/logout',route=>route.fulfill({status:503,json:{error:'Fixture logout unavailable'}}));await page.getByRole('button',{name:'Salir',exact:true}).click();await page.getByRole('alert').filter({hasText:/No se pudo cerrar/}).waitFor();assert.equal(await page.locator('.company-office').count(),1);await page.unroute('**/api/auth/logout');
   await page.getByRole('button',{name:'Salir',exact:true}).click();await page.getByLabel('Usuario',{exact:true}).waitFor();assert.equal(await page.locator('.company-office').count(),0);assert.equal((await context.request.get(base+'/api/monthly-goals')).status(),401);assert.deepEqual(errors,[]);
-  await page.getByLabel('Usuario',{exact:true}).fill('fixture-owner');await page.getByLabel('Password',{exact:true}).fill(fixturePassword);await page.getByRole('button',{name:'Entrar',exact:true}).last().click();
+  await loginForm('fixture-owner');await openCompany();
   await page.getByText(/Meta LOCAL · fixture-owner/).waitFor();
   assert.notEqual(await page.getByLabel('Objetivo',{exact:true}).inputValue(),'Plan privado del miembro LOCAL');
   await page.evaluate(()=>{
@@ -127,7 +158,7 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.screenshot({path:path.join(evidenceDir,'github-owner-handoff-mobile.png'),fullPage:true});
   await page.getByRole('button',{name:'Salir',exact:true}).click();await page.getByLabel('Usuario',{exact:true}).waitFor();
-  await page.getByLabel('Usuario',{exact:true}).fill('fixture-member');await page.getByLabel('Password',{exact:true}).fill(fixturePassword);await page.getByRole('button',{name:'Entrar',exact:true}).last().click();
+  await loginForm('fixture-member');
   await page.waitForFunction(()=>document.querySelector('textarea')?.value==='MEMBER-ONLY fixture handoff');
   assert.equal(await page.getByText('OWNER-ONLY fixture handoff',{exact:false}).count(),0);
   assert.deepEqual(errors,[]);
