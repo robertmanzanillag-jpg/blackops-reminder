@@ -88,9 +88,16 @@ async function syncAutomaticAnalytics() {
   automaticAnalyticsStatus = { ...automaticAnalyticsStatus, running: true, complete: false, importedByNetwork: {}, setupRequired: false, lastCheckedAt: new Date().toISOString() };
   try {
     // Detached from the heartbeat loop; a slow export never makes the Mac look offline.
-    await execFileAsync(process.execPath, [path.join(projectDir, "script/blackroom-metricool-exporter.mjs")], {
+    const collectionStarted = Date.now();
+    try { await execFileAsync(process.execPath, [path.join(projectDir, "script/blackroom-metricool-exporter.mjs")], {
       cwd: projectDir, timeout: 240_000, maxBuffer: 100_000,
-    });
+    }); } catch (error) {
+      // Optional secondary export/browser shutdown must not discard a newly
+      // committed primary export. Old snapshots must never masquerade as fresh.
+      const durable = JSON.parse(await readFile(path.join(analyticsRoot, "latest-export.json"), "utf8"));
+      const observed = Date.parse(durable?.checkedAt);
+      if (durable?.brandId !== '6585226' || !Number.isFinite(observed) || observed < collectionStarted || observed > Date.now()) throw error;
+    }
     const result = JSON.parse(await readFile(path.join(analyticsRoot, "latest-export.json"), "utf8"));
     // Local evidence is durable before a remote import is attempted. Failure
     // on either side must not prevent the other from succeeding.

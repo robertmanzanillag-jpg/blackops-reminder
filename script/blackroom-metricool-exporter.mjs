@@ -101,6 +101,10 @@ export async function acquireMetricoolExports({ context, authenticatedPage, now 
       try {
         const acquire = async () => {
         await page.goto(`https://app.metricool.com/evolution/${config.route}?blogId=${brandId}&userId=3558197`, { waitUntil: "domcontentloaded" });
+        if (typeof page.url === 'function') {
+          const location = new URL(page.url());
+          if(location.hostname !== 'app.metricool.com' || location.searchParams.get('blogId') !== brandId) throw new Error('Wrong Metricool brand page');
+        }
         if (typeof page.url === "function" && /\/login(?:[/?#]|$)/.test(page.url())) {
           setupRequired = true;
           throw new Error("Metricool login required");
@@ -108,6 +112,12 @@ export async function acquireMetricoolExports({ context, authenticatedPage, now 
         // Wait for the actual connected account, not merely a loaded SPA shell.
         stage = "account-identity";
         await page.locator(`a[href*="${config.identity}"]`).first().waitFor({ state: "visible" });
+        const identityLink = page.locator(`a[href*="${config.identity}"]`).first();
+        if (typeof identityLink.getAttribute === 'function') {
+          const actual = new URL(await identityLink.getAttribute('href'));
+          const expected = new URL('https://' + config.identity);
+          if (actual.protocol !== 'https:' || actual.hostname.replace(/^www\./,'') !== expected.hostname.replace(/^www\./,'') || actual.pathname.replace(/\/$/,'') !== expected.pathname || actual.username || actual.password) throw new Error('Wrong account identity');
+        }
         stage = "date-menu";
         const period = page.getByText("Main period", { exact: true }).locator("..");
         await period.getByRole("button").first().click();
@@ -156,16 +166,19 @@ export async function acquireMetricoolExports({ context, authenticatedPage, now 
   return { brandId, imports, errors, setupRequired, checkedAt: now().toISOString() };
 }
 
-export async function acquireBrandPair({context, authenticatedPage, statePath, acquire = acquireMetricoolExports}) {
+export async function acquireBrandPair({context, authenticatedPage, statePath, acquire = acquireMetricoolExports, secondaryTimeoutMs = 45000}) {
   const save = async (file, value) => { await mkdir(path.dirname(file),{recursive:true});const tmp=file+'.'+process.pid+'.tmp';await writeFile(tmp,JSON.stringify(value),{mode:0o600});await rename(tmp,file); };
   const blackroom=await acquire({context,authenticatedPage,brandId:'6585226'});
   // Commit primary evidence before any optional secondary acquisition.
   await save(statePath,blackroom);
+  let secondaryTimer, expired = false;
   try {
-    const kong=await acquire({context,brandId:'6475033',networkTimeoutMs:20_000});
+    const kong=await Promise.race([acquire({context,brandId:'6475033',networkTimeoutMs:20_000}),new Promise((_,reject)=>{secondaryTimer=setTimeout(()=>{expired=true;reject(new Error('Secondary timeout'));},secondaryTimeoutMs)})]);
+    if(expired) return blackroom;
     await save(path.join(path.dirname(statePath),'kong-latest-export.json'),kong);
     await save(path.join(path.dirname(statePath),'organic-brand-comparison.json'),compareBrandEvidence(blackroom,kong));
   } catch { /* Primary export is already durable; secondary must not block it. */ }
+  finally { clearTimeout(secondaryTimer); }
   return blackroom;
 }
 
@@ -183,7 +196,7 @@ export async function runMetricoolExporter({ profileDir, statePath, login = fals
     }
     const result = await acquireBrandPair({context,authenticatedPage,statePath});
     return result;
-  } finally { await context.close(); }
+  } finally { await Promise.race([context.close().catch(()=>{}),new Promise(resolve=>{const timer=setTimeout(resolve,2000);timer.unref();})]); }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

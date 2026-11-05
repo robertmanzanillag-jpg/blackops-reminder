@@ -10,12 +10,12 @@ export function compareBrandEvidence(blackroom,kong,now=new Date()) {
     }
     return {brand,brandId:id,evidence:rows,networks:['facebook','tiktok','youtube'].map(network=>{
       const samples=rows.filter(r=>r.network===network), durations=samples.map(r=>r.durationSeconds).filter(x=>x>0);
-      return {network,count:samples.length,medianViews:median(samples.map(r=>r.views)),medianDurationSeconds:median(durations)};
+      return {network,count:samples.length,durationSampleCount:durations.length,medianViews:median(samples.map(r=>r.views)),medianDurationSeconds:median(durations)};
     })};
   });
   return {evaluatedAt:now.toISOString(),mode:'observational_proposals',mayPublish:false,brands,
-    proposals:brands.flatMap(b=>b.networks.filter(n=>n.count>=3&&n.medianDurationSeconds!==null).map(n=>({brand:b.brand,network:n.network,observedMedianSeconds:n.medianDurationSeconds,
+    proposals:brands.flatMap(b=>b.networks.filter(n=>n.durationSampleCount>=3&&n.medianDurationSeconds!==null).map(n=>({brand:b.brand,network:n.network,observedMedianSeconds:n.medianDurationSeconds,
       proposal:`Compare an own-content duration near ${n.medianDurationSeconds}s against the existing control.`,
       counterargument:`${n.count} observations with median ${n.medianViews} views are not age-matched; audience and distribution differ between brands.`,
-      evidenceIds:b.evidence.filter(e=>e.network===n.network).map(e=>e.id),overrideWinner:false}))) };
+      evidenceIds:b.evidence.filter(e=>e.network===n.network&&e.durationSeconds>0).map(e=>e.id),overrideWinner:false}))) };
 }
