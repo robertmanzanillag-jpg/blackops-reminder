@@ -30,6 +30,7 @@ const cardsBody = z.object({ cards: z.array(z.unknown()).min(1).max(50) }).stric
 const count = z.number().finite().nonnegative();
 const metricsBody = z.object({
   rows: z.array(z.object({
+    network: z.string().regex(/^[a-z]{2,20}$/),
     postId: z.string().min(1).max(120).nullable(),
     queueItemId: z.string().max(120).nullable().optional(),
     contentHash: z.string().max(120).nullable().optional(),
