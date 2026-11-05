@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import http from "node:http";
+import { startOrganicPeerScout } from "./organic-peer-scout.mjs";
 import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -347,7 +348,13 @@ async function recoverWorker() {
   catch (error) { console.error("[blackroom-control] startup recovery failed", error); }
 }
 
-server.listen(port, "127.0.0.1", () => console.log(`[blackroom-control] http://127.0.0.1:${port}/blackroom`));
+server.listen(port, "127.0.0.1", () => {
+  console.log(`[blackroom-control] http://127.0.0.1:${port}/blackroom`);
+  // Long-lived local supervisor, independent of whether any publishing job is due.
+  const stopScout = startOrganicPeerScout(path.join(projectDir, "clippers_workspace/blackroom/agent"));
+  server.once("close", () => void stopScout());
+  for (const signal of ["SIGTERM", "SIGINT"]) process.once(signal, () => void stopScout().finally(() => process.exit(0)));
+});
 setTimeout(recoverWorker, 1_000);
 setInterval(recoverWorker, 60_000).unref();
 // A slow/failed control-plane poll (or missing token) cannot stall a local
