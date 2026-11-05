@@ -105,6 +105,7 @@ export function AgentsOfficeWorld({
   const [cityPage, setCityPage] = useState(0);
   const [cityCountry, setCityCountry] = useState("");
   const [cityControlsOpen, setCityControlsOpen] = useState(false);
+  const [cityOverviewOpen, setCityOverviewOpen] = useState(true);
   const [cityDetailsOpen, setCityDetailsOpen] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
   const cityDirectory = useQuery<unknown>({ queryKey: ["/api/agents-office/cities"], enabled: officeWing === "kong", staleTime: 60_000, refetchInterval: 60_000, retry: false });
@@ -133,6 +134,7 @@ export function AgentsOfficeWorld({
   const changeWing = (wing: "main" | "kong") => {
     setOfficeWing(wing); setCityPage(0); setFocusedDepartment(null); setPanelAgentId(null); setOverlay("none");
     setCityControlsOpen(false); setCityDetailsOpen(false); setCityCountry("");
+    setCityOverviewOpen(true);
     sceneRef.current?.focusDepartment(null);
   };
   const changeCityPage = (page: number) => {
@@ -142,6 +144,16 @@ export function AgentsOfficeWorld({
   };
   const focusRoom = (id: string | null) => {
     setFocusedDepartment(id); setPanelAgentId(null); sceneRef.current?.focusDepartment(id);
+  };
+  const openCityFromOverview = (id: string) => {
+    const filteredIndex = filteredCityRooms.findIndex(room => room.id === id);
+    const index = filteredIndex >= 0 ? filteredIndex : cityRooms.findIndex(room => room.id === id);
+    if (index < 0) return;
+    if (filteredIndex < 0) setCityCountry("");
+    setCityPage(Math.floor(index / OFFICE_CITY_PAGE_SIZE));
+    focusRoom(id);
+    setCityDetailsOpen(true);
+    setCityOverviewOpen(false);
   };
 
   // Approved council lessons change how an agent is reported (same rule as the building).
@@ -355,7 +367,11 @@ export function AgentsOfficeWorld({
         {officeWing === "main" && company?.events?.[0] && <p className="mt-1 truncate text-[11px] text-violet-200" data-testid="world-last-event">Ultimo: {company.events[0].text}</p>}
         <div className={cn("pointer-events-auto flex flex-wrap gap-2", officeWing === "kong" ? "mt-2" : "mt-3")}>
           <button type="button" onClick={() => changeWing(officeWing === "kong" ? "main" : "kong")} className={cn("rounded-full border-2 border-violet-200 bg-violet-500 font-bold text-white hover:bg-violet-400", officeWing === "kong" ? "px-3 py-1 text-[11px]" : "px-4 py-2 text-sm")} data-testid="world-kong-wing">{officeWing === "kong" ? "Volver a oficina principal" : "Ver oficina KONG"}</button>
-          <button type="button" onClick={() => focusRoom(null)} className="rounded-full border border-white/15 bg-black/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10" data-testid="world-overview">Vista general</button>
+          {officeWing === "kong" ? (
+            <button type="button" aria-expanded={cityOverviewOpen} aria-controls="world-city-overview" onClick={() => setCityOverviewOpen(open => !open)} className="rounded-full border border-white/15 bg-black/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10" data-testid="world-overview">Todas las ciudades</button>
+          ) : (
+            <button type="button" onClick={() => focusRoom(null)} className="rounded-full border border-white/15 bg-black/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10" data-testid="world-overview">Vista general</button>
+          )}
           {officeWing === "main" && <>
           <button type="button" onClick={() => setOverlay(overlay === "ceo" ? "none" : "ceo")} className="rounded-full border border-amber-200/40 bg-amber-400/20 px-3 py-1.5 text-xs font-semibold text-amber-50 hover:bg-amber-400/35" data-testid="world-ceo-channel">Canal con el CEO</button>
           <button type="button" onClick={() => setOverlay(overlay === "ranking" ? "none" : "ranking")} className="rounded-full border border-emerald-200/40 bg-emerald-400/15 px-3 py-1.5 text-xs font-semibold text-emerald-50 hover:bg-emerald-400/30" data-testid="world-ranking">Tabla de posiciones</button>
@@ -404,6 +420,35 @@ export function AgentsOfficeWorld({
         </nav>}
         {message && <p className="mt-2 text-xs text-violet-100" data-testid="world-message">{message}</p>}
       </div>
+
+      {officeWing === "kong" && cityOverviewOpen && (
+        <section id="world-city-overview" aria-labelledby="world-city-overview-title" className="absolute inset-x-3 bottom-3 z-20 flex max-h-[min(53%,34rem)] flex-col rounded-2xl border border-white/15 bg-[#070b14]/95 p-2.5 text-white shadow-2xl sm:left-auto sm:w-[min(660px,calc(100%_-_1.5rem))] sm:max-h-[min(64%,36rem)]" data-testid="world-city-overview">
+          <div className="mb-2 flex shrink-0 items-start justify-between gap-2">
+            <div>
+              <h2 id="world-city-overview-title" className="text-sm font-bold">Todas las ciudades ({cityRooms.length})</h2>
+              <p className="text-[11px] text-zinc-400">Elige una ciudad para ver sus siete figuras.</p>
+            </div>
+            <button type="button" onClick={() => setCityOverviewOpen(false)} className="shrink-0 rounded-full border border-white/20 px-2 py-1 text-[11px] font-semibold hover:bg-white/10" aria-label="Minimizar todas las ciudades">Minimizar</button>
+          </div>
+          {citySnapshot.isError && <p role="status" className="mb-2 shrink-0 text-[11px] text-amber-200" data-testid="world-city-overview-activity-unavailable">Actividad de KONG sin conectar. El directorio sigue visible y la actividad queda sin verificar.</p>}
+          {cityRooms.length ? (
+            <ul className="grid grid-cols-2 gap-1 overflow-y-auto pr-1 min-[480px]:grid-cols-3 sm:grid-cols-5">
+              {cityRooms.map(room => {
+                const running = room.agents.filter(agent => agent.status.state === "working").length;
+                const recorded = room.agents.filter(agent => agent.hasDurableEvidence).length;
+                return (
+                  <li key={room.id}>
+                    <button type="button" onClick={() => openCityFromOverview(room.id)} className="flex h-full w-full flex-col rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-left hover:border-violet-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-300" data-testid="world-city-overview-city">
+                      <span className="text-xs font-semibold">{room.name} <span className="text-[10px] text-zinc-400">{room.city.countryCode}</span></span>
+                      <span className={cn("text-[10px]", running ? "text-emerald-300" : "text-zinc-400")}>{recorded ? `${running} verificados en ejecución · ${recorded}/7 registrados` : "Sin evidencia reciente"}</span>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : <p role="status" className="text-xs text-zinc-300">{cityDirectory.isLoading ? "Consultando el directorio de KONG…" : "Directorio de ciudades no disponible."}</p>}
+        </section>
+      )}
 
       {overlay === "ranking" && (
         <section className="absolute bottom-3 left-3 z-30 max-h-[55%] w-[min(380px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-emerald-200/20 bg-[#06100d]/95 p-4 text-white shadow-2xl" data-testid="world-ranking-panel">
