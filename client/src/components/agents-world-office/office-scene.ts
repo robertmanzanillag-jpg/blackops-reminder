@@ -394,6 +394,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
 
     const label = document.createElement("div");
     label.className = "pointer-events-none absolute -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-white/15 bg-black/75 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-lg";
+    if (agent.id.startsWith("kong-city:")) label.dataset.testid = `world-avatar-${agent.id}`;
     labelLayer.appendChild(label);
 
     const ctx = canvas.getContext("2d");
