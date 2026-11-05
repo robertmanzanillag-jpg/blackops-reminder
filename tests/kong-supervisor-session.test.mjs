@@ -16,3 +16,10 @@ test('logout and session revalidation immediately hide private cached state', ()
   assert.equal(kongSupervisorSessionScope(undefined, owner, false, false), null);
   assert.equal(kongSupervisorSessionScope(owner, undefined, false, false), null);
 });
+test('retained success data cannot reopen the gate after a failed session revalidation', () => {
+  assert.equal(kongSupervisorSessionScope(owner, owner, false, false), 'owner');
+  assert.equal(kongSupervisorSessionScope(owner, owner, false, true), null);
+  // Query caches retain data when the refresh fails; the error flag must win.
+  assert.equal(kongSupervisorSessionScope(owner, owner, false, false, true), null);
+  assert.equal(kongSupervisorSessionScope(owner, owner, false, false, false, true), null);
+});
