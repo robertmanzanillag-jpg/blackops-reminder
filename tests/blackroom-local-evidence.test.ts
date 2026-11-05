@@ -70,17 +70,17 @@ test("local archive is crash-safe on invalid input; repeated refreshes do not to
     await writeFile(path.join(dir,"latest-export.json"), JSON.stringify({imports:[{network:"youtube",samples:[sample]}]}));
     await writeFile(path.join(dir,"manual-planner-receipts.json"), JSON.stringify({brandId:"6585226",state:"scheduled_not_published",rows:[
       { plannerId:"1234", networks:["youtube","tiktok","tiktok"] }]}));
-    const report = await refreshLocalBlackRoomEvidence(dir, dir, seen);
+    const report = await refreshLocalBlackRoomEvidence(dir, dir, seen, { home: dir });
     assert.equal(report.decisions.youtube.matchedSnapshots, 1);
     assert.equal(report.unverifiedManualDeliveries, 2);
     assert.equal(report.decisions.tiktok.matchedSnapshots, 0);
-    const replay = await refreshLocalBlackRoomEvidence(dir, dir, seen);
+    const replay = await refreshLocalBlackRoomEvidence(dir, dir, seen, { home: dir });
     assert.equal(replay.snapshotCount, 1);
     assert.equal((replay as any).lastCompleteImportAt, undefined);
     assert.equal(await readFile(path.join(dir,"queue.json"),"utf8"), '{"enabled":false}');
     assert.equal(await readFile(path.join(dir,"worker-ledger.json"),"utf8"), receiptJson);
     await writeFile(path.join(dir,"local-ceo-evidence.json"), "{bad");
-    await assert.rejects(refreshLocalBlackRoomEvidence(dir, dir, seen));
+    await assert.rejects(refreshLocalBlackRoomEvidence(dir, dir, seen, { home: dir }));
     assert.equal(await readFile(path.join(dir,"local-ceo-evidence.json"),"utf8"), "{bad");
   } finally { await rm(dir, { recursive:true, force:true }); }
 });

@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-04T21:40:46.514Z",
-  "repoRoot": "/private/tmp/br-ceo-pr.C1j7zP0e",
+  "generatedAt": "2026-11-04T23:58:19.619Z",
+  "repoRoot": "/private/tmp/br-manual-reconciliation",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -122,11 +122,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 657,
-    "filesIndexed": 574,
-    "imports": 1962,
+    "filesVisible": 661,
+    "filesIndexed": 578,
+    "imports": 1979,
     "routes": 495,
-    "symbols": 12901
+    "symbols": 13055
   },
   "directories": {
     ".": {
@@ -187,10 +187,10 @@
       }
     },
     "docs": {
-      "files": 31,
-      "indexed": 30,
+      "files": 32,
+      "indexed": 31,
       "kinds": {
-        "docs": 31
+        "docs": 32
       }
     },
     "examples/clippers-motivation": {
@@ -202,10 +202,10 @@
       }
     },
     "script": {
-      "files": 77,
-      "indexed": 72,
+      "files": 78,
+      "indexed": 73,
       "kinds": {
-        "script": 77
+        "script": 78
       }
     },
     "scripts": {
@@ -216,10 +216,10 @@
       }
     },
     "server": {
-      "files": 134,
-      "indexed": 130,
+      "files": 135,
+      "indexed": 131,
       "kinds": {
-        "server": 134
+        "server": 135
       }
     },
     "server/replit_integrations": {
@@ -244,10 +244,10 @@
       }
     },
     "tests": {
-      "files": 120,
-      "indexed": 117,
+      "files": 121,
+      "indexed": 118,
       "kinds": {
-        "test": 120
+        "test": 121
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -3926,6 +3926,14 @@
       "routes": []
     },
     {
+      "path": "docs/blackroom-manual-reconciliation.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/ceo-assistant-go-live-task.md",
       "kind": "docs",
       "imports": [],
@@ -4962,24 +4970,49 @@
       "imports": [
         "../server/blackroom-daily-queue",
         "../server/blackroom-local-evidence",
+        "../server/blackroom-manual-observations",
+        "./blackroom-publication-collector",
         "./blackroom-remote-sync.mjs",
+        "node:fs",
         "node:fs/promises",
         "node:os",
         "node:path",
         "node:url"
       ],
       "exports": [
+        "manualReceiptPaths",
         "refreshLocalBlackRoomEvidence"
       ],
       "symbols": [
         "archiveFile",
+        "buffer",
+        "calendarPath",
+        "clips",
+        "confirmed",
+        "directory",
+        "entries",
+        "handle",
         "jsonFile",
+        "keys",
         "latest",
         "ledger",
+        "manual",
+        "manualObservations",
+        "manualReceiptPaths",
+        "newRows",
+        "oldRegistry",
+        "outputDir",
         "prior",
+        "readManualReceipt",
+        "receiptPaths",
         "refreshLocalBlackRoomEvidence",
+        "registryDoc",
+        "registryPath",
+        "registryRows",
         "root",
         "saveAtomic",
+        "stat",
+        "summary",
         "temp"
       ],
       "routes": []
@@ -5178,6 +5211,31 @@
         "stream",
         "temporary",
         "transient"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/blackroom-publication-collector.ts",
+      "kind": "script",
+      "imports": [
+        "../server/blackroom-manual-observations"
+      ],
+      "exports": [
+        "collectBlackRoomPublicationReceipts"
+      ],
+      "symbols": [
+        "attemptedDays",
+        "body",
+        "collectBlackRoomPublicationReceipts",
+        "cutoff",
+        "days",
+        "failedDays",
+        "lastError",
+        "receipts",
+        "response",
+        "today",
+        "unique",
+        "url"
       ],
       "routes": []
     },
@@ -10507,6 +10565,7 @@
         "allocation",
         "allowed",
         "alternateCount",
+        "armDuration",
         "availableWindowStart",
         "belowTarget",
         "bitrate",
@@ -10524,16 +10583,21 @@
         "chooseLanguage",
         "cleaned",
         "commitBlackRoomReservation",
+        "commonDuration",
         "comparable",
         "controlledTest",
         "counts",
         "current",
+        "dayNumber",
         "daypart",
+        "decisions",
         "distributedSlotSelected",
         "dj",
         "durationSeconds",
+        "durationStudy",
         "durations",
         "encoderOptions",
+        "exploitDuration",
         "extractBlackRoomDj",
         "failedVideos",
         "findBlackRoomDropOffset",
@@ -10567,6 +10631,7 @@
         "parseBlackRoomEnergySamples",
         "planBlackRoomDeterministicEdit",
         "preferFreshSource",
+        "preferences",
         "preferred",
         "preferredCount",
         "preferredDjs",
@@ -11081,6 +11146,7 @@
       ],
       "exports": [
         "EvidenceArchive",
+        "applyLocalEditorialReport",
         "assessLocalBlackRoomExports",
         "emptyEvidence",
         "preferFreshLocalEvidence"
@@ -11089,25 +11155,38 @@
         "Decisions",
         "SourcePost",
         "add",
+        "applyLocalEditorialReport",
         "assessLocalBlackRoomExports",
+        "band",
         "byId",
         "candidate",
+        "d",
         "decisions",
+        "duration",
+        "durationDecisions",
+        "durations",
         "emptyEvidence",
         "experiments",
+        "groups",
         "id",
+        "input",
         "item",
         "k",
         "key",
         "latest",
+        "observedDurationCohorts",
+        "post",
         "posts",
         "preferFreshLocalEvidence",
         "receiptCounts",
+        "seconds",
         "selected",
         "snapshots",
         "sourceObservedAt",
         "unique",
-        "validReference"
+        "validReference",
+        "verifiedLearning",
+        "views"
       ],
       "routes": []
     },
@@ -11220,6 +11299,51 @@
         "values",
         "video",
         "width"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-manual-observations.ts",
+      "kind": "server",
+      "imports": [
+        "./blackroom-learning-observations",
+        "./blackroom-verified-learning"
+      ],
+      "exports": [
+        "CalendarReceipts",
+        "ManualClip",
+        "PublishedReceipt",
+        "emptyCalendarReceipts",
+        "manualClips",
+        "publishedCalendarReceipts",
+        "reconcileManualObservations"
+      ],
+      "symbols": [
+        "base",
+        "candidates",
+        "data",
+        "doc",
+        "emptyCalendarReceipts",
+        "id",
+        "ids",
+        "key",
+        "keys",
+        "latest",
+        "manualClips",
+        "matching",
+        "measured",
+        "network",
+        "networks",
+        "posts",
+        "publishedCalendarReceipts",
+        "rawReceipts",
+        "receipt",
+        "receipts",
+        "reconcileManualObservations",
+        "result",
+        "reused",
+        "unique",
+        "urlId"
       ],
       "routes": []
     },
@@ -11472,27 +11596,42 @@
         "node:crypto"
       ],
       "exports": [
+        "BLACKROOM_DURATION_TEST_ID",
         "BLACKROOM_HOOK_TEST_ID",
         "BLACKROOM_LEARNING_NETWORKS",
+        "DURATION_ARMS",
+        "DurationDecision",
         "VerifiedLearningDecision",
         "VerifiedLearningStatus",
         "canonicalLearningPostId",
-        "evaluateBlackRoomLearning"
+        "durationDecisionId",
+        "evaluateBlackRoomLearning",
+        "evaluateDurationLearning"
       ],
       "symbols": [
+        "Arm",
+        "BLACKROOM_DURATION_TEST_ID",
         "BLACKROOM_HOOK_TEST_ID",
+        "DURATION_ARMS",
+        "Row",
         "block",
         "blocks",
         "canonicalLearningPostId",
         "comparisonBlock",
         "counts",
+        "date",
         "dates",
         "declared",
         "deduped",
+        "durationDecisionId",
+        "e",
         "entries",
         "evaluateBlackRoomLearning",
+        "evaluateDurationLearning",
         "evidence",
         "finish",
+        "found",
+        "groups",
         "health",
         "host",
         "hour",
@@ -11500,21 +11639,27 @@
         "id",
         "identities",
         "key",
+        "local",
         "matches",
         "median",
         "paired",
         "pairedCounts",
         "pairedKeys",
+        "part",
+        "parts",
         "ratio",
         "ratios",
         "raw",
+        "reservations",
         "retention",
         "rows",
         "score",
+        "snapshots",
         "sorted",
         "sourceObservedAt",
         "threshold",
         "url",
+        "used",
         "valid",
         "winner"
       ],
@@ -19601,16 +19746,21 @@
       ],
       "exports": [],
       "symbols": [
+        "arm",
         "atQuota",
         "base",
         "committing",
+        "confounded",
         "date",
+        "decisions",
         "djs",
         "download",
+        "duplicates",
         "explicit",
         "explored",
         "full",
         "id",
+        "incompatible",
         "input",
         "inventory",
         "ledger",
@@ -19618,6 +19768,7 @@
         "next",
         "now",
         "output",
+        "p",
         "plan",
         "publishedAt",
         "queue",
@@ -19749,6 +19900,9 @@
       "kind": "test",
       "imports": [
         "../script/blackroom-local-evidence",
+        "../script/blackroom-metricool-exporter.mjs",
+        "../script/blackroom-remote-sync.mjs",
+        "../server/blackroom-deterministic-editor",
         "../server/blackroom-local-evidence",
         "../server/blackroom-verified-learning",
         "node:assert/strict",
@@ -19759,19 +19913,43 @@
       ],
       "exports": [],
       "symbols": [
+        "analytics",
         "assess",
+        "bad",
+        "consensus",
+        "contradicts",
+        "date",
+        "dayNum",
         "decision",
         "dir",
+        "divergent",
+        "filename",
         "first",
+        "id",
+        "imports",
+        "initial",
+        "later",
         "local",
+        "makeReport",
+        "measuredSeconds",
+        "missing",
+        "networks",
+        "now",
+        "num",
+        "plan",
+        "publishedAt",
+        "q",
         "receipt",
         "receiptJson",
         "ref",
+        "reference",
         "remote",
         "replay",
         "report",
         "sample",
-        "seen"
+        "seen",
+        "text",
+        "views"
       ],
       "routes": []
     },
@@ -19810,6 +19988,54 @@
         "targeted",
         "totalBytes",
         "valid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-manual-observations.test.ts",
+      "kind": "test",
+      "imports": [
+        "../script/blackroom-local-evidence",
+        "../script/blackroom-publication-collector",
+        "../server/blackroom-manual-observations",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "blockedFetch",
+        "calendar",
+        "calendarBody",
+        "clips",
+        "conflict",
+        "cooldown",
+        "d",
+        "dir",
+        "doc",
+        "env",
+        "fetcher",
+        "file",
+        "many",
+        "measured",
+        "missing",
+        "now",
+        "obs",
+        "old",
+        "output",
+        "persisted",
+        "provider",
+        "r",
+        "receipt",
+        "replay",
+        "report",
+        "result",
+        "retained",
+        "reused",
+        "row",
+        "u"
       ],
       "routes": []
     },
@@ -22862,6 +23088,7 @@
     "tests/blackroom-links.test.ts",
     "tests/blackroom-local-evidence.test.ts",
     "tests/blackroom-local-worker.test.ts",
+    "tests/blackroom-manual-observations.test.ts",
     "tests/blackroom-metricool-bridge.test.ts",
     "tests/blackroom-remote-control.test.ts",
     "tests/blackroom-verified-learning.test.ts",
