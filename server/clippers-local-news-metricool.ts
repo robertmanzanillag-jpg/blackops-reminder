@@ -8,6 +8,8 @@ import type {
   ClipperLocalNewsStatus,
 } from "./clippers-local-news-agent";
 import { hashLocalNewsQueueReview, hashLocalNewsReviewValue } from "./clippers-local-news-review-committee";
+import { destinationIdentityVerified, destinationNetworkVerified, newsArticleIdentity, newsSourceMatchesCity, readLocalNewsDeliveryPolicy, type NewsPolicyReader } from "./local-news-delivery-safety";
+import { readNewsDeliveryAttempts, saveNewsDeliveryAttempts, type NewsDeliveryAttempt } from "./local-news-delivery-attempts";
 
 const METRICOOL_API = "https://app.metricool.com";
 const TIME_ZONE = "America/New_York";
@@ -31,8 +33,6 @@ const BREAKING_DAILY_BURST = 2;
 const STALE_LOCK_MS = 10 * 60_000;
 const MEDIA_NORMALIZATION_ATTEMPTS = 3;
 const MEDIA_NORMALIZATION_RETRY_MS = 250;
-const SCHEDULE_ATTEMPTS = 3;
-const SCHEDULE_RETRY_MS = 500;
 const MAX_METRICOOL_JSON_BYTES = 1024 * 1024;
 const DEFAULT_METRICOOL_REQUEST_TIMEOUT_MS = 8_000;
 const DEFAULT_METRICOOL_RESPONSE_TIMEOUT_MS = 5_000;
@@ -60,6 +60,8 @@ const queueItemSchema = z.object({
   autoEligible: z.boolean(),
   published: z.literal(false),
   createdAt: z.string().datetime(),
+  originalPublishedAt: z.string().datetime().nullable().optional(),
+  expires: z.string().datetime().nullable().optional(),
   source: z.string().max(500).optional(),
   sourceUrl: z.string().url().max(2_000).optional(),
   section: z.enum(["traffic", "weather", "breaking", "public_safety", "local"]).optional(),
@@ -104,12 +106,12 @@ const ledgerEntrySchema = z.object({
   scheduledFor: z.string().datetime(),
   scheduledAt: z.string().datetime(),
   metricoolPostId: z.string().max(500).nullable(),
-});
+}).passthrough();
 
 const ledgerSchema = z.object({
   version: z.literal(1),
   entries: z.array(ledgerEntrySchema).max(100_000),
-});
+}).passthrough();
 
 type QueueItem = z.infer<typeof queueItemSchema>;
 type Ledger = z.infer<typeof ledgerSchema>;
@@ -124,7 +126,7 @@ function hasCompleteCommitteeApproval(item: QueueItem): boolean {
   if (!COMMITTEE_ROLES.every((role) => roles.has(role)) || item.verdicts.some((verdict) => verdict.verdict !== "approve")) return false;
   const expectedCopyHash = `copyHash=${hashLocalNewsReviewValue(item.copy)}`;
   if (!item.evidence.includes(expectedCopyHash)) return false;
-  const expectedReviewHash = hashLocalNewsQueueReview({ queueItemId: item.id, eventId: item.eventId, eventRevision: item.eventRevision, lane: item.lane, copy: item.copy, platform: item.platform, risk: item.risk, canonicalEventIdentity: item.canonicalEventIdentity, claimIdentityHash: item.claimIdentityHash, verdicts: item.verdicts, evidence: item.evidence, consensus: item.consensus, publishDecision: item.publishDecision, checkedAt: item.checkedAt });
+  const expectedReviewHash = hashLocalNewsQueueReview({ queueItemId: item.id, eventId: item.eventId, eventRevision: item.eventRevision, lane: item.lane, copy: item.copy, platform: item.platform, risk: item.risk, canonicalEventIdentity: item.canonicalEventIdentity, claimIdentityHash: item.claimIdentityHash, verdicts: item.verdicts, evidence: item.evidence, consensus: item.consensus, publishDecision: item.publishDecision, checkedAt: item.checkedAt, originalPublishedAt: item.originalPublishedAt, expires: item.expires });
   if (item.reviewHash !== expectedReviewHash) return false;
   if (item.risk === "high" || item.risk === "critical") {
     const connectorEvidence = item.evidence.find((entry) => entry.startsWith("connector="));
@@ -266,10 +268,14 @@ function queueItemIsFresh(item: QueueItem, nowMs: number, env: NodeJS.ProcessEnv
       : "CLIPPERS_LOCAL_NEWS_ROUTINE_MAX_AGE_HOURS";
   const maxAgeHours = boundedHours(env[envKey], DEFAULT_MAX_ITEM_AGE_HOURS[urgency], MAX_ITEM_AGE_HOURS);
   const createdAt = new Date(item.createdAt).getTime();
-  return Number.isFinite(createdAt) && nowMs - createdAt <= maxAgeHours * 60 * 60_000;
+  const original = item.originalPublishedAt ? Date.parse(item.originalPublishedAt) : NaN;
+  const expires = item.expires ? Date.parse(item.expires) : Infinity;
+  return Number.isFinite(createdAt) && Number.isFinite(original)
+    && original <= nowMs && nowMs - original <= maxAgeHours * 60 * 60_000
+    && nowMs < expires;
 }
 
-export type ClipperLocalNewsMetricoolResultStatus = "completed" | "partial" | "blocked";
+export type ClipperLocalNewsMetricoolResultStatus = "completed" | "partial" | "blocked" | "paused";
 
 export interface ClipperLocalNewsMetricoolResult {
   status: ClipperLocalNewsMetricoolResultStatus;
@@ -285,6 +291,9 @@ export interface ClipperLocalNewsMetricoolResult {
   mediaFallback: number;
   blockedLanes: ClipperLocalNewsLane[];
   ledgerPath: string;
+  publicationConfirmed: number;
+  pendingReconciliation: number;
+  duplicatesSuppressed: number;
 }
 
 export interface ClipperLocalNewsMetricoolOptions {
@@ -296,6 +305,8 @@ export interface ClipperLocalNewsMetricoolOptions {
   maxPerRun?: number;
   requestTimeoutMs?: number;
   responseTimeoutMs?: number;
+  /** Internal dependency only. Public handlers never forward request options. */
+  readPolicy?: NewsPolicyReader;
 }
 
 export interface ClipperLocalNewsMetricoolReadiness {
@@ -320,6 +331,8 @@ interface ProfileCandidate {
   label: string;
   blogId: string;
   connectedNetworks: Set<string> | null;
+  publishAllowed: boolean;
+  networkAccountIds: { facebook: string | null; x: string | null };
 }
 
 function hasRealValue(value: string | undefined): value is string {
@@ -405,8 +418,9 @@ function metricoolContentKey(item: Pick<QueueItem, "copy" | "lane" | "platform">
 }
 
 function metricoolSourceUrlHash(sourceUrl: string): string {
-  const normalized = new URL(sourceUrl).toString();
-  return createHash("sha256").update(normalized, "utf8").digest("hex");
+  const identity = newsArticleIdentity(sourceUrl);
+  if (!identity) throw new Error("invalid_source_article");
+  return identity;
 }
 
 function metricoolLedgerContentKey(entry: Ledger["entries"][number]): string | null {
@@ -414,7 +428,7 @@ function metricoolLedgerContentKey(entry: Ledger["entries"][number]): string | n
   return `${entry.lane}|${entry.platform}|${entry.copyHash}`;
 }
 
-function metricoolSourceWasScheduled(item: QueueItem, entries: Ledger["entries"]): boolean {
+function metricoolSourceWasScheduled(item: QueueItem, entries: Ledger["entries"], history: QueueItem[] = []): boolean {
   if (!item.sourceUrl) return false;
   let sourceUrlHash: string;
   try {
@@ -424,19 +438,14 @@ function metricoolSourceWasScheduled(item: QueueItem, entries: Ledger["entries"]
   }
   return entries.some((entry) => {
     if (entry.lane !== item.lane || entry.platform !== item.platform) return false;
-    const isNewerRevision = Boolean(
-      entry.eventId
-      && entry.eventId === item.eventId
-      && entry.eventRevision
-      && item.eventRevision
-      && item.eventRevision > entry.eventRevision,
-    );
-    const sameSourceUrl = entry.sourceUrlHash === sourceUrlHash;
-    const sameLegacyIdentity = !entry.sourceUrlHash && Boolean(
+    const historicalItem = history.find(previous => previous.id === entry.queueItemId);
+    const sameSourceUrl = entry.sourceUrlHash === sourceUrlHash
+      || (historicalItem?.sourceUrl && newsArticleIdentity(historicalItem.sourceUrl) === sourceUrlHash);
+    const sameLegacyIdentity = (!entry.sourceUrlHash || !historicalItem?.sourceUrl) && Boolean(
       (entry.eventId && entry.eventId === item.eventId)
       || (entry.canonicalEventIdentity && entry.canonicalEventIdentity === item.canonicalEventIdentity),
     );
-    return (sameSourceUrl || sameLegacyIdentity) && !isNewerRevision;
+    return sameSourceUrl || sameLegacyIdentity;
   });
 }
 
@@ -451,6 +460,7 @@ function resolvePaths(options: ClipperLocalNewsMetricoolOptions, env: NodeJS.Pro
   return {
     queuePath,
     ledgerPath: path.join(path.dirname(queuePath), "metricool-delivery-ledger.json"),
+    attemptsPath: path.join(path.dirname(queuePath), "metricool-delivery-attempts.json"),
   };
 }
 
@@ -522,7 +532,12 @@ function stringValues(value: unknown): string[] {
   if (value && typeof value === "object") {
     return Object.entries(value as Record<string, unknown>).flatMap(([key, child]) => {
       if (child === true) return [key.toLowerCase()];
-      if (/^(twitter|x|facebook)$/i.test(key) && child !== null && child !== false) return [key.toLowerCase()];
+      if (/^(twitter|x|facebook)$/i.test(key) && child !== null && child !== false
+        && !(typeof child === "string" && !child.trim())
+        && !(typeof child === "object" && child && (
+          (child as Record<string, unknown>).connected === false
+          || (child as Record<string, unknown>).enabled === false
+        ))) return [key.toLowerCase()];
       if (/network|provider|social/i.test(key)) return stringValues(child);
       return [];
     });
@@ -542,7 +557,12 @@ function profileFromRecord(record: Record<string, unknown>): ProfileCandidate | 
     ?? record.socialNetworks
     ?? (explicitTopLevelNetworks.length ? Object.fromEntries(explicitTopLevelNetworks.map((network) => [network, record[network]])) : undefined);
   const values = networkField === undefined ? null : new Set(stringValues(networkField));
-  return { label, blogId, connectedNetworks: values };
+  for (const network of explicitTopLevelNetworks) {
+    if (record[network] === null || record[network] === false || record[network] === "") values?.delete(network);
+  }
+  return { label, blogId, connectedNetworks: values, publishAllowed: record.canPublish === true,
+    networkAccountIds: { facebook: normalizeId(record.facebookPageId), x: normalizeId(record.twitterId) },
+  };
 }
 
 function collectProfiles(value: unknown, depth = 0): ProfileCandidate[] {
@@ -560,7 +580,7 @@ function providerFor(platform: ClipperLocalNewsPlatform): "twitter" | "facebook"
 }
 
 function supportsProvider(profile: ProfileCandidate, platform: ClipperLocalNewsPlatform): boolean {
-  if (!profile.connectedNetworks) return true;
+  if (!profile.connectedNetworks) return false;
   const provider = providerFor(platform);
   return profile.connectedNetworks.has(provider)
     || (provider === "twitter" && profile.connectedNetworks.has("x"));
@@ -652,25 +672,12 @@ async function scheduleMetricoolPost(
   payload: Record<string, unknown>,
   requestTimeoutMs: number,
 ): Promise<Response> {
-  for (let attempt = 1; attempt <= SCHEDULE_ATTEMPTS; attempt += 1) {
-    try {
-      const response = await fetchMetricool(fetcher, url, {
-        method: "POST",
-        headers: { Accept: "application/json", "Content-Type": "application/json", "X-Mc-Auth": token },
-        body: JSON.stringify(payload),
-      }, requestTimeoutMs);
-      if (response.ok || (response.status < 500 && response.status !== 429) || attempt === SCHEDULE_ATTEMPTS) return response;
-    } catch (error) {
-      // A timed-out POST has an ambiguous remote outcome: Metricool may have
-      // accepted the stable jobId before the response stalled. Do not fan out
-      // immediate duplicate attempts; the durable next cycle can reconcile by
-      // the same jobId/content identity.
-      if (error instanceof Error && error.message === "metricool_request_aborted") throw error;
-      if (attempt === SCHEDULE_ATTEMPTS) throw error;
-    }
-    await new Promise((resolve) => setTimeout(resolve, SCHEDULE_RETRY_MS * attempt));
-  }
-  throw new Error("Metricool scheduler retry loop exhausted");
+  // Never retry a write automatically: timeout/5xx can mean it was accepted.
+  return fetchMetricool(fetcher, url, {
+    method: "POST",
+    headers: { Accept: "application/json", "Content-Type": "application/json", "X-Mc-Auth": token },
+    body: JSON.stringify(payload),
+  }, requestTimeoutMs);
 }
 
 async function fetchMetricool(
@@ -771,6 +778,9 @@ function emptyResult(ledgerPath: string): ClipperLocalNewsMetricoolResult {
     mediaFallback: 0,
     blockedLanes: [],
     ledgerPath,
+    publicationConfirmed: 0,
+    pendingReconciliation: 0,
+    duplicatesSuppressed: 0,
   };
 }
 
@@ -806,7 +816,7 @@ const NEWS_LANE_CONFIG: Record<ClipperLocalNewsLane, { label: string; aliases: s
 };
 
 export async function getClipperLocalNewsMetricoolReadiness(
-  options: Pick<ClipperLocalNewsMetricoolOptions, "env" | "fetch"> = {},
+  options: Pick<ClipperLocalNewsMetricoolOptions, "env" | "fetch" | "readPolicy"> = {},
 ): Promise<ClipperLocalNewsMetricoolReadiness> {
   const env = options.env || process.env;
   const token = env.METRICOOL_USER_TOKEN;
@@ -828,6 +838,8 @@ export async function getClipperLocalNewsMetricoolReadiness(
     ])),
   });
   if (!hasRealValue(token) || !hasRealValue(userId)) return blocked("configurar credenciales de Metricool");
+  const policy = await (options.readPolicy || readLocalNewsDeliveryPolicy)();
+  if (policy.paused) return blocked("entregas de noticias pausadas");
 
   const profiles = await discoverProfiles(options.fetch || globalThis.fetch, token, userId);
   if (profiles === null) return blocked("no se pudo verificar Metricool");
@@ -836,12 +848,14 @@ export async function getClipperLocalNewsMetricoolReadiness(
     const config = NEWS_LANE_CONFIG[lane];
     const override = env[config.overrideKey];
     const profile = hasRealValue(override)
-      ? profiles.find((candidate) => candidate.blogId === override.trim())
+      ? profiles.find((candidate) => candidate.blogId === override.trim() && config.aliases.includes(candidate.label))
       : profiles.find((candidate) => config.aliases.includes(candidate.label));
     return (["facebook", "x"] as ClipperLocalNewsPlatform[]).map((platform) => ({
       lane,
       platform,
-      ready: Boolean(profile && supportsProvider(profile, platform)),
+      ready: Boolean(profile && supportsProvider(profile, platform) && profile.publishAllowed
+        && destinationNetworkVerified(policy, lane, platform, profile.networkAccountIds[platform])
+        && destinationIdentityVerified(policy, lane, profile.blogId, new Date())),
     }));
   });
   const connectedFor = (platform: ClipperLocalNewsPlatform) => targets.filter((target) => target.platform === platform && target.ready).length;
@@ -868,8 +882,15 @@ export async function deliverClipperLocalNewsToMetricool(
   options: ClipperLocalNewsMetricoolOptions = {},
 ): Promise<ClipperLocalNewsMetricoolResult> {
   const env = options.env || process.env;
-  const { queuePath, ledgerPath } = resolvePaths(options, env);
+  const { queuePath, ledgerPath, attemptsPath } = resolvePaths(options, env);
   const result = emptyResult(ledgerPath);
+  const readPolicy = options.readPolicy || readLocalNewsDeliveryPolicy;
+  const policy = await readPolicy();
+  if (policy.paused) {
+    result.status = "paused";
+    result.reason = policy.reason;
+    return result;
+  }
   const token = env.METRICOOL_USER_TOKEN;
   const userId = env.METRICOOL_USER_ID;
   if (!hasRealValue(token) || !hasRealValue(userId)) {
@@ -893,9 +914,11 @@ export async function deliverClipperLocalNewsToMetricool(
   try {
     let queue: QueueItem[];
     let ledger: Ledger;
+    let deliveryAttempts: NewsDeliveryAttempt[];
     try {
       queue = queueFileSchema.parse(JSON.parse(await readFile(queuePath, "utf8"))).items;
       ledger = await readLedger(ledgerPath);
+      deliveryAttempts = await readNewsDeliveryAttempts(attemptsPath);
     } catch {
       result.reason = "invalid_or_missing_queue_artifact";
       return result;
@@ -910,7 +933,7 @@ export async function deliverClipperLocalNewsToMetricool(
     const responseTimeoutMs = Math.max(100, Math.min(20_000, options.responseTimeoutMs ?? DEFAULT_METRICOOL_RESPONSE_TIMEOUT_MS));
     let safeItems = queue.filter((item) => {
       const platformEnabled = item.platform !== "x" || env.CLIPPERS_LOCAL_NEWS_ENABLE_X === "true";
-      if (!matchesClipperLocalNewsDeliveryJurisdiction(item)) {
+      if (!newsSourceMatchesCity(item) || !matchesClipperLocalNewsDeliveryJurisdiction(item)) {
         result.filtered += 1;
         return false;
       }
@@ -942,9 +965,19 @@ export async function deliverClipperLocalNewsToMetricool(
 
       const duplicate = already.has(item.id)
         || scheduledContentKeys.has(metricoolContentKey(item))
-        || metricoolSourceWasScheduled(item, ledger.entries);
+        || metricoolSourceWasScheduled(item, ledger.entries, queue)
+        || deliveryAttempts.some(attempt => attempt.articleIdentity === newsArticleIdentity(item.sourceUrl || "")
+          && attempt.lane === item.lane && attempt.platform === item.platform);
       if (duplicate) {
-        result.alreadyScheduled += 1;
+        const previousAttempts = deliveryAttempts.filter(attempt => attempt.articleIdentity === newsArticleIdentity(item.sourceUrl || "")
+          && attempt.lane === item.lane && attempt.platform === item.platform);
+        if (previousAttempts.length && !previousAttempts.some(attempt => attempt.state === "scheduling_accepted")) {
+          result.duplicatesSuppressed += 1;
+        } else result.alreadyScheduled += 1;
+        if (deliveryAttempts.some(attempt => attempt.articleIdentity === newsArticleIdentity(item.sourceUrl || "")
+          && attempt.lane === item.lane && attempt.platform === item.platform && attempt.state === "pending_reconciliation")) {
+          result.pendingReconciliation += 1;
+        }
         return false;
       }
       return true;
@@ -959,8 +992,7 @@ export async function deliverClipperLocalNewsToMetricool(
     for (const [lane, config] of Object.entries(NEWS_LANE_CONFIG) as Array<[ClipperLocalNewsLane, typeof NEWS_LANE_CONFIG[ClipperLocalNewsLane]]>) {
       laneConfig[lane] = { ...config, override: env[config.overrideKey] };
     }
-    const needsDiscovery = (Object.keys(laneConfig) as ClipperLocalNewsLane[])
-      .some((lane) => safeItems.some((item) => item.lane === lane) && !hasRealValue(laneConfig[lane].override));
+    const needsDiscovery = safeItems.length > 0;
     const profiles = needsDiscovery
       ? await discoverProfiles(options.fetch || globalThis.fetch, token, userId, requestTimeoutMs, responseTimeoutMs)
       : [];
@@ -973,7 +1005,10 @@ export async function deliverClipperLocalNewsToMetricool(
     for (const lane of Object.keys(laneConfig) as ClipperLocalNewsLane[]) {
       const config = laneConfig[lane];
       if (hasRealValue(config.override)) {
-        laneProfiles.set(lane, { label: config.label, blogId: config.override.trim(), connectedNetworks: null });
+        const match = profiles?.find(profile => profile.blogId === config.override!.trim()
+          && config.aliases.includes(profile.label));
+        if (match) laneProfiles.set(lane, match);
+        else if (safeItems.some(item => item.lane === lane)) result.blockedLanes.push(lane);
         continue;
       }
       const match = profiles?.find((profile) => config.aliases.includes(profile.label));
@@ -1017,12 +1052,16 @@ export async function deliverClipperLocalNewsToMetricool(
     let attempts = 0;
     for (const item of safeItems) {
       const contentKey = metricoolContentKey(item);
-      if (scheduledContentKeys.has(contentKey) || metricoolSourceWasScheduled(item, ledger.entries)) {
+      if (scheduledContentKeys.has(contentKey) || metricoolSourceWasScheduled(item, ledger.entries, queue)
+        || deliveryAttempts.some(attempt => attempt.articleIdentity === newsArticleIdentity(item.sourceUrl || "")
+          && attempt.lane === item.lane && attempt.platform === item.platform)) {
         result.alreadyScheduled += 1;
         continue;
       }
       const profile = laneProfiles.get(item.lane);
-      if (!profile || !supportsProvider(profile, item.platform)) {
+      if (!profile || !supportsProvider(profile, item.platform) || !profile.publishAllowed
+        || !destinationNetworkVerified(policy, item.lane, item.platform, profile.networkAccountIds[item.platform])
+        || !destinationIdentityVerified(policy, item.lane, profile.blogId, fetchedNow)) {
         if (!result.blockedLanes.includes(item.lane)) result.blockedLanes.push(item.lane);
         continue;
       }
@@ -1081,6 +1120,11 @@ export async function deliverClipperLocalNewsToMetricool(
         continue;
       }
       const scheduledDate = new Date(scheduledMs);
+      if (!queueItemIsFresh(item, scheduledMs, env)
+        || !destinationIdentityVerified(policy, item.lane, profile.blogId, scheduledDate)) {
+        result.filtered += 1;
+        continue;
+      }
       const mediaUrl = item.mediaUrl || publicBrandMediaUrl(env, item.lane);
       const mediaKey = mediaUrl ? `${item.mediaType || "image"}|${mediaUrl}` : `${item.lane}|none`;
       if (!mediaIds.has(mediaKey)) {
@@ -1113,9 +1157,38 @@ export async function deliverClipperLocalNewsToMetricool(
         autoPublish: true,
         draft: false,
       };
+      const finalPolicy = await readPolicy();
+      if (finalPolicy.paused) {
+        result.status = "paused";
+        result.reason = "delivery_paused_before_dispatch";
+        return result;
+      }
+      if (!destinationIdentityVerified(finalPolicy, item.lane, profile.blogId, new Date(Math.max(now().getTime(), scheduledMs)))
+        || !destinationNetworkVerified(finalPolicy, item.lane, item.platform, profile.networkAccountIds[item.platform])
+        || !queueItemIsFresh(item, Math.max(now().getTime(), scheduledMs), env)) {
+        result.filtered += 1;
+        continue;
+      }
       try {
+        const attempt: NewsDeliveryAttempt = {
+          attemptId: randomUUID(), articleIdentity: newsArticleIdentity(item.sourceUrl!)!,
+          lane: item.lane, platform: item.platform, queueItemId: item.id,
+          startedAt: (options.now || (() => new Date()))().toISOString(), state: "pending_reconciliation",
+        };
+        deliveryAttempts.push(attempt);
+        // Durable uncertainty BEFORE the write: a crash cannot authorize resend.
+        await saveNewsDeliveryAttempts(attemptsPath, deliveryAttempts);
+        if ((await readPolicy()).paused) {
+          result.status = "paused";
+          result.reason = "delivery_paused_before_dispatch";
+          return result;
+        }
         const response = await scheduleMetricoolPost(fetcher, url, token, payload, requestTimeoutMs);
+        attempt.httpStatus = response.status;
         if (!response.ok) {
+          if (response.status >= 400 && response.status < 500) attempt.state = "rejected";
+          else result.pendingReconciliation += 1;
+          await saveNewsDeliveryAttempts(attemptsPath, deliveryAttempts);
           result.failed += 1;
           if (response.status === 400 || response.status === 403 || response.status === 404) {
             if (!result.blockedLanes.includes(item.lane)) result.blockedLanes.push(item.lane);
@@ -1123,6 +1196,16 @@ export async function deliverClipperLocalNewsToMetricool(
           continue;
         }
         const responseBody = await safeJson(response, responseTimeoutMs);
+        const postId = responsePostId(responseBody);
+        if (!postId) {
+          result.pendingReconciliation += 1;
+          result.failed += 1;
+          await saveNewsDeliveryAttempts(attemptsPath, deliveryAttempts);
+          continue;
+        }
+        attempt.state = "scheduling_accepted";
+        attempt.metricoolPostId = postId;
+        await saveNewsDeliveryAttempts(attemptsPath, deliveryAttempts);
         const ledgerEntry: Ledger["entries"][number] = {
           queueItemId: item.id,
           eventId: item.eventId,
@@ -1153,10 +1236,14 @@ export async function deliverClipperLocalNewsToMetricool(
         else if (publicBrandMediaUrl(env, item.lane)) result.mediaFallback += 1;
       } catch {
         result.failed += 1;
+        result.pendingReconciliation += 1;
       }
     }
 
-    if (result.scheduled === 0 && (result.blockedLanes.length || result.failed > 0)) {
+    if (result.pendingReconciliation > 0) {
+      result.status = result.scheduled ? "partial" : "blocked";
+      result.reason = "metricool_reconciliation_required";
+    } else if (result.scheduled === 0 && (result.blockedLanes.length || result.failed > 0)) {
       result.status = "blocked";
       result.reason = result.blockedLanes.length ? "metricool_profile_or_provider_not_connected" : "metricool_schedule_failed";
     } else if (result.blockedLanes.length || result.failed > 0) {

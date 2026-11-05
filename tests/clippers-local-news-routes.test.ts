@@ -91,6 +91,7 @@ test("GET status is uncached and POST bootstrap returns the real workspace statu
   assert.equal(status.json.bootstrapped, false);
   assert.equal(status.json.scheduler.enabled, true);
   assert.equal(status.json.scheduler.started, false);
+  assert.equal(status.json.deliveryPolicy.paused, true);
   assert.equal(status.json.metricool.status, "blocked");
   assert.equal(status.json.metricool.platforms.facebook.ready, false);
   assert.equal(status.json.metricool.platforms.x.ready, false);
@@ -135,8 +136,10 @@ test("public handlers strip internal options and manual runs expose blocked Metr
   });
   assert.equal(cycle.response.status, 200);
   assert.equal(cycle.json.status.workspaceDir, workspaceDir);
-  assert.equal(cycle.json.metricoolDelivery.status, "blocked");
-  assert.equal(cycle.json.metricoolDelivery.reason, "missing_metricool_credentials");
+  assert.equal(cycle.json.metricoolDelivery.status, "paused");
+  assert.equal(cycle.json.cycleExecution, "completed");
+  assert.equal(cycle.json.status.deliveryPolicy.paused, true);
+  assert.equal(cycle.json.status.deliverySummary.publicationConfirmed, 0);
 
   const ingest = await request("POST", "/api/clippers/local-news/ingest-events", {
     ...internalOptions,

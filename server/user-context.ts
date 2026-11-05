@@ -4,7 +4,6 @@ import { hasRealValue } from "./ceo-doctor-cli";
 
 export const DEFAULT_DEV_USER_ID = "mock-user-123";
 export const LOCAL_AUTH_USER_COOKIE_NAME = "blackops.uid";
-const DEV_FALLBACK_ENVS = new Set(["development", "test"]);
 
 type RequestWithAuth = Request & {
   user?: { id?: string; userId?: string; sub?: string };
@@ -105,9 +104,9 @@ function readSignedLocalAuthCookie(req: Request): string | null {
 }
 
 export function allowsDevUserFallback(): boolean {
-  if (process.env.ALLOW_DEV_USER_FALLBACK === "true") return true;
-  if (process.env.ALLOW_DEV_USER_FALLBACK === "false") return false;
-  return DEV_FALLBACK_ENVS.has(process.env.NODE_ENV || "development");
+  // Request identity injection is available only to explicitly opted-in tests.
+  // The publicly reachable development workflow must require a real session.
+  return process.env.NODE_ENV === "test" && process.env.ALLOW_DEV_USER_FALLBACK === "true";
 }
 
 export function resolveCurrentUserId(req: Request): string | null {
@@ -147,8 +146,8 @@ export function isPublicApiRequest(req: Request): boolean {
  *
  * Supports provider-neutral auth state (Passport/Replit/Clerk/Auth.js adapters
  * can populate req.user or req.session). Request fallbacks such as x-user-id and
- * the mock user are limited to dev/test unless explicitly enabled with
- * ALLOW_DEV_USER_FALLBACK=true. DEFAULT_USER_ID is reserved for system jobs.
+ * the mock user require NODE_ENV=test and ALLOW_DEV_USER_FALLBACK=true.
+ * DEFAULT_USER_ID is reserved for system jobs.
  */
 export function getCurrentUserId(req: Request): string {
   const userId = resolveCurrentUserId(req);

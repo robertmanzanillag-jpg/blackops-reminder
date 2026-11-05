@@ -46,6 +46,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { LocalNewsSourceDiagnostics } from "@/components/clippers/local-news-source-diagnostics";
+import type { SourceDiagnostics } from "../../../shared/local-news-source-diagnostics";
 
 type ClipperAccountCategory = "sports" | "memes" | "streamers";
 type ClipperAccountStatus = "ready" | "needs_connection" | "paused";
@@ -255,6 +257,9 @@ interface ClipperLocalNewsQueueSummary {
 }
 
 interface ClipperLocalNewsStatus {
+  sourceDiagnostics?: SourceDiagnostics;
+  deliveryPolicy?: { paused: boolean; reason: string };
+  deliverySummary?: { status: string; scheduled: number; publicationConfirmed: number; pendingReconciliation: number };
   generatedAt?: string;
   rootDir?: string;
   workspaceDir?: string;
@@ -8211,7 +8216,7 @@ export default function ClippersPage() {
       const review = data.totals?.reviewRequired ?? queue?.reviewRequired ?? queue?.approvalRequired ?? 0;
       toast({
         title: "Ciclo Local News completado",
-        description: `${queued} en cola; ${review} requieren revisión. Nada se cuenta publicado sin evidencia y métricas.`,
+        description: `${queued} en cola; ${review} requieren revisión. ${data.deliverySummary?.status === "paused" ? "Entregas PAUSADAS: no se programó ni publicó nada." : data.deliverySummary?.pendingReconciliation ? "Resultado incierto: exige conciliación, sin reenvío automático." : "Nada se cuenta publicado sin evidencia y métricas."}`,
       });
     },
     onError: (error: Error) => {
@@ -12735,6 +12740,12 @@ export default function ClippersPage() {
                 </div>
               </div>
 
+              <div className="mt-3 rounded-md border border-amber-400/40 bg-amber-950/20 p-3 text-xs text-amber-100" data-testid="local-news-delivery-pause">
+                {localNews?.deliveryPolicy?.paused !== false
+                  ? "Entregas de Miami y New York PAUSADAS. Los ciclos no autorizan programación ni publicación."
+                  : "La entrega requiere identidad, red y permiso vigentes."}
+                <p>{localNews?.deliveryPolicy?.reason}</p>
+              </div>
               <div className={cn(
                 "mt-3 rounded-md border p-3 text-xs leading-5",
                 localNews?.metricool?.platforms?.facebook?.ready
@@ -12751,6 +12762,7 @@ export default function ClippersPage() {
                     : `${localNews?.metricool?.platforms?.x?.connected ?? 0}/${localNews?.metricool?.platforms?.x?.required ?? 2} conectado; no bloquea Facebook`}
                 </span>
               </div>
+              <LocalNewsSourceDiagnostics diagnostics={localNews?.sourceDiagnostics} />
               <div className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3 text-xs leading-5 text-emerald-100/80" data-testid="clippers-local-news-evidence-gate">
                 Publicado con evidencia: <span className="font-semibold text-emerald-100">{formatNumber(localNewsPublishedWithEvidence)}</span>. Los items en cola, auto-eligible o scheduled no cuentan como publicados; solo una URL pública comprobada y métricas registradas cierran el ciclo.
               </div>

@@ -26,12 +26,13 @@ import { getCurrentUserId, getSystemUserId, isPublicApiRequest } from "./user-co
 import { syncGoogleCalendarToTasks } from "./calendar-sync";
 import { executeApprovedPendingAction } from "./trust-executor";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
-import { ensureDefaultAutomations, recordManualAutomationRun } from "./automation-registry";
+import { getExistingAutomations, recordManualAutomationRun } from "./automation-registry";
 import { getMetricoolAnalyticsSyncStatus, getMetricoolAnalyticsSchedulerStatus, syncMetricoolAnalytics } from "./metricool-analytics-sync";
 import { getMeetingPrepById, getUpcomingMeetingPreps } from "./meeting-intelligence";
 import { buildCeoOperationalHealth } from "./ceo-operational-health";
 import { registerTelegramRoutes } from "./telegram-routes";
 import { registerRevenueStripeRoutes } from "./revenue-stripe-routes";
+import { registerAgentCouncilRoutes } from "./agent-council-routes";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
 import { ensureAppDriveStructure } from "./google-drive";
@@ -41,6 +42,7 @@ import { revenueOutreachUpdateSchema, updateRevenueOutreachDraft } from "./reven
 import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalConnectSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLaunchLaneMatrix, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOfficialPermissionSourceAudit, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalCloseoutPack, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "./clippers-agent";
 import { bootstrapClipperLocalNews, getClipperLocalNewsStatus, ingestClipperLocalNewsEvents, recordClipperLocalNewsMetrics, runClipperLocalNewsCycle } from "./clippers-local-news-agent";
 import { deliverClipperLocalNewsToMetricool, getClipperLocalNewsMetricoolReadiness } from "./clippers-local-news-metricool";
+import { readLocalNewsDeliveryPolicy } from "./local-news-delivery-safety";
 import { getClipperLocalNewsSchedulerStatus } from "./clippers-local-news-scheduler";
 import { getLocalNewsGrowthScoutStatus, readLocalNewsGrowthScoutStatus, runLocalNewsGrowthScoutNow } from "./local-news-growth-scout";
 import { getPublicLocalNewsBySlug, listPublicLocalNews, publicLocalNewsEtag, renderPublicLocalNewsShareHtml } from "./public-local-news";
@@ -837,6 +839,7 @@ export async function registerRoutes(
 
   registerTelegramRoutes(app);
   registerRevenueStripeRoutes(app);
+  registerAgentCouncilRoutes(app);
 
   // GET all tasks
   app.get("/api/tasks", async (req, res) => {
@@ -2188,7 +2191,7 @@ export async function registerRoutes(
         getClipperLocalNewsMetricoolReadiness(),
         readLocalNewsGrowthScoutStatus(),
       ]);
-      res.json({ ...status, scheduler: getClipperLocalNewsSchedulerStatus(), metricool, growthScout, metricoolAnalytics: { sync: await getMetricoolAnalyticsSyncStatus(), scheduler: getMetricoolAnalyticsSchedulerStatus() } });
+      res.json({ ...status, deliveryPolicy: await readLocalNewsDeliveryPolicy(), scheduler: getClipperLocalNewsSchedulerStatus(), metricool, growthScout, metricoolAnalytics: { sync: await getMetricoolAnalyticsSyncStatus(), scheduler: getMetricoolAnalyticsSchedulerStatus() } });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to inspect clippers local news status" });
     }
@@ -2228,7 +2231,13 @@ export async function registerRoutes(
       };
       const cycle = await runClipperLocalNewsCycle(input);
       const metricoolDelivery = await deliverClipperLocalNewsToMetricool({ status: cycle.status });
-      res.json({ ...cycle, metricoolDelivery });
+      res.json({
+        ...cycle, cycleExecution: "completed", metricoolDelivery,
+        status: { ...cycle.status, deliveryPolicy: await readLocalNewsDeliveryPolicy(), deliverySummary: {
+          status: metricoolDelivery.status, scheduled: metricoolDelivery.scheduled,
+          publicationConfirmed: metricoolDelivery.publicationConfirmed, pendingReconciliation: metricoolDelivery.pendingReconciliation,
+        } },
+      });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid clippers local news cycle payload", details: error.errors });
@@ -4191,7 +4200,7 @@ export async function registerRoutes(
 
   app.get("/api/automations", async (req, res) => {
     try {
-      const automations = await ensureDefaultAutomations(getCurrentUserId(req));
+      const automations = await getExistingAutomations(getCurrentUserId(req));
       res.json(automations);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch automations" });
@@ -4356,7 +4365,7 @@ export async function registerRoutes(
   app.get("/api/automation-manager/summary", async (req, res) => {
     try {
       const userId = getCurrentUserId(req);
-      const automations = await ensureDefaultAutomations(userId);
+      const automations = await getExistingAutomations(userId);
       const runs = await storage.getAutomationRuns(userId, undefined, 25);
       const active = automations.filter((automation) => automation.status === "active");
       const paused = automations.filter((automation) => automation.status === "paused");
@@ -6569,7 +6578,7 @@ export async function registerRoutes(
         safe(storage.getAgentActions(userId), []),
         safe(storage.getScheduledReminders(userId), []),
         safe(storage.getDjContacts(userId), []),
-        safe(ensureDefaultAutomations(userId), []),
+        safe(getExistingAutomations(userId), []),
         safe(storage.getAutomationRuns(userId, undefined, 25), []),
         safe(getUpcomingMeetingPreps(userId, 5), []),
         safe(storage.getUserProfileDataByCategory(userId, "decision"), []),
@@ -6965,7 +6974,7 @@ export async function registerRoutes(
   app.get("/api/app-qa-agent/history", async (req, res) => {
     try {
       const userId = getCurrentUserId(req);
-      const automations = await ensureDefaultAutomations(userId);
+      const automations = await getExistingAutomations(userId);
       const qaAutomation = automations.find((automation) => (automation.metadata as any)?.key === "app-qa-council");
       if (!qaAutomation) return res.json([]);
       const limit = Math.min(Number(req.query.limit || 20), 100);

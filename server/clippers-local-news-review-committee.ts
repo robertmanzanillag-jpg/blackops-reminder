@@ -82,6 +82,8 @@ export function hashLocalNewsQueueReview(value: {
   consensus: LocalNewsCommitteeResult["consensus"];
   publishDecision: LocalNewsPublishDecision;
   checkedAt: string;
+  originalPublishedAt?: string | null;
+  expires?: string | null;
 }): string {
   return hashLocalNewsReviewValue(value);
 }

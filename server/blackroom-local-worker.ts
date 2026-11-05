@@ -46,7 +46,7 @@ export function buildBlackRoomUploadChunks(totalBytes: number, chunkBytes = BLAC
 
 export type BlackRoomLedgerStatus = "reserved" | "confirmed" | "uncertain" | "discarded";
 export type BlackRoomReceiptNetwork = "tiktok" | "facebook" | "youtube";
-export type BlackRoomNetworkAttemptStatus = "uncertain" | "confirmed";
+export type BlackRoomNetworkAttemptStatus = "blocked" | "uncertain" | "confirmed";
 
 function isValidBlackRoomPublicationDateTime(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(value)) return false;
@@ -128,6 +128,19 @@ export function markBlackRoomNetworkUncertain(
   entry.networkAttempts[network] = "uncertain";
   entry.publicationDateTime = publicationDateTime;
   entry.updatedAt = new Date().toISOString();
+  return entry;
+}
+
+/** A positively acknowledged pre-dispatch veto is not a reset or uncertainty.
+ * The caller must never downgrade a verification-only/previously unknown POST.
+ */
+export function markBlackRoomNetworkBlocked(
+  entry: BlackRoomLedgerEntry, network: BlackRoomReceiptNetwork, now = new Date(),
+): BlackRoomLedgerEntry {
+  if (entry.status === "confirmed" || entry.networkReceipts?.[network]) throw new Error("confirmed receipt is immutable");
+  entry.networkAttempts ||= {};
+  entry.networkAttempts[network] = "blocked";
+  entry.updatedAt = now.toISOString();
   return entry;
 }
 

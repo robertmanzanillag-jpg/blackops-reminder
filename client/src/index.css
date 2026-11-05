@@ -201,3 +201,59 @@
     transform: rotate(-9deg) translateY(0);
   }
 }
+
+/* Agents building: live "working" animations (wrapped in motion-safe in the component). */
+@keyframes agent-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes agent-hands {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+
+@keyframes agent-type {
+  0% { width: 15%; }
+  100% { width: 100%; }
+}
+
+@keyframes agent-alert {
+  0%, 100% { box-shadow: 0 0 0 rgba(251, 113, 133, 0); }
+  50% { box-shadow: 0 0 16px rgba(251, 113, 133, 0.55); }
+}
+
+@keyframes antenna-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.2; }
+}
+
+@keyframes elevator-ride {
+  0%, 100% { top: calc(100% - 3rem); }
+  45%, 55% { top: 0.5rem; }
+}
+
+@keyframes agent-scan {
+  0%, 100% { transform: rotate(-4deg); }
+  50% { transform: rotate(4deg); }
+}
+
+@keyframes agent-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+@keyframes screen-scroll {
+  0% { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+@keyframes building-sway {
+  0%, 100% { transform: rotateY(-3deg); }
+  50% { transform: rotateY(3deg); }
+}
+
+@keyframes world-progress {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(200%); }
+}

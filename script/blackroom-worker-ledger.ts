@@ -5,6 +5,7 @@ import {
   assertSafeConfirmedDeletion,
   createBlackRoomWorkerLedger,
   markBlackRoomNetworkUncertain,
+  markBlackRoomNetworkBlocked,
   confirmBlackRoomNetworkReceipt,
   discardBlackRoomUnpublishedReservation,
   resetBlackRoomNetworkAttempt,
@@ -120,6 +121,11 @@ async function main(): Promise<void> {
       const entry = ledger.entries.find((candidate) => candidate.reservationId === arg("--reservation"));
       if (!entry) throw new Error("reservation not found");
       result = markBlackRoomNetworkUncertain(entry, networkArg(), arg("--publication-date-time") || "");
+      await writeLedger(ledger);
+    } else if (process.argv.includes("--network-blocked")) {
+      const entry = ledger.entries.find((candidate) => candidate.reservationId === arg("--reservation"));
+      if (!entry) throw new Error("reservation not found");
+      result = markBlackRoomNetworkBlocked(entry, networkArg());
       await writeLedger(ledger);
     } else if (process.argv.includes("--network-confirm")) {
       const entry = ledger.entries.find((candidate) => candidate.reservationId === arg("--reservation"));

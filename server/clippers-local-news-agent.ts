@@ -1,6 +1,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { execFile } from "node:child_process";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { finalizeSourceObservation, readSourceDiagnostics, recordSourceObservation, sourceObservation } from "./local-news-source-diagnostics";
+import type { SourceDiagnostics, SourceObservation } from "../shared/local-news-source-diagnostics";
 import path from "node:path";
 import { z } from "zod";
 import { detectLocalNewsSensitiveContent, hashLocalNewsCanonicalEventIdentity, hashLocalNewsQueueReview, hashLocalNewsReviewValue, runLocalNewsReviewCommittee } from "./clippers-local-news-review-committee";
@@ -68,6 +70,7 @@ export interface ClipperLocalNewsProvenance {
 }
 
 export interface ClipperLocalNewsEvent {
+  originalPublishedAt?: string | null;
   id: string;
   sourceEventId: string;
   source: string;
@@ -102,6 +105,7 @@ export interface ClipperLocalNewsEvent {
 }
 
 export interface ClipperLocalNewsQueueItem {
+  originalPublishedAt?: string | null;
   id: string;
   eventId: string;
   eventRevision: number;
@@ -168,6 +172,7 @@ export interface ClipperLocalNewsMetric extends Required<Omit<ClipperLocalNewsMe
 }
 
 export interface ClipperLocalNewsStatus {
+  sourceDiagnostics: SourceDiagnostics;
   workspaceDir: string;
   bootstrapped: boolean;
   scheduleMinutes: number;
@@ -913,10 +918,11 @@ async function queueFor(event: ClipperLocalNewsEvent, now: string, env: NodeJS.P
     const id = digest(`${event.id}|${event.revision}|${platform}`);
     const claimIdentityHash = hashLocalNewsReviewValue(event.provenance?.claimHash || event.fingerprint);
     const canonicalEventIdentity = hashLocalNewsCanonicalEventIdentity({ eventId: event.id, eventRevision: event.revision, lane: event.lane, title: event.title, description: event.description, instruction: event.instruction, location: event.location, eventType: event.eventType, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, effective: event.effective, expires: event.expires, claimIdentityHash });
-    const reviewHash = hashLocalNewsQueueReview({ queueItemId: id, eventId: event.id, eventRevision: event.revision, lane: event.lane, copy, platform, risk: event.risk, canonicalEventIdentity, claimIdentityHash, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, checkedAt: committee.checkedAt });
+    const originalPublishedAt = "originalPublishedAt" in event ? event.originalPublishedAt ?? null : event.effective;
+    const reviewHash = hashLocalNewsQueueReview({ queueItemId: id, eventId: event.id, eventRevision: event.revision, lane: event.lane, copy, platform, risk: event.risk, canonicalEventIdentity, claimIdentityHash, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, checkedAt: committee.checkedAt, originalPublishedAt, expires: event.expires });
     const translationUnavailable = Boolean(translationGated && bilingual?.issues.some((issue) => issue.startsWith("local_translation_failed:")));
     const reasons = translationGated ? [...committee.reasons, translationUnavailable ? "local_translation_unavailable" : "local_translation_integrity_failed"] : !autoEnabled && committee.publishDecision === "auto_publish" ? [...committee.reasons, "operator_disabled_automatic_publication"] : committee.reasons;
-    return { id, eventId: event.id, eventRevision: event.revision, canonicalEventIdentity, claimIdentityHash, lane: event.lane, platform, copy, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, section: event.section, topicTag: event.topicTag, editorialUrgency: event.editorialUrgency, editorialPriority: event.editorialPriority, revisionKind: event.revisionKind, textOnly: !event.mediaUrl, mediaRequired: false, mediaUrl: event.mediaUrl, mediaType: event.mediaType, qualityScore: event.qualityScore, gateReason, notBefore, status, approvalRequired: status === "approval_required", autoEligible: !gated, published: false, createdAt: now, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, reasons, checkedAt: committee.checkedAt, reviewHash, organicGrowth };
+    return { id, eventId: event.id, eventRevision: event.revision, canonicalEventIdentity, claimIdentityHash, lane: event.lane, platform, copy, source: event.source, sourceUrl: event.sourceUrl, risk: event.risk, lifecycle: event.lifecycle, effective: event.effective, originalPublishedAt, expires: event.expires, section: event.section, topicTag: event.topicTag, editorialUrgency: event.editorialUrgency, editorialPriority: event.editorialPriority, revisionKind: event.revisionKind, textOnly: !event.mediaUrl, mediaRequired: false, mediaUrl: event.mediaUrl, mediaType: event.mediaType, qualityScore: event.qualityScore, gateReason, notBefore, status, approvalRequired: status === "approval_required", autoEligible: !gated, published: false, createdAt: now, verdicts: committee.verdicts, evidence, consensus: committee.consensus, publishDecision, reasons, checkedAt: committee.checkedAt, reviewHash, organicGrowth };
   }));
 }
 
@@ -947,7 +953,10 @@ export async function ingestClipperLocalNewsEvents(input: ClipperLocalNewsIngest
       duplicates += 1; state.editorialCounters.duplicates += 1; continue;
     }
     const revisionKind: ClipperLocalNewsRevisionKind = normalized.revisionKind === "correction" ? "correction" : normalized.lifecycle === "resolved" ? "resolved" : previous ? "update" : "original";
-    const event: ClipperLocalNewsEvent = { ...normalized, revisionKind, firstSeenAt: previous?.firstSeenAt || now, updatedAt: now, resolvedAt: normalized.lifecycle === "resolved" ? now : null, revision: (previous?.revision || 0) + 1 };
+    const originalPublishedAt = previous
+      ? "originalPublishedAt" in previous ? previous.originalPublishedAt ?? null : previous.effective
+      : typeof raw.properties?.sent === "string" ? raw.properties.sent : normalized.effective;
+    const event: ClipperLocalNewsEvent = { ...normalized, originalPublishedAt, revisionKind, firstSeenAt: previous?.firstSeenAt || now, updatedAt: now, resolvedAt: normalized.lifecycle === "resolved" ? now : null, revision: (previous?.revision || 0) + 1 };
     byId.set(event.id, event);
     previous ? updated += 1 : created += 1;
     if (previous) state.editorialCounters.revisions += 1;
@@ -1116,7 +1125,7 @@ function rssEvents(xml: string, source: SourceDefinition, now = isoNow()): Clipp
     const publishedDate = published ? new Date(published) : null;
     const publishedMs = publishedDate?.getTime();
     if (publishedMs && Number.isFinite(publishedMs) && (nowMs - publishedMs > staleMs || publishedMs - nowMs > RSS_FUTURE_SKEW_MS)) return [];
-    return [attachVerifiedProvenance({ sourceEventId, source: source.sourceName || source.id, sourceUrl: safeUrl(link, source.url), lane: source.lane, title, description, eventType: rssTag(item, "category") || title, effective: publishedDate && Number.isFinite(publishedDate.getTime()) ? publishedDate.toISOString() : undefined, ...(media ? { mediaUrl: safeUrl(media.url, ""), mediaType: media.type } : {}) }, source, now)];
+    return [attachVerifiedProvenance({ sourceEventId, source: source.sourceName || source.id, sourceUrl: safeUrl(link, source.url), lane: source.lane, title, description, eventType: rssTag(item, "category") || title, effective: publishedDate && Number.isFinite(publishedDate.getTime()) ? publishedDate.toISOString() : undefined, originalPublishedAt: publishedDate && Number.isFinite(publishedDate.getTime()) ? publishedDate.toISOString() : null, ...(media ? { mediaUrl: safeUrl(media.url, ""), mediaType: media.type } : {}) }, source, now)];
   });
 }
 
@@ -1154,6 +1163,7 @@ function browardSheriffBreakingEvents(html: string, source: SourceDefinition, no
       location: "Broward County",
       eventType: "Official public safety release",
       effective,
+      originalPublishedAt: effective,
     }, source, now)];
   });
 }
@@ -1326,7 +1336,9 @@ function sourceEvents(payload: unknown, source: SourceDefinition, now = isoNow()
   return extractEvents(payload).flatMap((raw) => {
     const record = raw as Record<string, unknown>;
     const attributes = record.attributes && typeof record.attributes === "object" ? record.attributes as Record<string, unknown> : null;
-    if (!attributes) return [attachVerifiedProvenance({ ...raw, lane: raw.lane || source.lane, source: raw.source || source.sourceName || source.id, sourceUrl: raw.sourceUrl || source.url }, source, now)];
+    if (!attributes) return [attachVerifiedProvenance({ ...raw,
+      ...(source.id.startsWith("nws-") ? { originalPublishedAt: raw.properties?.sent ?? null } : {}),
+      lane: raw.lane || source.lane, source: raw.source || source.sourceName || source.id, sourceUrl: raw.sourceUrl || source.url }, source, now)];
     const value = (...keys: string[]) => keys.map((key) => attributes[key]).find((candidate) => candidate !== undefined && candidate !== null);
     const county = clean(value("COUNTY", "COUNTYNAME", "COUNTY_NAME")).toUpperCase();
     if (source.id.startsWith("fhp-miami-") && county && county !== "MIAMI-DADE" && county !== "MIAMI DADE") return [];
@@ -1352,7 +1364,7 @@ function sourceEvents(payload: unknown, source: SourceDefinition, now = isoNow()
   });
 }
 
-export async function runClipperLocalNewsCycle(input: ClipperLocalNewsCycleInput = {}): Promise<{ fetchedSources: number; failedSources: Array<{ id: string; error: string }>; created: number; updated: number; duplicates: number; resolved: number; queued: number; status: ClipperLocalNewsStatus }> {
+export async function runClipperLocalNewsCycle(input: ClipperLocalNewsCycleInput = {}): Promise<{ fetchedSources: number; failedSources: Array<{ id: string; error: string }>; sourceObservations: SourceObservation[]; diagnosticWriteErrors: Array<{ sourceId: string; code: "write_failed" }>; created: number; updated: number; duplicates: number; resolved: number; queued: number; status: ClipperLocalNewsStatus }> {
   cyclePayloadSchema.parse(input);
   const dir = workspace(input);
   await bootstrapClipperLocalNews({ ...input, workspaceDir: dir });
@@ -1361,13 +1373,29 @@ export async function runClipperLocalNewsCycle(input: ClipperLocalNewsCycleInput
   let events = input.events;
   let fetchedSources = 0;
   const failedSources: Array<{ id: string; error: string }> = [];
+  const sourceObservations: SourceObservation[] = [];
+  const diagnosticWriteErrors: Array<{ sourceId: string; code: "write_failed" }> = [];
+  const record = async (observation: SourceObservation, replace = false) => {
+    try { await recordSourceObservation(dir, observation, replace); }
+    catch { diagnosticWriteErrors.push({ sourceId: observation.sourceId, code: "write_failed" }); }
+    const index = replace ? sourceObservations.findIndex(o => o.attemptId === observation.attemptId) : -1;
+    if (index >= 0) sourceObservations[index] = observation;
+    else sourceObservations.push(observation);
+  };
   if (!events) {
     events = [];
     const fetcher = input.fetch || globalThis.fetch;
     const officialFeedTextFallback = input.officialFeedTextFallback || defaultOfficialFeedTextFallback;
     const hotOnly = env.CLIPPERS_LOCAL_NEWS_HOT_ONLY !== "false";
     for (const source of sources(env)) {
-      if (source.requiresKey && !source.key) { failedSources.push({ id: source.id, error: "missing_api_key" }); continue; }
+      let receivedCount: number | null = null;
+      if (source.requiresKey && !source.key) {
+        const observation = sourceObservation(source, isoNow(input.now), null, [], new Error("missing_api_key"));
+        failedSources.push({ id: source.id, error: observation.error!.message });
+        await record(observation);
+        continue;
+      }
+      let observation: SourceObservation;
       try {
         const requestUrl = new URL(source.url);
         if (source.id === "ny511" && source.key) requestUrl.searchParams.set("key", source.key);
@@ -1384,8 +1412,24 @@ export async function runClipperLocalNewsCycle(input: ClipperLocalNewsCycleInput
           if (!officialFeedText) throw new Error(`HTTP ${response.status}`);
         }
         let extracted: ClipperLocalNewsRawEvent[];
-        if (source.format === "rss") extracted = rssEvents(officialFeedText || await response!.text(), source, now);
-        else if (source.format === "bso-breaking-html") extracted = browardSheriffBreakingEvents(officialFeedText || await response!.text(), source, now);
+        let formatError: Error | undefined;
+        if (source.format === "rss") {
+          const xml = officialFeedText || await response!.text();
+          const rssValid = /<rss\b/i.test(xml) && /<\/rss>/i.test(xml);
+          receivedCount = [...xml.matchAll(/<item(?:\s[^>]*)?>/gi)].length;
+          extracted = rssEvents(xml, source, now);
+          if (!rssValid) formatError = new Error("invalid_response");
+        }
+        else if (source.format === "bso-breaking-html") {
+          const html = officialFeedText || await response!.text();
+          const serialized = html.match(/\blet\s+allNewsItems\s*=\s*(\[[\s\S]*?\]);/)?.[1];
+          try {
+            const payload = serialized ? JSON.parse(serialized) : null;
+            if (!Array.isArray(payload)) formatError = new Error("invalid_response");
+            else receivedCount = payload.length;
+          } catch { formatError = new Error("invalid_response"); }
+          extracted = browardSheriffBreakingEvents(html, source, now);
+        }
         else if (source.format === "mta-json") extracted = mtaAlertEvents(await response!.json(), source, now);
         else if (source.format === "miami-transit-bootstrap") {
           const page = await response!.text();
@@ -1396,19 +1440,65 @@ export async function runClipperLocalNewsCycle(input: ClipperLocalNewsCycleInput
           });
           if (!transitResponse.ok) throw new Error(`HTTP ${transitResponse.status}`);
           extracted = miamiTransitEvents(await transitResponse.json(), source, now);
-        } else extracted = sourceEvents(await response!.json(), source, now);
+        } else {
+          const payload = await response!.json();
+          const collection = Array.isArray(payload) ? payload
+            : ["features", "events", "incidents", "items", "results"].map(key => payload?.[key]).find(Array.isArray);
+          receivedCount = Array.isArray(collection) ? collection.length : null;
+          if (receivedCount === null) formatError = new Error("invalid_response");
+          extracted = sourceEvents(payload, source, now);
+        }
         if (hotOnly) extracted = extracted.filter((event) => isHotNewsEvent(event, now));
+        const diagnosticItems = extracted.map(raw => ({
+          ...raw,
+          sourceEventId: raw.sourceEventId ?? raw.id ?? raw.properties?.id ?? raw.properties?.["@id"],
+          effective: raw.effective || raw.properties?.effective || raw.properties?.sent,
+        }));
+        observation = sourceObservation(source, isoNow(input.now), receivedCount, diagnosticItems, formatError);
         events.push(...extracted); fetchedSources += 1;
-      } catch (error) { failedSources.push({ id: source.id, error: error instanceof Error ? error.message : "fetch_failed" }); }
+      } catch (error) {
+        observation = sourceObservation(source, isoNow(input.now), receivedCount, [], error);
+        failedSources.push({ id: source.id, error: observation.error!.message });
+      }
+      // Telemetry failures are reported separately and never stop ingestion.
+      await record(observation);
     }
     events = dedupeFetchedStoryEvents(events, now);
   }
   const controlledSnapshot = input.events !== undefined && input.resolveMissing === true;
+  const priorRevisions = new Map(((await readState(dir))?.events ?? []).map(e => [e.id, e.revision]));
+  // Dates are diagnostic metadata only: do not alter the existing event
+  // fingerprints, queue dates, delivery policy or committee behavior.
+  const contributionCandidates = new Map(events.map(raw => [
+    normalizeClipperLocalNewsEvent(raw, now).id, raw.originalPublishedAt,
+  ]));
   const result = await ingestClipperLocalNewsEvents({ ...input, workspaceDir: dir, now, events, resolveMissing: controlledSnapshot, snapshotLanes: controlledSnapshot ? input.snapshotLanes : undefined });
   const state = (await readState(dir))!;
+  const contributions = new Map<string, number>();
+  const acceptedRevisions = new Set(state.queue.filter(item => item.publishDecision === "auto_publish"
+    && Array.isArray(item.verdicts) && item.verdicts.length === 3 && item.verdicts.every(v => v?.verdict === "approve"))
+    .map(item => `${item.eventId}:${item.eventRevision}`));
+  for (const event of state.events) {
+    const originalDate = contributionCandidates.get(event.id);
+    const date = typeof originalDate === "string" ? Date.parse(originalDate) : NaN;
+    const accepted = acceptedRevisions.has(`${event.id}:${event.revision}`);
+    if (priorRevisions.get(event.id) === event.revision || !event.provenance?.verified || !accepted
+      || !Number.isFinite(date) || date > Date.parse(now) || Date.parse(now) - date > 72 * 3_600_000) continue;
+    const id = event.provenance.connectorId;
+    contributions.set(id, (contributions.get(id) ?? 0) + 1);
+  }
+  for (const observation of [...sourceObservations]) {
+    try { await record(finalizeSourceObservation(observation, contributions.get(observation.sourceId) ?? 0), true); }
+    catch { diagnosticWriteErrors.push({ sourceId: observation.sourceId, code: "write_failed" }); }
+  }
   state.lastRunAt = now; state.updatedAt = now;
   await persist(dir, state);
-  return { fetchedSources, failedSources, created: result.created, updated: result.updated, duplicates: result.duplicates, resolved: result.resolved, queued: result.queued, status: await getClipperLocalNewsStatus({ ...input, workspaceDir: dir }) };
+  const status = await getClipperLocalNewsStatus({ ...input, workspaceDir: dir });
+  if (diagnosticWriteErrors.length) {
+    status.sourceDiagnostics.available = false;
+    if (!status.sourceDiagnostics.storageError) status.sourceDiagnostics.storageError = "write_failed";
+  }
+  return { fetchedSources, failedSources, sourceObservations, diagnosticWriteErrors, created: result.created, updated: result.updated, duplicates: result.duplicates, resolved: result.resolved, queued: result.queued, status };
 }
 
 function nonNegativeInteger(value: unknown, field: string): number {
@@ -1443,6 +1533,11 @@ export async function getClipperLocalNewsStatus(options: ClipperLocalNewsOptions
   const dir = workspace(options);
   const state = await readState(dir);
   const env = options.env || process.env;
+  const diagnosticCatalog: Array<{ id: string; name?: string; lane: ClipperLocalNewsLane; configured: boolean }> =
+    sources(env).map(s => ({ id: s.id, name: s.sourceName ?? s.id, lane: s.lane, configured: true }));
+  const activeIds = new Set(diagnosticCatalog.map(s => s.id));
+  diagnosticCatalog.push(...connectorCatalog(env).filter(s => !s.configured && !activeIds.has(s.id)));
+  const sourceDiagnostics = await readSourceDiagnostics(dir, diagnosticCatalog, isoNow(options.now), Math.max(30, scheduleMinutes(env) * 2));
   const artifacts = Object.fromEntries(Object.entries(FILES).map(([key, filename]) => [key, path.join(dir, filename)]));
   const emptyLane = () => ({ active: 0, resolved: 0, queued: 0 });
   const lanes: ClipperLocalNewsStatus["lanes"] = { "miami-news": emptyLane(), "ny-news": emptyLane() };
@@ -1457,6 +1552,7 @@ export async function getClipperLocalNewsStatus(options: ClipperLocalNewsOptions
   const committeeItems = state?.queue.filter((item) => Array.isArray(item.verdicts) && item.verdicts.length === 3) || [];
   const revenueUsd = metrics.revenueUsd;
   return {
+    sourceDiagnostics,
     workspaceDir: dir, bootstrapped: Boolean(state), scheduleMinutes: state?.scheduleMinutes ?? scheduleMinutes(env), lastRunAt: state?.lastRunAt || null, lanes,
     events: { total: state?.events.length || 0, active: state?.events.filter((event) => event.lifecycle === "active").length || 0, resolved: state?.events.filter((event) => event.lifecycle === "resolved").length || 0 },
     queue: { total: state?.queue.length || 0, approvalRequired: state?.queue.filter((item) => item.approvalRequired).length || 0, autoEligible: state?.queue.filter((item) => item.autoEligible).length || 0, quarantined: state?.queue.filter((item) => item.status === "quarantined" || item.publishDecision === "quarantine").length || 0, rejected: state?.queue.filter((item) => item.status === "rejected" || item.publishDecision === "reject").length || 0, published: 0 },

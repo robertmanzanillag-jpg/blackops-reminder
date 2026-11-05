@@ -2,7 +2,9 @@ import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { getSystemUserId } from "./user-context";
-import { recordScheduledAutomationRun } from "./automation-registry";
+import { getExistingAutomations, recordScheduledAutomationRun } from "./automation-registry";
+import { activeMetricoolAnalyticsDefinition } from "./automation-definition-reads";
+import type { AutomationDefinition } from "@shared/schema";
 import { recordClipperLocalNewsMetrics, type ClipperLocalNewsLane, type ClipperLocalNewsMetricInput } from "./clippers-local-news-agent";
 import { callMetricoolMcpTool } from "./blackroom-metricool-bridge";
 
@@ -73,7 +75,10 @@ export interface MetricoolAnalyticsSchedulerDeps {
   now?: () => Date;
   setInterval?: (callback: () => void, delayMs: number) => SchedulerTimer;
   clearInterval?: (timer: SchedulerTimer) => void;
+  setTimeout?: (callback: () => void, delayMs: number) => SchedulerTimer;
+  clearTimeout?: (timer: SchedulerTimer) => void;
   getUserIds?: () => Promise<string[]>;
+  getAutomations?: (userId: string) => Promise<AutomationDefinition[]>;
   recordRun?: typeof recordScheduledAutomationRun;
   log?: (message: string) => void;
   logError?: (message: string) => void;
@@ -559,6 +564,8 @@ export function createMetricoolAnalyticsScheduler(deps: MetricoolAnalyticsSchedu
   const now = deps.now || (() => new Date());
   const schedule = deps.setInterval || globalThis.setInterval;
   const cancel = deps.clearInterval || ((timerToClear: SchedulerTimer) => globalThis.clearInterval(timerToClear as ReturnType<typeof setInterval>));
+  const deadlineTimer = deps.setTimeout || globalThis.setTimeout;
+  const cancelDeadline = deps.clearTimeout || ((handle: SchedulerTimer) => globalThis.clearTimeout(handle as ReturnType<typeof setTimeout>));
   const log = deps.log || ((message) => console.log(message));
   const logError = deps.logError || ((message) => console.error(message));
   let timer: SchedulerTimer | null = null;
@@ -576,17 +583,26 @@ export function createMetricoolAnalyticsScheduler(deps: MetricoolAnalyticsSchedu
   const execute = async (): Promise<"completed" | "partial" | "blocked" | "failed" | "skipped"> => {
     if (!config.enabled || inFlight) { skippedCount += 1; return "skipped"; }
     const startedAt = now();
-    runCount += 1; lastStartedAt = startedAt.toISOString(); lastError = null;
     const work = (async () => {
-      let timeout: ReturnType<typeof setTimeout> | null = null;
+      const users = deps.getUserIds ? await deps.getUserIds() : [getSystemUserId()];
+      const readDefinitions = deps.getAutomations || getExistingAutomations;
+      const activeUsers: string[] = [];
+      for (const userId of users) {
+        if (activeMetricoolAnalyticsDefinition(await readDefinitions(userId))) activeUsers.push(userId);
+      }
+      if (!activeUsers.length) {
+        skippedCount += 1;
+        return "skipped" as const;
+      }
+      runCount += 1; lastStartedAt = startedAt.toISOString(); lastError = null;
+      let timeout: SchedulerTimer | null = null;
       const deadline = new Promise<never>((_, reject) => {
-        timeout = setTimeout(() => reject(new Error("analytics_sync_timeout")), config.timeoutMs);
+        timeout = deadlineTimer(() => reject(new Error("analytics_sync_timeout")), config.timeoutMs);
         timeout.unref?.();
       });
-      const result = await Promise.race([runSync(), deadline]).finally(() => { if (timeout) clearTimeout(timeout); });
-      const users = deps.getUserIds ? await deps.getUserIds() : [getSystemUserId()];
+      const result = await Promise.race([runSync(), deadline]).finally(() => { if (timeout) cancelDeadline(timeout); });
       const recorder = deps.recordRun || recordScheduledAutomationRun;
-      await Promise.all(users.map((userId) => recorder(userId, "metricool-daily-analytics-sync", startedAt, {
+      await Promise.all(activeUsers.map((userId) => recorder(userId, "metricool-daily-analytics-sync", startedAt, {
         status: result.status === "completed" ? "success" : result.status === "blocked" ? "skipped" : "failed",
         resultSummary: `Metricool analytics sync ${result.status}: ${result.metricsRecorded} metric(s) recorded.`,
         errorMessage: result.lastError,
@@ -596,7 +612,13 @@ export function createMetricoolAnalyticsScheduler(deps: MetricoolAnalyticsSchedu
       lastFinishedAt = now().toISOString();
       return result.status;
     })();
-    inFlight = work.then(() => undefined).catch((error) => { lastError = error instanceof Error ? error.message : "analytics_scheduler_failed"; lastFinishedAt = now().toISOString(); logError(`[Metricool analytics] ${lastError}`); throw error; }).finally(() => { inFlight = null; });
+    // This bookkeeping promise is not awaited by the scheduler. Record failures
+    // without rethrowing here; execute() still returns "failed" for rejected work.
+    inFlight = work.then(() => undefined).catch((error) => {
+      lastError = error instanceof Error ? error.message : "analytics_scheduler_failed";
+      lastFinishedAt = now().toISOString();
+      logError(`[Metricool analytics] ${lastError}`);
+    }).finally(() => { inFlight = null; });
     try { return await work; } catch { return "failed"; }
   };
   const tick = () => {

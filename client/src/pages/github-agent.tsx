@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { Link } from "wouter";
+import { useQueryClient } from "@tanstack/react-query";
+import { ownerOfficeStorageKey } from "@/lib/owner-office-storage";
 
 interface Repo {
   id: number;
@@ -51,6 +53,9 @@ interface Message {
 const OFFICE_GITHUB_HANDOFF_KEY = "office.githubAgentHandoff";
 
 export default function GitHubAgentPage() {
+  const queryClient = useQueryClient();
+  const ownerId = queryClient.getQueryData<{ user?: { id: string } }>(["auth-me"])?.user?.id;
+  const handoffKey = ownerId ? ownerOfficeStorageKey(OFFICE_GITHUB_HANDOFF_KEY, ownerId) : null;
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
   const [user, setUser] = useState<GitHubUser | null>(null);
   const [repos, setRepos] = useState<Repo[]>([]);
@@ -90,7 +95,7 @@ export default function GitHubAgentPage() {
     let sourceApp = selectedRepo.name;
 
     try {
-      const rawHandoff = window.localStorage.getItem(OFFICE_GITHUB_HANDOFF_KEY);
+      const rawHandoff = handoffKey ? window.localStorage.getItem(handoffKey) : null;
       if (rawHandoff) {
         const handoff = JSON.parse(rawHandoff) as {
           repo?: string;
@@ -120,7 +125,7 @@ export default function GitHubAgentPage() {
       },
     ]);
     setHandoffLoaded(true);
-  }, [handoffLoaded, requestedTask, selectedRepo]);
+  }, [handoffLoaded, requestedTask, selectedRepo, handoffKey]);
 
   useEffect(() => {
     if (scrollRef.current) {

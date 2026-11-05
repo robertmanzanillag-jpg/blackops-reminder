@@ -3,7 +3,8 @@ import { access, mkdtemp, readFile, utimes, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
-import { __clipperLocalNewsMetricoolInternals, deliverClipperLocalNewsToMetricool, getClipperLocalNewsMetricoolReadiness, hasCompleteLocalNewsCommitteeApproval } from "../server/clippers-local-news-metricool";
+import { __clipperLocalNewsMetricoolInternals, deliverClipperLocalNewsToMetricool as deliver, getClipperLocalNewsMetricoolReadiness as readiness, hasCompleteLocalNewsCommitteeApproval, type ClipperLocalNewsMetricoolOptions } from "../server/clippers-local-news-metricool";
+import type { LocalNewsDeliveryPolicy } from "../server/local-news-delivery-safety";
 import { hashLocalNewsQueueReview, hashLocalNewsReviewValue } from "../server/clippers-local-news-review-committee";
 
 function rawItem(overrides: Record<string, unknown> = {}) {
@@ -29,11 +30,18 @@ function rawItem(overrides: Record<string, unknown> = {}) {
 function unanimouslyReviewedItem(overrides: Record<string, unknown> = {}) {
   const { committeeConnector, ...itemOverrides } = overrides;
   const base = rawItem(itemOverrides);
+  const ny = base.lane === "ny-news";
+  Object.assign(base, {
+    source: "Official city fixture",
+    sourceUrl: `https://${ny ? "www.nyc.gov" : "www.miamidade.gov"}/global/news-item.page?Mduid_news=${base.eventId}`,
+    originalPublishedAt: base.createdAt,
+    ...itemOverrides,
+  });
   const checkedAt = "2026-07-21T15:55:00.000Z";
   const reviewed = {
     ...base,
     verdicts: ["source_verifier", "safety_editor", "monetization_editor"].map((role) => ({ role, verdict: "approve", reasons: ["verified"], evidence: ["verified"], checkedAt })),
-    evidence: [`connector=${typeof committeeConnector === "string" ? committeeConnector : "official-test"}`, `claimHash=${"a".repeat(64)}`, `copyHash=${hashLocalNewsReviewValue(base.copy)}`],
+    evidence: [`connector=${typeof committeeConnector === "string" ? committeeConnector : ny ? "notify-nyc" : "miami-dade-news"}`, `claimHash=${"a".repeat(64)}`, `copyHash=${hashLocalNewsReviewValue(base.copy)}`],
     consensus: "unanimous_approve",
     publishDecision: "auto_publish",
     checkedAt,
@@ -53,6 +61,8 @@ function unanimouslyReviewedItem(overrides: Record<string, unknown> = {}) {
     consensus: reviewed.consensus as "unanimous_approve",
     publishDecision: reviewed.publishDecision as "auto_publish",
     checkedAt: reviewed.checkedAt,
+    originalPublishedAt: (reviewed as Record<string, unknown>).originalPublishedAt as string,
+    expires: (reviewed as Record<string, unknown>).expires as string | undefined,
   });
   return { ...reviewed, reviewHash };
 }
@@ -69,6 +79,49 @@ async function workspace(items: unknown[]) {
 
 const credentials = { METRICOOL_USER_TOKEN: "real-token", METRICOOL_USER_ID: "123", CLIPPERS_LOCAL_NEWS_ENABLE_X: "true" };
 const fixedNow = () => new Date("2026-07-21T16:00:00.000Z");
+
+// Explicit verified fixtures for legacy delivery-behaviour tests. Production
+// remains paused. New safety tests exercise the real default and unknown rights.
+function fixtureOptions(options: ClipperLocalNewsMetricoolOptions): ClipperLocalNewsMetricoolOptions {
+  const policy: LocalNewsDeliveryPolicy = { paused: false, reason: "isolated fixture", destinations: {} };
+  const originalFetch = options.fetch!;
+  const register = (record: Record<string, unknown>) => {
+    const label = record.label ?? record.name;
+    const lane = label === "Miami News" || label === "ynb4b6r6" ? "miami-news"
+      : label === "NY News" || label === "New York News" ? "ny-news" : null;
+    if (lane) {
+      policy.destinations[lane] = { blogId: String(record.blogId ?? record.id), identityVerified: true, permissionVerifiedUntil: "2030-01-01T00:00:00.000Z",
+        networkAccounts: { facebook: `fixture-${lane}-facebook`, x: `fixture-${lane}-x` } };
+      record.facebookPageId = `fixture-${lane}-facebook`;
+      record.twitterId = `fixture-${lane}-x`;
+      record.canPublish = true;
+    }
+    for (const child of Object.values(record)) {
+      if (Array.isArray(child)) child.forEach(x => { if (x && typeof x === "object") register(x); });
+      else if (child && typeof child === "object") register(child as Record<string, unknown>);
+    }
+  };
+  return { ...options, readPolicy: async () => policy, fetch: async (input, init) => {
+    if (new URL(String(input)).pathname !== "/api/admin/simpleProfiles") return originalFetch(input, init);
+    // Older tests supplied a manually selected verified destination and only
+    // mocked the POST. Discovery is now mandatory; supply explicit GET evidence.
+    if (options.env?.METRICOOL_MIAMI_NEWS_BLOG_ID === "99" || options.env?.METRICOOL_NY_NEWS_BLOG_ID === "100") {
+      const profiles = [
+        { blogId: "99", label: "Miami News", networks: ["twitter", "facebook"] },
+        { blogId: "100", label: "NY News", networks: ["twitter", "facebook"] },
+      ];
+      profiles.forEach(register);
+      return Response.json({ profiles });
+    }
+    const response = await originalFetch(input, init);
+    if (!response.ok) return response;
+    const value = await response.json();
+    if (Array.isArray(value)) value.forEach(register); else if (value && typeof value === "object") register(value);
+    return Response.json(value);
+  } };
+}
+const deliverClipperLocalNewsToMetricool = (options: ClipperLocalNewsMetricoolOptions) => deliver(fixtureOptions(options));
+const getClipperLocalNewsMetricoolReadiness = (options: ClipperLocalNewsMetricoolOptions) => readiness(fixtureOptions(options));
 
 test("missing credentials blocks without making a network request", async () => {
   const dir = await workspace([item()]);
@@ -360,7 +413,7 @@ test("spaces multiple breaking posts per account instead of assigning one immedi
     platform: "facebook",
     editorialUrgency: "breaking",
     copy: `URGENTE | Actualización local verificada ${index}. Fuente: https://official.example.gov/${index}`,
-    sourceUrl: `https://official.example.gov/${index}`,
+    sourceUrl: `https://www.miamidade.gov/global/news-item.page?Mduid_news=${index}`,
   })));
   const dates: string[] = [];
   const result = await deliverClipperLocalNewsToMetricool({
@@ -436,7 +489,7 @@ test("retries transient Metricool media normalization before scheduling a link p
   assert.equal(result.mediaFallback, 0);
 });
 
-test("retries transient scheduler failures instead of dropping the news post", async () => {
+test("transient scheduler failure requires reconciliation without a write retry", async () => {
   const dir = await workspace([item({ id: "miami-facebook-schedule-retry", platform: "facebook" })]);
   let scheduleAttempts = 0;
   const result = await deliverClipperLocalNewsToMetricool({
@@ -455,9 +508,10 @@ test("retries transient scheduler failures instead of dropping the news post", a
     },
   });
 
-  assert.equal(result.scheduled, 1);
-  assert.equal(result.failed, 0);
-  assert.equal(scheduleAttempts, 3);
+  assert.equal(result.scheduled, 0);
+  assert.equal(result.pendingReconciliation, 1);
+  assert.equal(result.failed, 1);
+  assert.equal(scheduleAttempts, 1);
 });
 
 test("prefers a verified source video over the fallback brand image", async () => {
@@ -565,7 +619,7 @@ test("readiness does not treat a blog id override as proof of an unverified prov
     ] }), { status: 200 }),
   });
 
-  assert.equal(readiness.platforms.facebook.ready, true);
+  assert.equal(readiness.platforms.facebook.ready, false);
   assert.equal(readiness.platforms.x.ready, false);
 });
 
@@ -723,7 +777,7 @@ test("durable ledger deduplicates the same event and copy when a later cycle cha
 });
 
 test("durable ledger deduplicates the same official article URL after copy changes", async () => {
-  const sourceUrl = "https://official.example.gov/news/one-story";
+  const sourceUrl = "https://www.miamidade.gov/global/news-item.page?Mduid_news=one-story";
   const dir = await workspace([item({ id: "source-cycle-one", sourceUrl })]);
   let posts = 0;
   const options = {
@@ -810,8 +864,8 @@ test("breaking stories stop at the bounded daily burst instead of flooding an ac
   assert.equal(fetched, false);
 });
 
-test("a real update to an existing event remains publishable when its copy changes", async () => {
-  const sourceUrl = "https://official.example.gov/news/developing-story";
+test("an editorial revision of the same article cannot bypass source deduplication", async () => {
+  const sourceUrl = "https://www.miamidade.gov/global/news-item.page?Mduid_news=developing-story";
   const dir = await workspace([item({ id: "initial-event-copy", sourceUrl })]);
   let posts = 0;
   const fetcher: typeof fetch = async () => {
@@ -831,9 +885,9 @@ test("a real update to an existing event remains publishable when its copy chang
   }), "utf8");
 
   const second = await deliverClipperLocalNewsToMetricool(options);
-  assert.equal(second.scheduled, 1);
-  assert.equal(second.alreadyScheduled, 0);
-  assert.equal(posts, 2);
+  assert.equal(second.scheduled, 0);
+  assert.equal(second.alreadyScheduled, 1);
+  assert.equal(posts, 1);
 });
 
 test("deduplicates identical copy inside one queue even when event and queue IDs differ", async () => {
@@ -858,7 +912,7 @@ test("deduplicates identical copy inside one queue even when event and queue IDs
 });
 
 test("deduplicates one official article URL inside a single queue even when generated copy differs", async () => {
-  const sourceUrl = "https://official.example.gov/news/shared-article";
+  const sourceUrl = "https://www.miamidade.gov/global/news-item.page?Mduid_news=shared-article";
   const dir = await workspace([
     item({ id: "source-duplicate-one", eventId: "source-event-one", sourceUrl, copy: "First generated version." }),
     item({ id: "source-duplicate-two", eventId: "source-event-two", sourceUrl, copy: "Second generated version." }),
@@ -898,7 +952,7 @@ test("does not deduplicate the same copy across different destination platforms"
   assert.deepEqual(providers, ["twitter", "facebook"]);
 });
 
-test("an alternate duplicate queue item retries in the same run after the first request fails", async () => {
+test("an alternate duplicate cannot retry an ambiguous write in the same run", async () => {
   const dir = await workspace([
     item({ id: "first-copy-attempt" }),
     item({ id: "second-copy-attempt" }),
@@ -920,12 +974,12 @@ test("an alternate duplicate queue item retries in the same run after the first 
     },
   });
 
-  assert.equal(result.status, "partial");
+  assert.equal(result.status, "blocked");
   assert.equal(result.failed, 1);
-  assert.equal(result.scheduled, 1);
-  assert.equal(posts, 4);
-  const ledger = JSON.parse(await readFile(path.join(dir, "metricool-delivery-ledger.json"), "utf8"));
-  assert.equal(ledger.entries[0].queueItemId, "second-copy-attempt");
+  assert.equal(result.scheduled, 0);
+  assert.equal(posts, 1);
+  const attempts = JSON.parse(await readFile(path.join(dir, "metricool-delivery-attempts.json"), "utf8"));
+  assert.equal(attempts[0].queueItemId, "first-copy-attempt");
 });
 
 test("continues reading a legacy ledger without eventId or copyHash", async () => {
@@ -957,7 +1011,7 @@ test("continues reading a legacy ledger without eventId or copyHash", async () =
   assert.equal(fetched, false);
 });
 
-test("failed scheduling is not written to the ledger and is retried next run", async () => {
+test("failed scheduling preserves an uncertain attempt and cannot retry next run", async () => {
   const dir = await workspace([item()]);
   let scheduleAttempts = 0;
   const fetcher: typeof fetch = async (input) => {
@@ -981,8 +1035,9 @@ test("failed scheduling is not written to the ledger and is retried next run", a
   await assert.rejects(readFile(path.join(dir, "metricool-delivery-ledger.json"), "utf8"), /ENOENT/);
   await assert.rejects(access(path.join(dir, "metricool-delivery-ledger.json.lock")), /ENOENT/);
   const second = await deliverClipperLocalNewsToMetricool(options);
-  assert.equal(second.scheduled, 1);
-  assert.equal(scheduleAttempts, 4);
+  assert.equal(second.scheduled, 0);
+  assert.equal(second.pendingReconciliation, 1);
+  assert.equal(scheduleAttempts, 1);
   await assert.rejects(access(path.join(dir, "metricool-delivery-ledger.json.lock")), /ENOENT/);
 });
 
@@ -1409,8 +1464,9 @@ test("a hanging successful Metricool body cannot retain the delivery lock", asyn
     fetch: async () => hangingResponse(),
   });
 
-  assert.equal(result.status, "completed");
-  assert.equal(result.scheduled, 1);
+  assert.equal(result.status, "blocked");
+  assert.equal(result.scheduled, 0);
+  assert.equal(result.pendingReconciliation, 1);
   await assert.rejects(access(path.join(dir, "metricool-delivery-ledger.json.lock")), /ENOENT/);
 });
 
@@ -1443,7 +1499,7 @@ test("an ambiguous timed-out Metricool POST is not retried in the same cycle", a
   });
 
   assert.equal(result.status, "blocked");
-  assert.equal(result.reason, "metricool_schedule_failed");
+  assert.equal(result.reason, "metricool_reconciliation_required");
   assert.equal(result.failed, 1);
   assert.equal(calls, 1);
   await assert.rejects(access(path.join(dir, "metricool-delivery-ledger.json.lock")), /ENOENT/);
