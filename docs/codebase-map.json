@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-05T11:36:01.803Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-04\\quioer-qu-echeck-el-trabajo-que\\work\\office-current",
+  "generatedAt": "2026-11-05T21:05:50.740Z",
+  "repoRoot": "/private/tmp/br-office-release-20261105",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,20 +124,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 741,
-    "filesIndexed": 652,
-    "imports": 2262,
-    "routes": 524,
-    "symbols": 14798
+    "filesVisible": 763,
+    "filesIndexed": 678,
+    "imports": 2363,
+    "routes": 526,
+    "symbols": 15321
   },
   "directories": {
-    ".local/office-evidence": {
-      "files": 9,
-      "indexed": 3,
-      "kinds": {
-        "other": 9
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -154,17 +147,11 @@
         "docs": 5
       }
     },
-    ".agents/skills/codebase-overview": {
-      "files": 1,
+    ".agents/skills": {
+      "files": 2,
       "indexed": 1,
       "kinds": {
-        "docs": 1
-      }
-    },
-    ".agents/skills/codebase-overview/agents": {
-      "files": 1,
-      "indexed": 0,
-      "kinds": {
+        "docs": 1,
         "other": 1
       }
     },
@@ -183,101 +170,29 @@
       }
     },
     "client/public": {
-      "files": 14,
+      "files": 16,
       "indexed": 2,
       "kinds": {
-        "other": 14
-      }
-    },
-    "client/public/local-news": {
-      "files": 2,
-      "indexed": 0,
-      "kinds": {
-        "other": 2
+        "other": 16
       }
     },
     "client/src": {
-      "files": 3,
-      "indexed": 3,
+      "files": 138,
+      "indexed": 136,
       "kinds": {
-        "other": 3
-      }
-    },
-    "client/src/components": {
-      "files": 24,
-      "indexed": 24,
-      "kinds": {
-        "client-component": 24
-      }
-    },
-    "client/src/components/agents-building": {
-      "files": 1,
-      "indexed": 1,
-      "kinds": {
-        "client-component": 1
-      }
-    },
-    "client/src/components/agents-world-office": {
-      "files": 2,
-      "indexed": 2,
-      "kinds": {
-        "client-component": 2
-      }
-    },
-    "client/src/components/clippers": {
-      "files": 1,
-      "indexed": 1,
-      "kinds": {
-        "client-component": 1
-      }
-    },
-    "client/src/components/company-office": {
-      "files": 5,
-      "indexed": 5,
-      "kinds": {
-        "client-component": 5
-      }
-    },
-    "client/src/components/ui": {
-      "files": 55,
-      "indexed": 55,
-      "kinds": {
-        "ui-component": 55
-      }
-    },
-    "client/src/hooks": {
-      "files": 3,
-      "indexed": 3,
-      "kinds": {
-        "client-hook": 3
-      }
-    },
-    "client/src/lib": {
-      "files": 15,
-      "indexed": 15,
-      "kinds": {
-        "client-lib": 15
-      }
-    },
-    "client/src/pages": {
-      "files": 26,
-      "indexed": 24,
-      "kinds": {
+        "other": 4,
+        "client-component": 35,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 15,
         "client-page": 26
       }
     },
-    "client/src/types": {
-      "files": 1,
-      "indexed": 1,
-      "kinds": {
-        "other": 1
-      }
-    },
     "docs": {
-      "files": 32,
-      "indexed": 31,
+      "files": 39,
+      "indexed": 36,
       "kinds": {
-        "docs": 32
+        "docs": 39
       }
     },
     "examples/clippers-motivation": {
@@ -289,10 +204,10 @@
       }
     },
     "script": {
-      "files": 82,
-      "indexed": 77,
+      "files": 85,
+      "indexed": 80,
       "kinds": {
-        "script": 82
+        "script": 85
       }
     },
     "scripts": {
@@ -303,38 +218,24 @@
       }
     },
     "server": {
-      "files": 148,
-      "indexed": 144,
+      "files": 155,
+      "indexed": 151,
       "kinds": {
-        "server": 148
+        "server": 155
       }
     },
-    "server/replit_integrations/batch": {
-      "files": 2,
-      "indexed": 2,
+    "server/replit_integrations": {
+      "files": 9,
+      "indexed": 9,
       "kinds": {
-        "server": 2
-      }
-    },
-    "server/replit_integrations/chat": {
-      "files": 4,
-      "indexed": 4,
-      "kinds": {
-        "server": 4
-      }
-    },
-    "server/replit_integrations/image": {
-      "files": 3,
-      "indexed": 3,
-      "kinds": {
-        "server": 3
+        "server": 9
       }
     },
     "shared": {
-      "files": 7,
-      "indexed": 7,
+      "files": 9,
+      "indexed": 9,
       "kinds": {
-        "shared": 7
+        "shared": 9
       }
     },
     "shared/models": {
@@ -345,10 +246,10 @@
       }
     },
     "tests": {
-      "files": 147,
-      "indexed": 144,
+      "files": 157,
+      "indexed": 154,
       "kinds": {
-        "test": 147
+        "test": 157
       }
     },
     "tests/fixtures": {
@@ -418,30 +319,6 @@
     {
       "path": ".agents/skills/codebase-overview/SKILL.md",
       "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": ".local/office-evidence/affected-route-auth-guards.json",
-      "kind": "other",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": ".local/office-evidence/github-handoff-verification.json",
-      "kind": "other",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": ".local/office-evidence/integrated-app-qa-local.json",
-      "kind": "other",
       "imports": [],
       "exports": [],
       "symbols": [],
@@ -711,19 +588,23 @@
         "@/lib/office-city-agents",
         "@/lib/utils",
         "@shared/agent-company",
+        "@shared/agent-integrations",
+        "@shared/agent-live-status",
         "@shared/office-kong-supervisor",
         "@tanstack/react-query",
         "react"
       ],
       "exports": [
         "AgentsOfficeWorld",
-        "WorldAgent"
+        "WorldAgent",
+        "WorldContact"
       ],
       "symbols": [
         "AgentsOfficeWorld",
         "CompanyView",
         "OfficeAgentStatusChat",
         "PanelAgent",
+        "academyIds",
         "activeCityAgents",
         "activeCityCountry",
         "career",
@@ -752,6 +633,7 @@
         "directorScore",
         "directory",
         "evidenceExpiresAt",
+        "evidenceRuns",
         "filteredCityRooms",
         "focusRoom",
         "focused",
@@ -761,10 +643,12 @@
         "grade",
         "host",
         "hostRef",
+        "integrations",
         "labels",
         "labelsRef",
         "latestSceneKey",
         "leaderboardRows",
+        "lifeNotApplicable",
         "liveStatuses",
         "mainDepartments",
         "markDone",
@@ -776,6 +660,7 @@
         "panelAgent",
         "panelAgents",
         "panelCareer",
+        "panelIntegration",
         "panelOrders",
         "panelPersonality",
         "panelRank",
@@ -798,8 +683,10 @@
         "sendOrder",
         "sourceMap",
         "sources",
+        "specialists",
         "text",
         "timer",
+        "topic",
         "workingCount"
       ],
       "routes": []
@@ -1420,6 +1307,65 @@
       "routes": []
     },
     {
+      "path": "client/src/components/kong-supervisor-panel.tsx",
+      "kind": "client-component",
+      "imports": [
+        "./kong-supervisor-session",
+        "@/components/ui/button",
+        "@/components/ui/dialog",
+        "@shared/kong-supervisor",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "exports": [
+        "KongSupervisorPanel"
+      ],
+      "symbols": [
+        "KongSupervisorPanel",
+        "battery",
+        "career",
+        "error",
+        "fieldId",
+        "input",
+        "life",
+        "lifeKey",
+        "messages",
+        "previous",
+        "queryClient",
+        "requestJson",
+        "requestRef",
+        "response",
+        "result",
+        "routerAuth",
+        "routerId",
+        "selectedName",
+        "send",
+        "sendingRef",
+        "sessionScope",
+        "state",
+        "stateKey",
+        "text",
+        "trimmed",
+        "verifiedAuth",
+        "visibleState"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/kong-supervisor-session.ts",
+      "kind": "client-component",
+      "imports": [],
+      "exports": [
+        "SupervisorAuth",
+        "kongSupervisorSessionScope"
+      ],
+      "symbols": [
+        "id",
+        "kongSupervisorSessionScope"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/components/month-view.tsx",
       "kind": "client-component",
       "imports": [
@@ -1859,7 +1805,7 @@
         "react"
       ],
       "exports": [
-        "AlertDialog,\r\n  AlertDialogPortal,\r\n  AlertDialogOverlay,\r\n  AlertDialogTrigger,\r\n  AlertDialogContent,\r\n  AlertDialogHeader,\r\n  AlertDialogFooter,\r\n  AlertDialogTitle,\r\n  AlertDialogDescription,\r\n  AlertDialogAction,\r\n  AlertDialogCancel,\r\n"
+        "AlertDialog,\n  AlertDialogPortal,\n  AlertDialogOverlay,\n  AlertDialogTrigger,\n  AlertDialogContent,\n  AlertDialogHeader,\n  AlertDialogFooter,\n  AlertDialogTitle,\n  AlertDialogDescription,\n  AlertDialogAction,\n  AlertDialogCancel,\n"
       ],
       "symbols": [
         "AlertDialog",
@@ -1955,7 +1901,7 @@
         "react"
       ],
       "exports": [
-        "Breadcrumb,\r\n  BreadcrumbList,\r\n  BreadcrumbItem,\r\n  BreadcrumbLink,\r\n  BreadcrumbPage,\r\n  BreadcrumbSeparator,\r\n  BreadcrumbEllipsis,\r\n"
+        "Breadcrumb,\n  BreadcrumbList,\n  BreadcrumbItem,\n  BreadcrumbLink,\n  BreadcrumbPage,\n  BreadcrumbSeparator,\n  BreadcrumbEllipsis,\n"
       ],
       "symbols": [
         "Breadcrumb",
@@ -1979,7 +1925,7 @@
         "class-variance-authority"
       ],
       "exports": [
-        "ButtonGroup,\r\n  ButtonGroupSeparator,\r\n  ButtonGroupText,\r\n  buttonGroupVariants,\r\n"
+        "ButtonGroup,\n  ButtonGroupSeparator,\n  ButtonGroupText,\n  buttonGroupVariants,\n"
       ],
       "symbols": [
         "ButtonGroup",
@@ -2062,7 +2008,7 @@
         "react"
       ],
       "exports": [
-        "type CarouselApi,\r\n  Carousel,\r\n  CarouselContent,\r\n  CarouselItem,\r\n  CarouselPrevious,\r\n  CarouselNext,\r\n"
+        "type CarouselApi,\n  Carousel,\n  CarouselContent,\n  CarouselItem,\n  CarouselPrevious,\n  CarouselNext,\n"
       ],
       "symbols": [
         "Carousel",
@@ -2096,7 +2042,7 @@
       ],
       "exports": [
         "ChartConfig",
-        "ChartContainer,\r\n  ChartTooltip,\r\n  ChartTooltipContent,\r\n  ChartLegend,\r\n  ChartLegendContent,\r\n  ChartStyle,\r\n"
+        "ChartContainer,\n  ChartTooltip,\n  ChartTooltipContent,\n  ChartLegend,\n  ChartLegendContent,\n  ChartStyle,\n"
       ],
       "symbols": [
         "ChartContainer",
@@ -2170,7 +2116,7 @@
         "react"
       ],
       "exports": [
-        "Command,\r\n  CommandDialog,\r\n  CommandInput,\r\n  CommandList,\r\n  CommandEmpty,\r\n  CommandGroup,\r\n  CommandItem,\r\n  CommandShortcut,\r\n  CommandSeparator,\r\n"
+        "Command,\n  CommandDialog,\n  CommandInput,\n  CommandList,\n  CommandEmpty,\n  CommandGroup,\n  CommandItem,\n  CommandShortcut,\n  CommandSeparator,\n"
       ],
       "symbols": [
         "Command",
@@ -2195,7 +2141,7 @@
         "react"
       ],
       "exports": [
-        "ContextMenu,\r\n  ContextMenuTrigger,\r\n  ContextMenuContent,\r\n  ContextMenuItem,\r\n  ContextMenuCheckboxItem,\r\n  ContextMenuRadioItem,\r\n  ContextMenuLabel,\r\n  ContextMenuSeparator,\r\n  ContextMenuShortcut,\r\n  ContextMenuGroup,\r\n  ContextMenuPortal,\r\n  ContextMenuSub,\r\n  ContextMenuSubContent,\r\n  ContextMenuSubTrigger,\r\n  ContextMenuRadioGroup,\r\n"
+        "ContextMenu,\n  ContextMenuTrigger,\n  ContextMenuContent,\n  ContextMenuItem,\n  ContextMenuCheckboxItem,\n  ContextMenuRadioItem,\n  ContextMenuLabel,\n  ContextMenuSeparator,\n  ContextMenuShortcut,\n  ContextMenuGroup,\n  ContextMenuPortal,\n  ContextMenuSub,\n  ContextMenuSubContent,\n  ContextMenuSubTrigger,\n  ContextMenuRadioGroup,\n"
       ],
       "symbols": [
         "ContextMenu",
@@ -2226,7 +2172,7 @@
         "react"
       ],
       "exports": [
-        "Dialog,\r\n  DialogPortal,\r\n  DialogOverlay,\r\n  DialogTrigger,\r\n  DialogClose,\r\n  DialogContent,\r\n  DialogHeader,\r\n  DialogFooter,\r\n  DialogTitle,\r\n  DialogDescription,\r\n"
+        "Dialog,\n  DialogPortal,\n  DialogOverlay,\n  DialogTrigger,\n  DialogClose,\n  DialogContent,\n  DialogHeader,\n  DialogFooter,\n  DialogTitle,\n  DialogDescription,\n"
       ],
       "symbols": [
         "Dialog",
@@ -2251,7 +2197,7 @@
         "vaul"
       ],
       "exports": [
-        "Drawer,\r\n  DrawerPortal,\r\n  DrawerOverlay,\r\n  DrawerTrigger,\r\n  DrawerClose,\r\n  DrawerContent,\r\n  DrawerHeader,\r\n  DrawerFooter,\r\n  DrawerTitle,\r\n  DrawerDescription,\r\n"
+        "Drawer,\n  DrawerPortal,\n  DrawerOverlay,\n  DrawerTrigger,\n  DrawerClose,\n  DrawerContent,\n  DrawerHeader,\n  DrawerFooter,\n  DrawerTitle,\n  DrawerDescription,\n"
       ],
       "symbols": [
         "Drawer",
@@ -2277,7 +2223,7 @@
         "react"
       ],
       "exports": [
-        "DropdownMenu,\r\n  DropdownMenuTrigger,\r\n  DropdownMenuContent,\r\n  DropdownMenuItem,\r\n  DropdownMenuCheckboxItem,\r\n  DropdownMenuRadioItem,\r\n  DropdownMenuLabel,\r\n  DropdownMenuSeparator,\r\n  DropdownMenuShortcut,\r\n  DropdownMenuGroup,\r\n  DropdownMenuPortal,\r\n  DropdownMenuSub,\r\n  DropdownMenuSubContent,\r\n  DropdownMenuSubTrigger,\r\n  DropdownMenuRadioGroup,\r\n"
+        "DropdownMenu,\n  DropdownMenuTrigger,\n  DropdownMenuContent,\n  DropdownMenuItem,\n  DropdownMenuCheckboxItem,\n  DropdownMenuRadioItem,\n  DropdownMenuLabel,\n  DropdownMenuSeparator,\n  DropdownMenuShortcut,\n  DropdownMenuGroup,\n  DropdownMenuPortal,\n  DropdownMenuSub,\n  DropdownMenuSubContent,\n  DropdownMenuSubTrigger,\n  DropdownMenuRadioGroup,\n"
       ],
       "symbols": [
         "DropdownMenu",
@@ -2306,7 +2252,7 @@
         "class-variance-authority"
       ],
       "exports": [
-        "Empty,\r\n  EmptyHeader,\r\n  EmptyTitle,\r\n  EmptyDescription,\r\n  EmptyContent,\r\n  EmptyMedia,\r\n"
+        "Empty,\n  EmptyHeader,\n  EmptyTitle,\n  EmptyDescription,\n  EmptyContent,\n  EmptyMedia,\n"
       ],
       "symbols": [
         "Empty",
@@ -2330,7 +2276,7 @@
         "react"
       ],
       "exports": [
-        "Field,\r\n  FieldLabel,\r\n  FieldDescription,\r\n  FieldError,\r\n  FieldGroup,\r\n  FieldLegend,\r\n  FieldSeparator,\r\n  FieldSet,\r\n  FieldContent,\r\n  FieldTitle,\r\n"
+        "Field,\n  FieldLabel,\n  FieldDescription,\n  FieldError,\n  FieldGroup,\n  FieldLegend,\n  FieldSeparator,\n  FieldSet,\n  FieldContent,\n  FieldTitle,\n"
       ],
       "symbols": [
         "Field",
@@ -2360,7 +2306,7 @@
         "react-hook-form"
       ],
       "exports": [
-        "useFormField,\r\n  Form,\r\n  FormItem,\r\n  FormLabel,\r\n  FormControl,\r\n  FormDescription,\r\n  FormMessage,\r\n  FormField,\r\n"
+        "useFormField,\n  Form,\n  FormItem,\n  FormLabel,\n  FormControl,\n  FormDescription,\n  FormMessage,\n  FormField,\n"
       ],
       "symbols": [
         "Form",
@@ -2412,7 +2358,7 @@
         "react"
       ],
       "exports": [
-        "InputGroup,\r\n  InputGroupAddon,\r\n  InputGroupButton,\r\n  InputGroupText,\r\n  InputGroupInput,\r\n  InputGroupTextarea,\r\n"
+        "InputGroup,\n  InputGroupAddon,\n  InputGroupButton,\n  InputGroupText,\n  InputGroupInput,\n  InputGroupTextarea,\n"
       ],
       "symbols": [
         "InputGroup",
@@ -2473,7 +2419,7 @@
         "react"
       ],
       "exports": [
-        "Item,\r\n  ItemMedia,\r\n  ItemContent,\r\n  ItemActions,\r\n  ItemGroup,\r\n  ItemSeparator,\r\n  ItemTitle,\r\n  ItemDescription,\r\n  ItemHeader,\r\n  ItemFooter,\r\n"
+        "Item,\n  ItemMedia,\n  ItemContent,\n  ItemActions,\n  ItemGroup,\n  ItemSeparator,\n  ItemTitle,\n  ItemDescription,\n  ItemHeader,\n  ItemFooter,\n"
       ],
       "symbols": [
         "Comp",
@@ -2535,7 +2481,7 @@
         "react"
       ],
       "exports": [
-        "Menubar,\r\n  MenubarMenu,\r\n  MenubarTrigger,\r\n  MenubarContent,\r\n  MenubarItem,\r\n  MenubarSeparator,\r\n  MenubarLabel,\r\n  MenubarCheckboxItem,\r\n  MenubarRadioGroup,\r\n  MenubarRadioItem,\r\n  MenubarPortal,\r\n  MenubarSubContent,\r\n  MenubarSubTrigger,\r\n  MenubarGroup,\r\n  MenubarSub,\r\n  MenubarShortcut,\r\n"
+        "Menubar,\n  MenubarMenu,\n  MenubarTrigger,\n  MenubarContent,\n  MenubarItem,\n  MenubarSeparator,\n  MenubarLabel,\n  MenubarCheckboxItem,\n  MenubarRadioGroup,\n  MenubarRadioItem,\n  MenubarPortal,\n  MenubarSubContent,\n  MenubarSubTrigger,\n  MenubarGroup,\n  MenubarSub,\n  MenubarShortcut,\n"
       ],
       "symbols": [
         "Menubar",
@@ -2568,7 +2514,7 @@
         "react"
       ],
       "exports": [
-        "navigationMenuTriggerStyle,\r\n  NavigationMenu,\r\n  NavigationMenuList,\r\n  NavigationMenuItem,\r\n  NavigationMenuContent,\r\n  NavigationMenuTrigger,\r\n  NavigationMenuLink,\r\n  NavigationMenuIndicator,\r\n  NavigationMenuViewport,\r\n"
+        "navigationMenuTriggerStyle,\n  NavigationMenu,\n  NavigationMenuList,\n  NavigationMenuItem,\n  NavigationMenuContent,\n  NavigationMenuTrigger,\n  NavigationMenuLink,\n  NavigationMenuIndicator,\n  NavigationMenuViewport,\n"
       ],
       "symbols": [
         "NavigationMenu",
@@ -2593,7 +2539,7 @@
         "react"
       ],
       "exports": [
-        "Pagination,\r\n  PaginationContent,\r\n  PaginationLink,\r\n  PaginationItem,\r\n  PaginationPrevious,\r\n  PaginationNext,\r\n  PaginationEllipsis,\r\n"
+        "Pagination,\n  PaginationContent,\n  PaginationLink,\n  PaginationItem,\n  PaginationPrevious,\n  PaginationNext,\n  PaginationEllipsis,\n"
       ],
       "symbols": [
         "Pagination",
@@ -2705,7 +2651,7 @@
         "react"
       ],
       "exports": [
-        "Select,\r\n  SelectGroup,\r\n  SelectValue,\r\n  SelectTrigger,\r\n  SelectContent,\r\n  SelectLabel,\r\n  SelectItem,\r\n  SelectSeparator,\r\n  SelectScrollUpButton,\r\n  SelectScrollDownButton,\r\n"
+        "Select,\n  SelectGroup,\n  SelectValue,\n  SelectTrigger,\n  SelectContent,\n  SelectLabel,\n  SelectItem,\n  SelectSeparator,\n  SelectScrollUpButton,\n  SelectScrollDownButton,\n"
       ],
       "symbols": [
         "Select",
@@ -2748,7 +2694,7 @@
         "react"
       ],
       "exports": [
-        "Sheet,\r\n  SheetPortal,\r\n  SheetOverlay,\r\n  SheetTrigger,\r\n  SheetClose,\r\n  SheetContent,\r\n  SheetHeader,\r\n  SheetFooter,\r\n  SheetTitle,\r\n  SheetDescription,\r\n"
+        "Sheet,\n  SheetPortal,\n  SheetOverlay,\n  SheetTrigger,\n  SheetClose,\n  SheetContent,\n  SheetHeader,\n  SheetFooter,\n  SheetTitle,\n  SheetDescription,\n"
       ],
       "symbols": [
         "Sheet",
@@ -2784,7 +2730,7 @@
         "react"
       ],
       "exports": [
-        "Sidebar,\r\n  SidebarContent,\r\n  SidebarFooter,\r\n  SidebarGroup,\r\n  SidebarGroupAction,\r\n  SidebarGroupContent,\r\n  SidebarGroupLabel,\r\n  SidebarHeader,\r\n  SidebarInput,\r\n  SidebarInset,\r\n  SidebarMenu,\r\n  SidebarMenuAction,\r\n  SidebarMenuBadge,\r\n  SidebarMenuButton,\r\n  SidebarMenuItem,\r\n  SidebarMenuSkeleton,\r\n  SidebarMenuSub,\r\n  SidebarMenuSubButton,\r\n  SidebarMenuSubItem,\r\n  SidebarProvider,\r\n  SidebarRail,\r\n  SidebarSeparator,\r\n  SidebarTrigger,\r\n  useSidebar,\r\n"
+        "Sidebar,\n  SidebarContent,\n  SidebarFooter,\n  SidebarGroup,\n  SidebarGroupAction,\n  SidebarGroupContent,\n  SidebarGroupLabel,\n  SidebarHeader,\n  SidebarInput,\n  SidebarInset,\n  SidebarMenu,\n  SidebarMenuAction,\n  SidebarMenuBadge,\n  SidebarMenuButton,\n  SidebarMenuItem,\n  SidebarMenuSkeleton,\n  SidebarMenuSub,\n  SidebarMenuSubButton,\n  SidebarMenuSubItem,\n  SidebarProvider,\n  SidebarRail,\n  SidebarSeparator,\n  SidebarTrigger,\n  useSidebar,\n"
       ],
       "symbols": [
         "Comp",
@@ -2920,7 +2866,7 @@
         "react"
       ],
       "exports": [
-        "Table,\r\n  TableHeader,\r\n  TableBody,\r\n  TableFooter,\r\n  TableHead,\r\n  TableRow,\r\n  TableCell,\r\n  TableCaption,\r\n"
+        "Table,\n  TableHeader,\n  TableBody,\n  TableFooter,\n  TableHead,\n  TableRow,\n  TableCell,\n  TableCaption,\n"
       ],
       "symbols": [
         "Table",
@@ -2979,7 +2925,7 @@
         "react"
       ],
       "exports": [
-        "type ToastProps,\r\n  type ToastActionElement,\r\n  ToastProvider,\r\n  ToastViewport,\r\n  Toast,\r\n  ToastTitle,\r\n  ToastDescription,\r\n  ToastClose,\r\n  ToastAction,\r\n"
+        "type ToastProps,\n  type ToastActionElement,\n  ToastProvider,\n  ToastViewport,\n  Toast,\n  ToastTitle,\n  ToastDescription,\n  ToastClose,\n  ToastAction,\n"
       ],
       "symbols": [
         "Toast",
@@ -3704,6 +3650,7 @@
         "@/components/agents-building/agents-building",
         "@/components/agents-world-office/agents-office-world",
         "@/components/company-office/company-office",
+        "@/components/kong-supervisor-panel",
         "@/components/office-connections-panel",
         "@/components/ui/button",
         "@/lib/agent-live-status",
@@ -4996,6 +4943,30 @@
       "routes": []
     },
     {
+      "path": "docs/blackroom-manual-exploration.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/blackroom-manual-reconciliation.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/blackroom-release-integration.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/ceo-assistant-go-live-task.md",
       "kind": "docs",
       "imports": [],
@@ -5141,6 +5112,22 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -5829,6 +5816,7 @@
         "./blackroom-metricool-csv-bridge.mjs",
         "./blackroom-metricool-exporter.mjs",
         "./blackroom-remote-sync.mjs",
+        "./organic-peer-scout.mjs",
         "node:child_process",
         "node:crypto",
         "node:fs/promises",
@@ -5848,6 +5836,7 @@
         "changed",
         "checkedAt",
         "child",
+        "collectionStarted",
         "command",
         "content",
         "controlToken",
@@ -5858,6 +5847,7 @@
         "currentWorker",
         "data",
         "deadline",
+        "durable",
         "entries",
         "error",
         "execFileAsync",
@@ -5876,6 +5866,7 @@
         "ledger",
         "next",
         "npmPath",
+        "observed",
         "origin",
         "page",
         "plan",
@@ -5888,6 +5879,7 @@
         "queueWithDeliveryCounts",
         "raw",
         "readBody",
+        "receipt",
         "recoverWorker",
         "remoteLoop",
         "remotePollMs",
@@ -5895,6 +5887,7 @@
         "remoteToken",
         "remoteUrl",
         "renderedPage",
+        "report",
         "response",
         "result",
         "send",
@@ -5902,6 +5895,7 @@
         "server",
         "start",
         "state",
+        "stopScout",
         "stopWorker",
         "syncAutomaticAnalytics",
         "syncMetricoolCsvExports",
@@ -5952,6 +5946,7 @@
       "imports": [
         "../server/blackroom-daily-queue",
         "../server/blackroom-deterministic-editor",
+        "../server/blackroom-local-evidence",
         "../server/blackroom-local-worker",
         "node:child_process",
         "node:fs/promises",
@@ -5984,6 +5979,7 @@
         "loadChannelInventory",
         "loadInventory",
         "loadMetadata",
+        "localReport",
         "main",
         "mediaStem",
         "message",
@@ -6019,6 +6015,59 @@
         "ytDlpAuthArgs",
         "ytDlpPath",
         "ytDlpTimeoutMs"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/blackroom-local-evidence.ts",
+      "kind": "script",
+      "imports": [
+        "../server/blackroom-daily-queue",
+        "../server/blackroom-local-evidence",
+        "../server/blackroom-manual-observations",
+        "./blackroom-publication-collector",
+        "./blackroom-remote-sync.mjs",
+        "node:fs",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "manualReceiptPaths",
+        "refreshLocalBlackRoomEvidence"
+      ],
+      "symbols": [
+        "archiveFile",
+        "buffer",
+        "calendarPath",
+        "clips",
+        "confirmed",
+        "directory",
+        "entries",
+        "handle",
+        "jsonFile",
+        "keys",
+        "latest",
+        "ledger",
+        "manual",
+        "manualObservations",
+        "manualReceiptPaths",
+        "newRows",
+        "oldRegistry",
+        "outputDir",
+        "prior",
+        "readManualReceipt",
+        "receiptPaths",
+        "refreshLocalBlackRoomEvidence",
+        "registryDoc",
+        "registryPath",
+        "registryRows",
+        "root",
+        "saveAtomic",
+        "stat",
+        "summary",
+        "temp"
       ],
       "routes": []
     },
@@ -6167,6 +6216,7 @@
       "path": "script/blackroom-metricool-exporter.mjs",
       "kind": "script",
       "imports": [
+        "../server/organic-brand-comparison.mjs",
         "./blackroom-metricool-csv-bridge.mjs",
         "node:fs/promises",
         "node:os",
@@ -6175,7 +6225,9 @@
         "node:url"
       ],
       "exports": [
+        "KONG_EXPORT_PAGES",
         "METRICOOL_EXPORT_PAGES",
+        "acquireBrandPair",
         "acquireMetricoolExports",
         "buildVerifiedMetricoolExport",
         "deliverMetricoolExports",
@@ -6183,9 +6235,13 @@
         "runMetricoolExporter"
       ],
       "symbols": [
+        "KONG_EXPORT_PAGES",
         "METRICOOL_EXPORT_PAGES",
         "acquire",
+        "acquireBrandPair",
         "acquireMetricoolExports",
+        "actual",
+        "blackroom",
         "buildVerifiedMetricoolExport",
         "complete",
         "context",
@@ -6194,16 +6250,21 @@
         "detail",
         "downloadButton",
         "errors",
+        "expected",
         "failure",
         "format",
+        "identityLink",
         "importedByNetwork",
         "imports",
         "instant",
+        "kong",
+        "location",
         "match",
         "matches",
         "metricoolPublicationInstant",
         "nominal",
         "page",
+        "pages",
         "parsed",
         "parts",
         "period",
@@ -6212,10 +6273,35 @@
         "root",
         "runMetricoolExporter",
         "samples",
+        "save",
         "status",
         "stream",
-        "temporary",
         "transient"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/blackroom-publication-collector.ts",
+      "kind": "script",
+      "imports": [
+        "../server/blackroom-manual-observations"
+      ],
+      "exports": [
+        "collectBlackRoomPublicationReceipts"
+      ],
+      "symbols": [
+        "attemptedDays",
+        "body",
+        "collectBlackRoomPublicationReceipts",
+        "cutoff",
+        "days",
+        "failedDays",
+        "lastError",
+        "receipts",
+        "response",
+        "today",
+        "unique",
+        "url"
       ],
       "routes": []
     },
@@ -10031,6 +10117,42 @@
       "routes": []
     },
     {
+      "path": "script/organic-peer-scout.mjs",
+      "kind": "script",
+      "imports": [
+        "../server/organic-peer-hypotheses.mjs",
+        "node:child_process",
+        "node:fs/promises",
+        "node:path",
+        "node:util"
+      ],
+      "exports": [
+        "SOURCES",
+        "refreshOrganicPeerScout",
+        "startOrganicPeerScout"
+      ],
+      "symbols": [
+        "SOURCES",
+        "channel",
+        "collect",
+        "controller",
+        "data",
+        "elapsed",
+        "exec",
+        "file",
+        "inFlight",
+        "observations",
+        "refreshOrganicPeerScout",
+        "report",
+        "startOrganicPeerScout",
+        "temp",
+        "tick",
+        "timer",
+        "work"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/radio-local-worker.ts",
       "kind": "script",
       "imports": [
@@ -10513,7 +10635,10 @@
       "kind": "server",
       "imports": [
         "./agent-council",
+        "./kong-supervisor-conversation",
+        "./kong-supervisor-routes",
         "./user-context",
+        "@shared/agent-live-status",
         "express"
       ],
       "exports": [
@@ -10521,10 +10646,14 @@
       ],
       "symbols": [
         "MANUAL_RUN_MIN_INTERVAL_MS",
+        "body",
         "council",
         "current",
+        "evidenceRunId",
+        "kongConversation",
         "last",
         "message",
+        "raw",
         "registerAgentCouncilRoutes",
         "state",
         "text"
@@ -10540,17 +10669,25 @@
       "path": "server/agent-council.ts",
       "kind": "server",
       "imports": [
+        "./database-url",
         "@shared/agent-company",
         "@shared/agent-council",
+        "@shared/agent-integrations",
         "@shared/agent-live-status",
+        "@shared/kong-supervisor",
         "node:crypto",
         "node:fs/promises",
         "node:path"
       ],
       "exports": [
         "AGENT_NAMES",
+        "CYCLE_WATCHDOG_MS",
         "CouncilDeps",
+        "CouncilStateConflict",
         "KONG_TEAM",
+        "MIN_CYCLE_GAP_MS",
+        "OrderEvidenceError",
+        "READ_TIMEOUT_MS",
         "createAgentCouncil",
         "emptyCouncilState ",
         "getAgentCouncil",
@@ -10561,19 +10698,34 @@
         "writeFileAtomic"
       ],
       "symbols": [
+        "COLLECT_TIMEOUT_MS",
+        "CURRICULUM_TIMEOUT_MS",
+        "CYCLE_WATCHDOG_MS",
+        "CouncilStateConflict",
         "DATA_DIR",
         "DB_TIMEOUT_MS",
         "EXEMPT_IDS",
         "KONG_IDS",
         "KONG_TEAM",
+        "MAX_OPEN_SPECIALIST_PROPOSALS",
+        "MIN_CYCLE_GAP_MS",
+        "OrderEvidenceError",
+        "ProposalPatch",
+        "READ_TIMEOUT_MS",
+        "SKIP",
         "SLOW_READ_TTL_MS",
         "STATE_FILE",
+        "STATE_KIND",
+        "STATE_OWNER",
         "STATUS_FRESH_MS",
+        "academyBase",
         "accountId",
         "action",
+        "adapter",
         "add",
         "advanceCompanyCycle",
         "approveFromTrustCenter",
+        "at",
         "available",
         "before",
         "body",
@@ -10583,6 +10735,7 @@
         "code",
         "collectReal",
         "collectStatusesReal",
+        "collectTimeout",
         "collected",
         "compact",
         "config",
@@ -10590,7 +10743,10 @@
         "controller",
         "count",
         "createAgentCouncil",
+        "current",
         "curriculum",
+        "databaseStateStore",
+        "deriveSpecialistProposals",
         "destination",
         "detail",
         "diff",
@@ -10598,8 +10754,10 @@
         "doc",
         "docs",
         "entries",
+        "entry",
         "everyone",
         "exists",
+        "expect",
         "fetchLatestReleaseReal",
         "file",
         "fileWriteQueues",
@@ -10615,6 +10773,9 @@
         "hit",
         "id",
         "instance",
+        "integration",
+        "integrations",
+        "integrationsNow",
         "isAgentCouncilEnabled",
         "iso",
         "job",
@@ -10623,7 +10784,10 @@
         "listedInClaudeMd",
         "load",
         "loadCurriculumReal",
+        "loaded",
         "local",
+        "matches",
+        "mergeProposalSync",
         "message",
         "modules",
         "mutate",
@@ -10632,14 +10796,18 @@
         "online",
         "open",
         "operation",
+        "patches",
         "personalities",
         "placeOrder",
         "plain",
         "previous",
         "projects",
+        "proposals",
         "raw",
         "read",
+        "readKongSupervision",
         "readSkillDocs",
+        "recent",
         "referenced",
         "release",
         "remote",
@@ -10649,21 +10817,28 @@
         "response",
         "result",
         "routesModule",
+        "row",
+        "rows",
+        "run",
         "runCycle",
         "runCycleOnce",
         "runScout",
         "runScoutOnce",
         "safe",
         "schema",
+        "scored",
         "setAgentCouncilUser",
         "settled",
         "slowReads",
+        "specialist",
+        "specialistNames",
         "startAgentCouncilScheduler",
         "state",
         "status",
         "statusesFromSignals",
         "summarize",
         "syncProposals",
+        "syncProposalsNetwork",
         "systemUserId",
         "tables",
         "tick",
@@ -10671,12 +10846,15 @@
         "timer",
         "tmp",
         "token",
+        "unscored",
+        "updateKongSupervision",
         "userId",
         "view",
         "webhookSecret",
         "withTimeout",
         "writeFileAtomic",
-        "writeStateAtomic"
+        "writeStateAtomic",
+        "written"
       ],
       "routes": []
     },
@@ -11903,6 +12081,7 @@
         "./blackroom-growth-ceo",
         "./blackroom-learning-observations",
         "./blackroom-local-worker",
+        "./blackroom-manual-exploration",
         "./blackroom-verified-learning",
         "node:crypto"
       ],
@@ -11919,6 +12098,7 @@
         "buildBlackRoomYtDlpAuthArgs",
         "buildBlackRoomYtDlpWindowArgs",
         "commitBlackRoomReservation",
+        "downloadBlackRoomWindowWithFallback",
         "extractBlackRoomDj",
         "findBlackRoomDropOffset",
         "isOwnedBlackRoomMetadata",
@@ -11934,6 +12114,7 @@
         "allocation",
         "allowed",
         "alternateCount",
+        "armDuration",
         "availableWindowStart",
         "belowTarget",
         "bitrate",
@@ -11951,16 +12132,23 @@
         "chooseLanguage",
         "cleaned",
         "commitBlackRoomReservation",
+        "commonDuration",
         "comparable",
         "controlledTest",
         "counts",
         "current",
+        "dayNumber",
         "daypart",
+        "decisions",
+        "diagnostic",
         "distributedSlotSelected",
         "dj",
+        "downloadBlackRoomWindowWithFallback",
         "durationSeconds",
+        "durationStudy",
         "durations",
         "encoderOptions",
+        "exploitDuration",
         "extractBlackRoomDj",
         "failedVideos",
         "findBlackRoomDropOffset",
@@ -11980,6 +12168,7 @@
         "leadSeconds",
         "learningNetwork",
         "learningReference",
+        "manualDuration",
         "margin",
         "maximumStart",
         "minimum",
@@ -11994,6 +12183,7 @@
         "parseBlackRoomEnergySamples",
         "planBlackRoomDeterministicEdit",
         "preferFreshSource",
+        "preferences",
         "preferred",
         "preferredCount",
         "preferredDjs",
@@ -12499,6 +12689,62 @@
       "routes": []
     },
     {
+      "path": "server/blackroom-local-evidence.ts",
+      "kind": "server",
+      "imports": [
+        "./blackroom-growth-ceo",
+        "./blackroom-learning-observations",
+        "./blackroom-manual-exploration",
+        "./blackroom-manual-observations",
+        "./blackroom-verified-learning"
+      ],
+      "exports": [
+        "EvidenceArchive",
+        "applyLocalEditorialReport",
+        "assessLocalBlackRoomExports",
+        "emptyEvidence",
+        "preferFreshLocalEvidence"
+      ],
+      "symbols": [
+        "Decisions",
+        "SourcePost",
+        "add",
+        "applyLocalEditorialReport",
+        "assessLocalBlackRoomExports",
+        "band",
+        "byId",
+        "candidate",
+        "d",
+        "decisions",
+        "duration",
+        "durationDecisions",
+        "durations",
+        "emptyEvidence",
+        "experiments",
+        "groups",
+        "id",
+        "input",
+        "item",
+        "k",
+        "key",
+        "latest",
+        "observedDurationCohorts",
+        "post",
+        "posts",
+        "preferFreshLocalEvidence",
+        "receiptCounts",
+        "seconds",
+        "selected",
+        "snapshots",
+        "sourceObservedAt",
+        "unique",
+        "validReference",
+        "verifiedLearning",
+        "views"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/blackroom-local-worker.ts",
       "kind": "server",
       "imports": [
@@ -12609,6 +12855,83 @@
         "values",
         "video",
         "width"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-manual-exploration.ts",
+      "kind": "server",
+      "imports": [
+        "./blackroom-learning-observations",
+        "./blackroom-manual-observations"
+      ],
+      "exports": [
+        "ManualExploration",
+        "ManualExplorations",
+        "proposeManualExploration",
+        "sharedManualExploration"
+      ],
+      "symbols": [
+        "ManualReport",
+        "age",
+        "eligible",
+        "group",
+        "groups",
+        "hours",
+        "latestAge",
+        "proposeManualExploration",
+        "seconds",
+        "sharedManualExploration",
+        "snapshot",
+        "values"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-manual-observations.ts",
+      "kind": "server",
+      "imports": [
+        "./blackroom-learning-observations",
+        "./blackroom-verified-learning"
+      ],
+      "exports": [
+        "CalendarReceipts",
+        "ManualClip",
+        "PublishedReceipt",
+        "emptyCalendarReceipts",
+        "manualClipCandidates",
+        "manualClips",
+        "publishedCalendarReceipts",
+        "reconcileManualObservations"
+      ],
+      "symbols": [
+        "base",
+        "candidates",
+        "data",
+        "doc",
+        "emptyCalendarReceipts",
+        "id",
+        "ids",
+        "key",
+        "keys",
+        "latest",
+        "manualClipCandidates",
+        "manualClips",
+        "matching",
+        "measured",
+        "network",
+        "networks",
+        "posts",
+        "publishedCalendarReceipts",
+        "rawReceipts",
+        "receipt",
+        "receipts",
+        "reconcileManualObservations",
+        "result",
+        "reused",
+        "rows",
+        "unique",
+        "urlId"
       ],
       "routes": []
     },
@@ -12891,27 +13214,42 @@
         "node:crypto"
       ],
       "exports": [
+        "BLACKROOM_DURATION_TEST_ID",
         "BLACKROOM_HOOK_TEST_ID",
         "BLACKROOM_LEARNING_NETWORKS",
+        "DURATION_ARMS",
+        "DurationDecision",
         "VerifiedLearningDecision",
         "VerifiedLearningStatus",
         "canonicalLearningPostId",
-        "evaluateBlackRoomLearning"
+        "durationDecisionId",
+        "evaluateBlackRoomLearning",
+        "evaluateDurationLearning"
       ],
       "symbols": [
+        "Arm",
+        "BLACKROOM_DURATION_TEST_ID",
         "BLACKROOM_HOOK_TEST_ID",
+        "DURATION_ARMS",
+        "Row",
         "block",
         "blocks",
         "canonicalLearningPostId",
         "comparisonBlock",
         "counts",
+        "date",
         "dates",
         "declared",
         "deduped",
+        "durationDecisionId",
+        "e",
         "entries",
         "evaluateBlackRoomLearning",
+        "evaluateDurationLearning",
         "evidence",
         "finish",
+        "found",
+        "groups",
         "health",
         "host",
         "hour",
@@ -12919,21 +13257,27 @@
         "id",
         "identities",
         "key",
+        "local",
         "matches",
         "median",
         "paired",
         "pairedCounts",
         "pairedKeys",
+        "part",
+        "parts",
         "ratio",
         "ratios",
         "raw",
+        "reservations",
         "retention",
         "rows",
         "score",
+        "snapshots",
         "sorted",
         "sourceObservedAt",
         "threshold",
         "url",
+        "used",
         "valid",
         "winner"
       ],
@@ -16378,6 +16722,64 @@
       ]
     },
     {
+      "path": "server/kong-supervisor-conversation.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/kong-supervisor"
+      ],
+      "exports": [
+        "KongConversationDeps",
+        "KongConversationInput",
+        "KongConversationInputError",
+        "createKongSupervisorConversation",
+        "validateKongConversationInput"
+      ],
+      "symbols": [
+        "HELP",
+        "KongConversationInputError",
+        "age",
+        "at",
+        "createKongSupervisorConversation",
+        "ids",
+        "input",
+        "isSupervisor",
+        "lastVideo",
+        "limitedRead",
+        "newRecords",
+        "normalized",
+        "readsVideo",
+        "record",
+        "report",
+        "state",
+        "statusReply",
+        "talk",
+        "v",
+        "validateKongConversationInput"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/kong-supervisor-routes.ts",
+      "kind": "server",
+      "imports": [
+        "./kong-supervisor-conversation",
+        "express"
+      ],
+      "exports": [
+        "KongSupervisorOwnerAuth",
+        "registerKongSupervisorRoutes"
+      ],
+      "symbols": [
+        "allow",
+        "registerKongSupervisorRoutes",
+        "userId"
+      ],
+      "routes": [
+        "/api/kong-supervisor/chat",
+        "/api/kong-supervisor/state"
+      ]
+    },
+    {
       "path": "server/legal-compliance-agent.ts",
       "kind": "server",
       "imports": [
@@ -16503,7 +16905,7 @@
         "zod"
       ],
       "exports": [
-        "hashPassword,\r\n  isLocalAuthEnabled,\r\n  isLocalAuthRegistrationAllowed,\r\n  normalizeUsername,\r\n  sanitizeAuthUser,\r\n  verifyPassword,\r\n",
+        "hashPassword,\n  isLocalAuthEnabled,\n  isLocalAuthRegistrationAllowed,\n  normalizeUsername,\n  sanitizeAuthUser,\n  verifyPassword,\n",
         "registerLocalAuthRoutes"
       ],
       "symbols": [
@@ -17730,6 +18132,45 @@
       "routes": []
     },
     {
+      "path": "server/organic-brand-comparison.mjs",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "compareBrandEvidence"
+      ],
+      "symbols": [
+        "age",
+        "brands",
+        "compareBrandEvidence",
+        "median",
+        "rows",
+        "samples"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/organic-peer-hypotheses.mjs",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "buildOrganicPeerHypotheses"
+      ],
+      "symbols": [
+        "buildOrganicPeerHypotheses",
+        "cutoff",
+        "durations",
+        "eligible",
+        "evidence",
+        "key",
+        "medianSeconds",
+        "observed",
+        "rows",
+        "seen",
+        "u"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/portfolio-agent.ts",
       "kind": "server",
       "imports": [
@@ -18837,7 +19278,7 @@
         "./utils"
       ],
       "exports": [
-        "batchProcess,\r\n  batchProcessWithSSE,\r\n  isRateLimitError,\r\n  type BatchOptions,\r\n"
+        "batchProcess,\n  batchProcessWithSSE,\n  isRateLimitError,\n  type BatchOptions,\n"
       ],
       "symbols": [],
       "routes": []
@@ -20995,39 +21436,61 @@
       ],
       "exports": [
         "AgentCareer",
+        "AgentSkill",
         "BATTERY_MAX",
         "CompanyOrder",
         "CompanyState",
         "CurriculumModule",
         "LeaderboardRow",
         "MemoryEntry",
+        "OrderEvidence",
         "OrderStatus",
         "Personality",
+        "SPECIALIST_MIN_ORDERS",
+        "SPECIALIST_PREFIX",
+        "SkillSource",
         "Trainee",
+        "addSkill",
         "advanceAcademy",
         "advanceCompany",
         "completeOrder",
         "createOrder",
         "emptyCompanyState",
         "enrollTrainee",
+        "evidenceAlreadyUsed",
+        "isSpecialistId",
+        "isTailoredModule",
         "leaderboard",
+        "learnLessons",
         "levelFor",
+        "orderTopic",
         "parseCompanyState",
         "personalityFor",
         "routeOrder",
+        "specialistIdFor",
+        "specialistNeeds",
+        "specialistTopicLabel",
+        "tailoredModules",
+        "topicSlug",
         "uniqueNickname"
       ],
       "symbols": [
         "BATTERY_MAX",
+        "BRAND_WORDS",
         "MAX_EVENTS",
         "MAX_MEMORY",
         "MAX_ORDERS",
+        "MAX_SKILLS",
         "MAX_TRAINEES",
         "MIN_TENURE_MS",
         "MOTTOS",
         "NEEDS_SETUP_FLOOR",
         "NICKNAMES",
+        "SPECIALIST_MIN_ORDERS",
+        "SPECIALIST_PREFIX",
+        "SPECIALIST_WINDOW_MS",
         "TRAITS",
+        "addSkill",
         "advanceAcademy",
         "advanceCompany",
         "assigneeIds",
@@ -21037,21 +21500,30 @@
         "career",
         "careers",
         "completeOrder",
+        "containsWord",
         "createOrder",
         "delta",
         "earned",
         "emptyCompanyState",
         "enrollTrainee",
+        "escaped",
         "events",
+        "evidenceAlreadyUsed",
         "exempt",
         "existing",
+        "failures",
         "first",
         "floor",
         "graduated",
+        "groups",
         "hash",
+        "isSpecialistId",
+        "isTailoredModule",
         "iso",
         "leaderboard",
+        "learnLessons",
         "levelFor",
+        "lower",
         "modules",
         "ms",
         "next",
@@ -21059,9 +21531,11 @@
         "nickname",
         "normalized",
         "order",
+        "orderTopic",
         "orders",
         "parseCompanyState",
         "personalityFor",
+        "previous",
         "reason",
         "remember",
         "replacement",
@@ -21069,17 +21543,29 @@
         "rows",
         "second",
         "seed",
+        "skilled",
+        "skills",
+        "specialist",
+        "specialistIdFor",
+        "specialistNeeds",
+        "specialistTopicLabel",
         "start",
         "status",
         "studying",
+        "tailored",
+        "tailoredModules",
         "text",
         "toMsSafe",
+        "topic",
+        "topicSlug",
         "trainees",
         "uniqueNickname",
         "used",
         "usedNicknames",
         "v",
+        "verified",
         "who",
+        "word",
         "working"
       ],
       "routes": []
@@ -21089,7 +21575,8 @@
       "kind": "shared",
       "imports": [
         "./agent-company",
-        "./agent-live-status"
+        "./agent-live-status",
+        "./kong-supervisor"
       ],
       "exports": [
         "COUNCIL_CYCLE_MS",
@@ -21218,6 +21705,30 @@
       "routes": []
     },
     {
+      "path": "shared/agent-integrations.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "AgentIntegration",
+        "DEFAULT_INTEGRATIONS",
+        "INTEGRATION_LABEL",
+        "IntegrationMode",
+        "IntegrationOwner",
+        "effectiveIntegrations",
+        "integrationFor",
+        "parseIntegrationOverrides",
+        "unscoredAgentIds"
+      ],
+      "symbols": [
+        "base",
+        "effectiveIntegrations",
+        "integrationFor",
+        "parseIntegrationOverrides",
+        "unscoredAgentIds"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/agent-live-status.ts",
       "kind": "shared",
       "imports": [],
@@ -21225,6 +21736,7 @@
         "AgentLiveState",
         "AgentLiveStatus",
         "AgentProbe",
+        "CITY_NEWS_AGENTS",
         "ProbeResult",
         "agentProbes",
         "extractActivity",
@@ -21232,8 +21744,11 @@
         "summarizeProbe"
       ],
       "symbols": [
+        "CITY_NEWS_AGENTS",
         "Json",
         "MINUTE",
+        "account",
+        "accounts",
         "active",
         "activity",
         "agent",
@@ -21247,24 +21762,30 @@
         "checks",
         "clients",
         "clip",
+        "connectors",
+        "coverage",
         "critical",
         "dayAgo",
+        "deficit",
         "degraded",
         "detail",
         "down",
         "events",
         "extra",
         "extractActivity",
+        "extractProblems",
         "failed",
         "google",
         "hours",
         "hoursAgo",
+        "lane",
         "last",
         "lastRun",
         "list",
         "listed",
         "login",
         "minutes",
+        "missing",
         "missingChecks",
         "newest",
         "next",
@@ -21276,8 +21797,10 @@
         "outputs",
         "pending",
         "plural",
+        "problems",
         "profitGuardStatus",
         "queue",
+        "queued",
         "readiness",
         "ready",
         "recent",
@@ -21296,6 +21819,7 @@
         "targets",
         "text",
         "totals",
+        "traffic",
         "unknown",
         "videos",
         "word",
@@ -21339,6 +21863,40 @@
         "status",
         "url",
         "visualStatus"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/kong-supervisor.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "KONG_SUPERVISOR_ID",
+        "KONG_WORKERS",
+        "KongChatAgentId",
+        "KongChatMessage",
+        "KongSupervision",
+        "KongWorkerId",
+        "SupervisionRecord",
+        "SupervisionResult",
+        "emptyKongSupervision",
+        "isKongChatAgentId",
+        "parseKongSupervision",
+        "reviewKongReadiness"
+      ],
+      "symbols": [
+        "KONG_SUPERVISOR_ID",
+        "KONG_WORKERS",
+        "base",
+        "checkedAt",
+        "emptyKongSupervision",
+        "input",
+        "isKongChatAgentId",
+        "messages",
+        "parseKongSupervision",
+        "records",
+        "reviewKongReadiness",
+        "signal"
       ],
       "routes": []
     },
@@ -21767,18 +22325,35 @@
         "MIN",
         "NOW",
         "all",
+        "assignee",
+        "byHand",
         "career",
         "company",
         "curriculum",
         "during",
+        "evidence",
+        "first",
+        "general",
         "ids",
+        "modules",
         "names",
+        "needs",
+        "next",
+        "order",
         "parsed",
+        "placed",
         "result",
+        "reused",
         "roles",
         "rows",
         "s",
-        "statuses"
+        "second",
+        "skill",
+        "specialist",
+        "statuses",
+        "studied",
+        "third",
+        "titles"
       ],
       "routes": []
     },
@@ -21788,6 +22363,7 @@
       "imports": [
         "../server/agent-council",
         "../shared/agent-council",
+        "../shared/agent-integrations",
         "node:assert/strict",
         "node:fs/promises",
         "node:os",
@@ -21798,24 +22374,33 @@
       "symbols": [
         "HOUR",
         "NOW",
+        "a",
+        "again",
+        "b",
         "back",
         "base",
         "broken",
         "byName",
+        "collect",
         "council",
         "dir",
         "docs",
+        "done",
         "down",
         "evidence",
         "fake",
         "fakeDeps",
         "file",
+        "files",
         "finding",
         "findings",
         "first",
+        "fresh",
         "hires",
         "id",
         "ids",
+        "imports",
+        "integrations",
         "lessons",
         "make",
         "merged",
@@ -21834,10 +22419,16 @@
         "runs",
         "same",
         "saved",
+        "second",
+        "shared",
+        "sharedStore",
         "skill",
+        "source",
+        "specialists",
         "state",
         "statuses",
         "stuck",
+        "submitProposal",
         "updates",
         "uuid",
         "value",
@@ -21865,11 +22456,14 @@
         "health",
         "kong",
         "legal",
+        "localNews",
         "lr",
+        "miami",
         "neverRun",
         "news",
         "next",
         "now",
+        "ny",
         "ok",
         "run",
         "status",
@@ -22378,16 +22972,21 @@
       ],
       "exports": [],
       "symbols": [
+        "arm",
         "atQuota",
         "base",
         "committing",
+        "confounded",
         "date",
+        "decisions",
         "djs",
         "download",
+        "duplicates",
         "explicit",
         "explored",
         "full",
         "id",
+        "incompatible",
         "input",
         "inventory",
         "ledger",
@@ -22395,6 +22994,7 @@
         "next",
         "now",
         "output",
+        "p",
         "plan",
         "publishedAt",
         "queue",
@@ -22522,6 +23122,64 @@
       "routes": []
     },
     {
+      "path": "tests/blackroom-local-evidence.test.ts",
+      "kind": "test",
+      "imports": [
+        "../script/blackroom-local-evidence",
+        "../script/blackroom-metricool-exporter.mjs",
+        "../script/blackroom-remote-sync.mjs",
+        "../server/blackroom-deterministic-editor",
+        "../server/blackroom-local-evidence",
+        "../server/blackroom-verified-learning",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "analytics",
+        "assess",
+        "bad",
+        "consensus",
+        "contradicts",
+        "date",
+        "dayNum",
+        "decision",
+        "dir",
+        "divergent",
+        "filename",
+        "first",
+        "id",
+        "imports",
+        "initial",
+        "later",
+        "local",
+        "makeReport",
+        "measuredSeconds",
+        "missing",
+        "networks",
+        "now",
+        "num",
+        "plan",
+        "publishedAt",
+        "q",
+        "receipt",
+        "receiptJson",
+        "ref",
+        "reference",
+        "remote",
+        "replay",
+        "report",
+        "sample",
+        "seen",
+        "text",
+        "views"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/blackroom-local-worker.test.ts",
       "kind": "test",
       "imports": [
@@ -22556,6 +23214,87 @@
         "targeted",
         "totalBytes",
         "valid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-manual-exploration.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-deterministic-editor",
+        "../server/blackroom-local-evidence",
+        "../server/blackroom-manual-exploration",
+        "../server/blackroom-verified-learning",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "after",
+        "base",
+        "before",
+        "evalInput",
+        "evidence",
+        "extra",
+        "first",
+        "h",
+        "ledger",
+        "now",
+        "observation",
+        "plan",
+        "queue",
+        "r",
+        "remote",
+        "report"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/blackroom-manual-observations.test.ts",
+      "kind": "test",
+      "imports": [
+        "../script/blackroom-local-evidence",
+        "../script/blackroom-publication-collector",
+        "../server/blackroom-manual-observations",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "blockedFetch",
+        "calendar",
+        "calendarBody",
+        "clips",
+        "conflict",
+        "conflictRetained",
+        "cooldown",
+        "d",
+        "dir",
+        "doc",
+        "env",
+        "fetcher",
+        "file",
+        "many",
+        "measured",
+        "missing",
+        "now",
+        "obs",
+        "old",
+        "output",
+        "persisted",
+        "provider",
+        "r",
+        "receipt",
+        "replay",
+        "report",
+        "result",
+        "retained",
+        "reused",
+        "row",
+        "u"
       ],
       "routes": []
     },
@@ -22637,16 +23376,23 @@
       ],
       "exports": [],
       "symbols": [
+        "FixedDate",
         "batches",
+        "calls",
         "complete",
         "context",
         "exported",
+        "failedChild",
         "failure",
         "imports",
         "index",
         "input",
+        "instant",
+        "loc",
         "locator",
+        "noAcknowledgment",
         "observedAt",
+        "offline",
         "page",
         "partial",
         "payloads",
@@ -24859,6 +25605,87 @@
       ]
     },
     {
+      "path": "tests/kong-supervisor-conversation.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../server/kong-supervisor-conversation.ts",
+        "../server/kong-supervisor-routes.ts",
+        "../shared/kong-supervisor.ts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "app",
+        "auth",
+        "denied",
+        "failed",
+        "get",
+        "h",
+        "harness",
+        "input",
+        "invalid",
+        "job",
+        "next",
+        "ok",
+        "response",
+        "result",
+        "routes",
+        "service",
+        "stale"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/kong-supervisor-integration.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../server/agent-council.ts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "council",
+        "deps",
+        "reloaded",
+        "state"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/kong-supervisor-session.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../client/src/components/kong-supervisor-session.ts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "other",
+        "owner"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/kong-supervisor.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../shared/kong-supervisor.ts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "before",
+        "now",
+        "parsed",
+        "result"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/legacy-publication-containment.test.ts",
       "kind": "test",
       "imports": [
@@ -25629,6 +26456,59 @@
       "routes": []
     },
     {
+      "path": "tests/organic-brand-comparison.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/blackroom-metricool-exporter.mjs",
+        "../server/organic-brand-comparison.mjs",
+        "node:fs/promises",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "p",
+        "r",
+        "report"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/organic-peer-hypotheses.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../server/organic-peer-hypotheses.mjs",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "now",
+        "row"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/organic-peer-scout.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/organic-peer-scout.mjs",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "c",
+        "dir",
+        "r",
+        "run",
+        "stop"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/owner-office-storage.test.ts",
       "kind": "test",
       "imports": [
@@ -26298,7 +27178,10 @@
     "tests/blackroom-learning-observations.test.ts",
     "tests/blackroom-learning-panel.test.ts",
     "tests/blackroom-links.test.ts",
+    "tests/blackroom-local-evidence.test.ts",
     "tests/blackroom-local-worker.test.ts",
+    "tests/blackroom-manual-exploration.test.ts",
+    "tests/blackroom-manual-observations.test.ts",
     "tests/blackroom-metricool-bridge.test.ts",
     "tests/blackroom-remote-control.test.ts",
     "tests/blackroom-verified-learning.test.ts",
