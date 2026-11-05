@@ -93,6 +93,7 @@ export function AgentsOfficeWorld({
   selectedAgentId,
   onSelectAgent,
   onSelectKongAgent,
+  onOpenKongOffice,
   onOpenContact,
 }: {
   agents: WorldAgent[];
@@ -101,6 +102,7 @@ export function AgentsOfficeWorld({
   selectedAgentId?: string;
   onSelectAgent: (agentId: string, status: AgentLiveStatus) => void;
   onSelectKongAgent: (name: string) => void;
+  onOpenKongOffice: () => void;
   // Opens the same local chat for agents that are not in the classic list (cities, new agents, trainees).
   onOpenContact?: (contact: WorldContact) => void;
 }) {
@@ -116,6 +118,8 @@ export function AgentsOfficeWorld({
   const integrations = companyView.integrations || effectiveIntegrations();
   const deputyId = leaderboardRows[0]?.points ? leaderboardRows[0].agentId : null;
   const queryClient = useQueryClient();
+  const openKongOfficeRef = useRef(onOpenKongOffice);
+  useEffect(() => { openKongOfficeRef.current = onOpenKongOffice; }, [onOpenKongOffice]);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const labelsRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<ReturnType<typeof createOfficeScene> | null>(null);
@@ -169,6 +173,7 @@ export function AgentsOfficeWorld({
   };
   const focusRoom = (id: string | null) => {
     setFocusedDepartment(id); setPanelAgentId(null); sceneRef.current?.focusDepartment(id);
+    if (id === "kong") onOpenKongOffice();
   };
   const openCityFromOverview = (id: string) => {
     if (!filteredCityRooms.some(room => room.id === id)) setCityCountry("");
@@ -303,12 +308,13 @@ export function AgentsOfficeWorld({
           sceneRef.current = createOfficeScene(THREE, host, labels, {
             onFocusDepartment: (id) => {
               setFocusedDepartment(id);
+              if (id === "kong") { openKongOfficeRef.current(); return; }
               if (id?.startsWith("kong-city:")) {
                 setOfficeWing("kong");
                 setPanelAgentId(null);
                 setCityDetailsOpen(true);
                 setCityOverviewOpen(false);
-              } else if (id && id !== "kong") {
+              } else if (id) {
                 setOfficeWing("main");
                 setOverlay(value => value === "city-director" ? "none" : value);
                 setPanelAgentId(null);
@@ -379,7 +385,8 @@ export function AgentsOfficeWorld({
         <p className="mx-auto mb-4 max-w-[900px] rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-xs text-amber-100" data-testid="world-fallback">
           Este navegador no pudo abrir la oficina 3D ({failed}). Te muestro el edificio con los mismos datos en vivo.
         </p>
-        <button type="button" onClick={() => changeWing("kong")} className="mx-auto mb-4 block rounded-full bg-violet-500 px-5 py-3 font-bold text-white" data-testid="world-kong-wing">Ver oficina KONG</button>
+        <button type="button" onClick={onOpenKongOffice} className="mx-auto mb-4 block rounded-full bg-violet-500 px-5 py-3 font-bold text-white" data-testid="world-kong-wing">Ver oficina KONG</button>
+        <button type="button" onClick={() => changeWing("kong")} className="mx-auto mb-4 block rounded-full border border-lime-300/50 px-5 py-2 text-lime-100">Ver mapa y director de ciudades</button>
         <AgentsBuilding agents={agents} kongTeam={kongTeam} legal={legal} selectedAgentId={selectedAgentId} onSelectAgent={onSelectAgent} onSelectKongAgent={onSelectKongAgent} />
       </div>
     );
