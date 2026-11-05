@@ -10,6 +10,7 @@
 // Trust Center pending actions for proposals. Approving a proposal records a
 // lesson or marks a PR-first brief as ready; it does not change code or skills.
 
+import { reviewKongReadiness } from "@shared/kong-supervisor";
 import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
@@ -227,6 +228,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
         // points, never get hiring/repair proposals, and are only reported (honestly) to the UI.
         let next = finishCycle(state, { findings, statuses, now, agentNames: AGENT_NAMES });
         next = advanceCompanyCycle(next, statuses, curriculum, now);
+        // This completes only a read-only readiness review, never the worker\'s commercial task.
+        next = { ...next, kongSupervision: reviewKongReadiness(state.kongSupervision, everyone, now) };
         next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, statuses, now, AGENT_NAMES, EXEMPT_IDS), ...next.proposals]) };
         return syncProposals(next, userId);
       });
