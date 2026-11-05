@@ -1,6 +1,6 @@
 import type { Express } from "express";
-import { getAgentCouncil, isAgentCouncilEnabled, setAgentCouncilUser } from "./agent-council";
-import { getSystemUserId } from "./user-context";
+import { OrderEvidenceError, getAgentCouncil, isAgentCouncilEnabled, setAgentCouncilUser } from "./agent-council";
+import { getCurrentUserId, getSystemUserId } from "./user-context";
 
 const MANUAL_RUN_MIN_INTERVAL_MS = 60_000;
 
@@ -31,11 +31,14 @@ export function registerAgentCouncilRoutes(app: Express) {
 
   app.post("/api/agent-company/orders/:id/done", async (req, res) => {
     try {
-      const state = await getAgentCouncil().finishOrder(String(req.params.id));
+      const raw = (req.body as { evidenceRunId?: unknown } | undefined)?.evidenceRunId;
+      const evidenceRunId = typeof raw === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(raw) ? raw : undefined;
+      if (raw !== undefined && raw !== null && raw !== "" && !evidenceRunId) return res.status(400).json({ error: "Evidencia no valida." });
+      const state = await getAgentCouncil().finishOrder(String(req.params.id), evidenceRunId, getCurrentUserId(req));
       res.json({ order: state.company.orders.find((order) => order.id === req.params.id) || null });
     } catch (error) {
       const message = error instanceof Error ? error.message : "No se pudo cerrar la orden";
-      res.status(message === "Orden no encontrada" ? 404 : 500).json({ error: message });
+      res.status(error instanceof OrderEvidenceError ? 422 : message === "Orden no encontrada" ? 404 : 500).json({ error: message });
     }
   });
 
@@ -51,7 +54,7 @@ export function registerAgentCouncilRoutes(app: Express) {
       if (Date.now() - last < MANUAL_RUN_MIN_INTERVAL_MS) {
         return res.status(429).json({ error: "El consejo acaba de reunirse; espera un minuto." });
       }
-      await council.runCycle();
+      await council.runCycle({ force: true });
       res.json(await council.view());
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Failed to run agent council" });

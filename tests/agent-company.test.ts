@@ -7,6 +7,7 @@ import {
   createOrder,
   emptyCompanyState,
   enrollTrainee,
+  evidenceAlreadyUsed,
   leaderboard,
   parseCompanyState,
   personalityFor,
@@ -119,13 +120,15 @@ test("CEO channel routes Robert's words to the right agents", () => {
   assert.deepEqual(routeOrder("arregla el agente de radio que esta caido", all), ["radio", "mechanic"]);
 });
 
-test("orders: working agents take them, others are blocked; Robert's OK gives points once", () => {
+test("orders: working agents take them, others are blocked; verified evidence gives points once", () => {
   let company = advanceCompany(emptyCompanyState(), { now: NOW, statuses: { radio: s("working"), legal: s("needs-setup", "GitHub sin conectar") }, roles }).state;
   const { state, order } = createOrder(company, { text: "Prepara la radio del viernes y revisa lo legal", now: NOW + MIN, statuses: { radio: s("working"), legal: s("needs-setup", "GitHub sin conectar") }, available: ["radio", "legal", "assistant"], names: roles });
   assert.deepEqual(order.assignees.map((a) => [a.agentId, a.status]), [["radio", "en_curso"], ["legal", "bloqueada"]]);
   assert.match(order.assignees[1].note, /GitHub sin conectar/);
-  company = completeOrder(state, order.id, NOW + 2 * MIN);
+  const evidence = { ref: "automation_run:r1", source: "automation_run" as const, summary: "Radio publicada", at: new Date(NOW).toISOString() };
+  company = completeOrder(state, order.id, NOW + 2 * MIN, evidence);
   assert.equal(company.careers.radio.points, 10 + 25);
+  assert.equal(company.orders[0].closedBy, "evidencia");
   assert.equal(company.careers.legal.points, 0, "no points for an order the agent could not work on");
   assert.equal(company.careers.radio.ordersDone, 1);
   assert.equal(completeOrder(company, order.id, NOW + 3 * MIN).careers.radio.points, 35, "completing twice does not pay twice");
@@ -154,4 +157,20 @@ test("nicknames are never repeated across the team and the academy", () => {
   state = enrollTrainee(state, { id: "new_agent:x", forAgentId: "agent-1", role: "Ayudante", now: Date.parse("2026-11-04T10:05:00Z") });
   const names = [...Object.values(state.careers).map((c) => c.nickname), ...state.trainees.map((t) => t.nickname)];
   assert.equal(new Set(names).size, names.length);
+});
+
+test("orders closed by hand are recorded with no points; one evidence closes only one order", () => {
+  let company = advanceCompany(emptyCompanyState(), { now: NOW, statuses: { radio: s("working") }, roles }).state;
+  const first = createOrder(company, { text: "Radio del viernes", now: NOW + MIN, statuses: { radio: s("working") }, available: ["radio"], names: roles });
+  const byHand = completeOrder(first.state, first.order.id, NOW + 2 * MIN);
+  assert.equal(byHand.careers.radio.points, 10);
+  assert.equal(byHand.orders[0].closedBy, "robert");
+  const evidence = { ref: "automation_run:r9", source: "automation_run" as const, summary: "ok", at: new Date(NOW).toISOString() };
+  const second = createOrder(byHand, { text: "Radio del sabado", now: NOW + 3 * MIN, statuses: { radio: s("working") }, available: ["radio"], names: roles });
+  company = completeOrder(second.state, second.order.id, NOW + 4 * MIN, evidence);
+  assert.equal(company.careers.radio.points, 35);
+  assert.ok(evidenceAlreadyUsed(company, "automation_run:r9"));
+  const third = createOrder(company, { text: "Radio del domingo", now: NOW + 5 * MIN, statuses: { radio: s("working") }, available: ["radio"], names: roles });
+  const reused = completeOrder(third.state, third.order.id, NOW + 6 * MIN, evidence);
+  assert.equal(reused.careers.radio.points, 35, "the same run never pays twice");
 });

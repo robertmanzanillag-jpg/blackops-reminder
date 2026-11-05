@@ -12,6 +12,7 @@
 
 import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { resolveDatabaseConnectionString } from "./database-url";
 import {
   COUNCIL_CYCLE_MS,
   SCOUT_INTERVAL_MS,
@@ -32,13 +33,23 @@ import {
   type CouncilSkillDoc,
   type CouncilState,
 } from "@shared/agent-council";
-import { agentProbes, summarizeProbe, type AgentLiveStatus } from "@shared/agent-live-status";
+import { CITY_NEWS_AGENTS, agentProbes, summarizeProbe, type AgentLiveStatus } from "@shared/agent-live-status";
+import {
+  INTEGRATION_LABEL,
+  effectiveIntegrations,
+  integrationFor,
+  parseIntegrationOverrides,
+  unscoredAgentIds,
+  type AgentIntegration,
+} from "@shared/agent-integrations";
 import {
   advanceAcademy,
   advanceCompany,
   completeOrder,
   createOrder,
   enrollTrainee,
+  evidenceAlreadyUsed,
+  type OrderEvidence,
   leaderboard,
   personalityFor,
   type CurriculumModule,
@@ -58,15 +69,34 @@ export type CouncilDeps = {
   collectStatuses?: (userId: string) => Promise<Record<string, AgentLiveStatus>>;
   // Real documents the academy teaches.
   loadCurriculum?: () => Promise<CurriculumModule[]>;
+  // Which agents are paused / external / not built (never scored). Defaults to the shared table + env overrides.
+  integrations?: () => Record<string, AgentIntegration>;
+  // Reads one automation run of the user (read-only), to verify order evidence.
+  verifyRun?: (userId: string, runId: string) => Promise<{ id: string; status: string; summary: string | null; at: string | null } | null>;
+  // Shared, versioned storage (production database). When present it replaces readState/writeState:
+  // every change re-reads the latest revision and a concurrent writer causes a retry, never an overwrite.
+  versioned?: {
+    read: () => Promise<{ raw: string | null; revision: number | null }>;
+    write: (raw: string, expectedRevision: number | null) => Promise<number>;
+  };
 };
+
+export class CouncilStateConflict extends Error {}
+export class OrderEvidenceError extends Error {}
+
+// Another instance (Autoscale) that ran a round this recently already did the work.
+export const MIN_CYCLE_GAP_MS = 10 * 60_000;
+const SKIP = Symbol("skip");
 
 export const KONG_TEAM = ["KONG AI", "Promoters + Mesas", "Venues", "Kong Legal"];
 const KONG_IDS = KONG_TEAM.map((name) => `kong:${name}`);
+// Always unscored, whatever the overrides say: they have no work of their own to measure.
 const EXEMPT_IDS = [...KONG_IDS, "mechanic"];
 // Order routing only trusts live states from a recent council cycle.
 const STATUS_FRESH_MS = 45 * 60_000;
 
 export const AGENT_NAMES: Record<string, string> = {
+  ...Object.fromEntries(CITY_NEWS_AGENTS.map((agent) => [agent.id, agent.name])),
   assistant: "Asistente",
   ceo: "CEO",
   revenue: "Revenue",
@@ -133,9 +163,21 @@ function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T>
 }
 const DB_TIMEOUT_MS = 10_000;
 
-function advanceCompanyCycle(state: CouncilState, statuses: Record<string, AgentLiveStatus>, curriculum: CurriculumModule[], now: number): CouncilState {
+function advanceCompanyCycle(
+  state: CouncilState,
+  statuses: Record<string, AgentLiveStatus>,
+  curriculum: CurriculumModule[],
+  now: number,
+  integrations: Record<string, AgentIntegration> = {}
+): CouncilState {
+  const unscored = new Set([...EXEMPT_IDS, ...unscoredAgentIds(integrations)]);
   const compact = Object.fromEntries(Object.entries(statuses).map(([id, status]) => [id, { state: status.state, label: status.label }]));
-  let company = advanceCompany(state.company, { now, statuses: compact, roles: AGENT_NAMES, exempt: EXEMPT_IDS }).state;
+  let company = advanceCompany(state.company, { now, statuses: compact, roles: AGENT_NAMES, exempt: [...unscored] }).state;
+  // Orders routed to a paused/external agent are blocked with the honest reason, never "assigned".
+  for (const id of unscored) {
+    const integration = integrationFor(id, integrations);
+    if (integration.mode !== "activa" && compact[id]) compact[id] = { state: "offline", label: `${INTEGRATION_LABEL[integration.mode]}: ${integration.reason}` };
+  }
   // Approved hires (agent factory) start in the academy.
   for (const proposal of state.proposals) {
     if (proposal.kind !== "new_agent" || proposal.status !== "applied") continue;
@@ -154,8 +196,19 @@ export function createAgentCouncil(deps: CouncilDeps) {
   let queue: Promise<unknown> = Promise.resolve();
   let running: Promise<CouncilState> | null = null;
   let scouting: Promise<void> | null = null;
+  const integrationsNow = () => (deps.integrations ? deps.integrations() : effectiveIntegrations(parseIntegrationOverrides(process.env.AGENT_INTEGRATION_OVERRIDES)));
 
   async function load(): Promise<CouncilState> {
+    if (deps.versioned) {
+      // Shared storage: always the latest state, whichever instance wrote it.
+      try {
+        cached = parseCouncilState((await deps.versioned.read()).raw);
+      } catch (error) {
+        deps.log(`agent council state read failed: ${error instanceof Error ? error.message : String(error)}`);
+        if (!cached) throw error;
+      }
+      return cached;
+    }
     if (cached) return cached;
     cached = parseCouncilState(await deps.readState().catch(() => null));
     return cached;
@@ -163,12 +216,31 @@ export function createAgentCouncil(deps: CouncilDeps) {
 
   // Every state change goes through this queue and starts from the latest state,
   // so the 15-minute cycle, the daily scout and Trust Center approvals never overwrite each other.
-  function mutate(change: (state: CouncilState) => Promise<CouncilState> | CouncilState): Promise<CouncilState> {
+  // With shared storage the write is conditional on the revision that was read; if another instance
+  // wrote in between, the change is re-applied on top of its state (up to 3 times).
+  function mutate(change: (state: CouncilState) => Promise<CouncilState | typeof SKIP> | CouncilState | typeof SKIP): Promise<CouncilState> {
     const job = queue.then(async () => {
-      const next = await change(await load());
-      cached = next;
-      await deps.writeState(JSON.stringify(next, null, 2));
-      return next;
+      if (!deps.versioned) {
+        const current = await load();
+        const next = await change(current);
+        if (next === SKIP) return current;
+        cached = next;
+        await deps.writeState(JSON.stringify(next, null, 2));
+        return next;
+      }
+      for (let attempt = 0; ; attempt++) {
+        const { raw, revision } = await deps.versioned.read();
+        const current = parseCouncilState(raw);
+        const next = await change(current);
+        if (next === SKIP) { cached = current; return current; }
+        try {
+          await deps.versioned.write(JSON.stringify(next), revision);
+          cached = next;
+          return next;
+        } catch (error) {
+          if (!(error instanceof CouncilStateConflict) || attempt >= 2) throw error;
+        }
+      }
     });
     queue = job.catch(() => undefined);
     return job;
@@ -211,23 +283,31 @@ export function createAgentCouncil(deps: CouncilDeps) {
     return next;
   }
 
-  async function runCycleOnce(): Promise<CouncilState> {
+  async function runCycleOnce(force: boolean): Promise<CouncilState> {
     const userId = deps.userId();
+    const recent = (state: CouncilState) => !force && Boolean(state.lastCycleAt) && deps.now() - toMs(state.lastCycleAt) < MIN_CYCLE_GAP_MS;
     try {
+      // Another instance already ran this round: skip the reads too.
+      const before = await load();
+      if (recent(before)) return before;
       // Slow reads happen outside the queue; the state change itself is serialized.
       const collected = await deps.collect(userId);
       const everyone = deps.collectStatuses ? await deps.collectStatuses(userId).catch(() => ({} as Record<string, AgentLiveStatus>)) : {};
       const curriculum = deps.loadCurriculum ? await deps.loadCurriculum().catch(() => [] as CurriculumModule[]) : [];
       return await mutate(async (state) => {
+        if (recent(state)) return SKIP;
         const now = deps.now();
         const signals: CouncilSignals = { ...collected, now };
         const findings = runCrossChecks(signals);
         const statuses: Record<string, AgentLiveStatus> = { ...everyone, ...statusesFromSignals(signals) };
-        // Kong guides and the Mechanic have no endpoint of their own: they never earn or lose
-        // points, never get hiring/repair proposals, and are only reported (honestly) to the UI.
-        let next = finishCycle(state, { findings, statuses, now, agentNames: AGENT_NAMES });
-        next = advanceCompanyCycle(next, statuses, curriculum, now);
-        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, statuses, now, AGENT_NAMES, EXEMPT_IDS), ...next.proposals]) };
+        // Paused, external or not-built agents (KONG guides, the external KONG publisher, a paused
+        // BlackRoom lane, the Mechanic) never earn or lose points and never get hiring/repair proposals.
+        const integrations = integrationsNow();
+        const unscored = [...EXEMPT_IDS, ...unscoredAgentIds(integrations)];
+        const scored = Object.fromEntries(Object.entries(statuses).filter(([id]) => !unscored.includes(id)));
+        let next = finishCycle(state, { findings, statuses: scored, now, agentNames: AGENT_NAMES });
+        next = advanceCompanyCycle(next, statuses, curriculum, now, integrations);
+        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, statuses, now, AGENT_NAMES, unscored), ...next.proposals]) };
         return syncProposals(next, userId);
       });
     } catch (error) {
@@ -238,8 +318,9 @@ export function createAgentCouncil(deps: CouncilDeps) {
   }
 
   // Overlapping triggers (scheduler + manual button) share one run instead of duplicating work.
-  function runCycle(): Promise<CouncilState> {
-    if (!running) running = runCycleOnce().finally(() => { running = null; });
+  // force: the manual button (already rate limited) runs even if a round just happened.
+  function runCycle(options: { force?: boolean } = {}): Promise<CouncilState> {
+    if (!running) running = runCycleOnce(Boolean(options.force)).finally(() => { running = null; });
     return running;
   }
 
@@ -299,10 +380,21 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
   }
 
-  function finishOrder(orderId: string) {
+  // evidenceRunId: an automation run of this user that finished with "success". Verified here,
+  // never trusted from the client; one run can close only one order.
+  async function finishOrder(orderId: string, evidenceRunId?: string, requesterId?: string) {
+    let evidence: OrderEvidence | undefined;
+    if (evidenceRunId) {
+      if (!deps.verifyRun) throw new OrderEvidenceError("No se puede verificar la evidencia en este servidor.");
+      const run = await withTimeout(deps.verifyRun(requesterId || deps.userId(), evidenceRunId), DB_TIMEOUT_MS, "evidencia");
+      if (!run) throw new OrderEvidenceError("Esa ejecucion no existe o no es tuya.");
+      if (run.status !== "success") throw new OrderEvidenceError(`Esa ejecucion termino en "${run.status}", no en exito.`);
+      evidence = { ref: `automation_run:${run.id}`, source: "automation_run", summary: run.summary || "Ejecucion exitosa", at: run.at || new Date(deps.now()).toISOString() };
+    }
     return mutate((state) => {
       if (!state.company.orders.some((order) => order.id === orderId)) throw new Error("Orden no encontrada");
-      return { ...state, company: completeOrder(state.company, orderId, deps.now()) };
+      if (evidence && evidenceAlreadyUsed(state.company, evidence.ref)) throw new OrderEvidenceError("Esa ejecucion ya cerro otra orden.");
+      return { ...state, company: completeOrder(state.company, orderId, deps.now(), evidence) };
     });
   }
 
@@ -311,7 +403,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
     const personalities = Object.fromEntries(Object.values(state.company.careers).map((career) => [career.agentId, personalityFor(career.agentId, career.generation)]));
     return {
       ...state,
-      leaderboard: leaderboard(state.company, ["ceo", ...EXEMPT_IDS]),
+      leaderboard: leaderboard(state.company, ["ceo", ...EXEMPT_IDS, ...unscoredAgentIds(integrationsNow())]),
+      integrations: integrationsNow(),
       personalities,
       overrides: applyLessons(state.debates, state.lessons),
       nextCycleInMs: state.lastCycleAt ? Math.max(0, Date.parse(state.lastCycleAt) + COUNCIL_CYCLE_MS - deps.now()) : 0,
@@ -467,7 +560,7 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
     read(["portfolio"], () => cachedSlowRead(`portfolio:${userId}`, async () => (await import("./portfolio-agent")).getPortfolioSummary(userId))),
     read(["radio"], async () => (await import("./radio-agent")).getRadioSlotsForMonth(userId)),
     read(["legal"], () => cachedSlowRead(`legal:${userId}`, async () => (await import("./legal-compliance-agent")).runLegalComplianceReports(userId))),
-    read(["news"], async () => (await import("./clippers-local-news-agent")).getClipperLocalNewsStatus()),
+    read(["news", ...CITY_NEWS_AGENTS.map((agent) => agent.id)], async () => (await import("./clippers-local-news-agent")).getClipperLocalNewsStatus()),
     read(["kong-videos"], async () => (await import("./promo-video-agent")).getPromoVideoStatus(userId)),
     read(["blackroom-videos"], async () => {
       const remoteModule = await import("./blackroom-remote-control");
@@ -528,6 +621,54 @@ async function fetchLatestReleaseReal(repo: string) {
 
 let council: ReturnType<typeof createAgentCouncil> | null = null;
 
+// In production the state lives in Postgres (existing revenue_engine_state table, its own owner key,
+// so no migration): every Autoscale instance sees the same careers, orders and proposals.
+// Locally without DATABASE_URL it stays in the git-ignored file.
+const STATE_OWNER = "agent-council";
+const STATE_KIND = "council_state";
+
+function databaseStateStore(): CouncilDeps["versioned"] {
+  let hasDatabase = false;
+  try {
+    hasDatabase = Boolean(resolveDatabaseConnectionString());
+  } catch {
+    hasDatabase = false;
+  }
+  if (!hasDatabase) return undefined;
+  const adapter = async () => {
+    const [{ db }, { createDrizzleRevenueEngineStateAdapter }] = await Promise.all([import("./db"), import("./revenue-engine-state-store")]);
+    return createDrizzleRevenueEngineStateAdapter(db);
+  };
+  return {
+    async read() {
+      const rows = await withTimeout((await adapter()).loadCollections(STATE_OWNER), DB_TIMEOUT_MS, "estado del consejo");
+      const row = rows.find((item) => item.kind === STATE_KIND);
+      if (row) return { raw: JSON.stringify(row.data), revision: row.revision };
+      // First run on the database: carry over the file state of this instance, if any.
+      return { raw: await readFile(STATE_FILE, "utf8").catch(() => null), revision: null };
+    },
+    async write(raw, expectedRevision) {
+      try {
+        const row = await withTimeout(
+          (await adapter()).upsertCollection({
+            ownerUserId: STATE_OWNER,
+            kind: STATE_KIND,
+            data: JSON.parse(raw),
+            ...(expectedRevision === null ? {} : { expectedRevision }),
+            updatedAt: new Date(),
+          }),
+          DB_TIMEOUT_MS,
+          "estado del consejo"
+        );
+        return row.revision;
+      } catch (error) {
+        if (error instanceof Error && /state conflict/i.test(error.message)) throw new CouncilStateConflict(error.message);
+        throw error;
+      }
+    },
+  };
+}
+
 export function getAgentCouncil() {
   if (council) return council;
   council = createAgentCouncil({
@@ -535,6 +676,14 @@ export function getAgentCouncil() {
     userId: systemUserId,
     readState: () => readFile(STATE_FILE, "utf8").catch(() => null),
     writeState: writeStateAtomic,
+    versioned: databaseStateStore(),
+    verifyRun: async (userId, runId) => {
+      const [{ db }, { automationRuns }, { and, eq }] = await Promise.all([import("./db"), import("@shared/schema"), import("drizzle-orm")]);
+      const [run] = await db.select().from(automationRuns).where(and(eq(automationRuns.id, runId), eq(automationRuns.ownerUserId, userId))).limit(1);
+      if (!run) return null;
+      const at = run.finishedAt || run.startedAt;
+      return { id: run.id, status: run.status, summary: run.resultSummary, at: at ? new Date(at).toISOString() : null };
+    },
     collect: collectReal,
     submitProposal: async (userId, proposal) => {
       const { createPendingActionForApproval } = await import("./trust-policy");

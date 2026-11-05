@@ -46,7 +46,12 @@ export type CompanyOrder = {
   createdAt: string;
   assignees: Array<{ agentId: string; status: OrderStatus; note: string }>;
   doneAt?: string;
+  // How it was closed: with a verifiable run (points) or by hand (record only, no points).
+  closedBy?: "evidencia" | "robert";
+  evidence?: OrderEvidence;
 };
+
+export type OrderEvidence = { ref: string; source: "automation_run"; summary: string; at: string };
 
 export type CompanyState = {
   version: 1;
@@ -338,7 +343,7 @@ export function createOrder(
         agentId,
         status: working ? "en_curso" : "bloqueada",
         note: working
-          ? "Asignada a un agente activo. Queda anotada: los agentes no ejecutan ordenes solos; tu la marcas como hecha."
+          ? "Asignada a un agente activo. Queda anotada: los agentes no ejecutan ordenes solos; se cierra con evidencia de una ejecucion exitosa."
           : `Asignada, pero el agente no esta trabajando (${status?.label || "sin estado reciente"}). Hay que arreglarlo antes.`,
       };
     }),
@@ -361,28 +366,46 @@ export function createOrder(
 }
 
 // Robert confirms an order is done: assignees that had it in progress earn points.
-export function completeOrder(state: CompanyState, orderId: string, now: number): CompanyState {
+export function evidenceAlreadyUsed(state: CompanyState, ref: string): boolean {
+  return state.orders.some((order) => order.evidence?.ref === ref);
+}
+
+// Points need proof: a verified run (checked by the server) that was not used for another order,
+// and only for agents that were actually working when the order came in. Closing by hand only records it.
+export function completeOrder(state: CompanyState, orderId: string, now: number, evidence?: OrderEvidence): CompanyState {
   const iso = new Date(now).toISOString();
   const order = state.orders.find((item) => item.id === orderId);
   if (!order || order.doneAt) return state;
+  const verified = Boolean(evidence) && !evidenceAlreadyUsed(state, evidence!.ref);
   const careers = { ...state.careers };
   for (const assignee of order.assignees) {
     const career = careers[assignee.agentId];
     if (!career) continue;
-    // Points only for agents that were actually working when the order came in.
-    const earned = assignee.status === "en_curso" ? 25 : 0;
+    const earned = verified && assignee.status === "en_curso" ? 25 : 0;
     careers[assignee.agentId] = {
       ...career,
       points: career.points + earned,
       battery: earned ? Math.min(BATTERY_MAX, career.battery + 10) : career.battery,
       ordersDone: career.ordersDone + (earned ? 1 : 0),
-      memory: remember(career.memory, iso, earned ? `Robert marco hecha la orden "${order.text.slice(0, 60)}" (+${earned} puntos).` : `La orden "${order.text.slice(0, 60)}" se cerro sin que yo estuviera trabajando (0 puntos).`),
+      memory: remember(
+        career.memory,
+        iso,
+        earned
+          ? `Orden "${order.text.slice(0, 60)}" cerrada con evidencia (${evidence!.summary.slice(0, 40)}): +${earned} puntos.`
+          : verified
+            ? `La orden "${order.text.slice(0, 60)}" se cerro con evidencia, pero yo no estaba trabajando (0 puntos).`
+            : `La orden "${order.text.slice(0, 60)}" se cerro a mano, sin evidencia (0 puntos).`
+      ),
     };
   }
   return {
     ...state,
     careers,
-    orders: state.orders.map((item) => (item.id === orderId ? { ...item, doneAt: iso, assignees: item.assignees.map((a) => ({ ...a, status: "hecha" as const })) } : item)),
+    orders: state.orders.map((item) =>
+      item.id === orderId
+        ? { ...item, doneAt: iso, closedBy: verified ? "evidencia" : "robert", ...(verified ? { evidence } : {}), assignees: item.assignees.map((a) => ({ ...a, status: "hecha" as const })) }
+        : item
+    ),
   };
 }
 

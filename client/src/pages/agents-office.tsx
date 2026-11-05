@@ -2238,6 +2238,19 @@ export default function AgentsOfficePage() {
                 const member = team?.agents.find((item) => item.name === name);
                 if (team && member) handleSelectTeamAgent(team, member);
               }}
+              onOpenContact={(contact) =>
+                openContactChat({
+                  id: contact.id,
+                  name: contact.name,
+                  role: contact.role,
+                  station: contact.department,
+                  status: contact.status.label,
+                  activity: [contact.description, contact.status.detail, ...(contact.status.problems || []).map((problem) => `Problema: ${problem}`)].filter(Boolean).join(". "),
+                  href: contact.href,
+                  icon: Bot,
+                  color: contact.color,
+                })
+              }
             />
           )}
           {officeView === "building" && (

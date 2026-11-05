@@ -10,7 +10,9 @@ import {
   type BuildingAgent,
   type BuildingTeamAgent,
 } from "@/components/agents-building/agents-building";
-import type { AgentCareer, CompanyOrder, CompanyState, LeaderboardRow, Personality, Trainee } from "@shared/agent-company";
+import { personalityFor, type AgentCareer, type CompanyOrder, type CompanyState, type LeaderboardRow, type Personality, type Trainee } from "@shared/agent-company";
+import { CITY_NEWS_AGENTS } from "@shared/agent-live-status";
+import { INTEGRATION_LABEL, effectiveIntegrations, integrationFor, type AgentIntegration } from "@shared/agent-integrations";
 import { createOfficeScene, type SceneData, type SceneDepartment } from "./office-scene";
 
 export type WorldAgent = BuildingAgent & { activity?: string; href?: string };
@@ -19,7 +21,15 @@ export type WorldAgent = BuildingAgent & { activity?: string; href?: string };
 const EXTRA_AGENTS: Array<{ id: string; name: string; role: string; description: string; color: string; href?: string }> = [
   { id: "blackroom-videos", name: "Videos Black Room", role: "Sube los videos de Black Room", description: "Edita y programa los videos de Black Room con su dispositivo de publicacion.", color: "#e879f9", href: "/clippers" },
   { id: "kong-videos", name: "Videos Kong", role: "Edita los videos de Kong", description: "Edita los videos de Kong y los guarda en Drive (Videos de Kong).", color: "#a3e635", href: "/promo-video" },
-  { id: "news", name: "Noticias", role: "Agente de noticias", description: "Cubre noticias locales con comite de revision antes de publicar.", color: "#38bdf8", href: "/news" },
+  { id: "news", name: "Noticias", role: "Jefe de noticias locales", description: "Coordina las mesas de cada ciudad y el comite de revision antes de publicar.", color: "#38bdf8", href: "/news" },
+  ...CITY_NEWS_AGENTS.map((agent) => ({
+    id: agent.id,
+    name: agent.name,
+    role: `Mesa de noticias de ${agent.city}`,
+    description: `Cubre ${agent.city}: noticias activas, cola de posts y metas diarias por cuenta de esta ciudad.`,
+    color: agent.lane === "miami-news" ? "#fb923c" : "#60a5fa",
+    href: "/news",
+  })),
 ];
 
 const COUNCIL_AGENTS: Record<string, { name: string; role: string; description: string; color: string }> = {
@@ -34,14 +44,15 @@ const DEPARTMENTS: Array<{ id: string; name: string; color: string; agentIds: st
   { id: "negocios", name: "Negocios", color: "#34d399", agentIds: ["revenue", "dropshipping", "portfolio"] },
   { id: "blackroom", name: "Black Room", color: "#e879f9", agentIds: ["blackroom-videos", "radio"] },
   { id: "kong", name: "Kong", color: "#a3e635", agentIds: ["kong-videos", "kong:KONG AI", "kong:Promoters + Mesas", "kong:Venues", "kong:Kong Legal"] },
-  { id: "medios", name: "Marketing y medios", color: "#f472b6", agentIds: ["marketing-cmo", "clippers", "news"] },
+  { id: "medios", name: "Marketing y medios", color: "#f472b6", agentIds: ["marketing-cmo", "clippers"] },
+  { id: "ciudades", name: "Ciudades", color: "#fb923c", agentIds: ["news", ...CITY_NEWS_AGENTS.map((agent) => agent.id)] },
   { id: "ingenieria", name: "Ingenieria y app", color: "#38bdf8", agentIds: ["code", "github", "claude-reviewer", "app-qa"] },
   { id: "seguridad", name: "Seguridad y legal", color: "#a78bfa", agentIds: ["cybersecurity", "legal"] },
   { id: "operaciones", name: "Operaciones", color: "#2dd4bf", agentIds: ["automations"] },
 ];
 
 const SCREEN_KIND: Record<string, SceneDepartment["agents"][number]["screen"]> = {
-  radio: "timeline", clippers: "timeline", "blackroom-videos": "timeline", "kong-videos": "timeline",
+  radio: "timeline", clippers: "timeline", "blackroom-videos": "timeline", "kong-videos": "timeline", "news:miami-news": "list", "news:ny-news": "list",
   revenue: "chart", portfolio: "chart", "marketing-cmo": "chart", dropshipping: "chart", news: "chart",
   code: "code", github: "code", "claude-reviewer": "code", "app-qa": "code", cybersecurity: "code", mechanic: "code",
 };
@@ -51,7 +62,8 @@ const SOURCE_NAME: Record<string, string> = {
   portfolio: "Mercados", "marketing-cmo": "Clientes de marketing", clippers: "Worker de clips", radio: "Calendario de radio",
   code: "GitHub", github: "GitHub", "claude-reviewer": "GitHub", "app-qa": "Salud de apps", cybersecurity: "Salud de apps",
   legal: "Reportes legales", automations: "Automatizaciones", "skills-scout": "Releases de GitHub", "agent-factory": "Consejo de agentes",
-  mechanic: "Consejo de agentes", "blackroom-videos": "Publicador Black Room", news: "Noticias locales", "kong-videos": "Drive · Videos de Kong",
+  mechanic: "Consejo de agentes", "blackroom-videos": "Publicador Black Room", news: "Noticias locales", "kong-videos": "Publicador externo KONG (Codex)",
+  "news:miami-news": "Noticias locales", "news:ny-news": "Noticias locales",
 };
 
 const STATE_TEXT: Record<AgentLiveState, string> = {
@@ -61,7 +73,8 @@ const STATE_BAR: Record<AgentLiveState, string> = {
   working: "bg-emerald-400", "needs-setup": "bg-amber-300", error: "bg-rose-400", offline: "bg-zinc-600", checking: "bg-sky-300",
 };
 
-type CompanyView = { company?: CompanyState; leaderboard?: LeaderboardRow[]; personalities?: Record<string, Personality> };
+type CompanyView = { company?: CompanyState; leaderboard?: LeaderboardRow[]; personalities?: Record<string, Personality>; integrations?: Record<string, AgentIntegration> };
+export type WorldContact = { id: string; name: string; role: string; department: string; status: AgentLiveStatus; description: string; href?: string; color: string };
 type PanelAgent = { id: string; name: string; role: string; description: string; href?: string; status: AgentLiveStatus; kong?: boolean; color: string };
 
 export function AgentsOfficeWorld({
@@ -71,6 +84,7 @@ export function AgentsOfficeWorld({
   selectedAgentId,
   onSelectAgent,
   onSelectKongAgent,
+  onOpenContact,
 }: {
   agents: WorldAgent[];
   kongTeam: BuildingTeamAgent[];
@@ -78,6 +92,8 @@ export function AgentsOfficeWorld({
   selectedAgentId?: string;
   onSelectAgent: (agentId: string, status: AgentLiveStatus) => void;
   onSelectKongAgent: (name: string) => void;
+  // Opens the same local chat for agents that are not in the classic list (cities, new agents, trainees).
+  onOpenContact?: (contact: WorldContact) => void;
 }) {
   const pageAgentIds = useMemo(() => agents.map((agent) => agent.id), [agents]);
   const probedIds = useMemo(() => [...pageAgentIds, ...EXTRA_AGENTS.map((agent) => agent.id)], [pageAgentIds]);
@@ -88,6 +104,7 @@ export function AgentsOfficeWorld({
   const careers: Record<string, AgentCareer> = company?.careers || {};
   const leaderboardRows = companyView.leaderboard || [];
   const personalities = companyView.personalities || {};
+  const integrations = companyView.integrations || effectiveIntegrations();
   const deputyId = leaderboardRows[0]?.points ? leaderboardRows[0].agentId : null;
   const queryClient = useQueryClient();
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -120,6 +137,12 @@ export function AgentsOfficeWorld({
           : !council.view.lastCycleAt || Date.now() - Date.parse(council.view.lastCycleAt) > 45 * 60_000
             ? { state: "offline", label: "Sin rondas recientes", detail: "El servidor no ha corrido el consejo en los ultimos 45 minutos." }
             : { state: "working", label: `${(council.view.proposals || []).filter((p) => p.kind === "repair" && p.status === "submitted").length} reparaciones abiertas`, activity: Object.values(careers).filter((c) => c.battery < 30).slice(0, 4).map((c) => `Revisando ${c.agentId} (${c.battery}%)`) };
+  // Work done outside BlackOps (the KONG publisher in Codex) is not visible here: say so instead of
+  // reporting the local Drive folder as if it were that work.
+  for (const [id, integration] of Object.entries(integrations)) {
+    if (integration.mode !== "externa" || !statuses[id]) continue;
+    statuses[id] = { state: "offline", label: integration.owner === "externo:codex" ? "Externo · lo publica Codex" : "Externo", detail: integration.reason, activity: ["Publicador externo: un solo publicador", ...(statuses[id].activity || [])].slice(0, 4), problems: statuses[id].problems };
+  }
   for (const member of kongTeam) {
     statuses[`kong:${member.name}`] = { state: "offline", label: "Sin backend propio", detail: "Responde con guias locales; no ejecuta tareas en Kong.", activity: ["Esperando su backend", "Guia local activa"] };
   }
@@ -164,7 +187,9 @@ export function AgentsOfficeWorld({
             color: agent.color,
             screen: SCREEN_KIND[agent.id] || "list",
             activity: agent.status.activity || [agent.status.label, agent.status.detail || ""].filter(Boolean),
-            badge: career ? `${career.nickname} · ${career.points} pts` : undefined,
+            badge: integrationFor(agent.id, integrations).mode !== "activa"
+              ? INTEGRATION_LABEL[integrationFor(agent.id, integrations).mode]
+              : career ? `${career.nickname} · ${career.points} pts` : undefined,
             battery: career?.battery,
             deputy: agent.id === deputyId,
             student: agent.id.startsWith("trainee:"),
@@ -237,9 +262,10 @@ export function AgentsOfficeWorld({
     setBusy(false);
   };
 
-  const markDone = async (orderId: string) => {
+  const markDone = async (orderId: string, evidenceRunId?: string) => {
     setBusy(true);
-    await post(`/api/agent-company/orders/${encodeURIComponent(orderId)}/done`);
+    const result = await post(`/api/agent-company/orders/${encodeURIComponent(orderId)}/done`, evidenceRunId ? { evidenceRunId } : {});
+    setMessage(result.ok ? (evidenceRunId ? "Orden cerrada con evidencia: puntos para quien trabajaba." : "Orden cerrada a mano: queda anotada, sin puntos.") : (result.body as { error?: string } | null)?.error || "No se pudo cerrar la orden.");
     await refreshCouncil();
     setBusy(false);
   };
@@ -279,7 +305,23 @@ export function AgentsOfficeWorld({
   const orders: CompanyOrder[] = company?.orders || [];
   const nameOf = (id: string) => panelAgents.get(id)?.name || id;
   const panelCareer = panelAgent ? careers[panelAgent.id] : undefined;
-  const panelPersonality = panelAgent ? personalities[panelAgent.id] : undefined;
+  // Every agent has a personality: from its career when it has one, otherwise the same deterministic pick.
+  const panelPersonality = panelAgent ? personalities[panelAgent.id] || personalityFor(panelAgent.id, 1) : undefined;
+  const panelIntegration = panelAgent ? integrationFor(panelAgent.id, integrations) : undefined;
+  const lifeNotApplicable = !panelAgent
+    ? ""
+    : panelAgent.id.startsWith("trainee:")
+      ? "En formacion en la academia: empieza a ganar o perder vida cuando se gradue."
+      : panelIntegration && panelIntegration.mode !== "activa"
+        ? panelIntegration.reason
+        : COUNCIL_AGENTS[panelAgent.id]
+          ? "Parte del consejo: revisa a los demas y no se mide a si mismo."
+          : panelAgent.id === "ceo"
+            ? "El CEO dirige; no compite en la tabla."
+            : "Se le abre la carrera en la proxima ronda del consejo (cada 15 min).";
+  const evidenceRuns = ((queryClient.getQueryData(["agents-building-probe", "automation-runs"]) as { ok?: boolean; body?: unknown } | undefined)?.body as Array<{ id?: string; status?: string; resultSummary?: string | null; startedAt?: string }> | undefined || [])
+    .filter((run) => run && typeof run.id === "string" && run.status === "success")
+    .slice(0, 10);
   const panelRank = panelAgent ? leaderboardRows.find((row) => row.agentId === panelAgent.id) : undefined;
   const panelOrders = panelAgent ? orders.filter((order) => order.assignees.some((assignee) => assignee.agentId === panelAgent.id)).slice(0, 4) : [];
 
@@ -348,7 +390,7 @@ export function AgentsOfficeWorld({
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200">Canal directo con el CEO</p>
             <button type="button" onClick={() => setOverlay("none")} className="text-xs text-zinc-400 hover:text-white">✕</button>
           </div>
-          <p className="mt-1 text-[11px] text-zinc-400">Escribe lo que necesitas y el CEO lo asigna al departamento correcto. Queda anotado como tarea: los agentes no la ejecutan solos. Cuando este hecha, marcala y ganan puntos los que estaban trabajando.</p>
+          <p className="mt-1 text-[11px] text-zinc-400">Escribe lo que necesitas y el CEO lo asigna al departamento correcto. Queda anotado como tarea: los agentes no la ejecutan solos. Para dar puntos, cierrala con una ejecucion exitosa como evidencia; cerrarla a mano solo la anota.</p>
           <div className="mt-3 flex gap-2">
             <input
               value={orderText}
@@ -373,8 +415,23 @@ export function AgentsOfficeWorld({
                     </span>
                   ))}
                 </div>
+                {order.doneAt && (
+                  <p className="mt-1 text-[10px] text-zinc-500">{order.closedBy === "evidencia" ? `Cerrada con evidencia: ${order.evidence?.summary || ""}` : "Cerrada a mano (sin puntos)"}</p>
+                )}
                 {!order.doneAt && (
-                  <button type="button" onClick={() => markDone(order.id)} disabled={busy} className="mt-1.5 text-[10px] font-semibold text-emerald-200 hover:underline" data-testid="world-order-done">Marcar como hecha</button>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <select
+                      defaultValue=""
+                      disabled={busy || evidenceRuns.length === 0}
+                      onChange={(event) => { if (event.target.value) void markDone(order.id, event.target.value); }}
+                      className="max-w-[220px] rounded-full border border-emerald-300/30 bg-black/60 px-2 py-0.5 text-[10px] text-emerald-100"
+                      data-testid="world-order-evidence"
+                    >
+                      <option value="">{evidenceRuns.length ? "Cerrar con evidencia..." : "Sin ejecuciones exitosas"}</option>
+                      {evidenceRuns.map((run) => <option key={run.id} value={run.id}>{(run.resultSummary || "Ejecucion exitosa").slice(0, 40)}</option>)}
+                    </select>
+                    <button type="button" onClick={() => markDone(order.id)} disabled={busy} className="text-[10px] font-semibold text-zinc-300 hover:underline" data-testid="world-order-done">Cerrar a mano (0 pts)</button>
+                  </div>
                 )}
               </div>
             ))}
@@ -439,11 +496,27 @@ export function AgentsOfficeWorld({
             <section className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-3" data-testid="world-agent-card">
               <p className="text-sm font-bold">{panelAgent.name}{panelCareer ? <span className="font-normal text-zinc-400"> · {panelCareer.nickname} (gen {panelCareer.generation})</span> : null}</p>
               <p className="text-[10px] uppercase tracking-[0.16em] text-zinc-500">{panelAgent.role}{panelRank ? ` · #${panelRank.rank} · ${panelRank.title}` : ""}</p>
+              {panelIntegration && panelIntegration.mode !== "activa" && (
+                <p className="mt-1 inline-block rounded-full border border-sky-200/30 bg-sky-400/10 px-2 py-0.5 text-[10px] font-semibold text-sky-100" data-testid="world-integration">
+                  {INTEGRATION_LABEL[panelIntegration.mode]}{panelIntegration.owner === "externo:codex" ? " · Codex" : ""}
+                </p>
+              )}
               {panelCareer && (
                 <div className="mt-2 grid grid-cols-3 gap-1.5 text-center" data-testid="world-career">
                   <div className="rounded-lg bg-black/40 p-1.5"><p className="text-[9px] uppercase text-zinc-500">Bateria</p><p className={cn("text-sm font-bold", panelCareer.battery > 60 ? "text-emerald-300" : panelCareer.battery > 25 ? "text-amber-200" : "text-rose-300")}>{panelCareer.battery}%</p></div>
                   <div className="rounded-lg bg-black/40 p-1.5"><p className="text-[9px] uppercase text-zinc-500">Puntos</p><p className="text-sm font-bold text-white">{panelCareer.points}</p></div>
                   <div className="rounded-lg bg-black/40 p-1.5"><p className="text-[9px] uppercase text-zinc-500">Confiable</p><p className="text-sm font-bold text-white">{panelRank?.reliability ?? 0}%</p></div>
+                </div>
+              )}
+              {panelCareer && panelIntegration?.mode === "activa" && !COUNCIL_AGENTS[panelAgent.id] && panelAgent.id !== "ceo" && (
+                <p className="mt-1 text-[10px] text-zinc-500" data-testid="world-rotation">
+                  Rotacion: si su vida llega a 0% el CEO lo reemplaza y el nuevo pasa por la academia.{panelCareer.firedCount ? ` Ya rotado ${panelCareer.firedCount} ${panelCareer.firedCount === 1 ? "vez" : "veces"}.` : ""}
+                </p>
+              )}
+              {(!panelCareer || (panelIntegration && panelIntegration.mode !== "activa")) && (
+                <div className="mt-2 rounded-lg bg-black/40 p-2 text-[11px]" data-testid="world-life-na">
+                  <span className="font-semibold text-zinc-200">Vida: {panelCareer ? `${panelCareer.battery}% (congelada)` : "no aplica"}</span>
+                  <span className="text-zinc-400"> · {lifeNotApplicable}</span>
                 </div>
               )}
               {panelPersonality && (
@@ -454,6 +527,12 @@ export function AgentsOfficeWorld({
                 <p className={cn("text-[11px] font-semibold", STATE_TEXT[panelAgent.status.state])}>Ahora: {panelAgent.status.label}</p>
                 {panelAgent.status.detail && <p className="mt-0.5 text-[11px] text-zinc-400">{panelAgent.status.detail}</p>}
               </div>
+              {(panelAgent.status.problems || []).length > 0 && (
+                <div className="mt-2 rounded-lg border border-rose-300/20 bg-rose-500/5 p-2 text-[11px] text-rose-100" data-testid="world-problems">
+                  <p className="mb-1 text-[9px] uppercase tracking-[0.18em] text-rose-200">Problemas</p>
+                  {(panelAgent.status.problems || []).map((problem) => <p key={problem}>· {problem}</p>)}
+                </div>
+              )}
               {(panelAgent.status.activity || []).length > 0 && (
                 <div className="mt-2 rounded-lg bg-[#020617] p-2 font-mono text-[10px] leading-4 text-zinc-300">
                   <p className="mb-1 text-[9px] uppercase tracking-[0.18em] text-zinc-500">Trabajo en vivo</p>
@@ -475,8 +554,12 @@ export function AgentsOfficeWorld({
               <div className="mt-3 flex gap-2">
                 <button
                   type="button"
-                  onClick={() => (panelAgent.kong ? onSelectKongAgent(panelAgent.name) : pageAgentIds.includes(panelAgent.id) && onSelectAgent(panelAgent.id, panelAgent.status))}
-                  disabled={!panelAgent.kong && !pageAgentIds.includes(panelAgent.id)}
+                  onClick={() => {
+                    if (panelAgent.kong) onSelectKongAgent(panelAgent.name);
+                    else if (pageAgentIds.includes(panelAgent.id)) onSelectAgent(panelAgent.id, panelAgent.status);
+                    else onOpenContact?.({ id: panelAgent.id, name: panelAgent.name, role: panelAgent.role, department: focused?.name || "Oficina", status: panelAgent.status, description: panelAgent.description, href: panelAgent.href, color: panelAgent.color });
+                  }}
+                  disabled={!panelAgent.kong && !pageAgentIds.includes(panelAgent.id) && !onOpenContact}
                   className="flex-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-black hover:bg-zinc-200 disabled:opacity-40"
                   data-testid="world-talk"
                 >
