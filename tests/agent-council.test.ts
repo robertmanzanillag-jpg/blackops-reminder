@@ -412,3 +412,149 @@ test("company over 4 days: repairs stay bounded, never for exempt agents, mechan
   const view = await council.view();
   assert.ok(!view.leaderboard.some((row) => row.agentId === "mechanic" || row.agentId.startsWith("kong:")));
 });
+
+// ---------- Supervisor: integrations, shared storage, evidence ----------
+
+import { CouncilStateConflict, OrderEvidenceError, MIN_CYCLE_GAP_MS } from "../server/agent-council";
+import { effectiveIntegrations, parseIntegrationOverrides } from "../shared/agent-integrations";
+
+function sharedStore() {
+  let raw: string | null = null;
+  let revision: number | null = null;
+  let writes = 0;
+  return {
+    writes: () => writes,
+    raw: () => raw,
+    store: {
+      read: async () => ({ raw, revision }),
+      write: async (next: string, expected: number | null) => {
+        await new Promise((resolve) => setTimeout(resolve, 5));
+        if (expected !== revision) throw new CouncilStateConflict("state conflict");
+        raw = next;
+        revision = (revision ?? 0) + 1;
+        writes++;
+        return revision;
+      },
+    },
+  };
+}
+
+test("paused, external and not-built agents are never penalized, fired or repaired (4 days)", async () => {
+  const fake = fakeDeps({
+    collect: async () => ({}),
+    collectStatuses: async () => ({
+      "blackroom-videos": { state: "offline", label: "Cola vacia" },
+      "kong-videos": { state: "offline", label: "Sin videos nuevos en 48 h" },
+      "news:miami-news": { state: "error", label: "Ciudad sin datos" },
+      radio: { state: "working", label: "Programando" },
+    }),
+    loadCurriculum: async () => [],
+    integrations: () => effectiveIntegrations(),
+  });
+  const council = createAgentCouncil(fake.deps);
+  let state = await council.runCycle();
+  for (let i = 0; i < 400; i++) {
+    fake.tick(15 * 60_000);
+    state = await council.runCycle();
+  }
+  assert.equal(state.company.careers["blackroom-videos"], undefined, "paused lane is not scored");
+  assert.equal(state.company.careers["kong-videos"], undefined, "external KONG publisher is not scored");
+  assert.ok(!state.proposals.some((proposal) => /blackroom-videos|kong-videos/.test(proposal.key)));
+  assert.ok(state.company.careers["news:miami-news"].firedCount >= 1, "an active city desk that fails is rotated");
+  assert.match(state.lastStatuses["kong-videos"].label, /Externa/);
+  const view = await council.view();
+  assert.equal(view.integrations["blackroom-videos"].mode, "pausada");
+  assert.ok(!view.leaderboard.some((row) => row.agentId === "kong-videos"));
+});
+
+test("overrides switch an agent back to active without a code change", () => {
+  const integrations = effectiveIntegrations(parseIntegrationOverrides("blackroom-videos=activa, kong-videos=nope,radio=pausada"));
+  assert.equal(integrations["blackroom-videos"].mode, "activa");
+  assert.equal(integrations["kong-videos"].mode, "externa", "invalid modes are ignored");
+  assert.equal(integrations.radio.mode, "pausada");
+});
+
+test("two instances on shared storage: one round per window, no lost writes", async () => {
+  const shared = sharedStore();
+  const a = fakeDeps({ versioned: shared.store, collect: async () => ({}) });
+  const b = fakeDeps({ versioned: shared.store, collect: async () => ({}) });
+  const first = createAgentCouncil(a.deps);
+  const second = createAgentCouncil(b.deps);
+  await Promise.all([first.runCycle(), second.runCycle()]);
+  assert.equal(parseCouncilState(shared.raw()).cycles, 1, "the second instance skips the round");
+  // An order placed on one instance is seen by the other.
+  await first.placeOrder("Revisa la radio");
+  assert.equal((await second.view()).company.orders.length, 1);
+  // Concurrent writes from both instances are retried on top of each other, not overwritten.
+  await Promise.all([first.placeOrder("Orden A"), second.placeOrder("Orden B")]);
+  assert.equal((await first.view()).company.orders.length, 3);
+  a.tick(MIN_CYCLE_GAP_MS + 1000);
+  b.tick(MIN_CYCLE_GAP_MS + 1000);
+  await second.runCycle();
+  assert.equal(parseCouncilState(shared.raw()).cycles, 2);
+});
+
+test("order evidence is verified on the server: wrong owner, failed run or reused run are rejected", async () => {
+  const runs: Record<string, { id: string; status: string; summary: string | null; at: string | null }> = {
+    good: { id: "good", status: "success", summary: "Radio publicada", at: null },
+    bad: { id: "bad", status: "failed", summary: null, at: null },
+  };
+  const fake = fakeDeps({ collect: async () => ({}), verifyRun: async (_user, id) => runs[id] || null });
+  const council = createAgentCouncil(fake.deps);
+  await council.placeOrder("Orden 1");
+  await council.placeOrder("Orden 2");
+  const [o2, o1] = (await council.view()).company.orders;
+  await assert.rejects(council.finishOrder(o1.id, "missing"), OrderEvidenceError);
+  await assert.rejects(council.finishOrder(o1.id, "bad"), /fallo|failed/);
+  const done = await council.finishOrder(o1.id, "good");
+  assert.equal(done.company.orders.find((order) => order.id === o1.id)?.closedBy, "evidencia");
+  await assert.rejects(council.finishOrder(o2.id, "good"), /ya cerro otra orden/);
+});
+
+test("single publisher: the supervisor never imports or calls publishing code", async () => {
+  const files = ["server/agent-council.ts", "server/agent-council-routes.ts", "shared/agent-company.ts", "shared/agent-integrations.ts", "shared/agent-live-status.ts", "shared/agent-council.ts", "shared/kong-supervisor.ts", "server/kong-supervisor-conversation.ts", "server/kong-supervisor-routes.ts"];
+  for (const file of files) {
+    const source = await readFile(path.join(process.cwd(), file), "utf8");
+    const imports = [...source.matchAll(/(?:from\s+|import\()\s*["']([^"']+)["']/g)].map((match) => match[1]);
+    for (const spec of imports) assert.doesNotMatch(spec, /metricool|publish|social|tiktok|facebook|instagram|youtube|scheduler|kong-cloud|kong-production|media-store|drive/i, `${file} imports ${spec}`);
+    assert.doesNotMatch(source, /\b(publish\w*|schedulePost\w*|uploadToDrive\w*|postTo\w*)\s*\(/, `${file} calls a publishing function`);
+  }
+});
+
+test("two instances never send the same proposal to the Trust Center twice", async () => {
+  const shared = sharedStore();
+  const submitted: string[] = [];
+  const collect = async () => ({ skills: [{ name: "long", path: "p", description: "x", truncatedInChat: true, bodyChars: 2000, missingPaths: [] }] });
+  const submitProposal = async (_user: string, proposal: CouncilProposal) => {
+    submitted.push(proposal.key);
+    await new Promise((resolve) => setTimeout(resolve, 15));
+    return `pa-${submitted.length}`;
+  };
+  const a = fakeDeps({ versioned: shared.store, collect, submitProposal });
+  const b = fakeDeps({ versioned: shared.store, collect, submitProposal });
+  const first = createAgentCouncil(a.deps);
+  const second = createAgentCouncil(b.deps);
+  await Promise.all([first.runCycle(), second.runCycle(), first.placeOrder("Orden durante la ronda"), second.placeOrder("Otra orden")]);
+  assert.deepEqual(submitted, ["skill:skills-truncated"]);
+  const state = parseCouncilState(shared.raw());
+  assert.equal(state.proposals[0].status, "submitted");
+  assert.equal(state.proposals[0].pendingActionId, "pa-1", "the id that was created is the one saved");
+  assert.equal(state.company.orders.length, 2, "orders placed meanwhile are kept");
+  // Next round (after the gap) reads the saved id and does not submit again.
+  a.tick(MIN_CYCLE_GAP_MS + 1000);
+  await first.runCycle();
+  assert.deepEqual(submitted, ["skill:skills-truncated"]);
+});
+
+test("the public council view never carries the owner-only KONG conversation", async () => {
+  const council = createAgentCouncil(fakeDeps({ collect: async () => ({}) }).deps);
+  await council.updateKongSupervision(async (current) => ({
+    ...current,
+    messages: [{ id: "r1-user", requestId: "request-0001", agentId: "kong-supervisor", at: new Date(NOW).toISOString(), role: "user", text: "privado" }],
+  }));
+  const view = await council.view();
+  assert.equal((view.kongSupervision as { messages?: unknown }).messages, undefined);
+  assert.ok(Array.isArray(view.kongSupervision.records));
+  assert.equal((await council.readKongSupervision()).messages.length, 1, "the owner route still reads it");
+  assert.doesNotMatch(JSON.stringify(view), /privado/);
+});

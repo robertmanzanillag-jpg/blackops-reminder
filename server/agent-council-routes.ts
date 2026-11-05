@@ -1,11 +1,37 @@
 import type { Express } from "express";
-import { getAgentCouncil, isAgentCouncilEnabled, setAgentCouncilUser } from "./agent-council";
-import { getSystemUserId } from "./user-context";
+import { OrderEvidenceError, getAgentCouncil, isAgentCouncilEnabled, setAgentCouncilUser } from "./agent-council";
+import { getCurrentUserId, getSystemUserId } from "./user-context";
+import { agentProbes, summarizeProbe } from "@shared/agent-live-status";
+import { createKongSupervisorConversation } from "./kong-supervisor-conversation";
+import { registerKongSupervisorRoutes } from "./kong-supervisor-routes";
 
 const MANUAL_RUN_MIN_INTERVAL_MS = 60_000;
 
 // Read-only view + a rate-limited manual cycle. Both sit behind requireAppUser (server/index.ts).
 export function registerAgentCouncilRoutes(app: Express) {
+  // Supervisor KONG (PR #315): owner-only chat and read-only readiness review.
+  // It reads the Kong video status; it never edits, publishes or runs commercial orders.
+  const kongConversation = createKongSupervisorConversation({
+    now: () => Date.now(),
+    commit: (change) => getAgentCouncil().updateKongSupervision(change),
+    read: () => getAgentCouncil().readKongSupervision(),
+    readVideoStatus: async () => {
+      const { getPromoVideoStatus } = await import("./promo-video-agent");
+      const body = await getPromoVideoStatus(getSystemUserId());
+      return summarizeProbe(agentProbes["kong-videos"], { ok: true, status: 200, body: JSON.parse(JSON.stringify(body ?? null)) });
+    },
+  });
+  registerKongSupervisorRoutes(app, kongConversation, {
+    requestUserId: (req) => {
+      try {
+        return getCurrentUserId(req);
+      } catch {
+        return null;
+      }
+    },
+    ownerUserId: () => getSystemUserId(),
+  });
+
   app.get("/api/agent-council/state", async (_req, res) => {
     try {
       res.set("Cache-Control", "no-store");
@@ -31,11 +57,14 @@ export function registerAgentCouncilRoutes(app: Express) {
 
   app.post("/api/agent-company/orders/:id/done", async (req, res) => {
     try {
-      const state = await getAgentCouncil().finishOrder(String(req.params.id));
+      const raw = (req.body as { evidenceRunId?: unknown } | undefined)?.evidenceRunId;
+      const evidenceRunId = typeof raw === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(raw) ? raw : undefined;
+      if (raw !== undefined && raw !== null && raw !== "" && !evidenceRunId) return res.status(400).json({ error: "Evidencia no valida." });
+      const state = await getAgentCouncil().finishOrder(String(req.params.id), evidenceRunId, getCurrentUserId(req));
       res.json({ order: state.company.orders.find((order) => order.id === req.params.id) || null });
     } catch (error) {
       const message = error instanceof Error ? error.message : "No se pudo cerrar la orden";
-      res.status(message === "Orden no encontrada" ? 404 : 500).json({ error: message });
+      res.status(error instanceof OrderEvidenceError ? 422 : message === "Orden no encontrada" ? 404 : 500).json({ error: message });
     }
   });
 
@@ -51,7 +80,7 @@ export function registerAgentCouncilRoutes(app: Express) {
       if (Date.now() - last < MANUAL_RUN_MIN_INTERVAL_MS) {
         return res.status(429).json({ error: "El consejo acaba de reunirse; espera un minuto." });
       }
-      await council.runCycle();
+      await council.runCycle({ force: true });
       res.json(await council.view());
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Failed to run agent council" });
