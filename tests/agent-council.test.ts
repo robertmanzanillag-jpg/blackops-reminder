@@ -512,12 +512,14 @@ test("order evidence is verified on the server: wrong owner, failed run or reuse
 });
 
 test("single publisher: the supervisor never imports or calls publishing code", async () => {
-  const files = ["server/agent-council.ts", "server/agent-council-routes.ts", "shared/agent-company.ts", "shared/agent-integrations.ts", "shared/agent-live-status.ts", "shared/agent-council.ts", "shared/kong-supervisor.ts", "server/kong-supervisor-conversation.ts", "server/kong-supervisor-routes.ts"];
+  const files = ["server/agent-council.ts", "server/agent-council-routes.ts", "shared/agent-company.ts", "shared/agent-integrations.ts", "shared/agent-live-status.ts", "shared/agent-council.ts", "shared/kong-supervisor.ts", "server/kong-supervisor-conversation.ts", "server/kong-supervisor-routes.ts", "shared/kong-operations.ts", "server/kong-operations.ts", "server/kong-operations-routes.ts"];
   for (const file of files) {
     const source = await readFile(path.join(process.cwd(), file), "utf8");
     const imports = [...source.matchAll(/(?:from\s+|import\()\s*["']([^"']+)["']/g)].map((match) => match[1]);
-    for (const spec of imports) assert.doesNotMatch(spec, /metricool|publish|social|tiktok|facebook|instagram|youtube|scheduler|kong-cloud|kong-production|media-store|drive/i, `${file} imports ${spec}`);
-    assert.doesNotMatch(source, /\b(publish\w*|schedulePost\w*|uploadToDrive\w*|postTo\w*)\s*\(/, `${file} calls a publishing function`);
+    // The only Metricool module allowed is the read-only metrics parser.
+    for (const spec of imports.filter((item) => item !== "./metricool-analytics-sync")) assert.doesNotMatch(spec, /metricool|publish|social|tiktok|facebook|instagram|youtube|scheduler|kong-cloud|kong-production|media-store|drive/i, `${file} imports ${spec}`);
+    const code = source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/(^|[^:"'`])\/\/.*$/gm, "$1");
+    assert.doesNotMatch(code, /\b(publish\w*|schedulePost\w*|uploadToDrive\w*|postTo\w*)\s*\(/, `${file} calls a publishing function`);
   }
 });
 

@@ -183,3 +183,13 @@ test("city desks fail closed: missing city, stale rounds or never bootstrapped a
   assert.equal(summarizeProbe(agentProbes["news:miami-news"], ok(localNews({ bootstrapped: false })), now).state, "needs-setup");
   assert.equal(summarizeProbe(agentProbes["news:miami-news"], { ok: false, status: 500, body: null }, now).state, "error");
 });
+
+test("KONG metrics agent: status and results come from the operations state, fail closed", () => {
+  const now = Date.parse("2026-11-05T12:00:00Z");
+  const body = { status: { "kong-metrics": { state: "working", label: "1/1 publicaciones medidas" } }, results: [{ title: "Venue: Club Prueba (Miami)", network: "instagram", impressions: 1200, engagements: 97 }] };
+  const status = summarizeProbe(agentProbes["kong-metrics"], ok(body), now);
+  assert.equal(status.state, "working");
+  assert.match(status.activity?.[0] || "", /1200 vistas/);
+  assert.equal(summarizeProbe(agentProbes["kong-metrics"], ok({ status: { "kong-metrics": { state: "working?" } } }), now).state, "error");
+  assert.equal(summarizeProbe(agentProbes["kong-metrics"], { ok: false, status: 403, body: null }, now).state, "needs-setup");
+});
