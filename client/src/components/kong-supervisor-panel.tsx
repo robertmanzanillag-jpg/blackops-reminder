@@ -30,7 +30,7 @@ export function KongSupervisorPanel() {
   const routerAuth = useQuery<SupervisorAuth>({ queryKey: ["auth-me"], enabled: false });
   const routerId = routerAuth.data?.user?.id || null;
   const verifiedAuth = useQuery({ queryKey: ["kong-supervisor-auth", routerId], queryFn: () => requestJson<SupervisorAuth>("/api/auth/me"), enabled: open && Boolean(routerId) && !routerAuth.isFetching, retry: false, staleTime: 0, gcTime: 0, refetchOnMount: "always" });
-  const sessionScope = kongSupervisorSessionScope(routerAuth.data, verifiedAuth.data, routerAuth.isFetching, verifiedAuth.isFetching);
+  const sessionScope = kongSupervisorSessionScope(routerAuth.data, verifiedAuth.data, routerAuth.isFetching, verifiedAuth.isFetching, verifiedAuth.isError, routerAuth.isError);
   const text = sessionScope && draft.scope === sessionScope ? draft.text : "";
   const error = sessionScope && failure?.scope === sessionScope ? failure.text : null;
   const stateKey = ["kong-supervisor-state", sessionScope];
