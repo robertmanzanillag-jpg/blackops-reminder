@@ -18,6 +18,7 @@ import { CITY_NEWS_AGENTS } from "@shared/agent-live-status";
 import { INTEGRATION_LABEL, effectiveIntegrations, integrationFor, type AgentIntegration } from "@shared/agent-integrations";
 import { createOfficeScene, type SceneData, type SceneDepartment } from "./office-scene";
 import { buildOfficeCityRoomsFromSnapshot, officeCityCountries, officeCitySnapshotExpiresAt, parseOfficeCityDirectory, type OfficeCityAgent } from "@/lib/office-city-agents";
+import { buildOfficeKongCentralSignals, OFFICE_KONG_CENTRAL_SEATS, officeCityEvidenceNotice, type OfficeKongCentralSignal } from "@/lib/office-kong-central-agents";
 
 export type WorldAgent = BuildingAgent & { activity?: string; href?: string };
 
@@ -84,7 +85,7 @@ const STATE_BAR: Record<AgentLiveState, string> = {
 
 type CompanyView = { company?: CompanyState; leaderboard?: LeaderboardRow[]; personalities?: Record<string, Personality>; integrations?: Record<string, AgentIntegration> };
 export type WorldContact = { id: string; name: string; role: string; department: string; status: AgentLiveStatus; description: string; href?: string; color: string };
-type PanelAgent = { id: string; name: string; role: string; description: string; href?: string; status: AgentLiveStatus; kong?: boolean; color: string; cityAgent?: OfficeCityAgent };
+type PanelAgent = { id: string; name: string; role: string; description: string; href?: string; status: AgentLiveStatus; kong?: boolean; color: string; cityAgent?: OfficeCityAgent; kongEvidence?: OfficeKongCentralSignal };
 
 export function AgentsOfficeWorld({
   agents,
@@ -135,8 +136,14 @@ export function AgentsOfficeWorld({
   const [cityDetailsOpen, setCityDetailsOpen] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => { if (failed && officeWing === "kong") setCityOverviewOpen(true); }, [failed, officeWing]);
-  const cityDirectory = useQuery<unknown>({ queryKey: ["/api/agents-office/cities"], enabled: officeWing === "kong", staleTime: 60_000, refetchInterval: cityRefreshInterval, retry: false });
-  const citySnapshot = useQuery<OfficeKongAuditResult & { collaboration?: OfficeKongCollaboration }>({ queryKey: ["/api/agents-office/kong-snapshot"], enabled: officeWing === "kong", staleTime: 45_000, refetchInterval: cityRefreshInterval, retry: false });
+  const cityDirectory = useQuery<unknown>({ queryKey: ["/api/agents-office/cities"], enabled: officeWing === "kong", staleTime: 60_000, refetchInterval: cityRefreshInterval,
+    retry: (failureCount, error) => failureCount < 2 && !/^(401|403):/.test(error.message), retryDelay: attempt => Math.min(1_000 * 2 ** attempt, 2_000) });
+  const citySnapshot = useQuery<OfficeKongAuditResult & { collaboration?: OfficeKongCollaboration }>({
+    queryKey: ["/api/agents-office/kong-snapshot"],
+    enabled: officeWing === "kong" || (officeWing === "main" && focusedDepartment === "kong"),
+    staleTime: 45_000, refetchInterval: cityRefreshInterval,
+    retry: (failureCount, error) => failureCount < 2 && !/^(401|403):/.test(error.message), retryDelay: attempt => Math.min(1_000 * 2 ** attempt, 2_000),
+  });
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 15_000); return () => window.clearInterval(timer); }, []);
   const cityEvidence = cityDirectory.isError || citySnapshot.isError ? undefined : citySnapshot.data?.evidence;
   const evidenceExpiresAt = useMemo(() => officeCitySnapshotExpiresAt(cityEvidence, clock), [cityEvidence, clock]);
@@ -150,6 +157,16 @@ export function AgentsOfficeWorld({
   }, [evidenceExpiresAt]);
   const directory = useMemo(() => clock - cityDirectory.dataUpdatedAt <= 5 * 60_000 ? parseOfficeCityDirectory(cityDirectory.data) : [], [clock, cityDirectory.data, cityDirectory.dataUpdatedAt]);
   const cityRooms = useMemo(() => buildOfficeCityRoomsFromSnapshot(directory, cityEvidence, clock), [directory, cityEvidence, clock]);
+  const centralSignals = useMemo(
+    () => buildOfficeKongCentralSignals(citySnapshot.isError ? undefined : citySnapshot.data?.evidence.agents,
+      citySnapshot.isError ? undefined : citySnapshot.data?.evidence.generatedAt, clock),
+    [citySnapshot.isError, citySnapshot.data?.evidence.agents, citySnapshot.data?.evidence.generatedAt, clock],
+  );
+  const centralSignalById = new Map(centralSignals.map(signal => [signal.id, signal]));
+  const centralKongTeam: BuildingTeamAgent[] = OFFICE_KONG_CENTRAL_SEATS.slice(1).map(seat => ({
+    name: seat.nativeName,
+    job: kongTeam.find(member => member.name.toLowerCase() === seat.nativeName.toLowerCase())?.job || seat.job,
+  }));
   const cityCountries = useMemo(() => officeCityCountries(directory), [directory]);
   const activeCityCountry = cityCountries.some(country => country.code === cityCountry) ? cityCountry : "";
   const filteredCityRooms = activeCityCountry ? cityRooms.filter(room => room.city.countryCode === activeCityCountry) : cityRooms;
@@ -198,21 +215,35 @@ export function AgentsOfficeWorld({
           : !council.view.lastCycleAt || Date.now() - Date.parse(council.view.lastCycleAt) > 45 * 60_000
             ? { state: "offline", label: "Sin rondas recientes", detail: "El servidor no ha corrido el consejo en los ultimos 45 minutos." }
             : { state: "working", label: `${(council.view.proposals || []).filter((p) => p.kind === "repair" && p.status === "submitted").length} reparaciones abiertas`, activity: Object.values(careers).filter((c) => c.battery < 30).slice(0, 4).map((c) => `Revisando ${c.agentId} (${c.battery}%)`) };
-  // Work done outside BlackOps (the KONG publisher in Codex) is not visible here: say so instead of
-  // reporting the local Drive folder as if it were that work.
+  for (const seat of OFFICE_KONG_CENTRAL_SEATS) {
+    const signal = centralSignalById.get(seat.id);
+    statuses[seat.id] = !signal || signal.signal === "unverified"
+      ? { state: "offline", label: signal?.label || "Actividad sin verificar", detail: signal?.detail || "No hay evidencia autenticada de este puesto." }
+      : signal.signal === "current"
+        ? { state: "working", label: "Ejecución actual verificada", detail: signal.detail, activity: [signal.detail] }
+        : signal.signal === "alert"
+          ? { state: "needs-setup", label: signal.label, detail: signal.detail }
+          : { state: "offline", label: signal.label, detail: signal.detail };
+  }
+  // Keep the authenticated KONG Native evidence, but an external publisher is
+  // never presented as a worker executing inside this office.
   for (const [id, integration] of Object.entries(integrations)) {
     if (integration.mode !== "externa" || !statuses[id]) continue;
     statuses[id] = { state: "offline", label: integration.owner === "externo:codex" ? "Externo · lo publica Codex" : "Externo", detail: integration.reason, activity: ["Publicador externo: un solo publicador", ...(statuses[id].activity || [])].slice(0, 4), problems: statuses[id].problems };
   }
-  for (const member of kongTeam) {
-    statuses[`kong:${member.name}`] = { state: "offline", label: "Sin backend propio", detail: "Responde con guias locales; no ejecuta tareas en Kong.", activity: ["Esperando su backend", "Guia local activa"] };
-  }
 
   const panelAgents = new Map<string, PanelAgent>();
   for (const agent of agents) panelAgents.set(agent.id, { id: agent.id, name: agent.name, role: agent.role, description: agent.activity || agent.role, href: agent.href, status: statuses[agent.id] ?? { state: "checking", label: "Verificando..." }, color: colorFromGradient(agent.color) });
-  for (const agent of EXTRA_AGENTS) panelAgents.set(agent.id, { ...agent, status: statuses[agent.id] ?? { state: "checking", label: "Verificando..." } });
+  for (const agent of EXTRA_AGENTS) panelAgents.set(agent.id, { ...agent, status: statuses[agent.id] ?? { state: "checking", label: "Verificando..." },
+    ...(agent.id === "kong-videos" ? { kongEvidence: centralSignalById.get("kong-videos") } : {}) });
   for (const [id, agent] of Object.entries(COUNCIL_AGENTS)) panelAgents.set(id, { id, ...agent, status: statuses[id] });
-  for (const member of kongTeam) panelAgents.set(`kong:${member.name}`, { id: `kong:${member.name}`, name: member.name, role: member.job, description: "Equipo de kong-nightlife: guia local, todavia sin backend propio.", status: statuses[`kong:${member.name}`], kong: true, color: "#a3e635" });
+  for (const member of centralKongTeam) {
+    const seat = OFFICE_KONG_CENTRAL_SEATS.find(item => item.nativeName === member.name);
+    if (!seat) continue;
+    panelAgents.set(seat.id, { id: seat.id, name: seat.name, role: member.job,
+      description: "Puesto central de KONG. Las señales proceden de la lectura autenticada de KONG Native.",
+      status: statuses[seat.id], kong: true, color: "#a3e635", kongEvidence: centralSignalById.get(seat.id) });
+  }
 
   const trainees: Trainee[] = (company?.trainees || []).filter((trainee) => !trainee.graduatedAt);
   // Specialists the academy created for recurring work (approved by Robert in the Trust Center).
@@ -380,7 +411,7 @@ export function AgentsOfficeWorld({
           Este navegador no pudo abrir la oficina 3D ({failed}). Te muestro el edificio con los mismos datos en vivo.
         </p>
         <button type="button" onClick={() => changeWing("kong")} className="mx-auto mb-4 block rounded-full bg-violet-500 px-5 py-3 font-bold text-white" data-testid="world-kong-wing">Ver oficina KONG</button>
-        <AgentsBuilding agents={agents} kongTeam={kongTeam} legal={legal} selectedAgentId={selectedAgentId} onSelectAgent={onSelectAgent} onSelectKongAgent={onSelectKongAgent} />
+        <AgentsBuilding agents={agents} kongTeam={centralKongTeam} legal={legal} selectedAgentId={selectedAgentId} onSelectAgent={onSelectAgent} onSelectKongAgent={onSelectKongAgent} />
       </div>
     );
   }
@@ -760,13 +791,12 @@ export function AgentsOfficeWorld({
                 </div>
               )}
               {panelAgent.cityAgent && <dl className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-zinc-300" data-testid="world-city-evidence">
-                <div><dt className="text-zinc-500">Ultimo trabajo completado</dt><dd>{formatCityTime(panelAgent.cityAgent.lastWorkAt)}</dd></div>
+                <div><dt className="text-zinc-500">Último resultado registrado</dt><dd>{formatCityTime(panelAgent.cityAgent.lastWorkAt)}</dd></div>
                 <div><dt className="text-zinc-500">Ultimo inicio</dt><dd>{formatCityTime(panelAgent.cityAgent.lastStartedAt)}</dd></div>
                 <div><dt className="text-zinc-500">Proximo trabajo registrado</dt><dd>{formatCityTime(panelAgent.cityAgent.nextWorkAt)}</dd></div>
                 <div className="col-span-2"><dt className="text-zinc-500">Bloqueo / limite actual</dt><dd>{panelAgent.cityAgent.blocker}</dd></div>
                 <div><dt className="text-zinc-500">Auditoria consultada</dt><dd>{formatCityTime(panelAgent.cityAgent.snapshotAt)}</dd></div>
               </dl>}
-              {(panelAgent.cityAgent || (!panelAgent.kong && !pageAgentIds.includes(panelAgent.id))) && <OfficeAgentStatusChat key={panelAgent.id} agent={panelAgent} />}
               {panelCareer && (panelCareer.skills || []).length > 0 && (
                 <div className="mt-2 rounded-lg border border-sky-300/15 bg-sky-500/5 p-2 text-[10px] leading-4 text-zinc-300" data-testid="world-skills">
                   <p className="mb-1 text-[9px] uppercase tracking-[0.18em] text-sky-200">Skills ganadas</p>
@@ -779,6 +809,16 @@ export function AgentsOfficeWorld({
                   </div>
                 </div>
               )}
+              {panelAgent.kongEvidence && <div className="mt-2 rounded-lg border border-lime-300/20 bg-lime-300/5 p-2 text-[11px]" data-testid={`world-kong-native-evidence-${panelAgent.kongEvidence.id}`}>
+                <p className="font-semibold text-lime-100">{panelAgent.kongEvidence.label}</p>
+                <p className="mt-1 text-zinc-300">{panelAgent.kongEvidence.detail}</p>
+                <p className="mt-1">Tarea en curso: {panelAgent.kongEvidence.signal === "current" ? "KONG Native confirma ejecución, pero no detalla la tarea actual." : "No hay tarea actual verificada."}</p>
+                <p>Último resultado: {formatCityTime(panelAgent.kongEvidence.lastRunAt)}</p>
+                <p>Próximo turno: {formatCityTime(panelAgent.kongEvidence.nextRunAt)}</p>
+                <p className="text-zinc-400">La lectura disponible no identifica entregas ni ejecuciones bajo demanda por separado.</p>
+              </div>}
+              {panelAgent.cityAgent && officeCityEvidenceNotice(panelAgent.cityAgent) && <p className="mt-2 text-[10px] text-amber-200" data-testid="world-city-evidence-notice">{officeCityEvidenceNotice(panelAgent.cityAgent)?.label}</p>}
+              {(panelAgent.cityAgent || panelAgent.kong || (!pageAgentIds.includes(panelAgent.id) && !panelAgent.kongEvidence)) && <OfficeAgentStatusChat key={panelAgent.id} agent={panelAgent} />}
               {panelCareer && panelCareer.memory.length > 0 && (
                 <div className="mt-2 rounded-lg border border-violet-300/15 bg-violet-500/5 p-2 text-[10px] leading-4 text-zinc-300" data-testid="world-brain">
                   <p className="mb-1 text-[9px] uppercase tracking-[0.18em] text-violet-200">Cerebro · lo que recuerda</p>
@@ -809,6 +849,17 @@ export function AgentsOfficeWorld({
               </div>}
             </section>
           )}
+
+          {officeWing === "main" && focused.id === "kong" && <section className="mt-4 rounded-xl border border-amber-200/20 bg-amber-300/5 p-3 text-[11px]" data-testid="world-kong-evidence-followup">
+            <p className="font-semibold text-amber-100">Evidencia pendiente para coordinar con KONG Ultimate Native</p>
+            <p className="mt-1 text-zinc-300">La oficina puede consultar señales autenticadas, pero no dispone de un canal de solicitud o mensajería hacia Native.</p>
+            <ul className="mt-2 list-disc space-y-1 pl-4 text-zinc-300">
+              {centralSignals.map(signal => <li key={signal.id}>
+                {signal.name}: {signal.signal === "unverified" ? signal.detail : "confirmar fecha y resultado de entrega; indicar si fue bajo demanda y aportar la tarea actual si sigue ejecutándose."}
+              </li>)}
+            </ul>
+            <p className="mt-2 text-zinc-400">No se envió ninguna solicitud ni se inició una ejecución.</p>
+          </section>}
 
           {proposals.length > 0 && (
             <section className="mt-4">
@@ -859,11 +910,27 @@ function OfficeAgentStatusChat({ agent }: { agent: PanelAgent }) {
     if (!question) return;
     const city = agent.cityAgent;
     const text = question.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+    const notice = city ? officeCityEvidenceNotice(city) : undefined;
     let answer = `${agent.status.label}. ${agent.status.detail ?? ""}`.trim();
-    if (city && /proxim|turno|cuando/.test(text)) answer = city.nextWorkAt ? `Mi próximo turno registrado es ${formatCityTime(city.nextWorkAt)}.` : "KONG no muestra un próximo turno verificable.";
-    else if (city && /ultim|anterior|terminaste/.test(text)) answer = city.lastWorkAt ? `Mi último cierre registrado fue ${formatCityTime(city.lastWorkAt)}. Estado actual: ${agent.status.label}.` : "KONG no muestra un cierre reciente verificable.";
-    else if (city && /tarea|haces|haciendo|funcion/.test(text)) answer = agent.status.state === "working" ? OFFICE_KONG_CITY_TASKS[city.category] + "." : `Mi tarea asignada es: ${OFFICE_KONG_CITY_TASKS[city.category]}. Ahora: ${agent.status.label}.`;
-    else if (!/estado|trabaj|bloque|error|problema|hola/.test(text)) answer = "Puedo responder sobre mi estado registrado, mi tarea y, en KONG, mis turnos. Esta consulta no inicia ni cambia trabajos.";
+    if (city && /fuente|429|limite|l[ií]mite/.test(text) && notice?.kind === "source-limit") answer = `${notice.label}. ${city.blocker}`;
+    else if (city && /cobertura|fuentes/.test(text) && notice?.kind === "coverage") answer = `${notice.label}. ${city.blocker}`;
+    else if (city && /fallo|error|problema/.test(text) && notice?.kind === "failure") answer = `${notice.label}. ${city.blocker}`;
+    else if (city && /proxim|turno|cuando/.test(text)) answer = city.nextWorkAt ? `Mi próximo turno registrado es ${formatCityTime(city.nextWorkAt)}.` : "KONG no muestra un próximo turno verificable.";
+    else if (city && /ultim|anterior|terminaste|resultado|entrega/.test(text)) answer = city.lastWorkAt
+      ? `El último resultado registrado fue ${formatCityTime(city.lastWorkAt)}. ${notice?.label || agent.status.label}.`
+      : "KONG no muestra un resultado reciente verificable.";
+    else if (city && /tarea|haces|haciendo|funcion/.test(text)) answer = agent.status.state === "working" && city.hasDurableEvidence
+      ? `Tarea en curso verificada: ${OFFICE_KONG_CITY_TASKS[city.category]}.`
+      : `Tarea prevista del puesto: ${OFFICE_KONG_CITY_TASKS[city.category]}. KONG no confirma una ejecución actual.`;
+    else if (agent.kongEvidence && /demanda/.test(text)) answer = "La lectura de KONG Native no identifica ejecuciones bajo demanda por separado.";
+    else if (agent.kongEvidence && /proxim|turno|cuando/.test(text)) answer = agent.kongEvidence.nextRunAt
+      ? `Próximo turno informado por KONG Native: ${formatCityTime(agent.kongEvidence.nextRunAt)}.` : "KONG Native no informa un próximo turno verificable.";
+    else if (agent.kongEvidence && /ultim|anterior|resultado|entrega/.test(text)) answer = agent.kongEvidence.lastRunAt
+      ? `KONG Native registra una ejecución el ${formatCityTime(agent.kongEvidence.lastRunAt)}; no confirma que sea una entrega.` : "KONG Native no muestra una última ejecución verificable.";
+    else if (agent.kongEvidence && /tarea|haces|haciendo/.test(text)) answer = agent.kongEvidence.signal === "current"
+      ? "KONG Native confirma una ejecución actual, pero no incluye el detalle de la tarea."
+      : "No hay una tarea actual verificada para este puesto.";
+    else if (!/estado|trabaj|bloque|error|problema|hola/.test(text)) answer = "Puedo responder sobre el estado registrado, el último resultado y el próximo turno. Esta consulta no inicia ni cambia trabajos.";
     setReply({ question, answer });
     setMessage("");
   }}>
