@@ -20,13 +20,13 @@ export function parseKongSupervision(value: unknown): KongSupervision {
   const records = input.records.filter((item): item is SupervisionRecord => Boolean(item) && KONG_WORKERS.includes(item.agentId) && item.task === "review-readiness" && ["completed", "blocked", "failed"].includes(item.result) && typeof item.reason === "string" && typeof item.checkedAt === "string" && Number.isFinite(Date.parse(item.checkedAt))).slice(0, 50);
   return { version: 1, owner: "kong-supervisor", lastRunAt: typeof input.lastRunAt === "string" && Number.isFinite(Date.parse(input.lastRunAt)) ? input.lastRunAt : null, records };
 }
-// Only the video reader exists in this application. Other roles remain blocked
-// until a real adapter is implemented; UI names alone never grant a capability.
+// Only the video reader exists in this application. Other roles remain blocked here
+// until their existing owners are connected; this does not assert they lack an external service.
 export function reviewKongReadiness(previous: KongSupervision, statuses: Record<string, { state: string }>, now: number): KongSupervision {
   const checkedAt = new Date(now).toISOString();
   const records: SupervisionRecord[] = KONG_WORKERS.map((agentId) => {
     const base = { agentId, task: "review-readiness" as const, checkedAt };
-    if (agentId !== "kong-videos") return { ...base, result: "blocked", reason: "Falta un servicio de ejecucion para este rol. No se ha ejecutado una orden." };
+    if (agentId !== "kong-videos") return { ...base, result: "blocked", reason: "Integracion no conectada a este supervisor. No se ha ejecutado una orden ni evaluado al productor externo." };
     const signal = statuses[agentId];
     if (!signal || signal.state === "checking") return { ...base, result: "blocked", reason: "No hay una lectura de estado disponible en este ciclo." };
     if (["error", "offline"].includes(signal.state)) return { ...base, result: "failed", reason: "La lectura de estado del servicio de video no esta disponible." };
