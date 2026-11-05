@@ -426,6 +426,7 @@ export function AgentsOfficeWorld({
                       <span className="truncate font-mono text-zinc-100">{agent.id === deputyId ? "👑 " : ""}{agent.name}{career ? <span className="text-zinc-500"> · {career.nickname}</span> : null}</span>
                       <span className={cn("truncate text-[10px]", STATE_TEXT[agent.status.state])}>{agent.status.label}</span>
                     </div>
+                    <p className="mt-1 text-[10px] text-zinc-400" data-testid={`world-life-${agent.id}`}>Vida: {career ? `${career.battery}%` : "No disponible"}</p>
                     <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/10">
                       <div className={cn("h-full rounded-full", STATE_BAR[agent.status.state], agent.status.state === "working" ? "w-1/2 motion-safe:animate-[world-progress_2.4s_ease-in-out_infinite]" : agent.status.state === "error" ? "w-full" : "w-1/4")} />
                     </div>
@@ -444,6 +445,12 @@ export function AgentsOfficeWorld({
                   <div className="rounded-lg bg-black/40 p-1.5"><p className="text-[9px] uppercase text-zinc-500">Bateria</p><p className={cn("text-sm font-bold", panelCareer.battery > 60 ? "text-emerald-300" : panelCareer.battery > 25 ? "text-amber-200" : "text-rose-300")}>{panelCareer.battery}%</p></div>
                   <div className="rounded-lg bg-black/40 p-1.5"><p className="text-[9px] uppercase text-zinc-500">Puntos</p><p className="text-sm font-bold text-white">{panelCareer.points}</p></div>
                   <div className="rounded-lg bg-black/40 p-1.5"><p className="text-[9px] uppercase text-zinc-500">Confiable</p><p className="text-sm font-bold text-white">{panelRank?.reliability ?? 0}%</p></div>
+                </div>
+              )}
+              {!panelCareer && (
+                <div className="mt-2 rounded-lg bg-black/40 p-2 text-xs text-zinc-400" data-testid="world-career-unavailable">
+                  <p className="font-semibold">Vida: no disponible</p>
+                  <p>Este agente aun no tiene una medicion de bateria. Su estado de actividad se muestra por separado.</p>
                 </div>
               )}
               {panelPersonality && (
