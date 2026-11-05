@@ -10,9 +10,12 @@
 // Trust Center pending actions for proposals. Approving a proposal records a
 // lesson or marks a PR-first brief as ready; it does not change code or skills.
 
+import { reviewKongReadiness } from "@shared/kong-supervisor";
+import { buildBlackRoomOfficeOperations } from "./blackroom-office-operations";
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import { resolveDatabaseConnectionString } from "./database-url";
 import {
   COUNCIL_CYCLE_MS,
   SCOUT_INTERVAL_MS,
@@ -26,6 +29,7 @@ import {
   hasProposal,
   parseCouncilState,
   pruneProposals,
+  safeText,
   toMs,
   runCrossChecks,
   type CouncilProposal,
@@ -33,13 +37,31 @@ import {
   type CouncilSkillDoc,
   type CouncilState,
 } from "@shared/agent-council";
-import { agentProbes, summarizeProbe, type AgentLiveStatus } from "@shared/agent-live-status";
+import { CITY_NEWS_AGENTS, agentProbes, summarizeProbe, type AgentLiveStatus } from "@shared/agent-live-status";
+import {
+  INTEGRATION_LABEL,
+  effectiveIntegrations,
+  integrationFor,
+  parseIntegrationOverrides,
+  unscoredAgentIds,
+  type AgentIntegration,
+} from "@shared/agent-integrations";
 import {
   advanceAcademy,
   advanceCompany,
   completeOrder,
   createOrder,
   enrollTrainee,
+  evidenceAlreadyUsed,
+  learnLessons,
+  specialistNeeds,
+  tailoredModules,
+  SPECIALIST_PREFIX,
+  isSpecialistId,
+  specialistIdFor,
+  specialistTopicLabel,
+  topicSlug,
+  type OrderEvidence,
   leaderboard,
   personalityFor,
   type CurriculumModule,
@@ -59,15 +81,37 @@ export type CouncilDeps = {
   collectStatuses?: (userId: string) => Promise<Record<string, AgentLiveStatus>>;
   // Real documents the academy teaches.
   loadCurriculum?: () => Promise<CurriculumModule[]>;
+  // Which agents are paused / external / not built (never scored). Defaults to the shared table + env overrides.
+  integrations?: () => Record<string, AgentIntegration>;
+  // Deadline for the round's reads (tests use a short one). Defaults to 90 s.
+  collectTimeoutMs?: number;
+  // Reads one automation run of the user (read-only), to verify order evidence.
+  verifyRun?: (userId: string, runId: string) => Promise<{ id: string; status: string; summary: string | null; at: string | null } | null>;
+  // Shared, versioned storage (production database). When present it replaces readState/writeState:
+  // every change re-reads the latest revision and a concurrent writer causes a retry, never an overwrite.
+  versioned?: {
+    read: () => Promise<{ raw: string | null; revision: number | null }>;
+    write: (raw: string, expectedRevision: number | null) => Promise<number>;
+  };
 };
+
+export class CouncilStateConflict extends Error {}
+export class OrderEvidenceError extends Error {}
+
+// Another instance (Autoscale) that ran a round this recently already did the work.
+export const MIN_CYCLE_GAP_MS = 10 * 60_000;
+const SKIP = Symbol("skip");
 
 export const KONG_TEAM = ["KONG AI", "Promoters + Mesas", "Venues", "Kong Legal"];
 const KONG_IDS = KONG_TEAM.map((name) => `kong:${name}`);
+// Always unscored, whatever the overrides say: they have no work of their own to measure.
 const EXEMPT_IDS = [...KONG_IDS, "mechanic"];
 // Order routing only trusts live states from a recent council cycle.
 const STATUS_FRESH_MS = 45 * 60_000;
 
 export const AGENT_NAMES: Record<string, string> = {
+  "kong-metrics": "Metricas KONG",
+  ...Object.fromEntries(CITY_NEWS_AGENTS.map((agent) => [agent.id, agent.name])),
   assistant: "Asistente",
   ceo: "CEO",
   revenue: "Revenue",
@@ -133,30 +177,108 @@ function withTimeout<T>(work: Promise<T>, ms: number, label: string): Promise<T>
   return Promise.race([work, timeout]).finally(() => clearTimeout(timer));
 }
 const DB_TIMEOUT_MS = 10_000;
+// Every read of another agent's data has a deadline: one slow or hung source (a remote device,
+// GitHub, a market API) must never freeze the council. Production stopped at round 44 because a
+// read without a deadline kept the round "running" forever, so no later round could start.
+export const READ_TIMEOUT_MS = 20_000;
+const COLLECT_TIMEOUT_MS = 90_000;
+const CURRICULUM_TIMEOUT_MS = 30_000;
+// Last resort: a round that has not finished after this long no longer blocks the next one.
+export const CYCLE_WATCHDOG_MS = 5 * 60_000;
 
-function advanceCompanyCycle(state: CouncilState, statuses: Record<string, AgentLiveStatus>, curriculum: CurriculumModule[], now: number): CouncilState {
+function advanceCompanyCycle(
+  state: CouncilState,
+  statuses: Record<string, AgentLiveStatus>,
+  curriculum: CurriculumModule[],
+  now: number,
+  integrations: Record<string, AgentIntegration> = {}
+): CouncilState {
+  const unscored = new Set([...EXEMPT_IDS, ...unscoredAgentIds(integrations)]);
   const compact = Object.fromEntries(Object.entries(statuses).map(([id, status]) => [id, { state: status.state, label: status.label }]));
-  let company = advanceCompany(state.company, { now, statuses: compact, roles: AGENT_NAMES, exempt: EXEMPT_IDS }).state;
-  // Approved hires (agent factory) start in the academy.
+  let company = advanceCompany(state.company, { now, statuses: compact, roles: AGENT_NAMES, exempt: [...unscored] }).state;
+  // Orders routed to a paused/external agent are blocked with the honest reason, never "assigned".
+  for (const id of unscored) {
+    const integration = integrationFor(id, integrations);
+    if (integration.mode !== "activa" && compact[id]) compact[id] = { state: "offline", label: `${INTEGRATION_LABEL[integration.mode]}: ${integration.reason}` };
+  }
+  // Approved hires (agent factory) start in the academy. A specialist becomes a new agent.
   for (const proposal of state.proposals) {
     if (proposal.kind !== "new_agent" || proposal.status !== "applied") continue;
-    const forAgentId = proposal.key.replace(/^new_agent:helper-/, "");
+    const specialist = proposal.key.match(/^new_agent:specialist-(.+)$/);
+    const forAgentId = specialist ? specialistIdFor(specialist[1]) : proposal.key.replace(/^new_agent:helper-/, "");
     company = enrollTrainee(company, { id: proposal.key, forAgentId, role: proposal.title.replace(/^Contratar /, ""), now });
   }
+  // Skills from the lessons Robert approved about each agent.
+  company = learnLessons(company, state.lessons, now);
   // If the docs can't be read this cycle, the academy still advances on the core rules so nobody
-  // stays in training forever.
+  // stays in training forever. Each trainee first studies its own job (why it failed, its orders,
+  // its lessons), then the general docs.
   const modules = curriculum.length ? curriculum : [{ id: "core-rules", title: "Reglas basicas", summary: "PR-first, QA antes de publicar, nada de gasto sin aprobacion de Robert." }];
-  company = advanceAcademy(company, () => modules, now);
+  const academyBase = company;
+  company = advanceAcademy(
+    company,
+    (trainee) => [
+      ...tailoredModules(academyBase, trainee.forAgentId, {
+        status: compact[trainee.forAgentId],
+        lessons: state.lessons,
+        topic: isSpecialistId(trainee.forAgentId) ? trainee.forAgentId.slice(SPECIALIST_PREFIX.length) : undefined,
+      }),
+      ...modules,
+    ],
+    now
+  );
   return { ...state, company, lastStatuses: compact };
+}
+
+// Agent factory: recurring work nobody could take becomes a "hire a specialist" proposal for Robert.
+const MAX_OPEN_SPECIALIST_PROPOSALS = 2;
+function deriveSpecialistProposals(state: CouncilState, now: number): CouncilProposal[] {
+  const iso = new Date(now).toISOString();
+  const open = state.proposals.filter((proposal) => proposal.key.startsWith("new_agent:specialist-") && !["applied", "rejected"].includes(proposal.status)).length;
+  const created: CouncilProposal[] = [];
+  for (const need of specialistNeeds(state.company, now)) {
+    if (open + created.length >= MAX_OPEN_SPECIALIST_PROPOSALS) break;
+    const key = `new_agent:specialist-${topicSlug(need.topic)}`;
+    // Never twice: not while a proposal exists, not once the specialist exists, not while one is training.
+    if (
+      state.proposals.some((proposal) => proposal.key === key) ||
+      state.company.careers[specialistIdFor(need.topic)] ||
+      state.company.trainees.some((trainee) => trainee.forAgentId === specialistIdFor(need.topic))
+    ) continue;
+    created.push({
+      key,
+      kind: "new_agent",
+      owner: "agent-factory",
+      title: `Contratar Especialista en ${need.topic}`,
+      description: `${need.orders.length} ordenes sobre "${need.topic}" en 14 dias quedaron sin nadie que pudiera tomarlas. Propongo un especialista que estudie esas ordenes en la academia y las reciba despues.`,
+      evidence: need.orders.slice(0, 5).map((order) => `${order.createdAt.slice(0, 10)}: ${safeText(order.text).slice(0, 120)}`),
+      handoffBrief: `Si apruebas, entra a la academia: estudia estas ordenes y las reglas de la empresa, se gradua como agente nuevo con esas skills y recibe las ordenes de "${need.topic}". Sus puntos solo cuentan con evidencia. Costo: $0.`,
+      createdAt: iso,
+      status: "pending_submit",
+    });
+  }
+  return created;
 }
 
 export function createAgentCouncil(deps: CouncilDeps) {
   let cached: CouncilState | null = null;
   let queue: Promise<unknown> = Promise.resolve();
   let running: Promise<CouncilState> | null = null;
+  let runningSince = 0;
   let scouting: Promise<void> | null = null;
+  const integrationsNow = () => (deps.integrations ? deps.integrations() : effectiveIntegrations(parseIntegrationOverrides(process.env.AGENT_INTEGRATION_OVERRIDES)));
 
   async function load(): Promise<CouncilState> {
+    if (deps.versioned) {
+      // Shared storage: always the latest state, whichever instance wrote it.
+      try {
+        cached = parseCouncilState((await deps.versioned.read()).raw);
+      } catch (error) {
+        deps.log(`agent council state read failed: ${error instanceof Error ? error.message : String(error)}`);
+        if (!cached) throw error;
+      }
+      return cached;
+    }
     if (cached) return cached;
     cached = parseCouncilState(await deps.readState().catch(() => null));
     return cached;
@@ -164,73 +286,137 @@ export function createAgentCouncil(deps: CouncilDeps) {
 
   // Every state change goes through this queue and starts from the latest state,
   // so the 15-minute cycle, the daily scout and Trust Center approvals never overwrite each other.
-  function mutate(change: (state: CouncilState) => Promise<CouncilState> | CouncilState): Promise<CouncilState> {
+  // With shared storage the write is conditional on the revision that was read; if another instance
+  // wrote in between, the change is re-applied on top of its state (up to 3 times).
+  function mutate(change: (state: CouncilState) => Promise<CouncilState | typeof SKIP> | CouncilState | typeof SKIP): Promise<CouncilState> {
     const job = queue.then(async () => {
-      const next = await change(await load());
-      cached = next;
-      await deps.writeState(JSON.stringify(next, null, 2));
-      return next;
+      if (!deps.versioned) {
+        const current = await load();
+        const next = await change(current);
+        if (next === SKIP) return current;
+        cached = next;
+        await deps.writeState(JSON.stringify(next, null, 2));
+        return next;
+      }
+      for (let attempt = 0; ; attempt++) {
+        const { raw, revision } = await deps.versioned.read();
+        const current = parseCouncilState(raw);
+        const next = await change(current);
+        if (next === SKIP) { cached = current; return current; }
+        try {
+          await deps.versioned.write(JSON.stringify(next), revision);
+          cached = next;
+          return next;
+        } catch (error) {
+          if (!(error instanceof CouncilStateConflict) || attempt >= 2) throw error;
+        }
+      }
     });
     queue = job.catch(() => undefined);
     return job;
   }
 
-  async function syncProposals(state: CouncilState, userId: string): Promise<CouncilState> {
+  // Talks to the Trust Center for a snapshot of the proposals, WITHOUT holding the state lock:
+  // creates approval requests for new proposals and reads the status of submitted ones.
+  // Returns per-key patches that are merged into the latest state afterwards (mergeProposalSync).
+  type ProposalPatch = { expect: "unsubmitted" | { pendingActionId: string }; patch: Partial<CouncilProposal> };
+  async function syncProposalsNetwork(snapshot: CouncilState, userId: string): Promise<Map<string, ProposalPatch>> {
     const iso = new Date(deps.now()).toISOString();
-    const proposals: CouncilProposal[] = [];
-    for (const proposal of state.proposals) {
+    const patches = new Map<string, ProposalPatch>();
+    for (const proposal of snapshot.proposals) {
       if (proposal.status === "pending_submit" || proposal.status === "not_submitted") {
         try {
           const id = await withTimeout(deps.submitProposal(userId, proposal), DB_TIMEOUT_MS, "Trust Center");
-          proposals.push({ ...proposal, status: "submitted", pendingActionId: id, note: "En el Trust Center esperando tu aprobacion." });
+          patches.set(proposal.key, { expect: "unsubmitted", patch: { status: "submitted", pendingActionId: id, note: "En el Trust Center esperando tu aprobacion." } });
         } catch (error) {
-          proposals.push({ ...proposal, status: "not_submitted", note: `No se pudo enviar al Trust Center: ${error instanceof Error ? error.message : String(error)}` });
+          patches.set(proposal.key, { expect: "unsubmitted", patch: { status: "not_submitted", note: `No se pudo enviar al Trust Center: ${error instanceof Error ? error.message : String(error)}` } });
         }
         continue;
       }
       if (proposal.status === "submitted" && proposal.pendingActionId) {
         const status = await withTimeout(deps.getPendingActionStatus(proposal.pendingActionId), DB_TIMEOUT_MS, "Trust Center").catch(() => null);
+        const expect = { pendingActionId: proposal.pendingActionId };
         if (status === "rejected" || status === "expired" || status === "cancelled") {
-          proposals.push({ ...proposal, status: "rejected", closedAt: iso, note: status === "rejected" ? "Rechazada en el Trust Center." : `Cerrada en el Trust Center (${status}).` });
-          continue;
-        }
-        if (status === "failed") {
-          proposals.push({ ...proposal, status: "rejected", closedAt: iso, note: "La ejecucion fallo en el Trust Center; se puede volver a proponer en 30 dias." });
-          continue;
-        }
-        if (status === "approved" || status === "executing" || status === "executed" || status === "completed") {
-          proposals.push({ ...proposal, status: "approved" });
-          continue;
+          patches.set(proposal.key, { expect, patch: { status: "rejected", closedAt: iso, note: status === "rejected" ? "Rechazada en el Trust Center." : `Cerrada en el Trust Center (${status}).` } });
+        } else if (status === "failed") {
+          patches.set(proposal.key, { expect, patch: { status: "rejected", closedAt: iso, note: "La ejecucion fallo en el Trust Center; se puede volver a proponer en 30 dias." } });
+        } else if (status === "approved" || status === "executing" || status === "executed" || status === "completed") {
+          patches.set(proposal.key, { expect, patch: { status: "approved" } });
         }
       }
-      proposals.push(proposal);
     }
-    let next: CouncilState = { ...state, proposals };
+    return patches;
+  }
+
+  // Applies the Trust Center results to the LATEST state. A patch only lands if the proposal is still
+  // in the state it was read in, so a result never overwrites what another instance already recorded.
+  function mergeProposalSync(fresh: CouncilState, patches: Map<string, ProposalPatch>): CouncilState {
+    let changed = false;
+    const proposals = fresh.proposals.map((proposal) => {
+      const entry = patches.get(proposal.key);
+      if (!entry) return proposal;
+      const matches = entry.expect === "unsubmitted"
+        ? (proposal.status === "pending_submit" || proposal.status === "not_submitted") && !proposal.pendingActionId
+        : proposal.status === "submitted" && proposal.pendingActionId === entry.expect.pendingActionId;
+      if (!matches) return proposal;
+      changed = true;
+      return { ...proposal, ...entry.patch };
+    });
+    if (!changed) return fresh;
+    let next: CouncilState = { ...fresh, proposals };
     for (const proposal of proposals) {
       if (proposal.status === "approved") next = applyApprovedProposal(next, proposal.key, deps.now());
     }
     return next;
   }
 
-  async function runCycleOnce(): Promise<CouncilState> {
+  async function syncProposals(state: CouncilState, userId: string): Promise<CouncilState> {
+    const patches = await syncProposalsNetwork(state, userId);
+    if (!patches.size) return state;
+    return mutate((fresh) => mergeProposalSync(fresh, patches));
+  }
+
+  async function runCycleOnce(force: boolean): Promise<CouncilState> {
     const userId = deps.userId();
+    const recent = (state: CouncilState) => !force && Boolean(state.lastCycleAt) && deps.now() - toMs(state.lastCycleAt) < MIN_CYCLE_GAP_MS;
     try {
+      // Another instance already ran this round: skip the reads too.
+      const before = await load();
+      if (recent(before)) return before;
       // Slow reads happen outside the queue; the state change itself is serialized.
-      const collected = await deps.collect(userId);
-      const everyone = deps.collectStatuses ? await deps.collectStatuses(userId).catch(() => ({} as Record<string, AgentLiveStatus>)) : {};
-      const curriculum = deps.loadCurriculum ? await deps.loadCurriculum().catch(() => [] as CurriculumModule[]) : [];
-      return await mutate(async (state) => {
+      const collectTimeout = deps.collectTimeoutMs ?? COLLECT_TIMEOUT_MS;
+      const collected = await withTimeout(deps.collect(userId), collectTimeout, "lectura de senales");
+      const everyone = deps.collectStatuses
+        ? await withTimeout(deps.collectStatuses(userId), collectTimeout, "estado de los agentes").catch(() => ({} as Record<string, AgentLiveStatus>))
+        : {};
+      const curriculum = deps.loadCurriculum
+        ? await withTimeout(deps.loadCurriculum(), CURRICULUM_TIMEOUT_MS, "academia").catch(() => [] as CurriculumModule[])
+        : [];
+      let wroteRound = false;
+      const written = await mutate(async (state) => {
+        wroteRound = false;
+        if (recent(state)) return SKIP;
         const now = deps.now();
         const signals: CouncilSignals = { ...collected, now };
         const findings = runCrossChecks(signals);
         const statuses: Record<string, AgentLiveStatus> = { ...everyone, ...statusesFromSignals(signals) };
-        // Kong guides and the Mechanic have no endpoint of their own: they never earn or lose
-        // points, never get hiring/repair proposals, and are only reported (honestly) to the UI.
-        let next = finishCycle(state, { findings, statuses, now, agentNames: AGENT_NAMES });
-        next = advanceCompanyCycle(next, statuses, curriculum, now);
-        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, statuses, now, AGENT_NAMES, EXEMPT_IDS), ...next.proposals]) };
-        return syncProposals(next, userId);
+        // Paused, external or not-built agents (KONG guides, the external KONG publisher, a paused
+        // BlackRoom lane, the Mechanic) never earn or lose points and never get hiring/repair proposals.
+        const integrations = integrationsNow();
+        const unscored = [...EXEMPT_IDS, ...unscoredAgentIds(integrations)];
+        const scored = Object.fromEntries(Object.entries(statuses).filter(([id]) => !unscored.includes(id)));
+        let next = finishCycle(state, { findings, statuses: scored, now, agentNames: AGENT_NAMES });
+        next = advanceCompanyCycle(next, statuses, curriculum, now, integrations);
+        // This completes only a read-only readiness review, never the worker's commercial task.
+        next = { ...next, kongSupervision: reviewKongReadiness(state.kongSupervision, everyone, now) };
+        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, statuses, now, AGENT_NAMES, unscored), ...deriveSpecialistProposals(next, now), ...next.proposals]) };
+        wroteRound = true;
+        return next;
       });
+      // Only the instance whose round was actually written talks to the Trust Center, and only after
+      // the write: a retried or skipped round never creates approval requests (no duplicates).
+      if (!wroteRound) return written;
+      return await syncProposals(written, userId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       deps.log(`agent council cycle failed: ${message}`);
@@ -239,8 +425,23 @@ export function createAgentCouncil(deps: CouncilDeps) {
   }
 
   // Overlapping triggers (scheduler + manual button) share one run instead of duplicating work.
-  function runCycle(): Promise<CouncilState> {
-    if (!running) running = runCycleOnce().finally(() => { running = null; });
+  // force: the manual button (already rate limited) runs even if a round just happened.
+  function runCycle(options: { force?: boolean } = {}): Promise<CouncilState> {
+    let force = Boolean(options.force);
+    if (running && deps.now() - runningSince > CYCLE_WATCHDOG_MS) {
+      deps.log(`agent council round stuck for more than ${CYCLE_WATCHDOG_MS / 60_000} min; starting a new one`);
+      running = null;
+      // The stuck round may still finish: the new one is never forced, so it respects the
+      // "a round just happened" check and the two never both submit to the Trust Center.
+      force = false;
+    }
+    if (!running) {
+      runningSince = deps.now();
+      const current: Promise<CouncilState> = runCycleOnce(force).finally(() => {
+        if (running === current) running = null;
+      });
+      running = current;
+    }
     return running;
   }
 
@@ -295,24 +496,43 @@ export function createAgentCouncil(deps: CouncilDeps) {
       const fresh = state.lastCycleAt && now - toMs(state.lastCycleAt) < STATUS_FRESH_MS && !state.lastCycleError;
       const statuses: Record<string, { state: AgentLiveStatus["state"]; label: string }> = fresh ? { ...state.lastStatuses } : {};
       if (fresh) statuses.mechanic = { state: "working", label: "Reviso a todos en el ultimo consejo" };
-      const result = createOrder(state.company, { text, now, statuses, available, names: AGENT_NAMES });
+      const specialistNames = Object.fromEntries(
+        Object.keys(state.company.careers).filter(isSpecialistId).map((id) => [id, `Especialista en ${specialistTopicLabel(id)}`])
+      );
+      const result = createOrder(state.company, { text, now, statuses, available, names: { ...AGENT_NAMES, ...specialistNames } });
       return { ...state, company: result.state };
     });
   }
 
-  function finishOrder(orderId: string) {
+  // evidenceRunId: an automation run of this user that finished with "success". Verified here,
+  // never trusted from the client; one run can close only one order.
+  async function finishOrder(orderId: string, evidenceRunId?: string, requesterId?: string) {
+    let evidence: OrderEvidence | undefined;
+    if (evidenceRunId) {
+      if (!deps.verifyRun) throw new OrderEvidenceError("No se puede verificar la evidencia en este servidor.");
+      const run = await withTimeout(deps.verifyRun(requesterId || deps.userId(), evidenceRunId), DB_TIMEOUT_MS, "evidencia");
+      if (!run) throw new OrderEvidenceError("Esa ejecucion no existe o no es tuya.");
+      if (run.status !== "success") throw new OrderEvidenceError(`Esa ejecucion termino en "${run.status}", no en exito.`);
+      evidence = { ref: `automation_run:${run.id}`, source: "automation_run", summary: run.summary || "Ejecucion exitosa", at: run.at || new Date(deps.now()).toISOString() };
+    }
     return mutate((state) => {
       if (!state.company.orders.some((order) => order.id === orderId)) throw new Error("Orden no encontrada");
-      return { ...state, company: completeOrder(state.company, orderId, deps.now()) };
+      if (evidence && evidenceAlreadyUsed(state.company, evidence.ref)) throw new OrderEvidenceError("Esa ejecucion ya cerro otra orden.");
+      return { ...state, company: completeOrder(state.company, orderId, deps.now(), evidence) };
     });
   }
 
   async function view() {
-    const state = await load();
+    const loaded = await load();
+    // The KONG conversation is owner-only (served by /api/kong-supervisor/state with an owner check).
+    // This view is readable by any signed-in user, so it only carries the readiness records.
+    const { messages: _privateMessages, ...kongSupervisionPublic } = loaded.kongSupervision;
+    const state = { ...loaded, kongSupervision: kongSupervisionPublic };
     const personalities = Object.fromEntries(Object.values(state.company.careers).map((career) => [career.agentId, personalityFor(career.agentId, career.generation)]));
     return {
       ...state,
-      leaderboard: leaderboard(state.company, ["ceo", ...EXEMPT_IDS]),
+      leaderboard: leaderboard(state.company, ["ceo", ...EXEMPT_IDS, ...unscoredAgentIds(integrationsNow())]),
+      integrations: integrationsNow(),
       personalities,
       overrides: applyLessons(state.debates, state.lessons),
       nextCycleInMs: state.lastCycleAt ? Math.max(0, Date.parse(state.lastCycleAt) + COUNCIL_CYCLE_MS - deps.now()) : 0,
@@ -321,7 +541,18 @@ export function createAgentCouncil(deps: CouncilDeps) {
     };
   }
 
-  return { runCycle, runScout, approveFromTrustCenter, view, load, placeOrder, finishOrder };
+  // KONG supervisor (PR #315): its conversation and read-only reviews are committed through the same
+  // serialized, revision-checked mutate as everything else. The change may be replayed on a conflict.
+  async function updateKongSupervision(change: (current: CouncilState["kongSupervision"]) => Promise<CouncilState["kongSupervision"]>) {
+    const state = await mutate(async (current) => ({ ...current, kongSupervision: await change(current.kongSupervision) }));
+    return state.kongSupervision;
+  }
+
+  async function readKongSupervision() {
+    return (await load()).kongSupervision;
+  }
+
+  return { runCycle, runScout, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {
@@ -411,7 +642,7 @@ export async function readSkillDocs(root = process.cwd()): Promise<{ skills: Cou
 async function collectReal(userId: string): Promise<Omit<CouncilSignals, "now">> {
   const safe = async <T,>(label: string, work: () => Promise<T> | T): Promise<T | undefined> => {
     try {
-      return await work();
+      return await withTimeout(Promise.resolve().then(work), READ_TIMEOUT_MS, label);
     } catch (error) {
       console.warn(`[agent-council] ${label} unavailable:`, error instanceof Error ? error.message : error);
       return undefined;
@@ -462,7 +693,7 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
   };
   const read = async (agentIds: string[], work: () => Promise<unknown>) => {
     try {
-      const body = await work();
+      const body = await withTimeout(Promise.resolve().then(work), READ_TIMEOUT_MS, agentIds.join(", "));
       agentIds.forEach((agentId) => summarize(agentId, body));
     } catch (error) {
       const detail = error instanceof Error ? error.message.slice(0, 120) : "sin detalle";
@@ -499,8 +730,9 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
     read(["portfolio"], () => cachedSlowRead(`portfolio:${userId}`, async () => (await import("./portfolio-agent")).getPortfolioSummary(userId))),
     read(["radio"], async () => (await import("./radio-agent")).getRadioSlotsForMonth(userId)),
     read(["legal"], () => cachedSlowRead(`legal:${userId}`, async () => (await import("./legal-compliance-agent")).runLegalComplianceReports(userId))),
-    read(["news"], async () => (await import("./clippers-local-news-agent")).getClipperLocalNewsStatus()),
+    read(["news", ...CITY_NEWS_AGENTS.map((agent) => agent.id)], async () => (await import("./clippers-local-news-agent")).getClipperLocalNewsStatus()),
     read(["kong-videos"], async () => (await import("./promo-video-agent")).getPromoVideoStatus(userId)),
+    read(["kong-metrics"], async () => (await import("./kong-operations")).getKongOperations().view()),
     read(["blackroom-videos"], async () => {
       const remoteModule = await import("./blackroom-remote-control");
       const routesModule = await import("./blackroom-control-routes");
@@ -508,7 +740,7 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
       const remoteQueue = (remote as unknown as { device?: { queue?: Record<string, unknown> } }).device?.queue;
       const online = remoteModule.isBlackRoomRemoteDeviceOnline(remote);
       const local = await routesModule.readBlackRoomPanelQueue(remoteQueue as never);
-      return { agent: routesModule.resolveBlackRoomPanelAgent(local, remoteQueue as never, online), remote: { online } };
+      return { agent: routesModule.resolveBlackRoomPanelAgent(local, remoteQueue as never, online), remote: { online }, operations: buildBlackRoomOfficeOperations(remote) };
     }),
   ]);
   return statuses;
@@ -560,6 +792,54 @@ async function fetchLatestReleaseReal(repo: string) {
 
 let council: ReturnType<typeof createAgentCouncil> | null = null;
 
+// In production the state lives in Postgres (existing revenue_engine_state table, its own owner key,
+// so no migration): every Autoscale instance sees the same careers, orders and proposals.
+// Locally without DATABASE_URL it stays in the git-ignored file.
+const STATE_OWNER = "agent-council";
+const STATE_KIND = "council_state";
+
+function databaseStateStore(): CouncilDeps["versioned"] {
+  let hasDatabase = false;
+  try {
+    hasDatabase = Boolean(resolveDatabaseConnectionString());
+  } catch {
+    hasDatabase = false;
+  }
+  if (!hasDatabase) return undefined;
+  const adapter = async () => {
+    const [{ db }, { createDrizzleRevenueEngineStateAdapter }] = await Promise.all([import("./db"), import("./revenue-engine-state-store")]);
+    return createDrizzleRevenueEngineStateAdapter(db);
+  };
+  return {
+    async read() {
+      const rows = await withTimeout((await adapter()).loadCollections(STATE_OWNER), DB_TIMEOUT_MS, "estado del consejo");
+      const row = rows.find((item) => item.kind === STATE_KIND);
+      if (row) return { raw: JSON.stringify(row.data), revision: row.revision };
+      // First run on the database: carry over the file state of this instance, if any.
+      return { raw: await readFile(STATE_FILE, "utf8").catch(() => null), revision: null };
+    },
+    async write(raw, expectedRevision) {
+      try {
+        const row = await withTimeout(
+          (await adapter()).upsertCollection({
+            ownerUserId: STATE_OWNER,
+            kind: STATE_KIND,
+            data: JSON.parse(raw),
+            ...(expectedRevision === null ? {} : { expectedRevision }),
+            updatedAt: new Date(),
+          }),
+          DB_TIMEOUT_MS,
+          "estado del consejo"
+        );
+        return row.revision;
+      } catch (error) {
+        if (error instanceof Error && /state conflict/i.test(error.message)) throw new CouncilStateConflict(error.message);
+        throw error;
+      }
+    },
+  };
+}
+
 export function getAgentCouncil() {
   if (council) return council;
   council = createAgentCouncil({
@@ -567,8 +847,24 @@ export function getAgentCouncil() {
     userId: systemUserId,
     readState: () => readFile(STATE_FILE, "utf8").catch(() => null),
     writeState: writeStateAtomic,
+    versioned: databaseStateStore(),
+    verifyRun: async (userId, runId) => {
+      const [{ db }, { automationRuns }, { and, eq }] = await Promise.all([import("./db"), import("@shared/schema"), import("drizzle-orm")]);
+      const [run] = await db.select().from(automationRuns).where(and(eq(automationRuns.id, runId), eq(automationRuns.ownerUserId, userId))).limit(1);
+      if (!run) return null;
+      const at = run.finishedAt || run.startedAt;
+      return { id: run.id, status: run.status, summary: run.resultSummary, at: at ? new Date(at).toISOString() : null };
+    },
     collect: collectReal,
     submitProposal: async (userId, proposal) => {
+      // Never two open approval requests for the same proposal: reuse the pending one if it exists.
+      const [{ db }, { pendingActions }, { and, eq, inArray }] = await Promise.all([import("./db"), import("@shared/schema"), import("drizzle-orm")]);
+      const [existing] = await db
+        .select({ id: pendingActions.id })
+        .from(pendingActions)
+        .where(and(eq(pendingActions.userId, userId), eq(pendingActions.resourceType, "agent_council_proposal"), eq(pendingActions.resourceId, proposal.key), inArray(pendingActions.status, ["draft", "pending", "edited", "snoozed"])))
+        .limit(1);
+      if (existing) return existing.id;
       const { createPendingActionForApproval } = await import("./trust-policy");
       const action = await createPendingActionForApproval({
         userId,

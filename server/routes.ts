@@ -33,6 +33,8 @@ import { buildCeoOperationalHealth } from "./ceo-operational-health";
 import { registerTelegramRoutes } from "./telegram-routes";
 import { registerRevenueStripeRoutes } from "./revenue-stripe-routes";
 import { registerAgentCouncilRoutes } from "./agent-council-routes";
+import { registerKongOperationsRoutes } from "./kong-operations-routes";
+import { getKongOperations } from "./kong-operations";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
 import { ensureAppDriveStructure } from "./google-drive";
@@ -845,6 +847,17 @@ export async function registerRoutes(
   registerTelegramRoutes(app);
   registerRevenueStripeRoutes(app);
   registerAgentCouncilRoutes(app);
+  // KONG operations (cards -> Videos KONG, single publisher lease, UUID ledger, metrics). Owner-only.
+  registerKongOperationsRoutes(app, getKongOperations(), {
+    requestUserId: (req) => {
+      try {
+        return getCurrentUserId(req);
+      } catch {
+        return null;
+      }
+    },
+    ownerUserId: () => getSystemUserId(),
+  });
 
   // GET all tasks
   app.get("/api/tasks", async (req, res) => {

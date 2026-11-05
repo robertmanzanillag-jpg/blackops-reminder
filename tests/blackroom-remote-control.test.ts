@@ -154,11 +154,13 @@ test("BlackRoom shared controls accept only the configured owner", async () => {
   assert.equal(await isConfiguredSingleUserOwner(DEFAULT_DEV_USER_ID), true);
   assert.equal(await isConfiguredSingleUserOwner("not-the-owner"), false);
   const request = (userId: string) => ({
+    user: { id: userId },
     headers: {},
     header: (name: string) => name.toLowerCase() === "x-user-id" ? userId : undefined,
   }) as any;
   assert.equal(await hasBlackRoomChatAccess(request(DEFAULT_DEV_USER_ID)), true);
   assert.equal(await hasBlackRoomChatAccess(request("not-the-owner")), false);
+  await assert.rejects(hasBlackRoomChatAccess({ headers: {}, header: () => DEFAULT_DEV_USER_ID } as any), /Authentication required/);
 });
 
 test("chat command is persisted and advances the remote generation", () => {

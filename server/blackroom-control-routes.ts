@@ -1,4 +1,5 @@
 import { type Express, type Request, type Response } from "express";
+import { buildBlackRoomOfficeOperations } from "./blackroom-office-operations";
 import { blackRoomLearningPanelHtml, blackRoomLearningPanelScript } from "./blackroom-learning-panel";
 import { canonicalLearningPostId } from "./blackroom-verified-learning";
 import { randomUUID, timingSafeEqual } from "node:crypto";
@@ -353,7 +354,7 @@ export function registerBlackRoomControlRoutes(app: Express): void {
       const remote = await readBlackRoomRemoteControl();
       const remoteQueue = remote.device?.queue as Record<string, any> | undefined;
       const localQueue = await readBlackRoomPanelQueue(remoteQueue);
-      res.json({ agent: resolveBlackRoomPanelAgent(localQueue, remoteQueue, isBlackRoomRemoteDeviceOnline(remote)), remote: remoteView(remote) });
+      res.json({ agent: resolveBlackRoomPanelAgent(localQueue, remoteQueue, isBlackRoomRemoteDeviceOnline(remote)), remote: remoteView(remote), operations: buildBlackRoomOfficeOperations(remote) });
     }
     catch (error: any) { res.status(500).json({ error: error.message || "Failed to read BlackRoom agent" }); }
   });

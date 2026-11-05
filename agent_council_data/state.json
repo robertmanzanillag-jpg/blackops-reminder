@@ -1,0 +1,751 @@
+{
+  "version": 1,
+  "cycles": 66,
+  "lastCycleAt": "2026-11-05T22:53:43.946Z",
+  "lastCycleError": null,
+  "debates": [
+    {
+      "ruleId": "automations-failed-runs",
+      "reviewer": "ceo",
+      "subject": "automations",
+      "severity": "medium",
+      "topic": "Automatizaciones con corridas fallidas",
+      "claim": "4 corrida(s) fallaron en las ultimas 24 h.",
+      "evidence": [
+        "0b1adfb4-96de-4005-b5cf-e7db429c030c: Google connector not connected",
+        "d232164f-0f16-4420-a19a-4746b96c7e4c: [redactado]",
+        "d232164f-0f16-4420-a19a-4746b96c7e4c: [redactado]"
+      ],
+      "defense": "Autos registra el error en cada corrida.",
+      "subjectSaysWorking": false,
+      "verdict": "confirmado",
+      "rationale": "El propio agente ya reporta el problema; el CEO confirma y lo deja en su cola.",
+      "key": "automations-failed-runs|automations",
+      "firstSeen": "2026-11-04T23:13:56.868Z",
+      "lastSeen": "2026-11-05T22:53:43.946Z",
+      "streak": 66
+    },
+    {
+      "ruleId": "skills-truncated",
+      "reviewer": "claude-reviewer",
+      "subject": "skills-scout",
+      "severity": "medium",
+      "topic": "5 skill(s) se cortan en el chat de BlackOps",
+      "claim": "El puente de skills del chat (web y Telegram) recibe estas skills recortadas al limite de 900 caracteres; en Claude Code se leen completas.",
+      "evidence": [
+        ".claude/skills/design-creative/SKILL.md: se recorta",
+        ".claude/skills/marketing-autopilot/SKILL.md: se recorta",
+        ".claude/skills/pr-first-fix/SKILL.md: se recorta",
+        ".claude/skills/review-pr/SKILL.md: se recorta",
+        ".claude/skills/skill-scout/SKILL.md: se recorta"
+      ],
+      "defense": "Las skills se escribieron para Claude Code, donde no hay recorte.",
+      "subjectSaysWorking": true,
+      "verdict": "escalado",
+      "rationale": "El agente dice que todo va bien pero su par encontro evidencia en contra: el CEO lo escala a Robert.",
+      "key": "skills-truncated|skills-scout",
+      "firstSeen": "2026-11-04T23:13:56.868Z",
+      "lastSeen": "2026-11-05T22:53:43.946Z",
+      "streak": 66
+    }
+  ],
+  "resolvedDebates": [],
+  "proposals": [
+    {
+      "key": "repair:kong-videos#2026-11-05",
+      "kind": "repair",
+      "owner": "mechanic",
+      "title": "Reparar a Videos Kong",
+      "description": "El Mecanico detecto que Videos Kong (Dani) no esta trabajando y se esta quedando sin bateria. Si apruebas, queda listo el brief para repararlo.",
+      "evidence": [
+        "Estado: Sin videos editados",
+        "Agrega videos fuente para que edite los de Kong.",
+        "Bateria 28% · 0 puntos"
+      ],
+      "handoffBrief": "Tarea BlackOps (PR-first, costo $0 de API): Reparar el agente Videos Kong\n\nObjetivo: Haz que Videos Kong vuelva a trabajar. Su propio estado dice: Sin videos editados (Agrega videos fuente para que edite los de Kong.). Corrige la causa (configuracion, conexion o codigo) sin inventar datos.\n\nEvidencia del consejo de agentes:\n- Estado: Sin videos editados\n- Agrega videos fuente para que edite los de Kong.\n- Bateria 28% · 0 puntos\n\nReglas:\n- Trabaja en una rama nueva y abre PR; no hagas merge ni deploy.\n- Corre npm run check, npm run build y el test relacionado.\n- Si falta una credencial o cuenta, dilo en vez de simularla.\n- Sin gasto de API.\n- Responde con: archivos cambiados, pruebas corridas y riesgos.",
+      "createdAt": "2026-11-05T06:57:09.335Z",
+      "status": "submitted",
+      "pendingActionId": "fb19c7cd-a693-4edf-82ea-11871ceedfd5",
+      "note": "En el Trust Center esperando tu aprobacion."
+    },
+    {
+      "key": "repair:assistant#2026-11-05",
+      "kind": "repair",
+      "owner": "mechanic",
+      "title": "Reparar a Asistente",
+      "description": "El Mecanico detecto que Asistente (Teo) no esta trabajando y se esta quedando sin bateria. Si apruebas, queda listo el brief para repararlo.",
+      "evidence": [
+        "Estado: Calendario sin conectar",
+        "Conecta Google Calendar o Zoho.",
+        "Bateria 28% · 0 puntos"
+      ],
+      "handoffBrief": "Tarea BlackOps (PR-first, costo $0 de API): Reparar el agente Asistente\n\nObjetivo: Haz que Asistente vuelva a trabajar. Su propio estado dice: Calendario sin conectar (Conecta Google Calendar o Zoho.). Corrige la causa (configuracion, conexion o codigo) sin inventar datos.\n\nEvidencia del consejo de agentes:\n- Estado: Calendario sin conectar\n- Conecta Google Calendar o Zoho.\n- Bateria 28% · 0 puntos\n\nReglas:\n- Trabaja en una rama nueva y abre PR; no hagas merge ni deploy.\n- Corre npm run check, npm run build y el test relacionado.\n- Si falta una credencial o cuenta, dilo en vez de simularla.\n- Sin gasto de API.\n- Responde con: archivos cambiados, pruebas corridas y riesgos.",
+      "createdAt": "2026-11-05T06:57:09.335Z",
+      "status": "submitted",
+      "pendingActionId": "28446ff6-fa8c-420a-aebd-bb113f549167",
+      "note": "En el Trust Center esperando tu aprobacion."
+    },
+    {
+      "key": "repair:automations#2026-11-05",
+      "kind": "repair",
+      "owner": "mechanic",
+      "title": "Reparar a Autos",
+      "description": "El Mecanico detecto que Autos (Ari) no esta trabajando y se esta quedando sin bateria. Si apruebas, queda listo el brief para repararlo.",
+      "evidence": [
+        "Estado: 5 corridas fallidas",
+        "Bateria 20% · 0 puntos"
+      ],
+      "handoffBrief": "Tarea BlackOps (PR-first, costo $0 de API): Reparar el agente Autos\n\nObjetivo: Haz que Autos vuelva a trabajar. Su propio estado dice: 5 corridas fallidas. Corrige la causa (configuracion, conexion o codigo) sin inventar datos.\n\nEvidencia del consejo de agentes:\n- Estado: 5 corridas fallidas\n- Bateria 20% · 0 puntos\n\nReglas:\n- Trabaja en una rama nueva y abre PR; no hagas merge ni deploy.\n- Corre npm run check, npm run build y el test relacionado.\n- Si falta una credencial o cuenta, dilo en vez de simularla.\n- Sin gasto de API.\n- Responde con: archivos cambiados, pruebas corridas y riesgos.",
+      "createdAt": "2026-11-05T00:43:52.633Z",
+      "status": "submitted",
+      "pendingActionId": "e5d6d644-20be-4cb0-8000-08c66cccedb4",
+      "note": "En el Trust Center esperando tu aprobacion."
+    },
+    {
+      "key": "skill:skills-truncated",
+      "kind": "skill_update",
+      "owner": "skills-scout",
+      "title": "5 skill(s) se cortan en el chat de BlackOps",
+      "description": "El puente de skills del chat (web y Telegram) recibe estas skills recortadas al limite de 900 caracteres; en Claude Code se leen completas.",
+      "evidence": [
+        ".claude/skills/design-creative/SKILL.md: se recorta",
+        ".claude/skills/marketing-autopilot/SKILL.md: se recorta",
+        ".claude/skills/pr-first-fix/SKILL.md: se recorta",
+        ".claude/skills/review-pr/SKILL.md: se recorta",
+        ".claude/skills/skill-scout/SKILL.md: se recorta"
+      ],
+      "handoffBrief": "Tarea BlackOps (PR-first, costo $0 de API): 5 skill(s) se cortan en el chat de BlackOps\n\nObjetivo: Deja la skill bajo el limite del puente: mueve lo esencial (Purpose, Operating Rules, Output) arriba y resume el resto.\n\nEvidencia del consejo de agentes:\n- .claude/skills/design-creative/SKILL.md: se recorta\n- .claude/skills/marketing-autopilot/SKILL.md: se recorta\n- .claude/skills/pr-first-fix/SKILL.md: se recorta\n- .claude/skills/review-pr/SKILL.md: se recorta\n- .claude/skills/skill-scout/SKILL.md: se recorta\n\nArchivos a revisar:\n- .claude/skills/design-creative/SKILL.md\n- .claude/skills/marketing-autopilot/SKILL.md\n- .claude/skills/pr-first-fix/SKILL.md\n- .claude/skills/review-pr/SKILL.md\n- .claude/skills/skill-scout/SKILL.md\n\nReglas:\n- Trabaja en una rama nueva y abre PR; no hagas merge ni deploy.\n- Corre npm run check, npm run build y el test relacionado.\n- No cambies el nombre de la skill.\n- Manten las reglas de seguridad y aprobacion.\n- Responde con: archivos cambiados, pruebas corridas y riesgos.",
+      "createdAt": "2026-11-04T23:13:56.868Z",
+      "status": "submitted",
+      "pendingActionId": "5c56ac48-3581-48b3-991a-6f8881ec8430",
+      "note": "En el Trust Center esperando tu aprobacion."
+    }
+  ],
+  "lessons": [],
+  "agentStates": {
+    "claude-reviewer": {
+      "working": false,
+      "since": "2026-11-05T20:39:44.388Z"
+    },
+    "portfolio": {
+      "working": true,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "legal": {
+      "working": true,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "ceo": {
+      "working": true,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "revenue": {
+      "working": true,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "radio": {
+      "working": true,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "kong-videos": {
+      "working": false,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "news": {
+      "working": true,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "blackroom-videos": {
+      "working": false,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "assistant": {
+      "working": false,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "code": {
+      "working": true,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "github": {
+      "working": true,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "clippers": {
+      "working": false,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "dropshipping": {
+      "working": false,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "marketing-cmo": {
+      "working": true,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "automations": {
+      "working": false,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "control": {
+      "working": false,
+      "since": "2026-11-04T23:13:56.868Z"
+    }
+  },
+  "scout": {
+    "lastRunAt": "2026-11-04T23:13:55.810Z",
+    "lastSeen": {
+      "anthropics/claude-code": "v2.1.318",
+      "openai/codex": "rust-v0.166.0",
+      "TanStack/query": "release-2026-11-04-2012",
+      "drizzle-team/drizzle-orm": "0.45.4",
+      "vitejs/vite": "create-vite@9.3.3",
+      "tailwindlabs/tailwindcss": "v4.3.4",
+      "Shopify/cli": "5.0.1"
+    },
+    "latest": [
+      {
+        "repo": "anthropics/claude-code",
+        "tag": "v2.1.318",
+        "url": "https://github.com/anthropics/claude-code/releases/tag/v2.1.318",
+        "publishedAt": "2026-11-04T00:01:03Z",
+        "skills": [
+          "project-scout",
+          "review-pr",
+          "qa-gate",
+          "pr-first-fix",
+          "skill-scout"
+        ]
+      },
+      {
+        "repo": "openai/codex",
+        "tag": "rust-v0.166.0",
+        "url": "https://github.com/openai/codex/releases/tag/rust-v0.166.0",
+        "publishedAt": "2026-10-29T19:47:53Z",
+        "skills": [
+          "pr-first-fix",
+          "review-pr"
+        ]
+      },
+      {
+        "repo": "TanStack/query",
+        "tag": "release-2026-11-04-2012",
+        "url": "https://github.com/TanStack/query/releases/tag/release-2026-11-04-2012",
+        "publishedAt": "2026-11-04T20:12:58Z",
+        "skills": [
+          "qa-gate"
+        ]
+      },
+      {
+        "repo": "drizzle-team/drizzle-orm",
+        "tag": "0.45.4",
+        "url": "https://github.com/drizzle-team/drizzle-orm/releases/tag/0.45.4",
+        "publishedAt": "2026-10-08T10:47:32Z",
+        "skills": [
+          "qa-gate"
+        ]
+      },
+      {
+        "repo": "vitejs/vite",
+        "tag": "create-vite@9.3.3",
+        "url": "https://github.com/vitejs/vite/releases/tag/create-vite%409.3.3",
+        "publishedAt": "2026-10-27T09:27:16Z",
+        "skills": [
+          "qa-gate"
+        ]
+      },
+      {
+        "repo": "tailwindlabs/tailwindcss",
+        "tag": "v4.3.4",
+        "url": "https://github.com/tailwindlabs/tailwindcss/releases/tag/v4.3.4",
+        "publishedAt": "2026-11-02T21:16:50Z",
+        "skills": [
+          "design-creative"
+        ]
+      },
+      {
+        "repo": "Shopify/cli",
+        "tag": "5.0.1",
+        "url": "https://github.com/Shopify/cli/releases/tag/5.0.1",
+        "publishedAt": "2026-11-04T14:22:45Z",
+        "skills": [
+          "marketing-autopilot"
+        ]
+      }
+    ],
+    "error": null
+  },
+  "company": {
+    "version": 1,
+    "careers": {
+      "ceo": {
+        "agentId": "ceo",
+        "generation": 1,
+        "nickname": "Thiago",
+        "points": 660,
+        "battery": 100,
+        "lastState": "working",
+        "cyclesWorking": 66,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a trabajando: Operativo."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como CEO."
+          }
+        ]
+      },
+      "revenue": {
+        "agentId": "revenue",
+        "generation": 1,
+        "nickname": "Emi",
+        "points": 660,
+        "battery": 100,
+        "lastState": "working",
+        "cyclesWorking": 66,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a trabajando: Operativo."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Revenue."
+          }
+        ]
+      },
+      "news": {
+        "agentId": "news",
+        "generation": 1,
+        "nickname": "Sofi",
+        "points": 660,
+        "battery": 100,
+        "lastState": "working",
+        "cyclesWorking": 66,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a trabajando: Publicando noticias."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Noticias."
+          }
+        ]
+      },
+      "kong-videos": {
+        "agentId": "kong-videos",
+        "generation": 1,
+        "nickname": "Dani",
+        "points": 0,
+        "battery": 20,
+        "lastState": "needs-setup",
+        "cyclesWorking": 0,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a esperando configuracion: Sin videos editados."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Videos Kong."
+          }
+        ]
+      },
+      "radio": {
+        "agentId": "radio",
+        "generation": 1,
+        "nickname": "Iker",
+        "points": 660,
+        "battery": 100,
+        "lastState": "working",
+        "cyclesWorking": 66,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a trabajando: Programando radio."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Radio."
+          }
+        ]
+      },
+      "assistant": {
+        "agentId": "assistant",
+        "generation": 1,
+        "nickname": "Teo",
+        "points": 0,
+        "battery": 20,
+        "lastState": "needs-setup",
+        "cyclesWorking": 0,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a esperando configuracion: Calendario sin conectar."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Asistente."
+          }
+        ]
+      },
+      "blackroom-videos": {
+        "agentId": "blackroom-videos",
+        "generation": 1,
+        "nickname": "Zoe",
+        "points": 0,
+        "battery": 20,
+        "lastState": "needs-setup",
+        "cyclesWorking": 0,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a esperando configuracion: Publicador desconectado."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Videos Black Room."
+          }
+        ]
+      },
+      "code": {
+        "agentId": "code",
+        "generation": 1,
+        "nickname": "Mia",
+        "points": 660,
+        "battery": 100,
+        "lastState": "working",
+        "cyclesWorking": 66,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a trabajando: Conectado a GitHub."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Code."
+          }
+        ]
+      },
+      "github": {
+        "agentId": "github",
+        "generation": 1,
+        "nickname": "Vale",
+        "points": 660,
+        "battery": 100,
+        "lastState": "working",
+        "cyclesWorking": 66,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a trabajando: Conectado a GitHub."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como GitHub."
+          }
+        ]
+      },
+      "claude-reviewer": {
+        "agentId": "claude-reviewer",
+        "generation": 1,
+        "nickname": "Bruno",
+        "points": 540,
+        "battery": 40,
+        "lastState": "offline",
+        "cyclesWorking": 56,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-05T20:39:44.388Z",
+            "text": "Paso a sin respuesta: Ejecutor de Claude desactivado."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a trabajando: Conectado a GitHub."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Claude Reviewer."
+          }
+        ]
+      },
+      "legal": {
+        "agentId": "legal",
+        "generation": 1,
+        "nickname": "Luna",
+        "points": 660,
+        "battery": 100,
+        "lastState": "working",
+        "cyclesWorking": 66,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a trabajando: Revisando 7 apps."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Legal / Compliance."
+          }
+        ]
+      },
+      "portfolio": {
+        "agentId": "portfolio",
+        "generation": 1,
+        "nickname": "Leo",
+        "points": 660,
+        "battery": 100,
+        "lastState": "working",
+        "cyclesWorking": 66,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a trabajando: Siguiendo inversiones."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Portfolio."
+          }
+        ]
+      },
+      "clippers": {
+        "agentId": "clippers",
+        "generation": 1,
+        "nickname": "Nico",
+        "points": 0,
+        "battery": 20,
+        "lastState": "needs-setup",
+        "cyclesWorking": 0,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a esperando configuracion: Worker nunca corrio."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Clippers."
+          }
+        ]
+      },
+      "dropshipping": {
+        "agentId": "dropshipping",
+        "generation": 1,
+        "nickname": "Tomi",
+        "points": 0,
+        "battery": 20,
+        "lastState": "needs-setup",
+        "cyclesWorking": 0,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a esperando configuracion: Falta producto o supplier."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Dropshipping CEO."
+          }
+        ]
+      },
+      "marketing-cmo": {
+        "agentId": "marketing-cmo",
+        "generation": 1,
+        "nickname": "Rafa",
+        "points": 660,
+        "battery": 100,
+        "lastState": "working",
+        "cyclesWorking": 66,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a trabajando: 4/4 clientes listos."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Marketing CMO."
+          }
+        ]
+      },
+      "automations": {
+        "agentId": "automations",
+        "generation": 1,
+        "nickname": "Ari",
+        "points": 0,
+        "battery": 0,
+        "lastState": "error",
+        "cyclesWorking": 0,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a con error: 4 corridas fallidas."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Autos."
+          }
+        ]
+      },
+      "control": {
+        "agentId": "control",
+        "generation": 1,
+        "nickname": "Gabo",
+        "points": 0,
+        "battery": 20,
+        "lastState": "needs-setup",
+        "cyclesWorking": 0,
+        "cyclesTotal": 66,
+        "ordersDone": 0,
+        "firedCount": 0,
+        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "memory": [
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Paso a esperando configuracion: Sin apps registradas."
+          },
+          {
+            "at": "2026-11-04T23:13:56.868Z",
+            "text": "Contratado como Control / Permisos."
+          }
+        ]
+      }
+    },
+    "trainees": [],
+    "orders": [],
+    "events": []
+  },
+  "lastStatuses": {
+    "claude-reviewer": {
+      "state": "offline",
+      "label": "Ejecutor de Claude desactivado"
+    },
+    "portfolio": {
+      "state": "working",
+      "label": "Siguiendo inversiones"
+    },
+    "legal": {
+      "state": "working",
+      "label": "Revisando 7 apps"
+    },
+    "ceo": {
+      "state": "working",
+      "label": "Operativo"
+    },
+    "revenue": {
+      "state": "working",
+      "label": "Operativo"
+    },
+    "radio": {
+      "state": "working",
+      "label": "Programando radio"
+    },
+    "kong-videos": {
+      "state": "needs-setup",
+      "label": "Sin videos editados"
+    },
+    "news": {
+      "state": "working",
+      "label": "Publicando noticias"
+    },
+    "blackroom-videos": {
+      "state": "needs-setup",
+      "label": "Publicador desconectado"
+    },
+    "assistant": {
+      "state": "needs-setup",
+      "label": "Calendario sin conectar"
+    },
+    "code": {
+      "state": "working",
+      "label": "Conectado a GitHub"
+    },
+    "github": {
+      "state": "working",
+      "label": "Conectado a GitHub"
+    },
+    "clippers": {
+      "state": "needs-setup",
+      "label": "Worker nunca corrio"
+    },
+    "dropshipping": {
+      "state": "needs-setup",
+      "label": "Falta producto o supplier"
+    },
+    "marketing-cmo": {
+      "state": "working",
+      "label": "4/4 clientes listos"
+    },
+    "automations": {
+      "state": "error",
+      "label": "4 corridas fallidas"
+    },
+    "control": {
+      "state": "needs-setup",
+      "label": "Sin apps registradas"
+    }
+  }
+}
