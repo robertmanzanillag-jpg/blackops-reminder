@@ -4,7 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Button } from "@/components/ui/button";
 import type { KongOperationsState, PublicationStatus } from "@shared/kong-operations";
 
-type View = KongOperationsState & { status: { "kong-metrics": { state: string; label: string }; inbox: number; holder: string | null } };
+type View = KongOperationsState & { status: { "kong-metrics": { state: string; label: string }; inbox: number; holder: string | null; duplicates: number } };
 
 const PUBLICATION_LABEL: Record<PublicationStatus, string> = {
   planned: "Reservada",
@@ -13,6 +13,7 @@ const PUBLICATION_LABEL: Record<PublicationStatus, string> = {
   failed: "Fallo",
   unknown: "Sin respuesta",
   retryable: "Para reintentar",
+  duplicate: "DUPLICADA",
 };
 
 function when(value?: string | null) {
@@ -43,14 +44,19 @@ export function KongOperationsPanel() {
         <DialogHeader>
           <DialogTitle>Operacion KONG</DialogTitle>
           <DialogDescription>
-            Fichas verificadas de Venues y Promoters para Videos KONG, el publicador unico, el registro por UUID y los resultados por publicacion.
-            Esta oficina coordina; no publica.
+            Fichas de Venues y Promoters (fuente https revisada por su autor en los ultimos 7 dias, sin datos personales) para Videos KONG,
+            el publicador unico, el registro por UUID y los resultados por publicacion. Esta oficina coordina; no publica.
           </DialogDescription>
         </DialogHeader>
         {query.isError && <p role="alert" className="text-sm text-rose-500">No se pudo leer la operacion de KONG.</p>}
         {!view && !query.isError && <p className="text-sm text-muted-foreground">Cargando...</p>}
         {view && (
           <div className="space-y-4 text-sm">
+            {view.status.duplicates > 0 && (
+              <p role="alert" className="rounded border border-rose-500 p-2 text-sm text-rose-600" data-testid="kong-ops-duplicates">
+                {view.status.duplicates} publicacion(es) salieron dos veces. Revisa el registro y borra el post repetido.
+              </p>
+            )}
             <section data-testid="kong-ops-holder">
               <h3 className="font-semibold">Publicador unico</h3>
               <p>
@@ -83,6 +89,7 @@ export function KongOperationsPanel() {
                     <span>{PUBLICATION_LABEL[publication.status]}</span>
                     <span>{publication.externalPostId || "-"}</span>
                     <span>{publication.holder} · ep. {publication.epoch}</span>
+                    {publication.lastError && <span className="w-full text-rose-500">{publication.lastError}</span>}
                   </li>
                 ))}
               </ul>

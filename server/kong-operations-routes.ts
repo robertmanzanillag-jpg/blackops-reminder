@@ -26,7 +26,17 @@ const reconcileBody = z.object({
   posts: z.array(z.object({ postId: z.string().min(1).max(120), uuid: z.string().max(64).nullish(), text: z.string().max(5000).nullish(), network: z.string().max(30).nullish(), publishedAt: z.string().max(40).nullish() }).strict()).max(500),
 }).strict();
 const cardsBody = z.object({ cards: z.array(z.unknown()).min(1).max(50) }).strict();
-const metricsBody = z.object({ rows: z.array(z.unknown()).max(2000) }).strict();
+// Rows already normalized by whoever read Metricool (same shape as parseMetricoolPostMetrics).
+const count = z.number().finite().nonnegative();
+const metricsBody = z.object({
+  rows: z.array(z.object({
+    postId: z.string().min(1).max(120).nullable(),
+    queueItemId: z.string().max(120).nullable().optional(),
+    contentHash: z.string().max(120).nullable().optional(),
+    observedAt: z.string().max(40).nullable(),
+    impressions: count, reach: count, videoViews: count, engagements: count, clicks: count, shares: count,
+  }).strict()).max(2000),
+}).strict();
 
 /**
  * KONG operations from the Agents Office. Owner-only, like the KONG supervisor.
@@ -36,6 +46,7 @@ export function registerKongOperationsRoutes(app: Express, ops: ReturnType<typeo
   const allow = (req: Request, res: Response) => {
     try {
       const userId = auth.requestUserId(req);
+      res.set("Cache-Control", "no-store");
       if (!userId) { res.status(401).json({ error: "Inicia sesion para operar KONG." }); return false; }
       if (userId !== auth.ownerUserId()) { res.status(403).json({ error: "La operacion de KONG pertenece al propietario." }); return false; }
       return true;
@@ -44,12 +55,13 @@ export function registerKongOperationsRoutes(app: Express, ops: ReturnType<typeo
   const fail = (res: Response, error: unknown) => {
     if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).slice(0, 4).join("; ") });
     if (error instanceof KongOpsError) return res.status(error.code === "invalid" || error.code === "unknown_brief" || error.code === "unknown_publication" ? 400 : 409).json({ error: error.message, code: error.code });
+    // Note: uuid_mismatch, lease_held, not_holder, stale_epoch and already_published are conflicts (409).
     return res.status(503).json({ error: "No se pudo guardar. Intenta de nuevo." });
   };
 
   app.get("/api/kong-ops/state", async (req, res) => {
     if (!allow(req, res)) return;
-    try { res.set("Cache-Control", "no-store"); res.json(await ops.view()); } catch (error) { fail(res, error); }
+    try { res.json(await ops.view()); } catch (error) { fail(res, error); }
   });
   // Venues / Promoters deliver verified cards to Videos KONG.
   app.post("/api/kong-ops/cards", async (req, res) => {
@@ -78,12 +90,9 @@ export function registerKongOperationsRoutes(app: Express, ops: ReturnType<typeo
     if (!allow(req, res)) return;
     try { res.json(await ops.reconcile(reconcileBody.parse(req.body).posts)); } catch (error) { fail(res, error); }
   });
-  // Metrics agent: raw Metricool rows (read by the publisher or the sync), parsed with the existing parser.
+  // Metrics agent: per-post rows that the external publisher read from Metricool; the office never calls Metricool here.
   app.post("/api/kong-ops/metrics", async (req, res) => {
     if (!allow(req, res)) return;
-    try {
-      const { parseMetricoolPostMetrics } = await import("./metricool-analytics-sync");
-      res.json({ results: await ops.measure(parseMetricoolPostMetrics(metricsBody.parse(req.body).rows)) });
-    } catch (error) { fail(res, error); }
+    try { res.json({ results: await ops.measure(metricsBody.parse(req.body).rows) }); } catch (error) { fail(res, error); }
   });
 }

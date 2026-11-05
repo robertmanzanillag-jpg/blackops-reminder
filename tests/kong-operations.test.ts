@@ -228,3 +228,83 @@ test("service: the same card delivered by two instances at once lands once; reco
   assert.equal(results.length, 1);
   assert.equal((await a.view()).status["kong-metrics"].state, "working");
 });
+
+// ---------- Review regressions ----------
+
+test("a 'failed' attempt keeps the slot: no new UUID for the same brief+network until reconciliation", () => {
+  let state = claimLease(withInbox(), "codex-local", "lease-a", NOW);
+  const briefId = briefOf(state, U.venue);
+  state = planPublication(state, { holder: "codex-local", epoch: 1, uuid: U.pub1, briefId, network: "instagram" }, NOW);
+  state = recordAttempt(state, { holder: "codex-local", epoch: 1, uuid: U.pub1, outcome: "failed", error: "timeout de la red" }, NOW + MIN);
+  assert.throws(() => planPublication(state, { holder: "codex-local", epoch: 1, uuid: U.pub2, briefId, network: "instagram" }, NOW + 2 * MIN), (error: unknown) => error instanceof KongOpsError && error.code === "already_published");
+  // It actually went out: reconciliation confirms it and the retry never happens.
+  const out = reconcileByUuid(state, [{ postId: "ig-1", text: `kong:${U.pub1}` }], NOW + 3 * MIN);
+  assert.deepEqual(out.confirmed, [U.pub1]);
+  // A late report cannot reopen a confirmed publication.
+  assert.equal(recordAttempt(out.state, { holder: "codex-local", epoch: 1, uuid: U.pub1, outcome: "failed" }, NOW + 4 * MIN), out.state);
+});
+
+test("the original post showing up after a retry is detected as a duplicate", () => {
+  let state = claimLease(withInbox(), "codex-local", "lease-a", NOW);
+  const briefId = briefOf(state, U.venue);
+  state = planPublication(state, { holder: "codex-local", epoch: 1, uuid: U.pub1, briefId, network: "instagram" }, NOW);
+  state = recordAttempt(state, { holder: "codex-local", epoch: 1, uuid: U.pub1, outcome: "unknown" }, NOW + MIN);
+  state = reconcileByUuid(state, [], NOW + MIN + RECONCILE_GRACE_MS).state;
+  state = claimLease(state, "codex-local", "lease-a", NOW + MIN + RECONCILE_GRACE_MS);
+  const epoch = state.lease!.epoch;
+  state = planPublication(state, { holder: "codex-local", epoch, uuid: U.pub2, briefId, network: "instagram" }, NOW + 2 * MIN + RECONCILE_GRACE_MS);
+  state = recordAttempt(state, { holder: "codex-local", epoch, uuid: U.pub2, outcome: "confirmed", externalPostId: "ig-2" }, NOW + 3 * MIN + RECONCILE_GRACE_MS);
+  // Hours later the first post appears (stuck queue / Metricool lag).
+  const late = reconcileByUuid(state, [{ postId: "ig-1", text: `kong:${U.pub1}` }], NOW + 3 * 60 * MIN);
+  assert.deepEqual(late.duplicates, [U.pub1]);
+  const dup = late.state.publications.find((item) => item.uuid === U.pub1)!;
+  assert.equal(dup.status, "duplicate");
+  assert.match(dup.lastError || "", /Duplicado de/);
+  assert.equal(kongOperationsStatus(late.state, NOW + 3 * 60 * MIN).duplicates, 1);
+});
+
+test("personal contact data never passes: handle, highlight, name, schedule", () => {
+  const leaks = [
+    venue({ publicHandle: "juan.perez@gmail.com" }),
+    venue({ publicHandle: "+584121234567" }),
+    venue({ publicHandle: "04121234567" }),
+    venue({ highlight: "Llama a Juan 0412-1234567 para mesas" }),
+    venue({ highlight: "Reservas: juan@gmail.com" }),
+    venue({ name: "Club (305) 555-0199" }),
+    venue({ schedule: "WhatsApp +1 305 555 0199" }),
+  ];
+  for (const card of leaks) {
+    const check = verifyCard(card, NOW);
+    assert.equal(check.ok, false, JSON.stringify(card).slice(0, 120));
+  }
+  // Normal promo text with dates, times and prices still passes.
+  assert.equal(verifyCard(venue({ highlight: "Sabado 7/11 de 11pm a 4am, mesas desde $250, 2x1 hasta la 1am" }), NOW).ok, true);
+  assert.equal(verifyCard(venue({ publicHandle: "@club_prueba.mia" }), NOW).ok, true);
+});
+
+test("ledger: UUID reused for another brief is rejected; uppercase UUIDs are the same UUID", () => {
+  let state = claimLease(withInbox(), "codex-local", "lease-a", NOW);
+  const venueBrief = briefOf(state, U.venue);
+  const promoBrief = briefOf(state, U.promoter);
+  state = planPublication(state, { holder: "codex-local", epoch: 1, uuid: U.pub1.toUpperCase(), briefId: venueBrief, network: "instagram" }, NOW);
+  assert.equal(state.publications[0].uuid, U.pub1);
+  assert.throws(() => planPublication(state, { holder: "codex-local", epoch: 1, uuid: U.pub1, briefId: promoBrief, network: "instagram" }, NOW), (error: unknown) => error instanceof KongOpsError && error.code === "uuid_mismatch");
+  state = recordAttempt(state, { holder: "codex-local", epoch: 1, uuid: U.pub1.toUpperCase(), outcome: "submitted" }, NOW + MIN);
+  assert.equal(state.publications[0].status, "submitted");
+});
+
+test("the same holder cannot open a second parallel lease (two processes with the same name)", () => {
+  const state = claimLease(withInbox(), "codex-local", "lease-a", NOW);
+  assert.throws(() => claimLease(state, "codex-local", "lease-z", NOW + MIN), (error: unknown) => error instanceof KongOpsError && error.code === "lease_held");
+  assert.equal(claimLease(state, "codex-local", "lease-z", NOW + LEASE_TTL_MS + MIN).lease?.epoch, 2, "after expiry it is a new turn");
+});
+
+test("metrics: a row without date never hides a dated observation", () => {
+  let state = claimLease(withInbox(), "codex-local", "lease-a", NOW);
+  const briefId = briefOf(state, U.venue);
+  state = planPublication(state, { holder: "codex-local", epoch: 1, uuid: U.pub1, briefId, network: "instagram" }, NOW);
+  state = recordAttempt(state, { holder: "codex-local", epoch: 1, uuid: U.pub1, outcome: "confirmed", externalPostId: "ig-7" }, NOW);
+  const base = { queueItemId: null, contentHash: null, reach: 0, videoViews: 0, engagements: 0, clicks: 0, shares: 0 };
+  state = measurePublications(state, [{ ...base, postId: "ig-7", observedAt: null, impressions: 1 }, { ...base, postId: "ig-7", observedAt: at(NOW + MIN), impressions: 999 }], NOW + 2 * MIN);
+  assert.equal(state.results[0].impressions, 999);
+});

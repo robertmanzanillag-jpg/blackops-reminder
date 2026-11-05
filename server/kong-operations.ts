@@ -128,7 +128,7 @@ export function createKongOperations(deps: { store: KongOpsStore; now: () => num
     attempt: (input: Parameters<typeof recordAttempt>[1]) =>
       mutate((state) => { const next = recordAttempt(state, input, deps.now()); return { state: next, result: next.publications.find((item) => item.uuid === input.uuid) || null }; }),
     reconcile: (posts: ExternalPost[]) =>
-      mutate((state) => { const out = reconcileByUuid(state, posts, deps.now()); return { state: out.state, result: { confirmed: out.confirmed, retryable: out.retryable } }; }),
+      mutate((state) => { const out = reconcileByUuid(state, posts, deps.now()); return { state: out.state, result: { confirmed: out.confirmed, retryable: out.retryable, duplicates: out.duplicates } }; }),
     measure: (rows: PostMetricsRow[]) =>
       mutate((state) => { const next = measurePublications(state, rows, deps.now()); return { state: next, result: next.results }; }),
   };

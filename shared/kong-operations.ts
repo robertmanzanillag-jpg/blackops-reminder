@@ -13,6 +13,21 @@ export const KONG_VIDEOS_AGENT = "kong-videos" as const;
 export const KONG_METRICS_AGENT = "kong-metrics" as const;
 
 export const CARD_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
+
+// Cards end up in public videos and captions: personal contact data must never pass.
+const EMAIL = /[^\s@]+@[^\s@]+\.[a-z]{2,}/i;
+/** A run of digits (allowing spaces, dots, dashes, parentheses, +) with 8 or more digits. */
+function containsPhone(text: string): boolean {
+  for (const match of text.matchAll(/\+?\d[\d\s().-]{6,}\d/g)) {
+    if (match[0].replace(/\D/g, "").length >= 8) return true;
+  }
+  return false;
+}
+export function personalDataIn(text: string): string | null {
+  if (EMAIL.test(text)) return "contiene un email";
+  if (containsPhone(text)) return "contiene un numero de telefono";
+  return null;
+}
 export const LEASE_TTL_MS = 15 * 60_000;
 /** An attempt with no answer for this long is reconciled by UUID before anyone retries it. */
 export const RECONCILE_GRACE_MS = 30 * 60_000;
@@ -34,8 +49,8 @@ export const kongCardSchema = z.object({
   /** What the video should say: the offer, night or table deal, as verified. */
   highlight: z.string().trim().min(1).max(400),
   schedule: z.string().trim().max(160).optional(),
-  /** Public handle or page only; no personal phone numbers or emails. */
-  publicHandle: z.string().trim().max(120).regex(/^[^@\s]*@?[A-Za-z0-9_.-]*$/, "solo un handle publico").optional(),
+  /** Public social handle only (e.g. @clubprueba); never a phone number or an email. */
+  publicHandle: z.string().trim().regex(/^@?(?=[A-Za-z0-9_.]*[A-Za-z_])[A-Za-z0-9_.]{2,30}$/, "solo un handle publico (@usuario)").optional(),
   sources: z.array(z.object({ url: z.string().url().startsWith("https://"), checkedAt: iso })).min(1).max(5),
   verifiedBy: z.enum(KONG_CARD_AUTHORS),
   verifiedAt: iso,
@@ -60,7 +75,13 @@ export type VideoBrief = {
 
 export type PublisherLease = { holder: string; leaseId: string; epoch: number; acquiredAt: string; expiresAt: string };
 
-export type PublicationStatus = "planned" | "submitted" | "confirmed" | "failed" | "unknown" | "retryable";
+export type PublicationStatus = "planned" | "submitted" | "confirmed" | "failed" | "unknown" | "retryable" | "duplicate";
+/**
+ * Statuses that still "own" a brief on a network. A failed or unknown attempt may have gone out
+ * anyway, so it keeps the slot until reconciliation by UUID turns it into "retryable".
+ */
+const LIVE: PublicationStatus[] = ["planned", "submitted", "confirmed", "unknown", "failed"];
+const OPEN: PublicationStatus[] = ["planned", "submitted", "unknown", "failed"];
 export type Publication = {
   uuid: string;
   briefId: string;
@@ -148,6 +169,10 @@ export function verifyCard(raw: unknown, now: number): { ok: true; card: KongCar
   if (!parsed.success) return { ok: false, reasons: parsed.error.issues.map((issue) => `${issue.path.join(".") || "ficha"}: ${issue.message}`).slice(0, 6) };
   const card = parsed.data;
   const reasons: string[] = [];
+  for (const [field, value] of [["name", card.name], ["city", card.city], ["highlight", card.highlight], ["schedule", card.schedule || ""], ["publicHandle", card.publicHandle || ""]] as const) {
+    const found = personalDataIn(value);
+    if (found) reasons.push(`${field}: ${found}; las fichas son publicas`);
+  }
   const verifiedAt = Date.parse(card.verifiedAt);
   if (verifiedAt > now + 60_000) reasons.push("verifiedAt esta en el futuro");
   if (now - verifiedAt > CARD_MAX_AGE_MS) reasons.push("verificacion de hace mas de 7 dias");
@@ -213,7 +238,7 @@ export function deliverCards(
 // ---------------------------------------------------------------------------------------------
 
 export class KongOpsError extends Error {
-  constructor(public code: "lease_held" | "not_holder" | "stale_epoch" | "unknown_brief" | "already_published" | "unknown_publication" | "invalid", message: string) {
+  constructor(public code: "lease_held" | "not_holder" | "stale_epoch" | "unknown_brief" | "already_published" | "unknown_publication" | "uuid_mismatch" | "invalid", message: string) {
     super(message);
   }
 }
@@ -227,6 +252,10 @@ export function claimLease(state: KongOperationsState, holder: string, leaseId: 
   const current = state.lease;
   if (leaseValid(current, now) && current.holder !== holder) {
     throw new KongOpsError("lease_held", `El titular es ${current.holder} hasta ${current.expiresAt}. Solo hay un publicador.`);
+  }
+  // Two processes with the same holder name must not take the lease from each other.
+  if (leaseValid(current, now) && current.leaseId !== leaseId) {
+    throw new KongOpsError("lease_held", `${holder} ya tiene un turno abierto con otro lease; liberalo o espera a que venza.`);
   }
   const renewing = leaseValid(current, now) && current.holder === holder && current.leaseId === leaseId;
   const lease: PublisherLease = {
@@ -258,23 +287,35 @@ export function planPublication(
   now: number
 ): KongOperationsState {
   if (!uuid.safeParse(input.uuid).success) throw new KongOpsError("invalid", "uuid invalido");
-  const existing = state.publications.find((publication) => publication.uuid === input.uuid);
-  if (existing) return state;
+  const id = input.uuid.toLowerCase();
+  const network = input.network.trim().toLowerCase().slice(0, 30);
+  const existing = state.publications.find((publication) => publication.uuid === id);
+  if (existing) {
+    if (existing.briefId !== input.briefId || existing.network !== network) throw new KongOpsError("uuid_mismatch", "Ese UUID ya esta reservado para otra ficha o red.");
+    return state;
+  }
   assertHolder(state, input.holder, input.epoch, now);
   const brief = state.inbox.find((item) => item.briefId === input.briefId);
   if (!brief) throw new KongOpsError("unknown_brief", "Esa ficha no esta en la bandeja de Videos KONG.");
-  const network = input.network.trim().toLowerCase().slice(0, 30);
-  const live = state.publications.find(
-    (publication) => publication.briefId === input.briefId && publication.network === network && ["planned", "submitted", "confirmed", "unknown"].includes(publication.status)
-  );
+  const live = state.publications.find((publication) => publication.briefId === input.briefId && publication.network === network && LIVE.includes(publication.status));
   if (live) throw new KongOpsError("already_published", `Ya hay una publicacion ${live.status} (${live.uuid}) para esa ficha en ${network}; concilia esa antes.`);
   const at = new Date(now).toISOString();
-  const publication: Publication = { uuid: input.uuid, briefId: input.briefId, holder: input.holder, epoch: input.epoch, network, status: "planned", attempts: 0, updatedAt: at };
+  const publication: Publication = { uuid: id, briefId: input.briefId, holder: input.holder, epoch: input.epoch, network, status: "planned", attempts: 0, updatedAt: at };
   return {
     ...state,
-    publications: [publication, ...state.publications].slice(0, MAX_LEDGER),
+    publications: trimLedger([publication, ...state.publications]),
     inbox: state.inbox.map((item) => (item.briefId === input.briefId && item.status === "pendiente" ? { ...item, status: "en_produccion" } : item)),
   };
+}
+
+/** Never drops a live or confirmed entry (that would re-open a published brief); trims resolved ones first. */
+function trimLedger(publications: Publication[]): Publication[] {
+  if (publications.length <= MAX_LEDGER) return publications;
+  const keep = new Set(publications.filter((item) => LIVE.includes(item.status)).map((item) => item.uuid));
+  const resolved = publications.filter((item) => !keep.has(item.uuid));
+  const room = Math.max(0, MAX_LEDGER - keep.size);
+  const kept = new Set([...keep, ...resolved.slice(0, room).map((item) => item.uuid)]);
+  return publications.filter((item) => kept.has(item.uuid));
 }
 
 /** The holder reports what happened to one attempt. A fenced (older) holder is rejected. */
@@ -284,9 +325,11 @@ export function recordAttempt(
   now: number
 ): KongOperationsState {
   assertHolder(state, input.holder, input.epoch, now);
-  const publication = state.publications.find((item) => item.uuid === input.uuid);
+  const id = input.uuid.toLowerCase();
+  const publication = state.publications.find((item) => item.uuid === id);
   if (!publication) throw new KongOpsError("unknown_publication", "UUID no reservado.");
-  if (publication.status === "confirmed") return state;
+  // Confirmed, retryable and duplicate are settled by reconciliation, not by a late report.
+  if (["confirmed", "retryable", "duplicate"].includes(publication.status)) return state;
   const at = new Date(now).toISOString();
   const updated: Publication = {
     ...publication,
@@ -312,7 +355,7 @@ function withPublication(state: KongOperationsState, updated: Publication, at: s
   };
 }
 
-/** What the publisher actually sees published (e.g. read from Metricool), with the UUID it tagged. */
+/** A post the publisher sees on the network (for example read from Metricool), with the UUID it tagged. */
 export type ExternalPost = { uuid?: string | null; text?: string | null; postId: string; network?: string | null; publishedAt?: string | null };
 
 /** Finds our UUID in an external post: explicit field, or the "kong:<uuid>" tag in the caption. */
@@ -326,7 +369,11 @@ export function uuidOf(post: ExternalPost): string | null {
  * After a failure or a lost answer: each open publication is matched by UUID against what really
  * went out. Found -> confirmed (never published again). Not found after the grace period -> retryable.
  */
-export function reconcileByUuid(state: KongOperationsState, posts: ExternalPost[], now: number): { state: KongOperationsState; confirmed: string[]; retryable: string[] } {
+export function reconcileByUuid(
+  state: KongOperationsState,
+  posts: ExternalPost[],
+  now: number
+): { state: KongOperationsState; confirmed: string[]; retryable: string[]; duplicates: string[] } {
   const at = new Date(now).toISOString();
   const seen = new Map<string, ExternalPost>();
   for (const post of posts) {
@@ -336,24 +383,46 @@ export function reconcileByUuid(state: KongOperationsState, posts: ExternalPost[
   let next = state;
   const confirmed: string[] = [];
   const retryable: string[] = [];
-  for (const publication of state.publications) {
-    if (!["submitted", "failed", "unknown", "planned"].includes(publication.status)) continue;
+  const duplicates: string[] = [];
+  // Oldest first: the original attempt wins and a later one is the duplicate.
+  for (const publication of [...state.publications].reverse()) {
+    // A "retryable" entry is still matched: the original post can show up late.
+    if (![...OPEN, "retryable"].includes(publication.status)) continue;
+    const current = next.publications.find((item) => item.uuid === publication.uuid)!;
     const match = seen.get(publication.uuid.toLowerCase());
     if (match) {
-      confirmed.push(publication.uuid);
-      next = withPublication(next, { ...publication, status: "confirmed", externalPostId: match.postId.slice(0, 120), ...(match.publishedAt ? { publishedAt: match.publishedAt } : {}), updatedAt: at }, at);
+      const other = next.publications.find(
+        (item) => item.uuid !== publication.uuid && item.briefId === publication.briefId && item.network === publication.network && item.status === "confirmed"
+      );
+      const patch = {
+        externalPostId: match.postId.slice(0, 120),
+        ...(match.publishedAt && !Number.isNaN(Date.parse(match.publishedAt)) ? { publishedAt: match.publishedAt } : {}),
+        updatedAt: at,
+      };
+      if (other) {
+        // It went out twice: keep both on record and flag it so Robert can remove one post.
+        duplicates.push(publication.uuid);
+        next = withPublication(next, { ...current, ...patch, status: "duplicate", lastError: `Duplicado de ${other.uuid} (${other.externalPostId || "sin id"}): borra uno de los dos posts.` }, at);
+      } else {
+        confirmed.push(publication.uuid);
+        next = withPublication(next, { ...current, ...patch, status: "confirmed" }, at);
+      }
       continue;
     }
-    const waiting = now - Date.parse(publication.updatedAt) >= RECONCILE_GRACE_MS;
-    if (publication.status !== "planned" && waiting) {
+    const updated = Date.parse(publication.updatedAt);
+    const waiting = !Number.isNaN(updated) && now - updated >= RECONCILE_GRACE_MS;
+    if (publication.status !== "planned" && publication.status !== "retryable" && waiting) {
       retryable.push(publication.uuid);
-      next = withPublication(next, { ...publication, status: "retryable", updatedAt: at }, at);
+      next = withPublication(next, { ...current, status: "retryable", updatedAt: at }, at);
     }
   }
-  if (confirmed.length || retryable.length) {
-    next = { ...next, events: event(next, at, `Conciliacion por UUID: ${confirmed.length} confirmadas, ${retryable.length} para reintentar.`) };
+  if (confirmed.length || retryable.length || duplicates.length) {
+    next = {
+      ...next,
+      events: event(next, at, `Conciliacion por UUID: ${confirmed.length} confirmadas, ${retryable.length} para reintentar${duplicates.length ? `, ${duplicates.length} DUPLICADAS` : ""}.`),
+    };
   }
-  return { state: next, confirmed, retryable };
+  return { state: next, confirmed, retryable, duplicates };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -371,14 +440,18 @@ export type PostMetricsRow = {
   shares: number;
 };
 
-/** Rows come from the existing Metricool parser (parseMetricoolPostMetrics), matched by external post id. */
+/**
+ * Rows in the shape of the Metricool parser output (server/metricool-analytics-sync.ts), already
+ * normalized by whoever read Metricool (the publisher). Matched by external post id.
+ */
 export function measurePublications(state: KongOperationsState, rows: PostMetricsRow[], now: number): KongOperationsState {
   const at = new Date(now).toISOString();
   const latest = new Map<string, PostMetricsRow>();
   for (const row of rows) {
     if (!row.postId) continue;
     const previous = latest.get(row.postId);
-    if (!previous || Date.parse(row.observedAt || "") >= Date.parse(previous.observedAt || "")) latest.set(row.postId, row);
+    const time = (value: string | null) => { const parsed = Date.parse(value || ""); return Number.isNaN(parsed) ? -Infinity : parsed; };
+    if (!previous || time(row.observedAt) >= time(previous.observedAt)) latest.set(row.postId, row);
   }
   const results: PublicationResult[] = [];
   for (const publication of state.publications) {
@@ -412,6 +485,7 @@ export function measurePublications(state: KongOperationsState, rows: PostMetric
 /** Live status of the office agents involved, from this state only (fails closed). */
 export function kongOperationsStatus(state: KongOperationsState, now: number) {
   const confirmed = state.publications.filter((publication) => publication.status === "confirmed");
+  const duplicates = state.publications.filter((publication) => publication.status === "duplicate").length;
   const measured = state.results.length;
   const metricsFresh = state.metricsCheckedAt && now - Date.parse(state.metricsCheckedAt) <= 48 * 60 * 60_000;
   return {
@@ -421,6 +495,7 @@ export function kongOperationsStatus(state: KongOperationsState, now: number) {
         ? { state: "working" as const, label: `${measured}/${confirmed.length} publicaciones medidas` }
         : { state: "needs-setup" as const, label: "Faltan metricas de las ultimas 48 h" },
     inbox: state.inbox.filter((brief) => brief.status === "pendiente").length,
+    duplicates,
     holder: leaseValid(state.lease, now) ? state.lease.holder : null,
   };
 }
