@@ -1,12 +1,14 @@
 {
-  "generatedAt": "2026-09-28T07:52:10.510Z",
-  "repoRoot": "/private/tmp/blackroom-learning-20260928",
+  "generatedAt": "2026-11-05T11:36:01.803Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-04\\quioer-qu-echeck-el-trabajo-que\\work\\office-current",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
     "dev": "NODE_ENV=development tsx server/index.ts",
     "build": "node --import tsx script/build.ts",
     "deploy:build": "npm run build",
+    "office:worker": "node dist/office-worker.cjs",
+    "office:cloud": "node script/office-cloud-launch.mjs",
     "codebase:map": "node --import tsx script/codebase-map.ts",
     "test:dropshipping-ceo": "node --import tsx --test tests/dropshipping-ceo.test.ts",
     "test:ceo": "node --import tsx --test tests/ceo-briefing.test.ts",
@@ -122,39 +124,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 654,
-    "filesIndexed": 571,
-    "imports": 1935,
-    "routes": 495,
-    "symbols": 12800
+    "filesVisible": 741,
+    "filesIndexed": 652,
+    "imports": 2262,
+    "routes": 524,
+    "symbols": 14798
   },
   "directories": {
-    "docs": {
-      "files": 31,
-      "indexed": 30,
+    ".local/office-evidence": {
+      "files": 9,
+      "indexed": 3,
       "kinds": {
-        "docs": 31
-      }
-    },
-    "script": {
-      "files": 76,
-      "indexed": 71,
-      "kinds": {
-        "script": 76
-      }
-    },
-    "server": {
-      "files": 133,
-      "indexed": 129,
-      "kinds": {
-        "server": 133
-      }
-    },
-    "tests": {
-      "files": 119,
-      "indexed": 116,
-      "kinds": {
-        "test": 119
+        "other": 9
       }
     },
     ".": {
@@ -173,11 +154,17 @@
         "docs": 5
       }
     },
-    ".agents/skills": {
-      "files": 2,
+    ".agents/skills/codebase-overview": {
+      "files": 1,
       "indexed": 1,
       "kinds": {
-        "docs": 1,
+        "docs": 1
+      }
+    },
+    ".agents/skills/codebase-overview/agents": {
+      "files": 1,
+      "indexed": 0,
+      "kinds": {
         "other": 1
       }
     },
@@ -196,22 +183,101 @@
       }
     },
     "client/public": {
-      "files": 16,
+      "files": 14,
       "indexed": 2,
       "kinds": {
-        "other": 16
+        "other": 14
+      }
+    },
+    "client/public/local-news": {
+      "files": 2,
+      "indexed": 0,
+      "kinds": {
+        "other": 2
       }
     },
     "client/src": {
-      "files": 116,
-      "indexed": 114,
+      "files": 3,
+      "indexed": 3,
       "kinds": {
-        "other": 3,
-        "client-component": 22,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 7,
+        "other": 3
+      }
+    },
+    "client/src/components": {
+      "files": 24,
+      "indexed": 24,
+      "kinds": {
+        "client-component": 24
+      }
+    },
+    "client/src/components/agents-building": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "client-component": 1
+      }
+    },
+    "client/src/components/agents-world-office": {
+      "files": 2,
+      "indexed": 2,
+      "kinds": {
+        "client-component": 2
+      }
+    },
+    "client/src/components/clippers": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "client-component": 1
+      }
+    },
+    "client/src/components/company-office": {
+      "files": 5,
+      "indexed": 5,
+      "kinds": {
+        "client-component": 5
+      }
+    },
+    "client/src/components/ui": {
+      "files": 55,
+      "indexed": 55,
+      "kinds": {
+        "ui-component": 55
+      }
+    },
+    "client/src/hooks": {
+      "files": 3,
+      "indexed": 3,
+      "kinds": {
+        "client-hook": 3
+      }
+    },
+    "client/src/lib": {
+      "files": 15,
+      "indexed": 15,
+      "kinds": {
+        "client-lib": 15
+      }
+    },
+    "client/src/pages": {
+      "files": 26,
+      "indexed": 24,
+      "kinds": {
         "client-page": 26
+      }
+    },
+    "client/src/types": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "other": 1
+      }
+    },
+    "docs": {
+      "files": 32,
+      "indexed": 31,
+      "kinds": {
+        "docs": 32
       }
     },
     "examples/clippers-motivation": {
@@ -222,6 +288,13 @@
         "other": 70
       }
     },
+    "script": {
+      "files": 82,
+      "indexed": 77,
+      "kinds": {
+        "script": 82
+      }
+    },
     "scripts": {
       "files": 4,
       "indexed": 1,
@@ -229,11 +302,39 @@
         "script": 4
       }
     },
-    "server/replit_integrations": {
-      "files": 9,
-      "indexed": 9,
+    "server": {
+      "files": 148,
+      "indexed": 144,
       "kinds": {
-        "server": 9
+        "server": 148
+      }
+    },
+    "server/replit_integrations/batch": {
+      "files": 2,
+      "indexed": 2,
+      "kinds": {
+        "server": 2
+      }
+    },
+    "server/replit_integrations/chat": {
+      "files": 4,
+      "indexed": 4,
+      "kinds": {
+        "server": 4
+      }
+    },
+    "server/replit_integrations/image": {
+      "files": 3,
+      "indexed": 3,
+      "kinds": {
+        "server": 3
+      }
+    },
+    "shared": {
+      "files": 7,
+      "indexed": 7,
+      "kinds": {
+        "shared": 7
       }
     },
     "shared/models": {
@@ -243,11 +344,25 @@
         "shared": 1
       }
     },
-    "shared": {
+    "tests": {
+      "files": 147,
+      "indexed": 144,
+      "kinds": {
+        "test": 147
+      }
+    },
+    "tests/fixtures": {
       "files": 1,
       "indexed": 1,
       "kinds": {
-        "shared": 1
+        "test": 1
+      }
+    },
+    "tests/harness": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "test": 1
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -303,6 +418,30 @@
     {
       "path": ".agents/skills/codebase-overview/SKILL.md",
       "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".local/office-evidence/affected-route-auth-guards.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".local/office-evidence/github-handoff-verification.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".local/office-evidence/integrated-app-qa-local.json",
+      "kind": "other",
       "imports": [],
       "exports": [],
       "symbols": [],
@@ -400,6 +539,7 @@
         "@/components/ui/button",
         "@/components/ui/toaster",
         "@/components/ui/tooltip",
+        "@/lib/auth-state",
         "@/pages/auth",
         "@tanstack/react-query",
         "react",
@@ -422,12 +562,10 @@
         "DropshippingCeoPage",
         "GitHubAgentPage",
         "InvestmentDetail",
-        "LOCAL_AUTH_USER_KEY",
         "LegalCompliancePage",
         "LocalNewsPublicPage",
         "MarketingCommandCenterPage",
         "NotFound",
-        "PREVIEW_USER",
         "PageLoading",
         "Portfolio",
         "Projects",
@@ -438,16 +576,9 @@
         "RevenueEnginePage",
         "Router",
         "ToolsPage",
-        "contentType",
-        "getLocalPreviewAuth",
-        "hasLocalPreviewAuth",
-        "isLocalPreview",
         "isPublicNewsRoute",
-        "localAuth",
         "logoutMutation",
-        "response",
-        "stored",
-        "user"
+        "response"
       ],
       "routes": [
         "/",
@@ -487,6 +618,472 @@
       "routes": []
     },
     {
+      "path": "client/src/components/agents-building/agents-building.tsx",
+      "kind": "client-component",
+      "imports": [
+        "@/lib/agent-live-status",
+        "@/lib/utils",
+        "@shared/agent-council",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "exports": [
+        "AgentsBuilding",
+        "BuildingAgent",
+        "BuildingTeamAgent",
+        "CouncilView",
+        "OPERATIONS_AGENT_IDS",
+        "buildingFloors",
+        "councilDeskStatus",
+        "useAgentLiveStatuses",
+        "useCouncil"
+      ],
+      "symbols": [
+        "AgentsBuilding",
+        "DebateRoom",
+        "Desk",
+        "Floor",
+        "FloorShell",
+        "KONG_LEVEL",
+        "Legend",
+        "Monitor",
+        "OPERATIONS_AGENT_IDS",
+        "Worker",
+        "activity",
+        "agent",
+        "agentById",
+        "agentIds",
+        "byKey",
+        "className",
+        "content",
+        "council",
+        "councilDeskStatus",
+        "current",
+        "debatingBy",
+        "error",
+        "frameRef",
+        "hires",
+        "last",
+        "lines",
+        "liveStatuses",
+        "mode",
+        "nameOf",
+        "names",
+        "onPointerMove",
+        "open",
+        "pending",
+        "placed",
+        "probe",
+        "proposals",
+        "px",
+        "py",
+        "query",
+        "queryClient",
+        "rect",
+        "renderAgent",
+        "result",
+        "resultByKey",
+        "results",
+        "runCouncil",
+        "scroll",
+        "stageRef",
+        "stale",
+        "status",
+        "style",
+        "title",
+        "uniqueProbes",
+        "unplaced",
+        "useAgentLiveStatuses",
+        "useCouncil",
+        "view"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/agents-world-office/agents-office-world.tsx",
+      "kind": "client-component",
+      "imports": [
+        "../../../../server/office-kong",
+        "../../../../server/office-kong-collaboration",
+        "./office-scene",
+        "@/components/agents-building/agents-building",
+        "@/lib/agent-live-status",
+        "@/lib/office-city-agents",
+        "@/lib/utils",
+        "@shared/agent-company",
+        "@shared/office-kong-supervisor",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "exports": [
+        "AgentsOfficeWorld",
+        "WorldAgent"
+      ],
+      "symbols": [
+        "AgentsOfficeWorld",
+        "CompanyView",
+        "OfficeAgentStatusChat",
+        "PanelAgent",
+        "activeCityAgents",
+        "activeCityCountry",
+        "career",
+        "changeWing",
+        "city",
+        "cityCountries",
+        "cityDirectory",
+        "cityEvidence",
+        "cityRefreshInterval",
+        "cityRegistered",
+        "cityRooms",
+        "cityRunning",
+        "citySnapshot",
+        "citySupervision",
+        "colorFromGradient",
+        "company",
+        "companyIds",
+        "companyView",
+        "council",
+        "current",
+        "debates",
+        "delay",
+        "departments",
+        "deputyId",
+        "directorCity",
+        "directorScore",
+        "directory",
+        "evidenceExpiresAt",
+        "filteredCityRooms",
+        "focusRoom",
+        "focused",
+        "focusedAgents",
+        "focusedIds",
+        "formatCityTime",
+        "grade",
+        "host",
+        "hostRef",
+        "labels",
+        "labelsRef",
+        "latestSceneKey",
+        "leaderboardRows",
+        "liveStatuses",
+        "mainDepartments",
+        "markDone",
+        "match",
+        "name",
+        "nameOf",
+        "openCityFromOverview",
+        "pageAgentIds",
+        "panelAgent",
+        "panelAgents",
+        "panelCareer",
+        "panelOrders",
+        "panelPersonality",
+        "panelRank",
+        "personalities",
+        "post",
+        "probedIds",
+        "proposals",
+        "queryClient",
+        "question",
+        "reassignmentProposals",
+        "recorded",
+        "reducedMotion",
+        "refreshCouncil",
+        "result",
+        "runCouncil",
+        "running",
+        "sceneKey",
+        "sceneRef",
+        "selectedCity",
+        "sendOrder",
+        "sourceMap",
+        "sources",
+        "text",
+        "timer",
+        "workingCount"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/agents-world-office/office-scene.ts",
+      "kind": "client-component",
+      "imports": [],
+      "exports": [
+        "SceneAgent",
+        "SceneAgentState",
+        "SceneCallbacks",
+        "SceneData",
+        "SceneDebate",
+        "SceneDepartment",
+        "createOfficeScene",
+        "officeCityDeskPosition",
+        "officeCityMapPosition"
+      ],
+      "symbols": [
+        "CITY_RING_SPACING",
+        "DESK_SPACING_X",
+        "DESK_SPACING_Z",
+        "DeskRuntime",
+        "PlatformRuntime",
+        "RING_RADIUS",
+        "a",
+        "accent",
+        "alarm",
+        "angle",
+        "applyViewOffset",
+        "area",
+        "armGeometry",
+        "arms",
+        "aspect",
+        "avatarMotion",
+        "b",
+        "back",
+        "badge",
+        "bar",
+        "bars",
+        "base",
+        "bases",
+        "beam",
+        "bezel",
+        "bh",
+        "bodies",
+        "body",
+        "book",
+        "build",
+        "buildCityOverviewDesks",
+        "buildDesk",
+        "busy",
+        "camera",
+        "canvas",
+        "chairs",
+        "cityJob",
+        "cityOverview",
+        "cityPosition",
+        "clearDynamic",
+        "clock",
+        "col",
+        "color",
+        "colorNum",
+        "cols",
+        "core",
+        "count",
+        "createOfficeScene",
+        "crown",
+        "ctx",
+        "curve",
+        "cx",
+        "cz",
+        "dark",
+        "depth",
+        "desk",
+        "deskById",
+        "desks",
+        "dispose",
+        "disposeObject",
+        "dot",
+        "drawMonitor",
+        "dt",
+        "dx",
+        "dy",
+        "ease",
+        "edges",
+        "el",
+        "end",
+        "fill",
+        "firstRow",
+        "floor",
+        "flow",
+        "flowColor",
+        "focusDepartment",
+        "frame",
+        "frameCityOverview",
+        "from",
+        "frustumScale",
+        "glow",
+        "goalTarget",
+        "grid",
+        "ground",
+        "group",
+        "h",
+        "hasProblem",
+        "head",
+        "headerSpace",
+        "heads",
+        "height",
+        "hexToNumber",
+        "hit",
+        "hub",
+        "hubLabel",
+        "hubLight",
+        "hubMotion",
+        "indent",
+        "instance",
+        "keepFocus",
+        "key",
+        "label",
+        "left",
+        "leftArm",
+        "leg",
+        "len",
+        "light",
+        "line",
+        "lineHolder",
+        "lines",
+        "live",
+        "materials",
+        "maxRadius",
+        "mesh",
+        "mid",
+        "motion",
+        "name",
+        "officeCityDeskPosition",
+        "officeCityMapPosition",
+        "offset",
+        "onPointerDown",
+        "onPointerMove",
+        "onPointerUp",
+        "onScreen",
+        "onStageEnter",
+        "onStageLeave",
+        "onWheel",
+        "p",
+        "panel",
+        "particle",
+        "particles",
+        "pct",
+        "phase",
+        "placeCamera",
+        "placeLabel",
+        "platform",
+        "platformHit",
+        "playhead",
+        "pointer",
+        "points",
+        "position",
+        "priorCount",
+        "priorLayout",
+        "projected",
+        "pulse",
+        "raycaster",
+        "rect",
+        "renderer",
+        "resizeObserver",
+        "rightArm",
+        "ring",
+        "row",
+        "rows",
+        "running",
+        "scene",
+        "screen",
+        "screenLines",
+        "screens",
+        "scroll",
+        "seat",
+        "seed",
+        "set",
+        "shirt",
+        "slab",
+        "slots",
+        "span",
+        "speed",
+        "stage",
+        "stand",
+        "start",
+        "state",
+        "status",
+        "t",
+        "tabletops",
+        "target",
+        "texture",
+        "tmp",
+        "to",
+        "top",
+        "tracks",
+        "transform",
+        "typing",
+        "u",
+        "update",
+        "updateDeskLabel",
+        "w",
+        "wave",
+        "width",
+        "wood",
+        "working",
+        "x",
+        "y",
+        "z"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/agents-world-scene.tsx",
+      "kind": "client-component",
+      "imports": [
+        "@/lib/agents-world",
+        "@/lib/agents-world-layout",
+        "react",
+        "three",
+        "three/addons/controls/OrbitControls.js"
+      ],
+      "exports": [
+        "AgentsWorldScene"
+      ],
+      "symbols": [
+        "AgentsWorldScene",
+        "Engine",
+        "Props",
+        "animationAllowed",
+        "avatar",
+        "box",
+        "budget",
+        "cached",
+        "camera",
+        "canvas",
+        "canvasRef",
+        "changed",
+        "controls",
+        "cube",
+        "down",
+        "draw",
+        "g",
+        "geometries",
+        "id",
+        "ids",
+        "inFrame",
+        "initial",
+        "intersection",
+        "label",
+        "legs",
+        "live",
+        "lost",
+        "m",
+        "manipulate",
+        "material",
+        "media",
+        "moving",
+        "orbit",
+        "raycaster",
+        "rect",
+        "release",
+        "resize",
+        "ring",
+        "ringGeometry",
+        "round",
+        "scene",
+        "sceneKey",
+        "select",
+        "setCameraStatus",
+        "stations",
+        "text",
+        "texture",
+        "tick",
+        "up",
+        "visibility",
+        "x"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/components/assistant-chat.tsx",
       "kind": "client-component",
       "imports": [
@@ -499,6 +1096,154 @@
       ],
       "symbols": [
         "AssistantChat"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/clippers/local-news-source-diagnostics.tsx",
+      "kind": "client-component",
+      "imports": [
+        "../../../../shared/local-news-source-diagnostics"
+      ],
+      "exports": [
+        "LocalNewsSourceDiagnostics"
+      ],
+      "symbols": [
+        "LocalNewsSourceDiagnostics",
+        "LocalNewsSourceDiagnosticsProps",
+        "ObservationRow",
+        "SourceErrorDetails",
+        "boundedSources",
+        "date",
+        "displayCount",
+        "formatTimestamp",
+        "storedDiagnostics"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/company-office/agents-world-office.css",
+      "kind": "client-component",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/company-office/agents-world-office.tsx",
+      "kind": "client-component",
+      "imports": [
+        "./agents-world-office.css",
+        "@/lib/agents-world",
+        "@/lib/agents-world-learning",
+        "@/lib/agents-world-session",
+        "react",
+        "wouter"
+      ],
+      "exports": [
+        "AgentsWorldOffice"
+      ],
+      "symbols": [
+        "AgentsWorldOffice",
+        "AgentsWorldScene",
+        "auth",
+        "brandProjects",
+        "controller",
+        "detail",
+        "entities",
+        "initialSources",
+        "learning",
+        "select",
+        "selected",
+        "sourceLabels",
+        "sourcePaths",
+        "timer",
+        "values",
+        "visible"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/company-office/company-office.css",
+      "kind": "client-component",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/company-office/company-office.tsx",
+      "kind": "client-component",
+      "imports": [
+        "./agents-world-office",
+        "./company-simulation",
+        "@/lib/owner-office-storage",
+        "@tanstack/react-query",
+        "framer-motion",
+        "lucide-react",
+        "react",
+        "wouter"
+      ],
+      "exports": [
+        "CompanyOffice"
+      ],
+      "symbols": [
+        "CompanyOffice",
+        "capacity",
+        "department",
+        "element",
+        "mapRef",
+        "name",
+        "news",
+        "observer",
+        "progress",
+        "projection",
+        "realGoals",
+        "reduced",
+        "response",
+        "running",
+        "sceneScale",
+        "selectDepartment",
+        "storageKey",
+        "team"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/company-office/company-simulation.ts",
+      "kind": "client-component",
+      "imports": [],
+      "exports": [
+        "DepartmentId",
+        "SIMULATION_KEY",
+        "SimulationState",
+        "advanceDay",
+        "dailyCapacity",
+        "departments",
+        "hireAgent",
+        "hireCost",
+        "newSimulation",
+        "nextMonth",
+        "parseSimulation",
+        "upgradeCost",
+        "upgradeDepartment"
+      ],
+      "symbols": [
+        "SIMULATION_KEY",
+        "advanceDay",
+        "cost",
+        "dailyCapacity",
+        "departments",
+        "hireAgent",
+        "hireCost",
+        "initialMap",
+        "integer",
+        "newSimulation",
+        "nextMonth",
+        "parseSimulation",
+        "upgradeCost",
+        "upgradeDepartment",
+        "value"
       ],
       "routes": []
     },
@@ -815,6 +1560,52 @@
       "routes": []
     },
     {
+      "path": "client/src/components/office-connections-panel.tsx",
+      "kind": "client-component",
+      "imports": [
+        "../../../server/office-kong",
+        "../../../server/office-kong-collaboration",
+        "@/components/ui/button",
+        "@/lib/office-city-agents",
+        "@/lib/queryClient",
+        "@shared/office-kong-supervisor",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "exports": [
+        "OfficeConnectionsPanel"
+      ],
+      "symbols": [
+        "OfficeConnectionsPanel",
+        "Probe",
+        "Run",
+        "busy",
+        "collaboration",
+        "connections",
+        "delay",
+        "enabled",
+        "fresh",
+        "isActive",
+        "kongAgents",
+        "kongEvidence",
+        "kongEvidenceFresh",
+        "mutation",
+        "nextExpiry",
+        "pending",
+        "probe",
+        "qualityChecks",
+        "response",
+        "runs",
+        "signature",
+        "snapshot",
+        "supervision",
+        "teams",
+        "timer",
+        "workerReady"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/components/pending-actions-panel.tsx",
       "kind": "client-component",
       "imports": [
@@ -1068,7 +1859,7 @@
         "react"
       ],
       "exports": [
-        "AlertDialog,\n  AlertDialogPortal,\n  AlertDialogOverlay,\n  AlertDialogTrigger,\n  AlertDialogContent,\n  AlertDialogHeader,\n  AlertDialogFooter,\n  AlertDialogTitle,\n  AlertDialogDescription,\n  AlertDialogAction,\n  AlertDialogCancel,\n"
+        "AlertDialog,\r\n  AlertDialogPortal,\r\n  AlertDialogOverlay,\r\n  AlertDialogTrigger,\r\n  AlertDialogContent,\r\n  AlertDialogHeader,\r\n  AlertDialogFooter,\r\n  AlertDialogTitle,\r\n  AlertDialogDescription,\r\n  AlertDialogAction,\r\n  AlertDialogCancel,\r\n"
       ],
       "symbols": [
         "AlertDialog",
@@ -1164,7 +1955,7 @@
         "react"
       ],
       "exports": [
-        "Breadcrumb,\n  BreadcrumbList,\n  BreadcrumbItem,\n  BreadcrumbLink,\n  BreadcrumbPage,\n  BreadcrumbSeparator,\n  BreadcrumbEllipsis,\n"
+        "Breadcrumb,\r\n  BreadcrumbList,\r\n  BreadcrumbItem,\r\n  BreadcrumbLink,\r\n  BreadcrumbPage,\r\n  BreadcrumbSeparator,\r\n  BreadcrumbEllipsis,\r\n"
       ],
       "symbols": [
         "Breadcrumb",
@@ -1188,7 +1979,7 @@
         "class-variance-authority"
       ],
       "exports": [
-        "ButtonGroup,\n  ButtonGroupSeparator,\n  ButtonGroupText,\n  buttonGroupVariants,\n"
+        "ButtonGroup,\r\n  ButtonGroupSeparator,\r\n  ButtonGroupText,\r\n  buttonGroupVariants,\r\n"
       ],
       "symbols": [
         "ButtonGroup",
@@ -1271,7 +2062,7 @@
         "react"
       ],
       "exports": [
-        "type CarouselApi,\n  Carousel,\n  CarouselContent,\n  CarouselItem,\n  CarouselPrevious,\n  CarouselNext,\n"
+        "type CarouselApi,\r\n  Carousel,\r\n  CarouselContent,\r\n  CarouselItem,\r\n  CarouselPrevious,\r\n  CarouselNext,\r\n"
       ],
       "symbols": [
         "Carousel",
@@ -1305,7 +2096,7 @@
       ],
       "exports": [
         "ChartConfig",
-        "ChartContainer,\n  ChartTooltip,\n  ChartTooltipContent,\n  ChartLegend,\n  ChartLegendContent,\n  ChartStyle,\n"
+        "ChartContainer,\r\n  ChartTooltip,\r\n  ChartTooltipContent,\r\n  ChartLegend,\r\n  ChartLegendContent,\r\n  ChartStyle,\r\n"
       ],
       "symbols": [
         "ChartContainer",
@@ -1379,7 +2170,7 @@
         "react"
       ],
       "exports": [
-        "Command,\n  CommandDialog,\n  CommandInput,\n  CommandList,\n  CommandEmpty,\n  CommandGroup,\n  CommandItem,\n  CommandShortcut,\n  CommandSeparator,\n"
+        "Command,\r\n  CommandDialog,\r\n  CommandInput,\r\n  CommandList,\r\n  CommandEmpty,\r\n  CommandGroup,\r\n  CommandItem,\r\n  CommandShortcut,\r\n  CommandSeparator,\r\n"
       ],
       "symbols": [
         "Command",
@@ -1404,7 +2195,7 @@
         "react"
       ],
       "exports": [
-        "ContextMenu,\n  ContextMenuTrigger,\n  ContextMenuContent,\n  ContextMenuItem,\n  ContextMenuCheckboxItem,\n  ContextMenuRadioItem,\n  ContextMenuLabel,\n  ContextMenuSeparator,\n  ContextMenuShortcut,\n  ContextMenuGroup,\n  ContextMenuPortal,\n  ContextMenuSub,\n  ContextMenuSubContent,\n  ContextMenuSubTrigger,\n  ContextMenuRadioGroup,\n"
+        "ContextMenu,\r\n  ContextMenuTrigger,\r\n  ContextMenuContent,\r\n  ContextMenuItem,\r\n  ContextMenuCheckboxItem,\r\n  ContextMenuRadioItem,\r\n  ContextMenuLabel,\r\n  ContextMenuSeparator,\r\n  ContextMenuShortcut,\r\n  ContextMenuGroup,\r\n  ContextMenuPortal,\r\n  ContextMenuSub,\r\n  ContextMenuSubContent,\r\n  ContextMenuSubTrigger,\r\n  ContextMenuRadioGroup,\r\n"
       ],
       "symbols": [
         "ContextMenu",
@@ -1435,7 +2226,7 @@
         "react"
       ],
       "exports": [
-        "Dialog,\n  DialogPortal,\n  DialogOverlay,\n  DialogTrigger,\n  DialogClose,\n  DialogContent,\n  DialogHeader,\n  DialogFooter,\n  DialogTitle,\n  DialogDescription,\n"
+        "Dialog,\r\n  DialogPortal,\r\n  DialogOverlay,\r\n  DialogTrigger,\r\n  DialogClose,\r\n  DialogContent,\r\n  DialogHeader,\r\n  DialogFooter,\r\n  DialogTitle,\r\n  DialogDescription,\r\n"
       ],
       "symbols": [
         "Dialog",
@@ -1460,7 +2251,7 @@
         "vaul"
       ],
       "exports": [
-        "Drawer,\n  DrawerPortal,\n  DrawerOverlay,\n  DrawerTrigger,\n  DrawerClose,\n  DrawerContent,\n  DrawerHeader,\n  DrawerFooter,\n  DrawerTitle,\n  DrawerDescription,\n"
+        "Drawer,\r\n  DrawerPortal,\r\n  DrawerOverlay,\r\n  DrawerTrigger,\r\n  DrawerClose,\r\n  DrawerContent,\r\n  DrawerHeader,\r\n  DrawerFooter,\r\n  DrawerTitle,\r\n  DrawerDescription,\r\n"
       ],
       "symbols": [
         "Drawer",
@@ -1486,7 +2277,7 @@
         "react"
       ],
       "exports": [
-        "DropdownMenu,\n  DropdownMenuTrigger,\n  DropdownMenuContent,\n  DropdownMenuItem,\n  DropdownMenuCheckboxItem,\n  DropdownMenuRadioItem,\n  DropdownMenuLabel,\n  DropdownMenuSeparator,\n  DropdownMenuShortcut,\n  DropdownMenuGroup,\n  DropdownMenuPortal,\n  DropdownMenuSub,\n  DropdownMenuSubContent,\n  DropdownMenuSubTrigger,\n  DropdownMenuRadioGroup,\n"
+        "DropdownMenu,\r\n  DropdownMenuTrigger,\r\n  DropdownMenuContent,\r\n  DropdownMenuItem,\r\n  DropdownMenuCheckboxItem,\r\n  DropdownMenuRadioItem,\r\n  DropdownMenuLabel,\r\n  DropdownMenuSeparator,\r\n  DropdownMenuShortcut,\r\n  DropdownMenuGroup,\r\n  DropdownMenuPortal,\r\n  DropdownMenuSub,\r\n  DropdownMenuSubContent,\r\n  DropdownMenuSubTrigger,\r\n  DropdownMenuRadioGroup,\r\n"
       ],
       "symbols": [
         "DropdownMenu",
@@ -1515,7 +2306,7 @@
         "class-variance-authority"
       ],
       "exports": [
-        "Empty,\n  EmptyHeader,\n  EmptyTitle,\n  EmptyDescription,\n  EmptyContent,\n  EmptyMedia,\n"
+        "Empty,\r\n  EmptyHeader,\r\n  EmptyTitle,\r\n  EmptyDescription,\r\n  EmptyContent,\r\n  EmptyMedia,\r\n"
       ],
       "symbols": [
         "Empty",
@@ -1539,7 +2330,7 @@
         "react"
       ],
       "exports": [
-        "Field,\n  FieldLabel,\n  FieldDescription,\n  FieldError,\n  FieldGroup,\n  FieldLegend,\n  FieldSeparator,\n  FieldSet,\n  FieldContent,\n  FieldTitle,\n"
+        "Field,\r\n  FieldLabel,\r\n  FieldDescription,\r\n  FieldError,\r\n  FieldGroup,\r\n  FieldLegend,\r\n  FieldSeparator,\r\n  FieldSet,\r\n  FieldContent,\r\n  FieldTitle,\r\n"
       ],
       "symbols": [
         "Field",
@@ -1569,7 +2360,7 @@
         "react-hook-form"
       ],
       "exports": [
-        "useFormField,\n  Form,\n  FormItem,\n  FormLabel,\n  FormControl,\n  FormDescription,\n  FormMessage,\n  FormField,\n"
+        "useFormField,\r\n  Form,\r\n  FormItem,\r\n  FormLabel,\r\n  FormControl,\r\n  FormDescription,\r\n  FormMessage,\r\n  FormField,\r\n"
       ],
       "symbols": [
         "Form",
@@ -1621,7 +2412,7 @@
         "react"
       ],
       "exports": [
-        "InputGroup,\n  InputGroupAddon,\n  InputGroupButton,\n  InputGroupText,\n  InputGroupInput,\n  InputGroupTextarea,\n"
+        "InputGroup,\r\n  InputGroupAddon,\r\n  InputGroupButton,\r\n  InputGroupText,\r\n  InputGroupInput,\r\n  InputGroupTextarea,\r\n"
       ],
       "symbols": [
         "InputGroup",
@@ -1682,7 +2473,7 @@
         "react"
       ],
       "exports": [
-        "Item,\n  ItemMedia,\n  ItemContent,\n  ItemActions,\n  ItemGroup,\n  ItemSeparator,\n  ItemTitle,\n  ItemDescription,\n  ItemHeader,\n  ItemFooter,\n"
+        "Item,\r\n  ItemMedia,\r\n  ItemContent,\r\n  ItemActions,\r\n  ItemGroup,\r\n  ItemSeparator,\r\n  ItemTitle,\r\n  ItemDescription,\r\n  ItemHeader,\r\n  ItemFooter,\r\n"
       ],
       "symbols": [
         "Comp",
@@ -1744,7 +2535,7 @@
         "react"
       ],
       "exports": [
-        "Menubar,\n  MenubarMenu,\n  MenubarTrigger,\n  MenubarContent,\n  MenubarItem,\n  MenubarSeparator,\n  MenubarLabel,\n  MenubarCheckboxItem,\n  MenubarRadioGroup,\n  MenubarRadioItem,\n  MenubarPortal,\n  MenubarSubContent,\n  MenubarSubTrigger,\n  MenubarGroup,\n  MenubarSub,\n  MenubarShortcut,\n"
+        "Menubar,\r\n  MenubarMenu,\r\n  MenubarTrigger,\r\n  MenubarContent,\r\n  MenubarItem,\r\n  MenubarSeparator,\r\n  MenubarLabel,\r\n  MenubarCheckboxItem,\r\n  MenubarRadioGroup,\r\n  MenubarRadioItem,\r\n  MenubarPortal,\r\n  MenubarSubContent,\r\n  MenubarSubTrigger,\r\n  MenubarGroup,\r\n  MenubarSub,\r\n  MenubarShortcut,\r\n"
       ],
       "symbols": [
         "Menubar",
@@ -1777,7 +2568,7 @@
         "react"
       ],
       "exports": [
-        "navigationMenuTriggerStyle,\n  NavigationMenu,\n  NavigationMenuList,\n  NavigationMenuItem,\n  NavigationMenuContent,\n  NavigationMenuTrigger,\n  NavigationMenuLink,\n  NavigationMenuIndicator,\n  NavigationMenuViewport,\n"
+        "navigationMenuTriggerStyle,\r\n  NavigationMenu,\r\n  NavigationMenuList,\r\n  NavigationMenuItem,\r\n  NavigationMenuContent,\r\n  NavigationMenuTrigger,\r\n  NavigationMenuLink,\r\n  NavigationMenuIndicator,\r\n  NavigationMenuViewport,\r\n"
       ],
       "symbols": [
         "NavigationMenu",
@@ -1802,7 +2593,7 @@
         "react"
       ],
       "exports": [
-        "Pagination,\n  PaginationContent,\n  PaginationLink,\n  PaginationItem,\n  PaginationPrevious,\n  PaginationNext,\n  PaginationEllipsis,\n"
+        "Pagination,\r\n  PaginationContent,\r\n  PaginationLink,\r\n  PaginationItem,\r\n  PaginationPrevious,\r\n  PaginationNext,\r\n  PaginationEllipsis,\r\n"
       ],
       "symbols": [
         "Pagination",
@@ -1914,7 +2705,7 @@
         "react"
       ],
       "exports": [
-        "Select,\n  SelectGroup,\n  SelectValue,\n  SelectTrigger,\n  SelectContent,\n  SelectLabel,\n  SelectItem,\n  SelectSeparator,\n  SelectScrollUpButton,\n  SelectScrollDownButton,\n"
+        "Select,\r\n  SelectGroup,\r\n  SelectValue,\r\n  SelectTrigger,\r\n  SelectContent,\r\n  SelectLabel,\r\n  SelectItem,\r\n  SelectSeparator,\r\n  SelectScrollUpButton,\r\n  SelectScrollDownButton,\r\n"
       ],
       "symbols": [
         "Select",
@@ -1957,7 +2748,7 @@
         "react"
       ],
       "exports": [
-        "Sheet,\n  SheetPortal,\n  SheetOverlay,\n  SheetTrigger,\n  SheetClose,\n  SheetContent,\n  SheetHeader,\n  SheetFooter,\n  SheetTitle,\n  SheetDescription,\n"
+        "Sheet,\r\n  SheetPortal,\r\n  SheetOverlay,\r\n  SheetTrigger,\r\n  SheetClose,\r\n  SheetContent,\r\n  SheetHeader,\r\n  SheetFooter,\r\n  SheetTitle,\r\n  SheetDescription,\r\n"
       ],
       "symbols": [
         "Sheet",
@@ -1993,7 +2784,7 @@
         "react"
       ],
       "exports": [
-        "Sidebar,\n  SidebarContent,\n  SidebarFooter,\n  SidebarGroup,\n  SidebarGroupAction,\n  SidebarGroupContent,\n  SidebarGroupLabel,\n  SidebarHeader,\n  SidebarInput,\n  SidebarInset,\n  SidebarMenu,\n  SidebarMenuAction,\n  SidebarMenuBadge,\n  SidebarMenuButton,\n  SidebarMenuItem,\n  SidebarMenuSkeleton,\n  SidebarMenuSub,\n  SidebarMenuSubButton,\n  SidebarMenuSubItem,\n  SidebarProvider,\n  SidebarRail,\n  SidebarSeparator,\n  SidebarTrigger,\n  useSidebar,\n"
+        "Sidebar,\r\n  SidebarContent,\r\n  SidebarFooter,\r\n  SidebarGroup,\r\n  SidebarGroupAction,\r\n  SidebarGroupContent,\r\n  SidebarGroupLabel,\r\n  SidebarHeader,\r\n  SidebarInput,\r\n  SidebarInset,\r\n  SidebarMenu,\r\n  SidebarMenuAction,\r\n  SidebarMenuBadge,\r\n  SidebarMenuButton,\r\n  SidebarMenuItem,\r\n  SidebarMenuSkeleton,\r\n  SidebarMenuSub,\r\n  SidebarMenuSubButton,\r\n  SidebarMenuSubItem,\r\n  SidebarProvider,\r\n  SidebarRail,\r\n  SidebarSeparator,\r\n  SidebarTrigger,\r\n  useSidebar,\r\n"
       ],
       "symbols": [
         "Comp",
@@ -2129,7 +2920,7 @@
         "react"
       ],
       "exports": [
-        "Table,\n  TableHeader,\n  TableBody,\n  TableFooter,\n  TableHead,\n  TableRow,\n  TableCell,\n  TableCaption,\n"
+        "Table,\r\n  TableHeader,\r\n  TableBody,\r\n  TableFooter,\r\n  TableHead,\r\n  TableRow,\r\n  TableCell,\r\n  TableCaption,\r\n"
       ],
       "symbols": [
         "Table",
@@ -2188,7 +2979,7 @@
         "react"
       ],
       "exports": [
-        "type ToastProps,\n  type ToastActionElement,\n  ToastProvider,\n  ToastViewport,\n  Toast,\n  ToastTitle,\n  ToastDescription,\n  ToastClose,\n  ToastAction,\n"
+        "type ToastProps,\r\n  type ToastActionElement,\r\n  ToastProvider,\r\n  ToastViewport,\r\n  Toast,\r\n  ToastTitle,\r\n  ToastDescription,\r\n  ToastClose,\r\n  ToastAction,\r\n"
       ],
       "symbols": [
         "Toast",
@@ -2497,6 +3288,125 @@
       "routes": []
     },
     {
+      "path": "client/src/lib/agent-live-status.ts",
+      "kind": "client-lib",
+      "imports": [
+        "@shared/agent-live-status"
+      ],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/agents-world-layout.ts",
+      "kind": "client-lib",
+      "imports": [
+        "./agents-world"
+      ],
+      "exports": [
+        "renderBudget",
+        "rooms",
+        "stationLayout",
+        "visualMotion"
+      ],
+      "symbols": [
+        "cols",
+        "items",
+        "renderBudget",
+        "rows",
+        "stationLayout",
+        "t",
+        "visualMotion"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/agents-world-learning.ts",
+      "kind": "client-lib",
+      "imports": [
+        "./agents-world"
+      ],
+      "exports": [
+        "readLearning"
+      ],
+      "symbols": [
+        "analytics",
+        "candidate",
+        "commands",
+        "d",
+        "data",
+        "evidence",
+        "obj",
+        "readLearning",
+        "recent",
+        "str",
+        "validWindow"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/agents-world-session.ts",
+      "kind": "client-lib",
+      "imports": [
+        "./agents-world"
+      ],
+      "exports": [
+        "worldOwnerMatches"
+      ],
+      "symbols": [
+        "data",
+        "worldOwnerMatches"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/agents-world.ts",
+      "kind": "client-lib",
+      "imports": [],
+      "exports": [
+        "Area",
+        "Department",
+        "Entity",
+        "Signal",
+        "Source",
+        "areas",
+        "buildWorld",
+        "departments",
+        "filterWorld",
+        "freshness",
+        "readSource",
+        "worldReadAllowlist"
+      ],
+      "symbols": [
+        "blank",
+        "buildWorld",
+        "data",
+        "departmentValue",
+        "entities",
+        "entity",
+        "event",
+        "events",
+        "filterWorld",
+        "freshness",
+        "kong",
+        "p",
+        "planner",
+        "proposed",
+        "query",
+        "readSource",
+        "record",
+        "remote",
+        "response",
+        "room",
+        "sourceEvidence",
+        "t",
+        "text",
+        "timestamp",
+        "worldReadAllowlist"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/lib/api.ts",
       "kind": "client-lib",
       "imports": [
@@ -2524,6 +3434,96 @@
         "syncCalendar",
         "syncZohoCalendar",
         "updateTask"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/auth-state.ts",
+      "kind": "client-lib",
+      "imports": [],
+      "exports": [
+        "AuthState",
+        "readAuthState"
+      ],
+      "symbols": [
+        "payload",
+        "readAuthState"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/office-city-agents.ts",
+      "kind": "client-lib",
+      "imports": [
+        "./agent-live-status",
+        "@shared/office-kong-supervisor",
+        "zod"
+      ],
+      "exports": [
+        "OFFICE_CITY_CATEGORIES",
+        "OfficeCityAgent",
+        "OfficeCityCountry",
+        "OfficeCityDirectoryEntry",
+        "OfficeCityRoom",
+        "buildOfficeCityRooms",
+        "buildOfficeCityRoomsFromSnapshot",
+        "officeCityCountries",
+        "officeCityEvidenceExpiresAt",
+        "officeCitySnapshotExpiresAt",
+        "parseOfficeCityDirectory",
+        "selectLatestOfficeKongAudit"
+      ],
+      "symbols": [
+        "MAX_AGE_MS",
+        "OFFICE_CITY_CATEGORIES",
+        "OfficeAuditIdentity",
+        "agents",
+        "buildOfficeCityRooms",
+        "buildOfficeCityRoomsFromSnapshot",
+        "candidates",
+        "categorySchema",
+        "cityEvidenceSchema",
+        "confirmed",
+        "counts",
+        "directoryCitySchema",
+        "evidence",
+        "evidenceSchema",
+        "fresh",
+        "future",
+        "job",
+        "latest",
+        "leaseExpiry",
+        "load",
+        "loadAge",
+        "matches",
+        "officeCityCountries",
+        "officeCityEvidenceExpiresAt",
+        "officeCitySnapshotExpiresAt",
+        "parseOfficeCityDirectory",
+        "parsed",
+        "readCityEvidence",
+        "record",
+        "score",
+        "scores",
+        "selectLatestOfficeKongAudit",
+        "snapshotAt",
+        "snapshotExpiry",
+        "time",
+        "timestamp",
+        "upcomingEvents",
+        "usable"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/owner-office-storage.ts",
+      "kind": "client-lib",
+      "imports": [],
+      "exports": [
+        "ownerOfficeStorageKey"
+      ],
+      "symbols": [
+        "ownerOfficeStorageKey"
       ],
       "routes": []
     },
@@ -2701,7 +3701,14 @@
       "path": "client/src/pages/agents-office.tsx",
       "kind": "client-page",
       "imports": [
+        "@/components/agents-building/agents-building",
+        "@/components/agents-world-office/agents-office-world",
+        "@/components/company-office/company-office",
+        "@/components/office-connections-panel",
         "@/components/ui/button",
+        "@/lib/agent-live-status",
+        "@/lib/owner-office-storage",
+        "@/lib/queryClient",
         "@/lib/utils",
         "@shared/schema",
         "@tanstack/react-query",
@@ -2735,10 +3742,12 @@
         "LegalAppReport",
         "LegalBridgeReport",
         "LegalComplianceRun",
+        "LiveAgentsOffice",
         "OFFICE_AGENT_LOCATIONS_KEY",
         "OFFICE_AGENT_OFFSETS_KEY",
         "OFFICE_GITHUB_HANDOFF_KEY",
         "OFFICE_LAYOUT_KEY",
+        "OFFICE_VIEW_KEY",
         "OfficeConnections",
         "OfficeContact",
         "OfficeDesk",
@@ -2746,6 +3755,7 @@
         "OfficePlant",
         "OfficeRoom",
         "OfficeRoomConnection",
+        "OfficeView",
         "RoomConversation",
         "RoomPresence",
         "RoomPresenceDot",
@@ -2754,6 +3764,7 @@
         "SkillSuggestion",
         "SpeakerIcon",
         "Workstation",
+        "action",
         "active",
         "activeIndex",
         "activeMessages",
@@ -2762,8 +3773,10 @@
         "agents",
         "appAgentPositions",
         "appAgents",
+        "append",
         "approved",
         "asksForNext",
+        "asksStatus",
         "baseContact",
         "baseStyle",
         "blackRoomProject",
@@ -2772,6 +3785,7 @@
         "buildAgentReply",
         "buildLegalAppReport",
         "buildRadioAgentReply",
+        "changeOfficeView",
         "checks",
         "clamp",
         "closeAgentCard",
@@ -2779,10 +3793,12 @@
         "columns",
         "connectedProjects",
         "contact",
+        "contactId",
         "conversation",
         "currentRoomId",
         "currentTimer",
         "cx",
+        "dispatch",
         "dx",
         "dy",
         "fallbackLegalAppReports",
@@ -2798,28 +3814,37 @@
         "handleSelectAgent",
         "handleSelectTeamAgent",
         "handleSendDirectMessage",
+        "handoffKey",
         "isChatOpen",
         "isDevReviewContact",
         "key",
         "kongProject",
+        "layoutKey",
         "legalAppReports",
         "legalReportsFromApi",
         "legalSourceErrors",
         "legalSummary",
+        "locationsKey",
         "manualOffset",
         "markAgentWalking",
+        "member",
         "moveAgentToRoom",
         "occupants",
         "officeMapRef",
         "offsetX",
         "offsetY",
+        "offsetsKey",
         "openContactChat",
         "openHref",
         "opener",
         "overview",
+        "ownerId",
         "parsed",
+        "pr",
         "projectText",
         "projects",
+        "queryClient",
+        "radio",
         "remoteRepos",
         "renameRoom",
         "reply",
@@ -2833,8 +3858,10 @@
         "roomOccupants",
         "row",
         "selectedTarget",
+        "signal",
         "slot",
         "speaker",
+        "specialist",
         "startAgentEdit",
         "startRoom",
         "startRoomEdit",
@@ -2845,6 +3872,7 @@
         "stopRoomEdit",
         "stored",
         "targetRoom",
+        "team",
         "text",
         "to",
         "top",
@@ -2872,6 +3900,7 @@
         "@/components/ui/card",
         "@/lib/queryClient",
         "@/lib/utils",
+        "@shared/app-qa-missions",
         "@tanstack/react-query",
         "lucide-react",
         "wouter"
@@ -2887,6 +3916,7 @@
         "QaSeverity",
         "QaStatus",
         "QaSubAgent",
+        "missionStatusStyle",
         "response",
         "scan",
         "scanMutation",
@@ -2980,49 +4010,11 @@
       ],
       "symbols": [
         "AuthMode",
-        "LOCAL_AUTH_USER_KEY",
-        "LOCAL_PASSKEY_KEY",
-        "LOCAL_USERS_KEY",
-        "LocalPasskey",
-        "LocalUser",
-        "PREVIEW_USER",
         "authMutation",
-        "binary",
-        "bytes",
         "canSubmit",
-        "cleanUsername",
-        "contentType",
-        "credential",
-        "credentialId",
-        "digest",
-        "enablePasskey",
-        "encoded",
-        "fromBase64Url",
-        "getLocalUsers",
-        "hashPassword",
-        "isLocalPreview",
-        "localSubmitAuth",
-        "loginAsPreviewUser",
-        "loginWithPasskey",
-        "normalized",
-        "padded",
-        "passkey",
-        "passkeyConfigured",
-        "passkeyLoginMutation",
-        "passkeySetupMutation",
-        "passkeySupported",
-        "passwordHash",
         "payload",
-        "previewLoginMutation",
-        "randomBytes",
-        "rawId",
         "response",
-        "setCurrentLocalUser",
-        "stored",
-        "submitAuth",
-        "toBase64Url",
-        "user",
-        "users"
+        "submitAuth"
       ],
       "routes": []
     },
@@ -3362,7 +4354,9 @@
       "imports": [
         "@/components/ui/button",
         "@/components/ui/scroll-area",
+        "@/lib/owner-office-storage",
         "@/lib/utils",
+        "@tanstack/react-query",
         "framer-motion",
         "lucide-react",
         "react",
@@ -3385,12 +4379,15 @@
         "goUp",
         "handleKeyDown",
         "handoff",
+        "handoffKey",
         "inputRef",
         "loadFiles",
         "loadRepos",
         "newContent",
         "openFile",
+        "ownerId",
         "parts",
+        "queryClient",
         "rawHandoff",
         "repo",
         "requestedRepo",
@@ -3886,6 +4883,71 @@
       "routes": []
     },
     {
+      "path": "client/src/types/agents-world-three.d.ts",
+      "kind": "other",
+      "imports": [
+        "three"
+      ],
+      "exports": [
+        "BoxGeometry",
+        "BufferGeometry",
+        "Camera",
+        "CanvasTexture",
+        "CylinderGeometry",
+        "DirectionalLight",
+        "Fog",
+        "Group",
+        "HemisphereLight",
+        "Material",
+        "Mesh",
+        "MeshStandardMaterial",
+        "Object3D",
+        "OrbitControls",
+        "PerspectiveCamera",
+        "Raycaster",
+        "SRGBColorSpace",
+        "Scene",
+        "SphereGeometry",
+        "Spherical",
+        "Sprite",
+        "SpriteMaterial",
+        "Texture",
+        "TorusGeometry",
+        "Vector2",
+        "Vector3",
+        "WebGLRenderer"
+      ],
+      "symbols": [
+        "BoxGeometry",
+        "BufferGeometry",
+        "Camera",
+        "CanvasTexture",
+        "CylinderGeometry",
+        "DirectionalLight",
+        "Fog",
+        "Group",
+        "HemisphereLight",
+        "Material",
+        "Mesh",
+        "MeshStandardMaterial",
+        "Object3D",
+        "OrbitControls",
+        "PerspectiveCamera",
+        "Raycaster",
+        "Scene",
+        "SphereGeometry",
+        "Spherical",
+        "Sprite",
+        "SpriteMaterial",
+        "Texture",
+        "TorusGeometry",
+        "Vector2",
+        "Vector3",
+        "WebGLRenderer"
+      ],
+      "routes": []
+    },
+    {
       "path": "components.json",
       "kind": "other",
       "imports": [],
@@ -3903,6 +4965,14 @@
     },
     {
       "path": "docs/agent-kanban-clippers-ceo-runtime-ready.json",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/agents-office-cloud-rollout.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -4757,6 +5827,7 @@
       "kind": "script",
       "imports": [
         "./blackroom-metricool-csv-bridge.mjs",
+        "./blackroom-metricool-exporter.mjs",
         "./blackroom-remote-sync.mjs",
         "node:child_process",
         "node:crypto",
@@ -4788,6 +5859,7 @@
         "data",
         "deadline",
         "entries",
+        "error",
         "execFileAsync",
         "expected",
         "extracted",
@@ -5106,18 +6178,25 @@
         "METRICOOL_EXPORT_PAGES",
         "acquireMetricoolExports",
         "buildVerifiedMetricoolExport",
+        "deliverMetricoolExports",
         "metricoolPublicationInstant",
         "runMetricoolExporter"
       ],
       "symbols": [
         "METRICOOL_EXPORT_PAGES",
+        "acquire",
         "acquireMetricoolExports",
         "buildVerifiedMetricoolExport",
+        "complete",
         "context",
         "decoder",
+        "deliverMetricoolExports",
+        "detail",
         "downloadButton",
+        "errors",
         "failure",
         "format",
+        "importedByNetwork",
         "imports",
         "instant",
         "match",
@@ -5132,8 +6211,11 @@
         "result",
         "root",
         "runMetricoolExporter",
+        "samples",
+        "status",
         "stream",
-        "temporary"
+        "temporary",
+        "transient"
       ],
       "routes": []
     },
@@ -5219,12 +6301,49 @@
       "routes": []
     },
     {
+      "path": "script/build-agents-world-client.mjs",
+      "kind": "script",
+      "imports": [
+        "@tailwindcss/vite",
+        "@vitejs/plugin-react",
+        "node:path",
+        "vite"
+      ],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "script/build-containment-static.mjs",
+      "kind": "script",
+      "imports": [
+        "esbuild",
+        "node:fs/promises",
+        "node:module",
+        "node:path",
+        "typescript"
+      ],
+      "exports": [],
+      "symbols": [
+        "ast",
+        "externals",
+        "out",
+        "pkg",
+        "require",
+        "source",
+        "visit"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/build.ts",
       "kind": "script",
       "imports": [
+        "../server/office-cloud-store",
         "child_process",
         "esbuild",
         "fs/promises",
+        "node:module",
         "vite"
       ],
       "exports": [],
@@ -8801,6 +9920,117 @@
       "routes": []
     },
     {
+      "path": "script/office-cloud-launch.mjs",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "createOfficeCloudLauncher"
+      ],
+      "symbols": [
+        "child",
+        "children",
+        "clearTimer",
+        "createOfficeCloudLauncher",
+        "cwd",
+        "env",
+        "executable",
+        "finish",
+        "graceMs",
+        "killGroup",
+        "launch",
+        "onInt",
+        "onTerm",
+        "platform",
+        "record",
+        "setTimer",
+        "shutdown",
+        "signalChildren",
+        "signals",
+        "spawnImpl",
+        "stop"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/office-postgres-qa.ts",
+      "kind": "script",
+      "imports": [
+        "../server/office-cloud-store",
+        "node:assert/strict",
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:url",
+        "pg"
+      ],
+      "exports": [
+        "runOfficePostgresQa"
+      ],
+      "symbols": [
+        "MARKER",
+        "PORT",
+        "PREFIX",
+        "allowed",
+        "bob",
+        "canonicalRoot",
+        "capabilities",
+        "capabilityTime",
+        "child",
+        "childEnvironment",
+        "claims",
+        "command",
+        "completed",
+        "consume",
+        "data",
+        "duplicate",
+        "exists",
+        "expiredOwner",
+        "first",
+        "history",
+        "identity",
+        "marker",
+        "retained",
+        "retainedTask",
+        "root",
+        "runOfficePostgresQa",
+        "scheduled",
+        "scheduledClaim",
+        "second",
+        "socket",
+        "storeA",
+        "storeB",
+        "task",
+        "temporaryParent",
+        "timer",
+        "user",
+        "verifyOwnedData",
+        "verifyOwnedRoot"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/office-worker.ts",
+      "kind": "script",
+      "imports": [
+        "../server/office-cloud-runtime",
+        "../server/user-context"
+      ],
+      "exports": [],
+      "symbols": [
+        "capabilities",
+        "heartbeat",
+        "main",
+        "worker"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/radio-local-worker.ts",
       "kind": "script",
       "imports": [
@@ -9020,6 +10250,53 @@
       "routes": []
     },
     {
+      "path": "script/test-legacy-containment.mjs",
+      "kind": "script",
+      "imports": [
+        "esbuild",
+        "node:child_process",
+        "node:fs/promises",
+        "node:path",
+        "typescript"
+      ],
+      "exports": [
+        "cleanupUploads",
+        "getHandlers",
+        "scheduleHandler",
+        "workerFailure",
+        "workerVerifyOnly"
+      ],
+      "symbols": [
+        "bridgeAst",
+        "bridgeSource",
+        "builtins",
+        "cleanup",
+        "cleanupUploads",
+        "failExports",
+        "findSchedule",
+        "fixture",
+        "getHandlers",
+        "handlers",
+        "out",
+        "result",
+        "scheduleHandler",
+        "sf",
+        "source",
+        "targets",
+        "test",
+        "virtual",
+        "walk",
+        "wanted",
+        "worker",
+        "workerAst",
+        "workerFailure",
+        "workerSource",
+        "workerVerifyOnly",
+        "workerVisit"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/upload-radio-edits-to-drive.ts",
       "kind": "script",
       "imports": [
@@ -9232,6 +10509,178 @@
       "routes": []
     },
     {
+      "path": "server/agent-council-routes.ts",
+      "kind": "server",
+      "imports": [
+        "./agent-council",
+        "./user-context",
+        "express"
+      ],
+      "exports": [
+        "registerAgentCouncilRoutes"
+      ],
+      "symbols": [
+        "MANUAL_RUN_MIN_INTERVAL_MS",
+        "council",
+        "current",
+        "last",
+        "message",
+        "registerAgentCouncilRoutes",
+        "state",
+        "text"
+      ],
+      "routes": [
+        "/api/agent-company/orders",
+        "/api/agent-company/orders/:id/done",
+        "/api/agent-council/run",
+        "/api/agent-council/state"
+      ]
+    },
+    {
+      "path": "server/agent-council.ts",
+      "kind": "server",
+      "imports": [
+        "@shared/agent-company",
+        "@shared/agent-council",
+        "@shared/agent-live-status",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "AGENT_NAMES",
+        "CouncilDeps",
+        "KONG_TEAM",
+        "createAgentCouncil",
+        "emptyCouncilState ",
+        "getAgentCouncil",
+        "isAgentCouncilEnabled",
+        "readSkillDocs",
+        "setAgentCouncilUser",
+        "startAgentCouncilScheduler",
+        "writeFileAtomic"
+      ],
+      "symbols": [
+        "DATA_DIR",
+        "DB_TIMEOUT_MS",
+        "EXEMPT_IDS",
+        "KONG_IDS",
+        "KONG_TEAM",
+        "SLOW_READ_TTL_MS",
+        "STATE_FILE",
+        "STATUS_FRESH_MS",
+        "accountId",
+        "action",
+        "add",
+        "advanceCompanyCycle",
+        "approveFromTrustCenter",
+        "available",
+        "before",
+        "body",
+        "cachedSlowRead",
+        "checks",
+        "claudeMd",
+        "code",
+        "collectReal",
+        "collectStatusesReal",
+        "collected",
+        "compact",
+        "config",
+        "connected",
+        "controller",
+        "count",
+        "createAgentCouncil",
+        "curriculum",
+        "destination",
+        "detail",
+        "diff",
+        "dir",
+        "doc",
+        "docs",
+        "entries",
+        "everyone",
+        "exists",
+        "fetchLatestReleaseReal",
+        "file",
+        "fileWriteQueues",
+        "findings",
+        "finishOrder",
+        "forAgentId",
+        "fresh",
+        "getAgentCouncil",
+        "gh",
+        "hasValue",
+        "headings",
+        "health",
+        "hit",
+        "id",
+        "instance",
+        "isAgentCouncilEnabled",
+        "iso",
+        "job",
+        "key",
+        "last",
+        "listedInClaudeMd",
+        "load",
+        "loadCurriculumReal",
+        "local",
+        "message",
+        "modules",
+        "mutate",
+        "next",
+        "now",
+        "online",
+        "open",
+        "operation",
+        "personalities",
+        "placeOrder",
+        "plain",
+        "previous",
+        "projects",
+        "raw",
+        "read",
+        "readSkillDocs",
+        "referenced",
+        "release",
+        "remote",
+        "remoteModule",
+        "remoteQueue",
+        "replaceFileAtomic",
+        "response",
+        "result",
+        "routesModule",
+        "runCycle",
+        "runCycleOnce",
+        "runScout",
+        "runScoutOnce",
+        "safe",
+        "schema",
+        "setAgentCouncilUser",
+        "settled",
+        "slowReads",
+        "startAgentCouncilScheduler",
+        "state",
+        "status",
+        "statusesFromSignals",
+        "summarize",
+        "syncProposals",
+        "systemUserId",
+        "tables",
+        "tick",
+        "timeout",
+        "timer",
+        "tmp",
+        "token",
+        "userId",
+        "view",
+        "webhookSecret",
+        "withTimeout",
+        "writeFileAtomic",
+        "writeStateAtomic"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ai-cost-notifications.ts",
       "kind": "server",
       "imports": [],
@@ -9353,6 +10802,7 @@
       "path": "server/app-qa-agent.ts",
       "kind": "server",
       "imports": [
+        "../shared/app-qa-missions",
         "./ceo-doctor-cli",
         "./github-client",
         "./scheduler-time",
@@ -9416,7 +10866,6 @@
         "appByName",
         "appRepoFullName",
         "appsWithoutHealth",
-        "authSeed",
         "baseUrl",
         "bodySnapshots",
         "bodyText",
@@ -9447,11 +10896,13 @@
         "controller",
         "council",
         "countExpectedVisualControls",
+        "coverage",
         "createFinding",
         "dateKey",
         "describeAppQaStorageError",
         "detail",
         "details",
+        "disclosure",
         "dynamicImport",
         "emptyBugPatrolReport",
         "escapeRegExp",
@@ -9902,9 +11353,27 @@
       ]
     },
     {
+      "path": "server/automation-definition-reads.ts",
+      "kind": "server",
+      "imports": [
+        "@shared/schema"
+      ],
+      "exports": [
+        "AutomationDefinitionReader",
+        "activeMetricoolAnalyticsDefinition",
+        "listExistingAutomationDefinitions"
+      ],
+      "symbols": [
+        "activeMetricoolAnalyticsDefinition",
+        "listExistingAutomationDefinitions"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/automation-registry.ts",
       "kind": "server",
       "imports": [
+        "./automation-definition-reads",
         "./storage",
         "./trust-policy",
         "@shared/schema"
@@ -9914,6 +11383,7 @@
         "ScheduledAutomationRunOutcome",
         "buildScheduledAutomationRunInput",
         "ensureDefaultAutomations",
+        "getExistingAutomations",
         "getNextRunAt",
         "recordManualAutomationRun",
         "recordScheduledAutomationRun"
@@ -9928,8 +11398,7 @@
         "data",
         "daysUntil",
         "ensureDefaultAutomations",
-        "existing",
-        "existingAutomation",
+        "getExistingAutomations",
         "getNextRunAt",
         "isRunnable",
         "now",
@@ -10151,7 +11620,9 @@
         "./blackroom-growth-ceo",
         "./blackroom-learning-panel",
         "./blackroom-metricool-bridge",
+        "./blackroom-publication-guard",
         "./blackroom-remote-control",
+        "./blackroom-verified-learning",
         "./single-user-owner",
         "./user-context",
         "express",
@@ -10192,6 +11663,7 @@
         "blackRoomPageTemplate",
         "blackRoomUploadDir",
         "blackRoomUploads",
+        "blocked",
         "byId",
         "bytes",
         "ceoTimer",
@@ -10207,6 +11679,7 @@
         "filePath",
         "hasBlackRoomChatAccess",
         "hasValidBlackRoomRemoteToken",
+        "id",
         "imports",
         "index",
         "info",
@@ -10465,6 +11938,7 @@
         "belowTarget",
         "bitrate",
         "blackRoomVideoUrl",
+        "block",
         "bounded",
         "buildBlackRoomRenderArgs",
         "buildBlackRoomVideoFilter",
@@ -10477,10 +11951,11 @@
         "chooseLanguage",
         "cleaned",
         "commitBlackRoomReservation",
+        "comparable",
         "controlledTest",
         "counts",
-        "creativeStrategy",
         "current",
+        "daypart",
         "distributedSlotSelected",
         "dj",
         "durationSeconds",
@@ -10489,11 +11964,13 @@
         "extractBlackRoomDj",
         "failedVideos",
         "findBlackRoomDropOffset",
+        "first",
         "format",
         "fresh",
         "gap",
         "history",
         "horizontal",
+        "instant",
         "intervals",
         "isActionableJob",
         "isOwnedBlackRoomMetadata",
@@ -10512,6 +11989,8 @@
         "networks",
         "now",
         "occupied",
+        "pairCandidates",
+        "pairs",
         "parseBlackRoomEnergySamples",
         "planBlackRoomDeterministicEdit",
         "preferFreshSource",
@@ -10905,13 +12384,20 @@
       "symbols": [
         "blackRoomLearningPanelHtml",
         "blackRoomLearningPanelScript",
+        "candidates",
+        "collector",
         "content",
+        "coverage",
         "decisions",
+        "detail",
         "item",
         "labels",
+        "latest",
         "lines",
         "observed",
         "renderLearning",
+        "source",
+        "stale",
         "stamp",
         "target"
       ],
@@ -11042,6 +12528,7 @@
         "hasCompleteBlackRoomMetricoolReceipt",
         "isBlackRoomJobPublishable",
         "isBlackRoomSourceSegmentRecorded",
+        "markBlackRoomNetworkBlocked",
         "markBlackRoomNetworkUncertain",
         "nextBlackRoomPublicationDateTime",
         "requiredBlackRoomReceiptNetworks",
@@ -11089,6 +12576,7 @@
         "isValidBlackRoomPublicationDateTime",
         "job",
         "leftDate",
+        "markBlackRoomNetworkBlocked",
         "markBlackRoomNetworkUncertain",
         "match",
         "maxVolumeDb",
@@ -11128,6 +12616,7 @@
       "path": "server/blackroom-metricool-bridge.ts",
       "kind": "server",
       "imports": [
+        "./blackroom-publication-guard",
         "node:child_process",
         "node:fs",
         "node:os",
@@ -11174,6 +12663,7 @@
         "METRICOOL_MCP_URL",
         "absoluteMinutes",
         "acceptedCaptions",
+        "assertPublicationAllowed",
         "blackRoomMetricoolNetworks",
         "blackRoomYoutubeWatchUrl",
         "blogId",
@@ -11270,7 +12760,30 @@
         "verifyUrl",
         "videoId",
         "visit",
+        "wait",
         "youtubeChannel"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/blackroom-publication-guard.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "BlackRoomPublicationBlockedError",
+        "BlackRoomPublicationControl",
+        "blackRoomPublicationControlVeto",
+        "blackRoomPublicationFlagVeto",
+        "retainBlackRoomAttempt",
+        "strictBlackRoomEnabled"
+      ],
+      "symbols": [
+        "BlackRoomPublicationBlockedError",
+        "blackRoomPublicationControlVeto",
+        "blackRoomPublicationFlagVeto",
+        "job",
+        "retainBlackRoomAttempt",
+        "strictBlackRoomEnabled"
       ],
       "routes": []
     },
@@ -11281,6 +12794,7 @@
         "./blackroom-chat",
         "./blackroom-growth-ceo",
         "./blackroom-learning-observations",
+        "./blackroom-publication-guard",
         "./blackroom-verified-learning",
         "@shared/schema",
         "drizzle-orm"
@@ -11300,7 +12814,9 @@
         "initializeBlackRoomRemoteControlPersistence",
         "isBlackRoomRemoteDeviceOnline",
         "mutateBlackRoomRemoteControl",
+        "normalizeRemoteControlState",
         "readBlackRoomRemoteControl",
+        "readExistingBlackRoomRemoteControl",
         "reconcileBlackRoomPublishedIdentities",
         "recordBlackRoomPublicationExperiment",
         "recordBlackRoomRemoteHeartbeat",
@@ -11318,6 +12834,7 @@
         "createBlackRoomRemoteControlState",
         "createdAt",
         "current",
+        "data",
         "database",
         "db",
         "durationSeconds",
@@ -11346,6 +12863,7 @@
         "rawDuration",
         "rawPublishedAt",
         "readBlackRoomRemoteControl",
+        "readExistingBlackRoomRemoteControl",
         "reconcileBlackRoomPublishedIdentities",
         "recordBlackRoomPublicationExperiment",
         "recordBlackRoomRemoteHeartbeat",
@@ -11385,8 +12903,10 @@
         "block",
         "blocks",
         "canonicalLearningPostId",
+        "comparisonBlock",
         "counts",
         "dates",
+        "declared",
         "deduped",
         "entries",
         "evaluateBlackRoomLearning",
@@ -11929,7 +13449,10 @@
       ],
       "exports": [
         "buildClaudeSkillContext",
-        "listClaudeSkillNames"
+        "compactSkillBody",
+        "extractFrontmatter",
+        "listClaudeSkillNames",
+        "skillLimits"
       ],
       "symbols": [
         "ClaudeSkill",
@@ -11988,11 +13511,13 @@
       "path": "server/clippers-local-news-agent.ts",
       "kind": "server",
       "imports": [
+        "../shared/local-news-source-diagnostics",
         "./clippers-local-news-growth",
         "./clippers-local-news-review-committee",
         "./clippers-local-news-state-retention",
         "./clippers-local-news-translation",
         "./local-news-growth-scout",
+        "./local-news-source-diagnostics",
         "node:child_process",
         "node:crypto",
         "node:fs/promises",
@@ -12057,9 +13582,12 @@
         "SourceDefinition",
         "TRANSLATION_TITLE_LIMIT",
         "__clipperLocalNewsInternals",
+        "accepted",
+        "acceptedRevisions",
         "accounts",
         "actionEn",
         "actionEs",
+        "activeIds",
         "alert",
         "allowed",
         "allowedIds",
@@ -12088,12 +13616,15 @@
         "certainty",
         "claimIdentityHash",
         "clean",
+        "collection",
         "combined",
         "committee",
         "committeeGated",
         "committeeItems",
         "compacted",
         "connectorCatalog",
+        "contributionCandidates",
+        "contributions",
         "controlledSnapshot",
         "converted",
         "copy",
@@ -12118,6 +13649,7 @@
         "detailEs",
         "detected",
         "detectedSourceLanguage",
+        "diagnosticItems",
         "digest",
         "dir",
         "direction",
@@ -12216,16 +13748,20 @@
         "now",
         "nowMs",
         "number",
+        "observation",
         "observed",
         "observedAt",
         "observedBoost",
         "officialFeedTextFallback",
         "organicGrowth",
         "original",
+        "originalDate",
+        "originalPublishedAt",
         "ownedLink",
         "page",
         "parsed",
         "parts",
+        "payload",
         "periods",
         "persist",
         "point",
@@ -12234,6 +13770,7 @@
         "prefixEn",
         "previous",
         "primaryPeriod",
+        "priorRevisions",
         "props",
         "provenance",
         "publicEventIds",
@@ -12278,6 +13815,7 @@
         "rssEvents",
         "rssMedia",
         "rssTag",
+        "rssValid",
         "runClipperLocalNewsCycle",
         "runbook",
         "safe",
@@ -12296,6 +13834,7 @@
         "snapshotFieldsSchema",
         "source",
         "sourceArticleMatchesConnector",
+        "sourceDiagnostics",
         "sourceEventId",
         "sourceEvents",
         "sourceFallbacks",
@@ -12308,6 +13847,7 @@
         "staleMs",
         "start",
         "state",
+        "status",
         "suffix",
         "summaries",
         "summarizeMetrics",
@@ -12350,7 +13890,8 @@
         "verifiedFetchedEvents",
         "windowStart",
         "workspace",
-        "xWeightedLength"
+        "xWeightedLength",
+        "xml"
       ],
       "routes": []
     },
@@ -12417,6 +13958,8 @@
       "imports": [
         "./clippers-local-news-agent",
         "./clippers-local-news-review-committee",
+        "./local-news-delivery-attempts",
+        "./local-news-delivery-safety",
         "node:crypto",
         "node:fs/promises",
         "node:path",
@@ -12456,8 +13999,6 @@
         "MIN_SPACING_MS",
         "ProfileCandidate",
         "QueueItem",
-        "SCHEDULE_ATTEMPTS",
-        "SCHEDULE_RETRY_MS",
         "STALE_LOCK_MS",
         "STANDARD_SPACING_MS",
         "TIME_ZONE",
@@ -12524,6 +14065,7 @@
         "evidenceValue",
         "expectedCopyHash",
         "expectedReviewHash",
+        "expires",
         "explicitTopLevelNetworks",
         "facebookConnected",
         "facebookReady",
@@ -12531,6 +14073,7 @@
         "fetchedNow",
         "fetcher",
         "filename",
+        "finalPolicy",
         "finish",
         "getClipperLocalNewsMetricoolReadiness",
         "group",
@@ -12540,11 +14083,12 @@
         "hasCompleteLocalNewsCommitteeApproval",
         "hasRealValue",
         "highImpactTraffic",
+        "historicalItem",
         "hostname",
         "hours",
+        "identity",
         "info",
         "isHighImpactTraffic",
-        "isNewerRevision",
         "isRoutineTransitNoise",
         "item",
         "key",
@@ -12585,6 +14129,7 @@
         "occupied",
         "occupiedByAccount",
         "onAbort",
+        "original",
         "override",
         "ownerId",
         "parsed",
@@ -12592,7 +14137,10 @@
         "parts",
         "payload",
         "platformEnabled",
+        "policy",
+        "postId",
         "prefix",
+        "previousAttempts",
         "profile",
         "profileFromRecord",
         "profiles",
@@ -12605,6 +14153,7 @@
         "queuePath",
         "readBody",
         "readLedger",
+        "readPolicy",
         "reader",
         "record",
         "remainingAfterThis",
@@ -13245,6 +14794,7 @@
       "imports": [
         "./app-qa-agent",
         "./github-client",
+        "./office-runtime",
         "./storage",
         "@shared/schema"
       ],
@@ -13340,6 +14890,8 @@
         "requestWithRepo",
         "requiredTargetContext",
         "requiredValue",
+        "review",
+        "reviewAge",
         "risks",
         "routePath",
         "routeScan",
@@ -14951,7 +16503,7 @@
         "zod"
       ],
       "exports": [
-        "hashPassword,\n  isLocalAuthEnabled,\n  isLocalAuthRegistrationAllowed,\n  normalizeUsername,\n  sanitizeAuthUser,\n  verifyPassword,\n",
+        "hashPassword,\r\n  isLocalAuthEnabled,\r\n  isLocalAuthRegistrationAllowed,\r\n  normalizeUsername,\r\n  sanitizeAuthUser,\r\n  verifyPassword,\r\n",
         "registerLocalAuthRoutes"
       ],
       "symbols": [
@@ -14986,6 +16538,65 @@
         "/api/auth/me",
         "/api/auth/register"
       ]
+    },
+    {
+      "path": "server/local-news-delivery-attempts.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto",
+        "node:fs/promises"
+      ],
+      "exports": [
+        "NewsDeliveryAttempt",
+        "readNewsDeliveryAttempts",
+        "saveNewsDeliveryAttempts"
+      ],
+      "symbols": [
+        "parsed",
+        "readNewsDeliveryAttempts",
+        "saveNewsDeliveryAttempts",
+        "temp"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/local-news-delivery-safety.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "zod"
+      ],
+      "exports": [
+        "LocalNewsDeliveryPolicy",
+        "NewsPolicyReader",
+        "canonicalNewsArticleUrl",
+        "destinationIdentityVerified",
+        "destinationNetworkVerified",
+        "newsArticleIdentity",
+        "newsSourceMatchesCity",
+        "readLocalNewsDeliveryPolicy"
+      ],
+      "symbols": [
+        "canonical",
+        "canonicalNewsArticleUrl",
+        "connector",
+        "destination",
+        "destinationIdentityVerified",
+        "destinationNetworkVerified",
+        "expected",
+        "host",
+        "newsArticleIdentity",
+        "newsSourceMatchesCity",
+        "policySchema",
+        "readLocalNewsDeliveryPolicy",
+        "rule",
+        "target",
+        "trackingParameter",
+        "url"
+      ],
+      "routes": []
     },
     {
       "path": "server/local-news-growth-scout.ts",
@@ -15111,6 +16722,69 @@
         "url",
         "value",
         "work"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/local-news-source-diagnostics.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/local-news-source-diagnostics",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "zod"
+      ],
+      "exports": [
+        "finalizeSourceObservation",
+        "readSourceDiagnostics",
+        "recordSourceObservation",
+        "sanitizeSourceError",
+        "sourceObservation"
+      ],
+      "symbols": [
+        "Catalog",
+        "DAY",
+        "ErrorCode",
+        "FILE",
+        "MAX_BYTES",
+        "State",
+        "age",
+        "at",
+        "codes",
+        "cutoff",
+        "date",
+        "describeError",
+        "e",
+        "errorSchema",
+        "file",
+        "finalizeSourceObservation",
+        "http",
+        "index",
+        "key",
+        "latest",
+        "load",
+        "loaded",
+        "locks",
+        "message",
+        "newer",
+        "next",
+        "observationSchema",
+        "previous",
+        "raw",
+        "readSourceDiagnostics",
+        "recordSourceObservation",
+        "safe",
+        "sanitizeSourceError",
+        "seen",
+        "sourceObservation",
+        "state",
+        "stateSchema",
+        "storageError",
+        "stored",
+        "tmp",
+        "value",
+        "writeFailures"
       ],
       "routes": []
     },
@@ -15351,10 +17025,12 @@
       "path": "server/metricool-analytics-sync.ts",
       "kind": "server",
       "imports": [
+        "./automation-definition-reads",
         "./automation-registry",
         "./blackroom-metricool-bridge",
         "./clippers-local-news-agent",
         "./user-context",
+        "@shared/schema",
         "node:crypto",
         "node:fs/promises",
         "node:path"
@@ -15398,6 +17074,7 @@
         "boundedInt",
         "canSplit",
         "cancel",
+        "cancelDeadline",
         "clicks",
         "clock",
         "collect",
@@ -15411,6 +17088,7 @@
         "current",
         "dailyDeadlineReached",
         "deadline",
+        "deadlineTimer",
         "dir",
         "direct",
         "discoverBrands",
@@ -15471,6 +17149,7 @@
         "raw",
         "reach",
         "reactions",
+        "readDefinitions",
         "readLedger",
         "readStoredState",
         "record",
@@ -15583,6 +17262,450 @@
         "networks",
         "recommendedPlan",
         "socialProfileCount"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-claude.ts",
+      "kind": "server",
+      "imports": [
+        "node:child_process",
+        "node:path"
+      ],
+      "exports": [
+        "OfficeClaudeError",
+        "OfficeClaudeProbe",
+        "OfficeClaudeProcessRequest",
+        "OfficeClaudeProcessResult",
+        "OfficeClaudeResult",
+        "OfficeClaudeRunner",
+        "createOfficeClaude",
+        "officeClaudeProcessRunner",
+        "probeOfficeClaude",
+        "runOfficeClaude"
+      ],
+      "symbols": [
+        "OUTPUT_LIMIT",
+        "OfficeClaudeError",
+        "PROMPT_LIMIT",
+        "SAFE_SETTINGS",
+        "allowed",
+        "auth",
+        "authMode",
+        "child",
+        "collect",
+        "config",
+        "correctMethod",
+        "createOfficeClaude",
+        "cwd",
+        "executable",
+        "execute",
+        "getConfig",
+        "now",
+        "officeClaude",
+        "probe",
+        "probeConfiguredClaude",
+        "probeOfficeClaude",
+        "result",
+        "runOfficeClaude",
+        "runner",
+        "source",
+        "subscriptionEnvironment",
+        "timer",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-cloud-runtime.ts",
+      "kind": "server",
+      "imports": [
+        "./office-claude",
+        "./office-cloud-store",
+        "./office-kong",
+        "./office-runtime",
+        "node:crypto"
+      ],
+      "exports": [
+        "createOfficeCloudRuntime",
+        "createOfficeCloudWorker",
+        "officeCloudRuntime",
+        "probeOfficeWorker"
+      ],
+      "symbols": [
+        "age",
+        "blocked",
+        "checkedAt",
+        "claimed",
+        "committed",
+        "createOfficeCloudRuntime",
+        "createOfficeCloudWorker",
+        "execute",
+        "heartbeat",
+        "known",
+        "kong",
+        "latest",
+        "now",
+        "officeCloudRuntime",
+        "output",
+        "overdue",
+        "probeAge",
+        "probeOfficeWorker",
+        "provider",
+        "publicRun",
+        "runs",
+        "store",
+        "time",
+        "unavailable",
+        "workerId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-cloud-store.ts",
+      "kind": "server",
+      "imports": [
+        "./office-runtime",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "OfficeCloudClient",
+        "OfficeCloudCompletion",
+        "OfficeCloudPool",
+        "OfficeCloudQueryResult",
+        "OfficeCloudRun",
+        "OfficeCloudStoreError",
+        "OfficeWorkerCapabilities",
+        "OfficeWorkerHeartbeat",
+        "createOfficeCloudSchemaSql",
+        "createOfficeCloudStore",
+        "officeCloudStore"
+      ],
+      "symbols": [
+        "OfficeCloudStoreError",
+        "PR",
+        "canonical",
+        "capabilities",
+        "capabilitiesSchema",
+        "claimed",
+        "client",
+        "completed",
+        "completionSchema",
+        "createOfficeCloudSchemaSql",
+        "createOfficeCloudStore",
+        "database",
+        "date",
+        "decode",
+        "digest",
+        "encoded",
+        "fail",
+        "find",
+        "guarded",
+        "hash",
+        "hex",
+        "input",
+        "inserted",
+        "inspect",
+        "jsonResult",
+        "key",
+        "leaseMs",
+        "officeCloudStore",
+        "owner",
+        "ownerKey",
+        "parsed",
+        "pool",
+        "providerProbeSchema",
+        "requestHash",
+        "result",
+        "safe",
+        "slot",
+        "task",
+        "taskSchema",
+        "timestamp",
+        "transaction",
+        "verified",
+        "worker",
+        "workerIdSafe"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-github.ts",
+      "kind": "server",
+      "imports": [
+        "./github-client",
+        "node:crypto"
+      ],
+      "exports": [
+        "OfficeGitHubError",
+        "OfficePrReference",
+        "OfficePullRequestPacket",
+        "createOfficeGitHubLoader",
+        "parseOfficePrUrl"
+      ],
+      "symbols": [
+        "MAX_FILES",
+        "MAX_PACKET_BYTES",
+        "OfficeGitHubClient",
+        "OfficeGitHubError",
+        "PrMetadata",
+        "RecordValue",
+        "ReviewedFile",
+        "SHA",
+        "after",
+        "assertCompletePatch",
+        "assertReviewablePath",
+        "before",
+        "block",
+        "client",
+        "createOfficeGitHubLoader",
+        "diff",
+        "filePacket",
+        "getClient",
+        "header",
+        "input",
+        "integer",
+        "line",
+        "lines",
+        "loadOfficePullRequest",
+        "metadata",
+        "newExpected",
+        "oldExpected",
+        "parseOfficePrUrl",
+        "parsed",
+        "record",
+        "reference",
+        "response"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-kong-collaboration.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/office-kong-supervisor",
+        "./office-kong"
+      ],
+      "exports": [
+        "OfficeKongCollaboration",
+        "buildOfficeKongCollaboration"
+      ],
+      "symbols": [
+        "Exchange",
+        "Kind",
+        "MAX_EXCHANGES",
+        "attempts",
+        "buildOfficeKongCollaboration",
+        "closed",
+        "completedAt",
+        "jobs",
+        "needsReassignmentReview",
+        "nextStep",
+        "observedAt",
+        "priority",
+        "proposal",
+        "startedAt",
+        "successAt",
+        "supervision"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-kong.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/office-kong-supervisor",
+        "zod"
+      ],
+      "exports": [
+        "OFFICE_KONG_CITY_CATEGORIES",
+        "OfficeKongAgent",
+        "OfficeKongAuditResult",
+        "OfficeKongCity",
+        "OfficeKongCityCategory",
+        "OfficeKongCityDirectoryEntry",
+        "OfficeKongError",
+        "OfficeKongProbe",
+        "createOfficeKongConnector"
+      ],
+      "symbols": [
+        "CITY_AGENTS_URL",
+        "CITY_DIRECTORY_URL",
+        "MAX_BODY_BYTES",
+        "MAX_FUTURE_SKEW_MS",
+        "MAX_SNAPSHOT_AGE_MS",
+        "OFFICE_KONG_CITY_CATEGORIES",
+        "OPERATIONS_URL",
+        "OfficeKongError",
+        "TIMEOUT_MS",
+        "age",
+        "agentSchema",
+        "briefSchema",
+        "categories",
+        "categoryCount",
+        "categorySchema",
+        "checkedAt",
+        "cities",
+        "citiesSchema",
+        "cityCoverageComplete",
+        "cityEvidence",
+        "citySchema",
+        "citySnapshot",
+        "contentType",
+        "controller",
+        "count",
+        "counts",
+        "createOfficeKongConnector",
+        "declaredSize",
+        "directorySchema",
+        "futureEvidence",
+        "ids",
+        "issues",
+        "job",
+        "jobSchema",
+        "lastSuccess",
+        "liveLease",
+        "loadOfficeKongDirectory",
+        "now",
+        "nullableTimestamp",
+        "operationsCityIds",
+        "operationsSchema",
+        "parsed",
+        "probeOfficeKong",
+        "readBoundedJson",
+        "readEndpoint",
+        "readOperations",
+        "reader",
+        "redactStrings",
+        "registeredIds",
+        "response",
+        "runOfficeKongReadOnly",
+        "safeError",
+        "snapshot",
+        "text",
+        "timer",
+        "timestamp",
+        "token",
+        "tokenSource"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-routes.ts",
+      "kind": "server",
+      "imports": [
+        "./office-claude",
+        "./office-kong",
+        "./office-kong-collaboration",
+        "./office-runtime",
+        "./user-context",
+        "express"
+      ],
+      "exports": [
+        "officeSameOrigin",
+        "registerOfficeRoutes"
+      ],
+      "symbols": [
+        "allowed",
+        "analyzeRadioEvents",
+        "checkedAt",
+        "code",
+        "input",
+        "now",
+        "officeSameOrigin",
+        "origin",
+        "owner",
+        "pending",
+        "registerOfficeRoutes",
+        "result",
+        "run",
+        "runtime",
+        "userId",
+        "workerDisabled"
+      ],
+      "routes": [
+        "/api/agents-office/cities",
+        "/api/agents-office/connections",
+        "/api/agents-office/contact-action",
+        "/api/agents-office/kong-snapshot",
+        "/api/agents-office/runs"
+      ]
+    },
+    {
+      "path": "server/office-runtime.ts",
+      "kind": "server",
+      "imports": [
+        "./office-claude",
+        "./office-kong",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "zod"
+      ],
+      "exports": [
+        "OfficePullRequest",
+        "OfficeRun",
+        "OfficeRuntimeError",
+        "OfficeTaskInput",
+        "createOfficeRuntime",
+        "officeRuntime",
+        "officeTaskSchema",
+        "usesOfficeCloudRuntime"
+      ],
+      "symbols": [
+        "OfficeRuntimeError",
+        "age",
+        "blocked",
+        "canonicalPr",
+        "checkFault",
+        "claude",
+        "clone",
+        "createOfficeRuntime",
+        "current",
+        "drain",
+        "execute",
+        "existing",
+        "faults",
+        "filename",
+        "found",
+        "index",
+        "initialize",
+        "interrupted",
+        "journals",
+        "known",
+        "kong",
+        "loadPr",
+        "localOfficeRuntime",
+        "locked",
+        "next",
+        "officeRuntime",
+        "officeTaskSchema",
+        "owner",
+        "ownerFor",
+        "parsed",
+        "pr",
+        "previous",
+        "prompt",
+        "raw",
+        "recovered",
+        "result",
+        "retained",
+        "reviewSchema",
+        "rootDir",
+        "run",
+        "runSchema",
+        "runs",
+        "save",
+        "selectedRuntime",
+        "sha256",
+        "task",
+        "temporary",
+        "terminal",
+        "update",
+        "usesOfficeCloudRuntime",
+        "validatePr",
+        "verdictSchema"
       ],
       "routes": []
     },
@@ -16714,7 +18837,7 @@
         "./utils"
       ],
       "exports": [
-        "batchProcess,\n  batchProcessWithSSE,\n  isRateLimitError,\n  type BatchOptions,\n"
+        "batchProcess,\r\n  batchProcessWithSSE,\r\n  isRateLimitError,\r\n  type BatchOptions,\r\n"
       ],
       "symbols": [],
       "routes": []
@@ -17051,6 +19174,7 @@
       "kind": "server",
       "imports": [
         "./agent-actions",
+        "./agent-council-routes",
         "./ai-cost-policy",
         "./app-qa-agent",
         "./assistant",
@@ -17075,11 +19199,15 @@
         "./google-drive-oauth",
         "./health-check",
         "./legal-compliance-agent",
+        "./local-news-delivery-safety",
         "./local-news-growth-scout",
         "./market-news",
         "./marketing-command-center",
         "./meeting-intelligence",
         "./metricool-analytics-sync",
+        "./office-github",
+        "./office-routes",
+        "./office-runtime",
         "./portfolio-agent",
         "./promo-video-agent",
         "./public-local-news",
@@ -17158,6 +19286,7 @@
         "cards",
         "carriedTask",
         "child",
+        "claudeReview",
         "clipperCsvCell",
         "clipperOwnerUserId",
         "clipperUniqueStrings",
@@ -17367,6 +19496,7 @@
         "response",
         "result",
         "results",
+        "reviewPacket",
         "rowById",
         "rows",
         "rtWeekStart",
@@ -18545,6 +20675,7 @@
         "input",
         "investment",
         "investments",
+        "proposalKey",
         "radioDriveVideoResult",
         "radioYoutubeResult",
         "taskToUpdate",
@@ -18605,6 +20736,7 @@
         "LOCAL_AUTH_USER_COOKIE_NAME",
         "allowsDevUserFallback",
         "createSignedLocalAuthCookieValue",
+        "getAuthenticatedCurrentUserId",
         "getCurrentUserId",
         "getSystemUserId",
         "isPublicApiPath",
@@ -18615,7 +20747,6 @@
       ],
       "symbols": [
         "DEFAULT_DEV_USER_ID",
-        "DEV_FALLBACK_ENVS",
         "LOCAL_AUTH_USER_COOKIE_NAME",
         "PUBLIC_API_PATHS",
         "RequestWithAuth",
@@ -18633,6 +20764,7 @@
         "error",
         "expected",
         "expectedBuffer",
+        "getAuthenticatedCurrentUserId",
         "getCurrentUserId",
         "getLocalAuthCookieSecret",
         "getSystemUserId",
@@ -18646,7 +20778,6 @@
         "readCookieHeader",
         "readSignedLocalAuthCookie",
         "request",
-        "requestFallbackAllowed",
         "requireAppUser",
         "resolveCurrentUserId",
         "resolveRequestApiPath",
@@ -18857,6 +20988,376 @@
       "routes": []
     },
     {
+      "path": "shared/agent-company.ts",
+      "kind": "shared",
+      "imports": [
+        "./agent-live-status"
+      ],
+      "exports": [
+        "AgentCareer",
+        "BATTERY_MAX",
+        "CompanyOrder",
+        "CompanyState",
+        "CurriculumModule",
+        "LeaderboardRow",
+        "MemoryEntry",
+        "OrderStatus",
+        "Personality",
+        "Trainee",
+        "advanceAcademy",
+        "advanceCompany",
+        "completeOrder",
+        "createOrder",
+        "emptyCompanyState",
+        "enrollTrainee",
+        "leaderboard",
+        "levelFor",
+        "parseCompanyState",
+        "personalityFor",
+        "routeOrder",
+        "uniqueNickname"
+      ],
+      "symbols": [
+        "BATTERY_MAX",
+        "MAX_EVENTS",
+        "MAX_MEMORY",
+        "MAX_ORDERS",
+        "MAX_TRAINEES",
+        "MIN_TENURE_MS",
+        "MOTTOS",
+        "NEEDS_SETUP_FLOOR",
+        "NICKNAMES",
+        "TRAITS",
+        "advanceAcademy",
+        "advanceCompany",
+        "assigneeIds",
+        "c",
+        "candidate",
+        "capTrainees",
+        "career",
+        "careers",
+        "completeOrder",
+        "createOrder",
+        "delta",
+        "earned",
+        "emptyCompanyState",
+        "enrollTrainee",
+        "events",
+        "exempt",
+        "existing",
+        "first",
+        "floor",
+        "graduated",
+        "hash",
+        "iso",
+        "leaderboard",
+        "levelFor",
+        "modules",
+        "ms",
+        "next",
+        "nextGeneration",
+        "nickname",
+        "normalized",
+        "order",
+        "orders",
+        "parseCompanyState",
+        "personalityFor",
+        "reason",
+        "remember",
+        "replacement",
+        "routeOrder",
+        "rows",
+        "second",
+        "seed",
+        "start",
+        "status",
+        "studying",
+        "text",
+        "toMsSafe",
+        "trainees",
+        "uniqueNickname",
+        "used",
+        "usedNicknames",
+        "v",
+        "who",
+        "working"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/agent-council.ts",
+      "kind": "shared",
+      "imports": [
+        "./agent-company",
+        "./agent-live-status"
+      ],
+      "exports": [
+        "COUNCIL_CYCLE_MS",
+        "CouncilDebate",
+        "CouncilFinding",
+        "CouncilLesson",
+        "CouncilProposal",
+        "CouncilSignals",
+        "CouncilSkillDoc",
+        "CouncilState",
+        "HELPER_AGENT_AFTER_MS",
+        "LESSON_STREAK",
+        "MAX_OPEN_REPAIR_PROPOSALS",
+        "ProposalKind",
+        "ProposalStatus",
+        "REJECTED_COOLDOWN_MS",
+        "SCOUT_INTERVAL_MS",
+        "SCOUT_WATCHLIST",
+        "ScoutRelease",
+        "Severity",
+        "Verdict",
+        "applyApprovedProposal",
+        "applyLessons",
+        "buildHandoffBrief",
+        "debateKey",
+        "deriveProposals",
+        "deriveRepairProposals",
+        "diffScoutReleases",
+        "emptyCouncilState",
+        "finishCycle",
+        "hasProposal",
+        "mergeDebates",
+        "parseCouncilState",
+        "pruneProposals",
+        "runCrossChecks",
+        "safeText",
+        "toMs",
+        "trackAgentStates"
+      ],
+      "symbols": [
+        "COUNCIL_CYCLE_MS",
+        "HELPER_AGENT_AFTER_MS",
+        "Json",
+        "LESSON_STREAK",
+        "MAX_OPEN_NEW_AGENT_PROPOSALS",
+        "MAX_OPEN_REPAIR_PROPOSALS",
+        "MAX_PROPOSALS",
+        "MAX_RESOLVED",
+        "REJECTED_COOLDOWN_MS",
+        "REPAIR_COOLDOWN_MS",
+        "REPAIR_OPEN",
+        "SCOUT_INTERVAL_MS",
+        "all",
+        "alreadyLearned",
+        "applyApprovedProposal",
+        "applyLessons",
+        "arr",
+        "base",
+        "blockers",
+        "buildHandoffBrief",
+        "byKey",
+        "cleaned",
+        "clippers",
+        "closed",
+        "debateKey",
+        "decide",
+        "deriveProposals",
+        "deriveRepairProposals",
+        "diffScoutReleases",
+        "downWithoutIncident",
+        "emptyCouncilState",
+        "evidence",
+        "existing",
+        "failed",
+        "finding",
+        "finishCycle",
+        "hasOpenOrRecent",
+        "hasProposal",
+        "healthyWithCritical",
+        "iso",
+        "key",
+        "label",
+        "lesson",
+        "lessons",
+        "mergeDebates",
+        "missing",
+        "name",
+        "nameOf",
+        "next",
+        "note",
+        "now",
+        "number",
+        "obj",
+        "open",
+        "openNewAgent",
+        "openRepairs",
+        "parseCouncilState",
+        "prefix",
+        "present",
+        "previous",
+        "prior",
+        "probe",
+        "proposal",
+        "proposals",
+        "proposalsInCooldown",
+        "pruneProposals",
+        "raw",
+        "resolved",
+        "runCrossChecks",
+        "runs",
+        "safeText",
+        "seen",
+        "self",
+        "status",
+        "stuck",
+        "subjectStatus",
+        "text",
+        "toMs",
+        "trackAgentStates",
+        "truncated",
+        "unchecked",
+        "value",
+        "watch",
+        "working"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/agent-live-status.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "AgentLiveState",
+        "AgentLiveStatus",
+        "AgentProbe",
+        "ProbeResult",
+        "agentProbes",
+        "extractActivity",
+        "runProbe",
+        "summarizeProbe"
+      ],
+      "symbols": [
+        "Json",
+        "MINUTE",
+        "active",
+        "activity",
+        "agent",
+        "approvals",
+        "apps",
+        "asObject",
+        "at",
+        "blockers",
+        "body",
+        "bodyError",
+        "checks",
+        "clients",
+        "clip",
+        "critical",
+        "dayAgo",
+        "degraded",
+        "detail",
+        "down",
+        "events",
+        "extra",
+        "extractActivity",
+        "failed",
+        "google",
+        "hours",
+        "hoursAgo",
+        "last",
+        "lastRun",
+        "list",
+        "listed",
+        "login",
+        "minutes",
+        "missingChecks",
+        "newest",
+        "next",
+        "note",
+        "num",
+        "obj",
+        "online",
+        "open",
+        "outputs",
+        "pending",
+        "plural",
+        "profitGuardStatus",
+        "queue",
+        "readiness",
+        "ready",
+        "recent",
+        "response",
+        "review",
+        "runProbe",
+        "runs",
+        "scorecard",
+        "slots",
+        "started",
+        "status",
+        "str",
+        "summarizeProbe",
+        "summarizeStatus",
+        "summary",
+        "targets",
+        "text",
+        "totals",
+        "unknown",
+        "videos",
+        "word",
+        "zoho"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/app-qa-missions.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "QA_MISSIONS",
+        "QaMissionBreakdown",
+        "QaMissionId",
+        "QaMissionReport",
+        "QaMissionStatus",
+        "buildMissionBreakdown",
+        "missionForRoute",
+        "routeMissionCoverage"
+      ],
+      "symbols": [
+        "Finding",
+        "QA_MISSIONS",
+        "Route",
+        "Visual",
+        "buildMissionBreakdown",
+        "clean",
+        "findingMission",
+        "globalFindings",
+        "items",
+        "localFindings",
+        "missionForRoute",
+        "missions",
+        "parts",
+        "paths",
+        "relevant",
+        "routeMissionCoverage",
+        "routeParts",
+        "scans",
+        "status",
+        "url",
+        "visualStatus"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/local-news-source-diagnostics.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "SourceDiagnostic",
+        "SourceDiagnostics",
+        "SourceError",
+        "SourceErrorCategory",
+        "SourceObservation",
+        "SourceOutcome"
+      ],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "shared/models/chat.ts",
       "kind": "shared",
       "imports": [
@@ -18880,6 +21381,61 @@
         "insertConversationSchema",
         "insertMessageSchema",
         "messages"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/office-kong-supervisor.ts",
+      "kind": "shared",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "OFFICE_KONG_CITY_TASKS",
+        "OFFICE_KONG_SCORE_DEDUCTIONS",
+        "OFFICE_KONG_SUPERVISED_CATEGORIES",
+        "OfficeKongCategoryScore",
+        "OfficeKongCityScore",
+        "OfficeKongCountryScore",
+        "OfficeKongSupervision",
+        "OfficeKongSupervisorSnapshot",
+        "OfficeKongSupervisorState",
+        "officeKongEventLoadSchema",
+        "scoreOfficeKongSnapshot"
+      ],
+      "symbols": [
+        "Category",
+        "CategoryEvidence",
+        "MAX_CLOCK_SKEW_MS",
+        "MAX_SNAPSHOT_AGE_MS",
+        "MISSED_GRACE_MS",
+        "OFFICE_KONG_SCORE_DEDUCTIONS",
+        "OFFICE_KONG_SUPERVISED_CATEGORIES",
+        "ScoreAggregate",
+        "aggregate",
+        "categories",
+        "cities",
+        "completed",
+        "countries",
+        "deduction",
+        "due",
+        "group",
+        "groups",
+        "interval",
+        "isFresh",
+        "lease",
+        "matches",
+        "officeKongEventLoadSchema",
+        "parse",
+        "points",
+        "score",
+        "scoreCategory",
+        "scoreOfficeKongSnapshot",
+        "snapshotAt",
+        "snapshotTime",
+        "started",
+        "success",
+        "verified"
       ],
       "routes": []
     },
@@ -19199,6 +21755,286 @@
       "routes": []
     },
     {
+      "path": "tests/agent-company.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/agent-company",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "MIN",
+        "NOW",
+        "all",
+        "career",
+        "company",
+        "curriculum",
+        "during",
+        "ids",
+        "names",
+        "parsed",
+        "result",
+        "roles",
+        "rows",
+        "s",
+        "statuses"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/agent-council.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/agent-council",
+        "../shared/agent-council",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "HOUR",
+        "NOW",
+        "back",
+        "base",
+        "broken",
+        "byName",
+        "council",
+        "dir",
+        "docs",
+        "down",
+        "evidence",
+        "fake",
+        "fakeDeps",
+        "file",
+        "finding",
+        "findings",
+        "first",
+        "hires",
+        "id",
+        "ids",
+        "lessons",
+        "make",
+        "merged",
+        "next",
+        "open",
+        "payloads",
+        "pending",
+        "pruned",
+        "reader",
+        "rejectedAt",
+        "repairs",
+        "repo",
+        "results",
+        "root",
+        "rules",
+        "runs",
+        "same",
+        "saved",
+        "skill",
+        "state",
+        "statuses",
+        "stuck",
+        "updates",
+        "uuid",
+        "value",
+        "view",
+        "withId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/agent-live-status.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/agent-live-status",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "blocked",
+        "br",
+        "checks",
+        "fake",
+        "fresh",
+        "health",
+        "kong",
+        "legal",
+        "lr",
+        "neverRun",
+        "news",
+        "next",
+        "now",
+        "ok",
+        "run",
+        "status",
+        "unsafeOnGet",
+        "warning",
+        "watching",
+        "working"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/agents-office-local-qa.test.mjs",
+      "kind": "test",
+      "imports": [
+        "esbuild",
+        "express",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:path",
+        "node:test",
+        "node:url",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "app",
+        "auth",
+        "avatars",
+        "blocked",
+        "bounds",
+        "cityCards",
+        "cityMarkers",
+        "cityOfficeEntry",
+        "company",
+        "concrete",
+        "context",
+        "director",
+        "envKeys",
+        "evidenceDir",
+        "fixturePassword",
+        "hasMap",
+        "host",
+        "liveSnapshot",
+        "login",
+        "loginForm",
+        "mainPanelToggle",
+        "mapFallback",
+        "mapHost",
+        "markers",
+        "memberGoals",
+        "modules",
+        "nativePlaywright",
+        "now",
+        "officeRoute",
+        "openCompany",
+        "ownerCookie",
+        "passive",
+        "pendingVisual",
+        "previous",
+        "protectedRoutes",
+        "runningWork",
+        "runtime",
+        "scoredDirector",
+        "selectedAgents",
+        "serveMode",
+        "temp",
+        "visual"
+      ],
+      "routes": [
+        "/api/agent-council/state",
+        "/api/agents-office/cities",
+        "/api/agents-office/connections",
+        "/api/agents-office/kong-snapshot",
+        "/api/app-qa-agent/status",
+        "/api/ceo/conversation-history",
+        "/api/ceo/go-live",
+        "/api/ceo/readiness",
+        "/api/fixture-owner-boundary",
+        "/api/github/repos",
+        "/api/github/repos/fixture/office-fixture/contents",
+        "/api/github/status",
+        "/api/legal-compliance/reports",
+        "/api/monthly-goals",
+        "/api/projects",
+        "/health"
+      ]
+    },
+    {
+      "path": "tests/agents-world-integrated-ui.mjs",
+      "kind": "test",
+      "imports": [
+        "esbuild",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:path",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "brandFilter",
+        "browser",
+        "camera",
+        "canvas",
+        "check",
+        "context",
+        "css",
+        "departmentFilter",
+        "detail",
+        "fixtures",
+        "frames",
+        "html",
+        "js",
+        "label",
+        "origin",
+        "original",
+        "output",
+        "page",
+        "pose",
+        "request",
+        "requests",
+        "results",
+        "scenario",
+        "state",
+        "status",
+        "timestamp",
+        "world",
+        "zoomed"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/agents-world-integration.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/lib/agents-world",
+        "../client/src/lib/agents-world-layout",
+        "../client/src/lib/agents-world-learning",
+        "../client/src/lib/agents-world-session",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "base",
+        "decision",
+        "denied",
+        "empty",
+        "entities",
+        "large",
+        "now",
+        "original",
+        "own",
+        "projects",
+        "role",
+        "roles",
+        "room",
+        "signal",
+        "source",
+        "tasks",
+        "world"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/ai-cost-notifications.test.ts",
       "kind": "test",
       "imports": [
@@ -19235,8 +22071,10 @@
       "kind": "test",
       "imports": [
         "../server/app-qa-agent",
+        "../shared/app-qa-missions",
         "@shared/schema",
         "node:assert/strict",
+        "node:fs",
         "node:fs/promises",
         "node:os",
         "node:path",
@@ -19249,20 +22087,26 @@
         "baseBody",
         "body",
         "bugPatrol",
+        "catalog",
         "council",
         "digest",
+        "direction",
         "errorEvent",
         "expectedCriticalClicks",
         "fakeChromiumPath",
         "genericBody",
         "githubApp",
+        "global",
         "healthCheck",
         "incident",
+        "late",
         "message",
         "notes",
         "now",
+        "partial",
         "partialReleaseBody",
         "partialSalesBody",
+        "paths",
         "previousBaseUrl",
         "previousExecutablePath",
         "previousHours",
@@ -19283,10 +22127,44 @@
         "salesNotes",
         "salesOnlyBody",
         "scan",
+        "scoped",
         "skipMorningRepeat",
-        "tempDir"
+        "source",
+        "tempDir",
+        "unavailable",
+        "unknown"
       ],
-      "routes": []
+      "routes": [
+        "([^"
+      ]
+    },
+    {
+      "path": "tests/app-qa-status-readonly.test.mjs",
+      "kind": "test",
+      "imports": [
+        "esbuild",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test",
+        "node:url"
+      ],
+      "exports": [],
+      "symbols": [
+        "modules",
+        "notified",
+        "previousFetch",
+        "previousToken",
+        "previousVisual",
+        "registration",
+        "routes",
+        "temp"
+      ],
+      "routes": [
+        "/api/app-qa-agent/scan",
+        "/api/app-qa-agent/status"
+      ]
     },
     {
       "path": "tests/assistant-chat-flow.test.ts",
@@ -19493,6 +22371,8 @@
       "kind": "test",
       "imports": [
         "../server/blackroom-deterministic-editor",
+        "../server/blackroom-learning-observations",
+        "../server/blackroom-verified-learning",
         "node:assert/strict",
         "node:test"
       ],
@@ -19501,20 +22381,29 @@
         "atQuota",
         "base",
         "committing",
+        "date",
+        "djs",
         "download",
         "explicit",
         "explored",
         "full",
+        "id",
+        "input",
         "inventory",
         "ledger",
         "ledgerPending",
         "next",
+        "now",
         "output",
         "plan",
+        "publishedAt",
         "queue",
         "render",
+        "result",
         "samples",
         "selected",
+        "stale",
+        "start",
         "state",
         "used"
       ],
@@ -19605,6 +22494,7 @@
       "exports": [],
       "symbols": [
         "context",
+        "scripts",
         "target"
       ],
       "routes": []
@@ -19739,11 +22629,30 @@
       "imports": [
         "../script/blackroom-metricool-exporter.mjs",
         "node:assert/strict",
-        "node:test"
+        "node:fs/promises",
+        "node:path",
+        "node:test",
+        "node:util",
+        "node:vm"
       ],
       "exports": [],
       "symbols": [
-        "result"
+        "batches",
+        "complete",
+        "context",
+        "exported",
+        "failure",
+        "imports",
+        "index",
+        "input",
+        "locator",
+        "observedAt",
+        "page",
+        "partial",
+        "payloads",
+        "result",
+        "source",
+        "status"
       ],
       "routes": []
     },
@@ -20057,7 +22966,6 @@
         "clippersSource",
         "indexSource",
         "localAuthSource",
-        "previousAllowDevFallback",
         "previousDefaultUserId",
         "promoSource",
         "requests",
@@ -20124,6 +23032,20 @@
         "readyBackup",
         "readyDb",
         "report"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/client-auth-state.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/lib/auth-state",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "payload"
       ],
       "routes": []
     },
@@ -20469,6 +23391,7 @@
       "imports": [
         "../server/clippers-local-news-metricool",
         "../server/clippers-local-news-review-committee",
+        "../server/local-news-delivery-safety",
         "node:assert/strict",
         "node:fs/promises",
         "node:os",
@@ -20477,37 +23400,48 @@
       ],
       "exports": [],
       "symbols": [
+        "attempts",
         "base",
         "checkedAt",
         "competing",
         "credentials",
         "declaredOversized",
+        "deliverClipperLocalNewsToMetricool",
         "dir",
         "filledToday",
         "filledTomorrow",
         "first",
         "firstPromise",
         "fixedNow",
+        "fixtureOptions",
         "freshDir",
         "freshResult",
+        "getClipperLocalNewsMetricoolReadiness",
         "hanging",
         "hangingResponse",
         "holdPost",
         "item",
         "items",
+        "label",
+        "lane",
         "ledger",
         "ledgerEntry",
         "legacyBacklog",
         "lockPath",
         "modes",
         "nowMs",
+        "ny",
         "options",
+        "originalFetch",
         "oversized",
         "payload",
         "postStarted",
+        "profiles",
         "queued",
         "rawItem",
         "readiness",
+        "register",
+        "response",
         "result",
         "reviewHash",
         "reviewed",
@@ -20521,6 +23455,7 @@
         "startedAt",
         "unanimouslyReviewedItem",
         "url",
+        "value",
         "workspace"
       ],
       "routes": []
@@ -21537,6 +24472,42 @@
       "routes": []
     },
     {
+      "path": "tests/company-office-simulation.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/components/company-office/company-simulation",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "next",
+        "rollover",
+        "valid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/containment-handlers.d.ts",
+      "kind": "test",
+      "imports": [],
+      "exports": [
+        "cleanupUploads",
+        "getHandlers",
+        "scheduleHandler",
+        "workerFailure",
+        "workerVerifyOnly"
+      ],
+      "symbols": [
+        "cleanupUploads",
+        "getHandlers",
+        "scheduleHandler",
+        "workerFailure",
+        "workerVerifyOnly"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/cybersecurity-agent.test.ts",
       "kind": "test",
       "imports": [
@@ -21630,6 +24601,7 @@
       "kind": "test",
       "imports": [
         "../server/developer-autopilot",
+        "../server/office-runtime",
         "node:assert/strict",
         "node:test"
       ],
@@ -21637,16 +24609,21 @@
       "symbols": [
         "body",
         "brief",
+        "cases",
         "clientBuildComment",
         "comment",
         "created",
         "gate",
         "handoff",
         "message",
+        "prUrl",
         "request",
         "requiredTargetContext",
+        "review",
         "safeTitle",
-        "title"
+        "scan",
+        "title",
+        "verifiedClaudeReview"
       ],
       "routes": []
     },
@@ -21771,6 +24748,20 @@
       "routes": []
     },
     {
+      "path": "tests/fixtures/containment-storage.ts",
+      "kind": "test",
+      "imports": [
+        "@shared/schema"
+      ],
+      "exports": [
+        "fakeStorage"
+      ],
+      "symbols": [
+        "fakeStorage"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/github-client-security.test.ts",
       "kind": "test",
       "imports": [
@@ -21849,6 +24840,69 @@
       "routes": []
     },
     {
+      "path": "tests/harness/agents-world-integrated.tsx",
+      "kind": "test",
+      "imports": [
+        "../../client/src/pages/agents-office",
+        "@tanstack/react-query",
+        "react",
+        "react-dom/client",
+        "wouter"
+      ],
+      "exports": [],
+      "symbols": [
+        "Harness",
+        "client"
+      ],
+      "routes": [
+        "/agents-office"
+      ]
+    },
+    {
+      "path": "tests/legacy-publication-containment.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/automation-registry",
+        "../server/blackroom-local-worker",
+        "../server/blackroom-metricool-bridge",
+        "../server/blackroom-publication-guard",
+        "../server/blackroom-remote-control",
+        "../server/metricool-analytics-sync",
+        "./fixtures/containment-storage",
+        "@shared/schema",
+        "containment-handlers",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "before",
+        "body",
+        "clock",
+        "control",
+        "definition",
+        "entry",
+        "env",
+        "envFixture",
+        "fakeTimer",
+        "fixture",
+        "handler",
+        "handlers",
+        "input",
+        "postReceipt",
+        "receipt",
+        "res",
+        "responseFixture",
+        "result",
+        "runNpm",
+        "scheduler",
+        "succeeded",
+        "upload",
+        "uploads"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/legal-compliance-agent.test.ts",
       "kind": "test",
       "imports": [
@@ -21898,6 +24952,48 @@
       "routes": []
     },
     {
+      "path": "tests/local-news-delivery-safety.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/clippers-local-news-agent",
+        "../server/clippers-local-news-metricool",
+        "../server/clippers-local-news-review-committee",
+        "../server/clippers-local-news-scheduler",
+        "../server/local-news-delivery-safety",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "ambiguous",
+        "article",
+        "attempts",
+        "before",
+        "child",
+        "config",
+        "dir",
+        "event",
+        "file",
+        "first",
+        "fixture",
+        "item",
+        "items",
+        "now",
+        "options",
+        "other",
+        "result",
+        "reviewed",
+        "scheduler",
+        "second",
+        "state"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/local-news-growth-scout.test.ts",
       "kind": "test",
       "imports": [
@@ -21921,6 +25017,60 @@
         "timer",
         "url",
         "workspace"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/local-news-source-diagnostics.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/clippers-local-news-agent",
+        "../server/clippers-local-news-metricool",
+        "../server/clippers-local-news-translation",
+        "../server/local-news-source-diagnostics",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Component",
+        "a",
+        "at",
+        "candidate",
+        "catalog",
+        "child",
+        "contributor",
+        "cycle",
+        "delivery",
+        "dir",
+        "end",
+        "errors",
+        "file",
+        "first",
+        "fixture",
+        "fresh",
+        "link",
+        "localNewsSection",
+        "missing",
+        "mount",
+        "ny",
+        "o",
+        "observed",
+        "options",
+        "outfile",
+        "page",
+        "queueEvidence",
+        "r",
+        "second",
+        "section",
+        "source",
+        "status",
+        "translator",
+        "url"
       ],
       "routes": []
     },
@@ -22000,17 +25150,25 @@
       "kind": "test",
       "imports": [
         "../server/metricool-analytics-sync",
+        "./server/metricool-analytics-sync.ts",
         "node:assert/strict",
+        "node:child_process",
         "node:fs/promises",
+        "node:http",
         "node:os",
         "node:path",
         "node:test"
       ],
       "exports": [],
       "symbols": [
+        "assertServing",
+        "child",
         "copy",
         "copyHash",
+        "deadline",
         "env",
+        "error",
+        "errors",
         "first",
         "from",
         "legacyFingerprint",
@@ -22021,11 +25179,15 @@
         "postId",
         "publicStatus",
         "publicationDate",
+        "recorded",
         "request",
         "response",
         "result",
+        "scenario",
         "scheduler",
+        "script",
         "second",
+        "server",
         "source",
         "state",
         "to",
@@ -22050,6 +25212,432 @@
         "plan",
         "ready"
       ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-city-agents.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/components/agents-world-office/office-scene",
+        "../client/src/lib/office-city-agents",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "ba",
+        "cities",
+        "desks",
+        "duplicateCategory",
+        "expiry",
+        "futureStart",
+        "job",
+        "jobs",
+        "latest",
+        "miami",
+        "noStart",
+        "now",
+        "old",
+        "options",
+        "pending",
+        "positions",
+        "rooms",
+        "run",
+        "runs",
+        "sameTime",
+        "snapshot",
+        "stamp",
+        "third",
+        "wrongCity"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-claude.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-claude",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "auth",
+        "date",
+        "env",
+        "fixture",
+        "next",
+        "office",
+        "probe",
+        "prompt",
+        "record",
+        "subscriptionToken",
+        "success",
+        "tokenAuth",
+        "tokenEnvironment"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-cloud-launch.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/office-cloud-launch.mjs",
+        "node:assert/strict",
+        "node:events",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "calls",
+        "child",
+        "children",
+        "ended",
+        "f",
+        "fixture",
+        "g",
+        "kills",
+        "options",
+        "running",
+        "signals"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-cloud-runtime.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-claude",
+        "../server/office-cloud-runtime",
+        "../server/office-cloud-store",
+        "../server/office-kong",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "f",
+        "first",
+        "fixture",
+        "gate",
+        "makeRun",
+        "now",
+        "original",
+        "pass",
+        "pending",
+        "prUrl",
+        "publicRows",
+        "review",
+        "rows",
+        "run",
+        "started",
+        "submitted",
+        "task",
+        "worker"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-cloud-store.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-cloud-store",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "ContractPool",
+        "capabilities",
+        "checkedAt",
+        "copy",
+        "done",
+        "expired",
+        "first",
+        "heartbeat",
+        "id",
+        "input",
+        "insert",
+        "owned",
+        "pool",
+        "predecessor",
+        "restarted",
+        "row",
+        "runs",
+        "scheduled",
+        "sql",
+        "store",
+        "submitted",
+        "task"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-github.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-github",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "BASE",
+        "HEAD",
+        "PR",
+        "failing",
+        "file",
+        "giant",
+        "loader",
+        "meta",
+        "packet",
+        "rejectsCode",
+        "renamed",
+        "result",
+        "secret",
+        "setup"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-kong-collaboration.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-kong",
+        "../server/office-kong-collaboration",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "at",
+        "evidence",
+        "fixture",
+        "incomplete",
+        "missing",
+        "now",
+        "result"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-kong-supervisor.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/office-kong-supervisor",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Category",
+        "City",
+        "MINUTE",
+        "NOW",
+        "at",
+        "categories",
+        "cities",
+        "city",
+        "evidence",
+        "expired",
+        "failed",
+        "interrupted",
+        "job",
+        "neverStarted",
+        "noLease",
+        "recorded",
+        "result",
+        "snapshot",
+        "warnings"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-kong.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-kong",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "CITIES_URL",
+        "DIRECTORY_URL",
+        "NOW",
+        "TOKEN",
+        "audit",
+        "base",
+        "blocked",
+        "c",
+        "citiesFixture",
+        "cityData",
+        "client",
+        "connector",
+        "directory",
+        "disabled",
+        "entries",
+        "huge",
+        "ids",
+        "invalidState",
+        "json",
+        "missing",
+        "operationData",
+        "operations",
+        "output",
+        "payload",
+        "probe",
+        "result",
+        "serialized",
+        "states",
+        "unexpectedAgentField",
+        "vip"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-routes",
+        "../server/user-context",
+        "express",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "app",
+        "base",
+        "checkedAt",
+        "connections",
+        "contact",
+        "cookie",
+        "directoryResponse",
+        "ownerHeaders",
+        "post",
+        "prReceipt",
+        "readSnapshot",
+        "results",
+        "saved",
+        "server",
+        "snapshot",
+        "task"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-runtime.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-claude",
+        "../server/office-runtime",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "accepted",
+        "answer",
+        "blocked",
+        "completed",
+        "diff",
+        "disk",
+        "done",
+        "enteredPromise",
+        "failed",
+        "file",
+        "files",
+        "first",
+        "fixture",
+        "generatedAt",
+        "other",
+        "ownerHash",
+        "pr",
+        "prUrl",
+        "providerDone",
+        "providerPromise",
+        "records",
+        "recovered",
+        "request",
+        "restarted",
+        "result",
+        "results",
+        "retained",
+        "root",
+        "runs",
+        "runtime",
+        "task",
+        "untilTerminal"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-worker-capabilities.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-cloud-runtime",
+        "../server/office-cloud-store",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "capabilities",
+        "disabled",
+        "heartbeat",
+        "now",
+        "options",
+        "probe",
+        "status",
+        "store",
+        "worker"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-worker-watchdog.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-cloud-runtime",
+        "../server/office-cloud-store",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "before",
+        "entered",
+        "hanging",
+        "held",
+        "lease",
+        "providerProbe",
+        "started",
+        "store",
+        "tick",
+        "worker"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/owner-office-storage.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/lib/owner-office-storage",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {
@@ -22382,6 +25970,18 @@
       "routes": []
     },
     {
+      "path": "tests/session-bundle-artifact.test.mjs",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "tests/session-config.test.ts",
       "kind": "test",
       "imports": [
@@ -22679,6 +26279,10 @@
     "tests/._radio-youtube-command.test.ts",
     "tests/._rate-limit.test.ts",
     "tests/._user-context.test.ts",
+    "tests/agent-company.test.ts",
+    "tests/agent-council.test.ts",
+    "tests/agent-live-status.test.ts",
+    "tests/agents-world-integration.test.ts",
     "tests/ai-cost-notifications.test.ts",
     "tests/ai-router-cost-override.test.ts",
     "tests/app-qa-agent.test.ts",
@@ -22711,6 +26315,7 @@
     "tests/ceo-readiness-cli.test.ts",
     "tests/ceo-readiness.test.ts",
     "tests/ceo-smoke-cli.test.ts",
+    "tests/client-auth-state.test.ts",
     "tests/clippers-agent.test.ts",
     "tests/clippers-local-news-agent.test.ts",
     "tests/clippers-local-news-growth.test.ts",
@@ -22724,6 +26329,7 @@
     "tests/clippers-upload-metricool-media.test.ts",
     "tests/clippers-youtube-audit-pages.test.ts",
     "tests/code-agent-security.test.ts",
+    "tests/company-office-simulation.test.ts",
     "tests/cybersecurity-agent.test.ts",
     "tests/db-config.test.ts",
     "tests/developer-autopilot-wiring.test.ts",
@@ -22735,15 +26341,31 @@
     "tests/google-connector.test.ts",
     "tests/google-drive-folder-command.test.ts",
     "tests/google-drive-oauth.test.ts",
+    "tests/legacy-publication-containment.test.ts",
     "tests/legal-compliance-agent.test.ts",
     "tests/local-auth-cli.test.ts",
     "tests/local-auth.test.ts",
+    "tests/local-news-delivery-safety.test.ts",
     "tests/local-news-growth-scout.test.ts",
+    "tests/local-news-source-diagnostics.test.ts",
     "tests/local-youtube-queue.test.ts",
     "tests/local-youtube-worker-queue.test.ts",
     "tests/marketing-command-center.test.ts",
     "tests/metricool-analytics-sync.test.ts",
     "tests/metricool-tracking.test.ts",
+    "tests/office-city-agents.test.ts",
+    "tests/office-claude.test.ts",
+    "tests/office-cloud-runtime.test.ts",
+    "tests/office-cloud-store.test.ts",
+    "tests/office-github.test.ts",
+    "tests/office-kong-collaboration.test.ts",
+    "tests/office-kong-supervisor.test.ts",
+    "tests/office-kong.test.ts",
+    "tests/office-routes.test.ts",
+    "tests/office-runtime.test.ts",
+    "tests/office-worker-capabilities.test.ts",
+    "tests/office-worker-watchdog.test.ts",
+    "tests/owner-office-storage.test.ts",
     "tests/public-local-news.test.ts",
     "tests/radio-template-agent.test.ts",
     "tests/radio-video-edit-agent.test.ts",

@@ -55,6 +55,10 @@ import { runAppQaScan } from "./app-qa-agent";
 import { createDeveloperAutopilotHandoff, createDeveloperAutopilotHandoffFromRequest, evaluateDeveloperReleaseGate } from "./developer-autopilot";
 import { buildMonthlyAiSpendReport } from "./ai-cost-policy";
 import { getClipperWorkerRuntimeStatus } from "./clippers-runtime-status";
+import { registerOfficeRoutes } from "./office-routes";
+import { getAuthenticatedCurrentUserId } from "./user-context";
+import { officeRuntime } from "./office-runtime";
+import { loadOfficePullRequest } from "./office-github";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -296,6 +300,7 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  registerOfficeRoutes(app);
   const CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS = 120_000;
   const killClipperRouteScriptProcess = (child: ReturnType<typeof spawn>) => {
     if (child.pid) {
@@ -5595,7 +5600,8 @@ export async function registerRoutes(
   });
 
   app.post("/api/revenue-engine/delivery-workspaces/app-qa-gate", async (req, res) => {
-    const userId = getCurrentUserId(req);
+    const userId = getAuthenticatedCurrentUserId(req);
+    if (!userId) return res.status(401).json({ error: "Authentication required" });
     if (userId !== getSystemUserId()) {
       return res.status(403).json({
         error: "Revenue Engine App QA gates require the configured owner account.",
@@ -5673,8 +5679,14 @@ export async function registerRoutes(
         expectedControls: ["Run App QA", "Registrar release gate", "Entregar aprobado"],
       };
       const scan = await runAppQaScan(userId, input.notify, true, false, appQaTargetContext);
+      const reviewPacket = await loadOfficePullRequest(prStatus.pr.htmlUrl);
+      const claudeReview = reviewPacket.headSha === prStatus.pr.headSha
+        ? await officeRuntime.getReview(userId, reviewPacket.prUrl, reviewPacket.headSha, reviewPacket.diffSha256) : undefined;
       const gate = evaluateDeveloperReleaseGate(scan, {
         prUrl: prStatus.pr.htmlUrl,
+        prHeadSha: prStatus.pr.headSha,
+        prDiffSha256: reviewPacket.diffSha256,
+        claudeReview,
         requiredTargetContext: appQaTargetContext,
       });
       const appQaPrCommentBody = gate.status === "pass"
@@ -6955,9 +6967,14 @@ export async function registerRoutes(
 
   app.post("/api/developer-autopilot/qa-gate", async (req, res) => {
     try {
-      const scan = await runAppQaScan(getCurrentUserId(req), Boolean(req.body?.notify), true, false);
+      const userId = getAuthenticatedCurrentUserId(req);
+      if (!userId) return res.status(401).json({ error: "Authentication required" });
+      if (userId !== getSystemUserId()) return res.status(403).json({ error: "Owner required" });
+      const scan = await runAppQaScan(userId, Boolean(req.body?.notify), true, false);
       const prUrl = typeof req.body?.prUrl === "string" ? req.body.prUrl.trim() : null;
-      const gate = evaluateDeveloperReleaseGate(scan, { prUrl });
+      const packet = prUrl ? await loadOfficePullRequest(prUrl) : null;
+      const claudeReview = packet ? await officeRuntime.getReview(userId, packet.prUrl, packet.headSha, packet.diffSha256) : undefined;
+      const gate = evaluateDeveloperReleaseGate(scan, { prUrl, prHeadSha: packet?.headSha, prDiffSha256: packet?.diffSha256, claudeReview });
       res.json({
         scan,
         gate,

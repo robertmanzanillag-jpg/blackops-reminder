@@ -257,6 +257,7 @@ async function getAccessToken() {
   connectionSettings = await fetch(
     'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=github',
     {
+      signal: AbortSignal.timeout(15_000),
       headers: {
         'Accept': 'application/json',
         'X_REPLIT_TOKEN': xReplitToken
@@ -264,7 +265,7 @@ async function getAccessToken() {
     }
   ).then(res => res.json()).then(data => data.items?.[0]);
 
-  const accessToken = connectionSettings?.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
+  const accessToken = connectionSettings?.settings?.access_token || connectionSettings?.settings?.oauth?.credentials?.access_token;
 
   if (!connectionSettings || !accessToken) {
     throw new Error('GitHub no conectado');

@@ -2,6 +2,7 @@ import type { AppQaScanResult, AppQaStatus, AppQaTargetContext } from "./app-qa-
 import { createIssue, createIssueComment, listRepositories } from "./github-client";
 import { storage } from "./storage";
 import type { AppProject } from "@shared/schema";
+import type { OfficeRun } from "./office-runtime";
 
 export type DeveloperFixKind = "bug" | "security" | "threat" | "incident" | "qa" | "client_build";
 export type SubscriptionHandoffKind = "marketing" | "design" | "strategy" | "analysis" | "business_ops";
@@ -602,7 +603,7 @@ export async function createDeveloperAutopilotHandoff(
 
 export function evaluateDeveloperReleaseGate(
   scan: Pick<AppQaScanResult, "failCount" | "warnCount" | "summary" | "subAgents"> & Partial<Pick<AppQaScanResult, "targetContext" | "visualScans">>,
-  input: { prUrl?: string | null; requiredTargetContext?: AppQaTargetContext } = {},
+  input: { prUrl?: string | null; prHeadSha?: string; prDiffSha256?: string; claudeReview?: OfficeRun; requiredTargetContext?: AppQaTargetContext } = {},
 ): DeveloperReleaseGate {
   const failingAgents = scan.subAgents.filter((agent) => agent.status !== "pass");
   const prUrl = input.prUrl?.trim() || null;
@@ -617,6 +618,17 @@ export function evaluateDeveloperReleaseGate(
 
   if (!prUrl) {
     reasons.push("A pull request URL is required before sending the fix to Robert for approval.");
+  }
+  // Evidence is loaded from the server journal by the route, never req.body.
+  // A new PR head invalidates every previous independent review.
+  const review = input.claudeReview;
+  const reviewAge = review?.completedAt ? Date.now() - Date.parse(review.completedAt) : NaN;
+  if (!review || review.kind !== "claude_review" || review.status !== "completed" ||
+    !review.sessionId || review.review?.verdict !== "pass" || review.review.findings.length > 0 ||
+    review.review.prUrl !== prUrl || !input.prHeadSha || !/^[a-f0-9]{40}$/i.test(input.prHeadSha) ||
+    review.review.headSha !== input.prHeadSha || !input.prDiffSha256 || review.review.diffSha256 !== input.prDiffSha256 ||
+    !Number.isFinite(reviewAge) || reviewAge < -30_000 || reviewAge > 86_400_000) {
+    reasons.push("A verified Claude review for the current PR head is required before approval.");
   }
   if (scan.failCount > 0) {
     reasons.push(`${scan.failCount} high/critical App QA finding(s) must be fixed before release.`);

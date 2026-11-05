@@ -16,6 +16,7 @@ export type SceneAgent = {
   color: string;
   screen: "timeline" | "chart" | "code" | "list";
   activity: string[];
+  cityRole?: string;
   // Company layer: nickname/battery shown on the floating label, crown for the deputy.
   badge?: string;
   battery?: number;
@@ -35,11 +36,13 @@ export type SceneDebate = { from: string; to: string };
 export type SceneData = {
   departments: SceneDepartment[];
   debates: SceneDebate[];
+  cityLayout?: "overview" | "detail";
 };
 
 export type SceneCallbacks = {
   onFocusDepartment: (departmentId: string | null) => void;
   onSelectAgent: (agentId: string) => void;
+  onOpenCityDirector: () => void;
 };
 
 const STATE_HEX: Record<SceneAgentState, string> = {
@@ -53,6 +56,31 @@ const STATE_HEX: Record<SceneAgentState, string> = {
 const RING_RADIUS = 17;
 const DESK_SPACING_X = 3.1;
 const DESK_SPACING_Z = 3.6;
+const CITY_RING_SPACING = 12;
+
+export function officeCityMapPosition(index: number, count: number) {
+  let start = 0;
+  let x = 0;
+  let z = 0;
+  let radius = 0;
+  for (let ring = 0; start < count; ring++) {
+    const slots = Math.min(8 + ring * 9, count - start);
+    radius = (ring + 1) * CITY_RING_SPACING;
+    if (index >= start && index < start + slots) {
+      const angle = -Math.PI / 2 + ((index - start + (ring % 2) * 0.5) / slots) * Math.PI * 2;
+      x = radius * Math.cos(angle);
+      z = radius * Math.sin(angle);
+    }
+    start += slots;
+  }
+  const span = radius * 2 + 8;
+  return { x, z, width: span, depth: span, centerX: 0, centerZ: 0 };
+}
+
+export function officeCityDeskPosition(index: number) {
+  const firstRow = index < 4;
+  return { x: ((index % 4) - (firstRow ? 1.5 : 1)) * 1.34, z: firstRow ? -1 : 1 };
+}
 
 type DeskRuntime = {
   agent: SceneAgent;
@@ -75,8 +103,8 @@ type PlatformRuntime = {
   group: any;
   center: any;
   angle: number;
-  label: HTMLDivElement;
-  flow: { curve: any; particles: any[]; speed: number; color: string };
+  label: HTMLElement;
+  flow?: { curve: any; particles: any[]; speed: number; color: string };
   desks: DeskRuntime[];
   size: { width: number; depth: number };
 };
@@ -226,15 +254,21 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   hub.add(beam);
   scene.add(hub);
 
-  const hubLabel = document.createElement("div");
+  const hubLabel = document.createElement("button");
+  hubLabel.type = "button";
+  hubLabel.addEventListener("click", callbacks.onOpenCityDirector);
   hubLabel.className = "pointer-events-none absolute -translate-x-1/2 -translate-y-full rounded-md border border-amber-200/40 bg-black/70 px-2 py-1 text-[11px] font-bold tracking-[0.2em] text-amber-100";
   hubLabel.textContent = "CEO · ORQUESTADOR";
+  hubLabel.dataset.testid = "world-ceo-orb";
   labelLayer.appendChild(hubLabel);
 
   const raycastTargets: any[] = [];
   let platforms: PlatformRuntime[] = [];
   let debateArcs: { curve: any; particles: any[]; line: any }[] = [];
   let focused: string | null = null;
+  let cityLayout: SceneData["cityLayout"];
+  let cityMapSize = officeCityMapPosition(0, 0);
+  let overviewDesks: { group: any; animate: (time: number) => void } | undefined;
 
   // Camera orbit state.
   const target = new THREE.Vector3(0, 0, 0);
@@ -270,6 +304,23 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     camera.updateProjectionMatrix();
   }
 
+  function frameCityOverview() {
+    const width = host.clientWidth;
+    const height = Math.max(1, host.clientHeight);
+    const aspect = Math.max(0.25, width / height);
+    const headerSpace = width < 900 ? Math.min(210, height * 0.47) : 0;
+    const span = Math.max(cityMapSize.depth / (1 - headerSpace / height), cityMapSize.width / aspect);
+    const frustumScale = 2 * Math.tan(Math.PI * camera.fov / 360);
+    goalRadius = Math.max(18, span / frustumScale * 1.18);
+    camera.far = Math.max(400, goalRadius + 150);
+    camera.updateProjectionMatrix();
+    scene.fog.near = Math.max(45, goalRadius * 0.85);
+    scene.fog.far = Math.max(110, goalRadius * 1.7 + 20);
+    goalTarget.set(cityMapSize.centerX + (width >= 900 ? cityMapSize.width * 0.13 : 0), 0, cityMapSize.centerZ + headerSpace / 2 * goalRadius * frustumScale / height);
+    goalPhi = 0.22;
+    goalTheta = -Math.PI / 2;
+  }
+
   function placeCamera() {
     camera.position.set(
       target.x + radius * Math.sin(phi) * Math.cos(theta),
@@ -281,6 +332,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
 
   function disposeObject(object: any) {
     object.traverse?.((child: any) => {
+      if (child.isInstancedMesh) child.dispose();
       child.geometry?.dispose?.();
       const materials = Array.isArray(child.material) ? child.material : child.material ? [child.material] : [];
       materials.forEach((material: any) => {
@@ -291,6 +343,11 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   }
 
   function clearDynamic() {
+    if (overviewDesks) {
+      scene.remove(overviewDesks.group);
+      disposeObject(overviewDesks.group);
+      overviewDesks = undefined;
+    }
     platforms.forEach((platform) => {
       scene.remove(platform.group);
       disposeObject(platform.group);
@@ -299,7 +356,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
         scene.remove(lineHolder);
         disposeObject(lineHolder);
       }
-      platform.flow.particles.forEach((particle) => {
+      platform.flow?.particles.forEach((particle) => {
         scene.remove(particle);
         disposeObject(particle);
       });
@@ -394,6 +451,10 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
 
     const label = document.createElement("div");
     label.className = "pointer-events-none absolute -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-white/15 bg-black/75 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-lg";
+    if (agent.cityRole) {
+      label.dataset.testid = `world-avatar-${agent.id}`;
+      label.className += " flex max-w-[88px] items-center gap-1 overflow-hidden";
+    }
     labelLayer.appendChild(label);
 
     const ctx = canvas.getContext("2d");
@@ -406,6 +467,16 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     const color = STATE_HEX[desk.agent.state];
     desk.label.innerHTML = "";
     const name = document.createElement("span");
+    if (desk.agent.cityRole) {
+      name.className = "min-w-0 truncate";
+      name.textContent = desk.agent.cityRole;
+      const dot = document.createElement("span");
+      dot.className = "size-1.5 shrink-0 rounded-full";
+      dot.style.backgroundColor = color;
+      desk.label.setAttribute("aria-label", `${desk.agent.name} · ${desk.agent.label}`);
+      desk.label.append(dot, name);
+      return;
+    }
     name.textContent = desk.agent.deputy ? `👑 ${desk.agent.name}` : desk.agent.name;
     const dot = document.createElement("span");
     dot.style.cssText = `display:inline-block;width:6px;height:6px;border-radius:9999px;margin:0 5px 1px 6px;background:${color}`;
@@ -429,24 +500,108 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     }
   }
 
+  function buildCityOverviewDesks() {
+    const desks = platforms.flatMap(({ department, center }) => department.agents.map((agent, index) => {
+      const position = officeCityDeskPosition(index);
+      return { agent, x: center.x + position.x, z: center.z + position.z };
+    }));
+    host.dataset.cityDeskCount = String(desks.length);
+    const running = desks.flatMap((desk, index) => desk.agent.state === "working" ? [index] : []);
+    host.dataset.cityRunningDeskCount = String(running.length);
+    if (!desks.length) return;
+    const group = new THREE.Group();
+    const instance = (geometry: any, color: number, count = desks.length) => {
+      const mesh = new THREE.InstancedMesh(geometry, new THREE.MeshStandardMaterial({ color, roughness: 0.8 }), count);
+      group.add(mesh);
+      return mesh;
+    };
+    const tabletops = instance(new THREE.BoxGeometry(1.16, 0.16, 0.74), 0xd6c7a8);
+    const bases = instance(new THREE.BoxGeometry(0.87, 0.59, 0.53), 0x344258);
+    const screens = instance(new THREE.BoxGeometry(0.85, 0.57, 0.14), 0xffffff);
+    const screenLines = instance(new THREE.BoxGeometry(0.55, 0.065, 0.025), 0xffffff, desks.length * 2);
+    const chairs = instance(new THREE.BoxGeometry(0.49, 0.73, 0.25), 0x243145);
+    const bodies = instance(new THREE.CapsuleGeometry(0.16, 0.26, 2, 6), 0xffffff);
+    const heads = instance(new THREE.SphereGeometry(0.17, 8, 6), 0xc58b5c);
+    const arms = instance(new THREE.BoxGeometry(0.10, 0.11, 0.37), 0xffffff, desks.length * 2);
+    const transform = new THREE.Object3D();
+    const set = (mesh: any, index: number, x: number, y: number, z: number) => {
+      transform.position.set(x, y, z);
+      transform.updateMatrix();
+      mesh.setMatrixAt(index, transform.matrix);
+    };
+    desks.forEach(({ agent, x, z }, index) => {
+      set(tabletops, index, x, 0.66, z - 0.12);
+      set(bases, index, x, 0.30, z - 0.12);
+      set(screens, index, x, 1.02, z - 0.40);
+      set(chairs, index, x, 0.50, z + 0.61);
+      set(bodies, index, x, 0.69, z + 0.37);
+      set(heads, index, x, 1.12, z + 0.37);
+      set(arms, index * 2, x - 0.20, 0.77, z + 0.14);
+      set(arms, index * 2 + 1, x + 0.20, 0.77, z + 0.14);
+      const shirt = new THREE.Color(agent.color);
+      bodies.setColorAt(index, shirt);
+      arms.setColorAt(index * 2, shirt);
+      arms.setColorAt(index * 2 + 1, shirt);
+      screens.setColorAt(index, new THREE.Color(0x152034));
+      set(screenLines, index * 2, x - 0.05, 1.12, z - 0.48);
+      set(screenLines, index * 2 + 1, x + 0.03, 0.96, z - 0.48);
+      screenLines.setColorAt(index * 2, new THREE.Color(STATE_HEX[agent.state]));
+      screenLines.setColorAt(index * 2 + 1, new THREE.Color(0x64748b));
+    });
+    if (running.length && !options.reducedMotion) arms.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(group);
+    overviewDesks = {
+      group,
+      animate(time) {
+        if (!running.length || options.reducedMotion) return;
+        running.forEach(index => {
+          const { x, z } = desks[index];
+          const phase = time * 13 + index;
+          set(arms, index * 2, x - 0.20, 0.77 + Math.max(0, Math.sin(phase)) * 0.13, z + 0.14);
+          set(arms, index * 2 + 1, x + 0.20, 0.77 + Math.max(0, -Math.sin(phase)) * 0.13, z + 0.14);
+        });
+        arms.instanceMatrix.needsUpdate = true;
+      },
+    };
+  }
+
   function build(data: SceneData) {
     clearDynamic();
+    cityLayout = data.cityLayout;
+    const cityOverview = cityLayout === "overview";
+    cityMapSize = officeCityMapPosition(0, data.departments.length);
+    hub.visible = cityLayout !== "detail";
+    hub.scale.setScalar(cityOverview ? 0.78 : 1);
+    beam.visible = cityLayout !== "detail";
+    hubLabel.textContent = "CEO · ORQUESTADOR";
+    hubLabel.disabled = !cityOverview;
+    hubLabel.classList.toggle("pointer-events-none", !cityOverview);
+    hubLabel.classList.toggle("pointer-events-auto", cityOverview);
+    if (cityOverview) hubLabel.setAttribute("aria-label", "Abrir Director de Ciudades de KONG");
+    else hubLabel.removeAttribute("aria-label");
+    if (!cityOverview) {
+      scene.fog.near = 45;
+      scene.fog.far = 110;
+      delete host.dataset.cityDeskCount;
+      delete host.dataset.cityRunningDeskCount;
+    }
     const count = Math.max(1, data.departments.length);
     data.departments.forEach((department, index) => {
-      const angle = (index / count) * Math.PI * 2 - Math.PI / 2;
-      const cx = Math.cos(angle) * RING_RADIUS;
-      const cz = Math.sin(angle) * RING_RADIUS;
+      const angle = cityLayout ? -Math.PI / 2 : (index / count) * Math.PI * 2 - Math.PI / 2;
+      const cityPosition = cityOverview ? officeCityMapPosition(index, count) : { x: 0, z: 0 };
+      const cx = cityLayout ? cityPosition.x : Math.cos(angle) * RING_RADIUS;
+      const cz = cityLayout ? cityPosition.z : Math.sin(angle) * RING_RADIUS;
       const group = new THREE.Group();
       group.position.set(cx, 0, cz);
       // Local +z points to the hub; monitors face outward.
-      group.lookAt(0, 0, 0);
+      if (!cityLayout) group.lookAt(0, 0, 0);
       scene.add(group);
 
       // One row of up to 5 desks so no desk hides behind another when the camera looks in.
       const cols = Math.min(5, Math.max(1, department.agents.length));
       const rows = Math.max(1, Math.ceil(department.agents.length / cols));
-      const width = cols * DESK_SPACING_X + 1.4;
-      const depth = rows * DESK_SPACING_Z + 1.2;
+      const width = cityOverview ? 6.1 : cols * DESK_SPACING_X + 1.4;
+      const depth = cityOverview ? 4.9 : rows * DESK_SPACING_Z + 1.2;
       const colorNum = hexToNumber(department.color);
       const slab = new THREE.Mesh(new THREE.BoxGeometry(width, 0.5, depth), new THREE.MeshStandardMaterial({ color: 0x111827, roughness: 0.9 }));
       slab.position.y = -0.25;
@@ -458,15 +613,17 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(width, 0.5, depth)), new THREE.LineBasicMaterial({ color: colorNum }));
       edges.position.y = -0.25;
       group.add(edges);
-      const glow = new THREE.PointLight(colorNum, 0.9, 14, 1.5);
-      glow.position.set(0, 4, 0);
-      group.add(glow);
+      if (!cityOverview) {
+        const glow = new THREE.PointLight(colorNum, 0.9, 14, 1.5);
+        glow.position.set(0, 4, 0);
+        group.add(glow);
+      }
       const platformHit = new THREE.Mesh(new THREE.BoxGeometry(width, 0.6, depth), new THREE.MeshBasicMaterial({ visible: false }));
       platformHit.userData = { departmentId: department.id };
       group.add(platformHit);
       raycastTargets.push(platformHit);
 
-      const desks = department.agents.map((agent, i) => {
+      const desks = cityOverview ? [] : department.agents.map((agent, i) => {
         const col = i % cols;
         const row = Math.floor(i / cols);
         const x = (col - (cols - 1) / 2) * DESK_SPACING_X;
@@ -475,27 +632,36 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       });
       desks.forEach(updateDeskLabel);
 
-      const label = document.createElement("div");
-      label.className = "pointer-events-auto absolute -translate-x-1/2 -translate-y-full cursor-pointer whitespace-nowrap rounded-lg border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] shadow-xl";
+      const label = document.createElement(cityOverview ? "button" : "div");
+      if (label instanceof HTMLButtonElement) label.type = "button";
+      label.className = cityOverview
+        ? "pointer-events-auto absolute max-w-[65px] -translate-x-1/2 -translate-y-full cursor-pointer rounded border px-1 py-0.5 text-center text-[9px] font-semibold leading-tight shadow-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-300 sm:max-w-[110px] sm:text-[11px]"
+        : "pointer-events-auto absolute -translate-x-1/2 -translate-y-full cursor-pointer whitespace-nowrap rounded-lg border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] shadow-xl";
       label.style.borderColor = `${department.color}99`;
       label.style.background = "rgba(2,6,23,0.82)";
       label.style.color = department.color;
       label.dataset.testid = `world-dept-${department.id}`;
       const working = department.agents.filter((agent) => agent.state === "working").length;
-      label.textContent = `${department.name} · ${working}/${department.agents.length}`;
+      label.textContent = cityOverview ? department.name : `${department.name} · ${working}/${department.agents.length}`;
+      if (cityOverview) label.setAttribute("aria-label", `Abrir ${department.name}, ${working} agentes en ejecución verificada`);
       label.addEventListener("click", () => focusDepartment(department.id));
       label.addEventListener("pointerenter", () => { lastInteraction = performance.now(); hoveringLabel = true; });
       label.addEventListener("pointerleave", () => { hoveringLabel = false; });
       labelLayer.appendChild(label);
 
+      if (cityLayout === "detail") {
+        platforms.push({ department, group, center: new THREE.Vector3(cx, 0, cz), angle, label, desks, size: { width, depth } });
+        return;
+      }
+
       // Data flow from the hub to the department.
       const start = new THREE.Vector3(0, 2, 0);
       const end = new THREE.Vector3(cx * 0.82, 0.4, cz * 0.82);
       const mid = start.clone().lerp(end, 0.5);
-      mid.y = 7;
+      mid.y = cityOverview ? 2.5 : 7;
       const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
       const points = curve.getPoints(48);
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineDashedMaterial({ color: colorNum, dashSize: 0.35, gapSize: 0.35, transparent: true, opacity: 0.55 }));
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineDashedMaterial({ color: colorNum, dashSize: 0.35, gapSize: 0.35, transparent: true, opacity: cityOverview && !working ? 0.26 : 0.55 }));
       line.computeLineDistances();
       const lineHolder = new THREE.Group();
       lineHolder.add(line);
@@ -504,7 +670,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       const busy = department.agents.filter((agent) => agent.state === "working").length / Math.max(1, department.agents.length);
       const hasProblem = department.agents.some((agent) => agent.state === "error" || agent.state === "needs-setup");
       const flowColor = busy > 0 ? department.color : "#52525b";
-      const particles = Array.from({ length: busy > 0 ? 6 : 2 }, () => {
+      const particles = Array.from({ length: cityOverview ? (working ? 3 : 0) : (busy > 0 ? 6 : 2) }, () => {
         const particle = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 10), new THREE.MeshBasicMaterial({ color: hexToNumber(flowColor), transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false }));
         scene.add(particle);
         return particle;
@@ -521,6 +687,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       });
     });
 
+    if (cityOverview) buildCityOverviewDesks();
     // World positions for desks (after platforms are oriented).
     scene.updateMatrixWorld(true);
     platforms.forEach((platform) => platform.desks.forEach((desk) => desk.group.getWorldPosition(desk.worldPos)));
@@ -548,10 +715,12 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     });
   }
 
-  function focusDepartment(departmentId: string | null) {
+  function focusDepartment(departmentId: string | null, notify = true) {
     focused = departmentId;
     const platform = platforms.find((item) => item.department.id === departmentId);
-    if (!platform) {
+    if (!platform && cityLayout === "overview") {
+      frameCityOverview();
+    } else if (!platform) {
       goalTarget.set(0, 0, 0);
       goalRadius = 52;
       goalPhi = 0.95;
@@ -564,7 +733,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     }
     lastInteraction = performance.now();
     applyViewOffset();
-    callbacks.onFocusDepartment(focused);
+    if (notify) callbacks.onFocusDepartment(focused);
   }
 
   // Pointer controls: drag to orbit, wheel / pinch to zoom, click to focus.
@@ -605,7 +774,8 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   };
   const onWheel = (event: WheelEvent) => {
     event.preventDefault();
-    goalRadius = Math.min(80, Math.max(9, goalRadius * (1 + Math.sign(event.deltaY) * 0.08)));
+    const maxRadius = cityLayout === "overview" ? camera.far - 50 : 80;
+    goalRadius = Math.min(maxRadius, Math.max(9, goalRadius * (1 + Math.sign(event.deltaY) * 0.08)));
     lastInteraction = performance.now();
   };
   el.addEventListener("pointerdown", onPointerDown);
@@ -618,6 +788,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     const h = Math.max(1, host.clientHeight);
     renderer.setSize(w, h);
     applyViewOffset();
+    if (cityLayout === "overview" && !focused) frameCityOverview();
   });
   resizeObserver.observe(host);
 
@@ -629,7 +800,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       if (element.style.display !== "none") element.style.display = "none";
       return;
     }
-    if (element.style.display !== "block") element.style.display = "block";
+    if (element.style.display === "none") element.style.removeProperty("display");
     // Whole pixels only: avoids sub-pixel jitter that makes labels hard to click.
     const left = `${Math.round(((projected.x + 1) / 2) * host.clientWidth)}px`;
     const top = `${Math.round(((1 - projected.y) / 2) * host.clientHeight)}px`;
@@ -647,7 +818,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
 
     // Idle auto-orbit for the overview.
     // Auto-orbit only while nobody is pointing at the office, so labels hold still to be clicked.
-    if (!focused && !dragging && !hoveringLabel && !hoveringStage && motion && performance.now() - lastInteraction > 4000) goalTheta += dt * 0.05;
+    if (!cityLayout && !focused && !dragging && !hoveringLabel && !hoveringStage && motion && performance.now() - lastInteraction > 4000) goalTheta += dt * 0.05;
     const ease = 1 - Math.pow(0.001, dt);
     target.lerp(goalTarget, ease);
     radius += (goalRadius - radius) * ease;
@@ -655,41 +826,46 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     phi += (goalPhi - phi) * ease;
     placeCamera();
 
-    core.scale.setScalar(1 + Math.sin(t * 2) * 0.06 * motion);
-    ring.rotation.z += dt * 0.4 * motion;
-    beam.material.opacity = 0.08 + Math.sin(t * 1.5) * 0.03 * motion;
+    const hubMotion = cityLayout ? 0 : motion;
+    core.scale.setScalar(1 + Math.sin(t * 2) * 0.06 * hubMotion);
+    ring.rotation.z += dt * 0.4 * hubMotion;
+    beam.material.opacity = 0.08 + Math.sin(t * 1.5) * 0.03 * hubMotion;
+    overviewDesks?.animate(t);
 
     platforms.forEach((platform) => {
       platform.desks.forEach((desk) => {
         const state = desk.agent.state;
+        const cityJob = desk.agent.id.startsWith("kong-city:");
+        const avatarMotion = cityJob && state !== "working" ? 0 : motion;
         const speed = state === "working" ? 1 : state === "error" ? 0.3 : state === "needs-setup" ? 0.45 : 0.18;
         const p = t * 6 * speed + desk.phase;
-        // Only working agents type. A broken one stops and its light blinks like an alarm.
-        desk.body.position.y = 1.12 + Math.sin(p * 0.35) * 0.03 * motion;
-        desk.head.position.y = 1.72 + Math.sin(p * 0.35) * 0.03 * motion;
-        desk.head.rotation.y = state === "working" ? Math.sin(p * 0.2) * 0.25 * motion : Math.sin(p * 0.1) * 0.6 * motion;
-        const typing = state === "working" ? 1 : state === "error" ? 0 : 0.25;
-        desk.leftArm.position.y = 1.18 + Math.max(0, Math.sin(p * 2)) * 0.06 * typing * motion;
-        desk.rightArm.position.y = 1.18 + Math.max(0, Math.sin(p * 2 + Math.PI)) * 0.06 * typing * motion;
-        const pulse = 0.75 + Math.sin(t * 3 + desk.phase) * 0.25 * motion;
+        // City figures only move during verified work; retain the main office's ambient motion.
+        desk.body.position.y = 1.12 + Math.sin(p * 0.35) * 0.03 * avatarMotion;
+        desk.head.position.y = 1.72 + Math.sin(p * 0.35) * 0.03 * avatarMotion;
+        desk.head.rotation.y = state === "working" ? Math.sin(p * 0.2) * 0.25 * avatarMotion : Math.sin(p * 0.1) * 0.6 * avatarMotion;
+        const typing = state === "working" ? 1 : cityJob || state === "error" ? 0 : 0.25;
+        desk.leftArm.position.y = 1.18 + Math.max(0, Math.sin(p * 2)) * 0.06 * typing * avatarMotion;
+        desk.rightArm.position.y = 1.18 + Math.max(0, Math.sin(p * 2 + Math.PI)) * 0.06 * typing * avatarMotion;
+        const pulse = 0.75 + Math.sin(t * 3 + desk.phase) * 0.25 * avatarMotion;
         const alarm = Math.sin(t * 8 + desk.phase) > 0 ? 1.15 : 0.45;
-        desk.light.scale.setScalar(state === "working" ? pulse : state === "error" ? (motion ? alarm : 1) : 0.8);
+        desk.light.scale.setScalar(state === "working" ? pulse : state === "error" ? (avatarMotion ? alarm : 1) : 0.8);
         tmp.copy(desk.worldPos).setY(3.25);
         placeLabel(desk.label, tmp, focused ? focused === platform.department.id : radius < 24);
       });
-      tmp.copy(platform.center).setY(platform.desks.length > 3 ? 6.4 : 5.2);
+      tmp.copy(platform.center).setY(cityLayout === "overview" ? 2.2 : platform.desks.length > 3 ? 6.4 : 5.2);
       placeLabel(platform.label, tmp, focused !== platform.department.id);
-      platform.flow.particles.forEach((particle, i) => {
-        const u = (t * platform.flow.speed * motion + i / platform.flow.particles.length) % 1;
-        particle.position.copy(platform.flow.curve.getPoint(u));
+      const flow = platform.flow;
+      flow?.particles.forEach((particle, i) => {
+        const u = (t * flow.speed * motion + i / flow.particles.length) % 1;
+        particle.position.copy(flow.curve.getPoint(u));
       });
     });
     debateArcs.forEach((arc) => arc.particles.forEach((particle, i) => {
       const u = (t * 0.25 * motion + i / arc.particles.length) % 1;
       particle.position.copy(arc.curve.getPoint(u));
     }));
-    tmp.set(0, 4.4, 0);
-    placeLabel(hubLabel, tmp, true);
+    tmp.set(0, cityLayout === "overview" ? 3.2 : 4.4, 0);
+    placeLabel(hubLabel, tmp, cityLayout !== "detail");
 
     if (t - lastScreenDraw > 0.25) {
       lastScreenDraw = t;
@@ -706,8 +882,14 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
 
   function update(data: SceneData) {
     const keepFocus = focused;
+    const priorLayout = cityLayout;
+    const priorCount = platforms.length;
     build(data);
-    if (keepFocus && platforms.some((platform) => platform.department.id === keepFocus)) focusDepartment(keepFocus);
+    if (keepFocus && platforms.some((platform) => platform.department.id === keepFocus)) focusDepartment(keepFocus, false);
+    else if (priorLayout !== cityLayout || (cityLayout === "overview" && priorCount !== platforms.length)) {
+      if (!cityLayout) goalTheta = 0.6;
+      focusDepartment(null, false);
+    }
   }
 
   function dispose() {

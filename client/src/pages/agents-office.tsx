@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { OfficeConnectionsPanel } from "@/components/office-connections-panel";
+import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { MonitoredProject } from "@shared/schema";
 import { AgentsBuilding } from "@/components/agents-building/agents-building";
@@ -347,6 +349,7 @@ type OfficeContact = {
   role: string;
   station: string;
   status: string;
+  statusSignal?: AgentLiveStatus;
   activity: string;
   href?: string;
   icon: Agent["icon"];
@@ -1921,13 +1924,36 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   const handleSendDirectMessage = () => {
     const text = directMessage.trim();
     if (!text) return;
+    const pr = /^(?:consultar pr\s+)?(https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/[1-9]\d*)$/i.exec(text);
+    const radio = /^analizar horarios(?: de radio)?[.!]?$/i.test(text);
+    const action = pr ? { action: "github_pull_request", prUrl: pr[1] } : radio ? { action: "radio_analysis" } : null;
+    if (action) {
+      const specialist = pr ? { id: "github", name: "GitHub" } : { id: "radio", name: "Radio" };
+      const contactId = contact.id;
+      const append = (messages: ChatMessage[]) => setAgentChats(current => ({ ...current, [contactId]: [...(current[contactId] || []), ...messages] }));
+      const dispatch = contactId === specialist.id ? `${specialist.name} está consultando sus datos.` : `Derivé la consulta a ${specialist.name}. Esperando su resultado.`;
+      append([{ role: "user", text }, { role: "agent", text: dispatch }]);
+      setDirectMessage("");
+      void apiRequest("POST", "/api/agents-office/contact-action", action)
+        .then(response => response.json() as Promise<{ agentId: string; summary: string; checkedAt: string }>)
+        .then(result => {
+          if (result.agentId !== specialist.id || typeof result.summary !== "string" || !Number.isFinite(Date.parse(result.checkedAt))) throw new Error("Invalid receipt");
+          append([{ role: "agent", text: `${result.summary} Comprobado ${new Date(result.checkedAt).toLocaleString()}.` }]);
+        })
+        .catch(() => append([{ role: "agent", text: `${specialist.name} no pudo completar la consulta. Puedes reintentar o abrir su herramienta.` }]));
+      return;
+    }
     const isDevReviewContact = contact.name === "Code" || contact.name === "GitHub" || contact.id === "claude-reviewer";
     const repoContext =
       isDevReviewContact && selectedTarget
         ? `\n\nRepo objetivo: ${selectedTarget.label} (${selectedTarget.repo}).`
         : "";
-    const reply = `Borrador local de orientación; no se ejecutó ningún agente. ${buildAgentReply(contact, `${text}${repoContext}`)}`;
-    if (isDevReviewContact && targetRepo !== "workspace") {
+    const asksStatus = /^(?:¿\s*)?(?:estado|como estas|que estas haciendo|estas trabajando)(?:[?!.\s]*)$/i.test(text.normalize("NFD").replace(/\p{Diacritic}/gu, ""));
+    const signal = contact.statusSignal;
+    const reply = asksStatus
+      ? signal ? `Última señal disponible: ${signal.label}. ${signal.detail ?? ""}`.trim() : `Mi función asignada es ${contact.role}. Esta conversación aún no tiene una señal de ejecución verificada.`
+      : `Este chat no tiene una acción conectada para esa solicitud. Puedes pedir «analizar horarios de radio» o «consultar PR» seguido del enlace. Orientación local: ${buildAgentReply(contact, `${text}${repoContext}`)}`;
+    if (!asksStatus && isDevReviewContact && targetRepo !== "workspace") {
       setLastRemoteTask(text);
       try { window.localStorage.setItem(
         handoffKey,
@@ -1962,6 +1988,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
       role: agent.role,
       station: getAgentStation(agent),
       status: liveStatus ? liveStatus.label : agent.status,
+      statusSignal: liveStatus,
       activity: liveStatus?.detail ? `${agent.activity}. Ahora: ${liveStatus.detail}` : agent.activity,
       href: agent.href,
       icon: agent.icon,
@@ -2094,6 +2121,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   return (
     <div className="h-screen overflow-hidden bg-[#05060a] text-foreground">
       <section className="relative h-full overflow-hidden bg-black bg-[linear-gradient(90deg,rgba(148,163,184,0.035)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.035)_1px,transparent_1px)] bg-[size:64px_64px,64px_64px]">
+        <OfficeConnectionsPanel />
         <div className="absolute left-5 top-5 z-[95]">
           <Link href="/">
             <Button variant="ghost" size="icon" className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03]" data-testid="button-back-home">

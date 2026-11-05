@@ -12,7 +12,8 @@ import { pathToFileURL } from 'node:url';
 test('office local QA: actual sessions, owner isolation and native scouts with fixture storage', async () => {
  const serveMode=process.argv.includes('--serve');
  const evidenceDir=path.resolve('.local/office-evidence');await mkdir(evidenceDir,{recursive:true});
- let executablePath;try { executablePath=execFileSync('which',['chromium'],{encoding:'utf8'}).trim(); } catch { executablePath=undefined; }
+ let executablePath=process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+ if(!executablePath&&process.platform!=='win32'){try { executablePath=execFileSync('which',['chromium'],{encoding:'utf8'}).trim(); } catch { executablePath=undefined; }}
  const temp=await mkdtemp(path.join(process.cwd(),'.local-office-qa-'));
  const envKeys=['NODE_ENV','ALLOW_DEV_USER_FALLBACK','DEFAULT_USER_ID','APP_QA_BASE_URL','APP_QA_VISUAL_MODE'];
  const previous=new Map(envKeys.map(k=>[k,process.env[k]]));
@@ -52,6 +53,19 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   app.get('/api/ceo/go-live',(_req,res)=>res.json({status:'blocked',checks:[],scope:'LOCAL fixture only'}));
   app.get('/api/ceo/readiness',(_req,res)=>res.json({status:'blocked',checks:[],scope:'LOCAL fixture only'}));
   app.get('/api/ceo/conversation-history',(_req,res)=>res.json({messages:[]}));
+  app.get('/api/agents-office/connections',(_req,res)=>{
+   const blocked={status:'blocked',reason:'Isolated fixture. No provider connection.',checkedAt:new Date().toISOString()};
+   res.json({claude:blocked,kong:blocked,worker:blocked});
+  });
+  app.get('/api/agents-office/cities',(_req,res)=>res.json(Array.from({length:25},(_,index)=>({
+   id:'fixture-city-'+(index+1),name:'Ciudad de prueba '+(index+1),countryCode:'US',timeZone:'America/New_York',currency:'USD',
+  }))));
+  let kongUnavailable=true;
+  app.get('/api/agents-office/kong-snapshot',(_req,res)=>{
+   if(kongUnavailable)return res.status(503).json({error:'Isolated fixture without KONG activity access.'});
+   res.json({evidence:{generatedAt:new Date().toISOString(),cityAgentsEnabled:true,cities:[]}});
+  });
+  app.get('/api/agent-council/state',(_req,res)=>res.json({enabled:false,cycles:0,debates:[],proposals:[],overrides:{},scout:{lastRunAt:null,latest:[],error:null}}));
   app.get('/api/app-qa-agent/status',async(req,res)=>res.json(await runtime.runAppQaScan(req.fixtureUserId,false,false,false)));
   app.use('/api',(req,res)=>req.method==='GET'?res.json([]):res.status(403).json({error:'Mutation outside local QA scope'}));
   // Serve the actual production build, not a dev proxy with HMR noise.
@@ -74,6 +88,23 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   assert.equal((await fetch(base+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json',origin:'https://wrong-origin.invalid'},body:JSON.stringify({username:'fixture-owner',password:fixturePassword})})).status,403);
   browser=await chromium.launch({executablePath,args:['--no-sandbox']});
   const context=await browser.newContext({viewport:{width:1440,height:1080},reducedMotion:'reduce'});await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.fulfill({status:200,contentType:'text/css',body:''}));const page=await context.newPage();page.setDefaultTimeout(8000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
+  const loginForm=async username=>{
+   await page.getByLabel('Usuario',{exact:true}).fill(username);
+   await page.getByLabel('Password',{exact:true}).fill(fixturePassword);
+   const [loggedIn,session]=await Promise.all([
+    page.waitForResponse(r=>r.url()===base+'/api/auth/login'&&r.request().method()==='POST'),
+    page.waitForResponse(r=>r.url()===base+'/api/auth/me'&&r.request().method()==='GET'),
+    page.getByRole('button',{name:'Entrar',exact:true}).last().click(),
+   ]);
+   assert.equal(loggedIn.status(),200);assert.equal(session.status(),200);
+   const auth=await session.json();assert.equal(auth.sessionBacked,true);assert.equal(auth.user?.id,username);
+  };
+  const company=page.locator('.company-office');
+  const openCompany=async()=>{
+   await page.getByTestId('button-back-home').waitFor();
+   await page.getByRole('button',{name:/^Abrir Company World/}).click();
+   await company.getByRole('heading',{name:'Tu empresa, en movimiento.'}).waitFor();
+  };
   await page.addInitScript(()=>localStorage.setItem('blackops-local-auth-user',JSON.stringify({id:'fixture-owner',username:'fixture-owner'})));
   await page.goto(base+'/agents-office');await page.getByLabel('Usuario',{exact:true}).waitFor();assert.equal(await page.locator('.company-office').count(),0);
   const protectedRoutes=runtime.__appQaAgentInternals.LOCAL_ROUTE_MAP.filter(r=>!r.path.startsWith('/news'));
@@ -84,31 +115,119 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   }
   await writeFile(path.join(evidenceDir,'affected-route-auth-guards.json'),JSON.stringify({scope:'Actual compiled auth gate, anonymous browser, isolated backend; not signed-in page certification',routes:protectedRoutes.map(r=>({path:r.path,status:'pass',check:'real login required'}))},null,2));
   await page.goto(base+'/agents-office');await page.getByLabel('Usuario',{exact:true}).waitFor();
-  await page.getByLabel('Usuario',{exact:true}).fill('fixture-member');await page.getByLabel('Password',{exact:true}).fill(fixturePassword);await page.getByRole('button',{name:'Entrar',exact:true}).last().click();
-  await page.getByRole('heading',{name:'Tu empresa, en movimiento.'}).waitFor();await page.getByText(/Meta LOCAL · fixture-member/).waitFor();
+  await loginForm('fixture-member');
+  const mainPanelToggle=page.getByTestId('world-main-panel-toggle');
+  await mainPanelToggle.click();
+  assert.equal(await page.getByTestId('world-kong-wing').isVisible(),false);
+  await mainPanelToggle.click();
+  assert.equal(await page.getByTestId('world-kong-wing').isVisible(),true);
+  await page.getByTestId('world-kong-wing').click();
+  const cityOfficeEntry=page.getByTestId('world-open-city-office');
+  if(await cityOfficeEntry.count()){
+   assert.equal(await page.getByTestId('world-dept-consejo').count(),1);
+   await cityOfficeEntry.click();
+  }
+  await page.getByTestId('world-city-country-count').filter({hasText:'1 países · 25 ciudades'}).waitFor();
+  await page.getByTestId('world-city-activity-unavailable').waitFor();
+  assert.equal(await page.getByTestId('world-city-active-work').count(),0);
+  const cityMarkers=page.locator('[data-testid^="world-dept-kong-city:"]');
+  const mapFallback=page.getByTestId('world-city-map-fallback');
+  await cityMarkers.first().or(mapFallback).waitFor();
+  const hasMap=await cityMarkers.count()>0;
+  const cityCards=page.getByTestId('world-city-overview-city');
+  if(hasMap){
+   assert.equal(await page.getByTestId('world-dept-consejo').count(),0);
+   assert.equal(await cityMarkers.count(),25);
+   await page.waitForFunction(()=>{
+    const host=document.querySelector('[data-testid="world-canvas-host"]')?.getBoundingClientRect();
+    const markers=[...document.querySelectorAll('[data-testid^="world-dept-kong-city:"]')];
+    return host&&markers.length===25&&markers.every(marker=>{
+     const bounds=marker.getBoundingClientRect();
+     return bounds.width>0&&bounds.height>0&&bounds.left>=host.left&&bounds.right<=host.right&&bounds.top>=host.top&&bounds.bottom<=host.bottom;
+    });
+   });
+   const mapHost=page.getByTestId('world-canvas-host');
+   assert.equal(await mapHost.getAttribute('data-city-desk-count'),'175');
+   assert.equal(await mapHost.getAttribute('data-city-running-desk-count'),'0');
+   await page.getByTestId('world-ceo-orb').filter({hasText:'CEO · ORQUESTADOR'}).waitFor();
+   await page.getByTestId('world-ceo-orb').click();
+   const director=page.getByTestId('world-city-director-panel');
+   await director.getByText('Sin evidencia vigente para asignar puntos o proponer relevos.').waitFor();
+   assert.equal(await director.getByRole('listitem').count(),7);
+   await director.getByRole('button',{name:'Cerrar',exact:true}).click();
+   assert.equal(await page.locator('[data-testid^="world-avatar-kong-city:"]').count(),0);
+   await page.getByTestId('world-dept-kong-city:fixture-city-25').click();
+  } else {
+   assert.equal(await cityCards.count(),25);
+   await cityCards.filter({hasText:'Ciudad de prueba 25'}).click();
+  }
+  assert.equal(await page.getByTestId('world-city-overview').count(),0);
+  const selectedAgents=page.locator('[data-testid^="world-agent-row-kong-city:fixture-city-25:"]');
+  await selectedAgents.first().waitFor();
+  assert.equal(await selectedAgents.count(),7);
+  assert.match(await selectedAgents.first().innerText(),/Sin evidencia/);
+  if(hasMap){
+   const avatars=page.locator('[data-testid^="world-avatar-kong-city:fixture-city-25:"]');
+   assert.equal(await avatars.count(),7);
+   assert.ok((await avatars.allTextContents()).every(text=>!text.includes('Ciudad de prueba 25')));
+   assert.match(await avatars.first().getAttribute('aria-label'),/Ciudad de prueba 25/);
+  }
+  await page.getByTestId('world-city-return-map').click();
+  if(hasMap)await cityMarkers.first().waitFor();
+  await page.getByTestId('world-overview').click();
+  assert.equal(await cityCards.count(),25);
+  await page.getByRole('button',{name:'Minimizar todas las ciudades'}).click();
+  await page.getByTestId('world-city-controls-toggle').click();
+  await page.getByTestId('world-city-select').selectOption('kong-city:fixture-city-1');
+  assert.equal(await page.locator('[data-testid^="world-agent-row-kong-city:fixture-city-1:"]').count(),7);
+  const liveSnapshot = '**/api/agents-office/kong-snapshot';
+  await page.route(liveSnapshot, route => {
+   const now=Date.now();
+   return route.fulfill({json:{evidence:{generatedAt:new Date(now).toISOString(),cityAgentsEnabled:true,cities:[{
+    id:'fixture-city-1',name:'Ciudad de prueba 1',countryCode:'US',timeZone:'America/New_York',currency:'USD',categories:[{
+     category:'media',state:'running',evidence:'persisted',lastRunAt:null,lastSuccessAt:null,lastStartedAt:new Date(now-1000).toISOString(),nextRunAt:null,leaseUntil:new Date(now+90000).toISOString(),issues:[],
+    }],
+   }]}}});
+  });
+  await page.reload();
+  await page.getByTestId('world-kong-wing').click();
+  if(await cityOfficeEntry.count())await cityOfficeEntry.click();
+  const runningWork=page.getByTestId('world-city-active-work');
+  await runningWork.getByRole('button',{name:/Ciudad de prueba 1.*Fotos y media.*Audita imágenes/}).click();
+  await page.getByTestId('world-agent-card').getByText('Ciudad de prueba 1 · Fotos y media',{exact:true}).waitFor();
+  await page.getByLabel('Chat de estado',{exact:true}).fill('¿Qué estás haciendo?');
+  await page.getByRole('button',{name:'Preguntar',exact:true}).click();
+  await page.getByRole('status').filter({hasText:/Audita imágenes y flyers/}).waitFor();
+  await page.getByTestId('world-city-director-toggle').click();
+  const scoredDirector=page.getByTestId('world-city-director-panel');
+  await scoredDirector.getByText(/Puntaje parcial: 100\/100 · 1\/7 puestos verificados/).waitFor();
+  await scoredDirector.getByRole('button',{name:'Cerrar',exact:true}).click();
+  await page.unroute(liveSnapshot);
+  await page.getByTestId('world-kong-wing').click();
+  await openCompany();await company.getByText(/Meta LOCAL · fixture-member/).waitFor();
   await page.getByLabel('Objetivo',{exact:true}).fill('Plan privado del miembro LOCAL');
   await page.getByRole('button',{name:'Guardar',exact:true}).click();
   await page.getByRole('status').filter({hasText:'Meta simulada guardada.'}).waitFor();
-  assert.equal(await page.getByRole('navigation',{name:'Departamentos'}).getByRole('button').count(),6);
+  assert.equal(await company.getByRole('navigation',{name:'Departamentos'}).getByRole('button').count(),6);
   assert.equal(await page.locator('.company-office').getAttribute('data-paused'),'true');
   assert.equal(await page.getByRole('button',{name:'Reanudar movimiento'}).isDisabled(),true);
   await page.getByRole('slider',{name:'Zoom del campus'}).focus();
   await page.getByRole('slider',{name:'Zoom del campus'}).press('End');
   assert.equal(await page.getByRole('slider',{name:'Zoom del campus'}).inputValue(),'1.2');
   for(let i=0;i<4;i++){
-   await page.getByRole('button',{name:/Abrir centro operativo existente/}).click();
-   assert.equal(await page.locator('#live-office-control').isVisible(),true);
-   await page.getByRole('note').filter({hasText:/Vista anterior/}).waitFor();
-   await page.getByRole('button',{name:/Ocultar centro operativo existente/}).click();
-   assert.equal(await page.locator('#live-office-control').isVisible(),false);
+   await page.getByRole('button',{name:/^Ocultar Company World/}).click();
+   assert.equal(await company.count(),0);
+   assert.equal(await page.getByTestId('button-back-home').isVisible(),true);
+   await openCompany();
+   assert.equal(await company.getByLabel('Objetivo',{exact:true}).inputValue(),'Plan privado del miembro LOCAL');
   }
-  await page.getByRole('navigation',{name:'Departamentos'}).getByRole('button',{name:/Ingeniería/}).click();await page.getByRole('button',{name:'App QA',exact:true}).click();
+  await company.getByRole('navigation',{name:'Departamentos'}).getByRole('button',{name:/Ingeniería/}).click();await company.getByRole('button',{name:'App QA',exact:true}).click();
   await page.screenshot({path:path.join(evidenceDir,'integrated-session-desktop.png'),fullPage:true});
   await page.setViewportSize({width:390,height:844});await page.evaluate(()=>scrollTo(0,0));await page.screenshot({path:path.join(evidenceDir,'integrated-session-mobile.png'),fullPage:true});
-  await page.goto(base+'/app-qa-agent');await page.getByRole('heading',{name:'Cobertura y resultados por misión'}).waitFor();await page.getByText('26/26 rutas clasificadas.',{exact:false}).waitFor();assert.equal(await page.locator('[data-testid^=qa-mission-]').count(),5);await page.setViewportSize({width:1440,height:1080});await page.screenshot({path:path.join(evidenceDir,'missions-desktop.png'),fullPage:true});await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:path.join(evidenceDir,'missions-mobile.png'),fullPage:true});await page.goto(base+'/agents-office');await page.locator('.company-office').waitFor();
+  await page.goto(base+'/app-qa-agent');await page.getByRole('heading',{name:'Cobertura y resultados por misión'}).waitFor();await page.getByText('26/26 rutas clasificadas.',{exact:false}).waitFor();assert.equal(await page.locator('[data-testid^=qa-mission-]').count(),5);await page.setViewportSize({width:1440,height:1080});await page.screenshot({path:path.join(evidenceDir,'missions-desktop.png'),fullPage:true});await page.setViewportSize({width:390,height:844});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);await page.screenshot({path:path.join(evidenceDir,'missions-mobile.png'),fullPage:true});await page.goto(base+'/agents-office');await openCompany();
   await page.route('**/api/auth/logout',route=>route.fulfill({status:503,json:{error:'Fixture logout unavailable'}}));await page.getByRole('button',{name:'Salir',exact:true}).click();await page.getByRole('alert').filter({hasText:/No se pudo cerrar/}).waitFor();assert.equal(await page.locator('.company-office').count(),1);await page.unroute('**/api/auth/logout');
   await page.getByRole('button',{name:'Salir',exact:true}).click();await page.getByLabel('Usuario',{exact:true}).waitFor();assert.equal(await page.locator('.company-office').count(),0);assert.equal((await context.request.get(base+'/api/monthly-goals')).status(),401);assert.deepEqual(errors,[]);
-  await page.getByLabel('Usuario',{exact:true}).fill('fixture-owner');await page.getByLabel('Password',{exact:true}).fill(fixturePassword);await page.getByRole('button',{name:'Entrar',exact:true}).last().click();
+  await loginForm('fixture-owner');await openCompany();
   await page.getByText(/Meta LOCAL · fixture-owner/).waitFor();
   assert.notEqual(await page.getByLabel('Objetivo',{exact:true}).inputValue(),'Plan privado del miembro LOCAL');
   await page.evaluate(()=>{
@@ -127,12 +246,13 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
   await page.screenshot({path:path.join(evidenceDir,'github-owner-handoff-mobile.png'),fullPage:true});
   await page.getByRole('button',{name:'Salir',exact:true}).click();await page.getByLabel('Usuario',{exact:true}).waitFor();
-  await page.getByLabel('Usuario',{exact:true}).fill('fixture-member');await page.getByLabel('Password',{exact:true}).fill(fixturePassword);await page.getByRole('button',{name:'Entrar',exact:true}).last().click();
+  await loginForm('fixture-member');
   await page.waitForFunction(()=>document.querySelector('textarea')?.value==='MEMBER-ONLY fixture handoff');
   assert.equal(await page.getByText('OWNER-ONLY fixture handoff',{exact:false}).count(),0);
   assert.deepEqual(errors,[]);
   await writeFile(path.join(evidenceDir,'github-handoff-verification.json'),JSON.stringify({scope:'Real compiled consumer and backend sessions; synthetic read-only repository adapters',status:'pass',ownerAndMemberSeparated:true,unownedStateIgnored:true,externalActions:0},null,2));
   await context.close();await browser.close();browser=null;
+  kongUnavailable=false;
   const passive=await runtime.runAppQaScan('fixture-owner',false,false,false);assert.equal(passive.failCount,0);assert.equal(passive.warnCount,0);assert.equal(passive.improvementIdeas.length,0);assert.equal(passive.telegramSent,false);assert.equal(passive.dailyDigestSent,false);
   for(const id of ['route-scout','link-click-scout','api-scout','error-scout'])assert.equal(passive.subAgents.find(s=>s.id===id).status,'pass');
   // Native visual scout gets an actual logged-in session via its existing dependency seam.
