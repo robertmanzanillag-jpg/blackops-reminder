@@ -2,6 +2,7 @@ import { build as esbuild } from "esbuild";
 import { build as viteBuild } from "vite";
 import { mkdir, rm, readFile, copyFile, writeFile } from "fs/promises";
 import { spawn } from "child_process";
+import { createRequire } from "node:module";
 import { createOfficeCloudSchemaSql } from "../server/office-cloud-store";
 
 function pipInstallEnv(): NodeJS.ProcessEnv {
@@ -125,7 +126,7 @@ async function buildAll() {
 
   // connect-pg-simple resolves this resource relative to the bundled __dirname.
   // Copying the library schema does not execute SQL or touch the database.
-  await copyFile("node_modules/connect-pg-simple/table.sql", "dist/table.sql");
+  await copyFile(createRequire(import.meta.url).resolve("connect-pg-simple/table.sql"), "dist/table.sql");
 
   await bundleFreshYtDlp();
 
