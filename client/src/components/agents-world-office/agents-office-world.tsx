@@ -188,9 +188,12 @@ export function AgentsOfficeWorld({
     setCityOverviewOpen(Boolean(failed));
     sceneRef.current?.focusDepartment(null);
   };
+  // Focus asked by a button (not a click on the 3D floor or label): it must not open the KONG office.
+  const focusFromButtonRef = useRef(false);
   const focusRoom = (id: string | null) => {
-    setFocusedDepartment(id); setPanelAgentId(null); sceneRef.current?.focusDepartment(id);
-    if (id === "kong") onOpenKongOffice();
+    setFocusedDepartment(id); setPanelAgentId(null);
+    focusFromButtonRef.current = true;
+    try { sceneRef.current?.focusDepartment(id); } finally { focusFromButtonRef.current = false; }
   };
   const openCityFromOverview = (id: string) => {
     if (!filteredCityRooms.some(room => room.id === id)) setCityCountry("");
@@ -339,7 +342,7 @@ export function AgentsOfficeWorld({
           sceneRef.current = createOfficeScene(THREE, host, labels, {
             onFocusDepartment: (id) => {
               setFocusedDepartment(id);
-              if (id === "kong") { openKongOfficeRef.current(); return; }
+              if (id === "kong") { if (!focusFromButtonRef.current) openKongOfficeRef.current(); return; }
               if (id?.startsWith("kong-city:")) {
                 setOfficeWing("kong");
                 setPanelAgentId(null);
@@ -416,8 +419,8 @@ export function AgentsOfficeWorld({
         <p className="mx-auto mb-4 max-w-[900px] rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-xs text-amber-100" data-testid="world-fallback">
           Este navegador no pudo abrir la oficina 3D ({failed}). Te muestro el edificio con los mismos datos en vivo.
         </p>
-        <button type="button" onClick={onOpenKongOffice} className="mx-auto mb-4 block rounded-full bg-violet-500 px-5 py-3 font-bold text-white" data-testid="world-kong-wing">Ver oficina KONG</button>
-        <button type="button" onClick={() => changeWing("kong")} className="mx-auto mb-4 block rounded-full border border-lime-300/50 px-5 py-2 text-lime-100">Ver mapa y director de ciudades</button>
+        <button type="button" onClick={onOpenKongOffice} className="mx-auto mb-4 block rounded-full bg-violet-500 px-5 py-3 font-bold text-white" data-testid="world-open-kong-office">Ver oficina KONG</button>
+        <button type="button" onClick={() => changeWing("kong")} className="mx-auto mb-4 block rounded-full border border-lime-300/50 px-5 py-2 text-lime-100" data-testid="world-kong-wing">Ver mapa y director de ciudades</button>
         <AgentsBuilding agents={agents} kongTeam={centralKongTeam} legal={legal} selectedAgentId={selectedAgentId} onSelectAgent={onSelectAgent} onSelectKongAgent={onSelectKongAgent} />
       </div>
     );

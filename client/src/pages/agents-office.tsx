@@ -2180,8 +2180,8 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
               <span>Type a command or search...</span>
               <span className="ml-auto rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px]">⌘ K</span>
             </div>
-            {/* On phones the row wraps to the left so it never covers "Trabajo real" (top right). */}
-            <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 lg:shrink-0 lg:justify-end">
+            {/* On phones the row wraps to the left and leaves the top-right corner free for "Trabajo real". */}
+            <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 max-sm:pr-24 lg:shrink-0 lg:justify-end">
               <div className="flex rounded-2xl border border-white/10 bg-[#0c1018]/90 p-1 shadow-xl shadow-black/30" role="group" aria-label="Vista de la oficina">
                 {(["world", "building", "office"] as const).map((view) => (
                   <button
