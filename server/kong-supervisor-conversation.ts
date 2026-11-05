@@ -60,7 +60,7 @@ export function createKongSupervisorConversation(deps: KongConversationDeps) {
         if (readsVideo && age >= 0 && age < 60_000) {
           reply = `Ya hay una revision de video de hace menos de un minuto. No se inicio otra lectura.\n${statusReply(previous, input.agentId)}`;
         } else {
-        const statuses = readsVideo ? { "kong-videos": await (observation ||= limitedRead(deps.readVideoStatus)) } : {};
+        const statuses: Record<string, { state: string }> = readsVideo ? { "kong-videos": await (observation ||= limitedRead(deps.readVideoStatus)) } : {};
         const report = reviewKongReadiness(previous, statuses, deps.now());
         const newRecords = report.records.slice(0, KONG_WORKERS.length).filter(record => isSupervisor || record.agentId === input.agentId);
         next = { ...previous, lastRunAt: report.lastRunAt, records: [...newRecords, ...previous.records].slice(0, 50) };
