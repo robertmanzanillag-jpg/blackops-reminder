@@ -14,8 +14,8 @@ test('only a fresh supplied video status can complete the readiness task', () =>
   assert.ok(result.records.slice(1).every(record => record.result === 'blocked'));
 });
 test('missing content is a dependency, not an agent failure; reader errors are failures', () => {
-  for (const state of ['needs-setup', 'checking', 'new-unknown-state']) assert.equal(reviewKongReadiness(emptyKongSupervision(), { 'kong-videos': { state } }, now).records[0].result, 'blocked');
-  for (const state of ['error', 'offline']) assert.equal(reviewKongReadiness(emptyKongSupervision(), { 'kong-videos': { state } }, now).records[0].result, 'failed');
+  for (const state of ['needs-setup', 'checking', 'offline', 'new-unknown-state']) assert.equal(reviewKongReadiness(emptyKongSupervision(), { 'kong-videos': { state } }, now).records[0].result, 'blocked');
+  for (const state of ['error']) assert.equal(reviewKongReadiness(emptyKongSupervision(), { 'kong-videos': { state } }, now).records[0].result, 'failed');
 });
 test('history is bounded and input state is unchanged', () => {
   const before = emptyKongSupervision();
