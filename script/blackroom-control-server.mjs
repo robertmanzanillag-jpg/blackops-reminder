@@ -1,6 +1,7 @@
 import { execFile, spawn } from "node:child_process";
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import http from "node:http";
+import { startOrganicPeerScout } from "./organic-peer-scout.mjs";
 import { mkdir, readFile, readdir, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path from "node:path";
@@ -58,10 +59,15 @@ function serializedCommand(name, options) {
   return next;
 }
 
-async function workerState() {
+async function workerState(includeLocalEvidence = true) {
   let state;
   try { state = JSON.parse(await readFile(workerStatePath, "utf8")); }
   catch { state = { running: false, pid: null, runs: 0, lastError: null }; }
+  if (includeLocalEvidence) {
+    const report = await readFile(path.join(path.dirname(workerLedgerPath), "local-ceo-report.json"), "utf8")
+      .then(JSON.parse).catch(() => null);
+    state.localEvidence = report?.scope === "local-evidence" ? report : null;
+  }
   try {
     const activity = JSON.parse(await readFile(workerActivityPath, "utf8"));
     return { ...state, csvBridge: csvBridgeStatus, automaticAnalytics: automaticAnalyticsStatus, activity: Array.isArray(activity) ? activity.slice(-80) : [] };
@@ -69,15 +75,16 @@ async function workerState() {
 }
 
 async function syncAutomaticAnalytics() {
-  if (!remoteToken || exportRunning || Date.now() < nextExportAt) return;
+  if (exportRunning || Date.now() < nextExportAt) return;
+  exportRunning = true;
   nextExportAt = Date.now() + 30 * 60_000;
   const profileExists = await stat(path.join(analyticsRoot, "browser-profile")).then((s) => s.isDirectory()).catch(() => false);
   if (!profileExists) {
-    automaticAnalyticsStatus = { ...automaticAnalyticsStatus, setupRequired: true,
+    exportRunning = false;
+    automaticAnalyticsStatus = { ...automaticAnalyticsStatus, setupRequired: true, complete: false, running: false,
       errors: { session: "Falta iniciar sesión una vez en el navegador dedicado de analíticas." } };
     return;
   }
-  exportRunning = true;
   automaticAnalyticsStatus = { ...automaticAnalyticsStatus, running: true, complete: false, importedByNetwork: {}, setupRequired: false, lastCheckedAt: new Date().toISOString() };
   try {
     // Detached from the heartbeat loop; a slow export never makes the Mac look offline.
@@ -85,8 +92,26 @@ async function syncAutomaticAnalytics() {
       cwd: projectDir, timeout: 240_000, maxBuffer: 100_000,
     });
     const result = JSON.parse(await readFile(path.join(analyticsRoot, "latest-export.json"), "utf8"));
+    // Local evidence is durable before a remote import is attempted. Failure
+    // on either side must not prevent the other from succeeding.
+    let localFailed = false;
+    try {
+      await execFileAsync(process.execPath, ["--experimental-strip-types", "--import", "./script/register-native-typescript.mjs",
+        "script/blackroom-local-evidence.ts"], { cwd: projectDir, timeout: 60_000, maxBuffer: 32_000 });
+    } catch { localFailed = true; }
+    if (!remoteToken) {
+      automaticAnalyticsStatus = { ...automaticAnalyticsStatus, running: false, complete: false, importedByNetwork: {},
+        errors: { ...result.errors, ...(localFailed ? { localEvidence: "No se pudo guardar la evidencia local." } : {}),
+          remote: "Importación remota no configurada; la evaluación local es independiente." }, setupRequired: result.setupRequired === true };
+      nextExportAt = Date.now() + (localFailed || result.setupRequired || Object.keys(result.errors || {}).length ? 60 * 60_000 : 6 * 60 * 60_000);
+      return;
+    }
     const { imported, importedByNetwork, complete, errors } = await deliverMetricoolExports(result,
-      (body) => remoteRequest("POST", body, "/api/blackroom-agent/analytics/import"));
+      async (body) => {
+        const receipt = await remoteRequest("POST", body, "/api/blackroom-agent/analytics/import");
+        if (receipt?.accepted !== true) throw new Error("Missing remote import confirmation");
+      });
+    if (localFailed) errors.localEvidence = "No se pudo guardar la evidencia local.";
     automaticAnalyticsStatus = { ...automaticAnalyticsStatus, running: false,
       lastImportedAt: imported ? result.checkedAt : automaticAnalyticsStatus.lastImportedAt,
       lastCompleteImportAt: complete ? result.checkedAt : automaticAnalyticsStatus.lastCompleteImportAt,
@@ -191,7 +216,8 @@ async function syncMetricoolCsvExports(force = false) {
       sourceFiles: group.sourceFiles,
       samples: [...group.samples.values()].slice(-2_000),
     }));
-    await remoteRequest("POST", { imports }, "/api/blackroom-agent/analytics/import");
+    const receipt = await remoteRequest("POST", { imports }, "/api/blackroom-agent/analytics/import");
+    if (receipt?.accepted !== true) throw new Error("Missing remote import confirmation");
     const files = { ...(previous.files || {}) };
     for (const file of changed) files[file.filename] = file.fingerprint;
     await writeJsonAtomic(csvBridgeStatePath, { version: 1, updatedAt: checkedAt, files });
@@ -255,7 +281,7 @@ async function syncRemoteControl() {
     await remoteRequest("POST", {
       deviceId: "blackroom-mac",
       queue,
-      worker: await workerState(),
+      worker: await workerState(false),
       publicationExperiments: await publicationExperiments(),
       lastError,
       appliedGeneration: Math.max(0, lastAppliedGeneration),
@@ -322,12 +348,21 @@ async function recoverWorker() {
   catch (error) { console.error("[blackroom-control] startup recovery failed", error); }
 }
 
-server.listen(port, "127.0.0.1", () => console.log(`[blackroom-control] http://127.0.0.1:${port}/blackroom`));
+server.listen(port, "127.0.0.1", () => {
+  console.log(`[blackroom-control] http://127.0.0.1:${port}/blackroom`);
+  // Long-lived local supervisor, independent of whether any publishing job is due.
+  const stopScout = startOrganicPeerScout(path.join(projectDir, "clippers_workspace/blackroom/agent"));
+  server.once("close", () => void stopScout());
+  for (const signal of ["SIGTERM", "SIGINT"]) process.once(signal, () => void stopScout().finally(() => process.exit(0)));
+});
 setTimeout(recoverWorker, 1_000);
 setInterval(recoverWorker, 60_000).unref();
+// A slow/failed control-plane poll (or missing token) cannot stall a local
+// metrics collection. The guarded collector has its own backoff.
+setTimeout(() => void syncAutomaticAnalytics(), 2_000);
+setInterval(() => void syncAutomaticAnalytics(), 60_000).unref();
 if (remoteToken) {
   const remoteLoop = async () => {
-    void syncAutomaticAnalytics();
     await syncMetricoolCsvExports();
     await syncRemoteControl();
     setTimeout(remoteLoop, remotePollMs).unref();

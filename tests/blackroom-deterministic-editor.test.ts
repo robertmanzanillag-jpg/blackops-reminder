@@ -7,6 +7,7 @@ import {
   buildBlackRoomRenderArgs,
   buildBlackRoomYtDlpAuthArgs,
   buildBlackRoomYtDlpWindowArgs,
+  downloadBlackRoomWindowWithFallback,
   commitBlackRoomReservation,
   extractBlackRoomDj,
   findBlackRoomDropOffset,
@@ -61,6 +62,103 @@ function ledger(): any {
     })),
   };
 }
+
+test("real planner rotates duration within DJ/set/daypart; delayed, cross-platform and unmatched observations cannot select a winner", async () => {
+  const { evaluateDurationLearning, BLACKROOM_DURATION_TEST_ID } = await import(
+    "../server/blackroom-verified-learning"
+  );
+  const state = queue();
+  state.sourceHistory = [];
+  const decisions = (prefix: string) => Object.fromEntries(["tiktok","facebook","youtube"].map(network=>[network,{id:prefix+"-"+network}]));
+  state.analytics = { verifiedLearning: decisions("hook"), durationLearning: decisions("duration") };
+  const history: any = { entries: [], version: 1 },
+    experiments: any[] = [],
+    observations: any[] = [];
+  const inventory = Array.from({ length: 150 }, (_, i) => ({
+    id: "set-" + i,
+    title: "DJ" + (i % 15) + " - DJ Set",
+    duration: 5400,
+  }));
+  for (let day = 1; day <= 20; day++) {
+    const date = "2026-09-" + String(day).padStart(2, "0");
+    state.jobs = [
+      {
+        id: date,
+        targetDate: date,
+        status: "queued",
+        notBefore: "2026-08-01T00:00:00Z",
+        slots: ["00:30", "05:00", "09:30", "14:00", "19:00"].map((localTime) => ({
+          localTime,
+          timezone: "America/New_York",
+        })),
+        requirements: { posts: 5, djs: 5, postsPerDj: 1, durationsSeconds: [15, 30, 60] },
+      },
+    ];
+    for (let i = 0; i < 5; i++) {
+      const p = planBlackRoomDeterministicEdit({
+        queue: state,
+        ledger: history,
+        inventory,
+        now: new Date("2026-08-31T12:00:00Z"),
+      })!;
+      const id = "p" + day + "_" + i,
+        publishedAt = date + "T" + p.slot + ":00-04:00";
+      history.entries.push({
+        ...p,
+        reservationId: id,
+        status: "confirmed",
+        segmentStartSeconds: p.windowStartSeconds,
+        segmentEndSeconds: p.windowStartSeconds + p.durationSeconds,
+        publicationDateTime: publishedAt,
+      });
+      experiments.push({ ...p, sourceVideoId: p.videoId, network: "youtube", platformPostId: id, reservationId: id });
+      observations.push({
+        network: "youtube",
+        postId: id,
+        publishedAt,
+        observedAt: new Date(Date.parse(publishedAt) + 24 * 3600_000).toISOString(),
+        views: p.durationSeconds === 30 ? 250 : 100,
+      });
+      if (p.learningTestId === BLACKROOM_DURATION_TEST_ID) assert.equal(p.creativeStrategy, "drop_first");
+      assert.equal(p.learningDecisionIds, p.targetNetworks.map(network=>network+":"+(p.learningTestId===BLACKROOM_DURATION_TEST_ID?"duration":"hook")+"-"+network).join(","));
+    }
+  }
+  const now = new Date("2026-09-22T12:00:00Z"),
+    snapshots = captureLearningSnapshots([], observations, now);
+  const input = { now, experiments, snapshots, sourceObservedAt: { youtube: now.toISOString() } };
+  const result = evaluateDurationLearning(input);
+  assert.equal(result.youtube.recommendedSeconds, 30, JSON.stringify(result.youtube));
+  assert.equal(result.tiktok.recommendedSeconds, null);
+  assert.ok(result.youtube.matchedBlocks >= 5);
+  assert.equal(result.youtube.windowHours, 24);
+  assert.match(result.youtube.id,/^[a-f0-9]{20}$/);
+  for(const conflict of [{format:"horizontal"}, {language:"es"}, {creativeStrategy:"instant_drop"}]) {
+    const duplicates=experiments.map(e=>({...e,...conflict}));
+    for(const records of [[...experiments,...duplicates],[...duplicates,...experiments]]) {
+      const incompatible=evaluateDurationLearning({...input,experiments:records}).youtube;
+      assert.equal(incompatible.exact,0);
+      assert.equal(incompatible.recommendedSeconds,null);
+      assert.notEqual(incompatible.id,result.youtube.id);
+    }
+  }
+  assert.equal(evaluateDurationLearning({ ...input, snapshots: [] }).youtube.recommendedSeconds, null);
+  assert.equal(
+    evaluateDurationLearning({ ...input, sourceObservedAt: { youtube: "2026-09-18T12:00:00Z" } }).youtube
+      .recommendedSeconds,
+    null,
+  );
+  const confounded = observations.map((o) => {
+    const arm = experiments.find((e) => e.platformPostId === o.postId).durationSeconds;
+    const publishedAt =
+      o.publishedAt.slice(0, 10) + "T" + (arm === 15 ? "02" : arm === 30 ? "11" : "19") + ":00:00-04:00";
+    return { ...o, publishedAt, observedAt: new Date(Date.parse(publishedAt) + 24 * 3600_000).toISOString() };
+  });
+  assert.equal(
+    evaluateDurationLearning({ ...input, snapshots: captureLearningSnapshots([], confounded, now) }).youtube
+      .matchedBlocks,
+    0,
+  );
+});
 
 test("multi-day controlled planning produces matched evidence without repeating segments or increasing volume", () => {
   const state = queue();
@@ -517,6 +615,27 @@ test("command builders keep downloads partial and renders platform-compatible", 
 test("YouTube downloads use the local Chrome session by default and can be disabled", () => {
   assert.deepEqual(buildBlackRoomYtDlpAuthArgs(), ["--cookies-from-browser", "chrome"]);
   assert.deepEqual(buildBlackRoomYtDlpAuthArgs("none"), []);
+});
+
+test("retry unavailable formats once with public default clients and the same audio and window requirements", async () => {
+  const plan = { videoUrl: "https://www.youtube.com/watch?v=owned", windowStartSeconds: 20, windowEndSeconds: 65 } as any;
+  const calls: string[][] = [];
+  await downloadBlackRoomWindowWithFallback(plan, "/source.mp4", "/tmp/work", ["--cookies-from-browser", "chrome"], async args => {
+    calls.push(args);
+    if (calls.length === 1) throw Object.assign(new Error("yt-dlp failed"), { stderr: "ERROR: Requested format is not available." });
+  });
+  assert.equal(calls.length, 2);
+  assert.deepEqual(calls[1], ["--ignore-config", ...calls[0].filter(v => !["--cookies-from-browser", "chrome", "--extractor-args", "youtube:player_client=web_safari"].includes(v))]);
+  assert.ok(calls[1].includes("*20-65"));
+  assert.ok(calls[1].includes("bestvideo*[height<=1080]+bestaudio/best[height<=1080]"));
+  for (const [message, expectedCalls] of [["disk full", 1], ["Requested format is not available", 2]] as const) {
+    let attempts = 0;
+    await assert.rejects(downloadBlackRoomWindowWithFallback(plan, "/source.mp4", "/tmp/work", [], async () => {
+      attempts++;
+      throw new Error(message);
+    }), new RegExp(message));
+    assert.equal(attempts, expectedCalls);
+  }
 });
 
 test("owned-source validation accepts only the official BlackRoom channel", () => {
