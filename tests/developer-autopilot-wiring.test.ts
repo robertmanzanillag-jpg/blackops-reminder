@@ -664,5 +664,5 @@ test("Agents Office shows Claude as an independent PR reviewer", () => {
   assert.match(source, /Segundo chequeo/);
   assert.match(source, /from: "claude-reviewer", to: "github"/);
   assert.match(source, /from: "app-qa", to: "claude-reviewer"/);
-  assert.match(source, /Codex trabaja PR-first y Claude revisa antes de App QA/);
+  assert.match(source, /Flujo previsto: Codex prepara el cambio, Claude lo revisa y App QA comprueba el resultado/);
 });
