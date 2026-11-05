@@ -512,7 +512,7 @@ test("order evidence is verified on the server: wrong owner, failed run or reuse
 });
 
 test("single publisher: the supervisor never imports or calls publishing code", async () => {
-  const files = ["server/agent-council.ts", "server/agent-council-routes.ts", "shared/agent-company.ts", "shared/agent-integrations.ts", "shared/agent-live-status.ts", "shared/agent-council.ts", "shared/kong-supervisor.ts", "server/kong-supervisor-conversation.ts", "server/kong-supervisor-routes.ts"];
+  const files = ["server/agent-council.ts", "server/agent-council-routes.ts", "shared/agent-company.ts", "shared/agent-integrations.ts", "shared/agent-live-status.ts", "shared/agent-council.ts", "shared/kong-supervisor.ts", "server/kong-supervisor-conversation.ts", "server/kong-supervisor-routes.ts", "shared/kong-operations.ts", "server/kong-operations.ts", "server/kong-operations-routes.ts"];
   for (const file of files) {
     const source = await readFile(path.join(process.cwd(), file), "utf8");
     const imports = [...source.matchAll(/(?:from\s+|import\()\s*["']([^"']+)["']/g)].map((match) => match[1]);
