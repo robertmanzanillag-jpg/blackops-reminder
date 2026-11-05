@@ -30,9 +30,9 @@ test("Developer Autopilot routes are exposed near App QA gates", () => {
   assert.match(source, /result\.status === "codex_dispatched"/);
   assert.match(source, /result\.status === "subscription_brief"/);
   assert.match(source, /\/api\/developer-autopilot\/qa-gate/);
-  assert.match(source, /runAppQaScan\(getCurrentUserId\(req\), Boolean\(req\.body\?\.notify\), true, false\)/);
+  assert.match(source, /runAppQaScan\(userId, Boolean\(req\.body\?\.notify\), true, false\)/);
   assert.match(source, /const prUrl = typeof req\.body\?\.prUrl === "string"/);
-  assert.match(source, /evaluateDeveloperReleaseGate\(scan, \{ prUrl \}\)/);
+  assert.match(source, /evaluateDeveloperReleaseGate\(scan, \{ prUrl, prHeadSha: packet\?\.headSha, prDiffSha256: packet\?\.diffSha256, claudeReview \}\)/);
 });
 
 test("Revenue Engine exposes GitHub handoff route for sold website workspaces", () => {

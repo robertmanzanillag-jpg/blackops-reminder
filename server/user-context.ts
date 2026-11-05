@@ -110,9 +110,8 @@ export function allowsDevUserFallback(): boolean {
   return DEV_FALLBACK_ENVS.has(process.env.NODE_ENV || "development");
 }
 
-export function resolveCurrentUserId(req: Request): string | null {
+export function getAuthenticatedCurrentUserId(req: Request): string | null {
   const authReq = req as RequestWithAuth;
-  const requestFallbackAllowed = allowsDevUserFallback();
 
   return (
     cleanUserId(authReq.user?.id) ||
@@ -122,10 +121,13 @@ export function resolveCurrentUserId(req: Request): string | null {
     cleanUserId(authReq.session?.user?.id) ||
     cleanUserId(authReq.session?.user?.userId) ||
     cleanUserId(authReq.session?.user?.sub) ||
-    readSignedLocalAuthCookie(req) ||
-    (requestFallbackAllowed ? cleanUserId(req.header("x-user-id")) : null) ||
-    (requestFallbackAllowed ? DEFAULT_DEV_USER_ID : null)
+    readSignedLocalAuthCookie(req)
   );
+}
+
+export function resolveCurrentUserId(req: Request): string | null {
+  return getAuthenticatedCurrentUserId(req) ||
+    (allowsDevUserFallback() ? cleanUserId(req.header("x-user-id")) || DEFAULT_DEV_USER_ID : null);
 }
 
 export function isPublicApiPath(path: string): boolean {

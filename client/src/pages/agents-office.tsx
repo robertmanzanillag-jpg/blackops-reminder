@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { OfficeConnectionsPanel } from "@/components/office-connections-panel";
 import { cn } from "@/lib/utils";
 import type { MonitoredProject } from "@shared/schema";
 
@@ -1915,6 +1916,7 @@ export default function AgentsOfficePage() {
   return (
     <div className="h-screen overflow-hidden bg-[#05060a] text-foreground">
       <section className="relative h-full overflow-hidden bg-black bg-[linear-gradient(90deg,rgba(148,163,184,0.035)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.035)_1px,transparent_1px)] bg-[size:64px_64px,64px_64px]">
+        <OfficeConnectionsPanel />
         <div className="absolute left-5 top-5 z-[95]">
           <Link href="/">
             <Button variant="ghost" size="icon" className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03]" data-testid="button-back-home">

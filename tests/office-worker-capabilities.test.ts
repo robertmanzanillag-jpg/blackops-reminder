@@ -1,0 +1,60 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { createOfficeCloudWorker, probeOfficeWorker } from "../server/office-cloud-runtime";
+import type { officeCloudStore, OfficeWorkerCapabilities, OfficeWorkerHeartbeat } from "../server/office-cloud-store";
+
+const now = new Date("2026-11-05T03:00:00Z");
+const probe = (status: "ready" | "blocked" = "ready", checkedAt = now.toISOString()) => ({ status, checkedAt, reason: "Checked on worker host" });
+const heartbeat = (capabilities?: OfficeWorkerCapabilities, lastSeenAt = now.toISOString()): OfficeWorkerHeartbeat => ({ workerId: "worker-a", lastSeenAt, ...(capabilities ? { capabilities } : {}) });
+
+test("cloud connection status comes from the execution host capability record", async () => {
+  const capabilities = { claude: probe(), kong: probe("blocked") };
+  const status = await probeOfficeWorker({ getHeartbeat: async () => heartbeat(capabilities) }, () => now);
+  assert.equal(status.status, "ready");
+  assert.equal(status.capabilities.claude.status, "ready");
+  assert.equal(status.capabilities.kong.status, "blocked");
+  assert.deepEqual(status.capabilities, capabilities);
+});
+
+test("fresh process heartbeats cannot refresh stale provider authentication evidence", async () => {
+  const capabilities = { claude: probe("ready", new Date(now.getTime() - 90_001).toISOString()), kong: probe("ready", new Date(now.getTime() + 30_001).toISOString()) };
+  const status = await probeOfficeWorker({ getHeartbeat: async () => heartbeat(capabilities) }, () => now);
+  assert.equal(status.status, "ready");
+  assert.equal(status.capabilities.claude.status, "blocked");
+  assert.equal(status.capabilities.kong.status, "blocked");
+});
+
+test("missing capabilities, missing workers and stale heartbeats never imply provider readiness", async () => {
+  for (const record of [undefined, heartbeat(), heartbeat({ claude: probe(), kong: probe() }, new Date(now.getTime() - 45_001).toISOString())]) {
+    const status = await probeOfficeWorker({ getHeartbeat: async () => record }, () => now);
+    assert.equal(status.capabilities.claude.status, "blocked");
+    assert.equal(status.capabilities.kong.status, "blocked");
+  }
+});
+
+test("database availability failure blocks all worker capability claims", async () => {
+  const status = await probeOfficeWorker({ getHeartbeat: async () => { throw new Error("private database error"); } }, () => now);
+  assert.equal(status.status, "blocked");
+  assert.equal(status.capabilities.claude.status, "blocked");
+  assert.ok(!JSON.stringify(status).includes("private database"));
+});
+
+test("worker refresh persists only sanitized probe fields and ordinary heartbeats retain probe time", async () => {
+  const payloads: Array<OfficeWorkerCapabilities | undefined> = [];
+  let claudeChecks = 0; let kongChecks = 0;
+  const store = {
+    heartbeat: async (_id: string, value?: OfficeWorkerCapabilities) => { payloads.push(value); return heartbeat(value); },
+  } as unknown as typeof officeCloudStore;
+  const worker = createOfficeCloudWorker({
+    store, execute: async () => { throw new Error("No task should run"); },
+    probeClaude: async () => { claudeChecks++; return probe(); },
+    probeKong: async () => { kongChecks++; return { ...probe("blocked"), agents: [] }; },
+  });
+  await Promise.all([worker.refreshCapabilities(), worker.refreshCapabilities()]);
+  await worker.heartbeat();
+  assert.equal(claudeChecks, 1); assert.equal(kongChecks, 1);
+  assert.equal(payloads.length, 2);
+  assert.deepEqual(payloads[0], { claude: probe(), kong: probe("blocked") });
+  assert.deepEqual(payloads[1], payloads[0]);
+  assert.ok(!JSON.stringify(payloads).includes("agents"));
+});
