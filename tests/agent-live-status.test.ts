@@ -131,11 +131,25 @@ test("runProbe maps fetch outcomes without throwing", async () => {
   assert.deepEqual(await runProbe("/api/x", fake(new Error("offline"))), { ok: false, status: 0, body: null, networkError: true });
 });
 
+test("BlackRoom supervision separates activity, pause, stale evidence and learning", () => {
+  const now = Date.parse("2026-11-05T12:00:00Z");
+  const probe = agentProbes["blackroom-videos"];
+  const operations = { checkedAt: new Date(now).toISOString(), state: "waiting", worker: { online: true, processing: false }, learning: { tiktok: { status: "stale", exactAttributed: 0 } }, actions: [{ message: "Recuperar métricas recientes" }] };
+  const result = (value: unknown) => ({ ok: true as const, status: 200, body: { operations: value } });
+  assert.equal(summarizeProbe(probe, result(operations), now).state, "checking");
+  assert.match(summarizeProbe(probe, result(operations), now).problems!.join(" "), /métricas/);
+  assert.equal(summarizeProbe(probe, result({ ...operations, state: "paused" }), now).state, "checking");
+  assert.equal(summarizeProbe(probe, result({ ...operations, checkedAt: new Date(now - 91_000).toISOString() }), now).state, "needs-setup");
+  assert.equal(summarizeProbe(probe, result({ ...operations, worker: { online: false } }), now).label, "Publicador desconectado");
+  assert.equal(summarizeProbe(probe, result({ ...operations, state: "working", worker: { online: true, processing: true, progressEventId: "edit-1" } }), now).state, "checking");
+  assert.equal(summarizeProbe(probe, result({ ...operations, state: "working", worker: { online: true, processing: true } }), now).state, "checking");
+});
+
 test("new real agents: Black Room videos, news and Kong videos", () => {
   const now = Date.parse("2026-11-04T12:00:00Z");
   const br = (online: boolean, totals: Record<string, number>) => ({ ok: true as const, status: 200, body: { agent: { totals }, remote: { online } } });
   assert.equal(summarizeProbe(agentProbes["blackroom-videos"], br(false, { queued: 3 }), now).label, "Publicador desconectado");
-  assert.equal(summarizeProbe(agentProbes["blackroom-videos"], br(true, { queued: 2, processing: 1, scheduled: 4 }), now).state, "working");
+  assert.equal(summarizeProbe(agentProbes["blackroom-videos"], br(true, { queued: 2, processing: 1, scheduled: 4 }), now).state, "checking");
   assert.equal(summarizeProbe(agentProbes["blackroom-videos"], br(true, { retry: 2 }), now).state, "error");
   assert.equal(summarizeProbe(agentProbes["blackroom-videos"], br(true, {}), now).state, "offline");
   const news = (lastRunAt: string | null) => ({ ok: true as const, status: 200, body: { bootstrapped: true, lastRunAt, events: { active: 3 }, queue: { total: 2, approvalRequired: 1 } } });
@@ -147,4 +161,50 @@ test("new real agents: Black Room videos, news and Kong videos", () => {
   assert.match((summarizeProbe(agentProbes["kong-videos"], fresh, now).activity || []).join(" "), /kong-1\.mp4/);
   assert.equal(summarizeProbe(agentProbes["kong-videos"], kong([]), now).state, "needs-setup");
   assert.equal(summarizeProbe(agentProbes["kong-videos"], kong([{ name: "old", modifiedAt: new Date(now - 72 * 3_600_000).toISOString() }]), now).state, "offline");
+});
+
+// Shape of GET /api/clippers/local-news/status (server/clippers-local-news-agent.ts ClipperLocalNewsStatus).
+const localNews = (overrides: Record<string, unknown> = {}) => ({
+  bootstrapped: true,
+  lastRunAt: new Date(Date.parse("2026-11-04T12:00:00Z") - 30 * 60_000).toISOString(),
+  lanes: { "miami-news": { active: 3, resolved: 5, queued: 2 }, "ny-news": { active: 0, resolved: 1, queued: 0 } },
+  editorial: { dailyPublishing: { accounts: {
+    "miami-news": { facebook: { queuedToday: 4, target: 10, deficit: 6 }, x: { queuedToday: 10, target: 10, deficit: 0 } },
+    "ny-news": { facebook: { queuedToday: 10, target: 10, deficit: 0 } },
+  } } },
+  connectors: [{ id: "fl511", lane: "miami-news", configured: false, requiresKey: true, public: false }, { id: "nws", lane: "ny-news", configured: true, requiresKey: false, public: true }],
+  coverage: { miamiTraffic: "not_configured", nyTraffic: "notify_nyc_public" },
+  ...overrides,
+});
+
+test("city desks: each city reports its own work and its own real problems", () => {
+  const now = Date.parse("2026-11-04T12:00:00Z");
+  const miami = summarizeProbe(agentProbes["news:miami-news"], ok(localNews()), now);
+  assert.equal(miami.state, "working");
+  assert.match(miami.label, /3 noticias · 2 en cola/);
+  assert.deepEqual(miami.problems, ["Facebook: 4/10 hoy (faltan 6)", "Fuentes sin configurar: fl511", "Trafico sin cobertura configurada"]);
+  const ny = summarizeProbe(agentProbes["news:ny-news"], ok(localNews()), now);
+  assert.equal(ny.state, "working", "a quiet city with fresh rounds is not a failure");
+  assert.match(ny.label, /Vigilando/);
+  assert.equal(ny.problems, undefined);
+  assert.equal(agentProbes["news:miami-news"].key, agentProbes.news.key, "cities reuse the news request");
+});
+
+test("city desks fail closed: missing city, stale rounds or never bootstrapped are not working", () => {
+  const now = Date.parse("2026-11-04T12:00:00Z");
+  assert.equal(summarizeProbe(agentProbes["news:ny-news"], ok(localNews({ lanes: { "miami-news": { active: 1, resolved: 0, queued: 0 } } })), now).state, "error");
+  assert.equal(summarizeProbe(agentProbes["news:ny-news"], ok(localNews({ lastRunAt: "2026-11-02T00:00:00Z" })), now).state, "needs-setup");
+  assert.equal(summarizeProbe(agentProbes["news:miami-news"], ok(localNews({ bootstrapped: false })), now).state, "needs-setup");
+  assert.equal(summarizeProbe(agentProbes["news:miami-news"], { ok: false, status: 500, body: null }, now).state, "error");
+});
+
+test("KONG metrics agent: status and results come from the operations state, fail closed", () => {
+  const now = Date.parse("2026-11-05T12:00:00Z");
+  const body = { status: { "kong-metrics": { state: "working", label: "1/1 publicaciones medidas" } }, results: [{ title: "Venue: Club Prueba (Miami)", network: "instagram", impressions: 1200, engagements: 97 }] };
+  const status = summarizeProbe(agentProbes["kong-metrics"], ok(body), now);
+  assert.equal(status.state, "checking", "legacy working snapshots never earn repeat points");
+  assert.match(status.activity?.[0] || "", /1200 vistas/);
+  assert.equal(summarizeProbe(agentProbes["kong-metrics"], ok({ ...body, status: { "kong-metrics": { state: "checking", label: "Datos disponibles" } } }), now).state, "checking");
+  assert.equal(summarizeProbe(agentProbes["kong-metrics"], ok({ status: { "kong-metrics": { state: "working?" } } }), now).state, "error");
+  assert.equal(summarizeProbe(agentProbes["kong-metrics"], { ok: false, status: 403, body: null }, now).state, "needs-setup");
 });

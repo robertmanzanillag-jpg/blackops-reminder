@@ -94,6 +94,7 @@ test("complete import requires all three networks, not merely a recent successfu
   assert.deepEqual(result.importedByNetwork, { tiktok: 1, facebook: 1, youtube: 1 });
   const partial = await deliverMetricoolExports({ imports: imports.slice(1) }, async () => {});
   assert.equal(partial.complete, false);
+  assert.equal((await deliverMetricoolExports({ imports: imports.map(item => ({ ...item, samples: [] })) }, async () => {})).complete, false);
 });
 
 test("protected status exposes partial and complete automatic delivery without mistaking import for learning", async () => {
@@ -112,7 +113,7 @@ test("protected status exposes partial and complete automatic delivery without m
     execFile: (...args) => args.at(-1)(null, { stdout: '{\n  "mode": "blackroom_daily_agent", "summary": {"enabled": true}}' }),
     stat: async () => ({ isDirectory: () => true }),
     readFile: async (file) => JSON.stringify(file.endsWith("latest-export.json") ? exported : {}),
-    fetch: async (_url, options) => ({ ok: !(fail && JSON.parse(options.body).imports[0].network === "tiktok"), status: 401, json: async () => ({}) }),
+    fetch: async (_url, options) => ({ ok: !(fail && JSON.parse(options.body).imports[0].network === "tiktok"), status: 401, json: async () => ({ accepted: true }) }),
     setTimeout: () => ({ unref() {} }), setInterval: () => ({ unref() {} }),
   });
   vm.runInContext(source, context);
@@ -136,6 +137,54 @@ test("protected status exposes partial and complete automatic delivery without m
   assert.equal(complete.lastCompleteImportAt, observedAt);
   assert.deepEqual(complete.errors, {});
   assert.deepEqual(complete.importedByNetwork, { tiktok: 1, facebook: 1, youtube: 1 });
+  context.fetch = async () => ({ ok: true, status: 200, json: async () => ({}) });
+  await vm.runInContext("nextExportAt = 0; syncAutomaticAnalytics()", context);
+  const noAcknowledgment = (await status()).body.worker.automaticAnalytics;
+  assert.equal(noAcknowledgment.complete, false);
+  assert.deepEqual(noAcknowledgment.importedByNetwork, {});
+  const calls = [];
+  const offline = vm.createContext({ ...context,
+    process: { ...context.process, env: { BLACKROOM_CONTROL_PORT: "5020" } },
+    fetch: async () => { throw new Error("No remote calls allowed"); },
+    execFile: (...args) => { calls.push(args[1]); args.at(-1)(null, { stdout: "" }); },
+  });
+  vm.runInContext(source, offline);
+  await vm.runInContext("syncAutomaticAnalytics()", offline);
+  assert.equal(calls.filter(args => args.includes("script/blackroom-local-evidence.ts")).length, 1);
+  assert.equal(vm.runInContext("automaticAnalyticsStatus.complete", offline), false);
+  assert.equal(vm.runInContext("automaticAnalyticsStatus.lastCompleteImportAt", offline), null);
+  assert.equal(vm.runInContext("automaticAnalyticsStatus.lastImportedAt", offline), null);
+  // The optional KONG browser can be killed after committing BR. Exercise the
+  // real supervisor catch path, not a substitute helper.
+  const instant = Date.parse('2026-11-04T12:00:00Z');
+  for (const [brandId, checkedAt, accepted] of [
+    ['6585226', new Date(instant).toISOString(), true],
+    ['6585226', new Date(instant-1).toISOString(), false],
+    ['6475033', new Date(instant).toISOString(), false],
+    ['6585226', new Date(instant+1).toISOString(), false],
+  ]) {
+    let localCalls=0;
+    class FixedDate extends Date { static now(){return instant;} }
+    const failedChild=vm.createContext({...context, Date:FixedDate,
+      process:{...context.process,env:{BLACKROOM_CONTROL_PORT:'5020'}},
+      readFile:async file=>JSON.stringify(file.endsWith('latest-export.json')?{...exported,brandId,checkedAt}:{}),
+      execFile:(...args)=>{if(args[1].some(a=>a.endsWith('blackroom-metricool-exporter.mjs')))args.at(-1)(new Error('killed'));else{localCalls++;args.at(-1)(null,{stdout:''});}},
+    });
+    vm.runInContext(source,failedChild);
+    await vm.runInContext('syncAutomaticAnalytics()',failedChild);
+    assert.equal(localCalls,accepted?1:0,brandId+checkedAt);
+  }
+});
+
+test('rejects wrong host brand and account prefix before downloading',async()=>{
+ for(const kind of ['host','brand','identity']) {
+  let current='',downloads=0;
+  const loc={first(){return this},waitFor:async()=>{},getAttribute:async()=> 'https://www.tiktok.com/@kongnightlife-imposter'};
+  const page={setDefaultTimeout(){},goto:async url=>{current=url},url:()=>kind==='host'?current.replace('app.metricool.com','evil.example'):kind==='brand'?current.replace('6475033','6585226'):current,
+    locator:()=>loc,close:async()=>{},waitForEvent:async()=>{downloads++;throw Error('unexpected download')}};
+  const result=await acquireMetricoolExports({brandId:'6475033',context:{newPage:async()=>page}});
+  assert.equal(result.imports.length,0);assert.equal(downloads,0);assert.equal(Object.keys(result.errors).length,2);
+ }
 });
 
 test("bounded network timeouts and cleanup failures preserve earlier successful exports", async () => {

@@ -15,6 +15,8 @@ export type AgentLiveStatus = {
   detail?: string;
   // Short lines taken from the agent's real data, shown scrolling on its monitor.
   activity?: string[];
+  // Concrete problems read from the agent's own data (a missed daily goal, a missing connector).
+  problems?: string[];
 };
 
 export type AgentProbe = {
@@ -36,9 +38,19 @@ export type AgentProbe = {
     | "legal"
     | "blackroom-videos"
     | "news"
-    | "kong-videos";
+    | "city-news"
+    | "kong-videos"
+    | "kong-metrics";
   onDemandNote?: string;
+  // city-news: which local-news lane (city) this desk owns.
+  lane?: "miami-news" | "ny-news";
 };
+
+// One desk per city of the local-news agent (Metro Current). Same endpoint as "news", so no extra calls.
+export const CITY_NEWS_AGENTS = [
+  { id: "news:miami-news", lane: "miami-news" as const, city: "Miami", name: "Noticias Miami" },
+  { id: "news:ny-news", lane: "ny-news" as const, city: "Nueva York", name: "Noticias Nueva York" },
+];
 
 const MINUTE = 60_000;
 
@@ -75,7 +87,11 @@ export const agentProbes: Record<string, AgentProbe> = {
   control: { key: "dev-health-dashboard", url: "/api/developer-health/dashboard", intervalMs: 2 * MINUTE, kind: "dev-health" },
   "blackroom-videos": { key: "blackroom-agent", url: "/api/blackroom-agent", intervalMs: 2 * MINUTE, kind: "blackroom-videos" },
   news: { key: "local-news-status", url: "/api/clippers/local-news/status", intervalMs: 2 * MINUTE, kind: "news" },
+  "news:miami-news": { key: "local-news-status", url: "/api/clippers/local-news/status", intervalMs: 2 * MINUTE, kind: "city-news", lane: "miami-news" },
+  "news:ny-news": { key: "local-news-status", url: "/api/clippers/local-news/status", intervalMs: 2 * MINUTE, kind: "city-news", lane: "ny-news" },
   "kong-videos": { key: "promo-video-status", url: "/api/promo-video/status", intervalMs: 5 * MINUTE, kind: "kong-videos" },
+  // KONG metrics agent: results per confirmed publication (owner-only state; read-only here).
+  "kong-metrics": { key: "kong-ops-state", url: "/api/kong-ops/state", intervalMs: 5 * MINUTE, kind: "kong-metrics" },
   // Not fetched by the building: it reuses the legal query the office page already runs.
   legal: { key: "legal-compliance-reports", url: "/api/legal-compliance/reports", intervalMs: MINUTE, kind: "legal" },
 };
@@ -116,7 +132,34 @@ export function summarizeProbe(probe: AgentProbe, result: ProbeResult | undefine
   // Activity comes only from a real JSON body; an error state still shows what the agent saw (e.g. the failed run).
   if (!result || !result.ok || result.body === null || result.body === undefined) return status;
   const activity = extractActivity(probe, result.body, now).filter(Boolean).slice(0, 4);
-  return activity.length ? { ...status, activity } : status;
+  const problems = extractProblems(probe, result.body).slice(0, 5);
+  return { ...status, ...(activity.length ? { activity } : {}), ...(problems.length ? { problems } : {}) };
+}
+
+const PLATFORM_NAMES: Record<string, string> = { facebook: "Facebook", x: "X", instagram: "Instagram", tiktok: "TikTok", youtube: "YouTube", threads: "Threads" };
+
+// Problems come only from fields the agent itself reports; nothing is guessed.
+function extractProblems(probe: AgentProbe, raw: unknown): string[] {
+  if (probe.kind === "blackroom-videos") {
+    const actions = asObject(asObject(raw)?.operations)?.actions;
+    return (Array.isArray(actions) ? actions : []).map((action) => str(asObject(action)?.message) || "").filter(Boolean);
+  }
+  if (probe.kind !== "city-news" || !probe.lane) return [];
+  const body = asObject(raw);
+  const problems: string[] = [];
+  const accounts = asObject(asObject(asObject(asObject(body?.editorial)?.dailyPublishing)?.accounts)?.[probe.lane]);
+  for (const [platform, value] of Object.entries(accounts || {})) {
+    const account = asObject(value);
+    const deficit = num(account?.deficit) ?? 0;
+    if (deficit > 0) problems.push(`${PLATFORM_NAMES[platform] || platform}: ${num(account?.queuedToday) ?? 0}/${num(account?.target) ?? "?"} hoy (faltan ${deficit})`);
+  }
+  const connectors = Array.isArray(body?.connectors) ? (body!.connectors as unknown[]).map(asObject).filter(Boolean) as Json[] : [];
+  const missing = connectors.filter((connector) => connector.lane === probe.lane && connector.configured === false).map((connector) => str(connector.id) || "fuente");
+  if (missing.length) problems.push(`Fuentes sin configurar: ${missing.slice(0, 3).join(", ")}`);
+  const coverage = asObject(body?.coverage);
+  const traffic = probe.lane === "miami-news" ? str(coverage?.miamiTraffic) : str(coverage?.nyTraffic);
+  if (traffic === "not_configured") problems.push("Trafico sin cobertura configurada");
+  return problems;
 }
 
 function clip(text: string, max = 48) {
@@ -200,12 +243,36 @@ export function extractActivity(probe: AgentProbe, raw: unknown, now: number = D
     case "legal":
       return list(body?.reports).map((report) => clip(`${str(report.appName) || "App"}: ${word(report.severity)}`));
     case "blackroom-videos": {
+      const operations = asObject(body?.operations);
+      if (operations) {
+        const worker = asObject(operations.worker);
+        const learning = asObject(operations.learning);
+        return [
+          worker?.online === true ? "Publicador existente conectado; no se crea otro publicador" : "Publicador desconectado: la oficina no puede editar sin el trabajador",
+          ...["tiktok", "facebook", "youtube"].map((network) => {
+            const evidence = asObject(learning?.[network]);
+            return `${network}: ${str(evidence?.status) || "sin evidencia"} · ${num(evidence?.exactAttributed) ?? 0} resultados asociados`;
+          }),
+        ];
+      }
       const totals = asObject(asObject(body?.agent)?.totals);
       const online = asObject(body?.remote)?.online === true;
       return [
         online ? "Dispositivo de publicacion en linea" : "Dispositivo de publicacion desconectado",
         totals ? `Cola: ${num(totals.queued) ?? 0} en espera · ${num(totals.processing) ?? 0} editando` : "",
         totals ? `${num(totals.scheduled) ?? 0} programados · ${num(totals.completed) ?? 0} publicados` : "",
+      ];
+    }
+    case "kong-metrics": {
+      const results = Array.isArray(body?.results) ? (body!.results as unknown[]).map(asObject).filter(Boolean) as Json[] : [];
+      return results.slice(0, 3).map((result) => `${str(result.title) || "Publicacion"} · ${str(result.network)}: ${num(result.impressions) ?? 0} vistas, ${num(result.engagements) ?? 0} interacciones`);
+    }
+    case "city-news": {
+      const lane = asObject(asObject(body?.lanes)?.[probe.lane || ""]);
+      return [
+        str(body?.lastRunAt) ? `Ultima ronda ${hoursAgo(str(body?.lastRunAt), now)}` : "Sin rondas todavia",
+        lane ? `${num(lane.active) ?? 0} noticias activas · ${num(lane.resolved) ?? 0} resueltas` : "",
+        lane ? `${num(lane.queued) ?? 0} posts en cola de esta ciudad` : "",
       ];
     }
     case "news": {
@@ -377,6 +444,19 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       };
     }
     case "blackroom-videos": {
+      const operations = asObject(body?.operations);
+      if (operations) {
+        const worker = asObject(operations.worker);
+        const age = now - Date.parse(str(operations.checkedAt) || "");
+        if (!Number.isFinite(age) || age < 0 || age > 90_000) return { state: "needs-setup", label: "Evidencia desactualizada" };
+        if (operations.state === "paused") return { state: "checking", label: "BlackRoom pausado", detail: "Se respeta la pausa; la supervision no inicia publicaciones." };
+        if (worker?.online !== true) return { state: "needs-setup", label: "Publicador desconectado" };
+        if (operations.state === "blocked") return { state: "needs-setup", label: "BlackRoom requiere atencion" };
+        // Activity is visible, but must not earn repeated career points until a
+        // durable, single-use completion receipt is connected to company scoring.
+        if (operations.state === "working" && worker?.processing === true && str(worker.progressEventId)) return { state: "checking", label: "Actividad reciente · resultado pendiente", detail: "No otorga puntos ni declara una publicacion completada." };
+        return { state: "checking", label: "Conectado · sin avance confirmado", detail: "Una cola preparada no demuestra trabajo nuevo ni aprendizaje." };
+      }
       const agent = asObject(body?.agent);
       const totals = asObject(agent?.totals);
       const online = asObject(body?.remote)?.online === true;
@@ -385,7 +465,28 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       if (!online) return { state: "needs-setup", label: "Publicador desconectado", detail: "El dispositivo que sube los videos de Black Room no esta en linea." };
       if ((num(totals.retry) ?? 0) > 0) return { state: "error", label: `${num(totals.retry)} videos reintentando` };
       if (active === 0 && (num(totals.scheduled) ?? 0) === 0) return { state: "offline", label: "Cola vacia", detail: "No hay videos de Black Room pendientes." };
-      return { state: "working", label: `${active} en cola · ${num(totals.scheduled) ?? 0} programados` };
+      return { state: "checking", label: `${active} en cola · avance sin verificar`, detail: "Falta evidencia reciente del trabajador; no se otorgan puntos por tener cola." };
+    }
+    case "kong-metrics": {
+      const status = asObject(asObject(body?.status)?.["kong-metrics"]);
+      const state = str(status?.state);
+      if (state === "needs-setup") return { state, label: str(status?.label) || "Sin datos" };
+      // Legacy servers may say "working" for a fresh metrics snapshot. Reading
+      // that same snapshot again is not new work and must not earn career points.
+      if (state === "checking" || state === "working") return { state: "checking", label: str(status?.label) || "Metricas disponibles", detail: "Datos disponibles; no acredita trabajo nuevo ni puntos por cada lectura." };
+      return { state: "error", label: "Estado de metricas ilegible" };
+    }
+    case "city-news": {
+      const last = Date.parse(str(body?.lastRunAt) || "");
+      const lane = asObject(asObject(body?.lanes)?.[probe.lane || ""]);
+      if (body?.bootstrapped === false) return { state: "needs-setup", label: "Sin configurar", detail: "El agente de noticias no ha corrido nunca." };
+      if (!lane) return { state: "error", label: "Ciudad sin datos", detail: "El estado de noticias no trae esta ciudad." };
+      if (!Number.isFinite(last)) return { state: "needs-setup", label: "Sin rondas todavia" };
+      // A quiet city is not a failure: the desk is working if its rounds are fresh.
+      if (now - last > 26 * 60 * 60_000) return { state: "needs-setup", label: "Sin rondas en 24 h" };
+      const active = num(lane.active) ?? 0;
+      const queued = num(lane.queued) ?? 0;
+      return { state: "working", label: active || queued ? `${active} noticias · ${queued} en cola` : "Vigilando: sin noticias activas" };
     }
     case "news": {
       const last = Date.parse(str(body?.lastRunAt) || "");
