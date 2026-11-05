@@ -17,6 +17,7 @@ function operations() {
 }
 const json = (value: unknown, status = 200) => new Response(JSON.stringify(value), { status, headers: { "content-type": "application/json" } });
 const CITIES_URL = "https://kongnightlife.com/api/admin/city-agents";
+const DIRECTORY_URL = "https://kongnightlife.com/api/cities";
 function citiesFixture(ids = ["miami"]) {
   return {
     enabled: true, coordinator: "global", maxConcurrent: 2, referenceCity: "miami",
@@ -33,6 +34,35 @@ function connector(fetchImpl: typeof fetch, token = TOKEN) {
   return createOfficeKongConnector({ token: () => token, now: () => NOW,
     fetchImpl: async (url, init) => url === CITIES_URL ? json(citiesFixture()) : fetchImpl(url, init) });
 }
+
+test("visible city directory uses the public registry without reading or sending a credential", async () => {
+  const ids = ["buenos-aires", ...Array.from({ length: 24 }, (_, index) => `city-${index}`)];
+  const entries = citiesFixture(ids).cities.map(({ jobs: _jobs, status: _status, ...entry }) => ({ ...entry, privateMetadata: "must be discarded" }));
+  const client = createOfficeKongConnector({ token: () => { throw new Error("Credential must never be read for the public directory"); }, fetchImpl: async (url, init) => {
+    assert.equal(url, DIRECTORY_URL); assert.equal(init?.method, "GET"); assert.equal(init?.redirect, "error");
+    assert.equal((init?.headers as Record<string,string>).Authorization, undefined);
+    return json(entries);
+  } });
+  const directory = await client.loadOfficeKongDirectory();
+  assert.equal(directory.length, 25); assert.equal(directory[0].currency, "ARS");
+  assert.ok(!JSON.stringify(directory).includes("privateMetadata"));
+  assert.ok(directory.every(city => !("jobs" in city) && !("state" in city)));
+});
+
+test("city directory rejects duplicates and malformed metadata instead of inventing agents", async () => {
+  const { jobs: _jobs, status: _status, ...entry } = citiesFixture().cities[0];
+  for (const payload of [[entry, entry], [{ ...entry, timeZone: "Invalid/Nowhere" }], [{ ...entry, currency: "not-currency" }], []]) {
+    const client = createOfficeKongConnector({ fetchImpl: async () => json(payload) });
+    await assert.rejects(client.loadOfficeKongDirectory(), (error: unknown) => error instanceof OfficeKongError && error.code === "INVALID_RESPONSE");
+  }
+});
+
+test("city directory refuses redirected and non-JSON responses", async () => {
+  for (const response of [new Response("redirect", {status:302}), new Response("<html>not a directory</html>", {headers:{"content-type":"text/html"}})]) {
+    const client = createOfficeKongConnector({ fetchImpl: async () => response });
+    await assert.rejects(client.loadOfficeKongDirectory(), OfficeKongError);
+  }
+});
 
 test("missing configuration blocks without making a request", async () => {
   const c = connector(async () => { throw new Error("must not request"); }, "");

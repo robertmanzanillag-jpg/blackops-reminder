@@ -2,7 +2,7 @@ import type { Express, Request, Response } from "express";
 import { getAuthenticatedCurrentUserId, getSystemUserId } from "./user-context";
 import { officeRuntime, officeTaskSchema, usesOfficeCloudRuntime } from "./office-runtime";
 import { probeOfficeClaude } from "./office-claude";
-import { probeOfficeKong } from "./office-kong";
+import { probeOfficeKong, loadOfficeKongDirectory, type OfficeKongCityDirectoryEntry } from "./office-kong";
 
 function owner(req: Request, res: Response): string | null {
   const userId = getAuthenticatedCurrentUserId(req);
@@ -27,9 +27,25 @@ export function registerOfficeRoutes(app: Express, dependencies: {
   runtime?: Pick<typeof officeRuntime, "list" | "submit">;
   claudeProbe?: typeof probeOfficeClaude;
   kongProbe?: typeof probeOfficeKong;
+  directoryReader?: typeof loadOfficeKongDirectory;
 } = {}) {
   const runtime = dependencies.runtime || officeRuntime;
   let probe: { expiresAt: number; promise: Promise<unknown> } | undefined;
+  let directory: { expiresAt: number; promise: Promise<OfficeKongCityDirectoryEntry[]> } | undefined;
+  app.get("/api/agents-office/cities", async (req, res) => {
+    try {
+      if (!owner(req, res)) return;
+      res.set("Cache-Control", "no-store");
+      if (!directory || directory.expiresAt < Date.now()) {
+        const pending = (dependencies.directoryReader || loadOfficeKongDirectory)().catch(error => {
+          if (directory?.promise === pending) directory = undefined;
+          throw error;
+        });
+        directory = { expiresAt: Date.now() + 30 * 60_000, promise: pending };
+      }
+      res.json(await directory.promise);
+    } catch { res.status(503).json({ error: "No se pudo consultar el directorio de ciudades de KONG." }); }
+  });
   app.get("/api/agents-office/connections", async (req, res) => {
     try {
       if (!owner(req, res)) return;

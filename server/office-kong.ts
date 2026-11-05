@@ -3,6 +3,7 @@ import { z } from "zod";
 // This is the existing authenticated KONG read contract, not a dispatch route.
 const OPERATIONS_URL = "https://kongnightlife.com/api/admin/ceo/operations";
 const CITY_AGENTS_URL = "https://kongnightlife.com/api/admin/city-agents";
+const CITY_DIRECTORY_URL = "https://kongnightlife.com/api/cities";
 const MAX_BODY_BYTES = 1024 * 1024;
 const TIMEOUT_MS = 15_000;
 const MAX_SNAPSHOT_AGE_MS = 5 * 60_000;
@@ -98,6 +99,8 @@ const citiesSchema = z.object({
   countries: z.array(z.string().regex(/^[A-Z]{2}$/)).min(1).max(200),
   needsAttention: z.array(z.string().min(1).max(200)).max(200),
 });
+const directorySchema = z.array(citySchema.omit({ status: true, jobs: true })).min(1).max(200);
+export type OfficeKongCityDirectoryEntry = z.infer<typeof directorySchema>[number];
 
 export type OfficeKongAgent = z.infer<typeof agentSchema>;
 export interface OfficeKongCityCategory {
@@ -235,19 +238,19 @@ export function createOfficeKongConnector(dependencies: {
   token?: () => string | undefined;
 } = {}) {
   const now = dependencies.now ?? (() => new Date());
-  const tokenSource = dependencies.token ?? (() => process.env.KONG_OFFICE_ADMIN_TOKEN);
+  const tokenSource = dependencies.token ?? (() => process.env.KONG_OFFICE_READ_TOKEN || process.env.KONG_OFFICE_ADMIN_TOKEN);
 
-  async function readEndpoint<Schema extends z.ZodTypeAny>(url: typeof OPERATIONS_URL | typeof CITY_AGENTS_URL, schema: Schema): Promise<z.infer<Schema>> {
-    const token = tokenSource()?.trim();
-    if (!token) return safeError("NOT_CONFIGURED", "Falta conectar la cuenta administradora de KONG en el servidor.");
-    if (/[\x00-\x20\x7f]/.test(token)) return safeError("INVALID_CONFIGURATION", "La conexion de KONG tiene una configuracion invalida.");
+  async function readEndpoint<Schema extends z.ZodTypeAny>(url: typeof OPERATIONS_URL | typeof CITY_AGENTS_URL | typeof CITY_DIRECTORY_URL, schema: Schema, authenticated = true): Promise<z.infer<Schema>> {
+    const token = authenticated ? tokenSource()?.trim() : undefined;
+    if (authenticated && !token) return safeError("NOT_CONFIGURED", "Falta configurar el acceso privado de lectura de KONG en el servidor.");
+    if (token && /[\x00-\x20\x7f]/.test(token)) return safeError("INVALID_CONFIGURATION", "La conexion de KONG tiene una configuracion invalida.");
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
     try {
       const response = await (dependencies.fetchImpl ?? fetch)(url, {
         method: "GET",
         redirect: "error",
-        headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
+        headers: { Accept: "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) },
         signal: controller.signal,
         cache: "no-store",
       });
@@ -257,7 +260,7 @@ export function createOfficeKongConnector(dependencies: {
       if (!response.ok) return safeError("UNAVAILABLE", "KONG no pudo entregar la evidencia de sus agentes.");
       const parsed = schema.safeParse(await readBoundedJson(response));
       if (!parsed.success) return safeError("INVALID_RESPONSE", "La evidencia de KONG no coincide con el contrato de operaciones.");
-      return redactStrings(parsed.data, token);
+      return token ? redactStrings(parsed.data, token) : parsed.data;
     } catch (error) {
       if (error instanceof OfficeKongError) throw error;
       // Never retain fetch errors, bodies or headers: they may contain credentials.
@@ -267,6 +270,13 @@ export function createOfficeKongConnector(dependencies: {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  async function loadOfficeKongDirectory(): Promise<OfficeKongCityDirectoryEntry[]> {
+    // Public registry only. It defines visible roles, never execution evidence.
+    const cities = await readEndpoint(CITY_DIRECTORY_URL, directorySchema, false);
+    if (new Set(cities.map(city => city.id)).size !== cities.length) return safeError("INVALID_RESPONSE", "El directorio de ciudades contiene identificadores repetidos.");
+    return cities;
   }
 
   async function readOperations() {
@@ -317,7 +327,7 @@ export function createOfficeKongConnector(dependencies: {
     };
   }
 
-  return { probeOfficeKong, runOfficeKongReadOnly };
+  return { probeOfficeKong, runOfficeKongReadOnly, loadOfficeKongDirectory };
 }
 
-export const { probeOfficeKong, runOfficeKongReadOnly } = createOfficeKongConnector();
+export const { probeOfficeKong, runOfficeKongReadOnly, loadOfficeKongDirectory } = createOfficeKongConnector();
