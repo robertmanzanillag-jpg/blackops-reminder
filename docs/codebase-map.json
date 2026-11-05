@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-04T23:58:19.619Z",
+  "generatedAt": "2026-11-05T00:18:27.086Z",
   "repoRoot": "/private/tmp/br-manual-reconciliation",
   "packageName": "rest-express",
   "scripts": {
@@ -122,13 +122,34 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 661,
-    "filesIndexed": 578,
-    "imports": 1979,
+    "filesVisible": 664,
+    "filesIndexed": 581,
+    "imports": 1990,
     "routes": 495,
-    "symbols": 13055
+    "symbols": 13087
   },
   "directories": {
+    "docs": {
+      "files": 33,
+      "indexed": 32,
+      "kinds": {
+        "docs": 33
+      }
+    },
+    "server": {
+      "files": 136,
+      "indexed": 132,
+      "kinds": {
+        "server": 136
+      }
+    },
+    "tests": {
+      "files": 122,
+      "indexed": 119,
+      "kinds": {
+        "test": 122
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -186,13 +207,6 @@
         "client-page": 26
       }
     },
-    "docs": {
-      "files": 32,
-      "indexed": 31,
-      "kinds": {
-        "docs": 32
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -215,13 +229,6 @@
         "script": 4
       }
     },
-    "server": {
-      "files": 135,
-      "indexed": 131,
-      "kinds": {
-        "server": 135
-      }
-    },
     "server/replit_integrations": {
       "files": 9,
       "indexed": 9,
@@ -241,13 +248,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 121,
-      "indexed": 118,
-      "kinds": {
-        "test": 121
       }
     },
     "tutorials/dropshipping-ceo-tutorial": {
@@ -3919,6 +3919,14 @@
     },
     {
       "path": "docs/blackroom-learning-acceptance.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/blackroom-manual-exploration.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -10534,6 +10542,7 @@
         "./blackroom-growth-ceo",
         "./blackroom-learning-observations",
         "./blackroom-local-worker",
+        "./blackroom-manual-exploration",
         "./blackroom-verified-learning",
         "node:crypto"
       ],
@@ -10617,6 +10626,7 @@
         "leadSeconds",
         "learningNetwork",
         "learningReference",
+        "manualDuration",
         "margin",
         "maximumStart",
         "minimum",
@@ -11142,6 +11152,8 @@
       "imports": [
         "./blackroom-growth-ceo",
         "./blackroom-learning-observations",
+        "./blackroom-manual-exploration",
+        "./blackroom-manual-observations",
         "./blackroom-verified-learning"
       ],
       "exports": [
@@ -11303,6 +11315,35 @@
       "routes": []
     },
     {
+      "path": "server/blackroom-manual-exploration.ts",
+      "kind": "server",
+      "imports": [
+        "./blackroom-learning-observations",
+        "./blackroom-manual-observations"
+      ],
+      "exports": [
+        "ManualExploration",
+        "ManualExplorations",
+        "proposeManualExploration",
+        "sharedManualExploration"
+      ],
+      "symbols": [
+        "ManualReport",
+        "age",
+        "eligible",
+        "group",
+        "groups",
+        "hours",
+        "latestAge",
+        "proposeManualExploration",
+        "seconds",
+        "sharedManualExploration",
+        "snapshot",
+        "values"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/blackroom-manual-observations.ts",
       "kind": "server",
       "imports": [
@@ -11314,6 +11355,7 @@
         "ManualClip",
         "PublishedReceipt",
         "emptyCalendarReceipts",
+        "manualClipCandidates",
         "manualClips",
         "publishedCalendarReceipts",
         "reconcileManualObservations"
@@ -11329,6 +11371,7 @@
         "key",
         "keys",
         "latest",
+        "manualClipCandidates",
         "manualClips",
         "matching",
         "measured",
@@ -11342,6 +11385,7 @@
         "reconcileManualObservations",
         "result",
         "reused",
+        "rows",
         "unique",
         "urlId"
       ],
@@ -19992,6 +20036,38 @@
       "routes": []
     },
     {
+      "path": "tests/blackroom-manual-exploration.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/blackroom-deterministic-editor",
+        "../server/blackroom-local-evidence",
+        "../server/blackroom-manual-exploration",
+        "../server/blackroom-verified-learning",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "after",
+        "base",
+        "before",
+        "evalInput",
+        "evidence",
+        "extra",
+        "first",
+        "h",
+        "ledger",
+        "now",
+        "observation",
+        "plan",
+        "queue",
+        "r",
+        "remote",
+        "report"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/blackroom-manual-observations.test.ts",
       "kind": "test",
       "imports": [
@@ -20011,6 +20087,7 @@
         "calendarBody",
         "clips",
         "conflict",
+        "conflictRetained",
         "cooldown",
         "d",
         "dir",
@@ -23088,6 +23165,7 @@
     "tests/blackroom-links.test.ts",
     "tests/blackroom-local-evidence.test.ts",
     "tests/blackroom-local-worker.test.ts",
+    "tests/blackroom-manual-exploration.test.ts",
     "tests/blackroom-manual-observations.test.ts",
     "tests/blackroom-metricool-bridge.test.ts",
     "tests/blackroom-remote-control.test.ts",

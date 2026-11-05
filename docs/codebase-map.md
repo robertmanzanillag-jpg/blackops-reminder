@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-04T23:58:19.619Z
+Generated: 2026-11-05T00:18:27.086Z
 Repo: `/private/tmp/br-manual-reconciliation`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 661 | 578 | 1979 | 495 | 13055 |
+| 664 | 581 | 1990 | 495 | 13087 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 135 | 131 | server:135 |
-| `tests` | 121 | 118 | test:121 |
+| `server` | 136 | 132 | server:136 |
+| `tests` | 122 | 119 | test:122 |
 | `client/src` | 116 | 114 | ui-component:55, client-page:26, client-component:22, client-lib:7 |
 | `script` | 78 | 73 | script:78 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 32 | 31 | docs:32 |
+| `docs` | 33 | 32 | docs:33 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `.agents/memory` | 5 | 5 | docs:5 |
@@ -84,6 +84,7 @@ Package: `rest-express`
 - `tests/blackroom-links.test.ts`
 - `tests/blackroom-local-evidence.test.ts`
 - `tests/blackroom-local-worker.test.ts`
+- `tests/blackroom-manual-exploration.test.ts`
 - `tests/blackroom-manual-observations.test.ts`
 - `tests/blackroom-metricool-bridge.test.ts`
 - `tests/blackroom-remote-control.test.ts`
