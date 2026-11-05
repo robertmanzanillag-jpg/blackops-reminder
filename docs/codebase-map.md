@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-10-09T01:39:37.437Z
-Repo: `/home/runner/workspace/.local/worktrees/agents-world-3d`
+Generated: 2026-11-05T05:45:00.508Z
+Repo: `/home/runner/workspace/.local/worktrees/office-cloud-qa-20261105`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 693 | 609 | 2065 | 511 | 13259 |
+| 749 | 660 | 2247 | 518 | 14670 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,22 +28,25 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 136 | 132 | server:136 |
-| `client/src` | 130 | 128 | ui-component:55, client-component:29, client-page:26, client-lib:13 |
-| `tests` | 129 | 126 | test:129 |
-| `script` | 77 | 72 | script:77 |
+| `server` | 147 | 143 | server:147 |
+| `tests` | 146 | 143 | test:146 |
+| `client/src` | 136 | 134 | ui-component:55, client-component:33, client-page:26, client-lib:15 |
+| `script` | 82 | 77 | script:82 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 32 | 31 | docs:32 |
-| `.` | 34 | 18 | other:22, docs:11, package:1 |
-| `.agents/memory` | 10 | 10 | docs:10 |
+| `docs` | 35 | 34 | docs:35 |
+| `.` | 35 | 18 | other:23, docs:11, package:1 |
+| `.agents/memory` | 11 | 11 | docs:11 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
-| `shared` | 3 | 3 | shared:3 |
+| `shared` | 7 | 7 | shared:7 |
+| `.office-cli-qa.guzTJp` | 2 | 2 | other:2 |
 | `client/public` | 16 | 2 | other:16 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
+| `attached_assets` | 5 | 1 | other:5 |
 | `client` | 1 | 1 | other:1 |
 | `config` | 1 | 1 | other:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `shared/models` | 1 | 1 | shared:1 |
+| `tests/fixtures` | 1 | 1 | test:1 |
 | `tests/harness` | 1 | 1 | test:1 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 | `.agents` | 1 | 0 | other:1 |
@@ -51,10 +54,12 @@ Package: `rest-express`
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/tools`
+- `server/agent-council-routes.ts`: `/api/agent-company/orders`, `/api/agent-company/orders/:id/done`, `/api/agent-council/run`, `/api/agent-council/state`
 - `server/assistant.ts`: `/api/assistant/chat`, `/api/assistant/context`, `/api/assistant/transcribe`
 - `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
 - `server/index.ts`: `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
+- `server/office-routes.ts`: `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/runs`
 - `server/replit_integrations/chat/routes.ts`: `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/messages`
 - `server/replit_integrations/image/routes.ts`: `/api/generate-image`
 - `server/revenue-stripe-routes.ts`: `/api/stripe/revenue-readiness`, `/api/stripe/revenue-webhook`
@@ -74,6 +79,9 @@ Package: `rest-express`
 - `tests/._radio-youtube-command.test.ts`
 - `tests/._rate-limit.test.ts`
 - `tests/._user-context.test.ts`
+- `tests/agent-company.test.ts`
+- `tests/agent-council.test.ts`
+- `tests/agent-live-status.test.ts`
 - `tests/agents-world-integration.test.ts`
 - `tests/ai-cost-notifications.test.ts`
 - `tests/ai-router-cost-override.test.ts`
@@ -133,6 +141,7 @@ Package: `rest-express`
 - `tests/google-connector.test.ts`
 - `tests/google-drive-folder-command.test.ts`
 - `tests/google-drive-oauth.test.ts`
+- `tests/legacy-publication-containment.test.ts`
 - `tests/legal-compliance-agent.test.ts`
 - `tests/local-auth-cli.test.ts`
 - `tests/local-auth.test.ts`
@@ -144,6 +153,17 @@ Package: `rest-express`
 - `tests/marketing-command-center.test.ts`
 - `tests/metricool-analytics-sync.test.ts`
 - `tests/metricool-tracking.test.ts`
+- `tests/office-city-agents.test.ts`
+- `tests/office-claude.test.ts`
+- `tests/office-cloud-runtime.test.ts`
+- `tests/office-cloud-store.test.ts`
+- `tests/office-github.test.ts`
+- `tests/office-kong-supervisor.test.ts`
+- `tests/office-kong.test.ts`
+- `tests/office-routes.test.ts`
+- `tests/office-runtime.test.ts`
+- `tests/office-worker-capabilities.test.ts`
+- `tests/office-worker-watchdog.test.ts`
 - `tests/owner-office-storage.test.ts`
 - `tests/public-local-news.test.ts`
 - `tests/radio-template-agent.test.ts`
@@ -174,7 +194,7 @@ Package: `rest-express`
 ## Key Files
 - `client/src/pages/._assistant.tsx` (client-page)
 - `client/src/pages/._dropshipping-ceo.tsx` (client-page)
-- `client/src/pages/agents-office.tsx` (client-page; 153 symbols, 10 imports)
+- `client/src/pages/agents-office.tsx` (client-page; 158 symbols, 14 imports)
 - `client/src/pages/app-qa-agent.tsx` (client-page; 12 symbols, 9 imports)
 - `client/src/pages/assistant.tsx` (client-page; 49 symbols, 7 imports)
 - `client/src/pages/auth.tsx` (client-page; 6 symbols, 8 imports)
@@ -206,7 +226,8 @@ Package: `rest-express`
 - `script/blackroom-remote-sync.mjs` (script; 24 symbols)
 - `script/blackroom-worker-ledger.ts` (script; 29 symbols, 4 imports)
 - `script/build-agents-world-client.mjs` (script; 4 imports)
-- `script/build.ts` (script; 12 symbols, 4 imports)
+- `script/build-containment-static.mjs` (script; 7 symbols, 5 imports)
+- `script/build.ts` (script; 12 symbols, 6 imports)
 - `script/cache-local-news-models.mjs` (script; 1 symbols)
 - `script/ceo-db-check.ts` (script; 8 symbols, 3 imports)
 - `script/ceo-doctor.ts` (script; 3 symbols, 1 imports)
@@ -251,7 +272,6 @@ Package: `rest-express`
 - `script/clippers-youtube-upload-packager.mjs` (script; 135 symbols, 7 imports)
 - `script/clippers-youtube-uploader.mjs` (script; 107 symbols, 5 imports)
 - `script/codebase-map.ts` (script; 43 symbols, 3 imports)
-- `script/compact-local-news-state.ts` (script; 9 symbols, 4 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
