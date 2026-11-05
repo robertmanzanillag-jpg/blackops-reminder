@@ -427,6 +427,10 @@ app.use((req, res, next) => {
       startReminderScheduler();
       startHealthCheckScheduler();
       startMarketNewsScheduler();
+      // Zero-cost peer review between agents (no AI calls). Disable with AGENT_COUNCIL_ENABLED=false.
+      void import("./agent-council").then((council) => council.startAgentCouncilScheduler()).catch((error) => {
+        log(`Failed to start agent council: ${error instanceof Error ? error.message : String(error)}`, "scheduler");
+      });
       // Publishing and analytics are revenue-critical and intentionally stay
       // active on the small Replit deployment. The metadata growth scout is the
       // optional memory-heavy process governed by the resource policy below.
