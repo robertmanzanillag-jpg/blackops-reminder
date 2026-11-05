@@ -145,7 +145,12 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   await selectedAgents.first().waitFor();
   assert.equal(await selectedAgents.count(),7);
   assert.match(await selectedAgents.first().innerText(),/Sin evidencia/);
-  if(hasMap)assert.equal(await page.locator('[data-testid^="world-avatar-kong-city:fixture-city-25:"]').count(),7);
+  if(hasMap){
+   const avatars=page.locator('[data-testid^="world-avatar-kong-city:fixture-city-25:"]');
+   assert.equal(await avatars.count(),7);
+   assert.ok((await avatars.allTextContents()).every(text=>!text.includes('Ciudad de prueba 25')));
+   assert.match(await avatars.first().getAttribute('aria-label'),/Ciudad de prueba 25/);
+  }
   await page.getByTestId('world-city-return-map').click();
   if(hasMap)await cityMarkers.first().waitFor();
   await page.getByTestId('world-overview').click();

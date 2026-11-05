@@ -221,6 +221,7 @@ export function AgentsOfficeWorld({
             color: agent.color,
             screen: SCREEN_KIND[agent.id] || "list",
             activity: agent.status.activity || [agent.status.label, agent.status.detail || ""].filter(Boolean),
+            cityRole: agent.cityAgent?.role,
             badge: career ? `${career.nickname} · ${career.points} pts` : undefined,
             battery: career?.battery,
             deputy: !agent.cityAgent && agent.id === deputyId,

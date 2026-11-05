@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-05T09:45:52.478Z
+Generated: 2026-11-05T10:00:11.934Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-04\quioer-qu-echeck-el-trabajo-que\work\office-current`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 741 | 652 | 2259 | 524 | 14781 |
+| 742 | 653 | 2267 | 528 | 15052 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -50,10 +50,11 @@ Package: `rest-express`
 | `client/src/components/agents-world-office` | 2 | 2 | client-component:2 |
 | `server/replit_integrations/batch` | 2 | 2 | server:2 |
 | `.agents/skills/codebase-overview` | 1 | 1 | docs:1 |
+| `.local-office-qa-FMrUBI` | 1 | 1 | other:1 |
 | `client` | 1 | 1 | other:1 |
-| `client/src/components/agents-building` | 1 | 1 | client-component:1 |
 
 ## Routes Detected
+- `.local-office-qa-FMrUBI/runtime.mjs`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
 - `client/src/App.tsx`: `/`, `/agents-office`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/tools`
 - `server/agent-council-routes.ts`: `/api/agent-company/orders`, `/api/agent-company/orders/:id/done`, `/api/agent-council/run`, `/api/agent-council/state`
 - `server/assistant.ts`: `/api/assistant/chat`, `/api/assistant/context`, `/api/assistant/transcribe`

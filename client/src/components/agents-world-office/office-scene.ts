@@ -16,6 +16,7 @@ export type SceneAgent = {
   color: string;
   screen: "timeline" | "chart" | "code" | "list";
   activity: string[];
+  cityRole?: string;
   // Company layer: nickname/battery shown on the floating label, crown for the deputy.
   badge?: string;
   battery?: number;
@@ -447,7 +448,10 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
 
     const label = document.createElement("div");
     label.className = "pointer-events-none absolute -translate-x-1/2 -translate-y-full whitespace-nowrap rounded-md border border-white/15 bg-black/75 px-1.5 py-0.5 text-[10px] font-semibold text-white shadow-lg";
-    if (agent.id.startsWith("kong-city:")) label.dataset.testid = `world-avatar-${agent.id}`;
+    if (agent.cityRole) {
+      label.dataset.testid = `world-avatar-${agent.id}`;
+      label.className += " flex max-w-[88px] items-center gap-1 overflow-hidden";
+    }
     labelLayer.appendChild(label);
 
     const ctx = canvas.getContext("2d");
@@ -460,6 +464,16 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     const color = STATE_HEX[desk.agent.state];
     desk.label.innerHTML = "";
     const name = document.createElement("span");
+    if (desk.agent.cityRole) {
+      name.className = "min-w-0 truncate";
+      name.textContent = desk.agent.cityRole;
+      const dot = document.createElement("span");
+      dot.className = "size-1.5 shrink-0 rounded-full";
+      dot.style.backgroundColor = color;
+      desk.label.setAttribute("aria-label", `${desk.agent.name} · ${desk.agent.label}`);
+      desk.label.append(dot, name);
+      return;
+    }
     name.textContent = desk.agent.deputy ? `👑 ${desk.agent.name}` : desk.agent.name;
     const dot = document.createElement("span");
     dot.style.cssText = `display:inline-block;width:6px;height:6px;border-radius:9999px;margin:0 5px 1px 6px;background:${color}`;
@@ -773,7 +787,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       if (element.style.display !== "none") element.style.display = "none";
       return;
     }
-    if (element.style.display !== "block") element.style.display = "block";
+    if (element.style.display === "none") element.style.removeProperty("display");
     // Whole pixels only: avoids sub-pixel jitter that makes labels hard to click.
     const left = `${Math.round(((projected.x + 1) / 2) * host.clientWidth)}px`;
     const top = `${Math.round(((1 - projected.y) / 2) * host.clientHeight)}px`;
