@@ -46,6 +46,9 @@ const SCREEN_KIND: Record<string, SceneDepartment["agents"][number]["screen"]> =
   revenue: "chart", portfolio: "chart", "marketing-cmo": "chart", dropshipping: "chart", news: "chart",
   code: "code", github: "code", "claude-reviewer": "code", "app-qa": "code", cybersecurity: "code", mechanic: "code",
 };
+const CITY_COUNTRY_COLORS: Record<string, string> = {
+  AR: "#fbbf24", US: "#38bdf8", GB: "#c084fc", ES: "#f472b6", FR: "#2dd4bf", AE: "#a3e635",
+};
 
 const SOURCE_NAME: Record<string, string> = {
   assistant: "Google Calendar", ceo: "Telegram + IA", control: "Salud de apps", revenue: "Stripe", dropshipping: "Shopify (pre-cuentas)",
@@ -182,7 +185,7 @@ export function AgentsOfficeWorld({
   const departments = officeWing === "kong"
     ? filteredCityRooms.map(room => ({
       id: room.id, name: room.name,
-      color: room.agents.some(agent => agent.status.state === "working") ? "#34d399" : "#94a3b8",
+      color: CITY_COUNTRY_COLORS[room.city.countryCode] ?? "#a78bfa",
       agentIds: room.agents.map(agent => agent.id),
     }))
     : mainDepartments;
@@ -363,7 +366,7 @@ export function AgentsOfficeWorld({
           {officeWing === "kong" && <button type="button" aria-expanded={cityControlsOpen} aria-controls="world-city-controls-content" onClick={() => setCityControlsOpen(open => !open)} className="pointer-events-auto shrink-0 rounded-full border border-white/20 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/10" data-testid="world-city-controls-toggle">{cityControlsOpen ? "Minimizar" : "Controles"}</button>}
         </div>
         <p className={cn("mt-1 font-black text-white", officeWing === "kong" ? "text-sm" : "text-lg sm:text-2xl")} data-testid="world-working-count">{officeWing === "kong" ? `${cityRooms.length * 7} puestos · ${cityRunning} en ejecución verificada` : `${workingCount} de ${companyIds.length} con señales operativas`}</p>
-        {officeWing === "kong" && <p className="mt-1 text-[11px] text-zinc-300" data-testid="world-city-country-count">{cityCountries.length} países · {cityRooms.length} ciudades</p>}
+        {officeWing === "kong" && <p className="mt-1 text-[11px] text-zinc-300" data-testid="world-city-country-count">{cityCountries.length} países · {cityRooms.length} ciudades · colores por país</p>}
         {officeWing === "kong" && citySnapshot.isError && <p role="status" className="mt-1 text-[11px] text-amber-200" data-testid="world-city-activity-unavailable">Actividad de KONG sin conectar.</p>}
         {officeWing === "kong" && failed && <p role="status" className="mt-1 text-[11px] text-zinc-300" data-testid="world-city-map-fallback">Mapa 3D no disponible. Usa la lista de ciudades.</p>}
         {officeWing === "kong" && !cityRooms.length && <p role="status" className="mt-1 text-[11px] text-zinc-300">{cityDirectory.isLoading ? "Consultando el directorio de KONG…" : "Directorio de ciudades no disponible."}</p>}

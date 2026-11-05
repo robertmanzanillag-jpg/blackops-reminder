@@ -17,8 +17,7 @@ test("all 25 registered cities have separate map positions and seven distinct ro
   assert.equal(new Set(rooms.flatMap(room => room.agents.map(agent => agent.id))).size, 175);
   const positions = rooms.map((_, index) => officeCityMapPosition(index, rooms.length));
   assert.equal(new Set(positions.map(({ x, z }) => `${x},${z}`)).size, 25);
-  assert.equal(new Set(positions.map(({ x }) => x)).size, 5);
-  assert.equal(new Set(positions.map(({ z }) => z)).size, 6);
+  assert.deepEqual(positions.map(({ x, z }) => Math.round(Math.hypot(x, z))), [...Array(8).fill(12), ...Array(17).fill(24)]);
   assert.ok(positions.every(({ x, z }) => x !== 0 || z !== 0));
   for (const room of rooms) assert.deepEqual(room.agents.map(agent => agent.category), OFFICE_CITY_CATEGORIES.map(category => category.id));
   const desks = rooms.flatMap((room, cityIndex) => room.agents.map((_, deskIndex) => {

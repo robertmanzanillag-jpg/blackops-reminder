@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T10:00:59.278Z",
+  "generatedAt": "2026-11-05T10:05:49.619Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-04\\quioer-qu-echeck-el-trabajo-que\\work\\office-current",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 652,
     "imports": 2259,
     "routes": 524,
-    "symbols": 14782
+    "symbols": 14778
   },
   "directories": {
     ".local/office-evidence": {
@@ -807,7 +807,7 @@
         "officeCityMapPosition"
       ],
       "symbols": [
-        "CITY_SPACING",
+        "CITY_RING_SPACING",
         "DESK_SPACING_X",
         "DESK_SPACING_Z",
         "DeskRuntime",
@@ -852,7 +852,6 @@
         "color",
         "colorNum",
         "cols",
-        "columns",
         "core",
         "count",
         "createOfficeScene",
@@ -901,18 +900,14 @@
         "hexToNumber",
         "hit",
         "hub",
-        "hubColumn",
-        "hubIndex",
         "hubLabel",
         "hubLight",
         "hubMotion",
-        "hubRow",
         "indent",
         "instance",
         "keepFocus",
         "key",
         "label",
-        "lastRowSize",
         "left",
         "leftArm",
         "leg",
@@ -967,6 +962,7 @@
         "running",
         "scene",
         "screen",
+        "screenLines",
         "screens",
         "scroll",
         "seat",
@@ -974,7 +970,7 @@
         "set",
         "shirt",
         "slab",
-        "slot",
+        "slots",
         "span",
         "speed",
         "stage",

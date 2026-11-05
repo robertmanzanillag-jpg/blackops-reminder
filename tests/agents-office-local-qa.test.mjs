@@ -133,7 +133,7 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
    const mapHost=page.getByTestId('world-canvas-host');
    assert.equal(await mapHost.getAttribute('data-city-desk-count'),'175');
    assert.equal(await mapHost.getAttribute('data-city-running-desk-count'),'0');
-   await page.getByTestId('world-ceo-orb').filter({hasText:'CEO · KONG'}).waitFor();
+   await page.getByTestId('world-ceo-orb').filter({hasText:'CEO · ORQUESTADOR'}).waitFor();
    assert.equal(await page.locator('[data-testid^="world-avatar-kong-city:"]').count(),0);
    await page.getByTestId('world-dept-kong-city:fixture-city-25').click();
   } else {
