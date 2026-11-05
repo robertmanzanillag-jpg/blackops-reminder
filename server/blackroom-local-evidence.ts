@@ -1,4 +1,6 @@
 import { captureLearningSnapshots, isLearningObservation, learningSourceHealth, type LearningObservation, type LearningNetwork, type LearningSnapshot } from "./blackroom-learning-observations";
+import { proposeManualExploration } from "./blackroom-manual-exploration";
+import type { reconcileManualObservations } from "./blackroom-manual-observations";
 import { BLACKROOM_LEARNING_NETWORKS, BLACKROOM_DURATION_TEST_ID, DURATION_ARMS, canonicalLearningPostId, durationDecisionId, evaluateBlackRoomLearning, evaluateDurationLearning, type VerifiedLearningDecision, type DurationDecision } from "./blackroom-verified-learning";
 import type { BlackRoomCeoAnalytics, BlackRoomPublicationExperiment } from "./blackroom-growth-ceo";
 
@@ -117,7 +119,7 @@ export function preferFreshLocalEvidence(remote: Decisions | undefined, local: D
 }
 
 export function applyLocalEditorialReport(
-  remote: BlackRoomCeoAnalytics, report: Partial<ReturnType<typeof assessLocalBlackRoomExports>["report"]> | null, now: Date,
+  remote: BlackRoomCeoAnalytics, report: (Partial<ReturnType<typeof assessLocalBlackRoomExports>["report"]> & { manualObservations?: ReturnType<typeof reconcileManualObservations> }) | null, now: Date,
 ): BlackRoomCeoAnalytics {
   if (!remote?.verifiedLearning || report?.scope !== "local-evidence" || report.version !== 1) return remote;
   const verifiedLearning = preferFreshLocalEvidence(remote.verifiedLearning, report.decisions, now);
@@ -138,5 +140,5 @@ export function applyLocalEditorialReport(
   // Only the two editorial experiment fields can be overlaid; an old remote
   // hook-only deployment can now rotate durations when fresh local evidence
   // exists. Unknown destinations remain without a preference.
-  return { ...remote, verifiedLearning, ...(durationLearning ? { durationLearning } : {}) };
+  return { ...remote, verifiedLearning, ...(durationLearning ? { durationLearning } : {}), manualExploration: proposeManualExploration(report.manualObservations, now) };
 }

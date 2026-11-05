@@ -116,6 +116,7 @@ export interface BlackRoomAttributionStats {
 }
 
 export interface BlackRoomCeoAnalytics {
+  manualExploration?: import("./blackroom-manual-exploration").ManualExplorations;
   durationLearning?: Record<LearningNetwork, DurationDecision>;
   verifiedLearning?: Record<LearningNetwork, VerifiedLearningDecision>;
   /** Total imported posts across all connected networks, for visibility. */
