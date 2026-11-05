@@ -44,6 +44,15 @@ test("counts all observed cities while bounding the number of exchanges", () => 
   assert.equal(new Set(result.exchanges.map(item => item.id)).size, 24);
 });
 
+test("a sanitized rate limit proposes official alternatives without guessing the provider", () => {
+  const evidence = fixture([{ ...job, lastSuccessAt: at(-3), recordedFailure: false, issues: ["La fuente limitó las consultas (HTTP 429)."] }]);
+  const [exchange] = buildOfficeKongCollaboration(evidence, now).exchanges;
+  assert.equal(exchange.kind, "attention");
+  assert.match(exchange.comments[0].text, /exitosa con avisos/);
+  assert.match(exchange.comments[1].text, /límite de consultas de la fuente/);
+  assert.doesNotMatch(JSON.stringify(exchange), /Ticketmaster/);
+});
+
 test("proposes CEO review of reassignment only with a persisted failure and at least two recorded attempts", () => {
   const evidence = fixture([{ ...job, attemptsSinceSuccess: 2 }, { ...job, category: "vip", attemptsSinceSuccess: 1 }]);
   const result = buildOfficeKongCollaboration(evidence, now);

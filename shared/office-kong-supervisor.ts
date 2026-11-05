@@ -1,11 +1,19 @@
+import { z } from "zod";
+
+export const officeKongEventLoadSchema = z.object({
+  upcomingEvents: z.number().int().nonnegative().nullable(),
+  windowDays: z.literal(30),
+  checkedAt: z.string().datetime({ offset: true }).nullable(),
+}).refine(value => (value.upcomingEvents === null) === (value.checkedAt === null));
+
 export const OFFICE_KONG_SUPERVISED_CATEGORIES = ["clubs", "vip", "restaurants", "events", "sports", "experiences", "media"] as const;
-export const OFFICE_KONG_SCORE_DEDUCTIONS = { failed: 25, stale: 20, missed: 15 } as const;
+export const OFFICE_KONG_SCORE_DEDUCTIONS = { failed: 25, stale: 20, missed: 15, completed_with_warnings: 5 } as const;
 const MAX_SNAPSHOT_AGE_MS = 5 * 60_000;
 const MAX_CLOCK_SKEW_MS = 30_000;
 const MISSED_GRACE_MS = 15 * 60_000;
 
 type Category = typeof OFFICE_KONG_SUPERVISED_CATEGORIES[number];
-export type OfficeKongSupervisorState = "completed" | "scheduled" | "running" | "missed" | "stale" | "failed" | "unverified" | "disabled";
+export type OfficeKongSupervisorState = "completed" | "completed_with_warnings" | "scheduled" | "running" | "missed" | "stale" | "failed" | "unverified" | "disabled";
 interface CategoryEvidence {
   category: Category;
   state: "healthy" | "running" | "attention" | "stale" | "unknown" | "disabled";
@@ -54,7 +62,8 @@ function aggregate(categories: readonly OfficeKongCategoryScore[]): ScoreAggrega
 
 function scoreCategory(category: Category, job: CategoryEvidence | undefined, verified: boolean, enabled: boolean, snapshotTime: number, nowMs: number): OfficeKongCategoryScore {
   const score = (state: OfficeKongSupervisorState, reason: string): OfficeKongCategoryScore => {
-    const deduction = state === "failed" || state === "stale" || state === "missed" ? OFFICE_KONG_SCORE_DEDUCTIONS[state] : 0;
+    const deduction = state === "failed" || state === "stale" || state === "missed" || state === "completed_with_warnings"
+      ? OFFICE_KONG_SCORE_DEDUCTIONS[state] : 0;
     return { category, state, reason, deduction, points: state === "unverified" || state === "disabled" ? null : 100 - deduction };
   };
   if (!verified) return score("unverified", "Falta una auditoría reciente verificable.");
@@ -85,12 +94,16 @@ function scoreCategory(category: Category, job: CategoryEvidence | undefined, ve
     return score("failed", "KONG registra una falla en el último intento.");
   }
   const interval = typeof job.intervalMs === "number" && Number.isSafeInteger(job.intervalMs) && job.intervalMs > 0 ? job.intervalMs : null;
-  if (job.state === "stale" && success !== null && interval !== null && snapshotTime - success > 2 * interval) {
+  if (success !== null && interval !== null && snapshotTime - success > 2 * interval) {
     return score("stale", "El último resultado superó dos intervalos de ejecución.");
   }
   if (interval !== null && due !== null && snapshotTime - due > MISSED_GRACE_MS &&
     (started === null || started < due) && (completed === null || completed < due)) {
     return score("missed", "Pasaron 15 minutos desde el turno programado sin registro de inicio o finalización.");
+  }
+  if (job.state === "attention" && job.recordedFailure === false && interval !== null && completed !== null && success !== null &&
+    (started === null ? completed === success : success >= started)) {
+    return score("completed_with_warnings", "KONG registró una ejecución exitosa con avisos en el informe.");
   }
   if (job.state === "healthy" && completed !== null && success !== null) {
     return due !== null && due > snapshotTime

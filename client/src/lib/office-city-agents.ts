@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AgentLiveStatus } from "./agent-live-status";
+import { officeKongEventLoadSchema, scoreOfficeKongSnapshot } from "@shared/office-kong-supervisor";
 
 export const OFFICE_CITY_CATEGORIES = [
   { id: "clubs", name: "Clubs" }, { id: "vip", name: "Mesas VIP" },
@@ -10,7 +11,7 @@ export const OFFICE_CITY_CATEGORIES = [
 const timestamp = z.string().datetime({ offset: true }).nullable();
 const directoryCitySchema = z.object({ id: z.string().min(1).max(200), name: z.string().min(1).max(200), countryCode: z.string().regex(/^[A-Z]{2}$/), timeZone: z.string().min(1).max(100), currency: z.string().regex(/^[A-Z]{3}$/) });
 const categorySchema = z.object({ category: z.enum(["clubs", "vip", "restaurants", "events", "sports", "experiences", "media"]), state: z.enum(["healthy", "running", "attention", "stale", "unknown", "disabled"]), evidence: z.enum(["persisted", "missing"]), lastRunAt: timestamp, lastSuccessAt: timestamp, lastStartedAt: timestamp, nextRunAt: timestamp, leaseUntil: timestamp.optional(), issues: z.array(z.string().max(20000)).max(500), intervalMs: z.number().int().positive().nullable().optional(), recordedFailure: z.boolean().optional() });
-const cityEvidenceSchema = directoryCitySchema.extend({ categories: z.array(categorySchema).max(7) });
+const cityEvidenceSchema = directoryCitySchema.extend({ categories: z.array(categorySchema).max(7), eventLoad: officeKongEventLoadSchema.optional().catch(undefined) });
 const evidenceSchema = z.object({ generatedAt: z.string().datetime({ offset: true }), citySnapshotCheckedAt: z.string().datetime({ offset: true }).optional(), cityAgentsEnabled: z.boolean(), cities: z.array(cityEvidenceSchema).max(200) });
 export type OfficeCityDirectoryEntry = z.infer<typeof directoryCitySchema>;
 export interface OfficeCityAgent {
@@ -22,7 +23,7 @@ export interface OfficeCityAgent {
   recordedFailure?: boolean;
   leaseUntil?: string | null;
 }
-export interface OfficeCityRoom { id: string; name: string; city: OfficeCityDirectoryEntry; agents: OfficeCityAgent[] }
+export interface OfficeCityRoom { id: string; name: string; city: OfficeCityDirectoryEntry; agents: OfficeCityAgent[]; upcomingEvents: number | null }
 export interface OfficeCityCountry { code: string; name: string; cityCount: number }
 export function officeCityCountries(directory: OfficeCityDirectoryEntry[]): OfficeCityCountry[] {
   const counts = new Map<string, number>();
@@ -85,6 +86,7 @@ export function buildOfficeCityRoomsFromSnapshot(directory: OfficeCityDirectoryE
   const evidence = parsed.success ? parsed.data : undefined;
   const usable = Boolean(evidence && fresh(evidence.generatedAt, now) && (!evidence.citySnapshotCheckedAt || fresh(evidence.citySnapshotCheckedAt, now)));
   const snapshotAt = evidence?.citySnapshotCheckedAt || evidence?.generatedAt || null;
+  const scores = new Map(scoreOfficeKongSnapshot(evidence, now).cities.map(city => [city.id, city.categories]));
   return directory.map(city => {
     const matches = evidence?.cities.filter(candidate => candidate.id === city.id) || [];
     const record = matches.length === 1 && matches[0].name === city.name && matches[0].countryCode === city.countryCode && matches[0].timeZone === city.timeZone && matches[0].currency === city.currency ? matches[0] : undefined;
@@ -100,18 +102,26 @@ export function buildOfficeCityRoomsFromSnapshot(directory: OfficeCityDirectoryE
         else if (job.state === "running" && job.lastStartedAt && job.leaseUntil && Date.parse(job.leaseUntil) > Math.max(now, Date.parse(job.lastStartedAt))) status = { state: "working", label: "Ejecutando · verificado", detail: "La auditoria reciente de KONG registra este trabajo en ejecucion con una reserva vigente." };
         else if (job.state === "running") status = { state: "offline", label: "Ejecucion sin vigencia", detail: "La auditoria registro actividad, pero no hay una reserva de ejecucion vigente." };
         else if (job.state === "healthy" && job.lastRunAt && job.lastSuccessAt) status = { state: "offline", label: "Completado · no ejecutando", detail: "Hay un resultado confirmado; no equivale a estar trabajando ahora." };
-        else if (job.state === "attention") status = { state: "error", label: "Requiere atencion", detail: job.issues.join(" · ") || "KONG registra un bloqueo en este trabajo." };
+        else if (job.state === "attention") {
+          const score = scores.get(city.id)?.find(item => item.category === category.id);
+          status = score?.state === "completed_with_warnings"
+            ? { state: "needs-setup", label: "Completado con avisos", detail: job.issues.join(" · ") || score.reason }
+            : { state: "error", label: score?.state === "failed" ? "Falló la última ejecución" : "Requiere atención", detail: job.issues.join(" · ") || score?.reason || "KONG registra un bloqueo en este trabajo." };
+        }
         else if (job.state === "disabled") status = { state: "needs-setup", label: "Deshabilitado", detail: "Este trabajo esta deshabilitado." };
         else if (job.state === "stale") status = { state: "offline", label: "Trabajo desactualizado", detail: "El ultimo resultado ya no tiene vigencia." };
         else status = { state: "offline", label: "Estado sin verificar", detail: job.issues.join(" · ") || "No hay una ejecucion actual verificable." };
       }
       const confirmed = usable && job?.evidence === "persisted";
       return { id: `kong-city:${city.id}:${category.id}`, name: `${city.name} · ${category.name}`, role: category.name, cityId: city.id, cityName: city.name, category: category.id,
-        status, color: status.state === "working" ? "#34d399" : status.state === "error" ? "#fb7185" : "#94a3b8",
+        status, color: status.state === "working" ? "#34d399" : status.state === "error" ? "#fb7185" : status.state === "needs-setup" ? "#fbbf24" : "#94a3b8",
         lastWorkAt: confirmed ? job!.lastRunAt : null, lastStartedAt: confirmed ? job!.lastStartedAt : null,
         nextWorkAt: confirmed ? job!.nextRunAt : null, blocker: status.detail || "", snapshotAt, hasDurableEvidence: Boolean(confirmed),
         intervalMs: confirmed ? job!.intervalMs : undefined, recordedFailure: confirmed ? job!.recordedFailure : undefined, leaseUntil: confirmed ? job!.leaseUntil : undefined };
     });
-    return { id: `kong-city:${city.id}`, name: city.name, city, agents };
-  });
+    const load = record?.eventLoad;
+    const loadAge = load?.checkedAt ? now - Date.parse(load.checkedAt) : Infinity;
+    const upcomingEvents = usable && load && loadAge >= -30_000 && loadAge <= 10 * 60_000 ? load.upcomingEvents : null;
+    return { id: `kong-city:${city.id}`, name: city.name, city, agents, upcomingEvents };
+  }).sort((a, b) => (b.upcomingEvents ?? -1) - (a.upcomingEvents ?? -1));
 }

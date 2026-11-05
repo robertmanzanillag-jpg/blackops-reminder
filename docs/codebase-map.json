@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-05T07:58:31.110Z",
+  "generatedAt": "2026-11-05T09:45:52.478Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-04\\quioer-qu-echeck-el-trabajo-que\\work\\office-current",
   "packageName": "rest-express",
   "scripts": {
@@ -126,9 +126,9 @@
   "totals": {
     "filesVisible": 741,
     "filesIndexed": 652,
-    "imports": 2257,
+    "imports": 2259,
     "routes": 524,
-    "symbols": 14748
+    "symbols": 14781
   },
   "directories": {
     ".local/office-evidence": {
@@ -136,20 +136,6 @@
       "indexed": 3,
       "kinds": {
         "other": 9
-      }
-    },
-    "server": {
-      "files": 148,
-      "indexed": 144,
-      "kinds": {
-        "server": 148
-      }
-    },
-    "tests": {
-      "files": 147,
-      "indexed": 144,
-      "kinds": {
-        "test": 147
       }
     },
     ".": {
@@ -316,6 +302,13 @@
         "script": 4
       }
     },
+    "server": {
+      "files": 148,
+      "indexed": 144,
+      "kinds": {
+        "server": 148
+      }
+    },
     "server/replit_integrations/batch": {
       "files": 2,
       "indexed": 2,
@@ -349,6 +342,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 147,
+      "indexed": 144,
+      "kinds": {
+        "test": 147
       }
     },
     "tests/fixtures": {
@@ -803,6 +803,7 @@
         "SceneDebate",
         "SceneDepartment",
         "createOfficeScene",
+        "officeCityDeskPosition",
         "officeCityMapPosition"
       ],
       "symbols": [
@@ -819,6 +820,7 @@
         "applyViewOffset",
         "area",
         "armGeometry",
+        "arms",
         "aspect",
         "avatarMotion",
         "b",
@@ -827,17 +829,20 @@
         "bar",
         "bars",
         "base",
+        "bases",
         "beam",
         "bezel",
         "bh",
+        "bodies",
         "body",
         "book",
         "build",
+        "buildCityOverviewDesks",
         "buildDesk",
-        "building",
         "busy",
         "camera",
         "canvas",
+        "chairs",
         "cityJob",
         "cityOverview",
         "cityPosition",
@@ -873,6 +878,7 @@
         "el",
         "end",
         "fill",
+        "firstRow",
         "floor",
         "flow",
         "flowColor",
@@ -890,16 +896,23 @@
         "hasProblem",
         "head",
         "headerSpace",
+        "heads",
         "height",
         "hexToNumber",
         "hit",
         "hub",
+        "hubColumn",
+        "hubIndex",
         "hubLabel",
         "hubLight",
+        "hubMotion",
+        "hubRow",
         "indent",
+        "instance",
         "keepFocus",
         "key",
         "label",
+        "lastRowSize",
         "left",
         "leftArm",
         "leg",
@@ -911,9 +924,11 @@
         "live",
         "materials",
         "maxRadius",
+        "mesh",
         "mid",
         "motion",
         "name",
+        "officeCityDeskPosition",
         "officeCityMapPosition",
         "offset",
         "onPointerDown",
@@ -928,6 +943,7 @@
         "particle",
         "particles",
         "pct",
+        "phase",
         "placeCamera",
         "placeLabel",
         "platform",
@@ -935,6 +951,7 @@
         "playhead",
         "pointer",
         "points",
+        "position",
         "priorCount",
         "priorLayout",
         "projected",
@@ -946,15 +963,18 @@
         "rightArm",
         "ring",
         "row",
-        "rowSize",
         "rows",
+        "running",
         "scene",
         "screen",
+        "screens",
         "scroll",
         "seat",
         "seed",
+        "set",
         "shirt",
         "slab",
+        "slot",
         "span",
         "speed",
         "stage",
@@ -963,12 +983,14 @@
         "state",
         "status",
         "t",
+        "tabletops",
         "target",
         "texture",
         "tmp",
         "to",
         "top",
         "tracks",
+        "transform",
         "typing",
         "u",
         "update",
@@ -3424,6 +3446,7 @@
       "kind": "client-lib",
       "imports": [
         "./agent-live-status",
+        "@shared/office-kong-supervisor",
         "zod"
       ],
       "exports": [
@@ -3460,6 +3483,8 @@
         "job",
         "latest",
         "leaseExpiry",
+        "load",
+        "loadAge",
         "matches",
         "officeCityCountries",
         "officeCityEvidenceExpiresAt",
@@ -3468,11 +3493,14 @@
         "parsed",
         "readCityEvidence",
         "record",
+        "score",
+        "scores",
         "selectLatestOfficeKongAudit",
         "snapshotAt",
         "snapshotExpiry",
         "time",
         "timestamp",
+        "upcomingEvents",
         "usable"
       ],
       "routes": []
@@ -21347,7 +21375,9 @@
     {
       "path": "shared/office-kong-supervisor.ts",
       "kind": "shared",
-      "imports": [],
+      "imports": [
+        "zod"
+      ],
       "exports": [
         "OFFICE_KONG_SCORE_DEDUCTIONS",
         "OFFICE_KONG_SUPERVISED_CATEGORIES",
@@ -21357,6 +21387,7 @@
         "OfficeKongSupervision",
         "OfficeKongSupervisorSnapshot",
         "OfficeKongSupervisorState",
+        "officeKongEventLoadSchema",
         "scoreOfficeKongSnapshot"
       ],
       "symbols": [
@@ -21381,6 +21412,7 @@
         "isFresh",
         "lease",
         "matches",
+        "officeKongEventLoadSchema",
         "parse",
         "points",
         "score",
@@ -21868,6 +21900,7 @@
         "login",
         "loginForm",
         "mapFallback",
+        "mapHost",
         "markers",
         "memberGoals",
         "modules",
@@ -25173,6 +25206,7 @@
       "symbols": [
         "ba",
         "cities",
+        "desks",
         "duplicateCategory",
         "expiry",
         "futureStart",
@@ -25190,7 +25224,9 @@
         "run",
         "runs",
         "sameTime",
+        "snapshot",
         "stamp",
+        "third",
         "wrongCity"
       ],
       "routes": []
@@ -25382,6 +25418,7 @@
         "NOW",
         "at",
         "categories",
+        "cities",
         "city",
         "evidence",
         "expired",
@@ -25392,7 +25429,8 @@
         "noLease",
         "recorded",
         "result",
-        "snapshot"
+        "snapshot",
+        "warnings"
       ],
       "routes": []
     },

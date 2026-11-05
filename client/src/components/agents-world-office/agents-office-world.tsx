@@ -356,7 +356,7 @@ export function AgentsOfficeWorld({
       <div ref={hostRef} className="absolute inset-0" data-testid="world-canvas-host" />
       <div ref={labelsRef} className="pointer-events-none absolute inset-0 overflow-hidden" />
 
-      <div className={cn("pointer-events-none absolute left-3 z-10 rounded-2xl border border-white/10 bg-[#04060b]/90 shadow-2xl backdrop-blur", officeWing === "kong" ? "top-28 w-[min(324px,calc(100vw-1.5rem))] p-2.5 sm:top-20" : "top-20 max-w-[min(540px,92vw)] p-3 sm:left-20")}>
+      <div className={cn("pointer-events-none absolute left-3 z-10 rounded-2xl border border-white/10 bg-[#04060b]/90 shadow-2xl backdrop-blur", officeWing === "kong" ? "top-28 w-[min(324px,calc(100vw-1.5rem))] p-2.5 sm:top-20" : "bottom-3 w-[min(365px,calc(100vw-1.5rem))] p-2.5")}>
         <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-cyan-100/80">{officeWing === "kong" ? "KONG · agentes por ciudad" : "BlackOps · la empresa"}</p>
           {officeWing === "kong" && <button type="button" aria-expanded={cityControlsOpen} aria-controls="world-city-controls-content" onClick={() => setCityControlsOpen(open => !open)} className="pointer-events-auto shrink-0 rounded-full border border-white/20 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/10" data-testid="world-city-controls-toggle">{cityControlsOpen ? "Minimizar" : "Controles"}</button>}
@@ -405,7 +405,7 @@ export function AgentsOfficeWorld({
             <button type="button" onClick={() => { setCityCountry(""); focusRoom(null); }} className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black" data-testid="world-city-clear">Restablecer vista KONG</button>
           </div>
         </div>}
-        {(officeWing === "main" || cityControlsOpen) && <nav className="pointer-events-auto mt-2 flex max-w-full gap-1.5 overflow-x-auto pb-1" aria-label="Departamentos" data-testid="world-deptnav">
+        {(officeWing === "main" || cityControlsOpen) && <nav className="pointer-events-auto mt-2 flex max-w-full gap-1.5 overflow-x-auto pb-1 [color-scheme:dark] [scrollbar-color:#404b63_#080c14] [scrollbar-width:thin]" aria-label="Departamentos" data-testid="world-deptnav">
           {departments.map((department) => (
             <button
               key={department.id}
@@ -444,6 +444,7 @@ export function AgentsOfficeWorld({
                   <li key={room.id}>
                     <button type="button" onClick={() => openCityFromOverview(room.id)} className="flex h-full w-full flex-col rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-left hover:border-violet-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-300" data-testid="world-city-overview-city">
                       <span className="text-xs font-semibold">{room.name} <span className="text-[10px] text-zinc-400">{room.city.countryCode}</span></span>
+                      {room.upcomingEvents !== null && <span className="text-[10px] text-cyan-200">{room.upcomingEvents} eventos próximos · 30 días</span>}
                       <span className={cn("text-[10px]", running ? "text-emerald-300" : "text-zinc-400")}>{recorded ? `${running} verificados en ejecución · ${recorded}/7 registrados` : "Sin evidencia reciente"}</span>
                     </button>
                   </li>
@@ -455,7 +456,7 @@ export function AgentsOfficeWorld({
       )}
 
       {overlay === "ranking" && (
-        <section className="absolute bottom-3 left-3 z-30 max-h-[55%] w-[min(380px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-emerald-200/20 bg-[#06100d]/95 p-4 text-white shadow-2xl" data-testid="world-ranking-panel">
+        <section className="absolute bottom-3 right-3 z-30 max-h-[55%] w-[min(380px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-emerald-200/20 bg-[#06100d]/95 p-4 text-white shadow-2xl [color-scheme:dark]" data-testid="world-ranking-panel">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-200">Tabla de posiciones</p>
             <button type="button" onClick={() => setOverlay("none")} className="text-xs text-zinc-400 hover:text-white">✕</button>
@@ -476,7 +477,7 @@ export function AgentsOfficeWorld({
       )}
 
       {overlay === "ceo" && (
-        <section className="absolute bottom-3 left-3 z-30 flex max-h-[60%] w-[min(420px,calc(100vw-1.5rem))] flex-col rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-4 text-white shadow-2xl" data-testid="world-ceo-panel">
+        <section className="absolute bottom-3 right-3 z-30 flex max-h-[60%] w-[min(420px,calc(100vw-1.5rem))] flex-col rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-4 text-white shadow-2xl [color-scheme:dark]" data-testid="world-ceo-panel">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200">Canal directo con el CEO</p>
             <button type="button" onClick={() => setOverlay("none")} className="text-xs text-zinc-400 hover:text-white">✕</button>
@@ -516,7 +517,7 @@ export function AgentsOfficeWorld({
       )}
 
       {!focused && overlay === "none" && (
-        <p className="pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-white/10 bg-black/60 px-4 py-2 text-xs text-zinc-300">
+        <p className={cn("pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-white/10 bg-black/60 px-4 py-2 text-xs text-zinc-300", officeWing === "kong" && "hidden sm:block")}>
           {failed ? "Vista sin 3D: elige una ciudad para ver sus siete agentes." : officeWing === "kong" ? "Toca una ciudad para ver sus siete agentes" : "Arrastra para girar · rueda para acercar · toca un departamento para entrar"}
         </p>
       )}

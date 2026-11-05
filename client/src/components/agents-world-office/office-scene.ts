@@ -58,15 +58,26 @@ const CITY_SPACING = 8;
 
 export function officeCityMapPosition(index: number, count: number) {
   const columns = Math.ceil(Math.sqrt(Math.max(1, count)));
-  const rows = Math.ceil(count / columns);
-  const row = Math.floor(index / columns);
-  const rowSize = Math.min(columns, count - row * columns);
+  const rows = Math.ceil((count + 1) / columns);
+  const hubRow = Math.floor((rows - 1) / 2);
+  const hubColumn = Math.floor(columns / 2);
+  const hubIndex = hubRow * columns + hubColumn;
+  const slot = index >= hubIndex ? index + 1 : index;
+  const row = Math.floor(slot / columns);
+  const lastRowSize = count + 1 - (rows - 1) * columns;
   return {
-    x: (index % columns - (rowSize - 1) / 2) * CITY_SPACING,
-    z: (row - (rows - 1) / 2) * CITY_SPACING,
+    x: (slot % columns - (row === rows - 1 && row !== hubRow ? (lastRowSize - 1) / 2 : hubColumn)) * CITY_SPACING,
+    z: (row - hubRow) * CITY_SPACING,
     width: columns * CITY_SPACING,
     depth: rows * CITY_SPACING,
+    centerX: ((columns - 1) / 2 - hubColumn) * CITY_SPACING,
+    centerZ: ((rows - 1) / 2 - hubRow) * CITY_SPACING,
   };
+}
+
+export function officeCityDeskPosition(index: number) {
+  const firstRow = index < 4;
+  return { x: ((index % 4) - (firstRow ? 1.5 : 1)) * 1.34, z: firstRow ? -1 : 1 };
 }
 
 type DeskRuntime = {
@@ -244,6 +255,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   const hubLabel = document.createElement("div");
   hubLabel.className = "pointer-events-none absolute -translate-x-1/2 -translate-y-full rounded-md border border-amber-200/40 bg-black/70 px-2 py-1 text-[11px] font-bold tracking-[0.2em] text-amber-100";
   hubLabel.textContent = "CEO · ORQUESTADOR";
+  hubLabel.dataset.testid = "world-ceo-orb";
   labelLayer.appendChild(hubLabel);
 
   const raycastTargets: any[] = [];
@@ -251,7 +263,8 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   let debateArcs: { curve: any; particles: any[]; line: any }[] = [];
   let focused: string | null = null;
   let cityLayout: SceneData["cityLayout"];
-  let cityMapSize = { width: 0, depth: 0 };
+  let cityMapSize = officeCityMapPosition(0, 0);
+  let overviewDesks: { group: any; animate: (time: number) => void } | undefined;
 
   // Camera orbit state.
   const target = new THREE.Vector3(0, 0, 0);
@@ -297,7 +310,9 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     goalRadius = Math.max(18, span / frustumScale * 1.18);
     camera.far = Math.max(400, goalRadius + 150);
     camera.updateProjectionMatrix();
-    goalTarget.set(width >= 900 ? cityMapSize.width * 0.13 : 0, 0, headerSpace / 2 * goalRadius * frustumScale / height);
+    scene.fog.near = Math.max(45, goalRadius * 0.85);
+    scene.fog.far = Math.max(110, goalRadius * 1.7 + 20);
+    goalTarget.set(cityMapSize.centerX + (width >= 900 ? cityMapSize.width * 0.13 : 0), 0, cityMapSize.centerZ + headerSpace / 2 * goalRadius * frustumScale / height);
     goalPhi = 0.22;
     goalTheta = -Math.PI / 2;
   }
@@ -313,6 +328,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
 
   function disposeObject(object: any) {
     object.traverse?.((child: any) => {
+      if (child.isInstancedMesh) child.dispose();
       child.geometry?.dispose?.();
       const materials = Array.isArray(child.material) ? child.material : child.material ? [child.material] : [];
       materials.forEach((material: any) => {
@@ -323,6 +339,11 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   }
 
   function clearDynamic() {
+    if (overviewDesks) {
+      scene.remove(overviewDesks.group);
+      disposeObject(overviewDesks.group);
+      overviewDesks = undefined;
+    }
     platforms.forEach((platform) => {
       scene.remove(platform.group);
       disposeObject(platform.group);
@@ -462,12 +483,81 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     }
   }
 
+  function buildCityOverviewDesks() {
+    const desks = platforms.flatMap(({ department, center }) => department.agents.map((agent, index) => {
+      const position = officeCityDeskPosition(index);
+      return { agent, x: center.x + position.x, z: center.z + position.z };
+    }));
+    host.dataset.cityDeskCount = String(desks.length);
+    const running = desks.flatMap((desk, index) => desk.agent.state === "working" ? [index] : []);
+    host.dataset.cityRunningDeskCount = String(running.length);
+    if (!desks.length) return;
+    const group = new THREE.Group();
+    const instance = (geometry: any, color: number, count = desks.length) => {
+      const mesh = new THREE.InstancedMesh(geometry, new THREE.MeshStandardMaterial({ color, roughness: 0.8 }), count);
+      group.add(mesh);
+      return mesh;
+    };
+    const tabletops = instance(new THREE.BoxGeometry(1.16, 0.16, 0.74), 0xd6c7a8);
+    const bases = instance(new THREE.BoxGeometry(0.87, 0.59, 0.53), 0x344258);
+    const screens = instance(new THREE.BoxGeometry(0.85, 0.57, 0.14), 0xffffff);
+    const chairs = instance(new THREE.BoxGeometry(0.49, 0.73, 0.25), 0x243145);
+    const bodies = instance(new THREE.CapsuleGeometry(0.16, 0.26, 2, 6), 0xffffff);
+    const heads = instance(new THREE.SphereGeometry(0.17, 8, 6), 0xc58b5c);
+    const arms = instance(new THREE.BoxGeometry(0.10, 0.11, 0.37), 0xffffff, desks.length * 2);
+    const transform = new THREE.Object3D();
+    const set = (mesh: any, index: number, x: number, y: number, z: number) => {
+      transform.position.set(x, y, z);
+      transform.updateMatrix();
+      mesh.setMatrixAt(index, transform.matrix);
+    };
+    desks.forEach(({ agent, x, z }, index) => {
+      set(tabletops, index, x, 0.66, z - 0.12);
+      set(bases, index, x, 0.30, z - 0.12);
+      set(screens, index, x, 1.02, z - 0.40);
+      set(chairs, index, x, 0.50, z + 0.61);
+      set(bodies, index, x, 0.69, z + 0.37);
+      set(heads, index, x, 1.12, z + 0.37);
+      set(arms, index * 2, x - 0.20, 0.77, z + 0.14);
+      set(arms, index * 2 + 1, x + 0.20, 0.77, z + 0.14);
+      const shirt = new THREE.Color(agent.color);
+      bodies.setColorAt(index, shirt);
+      arms.setColorAt(index * 2, shirt);
+      arms.setColorAt(index * 2 + 1, shirt);
+      screens.setColorAt(index, new THREE.Color(agent.state === "working" ? 0x34d399 : 0x26364e));
+    });
+    if (running.length && !options.reducedMotion) arms.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    scene.add(group);
+    overviewDesks = {
+      group,
+      animate(time) {
+        if (!running.length || options.reducedMotion) return;
+        running.forEach(index => {
+          const { x, z } = desks[index];
+          const phase = time * 13 + index;
+          set(arms, index * 2, x - 0.20, 0.77 + Math.max(0, Math.sin(phase)) * 0.13, z + 0.14);
+          set(arms, index * 2 + 1, x + 0.20, 0.77 + Math.max(0, -Math.sin(phase)) * 0.13, z + 0.14);
+        });
+        arms.instanceMatrix.needsUpdate = true;
+      },
+    };
+  }
+
   function build(data: SceneData) {
     clearDynamic();
     cityLayout = data.cityLayout;
     const cityOverview = cityLayout === "overview";
     cityMapSize = officeCityMapPosition(0, data.departments.length);
-    hub.visible = !cityLayout;
+    hub.visible = cityLayout !== "detail";
+    hub.scale.setScalar(cityOverview ? 0.78 : 1);
+    beam.visible = !cityLayout;
+    hubLabel.textContent = cityOverview ? "CEO · KONG" : "CEO · ORQUESTADOR";
+    if (!cityOverview) {
+      scene.fog.near = 45;
+      scene.fog.far = 110;
+      delete host.dataset.cityDeskCount;
+      delete host.dataset.cityRunningDeskCount;
+    }
     const count = Math.max(1, data.departments.length);
     data.departments.forEach((department, index) => {
       const angle = cityLayout ? -Math.PI / 2 : (index / count) * Math.PI * 2 - Math.PI / 2;
@@ -496,11 +586,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(width, 0.5, depth)), new THREE.LineBasicMaterial({ color: colorNum }));
       edges.position.y = -0.25;
       group.add(edges);
-      if (cityOverview) {
-        const building = new THREE.Mesh(new THREE.BoxGeometry(2.7, 1.8, 2.5), new THREE.MeshStandardMaterial({ color: colorNum, roughness: 0.85 }));
-        building.position.y = 0.9;
-        group.add(building);
-      } else {
+      if (!cityOverview) {
         const glow = new THREE.PointLight(colorNum, 0.9, 14, 1.5);
         glow.position.set(0, 4, 0);
         group.add(glow);
@@ -574,6 +660,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       });
     });
 
+    if (cityOverview) buildCityOverviewDesks();
     // World positions for desks (after platforms are oriented).
     scene.updateMatrixWorld(true);
     platforms.forEach((platform) => platform.desks.forEach((desk) => desk.group.getWorldPosition(desk.worldPos)));
@@ -712,9 +799,11 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     phi += (goalPhi - phi) * ease;
     placeCamera();
 
-    core.scale.setScalar(1 + Math.sin(t * 2) * 0.06 * motion);
-    ring.rotation.z += dt * 0.4 * motion;
-    beam.material.opacity = 0.08 + Math.sin(t * 1.5) * 0.03 * motion;
+    const hubMotion = cityLayout ? 0 : motion;
+    core.scale.setScalar(1 + Math.sin(t * 2) * 0.06 * hubMotion);
+    ring.rotation.z += dt * 0.4 * hubMotion;
+    beam.material.opacity = 0.08 + Math.sin(t * 1.5) * 0.03 * hubMotion;
+    overviewDesks?.animate(t);
 
     platforms.forEach((platform) => {
       platform.desks.forEach((desk) => {
@@ -748,8 +837,8 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       const u = (t * 0.25 * motion + i / arc.particles.length) % 1;
       particle.position.copy(arc.curve.getPoint(u));
     }));
-    tmp.set(0, 4.4, 0);
-    placeLabel(hubLabel, tmp, !cityLayout);
+    tmp.set(0, cityLayout === "overview" ? 3.2 : 4.4, 0);
+    placeLabel(hubLabel, tmp, cityLayout !== "detail");
 
     if (t - lastScreenDraw > 0.25) {
       lastScreenDraw = t;

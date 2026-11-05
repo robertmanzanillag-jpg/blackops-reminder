@@ -26,6 +26,9 @@ function nextStep(kind: Kind, job: OfficeKongCityCategory): string {
   if (job.category === "sports" && job.issues.some(issue => /Ticketmaster.*\b429\b/i.test(issue))) {
     return "Propuesta: respetar el límite de Ticketmaster y revisar los calendarios oficiales disponibles antes del siguiente turno.";
   }
+  if (job.issues.includes("La fuente limitó las consultas (HTTP 429).")) {
+    return "Propuesta: respetar el límite de consultas de la fuente y revisar fuentes oficiales alternativas antes del siguiente turno.";
+  }
   if (job.issues.some(issue => /paid discovery disabled/i.test(issue))) {
     return "Propuesta: revisar el inventario guardado y las fuentes públicas oficiales dentro del presupuesto actual.";
   }
@@ -60,7 +63,7 @@ export function buildOfficeKongCollaboration(evidence: OfficeKongAuditResult["ev
       else if (job.state === "attention" && closed) {
         kind = "attention";
         evidenceAt = job.lastRunAt;
-        report = "El informe de una ejecución registrada en KONG requiere revisión.";
+        report = score.state === "completed_with_warnings" ? score.reason : "El informe de una ejecución registrada en KONG requiere revisión.";
       } else continue;
       if (!evidenceAt) continue;
 
