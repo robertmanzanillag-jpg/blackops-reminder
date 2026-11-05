@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { scoreOfficeKongSnapshot } from "@shared/office-kong-supervisor";
+import { OFFICE_KONG_CITY_TASKS, scoreOfficeKongSnapshot } from "@shared/office-kong-supervisor";
 import { officeCitySnapshotExpiresAt } from "@/lib/office-city-agents";
 import type { OfficeKongAuditResult } from "../../../server/office-kong";
 import type { OfficeKongCollaboration } from "../../../server/office-kong-collaboration";
@@ -12,6 +12,7 @@ type Run = { id: string; key: string; kind: string; status: string; source?: "sc
 const statuses: Record<string, string> = { accepted: "Registrada", pending: "Registrada", running: "En ejecucion", completed: "Completada", blocked: "Bloqueada", failed: "Fallo", unknown: "Resultado sin confirmar" };
 const agentStates: Record<string, string> = { healthy: "Evidencia vigente", running: "En ejecucion", attention: "Necesita atencion", stale: "Evidencia antigua", unknown: "Sin evidencia", disabled: "Deshabilitado" };
 const categoryNames: Record<string, string> = { clubs: "Clubs", vip: "VIP", restaurants: "Restaurantes", events: "Eventos", sports: "Deportes", experiences: "Experiencias", media: "Imagenes" };
+const qualityChecks = { events: "Calendarios y eventos", media: "Flyers e imágenes", vip: "Fuentes de reservas VIP" } as const;
 
 export function OfficeConnectionsPanel() {
   const [open, setOpen] = useState(false);
@@ -95,16 +96,30 @@ export function OfficeConnectionsPanel() {
         </details>
         <details className="rounded-lg border border-cyan-200/20 p-2 text-xs" data-testid="office-kong-teams">
           <summary className="cursor-pointer font-semibold">Clasificación de ciudades</summary>
-          <p className="mt-2 text-slate-300">Cada equipo tiene un puntaje de 100. La clasificación requiere evidencia verificable de los siete puestos.</p>
+          <p className="mt-2 text-slate-300">Puntaje operativo sobre 100, basado en las ejecuciones de los siete puestos. La calidad del catálogo se revisa por separado.</p>
           {teams.length === 0 && <p className="mt-2 text-slate-400">Todavía no hay equipos con evidencia completa para clasificar.</p>}
           {teams.length > 0 && <ol className="mt-2 space-y-1">
             {teams.map(team => <li key={team.id}>{teams.findIndex(entry => entry.points === team.points) + 1}. {team.name} · {team.points}/100</li>)}
           </ol>}
           {supervision.verified && supervision.cities.length > teams.length && <p className="mt-2 text-slate-400">Equipos pendientes de verificación completa: {supervision.cities.length - teams.length}.</p>}
         </details>
+        <details className="rounded-lg border border-cyan-200/20 p-2 text-xs" data-testid="office-kong-catalog-quality">
+          <summary className="cursor-pointer font-semibold">Calidad del catálogo por ciudad</summary>
+          <p className="mt-2 text-slate-300">Los informes indican qué revisó cada puesto y si dejó avisos. La cobertura total y la exactitud de cada precio de entrada todavía requieren medición por evento.</p>
+          {!supervision.verified && <p className="mt-2 text-amber-200">Sin informes vigentes para comparar ciudades.</p>}
+          {supervision.verified && <ul className="mt-2 space-y-2">
+            {supervision.cities.map(city => <li key={city.id} className="border-t border-white/10 pt-2">
+              <strong>{city.name}</strong>
+              {city.categories.filter(category => Object.hasOwn(qualityChecks, category.category)).map(category => <p key={category.category} className="mt-1 text-slate-300">
+                {qualityChecks[category.category as keyof typeof qualityChecks]} · {category.reason}
+              </p>)}
+            </li>)}
+          </ul>}
+        </details>
         <details className="rounded-lg border border-cyan-200/20 p-2 text-xs" data-testid="office-kong-team-review">
           <summary className="cursor-pointer font-semibold">Mesa de equipos · propuestas para el CEO</summary>
           <p className="mt-2 text-slate-300">El supervisor señala incidencias registradas y Operaciones propone cómo revisarlas.</p>
+          <a href="https://kongnightlife.com/admin/ceo" className="mt-2 inline-block text-cyan-200 underline">Abrir la revisión semanal y la memoria del CEO</a>
           {!collaboration?.verified && <p className="mt-2 text-amber-200">Sin auditoría vigente para generar propuestas.</p>}
           {collaboration?.verified && collaboration.totalFindings === 0 && <p className="mt-2 text-slate-400">La última revisión no registró incidencias que requieran una propuesta.</p>}
           {collaboration?.verified && collaboration.exchanges.map(exchange => <article key={exchange.id} className="mt-2 border-t border-white/10 pt-2">
@@ -121,6 +136,7 @@ export function OfficeConnectionsPanel() {
             <summary className="cursor-pointer font-semibold">{city.name} · {city.currency}{score?.points != null ? ` · ${score.points}/100` : ""}</summary>
             <div className="mt-2 space-y-2">{city.categories.map(category => { const grade = score?.categories.find(row => row.category === category.category); return <div key={category.category} className="border-t border-white/10 pt-2">
               <p>{categoryNames[category.category] || category.category} · {!kongEvidenceFresh ? "Evidencia caducada" : grade?.state === "completed_with_warnings" ? "Completado con avisos" : grade?.state === "failed" ? "Falló la última ejecución" : category.state === "running" && grade?.state !== "running" ? "Ejecución sin confirmar" : (agentStates[category.state] || category.state)}</p>
+              {grade?.state === "running" && <p className="mt-1 text-emerald-200">{OFFICE_KONG_CITY_TASKS[category.category]}</p>}
               <p className="mt-1 text-slate-400">Ultima ejecucion: {category.lastRunAt ? new Date(category.lastRunAt).toLocaleString() : "Sin evidencia"}</p>
               <p className="text-slate-400">Proxima: {category.nextRunAt ? new Date(category.nextRunAt).toLocaleString() : "Sin programacion comprobada"}</p>
               {grade && <p className="text-slate-400">Supervisor: {grade.points === null ? "Sin puntuación" : `${grade.points}/100${grade.deduction ? ` (−${grade.deduction})` : ""}`} · {grade.reason}</p>}

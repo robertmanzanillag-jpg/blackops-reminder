@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { AgentLiveStatus } from "./agent-live-status";
-import { officeKongEventLoadSchema, scoreOfficeKongSnapshot } from "@shared/office-kong-supervisor";
+import { OFFICE_KONG_CITY_TASKS, officeKongEventLoadSchema, scoreOfficeKongSnapshot } from "@shared/office-kong-supervisor";
 
 export const OFFICE_CITY_CATEGORIES = [
   { id: "clubs", name: "Clubs" }, { id: "vip", name: "Mesas VIP" },
@@ -15,7 +15,7 @@ const cityEvidenceSchema = directoryCitySchema.extend({ categories: z.array(cate
 const evidenceSchema = z.object({ generatedAt: z.string().datetime({ offset: true }), citySnapshotCheckedAt: z.string().datetime({ offset: true }).optional(), cityAgentsEnabled: z.boolean(), cities: z.array(cityEvidenceSchema).max(200) });
 export type OfficeCityDirectoryEntry = z.infer<typeof directoryCitySchema>;
 export interface OfficeCityAgent {
-  id: string; name: string; role: string; cityId: string; cityName: string; category: string;
+  id: string; name: string; role: string; cityId: string; cityName: string; category: keyof typeof OFFICE_KONG_CITY_TASKS;
   status: AgentLiveStatus; color: string; lastWorkAt: string | null; lastStartedAt: string | null;
   nextWorkAt: string | null; blocker: string; snapshotAt: string | null;
   hasDurableEvidence: boolean;
@@ -99,7 +99,7 @@ export function buildOfficeCityRoomsFromSnapshot(directory: OfficeCityDirectoryE
       else if (usable && job?.evidence === "persisted") {
         const future = [job.lastRunAt, job.lastSuccessAt, job.lastStartedAt].some(value => value && Date.parse(value) > now + 30000);
         if (future) status = { state: "offline", label: "Fechas sin verificar", detail: "El trabajo contiene fechas futuras no verificables." };
-        else if (job.state === "running" && job.lastStartedAt && job.leaseUntil && Date.parse(job.leaseUntil) > Math.max(now, Date.parse(job.lastStartedAt))) status = { state: "working", label: "Ejecutando · verificado", detail: "La auditoria reciente de KONG registra este trabajo en ejecucion con una reserva vigente." };
+        else if (job.state === "running" && job.lastStartedAt && job.leaseUntil && Date.parse(job.leaseUntil) > Math.max(now, Date.parse(job.lastStartedAt))) status = { state: "working", label: "Ejecutando · verificado", detail: OFFICE_KONG_CITY_TASKS[category.id] };
         else if (job.state === "running") status = { state: "offline", label: "Ejecucion sin vigencia", detail: "La auditoria registro actividad, pero no hay una reserva de ejecucion vigente." };
         else if (job.state === "healthy" && job.lastRunAt && job.lastSuccessAt) status = { state: "offline", label: "Completado · no ejecutando", detail: "Hay un resultado confirmado; no equivale a estar trabajando ahora." };
         else if (job.state === "attention") {

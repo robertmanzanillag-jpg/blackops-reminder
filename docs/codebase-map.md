@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-05T10:07:50.480Z
-Repo: `/home/runner/workspace/.local/worktrees/office-central-0cb220d`
+Generated: 2026-11-05T11:16:45.459Z
+Repo: `/home/runner/workspace/.local/worktrees/office-unified-3a55fc0`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 749 | 660 | 2259 | 524 | 14778 |
+| 749 | 660 | 2262 | 524 | 14809 |
 
 ## Entrypoints
 - `client/src/App.tsx`
