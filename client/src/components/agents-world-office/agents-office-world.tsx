@@ -450,7 +450,7 @@ export function AgentsOfficeWorld({
               {!panelCareer && (
                 <div className="mt-2 rounded-lg bg-black/40 p-2 text-xs text-zinc-400" data-testid="world-career-unavailable">
                   <p className="font-semibold">Vida: no disponible</p>
-                  <p>Este agente aun no tiene una medicion de bateria. Su estado de actividad se muestra por separado.</p>
+                  <p>La medicion de bateria no esta disponible ahora. Su estado de actividad se muestra por separado.</p>
                 </div>
               )}
               {panelPersonality && (
