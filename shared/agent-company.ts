@@ -60,6 +60,21 @@ export type Trainee = {
 /** Ids of agents created by the academy for a recurring kind of work ("Especialista en ..."). */
 export const SPECIALIST_PREFIX = "specialist:";
 
+/** One spelling for a topic everywhere: proposal key, specialist id, routing and curriculum. */
+export function topicSlug(topic: string): string {
+  return topic.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "general";
+}
+export function specialistIdFor(topic: string): string {
+  return `${SPECIALIST_PREFIX}${topicSlug(topic)}`;
+}
+export function isSpecialistId(id: string): boolean {
+  return id.startsWith(SPECIALIST_PREFIX);
+}
+/** "specialist:black-room" -> "black room". */
+export function specialistTopicLabel(id: string): string {
+  return id.slice(SPECIALIST_PREFIX.length).replace(/-/g, " ");
+}
+
 export type OrderStatus = "en_curso" | "bloqueada" | "hecha";
 export type CompanyOrder = {
   id: string;
@@ -353,9 +368,9 @@ export function tailoredModules(
   for (const [index, entry] of failures.entries()) {
     modules.push({ id: `puesto:${forAgentId}:historial-${index}`, title: "Historial del puesto", summary: entry.text.slice(0, 160) });
   }
-  const topic = input.topic?.toLowerCase();
+  const topic = input.topic ? topicSlug(input.topic) : undefined;
   const orders = state.orders
-    .filter((order) => order.assignees.some((assignee) => assignee.agentId === forAgentId) || (topic ? orderTopic(order.text) === topic : false))
+    .filter((order) => order.assignees.some((assignee) => assignee.agentId === forAgentId) || (topic ? topicSlug(orderTopic(order.text)) === topic : false))
     .slice(0, 5);
   for (const order of orders) {
     modules.push({
@@ -373,11 +388,17 @@ export function tailoredModules(
 /** The first routing keyword found in an order, used to group recurring kinds of work. */
 // Brands say WHO the work is for; the topic should say WHAT the work is ("video", "legal", ...).
 const BRAND_WORDS = new Set(["black room", "blackroom", "br", "kong"]);
+function containsWord(text: string, word: string): boolean {
+  const escaped = word.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1])${escaped}([^a-z0-9\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1]|$)`).test(text);
+}
+
 export function orderTopic(text: string): string {
-  const lower = ` ${text.toLowerCase()} `;
+  // Whole words only ("solicita" is not "cita", "producto" is not "pr").
+  const lower = text.toLowerCase();
   let brand: string | null = null;
   for (const route of ROUTES) {
-    const word = route.words.find((candidate) => lower.includes(candidate));
+    const word = route.words.find((candidate) => containsWord(lower, candidate));
     if (!word) continue;
     if (!BRAND_WORDS.has(word.trim())) return word.trim();
     brand = brand || word.trim();
@@ -474,15 +495,18 @@ export function createOrder(
     createdAt: iso,
     assignees: [
       ...assigneeIds,
-      // Specialists created by the academy take the orders of their topic.
-      ...Object.keys(state.careers).filter((id) => id.startsWith(SPECIALIST_PREFIX) && ` ${text.toLowerCase()} `.includes(id.slice(SPECIALIST_PREFIX.length))),
+      // Specialists created by the academy take the orders whose topic is exactly theirs.
+      ...Object.keys(state.careers).filter((id) => isSpecialistId(id) && id === specialistIdFor(orderTopic(text))),
     ].map((agentId) => {
       const status = input.statuses[agentId];
-      const working = status?.state === "working" || agentId.startsWith(SPECIALIST_PREFIX);
+      const specialist = isSpecialistId(agentId);
+      const working = status?.state === "working" || specialist;
       return {
         agentId,
         status: working ? "en_curso" : "bloqueada",
-        note: working
+        note: specialist
+          ? "Anotada para el especialista de este tema. Nadie la ejecuta solo: se cierra con evidencia de una ejecucion exitosa."
+          : working
           ? "Asignada a un agente activo. Queda anotada: los agentes no ejecutan ordenes solos; se cierra con evidencia de una ejecucion exitosa."
           : `Asignada, pero el agente no esta trabajando (${status?.label || "sin estado reciente"}). Hay que arreglarlo antes.`,
       };

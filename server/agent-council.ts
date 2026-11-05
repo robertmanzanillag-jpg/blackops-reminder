@@ -56,6 +56,10 @@ import {
   specialistNeeds,
   tailoredModules,
   SPECIALIST_PREFIX,
+  isSpecialistId,
+  specialistIdFor,
+  specialistTopicLabel,
+  topicSlug,
   type OrderEvidence,
   leaderboard,
   personalityFor,
@@ -199,7 +203,7 @@ function advanceCompanyCycle(
   for (const proposal of state.proposals) {
     if (proposal.kind !== "new_agent" || proposal.status !== "applied") continue;
     const specialist = proposal.key.match(/^new_agent:specialist-(.+)$/);
-    const forAgentId = specialist ? `${SPECIALIST_PREFIX}${specialist[1]}` : proposal.key.replace(/^new_agent:helper-/, "");
+    const forAgentId = specialist ? specialistIdFor(specialist[1]) : proposal.key.replace(/^new_agent:helper-/, "");
     company = enrollTrainee(company, { id: proposal.key, forAgentId, role: proposal.title.replace(/^Contratar /, ""), now });
   }
   // Skills from the lessons Robert approved about each agent.
@@ -215,7 +219,7 @@ function advanceCompanyCycle(
       ...tailoredModules(academyBase, trainee.forAgentId, {
         status: compact[trainee.forAgentId],
         lessons: state.lessons,
-        topic: trainee.forAgentId.startsWith(SPECIALIST_PREFIX) ? trainee.forAgentId.slice(SPECIALIST_PREFIX.length) : undefined,
+        topic: isSpecialistId(trainee.forAgentId) ? trainee.forAgentId.slice(SPECIALIST_PREFIX.length) : undefined,
       }),
       ...modules,
     ],
@@ -232,8 +236,13 @@ function deriveSpecialistProposals(state: CouncilState, now: number): CouncilPro
   const created: CouncilProposal[] = [];
   for (const need of specialistNeeds(state.company, now)) {
     if (open + created.length >= MAX_OPEN_SPECIALIST_PROPOSALS) break;
-    const key = `new_agent:specialist-${need.topic.replace(/[^a-z0-9]+/g, "-")}`;
-    if (state.proposals.some((proposal) => proposal.key === key) || state.company.careers[`${SPECIALIST_PREFIX}${need.topic}`]) continue;
+    const key = `new_agent:specialist-${topicSlug(need.topic)}`;
+    // Never twice: not while a proposal exists, not once the specialist exists, not while one is training.
+    if (
+      state.proposals.some((proposal) => proposal.key === key) ||
+      state.company.careers[specialistIdFor(need.topic)] ||
+      state.company.trainees.some((trainee) => trainee.forAgentId === specialistIdFor(need.topic))
+    ) continue;
     created.push({
       key,
       kind: "new_agent",
@@ -416,13 +425,17 @@ export function createAgentCouncil(deps: CouncilDeps) {
   // Overlapping triggers (scheduler + manual button) share one run instead of duplicating work.
   // force: the manual button (already rate limited) runs even if a round just happened.
   function runCycle(options: { force?: boolean } = {}): Promise<CouncilState> {
+    let force = Boolean(options.force);
     if (running && deps.now() - runningSince > CYCLE_WATCHDOG_MS) {
       deps.log(`agent council round stuck for more than ${CYCLE_WATCHDOG_MS / 60_000} min; starting a new one`);
       running = null;
+      // The stuck round may still finish: the new one is never forced, so it respects the
+      // "a round just happened" check and the two never both submit to the Trust Center.
+      force = false;
     }
     if (!running) {
       runningSince = deps.now();
-      const current: Promise<CouncilState> = runCycleOnce(Boolean(options.force)).finally(() => {
+      const current: Promise<CouncilState> = runCycleOnce(force).finally(() => {
         if (running === current) running = null;
       });
       running = current;
@@ -482,7 +495,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
       const statuses: Record<string, { state: AgentLiveStatus["state"]; label: string }> = fresh ? { ...state.lastStatuses } : {};
       if (fresh) statuses.mechanic = { state: "working", label: "Reviso a todos en el ultimo consejo" };
       const specialistNames = Object.fromEntries(
-        Object.keys(state.company.careers).filter((id) => id.startsWith(SPECIALIST_PREFIX)).map((id) => [id, `Especialista en ${id.slice(SPECIALIST_PREFIX.length)}`])
+        Object.keys(state.company.careers).filter(isSpecialistId).map((id) => [id, `Especialista en ${specialistTopicLabel(id)}`])
       );
       const result = createOrder(state.company, { text, now, statuses, available, names: { ...AGENT_NAMES, ...specialistNames } });
       return { ...state, company: result.state };

@@ -12,6 +12,9 @@ import {
   specialistNeeds,
   tailoredModules,
   SPECIALIST_PREFIX,
+  specialistIdFor,
+  specialistTopicLabel,
+  orderTopic,
   leaderboard,
   parseCompanyState,
   personalityFor,
@@ -229,4 +232,30 @@ test("recurring blocked work creates a specialist: proposal need, academy, new a
   const next = createOrder(company, { text: "Sube el video nuevo", now: NOW + 30 * MIN, statuses: {}, available: ["clippers"], names: roles });
   const assignee = next.order.assignees.find((item) => item.agentId === `${SPECIALIST_PREFIX}video`);
   assert.equal(assignee?.status, "en_curso");
+});
+
+test("specialists: topics with spaces round-trip (black room) and only exact topics are assigned", () => {
+  assert.equal(specialistIdFor("black room"), "specialist:black-room");
+  assert.equal(specialistTopicLabel("specialist:black-room"), "black room");
+  let company = emptyCompanyState();
+  for (let i = 0; i < 3; i++) company = createOrder(company, { text: `Flyer ${i} para black room`, now: NOW + i * MIN, statuses: {}, available: ["radio"], names: roles }).state;
+  const [need] = specialistNeeds(company, NOW + 5 * MIN);
+  assert.equal(need.topic, "black room");
+  company = enrollTrainee(company, { id: "new_agent:specialist-black-room", forAgentId: specialistIdFor(need.topic), role: "Especialista en black room", now: NOW + 6 * MIN });
+  const studied = tailoredModules(company, "specialist:black-room", { topic: "black-room" });
+  assert.equal(studied.filter((module) => module.id.startsWith("orden:")).length, 3, "it studies the orders it was hired for");
+  for (let i = 0; i < 6; i++) company = advanceAcademy(company, (trainee) => tailoredModules(company, trainee.forAgentId, { topic: "black-room" }), NOW + (7 + i) * MIN);
+  assert.ok(company.careers["specialist:black-room"]);
+  const next = createOrder(company, { text: "Otro flyer para Black Room", now: NOW + 20 * MIN, statuses: {}, available: ["radio"], names: roles });
+  assert.ok(next.order.assignees.some((assignee) => assignee.agentId === "specialist:black-room"));
+  assert.match(next.order.assignees.find((assignee) => assignee.agentId === "specialist:black-room")!.note, /especialista/);
+});
+
+test("specialists never take unrelated orders through a substring (pr / producto, cita / solicita)", () => {
+  let company = emptyCompanyState();
+  company = { ...company, careers: { "specialist:pr": { agentId: "specialist:pr", generation: 1, nickname: "Pi", points: 0, battery: 80, lastState: null, cyclesWorking: 0, cyclesTotal: 0, ordersDone: 0, firedCount: 0, hiredAt: new Date(NOW).toISOString(), memory: [] } } };
+  const order = createOrder(company, { text: "subir producto a la tienda", now: NOW, statuses: {}, available: ["dropshipping"], names: roles }).order;
+  assert.ok(!order.assignees.some((assignee) => assignee.agentId === "specialist:pr"));
+  assert.notEqual(orderTopic("solicita el contrato"), "cita");
+  assert.equal(orderTopic("revisa el PR de la app"), "app", "work words win; whole words only");
 });

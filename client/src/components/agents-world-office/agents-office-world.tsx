@@ -10,7 +10,7 @@ import {
   type BuildingAgent,
   type BuildingTeamAgent,
 } from "@/components/agents-building/agents-building";
-import { SPECIALIST_PREFIX, personalityFor, type AgentCareer, type CompanyOrder, type CompanyState, type LeaderboardRow, type Personality, type Trainee } from "@shared/agent-company";
+import { SPECIALIST_PREFIX, isSpecialistId, specialistTopicLabel, personalityFor, type AgentCareer, type CompanyOrder, type CompanyState, type LeaderboardRow, type Personality, type Trainee } from "@shared/agent-company";
 import { OFFICE_KONG_CITY_TASKS, scoreOfficeKongSnapshot } from "@shared/office-kong-supervisor";
 import type { OfficeKongAuditResult } from "../../../../server/office-kong";
 import type { OfficeKongCollaboration } from "../../../../server/office-kong-collaboration";
@@ -215,9 +215,9 @@ export function AgentsOfficeWorld({
 
   const trainees: Trainee[] = (company?.trainees || []).filter((trainee) => !trainee.graduatedAt);
   // Specialists the academy created for recurring work (approved by Robert in the Trust Center).
-  const specialists = Object.values(careers).filter((career) => career.agentId.startsWith(SPECIALIST_PREFIX));
+  const specialists = Object.values(careers).filter((career) => isSpecialistId(career.agentId));
   for (const career of specialists) {
-    const topic = career.agentId.slice(SPECIALIST_PREFIX.length);
+    const topic = specialistTopicLabel(career.agentId);
     panelAgents.set(career.agentId, {
       id: career.agentId,
       name: `Especialista en ${topic}`,
