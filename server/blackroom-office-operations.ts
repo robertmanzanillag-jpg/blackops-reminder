@@ -20,20 +20,31 @@ export function buildBlackRoomOfficeOperations(remote: BlackRoomRemoteControlSta
   const worker = object(remote.device?.worker);
   const generationApplied = online && Number.isSafeInteger(remote.device?.appliedGeneration)
     && remote.device!.appliedGeneration === remote.generation;
-  const recentEvents = (Array.isArray(worker.activity) ? worker.activity : []).map(object)
+  const events = (Array.isArray(worker.activity) ? worker.activity : []).map(object)
     .filter(event => typeof event.id === "string" && event.id.length > 0 && typeof event.createdAt === "string"
-      && ["info", "success"].includes(String(event.level))
-      && now.getTime() - Date.parse(event.createdAt) >= 0 && now.getTime() - Date.parse(event.createdAt) <= HEARTBEAT_MAX_AGE_MS)
-    .sort((a, b) => Date.parse(String(b.createdAt)) - Date.parse(String(a.createdAt)));
-  const progress = recentEvents[0];
+      && ["info", "success", "error"].includes(String(event.level))
+      && now.getTime() - Date.parse(event.createdAt) >= 0)
+    // At an equal timestamp an error wins; input ordering must not hide a failure.
+    .sort((a, b) => Date.parse(String(b.createdAt)) - Date.parse(String(a.createdAt))
+      || Number(b.level === "error") - Number(a.level === "error"));
+  const latest = events[0];
+  const workerFailed = Boolean(typeof remote.device?.lastError === "string" && remote.device.lastError.trim())
+    || Boolean(typeof worker.lastError === "string" && worker.lastError.trim())
+    || count(totals.retry) > 0 || latest?.level === "error";
+  // Only stages actually emitted after successful validation/editing/confirmation
+  // qualify as recent progress. Generic info/start events are not completion proof.
+  const successfulStages = new Set(["video", "audio", "edición", "tiktok", "facebook", "youtube", "completado"]);
+  const progress = latest?.level === "success" && successfulStages.has(String(latest.stage))
+    && now.getTime() - Date.parse(String(latest.createdAt)) <= HEARTBEAT_MAX_AGE_MS ? latest : undefined;
   // A PID or running flag alone is not evidence of advancing work. The event ID
   // lets the council deduplicate scoring instead of rewarding the same read twice.
-  const processing = online && remote.desiredEnabled && generationApplied
+  const processing = online && remote.desiredEnabled && generationApplied && !workerFailed
     && Boolean(progress) && (worker.running === true || count(totals.processing) > 0);
   const actions: BlackRoomOfficeAction[] = [];
   const action = (entry: Omit<BlackRoomOfficeAction, "executed">) => actions.push({ ...entry, executed: false });
   if (remote.desiredEnabled && !online) action({ id: "restore-worker", owner: "mechanic", severity: "critical", message: "El publicador no envía señales recientes. Revisar conexión y servicio existente; no iniciar otro publicador ni retirar protecciones." });
   if (remote.desiredEnabled && online && !generationApplied) action({ id: "apply-generation", owner: "blackroom-videos", severity: "warning", message: "La orden aún no está aplicada por el publicador. Conciliar la generación antes de enviar otra." });
+  if (remote.desiredEnabled && workerFailed) action({ id: "inspect-worker-error", owner: "mechanic", severity: "critical", message: "El publicador reporta un error o reintento pendiente. Revisar el fallo y conciliar recibos antes de repetir una publicación." });
   // Historical scheduler receipts do not prove a current calendar: cancelled or moved posts
   // can remain in the experiment ledger. Never claim 14-day coverage from aggregate totals.
   action({ id: "verify-calendar", owner: "blackroom-videos", severity: "warning", message: "Verificar en el calendario vigente 3–5 clips únicos por día y red; los totales históricos no prueban cobertura." });
@@ -69,7 +80,7 @@ export function buildBlackRoomOfficeOperations(remote: BlackRoomRemoteControlSta
   if (Object.values(learning).some(item => item.samples > item.exactAttributed)) action({ id: "reconcile-identities", owner: "marketing", severity: "warning", message: "Hay resultados sin vínculo exacto al clip. Conciliar identificadores oficiales; no adivinar por título, hora o DJ." });
   return {
     checkedAt: now.toISOString(), policy: BLACKROOM_OFFICE_POLICY,
-    state: !remote.desiredEnabled ? "paused" : !online || !generationApplied ? "blocked" : processing ? "working" : "waiting",
+    state: !remote.desiredEnabled ? "paused" : !online || !generationApplied || workerFailed ? "blocked" : processing ? "working" : "waiting",
     worker: { online, seenAt, generationApplied, processing, progressEventId: progress ? String(progress.id) : null, progressAt: progress ? String(progress.createdAt) : null },
     queue: { queued: count(totals.queued), processing: count(totals.processing), retry: count(totals.retry), scheduled: count(totals.scheduled), completed: count(totals.completed), authoritative: online },
     coverage: { status: "unverified", reason: "Requiere conciliación con el calendario vigente, no solo contadores o experimentos históricos." },

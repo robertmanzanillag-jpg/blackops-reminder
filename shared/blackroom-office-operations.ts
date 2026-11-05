@@ -12,7 +12,7 @@ export const BLACKROOM_OFFICE_POLICY = {
 
 export type BlackRoomOfficeNetwork = typeof BLACKROOM_OFFICE_POLICY.networks[number];
 export type BlackRoomOfficeAction = {
-  id: "restore-worker" | "verify-calendar" | "restore-metrics" | "reconcile-identities" | "review-cadence" | "apply-generation";
+  id: "restore-worker" | "verify-calendar" | "restore-metrics" | "reconcile-identities" | "review-cadence" | "apply-generation" | "inspect-worker-error";
   owner: "blackroom-videos" | "marketing" | "mechanic";
   severity: "warning" | "critical";
   message: string;

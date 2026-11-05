@@ -38,11 +38,47 @@ test("fresh advancing activity is identified for scoring deduplication, not infe
   const state = fixture();
   state.device!.worker = { running: true, pid: 123 };
   assert.equal(buildBlackRoomOfficeOperations(state, now).state, "waiting");
-  state.device!.worker.activity = [{ id: "render:42", createdAt: now.toISOString(), level: "info", stage: "render" }];
+  state.device!.worker.activity = [{ id: "render:42", createdAt: now.toISOString(), level: "success", stage: "edición" }];
   const result = buildBlackRoomOfficeOperations(state, now);
   assert.equal(result.state, "working");
   assert.equal(result.worker.progressEventId, "render:42");
   assert.equal(buildBlackRoomOfficeOperations(state, new Date(now.getTime() + 91_000)).worker.processing, false);
+});
+
+test("start-only info events and unrelated successes never imply productive progress", () => {
+  for (const event of [{ level: "info", stage: "edición" }, { level: "success", stage: "heartbeat" }]) {
+    const state = fixture();
+    state.device!.worker = { running: true, activity: [{ id: "start", createdAt: now.toISOString(), ...event }] };
+    assert.equal(buildBlackRoomOfficeOperations(state, now).state, "waiting");
+  }
+});
+
+test("a newer or tied error overrides earlier success", () => {
+  for (const errorAt of [now.toISOString(), "2026-11-05T16:59:59Z"]) {
+    const state = fixture();
+    state.device!.worker = { running: true, activity: [
+      { id: "success", createdAt: "2026-11-05T16:59:59Z", level: "success", stage: "edición" },
+      { id: "failure", createdAt: errorAt, level: "error", stage: "error" },
+    ] };
+    const result = buildBlackRoomOfficeOperations(state, now);
+    assert.equal(result.state, "blocked");
+    assert.equal(result.worker.processing, false);
+    assert.equal(result.worker.progressEventId, null);
+  }
+});
+
+test("unresolved device error, worker error or retry overrides a recent successful stage", () => {
+  for (const failure of ["device", "worker", "retry"]) {
+    const state = fixture();
+    state.device!.worker = { running: true, activity: [{ id: "edited", createdAt: now.toISOString(), level: "success", stage: "edición" }] };
+    if (failure === "device") state.device!.lastError = "pending failure";
+    if (failure === "worker") state.device!.worker.lastError = "pending failure";
+    if (failure === "retry") state.device!.queue.totals = { retry: 1 };
+    const result = buildBlackRoomOfficeOperations(state, now);
+    assert.equal(result.state, "blocked");
+    assert.equal(result.worker.processing, false);
+    assert.ok(result.actions.some(a => a.id === "inspect-worker-error"));
+  }
 });
 
 test("pause and unapplied generations remain authoritative", () => {
