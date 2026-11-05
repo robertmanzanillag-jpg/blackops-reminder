@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { scoreOfficeKongSnapshot, type OfficeKongSupervisorSnapshot } from "../shared/office-kong-supervisor";
+import { OFFICE_KONG_SUPERVISED_CATEGORIES, scoreOfficeKongSnapshot, type OfficeKongSupervisorSnapshot } from "../shared/office-kong-supervisor";
 
 const NOW = Date.parse("2026-11-05T06:00:00.000Z");
 const MINUTE = 60_000;
@@ -39,7 +39,7 @@ test("one authenticated snapshot distinguishes completion, idle, live work and f
 
 test("unknown, intentionally disabled and ambiguous attention stay unscored", () => {
   const evidence = snapshot(city("madrid", "ES", [
-    job("clubs", { state: "attention", recordedFailure: false }),
+    job("clubs", { state: "attention", recordedFailure: false, lastSuccessAt: at(-5) }),
     job("vip", { state: "attention", recordedFailure: true, lastRunAt: null }),
     job("events", { state: "unknown", nextRunAt: at(-40) }),
     job("sports", { state: "disabled" }),
@@ -50,6 +50,30 @@ test("unknown, intentionally disabled and ambiguous attention stay unscored", ()
   assert.equal(result.cities[0].totalCategories, 7);
   assert.equal(result.cities[0].categories.find(value => value.category === "sports")?.state, "disabled");
   assert.ok(result.cities[0].categories.every(value => value.points === null && value.deduction === 0));
+});
+
+test("completed coverage warnings do not hide stale, missed, failed or unverified executions", () => {
+  const warnings = { state: "attention" as const, recordedFailure: false };
+  const evidence = snapshot(city("buenos-aires", "AR", [
+    job("clubs", warnings),
+    job("vip", { ...warnings, recordedFailure: true }),
+    job("restaurants", { ...warnings, lastStartedAt: at(-151), lastRunAt: at(-150), lastSuccessAt: at(-150) }),
+    job("events", { ...warnings, nextRunAt: at(-16), lastStartedAt: at(-60), lastRunAt: at(-59), lastSuccessAt: at(-59) }),
+    job("sports", { ...warnings, lastSuccessAt: null }),
+    job("media", { ...warnings, lastStartedAt: at(-1) }),
+  ]));
+  assert.deepEqual(scoreOfficeKongSnapshot(evidence, NOW).cities[0].categories.map(({ state, points }) => [state, points]), [
+    ["completed_with_warnings", 95], ["failed", 75], ["stale", 80], ["missed", 85], ["unverified", null], ["unverified", null], ["unverified", null],
+  ]);
+});
+
+test("a full registry with completed warnings and one recorded failure keeps those findings distinct", () => {
+  const cities = Array.from({ length: 25 }, (_, index) => city(`city-${index}`, "US", OFFICE_KONG_SUPERVISED_CATEGORIES.map(category =>
+    job(category, { state: "attention", recordedFailure: index === 0 && category === "vip" }))));
+  const result = scoreOfficeKongSnapshot(snapshot(...cities), NOW);
+  const categories = result.cities.flatMap(value => value.categories);
+  assert.equal(categories.filter(value => value.state === "completed_with_warnings").length, 174);
+  assert.equal(categories.filter(value => value.state === "failed").length, 1);
 });
 
 test("expired or inconsistent audit evidence never generates a score or penalty", () => {

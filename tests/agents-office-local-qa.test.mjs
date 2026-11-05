@@ -130,6 +130,10 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
      return bounds.width>0&&bounds.height>0&&bounds.left>=host.left&&bounds.right<=host.right&&bounds.top>=host.top&&bounds.bottom<=host.bottom;
     });
    });
+   const mapHost=page.getByTestId('world-canvas-host');
+   assert.equal(await mapHost.getAttribute('data-city-desk-count'),'175');
+   assert.equal(await mapHost.getAttribute('data-city-running-desk-count'),'0');
+   await page.getByTestId('world-ceo-orb').filter({hasText:'CEO · KONG'}).waitFor();
    assert.equal(await page.locator('[data-testid^="world-avatar-kong-city:"]').count(),0);
    await page.getByTestId('world-dept-kong-city:fixture-city-25').click();
   } else {

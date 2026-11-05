@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { buildOfficeCityRooms, officeCityCountries, officeCityEvidenceExpiresAt, parseOfficeCityDirectory, selectLatestOfficeKongAudit, OFFICE_CITY_CATEGORIES } from "../client/src/lib/office-city-agents";
-import { officeCityMapPosition } from "../client/src/components/agents-world-office/office-scene";
+import { officeCityDeskPosition, officeCityMapPosition } from "../client/src/components/agents-world-office/office-scene";
 
 const now = Date.parse("2026-11-05T14:00:00Z");
 const stamp = (delta: number) => new Date(now + delta).toISOString();
@@ -18,12 +18,18 @@ test("all 25 registered cities have separate map positions and seven distinct ro
   const positions = rooms.map((_, index) => officeCityMapPosition(index, rooms.length));
   assert.equal(new Set(positions.map(({ x, z }) => `${x},${z}`)).size, 25);
   assert.equal(new Set(positions.map(({ x }) => x)).size, 5);
-  assert.equal(new Set(positions.map(({ z }) => z)).size, 5);
+  assert.equal(new Set(positions.map(({ z }) => z)).size, 6);
+  assert.ok(positions.every(({ x, z }) => x !== 0 || z !== 0));
   for (const room of rooms) assert.deepEqual(room.agents.map(agent => agent.category), OFFICE_CITY_CATEGORIES.map(category => category.id));
+  const desks = rooms.flatMap((room, cityIndex) => room.agents.map((_, deskIndex) => {
+    const { x, z } = officeCityDeskPosition(deskIndex);
+    return `${positions[cityIndex].x + x},${positions[cityIndex].z + z}`;
+  }));
+  assert.equal(new Set(desks).size, 175);
 });
 
 test("fresh evidence animates only running jobs; completed jobs are distinct and missing jobs stay gray", () => {
-  const rooms = buildOfficeCityRooms([miami], [run([{ ...miami, categories: [job("clubs", "running"), job("vip"), job("restaurants", "healthy", { evidence: "missing" }), job("events", "attention", { issues: ["Falta la fuente"] })] }])], now);
+  const rooms = buildOfficeCityRooms([miami], [run([{ ...miami, categories: [job("clubs", "running"), job("vip"), job("restaurants", "healthy", { evidence: "missing" }), job("events", "attention", { recordedFailure: true, issues: ["Falta la fuente"] }), job("sports", "attention", { recordedFailure: false, intervalMs: 600_000, issues: ["La fuente limitó las consultas (HTTP 429)."] })] }])], now);
   const jobs = rooms[0].agents;
   assert.deepEqual(jobs.filter(agent => agent.status.state === "working").map(agent => agent.category), ["clubs"]);
   assert.equal(jobs[0].lastStartedAt, stamp(-100000));
@@ -35,7 +41,19 @@ test("fresh evidence animates only running jobs; completed jobs are distinct and
   assert.equal(jobs[2].hasDurableEvidence, false);
   assert.equal(jobs[3].status.state, "error");
   assert.equal(jobs[3].blocker, "Falta la fuente");
-  assert.equal(jobs.filter(agent => agent.hasDurableEvidence).length, 3);
+  assert.equal(jobs[4].status.label, "Completado con avisos");
+  assert.equal(jobs[4].color, "#fbbf24");
+  assert.equal(jobs.filter(agent => agent.hasDurableEvidence).length, 4);
+});
+
+test("measured city event load ranks higher demand first and keeps zero distinct from unknown", () => {
+  const third = { ...ba, id: "unknown", name: "Unknown" };
+  const snapshot = run([
+    { ...miami, categories: [], eventLoad: { upcomingEvents: 0, windowDays: 30, checkedAt: stamp(-1000) } },
+    { ...ba, categories: [], eventLoad: { upcomingEvents: 8, windowDays: 30, checkedAt: stamp(-300_000) } },
+    { ...third, categories: [], eventLoad: { upcomingEvents: 99, windowDays: 30, checkedAt: stamp(-600_001) } },
+  ]);
+  assert.deepEqual(buildOfficeCityRooms([third, miami, ba], [snapshot], now).map(room => [room.name, room.upcomingEvents]), [[ba.name, 8], [miami.name, 0], [third.name, null]]);
 });
 
 test("stale, future, inaccessible and disabled snapshots never show active work", () => {

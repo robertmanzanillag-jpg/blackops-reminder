@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { OFFICE_KONG_SUPERVISED_CATEGORIES } from "../shared/office-kong-supervisor";
+import { OFFICE_KONG_SUPERVISED_CATEGORIES, officeKongEventLoadSchema } from "../shared/office-kong-supervisor";
 
 // This is the existing authenticated KONG read contract, not a dispatch route.
 const OPERATIONS_URL = "https://kongnightlife.com/api/admin/ceo/operations";
@@ -90,6 +90,7 @@ const citySchema = z.object({
   currency: z.string().regex(/^[A-Z]{3}$/),
   status: z.enum(["healthy", "needs_attention"]),
   jobs: z.array(jobSchema).max(OFFICE_KONG_CITY_CATEGORIES.length),
+  eventLoad: officeKongEventLoadSchema.optional().catch(undefined),
 });
 const citiesSchema = z.object({
   enabled: z.boolean(),
@@ -100,7 +101,7 @@ const citiesSchema = z.object({
   countries: z.array(z.string().regex(/^[A-Z]{2}$/)).min(1).max(200),
   needsAttention: z.array(z.string().min(1).max(200)).max(200),
 });
-const directorySchema = z.array(citySchema.omit({ status: true, jobs: true })).min(1).max(200);
+const directorySchema = z.array(citySchema.omit({ status: true, jobs: true, eventLoad: true })).min(1).max(200);
 export type OfficeKongCityDirectoryEntry = z.infer<typeof directorySchema>[number];
 
 export type OfficeKongAgent = z.infer<typeof agentSchema>;
@@ -119,6 +120,7 @@ export interface OfficeKongCityCategory {
   leaseUntil?: string | null;
 }
 export interface OfficeKongCity {
+  eventLoad?: z.infer<typeof officeKongEventLoadSchema>;
   id: string;
   name: string;
   countryCode: string;
@@ -234,6 +236,7 @@ function cityEvidence(snapshot: z.infer<typeof citiesSchema>, at: Date): OfficeK
         leaseUntil: state === "running" ? job.lease_until : null };
     });
     return { id: city.id, name: city.name, countryCode: city.countryCode, timeZone: city.timeZone, currency: city.currency,
+      ...(city.eventLoad ? { eventLoad: city.eventLoad } : {}),
       status: city.status === "healthy" && categories.every(category => category.state === "healthy") ? "healthy" : "needs_attention", categories };
   });
 }
