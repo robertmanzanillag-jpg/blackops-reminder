@@ -11,6 +11,9 @@ import {
   type BuildingTeamAgent,
 } from "@/components/agents-building/agents-building";
 import type { AgentCareer, CompanyOrder, CompanyState, LeaderboardRow, Personality, Trainee } from "@shared/agent-company";
+import { OFFICE_KONG_CITY_TASKS, scoreOfficeKongSnapshot } from "@shared/office-kong-supervisor";
+import type { OfficeKongAuditResult } from "../../../../server/office-kong";
+import type { OfficeKongCollaboration } from "../../../../server/office-kong-collaboration";
 import { createOfficeScene, type SceneData, type SceneDepartment } from "./office-scene";
 import { buildOfficeCityRoomsFromSnapshot, officeCityCountries, officeCitySnapshotExpiresAt, parseOfficeCityDirectory, type OfficeCityAgent } from "@/lib/office-city-agents";
 
@@ -49,6 +52,7 @@ const SCREEN_KIND: Record<string, SceneDepartment["agents"][number]["screen"]> =
 const CITY_COUNTRY_COLORS: Record<string, string> = {
   AR: "#fbbf24", US: "#38bdf8", GB: "#c084fc", ES: "#f472b6", FR: "#2dd4bf", AE: "#a3e635",
 };
+const cityRefreshInterval = ({ state }: { state: { error: Error | null } }) => /^(401|403):/.test(state.error?.message ?? "") ? false as const : 60_000;
 
 const SOURCE_NAME: Record<string, string> = {
   assistant: "Google Calendar", ceo: "Telegram + IA", control: "Salud de apps", revenue: "Stripe", dropshipping: "Shopify (pre-cuentas)",
@@ -100,19 +104,21 @@ export function AgentsOfficeWorld({
   const [failed, setFailed] = useState<string | null>(null);
   const [focusedDepartment, setFocusedDepartment] = useState<string | null>(null);
   const [panelAgentId, setPanelAgentId] = useState<string | null>(null);
-  const [overlay, setOverlay] = useState<"none" | "ranking" | "ceo">("none");
+  const [overlay, setOverlay] = useState<"none" | "ranking" | "ceo" | "city-director">("none");
+  const [directorCityId, setDirectorCityId] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [orderText, setOrderText] = useState("");
   const [officeWing, setOfficeWing] = useState<"main" | "kong">("main");
   const [cityCountry, setCityCountry] = useState("");
   const [cityControlsOpen, setCityControlsOpen] = useState(false);
+  const [mainPanelMinimized, setMainPanelMinimized] = useState(false);
   const [cityOverviewOpen, setCityOverviewOpen] = useState(false);
   const [cityDetailsOpen, setCityDetailsOpen] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
   useEffect(() => { if (failed && officeWing === "kong") setCityOverviewOpen(true); }, [failed, officeWing]);
-  const cityDirectory = useQuery<unknown>({ queryKey: ["/api/agents-office/cities"], enabled: officeWing === "kong", staleTime: 60_000, refetchInterval: 60_000, retry: false });
-  const citySnapshot = useQuery<{ evidence: unknown }>({ queryKey: ["/api/agents-office/kong-snapshot"], enabled: officeWing === "kong", staleTime: 45_000, refetchInterval: 60_000, retry: false });
+  const cityDirectory = useQuery<unknown>({ queryKey: ["/api/agents-office/cities"], staleTime: 60_000, refetchInterval: cityRefreshInterval, retry: false });
+  const citySnapshot = useQuery<OfficeKongAuditResult & { collaboration?: OfficeKongCollaboration }>({ queryKey: ["/api/agents-office/kong-snapshot"], staleTime: 45_000, refetchInterval: cityRefreshInterval, retry: false });
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 15_000); return () => window.clearInterval(timer); }, []);
   const cityEvidence = cityDirectory.isError || citySnapshot.isError ? undefined : citySnapshot.data?.evidence;
   const evidenceExpiresAt = useMemo(() => officeCitySnapshotExpiresAt(cityEvidence, clock), [cityEvidence, clock]);
@@ -133,11 +139,16 @@ export function AgentsOfficeWorld({
   const activeCityAgents = cityRooms.flatMap(room => room.agents.filter(agent => agent.status.state === "working"));
   const cityRunning = activeCityAgents.length;
   const cityRegistered = cityRooms.reduce((count, room) => count + room.agents.filter(agent => agent.hasDurableEvidence).length, 0);
+  const directorCity = cityRooms.find(room => room.city.id === directorCityId) ?? cityRooms[0];
+  const citySupervision = overlay === "city-director" && cityEvidence ? scoreOfficeKongSnapshot(cityEvidence, clock) : undefined;
+  const directorScore = citySupervision?.cities.find(city => city.id === directorCity?.city.id);
+  const reassignmentProposals = citySupervision?.verified ? citySnapshot.data?.collaboration?.exchanges.filter(exchange => exchange.proposal.action === "review_reassignment") ?? [] : [];
   const changeWing = (wing: "main" | "kong") => {
-    setOfficeWing(wing); setFocusedDepartment(null); setPanelAgentId(null); setOverlay("none");
+    const department = wing === "kong" ? "kong" : null;
+    setOfficeWing(wing); setFocusedDepartment(department); setPanelAgentId(null); setOverlay("none");
     setCityControlsOpen(false); setCityDetailsOpen(false); setCityCountry("");
     setCityOverviewOpen(Boolean(failed));
-    sceneRef.current?.focusDepartment(null);
+    sceneRef.current?.focusDepartment(department);
   };
   const focusRoom = (id: string | null) => {
     setFocusedDepartment(id); setPanelAgentId(null); sceneRef.current?.focusDepartment(id);
@@ -183,13 +194,11 @@ export function AgentsOfficeWorld({
     ...DEPARTMENTS,
     ...(trainees.length ? [{ id: "academia", name: "Academia", color: "#60a5fa", agentIds: trainees.map((trainee) => `trainee:${trainee.id}`) }] : []),
   ];
-  const departments = officeWing === "kong"
-    ? filteredCityRooms.map(room => ({
+  const departments = [...mainDepartments, ...filteredCityRooms.map(room => ({
       id: room.id, name: room.name,
       color: CITY_COUNTRY_COLORS[room.city.countryCode] ?? "#a78bfa",
       agentIds: room.agents.map(agent => agent.id),
-    }))
-    : mainDepartments;
+    }))];
   // City jobs never inherit council careers, lessons or optimistic live probes.
   for (const room of filteredCityRooms) for (const agent of room.agents) panelAgents.set(agent.id, {
     id: agent.id, name: agent.name, role: agent.role, description: `${agent.role} de ${room.city.name} · ${room.city.countryCode} · ${room.city.timeZone} · ${room.city.currency}`,
@@ -207,8 +216,9 @@ export function AgentsOfficeWorld({
   }
 
   const sceneData: SceneData = {
-    cityLayout: officeWing === "kong" ? selectedCity ? "detail" : "overview" : undefined,
-    departments: departments.filter(department => !selectedCity || officeWing !== "kong" || department.id === selectedCity.id).map((department) => ({
+    cityAnnex: true,
+    cityAnnexFocus: selectedCity?.id,
+    departments: departments.map((department) => ({
       id: department.id,
       name: department.name,
       color: department.color,
@@ -252,15 +262,21 @@ export function AgentsOfficeWorld({
         try {
           sceneRef.current = createOfficeScene(THREE, host, labels, {
             onFocusDepartment: (id) => {
-              if (id === "kong") { changeWing("kong"); return; }
               setFocusedDepartment(id);
+              if (id === "kong") { setOfficeWing("kong"); setCityDetailsOpen(true); }
               if (id?.startsWith("kong-city:")) {
+                setOfficeWing("kong");
                 setPanelAgentId(null);
                 setCityDetailsOpen(true);
                 setCityOverviewOpen(false);
+              } else if (id && id !== "kong") {
+                setOfficeWing("main");
+                setOverlay(value => value === "city-director" ? "none" : value);
+                setPanelAgentId(null);
               }
             },
             onSelectAgent: (id) => { setPanelAgentId(id); if (id.startsWith("kong-city:")) setCityDetailsOpen(true); },
+            onOpenCityDirector: () => { setOfficeWing("kong"); setOverlay(value => value === "city-director" ? "none" : "city-director"); },
           }, { reducedMotion });
           sceneRef.current.update(JSON.parse(latestSceneKey.current));
         } catch (error) {
@@ -361,11 +377,13 @@ export function AgentsOfficeWorld({
       <div ref={hostRef} className="absolute inset-0" data-testid="world-canvas-host" />
       <div ref={labelsRef} className="pointer-events-none absolute inset-0 overflow-hidden" />
 
-      <div className={cn("pointer-events-none absolute left-3 z-10 rounded-2xl border border-white/10 bg-[#04060b]/90 shadow-2xl backdrop-blur", officeWing === "kong" ? "top-28 w-[min(324px,calc(100vw-1.5rem))] p-2.5 sm:top-20" : "bottom-3 w-[min(365px,calc(100vw-1.5rem))] p-2.5")}>
+      <div className={cn("pointer-events-none absolute left-3 z-10 rounded-2xl border border-white/10 bg-[#04060b]/90 shadow-2xl backdrop-blur", officeWing === "kong" ? "top-28 w-[min(324px,calc(100vw-1.5rem))] p-2.5 sm:top-20" : cn("bottom-3 p-2.5", !mainPanelMinimized && "w-[min(365px,calc(100vw-1.5rem))]"))}>
         <div className="flex items-center justify-between gap-2">
         <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-cyan-100/80">{officeWing === "kong" ? "KONG · agentes por ciudad" : "BlackOps · la empresa"}</p>
           {officeWing === "kong" && <button type="button" aria-expanded={cityControlsOpen} aria-controls="world-city-controls-content" onClick={() => setCityControlsOpen(open => !open)} className="pointer-events-auto shrink-0 rounded-full border border-white/20 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/10" data-testid="world-city-controls-toggle">{cityControlsOpen ? "Minimizar" : "Controles"}</button>}
+          {officeWing === "main" && <button type="button" aria-expanded={!mainPanelMinimized} aria-controls="world-office-panel-content" onClick={() => setMainPanelMinimized(value => !value)} className="pointer-events-auto shrink-0 rounded-full border border-white/20 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/10" data-testid="world-main-panel-toggle">{mainPanelMinimized ? "Abrir" : "Minimizar"}</button>}
         </div>
+        <div id="world-office-panel-content" hidden={officeWing === "main" && mainPanelMinimized}>
         <p className={cn("mt-1 font-black text-white", officeWing === "kong" ? "text-sm" : "text-lg sm:text-2xl")} data-testid="world-working-count">{officeWing === "kong" ? `${cityRooms.length * 7} puestos · ${cityRunning} en ejecución verificada` : `${workingCount} de ${companyIds.length} con señales operativas`}</p>
         {officeWing === "kong" && <p className="mt-1 text-[11px] text-zinc-300" data-testid="world-city-country-count">{cityCountries.length} países · {cityRooms.length} ciudades · colores por país</p>}
         {officeWing === "kong" && activeCityAgents.length > 0 && <ul aria-label="Trabajos en curso verificados" className="mt-2 space-y-1" data-testid="world-city-active-work">
@@ -384,9 +402,12 @@ export function AgentsOfficeWorld({
         </p>}
         {officeWing === "main" && company?.events?.[0] && <p className="mt-1 truncate text-[11px] text-violet-200" data-testid="world-last-event">Ultimo: {company.events[0].text}</p>}
         <div className={cn("pointer-events-auto flex flex-wrap gap-2", officeWing === "kong" ? "mt-2" : "mt-3")}>
-          <button type="button" onClick={() => changeWing(officeWing === "kong" ? "main" : "kong")} className={cn("rounded-full border-2 border-violet-200 bg-violet-500 font-bold text-white hover:bg-violet-400", officeWing === "kong" ? "px-3 py-1 text-[11px]" : "px-4 py-2 text-sm")} data-testid="world-kong-wing">{officeWing === "kong" ? "Volver a oficina principal" : "Ver oficina KONG"}</button>
+          <button type="button" onClick={() => changeWing(officeWing === "kong" ? "main" : "kong")} className={cn("rounded-full border-2 border-violet-200 bg-violet-500 font-bold text-white hover:bg-violet-400", officeWing === "kong" ? "px-3 py-1 text-[11px]" : "px-4 py-2 text-sm")} data-testid="world-kong-wing">{officeWing === "kong" ? "Ver controles generales" : "Ver equipo KONG"}</button>
           {officeWing === "kong" ? (
-            <button type="button" aria-expanded={cityOverviewOpen} aria-controls="world-city-overview" onClick={() => setCityOverviewOpen(open => !open)} className="rounded-full border border-white/15 bg-black/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10" data-testid="world-overview">Todas las ciudades</button>
+            <>
+              <button type="button" aria-expanded={cityOverviewOpen} aria-controls="world-city-overview" onClick={() => setCityOverviewOpen(open => !open)} className="rounded-full border border-white/15 bg-black/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10" data-testid="world-overview">Todas las ciudades</button>
+              <button type="button" aria-expanded={overlay === "city-director"} onClick={() => { setDirectorCityId(selectedCity?.city.id ?? ""); setOverlay(overlay === "city-director" ? "none" : "city-director"); }} className="rounded-full border border-amber-200/40 bg-amber-400/15 px-3 py-1.5 text-xs font-semibold text-amber-100" data-testid="world-city-director-toggle">Director de ciudades</button>
+            </>
           ) : (
             <button type="button" onClick={() => focusRoom(null)} className="rounded-full border border-white/15 bg-black/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10" data-testid="world-overview">Vista general</button>
           )}
@@ -419,7 +440,7 @@ export function AgentsOfficeWorld({
           </div>
         </div>}
         {(officeWing === "main" || cityControlsOpen) && <nav className="pointer-events-auto mt-2 flex max-w-full gap-1.5 overflow-x-auto pb-1 [color-scheme:dark] [scrollbar-color:#404b63_#080c14] [scrollbar-width:thin]" aria-label="Departamentos" data-testid="world-deptnav">
-          {departments.map((department) => (
+          {(officeWing === "main" ? mainDepartments : departments).map((department) => (
             <button
               key={department.id}
               type="button"
@@ -436,6 +457,7 @@ export function AgentsOfficeWorld({
           ))}
         </nav>}
         {message && <p className="mt-2 text-xs text-violet-100" data-testid="world-message">{message}</p>}
+        </div>
       </div>
 
       {officeWing === "kong" && cityOverviewOpen && (
@@ -468,6 +490,30 @@ export function AgentsOfficeWorld({
         </section>
       )}
 
+      {officeWing === "kong" && overlay === "city-director" && <section aria-label="Director de ciudades de KONG" data-testid="world-city-director-panel" className="absolute bottom-3 right-3 z-30 max-h-[54%] w-[min(410px,calc(100vw-1.5rem))] space-y-2 overflow-y-auto rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-3 text-xs text-white shadow-2xl [color-scheme:dark]">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-bold text-amber-100">Director de ciudades · KONG</h2>
+          <button type="button" onClick={() => setOverlay("none")} className="rounded-full border border-white/20 px-2 py-1">Cerrar</button>
+        </div>
+        <p className="text-slate-300">El coordinador de KONG asigna los turnos de los siete puestos. El director calcula los puntos con el resultado registrado y propone relevos para revisión cuando hay intentos repetidos sin éxito.</p>
+        <label className="block" htmlFor="world-director-city">Equipo de ciudad</label>
+        <select id="world-director-city" className="w-full rounded border border-white/20 bg-[#120d04] px-2 py-1" value={directorCity?.city.id ?? ""} disabled={!directorCity} onChange={event => setDirectorCityId(event.target.value)}>
+          {cityRooms.map(room => <option key={room.id} value={room.city.id}>{room.name}</option>)}
+        </select>
+        {!citySupervision?.verified && <p className="text-amber-200">Sin evidencia vigente para asignar puntos o proponer relevos.</p>}
+        {directorScore?.points != null && <p className="font-semibold">{directorScore.scoredCategories === directorScore.totalCategories ? "Puntos del equipo" : "Puntaje parcial"}: {directorScore.points}/100 · {directorScore.scoredCategories}/{directorScore.totalCategories} puestos verificados</p>}
+        <ul className="space-y-1">{directorCity?.agents.map(agent => {
+          const grade = directorScore?.categories.find(category => category.category === agent.category);
+          return <li key={agent.id} className="border-t border-white/10 pt-1">
+            <strong>{agent.role}</strong> · {grade?.points == null ? "Sin puntuación" : `${grade.points}/100`}
+            <p>{OFFICE_KONG_CITY_TASKS[agent.category]}</p>
+            <p className="text-slate-400">{agent.status.label}{agent.nextWorkAt ? ` · Próximo turno: ${formatCityTime(agent.nextWorkAt)}` : ""}</p>
+          </li>;
+        })}</ul>
+        <h3 className="font-semibold text-amber-100">Relevos propuestos · {reassignmentProposals.length}</h3>
+        {reassignmentProposals.map(item => <p key={item.id} className="text-amber-200">{cityRooms.find(room => room.city.id === item.cityId)?.name ?? item.cityId} · {item.category} · {item.proposal.text}</p>)}
+        <a href="https://kongnightlife.com/admin/ceo" className="inline-block text-amber-100 underline">Abrir la revisión del CEO en KONG</a>
+      </section>}
       {overlay === "ranking" && (
         <section className="absolute bottom-3 right-3 z-30 max-h-[55%] w-[min(380px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-emerald-200/20 bg-[#06100d]/95 p-4 text-white shadow-2xl [color-scheme:dark]" data-testid="world-ranking-panel">
           <div className="flex items-center justify-between">
@@ -536,19 +582,19 @@ export function AgentsOfficeWorld({
       )}
 
       {focused && (
-        <aside className={cn("absolute bottom-3 right-3 z-20 flex flex-col rounded-2xl border border-white/10 bg-[#070b14]/95 text-white shadow-2xl backdrop-blur", officeWing === "kong" ? cn("max-h-[min(38vh,350px)] overflow-hidden p-2.5", cityDetailsOpen ? "w-[min(320px,calc(100vw-1.5rem))]" : "w-fit max-w-[min(320px,calc(100vw-1.5rem))]") : "top-[42%] w-[min(390px,calc(100vw-1.5rem))] overflow-y-auto p-4 sm:top-20")} data-testid="world-panel">
+        <aside className={cn("absolute bottom-3 right-3 z-20 flex flex-col rounded-2xl border border-white/10 bg-[#070b14]/95 text-white shadow-2xl backdrop-blur", selectedCity ? cn("max-h-[min(38vh,350px)] overflow-hidden p-2.5", cityDetailsOpen ? "w-[min(320px,calc(100vw-1.5rem))]" : "w-fit max-w-[min(320px,calc(100vw-1.5rem))]") : "top-[42%] w-[min(390px,calc(100vw-1.5rem))] overflow-y-auto p-4 sm:top-20")} data-testid="world-panel">
           <div className="flex shrink-0 items-start justify-between gap-2">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.24em]" style={{ color: focused.color }}>{focused.name}</p>
-              <p className="mt-0.5 text-xs text-zinc-400">{focusedAgents.filter((agent) => agent.status.state === "working").length} de {focusedAgents.length} {officeWing === "kong" ? "en ejecución según la auditoría" : "con señales operativas"}</p>
+              <p className="mt-0.5 text-xs text-zinc-400">{focusedAgents.filter((agent) => agent.status.state === "working").length} de {focusedAgents.length} {selectedCity ? "en ejecución según la auditoría" : "con señales operativas"}</p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
-              {officeWing === "kong" && <button type="button" aria-expanded={cityDetailsOpen} aria-controls="world-city-details-content" onClick={() => setCityDetailsOpen(open => !open)} className="rounded-full border border-white/20 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/10" data-testid="world-city-details-toggle">{cityDetailsOpen ? "Minimizar" : "Ver detalles"}</button>}
+              {selectedCity && <button type="button" aria-expanded={cityDetailsOpen} aria-controls="world-city-details-content" onClick={() => setCityDetailsOpen(open => !open)} className="rounded-full border border-white/20 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/10" data-testid="world-city-details-toggle">{cityDetailsOpen ? "Minimizar" : "Ver detalles"}</button>}
               <button type="button" onClick={() => focusRoom(null)} className="rounded-full border border-white/10 px-2 py-0.5 text-xs text-zinc-300 hover:bg-white/10" aria-label="Cerrar departamento">✕</button>
             </div>
           </div>
 
-          <div id={officeWing === "kong" ? "world-city-details-content" : undefined} hidden={officeWing === "kong" && !cityDetailsOpen} className={officeWing === "kong" && cityDetailsOpen ? "flex min-h-0 flex-col overflow-y-auto pr-1" : undefined}>
+          <div id={selectedCity ? "world-city-details-content" : undefined} hidden={Boolean(selectedCity) && !cityDetailsOpen} className={selectedCity && cityDetailsOpen ? "flex min-h-0 flex-col overflow-y-auto pr-1" : undefined}>
 
           {officeWing === "main" && sources.length > 0 && (
             <section className="mt-4">
@@ -567,9 +613,9 @@ export function AgentsOfficeWorld({
             </section>
           )}
 
-          <section className={officeWing === "kong" ? "mt-2" : "mt-4"}>
+          <section className={selectedCity ? "mt-2" : "mt-4"}>
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">{focused.id === "academia" ? "Alumnos" : "Agentes en paralelo"}</p>
-            <div className={officeWing === "kong" ? "mt-1 grid grid-cols-2 gap-1" : "mt-2 space-y-1.5"}>
+            <div className={selectedCity ? "mt-1 grid grid-cols-2 gap-1" : "mt-2 space-y-1.5"}>
               {focusedAgents.map((agent) => {
                 const career = agent.cityAgent ? undefined : careers[agent.id];
                 return (

@@ -60,7 +60,11 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   app.get('/api/agents-office/cities',(_req,res)=>res.json(Array.from({length:25},(_,index)=>({
    id:'fixture-city-'+(index+1),name:'Ciudad de prueba '+(index+1),countryCode:'US',timeZone:'America/New_York',currency:'USD',
   }))));
-  app.get('/api/agents-office/kong-snapshot',(_req,res)=>res.status(503).json({error:'Isolated fixture without KONG activity access.'}));
+  let kongUnavailable=true;
+  app.get('/api/agents-office/kong-snapshot',(_req,res)=>{
+   if(kongUnavailable)return res.status(503).json({error:'Isolated fixture without KONG activity access.'});
+   res.json({evidence:{generatedAt:new Date().toISOString(),cityAgentsEnabled:true,cities:[]}});
+  });
   app.get('/api/agent-council/state',(_req,res)=>res.json({enabled:false,cycles:0,debates:[],proposals:[],overrides:{},scout:{lastRunAt:null,latest:[],error:null}}));
   app.get('/api/app-qa-agent/status',async(req,res)=>res.json(await runtime.runAppQaScan(req.fixtureUserId,false,false,false)));
   app.use('/api',(req,res)=>req.method==='GET'?res.json([]):res.status(403).json({error:'Mutation outside local QA scope'}));
@@ -112,6 +116,11 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   await writeFile(path.join(evidenceDir,'affected-route-auth-guards.json'),JSON.stringify({scope:'Actual compiled auth gate, anonymous browser, isolated backend; not signed-in page certification',routes:protectedRoutes.map(r=>({path:r.path,status:'pass',check:'real login required'}))},null,2));
   await page.goto(base+'/agents-office');await page.getByLabel('Usuario',{exact:true}).waitFor();
   await loginForm('fixture-member');
+  const mainPanelToggle=page.getByTestId('world-main-panel-toggle');
+  await mainPanelToggle.click();
+  assert.equal(await page.getByTestId('world-kong-wing').isVisible(),false);
+  await mainPanelToggle.click();
+  assert.equal(await page.getByTestId('world-kong-wing').isVisible(),true);
   await page.getByTestId('world-kong-wing').click();
   await page.getByTestId('world-city-country-count').filter({hasText:'1 países · 25 ciudades'}).waitFor();
   await page.getByTestId('world-city-activity-unavailable').waitFor();
@@ -122,6 +131,8 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   const hasMap=await cityMarkers.count()>0;
   const cityCards=page.getByTestId('world-city-overview-city');
   if(hasMap){
+   assert.equal(await page.getByTestId('world-dept-consejo').count(),1);
+   assert.equal(await page.getByTestId('world-dept-kong').count(),1);
    assert.equal(await cityMarkers.count(),25);
    await page.waitForFunction(()=>{
     const host=document.querySelector('[data-testid="world-canvas-host"]')?.getBoundingClientRect();
@@ -135,6 +146,11 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
    assert.equal(await mapHost.getAttribute('data-city-desk-count'),'175');
    assert.equal(await mapHost.getAttribute('data-city-running-desk-count'),'0');
    await page.getByTestId('world-ceo-orb').filter({hasText:'CEO · ORQUESTADOR'}).waitFor();
+   await page.getByTestId('world-city-director-orb').click();
+   const director=page.getByTestId('world-city-director-panel');
+   await director.getByText('Sin evidencia vigente para asignar puntos o proponer relevos.').waitFor();
+   assert.equal(await director.getByRole('listitem').count(),7);
+   await director.getByRole('button',{name:'Cerrar',exact:true}).click();
    assert.equal(await page.locator('[data-testid^="world-avatar-kong-city:"]').count(),0);
    await page.getByTestId('world-dept-kong-city:fixture-city-25').click();
   } else {
@@ -174,6 +190,10 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   const runningWork=page.getByTestId('world-city-active-work');
   await runningWork.getByRole('button',{name:/Ciudad de prueba 1.*Fotos y media.*Audita imágenes/}).click();
   await page.getByTestId('world-agent-card').getByText('Ciudad de prueba 1 · Fotos y media',{exact:true}).waitFor();
+  await page.getByTestId('world-city-director-toggle').click();
+  const scoredDirector=page.getByTestId('world-city-director-panel');
+  await scoredDirector.getByText(/Puntaje parcial: 100\/100 · 1\/7 puestos verificados/).waitFor();
+  await scoredDirector.getByRole('button',{name:'Cerrar',exact:true}).click();
   await page.unroute(liveSnapshot);
   await page.getByTestId('world-kong-wing').click();
   await openCompany();await company.getByText(/Meta LOCAL · fixture-member/).waitFor();
@@ -224,6 +244,7 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   assert.deepEqual(errors,[]);
   await writeFile(path.join(evidenceDir,'github-handoff-verification.json'),JSON.stringify({scope:'Real compiled consumer and backend sessions; synthetic read-only repository adapters',status:'pass',ownerAndMemberSeparated:true,unownedStateIgnored:true,externalActions:0},null,2));
   await context.close();await browser.close();browser=null;
+  kongUnavailable=false;
   const passive=await runtime.runAppQaScan('fixture-owner',false,false,false);assert.equal(passive.failCount,0);assert.equal(passive.warnCount,0);assert.equal(passive.improvementIdeas.length,0);assert.equal(passive.telegramSent,false);assert.equal(passive.dailyDigestSent,false);
   for(const id of ['route-scout','link-click-scout','api-scout','error-scout'])assert.equal(passive.subAgents.find(s=>s.id===id).status,'pass');
   // Native visual scout gets an actual logged-in session via its existing dependency seam.

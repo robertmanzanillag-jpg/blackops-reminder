@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-05T10:57:10.420Z
+Generated: 2026-11-05T11:11:36.789Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-04\quioer-qu-echeck-el-trabajo-que\work\office-current`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 741 | 652 | 2259 | 524 | 14780 |
+| 741 | 652 | 2262 | 524 | 14809 |
 
 ## Entrypoints
 - `client/src/App.tsx`
