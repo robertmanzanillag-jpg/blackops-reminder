@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-05T11:40:40.508Z",
-  "repoRoot": "/tmp/office-chat-59c19da",
+  "generatedAt": "2026-11-05T12:07:18.793Z",
+  "repoRoot": "/home/runner/workspace",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,13 +124,32 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 749,
-    "filesIndexed": 660,
-    "imports": 2262,
+    "filesVisible": 751,
+    "filesIndexed": 662,
+    "imports": 2270,
     "routes": 524,
-    "symbols": 14798
+    "symbols": 14830
   },
   "directories": {
+    "client/src": {
+      "files": 137,
+      "indexed": 135,
+      "kinds": {
+        "client-lib": 16,
+        "other": 4,
+        "client-component": 33,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-page": 26
+      }
+    },
+    "tests": {
+      "files": 148,
+      "indexed": 145,
+      "kinds": {
+        "test": 148
+      }
+    },
     ".": {
       "files": 35,
       "indexed": 18,
@@ -188,18 +207,6 @@
       "indexed": 2,
       "kinds": {
         "other": 16
-      }
-    },
-    "client/src": {
-      "files": 136,
-      "indexed": 134,
-      "kinds": {
-        "other": 4,
-        "client-component": 33,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 15,
-        "client-page": 26
       }
     },
     "config": {
@@ -264,13 +271,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 147,
-      "indexed": 144,
-      "kinds": {
-        "test": 147
       }
     },
     "tests/fixtures": {
@@ -663,6 +663,7 @@
         "@/components/agents-building/agents-building",
         "@/lib/agent-live-status",
         "@/lib/office-city-agents",
+        "@/lib/office-kong-central-agents",
         "@/lib/utils",
         "@shared/agent-company",
         "@shared/office-kong-supervisor",
@@ -681,6 +682,8 @@
         "activeCityAgents",
         "activeCityCountry",
         "career",
+        "centralSignalById",
+        "centralSignals",
         "changeWing",
         "city",
         "cityCountries",
@@ -725,6 +728,7 @@
         "match",
         "name",
         "nameOf",
+        "notice",
         "openCityFromOverview",
         "pageAgentIds",
         "panelAgent",
@@ -748,8 +752,10 @@
         "running",
         "sceneKey",
         "sceneRef",
+        "seat",
         "selectedCity",
         "sendOrder",
+        "signal",
         "sourceMap",
         "sources",
         "text",
@@ -3466,6 +3472,36 @@
         "timestamp",
         "upcomingEvents",
         "usable"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/office-kong-central-agents.ts",
+      "kind": "client-lib",
+      "imports": [
+        "../../../server/office-kong",
+        "./office-city-agents"
+      ],
+      "exports": [
+        "OFFICE_KONG_CENTRAL_SEATS",
+        "OfficeKongCentralSignal",
+        "OfficeKongCentralSignalKind",
+        "buildOfficeKongCentralSignals",
+        "officeCityEvidenceNotice"
+      ],
+      "symbols": [
+        "OFFICE_KONG_CENTRAL_SEATS",
+        "agent",
+        "base",
+        "buildOfficeKongCentralSignals",
+        "issues",
+        "matches",
+        "normalize",
+        "officeCityEvidenceNotice",
+        "snapshotFresh",
+        "snapshotTime",
+        "uniqueMatches",
+        "validTimestamp"
       ],
       "routes": []
     },
@@ -21887,6 +21923,10 @@
         "avatars",
         "blocked",
         "bounds",
+        "category",
+        "centralAgents",
+        "centralRows",
+        "cities",
         "cityCards",
         "cityMarkers",
         "cityOfficeEntry",
@@ -21899,6 +21939,7 @@
         "fixturePassword",
         "hasMap",
         "host",
+        "lastRunAt",
         "liveSnapshot",
         "login",
         "loginForm",
@@ -21909,6 +21950,7 @@
         "memberGoals",
         "modules",
         "nativePlaywright",
+        "nextRunAt",
         "now",
         "officeRoute",
         "openCompany",
@@ -21917,6 +21959,7 @@
         "pendingVisual",
         "previous",
         "protectedRoutes",
+        "running",
         "runningWork",
         "runtime",
         "scoredDirector",
@@ -25389,6 +25432,29 @@
       "routes": []
     },
     {
+      "path": "tests/office-kong-central-agents.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/lib/office-city-agents",
+        "../client/src/lib/office-kong-central-agents",
+        "../server/office-kong",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "agent",
+        "at",
+        "cityAgent",
+        "duplicated",
+        "future",
+        "now",
+        "signals",
+        "stale"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-kong-collaboration.test.ts",
       "kind": "test",
       "imports": [
@@ -26344,6 +26410,7 @@
     "tests/office-cloud-runtime.test.ts",
     "tests/office-cloud-store.test.ts",
     "tests/office-github.test.ts",
+    "tests/office-kong-central-agents.test.ts",
     "tests/office-kong-collaboration.test.ts",
     "tests/office-kong-supervisor.test.ts",
     "tests/office-kong.test.ts",

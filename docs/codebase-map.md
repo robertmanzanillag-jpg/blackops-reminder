@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-05T11:40:40.508Z
-Repo: `/tmp/office-chat-59c19da`
+Generated: 2026-11-05T12:07:18.793Z
+Repo: `/home/runner/workspace`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 749 | 660 | 2262 | 524 | 14798 |
+| 751 | 662 | 2270 | 524 | 14830 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,9 +28,9 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
+| `tests` | 148 | 145 | test:148 |
 | `server` | 148 | 144 | server:148 |
-| `tests` | 147 | 144 | test:147 |
-| `client/src` | 136 | 134 | ui-component:55, client-component:33, client-page:26, client-lib:15 |
+| `client/src` | 137 | 135 | ui-component:55, client-component:33, client-page:26, client-lib:16 |
 | `script` | 82 | 77 | script:82 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `docs` | 35 | 34 | docs:35 |
@@ -157,6 +157,7 @@ Package: `rest-express`
 - `tests/office-cloud-runtime.test.ts`
 - `tests/office-cloud-store.test.ts`
 - `tests/office-github.test.ts`
+- `tests/office-kong-central-agents.test.ts`
 - `tests/office-kong-collaboration.test.ts`
 - `tests/office-kong-supervisor.test.ts`
 - `tests/office-kong.test.ts`
