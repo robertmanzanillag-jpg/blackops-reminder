@@ -439,6 +439,8 @@ export function reconcileByUuid(
 // ---------------------------------------------------------------------------------------------
 
 export type PostMetricsRow = {
+  /** Required for attribution. Legacy unscoped rows are ignored, never guessed. */
+  network?: string;
   postId: string | null;
   observedAt: string | null;
   impressions: number;
@@ -449,25 +451,67 @@ export type PostMetricsRow = {
   shares: number;
 };
 
+const METRIC_FIELDS = ["impressions", "reach", "videoViews", "engagements", "clicks", "shares"] as const;
+const METRICS_MAX_AGE_MS = 48 * 60 * 60_000;
+function observedTime(value: unknown, now: number): number {
+  if (typeof value !== "string" || !/(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return NaN;
+  const time = Date.parse(value);
+  return Number.isFinite(time) && time <= now ? time : NaN;
+}
+function metricKey(network: unknown, postId: unknown): string | null {
+  return typeof network === "string" && /^[a-z]{2,20}$/.test(network) && typeof postId === "string" && postId.trim()
+    ? JSON.stringify([network, postId.trim()]) : null;
+}
+function validMetrics(row: PostMetricsRow | PublicationResult, now: number): boolean {
+  return Number.isFinite(observedTime(row.observedAt, now))
+    && METRIC_FIELDS.every(field => typeof row[field] === "number" && Number.isFinite(row[field]) && row[field] >= 0);
+}
+function resultMatches(result: PublicationResult, publication: Publication, now: number): boolean {
+  const observed = observedTime(result.observedAt, now);
+  const published = publication.publishedAt ? Date.parse(publication.publishedAt) : NaN;
+  return result.uuid === publication.uuid && result.briefId === publication.briefId
+    && result.network === publication.network && result.externalPostId === publication.externalPostId
+    && validMetrics(result, now) && (!publication.publishedAt || (Number.isFinite(published) && observed >= published));
+}
+function publicationIdentityCounts(state: KongOperationsState): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const publication of state.publications) {
+    const key = metricKey(publication.network, publication.externalPostId);
+    if (publication.status === "confirmed" && key) counts.set(key, (counts.get(key) || 0) + 1);
+  }
+  return counts;
+}
+
 /**
  * Rows in the shape of the Metricool parser output (server/metricool-analytics-sync.ts), already
- * normalized by whoever read Metricool (the publisher). Matched by external post id.
+ * normalized by whoever read Metricool (the publisher), with the source network.
+ * Matched by network AND external post id, never by an unscoped numeric id.
  */
 export function measurePublications(state: KongOperationsState, rows: PostMetricsRow[], now: number): KongOperationsState {
   const at = new Date(now).toISOString();
   const latest = new Map<string, PostMetricsRow>();
+  const ambiguous = new Set<string>();
   for (const row of rows) {
-    if (!row.postId) continue;
-    const previous = latest.get(row.postId);
-    const time = (value: string | null) => { const parsed = Date.parse(value || ""); return Number.isNaN(parsed) ? -Infinity : parsed; };
-    if (!previous || time(row.observedAt) >= time(previous.observedAt)) latest.set(row.postId, row);
+    const key = metricKey(row.network, row.postId);
+    if (!key || !validMetrics(row, now)) continue;
+    const previous = latest.get(key);
+    const time = observedTime(row.observedAt, now);
+    if (!previous || time > observedTime(previous.observedAt, now)) {
+      latest.set(key, row); ambiguous.delete(key);
+    } else if (time === observedTime(previous.observedAt, now) && METRIC_FIELDS.some(field => row[field] !== previous[field])) ambiguous.add(key);
   }
   const results: PublicationResult[] = [];
+  const identities = publicationIdentityCounts(state);
   for (const publication of state.publications) {
     if (publication.status !== "confirmed" || !publication.externalPostId) continue;
-    const row = latest.get(publication.externalPostId);
-    const kept = state.results.find((result) => result.uuid === publication.uuid);
-    if (!row) {
+    const key = metricKey(publication.network, publication.externalPostId);
+    if (!key || identities.get(key) !== 1) continue;
+    const row = key && !ambiguous.has(key) ? latest.get(key) : undefined;
+    const kept = state.results.filter(result => resultMatches(result, publication, now))
+      .sort((a, b) => observedTime(b.observedAt, now) - observedTime(a.observedAt, now))[0];
+    const published = publication.publishedAt ? Date.parse(publication.publishedAt) : NaN;
+    if (!row || (publication.publishedAt && (!Number.isFinite(published) || observedTime(row.observedAt, now) < published))
+      || (kept && observedTime(row.observedAt, now) <= observedTime(kept.observedAt, now))) {
       if (kept) results.push(kept);
       continue;
     }
@@ -495,14 +539,19 @@ export function measurePublications(state: KongOperationsState, rows: PostMetric
 export function kongOperationsStatus(state: KongOperationsState, now: number) {
   const confirmed = state.publications.filter((publication) => publication.status === "confirmed");
   const duplicates = state.publications.filter((publication) => publication.status === "duplicate").length;
-  const measured = state.results.length;
-  const metricsFresh = state.metricsCheckedAt && now - Date.parse(state.metricsCheckedAt) <= 48 * 60 * 60_000;
+  const identities = publicationIdentityCounts(state);
+  const measured = confirmed.filter(publication => identities.get(metricKey(publication.network, publication.externalPostId) || "") === 1
+    && state.results.some(result => resultMatches(result, publication, now)
+    && now - observedTime(result.observedAt, now) <= METRICS_MAX_AGE_MS)).length;
+  // Poll/refresh time is not source freshness. Empty exports and historical rows
+  // cannot make the agent look healthy; every confirmed publication needs evidence.
+  const metricsFresh = measured > 0 && measured === confirmed.length;
   return {
     [KONG_METRICS_AGENT]: !confirmed.length
       ? { state: "needs-setup" as const, label: "Sin publicaciones confirmadas que medir" }
       : metricsFresh
         ? { state: "working" as const, label: `${measured}/${confirmed.length} publicaciones medidas` }
-        : { state: "needs-setup" as const, label: "Faltan metricas de las ultimas 48 h" },
+        : { state: "needs-setup" as const, label: `${measured}/${confirmed.length} publicaciones con metricas de las ultimas 48 h` },
     inbox: state.inbox.filter((brief) => brief.status === "pendiente").length,
     duplicates,
     holder: leaseValid(state.lease, now) ? state.lease.holder : null,

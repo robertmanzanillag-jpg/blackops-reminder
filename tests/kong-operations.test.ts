@@ -162,7 +162,7 @@ test("metrics agent: results per confirmed publication from the Metricool rows",
   state = recordAttempt(state, { holder: "codex-local", epoch: 1, uuid: U.pub1, outcome: "confirmed", externalPostId: "ig-555", publishedAt: at(NOW) }, NOW + MIN);
   assert.equal(kongOperationsStatus(state, NOW + MIN)["kong-metrics"].state, "needs-setup");
   // Same shape parseMetricoolPostMetrics returns (server/metricool-analytics-sync.ts).
-  const row = (postId: string, observedAt: string, impressions: number, reach = 0, videoViews = 0, engagements = 0) => ({ postId, queueItemId: null, contentHash: null, observedAt, impressions, reach, videoViews, engagements, clicks: 3, shares: 9 });
+  const row = (postId: string, observedAt: string, impressions: number, reach = 0, videoViews = 0, engagements = 0) => ({ network: "instagram", postId, queueItemId: null, contentHash: null, observedAt, impressions, reach, videoViews, engagements, clicks: 3, shares: 9 });
   const rows = [row("ig-555", at(NOW + 60 * MIN), 1200, 900, 700, 97), row("ig-555", at(NOW + 30 * MIN), 400, 300, 200), row("otro-post", at(NOW), 99)];
   state = measurePublications(state, rows, NOW + 2 * 60 * MIN);
   assert.equal(state.results.length, 1);
@@ -224,7 +224,7 @@ test("service: the same card delivered by two instances at once lands once; reco
   await a.attempt({ holder: "codex-local", epoch: 1, uuid: U.pub1, outcome: "unknown", error: "timeout" });
   const reconciled = await b.reconcile([{ postId: "ig-9", text: `kong:${U.pub1}` }]);
   assert.deepEqual(reconciled.confirmed, [U.pub1]);
-  const results = await b.measure([{ postId: "ig-9", observedAt: at(NOW), impressions: 50, reach: 40, videoViews: 30, engagements: 5, clicks: 1, shares: 1 }]);
+  const results = await b.measure([{ network: "instagram", postId: "ig-9", observedAt: at(NOW), impressions: 50, reach: 40, videoViews: 30, engagements: 5, clicks: 1, shares: 1 }]);
   assert.equal(results.length, 1);
   assert.equal((await a.view()).status["kong-metrics"].state, "working");
 });
@@ -304,7 +304,7 @@ test("metrics: a row without date never hides a dated observation", () => {
   const briefId = briefOf(state, U.venue);
   state = planPublication(state, { holder: "codex-local", epoch: 1, uuid: U.pub1, briefId, network: "instagram" }, NOW);
   state = recordAttempt(state, { holder: "codex-local", epoch: 1, uuid: U.pub1, outcome: "confirmed", externalPostId: "ig-7" }, NOW);
-  const base = { queueItemId: null, contentHash: null, reach: 0, videoViews: 0, engagements: 0, clicks: 0, shares: 0 };
+  const base = { network: "instagram", queueItemId: null, contentHash: null, reach: 0, videoViews: 0, engagements: 0, clicks: 0, shares: 0 };
   state = measurePublications(state, [{ ...base, postId: "ig-7", observedAt: null, impressions: 1 }, { ...base, postId: "ig-7", observedAt: at(NOW + MIN), impressions: 999 }], NOW + 2 * MIN);
   assert.equal(state.results[0].impressions, 999);
 });
@@ -315,4 +315,65 @@ test("schedules and local prices are not mistaken for phone numbers", () => {
   }
   assert.equal(verifyCard(venue({ highlight: "Entrada 10.000.000 Bs, mesas desde $250" }), NOW).ok, true);
   assert.equal(verifyCard(venue({ schedule: "Sab 22:00, info 0412 123 4567" }), NOW).ok, false, "a phone next to a time is still caught");
+});
+
+function measuredFixture() {
+  let state = claimLease(withInbox(), "codex-local", "lease-a", NOW);
+  state = planPublication(state, { holder: "codex-local", epoch: 1, uuid: U.pub1, briefId: briefOf(state, U.venue), network: "instagram" }, NOW);
+  return recordAttempt(state, { holder: "codex-local", epoch: 1, uuid: U.pub1, outcome: "confirmed", externalPostId: "shared-id" }, NOW);
+}
+const metricRow = (overrides: Record<string, unknown> = {}) => ({ network: "instagram", postId: "shared-id", observedAt: at(NOW), impressions: 10, reach: 8, videoViews: 6, engagements: 2, clicks: 0, shares: 0, ...overrides });
+
+test("metrics empty refresh and stale observations do not renew source freshness", () => {
+  const empty = measurePublications(measuredFixture(), [], NOW);
+  assert.equal(kongOperationsStatus(empty, NOW)["kong-metrics"].state, "needs-setup");
+  let state = measurePublications(measuredFixture(), [metricRow()], NOW);
+  state = measurePublications(state, [], NOW + 49 * 60 * MIN);
+  assert.equal(state.metricsCheckedAt, at(NOW + 49 * 60 * MIN));
+  assert.equal(state.results[0].observedAt, at(NOW));
+  assert.equal(kongOperationsStatus(state, NOW + 49 * 60 * MIN)["kong-metrics"].state, "needs-setup");
+});
+
+test("metrics match the network namespace; legacy unscoped rows never guess", () => {
+  let state = measuredFixture();
+  state = planPublication(state, { holder: "codex-local", epoch: 1, uuid: U.pub2, briefId: briefOf(state, U.venue), network: "facebook" }, NOW);
+  state = recordAttempt(state, { holder: "codex-local", epoch: 1, uuid: U.pub2, outcome: "confirmed", externalPostId: "shared-id" }, NOW);
+  const result = measurePublications(state, [metricRow()], NOW);
+  assert.equal(result.results.length, 1);
+  assert.equal(result.results[0].network, "instagram");
+  assert.equal(kongOperationsStatus(result, NOW)["kong-metrics"].state, "needs-setup", "one measured platform cannot hide another's missing metrics");
+  assert.equal(measurePublications(state, [metricRow({ network: undefined })], NOW).results.length, 0);
+});
+
+test("older exports never replace newer measurements and malformed metrics are rejected", () => {
+  const current = measurePublications(measuredFixture(), [metricRow({ observedAt: at(NOW + MIN), impressions: 50 })], NOW + MIN);
+  const stale = measurePublications(current, [metricRow()], NOW + 2 * MIN);
+  assert.equal(stale.results[0].impressions, 50);
+  for (const overrides of [{ observedAt: null }, { observedAt: "invalid" }, { observedAt: at(NOW + 3 * MIN) }, { impressions: -1 }, { clicks: NaN }, { shares: Infinity }]) {
+    const result = measurePublications(measuredFixture(), [metricRow(overrides)], NOW + 2 * MIN);
+    assert.equal(result.results.length, 0);
+    assert.equal(kongOperationsStatus(result, NOW + 2 * MIN)["kong-metrics"].state, "needs-setup");
+  }
+});
+
+test("conflicting same-time metrics and pre-publication observations cannot become evidence", () => {
+  let state = measuredFixture();
+  assert.equal(measurePublications(state, [metricRow(), metricRow({ impressions: 500 })], NOW).results.length, 0);
+  state.publications[0].publishedAt = at(NOW + MIN);
+  assert.equal(measurePublications(state, [metricRow()], NOW + 2 * MIN).results.length, 0);
+});
+
+test("legacy future, unrelated and invalid stored results cannot make status healthy", () => {
+  const state = measurePublications(measuredFixture(), [metricRow()], NOW);
+  for (const overrides of [{ observedAt: at(NOW + MIN) }, { network: "facebook" }, { externalPostId: "other-id" }, { briefId: "other-brief" }, { impressions: -1 }]) {
+    const invalid = { ...state, results: [{ ...state.results[0], ...overrides }] };
+    assert.equal(kongOperationsStatus(invalid, NOW)["kong-metrics"].state, "needs-setup");
+  }
+});
+
+test("one official identity cannot measure two confirmed publication UUIDs", () => {
+  const state = measurePublications(measuredFixture(), [metricRow()], NOW);
+  state.publications.push({ ...state.publications[0], uuid: U.pub2 });
+  assert.equal(kongOperationsStatus(state, NOW)["kong-metrics"].state, "needs-setup");
+  assert.equal(measurePublications(state, [metricRow()], NOW).results.length, 0);
 });
