@@ -308,3 +308,11 @@ test("metrics: a row without date never hides a dated observation", () => {
   state = measurePublications(state, [{ ...base, postId: "ig-7", observedAt: null, impressions: 1 }, { ...base, postId: "ig-7", observedAt: at(NOW + MIN), impressions: 999 }], NOW + 2 * MIN);
   assert.equal(state.results[0].impressions, 999);
 });
+
+test("schedules and local prices are not mistaken for phone numbers", () => {
+  for (const schedule of ["Viernes 2026-11-06 22:00", "Sab 06-11-2026 de 22:00 a 04:00", "06.11.2026 22.00", "6/11/26 de 10pm a 4am"]) {
+    assert.equal(verifyCard(venue({ schedule }), NOW).ok, true, schedule);
+  }
+  assert.equal(verifyCard(venue({ highlight: "Entrada 10.000.000 Bs, mesas desde $250" }), NOW).ok, true);
+  assert.equal(verifyCard(venue({ schedule: "Sab 22:00, info 0412 123 4567" }), NOW).ok, false, "a phone next to a time is still caught");
+});

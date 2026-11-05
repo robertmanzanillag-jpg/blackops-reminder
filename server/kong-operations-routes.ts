@@ -44,18 +44,18 @@ const metricsBody = z.object({
  */
 export function registerKongOperationsRoutes(app: Express, ops: ReturnType<typeof createKongOperations>, auth: KongOpsOwnerAuth) {
   const allow = (req: Request, res: Response) => {
+    res.set("Cache-Control", "no-store");
     try {
       const userId = auth.requestUserId(req);
-      res.set("Cache-Control", "no-store");
       if (!userId) { res.status(401).json({ error: "Inicia sesion para operar KONG." }); return false; }
       if (userId !== auth.ownerUserId()) { res.status(403).json({ error: "La operacion de KONG pertenece al propietario." }); return false; }
       return true;
     } catch { res.status(503).json({ error: "No se pudo verificar el propietario." }); return false; }
   };
+  // invalid/unknown_* -> 400; uuid_mismatch, lease_held, not_holder, stale_epoch, already_published -> 409.
   const fail = (res: Response, error: unknown) => {
     if (error instanceof z.ZodError) return res.status(400).json({ error: error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).slice(0, 4).join("; ") });
     if (error instanceof KongOpsError) return res.status(error.code === "invalid" || error.code === "unknown_brief" || error.code === "unknown_publication" ? 400 : 409).json({ error: error.message, code: error.code });
-    // Note: uuid_mismatch, lease_held, not_holder, stale_epoch and already_published are conflicts (409).
     return res.status(503).json({ error: "No se pudo guardar. Intenta de nuevo." });
   };
 

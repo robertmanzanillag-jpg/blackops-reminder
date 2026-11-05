@@ -16,9 +16,17 @@ export const CARD_MAX_AGE_MS = 7 * 24 * 60 * 60_000;
 
 // Cards end up in public videos and captions: personal contact data must never pass.
 const EMAIL = /[^\s@]+@[^\s@]+\.[a-z]{2,}/i;
+// Dates, times and prices are normal in promo text; they are removed before looking for phones.
+const NOT_A_PHONE = [
+  /\b\d{4}[-./]\d{1,2}[-./]\d{1,2}\b/g, // 2026-11-06
+  /\b\d{1,2}[-./]\d{1,2}[-./]\d{2,4}\b/g, // 06-11-2026, 6/11/26
+  /\b\d{1,2}[:.h]\d{2}\b/g, // 22:00, 22.00, 22h00
+  /(?:[$\u20ac]|bs\.?|usd|ves)\s*\d[\d.,]*|\d[\d.,]*\s*(?:bs\.?|usd|ves|\$|\u20ac)/gi, // prices
+];
 /** A run of digits (allowing spaces, dots, dashes, parentheses, +) with 8 or more digits. */
 function containsPhone(text: string): boolean {
-  for (const match of text.matchAll(/\+?\d[\d\s().-]{6,}\d/g)) {
+  const cleaned = NOT_A_PHONE.reduce((value, pattern) => value.replace(pattern, " "), text);
+  for (const match of cleaned.matchAll(/\+?\d[\d\s().-]{6,}\d/g)) {
     if (match[0].replace(/\D/g, "").length >= 8) return true;
   }
   return false;
@@ -311,7 +319,8 @@ export function planPublication(
 /** Never drops a live or confirmed entry (that would re-open a published brief); trims resolved ones first. */
 function trimLedger(publications: Publication[]): Publication[] {
   if (publications.length <= MAX_LEDGER) return publications;
-  const keep = new Set(publications.filter((item) => LIVE.includes(item.status)).map((item) => item.uuid));
+  // Retryable entries are kept too: their original post can still show up and must be caught as a duplicate.
+  const keep = new Set(publications.filter((item) => LIVE.includes(item.status) || item.status === "retryable").map((item) => item.uuid));
   const resolved = publications.filter((item) => !keep.has(item.uuid));
   const room = Math.max(0, MAX_LEDGER - keep.size);
   const kept = new Set([...keep, ...resolved.slice(0, room).map((item) => item.uuid)]);
