@@ -41,7 +41,7 @@ test("running leases have live activity but earn no completion credit", () => {
   assert.equal(result.statuses["kong-city:miami:clubs"].state, "working");
   assert.equal(result.company.careers["kong-city:miami:clubs"].points, 0);
   assert.equal(result.statuses["kong:venues"].state, "offline");
-  assert.equal(result.company.careers["kong:venues"].points, 0);
+  assert.equal(result.company.careers["kong:venues"], undefined);
 });
 test("failure discussions are evidence-backed and a repeated failure is scored once", () => {
   const snapshot = evidence();
@@ -78,4 +78,47 @@ test("old state loads empty isolated KONG company", () => {
   assert.deepEqual(parsed.kongCompany, emptyCompanyState());
   assert.deepEqual(parsed.kongEvidenceAt, {});
   assert.equal(parsed.kongCollaboration.verified, false);
+});
+
+test("legacy KONG careers and academy are quarantined, never replayed or advanced in BlackOps", async () => {
+  const { advanceCompany } = await import("../shared/agent-company");
+  const old = emptyCouncilState();
+  old.company = advanceCompany(old.company, { now: NOW, statuses: { "kong-city:miami:clubs": { state: "working", label: "legacy" }, radio: { state: "working", label: "radio" } }, roles: {} }).state;
+  old.company.careers["kong-city:miami:clubs"].points = 1234;
+  old.company.trainees.push({ id: "old-kong-helper", forAgentId: "kong-city:miami:clubs", role: "Clubs", nickname: "Old helper", startedAt: at(-60), modulesDone: ["old-module"], knowledge: ["Old knowledge"] });
+  old.proposals.push({ key: "new_agent:helper-kong-city:miami:clubs", kind: "new_agent", owner: "agent-factory", title: "Contratar helper", description: "legacy", evidence: [], handoffBrief: "legacy", createdAt: at(-60), status: "applied" });
+  let raw = JSON.stringify(old);
+  const parsed = parseCouncilState(raw);
+  assert.equal(parsed.company.careers["kong-city:miami:clubs"], undefined);
+  assert.equal(parsed.company.trainees.length, 0);
+  assert.equal(parsed.company.careers.radio.points, 10);
+  assert.equal(parsed.kongLegacyCompany.careers["kong-city:miami:clubs"].points, 1234);
+  assert.deepEqual(parsed.kongCompany, emptyCompanyState());
+  assert.deepEqual(parseCouncilState(JSON.stringify(parsed)), parsed, "migration is idempotent");
+  const council = createAgentCouncil({ now: () => NOW, userId: () => "owner", readState: async () => raw, writeState: async value => { raw = value; }, collect: async () => ({}), collectKongEvidence: async () => evidence(), submitProposal: async () => "proposal", getPendingActionStatus: async () => null, fetchLatestRelease: async () => null, log: () => {} });
+  await council.runCycle();
+  const state = await council.load();
+  assert.equal(state.company.trainees.length, 0, "old applied helper cannot enroll again");
+  assert.deepEqual(state.kongLegacyCompany.trainees[0].modulesDone, ["old-module"], "archive never advances");
+  assert.equal(state.kongCompany.careers["kong-city:miami:clubs"].points, 10, "only new verified result earns points");
+  assert.equal("kongLegacyCompany" in await council.view(), false, "historical private state is not exposed");
+});
+
+test("missing and disabled city jobs do not acquire invented life or careers", () => {
+  for (const disabled of [false, true]) {
+    const snapshot = evidence();
+    if (disabled) snapshot.cityAgentsEnabled = false;
+    else snapshot.cities[0].categories = [];
+    const result = advanceKongCompany({ ...start(), evidence: snapshot });
+    assert.deepEqual(Object.keys(result.company.careers).filter(id => id.startsWith("kong-city:")), []);
+  }
+});
+
+test("declared central roles without a verified result stay unscored", () => {
+  for (const state of ["unknown", "disabled", "running"] as const) {
+    const snapshot = evidence();
+    snapshot.agents[0] = { ...snapshot.agents[0], state, lastRunAt: null };
+    const result = advanceKongCompany({ ...start(), evidence: snapshot });
+    assert.equal(result.company.careers["kong:venues"], undefined);
+  }
 });

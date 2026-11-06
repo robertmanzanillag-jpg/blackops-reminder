@@ -268,6 +268,10 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   let debateArcs: { curve: any; particles: any[]; line: any }[] = [];
   let focused: string | null = null;
   let cityLayout: SceneData["cityLayout"];
+  let largeOffice = false;
+  let latestData: SceneData | undefined;
+  let sceneVersion = 0;
+  let renderedVersion = -1;
   let cityMapSize = officeCityMapPosition(0, 0);
   let overviewDesks: { group: any; animate: (time: number) => void } | undefined;
 
@@ -504,9 +508,16 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   }
 
   function buildCityOverviewDesks() {
-    const desks = platforms.flatMap(({ department, center }) => department.agents.map((agent, index) => {
-      const position = officeCityDeskPosition(index);
-      return { agent, x: center.x + position.x, z: center.z + position.z };
+    const desks = platforms.flatMap(({ department, center, group, desks: detailDesks }) => detailDesks.length ? [] : department.agents.map((agent, index) => {
+      if (cityLayout === "overview") {
+        const position = officeCityDeskPosition(index);
+        return { agent, x: center.x + position.x, z: center.z + position.z };
+      }
+      const cols = Math.min(5, Math.max(1, department.agents.length));
+      const rows = Math.max(1, Math.ceil(department.agents.length / cols));
+      group.updateMatrixWorld(true);
+      const position = group.localToWorld(new THREE.Vector3((index % cols - (cols - 1) / 2) * DESK_SPACING_X, 0, (Math.floor(index / cols) - (rows - 1) / 2) * DESK_SPACING_Z));
+      return { agent, x: position.x, z: position.z };
     }));
     host.dataset.cityDeskCount = String(desks.length);
     const running = desks.flatMap((desk, index) => desk.agent.state === "working" ? [index] : []);
@@ -570,6 +581,10 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
 
   function build(data: SceneData) {
     clearDynamic();
+    latestData = data;
+    sceneVersion += 1;
+    largeOffice = data.departments.reduce((sum, department) => sum + department.agents.length, 0) > 60;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, largeOffice ? 1 : 2));
     cityLayout = data.cityLayout;
     const cityOverview = cityLayout === "overview";
     cityMapSize = officeCityMapPosition(0, data.departments.length);
@@ -625,7 +640,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(width, 0.5, depth)), new THREE.LineBasicMaterial({ color: colorNum }));
       edges.position.y = -0.25;
       group.add(edges);
-      if (!cityOverview) {
+      if (!cityOverview && !largeOffice) {
         const glow = new THREE.PointLight(colorNum, 0.9, 14, 1.5);
         glow.position.set(0, 4, 0);
         group.add(glow);
@@ -635,7 +650,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       group.add(platformHit);
       raycastTargets.push(platformHit);
 
-      const desks = cityOverview ? [] : department.agents.map((agent, i) => {
+      const desks = cityOverview || (largeOffice && focused !== department.id) ? [] : department.agents.map((agent, i) => {
         const col = i % cols;
         const row = Math.floor(i / cols);
         const x = (col - (cols - 1) / 2) * DESK_SPACING_X;
@@ -699,14 +714,26 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       });
     });
 
-    if (cityOverview) buildCityOverviewDesks();
+    if (cityOverview || largeOffice) buildCityOverviewDesks();
+    const citySeats = data.departments.flatMap(department => department.agents).filter(agent => agent.id.startsWith("kong-city:"));
+    host.dataset.cityDeskCount = String(citySeats.length);
+    host.dataset.cityRunningDeskCount = String(citySeats.filter(agent => agent.state === "working").length);
+    host.dataset.officeDeskCount = String(data.departments.reduce((sum, department) => sum + department.agents.length, 0));
     // World positions for desks (after platforms are oriented).
     scene.updateMatrixWorld(true);
     platforms.forEach((platform) => platform.desks.forEach((desk) => desk.group.getWorldPosition(desk.worldPos)));
 
     // Debates: violet arcs between reviewer and subject desks.
-    const deskById = new Map<string, DeskRuntime>();
-    platforms.forEach((platform) => platform.desks.forEach((desk) => deskById.set(desk.agent.id, desk)));
+    const deskById = new Map<string, { worldPos: any }>();
+    platforms.forEach((platform) => {
+      platform.desks.forEach((desk) => deskById.set(desk.agent.id, desk));
+      // Compact overview seats still participate in evidence-backed exchanges.
+      const cols = Math.min(5, Math.max(1, platform.department.agents.length));
+      const rows = Math.max(1, Math.ceil(platform.department.agents.length / cols));
+      platform.department.agents.forEach((agent, index) => {
+        if (!deskById.has(agent.id)) deskById.set(agent.id, { worldPos: platform.group.localToWorld(new THREE.Vector3((index % cols - (cols - 1) / 2) * DESK_SPACING_X, 0, (Math.floor(index / cols) - (rows - 1) / 2) * DESK_SPACING_Z)) });
+      });
+    });
     data.debates.forEach((debate) => {
       const from = deskById.get(debate.from);
       const to = deskById.get(debate.to);
@@ -728,7 +755,11 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   }
 
   function focusDepartment(departmentId: string | null, notify = true) {
+    const changed = focused !== departmentId;
     focused = departmentId;
+    // Keep every desk visible using shared meshes in the overview; only the selected room
+    // needs per-agent animated monitors and detailed figures.
+    if (changed && largeOffice && latestData) build(latestData);
     const platform = platforms.find((item) => item.department.id === departmentId);
     if (!platform && cityLayout === "overview") {
       frameCityOverview();
@@ -782,6 +813,8 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     if (!hit) return;
     const { agentId, departmentId } = hit.object.userData || {};
     if (departmentId && departmentId !== focused) focusDepartment(departmentId);
+    // Clicking the floor of the already-focused KONG room reopens its office (other rooms keep their panels).
+    else if (departmentId === "kong" && !agentId) callbacks.onFocusDepartment(departmentId);
     if (agentId) callbacks.onSelectAgent(agentId);
   };
   const onWheel = (event: WheelEvent) => {
@@ -796,6 +829,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   el.addEventListener("wheel", onWheel, { passive: false });
 
   const resizeObserver = new ResizeObserver(() => {
+    sceneVersion += 1;
     const w = host.clientWidth;
     const h = Math.max(1, host.clientHeight);
     renderer.setSize(w, h);
@@ -823,7 +857,12 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   let lastScreenDraw = 0;
   const clock = new THREE.Clock();
   const tmp = new THREE.Vector3();
+  let lastFrameAt = 0;
   function frame() {
+    const now = performance.now();
+    if (options.reducedMotion && renderedVersion === sceneVersion && target.distanceTo(goalTarget) < 0.001 && Math.abs(radius - goalRadius) < 0.001 && Math.abs(theta - goalTheta) < 0.001 && Math.abs(phi - goalPhi) < 0.001) return;
+    if (largeOffice && now - lastFrameAt < 1000 / 20) return;
+    lastFrameAt = now;
     const dt = Math.min(clock.getDelta(), 0.1);
     const t = clock.elapsedTime;
     const motion = options.reducedMotion ? 0 : 1;
@@ -879,16 +918,19 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     tmp.set(0, cityLayout === "overview" ? 3.2 : 4.4, 0);
     placeLabel(hubLabel, tmp, cityLayout !== "detail");
 
-    if (t - lastScreenDraw > 0.25) {
+    if (options.reducedMotion || t - lastScreenDraw > (largeOffice ? 0.5 : 0.25)) {
       lastScreenDraw = t;
       platforms.forEach((platform) => platform.desks.forEach((desk) => {
+        if (options.reducedMotion && desk.canvas.dataset.drawn === "true") return;
         const ctx = desk.canvas.getContext("2d");
         if (!ctx) return;
+        desk.canvas.dataset.drawn = "true";
         drawMonitor(ctx, desk.agent, motion ? t : 0);
         desk.texture.needsUpdate = true;
       }));
     }
     renderer.render(scene, camera);
+    renderedVersion = sceneVersion;
   }
   renderer.setAnimationLoop(frame);
 

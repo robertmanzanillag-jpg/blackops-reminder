@@ -25,9 +25,23 @@ test("KONG includes every observed central agent and every configured city seat 
 test("completed evidence does not animate as working; expired evidence clears running", () => {
   const current = buildKongOfficeWing(evidence, [], {}, now);
   assert.equal(current.agents.find(agent=>agent.id === "kong:chief_of_staff")?.status.state, "offline");
-  assert.equal(current.agents.find(agent=>agent.id === "kong:new_department")?.status.state, "working");
+  assert.equal(current.agents.find(agent=>agent.id === "kong:new_department")?.status.state, "needs-setup");
   const expired = buildKongOfficeWing(evidence, [], {}, now + 300001);
   assert.ok(expired.agents.every(agent=>agent.status.state !== "working"));
   const disconnected = buildKongOfficeWing(undefined, [], {}, now);
   assert.ok(disconnected.agents.every(agent=>agent.status.state !== "working"));
+});
+
+test("Native aliases reuse the observed desk and the external video seat", () => {
+  const native = { ...evidence, agents: [
+    { ...evidence.agents[0], id: "venues", name: "Venues", kind: "department", state: "running" },
+    { ...evidence.agents[0], id: "native-video", name: "Videos Kong", kind: "department", state: "running" },
+  ] } as OfficeKongAuditResult["evidence"];
+  const wing = buildKongOfficeWing(native, [], {"kong-videos": {state:"offline",label:"Publicador externo"}}, now);
+  assert.equal(wing.agents.filter(agent=>agent.kongEvidence?.id === "kong:Venues").length, 1);
+  assert.equal(wing.agents.find(agent=>agent.id === "kong:venues")?.status.state, "working");
+  assert.ok(!wing.agents.some(agent=>agent.id === "kong:Venues"));
+  assert.ok(!wing.agents.some(agent=>agent.id === "kong:native-video"));
+  assert.equal(wing.agents.find(agent=>agent.id === "kong-videos")?.status.state, "offline");
+  assert.equal(wing.departments.flatMap(group=>group.agentIds).filter(id=>id === "kong-videos").length, 1);
 });

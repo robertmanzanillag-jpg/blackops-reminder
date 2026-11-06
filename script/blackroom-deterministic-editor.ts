@@ -2,11 +2,12 @@ import { execFile } from "node:child_process";
 import { mkdir, readFile, readdir, rename, rm, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
+import { applyLocalEditorialReport } from "../server/blackroom-local-evidence";
 import {
   BLACKROOM_CHANNEL_VIDEOS_URL,
   buildBlackRoomYtDlpAuthArgs,
   buildBlackRoomRenderArgs,
-  buildBlackRoomYtDlpWindowArgs,
+  downloadBlackRoomWindowWithFallback,
   commitBlackRoomReservation,
   findBlackRoomDropOffset,
   parseBlackRoomEnergySamples,
@@ -119,12 +120,8 @@ function mediaStem(plan: BlackRoomEditPlan): string {
 
 async function downloadWindow(plan: BlackRoomEditPlan, sourcePath: string, temporaryDirectory: string): Promise<void> {
   await appendActivity(`Descargando una ventana parcial de ${plan.dj} en 1080p con audio.`, "descarga");
-  await run(
-    ytDlpPath,
-    [...ytDlpAuthArgs, ...buildBlackRoomYtDlpWindowArgs(plan, sourcePath, temporaryDirectory)],
-    128 * 1024 * 1024,
-    ytDlpTimeoutMs,
-  );
+  await downloadBlackRoomWindowWithFallback(plan, sourcePath, temporaryDirectory, ytDlpAuthArgs,
+    (args) => run(ytDlpPath, args, 128 * 1024 * 1024, ytDlpTimeoutMs));
   const info = await stat(sourcePath);
   if (!info.isFile() || info.size <= 0) throw new Error("yt-dlp produced an empty BlackRoom source window");
 }
@@ -232,6 +229,12 @@ async function main(): Promise<void> {
   await cleanupUnreservedGeneratedMedia(ledger);
   const queue = await readJson<BlackRoomQueueState>(queuePath);
   if (queue.enabled !== true) return;
+  const localReport = await readJson<any>(path.join(path.dirname(ledgerPath), "local-ceo-report.json")).catch(() => null);
+  if (localReport?.scope === "local-evidence" && localReport.version === 1 && queue.analytics?.verifiedLearning) {
+    // Only this edit plan sees the overlay. No local recommendation mutates
+    // the remote queue or authorizes a schedule, upload, or cleanup.
+    queue.analytics = applyLocalEditorialReport(queue.analytics, localReport, new Date());
+  }
   const sources = await loadInventory(queue);
   const plan = planBlackRoomDeterministicEdit({ queue, ledger, ...sources });
   if (!plan) return;

@@ -57,13 +57,39 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
    const blocked={status:'blocked',reason:'Isolated fixture. No provider connection.',checkedAt:new Date().toISOString()};
    res.json({claude:blocked,kong:blocked,worker:blocked});
   });
-  app.get('/api/agents-office/cities',(_req,res)=>res.json(Array.from({length:25},(_,index)=>({
-   id:'fixture-city-'+(index+1),name:'Ciudad de prueba '+(index+1),countryCode:'US',timeZone:'America/New_York',currency:'USD',
-  }))));
+   let cityDirectoryFailures=0;
+   app.get('/api/agents-office/cities',(_req,res)=>{
+    if(cityDirectoryFailures++===0)return res.status(503).json({error:'One transient fixture failure.'});
+    res.json(Array.from({length:25},(_,index)=>({
+     id:'fixture-city-'+(index+1),name:'Ciudad de prueba '+(index+1),countryCode:'US',timeZone:'America/New_York',currency:'USD',
+    })));
+   });
   let kongUnavailable=true;
   app.get('/api/agents-office/kong-snapshot',(_req,res)=>{
-   if(kongUnavailable)return res.status(503).json({error:'Isolated fixture without KONG activity access.'});
-   res.json({evidence:{generatedAt:new Date().toISOString(),cityAgentsEnabled:true,cities:[]}});
+    if(kongUnavailable){kongUnavailable=false;return res.status(503).json({error:'One transient fixture failure.'});}
+    const now=Date.now();
+    const lastRunAt=new Date(now-60_000).toISOString();
+    const nextRunAt=new Date(now+60_000).toISOString();
+    const centralAgents=[
+     {id:'kong-videos',name:'Videos Kong',kind:'department',owner:'fixture',responsibility:'Videos',state:'running',lastRunAt:null,nextRunAt,blocker:null,nextAction:'Fixture current execution',issues:[]},
+     {id:'kong-ai',name:'KONG AI',kind:'department',owner:'fixture',responsibility:'AI',state:'healthy',lastRunAt,nextRunAt,blocker:null,nextAction:'Fixture result',issues:[]},
+     {id:'kong-promoters',name:'Promoters + Mesas',kind:'department',owner:'fixture',responsibility:'Promoters',state:'attention',lastRunAt,nextRunAt,blocker:null,nextAction:'Review coverage',issues:['Aviso de cobertura: datos pendientes']},
+     {id:'kong-venues',name:'Venues',kind:'department',owner:'fixture',responsibility:'Venues',state:'unknown',lastRunAt:null,nextRunAt:null,blocker:'No hay evidencia',nextAction:'',issues:[]},
+     {id:'kong-legal',name:'Kong Legal',kind:'department',owner:'fixture',responsibility:'Legal',state:'disabled',lastRunAt,nextRunAt:null,blocker:'Desactivado en fixture',nextAction:'',issues:[]},
+    ];
+    const cities=Array.from({length:25},(_,index)=>({
+     id:'fixture-city-'+(index+1),name:'Ciudad de prueba '+(index+1),countryCode:'US',timeZone:'America/New_York',currency:'USD',
+     status:'needs_attention',categories:Array.from({length:7},(_,categoryIndex)=>{
+      const category=['clubs','vip','restaurants','events','sports','experiences','media'][categoryIndex];
+      // A persisted running flag is not current work after its lease expires.
+      // The later liveSnapshot fixture separately verifies a valid active lease.
+      const expiredRun=index===0&&category==='media';
+      return {category,state:expiredRun?'running':'unknown',evidence:expiredRun?'persisted':'missing',lastRunAt:null,lastSuccessAt:null,lastStartedAt:expiredRun?new Date(now-120_000).toISOString():null,
+       nextRunAt:expiredRun?nextRunAt:null,leaseUntil:expiredRun?new Date(now-30_000).toISOString():null,intervalMs:86_400_000,recordedFailure:false,issues:[]};
+     }),
+    }));
+    res.json({text:'Synthetic KONG Native read fixture.',completedAt:new Date(now).toISOString(),evidence:{generatedAt:new Date(now).toISOString(),citySnapshotCheckedAt:new Date(now).toISOString(),agents:centralAgents,
+     cityAgentsEnabled:true,cityCoverageComplete:true,cities}});
   });
   app.get('/api/agent-council/state',(_req,res)=>res.json({enabled:false,cycles:0,debates:[],proposals:[],overrides:{},scout:{lastRunAt:null,latest:[],error:null}}));
   app.get('/api/app-qa-agent/status',async(req,res)=>res.json(await runtime.runAppQaScan(req.fixtureUserId,false,false,false)));
@@ -125,10 +151,25 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   const cityOfficeEntry=page.getByTestId('world-open-city-office');
   if(await cityOfficeEntry.count()){
    assert.equal(await page.getByTestId('world-dept-consejo').count(),1);
+    const centralRows=page.locator('[data-testid^="world-agent-row-kong"]');
+    await page.getByTestId('world-agent-row-kong-videos').waitFor();
+    assert.equal(await centralRows.count(),6);
+    assert.equal(await page.getByTestId('world-agent-row-kong-metrics').count(),1,'preserve the separate KONG metrics desk');
+    await page.getByTestId('world-agent-row-kong-videos').click();
+    await page.getByTestId('world-kong-native-evidence-kong-videos').getByText('Ejecución actual reportada por KONG Native').waitFor();
+    assert.equal(await page.getByTestId('world-talk').isEnabled(),true);
+    await page.getByLabel('Chat de estado',{exact:true}).fill('¿Qué estás haciendo?');
+    await page.getByRole('button',{name:'Preguntar',exact:true}).click();
+    await page.getByRole('status').filter({hasText:/no incluye el detalle de la tarea/}).waitFor();
+    await page.getByTestId('world-talk').click();
+    await page.getByRole('heading',{name:'Videos Kong',exact:true}).waitFor();
+    await page.getByTestId('button-close-agent-card').click();
    await cityOfficeEntry.click();
   }
   await page.getByTestId('world-city-country-count').filter({hasText:'1 países · 25 ciudades'}).waitFor();
-  await page.getByTestId('world-city-activity-unavailable').waitFor();
+   await page.waitForFunction(()=>document.querySelector('[data-testid="world-city-activity-unavailable"]')===null);
+   assert.equal(cityDirectoryFailures,2,'city directory should recover after its first failed load');
+   assert.equal(kongUnavailable,false,'KONG snapshot should recover after its first failed load');
   assert.equal(await page.getByTestId('world-city-active-work').count(),0);
   const cityMarkers=page.locator('[data-testid^="world-dept-kong-city:"]');
   const mapFallback=page.getByTestId('world-city-map-fallback');
@@ -152,8 +193,12 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
    await page.getByTestId('world-ceo-orb').filter({hasText:'CEO · ORQUESTADOR'}).waitFor();
    await page.getByTestId('world-ceo-orb').click();
    const director=page.getByTestId('world-city-director-panel');
-   await director.getByText('Sin evidencia vigente para asignar puntos o proponer relevos.').waitFor();
+   await director.waitFor();
+   // A fresh snapshot can contain no scoreable jobs. It must not invent points.
+   assert.equal(await director.getByText(/Puntos del equipo|Puntaje parcial/).count(),0);
    assert.equal(await director.getByRole('listitem').count(),7);
+   assert.equal(await director.getByRole('listitem').filter({hasText:'Sin puntuación'}).count(),7);
+   await director.getByText('Relevos propuestos · 0',{exact:true}).waitFor();
    await director.getByRole('button',{name:'Cerrar',exact:true}).click();
    assert.equal(await page.locator('[data-testid^="world-avatar-kong-city:"]').count(),0);
    await page.getByTestId('world-dept-kong-city:fixture-city-25').click();
@@ -166,6 +211,10 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   await selectedAgents.first().waitFor();
   assert.equal(await selectedAgents.count(),7);
   assert.match(await selectedAgents.first().innerText(),/Sin evidencia/);
+   await page.getByTestId('world-agent-row-kong-city:fixture-city-25:media').click();
+   await page.getByLabel('Chat de estado',{exact:true}).fill('¿Qué tarea tienes?');
+   await page.getByRole('button',{name:'Preguntar',exact:true}).click();
+   await page.getByRole('status').filter({hasText:/KONG no confirma una ejecución actual/}).waitFor();
   if(hasMap){
    const avatars=page.locator('[data-testid^="world-avatar-kong-city:fixture-city-25:"]');
    assert.equal(await avatars.count(),7);
@@ -264,6 +313,6 @@ test('office local QA: actual sessions, owner isolation and native scouts with f
   await writeFile(path.join(evidenceDir,'integrated-app-qa-local.json'),JSON.stringify({scope:'LOCAL memory fixtures; no production DB, GitHub or telemetry certified',passive,visual,pendingVisual,requests},null,2));
   assert.equal(visual.status,'pass',JSON.stringify(visual.findings));assert.deepEqual(visual.visualScans.flatMap(s=>s.consoleErrors),[]);
  } finally {
-  if(browser)await browser.close();if(server)await new Promise(resolve=>server.close(resolve));for(const [k,v]of previous){if(v===undefined)delete process.env[k];else process.env[k]=v;}delete globalThis.__officeLocalStorage;delete globalThis.__officeLocalBase;await rm(temp,{recursive:true,force:true});
+  if(browser)await browser.close();if(server)await new Promise(resolve=>{server.close(resolve);server.closeAllConnections();});for(const [k,v]of previous){if(v===undefined)delete process.env[k];else process.env[k]=v;}delete globalThis.__officeLocalStorage;delete globalThis.__officeLocalBase;await rm(temp,{recursive:true,force:true});
  }
 });

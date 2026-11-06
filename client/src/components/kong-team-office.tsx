@@ -83,7 +83,7 @@ export function KongTeamOffice({ onClose }: { onClose: () => void }) {
     return agent ? [agent] : [];
   });
   return (
-    <dialog ref={dialog} aria-labelledby="kong-team-title" onCancel={event => { event.preventDefault(); onClose(); }}
+    <dialog ref={dialog} aria-labelledby="kong-team-title" data-testid="kong-team-office" onClose={onClose} onCancel={event => { event.preventDefault(); onClose(); }}
       className="m-auto max-h-[90dvh] w-[min(96vw,75rem)] overflow-auto rounded-2xl border border-lime-300/30 bg-slate-950 p-4 text-slate-100 backdrop:bg-black/75 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <h2 id="kong-team-title" className="text-xl font-bold text-lime-200">Oficina KONG</h2>

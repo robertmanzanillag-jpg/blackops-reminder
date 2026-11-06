@@ -9,7 +9,7 @@ import type { OfficeKongCollaboration } from "../server/office-kong-collaboratio
 
 import { agentProbes, summarizeProbe, type AgentLiveStatus } from "./agent-live-status";
 import { emptyKongSupervision, parseKongSupervision, type KongSupervision } from "./kong-supervisor";
-import { emptyCompanyState, parseCompanyState, type CompanyState } from "./agent-company";
+import { emptyCompanyState, parseCompanyState, separateLegacyKongCompany, type CompanyState } from "./agent-company";
 
 export type Severity = "low" | "medium" | "high";
 export type Verdict = "escalado" | "confirmado" | "descartado";
@@ -95,6 +95,8 @@ export type CouncilState = {
   scout: { lastRunAt: string | null; lastSeen: Record<string, string>; latest: ScoutRelease[]; error: string | null };
   company: CompanyState;
   kongCompany: CompanyState;
+  /** Historical records only; never scored or advanced and never returned by the public view. */
+  kongLegacyCompany: CompanyState;
   kongEvidenceAt: Record<string, string>;
   kongObservedAt: string | null;
   kongCollaboration: OfficeKongCollaboration;
@@ -137,6 +139,7 @@ export function emptyCouncilState(): CouncilState {
     scout: { lastRunAt: null, lastSeen: {}, latest: [], error: null },
     company: emptyCompanyState(),
     kongCompany: emptyCompanyState(),
+    kongLegacyCompany: emptyCompanyState(),
     kongEvidenceAt: {},
     kongObservedAt: null,
     kongCollaboration: { verified: false, observedAt: null, totalFindings: 0, exchanges: [] },
@@ -171,6 +174,7 @@ export function parseCouncilState(raw: string | null): CouncilState {
     const value = JSON.parse(raw);
     if (value?.version !== 1 || !Array.isArray(value.debates) || !Array.isArray(value.proposals) || !obj(value.scout)) return emptyCouncilState();
     const base = emptyCouncilState();
+    const legacy = separateLegacyKongCompany(parseCompanyState(value.company), parseCompanyState(value.kongLegacyCompany));
     return {
       ...base,
       ...value,
@@ -178,7 +182,8 @@ export function parseCouncilState(raw: string | null): CouncilState {
       lessons: Array.isArray(value.lessons) ? value.lessons : [],
       resolvedDebates: Array.isArray(value.resolvedDebates) ? value.resolvedDebates : [],
       scout: { ...base.scout, ...value.scout, lastSeen: obj(value.scout.lastSeen) ? value.scout.lastSeen : {} },
-      company: parseCompanyState(value.company),
+      company: legacy.company,
+      kongLegacyCompany: legacy.archived,
       kongCompany: parseCompanyState(value.kongCompany),
       kongEvidenceAt: Object.fromEntries(Object.entries(obj(value.kongEvidenceAt) || {}).filter(([, v]) => typeof v === "string" && Number.isFinite(Date.parse(v)))),
       kongCollaboration: obj(value.kongCollaboration) && Array.isArray(value.kongCollaboration.exchanges) ? value.kongCollaboration : base.kongCollaboration,

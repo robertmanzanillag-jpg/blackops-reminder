@@ -3,8 +3,9 @@ import type { BlackRoomDailyJob, BlackRoomQueueState, BlackRoomExperimentDuratio
 import { allocateBlackRoomCreativeArm, BLACKROOM_CEO_CREATIVE_MIN_SAMPLES, BLACKROOM_CEO_DEFAULT_NETWORK_TARGETS } from "./blackroom-growth-ceo";
 import type { BlackRoomLedgerEntry, BlackRoomWorkerLedger } from "./blackroom-local-worker";
 import type { BlackRoomCreativeStrategy } from "./blackroom-growth-ceo";
-import { BLACKROOM_HOOK_TEST_ID } from "./blackroom-verified-learning";
+import { BLACKROOM_HOOK_TEST_ID, BLACKROOM_DURATION_TEST_ID, DURATION_ARMS } from "./blackroom-verified-learning";
 import { learningSourceHealth } from "./blackroom-learning-observations";
+import { sharedManualExploration } from "./blackroom-manual-exploration";
 
 export const BLACKROOM_CHANNEL_ID = "UCi__qHBfHLlYg0fu86BUA8g";
 export const BLACKROOM_CHANNEL_HANDLE = "@blackroom_us";
@@ -238,8 +239,23 @@ export function planBlackRoomDeterministicEdit(input: {
   const testSeed = stableNumber(`${job.id}:${slot}:controlled-hook`);
   const testStrategy = sharedWinner && testSeed % 5 !== 0 ? sharedWinner
     : testSeed % 2 ? "instant_drop" : "drop_first";
-  let creativeStrategy = controlledTest ? testStrategy! : allocation.strategy;
-  const durationSeconds = controlledTest ? 15 : chooseDuration(job, jobEntries, input.queue, targetNetworks);
+  // Rotate three-day blocks; old analytics payloads preserve the previous hook
+  // campaign until a duration evaluator is actually available.
+  const dayNumber = Math.floor(Date.parse(job.targetDate + "T00:00:00Z") / 86400_000);
+  // One final slot in a 3–5 slot job is an observational follow-up, never a
+  // controlled-test observation. Shared assets require agreement across networks.
+  const manualDuration = controlledTest && job.slots.length >=3 && job.slots.length <=5 && job.slots.indexOf(slotConfig) === job.slots.length-1
+    ? sharedManualExploration(input.queue.analytics?.manualExploration, targetNetworks, now) : null;
+  const durationStudy = !manualDuration && controlledTest && !!input.queue.analytics?.durationLearning && dayNumber % 6 < 3;
+  const armDuration = DURATION_ARMS[(dayNumber + job.slots.indexOf(slotConfig)) % 3];
+  const preferences = targetNetworks.map(network => input.queue.analytics?.durationLearning?.[network]);
+  const commonDuration = preferences[0]?.recommendedSeconds;
+  // Keep a full rotation even after a provisional winner. Exploit on only
+  // one in five designated slots; never label those clips as test evidence.
+  const exploitDuration = durationStudy && commonDuration && testSeed % 5 === 0 && preferences.every(d =>
+    d?.recommendedSeconds === commonDuration && learningSourceHealth(d.sourceObservedAt, now).status === "fresh") ? commonDuration : null;
+  let creativeStrategy = manualDuration || durationStudy ? "drop_first" as const : controlledTest ? testStrategy! : allocation.strategy;
+  const durationSeconds = (manualDuration || (durationStudy ? exploitDuration || armDuration : controlledTest ? 15 : chooseDuration(job, jobEntries, input.queue, targetNetworks))) as BlackRoomExperimentDuration;
   const format = controlledTest ? "vertical" : chooseFormat(durationSeconds, jobEntries, targetNetworks, input.queue);
   const language = controlledTest ? "en" : chooseLanguage(jobEntries, input.queue);
   const margin = durationSeconds >= 300 ? 180 : 90;
@@ -282,16 +298,17 @@ export function planBlackRoomDeterministicEdit(input: {
   // Complete declared cross-day blocks before opening more unrelated sources.
   // Segment availability, failed-source exclusion and the DJ quota still apply.
   const daypart = Math.floor(Number(slot.split(":")[0]) / 6);
-  const comparable = activeLedgerEntries.filter((entry) => controlledTest && !sharedWinner
-    && entry.learningTestId === BLACKROOM_HOOK_TEST_ID && entry.jobId !== job.id
+  const comparable = activeLedgerEntries.filter((entry) => controlledTest && (durationStudy || !sharedWinner)
+    && entry.learningTestId === (durationStudy ? BLACKROOM_DURATION_TEST_ID : BLACKROOM_HOOK_TEST_ID) && entry.jobId !== job.id
     && Date.parse(`${job.targetDate}T00:00:00Z`) - Date.parse(`${entry.publicationDateTime?.slice(0, 10)}T00:00:00Z`) > 0
     && Date.parse(`${job.targetDate}T00:00:00Z`) - Date.parse(`${entry.publicationDateTime?.slice(0, 10)}T00:00:00Z`) <= 21 * 86400_000
-    && entry.durationSeconds === 15 && entry.format === "vertical" && entry.language === "en"
+    && (durationStudy ? DURATION_ARMS.some(d=>d===entry.durationSeconds) : entry.durationSeconds === 15) && entry.format === "vertical" && entry.language === "en"
     && Math.floor(Number(entry.slot.split(":")[0]) / 6) === daypart
     && targetNetworks.every((network) => entry.targetNetworks?.includes(network))
     && ["drop_first", "instant_drop"].includes(entry.creativeStrategy || ""));
   const pairCandidates = selectable.filter((candidate) => sourceHasReusableHistory(candidate.video.id)
-    && comparable.some((entry) => entry.videoId === candidate.video.id));
+    && comparable.some((entry) => entry.videoId === candidate.video.id)
+    && (!durationStudy || !comparable.some(entry=>entry.videoId===candidate.video.id && entry.durationSeconds===durationSeconds)));
   const preferFreshSource = (candidates: typeof selectable): typeof selectable => {
     const pairs = candidates.filter((candidate) => pairCandidates.includes(candidate));
     if (pairs.length) return pairs;
@@ -320,7 +337,7 @@ export function planBlackRoomDeterministicEdit(input: {
   // Source allocation must not change with the hook arm being tested.
   const seed = `${job.id}:${slot}:${durationSeconds}:${format}:${language}:${controlledTest ? "controlled-source" : creativeStrategy}`;
   const selected = priority || selectionPool[stableNumber(seed) % selectionPool.length];
-  if (controlledTest && !sharedWinner) {
+  if (controlledTest && !manualDuration && !durationStudy && !sharedWinner) {
     const block = comparable.filter((entry) => entry.videoId === selected.video.id);
     if (block.length) {
       const first = block.filter((entry) => entry.creativeStrategy === "drop_first").length;
@@ -340,9 +357,13 @@ export function planBlackRoomDeterministicEdit(input: {
     hookFamily: creativeStrategy,
     captionVariant: controlledTest ? "hook-test-fixed-copy-v1" : `${language}-${stableNumber(`${seed}:caption`) % 3}`,
     creativeArmId: `${learningNetwork}:${creativeStrategy}:${language}:${format}:${durationSeconds}`,
-    allocationMode: controlledTest ? sharedWinner && testSeed % 5 !== 0 ? "exploit" : "explore" : allocation.mode,
-    ...(controlledTest ? { learningTestId: BLACKROOM_HOOK_TEST_ID, learningReference,
-      learningDecisionIds: targetNetworks.map((network) => `${network}:${input.queue.analytics?.verifiedLearning?.[network]?.id || "missing"}`).join(","),
+    allocationMode: manualDuration ? "explore" : durationStudy ? exploitDuration ? "exploit" : "explore" : controlledTest ? sharedWinner && testSeed % 5 !== 0 ? "exploit" : "explore" : allocation.mode,
+    ...(controlledTest ? { learningTestId: manualDuration ? "manual-observational-followup-v1" : durationStudy ? exploitDuration ? "duration-followup" : BLACKROOM_DURATION_TEST_ID : BLACKROOM_HOOK_TEST_ID, learningReference,
+      learningDecisionIds: targetNetworks.map(network => {
+        if (manualDuration) return `${network}:observational-hypothesis:${manualDuration}s`;
+        const decisions = durationStudy ? input.queue.analytics?.durationLearning : input.queue.analytics?.verifiedLearning;
+        return `${network}:${decisions?.[network]?.id || "missing"}`;
+      }).join(","),
     } : {}),
   };
 }
@@ -392,13 +413,13 @@ export function isOwnedBlackRoomMetadata(metadata: { channel_id?: unknown; uploa
     || String(metadata.uploader_id || "").toLowerCase() === BLACKROOM_CHANNEL_HANDLE.toLowerCase();
 }
 
-export function buildBlackRoomYtDlpWindowArgs(plan: BlackRoomEditPlan, sourcePath: string, temporaryDirectory: string): string[] {
+export function buildBlackRoomYtDlpWindowArgs(plan: BlackRoomEditPlan, sourcePath: string, temporaryDirectory: string, client: "web_safari" | "default" = "web_safari"): string[] {
   return [
     plan.videoUrl,
     // YouTube currently requires a GVS PO token for the default web_creator
     // HTTPS formats. web_safari exposes HLS variants that remain compatible
     // with partial ffmpeg downloads while preserving 1080p video and audio.
-    "--extractor-args", "youtube:player_client=web_safari",
+    ...(client === "web_safari" ? ["--extractor-args", "youtube:player_client=web_safari"] : []),
     "--download-sections", `*${plan.windowStartSeconds}-${plan.windowEndSeconds}`,
     "--force-keyframes-at-cuts", "-f", "bestvideo*[height<=1080]+bestaudio/best[height<=1080]",
     // A network stall must fail fast so the local worker can retry the slot instead
@@ -407,6 +428,22 @@ export function buildBlackRoomYtDlpWindowArgs(plan: BlackRoomEditPlan, sourcePat
     "--merge-output-format", "mp4", "--no-playlist", "--no-warnings", "--force-overwrites",
     "--paths", `temp:${temporaryDirectory}`, "-o", sourcePath,
   ];
+}
+
+/** Retry only format negotiation, before any media is selected or downloaded. */
+export async function downloadBlackRoomWindowWithFallback(
+  plan: BlackRoomEditPlan, sourcePath: string, temporaryDirectory: string, authArgs: string[],
+  run: (args: string[]) => Promise<unknown>,
+): Promise<void> {
+  try {
+    await run([...authArgs, ...buildBlackRoomYtDlpWindowArgs(plan, sourcePath, temporaryDirectory)]);
+  } catch (error) {
+    const diagnostic = String((error as { stderr?: unknown } | null)?.stderr ?? error);
+    if (!/Requested format is not available/i.test(diagnostic)) throw error;
+    // Public channel ownership has already been verified by the caller. Let yt-dlp
+    // negotiate current public clients without injecting Chrome or user config.
+    await run(["--ignore-config", ...buildBlackRoomYtDlpWindowArgs(plan, sourcePath, temporaryDirectory, "default")]);
+  }
 }
 
 export function buildBlackRoomRenderArgs(

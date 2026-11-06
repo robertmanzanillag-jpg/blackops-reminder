@@ -13,6 +13,7 @@ import type { OfficeKongAuditResult } from "./office-kong";
 // lesson or marks a PR-first brief as ready; it does not change code or skills.
 
 import { reviewKongReadiness } from "@shared/kong-supervisor";
+import { buildBlackRoomOfficeOperations } from "./blackroom-office-operations";
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
@@ -208,10 +209,11 @@ function advanceCompanyCycle(
     if (proposal.kind !== "new_agent" || proposal.status !== "applied") continue;
     const specialist = proposal.key.match(/^new_agent:specialist-(.+)$/);
     const forAgentId = specialist ? specialistIdFor(specialist[1]) : proposal.key.replace(/^new_agent:helper-/, "");
+    if (isKongCompanyAgent(forAgentId)) continue;
     company = enrollTrainee(company, { id: proposal.key, forAgentId, role: proposal.title.replace(/^Contratar /, ""), now });
   }
   // Skills from the lessons Robert approved about each agent.
-  company = learnLessons(company, state.lessons, now);
+  company = learnLessons(company, state.lessons.filter(lesson => !isKongCompanyAgent(lesson.subject)), now);
   // If the docs can't be read this cycle, the academy still advances on the core rules so nobody
   // stays in training forever. Each trainee first studies its own job (why it failed, its orders,
   // its lessons), then the general docs.
@@ -550,7 +552,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
     // The KONG conversation is owner-only (served by /api/kong-supervisor/state with an owner check).
     // This view is readable by any signed-in user, so it only carries the readiness records.
     const { messages: _privateMessages, ...kongSupervisionPublic } = loaded.kongSupervision;
-    const state = { ...loaded, kongSupervision: kongSupervisionPublic };
+    const { kongLegacyCompany: _legacyHistory, ...publicState } = loaded;
+    const state = { ...publicState, kongSupervision: kongSupervisionPublic };
     const personalities = Object.fromEntries(Object.values(state.company.careers).map((career) => [career.agentId, personalityFor(career.agentId, career.generation)]));
     return {
       ...state,
@@ -767,7 +770,7 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
       const remoteQueue = (remote as unknown as { device?: { queue?: Record<string, unknown> } }).device?.queue;
       const online = remoteModule.isBlackRoomRemoteDeviceOnline(remote);
       const local = await routesModule.readBlackRoomPanelQueue(remoteQueue as never);
-      return { agent: routesModule.resolveBlackRoomPanelAgent(local, remoteQueue as never, online), remote: { online } };
+      return { agent: routesModule.resolveBlackRoomPanelAgent(local, remoteQueue as never, online), remote: { online }, operations: buildBlackRoomOfficeOperations(remote) };
     }),
   ]);
   return statuses;
