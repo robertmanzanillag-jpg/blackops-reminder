@@ -177,3 +177,18 @@ probe reserved one cent and conservatively charged that cent in its report.
 It used synthetic text only, not production data. This verifies the API path,
 not a running production worker. Deployment secrets still require synchronization
 when the dedicated factory deployment is prepared.
+
+All 24 builder, Responses-provider and patch-generator tests passed on Replit
+Linux against six individually SHA-256-verified files from commit
+`a7f26ad8e056c10f01c7f560314f6cfb8fc930c5`. The test process inherited only PATH,
+a temporary HOME and TMPDIR, not application credentials. These include mocked
+Docker command-envelope and cleanup tests; they do not prove Docker support in
+a published Reserved VM. Full local TypeScript checking also passed.
+
+The hosting inspection still found the existing application on Autoscale.
+Published local files are not a durable SQLite store. Docker was verified in
+development only, not in a published Reserved VM. Replit's documented spending
+shutdown applies to the account/workspace, with no verified factory-only hard
+cap; applying it globally could interrupt unrelated applications. The factory
+worker remains disabled pending supported execution, durable storage and a
+verified total-cost configuration. API connectivity is no longer the blocker.
