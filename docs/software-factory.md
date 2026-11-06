@@ -231,3 +231,20 @@ supported runner test. Full TypeScript checking passed after the publisher
 addition. Remaining production requirements include a supported isolated runner,
 real independent review/QA/deploy/rollback adapters, three verified rehearsal
 cycles, durable ledger authentication and bounded storage/hosting expenditure.
+
+### Alternative isolated runner verified
+
+The bounded, credential-free GitHub Actions probe passed on the public
+repository at commit 00da2eab6af3d5730fe28868d532914d9daa3d77:
+https://github.com/robertmanzanillag-jpg/blackops-reminder/actions/runs/42194734935
+The workflow uses ubuntu-24.04, no token permissions, no checkout, a fixed
+five-minute job limit and the previously pinned official Node image. It asserts
+non-root execution, no non-loopback interfaces, no Docker socket, no inherited
+credential variables and denied root-filesystem writes. This provides a viable
+runner direction independent of Replit's published Docker availability.
+GitHub documents standard public-repository runners as free:
+https://docs.github.com/en/actions/reference/runners/github-hosted-runners
+Private repositories and larger runners must not inherit that zero-cost
+assumption. The probe is not connected to builder/simulator execution yet.
+No automatic job schedule was installed. Replit's connector now reports no
+publication for the temporary host probe, confirming its withdrawal.
