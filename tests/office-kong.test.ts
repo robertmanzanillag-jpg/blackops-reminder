@@ -134,6 +134,46 @@ test("new operations root metadata is discarded rather than exposed or treated a
   assert.equal(audit.evidence.cities[0].id, "miami");
 });
 
+test("service-mode metadata from the new KONG operations contract survives strict read-only parsing", async () => {
+  const modes = [
+    ...["restaurant_secretary", "legacy_ceo", "restaurant_deals", "kong_ai_chat"].map(id => ({ id, operationMode: "on_demand" })),
+    ...["error_analyzer", "venue_events", "promoter_reminders", "image_health", "proactive_notifications", "backend_watchdog"].map(id => ({ id, operationMode: "scheduled" })),
+  ];
+  const payload = { ...operations(), agents: [...operations().agents, ...modes.map(({id, operationMode}) => ({
+    ...operations().agents[0], id, name: id, kind: "system", state: "unknown", blocker: null,
+    operationMode, evidencePending: true,
+  }))] };
+  const client = connector(async () => json(payload));
+  const probe = await client.probeOfficeKong();
+  assert.equal(probe.status, "ready");
+  const audit = await client.runOfficeKongReadOnly();
+  for (const agents of [probe.agents!, audit.evidence.agents]) {
+    assert.equal(agents.filter(agent => agent.kind === "system").length, 10);
+    for (const expected of modes) {
+      const actual = agents.find(agent => agent.id === expected.id)!;
+      assert.equal(actual.operationMode, expected.operationMode);
+      assert.equal(actual.evidencePending, true);
+      assert.equal(actual.state, "unknown", "Service design must not establish activity or health");
+      assert.equal(actual.lastRunAt, null);
+      assert.equal(actual.nextRunAt, null);
+    }
+  }
+});
+
+test("service metadata remains optional and validates exact enum and boolean types", async () => {
+  for (const fields of [{}, {operationMode: "on_demand"}, {operationMode: "scheduled"}, {evidencePending: false}, {evidencePending: true}]) {
+    const payload = {...operations(), agents: [{...operations().agents[0], ...fields}]};
+    assert.equal((await connector(async () => json(payload)).probeOfficeKong()).status, "ready");
+  }
+  for (const fields of [{operationMode: "always_on"}, {operationMode: null}, {operationMode: true},
+    {evidencePending: "true"}, {evidencePending: null}, {evidencePending: 1},
+    {operationMode: "scheduled", evidencePending: true, unrecognizedAgentField: "must reject"}]) {
+    const payload = {...operations(), agents: [{...operations().agents[0], ...fields}]};
+    await assert.rejects(connector(async () => json(payload)).runOfficeKongReadOnly(),
+      (error: unknown) => error instanceof OfficeKongError && error.code === "INVALID_RESPONSE");
+  }
+});
+
 test("old and implausibly future snapshots are rejected", async () => {
   for (const offset of [-300_001, 30_001]) {
     const payload = { ...operations(), generatedAt: new Date(NOW.getTime() + offset).toISOString() };
