@@ -41,7 +41,7 @@ export function SoftwareFactoryPanel() {
     <DialogContent className="z-[250] max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
       <DialogHeader>
         <DialogTitle>Fábrica de software</DialogTitle>
-        <DialogDescription>Mejoras verificadas para tus aplicaciones. Límite mensual de 100 USD, incluido alojamiento.</DialogDescription>
+        <DialogDescription>Presupuesto de la fábrica: 100 USD al mes, incluido alojamiento. El plan de Replit y Kong se cuentan aparte.</DialogDescription>
       </DialogHeader>
       {query.isPending && <p role="status">Comprobando actividad y presupuesto…</p>}
       {query.isError && <div role="alert"><p>No se pudo comprobar la fábrica. La actividad anterior no confirma que siga trabajando.</p><Button variant="outline" onClick={() => void query.refetch()}>Reintentar</Button></div>}

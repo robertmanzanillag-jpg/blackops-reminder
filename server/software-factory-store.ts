@@ -75,6 +75,18 @@ export function createSoftwareFactoryStore(providedPool?: OfficeCloudPool) {
     async status(owner: string) { const key = ownerKey(owner); const month = monthNow(); const p = await pool(); const r = await p.query("SELECT b.*,c.paused FROM software_factory_budget b JOIN software_factory_controls c USING(owner_key) WHERE b.owner_key=$1 AND b.month=$2",[key,month]); const row = r.rows[0]; const workers = (await p.query("SELECT id,last_seen_at,capabilities FROM software_factory_workers WHERE last_seen_at > CURRENT_TIMESTAMP - interval '45 seconds'")).rows; return { configured: !!row, paused: row ? row.paused !== false : true, month, fixedCents: Number(row?.fixed_cents || 0), spentCents: Number(row?.spent_cents || 0), reservedCents: Number(row?.reserved_cents || 0), limitCents: 10000, workers }; },
     async setPaused(owner: string, paused: boolean) { if (typeof paused !== "boolean") throw new Error("FACTORY_INVALID_PAUSE"); await (await pool()).query("INSERT INTO software_factory_controls(owner_key,paused) VALUES($1,$2) ON CONFLICT(owner_key) DO UPDATE SET paused=EXCLUDED.paused",[ownerKey(owner),paused]); },
     async heartbeat(workerId: string, capabilities: Record<string, boolean> = {}) { await (await pool()).query("INSERT INTO software_factory_workers(id,capabilities) VALUES($1,$2::jsonb) ON CONFLICT(id) DO UPDATE SET last_seen_at=CURRENT_TIMESTAMP,capabilities=EXCLUDED.capabilities",[workerId,JSON.stringify(capabilities)]); },
+    async idleState(): Promise<{ kind: "idle" | "unknown" | "pendingRecovery" } | { kind: "running"; leaseExpiresAt: string }> {
+      const result = await (await pool()).query("SELECT status,lease_expires_at FROM software_factory_jobs WHERE status IN ('running','unknown') OR (status='pending' AND input->>'kind' IN ('verify','rollback')) ORDER BY CASE status WHEN 'unknown' THEN 0 WHEN 'running' THEN 1 ELSE 2 END,lease_expires_at ASC NULLS FIRST LIMIT 1");
+      const row = result.rows[0];
+      if (!row) return { kind: "idle" };
+      if (row.status === "unknown") return { kind: "unknown" };
+      if (row.status === "running") {
+        const raw = row.lease_expires_at;
+        const date = raw instanceof Date ? raw : typeof raw === "string" ? new Date(raw) : undefined;
+        return date && Number.isFinite(date.getTime()) ? { kind: "running", leaseExpiresAt: date.toISOString() } : { kind: "unknown" };
+      }
+      return { kind: "pendingRecovery" };
+    },
     async claim(workerId: string) { return transaction(async c => {
       // Unknown outcomes also retain the global execution slot until operator reconciliation.
       const active = await c.query("SELECT id FROM software_factory_jobs WHERE status IN ('running','unknown') LIMIT 1"); if (active.rows.length) return undefined;

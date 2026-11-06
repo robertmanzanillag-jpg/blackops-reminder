@@ -13,6 +13,7 @@ export interface FactoryWorkerOptions {
   discoveryReservationCents?: number;
   now?: () => Date;
 }
+export type FactoryTickResult = { kind: "progressed" | "idle" | "quarantined" } | { kind: "retry"; delayMs: number };
 const transitions: Record<FactoryJob["kind"], FactoryJob["kind"][]> = { discover:["build"],build:["simulate"],simulate:["review","build"],review:["deploy","build"],deploy:["verify"],verify:["evaluate","rollback"],rollback:["evaluate"],evaluate:[] };
 export function validateFactoryTransition(job: FactoryJob, result: FactoryAdapterResult) {
   const next = result.next;
@@ -32,7 +33,12 @@ export function createSoftwareFactoryWorker(options: FactoryWorkerOptions = {}) 
   const now = options.now || (() => new Date());
   let busy = false; let quarantined = false; let active: AbortController | undefined; let deadline = 0;
   return {
-    async maintain() { await store.expire(); if (busy && now().getTime() >= deadline) { quarantined=true; active?.abort(); } if (!quarantined) await store.heartbeat(workerId,Object.fromEntries(Object.entries(options.adapters || {}).map(([kind,adapter])=>[kind,typeof adapter?.execute === "function"]))); },
+    async maintain() {
+      if (!busy || quarantined) return;
+      if (now().getTime() >= deadline) { quarantined=true; active?.abort(); }
+      await store.expire();
+      if (!quarantined && active) await store.heartbeat(workerId,Object.fromEntries(Object.entries(options.adapters || {}).map(([kind,adapter])=>[kind,typeof adapter?.execute === "function"])));
+    },
     async schedule() {
       if (!options.scheduleOwner || !options.adapters?.discover) return;
       const reserve = options.discoveryReservationCents;
@@ -42,38 +48,59 @@ export function createSoftwareFactoryWorker(options: FactoryWorkerOptions = {}) 
         await store.enqueue(options.scheduleOwner,{key:`daily:${project.id}:${now().toISOString().slice(0,10)}`,projectId:project.id,kind:"discover",reservedCents:reserve!,payload:{source:"daily"}});
       }
     },
-    async tick() {
-      if (busy || quarantined) return; busy=true; deadline=now().getTime()+30000;
+    async tick(): Promise<FactoryTickResult> {
+      if (quarantined) return { kind: "quarantined" };
+      if (busy) return { kind: "retry", delayMs: 5000 }; busy=true; deadline=now().getTime()+30000;
       try {
         await store.expire(); const job = await store.claim(workerId);
-        if (now().getTime() >= deadline) { quarantined=true; return; }
-        if (!job) return;
-        deadline=Date.parse(job.leaseExpiresAt || ""); if (!Number.isFinite(deadline) || deadline <= now().getTime()) {quarantined=true; return;}
+        if (quarantined || now().getTime() >= deadline) { quarantined=true; return { kind: "quarantined" }; }
+        if (!job) {
+          // claim(undefined) also means another worker or an unknown outcome owns
+          // the global slot. Only a second trusted queue check permits long sleep.
+          if (typeof store.idleState !== "function") return { kind: "retry", delayMs: 5000 };
+          const state = await store.idleState();
+          if (state.kind === "unknown") { quarantined = true; return { kind: "quarantined" }; }
+          if (state.kind === "running") {
+            const remaining = Date.parse(state.leaseExpiresAt) - now().getTime();
+            if (!Number.isFinite(remaining)) { quarantined = true; return { kind: "quarantined" }; }
+            return { kind: "retry", delayMs: Math.max(1, Math.min(5000, remaining)) };
+          }
+          if (state.kind === "pendingRecovery") return { kind: "retry", delayMs: 5000 };
+          return { kind: "idle" };
+        }
+        deadline=Date.parse(job.leaseExpiresAt || ""); if (!Number.isFinite(deadline) || deadline <= now().getTime()) {quarantined=true; return { kind: "quarantined" };}
+        await store.heartbeat(workerId,Object.fromEntries(Object.entries(options.adapters || {}).map(([kind,adapter])=>[kind,typeof adapter?.execute === "function"])));
+        const block = async (reason: string): Promise<FactoryTickResult> => {
+          if (!await store.complete(job, { status: "blocked", costCents: 0, reason })) quarantined = true;
+          return { kind: quarantined ? "quarantined" : "progressed" };
+        };
         let requiredRollbackCents: number | undefined;
         const adapter = options.adapters?.[job.kind];
-        if (!adapter) { await store.complete(job,{status:"blocked",costCents:0,reason:`FACTORY_ADAPTER_UNAVAILABLE:${job.kind}`}); return; }
+        if (!adapter) return await block(`FACTORY_ADAPTER_UNAVAILABLE:${job.kind}`);
         if (job.kind === "deploy") {
-          if (!options.releaseContext) { await store.complete(job,{status:"blocked",costCents:0,reason:"FACTORY_TRUSTED_RELEASE_EVIDENCE_UNAVAILABLE"}); return; }
+          if (!options.releaseContext) return await block("FACTORY_TRUSTED_RELEASE_EVIDENCE_UNAVAILABLE");
           const context=await options.releaseContext(job); const gate=(context.target === "staging" ? rehearsalGate : releaseGate)(context.project,context.candidate,context.evidence,now().getTime());
-          if (!gate.allowed || context.candidate.headSha !== job.headSha || context.project.id !== job.projectId) { await store.complete(job,{status:"blocked",costCents:0,reason:gate.reasons.join(",") || "FACTORY_RELEASE_IDENTITY_MISMATCH"}); return; }
+          if (!gate.allowed || context.candidate.headSha !== job.headSha || context.project.id !== job.projectId) return await block(gate.reasons.join(",") || "FACTORY_RELEASE_IDENTITY_MISMATCH");
           const recovery=context.recoveryBudget;
           requiredRollbackCents=recovery?.rollbackCents;
           if(!recovery || ![recovery.verifyCents,recovery.rollbackCents].every(x=>Number.isSafeInteger(x)&&x>0) || job.recoveryCents!==recovery.verifyCents+recovery.rollbackCents || job.reservedCents<=job.recoveryCents) {
-            await store.complete(job,{status:"blocked",costCents:0,reason:"FACTORY_RECOVERY_ESCROW_UNAVAILABLE"});return;
+            return await block("FACTORY_RECOVERY_ESCROW_UNAVAILABLE");
           }
         }
+        if (quarantined || now().getTime() >= deadline) { quarantined=true; return { kind: "quarantined" }; }
         active=new AbortController(); const controller=active;
         const timeout=setTimeout(() => {quarantined=true;controller.abort();},Math.max(1,deadline-now().getTime())); timeout.unref?.();
         try {
           let result: FactoryAdapterResult;
           try { result=await adapter.execute(job,{signal:controller.signal,maxCostCents:job.reservedCents-(job.recoveryCents || 0)}); }
           catch { result={status:"unknown",costCents:0,reason:"FACTORY_EXECUTION_UNCONFIRMED"}; }
-          if (quarantined || controller.signal.aborted) { await store.expire(); return; }
+          if (quarantined || controller.signal.aborted) { await store.expire(); return { kind: "quarantined" }; }
           try { validateFactoryTransition(job,result); if(job.kind==="deploy" && result.status==="completed" && result.next?.recoveryCents!==requiredRollbackCents)throw new Error("FACTORY_ROLLBACK_ESCROW_REQUIRED"); }
           catch { result={status:"unknown",costCents:0,reason:"FACTORY_INVALID_ADAPTER_RESULT"}; }
           const {next,...outcome}=result;
           if (!await store.complete(job,outcome,next)) quarantined=true;
           if (outcome.status === "unknown") quarantined=true;
+          return { kind: quarantined ? "quarantined" : "progressed" };
         } finally {clearTimeout(timeout);active=undefined;}
       } finally {busy=false;}
     },

@@ -36,12 +36,27 @@ before download, and rejects special files and unsafe paths. It does not publish
 PRs or grant GitHub permissions. Publication still requires a separate adapter
 that applies the tested patch and reconciles uncertain branch/PR creation.
 
-Before choosing Replit production PostgreSQL, budget its active compute time:
-the current worker polls every five seconds and heartbeats every fifteen seconds,
-so it prevents the database's five-minute idle suspension. A continuously active
-database must not be treated as free or assumed covered by the VM price. The
-current polling design is not approved for a $100/month deployment without a
-verified all-in cost or a revised storage/scheduling arrangement.
+The worker keeps its process alive but stops database polling during confirmed
+idle periods. It wakes hourly, schedules discovery and drains available funded
+work without sleeping between stages. During active work, maintenance runs every
+15 seconds; lease deadlines and cancellation remain enforced. A separate queue
+inspection distinguishes genuine idle from another running lease, pending
+verification/recovery, or an unknown outcome. Running/recovery states use short
+rechecks; unknown execution quarantines and exits the loop for reconciliation.
+Shutdown interrupts idle sleep promptly. Newly queued work during dormancy can
+wait up to one hour unless an operator restarts the worker.
+
+Idle periods do not write heartbeats: the existing 45-second liveness threshold
+is unchanged. The dashboard must not interpret stale heartbeat evidence as a
+live worker. Manual dashboard refreshes and other application queries can still
+keep a shared database active.
+
+Before choosing Replit production PostgreSQL, budget its active compute time,
+including the provider's idle-suspension tail after every wake. Hourly dormancy
+reduces idle queries but does not enforce a total $100 invoice limit. Long-running
+work, recovery, other database users, hosting, storage and provider usage still
+require verified costs and budget reservations. Do not treat the database as free
+or assume it is included in the VM price.
 
 The trusted adapter module can use `createTrustedFactoryWorkerOptions` from
 `server/software-factory-runtime.ts` to compose the eight real stage callbacks

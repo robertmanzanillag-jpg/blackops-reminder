@@ -5,6 +5,7 @@ import { stat } from "node:fs/promises";
 import { createSoftwareFactoryWorker, type FactoryWorkerOptions } from "../server/software-factory-worker";
 import { softwareFactoryStore } from "../server/software-factory-store";
 import { validateFactoryWorkerOptions } from "../server/software-factory-runtime";
+import { runSoftwareFactoryLoop } from "../server/software-factory-loop";
 
 async function main() {
   if (process.env.SOFTWARE_FACTORY_ENABLED !== "true") throw new Error("SOFTWARE_FACTORY_ENABLED_REQUIRED");
@@ -21,19 +22,13 @@ async function main() {
   const state=await softwareFactoryStore.status(owner);
   if (!state.configured) throw new Error("FACTORY_FIXED_COST_RESERVATION_REQUIRED");
   const worker=createSoftwareFactoryWorker({...config,store:softwareFactoryStore,scheduleOwner:owner});
-  let stopping=false;
-  const stop=()=>{stopping=true;worker.stop();};
-  process.once("SIGTERM",stop);process.once("SIGINT",stop);
-  const maintenance=setInterval(()=>{void worker.maintain().catch(()=>console.error("Factory persistence unavailable"));},15000);
+  const shutdown = new AbortController();
+  const stop = () => shutdown.abort();
+  process.once("SIGTERM",stop); process.once("SIGINT",stop);
   try {
-    await worker.maintain();
-    while(!stopping) {
-      try { await worker.schedule(); }
-      catch { console.error("Factory discovery admission blocked; existing funded work will continue."); }
-      try { await worker.tick(); }
-      catch { console.error("Factory cycle blocked; inspect persisted diagnostics and budget."); }
-      if(!stopping) await new Promise(resolve=>setTimeout(resolve,5000));
-    }
-  } finally {clearInterval(maintenance);worker.stop();}
+    await runSoftwareFactoryLoop(worker, { signal: shutdown.signal, onError: message => console.error(message) });
+  } finally {
+    process.removeListener("SIGTERM",stop); process.removeListener("SIGINT",stop); worker.stop();
+  }
 }
 void main().catch(()=>{console.error("Factory stopped: verify migration, fixed costs, owner and trusted adapter configuration.");process.exitCode=1;});

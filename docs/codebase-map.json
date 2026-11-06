@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T05:17:01.410Z",
+  "generatedAt": "2026-11-06T05:36:43.864Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -126,25 +126,25 @@
     "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 802,
-    "filesIndexed": 719,
-    "imports": 2576,
+    "filesVisible": 804,
+    "filesIndexed": 721,
+    "imports": 2583,
     "routes": 556,
-    "symbols": 16106
+    "symbols": 16130
   },
   "directories": {
     "server": {
-      "files": 168,
-      "indexed": 164,
+      "files": 169,
+      "indexed": 165,
       "kinds": {
-        "server": 168
+        "server": 169
       }
     },
     "tests": {
-      "files": 176,
-      "indexed": 173,
+      "files": 177,
+      "indexed": 174,
       "kinds": {
-        "test": 176
+        "test": 177
       }
     },
     ".": {
@@ -10653,6 +10653,7 @@
       "path": "script/software-factory-worker.ts",
       "kind": "script",
       "imports": [
+        "../server/software-factory-loop",
         "../server/software-factory-runtime",
         "../server/software-factory-store",
         "../server/software-factory-worker",
@@ -10663,10 +10664,10 @@
       "exports": [],
       "symbols": [
         "main",
-        "maintenance",
         "module",
         "modulePath",
         "owner",
+        "shutdown",
         "state",
         "stop",
         "worker"
@@ -21170,6 +21171,30 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-loop.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-worker"
+      ],
+      "exports": [
+        "FACTORY_IDLE_POLL_MS",
+        "FactoryLoopClock",
+        "runSoftwareFactoryLoop"
+      ],
+      "symbols": [
+        "FACTORY_IDLE_POLL_MS",
+        "clock",
+        "finish",
+        "maintain",
+        "report",
+        "runSoftwareFactoryLoop",
+        "stop",
+        "timer",
+        "wait"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-pipeline.ts",
       "kind": "server",
       "imports": [
@@ -21386,6 +21411,7 @@
         "config",
         "createSoftwareFactorySchemaSql",
         "createSoftwareFactoryStore",
+        "date",
         "decode",
         "factoryJobKinds",
         "input",
@@ -21397,7 +21423,9 @@
         "pool",
         "previous",
         "protectedTransfer",
+        "raw",
         "result",
+        "row",
         "run",
         "selected",
         "softwareFactoryStore",
@@ -21419,6 +21447,7 @@
       "exports": [
         "FactoryAdapter",
         "FactoryAdapterResult",
+        "FactoryTickResult",
         "FactoryWorkerOptions",
         "TrustedReleaseContext",
         "createSoftwareFactoryWorker",
@@ -21427,11 +21456,13 @@
       "symbols": [
         "adapter",
         "attempts",
+        "block",
         "context",
         "createSoftwareFactoryWorker",
         "next",
         "now",
         "recovery",
+        "remaining",
         "reserve",
         "state",
         "store",
@@ -28335,6 +28366,31 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-loop.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-loop",
+        "../server/software-factory-store",
+        "../server/software-factory-worker",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Clock",
+        "clock",
+        "flush",
+        "job",
+        "loop",
+        "maintain",
+        "setup",
+        "store",
+        "tick",
+        "worker"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-panel.test.mjs",
       "kind": "test",
       "imports": [
@@ -28944,6 +29000,7 @@
     "tests/shopify-oauth.test.ts",
     "tests/software-factory-builder.test.ts",
     "tests/software-factory-github.test.ts",
+    "tests/software-factory-loop.test.ts",
     "tests/software-factory-pipeline.test.ts",
     "tests/software-factory-postgres.test.ts",
     "tests/software-factory-routes.test.ts",
