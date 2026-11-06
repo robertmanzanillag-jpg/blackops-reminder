@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-06T09:53:57.732Z
+Generated: 2026-11-06T10:53:59.947Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\blackops-reminder`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 796 | 710 | 2519 | 554 | 16095 |
+| 805 | 717 | 2549 | 554 | 16162 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 175 | 171 | test:175 |
-| `server` | 166 | 161 | server:166 |
-| `script` | 86 | 81 | script:86 |
+| `tests` | 178 | 174 | test:178 |
+| `server` | 168 | 163 | server:168 |
+| `script` | 89 | 82 | script:89 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 34 | 33 | docs:34 |
+| `docs` | 35 | 34 | docs:35 |
 | `client/src/components` | 28 | 28 | client-component:28 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
@@ -176,6 +176,7 @@ Package: `rest-express`
 - `tests/office-claude.test.ts`
 - `tests/office-cloud-runtime.test.ts`
 - `tests/office-cloud-store.test.ts`
+- `tests/office-council-migration.test.ts`
 - `tests/office-execution.test.ts`
 - `tests/office-github.test.ts`
 - `tests/office-kong-central-agents.test.ts`
@@ -183,6 +184,7 @@ Package: `rest-express`
 - `tests/office-kong-supervisor.test.ts`
 - `tests/office-kong.test.ts`
 - `tests/office-openai.test.ts`
+- `tests/office-protocol.test.ts`
 - `tests/office-review-benchmarks.test.ts`
 - `tests/office-role-lifecycle.test.ts`
 - `tests/office-routes.test.ts`

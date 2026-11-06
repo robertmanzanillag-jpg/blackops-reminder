@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T09:53:57.732Z",
+  "generatedAt": "2026-11-06T10:53:59.947Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\blackops-reminder",
   "packageName": "rest-express",
   "scripts": {
@@ -124,53 +124,39 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 796,
-    "filesIndexed": 710,
-    "imports": 2519,
+    "filesVisible": 805,
+    "filesIndexed": 717,
+    "imports": 2549,
     "routes": 554,
-    "symbols": 16095
+    "symbols": 16162
   },
   "directories": {
-    ".github/workflows": {
-      "files": 1,
-      "indexed": 0,
-      "kinds": {
-        "other": 1
-      }
-    },
     "docs": {
-      "files": 34,
-      "indexed": 33,
+      "files": 35,
+      "indexed": 34,
       "kinds": {
-        "docs": 34
+        "docs": 35
       }
     },
     "script": {
-      "files": 86,
-      "indexed": 81,
+      "files": 89,
+      "indexed": 82,
       "kinds": {
-        "script": 86
+        "script": 89
       }
     },
     "server": {
-      "files": 166,
-      "indexed": 161,
+      "files": 168,
+      "indexed": 163,
       "kinds": {
-        "server": 166
-      }
-    },
-    "shared": {
-      "files": 12,
-      "indexed": 12,
-      "kinds": {
-        "shared": 12
+        "server": 168
       }
     },
     "tests": {
-      "files": 175,
-      "indexed": 171,
+      "files": 178,
+      "indexed": 174,
       "kinds": {
-        "test": 175
+        "test": 178
       }
     },
     ".": {
@@ -197,6 +183,13 @@
       }
     },
     ".agents/skills/codebase-overview/agents": {
+      "files": 1,
+      "indexed": 0,
+      "kinds": {
+        "other": 1
+      }
+    },
+    ".github/workflows": {
       "files": 1,
       "indexed": 0,
       "kinds": {
@@ -342,6 +335,13 @@
       "indexed": 3,
       "kinds": {
         "server": 3
+      }
+    },
+    "shared": {
+      "files": 12,
+      "indexed": 12,
+      "kinds": {
+        "shared": 12
       }
     },
     "shared/models": {
@@ -5431,6 +5431,14 @@
       "routes": []
     },
     {
+      "path": "docs/office-windows-worker.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/revenue-engine-first-lead-review.md",
       "kind": "docs",
       "imports": [],
@@ -10293,7 +10301,10 @@
       "path": "script/office-cloud-migrate.ts",
       "kind": "script",
       "imports": [
+        "../server/agent-council-store",
         "../server/office-cloud-store",
+        "../server/office-council-migration",
+        "../server/office-protocol",
         "pg"
       ],
       "exports": [],
@@ -10301,9 +10312,11 @@
         "apply",
         "args",
         "client",
+        "history",
         "main",
         "pool",
-        "result"
+        "result",
+        "revisionArg"
       ],
       "routes": []
     },
@@ -10367,19 +10380,72 @@
       "routes": []
     },
     {
+      "path": "script/office-windows-worker.mjs",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:fs",
+        "node:module",
+        "node:path",
+        "node:url",
+        "pg",
+        "tsx/esm/api"
+      ],
+      "exports": [
+        "parseWorkerConfig",
+        "preflightDatabase",
+        "safeWorkerEnvironment",
+        "validateWorkerPaths"
+      ],
+      "symbols": [
+        "allowed",
+        "args",
+        "cap",
+        "child",
+        "config",
+        "env",
+        "fail",
+        "localEnvFiles",
+        "main",
+        "manifest",
+        "match",
+        "output",
+        "owner",
+        "parseWorkerConfig",
+        "paths",
+        "pool",
+        "preflightDatabase",
+        "protocol",
+        "relative",
+        "repo",
+        "require",
+        "result",
+        "safeWorkerEnvironment",
+        "terminate",
+        "validateWorkerPaths",
+        "value"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/office-worker.ts",
       "kind": "script",
       "imports": [
         "../server/office-cloud-runtime",
-        "../server/user-context"
+        "../server/office-protocol",
+        "../server/user-context",
+        "pg"
       ],
       "exports": [],
       "symbols": [
         "capabilities",
+        "checkProtocol",
         "execution",
         "heartbeat",
         "main",
         "module",
+        "protocolPool",
+        "requireProtocol",
         "reviewOnlyOwner",
         "runOnce",
         "worker"
@@ -15680,6 +15746,7 @@
         "normalizeKnownAppTags",
         "normalizeRepo",
         "oldValue",
+        "previous",
         "repoKey",
         "retired",
         "tags",
@@ -17044,6 +17111,7 @@
         "./health-check",
         "./local-auth",
         "./market-news",
+        "./office-protocol",
         "./promo-video-agent",
         "./reminder-scheduler",
         "./revenue-engine",
@@ -18424,6 +18492,29 @@
       "routes": []
     },
     {
+      "path": "server/office-council-migration.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/office-role-lifecycle",
+        "./agent-council-store",
+        "node:crypto"
+      ],
+      "exports": [
+        "importOfficeCouncilHistory"
+      ],
+      "symbols": [
+        "data",
+        "destination",
+        "importOfficeCouncilHistory",
+        "key",
+        "object",
+        "row",
+        "source",
+        "verified"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/office-execution.ts",
       "kind": "server",
       "imports": [
@@ -18657,6 +18748,32 @@
         "text",
         "transport",
         "usage"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-protocol.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "OFFICE_PROTOCOL_VERSION",
+        "OfficeProtocolPool",
+        "assertOfficeProtocolReady",
+        "officeProtocolSchemaSql",
+        "officeWebProtocol"
+      ],
+      "symbols": [
+        "OFFICE_PROTOCOL_VERSION",
+        "assertOfficeProtocolReady",
+        "databaseNow",
+        "officeProtocolSchemaSql",
+        "officeWebProtocol",
+        "ownerKey",
+        "revision",
+        "row",
+        "verified"
       ],
       "routes": []
     },
@@ -26432,6 +26549,7 @@
         "kong",
         "repos",
         "result",
+        "row",
         "rows",
         "second",
         "updatedBr",
@@ -27572,6 +27690,23 @@
       "routes": []
     },
     {
+      "path": "tests/office-council-migration.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-council-migration",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "client",
+        "data",
+        "db",
+        "result"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-execution.test.ts",
       "kind": "test",
       "imports": [
@@ -27773,6 +27908,25 @@
       "routes": []
     },
     {
+      "path": "tests/office-protocol.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-protocol",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "key",
+        "owner",
+        "pool",
+        "row",
+        "sha"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-review-benchmarks.test.ts",
       "kind": "test",
       "imports": [
@@ -27907,6 +28061,30 @@
         "runtime",
         "task",
         "untilTerminal"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-windows-worker.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/office-windows-worker.mjs",
+        "node:assert/strict",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "FakePool",
+        "config",
+        "entry",
+        "env",
+        "raw",
+        "repo",
+        "root",
+        "source"
       ],
       "routes": []
     },
@@ -28768,6 +28946,7 @@
     "tests/office-claude.test.ts",
     "tests/office-cloud-runtime.test.ts",
     "tests/office-cloud-store.test.ts",
+    "tests/office-council-migration.test.ts",
     "tests/office-execution.test.ts",
     "tests/office-github.test.ts",
     "tests/office-kong-central-agents.test.ts",
@@ -28775,6 +28954,7 @@
     "tests/office-kong-supervisor.test.ts",
     "tests/office-kong.test.ts",
     "tests/office-openai.test.ts",
+    "tests/office-protocol.test.ts",
     "tests/office-review-benchmarks.test.ts",
     "tests/office-role-lifecycle.test.ts",
     "tests/office-routes.test.ts",
