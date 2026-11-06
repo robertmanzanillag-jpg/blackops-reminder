@@ -1,4 +1,5 @@
 import {createHash} from "node:crypto";
+import {canonicalEvidenceDigest} from "./evidence-json";
 import {performance} from "node:perf_hooks";
 import {enrollTrainee,type CompanyState} from "../shared/agent-company";
 import type {OfficeRoleLifecycleState} from "../shared/office-role-lifecycle";
@@ -7,7 +8,15 @@ import {evaluateRadioSlotPolicies,executeRadioSlotPolicy,RADIO_SLOT_BASELINE_POL
 export const RADIO_TRAINING_MAX_FAMILY_MS=1000;
 export type RadioTrainingMeasurement={benchmarkId:string;baselineDurationMs:number;candidateDurationMs:number};
 export type RadioTrainingEvidence={evaluation:RadioSlotPolicyEvaluation;timings:RadioTrainingMeasurement[];costBasis:"no-provider-invocation";apiCalls:0};
-export const radioEvidenceDigest=(value:unknown)=>createHash("sha256").update(JSON.stringify(value)).digest("hex");
+export const radioEvidenceDigest=canonicalEvidenceDigest;
+/** Recover only the exact pre-fix writer shape, after complete oracle validation.
+ * Never rewrite a stored attestation or accept arbitrary key permutations. */
+export function matchesRadioEvidenceDigest(evidence:RadioTrainingEvidence,digest:string):boolean {
+ if(!validateRadioTrainingEvidence(evidence))return false;
+ if(digest===radioEvidenceDigest(evidence))return true;
+ const original={evaluation:evaluateRadioSlotPolicies(),timings:evidence.timings.map(t=>({benchmarkId:t.benchmarkId,baselineDurationMs:t.baselineDurationMs,candidateDurationMs:t.candidateDurationMs})),costBasis:"no-provider-invocation",apiCalls:0};
+ return digest===createHash("sha256").update(JSON.stringify(original)).digest("hex");
+}
 export const radioIncumbentVersion=(generation:number)=>`${RADIO_SLOT_CANDIDATE_POLICY}:incumbent:${generation}`;
 export function radioImplementationVersion(policyVersion:string,generation:number):string {
  if(policyVersion===`baseline:radio:${generation}`)return RADIO_SLOT_BASELINE_POLICY;
@@ -19,7 +28,7 @@ export function validRadioTrainingReceipt(input:unknown):input is RadioTrainingR
  const value=input as RadioTrainingReceipt;
  try{return Boolean(value && typeof value.id==="string" && value.id && typeof value.traineeId==="string" && value.traineeId && Number.isSafeInteger(value.generation) && value.generation>0 &&
   value.scope==="radio-range-parser-only" && Number.isFinite(Date.parse(value.appliedAt)) && value.baselinePolicyVersion===`baseline:radio:${value.generation}` && value.appliedPolicyVersion===radioIncumbentVersion(value.generation) &&
-  validateRadioTrainingEvidence(value.evidence) && value.artifactId===radioEvidenceDigest(value.evidence) &&
+  matchesRadioEvidenceDigest(value.evidence,value.artifactId) &&
   (value.firstVerifiedRunId===undefined ? value.firstVerifiedAt===undefined && value.firstExecutionArtifactId===undefined : typeof value.firstVerifiedRunId==="string" && value.firstVerifiedRunId.length>0 && Number.isFinite(Date.parse(value.firstVerifiedAt || "")) && Date.parse(value.firstVerifiedAt!)>=Date.parse(value.appliedAt) && /^[a-f0-9]{64}$/.test(value.firstExecutionArtifactId || "")));}catch{return false;}
 }
 export async function resolveSavedRadioPolicy(userId:string,deps?:{owner:()=>string;read:()=>Promise<Pick<CouncilState,"officeExecution">>}):Promise<string> {
@@ -48,9 +57,9 @@ export function validateRadioTrainingEvidence(input:unknown):input is RadioTrain
  try {
  const value=input as RadioTrainingEvidence;
  const trusted=evaluateRadioSlotPolicies();
- return value?.costBasis === "no-provider-invocation" && value.apiCalls === 0 && radioEvidenceDigest(value.evaluation)===radioEvidenceDigest(trusted) && trusted.qualified &&
+ return !!value && Object.keys(value).sort().join(",")==="apiCalls,costBasis,evaluation,timings" && value.costBasis === "no-provider-invocation" && value.apiCalls === 0 && radioEvidenceDigest(value.evaluation)===radioEvidenceDigest(trusted) && trusted.qualified &&
   Array.isArray(value.timings) && value.timings.length===3 && new Set(value.timings.map(t=>t.benchmarkId)).size===3 &&
-  value.timings.every(t=>trusted.artifacts.some(f=>f.benchmarkId===t.benchmarkId) && [t.baselineDurationMs,t.candidateDurationMs].every(ms=>Number.isFinite(ms) && ms>=0 && ms<=RADIO_TRAINING_MAX_FAMILY_MS));
+  value.timings.every(t=>Object.keys(t).sort().join(",")==="baselineDurationMs,benchmarkId,candidateDurationMs" && trusted.artifacts.some(f=>f.benchmarkId===t.benchmarkId) && [t.baselineDurationMs,t.candidateDurationMs].every(ms=>Number.isFinite(ms) && ms>=0 && ms<=RADIO_TRAINING_MAX_FAMILY_MS));
  } catch {return false;}
 }
 

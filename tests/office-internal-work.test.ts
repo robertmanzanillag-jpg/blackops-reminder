@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createInternalWorkRunner,prepareInternalArtifact,parseInternalWork,readInternalWorkSnapshot,type InternalWorkSnapshot } from "../server/office-internal-work";
+import {recoverRadioReadOnly} from "../server/office-internal-work";
+import {completeRoleExecution} from "../shared/office-role-lifecycle";
 import { advanceCompany,emptyCompanyState } from "../shared/agent-company";
 import { emptyRoleLifecycleState,reconcileRoleLifecycles } from "../shared/office-role-lifecycle";
 import type { CouncilState } from "../shared/agent-council";
@@ -9,15 +11,16 @@ import { registerAgentCouncilRoutes } from "../server/agent-council-routes";
 const NOW=Date.parse("2026-11-06T12:00:00Z"), owner="owner-one";
 const key=createHash("sha256").update(JSON.stringify(owner)).digest("hex");
 const source=():InternalWorkSnapshot=>({ownerKey:key,observedAt:new Date(NOW).toISOString(),taskTotal:1,approvalTotal:1,tasks:[{id:"task1",title:"Saved task",scheduledAt:"2026-11-06T23:30:00",priority:"high",kind:"meeting"}],approvals:[{id:"approval1",title:"Pending approval",scheduledAt:null,priority:"medium",kind:"email.send"}]});
-function fixture(includeRadio=false){
+const jsonbRoundtrip=(value:any):any=>Array.isArray(value)?value.map(jsonbRoundtrip):value && typeof value==="object"?Object.fromEntries(Object.keys(value).sort((a,b)=>a.length-b.length || a.localeCompare(b)).map(k=>[k,jsonbRoundtrip(value[k])])):value;
+function fixture(includeRadio=false,jsonb=false){
   let clock=NOW;
   const company=advanceCompany(emptyCompanyState(),{now:NOW-1000,statuses:{ceo:{state:"working",label:"ready"},assistant:{state:"working",label:"ready"},...(includeRadio?{radio:{state:"working" as const,label:"ready"}}:{})},roles:{ceo:"CEO",assistant:"Assistant",...(includeRadio?{radio:"Radio"}:{})}}).state;
   let state:NonNullable<CouncilState["officeExecution"]>={roles:reconcileRoleLifecycles(emptyRoleLifecycleState(),company,NOW),tokens:{reservations:[]}};
-  const council={async updateOfficeExecution(change:any){const proposed=change(structuredClone(state),company);state=structuredClone(proposed);return structuredClone(state);}};
+  const council={async updateOfficeExecution(change:any){const proposed=change(structuredClone(state),company);state=jsonb?jsonbRoundtrip(proposed):structuredClone(proposed);return structuredClone(state);}};
   return {council,state:()=>state,company,now:()=>clock,setClock:(value:number)=>clock=value};
 }
 test("Radio incumbent qualification, policy assignment and first real saved-record result commit durably",async()=>{
- const f=fixture(true);let reads=0;
+ const f=fixture(true,true);let reads=0;
  const read=async()=>{reads++;return {...source(),observedAt:new Date(f.now()).toISOString(),radioTotal:1,radio:[{id:"radio1",title:"Radio",scheduledAt:"2026-11-08T19:00:00",description:"7-8PM DJ Alpha\n8-9PM DJ Beta\n9-10PM DJ Gamma"}]};};
  const make=()=>createInternalWorkRunner({council:f.council,owner,now:f.now,read});
  await Promise.all([make().tick(),make().tick()]);
@@ -37,6 +40,30 @@ test("Radio source failure keeps trained incumbent active without inventing comp
  assert.equal(f.state().roles.roles.radio.leases.some(l=>l.status==="completed"),false);
  const vacant=fixture(true);vacant.state().roles.roles.radio.status="vacant";
  await createInternalWorkRunner({council:vacant.council,owner,now:vacant.now,read:async()=>source()}).tick();assert.equal(vacant.state().internalWork?.jobs.some(j=>j.role==="radio"),false);assert.equal(vacant.state().roles.roles.radio.status,"vacant");
+});
+
+test("operator-only Radio recovery retains interruption, rotates fence once, and proves only the fresh read",async()=>{
+ const f=fixture(true,true),read=async()=>({...source(),observedAt:new Date(f.now()).toISOString(),radioTotal:1,radio:[{id:"radio1",title:"Radio",scheduledAt:"2026-11-08T19:00:00",description:"7-8PM DJ Alpha"}]});
+ await createInternalWorkRunner({council:f.council,owner,now:f.now,read}).tick();
+ const job=f.state().internalWork!.jobs.find(j=>j.role==="radio")!,lease=f.state().roles.roles.radio.leases.find(l=>l.executionId===job.id)!;
+ job.status="running";delete job.artifact;delete job.artifactId;delete job.completedAt;
+ lease.status="running";delete lease.artifactId;delete lease.completedAt;
+ const receipt=f.state().internalWork!.radioTrainingHistory![0];delete receipt.firstVerifiedRunId;delete receipt.firstVerifiedAt;delete receipt.firstExecutionArtifactId;
+ const original=structuredClone(job),originalLease=structuredClone(lease);let reads=0;
+ const options={council:f.council,owner,jobId:job.id,expectedFence:job.fence,operatorAuditId:"operator-paused-drained-1",now:f.now,read:async()=>{reads++;return read();}};
+ await assert.rejects(()=>recoverRadioReadOnly(options),/not eligible/);assert.equal(reads,0);
+ f.setClock(NOW+300001);
+ await assert.rejects(()=>recoverRadioReadOnly({...options,expectedFence:"stale"}),/not eligible/);
+ lease.startedAt=new Date(NOW-1).toISOString();await assert.rejects(()=>recoverRadioReadOnly(options),/not eligible/);lease.startedAt=originalLease.startedAt;
+ lease.artifactId="unexpected";await assert.rejects(()=>recoverRadioReadOnly(options),/not eligible/);delete lease.artifactId;
+ assert.equal(reads,0);
+ const results=await Promise.allSettled([recoverRadioReadOnly(options),recoverRadioReadOnly(options)]);assert.equal(results.filter(r=>r.status==="fulfilled").length,1);assert.equal(reads,1);
+ const work=parseInternalWork(jsonbRoundtrip(f.state().internalWork)),done=work.jobs.find(j=>j.id===job.id)!;
+ assert.equal(done.status,"completed");assert.notEqual(done.fence,original.fence);assert.equal(done.interruptedAttempts?.length,1);
+ assert.equal(done.interruptedAttempts![0].status,"unknown");assert.deepEqual(done.interruptedAttempts![0].priorLease,originalLease);assert.equal(done.interruptedAttempts![0].startedAt,original.startedAt);
+ assert.equal(work.radioTrainingHistory![0].firstVerifiedRunId,job.id);assert.equal(work.radioTrainingHistory![0].firstExecutionArtifactId,done.artifactId);
+ const late=completeRoleExecution(f.state().roles,{roleId:"radio",executionId:job.id,fence:original.fence,policyVersion:job.policyVersion,now:f.now(),artifactId:"late",success:true});assert.equal(late.accepted,false);
+ await assert.rejects(()=>recoverRadioReadOnly({...options,expectedFence:done.fence}),/not eligible/);
 });
 test("canonical planning includes exact saved records, no sending or live-calendar claims",()=>{
   const ceo=prepareInternalArtifact("ceo",source()),assistant=prepareInternalArtifact("assistant",source());
