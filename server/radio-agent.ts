@@ -1,3 +1,4 @@
+import { parseRadioDescription } from "../shared/radio-slots";
 import { storage } from "./storage";
 import { sendTelegramMessage } from "./telegram";
 import { format, addDays, endOfMonth, isAfter } from "date-fns";
@@ -36,62 +37,6 @@ export interface RadioAnalysis {
 function isRadioEventTitle(title: string): boolean {
   const normalized = title.toLowerCase();
   return normalized.includes("radio") || normalized.includes("black room");
-}
-
-function decodeDescription(description: string): string {
-  return description
-    .replace(/<br\s*\/?>/gi, "\n")
-    .replace(/<\/p>/gi, "\n")
-    .replace(/<[^>]*>/g, "")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&amp;/g, "&")
-    .replace(/&nbsp;/g, " ")
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"');
-}
-
-function cleanDjName(value: string): string | null {
-  const cleaned = value
-    .replace(/^[-–—:.\s]+/, "")
-    .replace(/\s+/g, " ")
-    .trim();
-
-  if (!cleaned || /^(tba|open|empty|vacio|vacío|pending|pendiente)$/i.test(cleaned)) {
-    return null;
-  }
-
-  return cleaned;
-}
-
-function parseRadioDescription(description: string | null): { slot7: string | null; slot8: string | null; slot9: string | null } {
-  if (!description) {
-    return { slot7: null, slot8: null, slot9: null };
-  }
-
-  const cleanDesc = decodeDescription(description);
-  let slot7: string | null = null;
-  let slot8: string | null = null;
-  let slot9: string | null = null;
-
-  const normalized = cleanDesc.replace(/\r?\n/g, " ");
-  const slotPattern = /(?:^|\s)([789])(?:\s*:\s*00)?(?:\s*(?:pm|p\.m\.))?\s*(?:[:.\-–—])?\s*([\s\S]*?)(?=\s[789](?:\s*:\s*00)?(?:\s*(?:pm|p\.m\.))?\s*(?:[:.\-–—])?\s*|$)/gi;
-
-  let match: RegExpExecArray | null;
-  while ((match = slotPattern.exec(normalized)) !== null) {
-    const hour = Number(match[1]);
-    const djName = cleanDjName(match[2] || "");
-
-    if (hour === 7) {
-      slot7 = djName;
-    } else if (hour === 8) {
-      slot8 = djName;
-    } else if (hour === 9) {
-      slot9 = djName;
-    }
-  }
-
-  return { slot7, slot8, slot9 };
 }
 
 function getOrdinalDay(day: number): string {

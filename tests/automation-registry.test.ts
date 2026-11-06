@@ -2,6 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { AutomationDefinition } from "@shared/schema";
 import { DEFAULT_AUTOMATIONS, buildScheduledAutomationRunInput } from "../server/automation-registry";
+import {listExistingAutomationDefinitions,verifiedNextRunAt} from "../server/automation-definition-reads";
+
+test("consumed schedule metadata is unknown without changing runs, permissions or persisted records",async()=>{
+  for(const lastStatus of ["success","failed","skipped"] as const) {
+    const saved=automation({nextRunAt:new Date('2026-06-22T06:45:00Z'),lastRunAt:new Date('2026-11-06T11:45:58Z'),lastStatus});
+    const [view]=await listExistingAutomationDefinitions({getAutomationDefinitions:async()=>[saved]},'user-1');
+    assert.equal(view.nextRunAt,null);assert.equal(view.lastStatus,lastStatus);
+    assert.equal(view.status,saved.status);assert.equal(view.permissionLevel,saved.permissionLevel);
+    assert.equal(view.scheduleEvidence?.state,'unverified_next_run');
+    assert.equal(saved.nextRunAt!.toISOString(),'2026-06-22T06:45:00.000Z');
+  }
+  const future=new Date('2026-11-07T11:45:00Z');
+  assert.equal(verifiedNextRunAt(automation({nextRunAt:future,lastRunAt:new Date('2026-11-06T11:45:00Z')})),future);
+});
 
 function automation(overrides: Partial<AutomationDefinition> = {}): AutomationDefinition {
   return {

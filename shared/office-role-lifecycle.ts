@@ -1,7 +1,7 @@
 import type { CompanyState } from "./agent-company";
 
 // This registry describes actual adapters, not the avatars displayed by the office.
-export const OFFICE_EXECUTABLE_ROLES = { "claude-reviewer": { readOnly: true } } as const;
+export const OFFICE_EXECUTABLE_ROLES = { "claude-reviewer": { readOnly: true }, ceo: {readOnly:true}, assistant: {readOnly:true} } as const;
 export type RolePolicy = {
   version: string;
   guidance: string[];
@@ -131,6 +131,9 @@ export function reconcileRoleLifecycles(state: OfficeRoleLifecycleState, company
       candidatePolicies: [], eligibleCandidateIds: [], assessments: [], leases: [], pendingOrderIds: [],
       context: { memory: [], skillIds: [] }, policyHistory: [], history: [],
     };
+    if(previous?.status === "unsupported" && executable && !previous.activePolicy && !career.inTrainingUntilGeneration && previous.generation === career.generation) {
+      role={...role,status:"active",activePolicy:baseline};
+    }
     if (previous && previous.generation !== career.generation) {
       role = { ...role, generation: career.generation, status: executable ? "vacant" : "unsupported",
         history: [...role.history, { at: iso(now), event: "holder_retired", policyVersion: role.activePolicy?.version }] };

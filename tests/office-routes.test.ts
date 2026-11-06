@@ -21,7 +21,7 @@ test("execution HTTP endpoints require authenticated owner, origin, and strict t
   const snapshot = { text: "KONG fixture", completedAt: checkedAt, evidence: { generatedAt: checkedAt, agents: [], cities: [], citySnapshotCheckedAt: checkedAt, cityAgentsEnabled: true, cityCoverageComplete: false } };
   delete process.env.OFFICE_WORKER_ENABLED;
   registerOfficeRoutes(app, { runtime: {
-    list: async () => { historyReads++; return []; },
+    list: async (owner) => { assert.equal(owner,"office-owner"); historyReads++; return [{id:"persisted-run",kind:"claude_review",status:"completed"}] as any; },
     submit: async (_owner, task: any) => { submissions++; return { id: "accepted-id", ...task, status: "accepted", createdAt: new Date().toISOString() } as any; },
   }, directoryReader: async () => { directoryReads++; return [{ id: "buenos-aires", name: "Buenos Aires", countryCode: "AR", timeZone: "America/Argentina/Buenos_Aires", currency: "ARS" }]; },
   now: () => clock, snapshotReader: async () => { snapshotReads++; if (failSnapshot) throw new Error("fixture upstream error"); return snapshot; },
@@ -90,8 +90,8 @@ test("execution HTTP endpoints require authenticated owner, origin, and strict t
   failSnapshot = false;
   assert.equal((await readSnapshot()).status, 200);
   assert.equal(snapshotReads, 3);
-  assert.deepEqual(await (await fetch(`${base}/api/agents-office/runs`, { headers: ownerHeaders })).json(), []);
-  assert.equal(historyReads, 1);
+  assert.deepEqual(await (await fetch(`${base}/api/agents-office/runs`, { headers: ownerHeaders })).json(), [{id:"persisted-run",kind:"claude_review",status:"completed"}]);
+  assert.equal(historyReads, 2);
   assert.equal((await post(ownerHeaders)).status, 503);
   assert.equal(submissions, 1);
   const connections = await (await fetch(`${base}/api/agents-office/connections`, { headers: ownerHeaders })).json();

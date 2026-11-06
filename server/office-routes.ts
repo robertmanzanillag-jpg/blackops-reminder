@@ -134,7 +134,6 @@ export function registerOfficeRoutes(app: Express, dependencies: {
       const userId = owner(req, res);
       if (!userId) return;
       res.set("Cache-Control", "no-store");
-      if (workerDisabled()) { res.json([]); return; }
       res.json(await runtime.list(userId));
     } catch { res.status(503).json({ error: "El registro de ejecuciones no esta disponible." }); }
   });
