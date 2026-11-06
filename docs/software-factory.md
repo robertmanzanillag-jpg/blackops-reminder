@@ -282,3 +282,28 @@ exact-commit release/rollback interface has not been verified. A factory-only
 provider hard spending cap has not been verified either. Do not apply an account
 shutdown limit that could interrupt Kong. No publication, balance reload, shared
 billing limit or Kong configuration was changed during this integration.
+### Browser recovery checks verified, 2026-11-06
+
+Run 42204443040 passed portable tests, application build and isolated browser
+recovery/panel checks at commit 8c65332:
+https://github.com/robertmanzanillag-jpg/blackops-reminder/actions/runs/42204443040
+The official Playwright 1.61.1 Noble image is pinned to registry manifest digest
+sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48,
+matching package-lock.json. Browser tests detect a seeded defect, verify three
+synthetic repair cycles, detect regression and restore the synthetic fixture.
+They exercise actual Chromium in a container without external networking or
+production credentials. They do not establish a Replit deployment rollback.
+
+GitHub evidence profiles now require a distinct browserStep. Missing, skipped or
+duplicate browser steps cannot satisfy candidate checks, even if the overall
+job reports success. Sixteen targeted tests and full TypeScript checking passed
+independent review.
+
+Current Replit documentation exposes publish_app(replId), not an exact-commit
+or rollback argument. SSH can prepare a project, but its keys apply to the whole
+account, not one app. An isolated account is being discussed with Robert before
+provisioning unattended access or a shutdown budget. No new credentials or
+account-wide spending changes have been made. Sources:
+https://docs.replit.com/platforms/mcp-server
+https://docs.replit.com/features/workspace-tools/ssh
+https://docs.replit.com/billing/managing-spend

@@ -128,10 +128,10 @@ test("concrete composition queries real GitHub adapter contracts before finalizi
             getContent: async (args) => ({ data: { type: "file", path: args.path, encoding: "base64", size: Buffer.byteLength(workflow), content: Buffer.from(workflow).toString("base64") } }),
         }, actions: {
             listWorkflowRuns: async () => { calls.push("run"); assert.equal(pushed, true); return { data: { total_count: 1, workflow_runs: [{ id: 1, head_sha: head, head_branch: branch, event: "push", path: workflowPath, workflow_id: 7, run_attempt: 1, status: "completed", conclusion: "success", html_url: `https://github.com/${project.repo}/actions/runs/1`, repository: { full_name: project.repo, private: false }, head_repository: { full_name: project.repo } }] } }; },
-            listJobsForWorkflowRunAttempt: async () => { calls.push("jobs"); return { data: { total_count: 1, jobs: [{ run_id: 1, head_sha: head, run_attempt: 1, name: "isolated", status: "completed", conclusion: "success", completed_at: now, labels: ["ubuntu-24.04"], steps: ["test", "build"].map(name => ({ name, status: "completed", conclusion: "success" })) }] } }; },
+            listJobsForWorkflowRunAttempt: async () => { calls.push("jobs"); return { data: { total_count: 1, jobs: [{ run_id: 1, head_sha: head, run_attempt: 1, name: "isolated", status: "completed", conclusion: "success", completed_at: now, labels: ["ubuntu-24.04"], steps: ["test", "build", "browser"].map(name => ({ name, status: "completed", conclusion: "success" })) }] } }; },
         } };
     const build = createGitHubActionsFactoryBuilder({ exportSource: f.options.exportSource, generatePatch: async (...args) => { calls.push("model"); return f.options.generatePatch(...args); }, publisherClient, actionsClient, publicationCostCents: 0, now: () => new Date(now), maxPolls: 1,
-        repositories: { [project.repo]: { baseBranch: "main", checks: { workflowId: 7, workflowPath, workflowSha256: createHash("sha256").update(workflow).digest("hex"), jobName: "isolated", testStep: "test", buildStep: "build" } } } });
+        repositories: { [project.repo]: { baseBranch: "main", checks: { workflowId: 7, workflowPath, workflowSha256: createHash("sha256").update(workflow).digest("hex"), jobName: "isolated", testStep: "test", buildStep: "build", browserStep: "browser" } } } });
     const result = await build(project, state, { signal: f.controller.signal, maxCostCents: 10 });
     assert.ok("candidate" in result);
     assert.equal(result.costCents, 2);

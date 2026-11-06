@@ -15,7 +15,7 @@ function fixture() {
     repository: { full_name: repository, private: false }, head_repository: { full_name: repository } };
   const job = { run_id: 10, head_sha: headSha, name: "isolated-checks", status: "completed", conclusion: "success",
     completed_at: "2026-11-06T10:00:00Z", labels: ["ubuntu-24.04"],
-    steps: ["Isolated tests", "Isolated build"].map(name => ({ name, status: "completed", conclusion: "success" })) };
+    steps: ["Isolated tests", "Isolated build", "Isolated browser recovery tests"].map(name => ({ name, status: "completed", conclusion: "success" })) };
   let privateRepo = false, changedWorkflow = false, calls = 0, waits = 0;
   const client: FactoryActionsClient = {
     repos: {
@@ -30,7 +30,7 @@ function fixture() {
   };
   const checks = createGitHubFactoryChecks({ client, repositories: { [repository]: { workflowId: 3, workflowPath: path,
     workflowSha256: createHash("sha256").update(workflow).digest("hex"), jobName: job.name,
-    testStep: "Isolated tests", buildStep: "Isolated build" } }, maxPolls: 2,
+    testStep: "Isolated tests", buildStep: "Isolated build", browserStep: "Isolated browser recovery tests" } }, maxPolls: 2,
     now: () => new Date("2026-11-06T10:01:00Z"), wait: async () => { waits++; } });
   const verify = () => checks.verifyCandidate(project, candidate, { signal: new AbortController().signal, maxCostCents: 5 });
   return { checks, verify, run, job, client, candidate, project,
@@ -87,4 +87,16 @@ test("pending run is bounded and cannot fabricate successful evidence", async ()
   const f = fixture(); f.run.status = "in_progress"; f.run.conclusion = null;
   assert.equal((await f.verify()).status, "unknown");
   assert.deepEqual(f.counts(), { calls: 2, waits: 1 });
+});
+
+
+test("missing, skipped or duplicate browser recovery step blocks even a successful job", async () => {
+  for (const change of [
+    (f: ReturnType<typeof fixture>) => { f.job.steps.pop(); },
+    (f: ReturnType<typeof fixture>) => { f.job.steps[2].conclusion = "skipped"; },
+    (f: ReturnType<typeof fixture>) => { f.job.steps.push({ ...f.job.steps[2] }); },
+  ]) {
+    const f = fixture(); change(f);
+    assert.equal((await f.verify()).status, "unknown");
+  }
 });

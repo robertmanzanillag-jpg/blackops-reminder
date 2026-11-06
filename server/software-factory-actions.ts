@@ -27,7 +27,7 @@ export interface FactoryActionsClient {
 }
 export interface FactoryActionsProfile {
   workflowId: number; workflowPath: string; workflowSha256: string;
-  jobName: string; testStep: string; buildStep: string;
+  jobName: string; testStep: string; buildStep: string; browserStep: string;
 }
 type Candidate = { repository: string; baseSha: string; headSha: string; branch: string; patchSha256: string };
 const sha = /^[a-f0-9]{40}$/;
@@ -47,7 +47,7 @@ export function createGitHubFactoryChecks(options: {
   for (const [repo, p] of profiles) {
     if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !Number.isSafeInteger(p.workflowId) || p.workflowId < 1 ||
         !/^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(p.workflowPath) || !hash.test(p.workflowSha256) ||
-        [p.jobName, p.testStep, p.buildStep].some(x => !x?.trim()) || p.testStep === p.buildStep) throw new Error("FACTORY_ACTIONS_CONFIGURATION_INVALID");
+        [p.jobName, p.testStep, p.buildStep, p.browserStep].some(x => !x?.trim()) || new Set([p.testStep, p.buildStep, p.browserStep]).size !== 3) throw new Error("FACTORY_ACTIONS_CONFIGURATION_INVALID");
   }
   const now = options.now ?? (() => new Date());
   const wait = options.wait ?? ((ms, signal) => new Promise<void>((resolve, rejectWait) => {
@@ -110,7 +110,7 @@ export function createGitHubFactoryChecks(options: {
               if (!Number.isFinite(age) || age < 0 || age > 86400000) reject();
               await preflight(candidate.repository, candidate.headSha, context.signal);
               if (run.conclusion === "failure") return { status: "failed" as const, costCents: 0, reason: "FACTORY_ACTIONS_CHECK_FAILED" };
-              for (const name of [profile.testStep, profile.buildStep]) {
+              for (const name of [profile.testStep, profile.buildStep, profile.browserStep]) {
                 const steps = job.steps.filter(s => s.name === name);
                 if (steps.length !== 1 || steps[0].status !== "completed" || steps[0].conclusion !== "success") reject();
               }
