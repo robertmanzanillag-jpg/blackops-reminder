@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "cycles": 66,
-  "lastCycleAt": "2026-11-05T22:53:43.946Z",
+  "cycles": 70,
+  "lastCycleAt": "2026-11-05T23:53:43.942Z",
   "lastCycleError": null,
   "debates": [
     {
@@ -22,8 +22,8 @@
       "rationale": "El propio agente ya reporta el problema; el CEO confirma y lo deja en su cola.",
       "key": "automations-failed-runs|automations",
       "firstSeen": "2026-11-04T23:13:56.868Z",
-      "lastSeen": "2026-11-05T22:53:43.946Z",
-      "streak": 66
+      "lastSeen": "2026-11-05T23:53:43.942Z",
+      "streak": 70
     },
     {
       "ruleId": "skills-truncated",
@@ -45,12 +45,46 @@
       "rationale": "El agente dice que todo va bien pero su par encontro evidencia en contra: el CEO lo escala a Robert.",
       "key": "skills-truncated|skills-scout",
       "firstSeen": "2026-11-04T23:13:56.868Z",
-      "lastSeen": "2026-11-05T22:53:43.946Z",
-      "streak": 66
+      "lastSeen": "2026-11-05T23:53:43.942Z",
+      "streak": 70
     }
   ],
   "resolvedDebates": [],
   "proposals": [
+    {
+      "key": "scout:TanStack/query@release-2026-11-05-0808",
+      "kind": "skill_update",
+      "owner": "skills-scout",
+      "title": "Novedad: TanStack/query release-2026-11-05-0808",
+      "description": "Libreria de datos del cliente. Revisar si las skills qa-gate necesitan cambios (antes: release-2026-11-04-2012).",
+      "evidence": [
+        "https://github.com/TanStack/query/releases/tag/release-2026-11-05-0808",
+        "Antes: release-2026-11-04-2012",
+        "Ahora: release-2026-11-05-0808"
+      ],
+      "handoffBrief": "Tarea BlackOps (PR-first, costo $0 de API): Actualizar skills por TanStack/query release-2026-11-05-0808\n\nObjetivo: Lee las notas del release (https://github.com/TanStack/query/releases/tag/release-2026-11-05-0808) y propone cambios concretos a: .claude/skills/qa-gate/SKILL.md. Si no hace falta cambiar nada, dilo.\n\nEvidencia del consejo de agentes:\n- https://github.com/TanStack/query/releases/tag/release-2026-11-05-0808\n\nReglas:\n- Trabaja en una rama nueva y abre PR; no hagas merge ni deploy.\n- Corre npm run check, npm run build y el test relacionado.\n- Pega este brief en tu suscripcion (Claude o ChatGPT): no usa API de BlackOps.\n- Manten cada skill bajo el limite del puente.\n- Responde con: archivos cambiados, pruebas corridas y riesgos.",
+      "createdAt": "2026-11-05T23:23:43.964Z",
+      "status": "submitted",
+      "pendingActionId": "45d17d7a-433d-4669-a87f-9efed59b0670",
+      "note": "En el Trust Center esperando tu aprobacion."
+    },
+    {
+      "key": "scout:vitejs/vite@create-vite@9.3.4",
+      "kind": "skill_update",
+      "owner": "skills-scout",
+      "title": "Novedad: vitejs/vite create-vite@9.3.4",
+      "description": "Build del cliente. Revisar si las skills qa-gate necesitan cambios (antes: create-vite@9.3.3).",
+      "evidence": [
+        "https://github.com/vitejs/vite/releases/tag/create-vite%409.3.4",
+        "Antes: create-vite@9.3.3",
+        "Ahora: create-vite@9.3.4"
+      ],
+      "handoffBrief": "Tarea BlackOps (PR-first, costo $0 de API): Actualizar skills por vitejs/vite create-vite@9.3.4\n\nObjetivo: Lee las notas del release (https://github.com/vitejs/vite/releases/tag/create-vite%409.3.4) y propone cambios concretos a: .claude/skills/qa-gate/SKILL.md. Si no hace falta cambiar nada, dilo.\n\nEvidencia del consejo de agentes:\n- https://github.com/vitejs/vite/releases/tag/create-vite%409.3.4\n\nReglas:\n- Trabaja en una rama nueva y abre PR; no hagas merge ni deploy.\n- Corre npm run check, npm run build y el test relacionado.\n- Pega este brief en tu suscripcion (Claude o ChatGPT): no usa API de BlackOps.\n- Manten cada skill bajo el limite del puente.\n- Responde con: archivos cambiados, pruebas corridas y riesgos.",
+      "createdAt": "2026-11-05T23:23:43.964Z",
+      "status": "submitted",
+      "pendingActionId": "2e2e8a63-5ff7-4da0-8eef-ba8f781c7ce4",
+      "note": "En el Trust Center esperando tu aprobacion."
+    },
     {
       "key": "repair:kong-videos#2026-11-05",
       "kind": "repair",
@@ -139,15 +173,15 @@
       "working": true,
       "since": "2026-11-04T23:13:56.868Z"
     },
-    "revenue": {
-      "working": true,
-      "since": "2026-11-04T23:13:56.868Z"
-    },
     "radio": {
       "working": true,
       "since": "2026-11-04T23:13:56.868Z"
     },
-    "kong-videos": {
+    "revenue": {
+      "working": true,
+      "since": "2026-11-04T23:13:56.868Z"
+    },
+    "blackroom-videos": {
       "working": false,
       "since": "2026-11-04T23:13:56.868Z"
     },
@@ -155,7 +189,7 @@
       "working": true,
       "since": "2026-11-04T23:13:56.868Z"
     },
-    "blackroom-videos": {
+    "kong-videos": {
       "working": false,
       "since": "2026-11-04T23:13:56.868Z"
     },
@@ -193,13 +227,13 @@
     }
   },
   "scout": {
-    "lastRunAt": "2026-11-04T23:13:55.810Z",
+    "lastRunAt": "2026-11-05T23:23:43.964Z",
     "lastSeen": {
       "anthropics/claude-code": "v2.1.318",
       "openai/codex": "rust-v0.166.0",
-      "TanStack/query": "release-2026-11-04-2012",
+      "TanStack/query": "release-2026-11-05-0808",
       "drizzle-team/drizzle-orm": "0.45.4",
-      "vitejs/vite": "create-vite@9.3.3",
+      "vitejs/vite": "create-vite@9.3.4",
       "tailwindlabs/tailwindcss": "v4.3.4",
       "Shopify/cli": "5.0.1"
     },
@@ -229,9 +263,9 @@
       },
       {
         "repo": "TanStack/query",
-        "tag": "release-2026-11-04-2012",
-        "url": "https://github.com/TanStack/query/releases/tag/release-2026-11-04-2012",
-        "publishedAt": "2026-11-04T20:12:58Z",
+        "tag": "release-2026-11-05-0808",
+        "url": "https://github.com/TanStack/query/releases/tag/release-2026-11-05-0808",
+        "publishedAt": "2026-11-05T08:08:15Z",
         "skills": [
           "qa-gate"
         ]
@@ -247,9 +281,9 @@
       },
       {
         "repo": "vitejs/vite",
-        "tag": "create-vite@9.3.3",
-        "url": "https://github.com/vitejs/vite/releases/tag/create-vite%409.3.3",
-        "publishedAt": "2026-10-27T09:27:16Z",
+        "tag": "create-vite@9.3.4",
+        "url": "https://github.com/vitejs/vite/releases/tag/create-vite%409.3.4",
+        "publishedAt": "2026-11-05T06:02:20Z",
         "skills": [
           "qa-gate"
         ]
@@ -282,11 +316,11 @@
         "agentId": "ceo",
         "generation": 1,
         "nickname": "Thiago",
-        "points": 660,
+        "points": 700,
         "battery": 100,
         "lastState": "working",
-        "cyclesWorking": 66,
-        "cyclesTotal": 66,
+        "cyclesWorking": 70,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -305,11 +339,11 @@
         "agentId": "revenue",
         "generation": 1,
         "nickname": "Emi",
-        "points": 660,
+        "points": 700,
         "battery": 100,
         "lastState": "working",
-        "cyclesWorking": 66,
-        "cyclesTotal": 66,
+        "cyclesWorking": 70,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -328,11 +362,11 @@
         "agentId": "news",
         "generation": 1,
         "nickname": "Sofi",
-        "points": 660,
+        "points": 700,
         "battery": 100,
         "lastState": "working",
-        "cyclesWorking": 66,
-        "cyclesTotal": 66,
+        "cyclesWorking": 70,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -355,7 +389,7 @@
         "battery": 20,
         "lastState": "needs-setup",
         "cyclesWorking": 0,
-        "cyclesTotal": 66,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -374,11 +408,11 @@
         "agentId": "radio",
         "generation": 1,
         "nickname": "Iker",
-        "points": 660,
+        "points": 700,
         "battery": 100,
         "lastState": "working",
-        "cyclesWorking": 66,
-        "cyclesTotal": 66,
+        "cyclesWorking": 70,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -401,7 +435,7 @@
         "battery": 20,
         "lastState": "needs-setup",
         "cyclesWorking": 0,
-        "cyclesTotal": 66,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -424,7 +458,7 @@
         "battery": 20,
         "lastState": "needs-setup",
         "cyclesWorking": 0,
-        "cyclesTotal": 66,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -443,11 +477,11 @@
         "agentId": "code",
         "generation": 1,
         "nickname": "Mia",
-        "points": 660,
+        "points": 700,
         "battery": 100,
         "lastState": "working",
-        "cyclesWorking": 66,
-        "cyclesTotal": 66,
+        "cyclesWorking": 70,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -466,11 +500,11 @@
         "agentId": "github",
         "generation": 1,
         "nickname": "Vale",
-        "points": 660,
+        "points": 700,
         "battery": 100,
         "lastState": "working",
-        "cyclesWorking": 66,
-        "cyclesTotal": 66,
+        "cyclesWorking": 70,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -489,11 +523,11 @@
         "agentId": "claude-reviewer",
         "generation": 1,
         "nickname": "Bruno",
-        "points": 540,
-        "battery": 40,
+        "points": 532,
+        "battery": 16,
         "lastState": "offline",
         "cyclesWorking": 56,
-        "cyclesTotal": 66,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -516,11 +550,11 @@
         "agentId": "legal",
         "generation": 1,
         "nickname": "Luna",
-        "points": 660,
+        "points": 700,
         "battery": 100,
         "lastState": "working",
-        "cyclesWorking": 66,
-        "cyclesTotal": 66,
+        "cyclesWorking": 70,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -539,11 +573,11 @@
         "agentId": "portfolio",
         "generation": 1,
         "nickname": "Leo",
-        "points": 660,
+        "points": 700,
         "battery": 100,
         "lastState": "working",
-        "cyclesWorking": 66,
-        "cyclesTotal": 66,
+        "cyclesWorking": 70,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -566,7 +600,7 @@
         "battery": 20,
         "lastState": "needs-setup",
         "cyclesWorking": 0,
-        "cyclesTotal": 66,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -589,7 +623,7 @@
         "battery": 20,
         "lastState": "needs-setup",
         "cyclesWorking": 0,
-        "cyclesTotal": 66,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -608,11 +642,11 @@
         "agentId": "marketing-cmo",
         "generation": 1,
         "nickname": "Rafa",
-        "points": 660,
+        "points": 700,
         "battery": 100,
         "lastState": "working",
-        "cyclesWorking": 66,
-        "cyclesTotal": 66,
+        "cyclesWorking": 70,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -629,26 +663,23 @@
       },
       "automations": {
         "agentId": "automations",
-        "generation": 1,
-        "nickname": "Ari",
+        "generation": 2,
+        "nickname": "Cami",
         "points": 0,
-        "battery": 0,
+        "battery": 60,
         "lastState": "error",
         "cyclesWorking": 0,
-        "cyclesTotal": 66,
+        "cyclesTotal": 68,
         "ordersDone": 0,
-        "firedCount": 0,
-        "hiredAt": "2026-11-04T23:13:56.868Z",
+        "firedCount": 1,
+        "hiredAt": "2026-11-05T23:23:44.323Z",
         "memory": [
           {
-            "at": "2026-11-04T23:13:56.868Z",
-            "text": "Paso a con error: 4 corridas fallidas."
-          },
-          {
-            "at": "2026-11-04T23:13:56.868Z",
-            "text": "Contratado como Autos."
+            "at": "2026-11-05T23:23:44.323Z",
+            "text": "Reemplaza a la generacion 1. Empieza en la academia."
           }
-        ]
+        ],
+        "inTrainingUntilGeneration": 2
       },
       "control": {
         "agentId": "control",
@@ -658,7 +689,7 @@
         "battery": 20,
         "lastState": "needs-setup",
         "cyclesWorking": 0,
-        "cyclesTotal": 66,
+        "cyclesTotal": 70,
         "ordersDone": 0,
         "firedCount": 0,
         "hiredAt": "2026-11-04T23:13:56.868Z",
@@ -674,9 +705,32 @@
         ]
       }
     },
-    "trainees": [],
+    "trainees": [
+      {
+        "id": "automations#2",
+        "forAgentId": "automations",
+        "role": "Autos",
+        "nickname": "Cami",
+        "startedAt": "2026-11-05T23:23:44.323Z",
+        "modulesDone": [
+          "rules",
+          "claude",
+          "map"
+        ],
+        "knowledge": [
+          "Mapa del codigo: docs/codebase-map.md (32554 caracteres): Codebase Map · Guardrails · Totals · Entrypoints",
+          "Como trabajamos con IA y costos: CLAUDE.md (5175 caracteres): Claude Code Project Memory · Operating Rules · Lean Claude Code Reinforcement · AI Cost Controls",
+          "Reglas de la empresa: AGENTS.md (8025 caracteres): ASITENTE Agent Rules · Developer Autopilot · Cross-Agent Review Gate · Local Codebase Map"
+        ]
+      }
+    ],
     "orders": [],
-    "events": []
+    "events": [
+      {
+        "at": "2026-11-05T23:23:44.323Z",
+        "text": "El CEO despidio a Ari (Autos). Bateria en cero (4 corridas fallidas). Entra un reemplazo a la academia."
+      }
+    ]
   },
   "lastStatuses": {
     "claude-reviewer": {
@@ -695,25 +749,25 @@
       "state": "working",
       "label": "Operativo"
     },
-    "revenue": {
-      "state": "working",
-      "label": "Operativo"
-    },
     "radio": {
       "state": "working",
       "label": "Programando radio"
     },
-    "kong-videos": {
+    "revenue": {
+      "state": "working",
+      "label": "Operativo"
+    },
+    "blackroom-videos": {
       "state": "needs-setup",
-      "label": "Sin videos editados"
+      "label": "Publicador desconectado"
     },
     "news": {
       "state": "working",
       "label": "Publicando noticias"
     },
-    "blackroom-videos": {
+    "kong-videos": {
       "state": "needs-setup",
-      "label": "Publicador desconectado"
+      "label": "Sin videos editados"
     },
     "assistant": {
       "state": "needs-setup",
