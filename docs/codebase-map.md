@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-06T22:00:16.453Z
+Generated: 2026-11-06T23:44:33.299Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-factory-integration`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 885 | 795 | 2911 | 564 | 17325 |
+| 896 | 806 | 2963 | 564 | 17465 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,8 +28,8 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 213 | 209 | test:213 |
-| `server` | 195 | 190 | server:195 |
+| `tests` | 218 | 214 | test:218 |
+| `server` | 201 | 196 | server:201 |
 | `script` | 93 | 85 | script:93 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
@@ -195,6 +195,7 @@ Package: `rest-express`
 - `tests/office-role-lifecycle.test.ts`
 - `tests/office-routes.test.ts`
 - `tests/office-runtime.test.ts`
+- `tests/office-shared-credits.test.ts`
 - `tests/office-token-budget.test.ts`
 - `tests/office-worker-capabilities.test.ts`
 - `tests/office-worker-watchdog.test.ts`
@@ -214,8 +215,12 @@ Package: `rest-express`
 - `tests/revenue-engine.test.ts`
 - `tests/revenue-stripe.test.ts`
 - `tests/session-config.test.ts`
+- `tests/shared-openai-credit-ledger.test.ts`
+- `tests/shared-openai-credit-store.test.ts`
 - `tests/shopify-oauth.test.ts`
 - `tests/software-factory-actions.test.ts`
+- `tests/software-factory-asistente-build.test.ts`
+- `tests/software-factory-asistente-success.test.ts`
 - `tests/software-factory-builder.test.ts`
 - `tests/software-factory-company.test.ts`
 - `tests/software-factory-encrypted-state.test.ts`

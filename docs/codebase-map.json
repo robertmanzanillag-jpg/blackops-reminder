@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T22:00:16.453Z",
+  "generatedAt": "2026-11-06T23:44:33.299Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-factory-integration",
   "packageName": "rest-express",
   "scripts": {
@@ -124,60 +124,25 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 885,
-    "filesIndexed": 795,
-    "imports": 2911,
+    "filesVisible": 896,
+    "filesIndexed": 806,
+    "imports": 2963,
     "routes": 564,
-    "symbols": 17325
+    "symbols": 17465
   },
   "directories": {
-    ".github/workflows": {
-      "files": 2,
-      "indexed": 0,
-      "kinds": {
-        "other": 2
-      }
-    },
-    "client/src/components": {
-      "files": 29,
-      "indexed": 29,
-      "kinds": {
-        "client-component": 29
-      }
-    },
-    "docs": {
-      "files": 40,
-      "indexed": 39,
-      "kinds": {
-        "docs": 40
-      }
-    },
-    "script": {
-      "files": 93,
-      "indexed": 85,
-      "kinds": {
-        "script": 93
-      }
-    },
     "server": {
-      "files": 195,
-      "indexed": 190,
+      "files": 201,
+      "indexed": 196,
       "kinds": {
-        "server": 195
-      }
-    },
-    "shared": {
-      "files": 17,
-      "indexed": 17,
-      "kinds": {
-        "shared": 17
+        "server": 201
       }
     },
     "tests": {
-      "files": 213,
-      "indexed": 209,
+      "files": 218,
+      "indexed": 214,
       "kinds": {
-        "test": 213
+        "test": 218
       }
     },
     ".": {
@@ -208,6 +173,13 @@
       "indexed": 0,
       "kinds": {
         "other": 1
+      }
+    },
+    ".github/workflows": {
+      "files": 2,
+      "indexed": 0,
+      "kinds": {
+        "other": 2
       }
     },
     "bin": {
@@ -243,6 +215,13 @@
       "indexed": 3,
       "kinds": {
         "other": 3
+      }
+    },
+    "client/src/components": {
+      "files": 29,
+      "indexed": 29,
+      "kinds": {
+        "client-component": 29
       }
     },
     "client/src/components/agents-building": {
@@ -308,12 +287,26 @@
         "other": 1
       }
     },
+    "docs": {
+      "files": 40,
+      "indexed": 39,
+      "kinds": {
+        "docs": 40
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 93,
+      "indexed": 85,
+      "kinds": {
+        "script": 93
       }
     },
     "scripts": {
@@ -342,6 +335,13 @@
       "indexed": 3,
       "kinds": {
         "server": 3
+      }
+    },
+    "shared": {
+      "files": 17,
+      "indexed": 17,
+      "kinds": {
+        "shared": 17
       }
     },
     "shared/models": {
@@ -18758,7 +18758,9 @@
         "./office-cloud-store",
         "./office-openai",
         "./office-runtime",
+        "./office-shared-credits",
         "./office-token-budget",
+        "./shared-openai-credit-runtime",
         "node:crypto"
       ],
       "exports": [
@@ -18769,6 +18771,7 @@
         "active",
         "admission",
         "artifactId",
+        "assigned",
         "budget",
         "completion",
         "createOfficeExecution",
@@ -18780,6 +18783,7 @@
         "run",
         "runtime",
         "scored",
+        "shared",
         "state",
         "tokens",
         "version"
@@ -19297,6 +19301,33 @@
         "usesOfficeCloudRuntime",
         "validatePr",
         "verdictSchema"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-shared-credits.ts",
+      "kind": "server",
+      "imports": [
+        "./office-openai",
+        "./shared-openai-credit-ledger",
+        "node:crypto"
+      ],
+      "exports": [
+        "createCreditLimitedOfficeRun"
+      ],
+      "symbols": [
+        "cost",
+        "createCreditLimitedOfficeRun",
+        "deadline",
+        "env",
+        "key",
+        "micro",
+        "pricingRemaining",
+        "provider",
+        "remaining",
+        "requestSha256",
+        "reservation",
+        "signal"
       ],
       "routes": []
     },
@@ -21647,6 +21678,111 @@
       "routes": []
     },
     {
+      "path": "server/shared-openai-credit-execution.ts",
+      "kind": "server",
+      "imports": [
+        "./shared-openai-credit-ledger"
+      ],
+      "exports": [
+        "executeWithinSharedCredits"
+      ],
+      "symbols": [
+        "Ledger",
+        "executeWithinSharedCredits",
+        "receipt",
+        "request",
+        "result"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/shared-openai-credit-ledger.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "CreditReservation",
+        "CreditTransaction",
+        "SharedCreditState",
+        "VerifiedCreditGrant",
+        "createSharedOpenAiCreditLedger"
+      ],
+      "symbols": [
+        "age",
+        "amount",
+        "at",
+        "budget",
+        "createSharedOpenAiCreditLedger",
+        "data",
+        "date",
+        "existing",
+        "fail",
+        "grant",
+        "grantSchema",
+        "hash",
+        "identifier",
+        "keys",
+        "remainingMs",
+        "reservationSchema",
+        "result",
+        "row",
+        "stateSchema",
+        "timestamp",
+        "totals",
+        "transact",
+        "transaction",
+        "validate"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/shared-openai-credit-runtime.ts",
+      "kind": "server",
+      "imports": [
+        "./agent-council-store",
+        "./shared-openai-credit-ledger",
+        "./shared-openai-credit-store",
+        "node:fs/promises",
+        "node:path",
+        "zod"
+      ],
+      "exports": [
+        "loadSharedCreditRuntime"
+      ],
+      "symbols": [
+        "config",
+        "configSchema",
+        "ledger",
+        "loadSharedCreditRuntime",
+        "path",
+        "raw"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/shared-openai-credit-store.ts",
+      "kind": "server",
+      "imports": [
+        "./agent-council-store",
+        "./shared-openai-credit-ledger"
+      ],
+      "exports": [
+        "createSharedCreditTransaction",
+        "provisionSharedCreditStorage"
+      ],
+      "symbols": [
+        "DurableStore",
+        "createSharedCreditTransaction",
+        "namespace",
+        "owner",
+        "provisionSharedCreditStorage",
+        "state"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/shopify-oauth.ts",
       "kind": "server",
       "imports": [
@@ -21809,6 +21945,43 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-asistente-build.ts",
+      "kind": "server",
+      "imports": [
+        "./shared-openai-credit-execution",
+        "./shared-openai-credit-ledger",
+        "./software-factory-actions",
+        "./software-factory-github-client",
+        "./software-factory-openai",
+        "./software-factory-openai-builder",
+        "./software-factory-pipeline",
+        "./software-factory-remote-builder",
+        "node:crypto"
+      ],
+      "exports": [
+        "createAsistenteFactoryBuild"
+      ],
+      "symbols": [
+        "build",
+        "client",
+        "createAsistenteFactoryBuild",
+        "deadline",
+        "generate",
+        "generatePatch",
+        "key",
+        "ledger",
+        "model",
+        "paths",
+        "profile",
+        "remainingMs",
+        "repository",
+        "requestSha256",
+        "result",
+        "signal"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-builder.ts",
       "kind": "server",
       "imports": [
@@ -21956,27 +22129,35 @@
         "./software-factory-github-publisher"
       ],
       "exports": [
+        "FACTORY_ASISTENTE_REPOSITORY",
         "FACTORY_PILOT_REPOSITORY",
         "FactoryPilotGitHubClient",
+        "createFactoryAsistenteGitHubClient",
+        "createFactoryAsistenteGitHubSourceExporter",
         "createFactoryPilotGitHubClient",
         "createFactoryPilotGitHubSourceExporter"
       ],
       "symbols": [
+        "ClientOptions",
+        "FACTORY_ASISTENTE_REPOSITORY",
         "FACTORY_PILOT_REPOSITORY",
         "branch",
         "branchPattern",
         "call",
         "chunk",
         "controller",
+        "createFactoryAsistenteGitHubClient",
+        "createFactoryAsistenteGitHubSourceExporter",
         "createFactoryPilotGitHubClient",
         "createFactoryPilotGitHubSourceExporter",
+        "createScopedClient",
+        "createScopedExporter",
         "data",
         "encoded",
         "expired",
         "exporter",
         "id",
         "invalid",
-        "owner",
         "paths",
         "request",
         "root",
@@ -29768,6 +29949,28 @@
       "routes": []
     },
     {
+      "path": "tests/office-shared-credits.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-shared-credits",
+        "../server/office-token-budget",
+        "../server/shared-openai-credit-ledger",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "f",
+        "fixture",
+        "ledger",
+        "model",
+        "response",
+        "run",
+        "tokenBudget"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-windows-worker.test.mjs",
       "kind": "test",
       "imports": [
@@ -30335,6 +30538,54 @@
       "routes": []
     },
     {
+      "path": "tests/shared-openai-credit-ledger.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/shared-openai-credit-ledger",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "altered",
+        "config",
+        "copy",
+        "f",
+        "fixture",
+        "input",
+        "mutable",
+        "operation",
+        "reopened",
+        "repeated",
+        "restarted",
+        "results",
+        "settlement",
+        "status"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/shared-openai-credit-store.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/shared-openai-credit-execution",
+        "../server/shared-openai-credit-ledger",
+        "../server/shared-openai-credit-store",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "input",
+        "ledger",
+        "make",
+        "raw",
+        "rows",
+        "store"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/shopify-oauth.test.ts",
       "kind": "test",
       "imports": [
@@ -30389,6 +30640,74 @@
         "repository",
         "run",
         "verify"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-asistente-build.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/shared-openai-credit-ledger",
+        "../server/software-factory",
+        "../server/software-factory-asistente-build",
+        "../server/software-factory-pipeline",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "attempted",
+        "blob",
+        "build",
+        "context",
+        "denied",
+        "expired",
+        "foreign",
+        "input",
+        "json",
+        "ledger",
+        "now",
+        "project",
+        "source",
+        "workflowPath"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-asistente-success.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/shared-openai-credit-ledger",
+        "../server/software-factory",
+        "../server/software-factory-asistente-build",
+        "../server/software-factory-pipeline",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "base",
+        "before",
+        "blob",
+        "build",
+        "gitHash",
+        "json",
+        "ledger",
+        "patch",
+        "patchSha",
+        "prefix",
+        "project",
+        "ref",
+        "repository",
+        "result",
+        "revision",
+        "route",
+        "state",
+        "subtree",
+        "tree",
+        "workflow"
       ],
       "routes": []
     },
@@ -30494,13 +30813,16 @@
       "exports": [],
       "symbols": [
         "actions",
+        "before",
         "bytes",
         "client",
         "dispatch",
         "failed",
         "json",
+        "paths",
         "scope",
         "sha",
+        "target",
         "valid",
         "workspace"
       ],
@@ -31470,6 +31792,7 @@
     "tests/office-role-lifecycle.test.ts",
     "tests/office-routes.test.ts",
     "tests/office-runtime.test.ts",
+    "tests/office-shared-credits.test.ts",
     "tests/office-token-budget.test.ts",
     "tests/office-worker-capabilities.test.ts",
     "tests/office-worker-watchdog.test.ts",
@@ -31489,8 +31812,12 @@
     "tests/revenue-engine.test.ts",
     "tests/revenue-stripe.test.ts",
     "tests/session-config.test.ts",
+    "tests/shared-openai-credit-ledger.test.ts",
+    "tests/shared-openai-credit-store.test.ts",
     "tests/shopify-oauth.test.ts",
     "tests/software-factory-actions.test.ts",
+    "tests/software-factory-asistente-build.test.ts",
+    "tests/software-factory-asistente-success.test.ts",
     "tests/software-factory-builder.test.ts",
     "tests/software-factory-company.test.ts",
     "tests/software-factory-encrypted-state.test.ts",

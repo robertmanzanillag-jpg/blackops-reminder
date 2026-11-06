@@ -3,8 +3,7 @@ import type { FactoryGitHubPublisherClient } from "./software-factory-github-pub
 import { createGitHubFactorySourceExporter } from "./software-factory-github";
 import type { FactoryBuilderDependencies } from "./software-factory-builder";
 export const FACTORY_PILOT_REPOSITORY = "robertmanzanillag-jpg/software-factory-pilot";
-const owner = "robertmanzanillag-jpg", repo = "software-factory-pilot";
-const root = `https://api.github.com/repos/${FACTORY_PILOT_REPOSITORY}`;
+export const FACTORY_ASISTENTE_REPOSITORY = "robertmanzanillag-jpg/blackops-reminder";
 const shaPattern = /^[a-f0-9]{40}$/;
 const branchPattern = /^factory\/[a-f0-9]{40}-[a-f0-9]{64}$/;
 function invalid(): never { throw Error("FACTORY_GITHUB_CLIENT_INPUT_INVALID"); }
@@ -13,11 +12,6 @@ function sha(value: unknown): asserts value is string { if (typeof value !== "st
 function branch(value: unknown): asserts value is string { if (typeof value !== "string" || !branchPattern.test(value))
     invalid(); }
 function id(value: unknown): asserts value is number { if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1)
-    invalid(); }
-function scope(value: {
-    owner: string;
-    repo: string;
-}) { if (value.owner !== owner || value.repo !== repo)
     invalid(); }
 function safePath(value: unknown): asserts value is string {
     if (typeof value !== "string" || !value || value.length > 1000 || /[\\:\x00-\x20\x7f]/.test(value) ||
@@ -28,12 +22,32 @@ export type FactoryPilotGitHubClient = FactoryGitHubPublisherClient & FactoryAct
 /** Trusted request must add authentication, never retry, and honor AbortSignal.
  * This client never discovers credentials, logs response bodies, executes code,
  * updates existing refs, merges PRs, or writes the default branch. */
-export function createFactoryPilotGitHubClient(options: {
+interface ClientOptions {
     request: (url: string, init: RequestInit) => Promise<Response>;
     allowDispatch?: boolean;
     timeoutMs?: number;
     maxResponseBytes?: number;
-}): FactoryPilotGitHubClient {
+}
+export function createFactoryPilotGitHubClient(options: ClientOptions): FactoryPilotGitHubClient {
+    return createScopedClient(FACTORY_PILOT_REPOSITORY, "main", options);
+}
+/** Explicit trusted installation for Asistente. Never inferred from an order,
+ * URL or model response; cannot grant access to other projects. */
+export function createFactoryAsistenteGitHubClient(options: ClientOptions & { baseBranch: "main" | "codex/office-integrated-repair-20261106"; writePaths: readonly string[] }): FactoryPilotGitHubClient {
+    if (!["main", "codex/office-integrated-repair-20261106"].includes(options.baseBranch)) invalid();
+    if (!Array.isArray(options.writePaths) || options.writePaths.length > 64) invalid();
+    const paths = new Set<string>();
+    for (const path of options.writePaths) {
+        safePath(path);
+        if (/kong|software-factory|office-token-budget|credit|auth|permission|payment|migration/i.test(path) || path.startsWith(".github/") || !/^(?:client\/src\/|server\/|shared\/|tests\/)/.test(path)) invalid();
+        paths.add(path);
+    }
+    return createScopedClient(FACTORY_ASISTENTE_REPOSITORY, options.baseBranch, options, paths);
+}
+function createScopedClient(repository: string, baseBranch: string, options: ClientOptions, writePaths?: ReadonlySet<string>): FactoryPilotGitHubClient {
+    const [owner, repo] = repository.split("/");
+    const root = `https://api.github.com/repos/${repository}`;
+    const scope = (value: { owner: string; repo: string }) => { if (value.owner !== owner || value.repo !== repo) invalid(); };
     const request = options.request, dispatchAllowed = options.allowDispatch === true;
     const timeoutMs = options.timeoutMs ?? 15000, maxBytes = options.maxResponseBytes ?? 8 * 1024 * 1024;
     if (typeof request !== "function" || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000 || !Number.isSafeInteger(maxBytes) || maxBytes < 1024 || maxBytes > 16 * 1024 * 1024)
@@ -121,7 +135,7 @@ export function createFactoryPilotGitHubClient(options: {
             if (!Array.isArray(input.tree) || !input.tree.length || input.tree.length > 64)
                 invalid();
             const paths = new Set<string>();
-            const tree = input.tree.map(e => { safePath(e.path); sha(e.sha); if (e.path.split("/")[0].toLowerCase() === ".github" || paths.has(e.path) || e.type !== "blob" || !["100644", "100755"].includes(e.mode))
+            const tree = input.tree.map(e => { safePath(e.path); sha(e.sha); if ((writePaths && !writePaths.has(e.path)) || e.path.split("/")[0].toLowerCase() === ".github" || paths.has(e.path) || e.type !== "blob" || !["100644", "100755"].includes(e.mode))
                 invalid(); paths.add(e.path); return { path: e.path, sha: e.sha, type: e.type, mode: e.mode }; });
             const data = await call("/git/trees", "POST", { base_tree: input.base_tree, tree }, 201);
             sha(data.sha);
@@ -129,7 +143,7 @@ export function createFactoryPilotGitHubClient(options: {
         },
         async createCommit(input) { scope(input); sha(input.tree); if (input.parents.length !== 1 || !/^Factory candidate [a-f0-9]{64}$/.test(input.message))
             invalid(); sha(input.parents[0]); const data = await call("/git/commits", "POST", { tree: input.tree, parents: [...input.parents], message: input.message }, 201); sha(data.sha); return { data }; },
-        async getRef(input) { scope(input); if (input.ref !== "heads/main") {
+        async getRef(input) { scope(input); if (input.ref !== `heads/${baseBranch}`) {
             if (!input.ref.startsWith("heads/"))
                 invalid();
             branch(input.ref.slice(6));
@@ -140,7 +154,7 @@ export function createFactoryPilotGitHubClient(options: {
             invalid(); return { data }; },
     };
     return { git, repos: {
-            async get(input) { scope(input); const data = await call(""); if (data.full_name !== FACTORY_PILOT_REPOSITORY || data.private !== false || data.archived !== false || data.disabled !== false || data.default_branch !== "main")
+            async get(input) { scope(input); const data = await call(""); if (data.full_name !== repository || data.private !== false || data.archived !== false || data.disabled !== false || data.default_branch !== "main")
                 throw Error("FACTORY_GITHUB_PUBLIC_PILOT_REQUIRED"); return { data }; },
             async getContent(input) { scope(input); sha(input.ref); safePath(input.path); const data = await call(`/contents/${input.path.split("/").map(encodeURIComponent).join("/")}?ref=${input.ref}`, "GET", undefined, 200, "application/vnd.github.object+json"); if (data.path !== input.path || data.type !== "file")
                 invalid(); sha(data.sha); return { data }; },
@@ -161,26 +175,33 @@ export function createFactoryPilotGitHubClient(options: {
                     const data = await call(`/actions/workflows/${input.workflow_id}/dispatches`, "POST", { ref: input.ref }, [200, 204]);
                     if (data === undefined) return; // Legacy no-content acknowledgement; run verification remains mandatory.
                     id(data.workflow_run_id);
-                    if (data.run_url !== `${root}/actions/runs/${data.workflow_run_id}` || data.html_url !== `https://github.com/${FACTORY_PILOT_REPOSITORY}/actions/runs/${data.workflow_run_id}`) throw Error("FACTORY_GITHUB_DISPATCH_UNCONFIRMED");
+                    if (data.run_url !== `${root}/actions/runs/${data.workflow_run_id}` || data.html_url !== `https://github.com/${repository}/actions/runs/${data.workflow_run_id}`) throw Error("FACTORY_GITHUB_DISPATCH_UNCONFIRMED");
                     return data;
                 } } : {}),
         }, pulls: {
-            async list(input) { scope(input); if (input.base !== "main" || input.state !== "all" || input.per_page !== 100 || !input.head.startsWith(`${owner}:`))
-                invalid(); branch(input.head.slice(owner.length + 1)); const data = await call(`/pulls?head=${encodeURIComponent(input.head)}&base=main&state=all&per_page=100`); if (!Array.isArray(data) || data.length > 100)
+            async list(input) { scope(input); if (input.base !== baseBranch || input.state !== "all" || input.per_page !== 100 || !input.head.startsWith(`${owner}:`))
+                invalid(); branch(input.head.slice(owner.length + 1)); const data = await call(`/pulls?head=${encodeURIComponent(input.head)}&base=${encodeURIComponent(baseBranch)}&state=all&per_page=100`); if (!Array.isArray(data) || data.length > 100)
                 invalid(); return { data }; },
-            async create(input) { scope(input); branch(input.head); if (input.base !== "main" || input.draft !== true || typeof input.title !== "string" || input.title.length > 200 || typeof input.body !== "string" || input.body.length > 10000)
-                invalid(); const data = await call("/pulls", "POST", { head: input.head, base: "main", draft: true, title: input.title, body: input.body }, 201); id(data.number); return { data }; },
+            async create(input) { scope(input); branch(input.head); if (input.base !== baseBranch || input.draft !== true || typeof input.title !== "string" || input.title.length > 200 || typeof input.body !== "string" || input.body.length > 10000)
+                invalid(); const data = await call("/pulls", "POST", { head: input.head, base: baseBranch, draft: true, title: input.title, body: input.body }, 201); id(data.number); return { data }; },
         } };
 }
 /** Reuses the verified blob exporter; no checkout credentials or commands. */
 export function createFactoryPilotGitHubSourceExporter(client: FactoryPilotGitHubClient): NonNullable<FactoryBuilderDependencies["exportSource"]> {
-    const exporter = createGitHubFactorySourceExporter({ repositories: [FACTORY_PILOT_REPOSITORY], client: { rest: { git: {
+    return createScopedExporter(client, FACTORY_PILOT_REPOSITORY);
+}
+export function createFactoryAsistenteGitHubSourceExporter(client: FactoryPilotGitHubClient): NonNullable<FactoryBuilderDependencies["exportSource"]> {
+    return createScopedExporter(client, FACTORY_ASISTENTE_REPOSITORY);
+}
+function createScopedExporter(client: FactoryPilotGitHubClient, allowedRepository: string): NonNullable<FactoryBuilderDependencies["exportSource"]> {
+    const [owner, repo] = allowedRepository.split("/");
+    const exporter = createGitHubFactorySourceExporter({ repositories: [allowedRepository], client: { rest: { git: {
                     getCommit: client.git.getCommit, getBlob: client.git.getBlob,
                     getTree: input => { if (input.recursive !== "1")
                         invalid(); return client.git.getTree({ ...input, recursive: "1" }); },
                 } } } });
     return async (repository, revision, destination) => {
-        if (repository !== FACTORY_PILOT_REPOSITORY)
+        if (repository !== allowedRepository)
             invalid();
         sha(revision);
         await client.repos.get({ owner, repo });
