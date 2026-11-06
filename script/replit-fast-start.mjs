@@ -60,11 +60,18 @@ export async function startReplitFastStart(options = {}) {
   const upstreamPort = Number(options.upstreamPort ?? process.env.REPLIT_UPSTREAM_PORT ?? 5001);
   const childEntry = options.childEntry || process.env.REPLIT_CHILD_ENTRY || "dist/index.cjs";
   const preflightEntry = options.preflightEntry === false ? null : options.preflightEntry || process.env.REPLIT_PREFLIGHT_ENTRY || "dist/compact-local-news-state.cjs";
-  const readinessIntervalMs = Number(options.readinessIntervalMs ?? 200);
+  const readinessIntervalMs = Number(options.readinessIntervalMs ?? 1_000);
+  const readinessTimeoutMs = Number(options.readinessTimeoutMs ?? 3_000);
+  const readinessFailureThreshold = Number(options.readinessFailureThreshold ?? 3);
+  const proxyTimeoutMs = Number(options.proxyTimeoutMs ?? 30_000);
   const startupStartedAt = Date.now();
   let upstreamReady = false;
   let stopping = false;
   let child;
+  let childEnded = false;
+  let readinessTimer;
+  let activeProbe;
+  let failedProbes = 0;
 
   const proxyRequest = (req, res) => {
     const path = new URL(req.url || "/", "http://replit.local").pathname;
@@ -89,12 +96,12 @@ export async function startReplitFastStart(options = {}) {
       res.writeHead(upstreamResponse.statusCode || 502, upstreamResponse.headers);
       upstreamResponse.pipe(res);
     });
-    upstream.setTimeout(30_000, () => upstream.destroy(new Error("upstream timeout")));
+    upstream.setTimeout(proxyTimeoutMs, () => upstream.destroy(new Error("upstream timeout")));
     upstream.on("error", () => {
-      upstreamReady = false;
+      // A route timeout/reset says nothing about the rest of the application.
       if (res.headersSent) return res.destroy();
       res.writeHead(503, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "retry-after": "1" });
-      res.end(JSON.stringify({ status: "restarting" }));
+      res.end(JSON.stringify({ status: "upstream_unavailable" }));
     });
     req.pipe(upstream);
   };
@@ -132,34 +139,68 @@ export async function startReplitFastStart(options = {}) {
     stdio: options.childStdio || "inherit",
   });
 
+  // Schedule the next probe only after completion: slow health responses must
+  // never accumulate overlapping requests or let an older result undo a new one.
   const pollReadiness = () => {
-    const request = http.get({ host: upstreamHost, port: upstreamPort, path: "/api/health", timeout: 1_000 }, (response) => {
-      response.resume();
-      if ((response.statusCode || 500) < 500 && !upstreamReady) {
-        upstreamReady = true;
-        console.log(`[replit-fast-start] application ready on ${upstreamHost}:${upstreamPort}`);
+    if (stopping || childEnded) return;
+    let settled = false;
+    let deadline;
+    const settle = (healthy) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      activeProbe = undefined;
+      if (stopping || childEnded) return;
+      if (healthy) {
+        failedProbes = 0;
+        if (!upstreamReady) {
+          upstreamReady = true;
+          console.log(`[replit-fast-start] application ready on ${upstreamHost}:${upstreamPort}`);
+        }
+      } else {
+        failedProbes += 1;
+        if (failedProbes >= readinessFailureThreshold) upstreamReady = false;
       }
+      readinessTimer = setTimeout(pollReadiness, readinessIntervalMs);
+      readinessTimer.unref();
+    };
+    const request = http.get({ host: upstreamHost, port: upstreamPort, path: "/api/health" }, (response) => {
+      response.on("end", () => settle(response.statusCode >= 200 && response.statusCode < 300));
+      response.on("error", () => settle(false));
+      response.on("aborted", () => settle(false));
+      response.resume();
     });
-    request.on("timeout", () => request.destroy());
-    request.on("error", () => {
-      upstreamReady = false;
+    activeProbe = request;
+    // Absolute deadline also bounds responses that send headers then hang/drip.
+    deadline = setTimeout(() => {
+      request.destroy();
+      settle(false);
+    }, readinessTimeoutMs);
+    deadline.unref();
+    request.on("error", () => settle(false));
+    request.on("close", () => {
+      // Destruction during stop/child exit must release the deadline as well.
+      if (stopping || childEnded) settle(false);
     });
   };
-  const readinessTimer = setInterval(pollReadiness, readinessIntervalMs);
-  readinessTimer.unref();
+  const stopReadiness = () => {
+    upstreamReady = false;
+    clearTimeout(readinessTimer);
+    activeProbe?.destroy();
+  };
   pollReadiness();
 
   child.once("exit", async (code, signal) => {
-    clearInterval(readinessTimer);
-    upstreamReady = false;
+    childEnded = true;
+    stopReadiness();
     if (stopping) return;
     console.error(`[replit-fast-start] application exited (${signal || code || 0})`);
     await closeServer(server);
     process.exitCode = code || (signal ? 1 : 0);
   });
   child.once("error", async (error) => {
-    clearInterval(readinessTimer);
-    upstreamReady = false;
+    childEnded = true;
+    stopReadiness();
     if (stopping) return;
     console.error(`[replit-fast-start] failed to launch application: ${error.message}`);
     await closeServer(server);
@@ -169,7 +210,7 @@ export async function startReplitFastStart(options = {}) {
   const stop = async (signal = "SIGTERM") => {
     if (stopping) return;
     stopping = true;
-    clearInterval(readinessTimer);
+    stopReadiness();
     if (child && child.exitCode == null && child.signalCode == null) child.kill(signal);
     await closeServer(server);
   };
