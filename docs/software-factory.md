@@ -248,3 +248,37 @@ Private repositories and larger runners must not inherit that zero-cost
 assumption. The probe is not connected to builder/simulator execution yet.
 No automatic job schedule was installed. Replit's connector now reports no
 publication for the temporary host probe, confirming its withdrawal.
+
+### GitHub candidate checks connected, 2026-11-06
+
+`createGitHubActionsFactoryBuilder` now composes source export, patch generation,
+two-phase candidate publication, exact GitHub Actions verification and draft PR
+finalization. An operator-pinned workflow hash must match both base and candidate.
+The verifier checks repository visibility, workflow ID/path, commit, branch,
+first attempt, runner, test/build step success and evidence freshness. Failed,
+cancelled, duplicate or ambiguous runs cannot open a PR; uncertain external work
+retains its reservation. Unit integration tests use synthetic clients and do not
+establish unattended operation.
+
+The real credential-free workflow passed tests and application build at commit
+5bb716289ecec6ce9cd02fe5659cc54e89a80ee5:
+https://github.com/robertmanzanillag-jpg/blackops-reminder/actions/runs/42198027098
+The checks run in separate bounded containers with no network or production
+credentials. Dependency installation disables package lifecycle scripts. The
+read-only package mount preserves Node resolution; bounded temporary filesystems
+permit executable test fixtures and Vite's generated configuration cache.
+These checks cover the portable factory suite, not live browser rehearsals or
+PostgreSQL integration. The workflow corrections received independent review.
+
+The production worker remains disabled. Still required: dedicated runtime
+credentials/configuration, real discovery and independent review, browser QA,
+exact-version deployment and rollback, three staging rehearsals, durable storage
+cost bounds and monthly budget initialization. The ten-minute worker lease also
+needs coordination with bounded remote checks and workflow queue delays before
+activation. No fake callbacks or inferred low-risk approval are installed.
+Replit's agent currently refuses work because account credits are exhausted.
+Its documented MCP publish operation publishes latest app changes; an unattended
+exact-commit release/rollback interface has not been verified. A factory-only
+provider hard spending cap has not been verified either. Do not apply an account
+shutdown limit that could interrupt Kong. No publication, balance reload, shared
+billing limit or Kong configuration was changed during this integration.
