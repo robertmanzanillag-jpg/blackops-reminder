@@ -8,6 +8,7 @@ export interface ResponsesFactoryBuildOptions {
   model: Parameters<typeof createOpenAiFactoryTextProvider>[0];
   sourcePaths: Readonly<Record<string, readonly string[]>>;
   maxOutputTokens: number;
+  patchMode?: "plainTextEdits";
   github: Omit<Parameters<typeof createGitHubActionsFactoryBuilder>[0], "generatePatch">;
 }
 
@@ -20,7 +21,7 @@ export function createResponsesFactoryBuild(options: ResponsesFactoryBuildOption
   }
   const generateText = createOpenAiFactoryTextProvider(options.model);
   const generatePatch = createOpenAiFactoryPatchGenerator({ generateText,
-    sourcePaths: options.sourcePaths, maxOutputTokens: options.maxOutputTokens });
+    sourcePaths: options.sourcePaths, maxOutputTokens: options.maxOutputTokens, patchMode: options.patchMode });
   return createGitHubActionsFactoryBuilder({ ...options.github, generatePatch });
 }
 

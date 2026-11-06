@@ -1,7 +1,7 @@
 import test from "node:test";
 import { validateFactoryPublicationPatch } from "../server/software-factory-github-publisher";
 import assert from "node:assert/strict";
-import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { createOpenAiFactoryPatchGenerator } from "../server/software-factory-openai-builder";
@@ -75,5 +75,37 @@ test("missing model line delimiter is normalized without repairing invalid diff 
       assert.equal(result.costCents, 2);
       assert.throws(() => validateFactoryPublicationPatch(result.patch));
     }
+  } finally { await rm(workspace, { recursive: true, force: true }); }
+});
+
+
+test("plain text edits construct exact complete hunks and reject ambiguous or structural edits with settled cost", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "factory-text-test-"));
+  const source = '<!doctype html>\n<html><body><h1>Old wording.</h1><a href="health.json">Health</a></body></html>\n';
+  try {
+    await mkdir(path.join(workspace, "site"));
+    await writeFile(path.join(workspace, "site/index.html"), source);
+    const run = async (text: string) => createOpenAiFactoryPatchGenerator({
+      sourcePaths: { "owner/app": ["site/index.html"] }, patchMode: "plainTextEdits", maxOutputTokens: 100,
+      generateText: async request => {
+        assert.match(request.instructions, /JSON object/);
+        return { status: "completed", text, costCents: 1, inputTokens: 10, outputTokens: 10 };
+      },
+    })(input, { workspace, maxCostCents: 10 });
+    const result = await run(JSON.stringify({ before: "Old wording.", after: "Verified wording." }));
+    assert.equal(result.costCents, 1);
+    assert.deepEqual(validateFactoryPublicationPatch(result.patch), ["site/index.html"]);
+    assert.equal(result.patch, 'diff --git a/site/index.html b/site/index.html\n--- a/site/index.html\n+++ b/site/index.html\n@@ -1,2 +1,2 @@\n-<!doctype html>\n-<html><body><h1>Old wording.</h1><a href="health.json">Health</a></body></html>\n+<!doctype html>\n+<html><body><h1>Verified wording.</h1><a href="health.json">Health</a></body></html>\n');
+    for (const response of ['not json', '{}', JSON.stringify({ before: 'Old wording.', after: 'New', extra: true }), ...[
+      ['health.json', 'other.json'], ['missing', 'New'], ['Old wording.', '<script>'], ['Old wording.', 'https://example.com'],
+      ['Old wording.', '&lt;script&gt;'], ['Old wording.', 'New\nline'], ['Old wording.', ''], ['Old wording.', 'x'.repeat(5001)],
+    ].map(([before, after]) => JSON.stringify({ before, after }))]) {
+      assert.deepEqual(await run(response), { patch: "", costCents: 1 });
+    }
+    for (const unsafe of [source.replace('Health</a>', 'Old wording.</a>'), source.replace('<h1>', '<script>'), source.replace('<h1>', '<!--'), source.slice(0, -1), '\uFEFF' + source]) {
+      await writeFile(path.join(workspace, "site/index.html"), unsafe);
+      assert.deepEqual(await run(JSON.stringify({ before: 'Old wording.', after: 'New wording.' })), { patch: "", costCents: 1 });
+    }
+    assert.throws(() => createOpenAiFactoryPatchGenerator({ sourcePaths: { "owner/app": ["app.ts"] }, patchMode: "plainTextEdits", maxOutputTokens: 100, generateText: async () => { throw Error("must not call"); } }), /PLAIN_TEXT_SOURCE_REQUIRED/);
   } finally { await rm(workspace, { recursive: true, force: true }); }
 });
