@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T11:55:09.976Z",
+  "generatedAt": "2026-11-06T12:07:55.886Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\blackops-reminder",
   "packageName": "rest-express",
   "scripts": {
@@ -124,46 +124,25 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 813,
-    "filesIndexed": 724,
-    "imports": 2581,
+    "filesVisible": 816,
+    "filesIndexed": 727,
+    "imports": 2591,
     "routes": 555,
-    "symbols": 16253
+    "symbols": 16291
   },
   "directories": {
-    "docs": {
-      "files": 36,
-      "indexed": 35,
-      "kinds": {
-        "docs": 36
-      }
-    },
-    "script": {
-      "files": 91,
-      "indexed": 83,
-      "kinds": {
-        "script": 91
-      }
-    },
-    "server": {
-      "files": 169,
-      "indexed": 164,
-      "kinds": {
-        "server": 169
-      }
-    },
     "shared": {
-      "files": 13,
-      "indexed": 13,
+      "files": 14,
+      "indexed": 14,
       "kinds": {
-        "shared": 13
+        "shared": 14
       }
     },
     "tests": {
-      "files": 181,
-      "indexed": 177,
+      "files": 183,
+      "indexed": 179,
       "kinds": {
-        "test": 181
+        "test": 183
       }
     },
     ".": {
@@ -308,6 +287,13 @@
         "other": 1
       }
     },
+    "docs": {
+      "files": 36,
+      "indexed": 35,
+      "kinds": {
+        "docs": 36
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -316,11 +302,25 @@
         "other": 70
       }
     },
+    "script": {
+      "files": 91,
+      "indexed": 83,
+      "kinds": {
+        "script": 91
+      }
+    },
     "scripts": {
       "files": 4,
       "indexed": 1,
       "kinds": {
         "script": 4
+      }
+    },
+    "server": {
+      "files": 169,
+      "indexed": 164,
+      "kinds": {
+        "server": 169
       }
     },
     "server/replit_integrations/batch": {
@@ -1704,6 +1704,7 @@
       "imports": [
         "../../../server/office-kong",
         "../../../server/office-kong-collaboration",
+        "./kong-supervisor-session",
         "@/components/ui/button",
         "@/lib/office-city-agents",
         "@/lib/queryClient",
@@ -1715,15 +1716,20 @@
         "OfficeConnectionsPanel"
       ],
       "symbols": [
+        "InternalHistory",
         "OfficeConnectionsPanel",
         "Probe",
         "Run",
+        "academyJobs",
         "busy",
         "collaboration",
         "connections",
         "delay",
         "enabled",
         "fresh",
+        "historyKey",
+        "internal",
+        "internalJobs",
         "isActive",
         "kongAgents",
         "kongEvidence",
@@ -1733,13 +1739,21 @@
         "pending",
         "probe",
         "qualityChecks",
+        "readOffice",
         "response",
+        "routerAuth",
+        "routerId",
         "runs",
+        "scope",
+        "sessionScope",
         "signature",
         "snapshot",
         "supervision",
         "teams",
         "timer",
+        "verifiedAuth",
+        "visibleInternal",
+        "visibleRuns",
         "workerReady"
       ],
       "routes": []
@@ -11032,6 +11046,8 @@
       ],
       "symbols": [
         "MANUAL_RUN_MIN_INTERVAL_MS",
+        "academy",
+        "assessment",
         "body",
         "council",
         "councilInstance",
@@ -11048,6 +11064,7 @@
         "scope",
         "state",
         "text",
+        "trainee",
         "view"
       ],
       "routes": [
@@ -11992,11 +12009,14 @@
       "exports": [
         "AutomationDefinitionReader",
         "activeMetricoolAnalyticsDefinition",
-        "listExistingAutomationDefinitions"
+        "listExistingAutomationDefinitions",
+        "verifiedNextRunAt"
       ],
       "symbols": [
         "activeMetricoolAnalyticsDefinition",
-        "listExistingAutomationDefinitions"
+        "listExistingAutomationDefinitions",
+        "next",
+        "verifiedNextRunAt"
       ],
       "routes": []
     },
@@ -14177,6 +14197,7 @@
       "path": "server/ceo-operational-health.ts",
       "kind": "server",
       "imports": [
+        "./automation-definition-reads",
         "@shared/schema"
       ],
       "exports": [
@@ -14194,12 +14215,15 @@
         "isOverdue",
         "items",
         "latestRun",
+        "next",
+        "nextRunAt",
         "now",
         "overdue",
         "overdueRuns",
         "pendingApprovalRuns",
         "runsByAutomation",
         "sortedRecentRuns",
+        "unknownSchedule",
         "worstStatus"
       ],
       "routes": []
@@ -22853,6 +22877,26 @@
       "routes": []
     },
     {
+      "path": "shared/clipper-observed-status.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "missingWeeklyRecommendation",
+        "observedClipperPipeline",
+        "unverifiedClipperAgents",
+        "weeklyClipperGoalGap",
+        "withoutUnverifiedWeeklyViews"
+      ],
+      "symbols": [
+        "missingWeeklyRecommendation",
+        "observedClipperPipeline",
+        "unverifiedClipperAgents",
+        "weeklyClipperGoalGap",
+        "withoutUnverifiedWeeklyViews"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/kong-operations.ts",
       "kind": "shared",
       "imports": [
@@ -24064,6 +24108,7 @@
       "path": "tests/automation-registry.test.ts",
       "kind": "test",
       "imports": [
+        "../server/automation-definition-reads",
         "../server/automation-registry",
         "@shared/schema",
         "node:assert/strict",
@@ -24073,7 +24118,9 @@
       "symbols": [
         "automation",
         "finishedAt",
+        "future",
         "run",
+        "saved",
         "startedAt"
       ],
       "routes": []
@@ -24961,7 +25008,9 @@
       "exports": [],
       "symbols": [
         "automation",
+        "definition",
         "health",
+        "result",
         "run"
       ],
       "routes": []
@@ -25066,6 +25115,23 @@
       "exports": [],
       "symbols": [
         "payload"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clipper-observed-status.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/clipper-observed-status",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "account",
+        "agents",
+        "original",
+        "rows"
       ],
       "routes": []
     },
@@ -27896,6 +27962,24 @@
       "routes": []
     },
     {
+      "path": "tests/office-history-ui.mjs",
+      "kind": "test",
+      "imports": [
+        "esbuild",
+        "node:assert/strict",
+        "node:path",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "browser",
+        "bundle",
+        "page",
+        "url"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-internal-work.test.ts",
       "kind": "test",
       "imports": [
@@ -29105,6 +29189,7 @@
     "tests/ceo-readiness.test.ts",
     "tests/ceo-smoke-cli.test.ts",
     "tests/client-auth-state.test.ts",
+    "tests/clipper-observed-status.test.ts",
     "tests/clippers-agent.test.ts",
     "tests/clippers-local-news-agent.test.ts",
     "tests/clippers-local-news-growth.test.ts",

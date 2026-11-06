@@ -65,7 +65,15 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
     try {
       if(requestUserId(req)!==ownerUserId()) return res.status(403).json({error:"Solo el propietario puede leer los resúmenes internos."});
       const state=await councilInstance().load();
-      return res.json(state.officeExecution?.internalWork || {version:1,jobs:[]});
+      const academy=(state.company?.academyJobs || []).slice(-20).reverse().map(job=>{
+        const trainee=state.company.trainees.find(t=>t.id===job.traineeId);
+        const assessment=trainee?.assessments?.find(a=>a.runId===job.id);
+        return {id:job.id,agentId:trainee?.forAgentId || "unknown",purpose:trainee?.purpose || "candidate",
+          policyCurrentlyApplied:Boolean(trainee && state.officeExecution?.roles.roles[trainee.forAgentId]?.activePolicy?.candidateId === trainee.id),
+          status:job.status,startedAt:job.startedAt,reason:job.reason,
+          benchmarkId:job.benchmarkId,...(assessment?{assessment:{passed:assessment.passed,quality:assessment.quality,incumbentQuality:assessment.incumbentQuality,completedAt:assessment.completedAt,scope:assessment.scope || "benchmark"}}:{})};
+      });
+      return res.json({...state.officeExecution?.internalWork || {version:1,jobs:[]},academy});
     } catch {return res.status(503).json({error:"No se pudo verificar el trabajo interno."});}
   });
 

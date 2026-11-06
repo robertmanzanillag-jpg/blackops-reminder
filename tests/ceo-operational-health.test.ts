@@ -3,6 +3,13 @@ import test from "node:test";
 import type { AutomationDefinition, AutomationRun } from "@shared/schema";
 import { buildCeoOperationalHealth } from "../server/ceo-operational-health";
 
+test("June next-run metadata after a November run is unverified, not a missed dispatch",()=>{
+  const definition=automation({nextRunAt:new Date('2026-06-22T06:45:00Z'),lastRunAt:new Date('2026-11-06T11:45:00Z'),schedule:{kind:'daily_time',hour:6,minute:45}});
+  const result=buildCeoOperationalHealth({automations:[definition],runs:[],now:new Date('2026-11-06T12:00:00Z')});
+  assert.equal(result.totals.overdueRuns,0);assert.equal(result.status,'warning');
+  assert.equal(result.items[0].nextRunAt,null);assert.match(result.items[0].detail,/unverified/);
+});
+
 function automation(overrides: Partial<AutomationDefinition> = {}): AutomationDefinition {
   return {
     id: "automation-1",

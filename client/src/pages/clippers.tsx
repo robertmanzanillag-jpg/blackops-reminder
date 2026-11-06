@@ -400,6 +400,7 @@ interface ClipperAccount {
   dailyClipTarget: number;
   weeklyViewsGoal: number;
   lastWeekViews: number;
+  weeklyViewsEvidence?: "unavailable" | "verified";
   status: ClipperAccountStatus;
   contentPolicy: string;
 }
@@ -6278,7 +6279,7 @@ interface ClipperGrowthAudit {
   summary: string;
   items: ClipperGrowthAuditItem[];
   roadmap: string[];
-  weeklyGoalGap: number;
+  weeklyGoalGap: number | null;
 }
 
 interface ClipperDriveFolder {
@@ -21364,7 +21365,7 @@ export default function ClippersPage() {
                       <Badge className={cn("border", growthAuditBadge(status.growthAudit.status))}>{status.growthAudit.status}</Badge>
                     </div>
                     <p className="mt-3 text-sm leading-6 text-zinc-400">{status.growthAudit.summary}</p>
-                    <p className="mt-2 text-xs text-amber-200">Gap semanal: {formatNumber(status.growthAudit.weeklyGoalGap)} views</p>
+                    <p className="mt-2 text-xs text-amber-200">Gap semanal: {status.growthAudit.weeklyGoalGap == null ? "Sin medición verificada" : `${formatNumber(status.growthAudit.weeklyGoalGap)} views`}</p>
                     <Progress value={status.growthAudit.score} className="mt-3 bg-white/10 [&>div]:bg-lime-200" />
                   </div>
 
@@ -25425,7 +25426,7 @@ export default function ClippersPage() {
 
         <div className="grid gap-4 xl:grid-cols-3">
           {(status?.accounts || []).map((account) => {
-            const progress = Math.min(Math.round((account.lastWeekViews / account.weeklyViewsGoal) * 100), 100);
+            const progress = account.weeklyViewsEvidence === "verified" ? Math.min(Math.round((account.lastWeekViews / account.weeklyViewsGoal) * 100), 100) : 0;
             return (
               <Card key={account.id} className="border-zinc-800 bg-zinc-950/70">
                 <CardHeader className="pb-3">
@@ -25446,7 +25447,7 @@ export default function ClippersPage() {
                   </div>
                   <div>
                     <div className="mb-2 flex justify-between text-xs text-zinc-500">
-                      <span>{formatNumber(account.lastWeekViews)} views</span>
+                      <span>{account.weeklyViewsEvidence !== "verified" ? "Sin medición semanal verificada" : `${formatNumber(account.lastWeekViews)} views`}</span>
                       <span>{formatNumber(account.weeklyViewsGoal)} goal</span>
                     </div>
                     <Progress value={progress} className="bg-white/10 [&>div]:bg-amber-200" />
@@ -25458,7 +25459,7 @@ export default function ClippersPage() {
                     </div>
                     <div className="rounded-md border border-white/10 bg-black/35 p-3">
                       <p className="text-xs text-zinc-500">Progreso</p>
-                      <p className="font-semibold">{progress}%</p>
+                      <p className="font-semibold">{account.weeklyViewsEvidence !== "verified" ? "Sin verificar" : `${progress}%`}</p>
                     </div>
                   </div>
                   <p className="text-xs leading-5 text-zinc-500">{account.contentPolicy}</p>

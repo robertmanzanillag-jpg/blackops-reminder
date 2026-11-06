@@ -31,10 +31,10 @@ test("canonical planning includes exact saved records, no sending or live-calend
 test("internal artifact route refuses other users before loading private state",async()=>{
   const handlers=new Map<string,any>();let reads=0;
   const app={get:(path:string,handler:any)=>handlers.set(path,handler),post:()=>{}};
-  registerAgentCouncilRoutes(app as any,{council:{async load(){reads++;return {officeExecution:{internalWork:{version:1,jobs:[]}}};}} as any,requestUserId:(req:any)=>req.user,ownerUserId:()=>owner});
+  registerAgentCouncilRoutes(app as any,{council:{async load(){reads++;return {officeExecution:{roles:{roles:{reviewer:{activePolicy:{candidateId:"incumbent1"}}}},internalWork:{version:1,jobs:[]}},company:{academyJobs:[{id:"assessment1",traineeId:"incumbent1",status:"completed",startedAt:new Date(NOW).toISOString(),benchmarkId:"fixture1"}],trainees:[{id:"incumbent1",forAgentId:"reviewer",purpose:"incumbent",assessments:[{runId:"assessment1",quality:90,incumbentQuality:80,passed:true,scope:"benchmark",artifacts:{candidateText:"PRIVATE_PROMPT_MUST_NOT_LEAK"}}]}]}};}} as any,requestUserId:(req:any)=>req.user,ownerUserId:()=>owner});
   const response=()=>({code:200,body:undefined as any,headers:{} as any,set(key:string,value:string){this.headers[key]=value;return this;},status(code:number){this.code=code;return this;},json(value:any){this.body=value;return this;}});
   const denied=response();await handlers.get("/api/agent-council/internal-work")({user:"other-owner"},denied);assert.equal(denied.code,403);assert.equal(reads,0);
-  const allowed=response();await handlers.get("/api/agent-council/internal-work")({user:owner},allowed);assert.equal(reads,1);assert.equal(allowed.headers["Cache-Control"],"no-store");assert.deepEqual(allowed.body,{version:1,jobs:[]});
+  const allowed=response();await handlers.get("/api/agent-council/internal-work")({user:owner},allowed);assert.equal(reads,1);assert.equal(allowed.headers["Cache-Control"],"no-store");assert.deepEqual(allowed.body.jobs,[]);assert.equal(allowed.body.academy[0].purpose,"incumbent");assert.equal(allowed.body.academy[0].policyCurrentlyApplied,true);assert.equal(allowed.body.academy[0].assessment.quality,90);assert.doesNotMatch(JSON.stringify(allowed.body),/PRIVATE_PROMPT/);
 });
 test("concurrent runners and restart complete one daily slot per role with immutable evidence",async()=>{
   const f=fixture();let reads=0;

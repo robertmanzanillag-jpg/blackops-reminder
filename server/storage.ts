@@ -1969,9 +1969,11 @@ export class DatabaseStorage implements IStorage {
         lastRunAt: run.startedAt,
         lastStatus: run.status as typeof automationDefinitionsTable.$inferInsert["lastStatus"],
         failureCount: run.status === "failed" ? sql`${automationDefinitionsTable.failureCount} + 1` : 0,
+        ...(run.triggeredBy === "scheduler" ? {nextRunAt:sql`CASE WHEN ${automationDefinitionsTable.nextRunAt} <= ${run.startedAt} THEN NULL ELSE ${automationDefinitionsTable.nextRunAt} END`} : {}),
         updatedAt: new Date(),
       })
-      .where(eq(automationDefinitionsTable.id, run.automationId));
+      .where(and(eq(automationDefinitionsTable.id, run.automationId),eq(automationDefinitionsTable.ownerUserId,run.ownerUserId),
+        sql`(${automationDefinitionsTable.lastRunAt} IS NULL OR ${automationDefinitionsTable.lastRunAt} <= ${run.startedAt})`));
 
     return newRun as AutomationRun;
   }

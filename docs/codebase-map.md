@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-06T11:55:09.976Z
+Generated: 2026-11-06T12:07:55.886Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\blackops-reminder`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 813 | 724 | 2581 | 555 | 16253 |
+| 816 | 727 | 2591 | 555 | 16291 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,7 +28,7 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 181 | 177 | test:181 |
+| `tests` | 183 | 179 | test:183 |
 | `server` | 169 | 164 | server:169 |
 | `script` | 91 | 83 | script:91 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
@@ -38,7 +38,7 @@ Package: `rest-express`
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `client/src/lib` | 17 | 17 | client-lib:17 |
-| `shared` | 13 | 13 | shared:13 |
+| `shared` | 14 | 14 | shared:14 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `client/src/components/company-office` | 5 | 5 | client-component:5 |
 | `server/replit_integrations/chat` | 4 | 4 | server:4 |
@@ -127,6 +127,7 @@ Package: `rest-express`
 - `tests/ceo-readiness.test.ts`
 - `tests/ceo-smoke-cli.test.ts`
 - `tests/client-auth-state.test.ts`
+- `tests/clipper-observed-status.test.ts`
 - `tests/clippers-agent.test.ts`
 - `tests/clippers-local-news-agent.test.ts`
 - `tests/clippers-local-news-growth.test.ts`
