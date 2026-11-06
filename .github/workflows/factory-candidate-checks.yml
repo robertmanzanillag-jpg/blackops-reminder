@@ -1,0 +1,86 @@
+name: Factory candidate checks
+on:
+  push:
+    branches: ['factory/**', codex/asistente-factory-integration]
+permissions: {}
+concurrency:
+  group: factory-candidate-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  isolated-checks:
+    if: github.repository == 'robertmanzanillag-jpg/blackops-reminder' && github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      FACTORY_IMAGE: docker.io/library/node@sha256:c0a93797ee78814ae6d32fcca2561fdbbe423149c3f5389aad32d86e9fd85bd4
+    steps:
+      - name: Prepare exact public source and isolated dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          mkdir source dependencies checkout
+          git -C checkout init --quiet
+          git -C checkout -c credential.helper= fetch --quiet --depth 1 https://github.com/robertmanzanillag-jpg/blackops-reminder.git "$GITHUB_SHA"
+          test "$(git -C checkout rev-parse FETCH_HEAD)" = "$GITHUB_SHA"
+          git -C checkout archive FETCH_HEAD | tar --exclude='credentials' --exclude='secrets' -x -C source
+          test -z "$(find source -type l -print -quit)"
+          test -z "$(find source -type d \( -name .git -o -name node_modules -o -name credentials -o -name secrets \) -print -quit)"
+          test -z "$(find source -type f \( -name '.env' -o -name '.env.*' -o -name '*.pem' -o -name '*.key' \) -print -quit)"
+          cp source/package.json source/package-lock.json dependencies/
+          container="factory-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-deps"
+          cleanup() { timeout --kill-after=5 10 docker rm -f "$container" >/dev/null 2>&1 || true; remaining=$(timeout --kill-after=5 10 docker ps -aq --filter "name=^/${container}$") || return 1; test -z "$remaining"; }
+          trap 'status=$?; cleanup || status=1; exit "$status"' EXIT
+          timeout --kill-after=5 120 docker pull "$FACTORY_IMAGE" >/dev/null
+          timeout --kill-after=10 300 docker run --rm --name "$container" --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --user "$(id -u):$(id -g)" --memory 3g --cpus 2 --pids-limit 128 \
+            --tmpfs /tmp:rw,nosuid,size=512m --env HOME=/tmp \
+            --mount "type=bind,src=$PWD/dependencies,dst=/dependencies" --workdir /dependencies \
+            "$FACTORY_IMAGE" npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org
+          test ! -L dependencies/node_modules/.vite-temp
+          mkdir -p dependencies/node_modules/.vite-temp
+      - name: Isolated tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          container="factory-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-tests"
+          cleanup() { timeout --kill-after=5 10 docker rm -f "$container" >/dev/null 2>&1 || true; remaining=$(timeout --kill-after=5 10 docker ps -aq --filter "name=^/${container}$") || return 1; test -z "$remaining"; }
+          trap 'status=$?; cleanup || status=1; exit "$status"' EXIT
+          timeout --kill-after=10 300 docker run --rm --name "$container" --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --user "$(id -u):$(id -g)" --memory 3g --cpus 2 --pids-limit 128 \
+            --tmpfs /tmp:rw,nosuid,exec,size=256m --tmpfs /work:rw,nosuid,size=512m,mode=1777 --tmpfs /dependencies/node_modules/.vite-temp:rw,nosuid,size=32m,mode=1777 --env HOME=/tmp \
+            --mount "type=bind,src=$PWD/source,dst=/source,readonly" \
+            --mount "type=bind,src=$PWD/dependencies/node_modules,dst=/dependencies/node_modules,readonly" \
+            --workdir /work "$FACTORY_IMAGE" sh -c \
+            'cp -R /source/. /work/ && ln -s /dependencies/node_modules /work/node_modules && node --import tsx --test tests/software-factory-company.test.ts tests/software-factory-actions.test.ts tests/software-factory-builder.test.ts tests/software-factory-gcs.test.ts tests/software-factory-github-client.test.ts tests/software-factory-pilot-review.test.ts tests/software-factory-github-publisher.test.ts tests/software-factory-github.test.ts tests/software-factory-loop.test.ts tests/software-factory-object-store.test.ts tests/software-factory-openai-builder.test.ts tests/software-factory-openai.test.ts tests/software-factory-pipeline.test.ts tests/software-factory-remote-builder.test.ts tests/software-factory-routes.test.ts tests/software-factory-runtime.test.ts tests/software-factory-store-provider.test.ts tests/software-factory-store.test.ts tests/software-factory-worker.test.ts tests/software-factory.test.ts'
+      - name: Isolated build
+        shell: bash
+        run: |
+          set -euo pipefail
+          container="factory-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-build"
+          cleanup() { timeout --kill-after=5 10 docker rm -f "$container" >/dev/null 2>&1 || true; remaining=$(timeout --kill-after=5 10 docker ps -aq --filter "name=^/${container}$") || return 1; test -z "$remaining"; }
+          trap 'status=$?; cleanup || status=1; exit "$status"' EXIT
+          timeout --kill-after=10 300 docker run --rm --name "$container" --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --user "$(id -u):$(id -g)" --memory 3g --cpus 2 --pids-limit 128 \
+            --tmpfs /tmp:rw,nosuid,exec,size=256m --tmpfs /work:rw,nosuid,size=512m,mode=1777 --tmpfs /dependencies/node_modules/.vite-temp:rw,nosuid,size=32m,mode=1777 --env HOME=/tmp \
+            --mount "type=bind,src=$PWD/source,dst=/source,readonly" \
+            --mount "type=bind,src=$PWD/dependencies/node_modules,dst=/dependencies/node_modules,readonly" \
+            --workdir /work "$FACTORY_IMAGE" sh -c \
+            'cp -R /source/. /work/ && ln -s /dependencies/node_modules /work/node_modules && npm run build'
+
+      - name: Isolated browser recovery tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='mcr.microsoft.com/playwright@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48'
+          container="factory-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-browser"
+          cleanup() { timeout --kill-after=5 10 docker rm -f "$container" >/dev/null 2>&1 || true; remaining=$(timeout --kill-after=5 10 docker ps -aq --filter "name=^/${container}$") || return 1; test -z "$remaining"; }
+          trap 'status=$?; cleanup || status=1; exit "$status"' EXIT
+          timeout --kill-after=5 180 docker pull "$image" >/dev/null
+          timeout --kill-after=10 300 docker run --rm --init --name "$container" --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
+            --user "$(id -u):$(id -g)" --memory 3g --cpus 2 --pids-limit 256 --shm-size 256m \
+            --tmpfs /tmp:rw,nosuid,size=512m --tmpfs /work:rw,nosuid,size=512m,mode=1777 --env HOME=/tmp \
+            --mount "type=bind,src=$PWD/source,dst=/source,readonly" \
+            --mount "type=bind,src=$PWD/dependencies/node_modules,dst=/dependencies/node_modules,readonly" \
+            --workdir /work "$image" sh -c \
+            'cp -R /source/. /work/ && ln -s /dependencies/node_modules /work/node_modules && node --import tsx --test --test-concurrency=1 tests/software-factory-simulator.test.ts tests/software-factory-panel.test.mjs'
