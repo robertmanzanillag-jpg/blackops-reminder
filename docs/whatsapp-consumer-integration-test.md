@@ -2,7 +2,7 @@
 
 The ordinary test suite runs the consumer unit tests without access to another repository. The HTTP backend integration test explicitly reports **skipped** unless `KONG_WHATSAPP_BACKEND_FIXTURE` is set. A skip is not a passing integration check.
 
-To reproduce the integration check, obtain an authorized local checkout of the KONG backend outside this repository. Check out commit `2e3e3cb753e57479002505240b8296a79f2f8990` and leave its `server` and `shared` sources unchanged. Do not copy private source or credentials into this project. Install this project's locked development dependencies, and ensure Git and Node are available on PATH.
+To reproduce the integration check, obtain an authorized local checkout of the KONG backend outside this repository. Check out commit `daada94d52df2e6b008b59799d2db723215df0c5` and leave its `server` and `shared` sources unchanged. Do not copy private source or credentials into this project. Install this project's locked development dependencies, and ensure Git and Node are available on PATH.
 
 In PowerShell, replace the path below with that checkout's absolute path:
 

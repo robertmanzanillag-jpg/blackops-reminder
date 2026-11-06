@@ -52,6 +52,13 @@ export function whatsappOfficeView(input: unknown, now = Date.now(), transportCu
       (attempt !== null && attempt > observed) || (success !== null && (attempt === null || success > attempt)) ||
       (success === null && evidence.lastSuccessGroupCount !== 0)) return missing;
   if (!transportCurrent) return { evidence, status: "stale", label: "Estado sin confirmar", detail: "La conexión de la oficina no está vigente. Se conserva la última evidencia, sin confirmar actividad actual." };
+  // An idle scheduled reader reports once per cycle, not every five minutes.
+  // This credits only the recorded read; it never asserts a live session.
+  if (evidence.scheduler === "active" && evidence.reader === "idle" && evidence.blocker === "none" &&
+      evidence.session === "connected" && success !== null && evidence.lastSuccessGroupCount === 4 &&
+      now - success <= Math.min(60, evidence.intervalMinutes * 2) * 60_000) {
+    return { evidence, status: "recent", label: "Última lectura completa verificada", detail: "Lectura registrada dentro de la cadencia programada; no confirma que esté leyendo ni conectado ahora." };
+  }
   if (now - observed > 5 * 60_000) return { evidence, status: "stale", label: "Estado obsoleto", detail: "La última observación tiene más de cinco minutos; no confirma actividad actual." };
   if (evidence.reader === "blocked" || evidence.blocker !== "none" || evidence.session === "disconnected") {
     return { evidence, status: "blocked", label: "Lector bloqueado", detail: evidence.blocker === "none" ? "La sesión de lectura no está disponible." : WHATSAPP_BLOCKERS[evidence.blocker] };

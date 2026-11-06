@@ -183,6 +183,21 @@ test("service metadata remains optional and validates exact enum and boolean typ
   }
 });
 
+test("event-driven receipt aggregates remain strict and do not establish live reader activity", async () => {
+  const aggregate = { windowDays: 30, receivedCount: 2, appliedCount: 1, pendingCount: 1, lastReceivedAt: null, lastAppliedAt: null };
+  const agent = { ...operations().agents[0], id: "black_room_whatsapp_reader", kind: "system", state: "unknown", operationMode: "event_driven", verifiedActivity: aggregate };
+  const payload = { ...operations(), agents: [...operations().agents, agent] };
+  const result = await connector(async () => json(payload)).runOfficeKongReadOnly();
+  const parsed = result.evidence.agents.find(item => item.id === agent.id)!;
+  assert.deepEqual(parsed.verifiedActivity, aggregate);
+  assert.equal(parsed.state, "unknown");
+  assert.equal(result.evidence.whatsappReader, undefined);
+  for (const invalid of [{ ...aggregate, chat: "private" }, { ...aggregate, receivedCount: -1 }, { ...aggregate, lastAppliedAt: "not-a-timestamp" }]) {
+    await assert.rejects(connector(async () => json({ ...payload, agents: [{ ...agent, verifiedActivity: invalid }] })).runOfficeKongReadOnly(),
+      (error: unknown) => error instanceof OfficeKongError && error.code === "INVALID_RESPONSE");
+  }
+});
+
 test("old and implausibly future snapshots are rejected", async () => {
   for (const offset of [-300_001, 30_001]) {
     const payload = { ...operations(), generatedAt: new Date(NOW.getTime() + offset).toISOString() };

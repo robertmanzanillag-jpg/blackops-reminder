@@ -67,7 +67,7 @@ tests/kong-company.test.ts tests/kong-company-routes.test.ts tests/kong-office-w
 
 `tests/whatsapp-backend-consumer.test.ts` additionally requires the read-only sibling
 `kong-whatsapp-production-ci` at exact commit
-`2e3e3cb753e57479002505240b8296a79f2f8990`. It bundles the actual backend route,
+`daada94d52df2e6b008b59799d2db723215df0c5`. It bundles the actual backend route,
 validator and office-read projection and exposes them only on an ephemeral loopback
 HTTP server. Auth, persistence and unrelated city/DB services use synthetic fixtures.
 The projected response flows through the actual consumer parser, desk builder and
