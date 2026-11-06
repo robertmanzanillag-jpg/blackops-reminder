@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T02:50:16.849Z",
+  "generatedAt": "2026-11-06T02:55:48.839Z",
   "repoRoot": "/Users/robertmanzanilla/Documents/Codex/2026-11-05/qui/work/software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -123,61 +123,21 @@
     "check": "tsc",
     "db:push": "drizzle-kit push",
     "factory:worker": "node dist/software-factory-worker.cjs",
-    "test:factory": "node --import tsx --test tests/software-factory*.test.ts"
+    "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 798,
+    "filesVisible": 799,
     "filesIndexed": 715,
-    "imports": 2552,
+    "imports": 2553,
     "routes": 556,
-    "symbols": 15978
+    "symbols": 16034
   },
   "directories": {
-    "client/src": {
-      "files": 143,
-      "indexed": 141,
+    "work": {
+      "files": 1,
+      "indexed": 0,
       "kinds": {
-        "client-component": 38,
-        "other": 4,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 17,
-        "client-page": 26
-      }
-    },
-    "docs": {
-      "files": 37,
-      "indexed": 36,
-      "kinds": {
-        "docs": 37
-      }
-    },
-    "script": {
-      "files": 86,
-      "indexed": 81,
-      "kinds": {
-        "script": 86
-      }
-    },
-    "server": {
-      "files": 166,
-      "indexed": 162,
-      "kinds": {
-        "server": 166
-      }
-    },
-    "shared": {
-      "files": 12,
-      "indexed": 12,
-      "kinds": {
-        "shared": 12
-      }
-    },
-    "tests": {
-      "files": 174,
-      "indexed": 171,
-      "kinds": {
-        "test": 174
+        "other": 1
       }
     },
     ".": {
@@ -225,12 +185,38 @@
         "other": 16
       }
     },
+    "client/src": {
+      "files": 143,
+      "indexed": 141,
+      "kinds": {
+        "other": 4,
+        "client-component": 38,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 17,
+        "client-page": 26
+      }
+    },
+    "docs": {
+      "files": 37,
+      "indexed": 36,
+      "kinds": {
+        "docs": 37
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 86,
+      "indexed": 81,
+      "kinds": {
+        "script": 86
       }
     },
     "scripts": {
@@ -240,6 +226,13 @@
         "script": 4
       }
     },
+    "server": {
+      "files": 166,
+      "indexed": 162,
+      "kinds": {
+        "server": 166
+      }
+    },
     "server/replit_integrations": {
       "files": 9,
       "indexed": 9,
@@ -247,11 +240,25 @@
         "server": 9
       }
     },
+    "shared": {
+      "files": 12,
+      "indexed": 12,
+      "kinds": {
+        "shared": 12
+      }
+    },
     "shared/models": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 174,
+      "indexed": 171,
+      "kinds": {
+        "test": 174
       }
     },
     "tests/fixtures": {
@@ -609,6 +616,7 @@
         "OfficeAgentStatusChat",
         "PanelAgent",
         "academyIds",
+        "canClassifyKongCities",
         "career",
         "centralSignalById",
         "centralSignals",
@@ -675,6 +683,7 @@
         "reassignmentProposals",
         "reducedMotion",
         "refreshCouncil",
+        "refreshKongRings",
         "result",
         "runCouncil",
         "sceneKey",
@@ -707,7 +716,8 @@
         "SceneDepartment",
         "createOfficeScene",
         "officeCityDeskPosition",
-        "officeCityMapPosition"
+        "officeCityMapPosition",
+        "officeConcentricRingLayout"
       ],
       "symbols": [
         "CITY_RING_SPACING",
@@ -757,6 +767,7 @@
         "color",
         "colorNum",
         "cols",
+        "concentric",
         "core",
         "count",
         "createOfficeScene",
@@ -788,6 +799,7 @@
         "flow",
         "flowColor",
         "focusDepartment",
+        "footprint",
         "frame",
         "frameCityOverview",
         "from",
@@ -797,6 +809,7 @@
         "grid",
         "ground",
         "group",
+        "groups",
         "h",
         "halfAngle",
         "hasProblem",
@@ -833,6 +846,7 @@
         "now",
         "officeCityDeskPosition",
         "officeCityMapPosition",
+        "officeConcentricRingLayout",
         "offset",
         "onPointerDown",
         "onPointerMove",
@@ -855,7 +869,10 @@
         "pointer",
         "points",
         "position",
+        "positions",
+        "previousRingSpacing",
         "priorCount",
+        "priorExtent",
         "priorLayout",
         "projected",
         "pulse",
@@ -865,9 +882,13 @@
         "resizeObserver",
         "rightArm",
         "ring",
+        "ringPosition",
+        "ringPositions",
+        "rings",
         "row",
         "rows",
         "running",
+        "sameRingSpacing",
         "scene",
         "screen",
         "screenLines",
@@ -877,6 +898,7 @@
         "seed",
         "set",
         "shirt",
+        "sizes",
         "slab",
         "slots",
         "span",
@@ -3516,22 +3538,39 @@
         "./office-kong-central-agents"
       ],
       "exports": [
+        "KongOfficeDepartment",
         "KongOfficeDesk",
-        "buildKongOfficeWing"
+        "KongOfficeRing",
+        "KongRingAssignment",
+        "buildKongOfficeWing",
+        "createKongRingAssignment",
+        "measureKongCityActivity"
       ],
       "symbols": [
         "age",
         "buildKongOfficeWing",
+        "busyCities",
         "central",
+        "centralDepartments",
         "centralGroups",
-        "departments",
+        "cityOrder",
+        "completed",
+        "completedPosts",
+        "createKongRingAssignment",
         "existing",
         "fresh",
         "grouped",
         "ids",
+        "measureKongCityActivity",
         "nativeSignals",
+        "orderedCities",
+        "ranked",
+        "rankedCityOrder",
+        "rows",
+        "runningPosts",
         "source",
         "state",
+        "verified",
         "videoNativeId"
       ],
       "routes": []
@@ -21001,6 +21040,7 @@
       "path": "server/software-factory-pipeline.ts",
       "kind": "server",
       "imports": [
+        "./app-qa-agent",
         "./software-factory",
         "./software-factory-simulator",
         "./software-factory-store",
@@ -21010,6 +21050,7 @@
       "exports": [
         "FactoryPipelineDependencies",
         "FactoryPipelineState",
+        "createAppQaFactoryDiscovery",
         "createFactoryPipeline",
         "createPipelineSimulator"
       ],
@@ -21022,6 +21063,7 @@
         "checkCost",
         "checked",
         "clone",
+        "createAppQaFactoryDiscovery",
         "createFactoryPipeline",
         "createPipelineSimulator",
         "deployed",
@@ -21033,17 +21075,21 @@
         "gate",
         "healthy",
         "id",
+        "kind",
         "load",
         "missing",
         "next",
         "now",
         "outcome",
         "previous",
+        "priority",
         "project",
         "readiness",
+        "regressionScenarioId",
         "report",
         "restored",
         "result",
+        "snapshot",
         "state",
         "validSha",
         "verified"
@@ -21179,6 +21225,7 @@
         "ownerKey",
         "pool",
         "previous",
+        "protectedTransfer",
         "result",
         "run",
         "selected",
@@ -21213,6 +21260,7 @@
         "createSoftwareFactoryWorker",
         "next",
         "now",
+        "recovery",
         "reserve",
         "state",
         "store",
@@ -26630,15 +26678,24 @@
       ],
       "exports": [],
       "symbols": [
+        "captured",
         "cities",
         "current",
         "directory",
         "disconnected",
+        "emptyMiddle",
         "evidence",
         "expired",
+        "groups",
         "ids",
+        "initial",
+        "job",
+        "layout",
         "native",
         "now",
+        "refreshed",
+        "rooms",
+        "unchanged",
         "wing"
       ],
       "routes": []
@@ -28117,17 +28174,21 @@
       ],
       "exports": [],
       "symbols": [
+        "deploy",
+        "discover",
         "evidence",
         "f",
         "fixture",
         "forged",
+        "found",
         "jobs",
         "now",
         "original",
         "pipeline",
         "result",
         "run",
-        "simulator"
+        "simulator",
+        "verify"
       ],
       "routes": []
     },
@@ -28150,6 +28211,7 @@
       "symbols": [
         "bin",
         "claims",
+        "deploy",
         "env",
         "exec",
         "input",
@@ -28157,10 +28219,12 @@
         "next",
         "outcomes",
         "reset",
+        "rollback",
         "root",
         "setup",
         "status",
-        "store"
+        "store",
+        "verify"
       ],
       "routes": []
     },
@@ -28253,9 +28317,16 @@
       ],
       "exports": [],
       "symbols": [
+        "candidate",
+        "evidence",
+        "h",
         "harness",
         "job",
-        "sha"
+        "project",
+        "releaseFixture",
+        "sha",
+        "task",
+        "time"
       ],
       "routes": []
     },

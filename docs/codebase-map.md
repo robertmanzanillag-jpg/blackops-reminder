@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-06T02:50:16.849Z
+Generated: 2026-11-06T02:55:48.839Z
 Repo: `/Users/robertmanzanilla/Documents/Codex/2026-11-05/qui/work/software-factory`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 798 | 715 | 2552 | 556 | 15978 |
+| 799 | 715 | 2553 | 556 | 16034 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -47,6 +47,7 @@ Package: `rest-express`
 | `tests/harness` | 1 | 1 | test:1 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
 | `bin` | 1 | 0 | other:1 |
+| `work` | 1 | 0 | other:1 |
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/tools`
