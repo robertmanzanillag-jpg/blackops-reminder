@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T06:11:22.453Z",
+  "generatedAt": "2026-11-06T08:25:18.938Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -126,25 +126,25 @@
     "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 810,
-    "filesIndexed": 727,
-    "imports": 2608,
+    "filesVisible": 812,
+    "filesIndexed": 729,
+    "imports": 2611,
     "routes": 556,
-    "symbols": 16233
+    "symbols": 16267
   },
   "directories": {
     "server": {
-      "files": 172,
-      "indexed": 168,
+      "files": 173,
+      "indexed": 169,
       "kinds": {
-        "server": 172
+        "server": 173
       }
     },
     "tests": {
-      "files": 180,
-      "indexed": 177,
+      "files": 181,
+      "indexed": 178,
       "kinds": {
-        "test": 180
+        "test": 181
       }
     },
     ".": {
@@ -21251,7 +21251,9 @@
         "capacity",
         "clone",
         "control",
+        "cost",
         "createSoftwareFactoryObjectStore",
+        "effectiveBudget",
         "exposed",
         "fit",
         "hash",
@@ -21271,8 +21273,39 @@
         "read",
         "state",
         "time",
+        "total",
         "unique",
         "validate"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-openai.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "FactoryTextResult",
+        "createOpenAiFactoryTextProvider"
+      ],
+      "symbols": [
+        "blocked",
+        "c",
+        "controller",
+        "cost",
+        "costCents",
+        "counted",
+        "createOpenAiFactoryTextProvider",
+        "expiry",
+        "fresh",
+        "input",
+        "nonnegative",
+        "positive",
+        "post",
+        "prompt",
+        "reader",
+        "response",
+        "timer",
+        "usage"
       ],
       "routes": []
     },
@@ -28547,6 +28580,7 @@
       "exports": [],
       "symbols": [
         "MemoryTransport",
+        "attempts",
         "before",
         "claimed",
         "deploy",
@@ -28554,6 +28588,7 @@
         "f",
         "fixture",
         "input",
+        "job",
         "ledger",
         "owner",
         "project",
@@ -28563,6 +28598,30 @@
         "transport",
         "verify",
         "writes"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-openai.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-openai",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "c",
+        "cancel",
+        "config",
+        "controller",
+        "count",
+        "generate",
+        "input",
+        "json",
+        "model",
+        "outcome",
+        "result"
       ],
       "routes": []
     },
@@ -29200,6 +29259,7 @@
     "tests/software-factory-github.test.ts",
     "tests/software-factory-loop.test.ts",
     "tests/software-factory-object-store.test.ts",
+    "tests/software-factory-openai.test.ts",
     "tests/software-factory-pipeline.test.ts",
     "tests/software-factory-postgres.test.ts",
     "tests/software-factory-routes.test.ts",

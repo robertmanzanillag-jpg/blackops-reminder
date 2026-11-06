@@ -145,3 +145,19 @@ the correct GitHub account connected and the repository enabled. Renewing the
 existing connection and repeating the request from GitHub's UI produced the
 same response. A published private cloud environment and passing setup tests
 do not prove unattended GitHub dispatch. No worker was activated on that basis.
+
+### Responses API alternative
+
+`createOpenAiFactoryTextProvider` supplies bounded, stateless text generation
+through the regular Responses API. The operator must inject authenticated
+requests with no retries, an exact dated model, verified upper-bound token
+prices with an expiry, and a maximum input size for that pricing tier. The
+provider counts the exact prompt before generation and checks the maximum
+output cost against an already durable reservation. Credits do not reduce
+the ledger charge. Ambiguous requests retain the full reservation; reported
+usage is accepted only for a terminal, matching response within its limits.
+
+This is a text provider, not a completed patch generator or reviewer. It does
+not itself activate the worker, establish release evidence, or enforce the
+cloud hosting bill. Live pricing, authentication, credit availability, stage
+wiring, and end-to-end rehearsal remain deployment requirements.
