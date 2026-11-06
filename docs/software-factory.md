@@ -112,6 +112,17 @@ also required. Never restore an older ledger over outstanding commitments.
 This backend removes the need for factory ledger SQL queries only once wired
 into the live service; it is not a provider-enforced spending cap.
 
+Monthly admission also includes outstanding reservations from earlier months
+and the full cost of older jobs settled in the current month. The original
+escrow remains available for recovery. Because execution cannot be reliably
+split at midnight, settlement is conservatively counted in both the original
+admission month and the settlement month, once within each month's view.
+Stopped unknown jobs receive a settlement timestamp when reconciled; their
+actual cost replaces the carried reservation. Settled old costs stop counting
+in later months. New-month fixed hosting costs must still be configured and
+funded; this accounting does not provide a provider billing ceiling or an
+automatic monthly budget initializer.
+
 ### Replit development storage proof (2026-11-06)
 
 An isolated temporary runtime using `@replit/object-storage` 1.0.0 and its

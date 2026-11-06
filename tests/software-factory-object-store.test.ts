@@ -101,3 +101,43 @@ test("near-full lease expiration spends its reserved capacity and zero protected
  assert.equal(after.jobs[0].status,"unknown");assert.ok(after.jobs[0].capacity<before.jobs[0].capacity);assert.equal((await f.store.status(owner)).reservedCents,100);
  after.jobs[0].capacity=0;f.transport.body=JSON.stringify(after);await assert.rejects(f.store.status(owner),/LEDGER_CORRUPT/);
 });
+
+
+test("old escrow and settlement costs constrain new-month admission without blocking rollback",async()=>{
+ const f=await fixture({start:"2026-11-30T23:59:50Z"});
+ await f.store.enqueue(owner,input("old-spend",8900));
+ await f.store.complete((await f.store.claim("worker"))!,{status:"completed",costCents:8900});
+ await f.store.enqueue(owner,{...input("boundary-deploy",100),kind:"deploy",headSha:sha,recoveryCents:100});
+ const deploy=(await f.store.claim("worker"))!;
+ f.now=Date.parse("2026-12-01T00:00:01Z");
+ await f.store.initializeMonth(owner,"2026-12",0);
+ assert.equal((await f.store.status(owner)).reservedCents,100);
+ await assert.rejects(f.store.enqueue(owner,input("too-much",10000)),/BUDGET_UNAVAILABLE/);
+ await f.store.enqueue(owner,input("new-month",9900));
+ await f.store.complete(deploy,{status:"completed",costCents:0},{...input("verify",100),kind:"verify",headSha:sha,recoveryCents:60});
+ const verify=(await f.store.claim("worker"))!;assert.equal(verify.kind,"verify");
+ await f.store.setPaused(owner,true);
+ await f.store.complete(verify,{status:"completed",costCents:40},{...input("rollback",60),kind:"rollback",headSha:sha});
+ let state=await f.store.status(owner);assert.equal(state.spentCents,40);assert.equal(state.reservedCents,9960);
+ const rollback=(await f.store.claim("worker"))!;assert.equal(rollback.kind,"rollback");
+ await f.store.complete(rollback,{status:"completed",costCents:40});
+ state=await f.store.status(owner);assert.equal(state.spentCents,80);assert.equal(state.reservedCents,9900);
+ await assert.rejects(f.store.enqueue(owner,input("still-too-much",21)),/BUDGET_UNAVAILABLE/);
+ await f.store.enqueue(owner,input("exact-remaining",20));
+ f.now=Date.parse("2027-01-01T00:00:00Z");await f.store.initializeMonth(owner,"2027-01",0);
+ state=await f.store.status(owner);assert.equal(state.spentCents,0);assert.equal(state.reservedCents,9920);
+});
+
+test("older unknown liabilities carry until stopped reconciliation then charge settlement month",async()=>{
+ const f=await fixture({start:"2026-11-30T23:59:59Z"});await f.store.enqueue(owner,input("uncertain",500));
+ const job=(await f.store.claim("worker"))!;await f.store.complete(job,{status:"unknown",costCents:0});
+ f.now=Date.parse("2026-12-01T00:00:01Z");await f.store.initializeMonth(owner,"2026-12",0);
+ assert.equal((await f.store.status(owner)).reservedCents,500);
+ await assert.rejects(f.store.enqueue(owner,input("too-much",9501)),/BUDGET_UNAVAILABLE/);
+ await f.store.reconcile(owner,job.id,{actualCostCents:400,executionStopped:true,reason:"provider confirmed full cost"});
+ let state=await f.store.status(owner);assert.equal(state.reservedCents,0);assert.equal(state.spentCents,400);
+ const attempts=await Promise.allSettled([f.store.enqueue(owner,input("a",6000)),f.store.enqueue(owner,input("b",6000))]);
+ assert.equal(attempts.filter(x=>x.status==="fulfilled").length,1);
+ f.now=Date.parse("2027-01-01T00:00:00Z");await f.store.initializeMonth(owner,"2027-01",0);
+ state=await f.store.status(owner);assert.equal(state.spentCents,0);assert.equal(state.reservedCents,6000);
+});
