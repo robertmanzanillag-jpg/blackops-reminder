@@ -1,0 +1,83 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { spawn } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const allowed = new Set(['DATABASE_URL','DEFAULT_USER_ID','OPENAI_API_KEY','OFFICE_OPENAI_MODEL','OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT','OFFICE_OPENAI_MAX_OUTPUT_TOKENS','OFFICE_ACADEMY_PREPARATION_ENABLED','OFFICE_ACADEMY_EXECUTION_ENABLED','OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED','OFFICE_EXPECTED_WEB_REVISION','GITHUB_TOKEN']);
+const localEnvFiles = ['.env','.env.local','.env.development','.env.development.local','.env.production','.env.production.local','.env.replit','CEO_ASSISTANT_ENV','CEO_ASSISTANT_ENV.local'];
+const fail = code => { throw new Error(code); };
+export function parseWorkerConfig(raw) {
+  if (Buffer.byteLength(raw) > 65536) fail('CONFIG_TOO_LARGE');
+  const config = {};
+  for (const line of raw.split(/\r?\n/)) {
+    const value = line.trim(); if (!value || value.startsWith('#')) continue;
+    const match = value.match(/^([A-Z][A-Z0-9_]*)=(.*)$/);
+    if (!match || !allowed.has(match[1]) || Object.hasOwn(config, match[1])) fail('CONFIG_KEY_INVALID');
+    let text = match[2].trim();
+    if ((text.startsWith('"') && text.endsWith('"')) || (text.startsWith("'") && text.endsWith("'"))) text = text.slice(1,-1);
+    if (!text || /[\r\n\0]/.test(text)) fail('CONFIG_VALUE_INVALID');
+    config[match[1]] = text;
+  }
+  for (const key of ['DATABASE_URL','DEFAULT_USER_ID','OPENAI_API_KEY','OFFICE_OPENAI_MODEL','OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT']) if (!config[key]) fail(`CONFIG_MISSING_${key}`);
+  let database; try { database = new URL(config.DATABASE_URL); } catch { fail('DATABASE_URL_INVALID'); }
+  if (!['postgres:','postgresql:'].includes(database.protocol) || !database.hostname || database.pathname.length < 2) fail('DATABASE_URL_INVALID');
+  if (/replace|placeholder|example|your[_-]|change.?me/i.test(config.DEFAULT_USER_ID) || config.DEFAULT_USER_ID.length > 200 || /\s/.test(config.DEFAULT_USER_ID)) fail('OWNER_INVALID');
+  if (!/^sk-[A-Za-z0-9_-]{10,}$/.test(config.OPENAI_API_KEY)) fail('KEY_FORMAT_INVALID');
+  if (!/^[A-Za-z0-9._-]{1,100}$/.test(config.OFFICE_OPENAI_MODEL)) fail('MODEL_INVALID');
+  const cap = Number(config.OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT);
+  if (!/^[a-f0-9]{40}$/.test(config.OFFICE_EXPECTED_WEB_REVISION || '')) fail('VERIFIED_WEB_REVISION_REQUIRED');
+  if (!Number.isSafeInteger(cap) || cap < 1) fail('EXPLICIT_TOKEN_LIMIT_REQUIRED');
+  const output = Number(config.OFFICE_OPENAI_MAX_OUTPUT_TOKENS || '2048');
+  if (!Number.isSafeInteger(output) || output < 32 || output > 4096) fail('OUTPUT_LIMIT_INVALID');
+  for (const key of ['OFFICE_ACADEMY_PREPARATION_ENABLED','OFFICE_ACADEMY_EXECUTION_ENABLED','OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED']) if (config[key] && !['true','false'].includes(config[key])) fail('FLAG_INVALID');
+  return config;
+}
+export function safeWorkerEnvironment(config, inherited = process.env) {
+  const env = {};
+  for (const key of ['SystemRoot','WINDIR','TEMP','TMP','PATH','Path','USERPROFILE','LOCALAPPDATA','APPDATA','COMSPEC']) if (inherited[key]) env[key] = inherited[key];
+  return { ...env, ...config, NODE_ENV:'production', OFFICE_WORKER_ENABLED:'true', OFFICE_WORKER_RUN_ONCE:'false', OFFICE_WORKER_FAIL_FAST:'true', OFFICE_WORKER_REVIEW_ONLY:'true', OFFICE_REVIEW_PROVIDER:'openai', OFFICE_KONG_AUDIT_SCHEDULE_ENABLED:'false', AGENT_COUNCIL_STORAGE:'postgres',
+    OFFICE_ACADEMY_PREPARATION_ENABLED:config.OFFICE_ACADEMY_PREPARATION_ENABLED || 'false', OFFICE_ACADEMY_EXECUTION_ENABLED:config.OFFICE_ACADEMY_EXECUTION_ENABLED || 'false', OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED:config.OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED || 'false' };
+}
+export function validateWorkerPaths(repoInput, configInput, nodeInput = process.execPath) {
+  if (![repoInput, configInput, nodeInput].every(value => typeof value === 'string' && path.isAbsolute(value) && !/[\r\n\0"]/.test(value))) fail('ABSOLUTE_PATH_REQUIRED');
+  const repo = fs.realpathSync(repoInput), configPath = fs.realpathSync(configInput), node = fs.realpathSync(nodeInput);
+  const relative = path.relative(repo, configPath);
+  if (!relative || (!relative.startsWith(`..${path.sep}`) && relative !== '..' && !path.isAbsolute(relative))) fail('CONFIG_MUST_BE_OUTSIDE_REPOSITORY');
+  if (!fs.statSync(repo).isDirectory() || !fs.statSync(configPath).isFile() || !fs.statSync(node).isFile()) fail('PATH_TYPE_INVALID');
+  if (process.platform === 'win32' && path.basename(node).toLowerCase() !== 'node.exe') fail('NODE_EXECUTABLE_REQUIRED');
+  const manifest = JSON.parse(fs.readFileSync(path.join(repo,'package.json'),'utf8'));
+  if (manifest.name !== 'rest-express' || !fs.existsSync(path.join(repo,'script','office-worker.ts')) || !fs.existsSync(path.join(repo,'node_modules','tsx','package.json'))) fail('REVIEWED_WORKER_OR_DEPENDENCIES_MISSING');
+  if (localEnvFiles.some(file => fs.existsSync(path.join(repo,file)))) fail('REPOSITORY_ENV_FALLBACK_FORBIDDEN');
+  return { repo, configPath, node };
+}
+export async function preflightDatabase(config, Pool, assertProtocolReady) {
+  if (typeof assertProtocolReady !== 'function') fail('PROTOCOL_VERIFIER_REQUIRED');
+  const pool = new Pool({ connectionString:config.DATABASE_URL, connectionTimeoutMillis:10000, statement_timeout:10000, max:1 });
+  try {
+    const result = await pool.query(`SELECT to_regclass('public.agent_office_cloud_jobs') AS jobs, to_regclass('public.office_agent_workers') AS workers, to_regclass('public.revenue_engine_state') AS council`);
+    if (!result.rows[0]?.jobs || !result.rows[0]?.workers || !result.rows[0]?.council) fail('QUEUE_SCHEMA_MISSING');
+    const owner = await pool.query('SELECT EXISTS(SELECT 1 FROM users WHERE id=$1) AND EXISTS(SELECT 1 FROM app_projects WHERE user_id=$1) AS valid', [config.DEFAULT_USER_ID]);
+    if (owner.rows[0]?.valid !== true) fail('OFFICE_OWNER_DATABASE_MISMATCH');
+    await assertProtocolReady(pool, config.DEFAULT_USER_ID, config.OFFICE_EXPECTED_WEB_REVISION);
+  } finally { await pool.end(); }
+}
+async function main() {
+  if (Number(process.versions.node.split('.')[0]) < 22) fail('NODE_22_OR_NEWER_REQUIRED');
+  const args = process.argv.slice(2);
+  if (args.length !== 5 || args[0] !== '--repo' || args[2] !== '--config' || !['--preflight','--run'].includes(args[4])) fail('ARGUMENTS_INVALID');
+  const paths = validateWorkerPaths(args[1], args[3]);
+  const config = parseWorkerConfig(fs.readFileSync(paths.configPath,'utf8'));
+  for (const key of Object.keys(process.env)) if (/^PG/.test(key)) delete process.env[key];
+  const require = createRequire(path.join(paths.repo,'package.json'));
+  const { tsImport } = require('tsx/esm/api');
+  const protocol = await tsImport(pathToFileURL(path.join(paths.repo,'server','office-protocol.ts')).href, import.meta.url);
+  await preflightDatabase(config, require('pg').Pool, protocol.assertOfficeProtocolReady);
+  if (args[4] === '--preflight') { console.log('Office worker preflight verified. No task was registered or executed.'); return; }
+  const child = spawn(paths.node, ['--import','tsx','script/office-worker.ts'], { cwd:paths.repo, env:safeWorkerEnvironment(config), shell:false, windowsHide:true, stdio:'ignore' });
+  const terminate = () => { if (child.exitCode === null) child.kill('SIGTERM'); };
+  process.on('SIGTERM',terminate); process.on('SIGINT',terminate);
+  try { await new Promise((resolve,reject) => { child.once('error',reject); child.once('exit',code => code === 0 ? resolve() : reject(new Error('WORKER_CYCLE_UNCONFIRMED'))); }); }
+  finally { process.off('SIGTERM',terminate); process.off('SIGINT',terminate); terminate(); }
+}
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(() => { console.error('Office Windows worker stopped: configuration, database identity, or execution was not verified. No automatic job retry.'); process.exitCode=1; });

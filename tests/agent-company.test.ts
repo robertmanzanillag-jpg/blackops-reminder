@@ -19,6 +19,8 @@ import {
   parseCompanyState,
   personalityFor,
   routeOrder,
+  recordAcademyAssessment,
+  scheduleAcademyTraining,
 } from "../shared/agent-company";
 
 const NOW = Date.parse("2026-11-04T12:00:00Z");
@@ -59,6 +61,9 @@ test("empty battery: the CEO fires the agent, a replacement trains in the academ
   assert.equal(career.battery, 60);
   assert.equal(career.inTrainingUntilGeneration, 2);
   assert.equal(company.trainees.length, 1);
+  assert.equal(company.retiredCareers?.length,1);
+  assert.equal(company.retiredCareers?.[0].generation,1);
+  assert.ok(company.retiredCareers?.[0].memory.length);
   assert.match(company.events[0].text, /despidio/);
   const during = advanceCompany(company, { now: NOW + (i + 20) * 15 * MIN, statuses: { clippers: s("error") }, roles }).state;
   assert.equal(during.careers.clippers.battery, 60, "no penalty while training");
@@ -77,7 +82,7 @@ test("exempt agents (no backend yet) are never scored, fired or ranked", () => {
   assert.equal(leaderboard(company).length, 0);
 });
 
-test("needs-setup (waiting on Robert) drains slowly but is never fired for it", () => {
+test("needs-setup (waiting on Robert) never drains life or causes firing", () => {
   let company = emptyCompanyState();
   let firedTotal = 0;
   for (let i = 0; i < 200; i++) {
@@ -86,7 +91,7 @@ test("needs-setup (waiting on Robert) drains slowly but is never fired for it", 
     firedTotal += result.fired.length;
   }
   assert.equal(firedTotal, 0);
-  assert.equal(company.careers.revenue.battery, 20);
+  assert.equal(company.careers.revenue.battery, 80);
 });
 
 test("state from disk: malformed careers/orders never crash, legacy shapes reset", () => {
@@ -99,7 +104,7 @@ test("state from disk: malformed careers/orders never crash, legacy shapes reset
   assert.equal(parsed.events.length, 1);
 });
 
-test("academy: one real module per cycle, then graduation puts the agent back to work", () => {
+test("academy: reading modules alone never graduates or clears the training hold", () => {
   let company = enrollTrainee(emptyCompanyState(), { id: "new_agent:helper-radio", forAgentId: "radio", role: "Asistente de Radio", now: NOW });
   company = { ...company, careers: { radio: { ...advanceCompany(emptyCompanyState(), { now: NOW, statuses: { radio: s("working") }, roles }).state.careers.radio, inTrainingUntilGeneration: 1 } } };
   const curriculum = () => [
@@ -111,9 +116,9 @@ test("academy: one real module per cycle, then graduation puts the agent back to
   company = advanceAcademy(company, curriculum, NOW + 2 * MIN);
   assert.equal(company.trainees[0].graduatedAt, undefined);
   company = advanceAcademy(company, curriculum, NOW + 3 * MIN);
-  assert.ok(company.trainees[0].graduatedAt);
-  assert.equal(company.careers.radio.inTrainingUntilGeneration, undefined);
-  assert.match(company.events[0].text, /graduo/);
+  assert.equal(company.trainees[0].graduatedAt, undefined);
+  assert.equal(company.trainees[0].awaitingEvidence, true);
+  assert.equal(company.careers.radio.inTrainingUntilGeneration, 1);
   assert.equal(enrollTrainee(company, { id: "new_agent:helper-radio", forAgentId: "radio", role: "x", now: NOW }).trainees.length, 1, "no duplicate enrollment");
 });
 
@@ -184,6 +189,12 @@ test("orders closed by hand are recorded with no points; one evidence closes onl
 
 // ---------- Academy from real work, skills, specialists ----------
 
+function withVerifiedGraduation(state: ReturnType<typeof emptyCompanyState>, traineeId: string, modules: Array<{id:string;title:string;summary:string}>, now: number) {
+  for (let i=0;i<3;i++) state=recordAcademyAssessment(state,traineeId,{scope:"production",runId:`verified-${traineeId}-${i}`,benchmarkId:`benchmark-${i}`,artifactId:`artifact-${traineeId}-${i}`,
+    curriculumVersion:JSON.stringify(modules.map(m=>[m.id,m.title,m.summary])),completedAt:new Date(now).toISOString(),passed:true,quality:95,incumbentQuality:80,errors:0,incumbentErrors:1,durationMs:1,incumbentDurationMs:2,cost:0,incumbentCost:0});
+  return advanceAcademy(state,()=>modules,now);
+}
+
 test("the academy teaches each trainee its own job first: why it failed, its orders, its lessons", () => {
   let company = advanceCompany(emptyCompanyState(), { now: NOW, statuses: { clippers: s("working") }, roles }).state;
   company = createOrder(company, { text: "Sube el clip del viernes", now: NOW + MIN, statuses: { clippers: s("error", "Worker con error") }, available: ["clippers"], names: roles }).state;
@@ -194,6 +205,8 @@ test("the academy teaches each trainee its own job first: why it failed, its ord
   company = enrollTrainee(company, { id: "new_agent:helper-clippers", forAgentId: "clippers", role: "Ayudante de Clippers", now: NOW + 2 * MIN });
   const general = [{ id: "rules", title: "Reglas", summary: "PR-first" }];
   for (let i = 0; i < 6; i++) company = advanceAcademy(company, () => [...modules, ...general], NOW + (3 + i) * MIN);
+  assert.equal(company.trainees[0].graduatedAt,undefined,"reading does not create job skills");
+  company=withVerifiedGraduation(company,"new_agent:helper-clippers",[...modules,...general],NOW+9*MIN);
   const titles = (company.careers.clippers.skills || []).map((skill) => skill.title);
   assert.ok(titles.includes("Por que este puesto no estaba trabajando"), titles.join(" | "));
   assert.ok(titles.some((title) => title.startsWith("Orden: Sube el clip")));
@@ -226,6 +239,8 @@ test("recurring blocked work creates a specialist: proposal need, academy, new a
   company = enrollTrainee(company, { id: "new_agent:specialist-video", forAgentId: `${SPECIALIST_PREFIX}video`, role: "Especialista en video", now: NOW + 11 * MIN });
   const curriculum = () => [...tailoredModules(company, `${SPECIALIST_PREFIX}video`, { topic: "video" }), { id: "rules", title: "Reglas", summary: "PR-first" }];
   for (let i = 0; i < 6; i++) company = advanceAcademy(company, curriculum, NOW + (12 + i) * MIN);
+  assert.equal(company.careers[`${SPECIALIST_PREFIX}video`],undefined,"no specialist without verified graduation");
+  company=withVerifiedGraduation(company,"new_agent:specialist-video",curriculum(),NOW+20*MIN);
   const specialist = company.careers[`${SPECIALIST_PREFIX}video`];
   assert.ok(specialist, "the specialist exists after graduating");
   assert.ok((specialist.skills || []).filter((skill) => skill.id.startsWith("orden:")).length >= 3);
@@ -245,6 +260,7 @@ test("specialists: topics with spaces round-trip (black room) and only exact top
   const studied = tailoredModules(company, "specialist:black-room", { topic: "black-room" });
   assert.equal(studied.filter((module) => module.id.startsWith("orden:")).length, 3, "it studies the orders it was hired for");
   for (let i = 0; i < 6; i++) company = advanceAcademy(company, (trainee) => tailoredModules(company, trainee.forAgentId, { topic: "black-room" }), NOW + (7 + i) * MIN);
+  company=withVerifiedGraduation(company,"new_agent:specialist-black-room",studied,NOW+15*MIN);
   assert.ok(company.careers["specialist:black-room"]);
   const next = createOrder(company, { text: "Otro flyer para Black Room", now: NOW + 20 * MIN, statuses: {}, available: ["radio"], names: roles });
   assert.ok(next.order.assignees.some((assignee) => assignee.agentId === "specialist:black-room"));
@@ -265,4 +281,101 @@ test("order topics merge synonyms and ignore accents", () => {
   assert.equal(orderTopic("agenda una cita con el DJ"), "radio", "work words win over brands; first matching group");
   assert.equal(orderTopic("lanza la campaña de anuncios"), "marketing");
   assert.equal(orderTopic("una reunion para el viernes"), "agenda");
+});
+
+test("academy requires three distinct comparable successful artifacts and survives serialization", () => {
+  const modules = [{ id: "rules", title: "Rules", summary: "v1" }];
+  let state = enrollTrainee(emptyCompanyState(), { id: "candidate", forAgentId: "radio", role: "Radio", now: NOW });
+  state = advanceAcademy(state, () => modules, NOW);
+  const assessment = { scope: "production" as const, runId: "r1", benchmarkId: "b1", curriculumVersion: JSON.stringify(modules.map(m => [m.id,m.title,m.summary])),
+    completedAt: new Date(NOW + MIN).toISOString(), artifactId: "artifact1", passed: true,
+    quality: 95, incumbentQuality: 85, errors: 0, incumbentErrors: 1, durationMs: 10, incumbentDurationMs: 20, cost: 0, incumbentCost: 0 };
+  state = recordAcademyAssessment(state, "candidate", assessment);
+  assert.equal(recordAcademyAssessment(state, "candidate", assessment), state, "duplicate run rejected");
+  state = recordAcademyAssessment(state, "candidate", { ...assessment, runId: "r2", benchmarkId: "b2", artifactId: "artifact2" });
+  assert.equal(advanceAcademy(state, () => modules, NOW + 2*MIN).trainees[0].graduatedAt, undefined);
+  state = recordAcademyAssessment(state, "candidate", { ...assessment, runId: "r3", benchmarkId: "b3", artifactId: "artifact3" });
+  state = parseCompanyState(JSON.parse(JSON.stringify(state)));
+  assert.ok(advanceAcademy(state, () => modules, NOW + 2*MIN).trainees[0].graduatedAt);
+  assert.equal(advanceAcademy(state, () => [{...modules[0], summary: "v2"}], NOW + 2*MIN).trainees[0].graduatedAt, undefined);
+  assert.equal(advanceAcademy(state, () => modules, NOW + 8*86400000).trainees[0].graduatedAt, undefined);
+});
+
+test("recurring preparation is bounded and trains incumbents alongside candidates without duplicating jobs", () => {
+  let state = advanceCompany(emptyCompanyState(), { now: NOW, statuses: { radio: s("working"), legal: s("working") }, roles }).state;
+  state = scheduleAcademyTraining(state, roles, NOW, 4);
+  assert.equal(state.trainees.length, 4);
+  assert.equal(state.trainees.filter(t => t.purpose === "incumbent").length, 2);
+  assert.equal(state.trainees.filter(t => t.purpose === "candidate").length, 2);
+  assert.deepEqual(scheduleAcademyTraining(state, roles, NOW + 8*86400000, 4), state);
+  assert.ok(Object.values(state.careers).every(c => !c.inTrainingUntilGeneration));
+  assert.equal(scheduleAcademyTraining(state, roles, NOW, -1), state);
+});
+
+test("replacement enrollment is not blocked by incumbent preparation and legacy holds can graduate", () => {
+  let state = advanceCompany(emptyCompanyState(), { now: NOW, statuses: { radio: s("working") }, roles }).state;
+  state = scheduleAcademyTraining(state, roles, NOW);
+  state.careers.radio.battery = 0;
+  state = advanceCompany(state, { now: NOW + 86400000, statuses: { radio: s("error") }, roles }).state;
+  assert.ok(state.trainees.some(t => t.id === "radio#2"));
+  const trainee = state.trainees.find(t => t.id === "radio#2")!;
+  delete trainee.generation;
+  const modules = [{id: "rules", title: "Rules", summary: "v1"}];
+  trainee.modulesDone = ["rules"];
+  for (let i=0;i<3;i++) state = recordAcademyAssessment(state, trainee.id, {
+    scope: "production", runId: `r${i}`, benchmarkId: `b${i}`, artifactId: `a${i}`, curriculumVersion: JSON.stringify(modules.map(m=>[m.id,m.title,m.summary])),
+    completedAt: new Date(NOW+86400000+MIN).toISOString(), passed: true, quality: 95, incumbentQuality: 80,
+    errors: 0, incumbentErrors: 1, durationMs: 10, incumbentDurationMs: 20, cost: 0, incumbentCost: 0,
+  });
+  state = advanceAcademy(state, () => modules, NOW+86400000+2*MIN);
+  assert.equal(state.careers.radio.inTrainingUntilGeneration, undefined);
+});
+test("malformed persisted assessments never crash or graduate", () => {
+  let state = enrollTrainee(emptyCompanyState(), {id: "t",forAgentId:"radio",role:"Radio",now:NOW});
+  const raw = JSON.parse(JSON.stringify(state));
+  raw.trainees[0].assessments = {};
+  state = parseCompanyState(raw);
+  assert.deepEqual(state.trainees[0].assessments, []);
+  assert.equal(advanceAcademy(state, () => [], NOW).trainees[0].graduatedAt, undefined);
+});
+
+
+test("idle, missing setup and shared infrastructure failure never deduct life",()=>{
+  let state=emptyCompanyState();
+  for(let i=0;i<200;i++) state=advanceCompany(state,{now:NOW+i*15*MIN,roles,statuses:{radio:{state:"offline",label:"No tasks"},legal:{state:"needs-setup",label:"Waiting approval"},clippers:{state:"error",label:"Shared database unavailable",lifePenaltyExempt:true}}}).state;
+  for(const career of Object.values(state.careers)){assert.equal(career.battery,80);assert.equal(career.firedCount,0);assert.equal(career.cyclesTotal,0);}
+});
+test("one failure result loses life once; distinct evidence may arrive at the same observation time",()=>{
+  let state=advanceCompany(emptyCompanyState(),{now:NOW,roles,statuses:{radio:{state:"error",label:"Failed job",evidenceId:"run1"}}}).state;
+  assert.equal(state.careers.radio.battery,70);
+  state=advanceCompany(state,{now:NOW+MIN,roles,statuses:{radio:{state:"error",label:"Failed job",evidenceId:"run1"}}}).state;
+  assert.equal(state.careers.radio.battery,70);
+  state=advanceCompany(state,{now:NOW+MIN,roles,statuses:{radio:{state:"error",label:"New failed job",evidenceId:"run2"}}}).state;
+  assert.equal(state.careers.radio.battery,60);
+});
+
+test("stale production records cannot upgrade fresh fixture qualification into graduation",()=>{
+  const course=[{id:"rules",title:"Rules",summary:"v1"}];
+  let state=enrollTrainee(emptyCompanyState(),{id:"t",forAgentId:"radio",role:"Radio",now:NOW-20*86400000});
+  state=advanceAcademy(state,()=>course,NOW);
+  const version=JSON.stringify(course.map(m=>[m.id,m.title,m.summary]));
+  const base={curriculumVersion:version,passed:true,quality:95,incumbentQuality:80,errors:0,incumbentErrors:1,durationMs:1,incumbentDurationMs:2,cost:0,incumbentCost:0};
+  state.trainees[0].assessments=[...Array.from({length:3},(_,i)=>({...base,scope:"fixture" as const,runId:`f${i}`,benchmarkId:`bf${i}`,artifactId:`af${i}`,completedAt:new Date(NOW).toISOString()})),
+    ...Array.from({length:3},(_,i)=>({...base,scope:"production" as const,runId:`p${i}`,benchmarkId:`bp${i}`,artifactId:`ap${i}`,completedAt:new Date(NOW-10*86400000).toISOString()}))];
+  state=advanceAcademy(state,()=>course,NOW+1);
+  assert.ok(state.trainees[0].qualifiedAt);assert.equal(state.trainees[0].graduatedAt,undefined);
+});
+
+test("stale-generation training cannot modify skills or graduate into the new holder",()=>{
+  const course=[{id:"puesto:radio",title:"Skill",summary:"v1"}];
+  let state=advanceCompany(emptyCompanyState(),{now:NOW,roles,statuses:{radio:s("working")}}).state;
+  state=enrollTrainee(state,{id:"old-training",forAgentId:"radio",role:"Radio",now:NOW});
+  state.trainees[0].generation=1;state.trainees[0].purpose="incumbent";
+  state=advanceAcademy(state,()=>course,NOW+1);
+  state.careers.radio={...state.careers.radio,generation:2,inTrainingUntilGeneration:2};
+  const career=JSON.parse(JSON.stringify(state.careers.radio));
+  state=withVerifiedGraduation(state,"old-training",course,NOW+100);
+  assert.deepEqual(state.careers.radio,career);
+  assert.equal(state.trainees[0].graduatedAt,undefined);
+  assert.match(state.trainees[0].executionBlocker!,/generation changed/);
 });

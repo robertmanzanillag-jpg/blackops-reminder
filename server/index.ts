@@ -18,6 +18,7 @@ import { startAppQaScheduler } from "./app-qa-agent";
 import { initializeRevenueEnginePersistence } from "./revenue-engine";
 import { initializeBlackRoomRemoteControlPersistence } from "./blackroom-remote-control";
 import { shouldStartResourceIntensiveSchedulers } from "./background-scheduler-policy";
+import { officeWebProtocol } from "./office-protocol";
 
 const app = express();
 const httpServer = createServer(app);
@@ -33,6 +34,7 @@ app.get(["/health", "/api/health"], (_req, res) => {
     status: "ok",
     ready: true,
     service: "blackops-reminder",
+    officeProtocol: officeWebProtocol(),
     instanceId,
     checkedAt: new Date().toISOString(),
     startedAt: instanceStartedAt.toISOString(),

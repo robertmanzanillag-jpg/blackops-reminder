@@ -7,6 +7,34 @@ import { OfficeKongError } from "../server/office-kong";
 import type { officeCloudStore, OfficeCloudRun, OfficeCloudCompletion } from "../server/office-cloud-store";
 
 const now = () => new Date().toISOString();
+
+test("slow lifecycle admission cannot invoke a provider after cloud lease expires", async () => {
+  let clock = Date.now(); let calls = 0;
+  const f = fixture([makeRun({ kind: "claude_review" })]);
+  const worker = createOfficeCloudWorker({ store: f.store, now: () => new Date(clock), execute: async () => { calls++; return {}; },
+    admission: { ready: async () => true, begin: async () => { clock += 300000; return true; }, finish: async () => {} },
+  });
+  await assert.rejects(worker.tick(), /ADMISSION_OUTLIVED_LEASE/);
+  assert.equal(calls, 0);
+  await worker.tick(); assert.equal(calls, 0);
+});
+
+test("vacancy preserves queued task; a rejected unstarted reservation releases only its claim", async () => {
+  const f = fixture([makeRun({ kind: "claude_review" })]); let ready = false; let calls = 0;
+  const worker = createOfficeCloudWorker({ store: f.store, execute: async () => { calls++; return {}; },
+    admission: { ready: async () => ready, begin: async () => false, finish: async () => {} },
+  });
+  await worker.tick(); assert.equal(f.rows[0].status, "pending");
+  assert.equal(f.calls.some(c => c.method === "claim"), false);
+  ready = true; await worker.tick(); assert.equal(f.rows[0].status, "pending"); assert.equal(calls, 0);
+});
+
+test("review-only advertised capability rejects unsupported chat before persistence", async () => {
+  const f = fixture();
+  f.store.getHeartbeat = async () => ({ workerId: "reviews", lastSeenAt: now(), capabilities: { reviewOnly: true, claude: { status: "ready", reason: "Reviews", checkedAt: now() }, kong: { status: "blocked", reason: "Unsupported", checkedAt: now() } } });
+  await assert.rejects(createOfficeCloudRuntime(f.store).submit("owner", { kind: "claude_chat", message: "Chat", key: randomUUID() }), /solo admite/);
+  assert.equal(f.rows.length, 0);
+});
 const makeRun = (patch: Partial<OfficeCloudRun> = {}): OfficeCloudRun => ({ id: randomUUID(), key: randomUUID(), kind: "claude_chat", message: "Question", status: "pending", createdAt: now(), ...patch });
 function fixture(initial: OfficeCloudRun[] = []) {
   const rows = initial;
@@ -19,6 +47,10 @@ function fixture(initial: OfficeCloudRun[] = []) {
       const run = makeRun({ ...input }); rows.unshift(run); return run;
     },
     list: async userId => { calls.push({ method: "list", args: [userId] }); return [...rows]; },
+    releaseUnstarted: async (id, workerId, fence) => {
+      const run = rows.find(r => r.id === id && r.workerId === workerId && r.fence === fence && r.status === "running");
+      if (!run) return false; run.status = "pending"; return true;
+    },
     claim: async workerId => {
       calls.push({ method: "claim", args: [workerId] });
       const pending = rows.find(run => run.status === "pending");

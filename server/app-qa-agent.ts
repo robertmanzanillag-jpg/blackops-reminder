@@ -1024,19 +1024,23 @@ function isVisualAuthScreen(bodyText: string): boolean {
     && (normalized.includes("entrar") || normalized.includes("crear cuenta"));
 }
 
-async function probeUrl(url: string, timeoutMs = 5000): Promise<{ ok: boolean; statusCode?: number; responseTimeMs: number; error?: string }> {
+export async function probeAppQaUrl(url: string, timeoutMs = 5000, health = false, transport: typeof fetch = fetch): Promise<{ ok: boolean; statusCode?: number; responseTimeMs: number; error?: string }> {
   const startedAt = Date.now();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    let response = await fetch(url, { method: "HEAD", redirect: "follow", signal: controller.signal });
+    let response = await transport(url, { method: "HEAD", redirect: "follow", signal: controller.signal });
     if (response.status === 405 || response.status === 403) {
-      response = await fetch(url, { method: "GET", redirect: "follow", signal: controller.signal });
+      response = await transport(url, { method: "GET", redirect: "follow", signal: controller.signal });
     }
+    const destination = new URL(response.url || url);
+    const auth = destination.hostname === "replit.com" && ["/silent-auth", "/login", "/__replshield"].includes(destination.pathname);
+    const htmlHealth = health && /text\/html/i.test(response.headers.get("content-type") || "");
     return {
-      ok: response.ok,
+      ok: response.ok && !auth && !htmlHealth,
       statusCode: response.status,
       responseTimeMs: Date.now() - startedAt,
+      ...(auth ? { error: "authentication_required" } : htmlHealth ? { error: "health_returned_html" } : {}),
     };
   } catch (error: any) {
     return {
@@ -1048,6 +1052,7 @@ async function probeUrl(url: string, timeoutMs = 5000): Promise<{ ok: boolean; s
     clearTimeout(timeout);
   }
 }
+const probeUrl = probeAppQaUrl;
 
 export function analyzeRoutes(routes = LOCAL_ROUTE_MAP): AppQaSubAgentReport {
   const findings: AppQaFinding[] = [];
@@ -1715,10 +1720,10 @@ async function analyzeLinksAndClicks(apps: AppProject[]): Promise<AppQaSubAgentR
         app,
         "link-click-scout",
         "Page load",
-        "high",
-        "Pagina principal no responde bien",
-        `${url} respondio ${probe.statusCode || probe.error || "sin status"} en ${probe.responseTimeMs}ms.`,
-        "Revisar deploy, dominio, auth gate y logs del servidor.",
+        probe.error === "authentication_required" ? "medium" : "high",
+        probe.error === "authentication_required" ? "Pagina requiere comprobacion autenticada" : "Pagina principal no responde bien",
+        `${url} respondio ${probe.error || probe.statusCode || "sin status"} en ${probe.responseTimeMs}ms.`,
+        probe.error === "authentication_required" ? "Verificar con una sesion autorizada sin retirar la proteccion de acceso." : "Revisar deploy, dominio, auth gate y logs del servidor.",
         url
       ));
     } else if (probe.responseTimeMs > 3000) {
@@ -1768,16 +1773,16 @@ async function analyzeApis(apps: AppProject[]): Promise<AppQaSubAgentReport> {
       continue;
     }
 
-    const probe = await probeUrl(app.healthUrl);
+    const probe = await probeUrl(app.healthUrl, 5000, true);
     if (!probe.ok) {
       findings.push(createFinding(
         app,
         "api-scout",
         "Health endpoint",
-        "critical",
-        "Health endpoint fallando",
-        `${app.healthUrl} respondio ${probe.statusCode || probe.error || "sin status"} en ${probe.responseTimeMs}ms.`,
-        "Tratarlo como bloqueo de release hasta confirmar que la app esta saludable.",
+        probe.error === "authentication_required" ? "medium" : "critical",
+        probe.error === "authentication_required" ? "Health requiere acceso autenticado" : "Health endpoint sin evidencia valida",
+        `${app.healthUrl} respondio ${probe.error || probe.statusCode || "sin status"} en ${probe.responseTimeMs}ms.`,
+        probe.error === "authentication_required" ? "Configurar una comprobacion autenticada; no desactivar la privacidad ni interpretar la pagina de acceso como salud de la app." : "Tratarlo como bloqueo de release hasta confirmar que la app esta saludable.",
         app.healthUrl
       ));
     }

@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-06T00:48:13.642Z
-Repo: `/Users/robertmanzanilla/Documents/Codex/2026-11-05/quioer-que-te-asgurs-de-uq-2/work/kong-office`
+Generated: 2026-11-06T10:56:14.004Z
+Repo: `/home/runner/workspace`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 778 | 695 | 2455 | 548 | 15719 |
+| 830 | 736 | 2549 | 554 | 16162 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,24 +28,29 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 165 | 162 | test:165 |
-| `server` | 159 | 155 | server:159 |
+| `tests` | 178 | 174 | test:178 |
+| `server` | 168 | 163 | server:168 |
 | `client/src` | 142 | 140 | ui-component:55, client-component:37, client-page:26, client-lib:17 |
-| `script` | 85 | 80 | script:85 |
+| `script` | 89 | 82 | script:89 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 36 | 35 | docs:36 |
-| `.` | 34 | 18 | other:22, docs:11, package:1 |
-| `shared` | 11 | 11 | shared:11 |
+| `docs` | 42 | 41 | docs:42 |
+| `.` | 35 | 18 | other:23, docs:11, package:1 |
+| `.agents/memory` | 14 | 14 | docs:14 |
+| `shared` | 12 | 12 | shared:12 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
-| `.agents/memory` | 5 | 5 | docs:5 |
 | `client/public` | 16 | 2 | other:16 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
+| `agent_council_data` | 1 | 1 | other:1 |
+| `attached_assets` | 5 | 1 | other:5 |
 | `client` | 1 | 1 | other:1 |
+| `config` | 1 | 1 | other:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `shared/models` | 1 | 1 | shared:1 |
 | `tests/fixtures` | 1 | 1 | test:1 |
 | `tests/harness` | 1 | 1 | test:1 |
 | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
+| `.agents` | 1 | 0 | other:1 |
+| `.github/workflows` | 1 | 0 | other:1 |
 | `bin` | 1 | 0 | other:1 |
 
 ## Routes Detected
@@ -57,6 +62,7 @@ Package: `rest-express`
 - `server/kong-operations-routes.ts`: `/api/kong-ops/cards`, `/api/kong-ops/lease`, `/api/kong-ops/metrics`, `/api/kong-ops/publications`, `/api/kong-ops/reconcile`, `/api/kong-ops/state`
 - `server/kong-supervisor-routes.ts`: `/api/kong-supervisor/chat`, `/api/kong-supervisor/state`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
+- `server/office-review-benchmarks.ts`: `/diagnostics`, `/notes`, `/profile`, `/projects/:id`, `/report`, `/users/:id`
 - `server/office-routes.ts`: `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/contact-action`, `/api/agents-office/kong-snapshot`, `/api/agents-office/runs`
 - `server/replit_integrations/chat/routes.ts`: `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/messages`
 - `server/replit_integrations/image/routes.ts`: `/api/generate-image`
@@ -79,12 +85,14 @@ Package: `rest-express`
 - `tests/._rate-limit.test.ts`
 - `tests/._user-context.test.ts`
 - `tests/agent-company.test.ts`
+- `tests/agent-council-store.test.ts`
 - `tests/agent-council.test.ts`
 - `tests/agent-live-status.test.ts`
 - `tests/agents-world-integration.test.ts`
 - `tests/ai-cost-notifications.test.ts`
 - `tests/ai-router-cost-override.test.ts`
 - `tests/app-qa-agent.test.ts`
+- `tests/app-qa-health-probe.test.ts`
 - `tests/assistant-chat-flow.test.ts`
 - `tests/automation-registry.test.ts`
 - `tests/background-scheduler-policy.test.ts`
@@ -161,17 +169,27 @@ Package: `rest-express`
 - `tests/marketing-command-center.test.ts`
 - `tests/metricool-analytics-sync.test.ts`
 - `tests/metricool-tracking.test.ts`
+- `tests/office-academy-benchmarks.test.ts`
+- `tests/office-academy-promotion.test.ts`
+- `tests/office-academy-runner.test.ts`
 - `tests/office-city-agents.test.ts`
 - `tests/office-claude.test.ts`
 - `tests/office-cloud-runtime.test.ts`
 - `tests/office-cloud-store.test.ts`
+- `tests/office-council-migration.test.ts`
+- `tests/office-execution.test.ts`
 - `tests/office-github.test.ts`
 - `tests/office-kong-central-agents.test.ts`
 - `tests/office-kong-collaboration.test.ts`
 - `tests/office-kong-supervisor.test.ts`
 - `tests/office-kong.test.ts`
+- `tests/office-openai.test.ts`
+- `tests/office-protocol.test.ts`
+- `tests/office-review-benchmarks.test.ts`
+- `tests/office-role-lifecycle.test.ts`
 - `tests/office-routes.test.ts`
 - `tests/office-runtime.test.ts`
+- `tests/office-token-budget.test.ts`
 - `tests/office-worker-capabilities.test.ts`
 - `tests/office-worker-watchdog.test.ts`
 - `tests/owner-office-storage.test.ts`
