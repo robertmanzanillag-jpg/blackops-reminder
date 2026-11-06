@@ -46,11 +46,11 @@ jobs:
           trap 'status=$?; cleanup || status=1; exit "$status"' EXIT
           timeout --kill-after=10 300 docker run --rm --name "$container" --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
             --user "$(id -u):$(id -g)" --memory 3g --cpus 2 --pids-limit 128 \
-            --tmpfs /tmp:rw,nosuid,size=256m --tmpfs /work:rw,nosuid,size=512m,mode=1777 --env HOME=/tmp \
+            --tmpfs /tmp:rw,nosuid,exec,size=256m --tmpfs /work:rw,nosuid,size=512m,mode=1777 --env HOME=/tmp \
             --mount "type=bind,src=$PWD/source,dst=/source,readonly" \
-            --mount "type=bind,src=$PWD/dependencies/node_modules,dst=/dependencies,readonly" \
+            --mount "type=bind,src=$PWD/dependencies/node_modules,dst=/dependencies/node_modules,readonly" \
             --workdir /work "$FACTORY_IMAGE" sh -c \
-            'cp -R /source/. /work/ && ln -s /dependencies /work/node_modules && node --import tsx --test tests/software-factory-actions.test.ts tests/software-factory-builder.test.ts tests/software-factory-gcs.test.ts tests/software-factory-github-publisher.test.ts tests/software-factory-github.test.ts tests/software-factory-loop.test.ts tests/software-factory-object-store.test.ts tests/software-factory-openai-builder.test.ts tests/software-factory-openai.test.ts tests/software-factory-pipeline.test.ts tests/software-factory-remote-builder.test.ts tests/software-factory-routes.test.ts tests/software-factory-runtime.test.ts tests/software-factory-store-provider.test.ts tests/software-factory-store.test.ts tests/software-factory-worker.test.ts tests/software-factory.test.ts'
+            'cp -R /source/. /work/ && ln -s /dependencies/node_modules /work/node_modules && node --import tsx --test tests/software-factory-actions.test.ts tests/software-factory-builder.test.ts tests/software-factory-gcs.test.ts tests/software-factory-github-publisher.test.ts tests/software-factory-github.test.ts tests/software-factory-loop.test.ts tests/software-factory-object-store.test.ts tests/software-factory-openai-builder.test.ts tests/software-factory-openai.test.ts tests/software-factory-pipeline.test.ts tests/software-factory-remote-builder.test.ts tests/software-factory-routes.test.ts tests/software-factory-runtime.test.ts tests/software-factory-store-provider.test.ts tests/software-factory-store.test.ts tests/software-factory-worker.test.ts tests/software-factory.test.ts'
       - name: Isolated build
         shell: bash
         run: |
@@ -60,8 +60,8 @@ jobs:
           trap 'status=$?; cleanup || status=1; exit "$status"' EXIT
           timeout --kill-after=10 300 docker run --rm --name "$container" --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
             --user "$(id -u):$(id -g)" --memory 3g --cpus 2 --pids-limit 128 \
-            --tmpfs /tmp:rw,nosuid,size=256m --tmpfs /work:rw,nosuid,size=512m,mode=1777 --env HOME=/tmp \
+            --tmpfs /tmp:rw,nosuid,exec,size=256m --tmpfs /work:rw,nosuid,size=512m,mode=1777 --env HOME=/tmp \
             --mount "type=bind,src=$PWD/source,dst=/source,readonly" \
-            --mount "type=bind,src=$PWD/dependencies/node_modules,dst=/dependencies,readonly" \
+            --mount "type=bind,src=$PWD/dependencies/node_modules,dst=/dependencies/node_modules,readonly" \
             --workdir /work "$FACTORY_IMAGE" sh -c \
-            'cp -R /source/. /work/ && ln -s /dependencies /work/node_modules && npm run build'
+            'cp -R /source/. /work/ && ln -s /dependencies/node_modules /work/node_modules && npm run build'
