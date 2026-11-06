@@ -9,6 +9,7 @@ import { FACTORY_POLICY, projectReadiness } from "./software-factory";
 import { configuredSoftwareFactoryStore as softwareFactoryStore } from "./software-factory-store-provider";
 import { companyOrderJob } from "./software-factory-company";
 import type { CompanyOrder } from "../shared/agent-company";
+import type {FactoryOfficeAdmission} from "./software-factory-office-connection";
 
 function pipelineState(job: FactoryJob): FactoryPipelineState | undefined {
   const result = job.result as { evidence?: { pipelineState?: FactoryPipelineState } } | undefined;
@@ -40,6 +41,7 @@ const budgetSchema = z.object({ fixedCents: z.number().int().min(0).max(10_000) 
 export function registerSoftwareFactoryRoutes(app: Express, options: {
   store?: Pick<typeof softwareFactoryStore, "status" | "list" | "setPaused" | "initializeMonth" | "projects" | "saveProject">;
   now?: () => Date;
+  resolveCompanyAdmission?:()=>Promise<FactoryOfficeAdmission|undefined>;
   // Installed by the trusted runtime only after the same ledger, credit guard and
   // Asistente worker are connected. Never enabled by a browser request.
   companyAdmission?: { reservationCents: number; readMainOrder(owner: string, id: string): Promise<CompanyOrder | undefined>;
@@ -55,13 +57,15 @@ export function registerSoftwareFactoryRoutes(app: Express, options: {
     if (!officeSameOrigin(req)) return res.status(403).json({ error: "La solicitud debe salir de esta oficina." });
     const input = z.object({ company: z.literal("main"), orderId: z.string().min(1).max(200), projectId: z.string().min(1).max(100) }).strict().safeParse(req.body);
     if (!input.success) return res.status(400).json({ error: "Selecciona una orden de la empresa principal y su proyecto." });
-    if (!options.companyAdmission || typeof options.companyAdmission.admitWithinCredits !== "function") return res.status(503).json({ error: "El ejecutor de Asistente aún no está conectado. No se ha enviado ni cobrado la orden." });
+    let admission=options.companyAdmission;
+    try { admission=admission || await options.resolveCompanyAdmission?.(); } catch { return res.status(503).json({error:"La conexión de la fábrica requiere revisión. No se ha admitido la orden."}); }
+    if (!admission || typeof admission.admitWithinCredits !== "function") return res.status(503).json({ error: "El ejecutor de Asistente aún no está conectado. No se ha enviado ni cobrado la orden." });
     try {
       const project = (await store.projects(owner)).find(p => p.id === input.data.projectId);
-      const order = await options.companyAdmission.readMainOrder(owner, input.data.orderId);
+      const order = await admission.readMainOrder(owner, input.data.orderId);
       if (!project || !order) return res.status(404).json({ error: "Orden o proyecto no disponible." });
       if (order.id !== input.data.orderId) throw Error("FACTORY_COMPANY_ORDER_MISMATCH");
-      const job = await options.companyAdmission.admitWithinCredits(owner, companyOrderJob(order, project, options.companyAdmission.reservationCents));
+      const job = await admission.admitWithinCredits(owner, companyOrderJob(order, project, admission.reservationCents));
       res.status(202).json({ jobId: job.id, status: job.status, orderId: order.id, delivered: false });
     } catch { res.status(409).json({ error: "No se confirmó la admisión. Revisa el alcance de la orden, el presupuesto y la conexión del ejecutor." }); }
   });

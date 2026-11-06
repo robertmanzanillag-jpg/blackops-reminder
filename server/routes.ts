@@ -59,6 +59,7 @@ import { buildMonthlyAiSpendReport } from "./ai-cost-policy";
 import { getClipperWorkerRuntimeStatus } from "./clippers-runtime-status";
 import { registerOfficeRoutes } from "./office-routes";
 import { registerSoftwareFactoryRoutes } from "./software-factory-routes";
+import { getFactoryOfficeAdmission } from "./software-factory-office-connection";
 import { getAuthenticatedCurrentUserId } from "./user-context";
 import { officeRuntime } from "./office-runtime";
 import { loadOfficePullRequest } from "./office-github";
@@ -304,7 +305,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   registerOfficeRoutes(app);
-  registerSoftwareFactoryRoutes(app);
+  registerSoftwareFactoryRoutes(app, {resolveCompanyAdmission:getFactoryOfficeAdmission});
   const CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS = 120_000;
   const killClipperRouteScriptProcess = (child: ReturnType<typeof spawn>) => {
     if (child.pid) {
