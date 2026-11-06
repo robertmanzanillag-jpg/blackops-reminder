@@ -132,6 +132,7 @@ function missingChecks(checks: unknown): string[] {
 
 export function summarizeProbe(probe: AgentProbe, result: ProbeResult | undefined, now: number = Date.now()): AgentLiveStatus {
   const status = summarizeStatus(probe, result, now);
+  if(!status.evidenceId) status.lifePenaltyExempt=true;
   // Activity comes only from a real JSON body; an error state still shows what the agent saw (e.g. the failed run).
   if (!result || !result.ok || result.body === null || result.body === undefined) return status;
   const activity = extractActivity(probe, result.body, now).filter(Boolean).slice(0, 4);
@@ -422,8 +423,20 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       const extra = pending ? plural(pending, "aprobacion pendiente", "aprobaciones pendientes") : undefined;
       const latest = [...recent].sort((a,b) => Date.parse(str(b.startedAt) || "") - Date.parse(str(a.startedAt) || ""));
       const failedRun = latest.find(run => run.status === "failed");
-      const runEvidence = (run: Json) => `automation:${str(run.id) || str(run.startedAt)}:${str(run.status)}`;
-      if (failed > 0) return { state: "error", evidenceId: runEvidence(failedRun!), label: plural(failed, "corrida fallida", "corridas fallidas"), detail: extra };
+      const runEvidence = (run: Json) => {
+        const started=Date.parse(str(run.startedAt) || ""),finished=Date.parse(str(run.finishedAt) || "");
+        return str(run.id) && Number.isFinite(started) && Number.isFinite(finished) && finished>=started && finished<=now ? `automation:${str(run.id)}` : undefined;
+      };
+      // A stored failure alone does not establish agent misconduct. Only explicit
+      // output-validation failures are scoreable; unknown/connector failures wait
+      // for diagnosis, while remaining visible as errors.
+      const attributable=(run:Json)=>{
+        const metadata=asObject(run.metadata), code=str(metadata?.errorCode);
+        const error=str(run.errorMessage) || "";
+        if(/connector|not connected|credential|oauth|token|quota|rate.?limit|timeout|timed out|network|database|ECONN|ENOTFOUND|HTTP\s*(401|403|429|5\d\d)/i.test(error)) return false;
+        return metadata?.failureKind === "agent_output" && ["INVALID_REVIEW","INVALID_RESULT","OUTPUT_VALIDATION_FAILED","TASK_REQUIREMENT_FAILED"].includes(code || "");
+      };
+      if (failed > 0) return { state: "error", evidenceId: runEvidence(failedRun!), lifePenaltyExempt:!attributable(failedRun!), label: plural(failed, "corrida fallida", "corridas fallidas"), detail: extra };
       if (recent.length === 0) return { state: "offline", label: "Sin corridas en 24 h", detail: extra };
       return { state: "working", evidenceId: runEvidence(latest[0]), label: `${plural(recent.length, "corrida", "corridas")} en 24 h`, detail: extra };
     }

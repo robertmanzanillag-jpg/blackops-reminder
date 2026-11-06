@@ -2,8 +2,8 @@
 //
 // Pure and deterministic ($0, no AI). The server runs `advanceCompany` once per council cycle
 // with every agent's REAL status, and Robert's orders/feedback through the CEO channel.
-// Points only come from real evidence: an agent earns them while its endpoint says it works,
-// and when Robert marks one of its orders as done. Nothing here edits code: a "fired" agent is
+// Points require a distinct verified execution, or an order closed with verified evidence.
+// Availability, manual completion and repeated observations never score. A "fired" agent is
 // replaced by a new hire that trains in the academy, and the Mechanic opens a repair proposal.
 
 import type { AgentLiveState } from "./agent-live-status";
@@ -30,6 +30,7 @@ export type AgentCareer = {
   skills?: AgentSkill[];
   reviewGuidance?: string[];
   lastEvaluatedAt?: string;
+  evaluatedEvidenceIds?: string[];
   lastEvidenceId?: string;
 };
 
@@ -340,14 +341,17 @@ export function advanceCompany(
           hiredAt: iso,
           memory: [{ at: iso, text: `Contratado como ${input.roles[agentId] || agentId}.` }],
         };
-    if (status.evidenceId ? status.evidenceId === career.lastEvidenceId : career.lastEvaluatedAt && toMsSafe(career.lastEvaluatedAt) >= input.now) { careers[agentId] = career; continue; }
+    const evidence=status.evidenceId?.trim();
+    if(career.evaluatedEvidenceIds !== undefined && (!Array.isArray(career.evaluatedEvidenceIds) || career.evaluatedEvidenceIds.some(id=>typeof id !== "string"))) { careers[agentId]=career;continue; }
+    if (!evidence || evidence === career.lastEvidenceId || career.evaluatedEvidenceIds?.includes(evidence)) { careers[agentId] = career; continue; }
     // "checking" has no evidence yet, and a replacement in the academy is studying, not failing.
     if (status.state === "checking" || status.state === "needs-setup" || status.state === "offline" || status.lifePenaltyExempt || career.inTrainingUntilGeneration) {
       careers[agentId] = career;
       continue;
     }
     career.lastEvaluatedAt = iso;
-    if (status.evidenceId) career.lastEvidenceId = status.evidenceId;
+    career.evaluatedEvidenceIds=[...(career.evaluatedEvidenceIds || []),...(career.lastEvidenceId && !career.evaluatedEvidenceIds?.includes(career.lastEvidenceId) ? [career.lastEvidenceId] : []),evidence];
+    career.lastEvidenceId = evidence;
     const delta = DELTA[status.state];
     career.points = Math.max(0, career.points + delta.points);
     career.battery = Math.max(0, Math.min(BATTERY_MAX, career.battery + delta.battery));

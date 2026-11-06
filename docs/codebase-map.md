@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-06T12:07:55.886Z
+Generated: 2026-11-06T20:28:55.174Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\blackops-reminder`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 816 | 727 | 2591 | 555 | 16291 |
+| 817 | 728 | 2596 | 555 | 16305 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,7 +28,7 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 183 | 179 | test:183 |
+| `tests` | 184 | 180 | test:184 |
 | `server` | 169 | 164 | server:169 |
 | `script` | 91 | 83 | script:91 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
@@ -85,6 +85,7 @@ Package: `rest-express`
 - `tests/._rate-limit.test.ts`
 - `tests/._user-context.test.ts`
 - `tests/agent-company.test.ts`
+- `tests/agent-council-owner.test.ts`
 - `tests/agent-council-store.test.ts`
 - `tests/agent-council.test.ts`
 - `tests/agent-live-status.test.ts`

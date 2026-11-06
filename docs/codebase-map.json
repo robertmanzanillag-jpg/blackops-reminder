@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T12:07:55.886Z",
+  "generatedAt": "2026-11-06T20:28:55.174Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\blackops-reminder",
   "packageName": "rest-express",
   "scripts": {
@@ -124,25 +124,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 816,
-    "filesIndexed": 727,
-    "imports": 2591,
+    "filesVisible": 817,
+    "filesIndexed": 728,
+    "imports": 2596,
     "routes": 555,
-    "symbols": 16291
+    "symbols": 16305
   },
   "directories": {
-    "shared": {
-      "files": 14,
-      "indexed": 14,
-      "kinds": {
-        "shared": 14
-      }
-    },
     "tests": {
-      "files": 183,
-      "indexed": 179,
+      "files": 184,
+      "indexed": 180,
       "kinds": {
-        "test": 183
+        "test": 184
       }
     },
     ".": {
@@ -342,6 +335,13 @@
       "indexed": 3,
       "kinds": {
         "server": 3
+      }
+    },
+    "shared": {
+      "files": 14,
+      "indexed": 14,
+      "kinds": {
+        "shared": 14
       }
     },
     "shared/models": {
@@ -11109,6 +11109,7 @@
         "./kong-company",
         "./office-internal-work",
         "./office-kong",
+        "./user-context",
         "@shared/agent-company",
         "@shared/agent-council",
         "@shared/agent-integrations",
@@ -11134,6 +11135,7 @@
         "readSkillDocs",
         "setAgentCouncilUser",
         "startAgentCouncilScheduler",
+        "systemUserId",
         "writeFileAtomic"
       ],
       "symbols": [
@@ -22474,6 +22476,7 @@
         "enrollTrainee",
         "escaped",
         "events",
+        "evidence",
         "evidenceAlreadyUsed",
         "exempt",
         "existing",
@@ -22742,6 +22745,7 @@
         "apps",
         "asObject",
         "at",
+        "attributable",
         "blockers",
         "body",
         "bodyError",
@@ -22756,6 +22760,7 @@
         "degraded",
         "detail",
         "down",
+        "error",
         "events",
         "evidence",
         "extra",
@@ -22774,6 +22779,7 @@
         "list",
         "listed",
         "login",
+        "metadata",
         "minutes",
         "missing",
         "missingChecks",
@@ -23611,6 +23617,23 @@
       "routes": []
     },
     {
+      "path": "tests/agent-council-owner.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/agent-council",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "council",
+        "keys",
+        "saved",
+        "state"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/agent-council-store.test.ts",
       "kind": "test",
       "imports": [
@@ -23716,6 +23739,7 @@
       "path": "tests/agent-live-status.test.ts",
       "kind": "test",
       "imports": [
+        "../shared/agent-company",
         "../shared/agent-live-status",
         "node:assert/strict",
         "node:test"
@@ -23723,6 +23747,7 @@
       "exports": [],
       "symbols": [
         "NOW",
+        "apply",
         "blocked",
         "body",
         "br",
@@ -23731,6 +23756,8 @@
         "fake",
         "fresh",
         "health",
+        "infra",
+        "invalid",
         "kong",
         "legal",
         "localNews",
@@ -23744,8 +23771,11 @@
         "ok",
         "one",
         "operations",
+        "points",
         "probe",
+        "readiness",
         "result",
+        "row",
         "run",
         "status",
         "two",
@@ -29147,6 +29177,7 @@
     "tests/._rate-limit.test.ts",
     "tests/._user-context.test.ts",
     "tests/agent-company.test.ts",
+    "tests/agent-council-owner.test.ts",
     "tests/agent-council-store.test.ts",
     "tests/agent-council.test.ts",
     "tests/agent-live-status.test.ts",

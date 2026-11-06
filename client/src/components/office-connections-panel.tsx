@@ -189,7 +189,7 @@ export function OfficeConnectionsPanel() {
         </section>
         <section aria-label="Preparación interna y academia" className="space-y-2">
           <h3 className="text-sm font-semibold">CEO, asistente y academia</h3>
-          {internal.isError && <p className="text-xs text-amber-200">No se pudo leer el historial privado; requiere acceso del propietario.</p>}
+          {internal.isError && <p className="text-xs text-amber-200">{internal.error.message.startsWith("403:") ? "Este historial requiere acceso del propietario." : "El historial privado no está disponible. No se ha confirmado que esté vacío."}</p>}
           {internal.isLoading && <p className="text-xs text-slate-300">Leyendo preparación guardada…</p>}
           {visibleInternal && internalJobs.length === 0 && <p className="text-xs text-slate-300">Todavía no hay preparaciones internas registradas.</p>}
           {internalJobs.slice().reverse().slice(0,8).map(job=><details key={job.id} className="rounded-lg border border-white/10 p-2 text-xs">
