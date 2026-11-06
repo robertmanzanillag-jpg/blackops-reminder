@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T11:28:08.790Z",
+  "generatedAt": "2026-11-06T11:51:12.320Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -126,25 +126,25 @@
     "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 826,
-    "filesIndexed": 741,
-    "imports": 2667,
+    "filesVisible": 828,
+    "filesIndexed": 743,
+    "imports": 2674,
     "routes": 556,
-    "symbols": 16465
+    "symbols": 16496
   },
   "directories": {
     "server": {
-      "files": 179,
-      "indexed": 175,
+      "files": 180,
+      "indexed": 176,
       "kinds": {
-        "server": 179
+        "server": 180
       }
     },
     "tests": {
-      "files": 186,
-      "indexed": 183,
+      "files": 187,
+      "indexed": 184,
       "kinds": {
-        "test": 186
+        "test": 187
       }
     },
     ".": {
@@ -21317,6 +21317,42 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-github-state.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-encrypted-state",
+        "./software-factory-object-store",
+        "node:crypto"
+      ],
+      "exports": [
+        "createGitHubFactoryStateTransport"
+      ],
+      "symbols": [
+        "base",
+        "blob",
+        "blobSha",
+        "bytes",
+        "call",
+        "createGitHubFactoryStateTransport",
+        "decodeGeneration",
+        "encoded",
+        "encodedLimit",
+        "generation",
+        "limit",
+        "m",
+        "meta",
+        "path",
+        "r",
+        "reader",
+        "repository",
+        "response",
+        "sha",
+        "shaValid",
+        "validateRepository"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-github.ts",
       "kind": "server",
       "imports": [
@@ -28858,6 +28894,30 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-github-state.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-github-state",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "bytes",
+        "f",
+        "first",
+        "fixture",
+        "json",
+        "method",
+        "repository",
+        "request",
+        "second",
+        "t"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-github.test.ts",
       "kind": "test",
       "imports": [
@@ -29664,6 +29724,7 @@
     "tests/software-factory-encrypted-state.test.ts",
     "tests/software-factory-gcs.test.ts",
     "tests/software-factory-github-publisher.test.ts",
+    "tests/software-factory-github-state.test.ts",
     "tests/software-factory-github.test.ts",
     "tests/software-factory-loop.test.ts",
     "tests/software-factory-object-store.test.ts",
