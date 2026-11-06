@@ -1,10 +1,37 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { createTrustedFactoryWorkerOptions, validateFactoryWorkerOptions, type TrustedFactoryStages } from "../server/software-factory-runtime";
+import { createTrustedFactoryWorkerOptions, currentFactoryProductionDeployment, validateFactoryWorkerOptions, type TrustedFactoryStages } from "../server/software-factory-runtime";
 import { factoryJobKinds, type FactoryJob, type softwareFactoryStore } from "../server/software-factory-store";
 const owner = "fixture-owner", key = createHash("sha256").update(owner).digest("hex");
 const context = { signal: new AbortController().signal, maxCostCents: 5 };
+
+test("hourly health accepts only the latest visible completed production deployment",async()=>{
+ const f=fixture(), sha='a'.repeat(40),base='b'.repeat(40);
+ const previous:any={id:'deployment',ownerKey:key,projectId:'pilot',kind:'deploy',status:'completed',headSha:sha,completedAt:'2026-11-06T12:00:00Z',result:{evidence:{pipelineState:{version:1,projectId:'pilot',target:'production',candidate:{projectId:'pilot',headSha:sha,baseSha:base},deployment:{id:'release',headSha:sha,target:'production'},evidence:[]}}}};
+ f.options.store.getCompletedJob=async()=>previous;
+ let listed:any[]=[previous];
+ (f.options.store as typeof f.options.store & {releaseHistory:unknown}).releaseHistory=async (raw:string,projectId:string)=>{assert.equal(raw,owner);assert.equal(projectId,'pilot');return listed;};
+ const runtime=await createTrustedFactoryWorkerOptions(f.options);
+ const health:FactoryJob={...job,id:'health',kind:'verify',headSha:sha,key:'deployment.health:2026-11-06T12',payload:{previousJobId:'deployment'},reservedCents:10,recoveryCents:5};
+ assert.equal((await runtime.releaseContext!(health)).candidate.headSha,sha);
+ listed=[{...previous,id:'newer',completedAt:'2026-11-06T13:00:00Z'},previous];await assert.rejects(runtime.releaseContext!(health),/HEALTH_DEPLOYMENT_UNVERIFIED/);
+ listed=[];await assert.rejects(runtime.releaseContext!(health),/HEALTH_DEPLOYMENT_UNVERIFIED/);
+ listed=[{...previous,completedAt:undefined}];await assert.rejects(runtime.releaseContext!(health),/HEALTH_DEPLOYMENT_UNVERIFIED/);
+ const restored=JSON.parse(JSON.stringify(previous));restored.id='restoration';restored.kind='rollback';restored.completedAt='2026-11-06T12:30:00Z';restored.result.evidence.pipelineState.rollback={healthy:true,restoredSha:base};
+ listed=[restored,previous];assert.equal(currentFactoryProductionDeployment(listed,'pilot'),undefined);await assert.rejects(runtime.releaseContext!(health),/HEALTH_DEPLOYMENT_UNVERIFIED/);
+ // Newer completed deployment supersedes a previous restoration.
+ const redeployed={...previous,id:'redeployed',completedAt:'2026-11-06T13:00:00Z'};
+ assert.equal(currentFactoryProductionDeployment([redeployed,restored,previous],'pilot')?.id,'redeployed');
+ for(const kind of ['deploy','rollback'])for(const status of ['running','unknown']){
+   listed=[{...previous,id:'conflict',kind,status},previous];
+   assert.equal(currentFactoryProductionDeployment(listed,'pilot'),undefined);
+   await assert.rejects(runtime.releaseContext!(health),/HEALTH_DEPLOYMENT_UNVERIFIED/);
+ }
+ assert.equal(currentFactoryProductionDeployment([{...restored,completedAt:previous.completedAt},previous],'pilot'),undefined);
+ assert.equal(currentFactoryProductionDeployment(Array.from({length:100},(_,i)=>({...job,id:String(i),projectId:'other'})).concat(previous),'pilot'),undefined);
+ delete (f.options.store as any).releaseHistory;await assert.rejects(runtime.releaseContext!(health),/HEALTH_DEPLOYMENT_UNVERIFIED/);
+});
 const job: FactoryJob = { id:"discovery", ownerKey:key, projectId:"pilot", kind:"discover", key:"daily", month:"2026-11", status:"running", createdAt:new Date().toISOString(), payload:{}, reservedCents:5, recoveryCents:0 };
 function fixture() {
   const calls: unknown[][] = [];

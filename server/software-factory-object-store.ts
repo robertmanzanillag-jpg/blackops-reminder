@@ -50,7 +50,7 @@ function validate(raw:unknown,ledgerId:string):Ledger {
  * financial records are retained; eventual archival is an operator migration.
  * Host clock synchronization must be verified externally. GCS generations are
  * opaque concurrency tokens, NOT clocks. */
-export function createSoftwareFactoryObjectStore(options:FactoryObjectStoreOptions): typeof softwareFactoryStore & {initializeStore():Promise<void>} {
+export function createSoftwareFactoryObjectStore(options:FactoryObjectStoreOptions): typeof softwareFactoryStore & {initializeStore():Promise<void>;releaseHistory(owner:string,projectId:string):Promise<FactoryJob[]>} {
  if(!options.transport||typeof options.transport.read!=="function"||typeof options.transport.compareAndSwap!=="function")throw Error("FACTORY_OBJECT_TRANSPORT_REQUIRED");
  if(typeof options.now!=="function"||!Number.isSafeInteger(options.maxClockSkewMs)||options.maxClockSkewMs<0||options.maxClockSkewMs>30000||!options.ledgerId.trim()||options.ledgerId.length>200)throw Error("FACTORY_OBJECT_CONFIGURATION_INVALID");
  const maxBytes=options.maxBytes??8*1024*1024,maxConflicts=options.maxConflicts??5;
@@ -122,6 +122,13 @@ export function createSoftwareFactoryObjectStore(options:FactoryObjectStoreOptio
   async projectByOwnerKey(key,id){assertKey(key);return (await read()).state.projects.find(p=>p.ownerKey===key&&p.config.id===id)?.config;},
   async projects(owner){const key=ownerKey(owner);return (await read()).state.projects.filter(p=>p.ownerKey===key).map(p=>p.config).sort((a,b)=>a.id.localeCompare(b.id));},
   async list(owner){const key=ownerKey(owner);return (await read()).state.jobs.filter(j=>j.ownerKey===key).sort((a,b)=>b.createdAt.localeCompare(a.createdAt)).slice(0,100).map(exposed);},
+  async releaseHistory(owner,projectId){
+   const key=ownerKey(owner);if(typeof projectId!=="string"||!projectId.trim()||projectId.length>200)throw Error("FACTORY_PROJECT_REQUIRED");
+   const jobs=(await read()).state.jobs.filter(j=>j.ownerKey===key&&j.input.projectId===projectId&&["deploy","rollback"].includes(j.input.kind)&&(["running","unknown"].includes(j.status)||(j.status==="completed"&&(j.result as {evidence?:{pipelineState?:{target?:string}}}|undefined)?.evidence?.pipelineState?.target==="production")));
+   // Active/uncertain releases must never disappear behind later settled events.
+   const rank=(j:StoredJob)=>["running","unknown"].includes(j.status)?1:0;
+   return jobs.sort((a,b)=>rank(b)-rank(a)||(b.completedAt??b.createdAt).localeCompare(a.completedAt??a.createdAt)).slice(0,100).map(exposed);
+  },
   async status(owner){const key=ownerKey(owner),state=(await read()).state,m=month(time()),b=state.budgets.find(b=>b.ownerKey===key&&b.month===m),c=state.controls.find(c=>c.ownerKey===key),effective=effectiveBudget(state,key,m);return {configured:!!b&&!!c,paused:c?.paused??true,month:m,...effective,limitCents:LIMIT,workers:state.workers.filter(w=>time()-Date.parse(w.last_seen_at)<45000).map(w=>({...w}))};},
   async setPaused(owner,paused){const key=ownerKey(owner);if(typeof paused!=="boolean")throw Error("FACTORY_INVALID_PAUSE");await mutate("setPaused",[key,paused],state=>{const c=state.controls.find(c=>c.ownerKey===key);if(c)c.paused=paused;else state.controls.push({ownerKey:key,paused});});},
   async heartbeat(workerId,capabilities={}){if(!workerId||workerId.length>200||bytes(capabilities)>4000)throw Error("FACTORY_WORKER_INVALID");z.record(z.boolean()).parse(capabilities);await mutate("heartbeat",[workerId,capabilities],(state,context)=>{const worker={id:workerId,last_seen_at:new Date(context.now).toISOString(),capabilities:clone(capabilities)};const i=state.workers.findIndex(w=>w.id===workerId);if(i<0)state.workers.push(worker);else state.workers[i]=worker;context.capacityJobId=state.jobs.find(j=>j.status==="running"&&j.workerId===workerId)?.id;});},

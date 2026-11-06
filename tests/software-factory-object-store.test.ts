@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { createSoftwareFactoryObjectStore, type FactoryObjectTransport } from "../server/software-factory-object-store";
 const owner="fixture-owner", key=createHash("sha256").update(owner).digest("hex"),sha="a".repeat(40),base="b".repeat(40);
 class MemoryTransport implements FactoryObjectTransport {
@@ -21,6 +21,25 @@ async function fixture(options:{maxBytes?:number;skew?:number;conflicts?:number;
 }
 const input=(id:string,reservedCents=100)=>({key:id,projectId:"pilot",kind:"build" as const,reservedCents,payload:{}});
 const project={id:"pilot",repo:"fixture/pilot",testCommand:"test",buildCommand:"build",stagingUrl:"https://stage.example",productionUrl:"https://app.example",healthUrl:"https://app.example/health",rollbackCommand:"restore",journeys:["home"],automaticRelease:true,providerSupportsRelease:true,providerSupportsRollback:true,rehearsalRunIds:["forged"],rollbackVerifiedAt:new Date().toISOString()};
+
+test("durable release history is not displaced by more than one hundred health jobs",async()=>{
+ const f=await fixture();await f.store.enqueue(owner,{...input('production',1),headSha:sha});
+ const deployed=(await f.store.claim('worker'))!;
+ await f.store.complete(deployed,{status:'completed',costCents:0,evidence:{pipelineState:{target:'production'}}});
+ const ledger=JSON.parse(f.transport.body!),template=ledger.jobs[0];
+ template.input.kind='deploy';template.requestHash=createHash('sha256').update(JSON.stringify(template.input)).digest('hex');
+ for(let i=0;i<110;i++){
+  const j=structuredClone(template);j.id=randomUUID();j.input={...j.input,key:`health-${i}`,kind:'verify',reservedCents:0,recoveryCents:0};j.requestHash=createHash('sha256').update(JSON.stringify(j.input)).digest('hex');j.createdAt=j.completedAt=new Date(f.now+i+1).toISOString();j.result={status:'completed',costCents:0};ledger.jobs.push(j);
+ }
+ f.transport.body=JSON.stringify(ledger);
+ assert.equal((await f.store.list(owner)).some(j=>j.id===deployed.id),false);
+ assert.deepEqual((await f.store.releaseHistory(owner,'pilot')).map(j=>j.id),[deployed.id]);
+ assert.deepEqual(await f.store.releaseHistory('another-owner','pilot'),[]);
+ assert.deepEqual(await f.store.releaseHistory(owner,'other-project'),[]);
+ const rollback=structuredClone(template);rollback.id=randomUUID();rollback.input={...rollback.input,key:'restored',kind:'rollback',reservedCents:0,recoveryCents:0};rollback.requestHash=createHash('sha256').update(JSON.stringify(rollback.input)).digest('hex');rollback.createdAt=rollback.completedAt=new Date(f.now+200).toISOString();ledger.jobs.push(rollback);
+ const unknown=structuredClone(rollback);unknown.id=randomUUID();unknown.input={...unknown.input,key:'uncertain'};unknown.requestHash=createHash('sha256').update(JSON.stringify(unknown.input)).digest('hex');unknown.status='unknown';unknown.capacity=64000;unknown.createdAt=new Date(f.now-1000).toISOString();delete unknown.completedAt;ledger.jobs.push(unknown);f.transport.body=JSON.stringify(ledger);
+ assert.deepEqual((await f.store.releaseHistory(owner,'pilot')).map(j=>j.id),[unknown.id,rollback.id,deployed.id]);
+});
 test("missing store never bootstraps implicitly and malformed configuration is rejected",async()=>{
  const transport=new MemoryTransport(),store=createSoftwareFactoryObjectStore({transport,ledgerId:"factory",now:()=>new Date(),maxClockSkewMs:0});
  await assert.rejects(store.status(owner),/LEDGER_MISSING/);await assert.rejects(store.initializeMonth(owner,new Date().toISOString().slice(0,7),0),/LEDGER_MISSING/);assert.equal(transport.writes,0);

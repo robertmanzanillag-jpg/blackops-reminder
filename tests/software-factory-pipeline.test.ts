@@ -4,6 +4,30 @@ import { createFactoryPipeline, createPipelineSimulator, createAppQaFactoryDisco
 import type { FactoryProject, FactoryEvidence } from "../server/software-factory";
 import type { FactoryJob } from "../server/software-factory-store";
 const now = new Date("2026-11-06T12:00:00Z"), head = "a".repeat(40), base = "b".repeat(40);
+
+test("hourly verification requires current production lineage and preserves recovery escrow", async () => {
+  const f=fixture({production:true});await f.run();
+  const deployment=[...f.jobs.values()].find(j=>j.kind==='deploy')!;
+  const original=JSON.parse(JSON.stringify(deployment));
+  f.deps.reservations.verify=1;f.deps.reservations.rollback=1;
+  let current=true, checks=0;
+  f.deps.isCurrentDeployment=async(owner,project,id)=>{checks++;assert.equal(owner,'owner');assert.equal(project,'office');assert.equal(id,deployment.id);return current;};
+  const health:FactoryJob={...deployment,id:'hourly',kind:'verify',status:'running',key:`${deployment.id}.health:2026-11-06T12`,payload:{previousJobId:deployment.id},reservedCents:2,recoveryCents:1};
+  const execute=(job=health)=>f.pipeline.adapters![job.kind]!.execute(job,{signal:new AbortController().signal,maxCostCents:1});
+  const healthy=await execute();assert.equal(healthy.status,'completed');assert.equal(healthy.next,undefined);assert.equal(checks,1);
+  f.deps.verify=async()=>({costCents:1,verification:{healthy:false,headSha:head}});
+  const failed=await execute();assert.equal(failed.next?.kind,'rollback');assert.equal(failed.next?.reservedCents,1);assert.equal(failed.next?.key,'hourly.next');
+  f.jobs.set(health.id,{...health,status:'completed',result:failed});
+  const recovery:FactoryJob={...health,...failed.next,id:'hourly-rollback',kind:'rollback',payload:failed.next!.payload!};
+  const restored=await execute(recovery);assert.equal(restored.status,'completed');assert.equal(restored.next,undefined);
+  current=false;await assert.rejects(execute(),/HEALTH_DEPLOYMENT_UNVERIFIED/);current=true;
+  for(const key of [`${deployment.id}.health:2026-02-30T12`,`${deployment.id}.health:2026-11-06T24`,`${deployment.id}.health:2026-11-06T12Z`,'spoof.next'])await assert.rejects(execute({...health,key}),/CHAIN_UNTRUSTED/);
+  await assert.rejects(execute({...health,kind:'rollback'}),/CHAIN_UNTRUSTED/);
+  await assert.rejects(execute({...health,headSha:'c'.repeat(40)}),/VERSION_MISMATCH/);
+  await assert.rejects(execute({...health,recoveryCents:0}),/HEALTH_DEPLOYMENT_UNVERIFIED/);
+  (deployment.result as any).evidence.pipelineState.target='staging';await assert.rejects(execute(),/HEALTH_DEPLOYMENT_UNVERIFIED/);
+  f.jobs.set(deployment.id,original);delete f.deps.isCurrentDeployment;await assert.rejects(execute(),/CHAIN_UNTRUSTED/);
+});
 function fixture(options: { failSimulation?: boolean; regress?: boolean; stale?: boolean; production?: boolean } = {}) {
   const jobs = new Map<string, FactoryJob>(); const findings = new Map<string, string>(); let serial = 0, findingSerial = 0; const calls: string[] = [];
   const project: FactoryProject = { id: "office", repo: "owner/office", testCommand: "npm test", buildCommand: "npm run build", rollbackCommand: "restore", stagingUrl: "https://staging.example.com", productionUrl: "https://example.com", healthUrl: "https://example.com/health", journeys: ["form"], providerSupportsRelease: true, providerSupportsRollback: true, automaticRelease: options.production || false, rehearsalRunIds: options.production ? ["a", "b", "c"] : [], rollbackVerifiedAt: now.toISOString() };

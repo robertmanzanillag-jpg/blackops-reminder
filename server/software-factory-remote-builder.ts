@@ -4,7 +4,7 @@ import { mkdtemp, rm, readdir, lstat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { FactoryBuilderDependencies } from "./software-factory-builder";
-import type { FactoryProject } from "./software-factory";
+import type { FactoryProject, FactoryCandidate } from "./software-factory";
 import type { FactoryPipelineDependencies } from "./software-factory-pipeline";
 import { createGitHubFactoryCandidatePublisher, validateFactoryPublicationPatch, type FactoryGitHubPublisherClient, type PreparedFactoryCandidate } from "./software-factory-github-publisher";
 export type FactoryRemoteCheckResult = {
@@ -29,6 +29,8 @@ export type FactoryRemoteCheckContext = {
     maxCostCents: number;
 };
 export interface FactoryRemoteBuilderOptions {
+    /** Operator-owned classifier with exact source and restoration proof. Defaults to unknown. */
+    classifyCandidate?: (candidate: PreparedFactoryCandidate) => Promise<Pick<FactoryCandidate, "risk" | "reversible" | "affectsContracts" | "affectsData">>;
     exportSource: NonNullable<FactoryBuilderDependencies["exportSource"]>;
     generatePatch: NonNullable<FactoryBuilderDependencies["generatePatch"]>;
     prepareCandidate: (input: Parameters<NonNullable<FactoryBuilderDependencies["publishPullRequest"]>>[0]) => Promise<PreparedFactoryCandidate>;
@@ -123,7 +125,12 @@ export function createFactoryRemotePipelineBuilder(options: FactoryRemoteBuilder
                 throw Error("FACTORY_REMOTE_PR_IDENTITY");
             uncertain = false;
             // The PR and evidence are verified. A late abort cannot undo them.
-            return { costCents, candidate: { projectId: project.id, baseSha, headSha: candidate.headSha, prUrl: published.prUrl, builderId: "factory-remote-builder", risk: "unknown", reversible: false, changedFiles, affectsContracts: true, affectsData: true, repairAttempts: state.repairAttempts }, tests: { projectId: project.id, baseSha, headSha: candidate.headSha, kind: "tests", passed: true, warnings: [], actorId: checked.actorId, createdAt: checked.createdAt, artifactIds: checked.artifactIds, journeyIds: checked.regressionScenarioIds } };
+            let classification: Pick<FactoryCandidate, "risk" | "reversible" | "affectsContracts" | "affectsData"> = { risk: "unknown", reversible: false, affectsContracts: true, affectsData: true };
+            try {
+                const classified = await o.classifyCandidate?.({ ...candidate, changedFiles: [...candidate.changedFiles] });
+                if (classified && ["low", "high", "unknown"].includes(classified.risk) && [classified.reversible, classified.affectsContracts, classified.affectsData].every(x => typeof x === "boolean")) classification = classified;
+            } catch { /* Preserve the verified PR while leaving release blocked. */ }
+            return { costCents, candidate: { projectId: project.id, baseSha, headSha: candidate.headSha, prUrl: published.prUrl, builderId: "factory-remote-builder", risk: classification.risk, reversible: classification.reversible, affectsContracts: classification.affectsContracts, affectsData: classification.affectsData, changedFiles, repairAttempts: state.repairAttempts }, tests: { projectId: project.id, baseSha, headSha: candidate.headSha, kind: "tests", passed: true, warnings: [], actorId: checked.actorId, createdAt: checked.createdAt, artifactIds: checked.artifactIds, journeyIds: checked.regressionScenarioIds } };
         }
         catch {
             return result(uncertain ? "unknown" : "failed", uncertain ? "FACTORY_REMOTE_EXECUTION_UNCONFIRMED" : "FACTORY_REMOTE_BUILD_FAILED");
@@ -143,6 +150,7 @@ export function createFactoryRemotePipelineBuilder(options: FactoryRemoteBuilder
 /** Concrete GitHub composition. Both clients authenticate in trusted control-plane
  * code; source export and model generation remain explicit operator adapters. */
 export function createGitHubActionsFactoryBuilder(options: {
+    classifyCandidate?: FactoryRemoteBuilderOptions["classifyCandidate"];
     exportSource: FactoryRemoteBuilderOptions["exportSource"];
     generatePatch: FactoryRemoteBuilderOptions["generatePatch"];
     publisherClient: FactoryGitHubPublisherClient;
@@ -162,7 +170,7 @@ export function createGitHubActionsFactoryBuilder(options: {
     const checks = createGitHubFactoryChecks({ client: options.actionsClient,
         repositories: Object.fromEntries(entries.map(([repo, profile]) => [repo, profile.checks])),
         now: options.now, maxPolls: options.maxPolls, wait: options.wait });
-    return createFactoryRemotePipelineBuilder({ exportSource: options.exportSource,
+    return createFactoryRemotePipelineBuilder({ exportSource: options.exportSource, classifyCandidate: options.classifyCandidate,
         generatePatch: options.generatePatch, publicationCostCents: options.publicationCostCents,
         now: options.now, prepareCandidate: publisher.prepare, finalizeCandidate: publisher.finalize,
         preflight: async (project, baseSha, context) => ({ allowed: await checks.preflight(project.repo, baseSha, context.signal) }),

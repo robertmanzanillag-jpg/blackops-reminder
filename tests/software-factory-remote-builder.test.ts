@@ -150,3 +150,12 @@ test("Responses composition counts tokens, generates patch and verifies GitHub b
     assert.ok(calls.indexOf("model") < calls.indexOf("push"));
     assert.ok(calls.indexOf("jobs") < calls.indexOf("pr"));
 });
+
+test("classifier cannot replace verified identity and failures preserve the PR", async () => {
+  const f=fixture();
+  f.options.classifyCandidate=async()=>({risk:'low',reversible:true,affectsContracts:false,affectsData:false,headSha:'evil',builderId:'evil',prUrl:'evil'});
+  const r=await f.run(); assert.ok('candidate' in r);
+  if('candidate' in r){assert.equal(r.candidate.headSha,head);assert.equal(r.candidate.builderId,'factory-remote-builder');assert.equal(r.candidate.prUrl,'https://github.com/owner/app/pull/1');assert.equal(r.candidate.risk,'low');}
+  f.options.classifyCandidate=async()=>{throw Error('unavailable');};
+  const unknown=await f.run();assert.ok('candidate' in unknown);if('candidate' in unknown)assert.equal(unknown.candidate.risk,'unknown');
+});

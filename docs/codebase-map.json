@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T12:06:17.332Z",
+  "generatedAt": "2026-11-06T20:41:04.141Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -126,13 +126,34 @@
     "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 828,
-    "filesIndexed": 743,
-    "imports": 2674,
+    "filesVisible": 833,
+    "filesIndexed": 748,
+    "imports": 2701,
     "routes": 556,
-    "symbols": 16499
+    "symbols": 16578
   },
   "directories": {
+    "script": {
+      "files": 88,
+      "indexed": 83,
+      "kinds": {
+        "script": 88
+      }
+    },
+    "server": {
+      "files": 182,
+      "indexed": 178,
+      "kinds": {
+        "server": 182
+      }
+    },
+    "tests": {
+      "files": 189,
+      "indexed": 186,
+      "kinds": {
+        "test": 189
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -290,25 +311,11 @@
         "other": 70
       }
     },
-    "script": {
-      "files": 87,
-      "indexed": 82,
-      "kinds": {
-        "script": 87
-      }
-    },
     "scripts": {
       "files": 4,
       "indexed": 1,
       "kinds": {
         "script": 4
-      }
-    },
-    "server": {
-      "files": 180,
-      "indexed": 176,
-      "kinds": {
-        "server": 180
       }
     },
     "server/replit_integrations/batch": {
@@ -344,13 +351,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 187,
-      "indexed": 184,
-      "kinds": {
-        "test": 187
       }
     },
     "tests/fixtures": {
@@ -10675,6 +10675,34 @@
         "options",
         "result"
       ],
+      "routes": []
+    },
+    {
+      "path": "script/software-factory-pilot-exports.ts",
+      "kind": "script",
+      "imports": [
+        "../server/software-factory",
+        "../server/software-factory-actions",
+        "../server/software-factory-github-client",
+        "../server/software-factory-github-state",
+        "../server/software-factory-object-store",
+        "../server/software-factory-openai",
+        "../server/software-factory-pilot-review",
+        "../server/software-factory-responses-runtime",
+        "../server/software-factory-runtime"
+      ],
+      "exports": [
+        "createFactoryPilotGitHubClient, createFactoryPilotGitHubSourceExporter ",
+        "createGitHubFactoryChecks ",
+        "createGitHubFactoryStateTransport ",
+        "createOpenAiFactoryTextProvider ",
+        "createPilotIndependentReview, classifyPilotTextChange ",
+        "createResponsesFactoryWorker ",
+        "createSoftwareFactoryObjectStore ",
+        "currentFactoryProductionDeployment ",
+        "releaseGate, rehearsalGate "
+      ],
+      "symbols": [],
       "routes": []
     },
     {
@@ -21251,6 +21279,49 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-github-client.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-actions",
+        "./software-factory-builder",
+        "./software-factory-github",
+        "./software-factory-github-publisher"
+      ],
+      "exports": [
+        "FACTORY_PILOT_REPOSITORY",
+        "FactoryPilotGitHubClient",
+        "createFactoryPilotGitHubClient",
+        "createFactoryPilotGitHubSourceExporter"
+      ],
+      "symbols": [
+        "FACTORY_PILOT_REPOSITORY",
+        "branch",
+        "branchPattern",
+        "call",
+        "chunk",
+        "controller",
+        "createFactoryPilotGitHubClient",
+        "createFactoryPilotGitHubSourceExporter",
+        "data",
+        "encoded",
+        "expired",
+        "exporter",
+        "id",
+        "invalid",
+        "owner",
+        "paths",
+        "request",
+        "root",
+        "safePath",
+        "scope",
+        "sha",
+        "shaPattern",
+        "timeoutMs",
+        "tree"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-github-publisher.ts",
       "kind": "server",
       "imports": [
@@ -21459,6 +21530,8 @@
         "hash",
         "inputSchema",
         "jobSchema",
+        "jobs",
+        "key",
         "keySchema",
         "ledgerSchema",
         "maxBytes",
@@ -21470,6 +21543,7 @@
         "projectSchema",
         "proof",
         "protectedTransfer",
+        "rank",
         "read",
         "state",
         "time",
@@ -21538,6 +21612,35 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-pilot-review.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory",
+        "./software-factory-openai",
+        "./software-factory-pipeline",
+        "node:crypto"
+      ],
+      "exports": [
+        "PilotReviewSource",
+        "classifyPilotTextChange",
+        "createPilotIndependentReview"
+      ],
+      "symbols": [
+        "a",
+        "candidate",
+        "classifyPilotTextChange",
+        "createPilotIndependentReview",
+        "digest",
+        "parsed",
+        "pieces",
+        "repository",
+        "result",
+        "source",
+        "unknown"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-pipeline.ts",
       "kind": "server",
       "imports": [
@@ -21576,6 +21679,7 @@
         "found",
         "gate",
         "healthy",
+        "hour",
         "id",
         "kind",
         "load",
@@ -21583,16 +21687,19 @@
         "next",
         "now",
         "outcome",
+        "prefix",
         "previous",
         "priority",
         "project",
         "readiness",
+        "recurring",
         "regressionScenarioId",
         "report",
         "restored",
         "result",
         "snapshot",
         "state",
+        "timestamp",
         "validSha",
         "verified"
       ],
@@ -21625,6 +21732,7 @@
         "changedFiles",
         "checked",
         "checks",
+        "classified",
         "createFactoryRemotePipelineBuilder",
         "createGitHubActionsFactoryBuilder",
         "entries",
@@ -21742,21 +21850,29 @@
         "FactoryRuntimeOptions",
         "TrustedFactoryStages",
         "createTrustedFactoryWorkerOptions",
+        "currentFactoryProductionDeployment",
         "validateFactoryWorkerOptions"
       ],
       "symbols": [
         "adapter",
         "adapters",
+        "completed",
         "createTrustedFactoryWorkerOptions",
+        "currentFactoryProductionDeployment",
         "expectedKey",
+        "jobs",
+        "latest",
         "owner",
         "pipeline",
+        "production",
+        "releases",
         "reservations",
         "reserve",
+        "s",
         "scope",
         "stages",
+        "state",
         "status",
-        "store",
         "validateFactoryWorkerOptions",
         "value"
       ],
@@ -28866,6 +28982,31 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-github-client.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-github-client",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "actions",
+        "bytes",
+        "client",
+        "failed",
+        "json",
+        "scope",
+        "sha",
+        "workspace"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-github-publisher.test.ts",
       "kind": "test",
       "imports": [
@@ -28990,10 +29131,12 @@
         "before",
         "claimed",
         "deploy",
+        "deployed",
         "exactCapacity",
         "f",
         "fixture",
         "input",
+        "j",
         "job",
         "ledger",
         "owner",
@@ -29002,6 +29145,7 @@
         "store",
         "tight",
         "transport",
+        "unknown",
         "verify",
         "writes"
       ],
@@ -29088,6 +29232,28 @@
       ]
     },
     {
+      "path": "tests/software-factory-pilot-review.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-pilot-review",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "before",
+        "candidate",
+        "context",
+        "make",
+        "restoration",
+        "result",
+        "review",
+        "source",
+        "state"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-pipeline.test.ts",
       "kind": "test",
       "imports": [
@@ -29100,17 +29266,22 @@
       "exports": [],
       "symbols": [
         "deploy",
+        "deployment",
         "discover",
         "evidence",
+        "execute",
         "f",
+        "failed",
         "fixture",
         "forged",
         "found",
+        "healthy",
         "initial",
         "jobs",
         "now",
         "original",
         "pipeline",
+        "restored",
         "result",
         "run",
         "second",
@@ -29184,9 +29355,11 @@
         "patch",
         "patchHash",
         "project",
+        "r",
         "result",
         "state",
         "tree",
+        "unknown",
         "workflow"
       ],
       "routes": []
@@ -29238,7 +29411,9 @@
         "fixture",
         "owner",
         "project",
+        "redeployed",
         "reservations",
+        "restored",
         "result",
         "runtime",
         "stages",
@@ -29726,6 +29901,7 @@
     "tests/software-factory-builder.test.ts",
     "tests/software-factory-encrypted-state.test.ts",
     "tests/software-factory-gcs.test.ts",
+    "tests/software-factory-github-client.test.ts",
     "tests/software-factory-github-publisher.test.ts",
     "tests/software-factory-github-state.test.ts",
     "tests/software-factory-github.test.ts",
@@ -29733,6 +29909,7 @@
     "tests/software-factory-object-store.test.ts",
     "tests/software-factory-openai-builder.test.ts",
     "tests/software-factory-openai.test.ts",
+    "tests/software-factory-pilot-review.test.ts",
     "tests/software-factory-pipeline.test.ts",
     "tests/software-factory-postgres.test.ts",
     "tests/software-factory-remote-builder.test.ts",

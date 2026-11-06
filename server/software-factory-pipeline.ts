@@ -19,6 +19,7 @@ interface Costed { costCents: number }
 export interface FactoryPipelineDependencies {
   project(ownerKey: string, projectId: string): Promise<FactoryProject | undefined>;
   previous(ownerKey: string, jobId: string): Promise<FactoryJob | undefined>;
+  isCurrentDeployment?: (ownerKey: string, projectId: string, deployJobId: string) => Promise<boolean>;
   claimFinding(ownerKey: string, projectId: string, key: string, jobId: string): Promise<boolean>;
   reservations: Record<FactoryJob["kind"], number>;
   discover?: (project: FactoryProject, context: StageContext) => Promise<Costed & { finding?: FactoryPipelineState["finding"]; findings?: FactoryPipelineState["finding"][] }>;
@@ -47,11 +48,19 @@ export function createFactoryPipeline(deps: FactoryPipelineDependencies): Pick<F
     const id = job.payload.previousJobId;
     if (typeof id !== "string") throw new Error("FACTORY_PREDECESSOR_REQUIRED");
     const previous = await deps.previous(job.ownerKey, id);
-    if (!previous || previous.ownerKey !== job.ownerKey || previous.projectId !== job.projectId || previous.status !== "completed" || job.key !== `${previous.id}.next` || !predecessors[job.kind].includes(previous.kind)) throw new Error("FACTORY_CHAIN_UNTRUSTED");
+    if (!previous || previous.ownerKey !== job.ownerKey || previous.projectId !== job.projectId || previous.status !== "completed" || !predecessors[job.kind].includes(previous.kind)) throw new Error("FACTORY_CHAIN_UNTRUSTED");
+    const recurring = job.key !== `${previous.id}.next`;
+    if (recurring) {
+      const prefix = `${previous.id}.health:`;
+      const hour = job.key.startsWith(prefix) ? job.key.slice(prefix.length) : "";
+      const timestamp = Date.parse(`${hour}:00:00Z`);
+      if (job.kind !== "verify" || previous.kind !== "deploy" || !/^\d{4}-\d{2}-\d{2}T\d{2}$/.test(hour) || !Number.isFinite(timestamp) || new Date(timestamp).toISOString().slice(0, 13) !== hour || typeof deps.isCurrentDeployment !== "function") throw new Error("FACTORY_CHAIN_UNTRUSTED");
+    }
     const outcome = previous.result as FactoryAdapterResult | undefined;
     const state = clone((outcome?.evidence as { pipelineState?: FactoryPipelineState } | undefined)?.pipelineState);
     if (!state || state.version !== 1 || state.projectId !== job.projectId || !["staging", "production"].includes(state.target)) throw new Error("FACTORY_CONTEXT_MISSING");
     if (job.kind !== "build" && (!state.candidate || state.candidate.headSha !== job.headSha)) throw new Error("FACTORY_CONTEXT_VERSION_MISMATCH");
+    if (recurring && (state.target !== "production" || !state.candidate || state.candidate.projectId !== job.projectId || !validSha(state.candidate.baseSha) || !validSha(state.candidate.headSha) || previous.headSha !== state.candidate.headSha || state.deployment?.target !== "production" || state.deployment.headSha !== state.candidate.headSha || !state.deployment.id || job.reservedCents < deps.reservations.verify + deps.reservations.rollback || job.recoveryCents < deps.reservations.rollback || !(await deps.isCurrentDeployment!(job.ownerKey, job.projectId, previous.id)))) throw new Error("FACTORY_HEALTH_DEPLOYMENT_UNVERIFIED");
     return { state, previous };
   };
   const next = (job: FactoryJob, kind: FactoryJob["kind"], state: FactoryPipelineState): FactoryJobInput => ({ key: `${job.id}.next`, projectId: job.projectId, kind, ...(kind !== "build" ? { headSha: state.candidate?.headSha } : {}), reservedCents: deps.reservations[kind] + (kind === "deploy" ? deps.reservations.verify + deps.reservations.rollback : kind === "verify" ? deps.reservations.rollback : 0), recoveryCents: kind === "deploy" ? deps.reservations.verify + deps.reservations.rollback : kind === "verify" ? deps.reservations.rollback : 0, payload: { previousJobId: job.id, repairAttempts: state.repairAttempts } });
@@ -112,11 +121,13 @@ export function createFactoryPipeline(deps: FactoryPipelineDependencies): Pick<F
       const verified = await deps.verify!(clone(project), clone(state), context); checkCost(verified.costCents);
       state.verification = verified.verification;
       const healthy = verified.verification.healthy && verified.verification.headSha === state.candidate!.headSha;
+      if (healthy && job.key !== `${previous.id}.next`) return result(state, verified.costCents);
       return result(state, verified.costCents, { next: next(job, !healthy || state.target === "staging" ? "rollback" : "evaluate", state), ...(!healthy ? { reason: "FACTORY_REGRESSION_RECOVERY" } : {}) });
     }
     if (kind === "rollback") {
       const restored = await deps.rollback!(clone(project), clone(state), context); checkCost(restored.costCents); state.rollback = restored.rollback;
       if (!restored.rollback.healthy || restored.rollback.restoredSha !== state.candidate!.baseSha) return result(state, restored.costCents, { status: "blocked", reason: "FACTORY_RECOVERY_UNVERIFIED" });
+      if (state.target === "production" && previous.kind === "verify" && typeof previous.payload.previousJobId === "string" && previous.key.startsWith(`${previous.payload.previousJobId}.health:`)) return result(state, restored.costCents);
       return result(state, restored.costCents, { next: next(job, "evaluate", state) });
     }
     if (state.target === "staging" && state.verification?.healthy && state.verification.headSha === state.candidate!.headSha && state.rollback?.healthy && state.rollback.restoredSha === state.candidate!.baseSha) await deps.recordValidation!(job.ownerKey, project.id, previous.id);
