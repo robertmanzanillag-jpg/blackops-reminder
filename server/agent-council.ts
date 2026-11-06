@@ -50,6 +50,7 @@ import {
 } from "@shared/agent-integrations";
 import {
   advanceAcademy,
+  scheduleAcademyTraining,
   advanceCompany,
   completeOrder,
   createOrder,
@@ -67,13 +68,18 @@ import {
   leaderboard,
   personalityFor,
   type CurriculumModule,
+  type CompanyState,
+  type AcademyJob,
+  type AcademyAssessment,
 } from "@shared/agent-company";
 
 export type CouncilDeps = {
+  academyReview?: (state: CompanyState, job: AcademyJob) => Promise<AcademyAssessment>;
   now: () => number;
   userId: () => string;
   readState: () => Promise<string | null>;
   writeState: (raw: string) => Promise<void>;
+  transactState?: (update: (raw: string | null) => Promise<string>) => Promise<string>;
   collect: (userId: string) => Promise<Omit<CouncilSignals, "now">>;
   submitProposal: (userId: string, proposal: CouncilProposal) => Promise<string>;
   getPendingActionStatus: (id: string) => Promise<string | null>;
@@ -197,7 +203,7 @@ function advanceCompanyCycle(
   integrations: Record<string, AgentIntegration> = {}
 ): CouncilState {
   const unscored = new Set([...EXEMPT_IDS, ...unscoredAgentIds(integrations)]);
-  const compact = Object.fromEntries(Object.entries(statuses).map(([id, status]) => [id, { state: status.state, label: status.label }]));
+  const compact = Object.fromEntries(Object.entries(statuses).map(([id, status]) => [id, { state: status.state, label: status.label, ...(status.evidenceId ? { evidenceId: status.evidenceId } : {}), ...(status.lifePenaltyExempt ? { lifePenaltyExempt: true } : {}) }]));
   let company = advanceCompany(state.company, { now, statuses: Object.fromEntries(Object.entries(compact).filter(([id]) => !isKongCompanyAgent(id))), roles: AGENT_NAMES, exempt: [...unscored] }).state;
   // Orders routed to a paused/external agent are blocked with the honest reason, never "assigned".
   for (const id of unscored) {
@@ -214,10 +220,10 @@ function advanceCompanyCycle(
   }
   // Skills from the lessons Robert approved about each agent.
   company = learnLessons(company, state.lessons.filter(lesson => !isKongCompanyAgent(lesson.subject)), now);
-  // If the docs can't be read this cycle, the academy still advances on the core rules so nobody
-  // stays in training forever. Each trainee first studies its own job (why it failed, its orders,
+  // Reading never replaces verified execution evidence. Each trainee first studies its own job (why it failed, its orders,
   // its lessons), then the general docs.
   const modules = curriculum.length ? curriculum : [{ id: "core-rules", title: "Reglas basicas", summary: "PR-first, QA antes de publicar, nada de gasto sin aprobacion de Robert." }];
+  if (process.env.OFFICE_ACADEMY_PREPARATION_ENABLED === "true") company = scheduleAcademyTraining(company, Object.fromEntries(Object.entries(AGENT_NAMES).filter(([id]) => !unscored.has(id) && !isKongCompanyAgent(id))), now);
   const academyBase = company;
   company = advanceAcademy(
     company,
@@ -264,6 +270,17 @@ function deriveSpecialistProposals(state: CouncilState, now: number): CouncilPro
   return created;
 }
 
+function parseDurableCouncilState(raw: string | null): CouncilState {
+  if (raw === null) return emptyCouncilState();
+  const value = JSON.parse(raw);
+  const object = (v: unknown) => v !== null && typeof v === "object" && !Array.isArray(v);
+  if (!object(value) || value.version !== 1 || !Array.isArray(value.debates) || !Array.isArray(value.proposals) || !object(value.scout) ||
+      !object(value.company) || value.company.version !== 1 || !object(value.company.careers) || !Array.isArray(value.company.trainees) || !Array.isArray(value.company.orders) || (value.company.academyJobs !== undefined && !Array.isArray(value.company.academyJobs))) {
+    throw new Error("Stored council state is incompatible; migration or recovery is required.");
+  }
+  return parseCouncilState(raw);
+}
+
 export function createAgentCouncil(deps: CouncilDeps) {
   let cached: CouncilState | null = null;
   let queue: Promise<unknown> = Promise.resolve();
@@ -273,16 +290,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
   const integrationsNow = () => (deps.integrations ? deps.integrations() : effectiveIntegrations(parseIntegrationOverrides(process.env.AGENT_INTEGRATION_OVERRIDES)));
 
   async function load(): Promise<CouncilState> {
-    if (deps.versioned) {
-      // Shared storage: always the latest state, whichever instance wrote it.
-      try {
-        cached = parseCouncilState((await deps.versioned.read()).raw);
-      } catch (error) {
-        deps.log(`agent council state read failed: ${error instanceof Error ? error.message : String(error)}`);
-        if (!cached) throw error;
-      }
-      return cached;
-    }
+    if (deps.transactState) return parseDurableCouncilState(await deps.readState());
+    if (deps.versioned) return parseDurableCouncilState((await deps.versioned.read()).raw);
     if (cached) return cached;
     cached = parseCouncilState(await deps.readState().catch(() => null));
     return cached;
@@ -294,17 +303,25 @@ export function createAgentCouncil(deps: CouncilDeps) {
   // wrote in between, the change is re-applied on top of its state (up to 3 times).
   function mutate(change: (state: CouncilState) => Promise<CouncilState | typeof SKIP> | CouncilState | typeof SKIP): Promise<CouncilState> {
     const job = queue.then(async () => {
+      if (deps.transactState) {
+        const raw = await deps.transactState(async raw => {
+          const current = parseDurableCouncilState(raw);
+          const next = await change(current);
+          return JSON.stringify(next === SKIP ? current : next);
+        });
+        return parseDurableCouncilState(raw);
+      }
       if (!deps.versioned) {
         const current = await load();
         const next = await change(current);
         if (next === SKIP) return current;
-        cached = next;
         await deps.writeState(JSON.stringify(next, null, 2));
+        cached = next;
         return next;
       }
       for (let attempt = 0; ; attempt++) {
         const { raw, revision } = await deps.versioned.read();
-        const current = parseCouncilState(raw);
+        const current = parseDurableCouncilState(raw);
         const next = await change(current);
         if (next === SKIP) { cached = current; return current; }
         try {
@@ -402,6 +419,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
         wroteRound = false;
         if (recent(state)) return SKIP;
         const now = deps.now();
+        if (deps.transactState && state.lastCycleAt && now - toMs(state.lastCycleAt) < COUNCIL_CYCLE_MS) return state;
         const signals: CouncilSignals = { ...collected, now };
         const findings = runCrossChecks(signals);
         const statuses: Record<string, AgentLiveStatus> = { ...everyone, ...statusesFromSignals(signals) };
@@ -547,6 +565,27 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
   }
 
+  async function runAcademyCycle() {
+    if ((!deps.transactState && !deps.versioned) || !deps.academyReview) throw new Error("Academy requires durable storage and an enabled trusted review executor.");
+    const { reserveAcademyReview, commitAcademyReview } = await import("./office-academy-runner");
+    const curriculum = await deps.loadCurriculum?.() || [];
+    let reservation: AcademyJob | undefined;
+    const reserved = await mutate(state => {
+      const result = reserveAcademyReview(state.company, curriculum, deps.now());
+      reservation = result.job;
+      return { ...state, company: result.state };
+    });
+    if (!reservation) return reserved;
+    const job = reservation;
+    try {
+      // Provider execution is outside the transaction; only the matching live reservation commits.
+      const result = await deps.academyReview(reserved.company, job);
+      return mutate(state => ({ ...state, company: commitAcademyReview(state.company, job, result, deps.now()) }));
+    } catch {
+      return mutate(state => ({ ...state, company: commitAcademyReview(state.company, job, undefined, deps.now(), "Review executor unavailable or result unverified; manual inspection required.") }));
+    }
+  }
+
   async function view() {
     const loaded = await load();
     // The KONG conversation is owner-only (served by /api/kong-supervisor/state with an owner check).
@@ -582,7 +621,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
     return (await load()).kongSupervision;
   }
 
-  return { runCycle, runScout, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision };
+  return { runCycle, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {
@@ -727,7 +766,7 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
       agentIds.forEach((agentId) => summarize(agentId, body));
     } catch (error) {
       const detail = error instanceof Error ? error.message.slice(0, 120) : "sin detalle";
-      agentIds.forEach((agentId) => { statuses[agentId] = { state: "error", label: "Con error", detail }; });
+      agentIds.forEach((agentId) => { statuses[agentId] = { state: "error", lifePenaltyExempt: true, label: "Con error", detail }; });
     }
   };
   const hasValue = (value: string | undefined) => Boolean(value && value.trim() && !/^(changeme|placeholder|xxx)/i.test(value.trim()));
@@ -872,12 +911,17 @@ function databaseStateStore(): CouncilDeps["versioned"] {
 
 export function getAgentCouncil() {
   if (council) return council;
+  const durable = process.env.AGENT_COUNCIL_STORAGE === "postgres";
+  const versioned = durable ? undefined : databaseStateStore();
+  const persistentStore = async () => (await import("./agent-council-store")).getCouncilStore();
   council = createAgentCouncil({
+    ...((durable || versioned) && process.env.OFFICE_ACADEMY_EXECUTION_ENABLED === "true" ? { academyReview: async (state: CompanyState, job: AcademyJob) => (await import("./office-academy-runner")).createAcademyReviewRunner()(state, job) } : {}),
     now: () => Date.now(),
     userId: systemUserId,
-    readState: () => readFile(STATE_FILE, "utf8").catch(() => null),
+    readState: () => durable ? persistentStore().then(store => store.read(systemUserId())) : readFile(STATE_FILE, "utf8").catch(() => null),
     writeState: writeStateAtomic,
-    versioned: databaseStateStore(),
+    versioned,
+    ...(durable ? { transactState: async (update: (raw: string | null) => Promise<string>) => (await persistentStore()).transact(systemUserId(), update) } : {}),
     verifyRun: async (userId, runId) => {
       const [{ db }, { automationRuns }, { and, eq }] = await Promise.all([import("./db"), import("@shared/schema"), import("drizzle-orm")]);
       const [run] = await db.select().from(automationRuns).where(and(eq(automationRuns.id, runId), eq(automationRuns.ownerUserId, userId))).limit(1);

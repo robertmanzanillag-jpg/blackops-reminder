@@ -277,8 +277,8 @@ export function AgentsOfficeWorld({
       id: `trainee:${trainee.id}`,
       name: trainee.nickname,
       role: `En formacion: ${trainee.role}`,
-      description: `Primero estudia su propio puesto (por que fallo, sus ordenes y lecciones), despues los documentos y la base de datos. Lleva ${trainee.modulesDone.length} ${trainee.modulesDone.length === 1 ? "modulo" : "modulos"}, ${(trainee.learned || []).length} sobre su puesto.`,
-      status: { state: "checking", label: `Estudiando · ${trainee.modulesDone.length} ${trainee.modulesDone.length === 1 ? "modulo" : "modulos"}`, activity: trainee.knowledge.slice(0, 4) },
+      description: trainee.awaitingEvidence ? "Lectura terminada; faltan pruebas verificables. Esto no cambia su puesto ni acredita una mejora." : `Primero estudia su propio puesto (por que fallo, sus ordenes y lecciones), despues los documentos y la base de datos. Lleva ${trainee.modulesDone.length} ${trainee.modulesDone.length === 1 ? "modulo" : "modulos"}, ${(trainee.learned || []).length} sobre su puesto.`,
+      status: { state: "checking", label: trainee.awaitingEvidence ? "Pendiente de pruebas reales" : `Estudiando · ${trainee.modulesDone.length} ${trainee.modulesDone.length === 1 ? "modulo" : "modulos"}`, activity: trainee.knowledge.slice(0, 4) },
       color: "#60a5fa",
     });
   }

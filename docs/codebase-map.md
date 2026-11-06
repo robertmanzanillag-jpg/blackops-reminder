@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-05T11:36:01.803Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-04\quioer-qu-echeck-el-trabajo-que\work\office-current`
+Generated: 2026-11-06T09:18:42.559Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\blackops-reminder`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 741 | 652 | 2262 | 524 | 14798 |
+| 791 | 708 | 2551 | 550 | 16839 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,30 +28,30 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 148 | 144 | server:148 |
-| `tests` | 147 | 144 | test:147 |
-| `script` | 82 | 77 | script:82 |
+| `tests` | 172 | 169 | test:172 |
+| `server` | 164 | 160 | server:164 |
+| `script` | 85 | 80 | script:85 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 32 | 31 | docs:32 |
-| `client/src/components` | 24 | 24 | client-component:24 |
+| `docs` | 33 | 32 | docs:33 |
+| `client/src/components` | 28 | 28 | client-component:28 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
-| `client/src/lib` | 15 | 15 | client-lib:15 |
-| `shared` | 7 | 7 | shared:7 |
+| `client/src/lib` | 17 | 17 | client-lib:17 |
+| `shared` | 13 | 13 | shared:13 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `client/src/components/company-office` | 5 | 5 | client-component:5 |
+| `client/src/components/agents-world-office` | 4 | 4 | client-component:4 |
 | `server/replit_integrations/chat` | 4 | 4 | server:4 |
-| `.local/office-evidence` | 9 | 3 | other:9 |
 | `client/src` | 3 | 3 | other:3 |
 | `client/src/hooks` | 3 | 3 | client-hook:3 |
 | `server/replit_integrations/image` | 3 | 3 | server:3 |
 | `client/public` | 14 | 2 | other:14 |
-| `client/src/components/agents-world-office` | 2 | 2 | client-component:2 |
 | `server/replit_integrations/batch` | 2 | 2 | server:2 |
 | `.agents/skills/codebase-overview` | 1 | 1 | docs:1 |
 | `client` | 1 | 1 | other:1 |
 | `client/src/components/agents-building` | 1 | 1 | client-component:1 |
+| `client/src/components/clippers` | 1 | 1 | client-component:1 |
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/tools`
@@ -59,7 +59,10 @@ Package: `rest-express`
 - `server/assistant.ts`: `/api/assistant/chat`, `/api/assistant/context`, `/api/assistant/transcribe`
 - `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
 - `server/index.ts`: `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
+- `server/kong-operations-routes.ts`: `/api/kong-ops/cards`, `/api/kong-ops/lease`, `/api/kong-ops/metrics`, `/api/kong-ops/publications`, `/api/kong-ops/reconcile`, `/api/kong-ops/state`
+- `server/kong-supervisor-routes.ts`: `/api/kong-supervisor/chat`, `/api/kong-supervisor/state`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
+- `server/office-academy-runner.ts`: `/search`, `/users/:id`
 - `server/office-routes.ts`: `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/contact-action`, `/api/agents-office/kong-snapshot`, `/api/agents-office/runs`
 - `server/replit_integrations/chat/routes.ts`: `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/messages`
 - `server/replit_integrations/image/routes.ts`: `/api/generate-image`
@@ -74,6 +77,7 @@ Package: `rest-express`
 - `tests/clippers-owned-source-scripts.test.ts`: `/api/clippers/external-closeout-next-action`, `/api/clippers/external-closeout-operator-queue`, `/api/clippers/external-closeout-pack`, `/api/clippers/external-closeout-proof-todo`, `/api/clippers/external-closeout-repair-work-packet`, `/api/clippers/operational-readiness`, `/api/clippers/prepare-external-closeout-pack`, `/api/clippers/prepare-operational-readiness`, `/api/clippers/run-intake-refresh-sweep`, `/api/clippers/run-post-connect-activation-sweep`
 - `tests/developer-autopilot-wiring.test.ts`: `/api/revenue-engine/delivery-workspaces/app-qa-gate`, `/api/revenue-engine/delivery-workspaces/github-handoff`, `/api/revenue-engine/delivery-workspaces/pr-status`, `/api/revenue-engine/delivery-workspaces/release-gate`
 - `tests/harness/agents-world-integrated.tsx`: `/agents-office`
+- `tests/kong-office-browser-qa.test.mjs`: `/api/agent-council/state`, `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/kong-snapshot`, `/api/app-qa-agent/status`, `/api/ceo/conversation-history`, `/api/ceo/go-live`, `/api/ceo/readiness`, `/api/fixture-owner-boundary`, `/api/github/repos`, `/api/github/repos/fixture/office-fixture/contents`, `/api/github/status`, `/api/legal-compliance/reports`, `/api/monthly-goals`, `/api/projects`, `/health`
 
 ## Test Inventory
 - `tests/._dropshipping-ceo.test.ts`
@@ -81,6 +85,11 @@ Package: `rest-express`
 - `tests/._rate-limit.test.ts`
 - `tests/._user-context.test.ts`
 - `tests/agent-company.test.ts`
+- `tests/agent-company.test.ts`
+- `tests/agent-company.test.ts`
+- `tests/agent-council-store.test.ts`
+- `tests/agent-council.test.ts`
+- `tests/agent-council.test.ts`
 - `tests/agent-council.test.ts`
 - `tests/agent-live-status.test.ts`
 - `tests/agents-world-integration.test.ts`
@@ -99,8 +108,12 @@ Package: `rest-express`
 - `tests/blackroom-learning-observations.test.ts`
 - `tests/blackroom-learning-panel.test.ts`
 - `tests/blackroom-links.test.ts`
+- `tests/blackroom-local-evidence.test.ts`
 - `tests/blackroom-local-worker.test.ts`
+- `tests/blackroom-manual-exploration.test.ts`
+- `tests/blackroom-manual-observations.test.ts`
 - `tests/blackroom-metricool-bridge.test.ts`
+- `tests/blackroom-office-operations.test.ts`
 - `tests/blackroom-remote-control.test.ts`
 - `tests/blackroom-verified-learning.test.ts`
 - `tests/ceo-backup-check-cli.test.ts`
@@ -142,6 +155,11 @@ Package: `rest-express`
 - `tests/google-connector.test.ts`
 - `tests/google-drive-folder-command.test.ts`
 - `tests/google-drive-oauth.test.ts`
+- `tests/kong-company-routes.test.ts`
+- `tests/kong-company.test.ts`
+- `tests/kong-office-wing.test.ts`
+- `tests/kong-operations-routes.test.ts`
+- `tests/kong-operations.test.ts`
 - `tests/legacy-publication-containment.test.ts`
 - `tests/legal-compliance-agent.test.ts`
 - `tests/local-auth-cli.test.ts`
@@ -154,11 +172,14 @@ Package: `rest-express`
 - `tests/marketing-command-center.test.ts`
 - `tests/metricool-analytics-sync.test.ts`
 - `tests/metricool-tracking.test.ts`
+- `tests/office-academy-benchmarks.test.ts`
+- `tests/office-academy-runner.test.ts`
 - `tests/office-city-agents.test.ts`
 - `tests/office-claude.test.ts`
 - `tests/office-cloud-runtime.test.ts`
 - `tests/office-cloud-store.test.ts`
 - `tests/office-github.test.ts`
+- `tests/office-kong-central-agents.test.ts`
 - `tests/office-kong-collaboration.test.ts`
 - `tests/office-kong-supervisor.test.ts`
 - `tests/office-kong.test.ts`
@@ -196,7 +217,7 @@ Package: `rest-express`
 ## Key Files
 - `client/src/pages/._assistant.tsx` (client-page)
 - `client/src/pages/._dropshipping-ceo.tsx` (client-page)
-- `client/src/pages/agents-office.tsx` (client-page; 167 symbols, 15 imports)
+- `client/src/pages/agents-office.tsx` (client-page; 168 symbols, 17 imports)
 - `client/src/pages/app-qa-agent.tsx` (client-page; 12 symbols, 9 imports)
 - `client/src/pages/assistant.tsx` (client-page; 49 symbols, 7 imports)
 - `client/src/pages/auth.tsx` (client-page; 6 symbols, 8 imports)
@@ -219,12 +240,14 @@ Package: `rest-express`
 - `client/src/pages/revenue-engine-simple.tsx` (client-page; 33 symbols, 7 imports)
 - `client/src/pages/tools.tsx` (client-page; 2 symbols, 6 imports)
 - `package.json` (package)
-- `script/blackroom-control-server.mjs` (script; 76 symbols, 10 imports)
+- `script/blackroom-control-server.mjs` (script; 82 symbols, 11 imports)
 - `script/blackroom-daily-agent.ts` (script; 16 symbols, 2 imports)
-- `script/blackroom-deterministic-editor.ts` (script; 59 symbols, 7 imports)
+- `script/blackroom-deterministic-editor.ts` (script; 60 symbols, 8 imports)
+- `script/blackroom-local-evidence.ts` (script; 30 symbols, 10 imports)
 - `script/blackroom-local-worker.ts` (script; 73 symbols, 7 imports)
 - `script/blackroom-metricool-csv-bridge.mjs` (script; 38 symbols)
-- `script/blackroom-metricool-exporter.mjs` (script; 33 symbols, 6 imports)
+- `script/blackroom-metricool-exporter.mjs` (script; 42 symbols, 7 imports)
+- `script/blackroom-publication-collector.ts` (script; 12 symbols, 1 imports)
 - `script/blackroom-remote-sync.mjs` (script; 24 symbols)
 - `script/blackroom-worker-ledger.ts` (script; 29 symbols, 4 imports)
 - `script/build-agents-world-client.mjs` (script; 4 imports)
@@ -272,8 +295,6 @@ Package: `rest-express`
 - `script/clippers-youtube-oauth-bootstrap.mjs` (script; 75 symbols, 6 imports)
 - `script/clippers-youtube-publish-worker.mjs` (script; 105 symbols, 6 imports)
 - `script/clippers-youtube-upload-packager.mjs` (script; 135 symbols, 7 imports)
-- `script/clippers-youtube-uploader.mjs` (script; 107 symbols, 5 imports)
-- `script/codebase-map.ts` (script; 43 symbols, 3 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

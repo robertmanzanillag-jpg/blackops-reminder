@@ -208,3 +208,12 @@ test("KONG metrics agent: status and results come from the operations state, fai
   assert.equal(summarizeProbe(agentProbes["kong-metrics"], ok({ status: { "kong-metrics": { state: "working?" } } }), now).state, "error");
   assert.equal(summarizeProbe(agentProbes["kong-metrics"], { ok: false, status: 403, body: null }, now).state, "needs-setup");
 });
+
+test("shared transport failure is penalty-exempt and automation evidence IDs stay stable across polls",()=>{
+  const failed=summarizeProbe(agentProbes.automations,{ok:false,status:503,body:{error:"database unavailable"}},NOW);
+  assert.equal(failed.lifePenaltyExempt,true);
+  const body=[{id:"run-x",status:"failed",startedAt:new Date(NOW-1000).toISOString()}];
+  const one=summarizeProbe(agentProbes.automations,ok(body),NOW);
+  const two=summarizeProbe(agentProbes.automations,ok(body),NOW+60000);
+  assert.equal(one.evidenceId,two.evidenceId);assert.ok(one.evidenceId);assert.notEqual(one.lifePenaltyExempt,true);
+});

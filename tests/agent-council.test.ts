@@ -606,3 +606,23 @@ test("agent factory: recurring blocked orders become one 'hire a specialist' pro
   const again = await council.runCycle();
   assert.equal(again.proposals.filter((proposal) => proposal.key.startsWith("new_agent:specialist-")).length, 1, "never proposed twice");
 });
+
+test("durable council rejects corrupt persisted state without replacing it", async () => {
+  let raw = '{"version":9}'; let writes=0;
+  const fake=fakeDeps({readState:async()=>raw,transactState:async update=>{ const next=await update(raw);writes++;raw=next;return next; }});
+  const council=createAgentCouncil(fake.deps);
+  await assert.rejects(council.load(),/incompatible/);
+  await assert.rejects(council.placeOrder("review"),/incompatible/);
+  assert.equal(writes,0);
+});
+test("separate durable council replicas apply one company tick per cadence", async () => {
+  let raw:string|null=null;let serial=Promise.resolve();
+  const transactState=async(update:(value:string|null)=>Promise<string>)=>{
+    let result="";
+    const task=serial.then(async()=>{result=await update(raw);raw=result;});serial=task.catch(()=>{});await task;return result;
+  };
+  const fake=fakeDeps({readState:async()=>raw,transactState});
+  const first=createAgentCouncil(fake.deps);const second=createAgentCouncil(fake.deps);
+  await Promise.all([first.runCycle(),second.runCycle()]);
+  assert.equal((await second.load()).cycles,1);
+});

@@ -8,7 +8,7 @@ export { isKongCompanyAgent } from "../shared/agent-company";
 export type KongCompanyObservation = {
   company: CompanyState;
   evidenceAt: Record<string, string>;
-  statuses: Record<string, { state: AgentLiveStatus["state"]; label: string }>;
+  statuses: Record<string, { state: AgentLiveStatus["state"]; label: string; evidenceId?: string }>;
   observedAt: string | null;
   collaboration: OfficeKongCollaboration;
 };
@@ -28,7 +28,7 @@ export function advanceKongCompany(input: {
   const credit = (id: string, at: string | null, status: AgentLiveStatus["state"], label: string) => {
     const time = at ? Date.parse(at) : NaN;
     if (!Number.isFinite(time) || time > input.now || time <= Date.parse(evidenceAt[id] || "1970-01-01")) return;
-    credited[id] = { state: status, label };
+    credited[id] = { state: status, label, evidenceId: `${id}:${at}` };
     evidenceAt[id] = at!;
   };
   if (supervision.verified && input.evidence) {
