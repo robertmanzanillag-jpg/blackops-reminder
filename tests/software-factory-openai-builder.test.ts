@@ -109,3 +109,25 @@ test("plain text edits construct exact complete hunks and reject ambiguous or st
     assert.throws(() => createOpenAiFactoryPatchGenerator({ sourcePaths: { "owner/app": ["app.ts"] }, patchMode: "plainTextEdits", maxOutputTokens: 100, generateText: async () => { throw Error("must not call"); } }), /PLAIN_TEXT_SOURCE_REQUIRED/);
   } finally { await rm(workspace, { recursive: true, force: true }); }
 });
+
+
+test("plain text model context excludes all tags and attributes including quoted delimiters", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "factory-text-context-"));
+  try {
+    await mkdir(path.join(workspace, "site"));
+    const source = '<!doctype html>\n<html lang="ATTRIBUTE_ONLY"><body><h1 title="PRIVATE > attribute">Old wording.</h1><a href="secret-path">Health</a></body></html>\n';
+    await writeFile(path.join(workspace, "site/index.html"), source);
+    const generate = createOpenAiFactoryPatchGenerator({sourcePaths:{"owner/app":["site/index.html"]},patchMode:"plainTextEdits",maxOutputTokens:100,
+      generateText:async request=>{
+        const data=JSON.parse(request.text);
+        assert.deepEqual(data.files,[{path:"site/index.html",textNodes:["Old wording.","Health"]}]);
+        for(const forbidden of ["ATTRIBUTE_ONLY","PRIVATE","secret-path","<h1","<!doctype"]) assert.ok(!request.text.includes(forbidden));
+        assert.match(request.instructions,/Example unrelated/);assert.match(request.instructions,/no newline/);
+        return {status:"completed",text:JSON.stringify({before:"Old wording.",after:"Clear wording."}),costCents:1,inputTokens:10,outputTokens:10};
+      }});
+    const result=await generate(input,{workspace,maxCostCents:10});
+    assert.deepEqual(validateFactoryPublicationPatch(result.patch),["site/index.html"]);
+    assert.ok(result.patch.includes('+<html lang="ATTRIBUTE_ONLY"><body><h1 title="PRIVATE > attribute">Clear wording.</h1><a href="secret-path">Health</a></body></html>'));
+    assert.equal(result.costCents,1);
+  } finally {await rm(workspace,{recursive:true,force:true});}
+});
