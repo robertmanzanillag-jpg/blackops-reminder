@@ -19,6 +19,8 @@ const agentSchema = z.object({
   owner: text,
   responsibility: text,
   state: z.enum(["healthy", "running", "attention", "stale", "unknown", "disabled"]),
+  operationMode: z.enum(["on_demand", "scheduled"]).optional(),
+  evidencePending: z.boolean().optional(),
   lastRunAt: nullableTimestamp,
   nextRunAt: nullableTimestamp,
   blocker: text.nullable(),

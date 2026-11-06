@@ -26,7 +26,23 @@ export type AgentCareer = {
   hiredAt: string;
   memory: MemoryEntry[];
   inTrainingUntilGeneration?: number;
+  // Skills earned from real work: graduating, orders closed with evidence, council lessons.
+  skills?: AgentSkill[];
 };
+
+export type SkillSource = "academia" | "orden" | "leccion";
+export type AgentSkill = { id: string; title: string; source: SkillSource; earnedAt: string; uses: number };
+const MAX_SKILLS = 12;
+
+/** Adds a skill, or counts one more use of a skill the agent already has. */
+export function addSkill(career: AgentCareer, skill: { id: string; title: string; source: SkillSource }, at: string): AgentCareer {
+  const skills = career.skills || [];
+  const existing = skills.find((item) => item.id === skill.id);
+  const next = existing
+    ? skills.map((item) => (item.id === skill.id ? { ...item, uses: item.uses + 1 } : item))
+    : [{ ...skill, earnedAt: at, uses: 1 }, ...skills];
+  return { ...career, skills: next.sort((a, b) => b.uses - a.uses || b.earnedAt.localeCompare(a.earnedAt)).slice(0, MAX_SKILLS) };
+}
 
 export type Trainee = {
   id: string;
@@ -37,7 +53,27 @@ export type Trainee = {
   modulesDone: string[];
   knowledge: string[];
   graduatedAt?: string;
+  // Tailored modules completed (id + title), turned into skills at graduation.
+  learned?: Array<{ id: string; title: string }>;
 };
+
+/** Ids of agents created by the academy for a recurring kind of work ("Especialista en ..."). */
+export const SPECIALIST_PREFIX = "specialist:";
+
+/** One spelling for a topic everywhere: proposal key, specialist id, routing and curriculum. */
+export function topicSlug(topic: string): string {
+  return topic.trim().toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "") || "general";
+}
+export function specialistIdFor(topic: string): string {
+  return `${SPECIALIST_PREFIX}${topicSlug(topic)}`;
+}
+export function isSpecialistId(id: string): boolean {
+  return id.startsWith(SPECIALIST_PREFIX);
+}
+/** "specialist:black-room" -> "black room". */
+export function specialistTopicLabel(id: string): string {
+  return id.slice(SPECIALIST_PREFIX.length).replace(/-/g, " ");
+}
 
 export type OrderStatus = "en_curso" | "bloqueada" | "hecha";
 export type CompanyOrder = {
@@ -46,7 +82,12 @@ export type CompanyOrder = {
   createdAt: string;
   assignees: Array<{ agentId: string; status: OrderStatus; note: string }>;
   doneAt?: string;
+  // How it was closed: with a verifiable run (points) or by hand (record only, no points).
+  closedBy?: "evidencia" | "robert";
+  evidence?: OrderEvidence;
 };
+
+export type OrderEvidence = { ref: string; source: "automation_run"; summary: string; at: string };
 
 export type CompanyState = {
   version: 1;
@@ -263,16 +304,139 @@ export function advanceAcademy(state: CompanyState, curriculum: (trainee: Traine
     const modules = curriculum(trainee);
     const next = modules.find((module) => !trainee.modulesDone.includes(module.id));
     if (!next) {
-      const career = careers[trainee.forAgentId];
+      let career = careers[trainee.forAgentId];
+      // A specialist is a brand-new agent: it is created when it graduates.
+      if (!career && trainee.forAgentId.startsWith(SPECIALIST_PREFIX)) {
+        career = {
+          agentId: trainee.forAgentId,
+          generation: 1,
+          nickname: trainee.nickname,
+          points: 0,
+          battery: 80,
+          lastState: null,
+          cyclesWorking: 0,
+          cyclesTotal: 0,
+          ordersDone: 0,
+          firedCount: 0,
+          hiredAt: iso,
+          memory: [],
+        };
+      }
       if (career) {
-        careers[trainee.forAgentId] = { ...career, inTrainingUntilGeneration: undefined, memory: remember(career.memory, iso, `Se graduo de la academia (${trainee.modulesDone.length} modulos) y entra a trabajar.`) };
+        // What it studied about this job becomes its skills.
+        for (const item of (trainee.learned || []).slice(0, 6)) career = addSkill(career, { id: item.id, title: item.title, source: "academia" }, iso);
+        careers[trainee.forAgentId] = {
+          ...career,
+          inTrainingUntilGeneration: undefined,
+          memory: remember(career.memory, iso, `Se graduo de la academia (${trainee.modulesDone.length} modulos, ${(trainee.learned || []).length} sobre este puesto) y entra a trabajar.`),
+        };
       }
       events = [{ at: iso, text: `${trainee.nickname} se graduo como ${trainee.role}.` }, ...events];
       return { ...trainee, graduatedAt: iso };
     }
-    return { ...trainee, modulesDone: [...trainee.modulesDone, next.id], knowledge: [`${next.title}: ${next.summary}`, ...trainee.knowledge].slice(0, 8) };
+    const tailored = isTailoredModule(next.id);
+    return {
+      ...trainee,
+      modulesDone: [...trainee.modulesDone, next.id],
+      knowledge: [`${next.title}: ${next.summary}`, ...trainee.knowledge].slice(0, 8),
+      learned: tailored ? [...(trainee.learned || []), { id: next.id, title: next.title }].slice(-10) : trainee.learned,
+    };
   });
   return { ...state, careers, trainees, events: events.slice(0, MAX_EVENTS) };
+}
+
+export function isTailoredModule(id: string): boolean {
+  return /^(puesto|orden|leccion):/.test(id);
+}
+
+/**
+ * The part of the curriculum that is about THIS job, built from what actually happened:
+ * why the previous holder was not working, the orders that reached the role, and the lessons the
+ * council learned about it. Comes before the general docs.
+ */
+export function tailoredModules(
+  state: CompanyState,
+  forAgentId: string,
+  input: { status?: { state: AgentLiveState; label: string }; lessons?: Array<{ key: string; subject: string; label: string }>; topic?: string } = {}
+): CurriculumModule[] {
+  const modules: CurriculumModule[] = [];
+  if (input.status && input.status.state !== "working") {
+    modules.push({ id: `puesto:${forAgentId}:estado`, title: "Por que este puesto no estaba trabajando", summary: input.status.label.slice(0, 160) });
+  }
+  const previous = state.careers[forAgentId];
+  const failures = (previous?.memory || []).filter((entry) => /despedid|bateria|error|no puede|reemplaz/i.test(entry.text)).slice(0, 2);
+  for (const [index, entry] of failures.entries()) {
+    modules.push({ id: `puesto:${forAgentId}:historial-${index}`, title: "Historial del puesto", summary: entry.text.slice(0, 160) });
+  }
+  const topic = input.topic ? topicSlug(input.topic) : undefined;
+  const orders = state.orders
+    .filter((order) => order.assignees.some((assignee) => assignee.agentId === forAgentId) || (topic ? topicSlug(orderTopic(order.text)) === topic : false))
+    .slice(0, 5);
+  for (const order of orders) {
+    modules.push({
+      id: `orden:${order.id}`,
+      title: `Orden: ${order.text.slice(0, 50)}`,
+      summary: order.evidence ? `Se hizo con evidencia: ${order.evidence.summary}` : order.assignees.map((assignee) => assignee.note).join(" ").slice(0, 160),
+    });
+  }
+  for (const lesson of (input.lessons || []).filter((item) => item.subject === forAgentId).slice(0, 3)) {
+    modules.push({ id: `leccion:${lesson.key}`, title: `Leccion: ${lesson.label.slice(0, 60)}`, summary: "Aprobada por Robert en el Trust Center." });
+  }
+  return modules;
+}
+
+/** The first routing keyword found in an order, used to group recurring kinds of work. */
+// Brands say WHO the work is for; the topic should say WHAT the work is ("video", "legal", ...).
+const BRAND_WORDS = new Set(["black room", "blackroom", "br", "kong"]);
+function containsWord(text: string, word: string): boolean {
+  const escaped = word.trim().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|[^a-z0-9\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1])${escaped}([^a-z0-9\u00e1\u00e9\u00ed\u00f3\u00fa\u00f1]|$)`).test(text);
+}
+
+export function orderTopic(text: string): string {
+  // Whole words only ("solicita" is not "cita", "producto" is not "pr"), accents ignored
+  // ("campaña" = "campana"). Synonyms share one topic: the group's first word ("reel" -> "video").
+  const lower = text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  let brand: string | null = null;
+  for (const route of ROUTES) {
+    const word = route.words.find((candidate) => containsWord(lower, candidate));
+    if (!word) continue;
+    const topic = route.words[0].trim();
+    if (!BRAND_WORDS.has(topic)) return topic;
+    brand = brand || topic;
+  }
+  return brand || "general";
+}
+
+export const SPECIALIST_MIN_ORDERS = 3;
+const SPECIALIST_WINDOW_MS = 14 * 24 * 60 * 60_000;
+
+/**
+ * Recurring work nobody could take: 3+ orders on the same topic in 14 days whose assignees were
+ * all blocked. The agent factory turns each into a "hire a specialist" proposal for Robert.
+ */
+export function specialistNeeds(state: CompanyState, now: number): Array<{ topic: string; orders: CompanyOrder[] }> {
+  const groups = new Map<string, CompanyOrder[]>();
+  for (const order of state.orders) {
+    if (now - Date.parse(order.createdAt) > SPECIALIST_WINDOW_MS) continue;
+    if (order.assignees.length && order.assignees.some((assignee) => assignee.status === "en_curso" || (assignee.status === "hecha" && order.closedBy === "evidencia"))) continue;
+    const topic = orderTopic(order.text);
+    if (topic === "general") continue;
+    groups.set(topic, [...(groups.get(topic) || []), order]);
+  }
+  return [...groups.entries()].filter(([, orders]) => orders.length >= SPECIALIST_MIN_ORDERS).map(([topic, orders]) => ({ topic, orders }));
+}
+
+/** Skills from council lessons approved about an agent ("Corrige: ..."). */
+export function learnLessons(state: CompanyState, lessons: Array<{ key: string; subject: string; label: string }>, now: number): CompanyState {
+  const iso = new Date(now).toISOString();
+  let careers = state.careers;
+  for (const lesson of lessons) {
+    const career = careers[lesson.subject];
+    if (!career || (career.skills || []).some((skill) => skill.id === `leccion:${lesson.key}`)) continue;
+    careers = { ...careers, [lesson.subject]: addSkill(career, { id: `leccion:${lesson.key}`, title: `Corrige: ${lesson.label.slice(0, 60)}`, source: "leccion" }, iso) };
+  }
+  return careers === state.careers ? state : { ...state, careers };
 }
 
 export function enrollTrainee(state: CompanyState, input: { id: string; forAgentId: string; role: string; now: number }): CompanyState {
@@ -331,14 +495,21 @@ export function createOrder(
     id: `ord-${input.now.toString(36)}-${hash(text).toString(36).slice(0, 4)}`,
     text,
     createdAt: iso,
-    assignees: assigneeIds.map((agentId) => {
+    assignees: [
+      ...assigneeIds,
+      // Specialists created by the academy take the orders whose topic is exactly theirs.
+      ...Object.keys(state.careers).filter((id) => isSpecialistId(id) && id === specialistIdFor(orderTopic(text))),
+    ].map((agentId) => {
       const status = input.statuses[agentId];
-      const working = status?.state === "working";
+      const specialist = isSpecialistId(agentId);
+      const working = status?.state === "working" || specialist;
       return {
         agentId,
         status: working ? "en_curso" : "bloqueada",
-        note: working
-          ? "Asignada a un agente activo. Queda anotada: los agentes no ejecutan ordenes solos; tu la marcas como hecha."
+        note: specialist
+          ? "Anotada para el especialista de este tema. Nadie la ejecuta solo: se cierra con evidencia de una ejecucion exitosa."
+          : working
+          ? "Asignada a un agente activo. Queda anotada: los agentes no ejecutan ordenes solos; se cierra con evidencia de una ejecucion exitosa."
           : `Asignada, pero el agente no esta trabajando (${status?.label || "sin estado reciente"}). Hay que arreglarlo antes.`,
       };
     }),
@@ -361,28 +532,47 @@ export function createOrder(
 }
 
 // Robert confirms an order is done: assignees that had it in progress earn points.
-export function completeOrder(state: CompanyState, orderId: string, now: number): CompanyState {
+export function evidenceAlreadyUsed(state: CompanyState, ref: string): boolean {
+  return state.orders.some((order) => order.evidence?.ref === ref);
+}
+
+// Points need proof: a verified run (checked by the server) that was not used for another order,
+// and only for agents that were actually working when the order came in. Closing by hand only records it.
+export function completeOrder(state: CompanyState, orderId: string, now: number, evidence?: OrderEvidence): CompanyState {
   const iso = new Date(now).toISOString();
   const order = state.orders.find((item) => item.id === orderId);
   if (!order || order.doneAt) return state;
+  const verified = Boolean(evidence) && !evidenceAlreadyUsed(state, evidence!.ref);
   const careers = { ...state.careers };
   for (const assignee of order.assignees) {
     const career = careers[assignee.agentId];
     if (!career) continue;
-    // Points only for agents that were actually working when the order came in.
-    const earned = assignee.status === "en_curso" ? 25 : 0;
+    const earned = verified && assignee.status === "en_curso" ? 25 : 0;
+    const skilled = earned ? addSkill(career, { id: `orden:${orderTopic(order.text)}`, title: `Ejecuta: ${orderTopic(order.text)}`, source: "orden" }, iso) : career;
     careers[assignee.agentId] = {
-      ...career,
+      ...skilled,
       points: career.points + earned,
       battery: earned ? Math.min(BATTERY_MAX, career.battery + 10) : career.battery,
       ordersDone: career.ordersDone + (earned ? 1 : 0),
-      memory: remember(career.memory, iso, earned ? `Robert marco hecha la orden "${order.text.slice(0, 60)}" (+${earned} puntos).` : `La orden "${order.text.slice(0, 60)}" se cerro sin que yo estuviera trabajando (0 puntos).`),
+      memory: remember(
+        career.memory,
+        iso,
+        earned
+          ? `Orden "${order.text.slice(0, 60)}" cerrada con evidencia (${evidence!.summary.slice(0, 40)}): +${earned} puntos.`
+          : verified
+            ? `La orden "${order.text.slice(0, 60)}" se cerro con evidencia, pero yo no estaba trabajando (0 puntos).`
+            : `La orden "${order.text.slice(0, 60)}" se cerro a mano, sin evidencia (0 puntos).`
+      ),
     };
   }
   return {
     ...state,
     careers,
-    orders: state.orders.map((item) => (item.id === orderId ? { ...item, doneAt: iso, assignees: item.assignees.map((a) => ({ ...a, status: "hecha" as const })) } : item)),
+    orders: state.orders.map((item) =>
+      item.id === orderId
+        ? { ...item, doneAt: iso, closedBy: verified ? "evidencia" : "robert", ...(verified ? { evidence } : {}), assignees: item.assignees.map((a) => ({ ...a, status: "hecha" as const })) }
+        : item
+    ),
   };
 }
 
@@ -404,4 +594,30 @@ export function leaderboard(state: CompanyState, exclude: string[] = ["ceo"]): L
       reliability: career.cyclesTotal ? Math.round((career.cyclesWorking / career.cyclesTotal) * 100) : 0,
     }));
   return rows;
+}
+
+/** KONG has its own company ledger; these ids must never advance in BlackOps. */
+export const isKongCompanyAgent = (id: string) => id === "kong" || id.startsWith("kong:") || id.startsWith("kong-city:") || ["kong-videos", "kong-metrics", "kong-supervisor"].includes(id);
+
+/** Quarantine old unproven scores and academy records without relabelling them as new evidence. */
+export function separateLegacyKongCompany(company: CompanyState, archived: CompanyState) {
+  const legacyCareers = Object.fromEntries(Object.entries(company.careers).filter(([id]) => isKongCompanyAgent(id)));
+  const legacyTrainees = company.trainees.filter(item => isKongCompanyAgent(item.forAgentId));
+  const legacyOrders = company.orders.filter(item => item.assignees.some(assignee => isKongCompanyAgent(assignee.agentId)));
+  const dedupe = <T extends { id: string }>(items: T[]) => [...new Map(items.map(item => [item.id, item])).values()];
+  return {
+    company: {
+      ...company,
+      careers: Object.fromEntries(Object.entries(company.careers).filter(([id]) => !isKongCompanyAgent(id))),
+      trainees: company.trainees.filter(item => !isKongCompanyAgent(item.forAgentId)),
+      orders: company.orders.filter(item => !legacyOrders.includes(item) || item.assignees.some(assignee => !isKongCompanyAgent(assignee.agentId)))
+        .map(item => ({ ...item, assignees: item.assignees.filter(assignee => !isKongCompanyAgent(assignee.agentId)) })),
+    },
+    archived: {
+      ...archived,
+      careers: { ...archived.careers, ...legacyCareers },
+      trainees: dedupe([...archived.trainees, ...legacyTrainees]),
+      orders: dedupe([...archived.orders, ...legacyOrders]),
+    },
+  };
 }

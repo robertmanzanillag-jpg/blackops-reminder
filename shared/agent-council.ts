@@ -1,3 +1,4 @@
+import type { OfficeKongCollaboration } from "../server/office-kong-collaboration";
 // Agent council: zero-cost peer review between BlackOps agents.
 //
 // Pure, deterministic logic (no IO, no AI calls). The server wrapper in
@@ -7,7 +8,8 @@
 // itself: approved items become playbook lessons or PR-first handoff briefs.
 
 import { agentProbes, summarizeProbe, type AgentLiveStatus } from "./agent-live-status";
-import { emptyCompanyState, parseCompanyState, type CompanyState } from "./agent-company";
+import { emptyKongSupervision, parseKongSupervision, type KongSupervision } from "./kong-supervisor";
+import { emptyCompanyState, parseCompanyState, separateLegacyKongCompany, type CompanyState } from "./agent-company";
 
 export type Severity = "low" | "medium" | "high";
 export type Verdict = "escalado" | "confirmado" | "descartado";
@@ -81,6 +83,7 @@ export type ScoutRelease = { repo: string; tag: string; url: string; publishedAt
 
 export type CouncilState = {
   version: 1;
+  kongSupervision: KongSupervision;
   cycles: number;
   lastCycleAt: string | null;
   lastCycleError: string | null;
@@ -91,6 +94,13 @@ export type CouncilState = {
   agentStates: Record<string, { working: boolean; since: string }>;
   scout: { lastRunAt: string | null; lastSeen: Record<string, string>; latest: ScoutRelease[]; error: string | null };
   company: CompanyState;
+  kongCompany: CompanyState;
+  /** Historical records only; never scored or advanced and never returned by the public view. */
+  kongLegacyCompany: CompanyState;
+  kongEvidenceAt: Record<string, string>;
+  kongObservedAt: string | null;
+  kongCollaboration: OfficeKongCollaboration;
+  kongLastStatuses: Record<string, { state: AgentLiveStatus["state"]; label: string }>;
   lastStatuses: Record<string, { state: AgentLiveStatus["state"]; label: string }>;
 };
 
@@ -117,6 +127,7 @@ export const SCOUT_WATCHLIST: Array<{ repo: string; skills: string[]; why: strin
 export function emptyCouncilState(): CouncilState {
   return {
     version: 1,
+    kongSupervision: emptyKongSupervision(),
     cycles: 0,
     lastCycleAt: null,
     lastCycleError: null,
@@ -127,6 +138,12 @@ export function emptyCouncilState(): CouncilState {
     agentStates: {},
     scout: { lastRunAt: null, lastSeen: {}, latest: [], error: null },
     company: emptyCompanyState(),
+    kongCompany: emptyCompanyState(),
+    kongLegacyCompany: emptyCompanyState(),
+    kongEvidenceAt: {},
+    kongObservedAt: null,
+    kongCollaboration: { verified: false, observedAt: null, totalFindings: 0, exchanges: [] },
+    kongLastStatuses: {},
     lastStatuses: {},
   };
 }
@@ -157,6 +174,7 @@ export function parseCouncilState(raw: string | null): CouncilState {
     const value = JSON.parse(raw);
     if (value?.version !== 1 || !Array.isArray(value.debates) || !Array.isArray(value.proposals) || !obj(value.scout)) return emptyCouncilState();
     const base = emptyCouncilState();
+    const legacy = separateLegacyKongCompany(parseCompanyState(value.company), parseCompanyState(value.kongLegacyCompany));
     return {
       ...base,
       ...value,
@@ -164,7 +182,14 @@ export function parseCouncilState(raw: string | null): CouncilState {
       lessons: Array.isArray(value.lessons) ? value.lessons : [],
       resolvedDebates: Array.isArray(value.resolvedDebates) ? value.resolvedDebates : [],
       scout: { ...base.scout, ...value.scout, lastSeen: obj(value.scout.lastSeen) ? value.scout.lastSeen : {} },
-      company: parseCompanyState(value.company),
+      company: legacy.company,
+      kongLegacyCompany: legacy.archived,
+      kongCompany: parseCompanyState(value.kongCompany),
+      kongEvidenceAt: Object.fromEntries(Object.entries(obj(value.kongEvidenceAt) || {}).filter(([, v]) => typeof v === "string" && Number.isFinite(Date.parse(v)))),
+      kongCollaboration: obj(value.kongCollaboration) && Array.isArray(value.kongCollaboration.exchanges) ? value.kongCollaboration : base.kongCollaboration,
+      kongObservedAt: typeof value.kongObservedAt === "string" ? value.kongObservedAt : null,
+      kongLastStatuses: obj(value.kongLastStatuses) ? value.kongLastStatuses : {},
+      kongSupervision: parseKongSupervision(value.kongSupervision),
       lastStatuses: obj(value.lastStatuses) ? value.lastStatuses : {},
     };
   } catch {
