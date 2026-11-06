@@ -77,18 +77,48 @@ export async function createTrustedFactoryWorkerOptions(options: FactoryRuntimeO
   };
 }
 
+export type FactoryProposalRuntimeOptions=Pick<FactoryRuntimeOptions,"owner"|"store"|"now"> & {
+  stages:Required<Pick<FactoryPipelineDependencies,"discover"|"build"|"simulate"|"review">>;
+  reservations:Record<"discover"|"build"|"simulate"|"review",number>;
+};
+/** Actual four-stage composition: no dummy deployment callbacks or release claims. */
+export async function createTrustedFactoryProposalWorkerOptions(options:FactoryProposalRuntimeOptions):Promise<FactoryWorkerOptions>{
+  if(!options.owner?.trim())throw Error("FACTORY_OWNER_REQUIRED");
+  const owner=options.owner,key=createHash("sha256").update(owner).digest("hex");
+  const scope=(actual:string)=>{if(actual!==key)throw Error("FACTORY_RUNTIME_OWNER_MISMATCH");};
+  const kinds=["discover","build","simulate","review"] as const;
+  for(const kind of kinds){if(typeof options.stages[kind]!=="function")throw Error(`FACTORY_STAGE_REQUIRED:${kind}`);if(!Number.isSafeInteger(options.reservations[kind]) || options.reservations[kind]<1 || options.reservations[kind]>FACTORY_POLICY.monthlyLimitCents)throw Error(`FACTORY_RESERVATION_INVALID:${kind}`);}
+  const store=options.store || softwareFactoryStore,status=await store.status(owner);
+  if(!status.configured)throw Error("FACTORY_FIXED_COST_RESERVATION_REQUIRED");
+  if(status.limitCents!==FACTORY_POLICY.monthlyLimitCents || ![status.fixedCents,status.spentCents,status.reservedCents].every(v=>Number.isSafeInteger(v)&&v>=0))throw Error("FACTORY_BUDGET_UNVERIFIED");
+  // Zero denotes disabled stages, not an allowance or a working adapter.
+  const reservations={...options.reservations,deploy:0,verify:0,rollback:0,evaluate:0};
+  const pipeline=createFactoryPipeline({...Object.fromEntries(kinds.map(kind=>[kind,options.stages[kind]])),executionMode:"review-only",reservations,now:options.now,
+    project:async(actual,id)=>{scope(actual);return store.projectByOwnerKey(actual,id);},
+    previous:async(actual,id)=>{scope(actual);return store.getCompletedJob(actual,id);},
+    claimFinding:async(actual,id,finding,job)=>{scope(actual);return store.claimFinding(actual,id,finding,job);},
+  });
+  if(!pipeline.readiness().ready)throw Error("FACTORY_PIPELINE_UNAVAILABLE");
+  return {store,scheduleOwner:owner,discoveryMode:"company-orders-only",releaseMode:"review-only",discoveryReservationCents:reservations.discover,now:options.now,
+    adapters:Object.fromEntries(kinds.map(kind=>[kind,{execute:async(...[job,context]:Parameters<FactoryAdapter["execute"]>)=>{scope(job.ownerKey);return pipeline.adapters![kind]!.execute(job,context);}}]))};
+}
+
 
 /** Entry-point guard for any operator-installed module, including custom ones. */
 export function validateFactoryWorkerOptions(config: unknown): asserts config is FactoryWorkerOptions {
   if (config === null || typeof config !== "object") throw new Error("FACTORY_WORKER_CONFIGURATION_REQUIRED");
   const value = config as Record<string, unknown>;
+  if(value.releaseMode!==undefined && !["review-only","enabled"].includes(value.releaseMode as string))throw Error("FACTORY_RELEASE_MODE_INVALID");
+  if(value.discoveryMode!==undefined && !["daily","company-orders-only"].includes(value.discoveryMode as string))throw Error("FACTORY_DISCOVERY_MODE_INVALID");
   if (value.adapters === null || typeof value.adapters !== "object") throw new Error("FACTORY_EXECUTORS_UNAVAILABLE");
   const adapters = value.adapters as Record<string, unknown>;
-  for (const kind of factoryJobKinds) {
+  const proposalOnly=value.releaseMode==="review-only";
+  if(proposalOnly && value.discoveryMode!=="company-orders-only")throw Error("FACTORY_EXPLICIT_ORDERS_REQUIRED");
+  for (const kind of proposalOnly?["discover","build","simulate","review"]:factoryJobKinds) {
     const adapter = adapters[kind];
     if (adapter === null || typeof adapter !== "object" || typeof (adapter as Record<string, unknown>).execute !== "function") throw new Error(`FACTORY_STAGE_REQUIRED:${kind}`);
   }
-  if (typeof value.releaseContext !== "function") throw new Error("FACTORY_TRUSTED_RELEASE_EVIDENCE_UNAVAILABLE");
+  if (!proposalOnly && typeof value.releaseContext !== "function") throw new Error("FACTORY_TRUSTED_RELEASE_EVIDENCE_UNAVAILABLE");
   const reserve = value.discoveryReservationCents;
   if (typeof reserve !== "number" || !Number.isSafeInteger(reserve) || reserve < 1 || reserve > FACTORY_POLICY.monthlyLimitCents) throw new Error("FACTORY_DISCOVERY_COST_REQUIRED");
 }

@@ -33,7 +33,28 @@ export function projectReadiness(project: FactoryProject): FactoryGate {
   if (!project.providerSupportsRelease || !project.providerSupportsRollback) reasons.push("provider_release_or_recovery_unavailable");
   return gate(reasons);
 }
+/** PR-only execution requires no deployment provider, rollback, or staging host. */
+export function proposalReadiness(project: FactoryProject): FactoryGate {
+  const reasons:string[]=[];
+  if(!project.id || !/^[\w.-]+\/[\w.-]+$/.test(project.repo))reasons.push("project_repository_missing");
+  if(![project.testCommand,project.buildCommand].every(value=>typeof value==="string" && value.trim()))reasons.push("project_commands_missing");
+  if(!Array.isArray(project.journeys) || !project.journeys.length || project.journeys.some(value=>!value.trim()) || new Set(project.journeys).size!==project.journeys.length)reasons.push("journeys_missing_or_duplicate");
+  return gate(reasons);
+}
 const protectedPath = /(^|\/)(\.env(?:\..*)?|credentials|secrets|\.git|node_modules|migrations)(\/|$)|(^|\/)(AGENTS\.md|CLAUDE\.md|package(?:-lock)?\.json|.*lock.*|.*(?:auth|permission|payment|stripe|security|trust-policy|software-factory|deploy|infra|schema).*)$/i;
+export function proposalEvidenceGate(project:FactoryProject,candidate:FactoryCandidate,evidence:FactoryEvidence[],now=Date.now()):FactoryGate{
+  const reasons=[...proposalReadiness(project).reasons];
+  let validPr=false;
+  try{const url=new URL(candidate.prUrl);validPr=url.origin==="https://github.com" && !url.username && !url.password && !url.search && !url.hash && url.pathname.startsWith(`/${project.repo}/pull/`) && /^[1-9][0-9]*$/.test(url.pathname.slice(`/${project.repo}/pull/`.length));}catch{}
+  if(candidate.projectId!==project.id || !sha(candidate.headSha) || !sha(candidate.baseSha) || candidate.headSha===candidate.baseSha || !candidate.builderId.trim() || !validPr)reasons.push("candidate_identity_invalid");
+  for(const kind of ["tests","simulation","review"] as const){
+    const latest=evidence.filter(e=>e.kind===kind && e.projectId===project.id && e.headSha===candidate.headSha && e.baseSha===candidate.baseSha).sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt))[0];
+    if(!latest || !latest.passed || latest.warnings.length || !recent(latest.createdAt,now) || !latest.artifactIds.length || latest.artifactIds.some(id=>!id.trim())){reasons.push(`${kind}_evidence_missing_or_failed`);continue;}
+    if(kind==="review" && (!latest.actorId.trim() || latest.actorId===candidate.builderId))reasons.push("independent_review_required");
+    if(kind==="simulation" && (latest.syntheticData!==true || latest.externalServicesMocked!==true || !["mobile","desktop"].every(v=>latest.viewports?.includes(v)) || !project.journeys.every(j=>latest.journeyIds?.includes(j) && latest.baselineJourneyIds?.includes(j))))reasons.push("simulation_coverage_incomplete");
+  }
+  return gate(reasons);
+}
 export function releaseGate(project: FactoryProject, candidate: FactoryCandidate, evidence: FactoryEvidence[], now = Date.now()): FactoryGate {
   const reasons = [...projectReadiness(project).reasons];
   if (!project.automaticRelease) reasons.push("automatic_release_disabled");
