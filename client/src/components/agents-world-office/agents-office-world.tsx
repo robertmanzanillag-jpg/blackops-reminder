@@ -489,7 +489,7 @@ export function AgentsOfficeWorld({
           {message && <p role="status" className="mt-2 text-xs text-violet-100" data-testid="world-message">{message}</p>}
         </div>
       </section>
-      {officeWing === "kong" && overlay === "kong-talk" && <section aria-label="Colaboración KONG" className="absolute right-3 top-24 z-30 max-h-[48%] w-[min(420px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-cyan-200/25 bg-[#07131b]/95 p-4 text-xs text-white" data-testid="world-kong-collaboration-panel">
+      {officeWing === "kong" && overlay === "kong-talk" && <section aria-label="Colaboración KONG" className="absolute right-3 top-[220px] z-30 sm:top-36 lg:top-24 max-h-[48%] w-[min(420px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-cyan-200/25 bg-[#07131b]/95 p-4 text-xs text-white" data-testid="world-kong-collaboration-panel">
         <div className="flex justify-between gap-2"><h2 className="font-bold text-cyan-100">Colaboración KONG</h2><button type="button" onClick={() => setOverlay("none")} aria-label="Cerrar colaboración">Cerrar</button></div>
         <p className="mt-2 text-zinc-300">Revisión automática de evidencia entre supervisión y operaciones. Son propuestas pendientes de revisión; no conversaciones de IA ni acciones ya ejecutadas.</p>
         {!kongCollaboration?.exchanges.length && <p className="mt-3">Sin intercambios con evidencia vigente.</p>}
@@ -500,7 +500,7 @@ export function AgentsOfficeWorld({
         </article>)}
       </section>}
 
-      {officeWing === "kong" && overlay === "city-director" && <section aria-label="Director de ciudades de KONG" data-testid="world-city-director-panel" className="absolute top-24 right-3 z-30 max-h-[45%] w-[min(410px,calc(100vw-1.5rem))] space-y-2 overflow-y-auto rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-3 text-xs text-white shadow-2xl [color-scheme:dark]">
+      {officeWing === "kong" && overlay === "city-director" && <section aria-label="Director de ciudades de KONG" data-testid="world-city-director-panel" className="absolute top-[220px] right-3 z-30 sm:top-36 lg:top-24 max-h-[45%] w-[min(410px,calc(100vw-1.5rem))] space-y-2 overflow-y-auto rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-3 text-xs text-white shadow-2xl [color-scheme:dark]">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-bold text-amber-100">Director de ciudades · KONG</h2>
           <button type="button" onClick={() => setOverlay("none")} className="rounded-full border border-white/20 px-2 py-1">Cerrar</button>
@@ -525,13 +525,13 @@ export function AgentsOfficeWorld({
         <a href="https://kongnightlife.com/admin/ceo" className="inline-block text-amber-100 underline">Abrir la revisión del CEO en KONG</a>
       </section>}
       {overlay === "ranking" && (
-        <section className="absolute top-24 right-3 z-30 max-h-[45%] w-[min(380px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-emerald-200/20 bg-[#06100d]/95 p-4 text-white shadow-2xl [color-scheme:dark]" data-testid="world-ranking-panel">
+        <section className="absolute top-[220px] right-3 z-30 sm:top-36 lg:top-24 max-h-[45%] w-[min(380px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-emerald-200/20 bg-[#06100d]/95 p-4 text-white shadow-2xl [color-scheme:dark]" data-testid="world-ranking-panel">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-200">Tabla de posiciones</p>
             <button type="button" onClick={() => setOverlay("none")} className="text-xs text-zinc-400 hover:text-white">✕</button>
           </div>
-          <p className="mt-1 text-[11px] text-zinc-400">Puntos del consejo por señales operativas y órdenes confirmadas por ti. El primer puesto queda de subdirector.</p>
-          {leaderboardRows.length === 0 && <p className="mt-3 text-xs text-zinc-400">Todavia no hay puntos: se reparten en cada reunion del consejo.</p>}
+          <p className="mt-1 text-[11px] text-zinc-400">{officeWing === "kong" ? "Puntos por resultados completados verificados. Consultar no suma puntos; cerrar a mano tampoco." : "Puntos del consejo por señales operativas y órdenes cerradas con evidencia. El primer puesto queda de subdirector."}</p>
+          {leaderboardRows.length === 0 && <p className="mt-3 text-xs text-zinc-400">{officeWing === "kong" ? "Todavía no hay puntos: faltan resultados completados con evidencia verificable." : "Todavía no hay puntos: el consejo revisa las evidencias en cada reunión."}</p>}
           <ol className="mt-3 space-y-1.5">
             {leaderboardRows.slice(0, 15).map((row) => (
               <li key={row.agentId} className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-2 py-1.5 text-[11px]" data-testid="world-ranking-row">
@@ -546,12 +546,12 @@ export function AgentsOfficeWorld({
       )}
 
       {overlay === "ceo" && (
-        <section className="absolute top-24 right-3 z-30 flex max-h-[45%] w-[min(420px,calc(100vw-1.5rem))] flex-col rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-4 text-white shadow-2xl [color-scheme:dark]" data-testid="world-ceo-panel">
+        <section className="absolute top-[220px] right-3 z-30 sm:top-36 lg:top-24 flex max-h-[45%] w-[min(420px,calc(100vw-1.5rem))] flex-col rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-4 text-white shadow-2xl [color-scheme:dark]" data-testid="world-ceo-panel">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200">Canal directo con el CEO</p>
             <button type="button" onClick={() => setOverlay("none")} className="text-xs text-zinc-400 hover:text-white">✕</button>
           </div>
-          <p className="mt-1 text-[11px] text-zinc-400">Escribe lo que necesitas y el CEO lo asigna al departamento correcto. Queda anotado como tarea: los agentes no la ejecutan solos. Para dar puntos, cierrala con una ejecucion exitosa como evidencia; cerrarla a mano solo la anota.</p>
+          <p className="mt-1 text-[11px] text-zinc-400">{officeWing === "kong" ? "Escribe una orden para coordinar al equipo KONG. Queda asignada, pero no activa ejecutores. Aquí puedes cerrarla a mano con 0 puntos; los resultados de KONG se verifican por separado." : "Escribe lo que necesitas y el CEO lo asigna al departamento correcto. Queda anotado como tarea: los agentes no la ejecutan solos. Para dar puntos, ciérrala con una ejecución exitosa como evidencia; cerrarla a mano solo la anota."}</p>
           <div className="mt-3 flex gap-2">
             <input
               value={orderText}
@@ -609,7 +609,7 @@ export function AgentsOfficeWorld({
       )}
 
       {focused && (
-        <aside className="absolute right-3 top-24 z-20 flex max-h-[42%] w-[min(390px,calc(100vw-1.5rem))] flex-col overflow-y-auto rounded-2xl border border-white/10 bg-[#070b14]/95 p-3 text-white shadow-2xl sm:max-h-[65%]" data-testid="world-panel">
+        <aside className="absolute right-3 top-[220px] z-20 sm:top-36 lg:top-24 flex max-h-[42%] w-[min(390px,calc(100vw-1.5rem))] flex-col overflow-y-auto rounded-2xl border border-white/10 bg-[#070b14]/95 p-3 text-white shadow-2xl sm:max-h-[65%]" data-testid="world-panel">
           <div className="flex shrink-0 items-start justify-between gap-2">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.24em]" style={{ color: focused.color }}>{focused.name}</p>

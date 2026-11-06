@@ -65,7 +65,7 @@ test('KONG unified office: browser route, click, API, error and improvement scou
    if(kongUnavailable)return res.status(503).json({error:'Isolated fixture without KONG activity access.'});
    res.json({evidence:{generatedAt:new Date().toISOString(),cityAgentsEnabled:true,cities:[]}});
   });
-  app.get('/api/agent-council/state',(_req,res)=>res.json({enabled:false,cycles:0,debates:[],proposals:[],overrides:{},scout:{lastRunAt:null,latest:[],error:null},company:{version:1,careers:{},trainees:[],orders:[],events:[]},leaderboard:[{agentId:'ceo',nickname:'MAIN-ONLY-SENTINEL',points:999,battery:100,level:'expert',rank:1,title:'main',reliability:1}],kongCompany:{version:1,careers:{},trainees:[],orders:[],events:[]},kongLeaderboard:[],kongCollaboration:{verified:false,observedAt:null,totalFindings:0,exchanges:[]}}));
+  app.get('/api/agent-council/state',(_req,res)=>res.json({enabled:false,cycles:0,costUsd:0,lessons:[],debates:[],proposals:[],overrides:{},scout:{lastRunAt:null,latest:[],error:null},company:{version:1,careers:{},trainees:[],orders:[],events:[]},leaderboard:[{agentId:'ceo',nickname:'MAIN-ONLY-SENTINEL',points:999,battery:100,level:'expert',rank:1,title:'main',reliability:1}],kongCompany:{version:1,careers:{},trainees:[],orders:[],events:[]},kongLeaderboard:[],kongCollaboration:{verified:false,observedAt:null,totalFindings:0,exchanges:[]}}));
   app.get('/api/app-qa-agent/status',async(req,res)=>res.json(await runtime.runAppQaScan(req.fixtureUserId,false,false,false)));
   app.use('/api',(req,res)=>req.method==='GET'?res.json([]):res.status(403).json({error:'Mutation outside local QA scope'}));
   // Serve the actual production build, not a dev proxy with HMR noise.
@@ -86,18 +86,27 @@ test('KONG unified office: browser route, click, API, error and improvement scou
   const memberGoals=await (await fetch(base+'/api/monthly-goals',{headers:{cookie:memberCookie}})).json();assert.equal(memberGoals[0].id,'fixture-member-goal');
   assert.equal((await fetch(base+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({username:'fixture-owner',password:'wrong-password'})})).status,401);
   assert.equal((await fetch(base+'/api/auth/login',{method:'POST',headers:{'content-type':'application/json',origin:'https://wrong-origin.invalid'},body:JSON.stringify({username:'fixture-owner',password:fixturePassword})})).status,403);
-  browser=await chromium.launch({executablePath,args:['--no-sandbox','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
+  console.log('QA fixture ready, launching Chrome');
+  browser=await chromium.launch({executablePath,args:['--no-sandbox']});
+  console.log('Chrome launched');
   const results=[];
-  for(const mode of ['desktop','mobile','no-webgl']) {
-   const context=await browser.newContext({viewport:mode==='mobile'?{width:390,height:844}:{width:1440,height:1080},reducedMotion:'reduce'});
+  for(const mode of (process.env.KONG_QA_MODES?.split(',') || ['desktop','tablet','mobile','no-webgl'])) {
+   const context=await browser.newContext({viewport:mode==='mobile'?{width:390,height:844}:mode==='tablet'?{width:1024,height:768}:{width:1440,height:1080},reducedMotion:'reduce'});
    await context.route('**/*',route=>new URL(route.request().url()).hostname==='127.0.0.1'?route.continue():route.fulfill({status:200,contentType:'text/css',body:''}));
    await context.addCookies(ownerCookie.split('; ').map(item=>({name:item.split('=')[0],value:item.slice(item.indexOf('=')+1),url:base})));
    if(mode==='no-webgl')await context.addInitScript(()=>{const get=HTMLCanvasElement.prototype.getContext;HTMLCanvasElement.prototype.getContext=function(kind,...args){return String(kind).includes('webgl')?null:get.call(this,kind,...args);};});
-   const page=await context.newPage();page.setDefaultTimeout(12000);const errors=[];page.on('pageerror',e=>errors.push(e.message));
+   const page=await context.newPage();page.setDefaultTimeout(12000);const errors=[];page.on('pageerror',e=>{errors.push(e.message);console.error('PAGE ERROR',e.stack);});
+   console.log('Starting',mode);
    await page.goto(base+'/agents-office');
-   await page.getByTestId('office-open-kong').click();
+   await page.getByTestId('office-open-kong').click();console.log('KONG entered',mode);
    await page.getByTestId('world-company-label').filter({hasText:'KONG'}).waitFor();
    await page.getByTestId('world-deptnav').waitFor();
+   const account=await page.getByRole('button',{name:'Salir',exact:true}).locator('..').boundingBox();assert.ok(account);
+   for(const title of ['Oficina 3D','Edificio','Clasica','Supervisor KONG','Oficina KONG','Operacion KONG']){
+    const box=await page.getByRole('button',{name:title,exact:true}).boundingBox();assert.ok(box,title);
+    assert.ok(box.x>=0 && box.x+box.width<=page.viewportSize().width,title+' stays within viewport');
+    assert.ok(box.x+box.width<=account.x || account.x+account.width<=box.x || box.y+box.height<=account.y || account.y+account.height<=box.y,title+' must not overlap account controls');
+   }
    // One office contains the operational departments and all 25 city teams.
    const nav=page.getByTestId('world-deptnav');
    await page.waitForFunction(()=>document.querySelector('[data-testid=world-deptnav]')?.querySelectorAll('button').length>=25);
@@ -119,24 +128,34 @@ test('KONG unified office: browser route, click, API, error and improvement scou
    await page.getByTestId('world-agent-card').waitFor();
    assert.equal(await page.getByTestId('world-career').count(),0,'No fake career when server has no history');
    await page.getByTestId('world-overview').click();
+   if(mode!=='no-webgl'){await page.locator('[data-testid^="world-dept-kong-city:"]').first().waitFor();await page.getByTestId('world-canvas-host').filter({has:page.locator('canvas')}).waitFor();await page.waitForFunction(()=>document.querySelector('[data-testid=world-canvas-host]')?.dataset.sceneSettled==='true');}
+   await page.evaluate(()=>{const badge=document.createElement('div');badge.textContent='DATOS DE PRUEBA · QA LOCAL';badge.style.cssText='position:fixed;bottom:4px;right:8px;z-index:9999;background:#111827;color:#fff;padding:4px 8px;font:11px sans-serif;border:1px solid #94a3b8';badge.id='qa-fixture-label';document.body.append(badge);});
    await page.screenshot({path:path.join(evidenceDir,mode+'-kong-office.png'),fullPage:true});
+   console.log('Basic UI completed',mode);
    if(mode==='desktop') {
     let stale=false;
     await page.route('**/api/agents-office/kong-snapshot',route=>{
      const now=Date.now();const iso=new Date(now-(stale?600000:0)).toISOString();
      return route.fulfill({json:{evidence:{generatedAt:iso,cityAgentsEnabled:true,cities:[{id:'fixture-city-1',name:'Ciudad de prueba 1',countryCode:'US',timeZone:'America/New_York',currency:'USD',categories:[{category:'media',state:'running',evidence:'persisted',lastRunAt:null,lastSuccessAt:null,lastStartedAt:new Date(now-1000).toISOString(),nextRunAt:null,leaseUntil:new Date(now+90000).toISOString(),issues:[]}]}]},collaboration:{verified:true,observedAt:iso,totalFindings:1,exchanges:[{id:'fixture-proposal',cityId:'fixture-city-1',category:'media',kind:'attention',evidenceAt:iso,comments:[{author:'supervisor',text:'Hallazgo sintético de QA.'},{author:'operations',text:'Revisar la fuente antes del próximo turno.'}],proposal:{recipient:'ceo',status:'proposed',action:'review_city_improvement',text:'Propuesta sintética pendiente.'}}]}}});
     });
-    await page.reload();await page.getByTestId('office-open-kong').click();
-    await page.getByTestId('world-working-count').filter({hasText:/^1 de/}).waitFor();
+    console.log('Loading live snapshot');
+    await page.reload();await page.getByTestId('office-open-kong').click();console.log('Live office entered');
+    await page.getByTestId('world-working-count').filter({hasText:/^1 de/}).waitFor();console.log('Live work verified');
     await page.getByTestId('world-kong-collaboration').click();
     await page.getByTestId('world-kong-collaboration-panel').getByText('Hallazgo sintético de QA.',{exact:false}).waitFor();
     await page.getByTestId('world-kong-collaboration-panel').getByText('Propuesta sintética pendiente.',{exact:false}).waitFor();
+    await page.evaluate(()=>{const badge=document.createElement('div');badge.textContent='DATOS DE PRUEBA · QA LOCAL';badge.style.cssText='position:fixed;bottom:4px;right:8px;z-index:9999;background:#111827;color:#fff;padding:4px 8px;font:11px sans-serif;border:1px solid #94a3b8';document.body.append(badge);});
     await page.screenshot({path:path.join(evidenceDir,'desktop-live-fixture.png'),fullPage:true});
-    stale=true;await page.reload();await page.getByTestId('office-open-kong').click();
+    await page.getByTestId('world-kong-collaboration-panel').getByRole('button',{name:'Cerrar colaboración'}).click();
+    await page.getByTestId('world-deptnav').getByRole('button',{name:'Ciudad de prueba 1',exact:true}).click();
+    await page.getByTestId('world-agent-row-kong-city:fixture-city-1:media').click();
+    await page.getByTestId('world-agent-card').getByText('Ejecutando · verificado',{exact:false}).waitFor();
+    await page.screenshot({path:path.join(evidenceDir,'desktop-active-agent-fixture.png'),fullPage:true});
+    console.log('Live collaboration verified');stale=true;await page.reload();await page.getByTestId('office-open-kong').click();
     await page.getByTestId('world-working-count').filter({hasText:/^0 de/}).waitFor();
     await page.getByTestId('world-kong-collaboration').click();
     await page.getByTestId('world-kong-collaboration-panel').getByText('Sin intercambios con evidencia vigente.').waitFor();
-    assert.equal(await page.getByTestId('world-kong-collaboration-panel').getByText('Hallazgo sintético de QA.',{exact:false}).count(),0);
+    assert.equal(await page.getByTestId('world-kong-collaboration-panel').getByText('Hallazgo sintético de QA.',{exact:false}).count(),0);console.log('Stale evidence fails closed');
    }
    results.push({mode,entry:'pass',departments:await nav.getByRole('button').count(),errors});
    assert.deepEqual(errors,[]);
@@ -152,7 +171,8 @@ test('KONG unified office: browser route, click, API, error and improvement scou
   await writeFile(path.join(evidenceDir,'app-qa-scouts.json'),JSON.stringify({scope:'Local fixture only',passive,visual},null,2));
   assert.equal(visual.status,'pass',JSON.stringify(visual.findings));assert.deepEqual(visual.visualScans.flatMap(s=>s.consoleErrors),[]);
   await writeFile(path.join(evidenceDir,'browser-results.json'),JSON.stringify({scope:'Compiled app with isolated memory fixture. No production readiness claim.',results,requests},null,2));
- } finally {
+ } catch(error) {console.error(error);for(const ctx of browser?.contexts()||[])for(const page of ctx.pages()){console.error((await page.locator('body').innerText({timeout:3000}).catch(()=>'' )).slice(0,16000));await page.screenshot({path:path.join(evidenceDir,'failure.png'),timeout:3000}).catch(()=>{});}throw error;} finally {
+  if(server)server.closeAllConnections();
   if(browser)await browser.close();if(server)await new Promise(resolve=>server.close(resolve));for(const [k,v]of previous){if(v===undefined)delete process.env[k];else process.env[k]=v;}delete globalThis.__officeLocalStorage;delete globalThis.__officeLocalBase;await rm(temp,{recursive:true,force:true});
  }
 });

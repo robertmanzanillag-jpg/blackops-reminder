@@ -2173,15 +2173,15 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
             </div>
         </aside>
 
-        <div className="absolute left-20 right-4 top-5 z-[75] flex items-start justify-start gap-4 lg:items-center lg:justify-between">
+        <div className="pointer-events-none absolute left-4 right-4 top-12 z-[75] flex items-start justify-start gap-4 sm:left-20 sm:top-5 lg:right-40 lg:items-center lg:justify-between [&_button]:pointer-events-auto [&_a]:pointer-events-auto [&_input]:pointer-events-auto">
             {/* Decorative search box: hidden below 1024px so the view toggle and the KONG buttons fit on screen. */}
-            <div className="hidden h-12 min-w-[260px] flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-[#0c1018]/90 px-4 text-sm text-slate-400 shadow-xl shadow-black/30 backdrop-blur lg:flex lg:max-w-[620px]">
+            <div className="hidden h-12 min-w-[260px] flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-[#0c1018]/90 px-4 text-sm text-slate-400 shadow-xl shadow-black/30 backdrop-blur xl:flex xl:max-w-[620px]">
               <Sparkles className="h-4 w-4 text-cyan-200" />
               <span>Type a command or search...</span>
               <span className="ml-auto rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px]">⌘ K</span>
             </div>
             {/* On phones the row wraps to the left and leaves the top-right corner free for "Trabajo real". */}
-            <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 max-sm:pr-24 lg:shrink-0 lg:justify-end">
+            <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 lg:shrink-0 lg:justify-end">
               <div className="flex rounded-2xl border border-white/10 bg-[#0c1018]/90 p-1 shadow-xl shadow-black/30" role="group" aria-label="Vista de la oficina">
                 {(["world", "building", "office"] as const).map((view) => (
                   <button
