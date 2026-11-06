@@ -7,19 +7,31 @@ import { probeOfficeClaude, runOfficeClaude } from "./office-claude";
 import { reserveRoleExecution, completeRoleExecution, type RolePolicy } from "../shared/office-role-lifecycle";
 import type { OfficeCloudRun, OfficeCloudCompletion } from "./office-cloud-store";
 import { advanceCompany } from "../shared/agent-company";
+import { createCreditLimitedOfficeRun } from "./office-shared-credits";
+import { loadSharedCreditRuntime } from "./shared-openai-credit-runtime";
 
 type Council = Pick<ReturnType<typeof createAgentCouncil>, "updateOfficeExecution">;
 /** Private worker wiring. No HTTP endpoint can submit a policy or grade. */
 export function createOfficeExecution(council: Council, env: NodeJS.ProcessEnv = process.env, now = Date.now,
-  deps: { fetch?: typeof fetch; loadPr?: NonNullable<Parameters<typeof createOfficeRuntime>[0]>["loadPr"] } = {}) {
+  deps: { fetch?: typeof fetch; loadPr?: NonNullable<Parameters<typeof createOfficeRuntime>[0]>["loadPr"];
+    sharedCredits?: Awaited<ReturnType<typeof loadSharedCreditRuntime>> } = {}) {
   const openai = env.OFFICE_REVIEW_PROVIDER === "openai";
   const budget = openai ? createOfficeTokenBudget({ limit: Number(env.OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT),
     transact: async change => { await council.updateOfficeExecution(state => {
       const tokens = structuredClone(state.tokens); change(tokens); return { ...state, tokens };
     }); }, now: () => new Date(now()),
   }) : undefined;
-  const run = async (prompt: string) => {
+  let activeExecutionId: string | undefined;
+  const run = async (prompt: string, executionId?: string) => {
     if (!openai) return runOfficeClaude(prompt);
+    if (deps.sharedCredits || env.OPENAI_SHARED_CREDIT_CONFIG || env.OPENAI_SHARED_CREDITS_REQUIRED === "true") {
+      const assigned = executionId || activeExecutionId;
+      if (!assigned) throw Error("OFFICE_CREDIT_ASSIGNMENT_REQUIRED");
+      const shared = deps.sharedCredits || await loadSharedCreditRuntime(env, () => new Date(now()));
+      return createCreditLimitedOfficeRun({ ...shared, env, now: () => new Date(now()), fetch: deps.fetch,
+        authorizeTokens: limits => budget!.reserve(limits), recordTokens: (id, metadata) => budget!.recordUsage(id, metadata),
+      })(prompt, assigned);
+    }
     let reservation: string | undefined;
     const provider = createOfficeOpenAI({ env, fetch: deps.fetch,
       authorize: async limits => { reservation = await budget!.reserve(limits); },
@@ -38,7 +50,7 @@ export function createOfficeExecution(council: Council, env: NodeJS.ProcessEnv =
     },
     async begin(task: OfficeCloudRun) {
       if (task.kind !== "claude_review" || !task.fence || !task.leaseExpiresAt) return false;
-      let admitted = false; policy = undefined;
+      let admitted = false; policy = undefined; activeExecutionId = undefined;
       await council.updateOfficeExecution(state => {
         admitted = false; policy = undefined;
         const active = state.roles.roles[roleId]?.activePolicy;
@@ -48,6 +60,7 @@ export function createOfficeExecution(council: Council, env: NodeJS.ProcessEnv =
         admitted = !!result.lease; policy = admitted ? active : undefined;
         return { ...state, roles: result.state };
       });
+      if (admitted) activeExecutionId = `review:${task.id}`;
       return admitted;
     },
     async finish(task: OfficeCloudRun, result: OfficeCloudCompletion) {
@@ -68,6 +81,7 @@ export function createOfficeExecution(council: Council, env: NodeJS.ProcessEnv =
         return { ...state, roles: completion.state };
       });
       policy = undefined;
+      activeExecutionId = undefined;
       if (!accepted) throw new Error("Role completion was not confirmed; reconcile stored cloud result before another run");
     },
   };
