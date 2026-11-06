@@ -39,7 +39,7 @@ test("Native aliases reuse the observed desk and the external video seat", () =>
   ] } as OfficeKongAuditResult["evidence"];
   const wing = buildKongOfficeWing(native, [], {"kong-videos": {state:"offline",label:"Publicador externo"}}, now);
   assert.equal(wing.agents.filter(agent=>agent.kongEvidence?.id === "kong:Venues").length, 1);
-  assert.equal(wing.agents.find(agent=>agent.id === "kong:venues")?.status.state, "working");
+  assert.equal(wing.agents.find(agent=>agent.id === "kong:venues")?.status.state, "available");
   assert.ok(!wing.agents.some(agent=>agent.id === "kong:Venues"));
   assert.ok(!wing.agents.some(agent=>agent.id === "kong:native-video"));
   assert.equal(wing.agents.find(agent=>agent.id === "kong-videos")?.status.state, "offline");
