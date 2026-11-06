@@ -16,7 +16,7 @@ The factory reuses the project's App QA/developer responsibilities. New pipeline
 2. Review and apply the prepared SQL migration to the intended PostgreSQL database. Building does not apply it. Do not share a production connection with the simulation processes.
 3. Register project metadata and fixed hosting costs through authenticated owner controls. Register actual test/build commands, isolated fixture/staging endpoints and recovery procedures. Leave automatic release unavailable until trusted rehearsal and recovery evidence exists.
 4. Supply trusted source-export, budget-enforced model, independent review, PR, browser fixture and deployment/recovery integrations. Provider support and unattended model access must be verified on the actual worker host; a local desktop subscription is not proof.
-5. Set `SOFTWARE_FACTORY_ENABLED=true`, `SOFTWARE_FACTORY_OWNER_ID`, and an absolute `SOFTWARE_FACTORY_ADAPTER_MODULE` path in the deployment configuration. That trusted module exports `createFactoryWorkerOptions()` and composes the store/pipeline/provider adapters. Start `npm run factory:worker` separately from the web application. Use the entrypoint's explicit configuration checks. Missing adapters, uninitialized budget or unavailable storage must remain visible blockers.
+5. Set `SOFTWARE_FACTORY_ENABLED=true`, `SOFTWARE_FACTORY_OWNER_ID`, and an absolute `SOFTWARE_FACTORY_ADAPTER_MODULE` path in the deployment configuration. That trusted module exports `createFactoryWorkerOptions({store})` and passes the supplied store to its runtime composition. The entrypoint rejects a different returned store to prevent accounting and pipeline evidence from using different ledgers. Start `npm run factory:worker` separately from the web application. Use the entrypoint's explicit configuration checks. Missing adapters, uninitialized budget or unavailable storage must remain visible blockers.
 6. Complete three real rehearsal cycles and one recovery rehearsal per application before enabling low-risk automatic release. Synthetic tests in this repository do not qualify a live application.
 
 Changes involving authentication, permissions, payments, migrations/deletion, infrastructure, dependencies, important business behavior or uncertain risk remain human-reviewed. Exact candidate/base revisions, independent clean review, complete synthetic mobile/desktop simulation and fresh recovery evidence are required for automatic release. Existing manual deployment gates stay unchanged.
@@ -93,6 +93,15 @@ is supplied by the trusted host, never by project input. Requests and payloads
 are bounded, and the adapter itself performs no retries. Store and transport
 size limits must agree. Neither module selects itself as the live backend.
 
+Web controls, pipeline composition and the worker share a lazy store selector.
+The default remains PostgreSQL. Selecting `SOFTWARE_FACTORY_STORAGE_BACKEND=object`
+requires an absolute `SOFTWARE_FACTORY_STORE_MODULE` path exporting
+`createFactoryStore()`. The trusted module supplies authentication, clock and
+the same bucket/object/ledger identity on both hosts. Selection is frozen on
+first use until process restart; invalid configuration, provider initialization
+failure or missing methods never fall back to PostgreSQL. Runtime startup does
+not initialize a blank ledger or register a new monthly budget.
+
 Before activation, verify conditional writes on the actual Replit bucket,
 configure the same backend in both the worker and owner controls, verify host
 clock synchronization, and account for requests, transfer and retained records.
@@ -102,3 +111,26 @@ object versioning, so a separately verified backup and recovery procedure is
 also required. Never restore an older ledger over outstanding commitments.
 This backend removes the need for factory ledger SQL queries only once wired
 into the live service; it is not a provider-enforced spending cap.
+
+### Replit development storage proof (2026-11-06)
+
+An isolated temporary runtime using `@replit/object-storage` 1.0.0 and its
+`@google-cloud/storage` 7.22.0 dependency verified create-only writes, successful
+generation changes, rejection of a stale write with HTTP 412, and exactly one
+winner between concurrent writes using the same generation. A separate Node
+process confirmed persistence. The synthetic object was at most 126 bytes;
+11 GCS requests completed with automatic retries disabled. The estimated test
+cost was below $0.00007, not an observed billing charge. No production database
+queries or application dependency changes were needed.
+
+The probe accessed the underlying bucket via the SDK's internally typed
+`getBucket()` method. This establishes bucket/authentication behavior but is not
+a production integration contract. The live adapter still needs a supported
+authenticated transport, verified clock and backup/recovery procedures.
+
+The subscription dispatch probe remains blocked: `@codex review` on PR 327
+received a bot response requesting account connection, despite settings showing
+the correct GitHub account connected and the repository enabled. Renewing the
+existing connection and repeating the request from GitHub's UI produced the
+same response. A published private cloud environment and passing setup tests
+do not prove unattended GitHub dispatch. No worker was activated on that basis.

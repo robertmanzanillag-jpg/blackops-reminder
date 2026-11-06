@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T05:59:24.848Z",
+  "generatedAt": "2026-11-06T06:11:22.453Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -126,25 +126,25 @@
     "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 808,
-    "filesIndexed": 725,
-    "imports": 2597,
+    "filesVisible": 810,
+    "filesIndexed": 727,
+    "imports": 2608,
     "routes": 556,
-    "symbols": 16219
+    "symbols": 16233
   },
   "directories": {
     "server": {
-      "files": 171,
-      "indexed": 167,
+      "files": 172,
+      "indexed": 168,
       "kinds": {
-        "server": 171
+        "server": 172
       }
     },
     "tests": {
-      "files": 179,
-      "indexed": 176,
+      "files": 180,
+      "indexed": 177,
       "kinds": {
-        "test": 179
+        "test": 180
       }
     },
     ".": {
@@ -10659,7 +10659,7 @@
       "imports": [
         "../server/software-factory-loop",
         "../server/software-factory-runtime",
-        "../server/software-factory-store",
+        "../server/software-factory-store-provider",
         "../server/software-factory-worker",
         "node:fs/promises",
         "node:path",
@@ -21346,6 +21346,7 @@
         "./software-factory",
         "./software-factory-pipeline",
         "./software-factory-store",
+        "./software-factory-store-provider",
         "./user-context",
         "express",
         "zod"
@@ -21399,6 +21400,7 @@
         "./software-factory",
         "./software-factory-pipeline",
         "./software-factory-store",
+        "./software-factory-store-provider",
         "./software-factory-worker",
         "node:crypto"
       ],
@@ -21471,6 +21473,30 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-store-provider.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-store",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "configuredSoftwareFactoryStore",
+        "createFactoryStoreProvider"
+      ],
+      "symbols": [
+        "Configuration",
+        "FactoryStore",
+        "config",
+        "configuredSoftwareFactoryStore",
+        "createFactoryStoreProvider",
+        "module",
+        "resolve",
+        "store"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-store.ts",
       "kind": "server",
       "imports": [
@@ -21524,6 +21550,7 @@
       "imports": [
         "./software-factory",
         "./software-factory-store",
+        "./software-factory-store-provider",
         "node:crypto"
       ],
       "exports": [
@@ -28727,6 +28754,27 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-store-provider.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-store",
+        "../server/software-factory-store-provider",
+        "node:assert/strict",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "f",
+        "fixture",
+        "object",
+        "options",
+        "postgres",
+        "store"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-store.test.ts",
       "kind": "test",
       "imports": [
@@ -29157,6 +29205,7 @@
     "tests/software-factory-routes.test.ts",
     "tests/software-factory-runtime.test.ts",
     "tests/software-factory-simulator.test.ts",
+    "tests/software-factory-store-provider.test.ts",
     "tests/software-factory-store.test.ts",
     "tests/software-factory-worker.test.ts",
     "tests/software-factory.test.ts",

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import { softwareFactoryStore, type FactoryJob, type FactoryJobInput, type FactoryOutcome } from "./software-factory-store";
+import type { FactoryJob, FactoryJobInput, FactoryOutcome } from "./software-factory-store";
+import { configuredSoftwareFactoryStore as softwareFactoryStore } from "./software-factory-store-provider";
 import { releaseGate, rehearsalGate, type FactoryProject, type FactoryCandidate, type FactoryEvidence } from "./software-factory";
 export interface FactoryAdapterResult extends FactoryOutcome { next?: FactoryJobInput }
 export interface FactoryAdapter { execute(job: FactoryJob, context: { signal: AbortSignal; maxCostCents: number }): Promise<FactoryAdapterResult> }

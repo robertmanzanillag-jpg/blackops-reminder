@@ -6,7 +6,7 @@ import type { FactoryJob } from "./software-factory-store";
 import type { FactoryPipelineState } from "./software-factory-pipeline";
 import type { SoftwareFactoryView } from "../shared/software-factory-view";
 import { FACTORY_POLICY, projectReadiness } from "./software-factory";
-import { softwareFactoryStore } from "./software-factory-store";
+import { configuredSoftwareFactoryStore as softwareFactoryStore } from "./software-factory-store-provider";
 
 function pipelineState(job: FactoryJob): FactoryPipelineState | undefined {
   const result = job.result as { evidence?: { pipelineState?: FactoryPipelineState } } | undefined;

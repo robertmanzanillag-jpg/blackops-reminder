@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { FACTORY_POLICY } from "./software-factory";
 import { createFactoryPipeline, type FactoryPipelineDependencies } from "./software-factory-pipeline";
-import { factoryJobKinds, softwareFactoryStore } from "./software-factory-store";
+import { factoryJobKinds } from "./software-factory-store";
+import { configuredSoftwareFactoryStore as softwareFactoryStore } from "./software-factory-store-provider";
 import type { FactoryAdapter, FactoryWorkerOptions } from "./software-factory-worker";
 
 export type TrustedFactoryStages = Required<Pick<FactoryPipelineDependencies, typeof factoryJobKinds[number]>>;

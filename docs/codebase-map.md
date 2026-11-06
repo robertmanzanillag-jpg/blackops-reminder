@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-06T05:59:24.848Z
+Generated: 2026-11-06T06:11:22.453Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\software-factory`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 808 | 725 | 2597 | 556 | 16219 |
+| 810 | 727 | 2608 | 556 | 16233 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,8 +28,8 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 179 | 176 | test:179 |
-| `server` | 171 | 167 | server:171 |
+| `tests` | 180 | 177 | test:180 |
+| `server` | 172 | 168 | server:172 |
 | `script` | 86 | 81 | script:86 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
@@ -206,6 +206,7 @@ Package: `rest-express`
 - `tests/software-factory-routes.test.ts`
 - `tests/software-factory-runtime.test.ts`
 - `tests/software-factory-simulator.test.ts`
+- `tests/software-factory-store-provider.test.ts`
 - `tests/software-factory-store.test.ts`
 - `tests/software-factory-worker.test.ts`
 - `tests/software-factory.test.ts`
