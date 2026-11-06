@@ -208,8 +208,8 @@ export function AgentsOfficeWorld({
       id: `trainee:${trainee.id}`,
       name: trainee.nickname,
       role: `En formacion: ${trainee.role}`,
-      description: `Estudia los documentos y la base de datos de la empresa antes de trabajar. Lleva ${trainee.modulesDone.length} ${trainee.modulesDone.length === 1 ? "modulo" : "modulos"}.`,
-      status: { state: "checking", label: `Estudiando · ${trainee.modulesDone.length} ${trainee.modulesDone.length === 1 ? "modulo" : "modulos"}`, activity: trainee.knowledge.slice(0, 4) },
+      description: trainee.awaitingEvidence ? "Lectura terminada. Faltan tres evaluaciones comparables con resultados verificables. Esto no cambia el puesto ni acredita una mejora." : `Estudia los documentos y la base de datos de la empresa antes de trabajar. Lleva ${trainee.modulesDone.length} ${trainee.modulesDone.length === 1 ? "modulo" : "modulos"}.`,
+      status: { state: "checking", label: trainee.awaitingEvidence ? "Pendiente de pruebas reales" : `Estudiando · ${trainee.modulesDone.length} ${trainee.modulesDone.length === 1 ? "modulo" : "modulos"}`, activity: trainee.knowledge.slice(0, 4) },
       color: "#60a5fa",
     });
   }

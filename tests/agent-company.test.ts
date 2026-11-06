@@ -11,6 +11,8 @@ import {
   parseCompanyState,
   personalityFor,
   routeOrder,
+  recordAcademyAssessment,
+  scheduleAcademyTraining,
 } from "../shared/agent-company";
 
 const NOW = Date.parse("2026-11-04T12:00:00Z");
@@ -91,7 +93,7 @@ test("state from disk: malformed careers/orders never crash, legacy shapes reset
   assert.equal(parsed.events.length, 1);
 });
 
-test("academy: one real module per cycle, then graduation puts the agent back to work", () => {
+test("academy: reading modules alone never graduates or clears the training hold", () => {
   let company = enrollTrainee(emptyCompanyState(), { id: "new_agent:helper-radio", forAgentId: "radio", role: "Asistente de Radio", now: NOW });
   company = { ...company, careers: { radio: { ...advanceCompany(emptyCompanyState(), { now: NOW, statuses: { radio: s("working") }, roles }).state.careers.radio, inTrainingUntilGeneration: 1 } } };
   const curriculum = () => [
@@ -103,9 +105,9 @@ test("academy: one real module per cycle, then graduation puts the agent back to
   company = advanceAcademy(company, curriculum, NOW + 2 * MIN);
   assert.equal(company.trainees[0].graduatedAt, undefined);
   company = advanceAcademy(company, curriculum, NOW + 3 * MIN);
-  assert.ok(company.trainees[0].graduatedAt);
-  assert.equal(company.careers.radio.inTrainingUntilGeneration, undefined);
-  assert.match(company.events[0].text, /graduo/);
+  assert.equal(company.trainees[0].graduatedAt, undefined);
+  assert.equal(company.trainees[0].awaitingEvidence, true);
+  assert.equal(company.careers.radio.inTrainingUntilGeneration, 1);
   assert.equal(enrollTrainee(company, { id: "new_agent:helper-radio", forAgentId: "radio", role: "x", now: NOW }).trainees.length, 1, "no duplicate enrollment");
 });
 
@@ -154,4 +156,61 @@ test("nicknames are never repeated across the team and the academy", () => {
   state = enrollTrainee(state, { id: "new_agent:x", forAgentId: "agent-1", role: "Ayudante", now: Date.parse("2026-11-04T10:05:00Z") });
   const names = [...Object.values(state.careers).map((c) => c.nickname), ...state.trainees.map((t) => t.nickname)];
   assert.equal(new Set(names).size, names.length);
+});
+
+
+test("academy requires three distinct comparable successful artifacts and survives serialization", () => {
+  const modules = [{ id: "rules", title: "Rules", summary: "v1" }];
+  let state = enrollTrainee(emptyCompanyState(), { id: "candidate", forAgentId: "radio", role: "Radio", now: NOW });
+  state = advanceAcademy(state, () => modules, NOW);
+  const assessment = { scope: "production" as const, runId: "r1", benchmarkId: "b1", curriculumVersion: JSON.stringify(modules.map(m => [m.id,m.title,m.summary])),
+    completedAt: new Date(NOW + MIN).toISOString(), artifactId: "artifact1", passed: true,
+    quality: 95, incumbentQuality: 85, errors: 0, incumbentErrors: 1, durationMs: 10, incumbentDurationMs: 20, cost: 0, incumbentCost: 0 };
+  state = recordAcademyAssessment(state, "candidate", assessment);
+  assert.equal(recordAcademyAssessment(state, "candidate", assessment), state, "duplicate run rejected");
+  state = recordAcademyAssessment(state, "candidate", { ...assessment, runId: "r2", benchmarkId: "b2", artifactId: "artifact2" });
+  assert.equal(advanceAcademy(state, () => modules, NOW + 2*MIN).trainees[0].graduatedAt, undefined);
+  state = recordAcademyAssessment(state, "candidate", { ...assessment, runId: "r3", benchmarkId: "b3", artifactId: "artifact3" });
+  state = parseCompanyState(JSON.parse(JSON.stringify(state)));
+  assert.ok(advanceAcademy(state, () => modules, NOW + 2*MIN).trainees[0].graduatedAt);
+  assert.equal(advanceAcademy(state, () => [{...modules[0], summary: "v2"}], NOW + 2*MIN).trainees[0].graduatedAt, undefined);
+  assert.equal(advanceAcademy(state, () => modules, NOW + 8*86400000).trainees[0].graduatedAt, undefined);
+});
+
+test("recurring preparation is bounded and trains incumbents alongside candidates without duplicating jobs", () => {
+  let state = advanceCompany(emptyCompanyState(), { now: NOW, statuses: { radio: s("working"), legal: s("working") }, roles }).state;
+  state = scheduleAcademyTraining(state, roles, NOW, 4);
+  assert.equal(state.trainees.length, 4);
+  assert.equal(state.trainees.filter(t => t.purpose === "incumbent").length, 2);
+  assert.equal(state.trainees.filter(t => t.purpose === "candidate").length, 2);
+  assert.deepEqual(scheduleAcademyTraining(state, roles, NOW + 8*86400000, 4), state);
+  assert.ok(Object.values(state.careers).every(c => !c.inTrainingUntilGeneration));
+  assert.equal(scheduleAcademyTraining(state, roles, NOW, -1), state);
+});
+
+test("replacement enrollment is not blocked by incumbent preparation and legacy holds can graduate", () => {
+  let state = advanceCompany(emptyCompanyState(), { now: NOW, statuses: { radio: s("working") }, roles }).state;
+  state = scheduleAcademyTraining(state, roles, NOW);
+  state.careers.radio.battery = 0;
+  state = advanceCompany(state, { now: NOW + 86400000, statuses: { radio: s("error") }, roles }).state;
+  assert.ok(state.trainees.some(t => t.id === "radio#2"));
+  const trainee = state.trainees.find(t => t.id === "radio#2")!;
+  delete trainee.generation;
+  const modules = [{id: "rules", title: "Rules", summary: "v1"}];
+  trainee.modulesDone = ["rules"];
+  for (let i=0;i<3;i++) state = recordAcademyAssessment(state, trainee.id, {
+    scope: "production", runId: `r${i}`, benchmarkId: `b${i}`, artifactId: `a${i}`, curriculumVersion: JSON.stringify(modules.map(m=>[m.id,m.title,m.summary])),
+    completedAt: new Date(NOW+86400000+MIN).toISOString(), passed: true, quality: 95, incumbentQuality: 80,
+    errors: 0, incumbentErrors: 1, durationMs: 10, incumbentDurationMs: 20, cost: 0, incumbentCost: 0,
+  });
+  state = advanceAcademy(state, () => modules, NOW+86400000+2*MIN);
+  assert.equal(state.careers.radio.inTrainingUntilGeneration, undefined);
+});
+test("malformed persisted assessments never crash or graduate", () => {
+  let state = enrollTrainee(emptyCompanyState(), {id: "t",forAgentId:"radio",role:"Radio",now:NOW});
+  const raw = JSON.parse(JSON.stringify(state));
+  raw.trainees[0].assessments = {};
+  state = parseCompanyState(raw);
+  assert.deepEqual(state.trainees[0].assessments, []);
+  assert.equal(advanceAcademy(state, () => [], NOW).trainees[0].graduatedAt, undefined);
 });

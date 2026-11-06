@@ -36,6 +36,7 @@ import {
 import { agentProbes, summarizeProbe, type AgentLiveStatus } from "@shared/agent-live-status";
 import {
   advanceAcademy,
+  scheduleAcademyTraining,
   advanceCompany,
   completeOrder,
   createOrder,
@@ -43,13 +44,18 @@ import {
   leaderboard,
   personalityFor,
   type CurriculumModule,
+  type CompanyState,
+  type AcademyJob,
+  type AcademyAssessment,
 } from "@shared/agent-company";
 
 export type CouncilDeps = {
+  academyReview?: (state: CompanyState, job: AcademyJob) => Promise<AcademyAssessment>;
   now: () => number;
   userId: () => string;
   readState: () => Promise<string | null>;
   writeState: (raw: string) => Promise<void>;
+  transactState?: (update: (raw: string | null) => Promise<string>) => Promise<string>;
   collect: (userId: string) => Promise<Omit<CouncilSignals, "now">>;
   submitProposal: (userId: string, proposal: CouncilProposal) => Promise<string>;
   getPendingActionStatus: (id: string) => Promise<string | null>;
@@ -143,11 +149,24 @@ function advanceCompanyCycle(state: CouncilState, statuses: Record<string, Agent
     const forAgentId = proposal.key.replace(/^new_agent:helper-/, "");
     company = enrollTrainee(company, { id: proposal.key, forAgentId, role: proposal.title.replace(/^Contratar /, ""), now });
   }
-  // If the docs can't be read this cycle, the academy still advances on the core rules so nobody
-  // stays in training forever.
+  // Core reading remains available when documents cannot be read. Reading alone never
+  // qualifies a trainee or releases a replacement without verified execution evidence.
   const modules = curriculum.length ? curriculum : [{ id: "core-rules", title: "Reglas basicas", summary: "PR-first, QA antes de publicar, nada de gasto sin aprobacion de Robert." }];
+  // Preparation remains opt-in until the execution host supplies trusted benchmark artifacts.
+  if (process.env.OFFICE_ACADEMY_PREPARATION_ENABLED === "true") company = scheduleAcademyTraining(company, AGENT_NAMES, now);
   company = advanceAcademy(company, () => modules, now);
   return { ...state, company, lastStatuses: compact };
+}
+
+function parseDurableCouncilState(raw: string | null): CouncilState {
+  if (raw === null) return emptyCouncilState();
+  const value = JSON.parse(raw);
+  const object = (v: unknown) => v !== null && typeof v === "object" && !Array.isArray(v);
+  if (!object(value) || value.version !== 1 || !Array.isArray(value.debates) || !Array.isArray(value.proposals) || !object(value.scout) ||
+      !object(value.company) || value.company.version !== 1 || !object(value.company.careers) || !Array.isArray(value.company.trainees) || !Array.isArray(value.company.orders) || (value.company.academyJobs !== undefined && !Array.isArray(value.company.academyJobs))) {
+    throw new Error("Stored council state is incompatible; migration or recovery is required.");
+  }
+  return parseCouncilState(raw);
 }
 
 export function createAgentCouncil(deps: CouncilDeps) {
@@ -157,6 +176,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
   let scouting: Promise<void> | null = null;
 
   async function load(): Promise<CouncilState> {
+    if (deps.transactState) return parseDurableCouncilState(await deps.readState());
     if (cached) return cached;
     cached = parseCouncilState(await deps.readState().catch(() => null));
     return cached;
@@ -166,9 +186,13 @@ export function createAgentCouncil(deps: CouncilDeps) {
   // so the 15-minute cycle, the daily scout and Trust Center approvals never overwrite each other.
   function mutate(change: (state: CouncilState) => Promise<CouncilState> | CouncilState): Promise<CouncilState> {
     const job = queue.then(async () => {
+      if (deps.transactState) {
+        const raw = await deps.transactState(async raw => JSON.stringify(await change(parseDurableCouncilState(raw))));
+        return parseDurableCouncilState(raw);
+      }
       const next = await change(await load());
-      cached = next;
       await deps.writeState(JSON.stringify(next, null, 2));
+      cached = next;
       return next;
     });
     queue = job.catch(() => undefined);
@@ -221,6 +245,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
       const curriculum = deps.loadCurriculum ? await deps.loadCurriculum().catch(() => [] as CurriculumModule[]) : [];
       return await mutate(async (state) => {
         const now = deps.now();
+        if (deps.transactState && state.lastCycleAt && now - toMs(state.lastCycleAt) < COUNCIL_CYCLE_MS) return state;
         const signals: CouncilSignals = { ...collected, now };
         const findings = runCrossChecks(signals);
         const statuses: Record<string, AgentLiveStatus> = { ...everyone, ...statusesFromSignals(signals) };
@@ -307,6 +332,27 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
   }
 
+  async function runAcademyCycle() {
+    if (!deps.transactState || !deps.academyReview) throw new Error("Academy requires durable storage and an enabled trusted review executor.");
+    const { reserveAcademyReview, commitAcademyReview } = await import("./office-academy-runner");
+    const curriculum = await deps.loadCurriculum?.() || [];
+    let reservation: AcademyJob | undefined;
+    const reserved = await mutate(state => {
+      const result = reserveAcademyReview(state.company, curriculum, deps.now());
+      reservation = result.job;
+      return { ...state, company: result.state };
+    });
+    if (!reservation) return reserved;
+    const job = reservation;
+    try {
+      // Provider execution is outside the transaction; only the matching live reservation commits.
+      const result = await deps.academyReview(reserved.company, job);
+      return mutate(state => ({ ...state, company: commitAcademyReview(state.company, job, result, deps.now()) }));
+    } catch {
+      return mutate(state => ({ ...state, company: commitAcademyReview(state.company, job, undefined, deps.now(), "Review executor unavailable or result unverified; manual inspection required.") }));
+    }
+  }
+
   async function view() {
     const state = await load();
     const personalities = Object.fromEntries(Object.values(state.company.careers).map((career) => [career.agentId, personalityFor(career.agentId, career.generation)]));
@@ -321,7 +367,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
     };
   }
 
-  return { runCycle, runScout, approveFromTrustCenter, view, load, placeOrder, finishOrder };
+  return { runCycle, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, finishOrder };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {
@@ -562,11 +608,15 @@ let council: ReturnType<typeof createAgentCouncil> | null = null;
 
 export function getAgentCouncil() {
   if (council) return council;
+  const durable = process.env.AGENT_COUNCIL_STORAGE === "postgres";
+  const persistentStore = async () => (await import("./agent-council-store")).getCouncilStore();
   council = createAgentCouncil({
+    ...(durable && process.env.OFFICE_ACADEMY_EXECUTION_ENABLED === "true" ? { academyReview: async (state: CompanyState, job: AcademyJob) => (await import("./office-academy-runner")).createAcademyReviewRunner()(state, job) } : {}),
     now: () => Date.now(),
     userId: systemUserId,
-    readState: () => readFile(STATE_FILE, "utf8").catch(() => null),
+    readState: () => durable ? persistentStore().then(store => store.read(systemUserId())) : readFile(STATE_FILE, "utf8").catch(() => null),
     writeState: writeStateAtomic,
+    ...(durable ? { transactState: async (update: (raw: string | null) => Promise<string>) => (await persistentStore()).transact(systemUserId(), update) } : {}),
     collect: collectReal,
     submitProposal: async (userId, proposal) => {
       const { createPendingActionForApproval } = await import("./trust-policy");

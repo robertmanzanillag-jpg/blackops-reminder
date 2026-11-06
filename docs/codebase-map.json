@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-05T11:36:01.803Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-04\\quioer-qu-echeck-el-trabajo-que\\work\\office-current",
+  "generatedAt": "2026-11-06T08:51:54.087Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\blackops-reminder",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,18 +124,32 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 741,
-    "filesIndexed": 652,
-    "imports": 2262,
-    "routes": 524,
-    "symbols": 14798
+    "filesVisible": 739,
+    "filesIndexed": 656,
+    "imports": 2280,
+    "routes": 526,
+    "symbols": 14903
   },
   "directories": {
-    ".local/office-evidence": {
-      "files": 9,
-      "indexed": 3,
+    "docs": {
+      "files": 33,
+      "indexed": 32,
       "kinds": {
-        "other": 9
+        "docs": 33
+      }
+    },
+    "server": {
+      "files": 151,
+      "indexed": 147,
+      "kinds": {
+        "server": 151
+      }
+    },
+    "tests": {
+      "files": 150,
+      "indexed": 147,
+      "kinds": {
+        "test": 150
       }
     },
     ".": {
@@ -273,13 +287,6 @@
         "other": 1
       }
     },
-    "docs": {
-      "files": 32,
-      "indexed": 31,
-      "kinds": {
-        "docs": 32
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -300,13 +307,6 @@
       "indexed": 1,
       "kinds": {
         "script": 4
-      }
-    },
-    "server": {
-      "files": 148,
-      "indexed": 144,
-      "kinds": {
-        "server": 148
       }
     },
     "server/replit_integrations/batch": {
@@ -342,13 +342,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 147,
-      "indexed": 144,
-      "kinds": {
-        "test": 147
       }
     },
     "tests/fixtures": {
@@ -418,30 +411,6 @@
     {
       "path": ".agents/skills/codebase-overview/SKILL.md",
       "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": ".local/office-evidence/affected-route-auth-guards.json",
-      "kind": "other",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": ".local/office-evidence/github-handoff-verification.json",
-      "kind": "other",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": ".local/office-evidence/integrated-app-qa-local.json",
-      "kind": "other",
       "imports": [],
       "exports": [],
       "symbols": [],
@@ -4957,6 +4926,14 @@
     },
     {
       "path": "design-qa.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/academy-persistence-rollout.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -10026,6 +10003,7 @@
         "capabilities",
         "heartbeat",
         "main",
+        "module",
         "worker"
       ],
       "routes": []
@@ -10537,6 +10515,30 @@
       ]
     },
     {
+      "path": "server/agent-council-store.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "CouncilClient",
+        "CouncilPool",
+        "councilSchemaSql",
+        "createCouncilStore",
+        "getCouncilStore"
+      ],
+      "symbols": [
+        "client",
+        "councilSchemaSql",
+        "createCouncilStore",
+        "getCouncilStore",
+        "key",
+        "raw",
+        "result"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/agent-council.ts",
       "kind": "server",
       "imports": [
@@ -10597,6 +10599,7 @@
         "dir",
         "doc",
         "docs",
+        "durable",
         "entries",
         "everyone",
         "exists",
@@ -10629,9 +10632,12 @@
         "mutate",
         "next",
         "now",
+        "object",
         "online",
         "open",
         "operation",
+        "parseDurableCouncilState",
+        "persistentStore",
         "personalities",
         "placeOrder",
         "plain",
@@ -10646,9 +10652,11 @@
         "remoteModule",
         "remoteQueue",
         "replaceFileAtomic",
+        "reserved",
         "response",
         "result",
         "routesModule",
+        "runAcademyCycle",
         "runCycle",
         "runCycleOnce",
         "runScout",
@@ -10672,6 +10680,7 @@
         "tmp",
         "token",
         "userId",
+        "value",
         "view",
         "webhookSecret",
         "withTimeout",
@@ -17266,6 +17275,93 @@
       "routes": []
     },
     {
+      "path": "server/office-academy-benchmarks.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company.ts",
+        "./office-cloud-store",
+        "node:crypto"
+      ],
+      "exports": [
+        "AcademyBenchmarkAssignment",
+        "AcademyBenchmarkEvaluation",
+        "AcademyBenchmarkExecution",
+        "AcademyBenchmarkManifest",
+        "AcademyUsageRecord",
+        "RecordedAcademyBenchmark",
+        "academyArtifactDigest",
+        "evaluateAcademyBenchmark",
+        "reconcileRecordedAcademyBenchmarks"
+      ],
+      "symbols": [
+        "academyArtifactDigest",
+        "actual",
+        "blocked",
+        "canonical",
+        "career",
+        "digest",
+        "end",
+        "evaluateAcademyBenchmark",
+        "evaluation",
+        "expected",
+        "nonempty",
+        "reconcileRecordedAcademyBenchmarks",
+        "review",
+        "start",
+        "trainee",
+        "updated"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-academy-runner.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "./office-claude",
+        "node:crypto"
+      ],
+      "exports": [
+        "academyCurriculumVersion",
+        "commitAcademyReview",
+        "createAcademyReviewRunner",
+        "reserveAcademyReview"
+      ],
+      "symbols": [
+        "academyCurriculumVersion",
+        "artifacts",
+        "candidate",
+        "candidateGrade",
+        "career",
+        "commitAcademyReview",
+        "createAcademyReviewRunner",
+        "digest",
+        "durationMs",
+        "errors",
+        "fixture",
+        "fixtures",
+        "grade",
+        "incumbent",
+        "incumbentDurationMs",
+        "incumbentGrade",
+        "jobs",
+        "now",
+        "prompt",
+        "recorded",
+        "reserveAcademyReview",
+        "run",
+        "startCandidate",
+        "startIncumbent",
+        "stored",
+        "trainee",
+        "version"
+      ],
+      "routes": [
+        "/search",
+        "/users/:id"
+      ]
+    },
+    {
       "path": "server/office-claude.ts",
       "kind": "server",
       "imports": [
@@ -20994,6 +21090,8 @@
         "./agent-live-status"
       ],
       "exports": [
+        "AcademyAssessment",
+        "AcademyJob",
         "AgentCareer",
         "BATTERY_MAX",
         "CompanyOrder",
@@ -21014,7 +21112,9 @@
         "levelFor",
         "parseCompanyState",
         "personalityFor",
+        "recordAcademyAssessment",
         "routeOrder",
+        "scheduleAcademyTraining",
         "uniqueNickname"
       ],
       "symbols": [
@@ -21038,6 +21138,7 @@
         "careers",
         "completeOrder",
         "createOrder",
+        "currentEvidence",
         "delta",
         "earned",
         "emptyCompanyState",
@@ -21049,7 +21150,9 @@
         "floor",
         "graduated",
         "hash",
+        "id",
         "iso",
+        "last",
         "leaderboard",
         "levelFor",
         "modules",
@@ -21062,11 +21165,15 @@
         "orders",
         "parseCompanyState",
         "personalityFor",
+        "readyForGraduation",
         "reason",
+        "recent",
+        "recordAcademyAssessment",
         "remember",
         "replacement",
         "routeOrder",
         "rows",
+        "scheduleAcademyTraining",
         "second",
         "seed",
         "start",
@@ -21074,11 +21181,17 @@
         "studying",
         "text",
         "toMsSafe",
+        "trainee",
         "trainees",
         "uniqueNickname",
         "used",
         "usedNicknames",
         "v",
+        "valid",
+        "validAssessment",
+        "values",
+        "version",
+        "week",
         "who",
         "working"
       ],
@@ -21767,18 +21880,42 @@
         "MIN",
         "NOW",
         "all",
+        "assessment",
         "career",
         "company",
         "curriculum",
         "during",
         "ids",
+        "modules",
         "names",
         "parsed",
+        "raw",
         "result",
         "roles",
         "rows",
         "s",
-        "statuses"
+        "statuses",
+        "trainee"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/agent-council-store.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/agent-council-store",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "a",
+        "before",
+        "h",
+        "harness",
+        "increment",
+        "rows",
+        "store"
       ],
       "routes": []
     },
@@ -21838,6 +21975,8 @@
         "state",
         "statuses",
         "stuck",
+        "task",
+        "transactState",
         "updates",
         "uuid",
         "value",
@@ -25215,6 +25354,55 @@
       "routes": []
     },
     {
+      "path": "tests/office-academy-benchmarks.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-academy-benchmarks.ts",
+        "../shared/agent-company.ts",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "evidence",
+        "execution",
+        "first",
+        "incorrect",
+        "input",
+        "packet",
+        "prUrl",
+        "result",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-academy-runner.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-academy-runner",
+        "../shared/agent-company",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "expired",
+        "issue",
+        "modules",
+        "reserved",
+        "result",
+        "run",
+        "runner",
+        "setup",
+        "state",
+        "tampered"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-city-agents.test.ts",
       "kind": "test",
       "imports": [
@@ -26280,6 +26468,7 @@
     "tests/._rate-limit.test.ts",
     "tests/._user-context.test.ts",
     "tests/agent-company.test.ts",
+    "tests/agent-council-store.test.ts",
     "tests/agent-council.test.ts",
     "tests/agent-live-status.test.ts",
     "tests/agents-world-integration.test.ts",
@@ -26353,6 +26542,8 @@
     "tests/marketing-command-center.test.ts",
     "tests/metricool-analytics-sync.test.ts",
     "tests/metricool-tracking.test.ts",
+    "tests/office-academy-benchmarks.test.ts",
+    "tests/office-academy-runner.test.ts",
     "tests/office-city-agents.test.ts",
     "tests/office-claude.test.ts",
     "tests/office-cloud-runtime.test.ts",

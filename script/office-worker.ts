@@ -10,6 +10,14 @@ if (process.env.OFFICE_KONG_AUDIT_SCHEDULE_ENABLED === "true") {
   catch { console.error("Recurring KONG audits require a configured office owner"); }
 }
 const worker = createOfficeCloudWorker({ scheduledKongOwner });
+let academy: Awaited<ReturnType<typeof import("../server/agent-council")["getAgentCouncil"]>> | undefined;
+if (process.env.OFFICE_ACADEMY_EXECUTION_ENABLED === "true") {
+  if (process.env.AGENT_COUNCIL_STORAGE !== "postgres") throw new Error("Academy requires PostgreSQL council storage.");
+  const module = await import("../server/agent-council");
+  module.setAgentCouncilUser(getSystemUserId());
+  academy = module.getAgentCouncil();
+}
+let lastAcademyTick = 0;
 let stopping = false;
 process.on("SIGTERM", () => { stopping = true; });
 process.on("SIGINT", () => { stopping = true; });
@@ -18,7 +26,7 @@ const capabilities = setInterval(() => { void worker.refreshCapabilities().catch
 try {
   await worker.refreshCapabilities();
   while (!stopping) {
-    try { await worker.tick(); }
+    try { await worker.tick(); if (academy && Date.now() - lastAcademyTick >= 15 * 60000) { lastAcademyTick = Date.now(); await academy.runCycle(); await academy.runAcademyCycle(); } }
     catch { console.error("Office worker cycle unconfirmed; no task will be retried automatically"); }
     if (!stopping) await new Promise(resolve => setTimeout(resolve, 5000));
   }

@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-05T11:36:01.803Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-04\quioer-qu-echeck-el-trabajo-que\work\office-current`
+Generated: 2026-11-06T08:51:54.087Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\blackops-reminder`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 741 | 652 | 2262 | 524 | 14798 |
+| 739 | 656 | 2280 | 526 | 14903 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `server` | 148 | 144 | server:148 |
-| `tests` | 147 | 144 | test:147 |
+| `server` | 151 | 147 | server:151 |
+| `tests` | 150 | 147 | test:150 |
 | `script` | 82 | 77 | script:82 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 32 | 31 | docs:32 |
+| `docs` | 33 | 32 | docs:33 |
 | `client/src/components` | 24 | 24 | client-component:24 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
@@ -42,7 +42,6 @@ Package: `rest-express`
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `client/src/components/company-office` | 5 | 5 | client-component:5 |
 | `server/replit_integrations/chat` | 4 | 4 | server:4 |
-| `.local/office-evidence` | 9 | 3 | other:9 |
 | `client/src` | 3 | 3 | other:3 |
 | `client/src/hooks` | 3 | 3 | client-hook:3 |
 | `server/replit_integrations/image` | 3 | 3 | server:3 |
@@ -52,6 +51,7 @@ Package: `rest-express`
 | `.agents/skills/codebase-overview` | 1 | 1 | docs:1 |
 | `client` | 1 | 1 | other:1 |
 | `client/src/components/agents-building` | 1 | 1 | client-component:1 |
+| `client/src/components/clippers` | 1 | 1 | client-component:1 |
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/tools`
@@ -60,6 +60,7 @@ Package: `rest-express`
 - `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
 - `server/index.ts`: `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
+- `server/office-academy-runner.ts`: `/search`, `/users/:id`
 - `server/office-routes.ts`: `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/contact-action`, `/api/agents-office/kong-snapshot`, `/api/agents-office/runs`
 - `server/replit_integrations/chat/routes.ts`: `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/messages`
 - `server/replit_integrations/image/routes.ts`: `/api/generate-image`
@@ -81,6 +82,7 @@ Package: `rest-express`
 - `tests/._rate-limit.test.ts`
 - `tests/._user-context.test.ts`
 - `tests/agent-company.test.ts`
+- `tests/agent-council-store.test.ts`
 - `tests/agent-council.test.ts`
 - `tests/agent-live-status.test.ts`
 - `tests/agents-world-integration.test.ts`
@@ -154,6 +156,8 @@ Package: `rest-express`
 - `tests/marketing-command-center.test.ts`
 - `tests/metricool-analytics-sync.test.ts`
 - `tests/metricool-tracking.test.ts`
+- `tests/office-academy-benchmarks.test.ts`
+- `tests/office-academy-runner.test.ts`
 - `tests/office-city-agents.test.ts`
 - `tests/office-claude.test.ts`
 - `tests/office-cloud-runtime.test.ts`
