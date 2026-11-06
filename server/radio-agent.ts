@@ -1,4 +1,6 @@
 import { parseRadioDescription } from "../shared/radio-slots";
+import {parseRadioSlotsWithPolicy} from "../shared/radio-slot-policies";
+import {resolveSavedRadioPolicy} from "./office-radio-training";
 import { storage } from "./storage";
 import { sendTelegramMessage } from "./telegram";
 import { format, addDays, endOfMonth, isAfter } from "date-fns";
@@ -55,9 +57,9 @@ function getOrdinalDay(day: number): string {
   }
 }
 
-function buildRadioSlot(event: Task): RadioSlot {
+function buildRadioSlot(event: Task,policyVersion?:string): RadioSlot {
   const eventDate = new Date(event.date);
-  const { slot7, slot8, slot9 } = parseRadioDescription(event.description);
+  const { slot7, slot8, slot9 } = policyVersion?parseRadioSlotsWithPolicy(policyVersion,event.description):parseRadioDescription(event.description);
   const emptySlots: number[] = [];
 
   if (!slot7) emptySlots.push(7);
@@ -85,6 +87,7 @@ function buildRadioSlot(event: Task): RadioSlot {
 }
 
 export async function analyzeRadioEvents(userId = getSystemUserId()): Promise<RadioAnalysis> {
+  const policyVersion=await resolveSavedRadioPolicy(userId);
   const tasks = await storage.getTasks(userId);
   const now = new Date();
   const monthEnd = endOfMonth(addDays(now, 60));
@@ -98,7 +101,7 @@ export async function analyzeRadioEvents(userId = getSystemUserId()): Promise<Ra
   const slotsToFill: { eventId: string; date: string; slots: number[] }[] = [];
 
   for (const event of radioEvents) {
-    const radioSlot = buildRadioSlot(event);
+    const radioSlot = buildRadioSlot(event,policyVersion);
     upcomingEvents.push(radioSlot);
 
     if (radioSlot.emptySlots.length > 0 && event.externalId) {

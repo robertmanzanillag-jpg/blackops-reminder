@@ -2,8 +2,9 @@ import { buildOfficeKongCentralSignals, type OfficeKongCentralSignal } from "./o
 import type { AgentLiveStatus } from "./agent-live-status";
 import type { OfficeCityRoom } from "./office-city-agents";
 import type { OfficeKongAuditResult } from "../../../server/office-kong";
+import { WHATSAPP_AGENT_ID, WHATSAPP_CAREER_ID, whatsappOfficeAgent, whatsappOfficeView, type WhatsAppOfficeView } from "@shared/whatsapp-office-agent";
 
-export type KongOfficeDesk = { id: string; name: string; role: string; description: string; color: string; status: AgentLiveStatus; kongEvidence?: OfficeKongCentralSignal };
+export type KongOfficeDesk = { id: string; name: string; role: string; description: string; color: string; status: AgentLiveStatus; kongEvidence?: OfficeKongCentralSignal; whatsappEvidence?: WhatsAppOfficeView };
 export type KongOfficeRing = 1 | 2 | 3;
 export type KongRingAssignment = { busyCityIds: string[]; cityOrder: string[]; classifiedAt: string; basis: "events" | "operations" | "unavailable" };
 export type KongOfficeDepartment = { id: string; name: string; color: string; agentIds: string[]; officeRing: KongOfficeRing };
@@ -38,15 +39,23 @@ const centralGroups = [
 const names: Record<string, string> = { chief_of_staff: "Coordinación KONG", city_operations: "Operaciones de ciudades", legacy_ceo: "CEO bajo demanda", customer_operations: "Atención al cliente", venue_deals: "Venues", promoters_partnerships: "Promotores y mesas", restaurant_secretary: "Secretaría de restaurantes", restaurant_deals: "Acuerdos de restaurantes", growth_analytics: "Crecimiento y analítica", finance_risk: "Finanzas y riesgo", product_reliability: "Producto y fiabilidad", kong_ai_chat: "KONG AI" };
 
 /** Shared visual vocabulary with BlackOps; activity comes only from a current KONG snapshot. */
-export function buildKongOfficeWing(evidence: OfficeKongAuditResult["evidence"] | undefined, cities: OfficeCityRoom[], media: Record<string, AgentLiveStatus>, now: number, assignment?: KongRingAssignment) {
+export function buildKongOfficeWing(evidence: OfficeKongAuditResult["evidence"] | undefined, cities: OfficeCityRoom[], media: Record<string, AgentLiveStatus>, now: number, assignment?: KongRingAssignment, transportCurrent = true) {
   const age = evidence ? now - Date.parse(evidence.generatedAt) : Infinity;
-  const fresh = age >= -30_000 && age <= 300_000;
-  const nativeSignals = buildOfficeKongCentralSignals(evidence?.agents, evidence?.generatedAt, now);
+  const fresh = transportCurrent && age >= -30_000 && age <= 300_000;
+  const nativeSignals = buildOfficeKongCentralSignals(transportCurrent ? evidence?.agents : undefined, transportCurrent ? evidence?.generatedAt : undefined, now);
   const central = new Map((evidence?.agents ?? []).filter(agent => agent.kind !== "city").map(agent => [agent.id, agent]));
+  central.set(WHATSAPP_AGENT_ID, whatsappOfficeAgent(evidence?.whatsappReader, now, fresh));
   const videoNativeId = nativeSignals.find(signal => signal.id === "kong-videos")?.agent?.id;
   const ids = new Set([...Object.keys(names), ...[...central.keys()].sort()].filter(id => id !== videoNativeId && id !== "kong-metrics"));
   const agents: KongOfficeDesk[] = [...ids].map(id => {
     const source = central.get(id);
+    if (id === WHATSAPP_AGENT_ID) {
+      const view = whatsappOfficeView(evidence?.whatsappReader, now, fresh);
+      return { id: WHATSAPP_CAREER_ID, name: "Vigilancia WhatsApp", role: "Lector externo autorizado", description: source!.responsibility,
+        color: "#22c55e", whatsappEvidence: view,
+        status: { state: view.status === "reading" ? "working" : view.status === "recent" ? "available" : view.status === "blocked" ? "needs-setup" : "offline",
+          label: view.label, detail: view.detail, lifePenaltyExempt: true } };
+    }
     const state = fresh ? source?.state : undefined;
     const status: AgentLiveStatus = state === "running"
       ? { state: "needs-setup", label: "Ejecución reportada sin verificar", detail: "El registro central no aporta una tarea o arrendamiento verificable en esta lectura." }
@@ -64,7 +73,7 @@ export function buildKongOfficeWing(evidence: OfficeKongAuditResult["evidence"] 
   const nativeIds: string[] = [];
   for (const signal of nativeSignals) {
     const existing = agents.find(agent => agent.id === (signal.id === "kong-videos" ? "kong-videos" : signal.agent ? `kong:${signal.agent.id}` : signal.id));
-    const status: AgentLiveStatus = signal.signal === "current" ? { state: "working", label: signal.label, detail: signal.detail } : { state: signal.signal === "alert" ? "needs-setup" : "offline", label: signal.label, detail: signal.detail };
+    const status: AgentLiveStatus = signal.signal === "current" ? { state: "available", label: "Actividad reportada; ejecución sin verificar", detail: signal.detail } : { state: signal.signal === "alert" ? "needs-setup" : "offline", label: signal.label, detail: signal.detail };
     if (existing) { if (signal.id !== "kong-videos") existing.status = status; existing.kongEvidence = signal; }
     else { agents.push({id:signal.id,name:signal.name,role:signal.role,description:signal.detail,color:"#a3e635",status,kongEvidence:signal}); nativeIds.push(signal.id); }
   }

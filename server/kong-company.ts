@@ -3,6 +3,7 @@ import type { AgentLiveStatus } from "../shared/agent-live-status";
 import { scoreOfficeKongSnapshot } from "../shared/office-kong-supervisor";
 import type { OfficeKongAuditResult } from "./office-kong";
 import { buildOfficeKongCollaboration, type OfficeKongCollaboration } from "./office-kong-collaboration";
+import { WHATSAPP_AGENT_ID, WHATSAPP_CAREER_ID, whatsappOfficeView } from "../shared/whatsapp-office-agent";
 
 export { isKongCompanyAgent } from "../shared/agent-company";
 export type KongCompanyObservation = {
@@ -33,6 +34,7 @@ export function advanceKongCompany(input: {
   };
   if (supervision.verified && input.evidence) {
     for (const raw of input.evidence.agents.filter(agent => agent.kind !== "city")) {
+      if (raw.id === WHATSAPP_AGENT_ID) continue; // Only the validated reader contract can credit this external role.
       const id = `kong:${raw.id}`;
       roles[id] = raw.name;
       // A running label without a lease is not proof that a remote department is still executing.
@@ -42,6 +44,18 @@ export function advanceKongCompany(input: {
         statuses[id] = { state: "offline", label: "Resultado confirmado; esperando próximo turno" };
         credit(id, raw.lastRunAt, "working", "Resultado completado verificado en KONG");
       }
+    }
+    const reader = whatsappOfficeView(input.evidence.whatsappReader, input.now);
+    roles[WHATSAPP_CAREER_ID] = "Vigilancia WhatsApp";
+    statuses[WHATSAPP_CAREER_ID] = {
+      state: reader.status === "reading" ? "working" : reader.status === "blocked" ? "needs-setup" : "checking",
+      label: reader.label,
+    };
+    // Reading/heartbeats/blocked evidence are not completed work or confirmed failed assignments.
+    // Preserve the existing once-per-result ledger; academy never replaces the external reader.
+    if (reader.status === "recent") {
+      observedAgents.add(WHATSAPP_CAREER_ID);
+      credit(WHATSAPP_CAREER_ID, reader.evidence!.lastSuccessAt, "working", "Lectura completa verificada de cuatro grupos");
     }
     for (const city of supervision.cities) for (const score of city.categories) {
       const id = `kong-city:${city.id}:${score.category}`;

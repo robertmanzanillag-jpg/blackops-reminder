@@ -9,13 +9,35 @@ import { registerAgentCouncilRoutes } from "../server/agent-council-routes";
 const NOW=Date.parse("2026-11-06T12:00:00Z"), owner="owner-one";
 const key=createHash("sha256").update(JSON.stringify(owner)).digest("hex");
 const source=():InternalWorkSnapshot=>({ownerKey:key,observedAt:new Date(NOW).toISOString(),taskTotal:1,approvalTotal:1,tasks:[{id:"task1",title:"Saved task",scheduledAt:"2026-11-06T23:30:00",priority:"high",kind:"meeting"}],approvals:[{id:"approval1",title:"Pending approval",scheduledAt:null,priority:"medium",kind:"email.send"}]});
-function fixture(){
+function fixture(includeRadio=false){
   let clock=NOW;
-  const company=advanceCompany(emptyCompanyState(),{now:NOW-1000,statuses:{ceo:{state:"working",label:"ready"},assistant:{state:"working",label:"ready"}},roles:{ceo:"CEO",assistant:"Assistant"}}).state;
+  const company=advanceCompany(emptyCompanyState(),{now:NOW-1000,statuses:{ceo:{state:"working",label:"ready"},assistant:{state:"working",label:"ready"},...(includeRadio?{radio:{state:"working" as const,label:"ready"}}:{})},roles:{ceo:"CEO",assistant:"Assistant",...(includeRadio?{radio:"Radio"}:{})}}).state;
   let state:NonNullable<CouncilState["officeExecution"]>={roles:reconcileRoleLifecycles(emptyRoleLifecycleState(),company,NOW),tokens:{reservations:[]}};
   const council={async updateOfficeExecution(change:any){const proposed=change(structuredClone(state),company);state=structuredClone(proposed);return structuredClone(state);}};
-  return {council,state:()=>state,now:()=>clock,setClock:(value:number)=>clock=value};
+  return {council,state:()=>state,company,now:()=>clock,setClock:(value:number)=>clock=value};
 }
+test("Radio incumbent qualification, policy assignment and first real saved-record result commit durably",async()=>{
+ const f=fixture(true);let reads=0;
+ const read=async()=>{reads++;return {...source(),observedAt:new Date(f.now()).toISOString(),radioTotal:1,radio:[{id:"radio1",title:"Radio",scheduledAt:"2026-11-08T19:00:00",description:"7-8PM DJ Alpha\n8-9PM DJ Beta\n9-10PM DJ Gamma"}]};};
+ const make=()=>createInternalWorkRunner({council:f.council,owner,now:f.now,read});
+ await Promise.all([make().tick(),make().tick()]);
+ const work=parseInternalWork(f.state().internalWork),job=work.jobs.find(j=>j.role==="radio")!;
+ assert.equal(job.status,"completed");assert.equal(job.artifact?.radioAssignments?.[0].slot7,"DJ Alpha");assert.equal(job.training?.scope,"radio-range-parser-only");
+ assert.equal(work.radioTrainingHistory?.length,1);assert.equal(f.state().roles.roles.radio.generation,1);assert.equal(f.company.trainees.find(t=>t.id===job.training?.traineeId)?.assessments?.length,3);
+  assert.equal(work.radioTrainingHistory?.[0].firstVerifiedRunId,job.id);assert.equal(work.radioTrainingHistory?.[0].firstExecutionArtifactId,job.artifactId);
+ assert.equal(f.state().roles.roles.radio.leases.filter(l=>l.status==="completed").length,1);
+ await make().tick();assert.equal(reads,3);
+ f.setClock(NOW+86400000);await make().tick();assert.equal(reads,6);assert.equal(f.state().internalWork?.radioTrainingHistory?.length,1);
+ const corrupted=structuredClone(f.state().internalWork)!;corrupted.radioTrainingHistory![0].generation=99;assert.throws(()=>parseInternalWork(corrupted));
+  const wrongPolicy=structuredClone(f.state().internalWork)!;const radioJob=wrongPolicy.jobs.find(j=>j.role==="radio")!;radioJob.artifact=prepareInternalArtifact("radio",radioJob.artifact!.snapshot,"radio-slots-baseline-v1");radioJob.artifactId=createHash("sha256").update(JSON.stringify(radioJob.artifact)).digest("hex");assert.throws(()=>parseInternalWork(wrongPolicy),/policy mismatch/);
+});
+test("Radio source failure keeps trained incumbent active without inventing completed work or promoting vacancy",async()=>{
+ const f=fixture(true);await createInternalWorkRunner({council:f.council,owner,now:f.now,read:async()=>source()}).tick();
+ assert.equal(f.state().internalWork?.jobs.find(j=>j.role==="radio")?.status,"blocked");assert.equal(f.state().roles.roles.radio.status,"active");
+ assert.equal(f.state().roles.roles.radio.leases.some(l=>l.status==="completed"),false);
+ const vacant=fixture(true);vacant.state().roles.roles.radio.status="vacant";
+ await createInternalWorkRunner({council:vacant.council,owner,now:vacant.now,read:async()=>source()}).tick();assert.equal(vacant.state().internalWork?.jobs.some(j=>j.role==="radio"),false);assert.equal(vacant.state().roles.roles.radio.status,"vacant");
+});
 test("canonical planning includes exact saved records, no sending or live-calendar claims",()=>{
   const ceo=prepareInternalArtifact("ceo",source()),assistant=prepareInternalArtifact("assistant",source());
   assert.deepEqual(ceo.includedIds,["task1","approval1"]);assert.deepEqual(assistant.includedIds,["task1"]);
@@ -62,4 +84,11 @@ test("source SQL binds owner on every private query and rolls back oversized res
   assert.match(queries[0].sql,/READ ONLY/);assert.ok(!queries.some(q=>/INSERT|UPDATE|DELETE/.test(q.sql)));
   const oversized={async connect(){const client=await pool.connect();return {...client,async query(sql:string,args?:unknown[]){if(sql.includes("FROM tasks"))return {rows:Array(201).fill(source().tasks[0])};return client.query(sql,args);}};}};
   await assert.rejects(()=>readInternalWorkSnapshot(oversized,owner));assert.equal(queries.at(-1)!.sql,"ROLLBACK");
+});
+test("Radio SQL stays owner-scoped and preserves exact saved description/date without external sync",async()=>{
+ const queries:Array<{sql:string,args?:unknown[]}>=[];
+ const raw={id:"radio-id",title:"Radio",scheduledAt:"2026-11-01T01:30:00",description:"7-8PM Alpha",total:"1"};
+ const pool={async connect(){return {async query(sql:string,args?:unknown[]){queries.push({sql,args});if(sql.includes("FROM users"))return {rows:[{id:owner}]};if(sql.includes("external_source='google'"))return {rows:[raw]};if(sql.includes("clock_timestamp"))return {rows:[{observed:new Date(NOW)}]};return {rows:[]};},release(){}};}};
+ const snapshot=await readInternalWorkSnapshot(pool,owner,true);assert.deepEqual(snapshot.radio,[{id:raw.id,title:raw.title,scheduledAt:raw.scheduledAt,description:raw.description}]);assert.equal(snapshot.radioTotal,1);
+ const radioQuery=queries.find(q=>q.sql.includes("external_source='google'"))!;assert.deepEqual(radioQuery.args,[owner]);assert.match(radioQuery.sql,/user_id=\$1/);assert.doesNotMatch(radioQuery.sql,/UPDATE|INSERT|DELETE/);
 });

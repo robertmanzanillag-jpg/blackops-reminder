@@ -32,7 +32,7 @@ if (internalEnabled || process.env.OFFICE_ACADEMY_EXECUTION_ENABLED === "true" |
 if (process.env.OFFICE_REVIEW_PROVIDER === "openai" && !reviewOnlyOwner) throw new Error("OpenAI requires the owner-scoped review-only worker.");
 const execution = reviewOnlyOwner && academy ? (await import("../server/office-execution")).createOfficeExecution(academy) : undefined;
 const internalModule=internalEnabled ? await import("../server/office-internal-work"):undefined;
-const internal=internalModule && academy && protocolPool ? internalModule.createInternalWorkRunner({council:academy,owner:getSystemUserId(),read:()=>internalModule.readInternalWorkSnapshot(protocolPool,getSystemUserId()),shouldStop:()=>stopping}):undefined;
+const internal=internalModule && academy && protocolPool ? internalModule.createInternalWorkRunner({council:academy,owner:getSystemUserId(),read:role=>internalModule.readInternalWorkSnapshot(protocolPool,getSystemUserId(),role==="radio"),shouldStop:()=>stopping}):undefined;
 const worker = createOfficeCloudWorker({ scheduledKongOwner, reviewOnlyOwner, ...(execution ? { execute: execution.execute, probeClaude: execution.probe, admission: execution.admission } : {}) });
 let lastAcademyTick = 0;
 let stopping = false;
@@ -52,6 +52,9 @@ try {
         lastAcademyTick = Date.now(); await academy.runCycle();
         if (!stopping && process.env.OFFICE_ACADEMY_EXECUTION_ENABLED === "true") await academy.runAcademyCycle();
         if(internal && !stopping) await internal.tick();
+        // The web scheduler is disabled in this deployment. Preserve the
+        // scout's durable daily cadence here; it only reads public releases.
+        if (!stopping) await academy.runScout();
       }
       if(!stopping) await worker.tick();
       consecutiveFailures = 0;

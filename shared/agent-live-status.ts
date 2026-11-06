@@ -7,7 +7,7 @@
 //
 // This module is pure (no React, no fetch) so it can be unit tested with node.
 
-export type AgentLiveState = "working" | "needs-setup" | "error" | "offline" | "checking";
+export type AgentLiveState = "working" | "available" | "needs-setup" | "error" | "offline" | "checking";
 
 export type AgentLiveStatus = {
   state: AgentLiveState;
@@ -48,6 +48,23 @@ export type AgentProbe = {
   // city-news: which local-news lane (city) this desk owns.
   lane?: "miami-news" | "ny-news";
 };
+
+/** Availability and completed observations are not proof of a currently running
+ * assignment. Keep execution scoring separate from visual activity. */
+export function presentProbeStatus(probe:AgentProbe,status:AgentLiveStatus):AgentLiveStatus {
+  if(status.state !== "working") return status;
+  const labels:Partial<Record<AgentProbe["kind"],string>>={
+    calendar:"Calendario conectado; sincronización actual sin verificar", "ready-checks":"Configuración disponible; ejecución sin verificar",
+    github:"GitHub conectado; sin ejecución actual verificada", dropshipping:"Preparación disponible; orden no ejecutada",
+    marketing:"Datos de clientes disponibles",portfolio:"Resumen de inversiones disponible",radio:"Eventos guardados disponibles",
+    clippers:"Reporte del worker disponible; ejecución actual sin verificar",automations:"Resultados de ejecuciones anteriores",
+    "dev-health":"Registro de salud disponible",news:"Ronda de noticias registrada; publicación sin verificar",
+    "city-news":"Datos de la última ronda disponibles", "kong-videos":"Archivos de video existentes; edición actual sin verificar",
+    legal:"Informe de revisión disponible", "blackroom-videos":"Reporte de videos disponible", "kong-metrics":"Métricas registradas disponibles",
+  };
+  const label=probe.kind === "clippers" && status.label === "Ultima corrida OK" ? "Última ejecución completada; no está ejecutándose ahora" : labels[probe.kind] || "Información disponible; ejecución actual sin verificar";
+  return {...status,state:"available",label,lifePenaltyExempt:true};
+}
 
 // One desk per city of the local-news agent (Metro Current). Same endpoint as "news", so no extra calls.
 export const CITY_NEWS_AGENTS = [

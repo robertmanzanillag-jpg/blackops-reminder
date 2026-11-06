@@ -6,6 +6,7 @@ import {
   agentProbes,
   runProbe,
   summarizeProbe,
+  presentProbeStatus,
   type AgentLiveState,
   type AgentLiveStatus,
   type ProbeResult,
@@ -44,6 +45,7 @@ const KONG_LEVEL = "1";
 export const OPERATIONS_AGENT_IDS = ["automations"];
 
 const stateStyle: Record<AgentLiveState, { dot: string; chip: string; text: string; screen: string; line: string }> = {
+  available: {dot:"bg-slate-400",chip:"border-slate-300/20",text:"text-slate-200",screen:"border-slate-300/20",line:"text-slate-200"},
   working: { dot: "bg-emerald-400", chip: "border-emerald-300/30 bg-emerald-400/10", text: "text-emerald-100", screen: "border-cyan-200/50 shadow-[0_0_22px_rgba(34,211,238,0.35)]", line: "text-cyan-100" },
   "needs-setup": { dot: "bg-amber-300", chip: "border-amber-300/30 bg-amber-300/10", text: "text-amber-100", screen: "border-amber-200/50 shadow-[0_0_18px_rgba(252,211,77,0.25)]", line: "text-amber-100" },
   error: { dot: "bg-rose-400", chip: "border-rose-300/40 bg-rose-400/10", text: "text-rose-100", screen: "border-rose-300/60 motion-safe:animate-[agent-alert_1.4s_ease-in-out_infinite]", line: "text-rose-100" },
@@ -53,6 +55,7 @@ const stateStyle: Record<AgentLiveState, { dot: string; chip: string; text: stri
 
 // What each agent is visibly doing at its desk. Everyone keeps moving; the label stays honest.
 const workMode: Record<AgentLiveState, { body: string; hands: string; verb: string }> = {
+  available: {body:"",hands:"",verb:"Disponible; sin ejecución actual verificada"},
   working: { body: "motion-safe:animate-[agent-bob_2.4s_ease-in-out_infinite]", hands: "motion-safe:animate-[agent-hands_0.35s_ease-in-out_infinite]", verb: "Trabajando" },
   "needs-setup": { body: "motion-safe:animate-[agent-scan_3.2s_ease-in-out_infinite]", hands: "motion-safe:animate-[agent-hands_0.9s_ease-in-out_infinite]", verb: "Esperando lo pendiente" },
   error: { body: "motion-safe:animate-[agent-bob_1.2s_ease-in-out_infinite]", hands: "motion-safe:animate-[agent-hands_0.22s_ease-in-out_infinite]", verb: "Investigando un error" },
@@ -100,10 +103,10 @@ export function useAgentLiveStatuses(
         : legal.data === undefined
           ? undefined
           : { ok: true, status: 200, body: legal.data };
-      statuses[id] = summarizeProbe(probe, legalResult);
+      statuses[id] = presentProbeStatus(probe,summarizeProbe(probe, legalResult));
       continue;
     }
-    statuses[id] = summarizeProbe(probe, resultByKey.get(probe.key));
+    statuses[id] = presentProbeStatus(probe,summarizeProbe(probe, resultByKey.get(probe.key)));
   }
   return statuses;
 }
@@ -341,7 +344,7 @@ export function councilDeskStatus(view: CouncilView | null, kind: "scout" | "fac
     const stale = Date.now() - last > 26 * 3_600_000;
     const pending = view.proposals.filter((p) => p.owner === "skills-scout" && p.status === "submitted").length;
     return {
-      state: stale ? "needs-setup" : "working",
+      state: stale ? "needs-setup" : "available",
       label: stale ? "Ronda atrasada" : pending ? `${pending} mejoras propuestas` : "Skills al dia",
       detail: view.scout.error || undefined,
       activity,
@@ -351,7 +354,7 @@ export function councilDeskStatus(view: CouncilView | null, kind: "scout" | "fac
   const hires = view.proposals.filter((p) => p.kind === "new_agent");
   const open = hires.filter((p) => ["submitted", "pending_submit", "not_submitted"].includes(p.status));
   return {
-    state: "working",
+    state: "available",
     label: open.length ? `${open.length} contrataciones propuestas` : "Sin vacantes",
     activity: hires.length ? hires.slice(0, 4).map((p) => p.title.replace("Contratar ", "")) : ["Busca huecos entre los agentes", "Propone agentes nuevos al CEO"],
   };
@@ -393,7 +396,7 @@ export function AgentsBuilding({
   const statuses: Record<string, AgentLiveStatus> = { ...liveStatuses };
   for (const [agentId, override] of Object.entries(council.view?.overrides || {})) {
     const current = statuses[agentId];
-    if (current && current.state === "working") statuses[agentId] = { ...current, state: "needs-setup", label: override.label, detail: override.detail };
+    if (current && (current.state === "working" || current.state === "available")) statuses[agentId] = { ...current, state: "needs-setup", label: override.label, detail: override.detail };
   }
 
   const debatingBy = new Map<string, string>();
@@ -403,7 +406,7 @@ export function AgentsBuilding({
     debatingBy.set(debate.subject, debatingBy.get(debate.subject) || debate.topic);
   }
 
-  const counts: Record<AgentLiveState, number> = { working: 0, "needs-setup": 0, error: 0, offline: 0, checking: 0 };
+  const counts: Record<AgentLiveState, number> = { working: 0, available:0, "needs-setup": 0, error: 0, offline: 0, checking: 0 };
   for (const id of agentIds) counts[statuses[id]?.state ?? "checking"] += 1;
 
   const runCouncil = async () => {

@@ -1,7 +1,7 @@
 import type { CompanyState } from "./agent-company";
 
 // This registry describes actual adapters, not the avatars displayed by the office.
-export const OFFICE_EXECUTABLE_ROLES = { "claude-reviewer": { readOnly: true }, ceo: {readOnly:true}, assistant: {readOnly:true} } as const;
+export const OFFICE_EXECUTABLE_ROLES = { "claude-reviewer": { readOnly: true }, ceo: {readOnly:true}, assistant: {readOnly:true}, radio:{readOnly:true} } as const;
 export type RolePolicy = {
   version: string;
   guidance: string[];
