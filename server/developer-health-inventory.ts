@@ -18,24 +18,24 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
   {
     name: "Br Website",
     slug: "br-website",
-    description: "Black Room website repo. GitHub: robertmanzanillag-jpg/br-website.",
+    description: "Black Room website repo. GitHub: robertmanzanillag-jpg/br-website. Health covers the token/database subsystem; no package test or build script is defined.",
     environment: "production",
     publicUrl: "https://blackroomus.com",
-    healthUrl: null,
+    healthUrl: "https://blackroomus.com/admin/tokens/health",
     repoOwner: "robertmanzanillag-jpg",
     repoName: "br-website",
     githubRepo: "robertmanzanillag-jpg/br-website",
     deploymentProvider: "custom-domain",
     deploymentId: null,
-    testCommand: "npm run check",
-    buildCommand: "npm run build",
+    testCommand: null,
+    buildCommand: null,
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
     logSource: null,
     priority: "high",
     ownerLabel: "Robert",
-    tags: ["known-github-inventory", "verified-public-url", "needs-health-url"],
+    tags: ["known-github-inventory", "verified-public-url", "subsystem-health-endpoint", "no-package-test-script", "no-build-step"],
   },
   {
     name: "Blackops Reminder",
@@ -62,7 +62,7 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
   {
     name: "DROPKIT",
     slug: "dropkit",
-    description: "Dropkit app repo. GitHub: robertmanzanillag-jpg/DROPKIT.",
+    description: "Dropkit app repo. GitHub: robertmanzanillag-jpg/DROPKIT. Validation uses TypeScript and lint; no unit-test script or health endpoint is verified.",
     environment: "production",
     publicUrl: "https://dropkit.replit.app",
     healthUrl: null,
@@ -71,8 +71,8 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     githubRepo: "robertmanzanillag-jpg/DROPKIT",
     deploymentProvider: "replit",
     deploymentId: null,
-    testCommand: "npm run check",
-    buildCommand: "npm run build",
+    testCommand: "npm run check:types && npm run lint",
+    buildCommand: "export NODE_OPTIONS='--max-old-space-size=4096' && EXPO_PUBLIC_DOMAIN=$REPLIT_INTERNAL_APP_DOMAIN npx expo export --platform web --output-dir static-build/web --no-bytecode --clear && EXPO_PUBLIC_DOMAIN=$REPLIT_INTERNAL_APP_DOMAIN npm run expo:static:build && npm run server:build",
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
@@ -87,21 +87,21 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     description: "Kong Nightlife app repo. GitHub: robertmanzanillag-jpg/kong-nightlife.",
     environment: "production",
     publicUrl: "https://kongnightlife.com",
-    healthUrl: "https://kongnightlife.com/api/health",
+    healthUrl: "https://kongnightlife.com/api/ready",
     repoOwner: "robertmanzanillag-jpg",
     repoName: "kong-nightlife",
     githubRepo: "robertmanzanillag-jpg/kong-nightlife",
     deploymentProvider: "replit",
     deploymentId: null,
-    testCommand: "npm run check",
-    buildCommand: "EXPO_PUBLIC_DOMAIN=kongnightlife.com npm run expo:static:build",
+    testCommand: "npm run check:routes && npm run test:genre-classifier",
+    buildCommand: "npm run server:build && npm run worker:build && WEB_DEPLOY_ONLY=true node scripts/build.js && node scripts/write-deploy-info.js",
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
     logSource: null,
     priority: "high",
     ownerLabel: "Robert",
-    tags: ["known-github-inventory", "health-verified"],
+    tags: ["known-github-inventory", "health-verified", "startup-database-readiness"],
   },
 ];
 
@@ -134,7 +134,6 @@ function normalizeKnownAppTags(existing: AppProject, known: InsertAppProject, me
 }
 
 function mergeKnownApp(existing: AppProject, known: InsertAppProject): Partial<AppProject> {
-  const mergedTags = normalizeKnownAppTags(existing, known, mergeTags(existing.tags, known.tags));
   const updates: Partial<AppProject> = {};
 
   const fields: Array<keyof InsertAppProject> = [
@@ -156,6 +155,16 @@ function mergeKnownApp(existing: AppProject, known: InsertAppProject): Partial<A
 
   for (const field of fields) {
     const nextValue = known[field];
+    if (field === "testCommand" || field === "buildCommand") {
+      const previous = existing[field];
+      const retired = known.slug === "br-website" || known.slug === "dropkit"
+        ? [field === "testCommand" ? "npm run check" : "npm run build"]
+        : known.slug === "kong-nightlife" ? field === "testCommand" ? ["npm run check"] : ["EXPO_PUBLIC_DOMAIN=kongnightlife.com npm run expo:static:build", "EXPO_PUBLIC_DOMAIN=kong--app.replit.app npm run expo:static:build"] : [];
+      // Only exact old bootstrap defaults may be replaced or cleared. Preserve custom commands.
+      if (previous && !retired.includes(previous)) continue;
+      if (previous !== nextValue) updates[field] = known[field] || null;
+      continue;
+    }
     if (nextValue === null || nextValue === undefined || nextValue === "") continue;
     if (field === "deploymentProvider" && existing.deploymentProvider === "github-homepage") {
       updates.deploymentProvider = String(nextValue);
@@ -173,6 +182,7 @@ function mergeKnownApp(existing: AppProject, known: InsertAppProject): Partial<A
     }
   }
 
+  const mergedTags = normalizeKnownAppTags({ ...existing, ...updates }, known, mergeTags(existing.tags, known.tags));
   if (JSON.stringify(tags(existing.tags).sort()) !== JSON.stringify(mergedTags.slice().sort())) {
     updates.tags = mergedTags;
   }
