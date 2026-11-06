@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { createFactoryBuilderAdapter, createDockerFactoryRunner, type FactoryBuilderDependencies, type FactoryBuildInput } from '../server/software-factory-builder';
+import { createFactoryBuilderAdapter, createFactoryPipelineBuilder, createDockerFactoryRunner, type FactoryBuilderDependencies, type FactoryBuildInput } from '../server/software-factory-builder';
 const input: FactoryBuildInput = { repository:'owner/app',baseSha:'a'.repeat(40),request:'Fix label',reservedCents:20,testCommand:['npm','test'],buildCommand:['npm','run','build'] };
 const patch='--- a/label.txt\n+++ b/label.txt\n@@ -1 +1 @@\n-old\n+new\n';
 function fixture(overrides:Partial<FactoryBuilderDependencies>={}) {
@@ -53,3 +53,26 @@ test('unconfirmed container cleanup makes the build outcome unknown',async()=>{
 });
 
 test('publication must attest the exact tested patch hash',async()=>{const {run}=fixture({publishPullRequest:async()=>({headSha:'b'.repeat(40),prUrl:'https://github.com/owner/app/pull/1',appliedPatchSha256:'c'.repeat(64)})});assert.equal((await run(input)).status,'unknown');});
+
+
+test('pipeline bridge preserves known failures instead of making them uncertain', async () => {
+ const build=createFactoryPipelineBuilder({dependencies:{}, commands:()=>({test:['npm','test'],build:['npm','run','build']}),attest:async()=>{throw Error('must not attest');}});
+ const result=await build({repo:'owner/app'} as any,{finding:{baseSha:input.baseSha,request:input.request}} as any,{signal:new AbortController().signal,maxCostCents:20});
+ assert.ok('status' in result);
+ if ('status' in result) {assert.equal(result.status,'blocked');assert.equal(result.costCents,0);}
+});
+
+
+test('pipeline bridge retains paid failed checks and uncertain publication distinctly', async () => {
+ for(const publish of [false,true]) {
+  const build=createFactoryPipelineBuilder({dependencies:{
+   exportSource:async(_repo,sha,dir)=>{await writeFile(path.join(dir,'label.txt'),'old\n');return {sha};},
+   generatePatch:async()=>({patch,costCents:10}),
+   runIsolated:async()=>{if(!publish)throw Error('known failed check');},
+   publishPullRequest:async()=>{throw Error('lost publication response');},
+  },commands:()=>({test:['npm','test'],build:['npm','run','build']}),attest:async()=>{throw Error('must not attest');}});
+  const result=await build({repo:'owner/app'} as any,{finding:{baseSha:input.baseSha,request:input.request}} as any,{signal:new AbortController().signal,maxCostCents:20});
+  assert.ok('status' in result);
+  if('status' in result){assert.equal(result.status,publish?'unknown':'failed');assert.equal(result.costCents,10);}
+ }
+});

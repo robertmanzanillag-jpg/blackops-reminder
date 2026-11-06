@@ -21,8 +21,8 @@ export interface FactoryPipelineDependencies {
   previous(ownerKey: string, jobId: string): Promise<FactoryJob | undefined>;
   claimFinding(ownerKey: string, projectId: string, key: string, jobId: string): Promise<boolean>;
   reservations: Record<FactoryJob["kind"], number>;
-  discover?: (project: FactoryProject, context: StageContext) => Promise<Costed & { finding?: FactoryPipelineState["finding"] }>;
-  build?: (project: FactoryProject, state: FactoryPipelineState, context: StageContext) => Promise<Costed & { candidate: FactoryCandidate; tests: FactoryEvidence }>;
+  discover?: (project: FactoryProject, context: StageContext) => Promise<Costed & { finding?: FactoryPipelineState["finding"]; findings?: FactoryPipelineState["finding"][] }>;
+  build?: (project: FactoryProject, state: FactoryPipelineState, context: StageContext) => Promise<(Costed & { candidate: FactoryCandidate; tests: FactoryEvidence }) | { status: "blocked" | "failed" | "unknown"; costCents: number; reason?: string }>;
   simulate?: (project: FactoryProject, state: FactoryPipelineState, context: StageContext) => Promise<Costed & { evidence: FactoryEvidence }>;
   review?: (project: FactoryProject, state: FactoryPipelineState, context: StageContext) => Promise<Costed & { evidence: FactoryEvidence }>;
   deploy?: (project: FactoryProject, state: FactoryPipelineState, context: StageContext) => Promise<Costed & { deployment: NonNullable<FactoryPipelineState["deployment"]> }>;
@@ -69,18 +69,24 @@ export function createFactoryPipeline(deps: FactoryPipelineDependencies): Pick<F
     const checkCost = (cost: number) => { if (!Number.isSafeInteger(cost) || cost < 0 || cost > context.maxCostCents) throw new Error("FACTORY_STAGE_BILLING_UNCONFIRMED"); };
     if (kind === "discover") {
       const found = await deps.discover!(clone(project), context); checkCost(found.costCents);
-      if (!found.finding) return { status: "completed", costCents: found.costCents, reason: "FACTORY_NO_ACTIONABLE_FINDING" };
-      if (!validSha(found.finding.baseSha) || !found.finding.id || !found.finding.request.trim() || !found.finding.artifactIds.length) throw new Error("FACTORY_FINDING_UNVERIFIED");
-      if (!["bug", "improvement"].includes(found.finding.kind) || (found.finding.kind === "bug" && !found.finding.regressionScenarioId?.trim())) throw new Error("FACTORY_REPRODUCTION_REQUIRED");
-      const findingKey = createHash("sha256").update(JSON.stringify([project.id, found.finding.baseSha, found.finding.id])).digest("hex");
-      if (!await deps.claimFinding(job.ownerKey, project.id, findingKey, job.id)) return { status: "completed", costCents: found.costCents, reason: "FACTORY_FINDING_ALREADY_TRACKED" };
-      const state: FactoryPipelineState = { version: 1, projectId: project.id, rootJobId: job.id, target: project.automaticRelease ? "production" : "staging", finding: found.finding, evidence: [], repairAttempts: 0 };
+      const findings = found.findings ?? (found.finding ? [found.finding] : []);
+      if (!findings.length) return { status: "completed", costCents: found.costCents, reason: "FACTORY_NO_ACTIONABLE_FINDING" };
+      let selected: FactoryPipelineState["finding"] | undefined;
+      for (const finding of findings) {
+        if (!validSha(finding.baseSha) || !finding.id || !finding.request.trim() || !finding.artifactIds.length) throw new Error("FACTORY_FINDING_UNVERIFIED");
+        if (!["bug", "improvement"].includes(finding.kind) || (finding.kind === "bug" && !finding.regressionScenarioId?.trim())) throw new Error("FACTORY_REPRODUCTION_REQUIRED");
+        const findingKey = createHash("sha256").update(JSON.stringify([project.id, finding.baseSha, finding.id])).digest("hex");
+        if (await deps.claimFinding(job.ownerKey, project.id, findingKey, job.id)) { selected = finding; break; }
+      }
+      if (!selected) return { status: "completed", costCents: found.costCents, reason: "FACTORY_FINDING_ALREADY_TRACKED" };
+      const state: FactoryPipelineState = { version: 1, projectId: project.id, rootJobId: job.id, target: project.automaticRelease ? "production" : "staging", finding: selected, evidence: [], repairAttempts: 0 };
       return result(state, found.costCents, { next: next(job, "build", state) });
     }
     const { state, previous } = await load(job);
     if (kind === "build") {
       if (previous.kind !== "discover") { if (!canRepair(state.repairAttempts)) return result(state, 0, { status: "blocked", reason: "FACTORY_REPAIR_LIMIT" }); state.repairAttempts++; }
       const built = await deps.build!(clone(project), clone(state), context); checkCost(built.costCents);
+      if ("status" in built) return result(state, built.costCents, { status: built.status, reason: built.reason });
       if (built.candidate.projectId !== project.id || built.candidate.baseSha !== state.finding.baseSha || !validSha(built.candidate.headSha)) throw new Error("FACTORY_BUILD_IDENTITY_INVALID");
       state.candidate = { ...built.candidate, repairAttempts: state.repairAttempts }; state.evidence = [built.tests];
       if (!evidenceMatches(state, built.tests, "tests") || !built.tests.passed || built.tests.warnings.length) return result(state, built.costCents, { status: "blocked", reason: "FACTORY_BUILD_CHECKS_FAILED" });
@@ -159,12 +165,13 @@ export function createAppQaFactoryDiscovery(options: {
     const snapshot = await options.snapshot(project, context);
     if (snapshot.projectId !== project.id || !validSha(snapshot.baseSha) || !snapshot.artifactId) throw new Error("FACTORY_QA_SNAPSHOT_UNVERIFIED");
     const priority = { critical: 0, high: 1, medium: 2, low: 3, info: 4 };
+    const findings: FactoryPipelineState["finding"][] = [];
     for (const finding of [...snapshot.findings].sort((a, b) => priority[a.severity] - priority[b.severity] || a.id.localeCompare(b.id))) {
       const kind = finding.sourceAgent === "improvement-scout" ? "improvement" : "bug";
       const regressionScenarioId = await options.reproduction(project, finding);
       if (kind === "bug" && !regressionScenarioId) continue;
-      return { costCents: snapshot.costCents, finding: { id: finding.id, kind, regressionScenarioId, baseSha: snapshot.baseSha, artifactIds: [snapshot.artifactId], request: `${finding.title}\n${finding.detail}\n${finding.recommendation}` } };
+      findings.push({ id: finding.id, kind, regressionScenarioId, baseSha: snapshot.baseSha, artifactIds: [snapshot.artifactId], request: `${finding.title}\n${finding.detail}\n${finding.recommendation}` });
     }
-    return { costCents: snapshot.costCents };
+    return { costCents: snapshot.costCents, finding: findings[0], findings };
   };
 }

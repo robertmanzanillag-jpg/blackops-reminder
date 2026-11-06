@@ -135,9 +135,10 @@ export function createFactoryPipelineBuilder(options: {
     const result = await build({ repository: project.repo, baseSha: state.finding.baseSha,
       request: state.finding.request, reservedCents: context.maxCostCents,
       testCommand: commands.test, buildCommand: commands.build }, context.signal);
-    // A thrown integration outcome is retained as uncertain by the durable worker;
-    // it must never be transformed into zero-cost success or an automatic retry.
-    if (result.status !== 'completed' || !result.evidence) throw new Error(`FACTORY_BUILD_${result.status.toUpperCase()}`);
+    // Preserve settled failures and their actual cost; uncertain outcomes still
+    // quarantine the worker and retain its reservation.
+    if (result.status !== 'completed') return { status: result.status, costCents: result.costCents, reason: `FACTORY_BUILD_${result.status.toUpperCase()}` };
+    if (!result.evidence) throw new Error('FACTORY_BUILD_EVIDENCE_MISSING');
     const attestation = await options.attest(project, result.evidence);
     const candidate = attestation.candidate;
     if (candidate.projectId !== project.id || candidate.baseSha !== result.evidence.baseSha ||

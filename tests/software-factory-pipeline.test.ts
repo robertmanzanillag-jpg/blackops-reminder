@@ -75,7 +75,7 @@ test("unchanged finding is deduplicated across daily scans", async () => {
 });
 test("bug repair cannot continue without a permanent regression test", async () => {
   const f = fixture(), build = f.deps.build!;
-  f.deps.build = async (...args) => { const result = await build(...args); result.candidate.changedFiles = ["client/src/button.tsx"]; return result; };
+  f.deps.build = async (...args) => { const result = await build(...args); if ("status" in result) throw new Error("Unexpected failed fixture"); result.candidate.changedFiles = ["client/src/button.tsx"]; return result; };
   const run = await f.run(); assert.equal(run.result.reason, "FACTORY_PERMANENT_REGRESSION_TEST_REQUIRED"); assert.deepEqual(run.stages, ["discover", "build"]);
 });
 test("fixture launch attestation is required and cleanup runs on refusal", async () => {
@@ -96,5 +96,30 @@ test("App QA discovery prioritizes reproducible findings without generating new 
   const f = fixture();
   const discover = createAppQaFactoryDiscovery({ snapshot: async () => ({ projectId: "office", baseSha: base, artifactId: "qa-report", costCents: 1, findings: [{ id: "visual", appName: "office", area: "button", severity: "low", title: "Style", detail: "Contrast", recommendation: "Improve contrast", sourceAgent: "improvement-scout" }, { id: "form", appName: "office", area: "form", severity: "high", title: "Form broken", detail: "Fails on submit", recommendation: "Fix form", sourceAgent: "error-scout" }] }), reproduction: async (_project, finding) => finding.id === "form" ? "form" : undefined });
   const found = await discover(f.project, { signal: new AbortController().signal, maxCostCents: 5 });
+  assert.deepEqual(found.findings?.map(finding => finding.id), ["form", "visual"]);
   assert.equal(found.finding?.id, "form"); assert.equal(found.finding?.regressionScenarioId, "form");
+});
+
+
+test("tracked first finding cannot starve another finding on the same revision", async () => {
+  const f = fixture();
+  const initial = await f.deps.discover!(f.project, { signal: new AbortController().signal, maxCostCents: 5 });
+  f.deps.discover = async () => ({ costCents: 1, findings: [initial.finding!, { ...initial.finding!, id: "second-bug" }] });
+  await f.run();
+  const second = await f.run();
+  assert.ok(second.stages.includes("build"));
+  assert.equal((second.result.evidence as any).pipelineState.finding.id, "second-bug");
+  assert.equal((await f.run()).result.reason, "FACTORY_FINDING_ALREADY_TRACKED");
+});
+
+test("settled build failures retain their status and billed cost", async () => {
+  for (const status of ["failed", "blocked", "unknown"] as const) {
+    const f = fixture();
+    f.deps.build = async () => ({ status, costCents: 7, reason: "FACTORY_BUILD_" + status.toUpperCase() });
+    const run = await f.run();
+    assert.deepEqual(run.stages, ["discover", "build"]);
+    assert.equal(run.result.status, status);
+    assert.equal(run.result.costCents, 7);
+    assert.equal(run.result.next, undefined);
+  }
 });
