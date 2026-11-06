@@ -1,12 +1,21 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const allowed = new Set(['DATABASE_URL','DEFAULT_USER_ID','OPENAI_API_KEY','OFFICE_OPENAI_MODEL','OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT','OFFICE_OPENAI_MAX_OUTPUT_TOKENS','OFFICE_ACADEMY_PREPARATION_ENABLED','OFFICE_ACADEMY_EXECUTION_ENABLED','OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED','OFFICE_EXPECTED_WEB_REVISION','GITHUB_TOKEN']);
 const localEnvFiles = ['.env','.env.local','.env.development','.env.development.local','.env.production','.env.production.local','.env.replit','CEO_ASSISTANT_ENV','CEO_ASSISTANT_ENV.local'];
 const fail = code => { throw new Error(code); };
+export function assertPrivateConfigAcl(configPath, execute = spawnSync, inherited = process.env) {
+  const script = "$ErrorActionPreference='Stop'; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; $acl=Get-Acl -LiteralPath $env:OFFICE_PRIVATE_CONFIG_PATH; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin @($sid,'S-1-5-18','S-1-5-32-544')){exit 1}; foreach($rule in $acl.Access){$id=$rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value; if($rule.AccessControlType -eq 'Allow' -and $id -notin @($sid,'S-1-5-18','S-1-5-32-544')){exit 1}}; Write-Output 'PRIVATE_CONFIG_ACL_OK'";
+  const env = {}; for (const key of ['SystemRoot','WINDIR','TEMP','TMP']) if (inherited[key]) env[key] = inherited[key];
+  if (!env.SystemRoot) fail('WINDOWS_SYSTEM_ROOT_REQUIRED');
+  const result = execute(path.join(env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe'), ['-NoProfile','-NonInteractive','-Command',script], {
+    env:{...env,OFFICE_PRIVATE_CONFIG_PATH:configPath}, windowsHide:true, shell:false, timeout:15000, encoding:'utf8', maxBuffer:4096,
+  });
+  if (result.status !== 0 || result.stdout?.trim() !== 'PRIVATE_CONFIG_ACL_OK') fail('CONFIGURATION_ACL_NOT_VERIFIED');
+}
 export function parseWorkerConfig(raw) {
   if (Buffer.byteLength(raw) > 65536) fail('CONFIG_TOO_LARGE');
   const config = {};
@@ -67,6 +76,7 @@ async function main() {
   const args = process.argv.slice(2);
   if (args.length !== 5 || args[0] !== '--repo' || args[2] !== '--config' || !['--preflight','--run'].includes(args[4])) fail('ARGUMENTS_INVALID');
   const paths = validateWorkerPaths(args[1], args[3]);
+  assertPrivateConfigAcl(paths.configPath);
   const config = parseWorkerConfig(fs.readFileSync(paths.configPath,'utf8'));
   for (const key of Object.keys(process.env)) if (/^PG/.test(key)) delete process.env[key];
   const require = createRequire(path.join(paths.repo,'package.json'));

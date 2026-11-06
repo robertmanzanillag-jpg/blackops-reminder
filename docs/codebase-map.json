@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T10:53:59.947Z",
+  "generatedAt": "2026-11-06T11:35:59.845Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\blackops-reminder",
   "packageName": "rest-express",
   "scripts": {
@@ -124,39 +124,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 805,
+    "filesVisible": 806,
     "filesIndexed": 717,
-    "imports": 2549,
+    "imports": 2551,
     "routes": 554,
-    "symbols": 16162
+    "symbols": 16175
   },
   "directories": {
-    "docs": {
-      "files": 35,
-      "indexed": 34,
-      "kinds": {
-        "docs": 35
-      }
-    },
     "script": {
-      "files": 89,
+      "files": 90,
       "indexed": 82,
       "kinds": {
-        "script": 89
-      }
-    },
-    "server": {
-      "files": 168,
-      "indexed": 163,
-      "kinds": {
-        "server": 168
-      }
-    },
-    "tests": {
-      "files": 178,
-      "indexed": 174,
-      "kinds": {
-        "test": 178
+        "script": 90
       }
     },
     ".": {
@@ -301,6 +280,13 @@
         "other": 1
       }
     },
+    "docs": {
+      "files": 35,
+      "indexed": 34,
+      "kinds": {
+        "docs": 35
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -314,6 +300,13 @@
       "indexed": 1,
       "kinds": {
         "script": 4
+      }
+    },
+    "server": {
+      "files": 168,
+      "indexed": 163,
+      "kinds": {
+        "server": 168
       }
     },
     "server/replit_integrations/batch": {
@@ -349,6 +342,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 178,
+      "indexed": 174,
+      "kinds": {
+        "test": 178
       }
     },
     "tests/fixtures": {
@@ -10392,6 +10392,7 @@
         "tsx/esm/api"
       ],
       "exports": [
+        "assertPrivateConfigAcl",
         "parseWorkerConfig",
         "preflightDatabase",
         "safeWorkerEnvironment",
@@ -10400,6 +10401,7 @@
       "symbols": [
         "allowed",
         "args",
+        "assertPrivateConfigAcl",
         "cap",
         "child",
         "config",
@@ -10421,6 +10423,7 @@
         "require",
         "result",
         "safeWorkerEnvironment",
+        "script",
         "terminate",
         "validateWorkerPaths",
         "value"
@@ -18558,6 +18561,7 @@
       "kind": "server",
       "imports": [
         "./github-client",
+        "@octokit/rest",
         "node:crypto"
       ],
       "exports": [
@@ -18565,6 +18569,7 @@
         "OfficePrReference",
         "OfficePullRequestPacket",
         "createOfficeGitHubLoader",
+        "getOfficePrReadClient",
         "parseOfficePrUrl"
       ],
       "symbols": [
@@ -18582,10 +18587,13 @@
         "before",
         "block",
         "client",
+        "configuredIdentity",
         "createOfficeGitHubLoader",
         "diff",
+        "env",
         "filePacket",
         "getClient",
+        "getOfficePrReadClient",
         "header",
         "input",
         "integer",
@@ -27755,6 +27763,9 @@
         "BASE",
         "HEAD",
         "PR",
+        "actual",
+        "client",
+        "expected",
         "failing",
         "file",
         "giant",
@@ -28070,6 +28081,7 @@
       "imports": [
         "../script/office-windows-worker.mjs",
         "node:assert/strict",
+        "node:child_process",
         "node:fs",
         "node:os",
         "node:path",
@@ -28078,11 +28090,16 @@
       "exports": [],
       "symbols": [
         "FakePool",
+        "command",
         "config",
         "entry",
         "env",
+        "guard",
+        "helper",
+        "privatePath",
         "raw",
         "repo",
+        "result",
         "root",
         "source"
       ],
