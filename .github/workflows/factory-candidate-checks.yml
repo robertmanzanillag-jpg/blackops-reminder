@@ -37,6 +37,8 @@ jobs:
             --tmpfs /tmp:rw,nosuid,size=512m --env HOME=/tmp \
             --mount "type=bind,src=$PWD/dependencies,dst=/dependencies" --workdir /dependencies \
             "$FACTORY_IMAGE" npm ci --ignore-scripts --no-audit --no-fund --registry=https://registry.npmjs.org
+          test ! -L dependencies/node_modules/.vite-temp
+          mkdir -p dependencies/node_modules/.vite-temp
       - name: Isolated tests
         shell: bash
         run: |
@@ -46,7 +48,7 @@ jobs:
           trap 'status=$?; cleanup || status=1; exit "$status"' EXIT
           timeout --kill-after=10 300 docker run --rm --name "$container" --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
             --user "$(id -u):$(id -g)" --memory 3g --cpus 2 --pids-limit 128 \
-            --tmpfs /tmp:rw,nosuid,exec,size=256m --tmpfs /work:rw,nosuid,size=512m,mode=1777 --env HOME=/tmp \
+            --tmpfs /tmp:rw,nosuid,exec,size=256m --tmpfs /work:rw,nosuid,size=512m,mode=1777 --tmpfs /dependencies/node_modules/.vite-temp:rw,nosuid,size=32m,mode=1777 --env HOME=/tmp \
             --mount "type=bind,src=$PWD/source,dst=/source,readonly" \
             --mount "type=bind,src=$PWD/dependencies/node_modules,dst=/dependencies/node_modules,readonly" \
             --workdir /work "$FACTORY_IMAGE" sh -c \
@@ -60,7 +62,7 @@ jobs:
           trap 'status=$?; cleanup || status=1; exit "$status"' EXIT
           timeout --kill-after=10 300 docker run --rm --name "$container" --network none --read-only --cap-drop ALL --security-opt no-new-privileges \
             --user "$(id -u):$(id -g)" --memory 3g --cpus 2 --pids-limit 128 \
-            --tmpfs /tmp:rw,nosuid,exec,size=256m --tmpfs /work:rw,nosuid,size=512m,mode=1777 --env HOME=/tmp \
+            --tmpfs /tmp:rw,nosuid,exec,size=256m --tmpfs /work:rw,nosuid,size=512m,mode=1777 --tmpfs /dependencies/node_modules/.vite-temp:rw,nosuid,size=32m,mode=1777 --env HOME=/tmp \
             --mount "type=bind,src=$PWD/source,dst=/source,readonly" \
             --mount "type=bind,src=$PWD/dependencies/node_modules,dst=/dependencies/node_modules,readonly" \
             --workdir /work "$FACTORY_IMAGE" sh -c \
