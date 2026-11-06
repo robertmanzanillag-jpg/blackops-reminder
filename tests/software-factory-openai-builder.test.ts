@@ -102,7 +102,7 @@ test("plain text edits construct exact complete hunks and reject ambiguous or st
     ].map(([before, after]) => JSON.stringify({ before, after }))]) {
       assert.deepEqual(await run(response), { patch: "", costCents: 1 });
     }
-    for (const unsafe of [source.replace('Health</a>', 'Old wording.</a>'), source.replace('<h1>', '<script>'), source.replace('<h1>', '<!--'), source.slice(0, -1), '\uFEFF' + source]) {
+    for (const unsafe of [source.replace('Health</a>', 'Old wording.</a>'), source.replace('<h1>', '<script>'), source.replace('<h1>', '<!--'), source.replace('<h1>Old wording.</h1>', '<h1 title="x > Old wording.">Other</h1>'), source.slice(0, -1), '\uFEFF' + source]) {
       await writeFile(path.join(workspace, "site/index.html"), unsafe);
       assert.deepEqual(await run(JSON.stringify({ before: 'Old wording.', after: 'New wording.' })), { patch: "", costCents: 1 });
     }
