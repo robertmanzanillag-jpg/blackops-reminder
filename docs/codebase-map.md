@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-06T02:55:48.839Z
-Repo: `/Users/robertmanzanilla/Documents/Codex/2026-11-05/qui/work/software-factory`
+Generated: 2026-11-06T04:53:14.398Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\software-factory`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 799 | 715 | 2553 | 556 | 16034 |
+| 800 | 717 | 2564 | 556 | 16066 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,26 +28,30 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 174 | 171 | test:174 |
-| `server` | 166 | 162 | server:166 |
-| `client/src` | 143 | 141 | ui-component:55, client-component:38, client-page:26, client-lib:17 |
+| `tests` | 175 | 172 | test:175 |
+| `server` | 167 | 163 | server:167 |
 | `script` | 86 | 81 | script:86 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
+| `client/src/components/ui` | 55 | 55 | ui-component:55 |
 | `docs` | 37 | 36 | docs:37 |
+| `client/src/components` | 29 | 29 | client-component:29 |
+| `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
+| `client/src/lib` | 17 | 17 | client-lib:17 |
 | `shared` | 12 | 12 | shared:12 |
-| `server/replit_integrations` | 9 | 9 | server:9 |
 | `.agents/memory` | 5 | 5 | docs:5 |
-| `client/public` | 16 | 2 | other:16 |
-| `.agents/skills` | 2 | 1 | docs:1, other:1 |
+| `client/src/components/company-office` | 5 | 5 | client-component:5 |
+| `server/replit_integrations/chat` | 4 | 4 | server:4 |
+| `client/src` | 3 | 3 | other:3 |
+| `client/src/hooks` | 3 | 3 | client-hook:3 |
+| `server/replit_integrations/image` | 3 | 3 | server:3 |
+| `client/public` | 14 | 2 | other:14 |
+| `client/src/components/agents-world-office` | 2 | 2 | client-component:2 |
+| `server/replit_integrations/batch` | 2 | 2 | server:2 |
+| `.agents/skills/codebase-overview` | 1 | 1 | docs:1 |
 | `client` | 1 | 1 | other:1 |
-| `scripts` | 4 | 1 | script:4 |
-| `shared/models` | 1 | 1 | shared:1 |
-| `tests/fixtures` | 1 | 1 | test:1 |
-| `tests/harness` | 1 | 1 | test:1 |
-| `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
-| `bin` | 1 | 0 | other:1 |
-| `work` | 1 | 0 | other:1 |
+| `client/src/components/agents-building` | 1 | 1 | client-component:1 |
+| `client/src/components/clippers` | 1 | 1 | client-component:1 |
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/tools`
@@ -196,6 +200,7 @@ Package: `rest-express`
 - `tests/software-factory-pipeline.test.ts`
 - `tests/software-factory-postgres.test.ts`
 - `tests/software-factory-routes.test.ts`
+- `tests/software-factory-runtime.test.ts`
 - `tests/software-factory-simulator.test.ts`
 - `tests/software-factory-store.test.ts`
 - `tests/software-factory-worker.test.ts`

@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-06T02:55:48.839Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/Codex/2026-11-05/qui/work/software-factory",
+  "generatedAt": "2026-11-06T04:53:14.398Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -126,18 +126,25 @@
     "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 799,
-    "filesIndexed": 715,
-    "imports": 2553,
+    "filesVisible": 800,
+    "filesIndexed": 717,
+    "imports": 2564,
     "routes": 556,
-    "symbols": 16034
+    "symbols": 16066
   },
   "directories": {
-    "work": {
-      "files": 1,
-      "indexed": 0,
+    "server": {
+      "files": 167,
+      "indexed": 163,
       "kinds": {
-        "other": 1
+        "server": 167
+      }
+    },
+    "tests": {
+      "files": 175,
+      "indexed": 172,
+      "kinds": {
+        "test": 175
       }
     },
     ".": {
@@ -156,11 +163,17 @@
         "docs": 5
       }
     },
-    ".agents/skills": {
-      "files": 2,
+    ".agents/skills/codebase-overview": {
+      "files": 1,
       "indexed": 1,
       "kinds": {
-        "docs": 1,
+        "docs": 1
+      }
+    },
+    ".agents/skills/codebase-overview/agents": {
+      "files": 1,
+      "indexed": 0,
+      "kinds": {
         "other": 1
       }
     },
@@ -179,22 +192,94 @@
       }
     },
     "client/public": {
-      "files": 16,
+      "files": 14,
       "indexed": 2,
       "kinds": {
-        "other": 16
+        "other": 14
+      }
+    },
+    "client/public/local-news": {
+      "files": 2,
+      "indexed": 0,
+      "kinds": {
+        "other": 2
       }
     },
     "client/src": {
-      "files": 143,
-      "indexed": 141,
+      "files": 3,
+      "indexed": 3,
       "kinds": {
-        "other": 4,
-        "client-component": 38,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 17,
+        "other": 3
+      }
+    },
+    "client/src/components": {
+      "files": 29,
+      "indexed": 29,
+      "kinds": {
+        "client-component": 29
+      }
+    },
+    "client/src/components/agents-building": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "client-component": 1
+      }
+    },
+    "client/src/components/agents-world-office": {
+      "files": 2,
+      "indexed": 2,
+      "kinds": {
+        "client-component": 2
+      }
+    },
+    "client/src/components/clippers": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "client-component": 1
+      }
+    },
+    "client/src/components/company-office": {
+      "files": 5,
+      "indexed": 5,
+      "kinds": {
+        "client-component": 5
+      }
+    },
+    "client/src/components/ui": {
+      "files": 55,
+      "indexed": 55,
+      "kinds": {
+        "ui-component": 55
+      }
+    },
+    "client/src/hooks": {
+      "files": 3,
+      "indexed": 3,
+      "kinds": {
+        "client-hook": 3
+      }
+    },
+    "client/src/lib": {
+      "files": 17,
+      "indexed": 17,
+      "kinds": {
+        "client-lib": 17
+      }
+    },
+    "client/src/pages": {
+      "files": 26,
+      "indexed": 24,
+      "kinds": {
         "client-page": 26
+      }
+    },
+    "client/src/types": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "other": 1
       }
     },
     "docs": {
@@ -226,18 +311,25 @@
         "script": 4
       }
     },
-    "server": {
-      "files": 166,
-      "indexed": 162,
+    "server/replit_integrations/batch": {
+      "files": 2,
+      "indexed": 2,
       "kinds": {
-        "server": 166
+        "server": 2
       }
     },
-    "server/replit_integrations": {
-      "files": 9,
-      "indexed": 9,
+    "server/replit_integrations/chat": {
+      "files": 4,
+      "indexed": 4,
       "kinds": {
-        "server": 9
+        "server": 4
+      }
+    },
+    "server/replit_integrations/image": {
+      "files": 3,
+      "indexed": 3,
+      "kinds": {
+        "server": 3
       }
     },
     "shared": {
@@ -252,13 +344,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 174,
-      "indexed": 171,
-      "kinds": {
-        "test": 174
       }
     },
     "tests/fixtures": {
@@ -1936,7 +2021,7 @@
         "react"
       ],
       "exports": [
-        "AlertDialog,\n  AlertDialogPortal,\n  AlertDialogOverlay,\n  AlertDialogTrigger,\n  AlertDialogContent,\n  AlertDialogHeader,\n  AlertDialogFooter,\n  AlertDialogTitle,\n  AlertDialogDescription,\n  AlertDialogAction,\n  AlertDialogCancel,\n"
+        "AlertDialog,\r\n  AlertDialogPortal,\r\n  AlertDialogOverlay,\r\n  AlertDialogTrigger,\r\n  AlertDialogContent,\r\n  AlertDialogHeader,\r\n  AlertDialogFooter,\r\n  AlertDialogTitle,\r\n  AlertDialogDescription,\r\n  AlertDialogAction,\r\n  AlertDialogCancel,\r\n"
       ],
       "symbols": [
         "AlertDialog",
@@ -2032,7 +2117,7 @@
         "react"
       ],
       "exports": [
-        "Breadcrumb,\n  BreadcrumbList,\n  BreadcrumbItem,\n  BreadcrumbLink,\n  BreadcrumbPage,\n  BreadcrumbSeparator,\n  BreadcrumbEllipsis,\n"
+        "Breadcrumb,\r\n  BreadcrumbList,\r\n  BreadcrumbItem,\r\n  BreadcrumbLink,\r\n  BreadcrumbPage,\r\n  BreadcrumbSeparator,\r\n  BreadcrumbEllipsis,\r\n"
       ],
       "symbols": [
         "Breadcrumb",
@@ -2056,7 +2141,7 @@
         "class-variance-authority"
       ],
       "exports": [
-        "ButtonGroup,\n  ButtonGroupSeparator,\n  ButtonGroupText,\n  buttonGroupVariants,\n"
+        "ButtonGroup,\r\n  ButtonGroupSeparator,\r\n  ButtonGroupText,\r\n  buttonGroupVariants,\r\n"
       ],
       "symbols": [
         "ButtonGroup",
@@ -2139,7 +2224,7 @@
         "react"
       ],
       "exports": [
-        "type CarouselApi,\n  Carousel,\n  CarouselContent,\n  CarouselItem,\n  CarouselPrevious,\n  CarouselNext,\n"
+        "type CarouselApi,\r\n  Carousel,\r\n  CarouselContent,\r\n  CarouselItem,\r\n  CarouselPrevious,\r\n  CarouselNext,\r\n"
       ],
       "symbols": [
         "Carousel",
@@ -2173,7 +2258,7 @@
       ],
       "exports": [
         "ChartConfig",
-        "ChartContainer,\n  ChartTooltip,\n  ChartTooltipContent,\n  ChartLegend,\n  ChartLegendContent,\n  ChartStyle,\n"
+        "ChartContainer,\r\n  ChartTooltip,\r\n  ChartTooltipContent,\r\n  ChartLegend,\r\n  ChartLegendContent,\r\n  ChartStyle,\r\n"
       ],
       "symbols": [
         "ChartContainer",
@@ -2247,7 +2332,7 @@
         "react"
       ],
       "exports": [
-        "Command,\n  CommandDialog,\n  CommandInput,\n  CommandList,\n  CommandEmpty,\n  CommandGroup,\n  CommandItem,\n  CommandShortcut,\n  CommandSeparator,\n"
+        "Command,\r\n  CommandDialog,\r\n  CommandInput,\r\n  CommandList,\r\n  CommandEmpty,\r\n  CommandGroup,\r\n  CommandItem,\r\n  CommandShortcut,\r\n  CommandSeparator,\r\n"
       ],
       "symbols": [
         "Command",
@@ -2272,7 +2357,7 @@
         "react"
       ],
       "exports": [
-        "ContextMenu,\n  ContextMenuTrigger,\n  ContextMenuContent,\n  ContextMenuItem,\n  ContextMenuCheckboxItem,\n  ContextMenuRadioItem,\n  ContextMenuLabel,\n  ContextMenuSeparator,\n  ContextMenuShortcut,\n  ContextMenuGroup,\n  ContextMenuPortal,\n  ContextMenuSub,\n  ContextMenuSubContent,\n  ContextMenuSubTrigger,\n  ContextMenuRadioGroup,\n"
+        "ContextMenu,\r\n  ContextMenuTrigger,\r\n  ContextMenuContent,\r\n  ContextMenuItem,\r\n  ContextMenuCheckboxItem,\r\n  ContextMenuRadioItem,\r\n  ContextMenuLabel,\r\n  ContextMenuSeparator,\r\n  ContextMenuShortcut,\r\n  ContextMenuGroup,\r\n  ContextMenuPortal,\r\n  ContextMenuSub,\r\n  ContextMenuSubContent,\r\n  ContextMenuSubTrigger,\r\n  ContextMenuRadioGroup,\r\n"
       ],
       "symbols": [
         "ContextMenu",
@@ -2303,7 +2388,7 @@
         "react"
       ],
       "exports": [
-        "Dialog,\n  DialogPortal,\n  DialogOverlay,\n  DialogTrigger,\n  DialogClose,\n  DialogContent,\n  DialogHeader,\n  DialogFooter,\n  DialogTitle,\n  DialogDescription,\n"
+        "Dialog,\r\n  DialogPortal,\r\n  DialogOverlay,\r\n  DialogTrigger,\r\n  DialogClose,\r\n  DialogContent,\r\n  DialogHeader,\r\n  DialogFooter,\r\n  DialogTitle,\r\n  DialogDescription,\r\n"
       ],
       "symbols": [
         "Dialog",
@@ -2328,7 +2413,7 @@
         "vaul"
       ],
       "exports": [
-        "Drawer,\n  DrawerPortal,\n  DrawerOverlay,\n  DrawerTrigger,\n  DrawerClose,\n  DrawerContent,\n  DrawerHeader,\n  DrawerFooter,\n  DrawerTitle,\n  DrawerDescription,\n"
+        "Drawer,\r\n  DrawerPortal,\r\n  DrawerOverlay,\r\n  DrawerTrigger,\r\n  DrawerClose,\r\n  DrawerContent,\r\n  DrawerHeader,\r\n  DrawerFooter,\r\n  DrawerTitle,\r\n  DrawerDescription,\r\n"
       ],
       "symbols": [
         "Drawer",
@@ -2354,7 +2439,7 @@
         "react"
       ],
       "exports": [
-        "DropdownMenu,\n  DropdownMenuTrigger,\n  DropdownMenuContent,\n  DropdownMenuItem,\n  DropdownMenuCheckboxItem,\n  DropdownMenuRadioItem,\n  DropdownMenuLabel,\n  DropdownMenuSeparator,\n  DropdownMenuShortcut,\n  DropdownMenuGroup,\n  DropdownMenuPortal,\n  DropdownMenuSub,\n  DropdownMenuSubContent,\n  DropdownMenuSubTrigger,\n  DropdownMenuRadioGroup,\n"
+        "DropdownMenu,\r\n  DropdownMenuTrigger,\r\n  DropdownMenuContent,\r\n  DropdownMenuItem,\r\n  DropdownMenuCheckboxItem,\r\n  DropdownMenuRadioItem,\r\n  DropdownMenuLabel,\r\n  DropdownMenuSeparator,\r\n  DropdownMenuShortcut,\r\n  DropdownMenuGroup,\r\n  DropdownMenuPortal,\r\n  DropdownMenuSub,\r\n  DropdownMenuSubContent,\r\n  DropdownMenuSubTrigger,\r\n  DropdownMenuRadioGroup,\r\n"
       ],
       "symbols": [
         "DropdownMenu",
@@ -2383,7 +2468,7 @@
         "class-variance-authority"
       ],
       "exports": [
-        "Empty,\n  EmptyHeader,\n  EmptyTitle,\n  EmptyDescription,\n  EmptyContent,\n  EmptyMedia,\n"
+        "Empty,\r\n  EmptyHeader,\r\n  EmptyTitle,\r\n  EmptyDescription,\r\n  EmptyContent,\r\n  EmptyMedia,\r\n"
       ],
       "symbols": [
         "Empty",
@@ -2407,7 +2492,7 @@
         "react"
       ],
       "exports": [
-        "Field,\n  FieldLabel,\n  FieldDescription,\n  FieldError,\n  FieldGroup,\n  FieldLegend,\n  FieldSeparator,\n  FieldSet,\n  FieldContent,\n  FieldTitle,\n"
+        "Field,\r\n  FieldLabel,\r\n  FieldDescription,\r\n  FieldError,\r\n  FieldGroup,\r\n  FieldLegend,\r\n  FieldSeparator,\r\n  FieldSet,\r\n  FieldContent,\r\n  FieldTitle,\r\n"
       ],
       "symbols": [
         "Field",
@@ -2437,7 +2522,7 @@
         "react-hook-form"
       ],
       "exports": [
-        "useFormField,\n  Form,\n  FormItem,\n  FormLabel,\n  FormControl,\n  FormDescription,\n  FormMessage,\n  FormField,\n"
+        "useFormField,\r\n  Form,\r\n  FormItem,\r\n  FormLabel,\r\n  FormControl,\r\n  FormDescription,\r\n  FormMessage,\r\n  FormField,\r\n"
       ],
       "symbols": [
         "Form",
@@ -2489,7 +2574,7 @@
         "react"
       ],
       "exports": [
-        "InputGroup,\n  InputGroupAddon,\n  InputGroupButton,\n  InputGroupText,\n  InputGroupInput,\n  InputGroupTextarea,\n"
+        "InputGroup,\r\n  InputGroupAddon,\r\n  InputGroupButton,\r\n  InputGroupText,\r\n  InputGroupInput,\r\n  InputGroupTextarea,\r\n"
       ],
       "symbols": [
         "InputGroup",
@@ -2550,7 +2635,7 @@
         "react"
       ],
       "exports": [
-        "Item,\n  ItemMedia,\n  ItemContent,\n  ItemActions,\n  ItemGroup,\n  ItemSeparator,\n  ItemTitle,\n  ItemDescription,\n  ItemHeader,\n  ItemFooter,\n"
+        "Item,\r\n  ItemMedia,\r\n  ItemContent,\r\n  ItemActions,\r\n  ItemGroup,\r\n  ItemSeparator,\r\n  ItemTitle,\r\n  ItemDescription,\r\n  ItemHeader,\r\n  ItemFooter,\r\n"
       ],
       "symbols": [
         "Comp",
@@ -2612,7 +2697,7 @@
         "react"
       ],
       "exports": [
-        "Menubar,\n  MenubarMenu,\n  MenubarTrigger,\n  MenubarContent,\n  MenubarItem,\n  MenubarSeparator,\n  MenubarLabel,\n  MenubarCheckboxItem,\n  MenubarRadioGroup,\n  MenubarRadioItem,\n  MenubarPortal,\n  MenubarSubContent,\n  MenubarSubTrigger,\n  MenubarGroup,\n  MenubarSub,\n  MenubarShortcut,\n"
+        "Menubar,\r\n  MenubarMenu,\r\n  MenubarTrigger,\r\n  MenubarContent,\r\n  MenubarItem,\r\n  MenubarSeparator,\r\n  MenubarLabel,\r\n  MenubarCheckboxItem,\r\n  MenubarRadioGroup,\r\n  MenubarRadioItem,\r\n  MenubarPortal,\r\n  MenubarSubContent,\r\n  MenubarSubTrigger,\r\n  MenubarGroup,\r\n  MenubarSub,\r\n  MenubarShortcut,\r\n"
       ],
       "symbols": [
         "Menubar",
@@ -2645,7 +2730,7 @@
         "react"
       ],
       "exports": [
-        "navigationMenuTriggerStyle,\n  NavigationMenu,\n  NavigationMenuList,\n  NavigationMenuItem,\n  NavigationMenuContent,\n  NavigationMenuTrigger,\n  NavigationMenuLink,\n  NavigationMenuIndicator,\n  NavigationMenuViewport,\n"
+        "navigationMenuTriggerStyle,\r\n  NavigationMenu,\r\n  NavigationMenuList,\r\n  NavigationMenuItem,\r\n  NavigationMenuContent,\r\n  NavigationMenuTrigger,\r\n  NavigationMenuLink,\r\n  NavigationMenuIndicator,\r\n  NavigationMenuViewport,\r\n"
       ],
       "symbols": [
         "NavigationMenu",
@@ -2670,7 +2755,7 @@
         "react"
       ],
       "exports": [
-        "Pagination,\n  PaginationContent,\n  PaginationLink,\n  PaginationItem,\n  PaginationPrevious,\n  PaginationNext,\n  PaginationEllipsis,\n"
+        "Pagination,\r\n  PaginationContent,\r\n  PaginationLink,\r\n  PaginationItem,\r\n  PaginationPrevious,\r\n  PaginationNext,\r\n  PaginationEllipsis,\r\n"
       ],
       "symbols": [
         "Pagination",
@@ -2782,7 +2867,7 @@
         "react"
       ],
       "exports": [
-        "Select,\n  SelectGroup,\n  SelectValue,\n  SelectTrigger,\n  SelectContent,\n  SelectLabel,\n  SelectItem,\n  SelectSeparator,\n  SelectScrollUpButton,\n  SelectScrollDownButton,\n"
+        "Select,\r\n  SelectGroup,\r\n  SelectValue,\r\n  SelectTrigger,\r\n  SelectContent,\r\n  SelectLabel,\r\n  SelectItem,\r\n  SelectSeparator,\r\n  SelectScrollUpButton,\r\n  SelectScrollDownButton,\r\n"
       ],
       "symbols": [
         "Select",
@@ -2825,7 +2910,7 @@
         "react"
       ],
       "exports": [
-        "Sheet,\n  SheetPortal,\n  SheetOverlay,\n  SheetTrigger,\n  SheetClose,\n  SheetContent,\n  SheetHeader,\n  SheetFooter,\n  SheetTitle,\n  SheetDescription,\n"
+        "Sheet,\r\n  SheetPortal,\r\n  SheetOverlay,\r\n  SheetTrigger,\r\n  SheetClose,\r\n  SheetContent,\r\n  SheetHeader,\r\n  SheetFooter,\r\n  SheetTitle,\r\n  SheetDescription,\r\n"
       ],
       "symbols": [
         "Sheet",
@@ -2861,7 +2946,7 @@
         "react"
       ],
       "exports": [
-        "Sidebar,\n  SidebarContent,\n  SidebarFooter,\n  SidebarGroup,\n  SidebarGroupAction,\n  SidebarGroupContent,\n  SidebarGroupLabel,\n  SidebarHeader,\n  SidebarInput,\n  SidebarInset,\n  SidebarMenu,\n  SidebarMenuAction,\n  SidebarMenuBadge,\n  SidebarMenuButton,\n  SidebarMenuItem,\n  SidebarMenuSkeleton,\n  SidebarMenuSub,\n  SidebarMenuSubButton,\n  SidebarMenuSubItem,\n  SidebarProvider,\n  SidebarRail,\n  SidebarSeparator,\n  SidebarTrigger,\n  useSidebar,\n"
+        "Sidebar,\r\n  SidebarContent,\r\n  SidebarFooter,\r\n  SidebarGroup,\r\n  SidebarGroupAction,\r\n  SidebarGroupContent,\r\n  SidebarGroupLabel,\r\n  SidebarHeader,\r\n  SidebarInput,\r\n  SidebarInset,\r\n  SidebarMenu,\r\n  SidebarMenuAction,\r\n  SidebarMenuBadge,\r\n  SidebarMenuButton,\r\n  SidebarMenuItem,\r\n  SidebarMenuSkeleton,\r\n  SidebarMenuSub,\r\n  SidebarMenuSubButton,\r\n  SidebarMenuSubItem,\r\n  SidebarProvider,\r\n  SidebarRail,\r\n  SidebarSeparator,\r\n  SidebarTrigger,\r\n  useSidebar,\r\n"
       ],
       "symbols": [
         "Comp",
@@ -2997,7 +3082,7 @@
         "react"
       ],
       "exports": [
-        "Table,\n  TableHeader,\n  TableBody,\n  TableFooter,\n  TableHead,\n  TableRow,\n  TableCell,\n  TableCaption,\n"
+        "Table,\r\n  TableHeader,\r\n  TableBody,\r\n  TableFooter,\r\n  TableHead,\r\n  TableRow,\r\n  TableCell,\r\n  TableCaption,\r\n"
       ],
       "symbols": [
         "Table",
@@ -3056,7 +3141,7 @@
         "react"
       ],
       "exports": [
-        "type ToastProps,\n  type ToastActionElement,\n  ToastProvider,\n  ToastViewport,\n  Toast,\n  ToastTitle,\n  ToastDescription,\n  ToastClose,\n  ToastAction,\n"
+        "type ToastProps,\r\n  type ToastActionElement,\r\n  ToastProvider,\r\n  ToastViewport,\r\n  Toast,\r\n  ToastTitle,\r\n  ToastDescription,\r\n  ToastClose,\r\n  ToastAction,\r\n"
       ],
       "symbols": [
         "Toast",
@@ -10568,6 +10653,7 @@
       "path": "script/software-factory-worker.ts",
       "kind": "script",
       "imports": [
+        "../server/software-factory-runtime",
         "../server/software-factory-store",
         "../server/software-factory-worker",
         "node:fs/promises",
@@ -17313,7 +17399,7 @@
         "zod"
       ],
       "exports": [
-        "hashPassword,\n  isLocalAuthEnabled,\n  isLocalAuthRegistrationAllowed,\n  normalizeUsername,\n  sanitizeAuthUser,\n  verifyPassword,\n",
+        "hashPassword,\r\n  isLocalAuthEnabled,\r\n  isLocalAuthRegistrationAllowed,\r\n  normalizeUsername,\r\n  sanitizeAuthUser,\r\n  verifyPassword,\r\n",
         "registerLocalAuthRoutes"
       ],
       "symbols": [
@@ -19686,7 +19772,7 @@
         "./utils"
       ],
       "exports": [
-        "batchProcess,\n  batchProcessWithSSE,\n  isRateLimitError,\n  type BatchOptions,\n"
+        "batchProcess,\r\n  batchProcessWithSSE,\r\n  isRateLimitError,\r\n  type BatchOptions,\r\n"
       ],
       "symbols": [],
       "routes": []
@@ -21070,6 +21156,7 @@
         "evaluated",
         "evidenceMatches",
         "findingKey",
+        "findings",
         "fixture",
         "found",
         "gate",
@@ -21114,6 +21201,7 @@
       ],
       "symbols": [
         "activeWorkers",
+        "age",
         "blocker",
         "budgetSchema",
         "capabilities",
@@ -21135,8 +21223,10 @@
         "proofAge",
         "registerSoftwareFactoryRoutes",
         "remainingCents",
+        "reported",
         "requireOwner",
         "result",
+        "seen",
         "stages",
         "state",
         "store"
@@ -21147,6 +21237,40 @@
         "/api/software-factory/pause",
         "/api/software-factory/projects"
       ]
+    },
+    {
+      "path": "server/software-factory-runtime.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory",
+        "./software-factory-pipeline",
+        "./software-factory-store",
+        "./software-factory-worker",
+        "node:crypto"
+      ],
+      "exports": [
+        "FactoryRuntimeOptions",
+        "TrustedFactoryStages",
+        "createTrustedFactoryWorkerOptions",
+        "validateFactoryWorkerOptions"
+      ],
+      "symbols": [
+        "adapter",
+        "adapters",
+        "createTrustedFactoryWorkerOptions",
+        "expectedKey",
+        "owner",
+        "pipeline",
+        "reservations",
+        "reserve",
+        "scope",
+        "stages",
+        "status",
+        "store",
+        "validateFactoryWorkerOptions",
+        "value"
+      ],
+      "routes": []
     },
     {
       "path": "server/software-factory-simulator.ts",
@@ -28122,12 +28246,14 @@
       ],
       "exports": [],
       "symbols": [
+        "build",
         "dir",
         "executable",
         "fixture",
         "patch",
         "prior",
         "record",
+        "result",
         "run"
       ],
       "routes": []
@@ -28181,12 +28307,14 @@
         "fixture",
         "forged",
         "found",
+        "initial",
         "jobs",
         "now",
         "original",
         "pipeline",
         "result",
         "run",
+        "second",
         "simulator",
         "verify"
       ],
@@ -28255,6 +28383,31 @@
         "server",
         "stale",
         "view"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-runtime.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-runtime",
+        "../server/software-factory-store",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "context",
+        "f",
+        "fixture",
+        "owner",
+        "project",
+        "reservations",
+        "result",
+        "runtime",
+        "stages",
+        "store"
       ],
       "routes": []
     },
@@ -28717,6 +28870,7 @@
     "tests/software-factory-pipeline.test.ts",
     "tests/software-factory-postgres.test.ts",
     "tests/software-factory-routes.test.ts",
+    "tests/software-factory-runtime.test.ts",
     "tests/software-factory-simulator.test.ts",
     "tests/software-factory-store.test.ts",
     "tests/software-factory-worker.test.ts",

@@ -29,6 +29,20 @@ A bad candidate is stopped before release. Post-release verification may request
 
 ## Remaining activation requirements
 
+The trusted adapter module can use `createTrustedFactoryWorkerOptions` from
+`server/software-factory-runtime.ts` to compose the eight real stage callbacks
+with the durable store. It validates reservations, requires initialized costs,
+and scopes persisted jobs and evidence to the configured owner. The worker
+entrypoint rejects partial executor configurations before processing any jobs.
+This composition does not supply provider credentials or substitute test doubles
+for real execution, review, deployment or recovery.
+
+Robert clarified that the $100 monthly factory ceiling is incremental to the
+existing Replit subscription. All costs attributable to the factory still count,
+including persistent hosting, database, isolated runners, AI usage and recovery.
+Shared account credits are not a dedicated factory budget. Do not enable account
+auto-reload or treat an account-wide spending control as a factory-only cap.
+
 A real cloud host and its fixed cost, a budget-enforced unattended coding provider, actual repository/PR credentials on that host, isolated app launch configuration, and a deployment provider with verified restoration must be configured. This change does not purchase hosting, alter secrets, migrate live data or claim production rehearsals.
 
 The builder runs source mounts read-only for checks. Configure commands/image to write build output and caches to `/tmp` or an explicitly isolated artifact directory. The digest-pinned image must already contain dependencies; network installation during checks is disabled.

@@ -4,6 +4,7 @@ import { pathToFileURL } from "node:url";
 import { stat } from "node:fs/promises";
 import { createSoftwareFactoryWorker, type FactoryWorkerOptions } from "../server/software-factory-worker";
 import { softwareFactoryStore } from "../server/software-factory-store";
+import { validateFactoryWorkerOptions } from "../server/software-factory-runtime";
 
 async function main() {
   if (process.env.SOFTWARE_FACTORY_ENABLED !== "true") throw new Error("SOFTWARE_FACTORY_ENABLED_REQUIRED");
@@ -14,7 +15,7 @@ async function main() {
   const module=await import(pathToFileURL(modulePath).href);
   if (typeof module.createFactoryWorkerOptions !== "function") throw new Error("FACTORY_ADAPTER_FACTORY_REQUIRED");
   const config:FactoryWorkerOptions=await module.createFactoryWorkerOptions();
-  if (!config.adapters || !Object.values(config.adapters).some(a=>typeof a?.execute === "function")) throw new Error("FACTORY_EXECUTORS_UNAVAILABLE");
+  validateFactoryWorkerOptions(config);
   const owner=process.env.SOFTWARE_FACTORY_OWNER_ID;
   if (!owner) throw new Error("FACTORY_OWNER_REQUIRED");
   const state=await softwareFactoryStore.status(owner);
