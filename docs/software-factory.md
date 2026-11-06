@@ -222,9 +222,9 @@ was not enabled. The account also displays exhausted credits and a grace-period
 warning for existing publications. No shared account cap or recharge setting
 was changed, and Kong was untouched.
 
-The temporary probe is still published while confirmation is pending: Replit's
+The temporary probe was unpublished after Robert confirmed deletion: Replit's
 unpublish dialog explicitly deletes its saved domain and deployment history.
-Pausing would not cancel billing. Its quoted ongoing rate is $0.0208/hour;
+Pausing would not cancel billing. Its quoted rate while published was $0.0208/hour;
 this is a probe only, not a production factory. No factory credentials were
 copied to the new application. The source code remains available for a later
 supported runner test. Full TypeScript checking passed after the publisher
