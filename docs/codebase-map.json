@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T08:35:02.506Z",
+  "generatedAt": "2026-11-06T09:11:39.119Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -126,25 +126,25 @@
     "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 814,
-    "filesIndexed": 731,
-    "imports": 2621,
+    "filesVisible": 817,
+    "filesIndexed": 734,
+    "imports": 2630,
     "routes": 556,
-    "symbols": 16289
+    "symbols": 16348
   },
   "directories": {
     "server": {
-      "files": 174,
-      "indexed": 170,
+      "files": 175,
+      "indexed": 171,
       "kinds": {
-        "server": 174
+        "server": 175
       }
     },
     "tests": {
-      "files": 182,
-      "indexed": 179,
+      "files": 183,
+      "indexed": 180,
       "kinds": {
-        "test": 182
+        "test": 183
       }
     },
     ".": {
@@ -298,10 +298,10 @@
       }
     },
     "script": {
-      "files": 86,
-      "indexed": 81,
+      "files": 87,
+      "indexed": 82,
       "kinds": {
-        "script": 86
+        "script": 87
       }
     },
     "scripts": {
@@ -10211,6 +10211,23 @@
         "folderId",
         "main",
         "userId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/factory-host-probe.mjs",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:crypto",
+        "node:http"
+      ],
+      "exports": [],
+      "symbols": [
+        "bootId",
+        "payload",
+        "server",
+        "startedAt"
       ],
       "routes": []
     },
@@ -21155,6 +21172,62 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-github-publisher.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-builder",
+        "node:crypto"
+      ],
+      "exports": [
+        "FactoryGitHubPublisherClient",
+        "createGitHubFactoryPullRequestPublisher"
+      ],
+      "symbols": [
+        "Commit",
+        "Entry",
+        "Node",
+        "Pull",
+        "allowed",
+        "apply",
+        "baseCommit",
+        "baseRef",
+        "blob",
+        "body",
+        "changed",
+        "createGitHubFactoryPullRequestPublisher",
+        "digest",
+        "encode",
+        "encoded",
+        "entry",
+        "existing",
+        "expectedTree",
+        "fail",
+        "file",
+        "files",
+        "found",
+        "h",
+        "header",
+        "hunk",
+        "input",
+        "line",
+        "lines",
+        "name",
+        "original",
+        "parsePatch",
+        "ref",
+        "safePath",
+        "segments",
+        "sha",
+        "start",
+        "text",
+        "tree",
+        "treeHash",
+        "validatePull",
+        "verifyCommit"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-github.ts",
       "kind": "server",
       "imports": [
@@ -28543,6 +28616,34 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-github-publisher.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-github-publisher",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "before",
+        "blob",
+        "f",
+        "fixture",
+        "g",
+        "gitHash",
+        "hash",
+        "input",
+        "original",
+        "patch",
+        "pr",
+        "result",
+        "tree",
+        "writes"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-github.test.ts",
       "kind": "test",
       "imports": [
@@ -29310,6 +29411,7 @@
     "tests/shopify-oauth.test.ts",
     "tests/software-factory-builder.test.ts",
     "tests/software-factory-gcs.test.ts",
+    "tests/software-factory-github-publisher.test.ts",
     "tests/software-factory-github.test.ts",
     "tests/software-factory-loop.test.ts",
     "tests/software-factory-object-store.test.ts",
