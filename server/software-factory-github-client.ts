@@ -38,7 +38,7 @@ export function createFactoryPilotGitHubClient(options: {
     const timeoutMs = options.timeoutMs ?? 15000, maxBytes = options.maxResponseBytes ?? 8 * 1024 * 1024;
     if (typeof request !== "function" || !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 30000 || !Number.isSafeInteger(maxBytes) || maxBytes < 1024 || maxBytes > 16 * 1024 * 1024)
         throw Error("FACTORY_GITHUB_CLIENT_CONFIGURATION_INVALID");
-    async function call(route: string, method = "GET", body?: unknown, success = 200, accept = "application/vnd.github+json"): Promise<any> {
+    async function call(route: string, method = "GET", body?: unknown, success: number | readonly number[] = 200, accept = "application/vnd.github+json"): Promise<any> {
         const encoded = body === undefined ? undefined : JSON.stringify(body);
         if (encoded !== undefined && Buffer.byteLength(encoded) > 2 * 1024 * 1024)
             invalid();
@@ -63,11 +63,11 @@ export function createFactoryPilotGitHubClient(options: {
                         void response.body?.cancel().catch(() => { });
                         throw Error("FACTORY_GITHUB_REQUEST_UNCONFIRMED");
                     }
-                    if (response.status !== success) {
+                    if (!(Array.isArray(success) ? success.includes(response.status) : response.status === success)) {
                         void response.body?.cancel().catch(() => { });
                         throw Object.assign(Error("FACTORY_GITHUB_HTTP_FAILURE"), { status: response.status });
                     }
-                    if (success === 204) {
+                    if (response.status === 204) {
                         void response.body?.cancel().catch(() => { });
                         return undefined;
                     }
@@ -156,7 +156,14 @@ export function createFactoryPilotGitHubClient(options: {
                     repo: string;
                     workflow_id: number;
                     ref: string;
-                }) { scope(input); id(input.workflow_id); branch(input.ref); return call(`/actions/workflows/${input.workflow_id}/dispatches`, "POST", { ref: input.ref }, 204); } } : {}),
+                }) {
+                    scope(input); id(input.workflow_id); branch(input.ref);
+                    const data = await call(`/actions/workflows/${input.workflow_id}/dispatches`, "POST", { ref: input.ref }, [200, 204]);
+                    if (data === undefined) return; // Legacy no-content acknowledgement; run verification remains mandatory.
+                    id(data.workflow_run_id);
+                    if (data.run_url !== `${root}/actions/runs/${data.workflow_run_id}` || data.html_url !== `https://github.com/${FACTORY_PILOT_REPOSITORY}/actions/runs/${data.workflow_run_id}`) throw Error("FACTORY_GITHUB_DISPATCH_UNCONFIRMED");
+                    return data;
+                } } : {}),
         }, pulls: {
             async list(input) { scope(input); if (input.base !== "main" || input.state !== "all" || input.per_page !== 100 || !input.head.startsWith(`${owner}:`))
                 invalid(); branch(input.head.slice(owner.length + 1)); const data = await call(`/pulls?head=${encodeURIComponent(input.head)}&base=main&state=all&per_page=100`); if (!Array.isArray(data) || data.length > 100)

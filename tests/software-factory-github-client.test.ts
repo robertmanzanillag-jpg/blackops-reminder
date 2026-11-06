@@ -8,6 +8,23 @@ import { createFactoryPilotGitHubClient, createFactoryPilotGitHubSourceExporter,
 const scope = { owner: "robertmanzanillag-jpg", repo: "software-factory-pilot" };
 const sha = "a".repeat(40), tree = "b".repeat(40), branch = `factory/${sha}-${"c".repeat(64)}`;
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
+
+test("dispatch accepts validated 2026 run identity and legacy acknowledgement without retry", async () => {
+ const valid={workflow_run_id:42293565576,run_url:`https://api.github.com/repos/${FACTORY_PILOT_REPOSITORY}/actions/runs/42293565576`,html_url:`https://github.com/${FACTORY_PILOT_REPOSITORY}/actions/runs/42293565576`};
+ const dispatch={...scope,workflow_id:9,ref:branch};
+ for(const status of [200,204]){
+  let calls=0;const client=createFactoryPilotGitHubClient({allowDispatch:true,request:async()=>{calls++;return status===204?new Response(null,{status}):json(valid);}});
+  assert.deepEqual(await client.actions.createWorkflowDispatch!(dispatch),status===204?undefined:valid);assert.equal(calls,1);
+ }
+ for(const data of [{...valid,workflow_run_id:0},{...valid,workflow_run_id:'42293565576'},{...valid,run_url:valid.run_url+'/jobs'},{...valid,html_url:'https://github.com/owner/other/actions/runs/42293565576'},{}]){
+  let calls=0;const client=createFactoryPilotGitHubClient({allowDispatch:true,request:async()=>{calls++;return json(data);}});
+  await assert.rejects(client.actions.createWorkflowDispatch!(dispatch));assert.equal(calls,1);
+ }
+ for(const response of [()=>new Response('broken',{status:200}),()=>json(valid,201)]){
+  let calls=0;const client=createFactoryPilotGitHubClient({allowDispatch:true,request:async()=>{calls++;return response();}});
+  await assert.rejects(client.actions.createWorkflowDispatch!(dispatch));assert.equal(calls,1);
+ }
+});
 test("constructs exact fixed-origin routes and sanitized request bodies", async () => {
     const calls: {
         url: string;
