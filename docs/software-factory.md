@@ -192,3 +192,42 @@ shutdown applies to the account/workspace, with no verified factory-only hard
 cap; applying it globally could interrupt unrelated applications. The factory
 worker remains disabled pending supported execution, durable storage and a
 verified total-cost configuration. API connectivity is no longer the blocker.
+
+### Exact GitHub candidate publication
+
+`createGitHubFactoryPullRequestPublisher` now publishes verified patches using
+an injected GitHub client and an operator-owned repository/base-branch allowlist.
+It verifies source blobs and reconstructs the complete Git tree, creates a
+commit with the exact base as its sole parent, and opens a draft PR on a
+deterministic factory branch. Existing branches/PRs must match the same identity;
+ambiguous results remain unconfirmed rather than being retried as free work.
+It never updates existing references or merges. Supported patches modify
+existing LF UTF-8 text files only; BOM, creation/deletion, renames, binary and
+mode changes are rejected. Seven synthetic tests pass, including lost-ack
+reconciliation and byte-preservation regressions. Live GitHub publication is
+not yet wired into an unattended worker.
+
+### Dedicated hosting probe, 2026-11-06
+
+A separate empty Replit application was created to avoid modifying Daily Planner
+or Kong. The reviewed dependency-free probe at commit 8897b98 was downloaded
+with SHA-256 verification. It started in development and was published on a
+private Reserved VM, 0.5 vCPU / 2 GiB. The UI quoted $15/month ($0.0208/hour).
+Deployment dfa70b3a-ff8b-4311-a365-2528ea66f624 reached success after transient
+startup health-check errors. The published process returned factoryActive=false
+and docker=unavailable. This establishes that the default published environment
+does not expose a working Docker command/daemon to this probe; it does not prove
+that every possible Replit runner configuration is unsupported. The factory
+was not enabled. The account also displays exhausted credits and a grace-period
+warning for existing publications. No shared account cap or recharge setting
+was changed, and Kong was untouched.
+
+The temporary probe is still published while confirmation is pending: Replit's
+unpublish dialog explicitly deletes its saved domain and deployment history.
+Pausing would not cancel billing. Its quoted ongoing rate is $0.0208/hour;
+this is a probe only, not a production factory. No factory credentials were
+copied to the new application. The source code remains available for a later
+supported runner test. Full TypeScript checking passed after the publisher
+addition. Remaining production requirements include a supported isolated runner,
+real independent review/QA/deploy/rollback adapters, three verified rehearsal
+cycles, durable ledger authentication and bounded storage/hosting expenditure.
