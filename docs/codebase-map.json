@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T11:51:12.320Z",
+  "generatedAt": "2026-11-06T11:54:10.233Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -130,23 +130,9 @@
     "filesIndexed": 743,
     "imports": 2674,
     "routes": 556,
-    "symbols": 16496
+    "symbols": 16497
   },
   "directories": {
-    "server": {
-      "files": 180,
-      "indexed": 176,
-      "kinds": {
-        "server": 180
-      }
-    },
-    "tests": {
-      "files": 187,
-      "indexed": 184,
-      "kinds": {
-        "test": 187
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -318,6 +304,13 @@
         "script": 4
       }
     },
+    "server": {
+      "files": 180,
+      "indexed": 176,
+      "kinds": {
+        "server": 180
+      }
+    },
     "server/replit_integrations/batch": {
       "files": 2,
       "indexed": 2,
@@ -351,6 +344,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 187,
+      "indexed": 184,
+      "kinds": {
+        "test": 187
       }
     },
     "tests/fixtures": {
@@ -28910,6 +28910,7 @@
         "fixture",
         "json",
         "method",
+        "path",
         "repository",
         "request",
         "second",

@@ -2,9 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { createGitHubFactoryStateTransport } from "../server/software-factory-github-state";
-const repository = "fixture/software-factory-pilot", path = ".factory/ledger.enc.json";
+const repository = "fixture/software-factory-pilot";
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), {status});
-function fixture() {
+function fixture(object: "ledger" | "transport-probe" = "ledger") {
+  const path = `.factory/${object}.enc.json`;
   let current: { sha: string; body: Buffer } | undefined;
   let failWrite = false, corruptRead = false;
   const calls: {url:string;method:string;body?:any}[] = [];
@@ -27,7 +28,7 @@ function fixture() {
     assert.ok(current && url.endsWith(current.sha));
     return json({sha:current.sha,size:current.body.length,encoding:"base64",content:corruptRead?"dGFtcGVyZWQ=":current.body.toString("base64")});
   };
-  return {request,calls, key:randomBytes(32),repository, fail:()=>{failWrite=true;}, corrupt:()=>{corruptRead=true;}};
+  return {request,calls, key:randomBytes(32),repository,object, fail:()=>{failWrite=true;}, corrupt:()=>{corruptRead=true;}};
 }
 test("encrypted GitHub state preserves opaque numeric generations and rejects stale writes",async()=>{
   const f=fixture(), t=createGitHubFactoryStateTransport(f);
@@ -57,4 +58,10 @@ test("configuration refuses other repositories and generation overflow",async()=
   const t=createGitHubFactoryStateTransport(f);
   await assert.rejects(t.compareAndSwap("9".repeat(49),"ledger"),/GENERATION_INVALID/);
   assert.equal(f.calls.length,0);
+});
+test("synthetic transport proof uses a separate object from the financial ledger",async()=>{
+ const f=fixture("transport-probe"),t=createGitHubFactoryStateTransport(f);
+ await t.compareAndSwap(null,"synthetic");assert.equal((await t.read())!.body,"synthetic");
+ assert.ok(f.calls.filter(c=>c.url.includes("/contents/")).every(c=>c.url.includes("/transport-probe.enc.json")));
+ assert.throws(()=>createGitHubFactoryStateTransport({...f,object:"../main" as any}),/OBJECT_INVALID/);
 });

@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-06T11:51:12.320Z
+Generated: 2026-11-06T11:54:10.233Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\software-factory`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 828 | 743 | 2674 | 556 | 16496 |
+| 828 | 743 | 2674 | 556 | 16497 |
 
 ## Entrypoints
 - `client/src/App.tsx`

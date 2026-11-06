@@ -9,13 +9,16 @@ export function createGitHubFactoryStateTransport(options: {
   key: Uint8Array;
   request: (url: string, init: RequestInit) => Promise<Response>;
   maxPlaintextBytes?: number;
+  /** Separate synthetic CAS proof; never reuse it as the financial ledger. */
+  object?: "ledger" | "transport-probe";
 }): FactoryObjectTransport {
   if (!/^[A-Za-z0-9-]+\/software-factory-pilot$/.test(options.repository)) throw Error("FACTORY_STATE_REPOSITORY_INVALID");
   const repository = options.repository, request = options.request;
   const limit = options.maxPlaintextBytes ?? 8 * 1024 * 1024;
   const encodedLimit = Math.ceil(limit * 4 / 3) + 256;
   const base = `https://api.github.com/repos/${repository}`;
-  const path = ".factory/ledger.enc.json", branch = "factory-state";
+  if (options.object !== undefined && !["ledger", "transport-probe"].includes(options.object)) throw Error("FACTORY_STATE_OBJECT_INVALID");
+  const path = `.factory/${options.object ?? "ledger"}.enc.json`, branch = "factory-state";
   const shaValid = (v: unknown): v is string => typeof v === "string" && /^[a-f0-9]{40}$/.test(v);
   const blobSha = (body: Buffer) => createHash("sha1").update(`blob ${body.length}\0`).update(body).digest("hex");
   const generation = (sha: string) => BigInt(`0x${sha}`).toString();
