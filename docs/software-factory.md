@@ -29,6 +29,20 @@ A bad candidate is stopped before release. Post-release verification may request
 
 ## Remaining activation requirements
 
+`createGitHubFactorySourceExporter` supplies the source-export portion of the
+builder through a trusted authenticated GitHub client and repository allowlist.
+It checks the exact commit/tree and each blob identity, excludes protected files
+before download, and rejects special files and unsafe paths. It does not publish
+PRs or grant GitHub permissions. Publication still requires a separate adapter
+that applies the tested patch and reconciles uncertain branch/PR creation.
+
+Before choosing Replit production PostgreSQL, budget its active compute time:
+the current worker polls every five seconds and heartbeats every fifteen seconds,
+so it prevents the database's five-minute idle suspension. A continuously active
+database must not be treated as free or assumed covered by the VM price. The
+current polling design is not approved for a $100/month deployment without a
+verified all-in cost or a revised storage/scheduling arrangement.
+
 The trusted adapter module can use `createTrustedFactoryWorkerOptions` from
 `server/software-factory-runtime.ts` to compose the eight real stage callbacks
 with the durable store. It validates reservations, requires initialized costs,

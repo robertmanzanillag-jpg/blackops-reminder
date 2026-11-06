@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T04:53:14.398Z",
+  "generatedAt": "2026-11-06T05:17:01.410Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -126,25 +126,25 @@
     "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 800,
-    "filesIndexed": 717,
-    "imports": 2564,
+    "filesVisible": 802,
+    "filesIndexed": 719,
+    "imports": 2576,
     "routes": 556,
-    "symbols": 16066
+    "symbols": 16106
   },
   "directories": {
     "server": {
-      "files": 167,
-      "indexed": 163,
+      "files": 168,
+      "indexed": 164,
       "kinds": {
-        "server": 167
+        "server": 168
       }
     },
     "tests": {
-      "files": 175,
-      "indexed": 172,
+      "files": 176,
+      "indexed": 173,
       "kinds": {
-        "test": 175
+        "test": 176
       }
     },
     ".": {
@@ -21123,6 +21123,53 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-github.ts",
+      "kind": "server",
+      "imports": [
+        "./github-client",
+        "./software-factory-builder",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "FactoryGitHubExportOptions",
+        "FactoryGitHubReadClient",
+        "createGitHubFactorySourceExporter"
+      ],
+      "symbols": [
+        "GitTreeEntry",
+        "actualSha",
+        "allowed",
+        "blob",
+        "bytes",
+        "client",
+        "commit",
+        "createGitHubFactorySourceExporter",
+        "encoded",
+        "info",
+        "limit",
+        "maxFiles",
+        "normalized",
+        "parts",
+        "privateKeyName",
+        "protectedPath",
+        "protectedSegment",
+        "repo",
+        "repositoryParts",
+        "root",
+        "rootInfo",
+        "safePath",
+        "seen",
+        "segments",
+        "selected",
+        "sha",
+        "target",
+        "tree"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-pipeline.ts",
       "kind": "server",
       "imports": [
@@ -28259,6 +28306,35 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-github.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-github",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "blob",
+        "blobSha",
+        "cases",
+        "commit",
+        "commitSha",
+        "content",
+        "dir",
+        "f",
+        "fixture",
+        "small",
+        "tree",
+        "workspace"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-panel.test.mjs",
       "kind": "test",
       "imports": [
@@ -28867,6 +28943,7 @@
     "tests/session-config.test.ts",
     "tests/shopify-oauth.test.ts",
     "tests/software-factory-builder.test.ts",
+    "tests/software-factory-github.test.ts",
     "tests/software-factory-pipeline.test.ts",
     "tests/software-factory-postgres.test.ts",
     "tests/software-factory-routes.test.ts",
