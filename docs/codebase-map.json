@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-06T00:48:13.642Z",
-  "repoRoot": "/Users/robertmanzanilla/Documents/Codex/2026-11-05/quioer-que-te-asgurs-de-uq-2/work/kong-office",
+  "generatedAt": "2026-11-06T02:50:16.849Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/Codex/2026-11-05/qui/work/software-factory",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -121,16 +121,65 @@
     "start:replit": "NODE_ENV=production node script/replit-fast-start.mjs",
     "test:replit-fast-start": "node --test tests/replit-fast-start.test.mjs",
     "check": "tsc",
-    "db:push": "drizzle-kit push"
+    "db:push": "drizzle-kit push",
+    "factory:worker": "node dist/software-factory-worker.cjs",
+    "test:factory": "node --import tsx --test tests/software-factory*.test.ts"
   },
   "totals": {
-    "filesVisible": 778,
-    "filesIndexed": 695,
-    "imports": 2455,
-    "routes": 548,
-    "symbols": 15719
+    "filesVisible": 798,
+    "filesIndexed": 715,
+    "imports": 2552,
+    "routes": 556,
+    "symbols": 15978
   },
   "directories": {
+    "client/src": {
+      "files": 143,
+      "indexed": 141,
+      "kinds": {
+        "client-component": 38,
+        "other": 4,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 17,
+        "client-page": 26
+      }
+    },
+    "docs": {
+      "files": 37,
+      "indexed": 36,
+      "kinds": {
+        "docs": 37
+      }
+    },
+    "script": {
+      "files": 86,
+      "indexed": 81,
+      "kinds": {
+        "script": 86
+      }
+    },
+    "server": {
+      "files": 166,
+      "indexed": 162,
+      "kinds": {
+        "server": 166
+      }
+    },
+    "shared": {
+      "files": 12,
+      "indexed": 12,
+      "kinds": {
+        "shared": 12
+      }
+    },
+    "tests": {
+      "files": 174,
+      "indexed": 171,
+      "kinds": {
+        "test": 174
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -176,38 +225,12 @@
         "other": 16
       }
     },
-    "client/src": {
-      "files": 142,
-      "indexed": 140,
-      "kinds": {
-        "other": 4,
-        "client-component": 37,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 17,
-        "client-page": 26
-      }
-    },
-    "docs": {
-      "files": 36,
-      "indexed": 35,
-      "kinds": {
-        "docs": 36
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
-      }
-    },
-    "script": {
-      "files": 85,
-      "indexed": 80,
-      "kinds": {
-        "script": 85
       }
     },
     "scripts": {
@@ -217,13 +240,6 @@
         "script": 4
       }
     },
-    "server": {
-      "files": 159,
-      "indexed": 155,
-      "kinds": {
-        "server": 159
-      }
-    },
     "server/replit_integrations": {
       "files": 9,
       "indexed": 9,
@@ -231,25 +247,11 @@
         "server": 9
       }
     },
-    "shared": {
-      "files": 11,
-      "indexed": 11,
-      "kinds": {
-        "shared": 11
-      }
-    },
     "shared/models": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 165,
-      "indexed": 162,
-      "kinds": {
-        "test": 165
       }
     },
     "tests/fixtures": {
@@ -1724,6 +1726,34 @@
         "queryClient",
         "syncMutation",
         "zohoSyncMutation"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/software-factory-panel.tsx",
+      "kind": "client-component",
+      "imports": [
+        "@/components/ui/button",
+        "@/components/ui/dialog",
+        "@/lib/queryClient",
+        "@shared/software-factory-view",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "exports": [
+        "SoftwareFactoryPanel"
+      ],
+      "symbols": [
+        "SoftwareFactoryPanel",
+        "client",
+        "data",
+        "endpoint",
+        "fixedCents",
+        "money",
+        "mutation",
+        "projectFields",
+        "query",
+        "registration"
       ],
       "routes": []
     },
@@ -3792,6 +3822,7 @@
         "@/components/kong-operations-panel",
         "@/components/kong-supervisor-panel",
         "@/components/office-connections-panel",
+        "@/components/software-factory-panel",
         "@/components/ui/button",
         "@/lib/agent-live-status",
         "@/lib/owner-office-storage",
@@ -5332,6 +5363,14 @@
       "routes": []
     },
     {
+      "path": "docs/software-factory.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "drizzle.config.ts",
       "kind": "other",
       "imports": [
@@ -6559,6 +6598,7 @@
       "kind": "script",
       "imports": [
         "../server/office-cloud-store",
+        "../server/software-factory-store",
         "child_process",
         "esbuild",
         "fs/promises",
@@ -10482,6 +10522,29 @@
         "main",
         "options",
         "result"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/software-factory-worker.ts",
+      "kind": "script",
+      "imports": [
+        "../server/software-factory-store",
+        "../server/software-factory-worker",
+        "node:fs/promises",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "maintenance",
+        "module",
+        "modulePath",
+        "owner",
+        "state",
+        "stop",
+        "worker"
       ],
       "routes": []
     },
@@ -19966,6 +20029,7 @@
         "./reminder-scheduler",
         "./revenue-engine",
         "./revenue-stripe-routes",
+        "./software-factory-routes",
         "./storage",
         "./telegram-routes",
         "./trust-executor",
@@ -20879,6 +20943,325 @@
         "APPROVED_SINGLE_USER_OWNER_USERNAMES",
         "isConfiguredSingleUserOwner",
         "user"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-builder.ts",
+      "kind": "server",
+      "imports": [
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path"
+      ],
+      "exports": [
+        "FactoryBuildInput",
+        "FactoryBuildResult",
+        "FactoryBuilderDependencies",
+        "IsolatedCommand",
+        "createDockerFactoryRunner",
+        "createFactoryBuilderAdapter",
+        "createFactoryPipelineBuilder"
+      ],
+      "symbols": [
+        "args",
+        "attestation",
+        "build",
+        "candidate",
+        "child",
+        "commands",
+        "createDockerFactoryRunner",
+        "createFactoryBuilderAdapter",
+        "createFactoryPipelineBuilder",
+        "entry",
+        "env",
+        "executable",
+        "exported",
+        "forbidden",
+        "generated",
+        "inspectExport",
+        "limit",
+        "name",
+        "output",
+        "patchSha256",
+        "paths",
+        "pr",
+        "removal",
+        "result",
+        "sha",
+        "stop",
+        "timer",
+        "workspace"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-pipeline.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory",
+        "./software-factory-simulator",
+        "./software-factory-store",
+        "./software-factory-worker",
+        "node:crypto"
+      ],
+      "exports": [
+        "FactoryPipelineDependencies",
+        "FactoryPipelineState",
+        "createFactoryPipeline",
+        "createPipelineSimulator"
+      ],
+      "symbols": [
+        "Costed",
+        "StageContext",
+        "a",
+        "assessment",
+        "built",
+        "checkCost",
+        "checked",
+        "clone",
+        "createFactoryPipeline",
+        "createPipelineSimulator",
+        "deployed",
+        "evaluated",
+        "evidenceMatches",
+        "findingKey",
+        "fixture",
+        "found",
+        "gate",
+        "healthy",
+        "id",
+        "load",
+        "missing",
+        "next",
+        "now",
+        "outcome",
+        "previous",
+        "project",
+        "readiness",
+        "report",
+        "restored",
+        "result",
+        "state",
+        "validSha",
+        "verified"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-routes.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/software-factory-view",
+        "./office-routes",
+        "./software-factory",
+        "./software-factory-pipeline",
+        "./software-factory-store",
+        "./user-context",
+        "express",
+        "zod"
+      ],
+      "exports": [
+        "registerSoftwareFactoryRoutes"
+      ],
+      "symbols": [
+        "activeWorkers",
+        "blocker",
+        "budgetSchema",
+        "capabilities",
+        "completed",
+        "costCents",
+        "costs",
+        "eligible",
+        "evidenceCount",
+        "healthyVerification",
+        "id",
+        "input",
+        "month",
+        "now",
+        "owner",
+        "pauseSchema",
+        "pipelineState",
+        "project",
+        "projectSchema",
+        "proofAge",
+        "registerSoftwareFactoryRoutes",
+        "remainingCents",
+        "requireOwner",
+        "result",
+        "stages",
+        "state",
+        "store"
+      ],
+      "routes": [
+        "/api/software-factory",
+        "/api/software-factory/budget",
+        "/api/software-factory/pause",
+        "/api/software-factory/projects"
+      ]
+    },
+    {
+      "path": "server/software-factory-simulator.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "playwright",
+        "zod"
+      ],
+      "exports": [
+        "FactorySimulationCase",
+        "FactorySimulationInput",
+        "factorySimulationSchema",
+        "runFactorySimulation"
+      ],
+      "symbols": [
+        "abort",
+        "baseline",
+        "browser",
+        "bytes",
+        "context",
+        "digest",
+        "factorySimulationSchema",
+        "input",
+        "localUrl",
+        "page",
+        "record",
+        "regressions",
+        "report",
+        "response",
+        "root",
+        "runFactorySimulation",
+        "runId",
+        "screenshot",
+        "selector",
+        "serialized",
+        "stepSchema",
+        "timeout",
+        "u",
+        "version"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-store.ts",
+      "kind": "server",
+      "imports": [
+        "./office-cloud-store",
+        "./software-factory",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "FactoryJob",
+        "FactoryJobInput",
+        "FactoryOutcome",
+        "createSoftwareFactorySchemaSql",
+        "createSoftwareFactoryStore",
+        "factoryJobKinds",
+        "softwareFactoryStore"
+      ],
+      "symbols": [
+        "active",
+        "config",
+        "createSoftwareFactorySchemaSql",
+        "createSoftwareFactoryStore",
+        "decode",
+        "factoryJobKinds",
+        "input",
+        "inputSchema",
+        "job",
+        "month",
+        "monthNow",
+        "ownerKey",
+        "pool",
+        "previous",
+        "result",
+        "run",
+        "selected",
+        "softwareFactoryStore",
+        "state",
+        "stored",
+        "transaction",
+        "updated"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-worker.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory",
+        "./software-factory-store",
+        "node:crypto"
+      ],
+      "exports": [
+        "FactoryAdapter",
+        "FactoryAdapterResult",
+        "FactoryWorkerOptions",
+        "TrustedReleaseContext",
+        "createSoftwareFactoryWorker",
+        "validateFactoryTransition"
+      ],
+      "symbols": [
+        "adapter",
+        "attempts",
+        "context",
+        "createSoftwareFactoryWorker",
+        "next",
+        "now",
+        "reserve",
+        "state",
+        "store",
+        "timeout",
+        "validateFactoryTransition",
+        "workerId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "FACTORY_POLICY",
+        "FactoryBudget",
+        "FactoryCandidate",
+        "FactoryEvidence",
+        "FactoryGate",
+        "FactoryProject",
+        "FactoryStage",
+        "LearningCase",
+        "canRepair",
+        "evaluateLearning",
+        "projectReadiness",
+        "rehearsalGate",
+        "releaseGate",
+        "reserveBudget",
+        "settleBudget"
+      ],
+      "symbols": [
+        "FACTORY_POLICY",
+        "canRepair",
+        "evaluateLearning",
+        "gate",
+        "group",
+        "latest",
+        "projectReadiness",
+        "protectedPath",
+        "reasons",
+        "recent",
+        "records",
+        "rehearsalGate",
+        "releaseGate",
+        "reserveBudget",
+        "settleBudget",
+        "sha",
+        "validUrl",
+        "validateBudget"
       ],
       "routes": []
     },
@@ -22754,6 +23137,16 @@
         "weeklyTasks",
         "yearlyGoals"
       ],
+      "routes": []
+    },
+    {
+      "path": "shared/software-factory-view.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "SoftwareFactoryView"
+      ],
+      "symbols": [],
       "routes": []
     },
     {
@@ -27660,6 +28053,231 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-builder.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-builder",
+        "node:assert/strict",
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "dir",
+        "executable",
+        "fixture",
+        "patch",
+        "prior",
+        "record",
+        "run"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-panel.test.mjs",
+      "kind": "test",
+      "imports": [
+        "esbuild",
+        "express",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "app",
+        "browser",
+        "origin",
+        "page",
+        "server",
+        "temp",
+        "values"
+      ],
+      "routes": [
+        "/",
+        "/api/software-factory",
+        "/api/software-factory/:action",
+        "/panel.js"
+      ]
+    },
+    {
+      "path": "tests/software-factory-pipeline.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory",
+        "../server/software-factory-pipeline",
+        "../server/software-factory-store",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "evidence",
+        "f",
+        "fixture",
+        "forged",
+        "jobs",
+        "now",
+        "original",
+        "pipeline",
+        "result",
+        "run",
+        "simulator"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-postgres.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-cloud-store",
+        "../server/software-factory-store",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test",
+        "node:util",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "bin",
+        "claims",
+        "env",
+        "exec",
+        "input",
+        "jobs",
+        "next",
+        "outcomes",
+        "reset",
+        "root",
+        "setup",
+        "status",
+        "store"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-routes",
+        "../server/user-context",
+        "express",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "app",
+        "base",
+        "cookie",
+        "evidenceJob",
+        "failure",
+        "headSha",
+        "metrics",
+        "post",
+        "project",
+        "ready",
+        "response",
+        "saved",
+        "server",
+        "stale",
+        "view"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-simulator.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-simulator",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "node:http",
+        "node:os",
+        "node:path",
+        "node:test",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "browser",
+        "browserOptions",
+        "bytes",
+        "candidate",
+        "candidateAddress",
+        "failure",
+        "input",
+        "isBroken",
+        "options",
+        "result",
+        "root",
+        "scenarios",
+        "server",
+        "sha"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-store.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-store",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "pool"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-worker.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-store",
+        "../server/software-factory-worker",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "harness",
+        "job",
+        "sha"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "cases",
+        "full",
+        "now",
+        "original",
+        "overrun"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/telegram-chat-flow.test.ts",
       "kind": "test",
       "imports": [
@@ -28024,6 +28642,14 @@
     "tests/revenue-stripe.test.ts",
     "tests/session-config.test.ts",
     "tests/shopify-oauth.test.ts",
+    "tests/software-factory-builder.test.ts",
+    "tests/software-factory-pipeline.test.ts",
+    "tests/software-factory-postgres.test.ts",
+    "tests/software-factory-routes.test.ts",
+    "tests/software-factory-simulator.test.ts",
+    "tests/software-factory-store.test.ts",
+    "tests/software-factory-worker.test.ts",
+    "tests/software-factory.test.ts",
     "tests/telegram-chat-flow.test.ts",
     "tests/telegram-chat-handler.test.ts",
     "tests/telegram-command.test.ts",

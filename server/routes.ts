@@ -57,6 +57,7 @@ import { runAppQaScan } from "./app-qa-agent";
 import { createDeveloperAutopilotHandoff, createDeveloperAutopilotHandoffFromRequest, evaluateDeveloperReleaseGate } from "./developer-autopilot";
 import { buildMonthlyAiSpendReport } from "./ai-cost-policy";
 import { getClipperWorkerRuntimeStatus } from "./clippers-runtime-status";
+import { registerSoftwareFactoryRoutes } from "./software-factory-routes";
 import { registerOfficeRoutes } from "./office-routes";
 import { getAuthenticatedCurrentUserId } from "./user-context";
 import { officeRuntime } from "./office-runtime";
@@ -303,6 +304,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   registerOfficeRoutes(app);
+  registerSoftwareFactoryRoutes(app);
   const CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS = 120_000;
   const killClipperRouteScriptProcess = (child: ReturnType<typeof spawn>) => {
     if (child.pid) {

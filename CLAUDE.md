@@ -70,3 +70,11 @@ For agent-generated PR-ready work, report:
 - QA or reviewer summary.
 - Risks and rollback note.
 - Whether deployment is waiting for approval.
+
+## Software Factory autonomy policy
+
+- Robert authorized risk-based autonomy for the software factory. This narrowly supersedes blanket deployment approval only for factory-managed applications that pass the factory release gate: exact-version independent review and QA, three verified rehearsal cycles, demonstrated rollback, and reversible low-risk changes. Legacy/manual deployment flows still require approval.
+- Authentication, permissions, payments, data deletion/migrations, infrastructure, dependencies, important business behavior, and uncertain risk require human review. Agents cannot change these boundaries or their own permissions.
+- Factory total monthly spending, including hosting, is capped at $100; fixed costs and outstanding commitments count before admitting work. Unknown costs or execution outcomes block rather than count as free/successful.
+- Use isolated workspaces and synthetic data. Do not inherit production credentials into repository commands or simulations. Missing cloud/model/deployment adapters are blockers, never simulated production success.
+- Learning changes must pass historical and held-out evaluation without safety regressions. The factory may not edit its own budgets, release gate, permission policy, or evaluation acceptance criteria.
