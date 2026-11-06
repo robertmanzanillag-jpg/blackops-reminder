@@ -355,7 +355,8 @@ export function AgentsOfficeWorld({
               }
             },
             onSelectAgent: (id) => { setPanelAgentId(id); if (id.startsWith("kong-city:")) setCityDetailsOpen(true); },
-            onOpenCityDirector: () => { setOfficeWing("kong"); setOverlay(value => value === "city-director" ? "none" : "city-director"); },
+            // One KONG office: the city director lives inside it now (no separate city wing).
+            onOpenCityDirector: () => openKongOfficeRef.current(),
           }, { reducedMotion });
           sceneRef.current.update(JSON.parse(latestSceneKey.current));
         } catch (error) {
@@ -420,7 +421,6 @@ export function AgentsOfficeWorld({
           Este navegador no pudo abrir la oficina 3D ({failed}). Te muestro el edificio con los mismos datos en vivo.
         </p>
         <button type="button" onClick={onOpenKongOffice} className="mx-auto mb-4 block rounded-full bg-violet-500 px-5 py-3 font-bold text-white" data-testid="world-open-kong-office">Ver oficina KONG</button>
-        <button type="button" onClick={() => changeWing("kong")} className="mx-auto mb-4 block rounded-full border border-lime-300/50 px-5 py-2 text-lime-100" data-testid="world-kong-wing">Ver mapa y director de ciudades</button>
         <AgentsBuilding agents={agents} kongTeam={centralKongTeam} legal={legal} selectedAgentId={selectedAgentId} onSelectAgent={onSelectAgent} onSelectKongAgent={onSelectKongAgent} />
       </div>
     );
@@ -448,7 +448,8 @@ export function AgentsOfficeWorld({
   }
   const sources = Array.from(sourceMap.values());
   const orders: CompanyOrder[] = company?.orders || [];
-  const nameOf = (id: string) => panelAgents.get(id)?.name || id;
+  const kongAgentNames = (companyView as { kongAgentNames?: Record<string, string> }).kongAgentNames || {};
+  const nameOf = (id: string) => panelAgents.get(id)?.name || kongAgentNames[id] || (id.startsWith("kong:") ? `KONG ${id.slice(5).replace(/^city:/, "").replace(/[_-]/g, " ")}` : id);
   // KONG city agents are measured by the KONG audit score (their own system), not by council careers.
   const panelCareer = panelAgent && !panelAgent.cityAgent ? careers[panelAgent.id] : undefined;
   // Every agent has a personality: from its career when it has one, otherwise the same deterministic pick.
@@ -505,7 +506,7 @@ export function AgentsOfficeWorld({
         </p>}
         {officeWing === "main" && company?.events?.[0] && <p className="mt-1 truncate text-[11px] text-violet-200" data-testid="world-last-event">Ultimo: {company.events[0].text}</p>}
         <div className={cn("pointer-events-auto flex flex-wrap gap-2", officeWing === "kong" ? "mt-2" : "mt-3")}>
-          <button type="button" onClick={() => officeWing === "kong" ? changeWing("main") : focusRoom("kong")} className={cn("rounded-full border-2 border-violet-200 bg-violet-500 font-bold text-white hover:bg-violet-400", officeWing === "kong" ? "px-3 py-1 text-[11px]" : "px-4 py-2 text-sm")} data-testid="world-kong-wing">{officeWing === "kong" ? "Volver a la oficina principal" : "Ver equipo KONG"}</button>
+          <button type="button" onClick={() => officeWing === "kong" ? changeWing("main") : onOpenKongOffice()} className={cn("rounded-full border-2 border-violet-200 bg-violet-500 font-bold text-white hover:bg-violet-400", officeWing === "kong" ? "px-3 py-1 text-[11px]" : "px-4 py-2 text-sm")} data-testid="world-kong-wing">{officeWing === "kong" ? "Volver a la oficina principal" : "Ver equipo KONG"}</button>
           {officeWing === "kong" ? (
             <>
               <button type="button" aria-expanded={cityOverviewOpen} aria-controls="world-city-overview" onClick={() => setCityOverviewOpen(open => !open)} className="rounded-full border border-white/15 bg-black/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10" data-testid="world-overview">Todas las ciudades</button>
@@ -702,7 +703,7 @@ export function AgentsOfficeWorld({
 
       {focused && (
         <aside className={cn("absolute bottom-3 right-3 z-20 flex flex-col rounded-2xl border border-white/10 bg-[#070b14]/95 text-white shadow-2xl backdrop-blur", selectedCity ? cn("max-h-[min(38vh,350px)] overflow-hidden p-2.5", cityDetailsOpen ? "w-[min(320px,calc(100vw-1.5rem))]" : "w-fit max-w-[min(320px,calc(100vw-1.5rem))]") : "top-[42%] w-[min(390px,calc(100vw-1.5rem))] overflow-y-auto p-4 sm:top-20")} data-testid="world-panel">
-          {focused.id === "kong" && <button type="button" data-testid="world-open-city-office" className="mb-3 self-start rounded-full border border-lime-300/50 bg-lime-400/15 px-3 py-1.5 text-xs font-bold text-lime-100" onClick={() => changeWing("kong")}>Ver oficina de las ciudades</button>}
+          {focused.id === "kong" && <button type="button" data-testid="world-open-kong-office-panel" className="mb-3 self-start rounded-full border border-lime-300/50 bg-lime-400/15 px-3 py-1.5 text-xs font-bold text-lime-100" onClick={onOpenKongOffice}>Abrir Oficina KONG (todos los agentes)</button>}
           <div className="flex shrink-0 items-start justify-between gap-2">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.24em]" style={{ color: focused.color }}>{focused.name}</p>

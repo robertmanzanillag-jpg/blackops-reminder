@@ -606,3 +606,29 @@ test("agent factory: recurring blocked orders become one 'hire a specialist' pro
   const again = await council.runCycle();
   assert.equal(again.proposals.filter((proposal) => proposal.key.startsWith("new_agent:specialist-")).length, 1, "never proposed twice");
 });
+
+test("KONG backend agents get life and battery, rotate when they fail, but never open debates or repairs", async () => {
+  const fake = fakeDeps({
+    collect: async () => ({}),
+    collectStatuses: async () => ({
+      "kong:city:miami": { state: "working", label: "En ejecución verificada" },
+      "kong:finance_risk": { state: "error", label: "Requiere atención", detail: "Revisar el último informe" },
+      "kong:growth_analytics": { state: "offline", label: "Evidencia vencida" },
+    }),
+    loadCurriculum: async () => [],
+  });
+  const council = createAgentCouncil(fake.deps);
+  let state = await council.runCycle();
+  assert.ok(state.company.careers["kong:city:miami"], "city agent has a career");
+  assert.ok(state.company.careers["kong:finance_risk"].battery < state.company.careers["kong:city:miami"].battery);
+  for (let i = 0; i < 200; i++) {
+    fake.tick(15 * 60_000);
+    state = await council.runCycle();
+  }
+  assert.ok(state.company.careers["kong:finance_risk"].firedCount >= 1, "a KONG agent that keeps failing is replaced");
+  assert.equal(state.company.careers["kong:city:miami"].firedCount, 0, "a working city agent is never replaced");
+  assert.ok(!state.proposals.some((proposal) => proposal.key.includes("kong:finance_risk") || proposal.key.includes("kong:growth_analytics")), "no repair proposals for KONG backend agents");
+  assert.ok(!state.debates.some((debate) => debate.subject.startsWith("kong:")), "no council debates about KONG backend agents");
+  const view = await council.view();
+  assert.ok(view.leaderboard.some((row) => row.agentId === "kong:city:miami"), "KONG agents appear on the leaderboard");
+});

@@ -38,6 +38,7 @@ import {
   type CouncilState,
 } from "@shared/agent-council";
 import { CITY_NEWS_AGENTS, agentProbes, summarizeProbe, type AgentLiveStatus } from "@shared/agent-live-status";
+import { isKongCareerId, kongAgentStatuses } from "@shared/kong-office-agents";
 import {
   INTEGRATION_LABEL,
   effectiveIntegrations,
@@ -195,7 +196,7 @@ function advanceCompanyCycle(
 ): CouncilState {
   const unscored = new Set([...EXEMPT_IDS, ...unscoredAgentIds(integrations)]);
   const compact = Object.fromEntries(Object.entries(statuses).map(([id, status]) => [id, { state: status.state, label: status.label }]));
-  let company = advanceCompany(state.company, { now, statuses: compact, roles: AGENT_NAMES, exempt: [...unscored] }).state;
+  let company = advanceCompany(state.company, { now, statuses: compact, roles: { ...AGENT_NAMES, ...kongAgentRoles }, exempt: [...unscored] }).state;
   // Orders routed to a paused/external agent are blocked with the honest reason, never "assigned".
   for (const id of unscored) {
     const integration = integrationFor(id, integrations);
@@ -405,11 +406,16 @@ export function createAgentCouncil(deps: CouncilDeps) {
         const integrations = integrationsNow();
         const unscored = [...EXEMPT_IDS, ...unscoredAgentIds(integrations)];
         const scored = Object.fromEntries(Object.entries(statuses).filter(([id]) => !unscored.includes(id)));
-        let next = finishCycle(state, { findings, statuses: scored, now, agentNames: AGENT_NAMES });
+        // KONG backend agents only move their careers (life, battery, replacement). They never open
+        // council debates or repair proposals here: their work and fixes belong to the KONG backend.
+        const isKongBackendAgent = (id: string) => isKongCareerId(id) && !KONG_IDS.includes(id);
+        const councilScored = Object.fromEntries(Object.entries(scored).filter(([id]) => !isKongBackendAgent(id)));
+        const councilStatuses = Object.fromEntries(Object.entries(statuses).filter(([id]) => !isKongBackendAgent(id)));
+        let next = finishCycle(state, { findings, statuses: councilScored, now, agentNames: AGENT_NAMES });
         next = advanceCompanyCycle(next, statuses, curriculum, now, integrations);
         // This completes only a read-only readiness review, never the worker's commercial task.
         next = { ...next, kongSupervision: reviewKongReadiness(state.kongSupervision, everyone, now) };
-        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, statuses, now, AGENT_NAMES, unscored), ...deriveSpecialistProposals(next, now), ...next.proposals]) };
+        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, councilStatuses, now, AGENT_NAMES, unscored), ...deriveSpecialistProposals(next, now), ...next.proposals]) };
         wroteRound = true;
         return next;
       });
@@ -532,6 +538,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
     return {
       ...state,
       leaderboard: leaderboard(state.company, ["ceo", ...EXEMPT_IDS, ...unscoredAgentIds(integrationsNow())]),
+      // Names of the KONG backend agents (central desks and cities) for the ranking and the office.
+      kongAgentNames: kongAgentRoleNames(),
       integrations: integrationsNow(),
       personalities,
       overrides: applyLessons(state.debates, state.lessons),
@@ -685,6 +693,12 @@ async function cachedSlowRead(key: string, work: () => Promise<unknown>): Promis
   return body;
 }
 
+// Role names of the KONG backend agents seen in the last snapshot (central desks and cities).
+let kongAgentRoles: Record<string, string> = {};
+export function kongAgentRoleNames(): Record<string, string> {
+  return kongAgentRoles;
+}
+
 async function collectStatusesReal(userId: string): Promise<Record<string, AgentLiveStatus>> {
   const now = Date.now();
   const statuses: Record<string, AgentLiveStatus> = {};
@@ -702,6 +716,18 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
   };
   const hasValue = (value: string | undefined) => Boolean(value && value.trim() && !/^(changeme|placeholder|xxx)/i.test(value.trim()));
   await Promise.all([
+    // KONG: read-only operations snapshot. If KONG can't be reached nobody is scored this round.
+    (async () => {
+      try {
+        const { runOfficeKongReadOnly } = await import("./office-kong");
+        const result = await withTimeout(runOfficeKongReadOnly(), READ_TIMEOUT_MS, "KONG");
+        const kong = kongAgentStatuses(result.evidence.agents);
+        Object.assign(statuses, kong.statuses);
+        kongAgentRoles = kong.roles;
+      } catch (error) {
+        console.warn("[agent-council] KONG snapshot unavailable:", error instanceof Error ? error.message.slice(0, 120) : error);
+      }
+    })(),
     read(["assistant"], async () => ({ google: await (await import("./google-calendar")).isGoogleCalendarConnected(), zoho: false })),
     read(["code", "github"], async () => {
       const gh = await import("./github-client");
