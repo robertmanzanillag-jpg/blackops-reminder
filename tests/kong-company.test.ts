@@ -83,7 +83,8 @@ test("old state loads empty isolated KONG company", () => {
 test("legacy KONG careers and academy are quarantined, never replayed or advanced in BlackOps", async () => {
   const { advanceCompany } = await import("../shared/agent-company");
   const old = emptyCouncilState();
-  old.company = advanceCompany(old.company, { now: NOW, statuses: { "kong-city:miami:clubs": { state: "working", label: "legacy" }, radio: { state: "working", label: "radio" } }, roles: {} }).state;
+  // Preserve a verified local career while quarantining the unproven KONG history.
+  old.company = advanceCompany(old.company, { now: NOW, statuses: { "kong-city:miami:clubs": { state: "working", label: "legacy" }, radio: { state: "working", label: "radio", evidenceId: "fixture:radio:verified-completed-run" } }, roles: {} }).state;
   old.company.careers["kong-city:miami:clubs"].points = 1234;
   old.company.trainees.push({ id: "old-kong-helper", forAgentId: "kong-city:miami:clubs", role: "Clubs", nickname: "Old helper", startedAt: at(-60), modulesDone: ["old-module"], knowledge: ["Old knowledge"] });
   old.proposals.push({ key: "new_agent:helper-kong-city:miami:clubs", kind: "new_agent", owner: "agent-factory", title: "Contratar helper", description: "legacy", evidence: [], handoffBrief: "legacy", createdAt: at(-60), status: "applied" });
