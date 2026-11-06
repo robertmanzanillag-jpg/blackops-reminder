@@ -50,3 +50,53 @@ and route/worker bundle compilation passed. None of these activates the executor
 
 No new deployment, API charge, account credential, payment method, reload, or Kong
 change is part of this integration code. It is not proof of autonomous operation.
+
+
+## Shared-credit executor integration (2026-11-06)
+
+PR 331 merged into the Office integration branch at `2213f03`; this is not a
+Replit publication. The subsequent executor branch adds an explicit Asistente
+repository client and a build-to-draft-PR composition. It verifies exact source,
+checks immutable workflow identity and test results, and permits candidate writes
+only to operator-selected leaf paths. Paths alone cannot establish isolation from
+Kong: shared-module effects still require independent content/risk review. It
+cannot update base branches, merge, deploy or claim that an order is completed.
+
+Office and factory can now use ONE micro-USD ledger in a separate namespace of
+the existing PostgreSQL council table. Provisioning and grant initialization are
+explicit operator steps, never startup/recovery behavior. An immutable verified
+grant has an expiry; neither the calendar nor a restart refills it. Unknown
+provider outcomes retain their entire reservation and stop new admissions.
+Every model transport rechecks the credit window and receives a bounded abort
+signal. Aborting transport is not proof that provider-side execution stopped.
+
+`OPENAI_SHARED_CREDIT_CONFIG` selects an absolute operator-owned JSON file with
+`grant` and `pricing`; it contains no credential. With this setting (or
+`OPENAI_SHARED_CREDITS_REQUIRED=true`), Office execution fails closed if the shared
+ledger is unavailable. The loader never creates a balance. Office review and
+academy calls use stable assignment/phase identities; the existing token ledger
+remains a secondary limit. Verified terminal usage is accounted even if the
+answer is incomplete; active/unknown provider statuses keep their holds.
+The factory adapter receives the same ledger explicitly. The runtime settings
+have NOT been written to the active worker.
+
+Independent review and controlled tests cover source-to-draft-PR, prior Office
+spend reducing factory credit, duplicate calls, lost commit acknowledgments,
+JSONB key ordering, expiry between counting and generation, nonterminal responses
+and uncertain usage. These tests use simulated transports, not live releases.
+
+Current host observation: the existing Windows Office task is running with
+five-minute recovery triggers. It depends on this PC remaining awake and online.
+The worker has its existing OpenAI/database access but no GitHub credential;
+Codex's interactive GitHub connector is not unattended worker access. No new
+credential was installed. Exact-version Replit deployment/recovery remains an
+uninstalled adapter and must be proven separately before automatic release.
+
+Operator rollout: reconcile the other Office chat's branch, pass CI/review, bind
+a narrowly scoped repository credential, verify current credit and pending usage,
+provision ONE ledger, update the reviewed worker configuration, then demonstrate
+real order-to-reviewed-PR execution. Keep publication disabled until Asistente's
+own release/recovery rehearsals pass. Stop admissions before rollback; preserve
+all ledger rows and unknown reservations. Do not reset financial state when
+reverting code. No payment details, recharge, extra hosting or Kong changes are
+introduced by this work.

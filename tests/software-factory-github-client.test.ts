@@ -5,9 +5,34 @@ import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { createFactoryPilotGitHubClient, createFactoryPilotGitHubSourceExporter, FACTORY_PILOT_REPOSITORY } from "../server/software-factory-github-client";
+import { createFactoryAsistenteGitHubClient, FACTORY_ASISTENTE_REPOSITORY } from "../server/software-factory-github-client";
 const scope = { owner: "robertmanzanillag-jpg", repo: "software-factory-pilot" };
 const sha = "a".repeat(40), tree = "b".repeat(40), branch = `factory/${sha}-${"c".repeat(64)}`;
 const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
+
+test("Asistente client confines candidate writes to trusted paths and exact base without granting Kong access", async () => {
+ const target={owner:'robertmanzanillag-jpg',repo:'blackops-reminder'}, baseBranch='codex/office-integrated-repair-20261106' as const;
+ const requests:string[]=[];
+ const paths=['server/agent-search.ts','tests/agent-search.test.ts'];
+ const client=createFactoryAsistenteGitHubClient({baseBranch,writePaths:paths,request:async(url,init)=>{
+  requests.push(url);
+  if(url.endsWith('/git/trees'))return json({sha:tree},201);
+  if(url.endsWith('/pulls')) { assert.equal(JSON.parse(String(init.body)).base,baseBranch);return json({number:1},201); }
+  return json({ref:`refs/heads/${baseBranch}`,object:{sha,type:'commit'}});
+ }});
+ paths.push('server/kong-operations.ts');
+ await client.git.getRef({...target,ref:`heads/${baseBranch}`});
+ await client.git.createTree({...target,base_tree:tree,tree:[{path:'server/agent-search.ts',sha,mode:'100644',type:'blob'}]});
+ await client.pulls.create({...target,head:branch,base:baseBranch,draft:true,title:'Candidate',body:'Reviewed code only'});
+ assert.ok(requests.every(url=>url.startsWith(`https://api.github.com/repos/${FACTORY_ASISTENTE_REPOSITORY}/`)));
+ const before=requests.length;
+ for(const path of ['server/kong-operations.ts','server/agent-council.ts','.github/workflows/run.yml']) await assert.rejects(client.git.createTree({...target,base_tree:tree,tree:[{path,sha,mode:'100644',type:'blob'}]}));
+ await assert.rejects(client.git.getRef({...scope,ref:`heads/${baseBranch}`}));
+ await assert.rejects(client.git.createRef({...target,ref:`refs/heads/${baseBranch}`,sha}));
+ await assert.rejects(client.pulls.create({...target,head:branch,base:'main',draft:true,title:'Candidate',body:'x'}));
+ assert.equal(requests.length,before);
+ for(const path of ['server/kong-operations.ts','server/software-factory.ts','server/user-auth.ts','package.json']) assert.throws(()=>createFactoryAsistenteGitHubClient({baseBranch,writePaths:[path],request:async()=>json({})}));
+});
 
 test("dispatch accepts validated 2026 run identity and legacy acknowledgement without retry", async () => {
  const valid={workflow_run_id:42293565576,run_url:`https://api.github.com/repos/${FACTORY_PILOT_REPOSITORY}/actions/runs/42293565576`,html_url:`https://github.com/${FACTORY_PILOT_REPOSITORY}/actions/runs/42293565576`};

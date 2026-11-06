@@ -69,6 +69,9 @@ export function createOfficeOpenAI(options: {
       throw new OfficeOpenAIError("invalid_usage", "OpenAI no devolvio una identificacion y consumo verificables.");
     }
     const metadata = { sessionId: body.id, completedAt: now().toISOString(), provider: "openai" as const, model: body.model as string, usage };
+    if (!["completed", "failed", "incomplete", "cancelled"].includes(body.status)) {
+      throw new OfficeOpenAIError("execution_unknown", "La ejecucion puede seguir activa; su reserva debe conservarse.");
+    }
     try { await options.recordUsage!(metadata); }
     catch { throw new OfficeOpenAIError("execution_unknown", "El consumo de OpenAI no pudo confirmarse en el registro persistente; requiere conciliacion."); }
     const messages = Array.isArray(body.output) ? body.output.filter((item: any) => item.type === "message" && item.role === "assistant") : [];
