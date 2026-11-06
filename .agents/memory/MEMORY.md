@@ -6,3 +6,4 @@
 - [Dropshipping CEO start flow](dropshipping-ceo-start.md) — POST /api/dropshipping-ceo/start corre ciclo + envía Telegram con blocker de Shopify; guardrails de aprobación intactos.
 - [Software factory budget](software-factory-budget.md) — límite total de $100/mes, separado de Replit Pro; no comprar créditos ni habilitar recarga automática.
 - [GitHub source snapshots](github-api-snapshot.md) — si el proxy bloquea archivos comprimidos, reconstruir una revisión desde tree/blob y verificar cada SHA; limitar concurrencia por 429.
+- [Pinned Docker image verification](docker-image-verification.md) — verificar origen oficial, digest de plataforma y versión en el config antes de descargar una imagen.
