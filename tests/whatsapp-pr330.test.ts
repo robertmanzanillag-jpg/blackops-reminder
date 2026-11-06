@@ -18,7 +18,7 @@ const evidence = (value?: WhatsAppReaderEvidence): OfficeKongAuditResult["eviden
 test("one desk survives absent/blocked/unknown/stale/reading/recent/error inputs without inventing work", () => {
   const cases: [WhatsAppReaderEvidence | undefined, string, string][] = [
     [undefined, "unverified", "offline"], [reader({reader:"blocked",blocker:"missing-reference",session:"unknown"}),"blocked","needs-setup"],
-    [reader({session:"unknown"}),"unverified","offline"], [reader({observedAt:at(-6),lastReviewAt:at(-6),lastAttemptAt:at(-7),lastSuccessAt:at(-7)}),"stale","offline"],
+    [reader({session:"unknown"}),"unverified","offline"], [reader({observedAt:at(-61),lastReviewAt:at(-61),lastAttemptAt:at(-62),lastSuccessAt:at(-62)}),"stale","offline"],
     [reader({reader:"reading"}),"reading","working"], [reader(),"recent","available"],
     [reader({reader:"blocked",blocker:"interaction-failed"}),"blocked","needs-setup"],
   ];
@@ -36,6 +36,20 @@ test("disconnect and expiry retain prior timestamps but never animate cached rea
     assert.equal(desk.whatsappEvidence?.status, "stale"); assert.notEqual(desk.status.state, "working");
     assert.equal(desk.whatsappEvidence?.evidence?.lastSuccessAt, value.lastSuccessAt);
   }
+});
+
+test("idle observations follow the scheduled cadence without claiming a live reader", () => {
+  const value = reader({observedAt:at(-30),lastReviewAt:at(-30),lastAttemptAt:at(-30),lastSuccessAt:at(-30)});
+  assert.equal(whatsappOfficeView(value,NOW).status,"recent");
+  assert.equal(whatsappOfficeView(value,NOW+30*60000).status,"recent");
+  assert.equal(whatsappOfficeView(value,NOW+30*60000+1).status,"stale");
+  assert.equal(whatsappOfficeView(value,NOW,false).status,"stale");
+  for (const patch of [{reader:"reading"},{reader:"blocked",blocker:"interaction-failed"},{session:"disconnected"},{scheduler:"paused"},{lastSuccessGroupCount:3},{intervalMinutes:10}]) {
+    assert.notEqual(whatsappOfficeView({...value,...patch},NOW).status,"recent");
+  }
+  const short = reader({intervalMinutes:10,observedAt:at(-20),lastReviewAt:at(-20),lastAttemptAt:at(-20),lastSuccessAt:at(-20)});
+  assert.equal(whatsappOfficeView(short,NOW).status,"recent");
+  assert.equal(whatsappOfficeView(short,NOW+1).status,"stale");
 });
 
 test("empty, private, future, invalid scope/count and inconsistent success never qualify", () => {
