@@ -58,3 +58,6 @@ DEFAULT_USER_ID = "mock-user-123"
 [postMerge]
 path = "scripts/post-merge.sh"
 timeoutMs = 120000
+
+[objectStorage]
+defaultBucketID = "replit-objstore-2d342fb0-d15f-4263-b84c-751093635101"
