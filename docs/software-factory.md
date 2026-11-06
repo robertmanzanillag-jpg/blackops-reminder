@@ -67,7 +67,7 @@ This composition does not supply provider credentials or substitute test doubles
 for real execution, review, deployment or recovery.
 
 Robert clarified that the $100 monthly factory ceiling is incremental to the
-existing Replit subscription. All costs attributable to the factory still count,
+existing Replit subscription and Kong. All costs attributable to the factory still count,
 including persistent hosting, database, isolated runners, AI usage and recovery.
 Shared account credits are not a dedicated factory budget. Do not enable account
 auto-reload or treat an account-wide spending control as a factory-only cap.
@@ -75,3 +75,30 @@ auto-reload or treat an account-wide spending control as a factory-only cap.
 A real cloud host and its fixed cost, a budget-enforced unattended coding provider, actual repository/PR credentials on that host, isolated app launch configuration, and a deployment provider with verified restoration must be configured. This change does not purchase hosting, alter secrets, migrate live data or claim production rehearsals.
 
 The builder runs source mounts read-only for checks. Configure commands/image to write build output and caches to `/tmp` or an explicitly isolated artifact directory. The digest-pinned image must already contain dependencies; network installation during checks is disabled.
+
+## Optional object ledger (not activated)
+
+`createSoftwareFactoryObjectStore` provides the store contract using one private
+object and conditional generation writes. It requires explicit initialization,
+an operator-verified synchronized clock and a bounded clock-error allowance.
+Missing, malformed or inconsistent state blocks execution; it never silently
+creates a replacement budget. Mutation receipts reconcile lost acknowledgments;
+unconfirmed writes stop rather than replay. Reservations, global execution
+leases, recovery escrow and rehearsal evidence remain persistent. Space is
+reserved for in-flight outcomes and recovery before admitting more work.
+
+`createGcsFactoryTransport` pins downloads to the metadata generation and checks
+size and checksum. Only a precondition failure is a write conflict. Authentication
+is supplied by the trusted host, never by project input. Requests and payloads
+are bounded, and the adapter itself performs no retries. Store and transport
+size limits must agree. Neither module selects itself as the live backend.
+
+Before activation, verify conditional writes on the actual Replit bucket,
+configure the same backend in both the worker and owner controls, verify host
+clock synchronization, and account for requests, transfer and retained records.
+The ledger retains receipts and financial history; capacity exhaustion requires
+an operator-reviewed archival migration. Replit App Storage does not provide
+object versioning, so a separately verified backup and recovery procedure is
+also required. Never restore an older ledger over outstanding commitments.
+This backend removes the need for factory ledger SQL queries only once wired
+into the live service; it is not a provider-enforced spending cap.

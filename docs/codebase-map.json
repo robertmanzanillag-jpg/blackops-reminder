@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T05:36:43.864Z",
+  "generatedAt": "2026-11-06T05:59:24.848Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -126,25 +126,25 @@
     "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 804,
-    "filesIndexed": 721,
-    "imports": 2583,
+    "filesVisible": 808,
+    "filesIndexed": 725,
+    "imports": 2597,
     "routes": 556,
-    "symbols": 16130
+    "symbols": 16219
   },
   "directories": {
     "server": {
-      "files": 169,
-      "indexed": 165,
+      "files": 171,
+      "indexed": 167,
       "kinds": {
-        "server": 169
+        "server": 171
       }
     },
     "tests": {
-      "files": 177,
-      "indexed": 174,
+      "files": 179,
+      "indexed": 176,
       "kinds": {
-        "test": 177
+        "test": 179
       }
     },
     ".": {
@@ -10596,19 +10596,23 @@
         "preflightEntry",
         "proxyHeaders",
         "proxyRequest",
+        "proxyTimeoutMs",
         "publicHost",
         "publicPort",
+        "readinessFailureThreshold",
         "readinessIntervalMs",
-        "readinessTimer",
+        "readinessTimeoutMs",
         "remoteAddress",
         "request",
         "runNodePreflight",
         "runtime",
         "server",
+        "settle",
         "shutdown",
         "startReplitFastStart",
         "startupStartedAt",
         "stop",
+        "stopReadiness",
         "upstream",
         "upstreamHost",
         "upstreamPort",
@@ -21124,6 +21128,33 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-gcs.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-object-store",
+        "node:crypto"
+      ],
+      "exports": [
+        "createGcsFactoryTransport"
+      ],
+      "symbols": [
+        "base",
+        "chunk",
+        "controller",
+        "createGcsFactoryTransport",
+        "data",
+        "generation",
+        "metadata",
+        "reader",
+        "request",
+        "response",
+        "result",
+        "timer",
+        "url"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-github.ts",
       "kind": "server",
       "imports": [
@@ -21191,6 +21222,57 @@
         "stop",
         "timer",
         "wait"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-object-store.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory",
+        "./software-factory-store",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "FactoryObjectStoreOptions",
+        "FactoryObjectTransport",
+        "createSoftwareFactoryObjectStore"
+      ],
+      "symbols": [
+        "Context",
+        "LIMIT",
+        "Ledger",
+        "addJob",
+        "assertKey",
+        "b",
+        "budget",
+        "bytes",
+        "capacity",
+        "clone",
+        "control",
+        "createSoftwareFactoryObjectStore",
+        "exposed",
+        "fit",
+        "hash",
+        "inputSchema",
+        "jobSchema",
+        "keySchema",
+        "ledgerSchema",
+        "maxBytes",
+        "month",
+        "mutate",
+        "mutationId",
+        "open",
+        "ownerKey",
+        "projectSchema",
+        "proof",
+        "protectedTransfer",
+        "read",
+        "state",
+        "time",
+        "unique",
+        "validate"
       ],
       "routes": []
     },
@@ -27702,6 +27784,7 @@
         "DIRECTORY_URL",
         "NOW",
         "TOKEN",
+        "actual",
         "audit",
         "base",
         "blocked",
@@ -27718,6 +27801,7 @@
         "invalidState",
         "json",
         "missing",
+        "modes",
         "operationData",
         "operations",
         "output",
@@ -28130,17 +28214,31 @@
       "exports": [],
       "symbols": [
         "address",
+        "beforeFailure",
         "childEntry",
+        "control",
+        "controlledRuntime",
+        "count",
+        "direct",
         "directory",
+        "end",
+        "error",
+        "exited",
+        "initial",
         "port",
         "ready",
         "replit",
         "reservePort",
+        "response",
         "runtime",
         "server",
         "starting",
+        "stats",
+        "status",
         "unavailable",
-        "upstreamPort"
+        "upstreamPort",
+        "url",
+        "waitFor"
       ],
       "routes": []
     },
@@ -28337,6 +28435,26 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-gcs.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-gcs",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "body",
+        "json",
+        "metadata",
+        "options",
+        "request",
+        "transport"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-github.test.ts",
       "kind": "test",
       "imports": [
@@ -28387,6 +28505,37 @@
         "store",
         "tick",
         "worker"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-object-store.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-object-store",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "MemoryTransport",
+        "before",
+        "claimed",
+        "deploy",
+        "exactCapacity",
+        "f",
+        "fixture",
+        "input",
+        "ledger",
+        "owner",
+        "project",
+        "rollback",
+        "store",
+        "tight",
+        "transport",
+        "verify",
+        "writes"
       ],
       "routes": []
     },
@@ -28999,8 +29148,10 @@
     "tests/session-config.test.ts",
     "tests/shopify-oauth.test.ts",
     "tests/software-factory-builder.test.ts",
+    "tests/software-factory-gcs.test.ts",
     "tests/software-factory-github.test.ts",
     "tests/software-factory-loop.test.ts",
+    "tests/software-factory-object-store.test.ts",
     "tests/software-factory-pipeline.test.ts",
     "tests/software-factory-postgres.test.ts",
     "tests/software-factory-routes.test.ts",
