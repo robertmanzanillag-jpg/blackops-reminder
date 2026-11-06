@@ -12,7 +12,7 @@ test("actual backend office HTTP projection feeds the consumer parser, desk and 
     const now=Date.now(); const at=(minutes:number)=>new Date(now+minutes*60000).toISOString();
     const reader:WhatsAppReaderEvidence={version:1,scopeId:"kong-venues-four-groups",ownerId:"11111111-1111-4111-8111-111111111111",observedAt:at(-0.1),scheduler:"active",intervalMinutes:30,reader:"idle",session:"connected",lastReviewAt:at(-0.1),lastAttemptAt:at(-1),lastSuccessAt:at(-1),groupsRead:4,lastSuccessGroupCount:4,blocker:"none",checkpointsRetained:true};
     const cases:[WhatsAppReaderEvidence|null,string][]=[ [null,"unverified"], [{...reader,reader:"blocked",session:"unknown",blocker:"missing-reference"},"blocked"],
-      [{...reader,session:"unknown"},"unverified"], [{...reader,observedAt:at(-6),lastReviewAt:at(-6),lastAttemptAt:at(-7),lastSuccessAt:at(-7)},"stale"],
+      [{...reader,session:"unknown"},"unverified"], [{...reader,observedAt:at(-61),lastReviewAt:at(-61),lastAttemptAt:at(-62),lastSuccessAt:at(-62)},"stale"],
       [{...reader,reader:"reading"},"reading"], [reader,"recent"], [{...reader,reader:"blocked",blocker:"permission-required"},"blocked"],
       [{...reader,reader:"blocked",blocker:"interaction-failed"},"blocked"] ];
     for(const [value,expected] of cases) {

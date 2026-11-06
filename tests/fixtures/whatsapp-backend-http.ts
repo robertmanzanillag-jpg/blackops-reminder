@@ -10,7 +10,7 @@ import { execFileSync } from "node:child_process";
 import { createOfficeKongConnector } from "../../server/office-kong";
 import type { WhatsAppReaderEvidence } from "../../shared/whatsapp-office-agent";
 
-export const BACKEND_REVISION = "2e3e3cb753e57479002505240b8296a79f2f8990";
+export const BACKEND_REVISION = "daada94d52df2e6b008b59799d2db723215df0c5";
 const OWNER = "11111111-1111-4111-8111-111111111111";
 const TOKEN = "synthetic-office-fixture-read-token-00000000";
 /** Actual backend HTTP office projection, fixture auth/storage only; no live DB or outgoing network. */
