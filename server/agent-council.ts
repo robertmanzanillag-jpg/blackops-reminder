@@ -1,4 +1,5 @@
 import { advanceKongCompany, isKongCompanyAgent } from "./kong-company";
+import { parseInternalWork } from "./office-internal-work";
 import type { OfficeKongAuditResult } from "./office-kong";
 // Server side of the agent council (see shared/agent-council.ts).
 //
@@ -284,6 +285,7 @@ function parseDurableCouncilState(raw: string | null): CouncilState {
   if (value.officeExecution !== undefined) {
     if (!object(value.officeExecution) || !object(value.officeExecution.tokens)) throw new Error("Invalid office execution state");
     parseRoleLifecycleState(value.officeExecution.roles);
+    parseInternalWork(value.officeExecution.internalWork);
   }
   return parseCouncilState(raw);
 }
@@ -665,6 +667,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
           : role.leases.some(lease => lease.status === "unknown") ? "An execution is uncertain; reconciliation is required."
           : role.status === "vacant" ? "Awaiting a candidate with verified comparable evaluations."
           : role.status === "probation" ? "Awaiting the replacement's first verified execution."
+          : ["ceo","assistant"].includes(role.roleId) ? "Deterministic saved-record planning adapter only; requires explicit enablement. Contract checks do not qualify trained replacements."
           : role.activePolicy?.qualificationScope === "benchmark" ? "Qualified on held-out benchmarks only; actual PR execution does not prove universal review quality."
           : "Policy admitted; completed work is verified separately.",
       })) : [],

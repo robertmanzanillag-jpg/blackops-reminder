@@ -3,8 +3,9 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { ownershipPaths, acquireWorkerOwnership, requestWorkerStop, resumeWorker } from './office-worker-ownership.mjs';
 
-const allowed = new Set(['DATABASE_URL','DEFAULT_USER_ID','OPENAI_API_KEY','OFFICE_OPENAI_MODEL','OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT','OFFICE_OPENAI_MAX_OUTPUT_TOKENS','OFFICE_ACADEMY_PREPARATION_ENABLED','OFFICE_ACADEMY_EXECUTION_ENABLED','OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED','OFFICE_EXPECTED_WEB_REVISION','GITHUB_TOKEN']);
+const allowed = new Set(['DATABASE_URL','DEFAULT_USER_ID','OPENAI_API_KEY','OFFICE_OPENAI_MODEL','OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT','OFFICE_OPENAI_MAX_OUTPUT_TOKENS','OFFICE_ACADEMY_PREPARATION_ENABLED','OFFICE_ACADEMY_EXECUTION_ENABLED','OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED','OFFICE_EXPECTED_WEB_REVISION','GITHUB_TOKEN','OFFICE_INTERNAL_WORK_ENABLED']);
 const localEnvFiles = ['.env','.env.local','.env.development','.env.development.local','.env.production','.env.production.local','.env.replit','CEO_ASSISTANT_ENV','CEO_ASSISTANT_ENV.local'];
 const fail = code => { throw new Error(code); };
 export function assertPrivateConfigAcl(configPath, execute = spawnSync, inherited = process.env) {
@@ -39,14 +40,14 @@ export function parseWorkerConfig(raw) {
   if (!Number.isSafeInteger(cap) || cap < 1) fail('EXPLICIT_TOKEN_LIMIT_REQUIRED');
   const output = Number(config.OFFICE_OPENAI_MAX_OUTPUT_TOKENS || '2048');
   if (!Number.isSafeInteger(output) || output < 32 || output > 4096) fail('OUTPUT_LIMIT_INVALID');
-  for (const key of ['OFFICE_ACADEMY_PREPARATION_ENABLED','OFFICE_ACADEMY_EXECUTION_ENABLED','OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED']) if (config[key] && !['true','false'].includes(config[key])) fail('FLAG_INVALID');
+  for (const key of ['OFFICE_ACADEMY_PREPARATION_ENABLED','OFFICE_ACADEMY_EXECUTION_ENABLED','OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED','OFFICE_INTERNAL_WORK_ENABLED']) if (config[key] && !['true','false'].includes(config[key])) fail('FLAG_INVALID');
   return config;
 }
 export function safeWorkerEnvironment(config, inherited = process.env) {
   const env = {};
   for (const key of ['SystemRoot','WINDIR','TEMP','TMP','PATH','Path','USERPROFILE','LOCALAPPDATA','APPDATA','COMSPEC']) if (inherited[key]) env[key] = inherited[key];
   return { ...env, ...config, NODE_ENV:'production', OFFICE_WORKER_ENABLED:'true', OFFICE_WORKER_RUN_ONCE:'false', OFFICE_WORKER_FAIL_FAST:'true', OFFICE_WORKER_REVIEW_ONLY:'true', OFFICE_REVIEW_PROVIDER:'openai', OFFICE_KONG_AUDIT_SCHEDULE_ENABLED:'false', AGENT_COUNCIL_STORAGE:'postgres',
-    OFFICE_ACADEMY_PREPARATION_ENABLED:config.OFFICE_ACADEMY_PREPARATION_ENABLED || 'false', OFFICE_ACADEMY_EXECUTION_ENABLED:config.OFFICE_ACADEMY_EXECUTION_ENABLED || 'false', OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED:config.OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED || 'false' };
+    OFFICE_INTERNAL_WORK_ENABLED:config.OFFICE_INTERNAL_WORK_ENABLED || 'false', OFFICE_ACADEMY_PREPARATION_ENABLED:config.OFFICE_ACADEMY_PREPARATION_ENABLED || 'false', OFFICE_ACADEMY_EXECUTION_ENABLED:config.OFFICE_ACADEMY_EXECUTION_ENABLED || 'false', OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED:config.OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED || 'false' };
 }
 export function validateWorkerPaths(repoInput, configInput, nodeInput = process.execPath) {
   if (![repoInput, configInput, nodeInput].every(value => typeof value === 'string' && path.isAbsolute(value) && !/[\r\n\0"]/.test(value))) fail('ABSOLUTE_PATH_REQUIRED');
@@ -71,23 +72,49 @@ export async function preflightDatabase(config, Pool, assertProtocolReady) {
     await assertProtocolReady(pool, config.DEFAULT_USER_ID, config.OFFICE_EXPECTED_WEB_REVISION);
   } finally { await pool.end(); }
 }
+export async function superviseOwnedWorker(child, ownership, ownedPaths, { pollMs=1000, parentAlive=()=>{
+  try { process.kill(ownership.identity.parentPid,0); return true; } catch(error) { return error.code !== 'ESRCH'; }
+} } = {}) {
+  let requested=false;
+  const terminate=()=>{ if (!requested && child.connected) { requested=true; child.send({type:'office-shutdown'},()=>{}); } };
+  process.on('SIGTERM',terminate); process.on('SIGINT',terminate);
+  const monitor=setInterval(()=>{
+    try { if (!parentAlive()) requestWorkerStop(ownedPaths); if (ownership.stopRequested()) terminate(); }
+    catch { terminate(); }
+  },pollMs);
+  try { return await new Promise((resolve,reject)=>{ child.once('error',reject); child.once('exit',code=>resolve(code)); }); }
+  finally { clearInterval(monitor); process.off('SIGTERM',terminate); process.off('SIGINT',terminate); }
+}
 async function main() {
   if (Number(process.versions.node.split('.')[0]) < 22) fail('NODE_22_OR_NEWER_REQUIRED');
   const args = process.argv.slice(2);
-  if (args.length !== 5 || args[0] !== '--repo' || args[2] !== '--config' || !['--preflight','--run'].includes(args[4])) fail('ARGUMENTS_INVALID');
+  if (args.length !== 5 || args[0] !== '--repo' || args[2] !== '--config' || !['--preflight','--run','--stop','--resume'].includes(args[4])) fail('ARGUMENTS_INVALID');
   const paths = validateWorkerPaths(args[1], args[3]);
   assertPrivateConfigAcl(paths.configPath);
+  assertPrivateConfigAcl(path.dirname(paths.configPath));
   const config = parseWorkerConfig(fs.readFileSync(paths.configPath,'utf8'));
+  const ownedPaths = ownershipPaths(paths.repo,paths.configPath,config.DEFAULT_USER_ID);
+  if (args[4] === '--stop') { requestWorkerStop(ownedPaths); console.log('Worker pause persisted; active cycle may still be finishing. Verify lock removal before restart.'); return; }
+  if (args[4] === '--resume') { resumeWorker(ownedPaths); console.log('Worker pause cleared; no worker started.'); return; }
+  const ownership = args[4] === '--run' ? acquireWorkerOwnership(ownedPaths) : undefined;
+  let child;
+  let childFinished = false;
+  try {
   for (const key of Object.keys(process.env)) if (/^PG/.test(key)) delete process.env[key];
   const require = createRequire(path.join(paths.repo,'package.json'));
   const { tsImport } = require('tsx/esm/api');
   const protocol = await tsImport(pathToFileURL(path.join(paths.repo,'server','office-protocol.ts')).href, import.meta.url);
   await preflightDatabase(config, require('pg').Pool, protocol.assertOfficeProtocolReady);
   if (args[4] === '--preflight') { console.log('Office worker preflight verified. No task was registered or executed.'); return; }
-  const child = spawn(paths.node, ['--import','tsx','script/office-worker.ts'], { cwd:paths.repo, env:safeWorkerEnvironment(config), shell:false, windowsHide:true, stdio:'ignore' });
-  const terminate = () => { if (child.exitCode === null) child.kill('SIGTERM'); };
-  process.on('SIGTERM',terminate); process.on('SIGINT',terminate);
-  try { await new Promise((resolve,reject) => { child.once('error',reject); child.once('exit',code => code === 0 ? resolve() : reject(new Error('WORKER_CYCLE_UNCONFIRMED'))); }); }
-  finally { process.off('SIGTERM',terminate); process.off('SIGINT',terminate); terminate(); }
+  if (ownership.stopRequested()) return;
+  child = spawn(paths.node, ['--import','tsx','script/office-worker.ts'], { cwd:paths.repo, env:safeWorkerEnvironment(config), shell:false, windowsHide:true, stdio:['ignore','ignore','ignore','ipc'] });
+  const code=await superviseOwnedWorker(child,ownership,ownedPaths);
+  childFinished=true;
+  if(code !== 0) throw new Error('WORKER_CYCLE_UNCONFIRMED');
+  } finally {
+    // A force-killed wrapper leaves a lock for explicit reconciliation. Never
+    // unlock an uncertain live child or replay its provider request.
+    if (ownership && (!child || childFinished || !child.pid)) ownership.release();
+  }
 }
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main().catch(() => { console.error('Office Windows worker stopped: configuration, database identity, or execution was not verified. No automatic job retry.'); process.exitCode=1; });

@@ -25,6 +25,9 @@ test('missing owned task upgrade refuses creation while normal dry-run may conti
 });
 test('strict config requires budget/owner and refuses executable environment injection', () => {
   assert.equal(parseWorkerConfig(raw).OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT,'100000');
+  assert.equal(safeWorkerEnvironment(parseWorkerConfig(raw)).OFFICE_INTERNAL_WORK_ENABLED,'false');
+  assert.equal(safeWorkerEnvironment(parseWorkerConfig(raw+'\nOFFICE_INTERNAL_WORK_ENABLED=true')).OFFICE_INTERNAL_WORK_ENABLED,'true');
+  assert.throws(()=>parseWorkerConfig(raw+'\nOFFICE_INTERNAL_WORK_ENABLED=yes'),/FLAG_INVALID/);
   for (const extra of ['NODE_OPTIONS=--require malware.js','OFFICE_WORKER_REVIEW_ONLY=false','DATABASE_URL=postgresql://other/db','export SECRET=abc']) assert.throws(() => parseWorkerConfig(raw+'\n'+extra));
   assert.throws(() => parseWorkerConfig(raw.replace('100000','0')), /TOKEN_LIMIT/);
   assert.throws(() => parseWorkerConfig(raw.replace('owner-123','replace-with-user-id')), /OWNER/);

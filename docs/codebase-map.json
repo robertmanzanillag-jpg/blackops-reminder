@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T11:35:59.845Z",
+  "generatedAt": "2026-11-06T11:55:09.976Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\blackops-reminder",
   "packageName": "rest-express",
   "scripts": {
@@ -124,18 +124,46 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 806,
-    "filesIndexed": 717,
-    "imports": 2551,
-    "routes": 554,
-    "symbols": 16175
+    "filesVisible": 813,
+    "filesIndexed": 724,
+    "imports": 2581,
+    "routes": 555,
+    "symbols": 16253
   },
   "directories": {
-    "script": {
-      "files": 90,
-      "indexed": 82,
+    "docs": {
+      "files": 36,
+      "indexed": 35,
       "kinds": {
-        "script": 90
+        "docs": 36
+      }
+    },
+    "script": {
+      "files": 91,
+      "indexed": 83,
+      "kinds": {
+        "script": 91
+      }
+    },
+    "server": {
+      "files": 169,
+      "indexed": 164,
+      "kinds": {
+        "server": 169
+      }
+    },
+    "shared": {
+      "files": 13,
+      "indexed": 13,
+      "kinds": {
+        "shared": 13
+      }
+    },
+    "tests": {
+      "files": 181,
+      "indexed": 177,
+      "kinds": {
+        "test": 181
       }
     },
     ".": {
@@ -280,13 +308,6 @@
         "other": 1
       }
     },
-    "docs": {
-      "files": 35,
-      "indexed": 34,
-      "kinds": {
-        "docs": 35
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -300,13 +321,6 @@
       "indexed": 1,
       "kinds": {
         "script": 4
-      }
-    },
-    "server": {
-      "files": 168,
-      "indexed": 163,
-      "kinds": {
-        "server": 168
       }
     },
     "server/replit_integrations/batch": {
@@ -330,25 +344,11 @@
         "server": 3
       }
     },
-    "shared": {
-      "files": 12,
-      "indexed": 12,
-      "kinds": {
-        "shared": 12
-      }
-    },
     "shared/models": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 178,
-      "indexed": 174,
-      "kinds": {
-        "test": 178
       }
     },
     "tests/fixtures": {
@@ -5423,6 +5423,14 @@
       "routes": []
     },
     {
+      "path": "docs/office-internal-work.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/office-openai-rollout.md",
       "kind": "docs",
       "imports": [],
@@ -10383,6 +10391,7 @@
       "path": "script/office-windows-worker.mjs",
       "kind": "script",
       "imports": [
+        "./office-worker-ownership.mjs",
         "node:child_process",
         "node:fs",
         "node:module",
@@ -10396,6 +10405,7 @@
         "parseWorkerConfig",
         "preflightDatabase",
         "safeWorkerEnvironment",
+        "superviseOwnedWorker",
         "validateWorkerPaths"
       ],
       "symbols": [
@@ -10403,7 +10413,7 @@
         "args",
         "assertPrivateConfigAcl",
         "cap",
-        "child",
+        "code",
         "config",
         "env",
         "fail",
@@ -10411,8 +10421,11 @@
         "main",
         "manifest",
         "match",
+        "monitor",
         "output",
+        "ownedPaths",
         "owner",
+        "ownership",
         "parseWorkerConfig",
         "paths",
         "pool",
@@ -10424,9 +10437,36 @@
         "result",
         "safeWorkerEnvironment",
         "script",
+        "superviseOwnedWorker",
         "terminate",
         "validateWorkerPaths",
         "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/office-worker-ownership.mjs",
+      "kind": "script",
+      "imports": [
+        "node:crypto",
+        "node:fs",
+        "node:path"
+      ],
+      "exports": [
+        "acquireWorkerOwnership",
+        "ownershipPaths",
+        "requestWorkerStop",
+        "resumeWorker"
+      ],
+      "symbols": [
+        "acquireWorkerOwnership",
+        "base",
+        "current",
+        "identity",
+        "key",
+        "ownershipPaths",
+        "requestWorkerStop",
+        "resumeWorker"
       ],
       "routes": []
     },
@@ -10445,6 +10485,9 @@
         "checkProtocol",
         "execution",
         "heartbeat",
+        "internal",
+        "internalEnabled",
+        "internalModule",
         "main",
         "module",
         "protocolPool",
@@ -11010,6 +11053,7 @@
       "routes": [
         "/api/agent-company/orders",
         "/api/agent-company/orders/:id/done",
+        "/api/agent-council/internal-work",
         "/api/agent-council/run",
         "/api/agent-council/state"
       ]
@@ -11046,6 +11090,7 @@
         "./blackroom-office-operations",
         "./database-url",
         "./kong-company",
+        "./office-internal-work",
         "./office-kong",
         "@shared/agent-company",
         "@shared/agent-council",
@@ -18612,6 +18657,60 @@
       "routes": []
     },
     {
+      "path": "server/office-internal-work.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "../shared/office-role-lifecycle",
+        "./agent-council",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "InternalWorkJob",
+        "InternalWorkSnapshot",
+        "InternalWorkState",
+        "createInternalWorkRunner",
+        "parseInternalWork",
+        "prepareInternalArtifact",
+        "readInternalWorkSnapshot"
+      ],
+      "symbols": [
+        "active",
+        "approvals",
+        "artifactSchema",
+        "clean",
+        "client",
+        "clock",
+        "createInternalWorkRunner",
+        "digest",
+        "end",
+        "identity",
+        "ids",
+        "item",
+        "jobSchema",
+        "jobs",
+        "now",
+        "parseInternalWork",
+        "prepareInternalArtifact",
+        "project",
+        "readInternalWorkSnapshot",
+        "records",
+        "reserved",
+        "result",
+        "retained",
+        "snapshot",
+        "snapshotSchema",
+        "source",
+        "start",
+        "state",
+        "tasks",
+        "text",
+        "work"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/office-kong-collaboration.ts",
       "kind": "server",
       "imports": [
@@ -19443,6 +19542,7 @@
       "path": "server/radio-agent.ts",
       "kind": "server",
       "imports": [
+        "../shared/radio-slots",
         "./ceo-doctor-cli",
         "./storage",
         "./telegram",
@@ -19471,17 +19571,12 @@
         "bScore",
         "botToken",
         "buildRadioSlot",
-        "cleanDesc",
-        "cleanDjName",
-        "cleaned",
         "config",
         "createVideoEditTask",
         "dateStr",
         "dayAfter",
         "dayNumber",
-        "decodeDescription",
         "defaultTemplate",
-        "djName",
         "djSet",
         "eventDate",
         "existingDjs",
@@ -19493,7 +19588,6 @@
         "getOrdinalDay",
         "getRadioSlotsForMonth",
         "getTelegramBotToken",
-        "hour",
         "importDjsFromRadioHistory",
         "instagram",
         "instagramMatch",
@@ -19505,13 +19599,11 @@
         "names",
         "normalized",
         "now",
-        "parseRadioDescription",
         "parsed",
         "radioEvents",
         "radioSlot",
         "rating",
         "sendRadioSlotsSummary",
-        "slotPattern",
         "slotsStr",
         "sortedDjs",
         "suggestedDjs",
@@ -23081,6 +23173,29 @@
         "time",
         "validAssessment",
         "validPolicy"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/radio-slots.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "parseRadioDescription"
+      ],
+      "symbols": [
+        "cleanDesc",
+        "cleanDjName",
+        "cleaned",
+        "decodeDescription",
+        "djName",
+        "end",
+        "hour",
+        "marker",
+        "markers",
+        "normalized",
+        "parseRadioDescription",
+        "start"
       ],
       "routes": []
     },
@@ -27781,6 +27896,45 @@
       "routes": []
     },
     {
+      "path": "tests/office-internal-work.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/agent-council-routes",
+        "../server/office-internal-work",
+        "../shared/agent-company",
+        "../shared/agent-council",
+        "../shared/office-role-lifecycle",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "allowed",
+        "app",
+        "approvals",
+        "bounded",
+        "ceo",
+        "company",
+        "corrupt",
+        "council",
+        "denied",
+        "empty",
+        "f",
+        "fixture",
+        "handlers",
+        "key",
+        "make",
+        "oversized",
+        "pool",
+        "response",
+        "source",
+        "tasks"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-kong-central-agents.test.ts",
       "kind": "test",
       "imports": [
@@ -28129,6 +28283,31 @@
       "routes": []
     },
     {
+      "path": "tests/office-worker-ownership.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/office-windows-worker.mjs",
+        "../script/office-worker-ownership.mjs",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "child",
+        "dir",
+        "fixture",
+        "next",
+        "paths",
+        "record",
+        "waiting"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-worker-watchdog.test.ts",
       "kind": "test",
       "imports": [
@@ -28284,6 +28463,18 @@
         "verdicts",
         "writeState"
       ],
+      "routes": []
+    },
+    {
+      "path": "tests/radio-slots.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/radio-slots",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {
@@ -28966,6 +29157,7 @@
     "tests/office-council-migration.test.ts",
     "tests/office-execution.test.ts",
     "tests/office-github.test.ts",
+    "tests/office-internal-work.test.ts",
     "tests/office-kong-central-agents.test.ts",
     "tests/office-kong-collaboration.test.ts",
     "tests/office-kong-supervisor.test.ts",
@@ -28981,6 +29173,7 @@
     "tests/office-worker-watchdog.test.ts",
     "tests/owner-office-storage.test.ts",
     "tests/public-local-news.test.ts",
+    "tests/radio-slots.test.ts",
     "tests/radio-template-agent.test.ts",
     "tests/radio-video-edit-agent.test.ts",
     "tests/radio-youtube-command.test.ts",

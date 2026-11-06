@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-06T11:35:59.845Z
+Generated: 2026-11-06T11:55:09.976Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\blackops-reminder`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 806 | 717 | 2551 | 554 | 16175 |
+| 813 | 724 | 2581 | 555 | 16253 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,17 +28,17 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 178 | 174 | test:178 |
-| `server` | 168 | 163 | server:168 |
-| `script` | 90 | 82 | script:90 |
+| `tests` | 181 | 177 | test:181 |
+| `server` | 169 | 164 | server:169 |
+| `script` | 91 | 83 | script:91 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 35 | 34 | docs:35 |
+| `docs` | 36 | 35 | docs:36 |
 | `client/src/components` | 28 | 28 | client-component:28 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `client/src/lib` | 17 | 17 | client-lib:17 |
-| `shared` | 12 | 12 | shared:12 |
+| `shared` | 13 | 13 | shared:13 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `client/src/components/company-office` | 5 | 5 | client-component:5 |
 | `server/replit_integrations/chat` | 4 | 4 | server:4 |
@@ -55,7 +55,7 @@ Package: `rest-express`
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/tools`
-- `server/agent-council-routes.ts`: `/api/agent-company/orders`, `/api/agent-company/orders/:id/done`, `/api/agent-council/run`, `/api/agent-council/state`
+- `server/agent-council-routes.ts`: `/api/agent-company/orders`, `/api/agent-company/orders/:id/done`, `/api/agent-council/internal-work`, `/api/agent-council/run`, `/api/agent-council/state`
 - `server/assistant.ts`: `/api/assistant/chat`, `/api/assistant/context`, `/api/assistant/transcribe`
 - `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
 - `server/index.ts`: `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
@@ -179,6 +179,7 @@ Package: `rest-express`
 - `tests/office-council-migration.test.ts`
 - `tests/office-execution.test.ts`
 - `tests/office-github.test.ts`
+- `tests/office-internal-work.test.ts`
 - `tests/office-kong-central-agents.test.ts`
 - `tests/office-kong-collaboration.test.ts`
 - `tests/office-kong-supervisor.test.ts`
@@ -194,6 +195,7 @@ Package: `rest-express`
 - `tests/office-worker-watchdog.test.ts`
 - `tests/owner-office-storage.test.ts`
 - `tests/public-local-news.test.ts`
+- `tests/radio-slots.test.ts`
 - `tests/radio-template-agent.test.ts`
 - `tests/radio-video-edit-agent.test.ts`
 - `tests/radio-youtube-command.test.ts`
