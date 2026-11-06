@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T11:10:46.326Z",
+  "generatedAt": "2026-11-06T11:28:08.790Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -126,18 +126,25 @@
     "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 824,
-    "filesIndexed": 739,
-    "imports": 2660,
+    "filesVisible": 826,
+    "filesIndexed": 741,
+    "imports": 2667,
     "routes": 556,
-    "symbols": 16446
+    "symbols": 16465
   },
   "directories": {
     "server": {
-      "files": 178,
-      "indexed": 174,
+      "files": 179,
+      "indexed": 175,
       "kinds": {
-        "server": 178
+        "server": 179
+      }
+    },
+    "tests": {
+      "files": 186,
+      "indexed": 183,
+      "kinds": {
+        "test": 186
       }
     },
     ".": {
@@ -344,13 +351,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 185,
-      "indexed": 182,
-      "kinds": {
-        "test": 185
       }
     },
     "tests/fixtures": {
@@ -21196,6 +21196,32 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-encrypted-state.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-object-store",
+        "node:crypto"
+      ],
+      "exports": [
+        "createEncryptedFactoryTransport"
+      ],
+      "symbols": [
+        "body",
+        "bytes",
+        "ciphertext",
+        "createEncryptedFactoryTransport",
+        "decipher",
+        "decode",
+        "envelope",
+        "key",
+        "limit",
+        "nonce",
+        "transport",
+        "value"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-gcs.ts",
       "kind": "server",
       "imports": [
@@ -28760,6 +28786,28 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-encrypted-state.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-encrypted-state",
+        "../server/software-factory-object-store",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "e",
+        "f",
+        "fixture",
+        "key",
+        "next",
+        "raw",
+        "wrapped"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-gcs.test.ts",
       "kind": "test",
       "imports": [
@@ -29613,6 +29661,7 @@
     "tests/shopify-oauth.test.ts",
     "tests/software-factory-actions.test.ts",
     "tests/software-factory-builder.test.ts",
+    "tests/software-factory-encrypted-state.test.ts",
     "tests/software-factory-gcs.test.ts",
     "tests/software-factory-github-publisher.test.ts",
     "tests/software-factory-github.test.ts",
