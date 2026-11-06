@@ -29,6 +29,7 @@ export type SceneDepartment = {
   name: string;
   color: string;
   agents: SceneAgent[];
+  officeRing?: 1 | 2 | 3;
 };
 
 export type SceneDebate = { from: string; to: string };
@@ -58,6 +59,30 @@ const RING_RADIUS = 17;
 const DESK_SPACING_X = 3.1;
 const DESK_SPACING_Z = 3.6;
 const CITY_RING_SPACING = 12;
+
+/** Space platform bounding circles rather than overlapping wedges in a fixed-radius ring. */
+export function officeConcentricRingLayout(departments: Array<{ id: string; agentCount: number; ring: 1 | 2 | 3 }>) {
+  const rings = [1, 2, 3] as const;
+  const footprint = (count: number) => {
+    const cols = Math.min(5, Math.max(1, count));
+    const rows = Math.max(1, Math.ceil(count / cols));
+    return Math.hypot(cols * DESK_SPACING_X + 1.4, rows * DESK_SPACING_Z + 1.2) / 2;
+  };
+  const groups = rings.map(ring => departments.filter(department => department.ring === ring));
+  const sizes = groups.map(group => Math.max(5, ...group.map(department => footprint(department.agentCount))));
+  const radii: number[] = [];
+  groups.forEach((group, index) => {
+    const sameRingSpacing = group.length > 1 ? (sizes[index] + 2) / Math.sin(Math.PI / group.length) : 0;
+    const previousRingSpacing = index ? radii[index - 1] + sizes[index - 1] + sizes[index] + 6 : 17;
+    radii.push(Math.max(previousRingSpacing, sameRingSpacing));
+  });
+  const positions = groups.flatMap((group, ringIndex) => group.map((department, index) => {
+    const angle = ((index + (ringIndex % 2 ? 0.5 : 0)) / Math.max(1, group.length)) * Math.PI * 2 - Math.PI / 2;
+    return { id: department.id, ring: department.ring, radius: radii[ringIndex], angle,
+      x: Math.cos(angle) * radii[ringIndex], z: Math.sin(angle) * radii[ringIndex], footprint: footprint(department.agentCount) };
+  }));
+  return { positions, radii, extent: radii[2] + sizes[2] };
+}
 
 export function officeCityMapPosition(index: number, count: number) {
   let start = 0;
@@ -270,6 +295,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   let cityLayout: SceneData["cityLayout"];
   let largeOffice = false;
   let latestData: SceneData | undefined;
+  let ringGuides: any;
   let sceneVersion = 0;
   let renderedVersion = -1;
   let cityMapSize = officeCityMapPosition(0, 0);
@@ -361,6 +387,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   }
 
   function clearDynamic() {
+    if (ringGuides) { scene.remove(ringGuides); disposeObject(ringGuides); ringGuides = undefined; }
     if (overviewDesks) {
       scene.remove(overviewDesks.group);
       disposeObject(overviewDesks.group);
@@ -617,7 +644,22 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     }
     const count = Math.max(1, data.departments.length);
     const widest = Math.max(9, ...data.departments.map(department => Math.min(5, Math.max(1, department.agents.length)) * DESK_SPACING_X + 1.4));
-    officeRingRadius = Math.max(RING_RADIUS, count * (widest + 2) / (2 * Math.PI));
+    const concentric = data.company === "KONG" && !cityLayout ? officeConcentricRingLayout(data.departments.map(department => ({id: department.id, agentCount: department.agents.length, ring: department.officeRing ?? (department.id.startsWith("kong-city:") ? 3 : 1)}))) : undefined;
+    const ringPositions = new Map(concentric?.positions.map(position => [position.id, position]));
+    officeRingRadius = concentric?.extent ?? Math.max(RING_RADIUS, count * (widest + 2) / (2 * Math.PI));
+    if (concentric) {
+      ringGuides = new THREE.Group();
+      concentric.radii.forEach((ringRadius, index) => {
+        const points = Array.from({length: 128}, (_, step) => new THREE.Vector3(Math.cos(step / 128 * Math.PI * 2) * ringRadius, -0.5, Math.sin(step / 128 * Math.PI * 2) * ringRadius));
+        ringGuides.add(new THREE.LineLoop(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineBasicMaterial({color: [0xfbbf24, 0x22d3ee, 0xa78bfa][index], transparent: true, opacity: 0.6})));
+        host.dataset[`officeRing${index + 1}Count`] = String(concentric.positions.filter(position => position.ring === index + 1).length);
+      });
+      scene.add(ringGuides);
+      host.dataset.officeLayout = "three-rings";
+    } else {
+      host.dataset.officeLayout = "single-ring";
+      for (const ring of [1, 2, 3]) delete host.dataset[`officeRing${ring}Count`];
+    }
     fitOfficeOverview();
     if (!cityLayout) {
       camera.far = Math.max(400, officeOverviewRadius + 150);
@@ -626,10 +668,11 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       scene.fog.far = Math.max(110, officeOverviewRadius * 1.7 + 20);
     }
     data.departments.forEach((department, index) => {
-      const angle = cityLayout ? -Math.PI / 2 : (index / count) * Math.PI * 2 - Math.PI / 2;
+      const ringPosition = ringPositions.get(department.id);
+      const angle = cityLayout ? -Math.PI / 2 : ringPosition?.angle ?? (index / count) * Math.PI * 2 - Math.PI / 2;
       const cityPosition = cityOverview ? officeCityMapPosition(index, count) : { x: 0, z: 0 };
-      const cx = cityLayout ? cityPosition.x : Math.cos(angle) * officeRingRadius;
-      const cz = cityLayout ? cityPosition.z : Math.sin(angle) * officeRingRadius;
+      const cx = cityLayout ? cityPosition.x : ringPosition?.x ?? Math.cos(angle) * officeRingRadius;
+      const cz = cityLayout ? cityPosition.z : ringPosition?.z ?? Math.sin(angle) * officeRingRadius;
       const group = new THREE.Group();
       group.position.set(cx, 0, cz);
       // Local +z points to the hub; monitors face outward.
@@ -688,6 +731,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       label.style.background = "rgba(2,6,23,0.82)";
       label.style.color = department.color;
       label.dataset.testid = `world-dept-${department.id}`;
+      if (ringPosition) label.dataset.officeRing = String(ringPosition.ring);
       const working = department.agents.filter((agent) => agent.state === "working").length;
       label.textContent = cityOverview ? department.name : `${department.name} · ${working}/${department.agents.length}`;
       if (cityOverview) label.setAttribute("aria-label", `Abrir ${department.name}, ${working} agentes en ejecución verificada`);
@@ -970,9 +1014,10 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     const keepFocus = focused;
     const priorLayout = cityLayout;
     const priorCount = platforms.length;
+    const priorExtent = officeRingRadius;
     build(data);
     if (keepFocus && platforms.some((platform) => platform.department.id === keepFocus)) focusDepartment(keepFocus, false);
-    else if (priorLayout !== cityLayout || priorCount !== platforms.length) {
+    else if (priorLayout !== cityLayout || priorCount !== platforms.length || priorExtent !== officeRingRadius) {
       if (!cityLayout) goalTheta = 0.6;
       focusDepartment(null, false);
     }

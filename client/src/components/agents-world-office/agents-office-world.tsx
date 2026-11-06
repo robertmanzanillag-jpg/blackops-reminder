@@ -17,7 +17,7 @@ import type { OfficeKongCollaboration } from "../../../../server/office-kong-col
 import { CITY_NEWS_AGENTS } from "@shared/agent-live-status";
 import { INTEGRATION_LABEL, effectiveIntegrations, integrationFor, type AgentIntegration } from "@shared/agent-integrations";
 import { buildOfficeKongCentralSignals, OFFICE_KONG_CENTRAL_SEATS, officeCityEvidenceNotice, type OfficeKongCentralSignal } from "@/lib/office-kong-central-agents";
-import { buildKongOfficeWing } from "@/lib/kong-office-wing";
+import { buildKongOfficeWing, createKongRingAssignment, type KongRingAssignment } from "@/lib/kong-office-wing";
 import { createOfficeScene, type SceneData, type SceneDepartment } from "./office-scene";
 import { buildOfficeCityRoomsFromSnapshot, officeCitySnapshotExpiresAt, parseOfficeCityDirectory, type OfficeCityAgent } from "@/lib/office-city-agents";
 
@@ -163,6 +163,15 @@ export function AgentsOfficeWorld({
     name: seat.nativeName,
     job: kongTeam.find(member => member.name.toLowerCase() === seat.nativeName.toLowerCase())?.job || seat.job,
   }));
+  const [kongRingAssignment, setKongRingAssignment] = useState<KongRingAssignment>();
+  const canClassifyKongCities = !citySnapshot.isError && !cityDirectory.isError && cityRooms.some(room => room.upcomingEvents !== null || room.agents.some(agent => agent.hasDurableEvidence));
+  useEffect(() => {
+    if (!kongRingAssignment && canClassifyKongCities) setKongRingAssignment(createKongRingAssignment(cityRooms, clock));
+  }, [kongRingAssignment, canClassifyKongCities, cityRooms, clock]);
+  const refreshKongRings = () => {
+    setKongRingAssignment(createKongRingAssignment(cityRooms, clock));
+    setFocusedDepartment(null); setPanelAgentId(null); sceneRef.current?.focusDepartment(null);
+  };
   const selectedCity = cityRooms.find(room => room.id === focusedDepartment);
   const directorCity = cityRooms.find(room => room.city.id === directorCityId) ?? cityRooms[0];
   const citySupervision = overlay === "city-director" && cityEvidence ? scoreOfficeKongSnapshot(cityEvidence, clock) : undefined;
@@ -251,10 +260,10 @@ export function AgentsOfficeWorld({
     ...DEPARTMENTS,
     ...(academyIds.length ? [{ id: "academia", name: "Academia", color: "#60a5fa", agentIds: academyIds }] : []),
   ];
-  const kongWing = buildKongOfficeWing(citySnapshot.isError ? undefined : citySnapshot.data?.evidence, cityRooms, statuses, clock);
+  const kongWing = buildKongOfficeWing(citySnapshot.isError ? undefined : citySnapshot.data?.evidence, cityRooms, statuses, clock, kongRingAssignment);
   const departments = officeWing === "main" ? mainDepartments : [
     ...kongWing.departments,
-    ...(academyIds.length ? [{ id: "kong-academia", name: "Academia KONG", color: "#60a5fa", agentIds: academyIds }] : []),
+    ...(academyIds.length ? [{ id: "kong-academia", name: "Academia KONG", color: "#60a5fa", agentIds: academyIds, officeRing: 1 as const }] : []),
   ];
   for (const agent of kongWing.agents) panelAgents.set(agent.id, { ...panelAgents.get(agent.id), ...agent });
   const kongCollaboration = citySnapshot.isError || !cityEvidence || !scoreOfficeKongSnapshot(cityEvidence, clock).verified ? undefined : citySnapshot.data?.collaboration;
@@ -280,6 +289,7 @@ export function AgentsOfficeWorld({
       id: department.id,
       name: department.name,
       color: department.color,
+      officeRing: "officeRing" in department ? department.officeRing as 1 | 2 | 3 : undefined,
       agents: department.agentIds
         .map((id) => panelAgents.get(id))
         .filter((agent): agent is PanelAgent => Boolean(agent))
@@ -468,6 +478,12 @@ export function AgentsOfficeWorld({
         <div id="world-office-panel-content" hidden={mainPanelMinimized}>
           <p className="mt-2 text-lg font-black" data-testid="world-working-count">{workingCount} de {companyIds.length} {officeWing === "kong" ? "en ejecución verificada" : "con señales operativas"}</p>
           {officeWing === "kong" && <p className="mt-1 text-xs text-zinc-300">Todos los puestos centrales y {cityRooms.length} ciudades en la misma oficina. La oficina observa y coordina; abrirla no activa los ejecutores.</p>}
+          {officeWing === "kong" && <div className="mt-2 space-y-1 text-[11px] text-zinc-300" data-testid="world-kong-rings-legend">
+            <p><span className="text-amber-200">1 · Equipo central</span> · <span className="text-cyan-200">2 · Ciudades prioritarias ({kongRingAssignment?.busyCityIds.length ?? 0})</span> · <span className="text-violet-200">3 · Resto de ciudades</span></p>
+            <p>{kongRingAssignment?.basis === "events" ? "Prioridad por eventos próximos (30 días); desempate por puestos con trabajo completado en 24 h. No mide reservas ni ventas." : kongRingAssignment?.basis === "operations" ? "Sin volumen de eventos disponible: prioridad por actividad operativa registrada (puestos con último intento completado en 24 h, incluidos fallos)." : "Sin datos vigentes para priorizar ciudades; el segundo anillo espera evidencia."}</p>
+            <p>Distribución fija{kongRingAssignment ? ` desde ${new Date(kongRingAssignment.classifiedAt).toLocaleTimeString("es", {hour: "2-digit", minute: "2-digit"})}` : " hasta recibir evidencia"}; los estados siguen actualizándose.</p>
+            <button type="button" onClick={refreshKongRings} disabled={!canClassifyKongCities} className="rounded-full border border-white/20 px-2 py-1 disabled:opacity-40" data-testid="world-kong-refresh-rings">Actualizar distribución</button>
+          </div>}
           <p className="mt-1 text-xs text-zinc-400">{trainees.length} en la academia · puntuación por evidencia registrada.</p>
           {officeWing === "kong" && (citySnapshot.isError || cityDirectory.isError) && <p role="status" className="mt-1 text-xs text-amber-200">Actividad de KONG sin conectar. Los puestos no muestran trabajo sin evidencia vigente.</p>}
           {failed && <p role="status" className="mt-1 text-xs text-amber-200" data-testid="world-kong-fallback">Vista 3D no disponible. Todos los agentes están accesibles por departamento.</p>}
