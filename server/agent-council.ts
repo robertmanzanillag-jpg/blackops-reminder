@@ -668,6 +668,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
           : role.leases.some(lease => lease.status === "unknown") ? "An execution is uncertain; reconciliation is required."
           : role.status === "vacant" ? "Awaiting a candidate with verified comparable evaluations."
           : role.status === "probation" ? "Awaiting the replacement's first verified execution."
+          : role.roleId === "radio" ? "Read-only saved-schedule parser; versioned incumbent skill qualification is separate from actual report execution. No replacement or contact is implied."
           : ["ceo","assistant"].includes(role.roleId) ? "Deterministic saved-record planning adapter only; requires explicit enablement. Contract checks do not qualify trained replacements."
           : role.activePolicy?.qualificationScope === "benchmark" ? "Qualified on held-out benchmarks only; actual PR execution does not prove universal review quality."
           : "Policy admitted; completed work is verified separately.",

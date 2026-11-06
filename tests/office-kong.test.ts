@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createOfficeKongConnector, OfficeKongError, OFFICE_KONG_CITY_CATEGORIES } from "../server/office-kong";
 
+test("invalid reader timestamps are removed at connector boundary, not forwarded as evidence", async () => {
+  const reader = { version:1, scopeId:"kong-venues-four-groups", ownerId:"11111111-1111-4111-8111-111111111111",observedAt:NOW.toISOString(),scheduler:"active",intervalMinutes:30,reader:"reading",session:"connected",lastAttemptAt:NOW.toISOString(),lastSuccessAt:null,lastSuccessGroupCount:0,groupsRead:0,blocker:"none",checkpointsRetained:false };
+  for (const patch of [{observedAt:new Date(NOW.getTime()+60000).toISOString()}, {lastSuccessAt:new Date(NOW.getTime()+60000).toISOString(),lastSuccessGroupCount:4}]) {
+    const audit = await connector(async()=>json({...operations(),whatsappReader:{...reader,...patch}})).runOfficeKongReadOnly();
+    assert.equal(audit.evidence.whatsappReader,undefined);
+    assert.equal(audit.evidence.agents.find(agent=>agent.id==="whatsapp_reader")?.state,"unknown");
+  }
+});
+
 const NOW = new Date("2026-11-05T03:00:00.000Z");
 const TOKEN = "test-only-office-admin-token";
 function operations() {
@@ -85,7 +94,7 @@ test("authenticated audit uses only fixed GET contract and preserves unknown evi
   const audit = await c.runOfficeKongReadOnly();
   assert.equal(audit.evidence.generatedAt, NOW.toISOString());
   assert.equal(audit.evidence.agents[0].lastRunAt, null);
-  assert.match(audit.text, /1 sin evidencia verificable/);
+  assert.match(audit.text, /2 sin evidencia verificable/);
   assert.match(audit.text, /no inicia agentes, no lee WhatsApp/);
 });
 
@@ -148,7 +157,7 @@ test("service-mode metadata from the new KONG operations contract survives stric
   assert.equal(probe.status, "ready");
   const audit = await client.runOfficeKongReadOnly();
   for (const agents of [probe.agents!, audit.evidence.agents]) {
-    assert.equal(agents.filter(agent => agent.kind === "system").length, 10);
+    assert.equal(agents.filter(agent => agent.kind === "system").length, 11);
     for (const expected of modes) {
       const actual = agents.find(agent => agent.id === expected.id)!;
       assert.equal(actual.operationMode, expected.operationMode);

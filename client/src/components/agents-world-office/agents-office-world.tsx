@@ -18,6 +18,8 @@ import { CITY_NEWS_AGENTS } from "@shared/agent-live-status";
 import { INTEGRATION_LABEL, effectiveIntegrations, integrationFor, type AgentIntegration } from "@shared/agent-integrations";
 import { buildOfficeKongCentralSignals, OFFICE_KONG_CENTRAL_SEATS, officeCityEvidenceNotice, type OfficeKongCentralSignal } from "@/lib/office-kong-central-agents";
 import { buildKongOfficeWing, createKongRingAssignment, type KongRingAssignment } from "@/lib/kong-office-wing";
+import type { WhatsAppOfficeView } from "@shared/whatsapp-office-agent";
+import { kongOfficeSnapshotKey, readOwnerKongSnapshot } from "@/lib/whatsapp-office-query";
 import { createOfficeScene, type SceneData, type SceneDepartment } from "./office-scene";
 import { buildOfficeCityRoomsFromSnapshot, officeCitySnapshotExpiresAt, parseOfficeCityDirectory, type OfficeCityAgent } from "@/lib/office-city-agents";
 
@@ -78,15 +80,17 @@ const SOURCE_NAME: Record<string, string> = {
 };
 
 const STATE_TEXT: Record<AgentLiveState, string> = {
+  available:"text-slate-300",
   working: "text-emerald-300", "needs-setup": "text-amber-200", error: "text-rose-300", offline: "text-zinc-400", checking: "text-sky-200",
 };
 const STATE_BAR: Record<AgentLiveState, string> = {
+  available:"bg-slate-400",
   working: "bg-emerald-400", "needs-setup": "bg-amber-300", error: "bg-rose-400", offline: "bg-zinc-600", checking: "bg-sky-300",
 };
 
 type CompanyView = { kongCompany?: CompanyState; kongLeaderboard?: LeaderboardRow[]; kongPersonalities?: Record<string, Personality>; kongCollaboration?: OfficeKongCollaboration; company?: CompanyState; leaderboard?: LeaderboardRow[]; personalities?: Record<string, Personality>; integrations?: Record<string, AgentIntegration> };
 export type WorldContact = { id: string; name: string; role: string; department: string; status: AgentLiveStatus; description: string; href?: string; color: string };
-type PanelAgent = { id: string; name: string; role: string; description: string; href?: string; status: AgentLiveStatus; kong?: boolean; color: string; cityAgent?: OfficeCityAgent; kongEvidence?: OfficeKongCentralSignal };
+type PanelAgent = { id: string; name: string; role: string; description: string; href?: string; status: AgentLiveStatus; kong?: boolean; color: string; cityAgent?: OfficeCityAgent; kongEvidence?: OfficeKongCentralSignal; whatsappEvidence?: WhatsAppOfficeView };
 
 export function AgentsOfficeWorld({
   agents,
@@ -123,6 +127,9 @@ export function AgentsOfficeWorld({
   const integrations = companyView.integrations || effectiveIntegrations();
   const deputyId = leaderboardRows[0]?.points ? leaderboardRows[0].agentId : null;
   const queryClient = useQueryClient();
+  const currentOwner = () => queryClient.getQueryData<{ user?: { id: string } }>(["auth-me"])?.user?.id;
+  const snapshotAuth = useQuery<{ user?: { id: string } }>({ queryKey: ["auth-me"], enabled: false });
+  const snapshotOwner = snapshotAuth.data?.user?.id;
   const hostRef = useRef<HTMLDivElement | null>(null);
   const labelsRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<ReturnType<typeof createOfficeScene> | null>(null);
@@ -139,7 +146,7 @@ export function AgentsOfficeWorld({
   const [cityDetailsOpen, setCityDetailsOpen] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
   const cityDirectory = useQuery<unknown>({ queryKey: ["/api/agents-office/cities"], enabled: officeWing === "kong", staleTime: 60_000, refetchInterval: cityRefreshInterval, retry: (count, error) => count < 2 && !/^(401|403):/.test(error.message), retryDelay: attempt => Math.min(1_000 * 2 ** attempt, 2_000) });
-  const citySnapshot = useQuery<OfficeKongAuditResult & { collaboration?: OfficeKongCollaboration }>({ queryKey: ["/api/agents-office/kong-snapshot"], enabled: officeWing === "kong", staleTime: 45_000, refetchInterval: cityRefreshInterval, retry: (count, error) => count < 2 && !/^(401|403):/.test(error.message), retryDelay: attempt => Math.min(1_000 * 2 ** attempt, 2_000) });
+  const citySnapshot = useQuery<OfficeKongAuditResult & { collaboration?: OfficeKongCollaboration }>({ queryKey: kongOfficeSnapshotKey(snapshotOwner), queryFn: ({ signal }) => readOwnerKongSnapshot(snapshotOwner, currentOwner, signal), enabled: officeWing === "kong" && Boolean(snapshotOwner), staleTime: 45_000, refetchInterval: cityRefreshInterval, retry: (count, error) => count < 2 && !/^(401|403):/.test(error.message), retryDelay: attempt => Math.min(1_000 * 2 ** attempt, 2_000) });
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 15_000); return () => window.clearInterval(timer); }, []);
   const cityEvidence = cityDirectory.isError || citySnapshot.isError ? undefined : citySnapshot.data?.evidence;
   const evidenceExpiresAt = useMemo(() => officeCitySnapshotExpiresAt(cityEvidence, clock), [cityEvidence, clock]);
@@ -196,7 +203,7 @@ export function AgentsOfficeWorld({
   const statuses: Record<string, AgentLiveStatus> = { ...liveStatuses };
   for (const [agentId, override] of Object.entries(council.view?.overrides || {})) {
     const current = statuses[agentId];
-    if (current && current.state === "working") statuses[agentId] = { ...current, state: "needs-setup", label: override.label, detail: override.detail };
+    if (current && (current.state === "working" || current.state === "available")) statuses[agentId] = { ...current, state: "needs-setup", label: override.label, detail: override.detail };
   }
   statuses["skills-scout"] = councilDeskStatus(council.view, "scout", council.error);
   statuses["agent-factory"] = councilDeskStatus(council.view, "factory", council.error);
@@ -210,13 +217,13 @@ export function AgentsOfficeWorld({
           ? { state: "offline", label: "Consejo apagado" }
           : !council.view.lastCycleAt || Date.now() - Date.parse(council.view.lastCycleAt) > 45 * 60_000
             ? { state: "offline", label: "Sin rondas recientes", detail: "El servidor no ha corrido el consejo en los ultimos 45 minutos." }
-            : { state: "working", label: `${(council.view.proposals || []).filter((p) => p.kind === "repair" && p.status === "submitted").length} reparaciones abiertas`, activity: Object.values(careers).filter((c) => c.battery < 30).slice(0, 4).map((c) => `Revisando ${c.agentId} (${c.battery}%)`) };
+            : { state: "available", label: `${(council.view.proposals || []).filter((p) => p.kind === "repair" && p.status === "submitted").length} propuestas de reparación registradas`, detail:"No demuestra una reparación en ejecución." };
   for (const seat of OFFICE_KONG_CENTRAL_SEATS) {
     const signal = centralSignalById.get(seat.id);
     statuses[seat.id] = !signal || signal.signal === "unverified"
       ? { state: "offline", label: signal?.label || "Actividad sin verificar", detail: signal?.detail || "No hay evidencia autenticada de este puesto." }
       : signal.signal === "current"
-        ? { state: "working", label: "Ejecución actual verificada", detail: signal.detail, activity: [signal.detail] }
+        ? { state: "available", label: "Actividad reportada; ejecución sin verificar", detail: signal.detail, activity: [signal.detail] }
         : signal.signal === "alert"
           ? { state: "needs-setup", label: signal.label, detail: signal.detail }
           : { state: "offline", label: signal.label, detail: signal.detail };
@@ -260,7 +267,7 @@ export function AgentsOfficeWorld({
     ...DEPARTMENTS,
     ...(academyIds.length ? [{ id: "academia", name: "Academia", color: "#60a5fa", agentIds: academyIds }] : []),
   ];
-  const kongWing = buildKongOfficeWing(citySnapshot.isError ? undefined : citySnapshot.data?.evidence, cityRooms, statuses, clock, kongRingAssignment);
+  const kongWing = buildKongOfficeWing(citySnapshot.data?.evidence, cityRooms, statuses, clock, kongRingAssignment, !citySnapshot.isError);
   const departments = officeWing === "main" ? mainDepartments : [
     ...kongWing.departments,
     ...(academyIds.length ? [{ id: "kong-academia", name: "Academia KONG", color: "#60a5fa", agentIds: academyIds, officeRing: 1 as const }] : []),
@@ -425,7 +432,7 @@ export function AgentsOfficeWorld({
   const proposals = (council.view?.proposals || []).filter((proposal) => ["submitted", "pending_submit", "not_submitted"].includes(proposal.status) && (focusedIds.has(proposal.owner) || (proposal.lesson && focusedIds.has(proposal.lesson.subject)) || [...focusedIds].some((id) => proposal.key.startsWith(`repair:${id}#`))));
   const debates = (council.view?.debates || []).filter((debate) => focusedIds.has(debate.reviewer) || focusedIds.has(debate.subject));
   const sourceMap = new Map<string, { name: string; state: AgentLiveState; label: string; users: string[] }>();
-  const rank: Record<AgentLiveState, number> = { error: 4, "needs-setup": 3, offline: 2, checking: 1, working: 0 };
+  const rank: Record<AgentLiveState, number> = { error: 4, "needs-setup": 3, offline: 2, checking: 1, available:1, working: 0 };
   for (const agent of focusedAgents) {
     if (agent.id.startsWith("trainee:")) continue;
     const name = agent.cityAgent ? "Auditoria autenticada KONG" : (agent.kong || agent.id.startsWith("kong:")) ? "Lectura autenticada KONG" : SOURCE_NAME[agent.id] || agent.name;
@@ -476,7 +483,7 @@ export function AgentsOfficeWorld({
           <button type="button" aria-expanded={!mainPanelMinimized} aria-controls="world-office-panel-content" onClick={() => setMainPanelMinimized(v => !v)} className="rounded-full border border-white/20 px-2 py-1 text-xs" data-testid="world-main-panel-toggle">{mainPanelMinimized ? "Abrir" : "Minimizar"}</button>
         </div>
         <div id="world-office-panel-content" hidden={mainPanelMinimized}>
-          <p className="mt-2 text-lg font-black" data-testid="world-working-count">{workingCount} de {companyIds.length} {officeWing === "kong" ? "en ejecución verificada" : "con señales operativas"}</p>
+          <p className="mt-2 text-lg font-black" data-testid="world-working-count">{workingCount} de {companyIds.length} en ejecución actual verificada</p>
           {officeWing === "kong" && <p className="mt-1 text-xs text-zinc-300">Todos los puestos centrales y {cityRooms.length} ciudades en la misma oficina. La oficina observa y coordina; abrirla no activa los ejecutores.</p>}
           {officeWing === "kong" && <div className="mt-2 space-y-1 text-[11px] text-zinc-300" data-testid="world-kong-rings-legend">
             <p><span className="text-amber-200">1 · Equipo central</span> · <span className="text-cyan-200">2 · Ciudades prioritarias ({kongRingAssignment?.busyCityIds.length ?? 0})</span> · <span className="text-violet-200">3 · Resto de ciudades</span></p>
@@ -546,7 +553,7 @@ export function AgentsOfficeWorld({
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-200">Tabla de posiciones</p>
             <button type="button" onClick={() => setOverlay("none")} className="text-xs text-zinc-400 hover:text-white">✕</button>
           </div>
-          <p className="mt-1 text-[11px] text-zinc-400">{officeWing === "kong" ? "Puntos por resultados completados verificados. Consultar no suma puntos; cerrar a mano tampoco." : "Puntos del consejo por señales operativas y órdenes cerradas con evidencia. El primer puesto queda de subdirector."}</p>
+          <p className="mt-1 text-[11px] text-zinc-400">Puntos por resultados distintos y verificados. Conectarse, consultar y cerrar órdenes a mano no suma puntos.</p>
           {leaderboardRows.length === 0 && <p className="mt-3 text-xs text-zinc-400">{officeWing === "kong" ? "Todavía no hay puntos: faltan resultados completados con evidencia verificable." : "Todavía no hay puntos: el consejo revisa las evidencias en cada reunión."}</p>}
           <ol className="mt-3 space-y-1.5">
             {leaderboardRows.slice(0, 15).map((row) => (
@@ -629,7 +636,7 @@ export function AgentsOfficeWorld({
           <div className="flex shrink-0 items-start justify-between gap-2">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.24em]" style={{ color: focused.color }}>{focused.name}</p>
-              <p className="mt-0.5 text-xs text-zinc-400">{focusedAgents.filter((agent) => agent.status.state === "working").length} de {focusedAgents.length} {selectedCity ? "en ejecución según la auditoría" : "con señales operativas"}</p>
+              <p className="mt-0.5 text-xs text-zinc-400">{focusedAgents.filter((agent) => agent.status.state === "working").length} de {focusedAgents.length} en ejecución actual verificada</p>
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {selectedCity && <button type="button" aria-expanded={cityDetailsOpen} aria-controls="world-city-details-content" onClick={() => setCityDetailsOpen(open => !open)} className="rounded-full border border-white/20 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/10" data-testid="world-city-details-toggle">{cityDetailsOpen ? "Minimizar" : "Ver detalles"}</button>}
@@ -742,10 +749,25 @@ export function AgentsOfficeWorld({
                   </div>
                 </div>
               )}
+              {panelAgent.whatsappEvidence && <div className="mt-2 space-y-1 rounded-lg border border-lime-300/20 bg-lime-300/5 p-2 text-[11px]" data-testid="world-whatsapp-evidence">
+                <p className="font-semibold">{panelAgent.whatsappEvidence.label}</p>
+                <p>{panelAgent.whatsappEvidence.detail}</p>
+                <p>Programación: {({active: "activa", paused: "pausada", unknown: "desconocida"} as const)[panelAgent.whatsappEvidence.evidence?.scheduler ?? "unknown"]}; no acredita lectura.</p>
+                <p>Sesión: {({connected: "conectada", disconnected: "desconectada", unknown: "desconocida"} as const)[panelAgent.whatsappEvidence.evidence?.session ?? "unknown"]}</p>
+                <p>Responsable: {panelAgent.whatsappEvidence.evidence?.ownerId ?? "Sin verificar"}</p>
+                <p>Última observación: {formatCityTime(panelAgent.whatsappEvidence.evidence?.observedAt ?? null)}</p>
+                <p>Última revisión: {formatCityTime(panelAgent.whatsappEvidence.evidence?.lastReviewAt ?? null)}</p>
+                <p>Último intento: {formatCityTime(panelAgent.whatsappEvidence.evidence?.lastAttemptAt ?? null)}</p>
+                <p>Última lectura correcta: {formatCityTime(panelAgent.whatsappEvidence.evidence?.lastSuccessAt ?? null)}</p>
+                <p>Grupos leídos en esta revisión: {panelAgent.whatsappEvidence.evidence?.groupsRead ?? "Sin verificar"} / 4 autorizados</p>
+                <p>Grupos de la última lectura correcta: {panelAgent.whatsappEvidence.evidence?.lastSuccessGroupCount ?? "Sin verificar"} / 4</p>
+                <p>Punto de lectura conservado: {panelAgent.whatsappEvidence.evidence ? panelAgent.whatsappEvidence.evidence.checkpointsRetained ? "Sí" : "Sin confirmar" : "Sin verificar"}</p>
+                <p className="text-amber-100">Vida y academia registran resultados confirmados una sola vez. La rotación local no sustituye ni inicia al lector externo; su reemplazo operativo no está conectado.</p>
+              </div>}
               {panelAgent.kongEvidence && <div className="mt-2 rounded-lg border border-lime-300/20 bg-lime-300/5 p-2 text-[11px]" data-testid={`world-kong-native-evidence-${panelAgent.kongEvidence.id}`}>
                 <p className="font-semibold text-lime-100">{panelAgent.kongEvidence.label}</p>
                 <p className="mt-1 text-zinc-300">{panelAgent.kongEvidence.detail}</p>
-                <p className="mt-1">Tarea en curso: {panelAgent.kongEvidence.signal === "current" ? "KONG Native confirma ejecución, pero no detalla la tarea actual." : "No hay tarea actual verificada."}</p>
+                <p className="mt-1">Tarea en curso: {panelAgent.kongEvidence.signal === "current" ? "KONG Native reporta actividad; no hay una tarea en ejecución verificada." : "No hay tarea actual verificada."}</p>
                 <p>Último resultado: {formatCityTime(panelAgent.kongEvidence.lastRunAt)}</p>
                 <p>Próximo turno: {formatCityTime(panelAgent.kongEvidence.nextRunAt)}</p>
                 <p className="text-zinc-400">La lectura disponible no identifica entregas ni ejecuciones bajo demanda por separado.</p>
@@ -861,7 +883,7 @@ function OfficeAgentStatusChat({ agent }: { agent: PanelAgent }) {
     else if (agent.kongEvidence && /ultim|anterior|resultado|entrega/.test(text)) answer = agent.kongEvidence.lastRunAt
       ? `KONG Native registra una ejecución el ${formatCityTime(agent.kongEvidence.lastRunAt)}; no confirma que sea una entrega.` : "KONG Native no muestra una última ejecución verificable.";
     else if (agent.kongEvidence && /tarea|haces|haciendo/.test(text)) answer = agent.kongEvidence.signal === "current"
-      ? "KONG Native confirma una ejecución actual, pero no incluye el detalle de la tarea."
+      ? "KONG Native reporta actividad; no hay una tarea en ejecución verificada."
       : "No hay una tarea actual verificada para este puesto.";
     else if (!/estado|trabaj|bloque|error|problema|hola/.test(text)) answer = "Puedo responder sobre el estado registrado, el último resultado y el próximo turno. Esta consulta no inicia ni cambia trabajos.";
     setReply({ question, answer });

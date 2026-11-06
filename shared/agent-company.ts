@@ -198,6 +198,7 @@ function toMsSafe(value: string | undefined): number {
 
 // Points / battery per council cycle, by real state.
 const DELTA: Record<AgentLiveState, { points: number; battery: number }> = {
+  available: {points:0,battery:0},
   working: { points: 10, battery: 6 },
   // Configuration waits and absence of assigned work are not agent failures.
   "needs-setup": { points: 0, battery: 0 },
@@ -302,6 +303,7 @@ export function levelFor(points: number) {
 }
 
 const STATE_WORDS: Record<AgentLiveState, string> = {
+  available:"disponible sin ejecución actual",
   working: "trabajando",
   "needs-setup": "esperando configuracion",
   error: "con error",
@@ -345,7 +347,7 @@ export function advanceCompany(
     if(career.evaluatedEvidenceIds !== undefined && (!Array.isArray(career.evaluatedEvidenceIds) || career.evaluatedEvidenceIds.some(id=>typeof id !== "string"))) { careers[agentId]=career;continue; }
     if (!evidence || evidence === career.lastEvidenceId || career.evaluatedEvidenceIds?.includes(evidence)) { careers[agentId] = career; continue; }
     // "checking" has no evidence yet, and a replacement in the academy is studying, not failing.
-    if (status.state === "checking" || status.state === "needs-setup" || status.state === "offline" || status.lifePenaltyExempt || career.inTrainingUntilGeneration) {
+    if (status.state === "available" || status.state === "checking" || status.state === "needs-setup" || status.state === "offline" || status.lifePenaltyExempt || career.inTrainingUntilGeneration) {
       careers[agentId] = career;
       continue;
     }

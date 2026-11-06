@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T20:28:55.174Z",
+  "generatedAt": "2026-11-06T21:26:31.032Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\blackops-reminder",
   "packageName": "rest-express",
   "scripts": {
@@ -124,18 +124,53 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 817,
-    "filesIndexed": 728,
-    "imports": 2596,
+    "filesVisible": 828,
+    "filesIndexed": 739,
+    "imports": 2652,
     "routes": 555,
-    "symbols": 16305
+    "symbols": 16458
   },
   "directories": {
-    "tests": {
-      "files": 184,
-      "indexed": 180,
+    "client/src/lib": {
+      "files": 18,
+      "indexed": 18,
       "kinds": {
-        "test": 184
+        "client-lib": 18
+      }
+    },
+    "docs": {
+      "files": 38,
+      "indexed": 37,
+      "kinds": {
+        "docs": 38
+      }
+    },
+    "server": {
+      "files": 170,
+      "indexed": 165,
+      "kinds": {
+        "server": 170
+      }
+    },
+    "shared": {
+      "files": 16,
+      "indexed": 16,
+      "kinds": {
+        "shared": 16
+      }
+    },
+    "tests/fixtures": {
+      "files": 2,
+      "indexed": 2,
+      "kinds": {
+        "test": 2
+      }
+    },
+    "tests": {
+      "files": 188,
+      "indexed": 184,
+      "kinds": {
+        "test": 188
       }
     },
     ".": {
@@ -259,13 +294,6 @@
         "client-hook": 3
       }
     },
-    "client/src/lib": {
-      "files": 17,
-      "indexed": 17,
-      "kinds": {
-        "client-lib": 17
-      }
-    },
     "client/src/pages": {
       "files": 26,
       "indexed": 24,
@@ -278,13 +306,6 @@
       "indexed": 1,
       "kinds": {
         "other": 1
-      }
-    },
-    "docs": {
-      "files": 36,
-      "indexed": 35,
-      "kinds": {
-        "docs": 36
       }
     },
     "examples/clippers-motivation": {
@@ -309,13 +330,6 @@
         "script": 4
       }
     },
-    "server": {
-      "files": 169,
-      "indexed": 164,
-      "kinds": {
-        "server": 169
-      }
-    },
     "server/replit_integrations/batch": {
       "files": 2,
       "indexed": 2,
@@ -337,25 +351,11 @@
         "server": 3
       }
     },
-    "shared": {
-      "files": 14,
-      "indexed": 14,
-      "kinds": {
-        "shared": 14
-      }
-    },
     "shared/models": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests/fixtures": {
-      "files": 1,
-      "indexed": 1,
-      "kinds": {
-        "test": 1
       }
     },
     "tests/harness": {
@@ -688,10 +688,12 @@
         "@/lib/office-city-agents",
         "@/lib/office-kong-central-agents",
         "@/lib/utils",
+        "@/lib/whatsapp-office-query",
         "@shared/agent-company",
         "@shared/agent-integrations",
         "@shared/agent-live-status",
         "@shared/office-kong-supervisor",
+        "@shared/whatsapp-office-agent",
         "@tanstack/react-query",
         "react"
       ],
@@ -724,6 +726,7 @@
         "companyView",
         "council",
         "current",
+        "currentOwner",
         "debates",
         "delay",
         "departments",
@@ -782,6 +785,8 @@
         "selectedCity",
         "sendOrder",
         "signal",
+        "snapshotAuth",
+        "snapshotOwner",
         "sourceMap",
         "sources",
         "specialists",
@@ -3611,7 +3616,8 @@
         "../../../server/office-kong",
         "./agent-live-status",
         "./office-city-agents",
-        "./office-kong-central-agents"
+        "./office-kong-central-agents",
+        "@shared/whatsapp-office-agent"
       ],
       "exports": [
         "KongOfficeDepartment",
@@ -3647,7 +3653,8 @@
         "source",
         "state",
         "verified",
-        "videoNativeId"
+        "videoNativeId",
+        "view"
       ],
       "routes": []
     },
@@ -3896,6 +3903,22 @@
       ],
       "symbols": [
         "cn"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/lib/whatsapp-office-query.ts",
+      "kind": "client-lib",
+      "imports": [],
+      "exports": [
+        "kongOfficeSnapshotKey",
+        "readOwnerKongSnapshot"
+      ],
+      "symbols": [
+        "kongOfficeSnapshotKey",
+        "readOwnerKongSnapshot",
+        "response",
+        "value"
       ],
       "routes": []
     },
@@ -5453,6 +5476,14 @@
       "routes": []
     },
     {
+      "path": "docs/office-radio-training.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/office-windows-worker.md",
       "kind": "docs",
       "imports": [],
@@ -5470,6 +5501,14 @@
     },
     {
       "path": "docs/revenue-engine-launch-runbook.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/whatsapp-office-contract.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -11058,6 +11097,7 @@
         "last",
         "message",
         "ownerUserId",
+        "radioAcademy",
         "raw",
         "registerAgentCouncilRoutes",
         "requestUserId",
@@ -17260,6 +17300,7 @@
         "../shared/agent-company",
         "../shared/agent-live-status",
         "../shared/office-kong-supervisor",
+        "../shared/whatsapp-office-agent",
         "./office-kong",
         "./office-kong-collaboration"
       ],
@@ -17278,6 +17319,7 @@
         "job",
         "newAgents",
         "observedAgents",
+        "reader",
         "supervision",
         "time"
       ],
@@ -18688,7 +18730,9 @@
       "imports": [
         "../shared/agent-company",
         "../shared/office-role-lifecycle",
+        "../shared/radio-slot-policies",
         "./agent-council",
+        "./office-radio-training",
         "node:crypto",
         "zod"
       ],
@@ -18720,6 +18764,11 @@
         "parseInternalWork",
         "prepareInternalArtifact",
         "project",
+        "qualified",
+        "radio",
+        "radioAssignments",
+        "radioItem",
+        "radioTrainingHistory",
         "readInternalWorkSnapshot",
         "records",
         "reserved",
@@ -18732,6 +18781,7 @@
         "state",
         "tasks",
         "text",
+        "trial",
         "work"
       ],
       "routes": []
@@ -18772,6 +18822,7 @@
       "kind": "server",
       "imports": [
         "../shared/office-kong-supervisor",
+        "../shared/whatsapp-office-agent",
         "zod"
       ],
       "exports": [
@@ -18843,7 +18894,8 @@
         "timer",
         "timestamp",
         "token",
-        "tokenSource"
+        "tokenSource",
+        "whatsappReader"
       ],
       "routes": []
     },
@@ -18907,6 +18959,54 @@
         "revision",
         "row",
         "verified"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-radio-training.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "../shared/agent-council",
+        "../shared/office-role-lifecycle",
+        "../shared/radio-slot-policies",
+        "node:crypto",
+        "node:perf_hooks"
+      ],
+      "exports": [
+        "RADIO_TRAINING_MAX_FAMILY_MS",
+        "RadioTrainingEvidence",
+        "RadioTrainingMeasurement",
+        "RadioTrainingReceipt",
+        "qualifyRadioIncumbent",
+        "radioEvidenceDigest",
+        "radioImplementationVersion",
+        "radioIncumbentVersion",
+        "resolveSavedRadioPolicy",
+        "runRadioTrainingTrial",
+        "validRadioTrainingReceipt",
+        "validateRadioTrainingEvidence"
+      ],
+      "symbols": [
+        "RADIO_TRAINING_MAX_FAMILY_MS",
+        "appliedAt",
+        "evaluation",
+        "measure",
+        "owner",
+        "qualifyRadioIncumbent",
+        "radioEvidenceDigest",
+        "radioImplementationVersion",
+        "radioIncumbentVersion",
+        "resolveSavedRadioPolicy",
+        "role",
+        "runRadioTrainingTrial",
+        "state",
+        "timings",
+        "trusted",
+        "validRadioTrainingReceipt",
+        "validateRadioTrainingEvidence",
+        "value",
+        "version"
       ],
       "routes": []
     },
@@ -19568,8 +19668,10 @@
       "path": "server/radio-agent.ts",
       "kind": "server",
       "imports": [
+        "../shared/radio-slot-policies",
         "../shared/radio-slots",
         "./ceo-doctor-cli",
+        "./office-radio-training",
         "./storage",
         "./telegram",
         "./user-context",
@@ -19626,6 +19728,7 @@
         "normalized",
         "now",
         "parsed",
+        "policyVersion",
         "radioEvents",
         "radioSlot",
         "rating",
@@ -22727,6 +22830,7 @@
         "ProbeResult",
         "agentProbes",
         "extractActivity",
+        "presentProbeStatus",
         "runProbe",
         "summarizeProbe"
       ],
@@ -22771,6 +22875,7 @@
         "google",
         "hours",
         "hoursAgo",
+        "label",
         "lane",
         "last",
         "lastRun",
@@ -22794,6 +22899,7 @@
         "outputs",
         "pending",
         "plural",
+        "presentProbeStatus",
         "problems",
         "profitGuardStatus",
         "queue",
@@ -23227,6 +23333,53 @@
       "routes": []
     },
     {
+      "path": "shared/radio-slot-policies.ts",
+      "kind": "shared",
+      "imports": [
+        "./radio-slots"
+      ],
+      "exports": [
+        "RADIO_SLOT_BASELINE_POLICY",
+        "RADIO_SLOT_CANDIDATE_POLICY",
+        "RADIO_SLOT_POLICIES",
+        "RADIO_SLOT_PROFILE_ID",
+        "RADIO_SLOT_PROFILE_VERSION",
+        "RadioSlotAssignment",
+        "RadioSlotPolicyEvaluation",
+        "RadioSlotPolicyVersion",
+        "evaluateRadioSlotPolicies",
+        "executeRadioSlotPolicy",
+        "parseRadioSlotsWithPolicy"
+      ],
+      "symbols": [
+        "MAX_DESCRIPTION_LENGTH",
+        "OracleCase",
+        "RADIO_SLOT_BASELINE_POLICY",
+        "RADIO_SLOT_CANDIDATE_POLICY",
+        "RADIO_SLOT_POLICIES",
+        "RADIO_SLOT_PROFILE_ID",
+        "RADIO_SLOT_PROFILE_VERSION",
+        "artifacts",
+        "baseline",
+        "baselineCorrect",
+        "candidate",
+        "candidateCorrect",
+        "cases",
+        "checkedInput",
+        "equal",
+        "evaluateRadioSlotPolicies",
+        "executeRadioSlotPolicy",
+        "input",
+        "lines",
+        "match",
+        "parseRadioSlotsWithPolicy",
+        "rangeInput",
+        "rewritten",
+        "slots"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/radio-slots.ts",
       "kind": "shared",
       "imports": [],
@@ -23533,6 +23686,46 @@
       "routes": []
     },
     {
+      "path": "shared/whatsapp-office-agent.ts",
+      "kind": "shared",
+      "imports": [
+        "../server/office-kong",
+        "zod"
+      ],
+      "exports": [
+        "WHATSAPP_AGENT_ID",
+        "WHATSAPP_BLOCKERS",
+        "WHATSAPP_CAREER_ID",
+        "WHATSAPP_SCOPE_ID",
+        "WhatsAppOfficeView",
+        "WhatsAppReaderEvidence",
+        "whatsappOfficeAgent",
+        "whatsappOfficeView",
+        "whatsappReaderEvidenceSchema",
+        "withWhatsAppOfficeAgent"
+      ],
+      "symbols": [
+        "WHATSAPP_AGENT_ID",
+        "WHATSAPP_BLOCKERS",
+        "WHATSAPP_CAREER_ID",
+        "WHATSAPP_SCOPE_ID",
+        "attempt",
+        "evidence",
+        "missing",
+        "observed",
+        "parsed",
+        "review",
+        "success",
+        "timestamp",
+        "view",
+        "whatsappOfficeAgent",
+        "whatsappOfficeView",
+        "whatsappReaderEvidenceSchema",
+        "withWhatsAppOfficeAgent"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/._dropshipping-ceo.test.ts",
       "kind": "test",
       "imports": [],
@@ -23752,6 +23945,8 @@
         "body",
         "br",
         "checks",
+        "completed",
+        "error",
         "failed",
         "fake",
         "fresh",
@@ -26881,6 +27076,47 @@
       "routes": []
     },
     {
+      "path": "tests/fixtures/whatsapp-backend-http.ts",
+      "kind": "test",
+      "imports": [
+        "../../server/office-kong",
+        "../../shared/whatsapp-office-agent",
+        "esbuild",
+        "express",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:module",
+        "node:os",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "BACKEND_REVISION",
+        "createBackendHttpFixture"
+      ],
+      "symbols": [
+        "BACKEND_REVISION",
+        "OWNER",
+        "TOKEN",
+        "address",
+        "app",
+        "audit",
+        "auth",
+        "backend",
+        "base",
+        "cities",
+        "connector",
+        "createBackendHttpFixture",
+        "outfile",
+        "require",
+        "response",
+        "server",
+        "temp"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/github-client-security.test.ts",
       "kind": "test",
       "imports": [
@@ -28032,6 +28268,7 @@
         "ceo",
         "company",
         "corrupt",
+        "corrupted",
         "council",
         "denied",
         "empty",
@@ -28042,9 +28279,16 @@
         "make",
         "oversized",
         "pool",
+        "radioQuery",
+        "raw",
+        "read",
         "response",
+        "snapshot",
         "source",
-        "tasks"
+        "tasks",
+        "vacant",
+        "work",
+        "wrongPolicy"
       ],
       "routes": []
     },
@@ -28161,6 +28405,7 @@
         "output",
         "payload",
         "probe",
+        "reader",
         "result",
         "serialized",
         "states",
@@ -28202,6 +28447,35 @@
         "pool",
         "row",
         "sha"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-radio-training.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-radio-training",
+        "../shared/agent-company",
+        "../shared/office-role-lifecycle",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "changed",
+        "company",
+        "deps",
+        "evidence",
+        "f",
+        "fixture",
+        "forged",
+        "invalid",
+        "missing",
+        "result",
+        "roles",
+        "trainee",
+        "uncertain"
       ],
       "routes": []
     },
@@ -28576,6 +28850,24 @@
         "tampered",
         "verdicts",
         "writeState"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/radio-slot-policies.test.ts",
+      "kind": "test",
+      "imports": [
+        "../shared/radio-slot-policies",
+        "../shared/radio-slots",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "evaluation",
+        "input",
+        "original",
+        "result"
       ],
       "routes": []
     },
@@ -29088,6 +29380,71 @@
       "routes": []
     },
     {
+      "path": "tests/whatsapp-backend-consumer.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/lib/kong-office-wing",
+        "../server/kong-company",
+        "../shared/agent-company",
+        "../shared/whatsapp-office-agent",
+        "./fixtures/whatsapp-backend-http",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "desks",
+        "fixture",
+        "now",
+        "replay",
+        "result",
+        "scored"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/whatsapp-pr330.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/lib/kong-office-wing",
+        "../client/src/lib/whatsapp-office-query",
+        "../server/kong-company",
+        "../server/office-council-migration",
+        "../server/office-kong",
+        "../shared/agent-company",
+        "../shared/agent-council",
+        "../shared/office-role-lifecycle",
+        "../shared/whatsapp-office-agent",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "at",
+        "client",
+        "desk",
+        "desks",
+        "evidence",
+        "first",
+        "historical",
+        "input",
+        "lifecycle",
+        "newResult",
+        "next",
+        "noRead",
+        "observed",
+        "original",
+        "previous",
+        "reader",
+        "replay",
+        "snapshot",
+        "source",
+        "value"
+      ],
+      "routes": []
+    },
+    {
       "path": "threat_model.md",
       "kind": "docs",
       "imports": [],
@@ -29280,6 +29637,7 @@
     "tests/office-kong.test.ts",
     "tests/office-openai.test.ts",
     "tests/office-protocol.test.ts",
+    "tests/office-radio-training.test.ts",
     "tests/office-review-benchmarks.test.ts",
     "tests/office-role-lifecycle.test.ts",
     "tests/office-routes.test.ts",
@@ -29289,6 +29647,7 @@
     "tests/office-worker-watchdog.test.ts",
     "tests/owner-office-storage.test.ts",
     "tests/public-local-news.test.ts",
+    "tests/radio-slot-policies.test.ts",
     "tests/radio-slots.test.ts",
     "tests/radio-template-agent.test.ts",
     "tests/radio-video-edit-agent.test.ts",
@@ -29313,7 +29672,9 @@
     "tests/telegram-webhook-dedupe.test.ts",
     "tests/telegram-webhook-runtime.test.ts",
     "tests/user-context.test.ts",
-    "tests/user-migration-plan.test.ts"
+    "tests/user-migration-plan.test.ts",
+    "tests/whatsapp-backend-consumer.test.ts",
+    "tests/whatsapp-pr330.test.ts"
   ],
   "guardrails": [
     "Generated locally from Git-visible files only: tracked files plus untracked files that are not ignored.",

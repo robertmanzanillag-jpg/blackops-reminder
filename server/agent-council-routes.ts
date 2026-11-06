@@ -73,7 +73,13 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
           status:job.status,startedAt:job.startedAt,reason:job.reason,
           benchmarkId:job.benchmarkId,...(assessment?{assessment:{passed:assessment.passed,quality:assessment.quality,incumbentQuality:assessment.incumbentQuality,completedAt:assessment.completedAt,scope:assessment.scope || "benchmark"}}:{})};
       });
-      return res.json({...state.officeExecution?.internalWork || {version:1,jobs:[]},academy});
+      const radioAcademy=(state.officeExecution?.internalWork?.radioTrainingHistory || []).map(receipt=>({id:receipt.id,agentId:"radio",purpose:"incumbent",status:"completed",startedAt:receipt.appliedAt,
+        policyCurrentlyApplied:state.officeExecution?.roles.roles.radio?.activePolicy?.version===receipt.appliedPolicyVersion,
+        benchmarkId:receipt.evidence.evaluation.profileId,
+        reason:`Solo parser de rangos horarios; misma persona y generación. ${receipt.firstVerifiedRunId?"Primera ejecución con registros guardados verificada.":"Primera ejecución con registros guardados todavía no confirmada."}`,
+        assessment:{passed:receipt.evidence.evaluation.qualified,quality:Math.min(...receipt.evidence.evaluation.artifacts.map(a=>a.candidateQuality)),incumbentQuality:Math.min(...receipt.evidence.evaluation.artifacts.map(a=>a.baselineQuality)),scope:"benchmark",completedAt:receipt.appliedAt},
+      }));
+      return res.json({...state.officeExecution?.internalWork || {version:1,jobs:[]},academy:[...radioAcademy,...academy].sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt)).slice(0,20)});
     } catch {return res.status(503).json({error:"No se pudo verificar el trabajo interno."});}
   });
 

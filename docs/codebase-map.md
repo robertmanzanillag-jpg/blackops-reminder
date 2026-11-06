@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-06T20:28:55.174Z
+Generated: 2026-11-06T21:26:31.032Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\blackops-reminder`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 817 | 728 | 2596 | 555 | 16305 |
+| 828 | 739 | 2652 | 555 | 16458 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,17 +28,17 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 184 | 180 | test:184 |
-| `server` | 169 | 164 | server:169 |
+| `tests` | 188 | 184 | test:188 |
+| `server` | 170 | 165 | server:170 |
 | `script` | 91 | 83 | script:91 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 36 | 35 | docs:36 |
+| `docs` | 38 | 37 | docs:38 |
 | `client/src/components` | 28 | 28 | client-component:28 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
-| `client/src/lib` | 17 | 17 | client-lib:17 |
-| `shared` | 14 | 14 | shared:14 |
+| `client/src/lib` | 18 | 18 | client-lib:18 |
+| `shared` | 16 | 16 | shared:16 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `client/src/components/company-office` | 5 | 5 | client-component:5 |
 | `server/replit_integrations/chat` | 4 | 4 | server:4 |
@@ -48,10 +48,10 @@ Package: `rest-express`
 | `client/public` | 14 | 2 | other:14 |
 | `client/src/components/agents-world-office` | 2 | 2 | client-component:2 |
 | `server/replit_integrations/batch` | 2 | 2 | server:2 |
+| `tests/fixtures` | 2 | 2 | test:2 |
 | `.agents/skills/codebase-overview` | 1 | 1 | docs:1 |
 | `client` | 1 | 1 | other:1 |
 | `client/src/components/agents-building` | 1 | 1 | client-component:1 |
-| `client/src/components/clippers` | 1 | 1 | client-component:1 |
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/tools`
@@ -188,6 +188,7 @@ Package: `rest-express`
 - `tests/office-kong.test.ts`
 - `tests/office-openai.test.ts`
 - `tests/office-protocol.test.ts`
+- `tests/office-radio-training.test.ts`
 - `tests/office-review-benchmarks.test.ts`
 - `tests/office-role-lifecycle.test.ts`
 - `tests/office-routes.test.ts`
@@ -197,6 +198,7 @@ Package: `rest-express`
 - `tests/office-worker-watchdog.test.ts`
 - `tests/owner-office-storage.test.ts`
 - `tests/public-local-news.test.ts`
+- `tests/radio-slot-policies.test.ts`
 - `tests/radio-slots.test.ts`
 - `tests/radio-template-agent.test.ts`
 - `tests/radio-video-edit-agent.test.ts`
@@ -222,6 +224,8 @@ Package: `rest-express`
 - `tests/telegram-webhook-runtime.test.ts`
 - `tests/user-context.test.ts`
 - `tests/user-migration-plan.test.ts`
+- `tests/whatsapp-backend-consumer.test.ts`
+- `tests/whatsapp-pr330.test.ts`
 
 ## Key Files
 - `client/src/pages/._assistant.tsx` (client-page)

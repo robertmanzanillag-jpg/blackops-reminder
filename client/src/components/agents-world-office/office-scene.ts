@@ -6,7 +6,7 @@
 // "runs" and its data line only flows fast when the agent's real endpoint says it is working.
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
-export type SceneAgentState = "working" | "needs-setup" | "error" | "offline" | "checking";
+export type SceneAgentState = "working" | "available" | "needs-setup" | "error" | "offline" | "checking";
 
 export type SceneAgent = {
   id: string;
@@ -48,6 +48,7 @@ export type SceneCallbacks = {
 };
 
 const STATE_HEX: Record<SceneAgentState, string> = {
+  available:"#94a3b8",
   working: "#34d399",
   "needs-setup": "#fbbf24",
   error: "#fb7185",
@@ -955,13 +956,13 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
         const state = desk.agent.state;
         const cityJob = desk.agent.id.startsWith("kong-city:");
         const avatarMotion = cityJob && state !== "working" ? 0 : motion;
-        const speed = state === "working" ? 1 : state === "error" ? 0.3 : state === "needs-setup" ? 0.45 : 0.18;
+        const speed = state === "available" ? 0 : state === "working" ? 1 : state === "error" ? 0.3 : state === "needs-setup" ? 0.45 : 0.18;
         const p = t * 6 * speed + desk.phase;
         // City figures only move during verified work; retain the main office's ambient motion.
         desk.body.position.y = 1.12 + Math.sin(p * 0.35) * 0.03 * avatarMotion;
         desk.head.position.y = 1.72 + Math.sin(p * 0.35) * 0.03 * avatarMotion;
         desk.head.rotation.y = state === "working" ? Math.sin(p * 0.2) * 0.25 * avatarMotion : Math.sin(p * 0.1) * 0.6 * avatarMotion;
-        const typing = state === "working" ? 1 : cityJob || state === "error" ? 0 : 0.25;
+        const typing = state === "working" ? 1 : cityJob || state === "error" || state === "available" ? 0 : 0.25;
         desk.leftArm.position.y = 1.18 + Math.max(0, Math.sin(p * 2)) * 0.06 * typing * avatarMotion;
         desk.rightArm.position.y = 1.18 + Math.max(0, Math.sin(p * 2 + Math.PI)) * 0.06 * typing * avatarMotion;
         const pulse = 0.75 + Math.sin(t * 3 + desk.phase) * 0.25 * avatarMotion;

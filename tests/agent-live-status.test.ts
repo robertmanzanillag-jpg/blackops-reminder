@@ -1,7 +1,17 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { agentProbes, runProbe, summarizeProbe } from "../shared/agent-live-status";
+import { agentProbes, runProbe, summarizeProbe, presentProbeStatus } from "../shared/agent-live-status";
 import {advanceCompany,emptyCompanyState} from "../shared/agent-company";
+
+test('connection, readiness and past reports never animate as current execution',()=>{
+  for(const id of ['assistant','ceo','github','code','marketing-cmo','portfolio','radio','app-qa','cybersecurity','news','kong-videos','legal','clippers','automations']) {
+    const status=presentProbeStatus(agentProbes[id],{state:'working',label:'Prior observation',activity:['source record'],evidenceId:id==='automations'?'stored-run':undefined});
+    assert.equal(status.state,'available');assert.equal(status.lifePenaltyExempt,true);assert.deepEqual(status.activity,['source record']);
+  }
+  const completed=presentProbeStatus(agentProbes.clippers,{state:'working',label:'Ultima corrida OK'});
+  assert.match(completed.label,/completada/);
+  const error={state:'error' as const,label:'Real error'};assert.deepEqual(presentProbeStatus(agentProbes.radio,error),error);
+});
 
 test('skipped and running polls never score; only a distinct completed success earns points',()=>{
   const now=Date.parse('2026-11-06T12:00:00Z');

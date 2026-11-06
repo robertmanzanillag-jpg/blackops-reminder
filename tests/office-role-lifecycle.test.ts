@@ -10,7 +10,7 @@ import {
 const NOW = Date.parse("2026-11-06T12:00:00Z");
 const ROLE = "claude-reviewer";
 function setup() {
-  let company = advanceCompany(emptyCompanyState(), { now: NOW - 86400000, statuses: { [ROLE]: { state: "working", label: "Working" }, radio: { state: "working", label: "Working" } }, roles: { [ROLE]: "Reviewer", radio: "Radio" } }).state;
+  let company = advanceCompany(emptyCompanyState(), { now: NOW - 86400000, statuses: { [ROLE]: { state: "working", label: "Working" }, code: { state: "working", label: "Working" } }, roles: { [ROLE]: "Reviewer", code: "Code" } }).state;
   company = enrollTrainee(company, { id: "candidate", forAgentId: ROLE, role: "Reviewer", now: NOW - 10000 });
   company.orders.push({ id: "stable-order", text: "Review the existing PR", createdAt: new Date(NOW - 10000).toISOString(), assignees: [{ agentId: ROLE, status: "en_curso", note: "Existing assignment" }] });
   const policy: RolePolicy = { version: "candidate-v1", candidateId: "candidate", generation: 1, curriculumVersion: "course-v1", guidance: ["Check authorization and data isolation"], createdAt: new Date(NOW - 10000).toISOString() };
@@ -45,10 +45,10 @@ test("only the complete approved held-out profile permits benchmark-scoped proba
 });
 test("registry keeps unsupported roles explicit and initializes reviewer only", () => {
   const { state } = setup();
-  assert.equal(state.roles.radio.status, "unsupported");
-  assert.equal(state.roles.radio.activePolicy, undefined);
+  assert.equal(state.roles.code.status, "unsupported");
+  assert.equal(state.roles.code.activePolicy, undefined);
   assert.equal(state.roles[ROLE].status, "active");
-  assert.equal(reserveRoleExecution(state, { roleId: "radio", policyVersion: "x", executionId: "e", fence: "f", now: NOW, ttlMs: 1000 }).lease, undefined);
+  assert.equal(reserveRoleExecution(state, { roleId: "code", policyVersion: "x", executionId: "e", fence: "f", now: NOW, ttlMs: 1000 }).lease, undefined);
 });
 test("policy registration is immutable and requires current eligible candidate", () => {
   const { state, policy } = setup();

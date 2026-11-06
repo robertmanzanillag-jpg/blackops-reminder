@@ -188,12 +188,12 @@ export function OfficeConnectionsPanel() {
           </article>)}
         </section>
         <section aria-label="Preparación interna y academia" className="space-y-2">
-          <h3 className="text-sm font-semibold">CEO, asistente y academia</h3>
+          <h3 className="text-sm font-semibold">CEO, asistente, Radio y academia</h3>
           {internal.isError && <p className="text-xs text-amber-200">{internal.error.message.startsWith("403:") ? "Este historial requiere acceso del propietario." : "El historial privado no está disponible. No se ha confirmado que esté vacío."}</p>}
           {internal.isLoading && <p className="text-xs text-slate-300">Leyendo preparación guardada…</p>}
           {visibleInternal && internalJobs.length === 0 && <p className="text-xs text-slate-300">Todavía no hay preparaciones internas registradas.</p>}
           {internalJobs.slice().reverse().slice(0,8).map(job=><details key={job.id} className="rounded-lg border border-white/10 p-2 text-xs">
-            <summary>{job.role === "ceo" ? "CEO" : "Asistente"} · {statuses[job.status] || job.status} · {new Date(job.startedAt).toLocaleString()}</summary>
+            <summary>{job.role === "ceo" ? "CEO" : job.role === "radio" ? "Radio" : "Asistente"} · {statuses[job.status] || job.status} · {new Date(job.startedAt).toLocaleString()}</summary>
             {job.reason && <p className="mt-2 text-amber-200">{job.reason}</p>}
             {job.artifact && <p className="mt-2 whitespace-pre-wrap break-words">{job.artifact.text}</p>}
           </details>)}
