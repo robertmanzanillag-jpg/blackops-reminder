@@ -595,3 +595,29 @@ export function leaderboard(state: CompanyState, exclude: string[] = ["ceo"]): L
     }));
   return rows;
 }
+
+/** KONG has its own company ledger; these ids must never advance in BlackOps. */
+export const isKongCompanyAgent = (id: string) => id === "kong" || id.startsWith("kong:") || id.startsWith("kong-city:") || ["kong-videos", "kong-metrics", "kong-supervisor"].includes(id);
+
+/** Quarantine old unproven scores and academy records without relabelling them as new evidence. */
+export function separateLegacyKongCompany(company: CompanyState, archived: CompanyState) {
+  const legacyCareers = Object.fromEntries(Object.entries(company.careers).filter(([id]) => isKongCompanyAgent(id)));
+  const legacyTrainees = company.trainees.filter(item => isKongCompanyAgent(item.forAgentId));
+  const legacyOrders = company.orders.filter(item => item.assignees.some(assignee => isKongCompanyAgent(assignee.agentId)));
+  const dedupe = <T extends { id: string }>(items: T[]) => [...new Map(items.map(item => [item.id, item])).values()];
+  return {
+    company: {
+      ...company,
+      careers: Object.fromEntries(Object.entries(company.careers).filter(([id]) => !isKongCompanyAgent(id))),
+      trainees: company.trainees.filter(item => !isKongCompanyAgent(item.forAgentId)),
+      orders: company.orders.filter(item => !legacyOrders.includes(item) || item.assignees.some(assignee => !isKongCompanyAgent(assignee.agentId)))
+        .map(item => ({ ...item, assignees: item.assignees.filter(assignee => !isKongCompanyAgent(assignee.agentId)) })),
+    },
+    archived: {
+      ...archived,
+      careers: { ...archived.careers, ...legacyCareers },
+      trainees: dedupe([...archived.trainees, ...legacyTrainees]),
+      orders: dedupe([...archived.orders, ...legacyOrders]),
+    },
+  };
+}
