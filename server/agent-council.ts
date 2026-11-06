@@ -1,3 +1,5 @@
+import { advanceKongCompany, isKongCompanyAgent } from "./kong-company";
+import type { OfficeKongAuditResult } from "./office-kong";
 // Server side of the agent council (see shared/agent-council.ts).
 //
 // Cost: $0. It only reads data the agents already produce (local files and the
@@ -78,6 +80,7 @@ export type CouncilDeps = {
   fetchLatestRelease: (repo: string) => Promise<{ tag: string; url: string; publishedAt: string | null } | null>;
   log: (message: string) => void;
   // Real status of every agent (same data its endpoint serves). Optional so tests can stay small.
+  collectKongEvidence?: () => Promise<OfficeKongAuditResult["evidence"]>;
   collectStatuses?: (userId: string) => Promise<Record<string, AgentLiveStatus>>;
   // Real documents the academy teaches.
   loadCurriculum?: () => Promise<CurriculumModule[]>;
@@ -195,7 +198,7 @@ function advanceCompanyCycle(
 ): CouncilState {
   const unscored = new Set([...EXEMPT_IDS, ...unscoredAgentIds(integrations)]);
   const compact = Object.fromEntries(Object.entries(statuses).map(([id, status]) => [id, { state: status.state, label: status.label }]));
-  let company = advanceCompany(state.company, { now, statuses: compact, roles: AGENT_NAMES, exempt: [...unscored] }).state;
+  let company = advanceCompany(state.company, { now, statuses: Object.fromEntries(Object.entries(compact).filter(([id]) => !isKongCompanyAgent(id))), roles: AGENT_NAMES, exempt: [...unscored] }).state;
   // Orders routed to a paused/external agent are blocked with the honest reason, never "assigned".
   for (const id of unscored) {
     const integration = integrationFor(id, integrations);
@@ -206,10 +209,11 @@ function advanceCompanyCycle(
     if (proposal.kind !== "new_agent" || proposal.status !== "applied") continue;
     const specialist = proposal.key.match(/^new_agent:specialist-(.+)$/);
     const forAgentId = specialist ? specialistIdFor(specialist[1]) : proposal.key.replace(/^new_agent:helper-/, "");
+    if (isKongCompanyAgent(forAgentId)) continue;
     company = enrollTrainee(company, { id: proposal.key, forAgentId, role: proposal.title.replace(/^Contratar /, ""), now });
   }
   // Skills from the lessons Robert approved about each agent.
-  company = learnLessons(company, state.lessons, now);
+  company = learnLessons(company, state.lessons.filter(lesson => !isKongCompanyAgent(lesson.subject)), now);
   // If the docs can't be read this cycle, the academy still advances on the core rules so nobody
   // stays in training forever. Each trainee first studies its own job (why it failed, its orders,
   // its lessons), then the general docs.
@@ -389,6 +393,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
       const everyone = deps.collectStatuses
         ? await withTimeout(deps.collectStatuses(userId), collectTimeout, "estado de los agentes").catch(() => ({} as Record<string, AgentLiveStatus>))
         : {};
+      const kongEvidence = deps.collectKongEvidence ? await withTimeout(deps.collectKongEvidence(), collectTimeout, "evidencia KONG").catch(() => undefined) : undefined;
       const curriculum = deps.loadCurriculum
         ? await withTimeout(deps.loadCurriculum(), CURRICULUM_TIMEOUT_MS, "academia").catch(() => [] as CurriculumModule[])
         : [];
@@ -404,12 +409,14 @@ export function createAgentCouncil(deps: CouncilDeps) {
         // BlackRoom lane, the Mechanic) never earn or lose points and never get hiring/repair proposals.
         const integrations = integrationsNow();
         const unscored = [...EXEMPT_IDS, ...unscoredAgentIds(integrations)];
-        const scored = Object.fromEntries(Object.entries(statuses).filter(([id]) => !unscored.includes(id)));
+        const scored = Object.fromEntries(Object.entries(statuses).filter(([id]) => !unscored.includes(id) && !isKongCompanyAgent(id)));
         let next = finishCycle(state, { findings, statuses: scored, now, agentNames: AGENT_NAMES });
         next = advanceCompanyCycle(next, statuses, curriculum, now, integrations);
+        const kong = advanceKongCompany({ company: state.kongCompany, evidenceAt: state.kongEvidenceAt, evidence: kongEvidence, now, curriculum });
+        next = { ...next, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt, kongCollaboration: kong.collaboration };
         // This completes only a read-only readiness review, never the worker's commercial task.
         next = { ...next, kongSupervision: reviewKongReadiness(state.kongSupervision, everyone, now) };
-        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, statuses, now, AGENT_NAMES, unscored), ...deriveSpecialistProposals(next, now), ...next.proposals]) };
+        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, Object.fromEntries(Object.entries(statuses).filter(([id]) => !isKongCompanyAgent(id))), now, AGENT_NAMES, unscored), ...deriveSpecialistProposals(next, now), ...next.proposals]) };
         wroteRound = true;
         return next;
       });
@@ -489,8 +496,19 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
   }
 
-  function placeOrder(text: string) {
+  function placeOrder(text: string, scope: "main" | "kong" = "main") {
     return mutate((state) => {
+      if (scope === "kong") {
+        const now = deps.now();
+        const ids = Object.keys(state.kongLastStatuses);
+        const normalized = text.toLocaleLowerCase();
+        const matching = ids.filter(id => id.split(":").slice(1).some(part => normalized.includes(part.toLocaleLowerCase())));
+        const available = matching.length ? matching : ids;
+        // Recorded for review only: an office order does not dispatch a remote worker.
+        const statuses = Object.fromEntries(available.map(id => [id, { state: "offline" as const, label: "Orden registrada para revisión; sin despacho remoto" }]));
+        const result = createOrder(state.kongCompany, { text, now, statuses, available, names: {} });
+        return { ...state, kongCompany: result.state };
+      }
       const available = Object.keys(AGENT_NAMES).filter((id) => !id.startsWith("kong:") && id !== "kong");
       const now = deps.now();
       const fresh = state.lastCycleAt && now - toMs(state.lastCycleAt) < STATUS_FRESH_MS && !state.lastCycleError;
@@ -506,7 +524,14 @@ export function createAgentCouncil(deps: CouncilDeps) {
 
   // evidenceRunId: an automation run of this user that finished with "success". Verified here,
   // never trusted from the client; one run can close only one order.
-  async function finishOrder(orderId: string, evidenceRunId?: string, requesterId?: string) {
+  async function finishOrder(orderId: string, evidenceRunId?: string, requesterId?: string, scope: "main" | "kong" = "main") {
+    if (scope === "kong") {
+      if (evidenceRunId) throw new OrderEvidenceError("Una ejecución genérica no demuestra que esta orden KONG se realizó. Confírmala manualmente sin puntos.");
+      return mutate(state => {
+        if (!state.kongCompany.orders.some(order => order.id === orderId)) throw new Error("Orden no encontrada");
+        return { ...state, kongCompany: completeOrder(state.kongCompany, orderId, deps.now()) };
+      });
+    }
     let evidence: OrderEvidence | undefined;
     if (evidenceRunId) {
       if (!deps.verifyRun) throw new OrderEvidenceError("No se puede verificar la evidencia en este servidor.");
@@ -527,11 +552,16 @@ export function createAgentCouncil(deps: CouncilDeps) {
     // The KONG conversation is owner-only (served by /api/kong-supervisor/state with an owner check).
     // This view is readable by any signed-in user, so it only carries the readiness records.
     const { messages: _privateMessages, ...kongSupervisionPublic } = loaded.kongSupervision;
-    const state = { ...loaded, kongSupervision: kongSupervisionPublic };
+    const { kongLegacyCompany: _legacyHistory, ...publicState } = loaded;
+    const state = { ...publicState, kongSupervision: kongSupervisionPublic };
     const personalities = Object.fromEntries(Object.values(state.company.careers).map((career) => [career.agentId, personalityFor(career.agentId, career.generation)]));
     return {
       ...state,
-      leaderboard: leaderboard(state.company, ["ceo", ...EXEMPT_IDS, ...unscoredAgentIds(integrationsNow())]),
+      kongLastStatuses: state.kongObservedAt && deps.now() - Date.parse(state.kongObservedAt) <= 5 * 60_000 ? state.kongLastStatuses : {},
+      kongLeaderboard: leaderboard(state.kongCompany),
+      kongPersonalities: Object.fromEntries(Object.values(state.kongCompany.careers).map(career => [career.agentId, personalityFor(career.agentId, career.generation)])),
+      kongCollaboration: state.kongCollaboration.observedAt && deps.now() - Date.parse(state.kongCollaboration.observedAt) <= 5 * 60_000 ? state.kongCollaboration : { verified: false, observedAt: null, totalFindings: 0, exchanges: [] },
+      leaderboard: leaderboard(state.company, ["ceo", ...Object.keys(state.company.careers).filter(isKongCompanyAgent), ...EXEMPT_IDS, ...unscoredAgentIds(integrationsNow())]),
       integrations: integrationsNow(),
       personalities,
       overrides: applyLessons(state.debates, state.lessons),
@@ -892,6 +922,7 @@ export function getAgentCouncil() {
     fetchLatestRelease: fetchLatestReleaseReal,
     log: (message) => console.warn(`[agent-council] ${message}`),
     collectStatuses: collectStatusesReal,
+    collectKongEvidence: async () => (await (await import("./office-kong")).runOfficeKongReadOnly()).evidence,
     loadCurriculum: () => loadCurriculumReal(),
   });
   return council;

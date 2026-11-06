@@ -16,9 +16,10 @@ import type { OfficeKongAuditResult } from "../../../../server/office-kong";
 import type { OfficeKongCollaboration } from "../../../../server/office-kong-collaboration";
 import { CITY_NEWS_AGENTS } from "@shared/agent-live-status";
 import { INTEGRATION_LABEL, effectiveIntegrations, integrationFor, type AgentIntegration } from "@shared/agent-integrations";
-import { createOfficeScene, type SceneData, type SceneDepartment } from "./office-scene";
-import { buildOfficeCityRoomsFromSnapshot, officeCityCountries, officeCitySnapshotExpiresAt, parseOfficeCityDirectory, type OfficeCityAgent } from "@/lib/office-city-agents";
 import { buildOfficeKongCentralSignals, OFFICE_KONG_CENTRAL_SEATS, officeCityEvidenceNotice, type OfficeKongCentralSignal } from "@/lib/office-kong-central-agents";
+import { buildKongOfficeWing } from "@/lib/kong-office-wing";
+import { createOfficeScene, type SceneData, type SceneDepartment } from "./office-scene";
+import { buildOfficeCityRoomsFromSnapshot, officeCitySnapshotExpiresAt, parseOfficeCityDirectory, type OfficeCityAgent } from "@/lib/office-city-agents";
 
 export type WorldAgent = BuildingAgent & { activity?: string; href?: string };
 
@@ -83,7 +84,7 @@ const STATE_BAR: Record<AgentLiveState, string> = {
   working: "bg-emerald-400", "needs-setup": "bg-amber-300", error: "bg-rose-400", offline: "bg-zinc-600", checking: "bg-sky-300",
 };
 
-type CompanyView = { company?: CompanyState; leaderboard?: LeaderboardRow[]; personalities?: Record<string, Personality>; integrations?: Record<string, AgentIntegration> };
+type CompanyView = { kongCompany?: CompanyState; kongLeaderboard?: LeaderboardRow[]; kongPersonalities?: Record<string, Personality>; kongCollaboration?: OfficeKongCollaboration; company?: CompanyState; leaderboard?: LeaderboardRow[]; personalities?: Record<string, Personality>; integrations?: Record<string, AgentIntegration> };
 export type WorldContact = { id: string; name: string; role: string; department: string; status: AgentLiveStatus; description: string; href?: string; color: string };
 type PanelAgent = { id: string; name: string; role: string; description: string; href?: string; status: AgentLiveStatus; kong?: boolean; color: string; cityAgent?: OfficeCityAgent; kongEvidence?: OfficeKongCentralSignal };
 
@@ -96,6 +97,7 @@ export function AgentsOfficeWorld({
   onSelectKongAgent,
   onOpenKongOffice,
   onOpenContact,
+  kongWingRequest = 0,
 }: {
   agents: WorldAgent[];
   kongTeam: BuildingTeamAgent[];
@@ -104,6 +106,7 @@ export function AgentsOfficeWorld({
   onSelectAgent: (agentId: string, status: AgentLiveStatus) => void;
   onSelectKongAgent: (name: string) => void;
   onOpenKongOffice: () => void;
+  kongWingRequest?: number;
   // Opens the same local chat for agents that are not in the classic list (cities, new agents, trainees).
   onOpenContact?: (contact: WorldContact) => void;
 }) {
@@ -112,42 +115,31 @@ export function AgentsOfficeWorld({
   const liveStatuses = useAgentLiveStatuses(probedIds, legal);
   const council = useCouncil();
   const companyView = (council.view || {}) as unknown as CompanyView;
-  const company = companyView.company;
+  const [officeWing, setOfficeWing] = useState<"main" | "kong">("main");
+  const company = officeWing === "kong" ? companyView.kongCompany : companyView.company;
   const careers: Record<string, AgentCareer> = company?.careers || {};
-  const leaderboardRows = companyView.leaderboard || [];
-  const personalities = companyView.personalities || {};
+  const leaderboardRows = (officeWing === "kong" ? companyView.kongLeaderboard : companyView.leaderboard) || [];
+  const personalities = (officeWing === "kong" ? companyView.kongPersonalities : companyView.personalities) || {};
   const integrations = companyView.integrations || effectiveIntegrations();
   const deputyId = leaderboardRows[0]?.points ? leaderboardRows[0].agentId : null;
   const queryClient = useQueryClient();
-  const openKongOfficeRef = useRef(onOpenKongOffice);
-  useEffect(() => { openKongOfficeRef.current = onOpenKongOffice; }, [onOpenKongOffice]);
   const hostRef = useRef<HTMLDivElement | null>(null);
   const labelsRef = useRef<HTMLDivElement | null>(null);
   const sceneRef = useRef<ReturnType<typeof createOfficeScene> | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const [focusedDepartment, setFocusedDepartment] = useState<string | null>(null);
   const [panelAgentId, setPanelAgentId] = useState<string | null>(null);
-  const [overlay, setOverlay] = useState<"none" | "ranking" | "ceo" | "city-director">("none");
+  const [overlay, setOverlay] = useState<"none" | "ranking" | "ceo" | "city-director" | "kong-talk">("none");
   const [directorCityId, setDirectorCityId] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [orderText, setOrderText] = useState("");
-  const [officeWing, setOfficeWing] = useState<"main" | "kong">("main");
-  const [cityCountry, setCityCountry] = useState("");
-  const [cityControlsOpen, setCityControlsOpen] = useState(false);
+
   const [mainPanelMinimized, setMainPanelMinimized] = useState(false);
-  const [cityOverviewOpen, setCityOverviewOpen] = useState(false);
   const [cityDetailsOpen, setCityDetailsOpen] = useState(false);
   const [clock, setClock] = useState(() => Date.now());
-  useEffect(() => { if (failed && officeWing === "kong") setCityOverviewOpen(true); }, [failed, officeWing]);
-  const cityDirectory = useQuery<unknown>({ queryKey: ["/api/agents-office/cities"], enabled: officeWing === "kong", staleTime: 60_000, refetchInterval: cityRefreshInterval,
-    retry: (failureCount, error) => failureCount < 2 && !/^(401|403):/.test(error.message), retryDelay: attempt => Math.min(1_000 * 2 ** attempt, 2_000) });
-  const citySnapshot = useQuery<OfficeKongAuditResult & { collaboration?: OfficeKongCollaboration }>({
-    queryKey: ["/api/agents-office/kong-snapshot"],
-    enabled: officeWing === "kong" || (officeWing === "main" && focusedDepartment === "kong"),
-    staleTime: 45_000, refetchInterval: cityRefreshInterval,
-    retry: (failureCount, error) => failureCount < 2 && !/^(401|403):/.test(error.message), retryDelay: attempt => Math.min(1_000 * 2 ** attempt, 2_000),
-  });
+  const cityDirectory = useQuery<unknown>({ queryKey: ["/api/agents-office/cities"], enabled: officeWing === "kong", staleTime: 60_000, refetchInterval: cityRefreshInterval, retry: (count, error) => count < 2 && !/^(401|403):/.test(error.message), retryDelay: attempt => Math.min(1_000 * 2 ** attempt, 2_000) });
+  const citySnapshot = useQuery<OfficeKongAuditResult & { collaboration?: OfficeKongCollaboration }>({ queryKey: ["/api/agents-office/kong-snapshot"], enabled: officeWing === "kong", staleTime: 45_000, refetchInterval: cityRefreshInterval, retry: (count, error) => count < 2 && !/^(401|403):/.test(error.message), retryDelay: attempt => Math.min(1_000 * 2 ** attempt, 2_000) });
   useEffect(() => { const timer = window.setInterval(() => setClock(Date.now()), 15_000); return () => window.clearInterval(timer); }, []);
   const cityEvidence = cityDirectory.isError || citySnapshot.isError ? undefined : citySnapshot.data?.evidence;
   const evidenceExpiresAt = useMemo(() => officeCitySnapshotExpiresAt(cityEvidence, clock), [cityEvidence, clock]);
@@ -171,36 +163,23 @@ export function AgentsOfficeWorld({
     name: seat.nativeName,
     job: kongTeam.find(member => member.name.toLowerCase() === seat.nativeName.toLowerCase())?.job || seat.job,
   }));
-  const cityCountries = useMemo(() => officeCityCountries(directory), [directory]);
-  const activeCityCountry = cityCountries.some(country => country.code === cityCountry) ? cityCountry : "";
-  const filteredCityRooms = activeCityCountry ? cityRooms.filter(room => room.city.countryCode === activeCityCountry) : cityRooms;
-  const selectedCity = filteredCityRooms.find(room => room.id === focusedDepartment);
-  const activeCityAgents = cityRooms.flatMap(room => room.agents.filter(agent => agent.status.state === "working"));
-  const cityRunning = activeCityAgents.length;
-  const cityRegistered = cityRooms.reduce((count, room) => count + room.agents.filter(agent => agent.hasDurableEvidence).length, 0);
+  const selectedCity = cityRooms.find(room => room.id === focusedDepartment);
   const directorCity = cityRooms.find(room => room.city.id === directorCityId) ?? cityRooms[0];
   const citySupervision = overlay === "city-director" && cityEvidence ? scoreOfficeKongSnapshot(cityEvidence, clock) : undefined;
   const directorScore = citySupervision?.cities.find(city => city.id === directorCity?.city.id);
   const reassignmentProposals = citySupervision?.verified ? citySnapshot.data?.collaboration?.exchanges.filter(exchange => exchange.proposal.action === "review_reassignment") ?? [] : [];
   const changeWing = (wing: "main" | "kong") => {
     setOfficeWing(wing); setFocusedDepartment(null); setPanelAgentId(null); setOverlay("none");
-    setCityControlsOpen(false); setCityDetailsOpen(false); setCityCountry("");
-    setCityOverviewOpen(Boolean(failed));
+    setCityDetailsOpen(true); setMainPanelMinimized(false);
     sceneRef.current?.focusDepartment(null);
   };
-  // Focus asked by a button (not a click on the 3D floor or label): it must not open the KONG office.
-  const focusFromButtonRef = useRef(false);
   const focusRoom = (id: string | null) => {
-    setFocusedDepartment(id); setPanelAgentId(null);
-    focusFromButtonRef.current = true;
-    try { sceneRef.current?.focusDepartment(id); } finally { focusFromButtonRef.current = false; }
+    setFocusedDepartment(id); setPanelAgentId(null); sceneRef.current?.focusDepartment(id);
+    if (id === "kong") changeWing("kong");
   };
-  const openCityFromOverview = (id: string) => {
-    if (!filteredCityRooms.some(room => room.id === id)) setCityCountry("");
-    focusRoom(id);
-    setCityDetailsOpen(true);
-    setCityOverviewOpen(false);
-  };
+  useEffect(() => { if (kongWingRequest > 0) changeWing("kong"); }, [kongWingRequest]);
+  const wingRef = useRef(officeWing);
+  wingRef.current = officeWing;
   // Bumped after every close attempt so a failed pick can be selected again.
   const [evidenceResetKey, setEvidenceResetKey] = useState(0);
 
@@ -272,13 +251,15 @@ export function AgentsOfficeWorld({
     ...DEPARTMENTS,
     ...(academyIds.length ? [{ id: "academia", name: "Academia", color: "#60a5fa", agentIds: academyIds }] : []),
   ];
-  const departments = officeWing === "main" ? mainDepartments : filteredCityRooms.map(room => ({
-      id: room.id, name: room.name,
-      color: CITY_COUNTRY_COLORS[room.city.countryCode] ?? "#a78bfa",
-      agentIds: room.agents.map(agent => agent.id),
-    }));
+  const kongWing = buildKongOfficeWing(citySnapshot.isError ? undefined : citySnapshot.data?.evidence, cityRooms, statuses, clock);
+  const departments = officeWing === "main" ? mainDepartments : [
+    ...kongWing.departments,
+    ...(academyIds.length ? [{ id: "kong-academia", name: "Academia KONG", color: "#60a5fa", agentIds: academyIds }] : []),
+  ];
+  for (const agent of kongWing.agents) panelAgents.set(agent.id, { ...panelAgents.get(agent.id), ...agent });
+  const kongCollaboration = citySnapshot.isError || !cityEvidence || !scoreOfficeKongSnapshot(cityEvidence, clock).verified ? undefined : citySnapshot.data?.collaboration;
   // City jobs never inherit council careers, lessons or optimistic live probes.
-  for (const room of filteredCityRooms) for (const agent of room.agents) panelAgents.set(agent.id, {
+  for (const room of cityRooms) for (const agent of room.agents) panelAgents.set(agent.id, {
     id: agent.id, name: agent.name, role: agent.role, description: `${agent.role} de ${room.city.name} · ${room.city.countryCode} · ${room.city.timeZone} · ${room.city.currency}`,
     status: agent.status, color: agent.color, cityAgent: agent,
   });
@@ -294,8 +275,8 @@ export function AgentsOfficeWorld({
   }
 
   const sceneData: SceneData = {
-    cityLayout: officeWing === "kong" ? selectedCity ? "detail" : "overview" : undefined,
-    departments: departments.filter(department => !selectedCity || officeWing !== "kong" || department.id === selectedCity.id).map((department) => ({
+    company: officeWing === "kong" ? "KONG" : "BlackOps",
+    departments: departments.map((department) => ({
       id: department.id,
       name: department.name,
       color: department.color,
@@ -303,7 +284,7 @@ export function AgentsOfficeWorld({
         .map((id) => panelAgents.get(id))
         .filter((agent): agent is PanelAgent => Boolean(agent))
         .map((agent) => {
-          const career = agent.cityAgent ? undefined : careers[agent.id];
+          const career = careers[agent.id];
           return {
             id: agent.id,
             name: agent.name,
@@ -317,12 +298,12 @@ export function AgentsOfficeWorld({
               ? INTEGRATION_LABEL[integrationFor(agent.id, integrations).mode]
               : career ? `${career.nickname} · ${career.points} pts` : undefined,
             battery: career?.battery,
-            deputy: !agent.cityAgent && agent.id === deputyId,
+            deputy: agent.id === deputyId,
             student: agent.id.startsWith("trainee:"),
           };
         }),
     })),
-    debates: officeWing === "kong" ? [] : (council.view?.debates || []).filter((debate) => debate.verdict !== "descartado").map((debate) => ({ from: debate.reviewer, to: debate.subject })),
+    debates: officeWing === "kong" ? (kongCollaboration?.exchanges || []).map(exchange => ({ from: "kong:city_operations", to: `kong-city:${exchange.cityId}:${exchange.category}` })) : (council.view?.debates || []).filter((debate) => debate.verdict !== "descartado").map((debate) => ({ from: debate.reviewer, to: debate.subject })),
   };
   const sceneKey = JSON.stringify(sceneData);
   const latestSceneKey = useRef(sceneKey);
@@ -342,14 +323,13 @@ export function AgentsOfficeWorld({
           sceneRef.current = createOfficeScene(THREE, host, labels, {
             onFocusDepartment: (id) => {
               setFocusedDepartment(id);
-              if (id === "kong") { if (!focusFromButtonRef.current) openKongOfficeRef.current(); return; }
+              if (id === "kong") { setOfficeWing("kong"); setFocusedDepartment(null); setPanelAgentId(null); return; }
               if (id?.startsWith("kong-city:")) {
                 setOfficeWing("kong");
                 setPanelAgentId(null);
                 setCityDetailsOpen(true);
-                setCityOverviewOpen(false);
               } else if (id) {
-                setOfficeWing("main");
+                if (wingRef.current !== "kong") setOfficeWing("main");
                 setOverlay(value => value === "city-director" ? "none" : value);
                 setPanelAgentId(null);
               }
@@ -393,7 +373,7 @@ export function AgentsOfficeWorld({
     const text = orderText.trim();
     if (!text) return;
     setBusy(true);
-    const result = await post("/api/agent-company/orders", { text });
+    const result = await post("/api/agent-company/orders", { text, company: officeWing });
     if (result.ok) {
       setOrderText("");
       setMessage("El CEO recibio la orden y la asigno.");
@@ -406,7 +386,7 @@ export function AgentsOfficeWorld({
 
   const markDone = async (orderId: string, evidenceRunId?: string) => {
     setBusy(true);
-    const result = await post(`/api/agent-company/orders/${encodeURIComponent(orderId)}/done`, evidenceRunId ? { evidenceRunId } : {});
+    const result = await post(`/api/agent-company/orders/${encodeURIComponent(orderId)}/done`, { ...(evidenceRunId ? { evidenceRunId } : {}), company: officeWing });
     setMessage(result.ok ? (evidenceRunId ? "Orden cerrada con evidencia: puntos para quien trabajaba." : "Orden cerrada a mano: queda anotada, sin puntos.") : (result.body as { error?: string } | null)?.error || "No se pudo cerrar la orden.");
     await refreshCouncil();
     setEvidenceResetKey((value) => value + 1);
@@ -419,15 +399,15 @@ export function AgentsOfficeWorld({
         <p className="mx-auto mb-4 max-w-[900px] rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-xs text-amber-100" data-testid="world-fallback">
           Este navegador no pudo abrir la oficina 3D ({failed}). Te muestro el edificio con los mismos datos en vivo.
         </p>
-        <button type="button" onClick={onOpenKongOffice} className="mx-auto mb-4 block rounded-full bg-violet-500 px-5 py-3 font-bold text-white" data-testid="world-open-kong-office">Ver oficina KONG</button>
-        <button type="button" onClick={() => changeWing("kong")} className="mx-auto mb-4 block rounded-full border border-lime-300/50 px-5 py-2 text-lime-100" data-testid="world-kong-wing">Ver mapa y director de ciudades</button>
+        <button type="button" onClick={() => changeWing("kong")} className="mx-auto mb-4 block rounded-full bg-violet-500 px-5 py-3 font-bold text-white" data-testid="world-kong-wing">Ver oficina KONG</button>
+
         <AgentsBuilding agents={agents} kongTeam={centralKongTeam} legal={legal} selectedAgentId={selectedAgentId} onSelectAgent={onSelectAgent} onSelectKongAgent={onSelectKongAgent} />
       </div>
     );
   }
 
-  const companyIds = DEPARTMENTS.flatMap((department) => department.agentIds);
-  const workingCount = companyIds.filter((id) => statuses[id]?.state === "working").length;
+  const companyIds = departments.flatMap((department) => department.agentIds);
+  const workingCount = companyIds.filter((id) => panelAgents.get(id)?.status.state === "working").length;
   const focused = departments.find((department) => department.id === focusedDepartment) || null;
   const focusedAgents = focused ? focused.agentIds.map((id) => panelAgents.get(id)).filter((agent): agent is PanelAgent => Boolean(agent)) : [];
   const panelAgent = (panelAgentId && focusedAgents.find((agent) => agent.id === panelAgentId)) || focusedAgents[0] || null;
@@ -438,7 +418,7 @@ export function AgentsOfficeWorld({
   const rank: Record<AgentLiveState, number> = { error: 4, "needs-setup": 3, offline: 2, checking: 1, working: 0 };
   for (const agent of focusedAgents) {
     if (agent.id.startsWith("trainee:")) continue;
-    const name = agent.cityAgent ? "Auditoria autenticada KONG" : agent.kong ? "Kong (sin backend)" : SOURCE_NAME[agent.id] || agent.name;
+    const name = agent.cityAgent ? "Auditoria autenticada KONG" : (agent.kong || agent.id.startsWith("kong:")) ? "Lectura autenticada KONG" : SOURCE_NAME[agent.id] || agent.name;
     const current = sourceMap.get(name);
     if (!current) sourceMap.set(name, { name, state: agent.status.state, label: agent.status.label, users: [agent.name] });
     else {
@@ -450,14 +430,14 @@ export function AgentsOfficeWorld({
   const orders: CompanyOrder[] = company?.orders || [];
   const nameOf = (id: string) => panelAgents.get(id)?.name || id;
   // KONG city agents are measured by the KONG audit score (their own system), not by council careers.
-  const panelCareer = panelAgent && !panelAgent.cityAgent ? careers[panelAgent.id] : undefined;
+  const panelCareer = panelAgent ? careers[panelAgent.id] : undefined;
   // Every agent has a personality: from its career when it has one, otherwise the same deterministic pick.
   const panelPersonality = panelAgent ? personalities[panelAgent.id] || personalityFor(panelAgent.id, 1) : undefined;
   const panelIntegration = panelAgent ? integrationFor(panelAgent.id, integrations) : undefined;
   const lifeNotApplicable = !panelAgent
     ? ""
     : panelAgent.cityAgent
-      ? "Agente de ciudad KONG: se mide con la auditoria de KONG de su ciudad, no con la bateria del consejo."
+      ? "Esperando resultados verificados de este puesto en el consejo KONG."
       : panelAgent.id.startsWith("trainee:")
       ? "En formacion en la academia: empieza a ganar o perder vida cuando se gradue."
       : panelIntegration && panelIntegration.mode !== "activa"
@@ -470,9 +450,9 @@ export function AgentsOfficeWorld({
               ? "Todavia no hay lectura de su trabajo; la vida empieza cuando el consejo lo mida."
               : "Se le abre la carrera en la proxima ronda del consejo (cada 15 min).";
   const evidenceRuns = ((queryClient.getQueryData(["agents-building-probe", "automation-runs"]) as { ok?: boolean; body?: unknown } | undefined)?.body as Array<{ id?: string; status?: string; resultSummary?: string | null; startedAt?: string }> | undefined || [])
-    .filter((run) => run && typeof run.id === "string" && run.status === "success")
+    .filter((run) => officeWing !== "kong" && run && typeof run.id === "string" && run.status === "success")
     .slice(0, 10);
-  const panelRank = panelAgent && !panelAgent.cityAgent ? leaderboardRows.find((row) => row.agentId === panelAgent.id) : undefined;
+  const panelRank = panelAgent ? leaderboardRows.find((row) => row.agentId === panelAgent.id) : undefined;
   const panelOrders = panelAgent ? orders.filter((order) => order.assignees.some((assignee) => assignee.agentId === panelAgent.id)).slice(0, 4) : [];
 
   return (
@@ -480,120 +460,47 @@ export function AgentsOfficeWorld({
       <div ref={hostRef} className="absolute inset-0" data-testid="world-canvas-host" />
       <div ref={labelsRef} className="pointer-events-none absolute inset-0 overflow-hidden" />
 
-      <div className={cn("pointer-events-none absolute left-3 z-10 rounded-2xl border border-white/10 bg-[#04060b]/90 shadow-2xl backdrop-blur", officeWing === "kong" ? "top-28 w-[min(324px,calc(100vw-1.5rem))] p-2.5 sm:top-20" : cn("bottom-3 p-2.5", !mainPanelMinimized && "w-[min(365px,calc(100vw-1.5rem))]"))}>
-        <div className="flex items-center justify-between gap-2">
-        <p className="text-[11px] font-bold uppercase tracking-[0.28em] text-cyan-100/80">{officeWing === "kong" ? "KONG · agentes por ciudad" : "BlackOps · la empresa"}</p>
-          {officeWing === "kong" && <button type="button" aria-expanded={cityControlsOpen} aria-controls="world-city-controls-content" onClick={() => setCityControlsOpen(open => !open)} className="pointer-events-auto shrink-0 rounded-full border border-white/20 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/10" data-testid="world-city-controls-toggle">{cityControlsOpen ? "Minimizar" : "Controles"}</button>}
-          {officeWing === "main" && <button type="button" aria-expanded={!mainPanelMinimized} aria-controls="world-office-panel-content" onClick={() => setMainPanelMinimized(value => !value)} className="pointer-events-auto shrink-0 rounded-full border border-white/20 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/10" data-testid="world-main-panel-toggle">{mainPanelMinimized ? "Abrir" : "Minimizar"}</button>}
+      <section className={cn("absolute bottom-3 left-3 z-10 max-h-[45%] overflow-y-auto rounded-2xl border border-white/10 bg-[#04060b]/95 p-3 text-white shadow-2xl", !mainPanelMinimized && "w-[min(365px,calc(100vw-1.5rem))]")} aria-label="Controles de oficina">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-[11px] font-bold uppercase tracking-[0.2em] text-cyan-100" data-testid="world-company-label">{officeWing === "kong" ? "KONG · la empresa" : "BlackOps · la empresa"}</h2>
+          <button type="button" aria-expanded={!mainPanelMinimized} aria-controls="world-office-panel-content" onClick={() => setMainPanelMinimized(v => !v)} className="rounded-full border border-white/20 px-2 py-1 text-xs" data-testid="world-main-panel-toggle">{mainPanelMinimized ? "Abrir" : "Minimizar"}</button>
         </div>
-        <div id="world-office-panel-content" hidden={officeWing === "main" && mainPanelMinimized}>
-        <p className={cn("mt-1 font-black text-white", officeWing === "kong" ? "text-sm" : "text-lg sm:text-2xl")} data-testid="world-working-count">{officeWing === "kong" ? `${cityRooms.length * 7} puestos · ${cityRunning} en ejecución verificada` : `${workingCount} de ${companyIds.length} con señales operativas`}</p>
-        {officeWing === "kong" && <p className="mt-1 text-[11px] text-zinc-300" data-testid="world-city-country-count">{cityCountries.length} países · {cityRooms.length} ciudades · colores por país</p>}
-        {officeWing === "kong" && activeCityAgents.length > 0 && <ul aria-label="Trabajos en curso verificados" className="mt-2 space-y-1" data-testid="world-city-active-work">
-          {activeCityAgents.map(agent => <li key={agent.id}>
-            <button type="button" className="pointer-events-auto w-full rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2 py-1.5 text-left text-[11px] text-emerald-100 hover:bg-emerald-400/20" onClick={() => { openCityFromOverview(`kong-city:${agent.cityId}`); setPanelAgentId(agent.id); }}>
-              <strong className="block">{agent.cityName} · {agent.role}</strong>
-              <span>{agent.status.detail}</span>
-            </button>
-          </li>)}
-        </ul>}
-        {officeWing === "kong" && citySnapshot.isError && <p role="status" className="mt-1 text-[11px] text-amber-200" data-testid="world-city-activity-unavailable">Actividad de KONG sin conectar.</p>}
-        {officeWing === "kong" && failed && <p role="status" className="mt-1 text-[11px] text-zinc-300" data-testid="world-city-map-fallback">Mapa 3D no disponible. Usa la lista de ciudades.</p>}
-        {officeWing === "kong" && !cityRooms.length && <p role="status" className="mt-1 text-[11px] text-zinc-300">{cityDirectory.isLoading ? "Consultando el directorio de KONG…" : "Directorio de ciudades no disponible."}</p>}
-        {officeWing === "main" && <p className="mt-1 text-xs text-zinc-400">
-          {council.view ? `${trainees.length} en la academia · ${council.view.debates.length} debates · consejo cada 15 min · costo $0` : council.error || "Consejo conectando..."}
-        </p>}
-        {officeWing === "main" && company?.events?.[0] && <p className="mt-1 truncate text-[11px] text-violet-200" data-testid="world-last-event">Ultimo: {company.events[0].text}</p>}
-        <div className={cn("pointer-events-auto flex flex-wrap gap-2", officeWing === "kong" ? "mt-2" : "mt-3")}>
-          <button type="button" onClick={() => officeWing === "kong" ? changeWing("main") : focusRoom("kong")} className={cn("rounded-full border-2 border-violet-200 bg-violet-500 font-bold text-white hover:bg-violet-400", officeWing === "kong" ? "px-3 py-1 text-[11px]" : "px-4 py-2 text-sm")} data-testid="world-kong-wing">{officeWing === "kong" ? "Volver a la oficina principal" : "Ver equipo KONG"}</button>
-          {officeWing === "kong" ? (
-            <>
-              <button type="button" aria-expanded={cityOverviewOpen} aria-controls="world-city-overview" onClick={() => setCityOverviewOpen(open => !open)} className="rounded-full border border-white/15 bg-black/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10" data-testid="world-overview">Todas las ciudades</button>
-              <button type="button" aria-expanded={overlay === "city-director"} onClick={() => { setDirectorCityId(selectedCity?.city.id ?? ""); setOverlay(overlay === "city-director" ? "none" : "city-director"); }} className="rounded-full border border-amber-200/40 bg-amber-400/15 px-3 py-1.5 text-xs font-semibold text-amber-100" data-testid="world-city-director-toggle">Director de ciudades</button>
-            </>
-          ) : (
-            <button type="button" onClick={() => focusRoom(null)} className="rounded-full border border-white/15 bg-black/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10" data-testid="world-overview">Vista general</button>
-          )}
-          {officeWing === "kong" && selectedCity && <button type="button" onClick={() => focusRoom(null)} className="rounded-full border border-white/15 bg-black/60 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10" data-testid="world-city-return-map">Volver al mapa 3D</button>}
-          {officeWing === "main" && <>
-          <button type="button" onClick={() => setOverlay(overlay === "ceo" ? "none" : "ceo")} className="rounded-full border border-amber-200/40 bg-amber-400/20 px-3 py-1.5 text-xs font-semibold text-amber-50 hover:bg-amber-400/35" data-testid="world-ceo-channel">Canal con el CEO</button>
-          <button type="button" onClick={() => setOverlay(overlay === "ranking" ? "none" : "ranking")} className="rounded-full border border-emerald-200/40 bg-emerald-400/15 px-3 py-1.5 text-xs font-semibold text-emerald-50 hover:bg-emerald-400/30" data-testid="world-ranking">Tabla de posiciones</button>
-          <button type="button" onClick={runCouncil} disabled={busy || !council.view} className="rounded-full border border-violet-200/40 bg-violet-500/20 px-3 py-1.5 text-xs font-semibold text-violet-50 hover:bg-violet-500/35 disabled:opacity-50" data-testid="world-council-run">Reunir consejo</button>
-          </>}
-        </div>
-        {officeWing === "kong" && <div id="world-city-controls-content" hidden={!cityControlsOpen} className="pointer-events-auto mt-2 space-y-2" data-testid="world-city-controls">
-          <p className="text-xs text-zinc-300">{cityRooms.length} ciudades · 7 agentes por ciudad · {cityRegistered} con registro reciente. Completado no significa trabajando.</p>
-          {(cityDirectory.isError || citySnapshot.isError) && <p role="status" className="text-xs text-amber-200">{cityDirectory.isError ? "No se pudo actualizar el directorio. Solo se conserva su ultima lectura reciente." : "No se pudo consultar la actividad registrada de KONG. Los agentes aparecen sin evidencia."}</p>}
-          {cityDirectory.isLoading && <p className="text-xs text-zinc-400">Consultando ciudades configuradas…</p>}
-          {!cityDirectory.isLoading && cityRooms.length === 0 && <p role="status" className="text-xs text-amber-200">Directorio no disponible. No se inventaran ciudades ni agentes.</p>}
-          <label className="block text-[11px] text-zinc-300" htmlFor="world-city-country-select">Filtrar por país</label>
-          <select id="world-city-country-select" value={activeCityCountry} disabled={!cityCountries.length} onChange={event => { setCityCountry(event.target.value); focusRoom(null); }} className="w-full rounded-lg border border-white/20 bg-[#0b1220] px-2 py-1.5 text-xs text-white" data-testid="world-city-country-select">
-            <option value="">Todos los países ({cityCountries.length})</option>
-            {cityCountries.map(country => <option key={country.code} value={country.code}>{country.name} · {country.cityCount} {country.cityCount === 1 ? "ciudad" : "ciudades"}</option>)}
-          </select>
-          <label className="block text-[11px] text-zinc-300" htmlFor="world-city-select">Ir a una ciudad</label>
-          <select id="world-city-select" value={selectedCity?.id || ""} disabled={!filteredCityRooms.length} onChange={event => { if (event.target.value) openCityFromOverview(event.target.value); else focusRoom(null); }} className="w-full rounded-lg border border-white/20 bg-[#0b1220] px-2 py-1.5 text-xs text-white" data-testid="world-city-select">
-            {filteredCityRooms.length > 0 && <option value="">Elegir ciudad ({filteredCityRooms.length})</option>}
-            {!filteredCityRooms.length && <option value="">Sin directorio</option>}
-            {filteredCityRooms.map(room => <option key={room.id} value={room.id}>{room.name} · {room.city.countryCode}</option>)}
-          </select>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs text-zinc-300">{filteredCityRooms.length} ciudades en el mapa</span>
-            <button type="button" onClick={() => { setCityCountry(""); focusRoom(null); }} className="rounded-full bg-white px-3 py-1 text-xs font-bold text-black" data-testid="world-city-clear">Restablecer vista KONG</button>
+        <div id="world-office-panel-content" hidden={mainPanelMinimized}>
+          <p className="mt-2 text-lg font-black" data-testid="world-working-count">{workingCount} de {companyIds.length} {officeWing === "kong" ? "en ejecución verificada" : "con señales operativas"}</p>
+          {officeWing === "kong" && <p className="mt-1 text-xs text-zinc-300">Todos los puestos centrales y {cityRooms.length} ciudades en la misma oficina. La oficina observa y coordina; abrirla no activa los ejecutores.</p>}
+          <p className="mt-1 text-xs text-zinc-400">{trainees.length} en la academia · puntuación por evidencia registrada.</p>
+          {officeWing === "kong" && (citySnapshot.isError || cityDirectory.isError) && <p role="status" className="mt-1 text-xs text-amber-200">Actividad de KONG sin conectar. Los puestos no muestran trabajo sin evidencia vigente.</p>}
+          {failed && <p role="status" className="mt-1 text-xs text-amber-200" data-testid="world-kong-fallback">Vista 3D no disponible. Todos los agentes están accesibles por departamento.</p>}
+          {company?.events?.[0] && <p className="mt-1 text-xs text-violet-200" data-testid="world-last-event">Último: {company.events[0].text}</p>}
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={() => changeWing(officeWing === "kong" ? "main" : "kong")} className="rounded-full bg-violet-500 px-3 py-2 text-xs font-bold" data-testid="world-kong-wing">{officeWing === "kong" ? "Volver a la oficina principal" : "Ver oficina KONG"}</button>
+            <button type="button" onClick={() => focusRoom(null)} className="rounded-full border border-white/20 px-3 py-2 text-xs" data-testid="world-overview">Vista general</button>
+            <button type="button" onClick={() => setOverlay(overlay === "ceo" ? "none" : "ceo")} className="rounded-full border border-amber-200/40 px-3 py-2 text-xs text-amber-100" data-testid="world-ceo-channel">Canal con el CEO</button>
+            <button type="button" onClick={() => setOverlay(overlay === "ranking" ? "none" : "ranking")} className="rounded-full border border-emerald-200/40 px-3 py-2 text-xs text-emerald-100" data-testid="world-ranking">Tabla de posiciones</button>
+            <button type="button" onClick={runCouncil} disabled={busy || !council.view} className="rounded-full border border-violet-200/40 px-3 py-2 text-xs disabled:opacity-50" data-testid="world-council-run">Reunir consejo</button>
+            {officeWing === "kong" && <>
+              <button type="button" onClick={() => setOverlay(overlay === "kong-talk" ? "none" : "kong-talk")} className="rounded-full border border-cyan-200/40 px-3 py-2 text-xs text-cyan-100" data-testid="world-kong-collaboration">Colaboración · {kongCollaboration?.exchanges.length ?? 0}</button>
+              <button type="button" onClick={() => setOverlay(overlay === "city-director" ? "none" : "city-director")} className="rounded-full border border-amber-200/40 px-3 py-2 text-xs" data-testid="world-city-director-toggle">Director de ciudades</button>
+            </>}
           </div>
-        </div>}
-        {(officeWing === "main" || cityControlsOpen) && <nav className="pointer-events-auto mt-2 flex max-w-full gap-1.5 overflow-x-auto pb-1 [color-scheme:dark] [scrollbar-color:#404b63_#080c14] [scrollbar-width:thin]" aria-label="Departamentos" data-testid="world-deptnav">
-          {(officeWing === "main" ? mainDepartments : departments).map((department) => (
-            <button
-              key={department.id}
-              type="button"
-              onClick={() => focusRoom(department.id)}
-              className={cn(
-                "shrink-0 rounded-full border px-2.5 py-1 text-[11px] font-semibold text-white/90 hover:bg-white/10",
-                focusedDepartment === department.id ? "bg-white/15" : "bg-black/50",
-              )}
-              style={{ borderColor: `${department.color}88` }}
-              data-testid={`world-nav-${department.id}`}
-            >
-              {department.name}
-            </button>
-          ))}
-        </nav>}
-        {message && <p className="mt-2 text-xs text-violet-100" data-testid="world-message">{message}</p>}
+          <nav className="mt-3 flex flex-wrap gap-1.5" aria-label="Departamentos" data-testid="world-deptnav">
+            {departments.map(department => <button key={department.id} type="button" onClick={() => { focusRoom(department.id); setCityDetailsOpen(true); }} aria-pressed={focusedDepartment === department.id} className="rounded-full border px-2 py-1 text-[11px] hover:bg-white/15" style={{borderColor: department.color}} data-testid={`world-nav-${department.id}`}>{department.name}</button>)}
+          </nav>
+          {message && <p role="status" className="mt-2 text-xs text-violet-100" data-testid="world-message">{message}</p>}
         </div>
-      </div>
+      </section>
+      {officeWing === "kong" && overlay === "kong-talk" && <section aria-label="Colaboración KONG" className="absolute right-3 top-[220px] z-30 sm:top-36 lg:top-24 max-h-[48%] w-[min(420px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-cyan-200/25 bg-[#07131b]/95 p-4 text-xs text-white" data-testid="world-kong-collaboration-panel">
+        <div className="flex justify-between gap-2"><h2 className="font-bold text-cyan-100">Colaboración KONG</h2><button type="button" onClick={() => setOverlay("none")} aria-label="Cerrar colaboración">Cerrar</button></div>
+        <p className="mt-2 text-zinc-300">Revisión automática de evidencia entre supervisión y operaciones. Son propuestas pendientes de revisión; no conversaciones de IA ni acciones ya ejecutadas.</p>
+        {!kongCollaboration?.exchanges.length && <p className="mt-3">Sin intercambios con evidencia vigente.</p>}
+        {kongCollaboration?.exchanges.map(exchange => <article key={exchange.id} className="mt-3 rounded-lg border border-white/10 p-2">
+          <h3 className="font-bold">{cityRooms.find(room => room.city.id === exchange.cityId)?.name ?? exchange.cityId} · {exchange.category}</h3>
+          {exchange.comments.map(comment => <p key={comment.author} className="mt-1"><b>{comment.author === "supervisor" ? "Supervisor" : "Operaciones"}:</b> {comment.text}</p>)}
+          <p className="mt-2 text-amber-100">Para el CEO · {exchange.proposal.text}</p>
+        </article>)}
+      </section>}
 
-      {officeWing === "kong" && cityOverviewOpen && (
-        <section id="world-city-overview" aria-labelledby="world-city-overview-title" className="absolute inset-x-3 bottom-3 z-20 flex max-h-[min(53%,34rem)] flex-col rounded-2xl border border-white/15 bg-[#070b14]/95 p-2.5 text-white shadow-2xl sm:left-auto sm:w-[min(660px,calc(100%_-_1.5rem))] sm:max-h-[min(64%,36rem)]" data-testid="world-city-overview">
-          <div className="mb-2 flex shrink-0 items-start justify-between gap-2">
-            <div>
-              <h2 id="world-city-overview-title" className="text-sm font-bold">Todas las ciudades ({cityRooms.length})</h2>
-              <p className="text-[11px] text-zinc-400">Elige una ciudad para ver sus siete figuras.</p>
-            </div>
-            <button type="button" onClick={() => setCityOverviewOpen(false)} className="shrink-0 rounded-full border border-white/20 px-2 py-1 text-[11px] font-semibold hover:bg-white/10" aria-label="Minimizar todas las ciudades">Minimizar</button>
-          </div>
-          {citySnapshot.isError && <p role="status" className="mb-2 shrink-0 text-[11px] text-amber-200" data-testid="world-city-overview-activity-unavailable">Actividad de KONG sin conectar. El directorio sigue visible y la actividad queda sin verificar.</p>}
-          {cityRooms.length ? (
-            <ul className="grid grid-cols-2 gap-1 overflow-y-auto pr-1 min-[480px]:grid-cols-3 sm:grid-cols-5">
-              {cityRooms.map(room => {
-                const running = room.agents.filter(agent => agent.status.state === "working").length;
-                const recorded = room.agents.filter(agent => agent.hasDurableEvidence).length;
-                return (
-                  <li key={room.id}>
-                    <button type="button" onClick={() => openCityFromOverview(room.id)} className="flex h-full w-full flex-col rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-left hover:border-violet-300 focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-300" data-testid="world-city-overview-city">
-                      <span className="text-xs font-semibold">{room.name} <span className="text-[10px] text-zinc-400">{room.city.countryCode}</span></span>
-                      {room.upcomingEvents !== null && <span className="text-[10px] text-cyan-200">{room.upcomingEvents} eventos próximos · 30 días</span>}
-                      <span className={cn("text-[10px]", running ? "text-emerald-300" : "text-zinc-400")}>{recorded ? `${running} verificados en ejecución · ${recorded}/7 registrados` : "Sin evidencia reciente"}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          ) : <p role="status" className="text-xs text-zinc-300">{cityDirectory.isLoading ? "Consultando el directorio de KONG…" : "Directorio de ciudades no disponible."}</p>}
-        </section>
-      )}
-
-      {officeWing === "kong" && overlay === "city-director" && <section aria-label="Director de ciudades de KONG" data-testid="world-city-director-panel" className="absolute bottom-3 right-3 z-30 max-h-[54%] w-[min(410px,calc(100vw-1.5rem))] space-y-2 overflow-y-auto rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-3 text-xs text-white shadow-2xl [color-scheme:dark]">
+      {officeWing === "kong" && overlay === "city-director" && <section aria-label="Director de ciudades de KONG" data-testid="world-city-director-panel" className="absolute top-[220px] right-3 z-30 sm:top-36 lg:top-24 max-h-[45%] w-[min(410px,calc(100vw-1.5rem))] space-y-2 overflow-y-auto rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-3 text-xs text-white shadow-2xl [color-scheme:dark]">
         <div className="flex items-center justify-between gap-2">
           <h2 className="text-sm font-bold text-amber-100">Director de ciudades · KONG</h2>
           <button type="button" onClick={() => setOverlay("none")} className="rounded-full border border-white/20 px-2 py-1">Cerrar</button>
@@ -618,13 +525,13 @@ export function AgentsOfficeWorld({
         <a href="https://kongnightlife.com/admin/ceo" className="inline-block text-amber-100 underline">Abrir la revisión del CEO en KONG</a>
       </section>}
       {overlay === "ranking" && (
-        <section className="absolute bottom-3 right-3 z-30 max-h-[55%] w-[min(380px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-emerald-200/20 bg-[#06100d]/95 p-4 text-white shadow-2xl [color-scheme:dark]" data-testid="world-ranking-panel">
+        <section className="absolute top-[220px] right-3 z-30 sm:top-36 lg:top-24 max-h-[45%] w-[min(380px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-emerald-200/20 bg-[#06100d]/95 p-4 text-white shadow-2xl [color-scheme:dark]" data-testid="world-ranking-panel">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-200">Tabla de posiciones</p>
             <button type="button" onClick={() => setOverlay("none")} className="text-xs text-zinc-400 hover:text-white">✕</button>
           </div>
-          <p className="mt-1 text-[11px] text-zinc-400">Puntos del consejo por señales operativas y órdenes confirmadas por ti. El primer puesto queda de subdirector.</p>
-          {leaderboardRows.length === 0 && <p className="mt-3 text-xs text-zinc-400">Todavia no hay puntos: se reparten en cada reunion del consejo.</p>}
+          <p className="mt-1 text-[11px] text-zinc-400">{officeWing === "kong" ? "Puntos por resultados completados verificados. Consultar no suma puntos; cerrar a mano tampoco." : "Puntos del consejo por señales operativas y órdenes cerradas con evidencia. El primer puesto queda de subdirector."}</p>
+          {leaderboardRows.length === 0 && <p className="mt-3 text-xs text-zinc-400">{officeWing === "kong" ? "Todavía no hay puntos: faltan resultados completados con evidencia verificable." : "Todavía no hay puntos: el consejo revisa las evidencias en cada reunión."}</p>}
           <ol className="mt-3 space-y-1.5">
             {leaderboardRows.slice(0, 15).map((row) => (
               <li key={row.agentId} className="flex items-center gap-2 rounded-lg bg-white/[0.04] px-2 py-1.5 text-[11px]" data-testid="world-ranking-row">
@@ -639,18 +546,19 @@ export function AgentsOfficeWorld({
       )}
 
       {overlay === "ceo" && (
-        <section className="absolute bottom-3 right-3 z-30 flex max-h-[60%] w-[min(420px,calc(100vw-1.5rem))] flex-col rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-4 text-white shadow-2xl [color-scheme:dark]" data-testid="world-ceo-panel">
+        <section className="absolute top-[220px] right-3 z-30 sm:top-36 lg:top-24 flex max-h-[45%] w-[min(420px,calc(100vw-1.5rem))] flex-col rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-4 text-white shadow-2xl [color-scheme:dark]" data-testid="world-ceo-panel">
           <div className="flex items-center justify-between">
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200">Canal directo con el CEO</p>
             <button type="button" onClick={() => setOverlay("none")} className="text-xs text-zinc-400 hover:text-white">✕</button>
           </div>
-          <p className="mt-1 text-[11px] text-zinc-400">Escribe lo que necesitas y el CEO lo asigna al departamento correcto. Queda anotado como tarea: los agentes no la ejecutan solos. Para dar puntos, cierrala con una ejecucion exitosa como evidencia; cerrarla a mano solo la anota.</p>
+          <p className="mt-1 text-[11px] text-zinc-400">{officeWing === "kong" ? "Escribe una orden para coordinar al equipo KONG. Queda asignada, pero no activa ejecutores. Aquí puedes cerrarla a mano con 0 puntos; los resultados de KONG se verifican por separado." : "Escribe lo que necesitas y el CEO lo asigna al departamento correcto. Queda anotado como tarea: los agentes no la ejecutan solos. Para dar puntos, ciérrala con una ejecución exitosa como evidencia; cerrarla a mano solo la anota."}</p>
           <div className="mt-3 flex gap-2">
             <input
               value={orderText}
               onChange={(event) => setOrderText(event.target.value)}
               onKeyDown={(event) => { if (event.key === "Enter") void sendOrder(); }}
-              placeholder="Ej: sube el video nuevo de Black Room"
+              aria-label="Orden para el CEO"
+              placeholder={officeWing === "kong" ? "Ej: revisar eventos de Miami" : "Ej: revisar el video nuevo de Black Room"}
               maxLength={500}
               className="min-w-0 flex-1 rounded-full border border-white/10 bg-black/50 px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:border-amber-200/50 focus:outline-none"
               data-testid="world-order-input"
@@ -696,13 +604,12 @@ export function AgentsOfficeWorld({
 
       {!focused && overlay === "none" && (
         <p className={cn("pointer-events-none absolute bottom-4 left-1/2 z-10 -translate-x-1/2 rounded-full border border-white/10 bg-black/60 px-4 py-2 text-xs text-zinc-300", officeWing === "kong" && "hidden sm:block")}>
-          {failed ? "Vista sin 3D: elige una ciudad para ver sus siete agentes." : officeWing === "kong" ? "Toca una ciudad para ver sus siete agentes" : "Arrastra para girar · rueda para acercar · toca un departamento para entrar"}
+          {failed ? "Vista sin 3D: elige un departamento para ver sus agentes." : officeWing === "kong" ? "Todos los agentes de KONG · toca un departamento para entrar" : "Arrastra para girar · rueda para acercar · toca un departamento para entrar"}
         </p>
       )}
 
       {focused && (
-        <aside className={cn("absolute bottom-3 right-3 z-20 flex flex-col rounded-2xl border border-white/10 bg-[#070b14]/95 text-white shadow-2xl backdrop-blur", selectedCity ? cn("max-h-[min(38vh,350px)] overflow-hidden p-2.5", cityDetailsOpen ? "w-[min(320px,calc(100vw-1.5rem))]" : "w-fit max-w-[min(320px,calc(100vw-1.5rem))]") : "top-[42%] w-[min(390px,calc(100vw-1.5rem))] overflow-y-auto p-4 sm:top-20")} data-testid="world-panel">
-          {focused.id === "kong" && <button type="button" data-testid="world-open-city-office" className="mb-3 self-start rounded-full border border-lime-300/50 bg-lime-400/15 px-3 py-1.5 text-xs font-bold text-lime-100" onClick={() => changeWing("kong")}>Ver oficina de las ciudades</button>}
+        <aside className="absolute right-3 top-[220px] z-20 sm:top-36 lg:top-24 flex max-h-[42%] w-[min(390px,calc(100vw-1.5rem))] flex-col overflow-y-auto rounded-2xl border border-white/10 bg-[#070b14]/95 p-3 text-white shadow-2xl sm:max-h-[65%]" data-testid="world-panel">
           <div className="flex shrink-0 items-start justify-between gap-2">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.24em]" style={{ color: focused.color }}>{focused.name}</p>
@@ -716,7 +623,7 @@ export function AgentsOfficeWorld({
 
           <div id={selectedCity ? "world-city-details-content" : undefined} hidden={Boolean(selectedCity) && !cityDetailsOpen} className={selectedCity && cityDetailsOpen ? "flex min-h-0 flex-col overflow-y-auto pr-1" : undefined}>
 
-          {officeWing === "main" && sources.length > 0 && (
+          {sources.length > 0 && (
             <section className="mt-4">
               <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
                 <span>Fuentes conectadas</span>
@@ -737,7 +644,7 @@ export function AgentsOfficeWorld({
             <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">{focused.id === "academia" ? "Alumnos" : "Agentes en paralelo"}</p>
             <div className={selectedCity ? "mt-1 grid grid-cols-2 gap-1" : "mt-2 space-y-1.5"}>
               {focusedAgents.map((agent) => {
-                const career = agent.cityAgent ? undefined : careers[agent.id];
+                const career = careers[agent.id];
                 return (
                   <button key={`row-${agent.id}`} type="button" onClick={() => setPanelAgentId(agent.id)} className={cn("w-full rounded-lg px-2 py-1.5 text-left hover:bg-white/5", panelAgent?.id === agent.id && "bg-white/[0.06]")} data-testid={`world-agent-row-${agent.id}`}>
                     <div className="flex items-center justify-between gap-2 text-[11px]">

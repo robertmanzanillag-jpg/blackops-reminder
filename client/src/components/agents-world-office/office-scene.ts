@@ -37,6 +37,7 @@ export type SceneData = {
   departments: SceneDepartment[];
   debates: SceneDebate[];
   cityLayout?: "overview" | "detail";
+  company?: "KONG" | "BlackOps";
 };
 
 export type SceneCallbacks = {
@@ -258,7 +259,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   hubLabel.type = "button";
   hubLabel.addEventListener("click", callbacks.onOpenCityDirector);
   hubLabel.className = "pointer-events-none absolute -translate-x-1/2 -translate-y-full rounded-md border border-amber-200/40 bg-black/70 px-2 py-1 text-[11px] font-bold tracking-[0.2em] text-amber-100";
-  hubLabel.textContent = "CEO · ORQUESTADOR";
+  hubLabel.textContent = "BlackOps · CEO";
   hubLabel.dataset.testid = "world-ceo-orb";
   labelLayer.appendChild(hubLabel);
 
@@ -267,6 +268,10 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   let debateArcs: { curve: any; particles: any[]; line: any }[] = [];
   let focused: string | null = null;
   let cityLayout: SceneData["cityLayout"];
+  let largeOffice = false;
+  let latestData: SceneData | undefined;
+  let sceneVersion = 0;
+  let renderedVersion = -1;
   let cityMapSize = officeCityMapPosition(0, 0);
   let overviewDesks: { group: any; animate: (time: number) => void } | undefined;
 
@@ -275,6 +280,8 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   const goalTarget = new THREE.Vector3(0, 0, 0);
   let radius = 52;
   let goalRadius = 52;
+  let officeOverviewRadius = 52;
+  let officeRingRadius = RING_RADIUS;
   let theta = 0.6;
   let goalTheta = 0.6;
   let phi = 0.95;
@@ -301,6 +308,17 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     if (panel > 0) camera.setViewOffset(w + panel, h, panel, 0, w, h);
     else camera.clearViewOffset();
     camera.aspect = panel > 0 ? (w + panel) / h : w / h;
+    camera.updateProjectionMatrix();
+  }
+
+  function fitOfficeOverview() {
+    const aspect = Math.max(0.2, host.clientWidth / Math.max(1, host.clientHeight));
+    const halfAngle = Math.atan(Math.tan(Math.PI * camera.fov / 360) * Math.min(1, aspect));
+    // Fit the full circular office, including the near platforms, on portrait and desktop.
+    officeOverviewRadius = Math.max(52, (officeRingRadius + 13) / Math.sin(halfAngle) * 1.12);
+    camera.far = Math.max(400, officeOverviewRadius + 150);
+    scene.fog.near = Math.max(45, officeOverviewRadius * 0.85);
+    scene.fog.far = Math.max(110, officeOverviewRadius * 1.7 + 20);
     camera.updateProjectionMatrix();
   }
 
@@ -501,9 +519,16 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   }
 
   function buildCityOverviewDesks() {
-    const desks = platforms.flatMap(({ department, center }) => department.agents.map((agent, index) => {
-      const position = officeCityDeskPosition(index);
-      return { agent, x: center.x + position.x, z: center.z + position.z };
+    const desks = platforms.flatMap(({ department, center, group, desks: detailDesks }) => detailDesks.length ? [] : department.agents.map((agent, index) => {
+      if (cityLayout === "overview") {
+        const position = officeCityDeskPosition(index);
+        return { agent, x: center.x + position.x, z: center.z + position.z };
+      }
+      const cols = Math.min(5, Math.max(1, department.agents.length));
+      const rows = Math.max(1, Math.ceil(department.agents.length / cols));
+      group.updateMatrixWorld(true);
+      const position = group.localToWorld(new THREE.Vector3((index % cols - (cols - 1) / 2) * DESK_SPACING_X, 0, (Math.floor(index / cols) - (rows - 1) / 2) * DESK_SPACING_Z));
+      return { agent, x: position.x, z: position.z };
     }));
     host.dataset.cityDeskCount = String(desks.length);
     const running = desks.flatMap((desk, index) => desk.agent.state === "working" ? [index] : []);
@@ -567,13 +592,18 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
 
   function build(data: SceneData) {
     clearDynamic();
+    latestData = data;
+    sceneVersion += 1;
+    host.dataset.sceneSettled = "false";
+    largeOffice = data.departments.reduce((sum, department) => sum + department.agents.length, 0) > 60;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, largeOffice ? 1 : 2));
     cityLayout = data.cityLayout;
     const cityOverview = cityLayout === "overview";
     cityMapSize = officeCityMapPosition(0, data.departments.length);
     hub.visible = cityLayout !== "detail";
     hub.scale.setScalar(cityOverview ? 0.78 : 1);
     beam.visible = cityLayout !== "detail";
-    hubLabel.textContent = "CEO · ORQUESTADOR";
+    hubLabel.textContent = `${data.company || "BlackOps"} · CEO`;
     hubLabel.disabled = !cityOverview;
     hubLabel.classList.toggle("pointer-events-none", !cityOverview);
     hubLabel.classList.toggle("pointer-events-auto", cityOverview);
@@ -586,11 +616,20 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       delete host.dataset.cityRunningDeskCount;
     }
     const count = Math.max(1, data.departments.length);
+    const widest = Math.max(9, ...data.departments.map(department => Math.min(5, Math.max(1, department.agents.length)) * DESK_SPACING_X + 1.4));
+    officeRingRadius = Math.max(RING_RADIUS, count * (widest + 2) / (2 * Math.PI));
+    fitOfficeOverview();
+    if (!cityLayout) {
+      camera.far = Math.max(400, officeOverviewRadius + 150);
+      camera.updateProjectionMatrix();
+      scene.fog.near = Math.max(45, officeOverviewRadius * 0.85);
+      scene.fog.far = Math.max(110, officeOverviewRadius * 1.7 + 20);
+    }
     data.departments.forEach((department, index) => {
       const angle = cityLayout ? -Math.PI / 2 : (index / count) * Math.PI * 2 - Math.PI / 2;
       const cityPosition = cityOverview ? officeCityMapPosition(index, count) : { x: 0, z: 0 };
-      const cx = cityLayout ? cityPosition.x : Math.cos(angle) * RING_RADIUS;
-      const cz = cityLayout ? cityPosition.z : Math.sin(angle) * RING_RADIUS;
+      const cx = cityLayout ? cityPosition.x : Math.cos(angle) * officeRingRadius;
+      const cz = cityLayout ? cityPosition.z : Math.sin(angle) * officeRingRadius;
       const group = new THREE.Group();
       group.position.set(cx, 0, cz);
       // Local +z points to the hub; monitors face outward.
@@ -613,7 +652,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       const edges = new THREE.LineSegments(new THREE.EdgesGeometry(new THREE.BoxGeometry(width, 0.5, depth)), new THREE.LineBasicMaterial({ color: colorNum }));
       edges.position.y = -0.25;
       group.add(edges);
-      if (!cityOverview) {
+      if (!cityOverview && !largeOffice) {
         const glow = new THREE.PointLight(colorNum, 0.9, 14, 1.5);
         glow.position.set(0, 4, 0);
         group.add(glow);
@@ -623,7 +662,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       group.add(platformHit);
       raycastTargets.push(platformHit);
 
-      const desks = cityOverview ? [] : department.agents.map((agent, i) => {
+      const desks = cityOverview || (largeOffice && focused !== department.id) ? [] : department.agents.map((agent, i) => {
         const col = i % cols;
         const row = Math.floor(i / cols);
         const x = (col - (cols - 1) / 2) * DESK_SPACING_X;
@@ -632,11 +671,19 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       });
       desks.forEach(updateDeskLabel);
 
-      const label = document.createElement(cityOverview ? "button" : "div");
+      const label = document.createElement("button");
       if (label instanceof HTMLButtonElement) label.type = "button";
       label.className = cityOverview
         ? "pointer-events-auto absolute max-w-[65px] -translate-x-1/2 -translate-y-full cursor-pointer rounded border px-1 py-0.5 text-center text-[9px] font-semibold leading-tight shadow-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-300 sm:max-w-[110px] sm:text-[11px]"
         : "pointer-events-auto absolute -translate-x-1/2 -translate-y-full cursor-pointer whitespace-nowrap rounded-lg border px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] shadow-xl";
+      if (largeOffice && !cityOverview) {
+        label.style.maxWidth = "92px";
+        label.style.overflow = "hidden";
+        label.style.textOverflow = "ellipsis";
+        label.style.fontSize = "9px";
+        label.style.letterSpacing = "0.03em";
+        label.title = `${department.name} · ${department.agents.length} puestos`;
+      }
       label.style.borderColor = `${department.color}99`;
       label.style.background = "rgba(2,6,23,0.82)";
       label.style.color = department.color;
@@ -687,14 +734,26 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       });
     });
 
-    if (cityOverview) buildCityOverviewDesks();
+    if (cityOverview || largeOffice) buildCityOverviewDesks();
+    const citySeats = data.departments.flatMap(department => department.agents).filter(agent => agent.id.startsWith("kong-city:"));
+    host.dataset.cityDeskCount = String(citySeats.length);
+    host.dataset.cityRunningDeskCount = String(citySeats.filter(agent => agent.state === "working").length);
+    host.dataset.officeDeskCount = String(data.departments.reduce((sum, department) => sum + department.agents.length, 0));
     // World positions for desks (after platforms are oriented).
     scene.updateMatrixWorld(true);
     platforms.forEach((platform) => platform.desks.forEach((desk) => desk.group.getWorldPosition(desk.worldPos)));
 
     // Debates: violet arcs between reviewer and subject desks.
-    const deskById = new Map<string, DeskRuntime>();
-    platforms.forEach((platform) => platform.desks.forEach((desk) => deskById.set(desk.agent.id, desk)));
+    const deskById = new Map<string, { worldPos: any }>();
+    platforms.forEach((platform) => {
+      platform.desks.forEach((desk) => deskById.set(desk.agent.id, desk));
+      // Compact overview seats still participate in evidence-backed exchanges.
+      const cols = Math.min(5, Math.max(1, platform.department.agents.length));
+      const rows = Math.max(1, Math.ceil(platform.department.agents.length / cols));
+      platform.department.agents.forEach((agent, index) => {
+        if (!deskById.has(agent.id)) deskById.set(agent.id, { worldPos: platform.group.localToWorld(new THREE.Vector3((index % cols - (cols - 1) / 2) * DESK_SPACING_X, 0, (Math.floor(index / cols) - (rows - 1) / 2) * DESK_SPACING_Z)) });
+      });
+    });
     data.debates.forEach((debate) => {
       const from = deskById.get(debate.from);
       const to = deskById.get(debate.to);
@@ -716,13 +775,18 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   }
 
   function focusDepartment(departmentId: string | null, notify = true) {
+    const changed = focused !== departmentId;
+    if (changed) { host.dataset.sceneSettled = "false"; renderedVersion = -1; }
     focused = departmentId;
+    // Keep every desk visible using shared meshes in the overview; only the selected room
+    // needs per-agent animated monitors and detailed figures.
+    if (changed && largeOffice && latestData) build(latestData);
     const platform = platforms.find((item) => item.department.id === departmentId);
     if (!platform && cityLayout === "overview") {
       frameCityOverview();
     } else if (!platform) {
       goalTarget.set(0, 0, 0);
-      goalRadius = 52;
+      goalRadius = officeOverviewRadius;
       goalPhi = 0.95;
     } else {
       goalTarget.copy(platform.center).setY(1.4);
@@ -776,7 +840,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   };
   const onWheel = (event: WheelEvent) => {
     event.preventDefault();
-    const maxRadius = cityLayout === "overview" ? camera.far - 50 : 80;
+    const maxRadius = cityLayout === "overview" ? camera.far - 50 : Math.max(80, officeOverviewRadius * 1.5);
     goalRadius = Math.min(maxRadius, Math.max(9, goalRadius * (1 + Math.sign(event.deltaY) * 0.08)));
     lastInteraction = performance.now();
   };
@@ -786,11 +850,13 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   el.addEventListener("wheel", onWheel, { passive: false });
 
   const resizeObserver = new ResizeObserver(() => {
+    sceneVersion += 1;
     const w = host.clientWidth;
     const h = Math.max(1, host.clientHeight);
     renderer.setSize(w, h);
     applyViewOffset();
     if (cityLayout === "overview" && !focused) frameCityOverview();
+    else if (!cityLayout) { fitOfficeOverview(); if (!focused) goalRadius = officeOverviewRadius; }
   });
   resizeObserver.observe(host);
 
@@ -813,7 +879,12 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   let lastScreenDraw = 0;
   const clock = new THREE.Clock();
   const tmp = new THREE.Vector3();
+  let lastFrameAt = 0;
   function frame() {
+    const now = performance.now();
+    if (options.reducedMotion && renderedVersion === sceneVersion && target.distanceTo(goalTarget) < 0.001 && Math.abs(radius - goalRadius) < 0.001 && Math.abs(theta - goalTheta) < 0.001 && Math.abs(phi - goalPhi) < 0.001) return;
+    if (largeOffice && now - lastFrameAt < 1000 / 20) return;
+    lastFrameAt = now;
     const dt = Math.min(clock.getDelta(), 0.1);
     const t = clock.elapsedTime;
     const motion = options.reducedMotion ? 0 : 1;
@@ -834,6 +905,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     beam.material.opacity = 0.08 + Math.sin(t * 1.5) * 0.03 * hubMotion;
     overviewDesks?.animate(t);
 
+    const labelBounds: Array<{ x: number; y: number }> = [];
     platforms.forEach((platform) => {
       platform.desks.forEach((desk) => {
         const state = desk.agent.state;
@@ -855,7 +927,15 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
         placeLabel(desk.label, tmp, focused ? focused === platform.department.id : radius < 24);
       });
       tmp.copy(platform.center).setY(cityLayout === "overview" ? 2.2 : platform.desks.length > 3 ? 6.4 : 5.2);
-      placeLabel(platform.label, tmp, focused !== platform.department.id);
+      let labelVisible = focused !== platform.department.id;
+      if (largeOffice) {
+        projected.copy(tmp).project(camera);
+        const x = ((projected.x + 1) / 2) * host.clientWidth;
+        const y = ((1 - projected.y) / 2) * host.clientHeight;
+        labelVisible = !focused && !labelBounds.some(bounds => Math.abs(bounds.x - x) < 96 && Math.abs(bounds.y - y) < 27);
+        if (labelVisible) labelBounds.push({x, y});
+      }
+      placeLabel(platform.label, tmp, labelVisible);
       const flow = platform.flow;
       flow?.particles.forEach((particle, i) => {
         const u = (t * flow.speed * motion + i / flow.particles.length) % 1;
@@ -869,16 +949,20 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     tmp.set(0, cityLayout === "overview" ? 3.2 : 4.4, 0);
     placeLabel(hubLabel, tmp, cityLayout !== "detail");
 
-    if (t - lastScreenDraw > 0.25) {
+    if (options.reducedMotion || t - lastScreenDraw > (largeOffice ? 0.5 : 0.25)) {
       lastScreenDraw = t;
       platforms.forEach((platform) => platform.desks.forEach((desk) => {
+        if (options.reducedMotion && desk.canvas.dataset.drawn === "true") return;
         const ctx = desk.canvas.getContext("2d");
         if (!ctx) return;
+        desk.canvas.dataset.drawn = "true";
         drawMonitor(ctx, desk.agent, motion ? t : 0);
         desk.texture.needsUpdate = true;
       }));
     }
     renderer.render(scene, camera);
+    renderedVersion = sceneVersion;
+    host.dataset.sceneSettled = String(target.distanceTo(goalTarget) < 0.01 && Math.abs(radius - goalRadius) < 0.01 && Math.abs(theta - goalTheta) < 0.01 && Math.abs(phi - goalPhi) < 0.01);
   }
   renderer.setAnimationLoop(frame);
 
@@ -888,7 +972,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     const priorCount = platforms.length;
     build(data);
     if (keepFocus && platforms.some((platform) => platform.department.id === keepFocus)) focusDepartment(keepFocus, false);
-    else if (priorLayout !== cityLayout || (cityLayout === "overview" && priorCount !== platforms.length)) {
+    else if (priorLayout !== cityLayout || priorCount !== platforms.length) {
       if (!cityLayout) goalTheta = 0.6;
       focusDepartment(null, false);
     }

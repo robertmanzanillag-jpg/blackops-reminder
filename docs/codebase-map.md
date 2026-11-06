@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-05T21:35:58.948Z
-Repo: `/private/tmp/br-office-reconcile-20261105`
+Generated: 2026-11-06T00:48:13.642Z
+Repo: `/Users/robertmanzanilla/Documents/Codex/2026-11-05/quioer-que-te-asgurs-de-uq-2/work/kong-office`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 772 | 689 | 2409 | 532 | 15588 |
+| 778 | 695 | 2455 | 548 | 15719 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,9 +28,9 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 161 | 158 | test:161 |
-| `server` | 158 | 154 | server:158 |
-| `client/src` | 140 | 138 | ui-component:55, client-component:36, client-page:26, client-lib:16 |
+| `tests` | 165 | 162 | test:165 |
+| `server` | 159 | 155 | server:159 |
+| `client/src` | 142 | 140 | ui-component:55, client-component:37, client-page:26, client-lib:17 |
 | `script` | 85 | 80 | script:85 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `docs` | 36 | 35 | docs:36 |
@@ -40,7 +40,6 @@ Package: `rest-express`
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `client/public` | 16 | 2 | other:16 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
-| `.local/office-evidence` | 1 | 1 | other:1 |
 | `client` | 1 | 1 | other:1 |
 | `scripts` | 4 | 1 | script:4 |
 | `shared/models` | 1 | 1 | shared:1 |
@@ -72,6 +71,7 @@ Package: `rest-express`
 - `tests/clippers-owned-source-scripts.test.ts`: `/api/clippers/external-closeout-next-action`, `/api/clippers/external-closeout-operator-queue`, `/api/clippers/external-closeout-pack`, `/api/clippers/external-closeout-proof-todo`, `/api/clippers/external-closeout-repair-work-packet`, `/api/clippers/operational-readiness`, `/api/clippers/prepare-external-closeout-pack`, `/api/clippers/prepare-operational-readiness`, `/api/clippers/run-intake-refresh-sweep`, `/api/clippers/run-post-connect-activation-sweep`
 - `tests/developer-autopilot-wiring.test.ts`: `/api/revenue-engine/delivery-workspaces/app-qa-gate`, `/api/revenue-engine/delivery-workspaces/github-handoff`, `/api/revenue-engine/delivery-workspaces/pr-status`, `/api/revenue-engine/delivery-workspaces/release-gate`
 - `tests/harness/agents-world-integrated.tsx`: `/agents-office`
+- `tests/kong-office-browser-qa.test.mjs`: `/api/agent-council/state`, `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/kong-snapshot`, `/api/app-qa-agent/status`, `/api/ceo/conversation-history`, `/api/ceo/go-live`, `/api/ceo/readiness`, `/api/fixture-owner-boundary`, `/api/github/repos`, `/api/github/repos/fixture/office-fixture/contents`, `/api/github/status`, `/api/legal-compliance/reports`, `/api/monthly-goals`, `/api/projects`, `/health`
 
 ## Test Inventory
 - `tests/._dropshipping-ceo.test.ts`
@@ -144,6 +144,9 @@ Package: `rest-express`
 - `tests/google-connector.test.ts`
 - `tests/google-drive-folder-command.test.ts`
 - `tests/google-drive-oauth.test.ts`
+- `tests/kong-company-routes.test.ts`
+- `tests/kong-company.test.ts`
+- `tests/kong-office-wing.test.ts`
 - `tests/kong-operations-routes.test.ts`
 - `tests/kong-operations.test.ts`
 - `tests/legacy-publication-containment.test.ts`
@@ -201,7 +204,7 @@ Package: `rest-express`
 ## Key Files
 - `client/src/pages/._assistant.tsx` (client-page)
 - `client/src/pages/._dropshipping-ceo.tsx` (client-page)
-- `client/src/pages/agents-office.tsx` (client-page; 167 symbols, 17 imports)
+- `client/src/pages/agents-office.tsx` (client-page; 168 symbols, 17 imports)
 - `client/src/pages/app-qa-agent.tsx` (client-page; 12 symbols, 9 imports)
 - `client/src/pages/assistant.tsx` (client-page; 49 symbols, 7 imports)
 - `client/src/pages/auth.tsx` (client-page; 6 symbols, 8 imports)
