@@ -57,7 +57,7 @@ export function validateRadioTrainingEvidence(input:unknown):input is RadioTrain
 /** Narrow incumbent skill update, not replacement. No vacant, probationary,
  * missing or uncertain holder can enter through this gate. Caller commits this
  * with its admitted role execution and full receipt in the same transaction. */
-export function qualifyRadioIncumbent(roles:OfficeRoleLifecycleState,company:CompanyState,evidence:RadioTrainingEvidence,now:number,id:string) {
+export function qualifyRadioIncumbent(roles:OfficeRoleLifecycleState,company:CompanyState,evidence:RadioTrainingEvidence,now:number,id:string):{roles:OfficeRoleLifecycleState;company:CompanyState;receipt?:RadioTrainingReceipt} {
  const role=roles.roles.radio,career=company.careers.radio;
  if(!id.trim() || !Number.isFinite(now) || !role || !career || career.inTrainingUntilGeneration || role.status!=="active" || role.generation!==career.generation ||
    role.activePolicy?.version!==`baseline:radio:${role.generation}` || role.leases.some(l=>["running","unknown"].includes(l.status)) || !validateRadioTrainingEvidence(evidence)) return {roles,company};
