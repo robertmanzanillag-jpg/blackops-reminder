@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T09:37:22.817Z",
+  "generatedAt": "2026-11-06T11:10:46.326Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -126,32 +126,18 @@
     "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 823,
-    "filesIndexed": 738,
-    "imports": 2654,
+    "filesVisible": 824,
+    "filesIndexed": 739,
+    "imports": 2660,
     "routes": 556,
-    "symbols": 16438
+    "symbols": 16446
   },
   "directories": {
-    ".github/workflows": {
-      "files": 2,
-      "indexed": 0,
-      "kinds": {
-        "other": 2
-      }
-    },
     "server": {
-      "files": 177,
-      "indexed": 173,
+      "files": 178,
+      "indexed": 174,
       "kinds": {
-        "server": 177
-      }
-    },
-    "tests": {
-      "files": 185,
-      "indexed": 182,
-      "kinds": {
-        "test": 185
+        "server": 178
       }
     },
     ".": {
@@ -182,6 +168,13 @@
       "indexed": 0,
       "kinds": {
         "other": 1
+      }
+    },
+    ".github/workflows": {
+      "files": 2,
+      "indexed": 0,
+      "kinds": {
+        "other": 2
       }
     },
     "bin": {
@@ -351,6 +344,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 185,
+      "indexed": 182,
+      "kinds": {
+        "test": 185
       }
     },
     "tests/fixtures": {
@@ -21582,6 +21582,32 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-responses-runtime.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-openai",
+        "./software-factory-openai-builder",
+        "./software-factory-remote-builder",
+        "./software-factory-runtime",
+        "./software-factory-worker"
+      ],
+      "exports": [
+        "ResponsesFactoryBuildOptions",
+        "createResponsesFactoryBuild",
+        "createResponsesFactoryWorker"
+      ],
+      "symbols": [
+        "build",
+        "createResponsesFactoryBuild",
+        "createResponsesFactoryWorker",
+        "generatePatch",
+        "generateText",
+        "repositories",
+        "workerOptions"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-routes.ts",
       "kind": "server",
       "imports": [
@@ -29027,6 +29053,7 @@
         "../server/software-factory-github-publisher",
         "../server/software-factory-pipeline",
         "../server/software-factory-remote-builder",
+        "../server/software-factory-responses-runtime",
         "node:assert/strict",
         "node:crypto",
         "node:fs/promises",
@@ -29037,6 +29064,7 @@
       "symbols": [
         "base",
         "blob",
+        "body",
         "build",
         "f",
         "fixture",

@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-06T09:37:22.817Z
+Generated: 2026-11-06T11:10:46.326Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\software-factory`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 823 | 738 | 2654 | 556 | 16438 |
+| 824 | 739 | 2660 | 556 | 16446 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,7 +29,7 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `tests` | 185 | 182 | test:185 |
-| `server` | 177 | 173 | server:177 |
+| `server` | 178 | 174 | server:178 |
 | `script` | 87 | 82 | script:87 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |

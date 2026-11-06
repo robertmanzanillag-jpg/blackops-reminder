@@ -1,3 +1,4 @@
+import { createResponsesFactoryBuild } from "../server/software-factory-responses-runtime";
 import { createHash } from "node:crypto";
 import type { FactoryGitHubPublisherClient } from "../server/software-factory-github-publisher";
 import type { FactoryActionsClient } from "../server/software-factory-actions";
@@ -100,7 +101,7 @@ test("abort after a verified PR preserves the completed outcome", async () => {
     assert.ok("candidate" in result);
     assert.equal(result.costCents, 3);
 });
-test("concrete composition queries real GitHub adapter contracts before finalizing a draft PR", async () => {
+test("Responses composition counts tokens, generates patch and verifies GitHub before opening PR", async () => {
     const f = fixture(), calls: string[] = [];
     const gitHash = (type: string, bytes: Buffer) => createHash("sha1").update(`${type} ${bytes.length}\0`).update(bytes).digest("hex");
     const blob = (text: string) => gitHash("blob", Buffer.from(text));
@@ -130,12 +131,22 @@ test("concrete composition queries real GitHub adapter contracts before finalizi
             listWorkflowRuns: async () => { calls.push("run"); assert.equal(pushed, true); return { data: { total_count: 1, workflow_runs: [{ id: 1, head_sha: head, head_branch: branch, event: "push", path: workflowPath, workflow_id: 7, run_attempt: 1, status: "completed", conclusion: "success", html_url: `https://github.com/${project.repo}/actions/runs/1`, repository: { full_name: project.repo, private: false }, head_repository: { full_name: project.repo } }] } }; },
             listJobsForWorkflowRunAttempt: async () => { calls.push("jobs"); return { data: { total_count: 1, jobs: [{ run_id: 1, head_sha: head, run_attempt: 1, name: "isolated", status: "completed", conclusion: "success", completed_at: now, labels: ["ubuntu-24.04"], steps: ["test", "build", "browser"].map(name => ({ name, status: "completed", conclusion: "success" })) }] } }; },
         } };
-    const build = createGitHubActionsFactoryBuilder({ exportSource: f.options.exportSource, generatePatch: async (...args) => { calls.push("model"); return f.options.generatePatch(...args); }, publisherClient, actionsClient, publicationCostCents: 0, now: () => new Date(now), maxPolls: 1,
-        repositories: { [project.repo]: { baseBranch: "main", checks: { workflowId: 7, workflowPath, workflowSha256: createHash("sha256").update(workflow).digest("hex"), jobName: "isolated", testStep: "test", buildStep: "build", browserStep: "browser" } } } });
+    const build = createResponsesFactoryBuild({
+      model: {model:"gpt-4.1-mini-2025-04-14",inputNanoUsdPerToken:400,outputNanoUsdPerToken:1600,pricingValidUntil:"2026-11-07T00:00:00Z",now:()=>new Date(now),maxInputTokens:1000,
+        request:async(url, init)=>{
+          const body=JSON.parse(String(init.body));
+          assert.ok(body.input.includes('old\\n'));
+          if(url.endsWith('/input_tokens')){calls.push("count");return Response.json({object:"response.input_tokens",input_tokens:100});}
+          calls.push("model");assert.equal(body.max_output_tokens,1000);assert.deepEqual(body.tools,[]);
+          return Response.json({object:"response",model:body.model,status:"completed",usage:{input_tokens:100,output_tokens:100,total_tokens:200},output:[{type:"message",role:"assistant",status:"completed",content:[{type:"output_text",text:patch}]}]});
+        }},sourcePaths:{[project.repo]:["app.ts"]},maxOutputTokens:1000,
+      github:{ exportSource: f.options.exportSource, publisherClient, actionsClient, publicationCostCents: 0, now: () => new Date(now), maxPolls: 1,
+        repositories: { [project.repo]: { baseBranch: "main", checks: { workflowId: 7, workflowPath, workflowSha256: createHash("sha256").update(workflow).digest("hex"), jobName: "isolated", testStep: "test", buildStep: "build", browserStep: "browser" } } } } });
     const result = await build(project, state, { signal: f.controller.signal, maxCostCents: 10 });
     assert.ok("candidate" in result);
-    assert.equal(result.costCents, 2);
+    assert.equal(result.costCents, 1);
     assert.ok(calls.indexOf("eligibility") < calls.indexOf("model"));
+    assert.ok(calls.indexOf("count") < calls.indexOf("model"));
     assert.ok(calls.indexOf("model") < calls.indexOf("push"));
     assert.ok(calls.indexOf("jobs") < calls.indexOf("pr"));
 });
