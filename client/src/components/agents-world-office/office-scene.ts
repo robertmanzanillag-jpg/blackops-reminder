@@ -37,6 +37,7 @@ export type SceneData = {
   departments: SceneDepartment[];
   debates: SceneDebate[];
   cityLayout?: "overview" | "detail";
+  company?: "KONG" | "BlackOps";
 };
 
 export type SceneCallbacks = {
@@ -258,7 +259,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   hubLabel.type = "button";
   hubLabel.addEventListener("click", callbacks.onOpenCityDirector);
   hubLabel.className = "pointer-events-none absolute -translate-x-1/2 -translate-y-full rounded-md border border-amber-200/40 bg-black/70 px-2 py-1 text-[11px] font-bold tracking-[0.2em] text-amber-100";
-  hubLabel.textContent = "CEO · ORQUESTADOR";
+  hubLabel.textContent = "BlackOps · CEO";
   hubLabel.dataset.testid = "world-ceo-orb";
   labelLayer.appendChild(hubLabel);
 
@@ -275,6 +276,8 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   const goalTarget = new THREE.Vector3(0, 0, 0);
   let radius = 52;
   let goalRadius = 52;
+  let officeOverviewRadius = 52;
+  let officeRingRadius = RING_RADIUS;
   let theta = 0.6;
   let goalTheta = 0.6;
   let phi = 0.95;
@@ -573,7 +576,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     hub.visible = cityLayout !== "detail";
     hub.scale.setScalar(cityOverview ? 0.78 : 1);
     beam.visible = cityLayout !== "detail";
-    hubLabel.textContent = "CEO · ORQUESTADOR";
+    hubLabel.textContent = `${data.company || "BlackOps"} · CEO`;
     hubLabel.disabled = !cityOverview;
     hubLabel.classList.toggle("pointer-events-none", !cityOverview);
     hubLabel.classList.toggle("pointer-events-auto", cityOverview);
@@ -586,11 +589,20 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       delete host.dataset.cityRunningDeskCount;
     }
     const count = Math.max(1, data.departments.length);
+    const widest = Math.max(9, ...data.departments.map(department => Math.min(5, Math.max(1, department.agents.length)) * DESK_SPACING_X + 1.4));
+    officeRingRadius = Math.max(RING_RADIUS, count * (widest + 2) / (2 * Math.PI));
+    officeOverviewRadius = Math.max(52, officeRingRadius * 2.8);
+    if (!cityLayout) {
+      camera.far = Math.max(400, officeOverviewRadius + 150);
+      camera.updateProjectionMatrix();
+      scene.fog.near = Math.max(45, officeOverviewRadius * 0.85);
+      scene.fog.far = Math.max(110, officeOverviewRadius * 1.7 + 20);
+    }
     data.departments.forEach((department, index) => {
       const angle = cityLayout ? -Math.PI / 2 : (index / count) * Math.PI * 2 - Math.PI / 2;
       const cityPosition = cityOverview ? officeCityMapPosition(index, count) : { x: 0, z: 0 };
-      const cx = cityLayout ? cityPosition.x : Math.cos(angle) * RING_RADIUS;
-      const cz = cityLayout ? cityPosition.z : Math.sin(angle) * RING_RADIUS;
+      const cx = cityLayout ? cityPosition.x : Math.cos(angle) * officeRingRadius;
+      const cz = cityLayout ? cityPosition.z : Math.sin(angle) * officeRingRadius;
       const group = new THREE.Group();
       group.position.set(cx, 0, cz);
       // Local +z points to the hub; monitors face outward.
@@ -632,7 +644,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       });
       desks.forEach(updateDeskLabel);
 
-      const label = document.createElement(cityOverview ? "button" : "div");
+      const label = document.createElement("button");
       if (label instanceof HTMLButtonElement) label.type = "button";
       label.className = cityOverview
         ? "pointer-events-auto absolute max-w-[65px] -translate-x-1/2 -translate-y-full cursor-pointer rounded border px-1 py-0.5 text-center text-[9px] font-semibold leading-tight shadow-xl focus-visible:outline focus-visible:outline-2 focus-visible:outline-violet-300 sm:max-w-[110px] sm:text-[11px]"
@@ -722,7 +734,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       frameCityOverview();
     } else if (!platform) {
       goalTarget.set(0, 0, 0);
-      goalRadius = 52;
+      goalRadius = officeOverviewRadius;
       goalPhi = 0.95;
     } else {
       goalTarget.copy(platform.center).setY(1.4);
@@ -774,7 +786,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   };
   const onWheel = (event: WheelEvent) => {
     event.preventDefault();
-    const maxRadius = cityLayout === "overview" ? camera.far - 50 : 80;
+    const maxRadius = cityLayout === "overview" ? camera.far - 50 : Math.max(80, officeOverviewRadius * 1.5);
     goalRadius = Math.min(maxRadius, Math.max(9, goalRadius * (1 + Math.sign(event.deltaY) * 0.08)));
     lastInteraction = performance.now();
   };
@@ -886,7 +898,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     const priorCount = platforms.length;
     build(data);
     if (keepFocus && platforms.some((platform) => platform.department.id === keepFocus)) focusDepartment(keepFocus, false);
-    else if (priorLayout !== cityLayout || (cityLayout === "overview" && priorCount !== platforms.length)) {
+    else if (priorLayout !== cityLayout || priorCount !== platforms.length) {
       if (!cityLayout) goalTheta = 0.6;
       focusDepartment(null, false);
     }

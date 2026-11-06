@@ -37,7 +37,6 @@ import { AgentsBuilding } from "@/components/agents-building/agents-building";
 import { AgentsOfficeWorld } from "@/components/agents-world-office/agents-office-world";
 import { KongSupervisorPanel } from "@/components/kong-supervisor-panel";
 import { KongOperationsPanel } from "@/components/kong-operations-panel";
-import { KongTeamOffice } from "@/components/kong-team-office";
 import type { AgentLiveStatus } from "@/lib/agent-live-status";
 
 type GitHubOverview = Record<
@@ -1636,7 +1635,8 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   const [agentChats, setAgentChats] = useState<Record<string, ChatMessage[]>>({});
   const [directMessage, setDirectMessage] = useState("");
   const [editRooms, setEditRooms] = useState(false);
-  const [kongOfficeOpen, setKongOfficeOpen] = useState(false);
+  const [kongWingRequest, setKongWingRequest] = useState(0);
+  const openKongOffice = () => { changeOfficeView("world"); setKongWingRequest(value => value + 1); };
   const [officeView, setOfficeView] = useState<OfficeView>(() => {
     if (typeof window === "undefined") return "world";
     try {
@@ -2203,10 +2203,9 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
               <div data-testid="office-kong-supervisor-slot">
                 <KongSupervisorPanel />
               </div>
-              <button type="button" onClick={() => setKongOfficeOpen(true)} className="rounded-xl border border-lime-300/35 bg-lime-400/10 px-3 py-2 text-xs font-semibold text-lime-100">
+              <button type="button" data-testid="office-open-kong" onClick={openKongOffice} className="rounded-xl border border-lime-300/35 bg-lime-400/10 px-3 py-2 text-xs font-semibold text-lime-100">
                 Oficina KONG
               </button>
-              {kongOfficeOpen && <KongTeamOffice onClose={() => setKongOfficeOpen(false)} />}
               <div data-testid="office-kong-operations-slot">
                 <KongOperationsPanel />
               </div>
@@ -2276,7 +2275,8 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
         <div ref={officeMapRef} className="relative h-full min-h-[620px] w-full [perspective:1400px]">
           {officeView === "world" && (
             <AgentsOfficeWorld
-              onOpenKongOffice={() => setKongOfficeOpen(true)}
+              onOpenKongOffice={openKongOffice}
+              kongWingRequest={kongWingRequest}
               agents={agents}
               kongTeam={githubAppTeams.find((team) => team.app === "Kong")?.agents ?? []}
               legal={{ data: legalCompliance, isError: legalComplianceError }}

@@ -1,3 +1,4 @@
+import type { OfficeKongCollaboration } from "../server/office-kong-collaboration";
 // Agent council: zero-cost peer review between BlackOps agents.
 //
 // Pure, deterministic logic (no IO, no AI calls). The server wrapper in
@@ -93,6 +94,11 @@ export type CouncilState = {
   agentStates: Record<string, { working: boolean; since: string }>;
   scout: { lastRunAt: string | null; lastSeen: Record<string, string>; latest: ScoutRelease[]; error: string | null };
   company: CompanyState;
+  kongCompany: CompanyState;
+  kongEvidenceAt: Record<string, string>;
+  kongObservedAt: string | null;
+  kongCollaboration: OfficeKongCollaboration;
+  kongLastStatuses: Record<string, { state: AgentLiveStatus["state"]; label: string }>;
   lastStatuses: Record<string, { state: AgentLiveStatus["state"]; label: string }>;
 };
 
@@ -130,6 +136,11 @@ export function emptyCouncilState(): CouncilState {
     agentStates: {},
     scout: { lastRunAt: null, lastSeen: {}, latest: [], error: null },
     company: emptyCompanyState(),
+    kongCompany: emptyCompanyState(),
+    kongEvidenceAt: {},
+    kongObservedAt: null,
+    kongCollaboration: { verified: false, observedAt: null, totalFindings: 0, exchanges: [] },
+    kongLastStatuses: {},
     lastStatuses: {},
   };
 }
@@ -168,6 +179,11 @@ export function parseCouncilState(raw: string | null): CouncilState {
       resolvedDebates: Array.isArray(value.resolvedDebates) ? value.resolvedDebates : [],
       scout: { ...base.scout, ...value.scout, lastSeen: obj(value.scout.lastSeen) ? value.scout.lastSeen : {} },
       company: parseCompanyState(value.company),
+      kongCompany: parseCompanyState(value.kongCompany),
+      kongEvidenceAt: Object.fromEntries(Object.entries(obj(value.kongEvidenceAt) || {}).filter(([, v]) => typeof v === "string" && Number.isFinite(Date.parse(v)))),
+      kongCollaboration: obj(value.kongCollaboration) && Array.isArray(value.kongCollaboration.exchanges) ? value.kongCollaboration : base.kongCollaboration,
+      kongObservedAt: typeof value.kongObservedAt === "string" ? value.kongObservedAt : null,
+      kongLastStatuses: obj(value.kongLastStatuses) ? value.kongLastStatuses : {},
       kongSupervision: parseKongSupervision(value.kongSupervision),
       lastStatuses: obj(value.lastStatuses) ? value.lastStatuses : {},
     };
