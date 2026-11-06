@@ -26,7 +26,8 @@ import {
 const NOW = Date.parse("2026-11-04T12:00:00Z");
 const MIN = 60_000;
 const roles = { clippers: "Clippers", radio: "Radio", legal: "Legal", "kong-ai": "KONG AI" };
-const s = (state: "working" | "needs-setup" | "error" | "offline" | "checking", label: string = state) => ({ state, label });
+let execution=0;
+const s = (state: "working" | "needs-setup" | "error" | "offline" | "checking", label: string = state) => ({ state, label, evidenceId:`verified-test-execution-${++execution}` });
 
 test("working agents earn points and battery; failing agents lose them", () => {
   let company = emptyCompanyState();
@@ -352,6 +353,15 @@ test("one failure result loses life once; distinct evidence may arrive at the sa
   assert.equal(state.careers.radio.battery,70);
   state=advanceCompany(state,{now:NOW+MIN,roles,statuses:{radio:{state:"error",label:"New failed job",evidenceId:"run2"}}}).state;
   assert.equal(state.careers.radio.battery,60);
+  state=parseCompanyState(JSON.parse(JSON.stringify(state)));
+  state=advanceCompany(state,{now:NOW+2*MIN,roles,statuses:{radio:{state:'error',label:'Old failure resurfaced',evidenceId:'run1'}}}).state;
+  assert.equal(state.careers.radio.battery,60,'A-B-A replay across restart cannot score A twice');
+});
+
+test('readiness without execution identity changes neither points nor life',()=>{
+  let state=emptyCompanyState();
+  for(let i=0;i<100;i++) state=advanceCompany(state,{now:NOW+i*MIN,roles,statuses:{radio:{state:i%2?'working':'error',label:'Availability only'}}}).state;
+  assert.equal(state.careers.radio.points,0);assert.equal(state.careers.radio.battery,80);assert.equal(state.careers.radio.cyclesTotal,0);
 });
 
 test("stale production records cannot upgrade fresh fixture qualification into graduation",()=>{

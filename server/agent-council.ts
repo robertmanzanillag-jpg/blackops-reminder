@@ -1,5 +1,6 @@
 import { advanceKongCompany, isKongCompanyAgent } from "./kong-company";
 import { parseInternalWork } from "./office-internal-work";
+import { getSystemUserId } from "./user-context";
 import type { OfficeKongAuditResult } from "./office-kong";
 // Server side of the agent council (see shared/agent-council.ts).
 //
@@ -1062,13 +1063,13 @@ export function getAgentCouncil() {
 }
 
 // The council works for the single BlackOps owner (same user the other schedulers use).
-let resolvedSystemUserId: string | null = null;
 export function setAgentCouncilUser(userId: string) {
-  resolvedSystemUserId = userId;
+  if(userId !== getSystemUserId()) throw new Error("Agent council owner does not match configured owner");
 }
-function systemUserId(): string {
-  if (!resolvedSystemUserId) throw new Error("Agent council user not initialised");
-  return resolvedSystemUserId;
+export function systemUserId(): string {
+  // Read-only web routes must resolve the same configured owner even when no
+  // scheduler has started. Never derive this global store's owner from a request.
+  return getSystemUserId();
 }
 
 export async function startAgentCouncilScheduler(env: NodeJS.ProcessEnv = process.env) {
@@ -1076,7 +1077,6 @@ export async function startAgentCouncilScheduler(env: NodeJS.ProcessEnv = proces
     console.log("[agent-council] disabled by AGENT_COUNCIL_ENABLED=false");
     return;
   }
-  const { getSystemUserId } = await import("./user-context");
   setAgentCouncilUser(getSystemUserId());
   const instance = getAgentCouncil();
   // Errors are logged, never thrown: an unhandled rejection here would stop the whole server.

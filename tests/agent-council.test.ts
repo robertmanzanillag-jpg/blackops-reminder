@@ -460,7 +460,8 @@ test("paused, external and not-built agents are never penalized, fired or repair
   assert.equal(state.company.careers["blackroom-videos"], undefined, "paused lane is not scored");
   assert.equal(state.company.careers["kong-videos"], undefined, "external KONG publisher is not scored");
   assert.ok(!state.proposals.some((proposal) => /blackroom-videos|kong-videos/.test(proposal.key)));
-  assert.ok(state.company.careers["news:miami-news"].firedCount >= 1, "an active city desk that fails is rotated");
+  assert.equal(state.company.careers["news:miami-news"].firedCount,0,"missing city data is not a failed execution and cannot retire a holder");
+  assert.equal(state.company.careers.radio.points,0,"repeated readiness without distinct work does not earn points");
   assert.match(state.lastStatuses["kong-videos"].label, /Externa/);
   const view = await council.view();
   assert.equal(view.integrations["blackroom-videos"].mode, "pausada");
