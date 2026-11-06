@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T11:54:10.233Z",
+  "generatedAt": "2026-11-06T12:06:17.332Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -130,7 +130,7 @@
     "filesIndexed": 743,
     "imports": 2674,
     "routes": 556,
-    "symbols": 16497
+    "symbols": 16499
   },
   "directories": {
     ".": {
@@ -21123,6 +21123,7 @@
         "content",
         "createGitHubFactoryChecks",
         "encoded",
+        "event",
         "hash",
         "job",
         "jobs",
@@ -21132,6 +21133,7 @@
         "profile",
         "profiles",
         "r",
+        "ref",
         "reject",
         "response",
         "run",

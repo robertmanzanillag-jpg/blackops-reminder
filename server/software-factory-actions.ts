@@ -14,18 +14,21 @@ interface Job {
   labels: string[];
   steps: { name: string; status: string; conclusion: string | null }[];
 }
-/** Inject an authenticated, bounded GitHub REST client. No dispatch/retry writes. */
+/** Inject an authenticated, bounded GitHub REST client. Dispatch is opt-in and never retried. */
 export interface FactoryActionsClient {
+  git?: { getRef(input: Scope & { ref: string }): Promise<{ data: { ref: string; object: { type: string; sha: string } } }> };
   repos: {
     get(input: Scope): Promise<{ data: { full_name: string; private: boolean; archived: boolean; disabled: boolean } }>;
     getContent(input: Scope & { path: string; ref: string }): Promise<{ data: unknown }>;
   };
   actions: {
-    listWorkflowRuns(input: Scope & { workflow_id: number; head_sha: string; event: "push"; per_page: 100 }): Promise<{ data: { total_count: number; workflow_runs: Run[] } }>;
+    listWorkflowRuns(input: Scope & { workflow_id: number; head_sha: string; event: "push" | "workflow_dispatch"; per_page: 100 }): Promise<{ data: { total_count: number; workflow_runs: Run[] } }>;
+    createWorkflowDispatch?(input: Scope & { workflow_id: number; ref: string }): Promise<unknown>;
     listJobsForWorkflowRunAttempt(input: Scope & { run_id: number; attempt_number: number; per_page: 100 }): Promise<{ data: { total_count: number; jobs: Job[] } }>;
   };
 }
 export interface FactoryActionsProfile {
+  trigger?: "push" | "workflow_dispatch";
   workflowId: number; workflowPath: string; workflowSha256: string;
   jobName: string; testStep: string; buildStep: string; browserStep: string;
 }
@@ -45,7 +48,7 @@ export function createGitHubFactoryChecks(options: {
   const polls = options.maxPolls ?? 40;
   if (!Number.isInteger(polls) || polls < 1 || polls > 40) throw new Error("FACTORY_ACTIONS_CONFIGURATION_INVALID");
   for (const [repo, p] of profiles) {
-    if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !Number.isSafeInteger(p.workflowId) || p.workflowId < 1 ||
+    if ((p.trigger !== undefined && !["push", "workflow_dispatch"].includes(p.trigger)) || !/^[\w.-]+\/[\w.-]+$/.test(repo) || !Number.isSafeInteger(p.workflowId) || p.workflowId < 1 ||
         !/^\.github\/workflows\/[a-zA-Z0-9_-]+\.ya?ml$/.test(p.workflowPath) || !hash.test(p.workflowSha256) ||
         [p.jobName, p.testStep, p.buildStep, p.browserStep].some(x => !x?.trim()) || new Set([p.testStep, p.buildStep, p.browserStep]).size !== 3) throw new Error("FACTORY_ACTIONS_CONFIGURATION_INVALID");
   }
@@ -86,15 +89,17 @@ export function createGitHubFactoryChecks(options: {
             candidate.branch !== `factory/${candidate.baseSha}-${candidate.patchSha256}`) reject();
         const { scope, profile } = await preflight(candidate.repository, candidate.baseSha, context.signal);
         await preflight(candidate.repository, candidate.headSha, context.signal);
+        const event = profile.trigger ?? "push";
+        let dispatched = false;
         for (let attempt = 0; attempt < polls; attempt++) {
           context.signal.throwIfAborted();
           const response = (await options.client.actions.listWorkflowRuns({ ...scope, workflow_id: profile.workflowId,
-            head_sha: candidate.headSha, event: "push", per_page: 100 })).data;
+            head_sha: candidate.headSha, event, per_page: 100 })).data;
           if (response.total_count !== response.workflow_runs.length || response.total_count > 1) reject();
           const run = response.workflow_runs[0];
           if (run) {
             if (!Number.isSafeInteger(run.id) || run.id < 1 || run.run_attempt !== 1 || run.workflow_id !== profile.workflowId ||
-                run.head_sha !== candidate.headSha || run.head_branch !== candidate.branch || run.event !== "push" ||
+                run.head_sha !== candidate.headSha || run.head_branch !== candidate.branch || run.event !== event ||
                 ![profile.workflowPath, `${profile.workflowPath}@refs/heads/${candidate.branch}`].includes(run.path) ||
                 run.repository.full_name !== candidate.repository || run.repository.private !== false || run.head_repository.full_name !== candidate.repository ||
                 run.html_url !== `https://github.com/${candidate.repository}/actions/runs/${run.id}`) reject();
@@ -118,6 +123,17 @@ export function createGitHubFactoryChecks(options: {
                 baseSha: candidate.baseSha, headSha: candidate.headSha, testPassed: true as const, buildPassed: true as const,
                 actorId: "github-actions-isolated-runner", artifactIds: [run.html_url], createdAt: job.completed_at! };
             }
+          } else if (event === "workflow_dispatch" && !dispatched) {
+            if (!options.client.actions.createWorkflowDispatch || !options.client.git?.getRef) reject();
+            const ref = (await options.client.git!.getRef({ ...scope, ref: `heads/${candidate.branch}` })).data;
+            if (ref.ref !== `refs/heads/${candidate.branch}` || ref.object.type !== "commit" || ref.object.sha !== candidate.headSha) reject();
+            context.signal.throwIfAborted();
+            // A lost acknowledgement must remain unknown. Never repeat this write
+            // within an execution, including while GitHub's run list catches up.
+            // GitHub dispatch is not atomic with the ref read: the trusted controller
+            // must own candidate refs and prevent concurrent branch mutation.
+            dispatched = true;
+            await options.client.actions.createWorkflowDispatch!({ ...scope, workflow_id: profile.workflowId, ref: candidate.branch });
           }
           if (attempt + 1 < polls) await wait(15000, context.signal);
         }

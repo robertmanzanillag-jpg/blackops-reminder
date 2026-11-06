@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createGitHubFactoryChecks, type FactoryActionsClient } from "../server/software-factory-actions";
 
-function fixture() {
+function fixture(trigger: "push" | "workflow_dispatch" = "push") {
   const repository = "owner/repo", baseSha = "a".repeat(40), headSha = "b".repeat(40), patchSha256 = "c".repeat(64);
   const branch = `factory/${baseSha}-${patchSha256}`, workflow = Buffer.from("trusted workflow");
   const path = ".github/workflows/factory-candidate-checks.yml";
@@ -18,6 +18,7 @@ function fixture() {
     steps: ["Isolated tests", "Isolated build", "Isolated browser recovery tests"].map(name => ({ name, status: "completed", conclusion: "success" })) };
   let privateRepo = false, changedWorkflow = false, calls = 0, waits = 0;
   const client: FactoryActionsClient = {
+    git: { getRef: async () => ({ data: { ref: `refs/heads/${branch}`, object: { type: "commit", sha: headSha } } }) },
     repos: {
       get: async () => ({ data: { full_name: repository, private: privateRepo, archived: false, disabled: false } }),
       getContent: async () => ({ data: { type: "file", path, encoding: "base64", size: workflow.length,
@@ -28,7 +29,7 @@ function fixture() {
       listJobsForWorkflowRunAttempt: async input => { assert.equal(input.attempt_number, 1); return { data: { total_count: 1, jobs: [job] } }; },
     },
   };
-  const checks = createGitHubFactoryChecks({ client, repositories: { [repository]: { workflowId: 3, workflowPath: path,
+  const checks = createGitHubFactoryChecks({ client, repositories: { [repository]: { trigger, workflowId: 3, workflowPath: path,
     workflowSha256: createHash("sha256").update(workflow).digest("hex"), jobName: job.name,
     testStep: "Isolated tests", buildStep: "Isolated build", browserStep: "Isolated browser recovery tests" } }, maxPolls: 2,
     now: () => new Date("2026-11-06T10:01:00Z"), wait: async () => { waits++; } });
@@ -45,6 +46,45 @@ test("accepts only exact trusted completed tests and build, without requiring un
     assert.equal(result.createdAt, f.job.completed_at);
     assert.equal(result.costCents, 0);
   }
+});
+
+test("dispatches the exact candidate once and accepts only its independently checked run", async () => {
+  const f = fixture("workflow_dispatch"); let lists = 0, dispatches = 0;
+  f.run.event = "workflow_dispatch";
+  f.client.actions.listWorkflowRuns = async input => {
+    assert.equal(input.event, "workflow_dispatch"); assert.equal(input.head_sha, f.candidate.headSha);
+    return { data: { total_count: ++lists > 1 ? 1 : 0, workflow_runs: lists > 1 ? [f.run] : [] } };
+  };
+  f.client.actions.createWorkflowDispatch = async input => {
+    dispatches++; assert.deepEqual(input, { owner: "owner", repo: "repo", workflow_id: 3, ref: f.candidate.branch });
+  };
+  assert.equal((await f.verify()).status, "passed"); assert.equal(dispatches, 1);
+  assert.equal((await f.verify()).status, "passed"); assert.equal(dispatches, 1);
+});
+
+test("dispatch acknowledgement loss or delayed run visibility cannot cause retry or success", async () => {
+  for (const lost of [false, true]) {
+    const f = fixture("workflow_dispatch"); let dispatches = 0;
+    f.client.actions.listWorkflowRuns = async () => ({ data: { total_count: 0, workflow_runs: [] } });
+    f.client.actions.createWorkflowDispatch = async () => { dispatches++; if (lost) throw Error("lost acknowledgement"); };
+    assert.equal((await f.verify()).status, "unknown"); assert.equal(dispatches, 1);
+  }
+});
+
+test("untrusted workflow blocks dispatch, and dispatch mode cannot accept push evidence", async () => {
+  const f = fixture("workflow_dispatch"); let dispatches = 0;
+  f.client.actions.createWorkflowDispatch = async () => { dispatches++; };
+  assert.equal((await f.verify()).status, "unknown"); assert.equal(dispatches, 0);
+  f.client.actions.listWorkflowRuns = async () => ({ data: { total_count: 0, workflow_runs: [] } });
+  f.change(); assert.equal((await f.verify()).status, "unknown"); assert.equal(dispatches, 0);
+});
+
+test("a moved candidate ref cannot dispatch an unverified workflow", async () => {
+  const f = fixture("workflow_dispatch"); let dispatches = 0;
+  f.client.actions.listWorkflowRuns = async () => ({ data: { total_count: 0, workflow_runs: [] } });
+  f.client.actions.createWorkflowDispatch = async () => { dispatches++; };
+  f.client.git!.getRef = async () => ({ data: { ref: `refs/heads/${f.candidate.branch}`, object: { type: "commit", sha: "d".repeat(40) } } });
+  assert.equal((await f.verify()).status, "unknown"); assert.equal(dispatches, 0);
 });
 test("preflight blocks private repositories and altered workflow before polling", async () => {
   for (const mutate of [(f: ReturnType<typeof fixture>) => f.private(), (f: ReturnType<typeof fixture>) => f.change()]) {
