@@ -241,7 +241,7 @@ export function AgentsOfficeWorld({
       status: statuses[seat.id], kong: true, color: "#a3e635", kongEvidence: centralSignalById.get(seat.id) });
   }
 
-  const trainees: Trainee[] = (company?.trainees || []).filter((trainee) => !trainee.graduatedAt);
+  const trainees: Trainee[] = (company?.trainees || []).filter((trainee) => !trainee.graduatedAt && !trainee.evaluationClosedAt);
   // Specialists the academy created for recurring work (approved by Robert in the Trust Center).
   const specialists = Object.values(careers).filter((career) => isSpecialistId(career.agentId));
   for (const career of specialists) {

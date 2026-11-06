@@ -15,7 +15,8 @@ import type { OfficeKongAuditResult } from "./office-kong";
 import { reviewKongReadiness } from "@shared/kong-supervisor";
 import { buildBlackRoomOfficeOperations } from "./blackroom-office-operations";
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
+import { emptyRoleLifecycleState, reconcileRoleLifecycles, parseRoleLifecycleState, registerCandidatePolicy, recordProductionPolicyAssessment, activateCandidatePolicy } from "../shared/office-role-lifecycle";
 import path from "node:path";
 import { resolveDatabaseConnectionString } from "./database-url";
 import {
@@ -204,6 +205,8 @@ function advanceCompanyCycle(
 ): CouncilState {
   const unscored = new Set([...EXEMPT_IDS, ...unscoredAgentIds(integrations)]);
   const compact = Object.fromEntries(Object.entries(statuses).map(([id, status]) => [id, { state: status.state, label: status.label, ...(status.evidenceId ? { evidenceId: status.evidenceId } : {}), ...(status.lifePenaltyExempt ? { lifePenaltyExempt: true } : {}) }]));
+  // Connection/readiness probes cannot penalize the reviewer; its worker scores actual results.
+  if (compact["claude-reviewer"]) compact["claude-reviewer"].lifePenaltyExempt = true;
   let company = advanceCompany(state.company, { now, statuses: Object.fromEntries(Object.entries(compact).filter(([id]) => !isKongCompanyAgent(id))), roles: AGENT_NAMES, exempt: [...unscored] }).state;
   // Orders routed to a paused/external agent are blocked with the honest reason, never "assigned".
   for (const id of unscored) {
@@ -237,7 +240,7 @@ function advanceCompanyCycle(
     ],
     now
   );
-  return { ...state, company, lastStatuses: compact };
+  return { ...state, company, lastStatuses: compact, ...(state.officeExecution ? { officeExecution: { ...state.officeExecution, roles: reconcileRoleLifecycles(state.officeExecution.roles, company, now) } } : {}) };
 }
 
 // Agent factory: recurring work nobody could take becomes a "hire a specialist" proposal for Robert.
@@ -278,7 +281,38 @@ function parseDurableCouncilState(raw: string | null): CouncilState {
       !object(value.company) || value.company.version !== 1 || !object(value.company.careers) || !Array.isArray(value.company.trainees) || !Array.isArray(value.company.orders) || (value.company.academyJobs !== undefined && !Array.isArray(value.company.academyJobs))) {
     throw new Error("Stored council state is incompatible; migration or recovery is required.");
   }
+  if (value.officeExecution !== undefined) {
+    if (!object(value.officeExecution) || !object(value.officeExecution.tokens)) throw new Error("Invalid office execution state");
+    parseRoleLifecycleState(value.officeExecution.roles);
+  }
   return parseCouncilState(raw);
+}
+
+function settleReviewEvaluations(state: CouncilState, now: number): CouncilState {
+  if (!state.officeExecution) return state;
+  let roles = reconcileRoleLifecycles(state.officeExecution.roles, state.company, now);
+  const company = structuredClone(state.company);
+  for (const role of Object.values(roles.roles)) for (const candidate of role.candidatePolicies) {
+    const trainee = company.trainees.find(t => t.id === candidate.candidateId && !t.graduatedAt && !t.evaluationClosedAt);
+    if (!trainee || candidate.version === role.activePolicy?.version) continue;
+    const promotion = activateCandidatePolicy(roles, role.roleId, candidate.version, now);
+    if (promotion.activated && process.env.OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED === "true") {
+      roles = promotion.state;
+      company.careers[role.roleId].reviewGuidance = [...roles.roles[role.roleId].activePolicy!.guidance];
+      delete company.careers[role.roleId].inTrainingUntilGeneration;
+      trainee.qualifiedAt = trainee.graduatedAt = new Date(now).toISOString();
+      trainee.awaitingEvidence = false;
+      trainee.executionBlocker = "Benchmark-qualified reviewer policy in probation; first actual PR result pending.";
+    } else if (!promotion.activated && promotion.reason === "INSUFFICIENT_COMPARABLE_PRODUCTION_EVIDENCE") {
+      const completed = role.assessments.filter(a => a.candidatePolicyVersion === candidate.version && a.generation === role.generation && a.scope === "benchmark");
+      if (new Set(completed.map(a => a.taskId)).size === 3) {
+        trainee.evaluationClosedAt = new Date(now).toISOString();
+        trainee.awaitingEvidence = false;
+        trainee.executionBlocker = "Evaluation closed without promotion; improvement was insufficient or the comparison policy changed. A later training version may prepare another candidate.";
+      }
+    }
+  }
+  return { ...state, company, officeExecution: { ...state.officeExecution, roles: reconcileRoleLifecycles(roles, company, now) } };
 }
 
 export function createAgentCouncil(deps: CouncilDeps) {
@@ -571,16 +605,43 @@ export function createAgentCouncil(deps: CouncilDeps) {
     const curriculum = await deps.loadCurriculum?.() || [];
     let reservation: AcademyJob | undefined;
     const reserved = await mutate(state => {
+      state = settleReviewEvaluations(state, deps.now());
       const result = reserveAcademyReview(state.company, curriculum, deps.now());
       reservation = result.job;
-      return { ...state, company: result.state };
+      if (!reservation) return { ...state, company: result.state };
+      const trainee = result.state.trainees.find(t => t.id === reservation!.traineeId)!;
+      const previous = state.officeExecution || { roles: emptyRoleLifecycleState(), tokens: { reservations: [] } };
+      let roles = reconcileRoleLifecycles(previous.roles, result.state, deps.now());
+      const version = createHash("sha256").update(JSON.stringify([trainee.id, reservation.generation, reservation.curriculumVersion, trainee.knowledge])).digest("hex");
+      roles = registerCandidatePolicy(roles, trainee.forAgentId, { version, guidance: [...trainee.knowledge], candidateId: trainee.id,
+        generation: reservation.generation, curriculumVersion: reservation.curriculumVersion, createdAt: reservation.startedAt }, deps.now());
+      reservation = { ...reservation, incumbentPolicyVersion: roles.roles[trainee.forAgentId]?.activePolicy?.version, candidatePolicyVersion: version };
+      return { ...state, company: { ...result.state, academyJobs: result.state.academyJobs!.map(j => j.id === reservation!.id ? reservation! : j) }, officeExecution: { ...previous, roles } };
     });
     if (!reservation) return reserved;
     const job = reservation;
     try {
       // Provider execution is outside the transaction; only the matching live reservation commits.
-      const result = await deps.academyReview(reserved.company, job);
-      return mutate(state => ({ ...state, company: commitAcademyReview(state.company, job, result, deps.now()) }));
+      const traineeAtStart = reserved.company.trainees.find(t => t.id === job.traineeId)!;
+      const active = reserved.officeExecution?.roles.roles[traineeAtStart.forAgentId]?.activePolicy;
+      const studyCompany = structuredClone(reserved.company);
+      if (active) studyCompany.careers[traineeAtStart.forAgentId].reviewGuidance = [...active.guidance];
+      const result = await deps.academyReview(studyCompany, job);
+      return mutate(state => {
+        const company = commitAcademyReview(state.company, job, result, deps.now());
+        const trainee = company.trainees.find(t => t.id === job.traineeId);
+        if (!trainee || !company.academyJobs?.some(j => j.id === job.id && j.status === "completed")) return { ...state, company };
+        const previous = state.officeExecution || { roles: emptyRoleLifecycleState(), tokens: { reservations: [] } };
+        let roles = reconcileRoleLifecycles(previous.roles, company, deps.now());
+        if (result.scope === "benchmark" && job.incumbentPolicyVersion && job.candidatePolicyVersion &&
+            roles.roles[trainee.forAgentId]?.activePolicy?.version === job.incumbentPolicyVersion) {
+          roles = recordProductionPolicyAssessment(roles, trainee.forAgentId, {
+            ...result, scope: "benchmark", taskId: result.benchmarkId, generation: job.generation,
+            incumbentPolicyVersion: job.incumbentPolicyVersion, candidatePolicyVersion: job.candidatePolicyVersion,
+          }, deps.now());
+        }
+        return settleReviewEvaluations({ ...state, company, officeExecution: { ...previous, roles } }, deps.now());
+      });
     } catch {
       return mutate(state => ({ ...state, company: commitAcademyReview(state.company, job, undefined, deps.now(), "Review executor unavailable or result unverified; manual inspection required.") }));
     }
@@ -591,11 +652,22 @@ export function createAgentCouncil(deps: CouncilDeps) {
     // The KONG conversation is owner-only (served by /api/kong-supervisor/state with an owner check).
     // This view is readable by any signed-in user, so it only carries the readiness records.
     const { messages: _privateMessages, ...kongSupervisionPublic } = loaded.kongSupervision;
-    const { kongLegacyCompany: _legacyHistory, ...publicState } = loaded;
+    const { kongLegacyCompany: _legacyHistory, officeExecution: _privateExecution, ...publicState } = loaded;
     const state = { ...publicState, kongSupervision: kongSupervisionPublic };
     const personalities = Object.fromEntries(Object.values(state.company.careers).map((career) => [career.agentId, personalityFor(career.agentId, career.generation)]));
     return {
       ...state,
+      executionReadiness: loaded.officeExecution ? Object.values(loaded.officeExecution.roles.roles).map(role => ({
+        agentId: role.roleId, status: role.status, generation: role.generation,
+        policyVersion: role.activePolicy?.version,
+        qualificationScope: role.activePolicy?.qualificationScope,
+        reason: role.status === "unsupported" ? "No verified execution/training adapter is installed for this role."
+          : role.leases.some(lease => lease.status === "unknown") ? "An execution is uncertain; reconciliation is required."
+          : role.status === "vacant" ? "Awaiting a candidate with verified comparable evaluations."
+          : role.status === "probation" ? "Awaiting the replacement's first verified execution."
+          : role.activePolicy?.qualificationScope === "benchmark" ? "Qualified on held-out benchmarks only; actual PR execution does not prove universal review quality."
+          : "Policy admitted; completed work is verified separately.",
+      })) : [],
       kongLastStatuses: state.kongObservedAt && deps.now() - Date.parse(state.kongObservedAt) <= 5 * 60_000 ? state.kongLastStatuses : {},
       kongLeaderboard: leaderboard(state.kongCompany),
       kongPersonalities: Object.fromEntries(Object.values(state.kongCompany.careers).map(career => [career.agentId, personalityFor(career.agentId, career.generation)])),
@@ -621,7 +693,18 @@ export function createAgentCouncil(deps: CouncilDeps) {
     return (await load()).kongSupervision;
   }
 
-  return { runCycle, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision };
+  // Internal worker only: callbacks must be pure because CAS may replay them.
+  async function updateOfficeExecution(change: (execution: NonNullable<CouncilState["officeExecution"]>, company: CompanyState) => NonNullable<CouncilState["officeExecution"]>) {
+    if (!deps.transactState && !deps.versioned) throw new Error("Office execution requires shared durable storage");
+    const state = await mutate(current => {
+      const previous = current.officeExecution || { roles: emptyRoleLifecycleState(), tokens: { reservations: [] } };
+      const execution = { ...previous, roles: reconcileRoleLifecycles(previous.roles, current.company, deps.now()) };
+      const updated = change(execution, current.company);
+      return { ...current, officeExecution: { ...updated, roles: reconcileRoleLifecycles(updated.roles, current.company, deps.now()) } };
+    });
+    return state.officeExecution!;
+  }
+  return { runCycle, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {
@@ -915,7 +998,10 @@ export function getAgentCouncil() {
   const versioned = durable ? undefined : databaseStateStore();
   const persistentStore = async () => (await import("./agent-council-store")).getCouncilStore();
   council = createAgentCouncil({
-    ...((durable || versioned) && process.env.OFFICE_ACADEMY_EXECUTION_ENABLED === "true" ? { academyReview: async (state: CompanyState, job: AcademyJob) => (await import("./office-academy-runner")).createAcademyReviewRunner()(state, job) } : {}),
+    ...((durable || versioned) && process.env.OFFICE_ACADEMY_EXECUTION_ENABLED === "true" ? { academyReview: async (state: CompanyState, job: AcademyJob) => {
+      const run = process.env.OFFICE_REVIEW_PROVIDER === "openai" ? (await import("./office-execution")).createOfficeExecution(getAgentCouncil()).run : undefined;
+      return (await import("./office-academy-runner")).createAcademyReviewRunner({ run })(state, job);
+    } } : {}),
     now: () => Date.now(),
     userId: systemUserId,
     readState: () => durable ? persistentStore().then(store => store.read(systemUserId())) : readFile(STATE_FILE, "utf8").catch(() => null),

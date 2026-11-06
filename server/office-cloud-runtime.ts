@@ -1,8 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { officeCloudStore, type OfficeCloudRun, type OfficeCloudCompletion, type OfficeWorkerCapabilities } from "./office-cloud-store";
-import { createOfficeRuntime, type OfficeRun, officeTaskSchema } from "./office-runtime";
+import { createOfficeRuntime, type OfficeRun, officeTaskSchema, OfficeRuntimeError } from "./office-runtime";
 import { OfficeClaudeError, probeOfficeClaude, type OfficeClaudeProbe } from "./office-claude";
 import { OfficeKongError, probeOfficeKong } from "./office-kong";
+import { OfficeOpenAIError } from "./office-openai";
 
 function publicRun(run: OfficeCloudRun): OfficeRun {
   const { result, workerId: _workerId, fence: _fence, leaseExpiresAt: _lease, ...task } = run;
@@ -18,7 +19,9 @@ export function createOfficeCloudRuntime(store = officeCloudStore) {
     async list(userId: string) { return (await store.list(userId)).map(publicRun); },
     async submit(userId: string, input: unknown) {
       // Persist only. The web process never starts a second worker.
-      return publicRun(await store.submit(userId, officeTaskSchema.parse(input)));
+      const task = officeTaskSchema.parse(input);
+      if (task.kind === "claude_chat" && (await store.getHeartbeat())?.capabilities?.reviewOnly) throw new Error("El ejecutor disponible solo admite revisiones de codigo.");
+      return publicRun(await store.submit(userId, task));
     },
     async getReview(userId: string, prUrl: string, headSha: string, diffSha256: string) {
       const runs = (await store.list(userId)).map(publicRun);
@@ -47,7 +50,7 @@ export async function probeOfficeWorker(store: Pick<typeof officeCloudStore, "ge
     };
     return {
       status: "ready" as const, reason: "Ejecutor de nube con señal reciente en PostgreSQL.", checkedAt, lastSeenAt: heartbeat!.lastSeenAt,
-      capabilities: { claude: provider(heartbeat!.capabilities?.claude), kong: provider(heartbeat!.capabilities?.kong) },
+      capabilities: { claude: provider(heartbeat!.capabilities?.claude), kong: provider(heartbeat!.capabilities?.kong), ...(heartbeat!.capabilities?.reviewOnly ? { reviewOnly: true } : {}) },
     };
   } catch {
     return blocked("El registro persistente o el ejecutor de nube no estan preparados.");
@@ -61,6 +64,8 @@ export function createOfficeCloudWorker(options: {
   probeClaude?: typeof probeOfficeClaude;
   probeKong?: typeof probeOfficeKong;
   scheduledKongOwner?: string;
+  reviewOnlyOwner?: string;
+  admission?: { ready: () => Promise<boolean>; begin: (run: OfficeCloudRun) => Promise<boolean>; finish: (run: OfficeCloudRun, result: OfficeCloudCompletion) => Promise<void> };
   now?: () => Date;
 } = {}) {
   const store = options.store || officeCloudStore;
@@ -99,11 +104,14 @@ export function createOfficeCloudWorker(options: {
       if (overdue()) return Promise.resolve();
       return checkingCapabilities ||= (async () => {
         const [claude, kong] = await Promise.all([
-          (options.probeClaude || probeOfficeClaude)(), (options.probeKong || probeOfficeKong)(),
+          (options.probeClaude || probeOfficeClaude)(), options.reviewOnlyOwner
+            ? Promise.resolve({ status: "blocked" as const, checkedAt: now().toISOString(), reason: "Este ejecutor solo revisa codigo; KONG requiere su propio ejecutor." })
+            : (options.probeKong || probeOfficeKong)(),
         ]);
         capabilities = {
           claude: { status: claude.status, reason: claude.reason, checkedAt: claude.checkedAt },
           kong: { status: kong.status, reason: kong.reason, checkedAt: kong.checkedAt },
+          ...(options.reviewOnlyOwner ? { reviewOnly: true } : {}),
         };
         await heartbeat();
       })().finally(() => { checkingCapabilities = undefined; });
@@ -122,14 +130,15 @@ export function createOfficeCloudWorker(options: {
         const time = now().getTime();
         const kong = capabilities?.kong;
         const probeAge = kong ? time - Date.parse(kong.checkedAt) : NaN;
-        if (options.scheduledKongOwner && kong?.status === "ready" && probeAge >= -30_000 && probeAge <= 90_000 &&
+        if (!options.reviewOnlyOwner && options.scheduledKongOwner && kong?.status === "ready" && probeAge >= -30_000 && probeAge <= 90_000 &&
             (lastScheduleCheck === undefined || time - lastScheduleCheck >= 30_000)) {
           lastScheduleCheck = time;
           try { await store.enqueueScheduledKongAudit(options.scheduledKongOwner); }
           catch { console.error("Office worker could not confirm its recurring KONG audit"); }
           if (overdue()) throw new Error("OFFICE_WORKER_PROGRESS_STALLED");
         }
-        const claimed = await store.claim(workerId);
+        if (options.admission && !(await options.admission.ready())) return;
+        const claimed = await store.claim(workerId, options.reviewOnlyOwner ? { ownerId: options.reviewOnlyOwner, reviewOnly: true } : undefined);
         // A late claim may have committed while its response was uncertain.
         // Never replace its expired admission deadline with a new lease budget.
         if (overdue()) throw new Error("OFFICE_WORKER_PROGRESS_STALLED");
@@ -140,12 +149,21 @@ export function createOfficeCloudWorker(options: {
           throw new Error("OFFICE_CLAIM_LEASE_UNVERIFIED");
         }
         let result: OfficeCloudCompletion;
+        if (options.admission && !(await options.admission.begin(claimed))) {
+          if (!(await store.releaseUnstarted(claimed.id, workerId, claimed.fence!))) throw new Error("OFFICE_UNSTARTED_RELEASE_UNCONFIRMED");
+          return;
+        }
+        if (overdue()) { await store.markExpiredUnknown(); throw new Error("OFFICE_ADMISSION_OUTLIVED_LEASE"); }
         try {
           const output = await execute(publicRun(claimed));
           result = { ...output, status: "completed" } as OfficeCloudCompletion;
         } catch (error) {
-          const known = error instanceof OfficeClaudeError || error instanceof OfficeKongError;
-          result = { status: known ? "blocked" : "failed", error: { code: known ? error.code : "EXECUTION_FAILED", reason: known ? error.message : "La tarea no produjo un resultado verificable." } };
+          const known = error instanceof OfficeClaudeError || error instanceof OfficeKongError || error instanceof OfficeOpenAIError || error instanceof OfficeRuntimeError;
+          if (error instanceof OfficeOpenAIError && ["execution_unknown", "invalid_usage"].includes(error.code)) {
+            quarantined = true;
+            throw error;
+          }
+          result = { status: known && !(error instanceof OfficeRuntimeError) ? "blocked" : "failed", error: { code: known ? error.code : "EXECUTION_FAILED", reason: known ? error.message : "La tarea no produjo un resultado verificable." } };
         }
         if (overdue()) {
           await store.markExpiredUnknown();
@@ -154,6 +172,7 @@ export function createOfficeCloudWorker(options: {
         // Fenced write. An expired or lost outcome cannot become a new retry.
         const committed = await store.complete(claimed.id, workerId, claimed.fence!, result);
         if (!committed) throw new Error("OFFICE_COMPLETION_UNCONFIRMED");
+        await options.admission?.finish(claimed, result);
       } finally { active = false; executionDeadline = undefined; }
     },
     heartbeat,

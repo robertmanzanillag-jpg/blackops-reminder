@@ -55,13 +55,13 @@ test("BlackOps Reminder carries the Dialer Planner alternate Replit alias", () =
   const blackops = knownDeveloperHealthApps().find((app) => app.githubRepo === "robertmanzanillag-jpg/blackops-reminder")!;
 
   assert.match(blackops.description || "", /Dialer Planner/);
-  assert.equal(blackops.publicUrl, "https://robplanner.replit.app");
-  assert.equal(blackops.healthUrl, "https://robplanner.replit.app/api/health");
+  assert.equal(blackops.publicUrl, "https://robertwebsites.com");
+  assert.equal(blackops.healthUrl, "https://robertwebsites.com/api/health");
   assert.equal(blackops.deploymentProvider, "replit");
   assert.match(blackops.testCommand || "", /test:revenue-engine/);
   assert.equal(blackops.buildCommand, "npm run build");
   assert.deepEqual((blackops.tags as string[]).includes("alias-dialer-planner"), true);
-  assert.deepEqual((blackops.tags as string[]).includes("alternate-replit-deployment"), true);
+  assert.deepEqual((blackops.tags as string[]).includes("private-replit-deployment"), true);
   assert.deepEqual((blackops.tags as string[]).includes("liveness-health-endpoint"), true);
 });
 
@@ -161,8 +161,8 @@ test("upsertKnownDeveloperHealthInventory adds verified fields without erasing e
   assert.deepEqual((updatedBr.tags as string[]).includes("needs-public-url"), false);
   assert.deepEqual((updatedBr.tags as string[]).includes("needs-deploy-provider"), false);
   assert.deepEqual((updatedBr.tags as string[]).includes("verified-public-url"), true);
-  assert.equal(updatedKong.publicUrl, "https://kong--app.replit.app");
-  assert.equal(updatedKong.healthUrl, "https://kong--app.replit.app/api/health");
+  assert.equal(updatedKong.publicUrl, "https://kongnightlife.com");
+  assert.equal(updatedKong.healthUrl, "https://kongnightlife.com/api/health");
   assert.equal(updatedKong.deploymentProvider, "replit");
 });
 
@@ -200,7 +200,8 @@ test("upsertKnownDeveloperHealthInventory upgrades generic GitHub imported known
 
   assert.equal(result.updated.length, 1);
   assert.equal(upgraded.deploymentProvider, "replit");
-  assert.equal(upgraded.healthUrl, "https://robplanner.replit.app/api/health");
+  assert.equal(upgraded.publicUrl, "https://robertwebsites.com");
+  assert.equal(upgraded.healthUrl, "https://robertwebsites.com/api/health");
   assert.match(upgraded.testCommand || "", /test:revenue-engine/);
   assert.equal(upgraded.buildCommand, "npm run build");
   assert.deepEqual((upgraded.tags as string[]).includes("github-import"), true);
@@ -257,4 +258,21 @@ test("Developer Health inventory CLI rejects placeholder user ids", () => {
     ),
     "real-user-id",
   );
+});
+
+test("only exact retired KONG destinations migrate; custom near-matches remain", async () => {
+  const known = knownDeveloperHealthApps();
+  for (const oldUrl of ["https://kong--app.replit.app", "https://kong--app.replit.app/custom"]) {
+    const rows = known.map(app => appProject(app, app.slug === "kong-nightlife" ? { publicUrl: oldUrl, healthUrl: `${oldUrl}/api/health` } : {}));
+    await upsertKnownDeveloperHealthInventory("user-1", {
+      getAppProjects: async () => rows,
+      createAppProject: async () => { throw new Error("unexpected creation"); },
+      updateAppProject: async (id, updates) => {
+        const index = rows.findIndex(row => row.id === id); rows[index] = { ...rows[index], ...updates }; return rows[index];
+      },
+    });
+    const kong = rows.find(row => row.slug === "kong-nightlife")!;
+    const expected = oldUrl.endsWith("/custom") ? oldUrl : "https://kongnightlife.com";
+    assert.equal(kong.publicUrl, expected); assert.equal(kong.healthUrl, `${expected}/api/health`);
+  }
 });

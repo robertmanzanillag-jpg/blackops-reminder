@@ -56,6 +56,7 @@ export type Trainee = {
   modulesDone: string[];
   knowledge: string[];
   graduatedAt?: string;
+  evaluationClosedAt?: string;
   qualifiedAt?: string;
   purpose?: "incumbent" | "candidate";
   generation?: number;
@@ -89,7 +90,9 @@ export function specialistTopicLabel(id: string): string {
 
 // Only trusted execution adapters may supply these records. Reading curriculum is not evidence.
 export type AcademyAssessment = {
-  scope?: "fixture" | "production";
+  scope?: "fixture" | "production" | "benchmark";
+  profileId?: string;
+  profileVersion?: string;
   runId: string;
   benchmarkId: string;
   curriculumVersion: string;
@@ -104,8 +107,10 @@ export type AcademyAssessment = {
   incumbentDurationMs: number;
   cost: number;
   incumbentCost: number;
-  costBasis?: "subscription_no_incremental_api_charge";
-  artifacts?: { assignmentId: string; curriculumVersion: string; fixtureId: string; fixtureCode: string; incumbentText: string; candidateText: string; incumbentSessionId: string; candidateSessionId: string };
+  costBasis?: "subscription_no_incremental_api_charge" | "measured_tokens_not_usd";
+  artifacts?: { assignmentId: string; curriculumVersion: string; fixtureId: string; fixtureCode: string; incumbentText: string; candidateText: string; incumbentSessionId: string; candidateSessionId: string; profileId?: string; profileVersion?: string;
+    incumbentPolicyVersion?: string; candidatePolicyVersion?: string; candidateMeasuredCost?: number; incumbentMeasuredCost?: number;
+    candidateDurationMs?: number; incumbentDurationMs?: number; costBasis?: AcademyAssessment["costBasis"]; incumbentModel?: string; candidateModel?: string; provider?: string };
 };
 
 function validAssessment(a: unknown): a is AcademyAssessment {
@@ -118,7 +123,7 @@ function validAssessment(a: unknown): a is AcademyAssessment {
 }
 
 export function recordAcademyAssessment(state: CompanyState, traineeId: string, assessment: AcademyAssessment): CompanyState {
-  const trainee = state.trainees.find(t => t.id === traineeId && !t.graduatedAt);
+  const trainee = state.trainees.find(t => t.id === traineeId && !t.graduatedAt && !t.evaluationClosedAt);
   if (!validAssessment(assessment)) return state;
   const values = [assessment.quality, assessment.incumbentQuality, assessment.errors, assessment.incumbentErrors,
     assessment.durationMs, assessment.incumbentDurationMs, assessment.cost, assessment.incumbentCost];
@@ -169,6 +174,8 @@ export type CompanyState = {
 };
 
 export type AcademyJob = {
+  incumbentPolicyVersion?: string;
+  candidatePolicyVersion?: string;
   id: string; traineeId: string; generation: number; curriculumVersion: string;
   benchmarkId: string; startedAt: string; expiresAt: string;
   status: "running" | "completed" | "blocked" | "unknown";
@@ -219,8 +226,8 @@ function hash(text: string) {
 
 // Graduates are history and can be trimmed; someone still studying is never dropped.
 function capTrainees(trainees: Trainee[]): Trainee[] {
-  const studying = trainees.filter((trainee) => !trainee.graduatedAt);
-  const graduated = trainees.filter((trainee) => trainee.graduatedAt);
+  const studying = trainees.filter((trainee) => !trainee.graduatedAt && !trainee.evaluationClosedAt);
+  const graduated = trainees.filter((trainee) => trainee.graduatedAt || trainee.evaluationClosedAt);
   return [...studying, ...graduated.slice(0, Math.max(0, MAX_TRAINEES - studying.length))];
 }
 
@@ -390,7 +397,7 @@ export function advanceAcademy(state: CompanyState, curriculum: (trainee: Traine
   const careers = { ...state.careers };
   let events = [...state.events];
   const trainees = state.trainees.map((trainee) => {
-    if (trainee.graduatedAt) return trainee;
+    if (trainee.graduatedAt || trainee.evaluationClosedAt) return trainee;
     const currentCareer = careers[trainee.forAgentId];
     if (currentCareer && trainee.generation !== undefined && trainee.generation !== currentCareer.generation) {
       return { ...trainee, awaitingEvidence: true, executionBlocker: "Career generation changed; this course cannot update the current holder." };
@@ -564,8 +571,8 @@ export function scheduleAcademyTraining(state: CompanyState, roles: Record<strin
     });
   for (const career of careers) {
     for (const purpose of ["incumbent", "candidate"] as const) {
-      if (next.trainees.filter(t => !t.graduatedAt).length >= maxActive) return next;
-      if (next.trainees.some(t => t.forAgentId === career.agentId && t.purpose === purpose && !t.graduatedAt)) continue;
+      if (next.trainees.filter(t => !t.graduatedAt && !t.evaluationClosedAt).length >= maxActive) return next;
+      if (next.trainees.some(t => t.forAgentId === career.agentId && t.purpose === purpose && !t.graduatedAt && !t.evaluationClosedAt)) continue;
       const id = `academy:${career.agentId}:${career.generation}:${purpose}:${week}`;
       if (next.trainees.some(t => t.id === id)) continue;
       next = enrollTrainee(next, { id, forAgentId: career.agentId, role: roles[career.agentId], now });

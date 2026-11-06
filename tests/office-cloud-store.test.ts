@@ -55,10 +55,16 @@ class ContractPool implements OfficeCloudPool {
     }
     if (sql.includes("office:claim")) {
       assert.match(sql, /FOR UPDATE SKIP LOCKED/); assert.match(sql, /status\s*=\s*'pending'/);
-      const row = this.rows.find(item => item.status === "pending");
+      assert.match(sql, /owner_key=\$4 AND input->>'kind'='claude_review'/);
+      const row = this.rows.find(item => item.status === "pending" && (!parameters[3] || (item.owner_key === parameters[3] && (item.input as any).kind === "claude_review")));
       if (!row) return copy([]);
       Object.assign(row, { status: "running", worker_id: parameters[0], fence: parameters[1], lease_expires_at: new Date(this.time + Number(parameters[2])).toISOString(), started_at: new Date(this.time).toISOString() });
       return copy([row]);
+    }
+    if (sql.includes("office:release-unstarted")) {
+      const row = this.rows.find(item => item.id === parameters[0] && item.worker_id === parameters[1] && item.fence === parameters[2] && item.status === "running" && Date.parse(String(item.lease_expires_at)) > this.time);
+      if (!row) return copy([]);
+      Object.assign(row, { status: "pending", worker_id: null, fence: null, lease_expires_at: null, started_at: null }); return copy([row]);
     }
     if (sql.includes("office:complete")) {
       assert.match(sql, /worker_id=\$2 AND fence=\$3 AND status='running' AND lease_expires_at > CURRENT_TIMESTAMP/);
@@ -90,6 +96,21 @@ class ContractPool implements OfficeCloudPool {
   }
 }
 const input = () => ({ kind: "claude_chat" as const, message: "Review my task", key: randomUUID() });
+
+test("review-only claims preserve other owners and task kinds; unstarted admission is fenced", async () => {
+  const pool = new ContractPool(); const store = createOfficeCloudStore({ pool });
+  await store.submit("owner", { kind: "kong_audit", key: randomUUID() });
+  await store.submit("other", { kind: "claude_review", key: randomUUID(), prUrl: "https://github.com/a/b/pull/1" });
+  const wanted = await store.submit("owner", { kind: "claude_review", key: randomUUID(), prUrl: "https://github.com/a/b/pull/1" });
+  const task = (await store.claim("worker", { ownerId: "owner", reviewOnly: true }))!;
+  assert.equal(task.id, wanted.id);
+  assert.equal(await store.releaseUnstarted(task.id, "wrong", task.fence!), false);
+  assert.equal(await store.releaseUnstarted(task.id, "worker", task.fence!), true);
+  const next = (await store.claim("worker", { ownerId: "owner", reviewOnly: true }))!;
+  assert.notEqual(next.fence, task.fence);
+  assert.equal(await store.releaseUnstarted(task.id, "worker", task.fence!), false);
+  assert.equal(pool.rows.filter(r => r.status === "pending").length, 2);
+});
 
 test("recurring audits use one database slot across workers, preserve fences and avoid backlog", async () => {
   const pool = new ContractPool();

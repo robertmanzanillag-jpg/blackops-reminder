@@ -1,0 +1,51 @@
+name: Office repository reviewer
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17,47 * * * *'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+concurrency:
+  group: office-repository-reviewer
+  cancel-in-progress: false
+
+jobs:
+  review:
+    if: >-
+      github.repository == 'robertmanzanillag-jpg/blackops-reminder' &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
+      vars.OFFICE_REVIEWER_AUTOMATION_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22'
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Run one bounded repository review cycle
+        env:
+          NODE_ENV: production
+          OFFICE_WORKER_ENABLED: 'true'
+          OFFICE_WORKER_RUN_ONCE: 'true'
+          OFFICE_WORKER_REVIEW_ONLY: 'true'
+          OFFICE_KONG_AUDIT_SCHEDULE_ENABLED: 'false'
+          OFFICE_REVIEW_PROVIDER: openai
+          OFFICE_OPENAI_MODEL: ${{ vars.OFFICE_OPENAI_MODEL }}
+          OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT: ${{ vars.OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT }}
+          OFFICE_OPENAI_MAX_OUTPUT_TOKENS: '2048'
+          OFFICE_ACADEMY_PREPARATION_ENABLED: ${{ vars.OFFICE_ACADEMY_PREPARATION_ENABLED }}
+          OFFICE_ACADEMY_EXECUTION_ENABLED: ${{ vars.OFFICE_ACADEMY_EXECUTION_ENABLED }}
+          OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED: ${{ vars.OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED }}
+          OPENAI_API_KEY: ${{ secrets.OFFICE_OPENAI_API_KEY }}
+          DATABASE_URL: ${{ secrets.OFFICE_DATABASE_URL }}
+          DEFAULT_USER_ID: ${{ secrets.OFFICE_OWNER_ID }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node --import tsx script/office-worker.ts

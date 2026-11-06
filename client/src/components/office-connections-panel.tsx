@@ -21,7 +21,7 @@ export function OfficeConnectionsPanel() {
   const [clock, setClock] = useState(Date.now);
   // Retain the same key after an uncertain HTTP outcome; no duplicate dispatch.
   const pending = useRef<{ signature: string; key: string } | undefined>(undefined);
-  const connections = useQuery<{ claude?: Probe; worker?: Probe; workerEnabled?: boolean }>({ queryKey: ["/api/agents-office/connections"], enabled: open, staleTime: 30_000, refetchInterval: query => query.state.data?.workerEnabled === false ? false : 30_000 });
+  const connections = useQuery<{ claude?: Probe; worker?: Probe; workerEnabled?: boolean; reviewOnly?: boolean }>({ queryKey: ["/api/agents-office/connections"], enabled: open, staleTime: 30_000, refetchInterval: query => query.state.data?.workerEnabled === false ? false : 30_000 });
   const fresh = (probe?: Probe) => !connections.isError && Boolean(probe && Date.now() - Date.parse(probe.checkedAt) >= -30_000 && Date.now() - Date.parse(probe.checkedAt) < 90_000);
   const workerReady = fresh(connections.data?.worker) && connections.data?.worker?.status === "ready";
   const runs = useQuery<Run[]>({ queryKey: ["/api/agents-office/runs"], enabled: open && workerReady, refetchInterval: 2_000 });
@@ -148,10 +148,11 @@ export function OfficeConnectionsPanel() {
           <label htmlFor="office-live-message" className="text-sm">Hablar con Claude</label>
           <textarea id="office-live-message" value={message} onChange={e => setMessage(e.target.value)} maxLength={16000} className="min-h-20 w-full rounded-lg border border-white/15 bg-black/50 p-2 text-sm" placeholder="Escribe una tarea de analisis o una pregunta" />
           <p className="text-xs text-slate-400">Cada respuesta necesita una sesion real registrada de Claude. Este flujo analiza texto; no modifica archivos ni envia mensajes.</p>
-          <Button disabled={!enabled || busy || !message.trim()} onClick={() => mutation.mutate({ kind: "claude_chat", message: message.trim() })}>Enviar a Claude</Button>
+          {connections.data?.reviewOnly && <p className="text-xs text-amber-200">Este ejecutor solo revisa codigo. El chat necesita otro ejecutor.</p>}
+          <Button disabled={!enabled || connections.data?.reviewOnly || busy || !message.trim()} onClick={() => mutation.mutate({ kind: "claude_chat", message: message.trim() })}>Enviar a Claude</Button>
         </div>
         <div className="space-y-2">
-          <label htmlFor="office-live-pr" className="text-sm">Revision de cambios por Claude</label>
+          <label htmlFor="office-live-pr" className="text-sm">Revision independiente de cambios</label>
           <input id="office-live-pr" value={prUrl} onChange={e => setPrUrl(e.target.value)} className="w-full rounded-lg border border-white/15 bg-black/50 p-2 text-sm" placeholder="https://github.com/propietario/repo/pull/123" />
           <Button disabled={!enabled || busy || !prUrl.trim()} onClick={() => mutation.mutate({ kind: "claude_review", prUrl: prUrl.trim() })}>Revisar PR</Button>
         </div>
@@ -160,7 +161,7 @@ export function OfficeConnectionsPanel() {
         <section aria-label="Resultados de agentes" className="space-y-3">
           <h3 className="text-sm font-semibold">Ejecuciones comprobables</h3>
           {Array.isArray(runs.data) && runs.data.slice(0, 15).map(run => <article key={run.id} className="rounded-xl border border-white/10 p-3 text-xs">
-            <p className="font-semibold">{run.source === "scheduled" ? "Supervisor KONG" : run.kind === "kong_audit" ? "KONG" : "Claude"} · {statuses[run.status] || run.status}</p>
+            <p className="font-semibold">{run.source === "scheduled" ? "Supervisor KONG" : run.kind === "kong_audit" ? "KONG" : run.kind === "claude_review" ? "Revisor" : "Claude"} · {statuses[run.status] || run.status}</p>
             <p className="mt-1 text-slate-500">{new Date(run.createdAt).toLocaleString()} · {run.id.slice(0, 8)}</p>
             {run.error && <p className="mt-2 text-amber-200">{run.error.reason}</p>}
             {run.text && <p className="mt-2 whitespace-pre-wrap break-words leading-5 text-slate-200">{run.text}</p>}

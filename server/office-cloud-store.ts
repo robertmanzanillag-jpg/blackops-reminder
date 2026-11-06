@@ -13,6 +13,7 @@ const completionSchema = z.object({
   error: z.object({ code: z.string().min(1).max(100), reason: z.string().min(1).max(1000) }).strict().optional(),
   review: z.object({ prUrl: z.string().regex(PR), headSha: z.string().regex(/^[a-f0-9]{40,64}$/i), diffSha256: z.string().regex(/^[a-f0-9]{64}$/i), verdict: z.enum(["pass", "block"]), summary: z.string().min(1).max(8000), findings: z.array(z.string().max(4000)).max(100) }).strict().optional(),
   evidence: z.unknown().optional(),
+  provider: z.enum(["claude", "openai"]).optional(),
 }).strict();
 export type OfficeCloudCompletion = z.infer<typeof completionSchema>;
 export interface OfficeCloudRun {
@@ -37,7 +38,7 @@ const providerProbeSchema = z.object({
   reason: z.string().trim().min(1).max(1000),
   checkedAt: z.string().datetime({ offset: true }),
 }).strict();
-const capabilitiesSchema = z.object({ claude: providerProbeSchema, kong: providerProbeSchema }).strict();
+const capabilitiesSchema = z.object({ claude: providerProbeSchema, kong: providerProbeSchema, reviewOnly: z.boolean().optional() }).strict();
 export type OfficeWorkerCapabilities = z.infer<typeof capabilitiesSchema>;
 export interface OfficeWorkerHeartbeat {
   workerId: string;
@@ -209,17 +210,27 @@ export function createOfficeCloudStore(options: { pool?: OfficeCloudPool; leaseM
         return decode(existing);
       });
     },
-    async claim(workerId: string): Promise<OfficeCloudRun | undefined> {
+    async claim(workerId: string, filter?: { ownerId: string; reviewOnly: true }): Promise<OfficeCloudRun | undefined> {
       const workerIdSafe = worker(workerId);
+      const filteredOwner = filter ? ownerKey(filter.ownerId) : null;
       return transaction(async client => {
         // The durable running state is committed before the caller may invoke
         // Claude. A crash after claim is uncertain and never auto-retried.
         const claimed = await client.query(`/*office:claim*/ WITH candidate AS (
- SELECT id FROM agent_office_cloud_jobs WHERE status = 'pending' ORDER BY created_at, id FOR UPDATE SKIP LOCKED LIMIT 1
+ SELECT id FROM agent_office_cloud_jobs WHERE status = 'pending'
+ AND ($4::text IS NULL OR (owner_key=$4 AND input->>'kind'='claude_review'))
+ ORDER BY created_at, id FOR UPDATE SKIP LOCKED LIMIT 1
 ) UPDATE agent_office_cloud_jobs job SET status='running', worker_id=$1, fence=$2, lease_expires_at=CURRENT_TIMESTAMP + ($3 * interval '1 millisecond'), started_at=CURRENT_TIMESTAMP, updated_at=CURRENT_TIMESTAMP
-FROM candidate WHERE job.id=candidate.id AND job.status='pending' RETURNING job.*`, [workerIdSafe, randomUUID(), leaseMs]);
+FROM candidate WHERE job.id=candidate.id AND job.status='pending' RETURNING job.*`, [workerIdSafe, randomUUID(), leaseMs, filteredOwner]);
         return claimed.rows[0] ? decode(claimed.rows[0]) : undefined;
       });
+    },
+    // Only the worker's pre-execution admission path may return an unstarted claim.
+    async releaseUnstarted(id: string, workerId: string, fence: string): Promise<boolean> {
+      const result = await (await pool()).query(`/*office:release-unstarted*/ UPDATE agent_office_cloud_jobs
+SET status='pending', worker_id=NULL, fence=NULL, lease_expires_at=NULL, started_at=NULL, updated_at=CURRENT_TIMESTAMP
+WHERE id=$1 AND worker_id=$2 AND fence=$3 AND status='running' AND lease_expires_at>CURRENT_TIMESTAMP RETURNING id`, [id, worker(workerId), fence]);
+      return result.rows.length === 1;
     },
     async enqueueScheduledKongAudit(userId: string): Promise<void> {
       const owner = ownerKey(userId);

@@ -82,6 +82,7 @@ export type CouncilLesson = { key: string; ruleId: string; subject: string; labe
 export type ScoutRelease = { repo: string; tag: string; url: string; publishedAt: string | null; skills: string[] };
 
 export type CouncilState = {
+  officeExecution?: { roles: import("./office-role-lifecycle").OfficeRoleLifecycleState; tokens: import("../server/office-token-budget").OfficeTokenBudgetState };
   version: 1;
   kongSupervision: KongSupervision;
   cycles: number;

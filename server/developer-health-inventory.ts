@@ -42,8 +42,8 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     slug: "blackops-reminder",
     description: "BlackOps Reminder full-stack TypeScript PWA, also referred to as Dialer Planner when running from its alternate Replit deployment. GitHub: robertmanzanillag-jpg/blackops-reminder.",
     environment: "production",
-    publicUrl: "https://robplanner.replit.app",
-    healthUrl: "https://robplanner.replit.app/api/health",
+    publicUrl: "https://robertwebsites.com",
+    healthUrl: "https://robertwebsites.com/api/health",
     repoOwner: "robertmanzanillag-jpg",
     repoName: "blackops-reminder",
     githubRepo: "robertmanzanillag-jpg/blackops-reminder",
@@ -57,7 +57,7 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     logSource: null,
     priority: "high",
     ownerLabel: "Robert",
-    tags: ["known-github-inventory", "alias-dialer-planner", "alternate-replit-deployment", "liveness-health-endpoint"],
+    tags: ["known-github-inventory", "alias-dialer-planner", "private-replit-deployment", "liveness-health-endpoint"],
   },
   {
     name: "DROPKIT",
@@ -86,15 +86,15 @@ const KNOWN_DEVELOPER_HEALTH_APPS: InsertAppProject[] = [
     slug: "kong-nightlife",
     description: "Kong Nightlife app repo. GitHub: robertmanzanillag-jpg/kong-nightlife.",
     environment: "production",
-    publicUrl: "https://kong--app.replit.app",
-    healthUrl: "https://kong--app.replit.app/api/health",
+    publicUrl: "https://kongnightlife.com",
+    healthUrl: "https://kongnightlife.com/api/health",
     repoOwner: "robertmanzanillag-jpg",
     repoName: "kong-nightlife",
     githubRepo: "robertmanzanillag-jpg/kong-nightlife",
     deploymentProvider: "replit",
     deploymentId: null,
     testCommand: "npm run check",
-    buildCommand: "EXPO_PUBLIC_DOMAIN=kong--app.replit.app npm run expo:static:build",
+    buildCommand: "EXPO_PUBLIC_DOMAIN=kongnightlife.com npm run expo:static:build",
     sentryProjectId: null,
     stripeAccountId: null,
     stripeWebhookEndpointId: null,
@@ -161,7 +161,13 @@ function mergeKnownApp(existing: AppProject, known: InsertAppProject): Partial<A
       updates.deploymentProvider = String(nextValue);
       continue;
     }
-    if (["publicUrl", "healthUrl", "deploymentProvider"].includes(field) && (existing as any)[field]) continue;
+    if (["publicUrl", "healthUrl", "deploymentProvider"].includes(field) && (existing as any)[field]) {
+      // Replace only the exact retired defaults confirmed against deployment
+      // metadata. User-managed custom destinations remain untouched.
+      const retired = known.slug === "kong-nightlife" ? "https://kong--app.replit.app" : known.slug === "blackops-reminder" ? "https://robplanner.replit.app" : undefined;
+      const oldValue = retired && (field === "publicUrl" ? retired : field === "healthUrl" ? `${retired}/api/health` : undefined);
+      if (!oldValue || (existing as any)[field] !== oldValue) continue;
+    }
     if ((existing as any)[field] !== nextValue) {
       (updates as any)[field] = nextValue;
     }
