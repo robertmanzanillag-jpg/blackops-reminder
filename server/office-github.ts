@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { Octokit } from "@octokit/rest";
 import { parseGitHubPullRequestUrl, validateGitHubFilePath } from "./github-client";
 
 const MAX_FILES = 100;
@@ -44,6 +45,25 @@ interface OfficeGitHubClient {
     get(input: { owner: string; repo: string; pull_number: number; request?: { timeout: number } }): Promise<{ data: unknown }>;
     listFiles(input: { owner: string; repo: string; pull_number: number; page: number; per_page: number; request?: { timeout: number } }): Promise<{ data: unknown }>;
   };
+}
+
+/** Only the credentialless review worker may read public PRs anonymously.
+ * Return a narrowed GET-only surface; shared authenticated/write clients are unchanged. */
+export async function getOfficePrReadClient(options: {
+  env?: NodeJS.ProcessEnv;
+  authenticated?: () => Promise<OfficeGitHubClient>;
+  publicFetch?: typeof fetch;
+} = {}): Promise<OfficeGitHubClient> {
+  const env = options.env || process.env;
+  const configuredIdentity = [env.GITHUB_TOKEN, env.GH_TOKEN, env.REPL_IDENTITY, env.WEB_REPL_RENEWAL].some(value => Boolean(value?.trim()));
+  if (env.OFFICE_WORKER_ENABLED !== "true" || env.OFFICE_WORKER_REVIEW_ONLY !== "true" || configuredIdentity) {
+    return (options.authenticated || (async () => (await import("./github-client")).getGitHubClient()))();
+  }
+  const client = new Octokit({ request: { timeout: 15000, ...(options.publicFetch ? { fetch: options.publicFetch } : {}) } });
+  return { pulls: {
+    get: ({ owner, repo, pull_number }) => client.pulls.get({ owner, repo, pull_number, request: { timeout: 15000 } }),
+    listFiles: ({ owner, repo, pull_number, page, per_page }) => client.pulls.listFiles({ owner, repo, pull_number, page, per_page, request: { timeout: 15000 } }),
+  } };
 }
 interface PrMetadata { headSha: string; baseSha: string; changedFiles: number; additions: number; deletions: number }
 interface ReviewedFile { path: string; previousPath?: string; status: string; additions: number; deletions: number; patch: string }
@@ -138,7 +158,7 @@ function filePacket(value: unknown): ReviewedFile {
 }
 
 export function createOfficeGitHubLoader(dependencies: { getClient?: () => Promise<OfficeGitHubClient> } = {}) {
-  const getClient = dependencies.getClient ?? (async () => (await import("./github-client")).getGitHubClient());
+  const getClient = dependencies.getClient ?? getOfficePrReadClient;
   async function loadOfficePullRequest(prUrl: string): Promise<OfficePullRequestPacket> {
     const reference = parseOfficePrUrl(prUrl);
     try {
@@ -167,7 +187,7 @@ export function createOfficeGitHubLoader(dependencies: { getClient?: () => Promi
       return { prUrl: reference.prUrl, headSha: before.headSha, diff, diffSha256: createHash("sha256").update(diff, "utf8").digest("hex") };
     } catch (error) {
       if (error instanceof OfficeGitHubError) throw error;
-      return block("GITHUB_UNAVAILABLE", "No se pudo leer el pull request con la conexion autenticada de GitHub.");
+      return block("GITHUB_UNAVAILABLE", "No se pudo leer el pull request. Las revisiones sin credenciales solo pueden acceder a repositorios publicos.");
     }
   }
   return { loadOfficePullRequest };
