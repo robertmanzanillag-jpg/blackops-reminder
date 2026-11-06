@@ -54,6 +54,11 @@ export function createOpenAiFactoryPatchGenerator(options: {
     // The existing builder checks/apply/tests the exact returned diff. Failed
     // terminal calls settle known usage; ambiguous calls keep its reservation.
     if (result.status === "unknown") throw new Error("FACTORY_MODEL_EXECUTION_UNCONFIRMED");
-    return { patch: result.status === "completed" ? result.text : "", costCents: result.costCents };
+    // Model text may omit its final line delimiter. Add only that delimiter;
+    // never trim hunk whitespace, unwrap commentary, or repair truncated hunks.
+    // The strict downstream parser still validates the entire resulting patch.
+    const text = result.status === "completed" ? result.text : "";
+    const patch = text && !text.endsWith("\n") ? `${text}\n` : text;
+    return { patch, costCents: result.costCents };
   };
 }

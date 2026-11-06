@@ -1,4 +1,5 @@
 import test from "node:test";
+import { validateFactoryPublicationPatch } from "../server/software-factory-github-publisher";
 import assert from "node:assert/strict";
 import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
@@ -50,5 +51,29 @@ test("ambiguous model execution throws; terminal failure retains its cost", asyn
     await assert.rejects(unknown(input, { workspace, maxCostCents: 10 }), /UNCONFIRMED/);
     const failed = createOpenAiFactoryPatchGenerator({ ...common, generateText: async () => ({ status: "failed", reason: "refusal", costCents: 3 }) });
     assert.deepEqual(await failed(input, { workspace, maxCostCents: 10 }), { patch: "", costCents: 3 });
+  } finally { await rm(workspace, { recursive: true, force: true }); }
+});
+
+
+test("missing model line delimiter is normalized without repairing invalid diff contents", async () => {
+  const workspace = await mkdtemp(path.join(os.tmpdir(), "factory-openai-test-"));
+  try {
+    await writeFile(path.join(workspace, "app.ts"), "old\n");
+    const valid = "diff --git a/app.ts b/app.ts\n--- a/app.ts\n+++ b/app.ts\n@@ -1 +1 @@\n-old\n+new  ";
+    for (const text of [valid, valid + "\n", valid.replace("@@ -1 +1 @@", "@@ -2 +2 @@")]) {
+      const generate = createOpenAiFactoryPatchGenerator({ sourcePaths: { "owner/app": ["app.ts"] }, maxOutputTokens: 100,
+        generateText: async () => ({ status: "completed", text, costCents: 2, inputTokens: 10, outputTokens: 10 }) });
+      const result = await generate(input, { workspace, maxCostCents: 10 });
+      assert.equal(result.patch, text.endsWith("\n") ? text : text + "\n");
+      assert.equal(result.costCents, 2);
+      assert.deepEqual(validateFactoryPublicationPatch(result.patch), ["app.ts"]);
+    }
+    for (const text of [valid.replace("@@ -1 +1 @@", "@@ -1,2 +1,2 @@"), "```diff\n" + valid + "\n```", valid.replaceAll("app.ts", "../escape"), valid + "\r", ""]) {
+      const generate = createOpenAiFactoryPatchGenerator({ sourcePaths: { "owner/app": ["app.ts"] }, maxOutputTokens: 100,
+        generateText: async () => ({ status: "completed", text, costCents: 2, inputTokens: 10, outputTokens: 10 }) });
+      const result = await generate(input, { workspace, maxCostCents: 10 });
+      assert.equal(result.costCents, 2);
+      assert.throws(() => validateFactoryPublicationPatch(result.patch));
+    }
   } finally { await rm(workspace, { recursive: true, force: true }); }
 });
