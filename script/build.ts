@@ -3,6 +3,7 @@ import { build as viteBuild } from "vite";
 import { mkdir, rm, readFile, copyFile, writeFile } from "fs/promises";
 import { spawn } from "child_process";
 import { createRequire } from "node:module";
+import { createSoftwareFactorySchemaSql } from "../server/software-factory-store";
 import { createOfficeCloudSchemaSql } from "../server/office-cloud-store";
 
 function pipInstallEnv(): NodeJS.ProcessEnv {
@@ -176,6 +177,14 @@ async function buildAll() {
     external: externals,
     logLevel: "error",
   });
+  await esbuild({
+    entryPoints: ["script/software-factory-worker.ts"],
+    platform: "node", bundle: true, format: "cjs",
+    outfile: "dist/software-factory-worker.cjs",
+    define: { "process.env.NODE_ENV": '"production"' },
+    minify: true, external: externals, logLevel: "error",
+  });
+  await writeFile("dist/software-factory-schema.sql", createSoftwareFactorySchemaSql(), "utf8");
   // Prepared artifact only: building never applies this migration.
   await writeFile("dist/office-cloud-schema.sql", createOfficeCloudSchemaSql(), "utf8");
 }

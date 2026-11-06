@@ -1,0 +1,33 @@
+name: Factory isolated runner probe
+on:
+  push:
+    branches: [codex/autonomous-software-factory]
+    paths: [.github/workflows/factory-runner-probe.yml]
+permissions: {}
+concurrency:
+  group: factory-runner-probe
+  cancel-in-progress: false
+jobs:
+  probe:
+    if: github.repository == 'robertmanzanillag-jpg/blackops-reminder' && github.event.repository.private == false
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify bounded isolated execution without repository code or secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          image='docker.io/library/node@sha256:c0a93797ee78814ae6d32fcca2561fdbbe423149c3f5389aad32d86e9fd85bd4'
+          timeout 120 docker pull "$image" >/dev/null
+          timeout 30 docker run --rm --network none --read-only --cap-drop ALL \
+            --security-opt no-new-privileges --user 65534:65534 \
+            --memory 128m --cpus 1 --pids-limit 32 \
+            --tmpfs /tmp:rw,noexec,nosuid,size=8m "$image" node -e '
+            const fs = require("node:fs");
+            const assert = require("node:assert/strict");
+            assert.equal(process.getuid(), 65534);
+            assert.throws(() => fs.writeFileSync("/factory-write-test", "test"));
+            assert.equal(fs.existsSync("/var/run/docker.sock"), false);
+            assert.equal(Object.keys(require("node:os").networkInterfaces()).filter(k => k !== "lo").length, 0);
+            assert.equal(Object.keys(process.env).some(k => /TOKEN|SECRET|API_KEY|DATABASE_URL/.test(k)), false);
+            console.log("FACTORY_ISOLATION_PROBE_PASSED");'
