@@ -23,7 +23,7 @@ export function SoftwareFactoryPanel() {
   const [journeys, setJourneys] = useState("");
   const [fixed, setFixed] = useState("");
   const client = useQueryClient();
-  const query = useQuery<SoftwareFactoryView>({ queryKey: [endpoint], enabled: open, staleTime: 0, refetchInterval: open ? 15_000 : false, retry: false });
+  const query = useQuery<SoftwareFactoryView>({ queryKey: [endpoint], enabled: open, staleTime: 0, refetchInterval: false, refetchOnWindowFocus: false, refetchOnReconnect: false, retry: false });
   const mutation = useMutation({
     mutationFn: async (action: { path: "pause" | "budget"; body: { paused: boolean } | { fixedCents: number } }) => {
       await apiRequest("POST", `${endpoint}/${action.path}`, action.body);
@@ -47,6 +47,10 @@ export function SoftwareFactoryPanel() {
       {query.isError && <div role="alert"><p>No se pudo comprobar la fábrica. La actividad anterior no confirma que siga trabajando.</p><Button variant="outline" onClick={() => void query.refetch()}>Reintentar</Button></div>}
       {mutation.isError && <p role="alert">No se confirmó el cambio. Actualiza el estado antes de reintentarlo.</p>}
       {data && <div className="space-y-5">
+        <div className="space-y-2">
+          <p className="text-sm text-muted-foreground">Estado comprobado el <time dateTime={data.checkedAt}>{new Date(data.checkedAt).toLocaleString("es")}</time>. No se actualiza automáticamente; esta información no confirma la actividad actual.</p>
+          <Button variant="outline" disabled={query.isFetching} onClick={() => void query.refetch()}>{query.isFetching ? "Actualizando…" : "Actualizar estado"}</Button>
+        </div>
         <section aria-labelledby="factory-state">
           <h3 id="factory-state" className="font-semibold">{data.paused ? "Fábrica pausada" : data.readiness === "available" ? "Ejecutor disponible" : "Necesita preparación"}</h3>
           <p className="text-sm text-muted-foreground">Pausar impide tomar nuevos trabajos; una operación ya iniciada puede terminar.</p>
