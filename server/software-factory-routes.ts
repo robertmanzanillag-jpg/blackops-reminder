@@ -51,9 +51,18 @@ export function registerSoftwareFactoryRoutes(app: Express, options: {
       const remainingCents = Math.max(0, state.limitCents - state.fixedCents - state.spentCents - state.reservedCents);
       if (state.configured && remainingCents === 0) blockers.push("El presupuesto mensual está agotado o comprometido.");
       const stages = ["discover", "build", "simulate", "review", "deploy", "verify", "rollback", "evaluate"] as const;
-      const activeWorkers = state.workers.filter(worker => { const age = now().getTime() - new Date(worker.last_seen_at).getTime(); return age >= -30000 && age <= 45000; });
+      const activeWorkers = state.workers.filter(worker => {
+        const seen = worker.last_seen_at;
+        if (!(seen instanceof Date) && typeof seen !== "string" && typeof seen !== "number") return false;
+        const age = now().getTime() - new Date(seen).getTime();
+        return Number.isFinite(age) && age >= -30000 && age <= 45000;
+      });
       if (!activeWorkers.length) blockers.push("No hay señal reciente del ejecutor de la fábrica.");
-      const capabilities = stages.every(stage => activeWorkers.some(worker => worker.capabilities?.[stage] === true));
+      const capabilities = stages.every(stage => activeWorkers.some(worker => {
+        const reported = worker.capabilities;
+        return reported !== null && typeof reported === "object" && !Array.isArray(reported)
+          && (reported as Record<string, unknown>)[stage] === true;
+      }));
       if (!capabilities) blockers.push("Faltan ejecutores configurados para completar todas las etapas.");
       if (!projects.length) blockers.push("Registra una aplicación con su entorno de ensayo y recuperación.");
       const eligible = projects.some(project => {
