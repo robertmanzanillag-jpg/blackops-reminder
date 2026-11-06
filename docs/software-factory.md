@@ -157,7 +157,23 @@ output cost against an already durable reservation. Credits do not reduce
 the ledger charge. Ambiguous requests retain the full reservation; reported
 usage is accepted only for a terminal, matching response within its limits.
 
-This is a text provider, not a completed patch generator or reviewer. It does
-not itself activate the worker, establish release evidence, or enforce the
+`createOpenAiFactoryPatchGenerator` connects this provider to the existing
+builder using an operator-owned per-repository file allowlist. It reads only
+bounded, regular UTF-8 files from the exact source export, rejects credential
+paths and special files, and preserves the returned patch for isolated tests
+and publication. The workspace must remain private and immutable during model
+context collection. Ambiguous generation keeps its reservation; a known failed
+response returns its actual conservative cost and no usable patch.
+
+These adapters do not themselves activate the worker, establish release evidence, or enforce the
 cloud hosting bill. Live pricing, authentication, credit availability, stage
 wiring, and end-to-end rehearsal remain deployment requirements.
+
+A live development probe on 2026-11-06 downloaded and verified the provider at
+commit `35aeece4841b389b3666ad9bcc25b4ecd729eb7d`. With a dedicated restricted
+Responses key in Replit Secrets, input counting and generation completed in
+two requests: 23 input tokens, 2 output tokens, response `READY`. The manual
+probe reserved one cent and conservatively charged that cent in its report.
+It used synthetic text only, not production data. This verifies the API path,
+not a running production worker. Deployment secrets still require synchronization
+when the dedicated factory deployment is prepared.

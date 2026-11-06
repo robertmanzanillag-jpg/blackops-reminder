@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T08:25:18.938Z",
+  "generatedAt": "2026-11-06T08:35:02.506Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -126,25 +126,25 @@
     "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 812,
-    "filesIndexed": 729,
-    "imports": 2611,
+    "filesVisible": 814,
+    "filesIndexed": 731,
+    "imports": 2621,
     "routes": 556,
-    "symbols": 16267
+    "symbols": 16289
   },
   "directories": {
     "server": {
-      "files": 173,
-      "indexed": 169,
+      "files": 174,
+      "indexed": 170,
       "kinds": {
-        "server": 173
+        "server": 174
       }
     },
     "tests": {
-      "files": 181,
-      "indexed": 178,
+      "files": 182,
+      "indexed": 179,
       "kinds": {
-        "test": 181
+        "test": 182
       }
     },
     ".": {
@@ -21280,6 +21280,34 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-openai-builder.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-builder",
+        "./software-factory-openai",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "createOpenAiFactoryPatchGenerator"
+      ],
+      "symbols": [
+        "createOpenAiFactoryPatchGenerator",
+        "files",
+        "generate",
+        "input",
+        "protectedSegment",
+        "raw",
+        "result",
+        "rootStat",
+        "segments",
+        "signal",
+        "sources",
+        "stat"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-openai.ts",
       "kind": "server",
       "imports": [],
@@ -28602,6 +28630,32 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-openai-builder.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-openai-builder",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "common",
+        "context",
+        "failed",
+        "generate",
+        "generateText",
+        "input",
+        "patch",
+        "sourcePaths",
+        "unknown",
+        "workspace"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-openai.test.ts",
       "kind": "test",
       "imports": [
@@ -29259,6 +29313,7 @@
     "tests/software-factory-github.test.ts",
     "tests/software-factory-loop.test.ts",
     "tests/software-factory-object-store.test.ts",
+    "tests/software-factory-openai-builder.test.ts",
     "tests/software-factory-openai.test.ts",
     "tests/software-factory-pipeline.test.ts",
     "tests/software-factory-postgres.test.ts",
