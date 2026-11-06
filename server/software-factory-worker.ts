@@ -33,6 +33,8 @@ export function validateFactoryTransition(job: FactoryJob, result: FactoryAdapte
   if (Number(next.payload.repairAttempts) > 2) throw new Error("FACTORY_REPAIR_LIMIT");
 }
 export function createSoftwareFactoryWorker(options: FactoryWorkerOptions = {}) {
+  if(options.releaseMode!==undefined && !["review-only","enabled"].includes(options.releaseMode))throw Error("FACTORY_RELEASE_MODE_INVALID");
+  if(options.discoveryMode!==undefined && !["daily","company-orders-only"].includes(options.discoveryMode))throw Error("FACTORY_DISCOVERY_MODE_INVALID");
   const store = options.store || softwareFactoryStore;
   const workerId = options.workerId || `factory-${randomUUID()}`;
   const now = options.now || (() => new Date());
@@ -84,7 +86,12 @@ export function createSoftwareFactoryWorker(options: FactoryWorkerOptions = {}) 
         };
         let requiredRollbackCents: number | undefined;
         const adapter = options.adapters?.[job.kind];
-        if (options.releaseMode === "review-only" && ["deploy", "verify", "rollback", "evaluate"].includes(job.kind)) return await block("FACTORY_RELEASE_NOT_ENABLED");
+        if (options.releaseMode === "review-only" && ["deploy", "verify", "rollback", "evaluate"].includes(job.kind)) {
+          // A previous deployment may still need recovery. Never release its
+          // escrow by completing a claimed recovery job as a zero-cost block.
+          await store.complete(job,{status:"unknown",costCents:0,reason:"FACTORY_RELEASE_REQUIRES_OPERATOR_RECONCILIATION"});
+          quarantined=true;return {kind:"quarantined"};
+        }
         if (!adapter) return await block(`FACTORY_ADAPTER_UNAVAILABLE:${job.kind}`);
         if (job.kind === "deploy") {
           if (!options.releaseContext) return await block("FACTORY_TRUSTED_RELEASE_EVIDENCE_UNAVAILABLE");
