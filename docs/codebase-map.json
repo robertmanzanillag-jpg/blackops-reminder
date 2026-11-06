@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-05T21:35:58.948Z",
-  "repoRoot": "/private/tmp/br-office-reconcile-20261105",
+  "generatedAt": "2026-11-06T00:48:13.642Z",
+  "repoRoot": "/Users/robertmanzanilla/Documents/Codex/2026-11-05/quioer-que-te-asgurs-de-uq-2/work/kong-office",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,20 +124,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 772,
-    "filesIndexed": 689,
-    "imports": 2409,
-    "routes": 532,
-    "symbols": 15588
+    "filesVisible": 778,
+    "filesIndexed": 695,
+    "imports": 2455,
+    "routes": 548,
+    "symbols": 15719
   },
   "directories": {
-    ".local/office-evidence": {
-      "files": 1,
-      "indexed": 1,
-      "kinds": {
-        "other": 1
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -184,14 +177,14 @@
       }
     },
     "client/src": {
-      "files": 140,
-      "indexed": 138,
+      "files": 142,
+      "indexed": 140,
       "kinds": {
         "other": 4,
-        "client-component": 36,
+        "client-component": 37,
         "ui-component": 55,
         "client-hook": 3,
-        "client-lib": 16,
+        "client-lib": 17,
         "client-page": 26
       }
     },
@@ -225,10 +218,10 @@
       }
     },
     "server": {
-      "files": 158,
-      "indexed": 154,
+      "files": 159,
+      "indexed": 155,
       "kinds": {
-        "server": 158
+        "server": 159
       }
     },
     "server/replit_integrations": {
@@ -253,10 +246,10 @@
       }
     },
     "tests": {
-      "files": 161,
-      "indexed": 158,
+      "files": 165,
+      "indexed": 162,
       "kinds": {
-        "test": 161
+        "test": 165
       }
     },
     "tests/fixtures": {
@@ -326,14 +319,6 @@
     {
       "path": ".agents/skills/codebase-overview/SKILL.md",
       "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": ".local/office-evidence/affected-route-auth-guards.json",
-      "kind": "other",
       "imports": [],
       "exports": [],
       "symbols": [],
@@ -600,6 +585,7 @@
         "./office-scene",
         "@/components/agents-building/agents-building",
         "@/lib/agent-live-status",
+        "@/lib/kong-office-wing",
         "@/lib/office-city-agents",
         "@/lib/office-kong-central-agents",
         "@/lib/utils",
@@ -621,20 +607,15 @@
         "OfficeAgentStatusChat",
         "PanelAgent",
         "academyIds",
-        "activeCityAgents",
-        "activeCityCountry",
         "career",
         "centralSignalById",
         "centralSignals",
         "changeWing",
         "city",
-        "cityCountries",
         "cityDirectory",
         "cityEvidence",
         "cityRefreshInterval",
-        "cityRegistered",
         "cityRooms",
-        "cityRunning",
         "citySnapshot",
         "citySupervision",
         "colorFromGradient",
@@ -652,7 +633,6 @@
         "directory",
         "evidenceExpiresAt",
         "evidenceRuns",
-        "filteredCityRooms",
         "focusRoom",
         "focused",
         "focusedAgents",
@@ -662,6 +642,8 @@
         "host",
         "hostRef",
         "integrations",
+        "kongCollaboration",
+        "kongWing",
         "labels",
         "labelsRef",
         "latestSceneKey",
@@ -674,7 +656,6 @@
         "name",
         "nameOf",
         "notice",
-        "openCityFromOverview",
         "pageAgentIds",
         "panelAgent",
         "panelAgents",
@@ -690,12 +671,10 @@
         "queryClient",
         "question",
         "reassignmentProposals",
-        "recorded",
         "reducedMotion",
         "refreshCouncil",
         "result",
         "runCouncil",
-        "running",
         "sceneKey",
         "sceneRef",
         "seat",
@@ -708,6 +687,7 @@
         "text",
         "timer",
         "topic",
+        "wingRef",
         "workingCount"
       ],
       "routes": []
@@ -764,9 +744,11 @@
         "camera",
         "canvas",
         "chairs",
+        "changed",
         "cityJob",
         "cityOverview",
         "cityPosition",
+        "citySeats",
         "clearDynamic",
         "clock",
         "col",
@@ -799,6 +781,7 @@
         "end",
         "fill",
         "firstRow",
+        "fitOfficeOverview",
         "floor",
         "flow",
         "flowColor",
@@ -813,6 +796,7 @@
         "ground",
         "group",
         "h",
+        "halfAngle",
         "hasProblem",
         "head",
         "headerSpace",
@@ -844,6 +828,7 @@
         "mid",
         "motion",
         "name",
+        "now",
         "officeCityDeskPosition",
         "officeCityMapPosition",
         "offset",
@@ -914,6 +899,7 @@
         "updateDeskLabel",
         "w",
         "wave",
+        "widest",
         "width",
         "wood",
         "working",
@@ -1406,6 +1392,55 @@
       "symbols": [
         "id",
         "kongSupervisorSessionScope"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/kong-team-office.tsx",
+      "kind": "client-component",
+      "imports": [
+        "../../../server/office-kong",
+        "@/components/agents-building/agents-building",
+        "@/lib/office-city-agents",
+        "@shared/office-kong-supervisor",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "exports": [
+        "KongTeamOffice"
+      ],
+      "symbols": [
+        "Desk",
+        "KongTeamOffice",
+        "age",
+        "agent",
+        "agentButton",
+        "all",
+        "byId",
+        "ceo",
+        "cities",
+        "city",
+        "cityEvidence",
+        "countries",
+        "current",
+        "desk",
+        "dialog",
+        "directory",
+        "evidence",
+        "expiresAt",
+        "media",
+        "mediaIds",
+        "onDemand",
+        "panel",
+        "priority",
+        "priorityDesks",
+        "query",
+        "results",
+        "rooms",
+        "searchKey",
+        "snapshot",
+        "station",
+        "timer"
       ],
       "routes": []
     },
@@ -3442,6 +3477,36 @@
       "routes": []
     },
     {
+      "path": "client/src/lib/kong-office-wing.ts",
+      "kind": "client-lib",
+      "imports": [
+        "../../../server/office-kong",
+        "./agent-live-status",
+        "./office-city-agents",
+        "./office-kong-central-agents"
+      ],
+      "exports": [
+        "KongOfficeDesk",
+        "buildKongOfficeWing"
+      ],
+      "symbols": [
+        "age",
+        "buildKongOfficeWing",
+        "central",
+        "centralGroups",
+        "departments",
+        "existing",
+        "fresh",
+        "grouped",
+        "ids",
+        "nativeSignals",
+        "source",
+        "state",
+        "videoNativeId"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/lib/office-city-agents.ts",
       "kind": "client-lib",
       "imports": [
@@ -3858,6 +3923,7 @@
         "offsetsKey",
         "openContactChat",
         "openHref",
+        "openKongOffice",
         "opener",
         "overview",
         "ownerId",
@@ -10715,15 +10781,21 @@
         "MANUAL_RUN_MIN_INTERVAL_MS",
         "body",
         "council",
+        "councilInstance",
         "current",
+        "enabled",
         "evidenceRunId",
         "kongConversation",
         "last",
         "message",
+        "ownerUserId",
         "raw",
         "registerAgentCouncilRoutes",
+        "requestUserId",
+        "scope",
         "state",
-        "text"
+        "text",
+        "view"
       ],
       "routes": [
         "/api/agent-company/orders",
@@ -10738,6 +10810,8 @@
       "imports": [
         "./blackroom-office-operations",
         "./database-url",
+        "./kong-company",
+        "./office-kong",
         "@shared/agent-company",
         "@shared/agent-council",
         "@shared/agent-integrations",
@@ -10840,6 +10914,7 @@
         "health",
         "hit",
         "id",
+        "ids",
         "instance",
         "integration",
         "integrations",
@@ -10848,6 +10923,8 @@
         "iso",
         "job",
         "key",
+        "kong",
+        "kongEvidence",
         "last",
         "listedInClaudeMd",
         "load",
@@ -10855,11 +10932,13 @@
         "loaded",
         "local",
         "matches",
+        "matching",
         "mergeProposalSync",
         "message",
         "modules",
         "mutate",
         "next",
+        "normalized",
         "now",
         "online",
         "open",
@@ -10903,6 +10982,7 @@
         "startAgentCouncilScheduler",
         "state",
         "status",
+        "statuses",
         "statusesFromSignals",
         "summarize",
         "syncProposals",
@@ -16839,6 +16919,36 @@
       ]
     },
     {
+      "path": "server/kong-company.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "../shared/agent-live-status",
+        "../shared/office-kong-supervisor",
+        "./office-kong",
+        "./office-kong-collaboration"
+      ],
+      "exports": [
+        "KongCompanyObservation",
+        "advanceKongCompany",
+        "isKongCompanyAgent "
+      ],
+      "symbols": [
+        "advanceKongCompany",
+        "collaboration",
+        "credit",
+        "evidenceAt",
+        "id",
+        "initialized",
+        "job",
+        "newAgents",
+        "observedAgents",
+        "supervision",
+        "time"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/kong-operations-routes.ts",
       "kind": "server",
       "imports": [
@@ -21656,6 +21766,7 @@
         "emptyCompanyState",
         "enrollTrainee",
         "evidenceAlreadyUsed",
+        "isKongCompanyAgent",
         "isSpecialistId",
         "isTailoredModule",
         "leaderboard",
@@ -21665,6 +21776,7 @@
         "parseCompanyState",
         "personalityFor",
         "routeOrder",
+        "separateLegacyKongCompany",
         "specialistIdFor",
         "specialistNeeds",
         "specialistTopicLabel",
@@ -21700,6 +21812,7 @@
         "completeOrder",
         "containsWord",
         "createOrder",
+        "dedupe",
         "delta",
         "earned",
         "emptyCompanyState",
@@ -21715,11 +21828,15 @@
         "graduated",
         "groups",
         "hash",
+        "isKongCompanyAgent",
         "isSpecialistId",
         "isTailoredModule",
         "iso",
         "leaderboard",
         "learnLessons",
+        "legacyCareers",
+        "legacyOrders",
+        "legacyTrainees",
         "levelFor",
         "lower",
         "modules",
@@ -21741,6 +21858,7 @@
         "rows",
         "second",
         "seed",
+        "separateLegacyKongCompany",
         "skilled",
         "skills",
         "specialist",
@@ -21772,6 +21890,7 @@
       "path": "shared/agent-council.ts",
       "kind": "shared",
       "imports": [
+        "../server/office-kong-collaboration",
         "./agent-company",
         "./agent-live-status",
         "./kong-supervisor"
@@ -21857,6 +21976,7 @@
         "iso",
         "key",
         "label",
+        "legacy",
         "lesson",
         "lessons",
         "mergeDebates",
@@ -22854,31 +22974,26 @@
         "auth",
         "avatars",
         "blocked",
-        "bounds",
         "category",
         "centralAgents",
-        "centralRows",
         "cities",
-        "cityCards",
         "cityMarkers",
-        "cityOfficeEntry",
         "company",
         "concrete",
         "context",
+        "departmentNav",
         "director",
         "envKeys",
         "evidenceDir",
+        "expiredRun",
+        "fallback",
         "fixturePassword",
         "hasMap",
-        "host",
         "lastRunAt",
         "liveSnapshot",
         "login",
         "loginForm",
         "mainPanelToggle",
-        "mapFallback",
-        "mapHost",
-        "markers",
         "memberGoals",
         "modules",
         "nativePlaywright",
@@ -22891,8 +23006,6 @@
         "pendingVisual",
         "previous",
         "protectedRoutes",
-        "running",
-        "runningWork",
         "runtime",
         "scoredDirector",
         "selectedAgents",
@@ -25991,6 +26104,153 @@
       ]
     },
     {
+      "path": "tests/kong-company-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/agent-council",
+        "../server/agent-council-routes",
+        "../shared/agent-council",
+        "express",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "base",
+        "council",
+        "created",
+        "member",
+        "memberView",
+        "order",
+        "request",
+        "server",
+        "state"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/kong-company.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/agent-council",
+        "../server/kong-company",
+        "../server/office-kong",
+        "../shared/agent-company",
+        "../shared/agent-council",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "again",
+        "at",
+        "council",
+        "deps",
+        "evidence",
+        "first",
+        "newer",
+        "next",
+        "old",
+        "parsed",
+        "repeated",
+        "result",
+        "snapshot",
+        "start",
+        "state"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/kong-office-browser-qa.test.mjs",
+      "kind": "test",
+      "imports": [
+        "esbuild",
+        "express",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:path",
+        "node:test",
+        "node:url",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "account",
+        "app",
+        "blocked",
+        "box",
+        "cityRows",
+        "collaboration",
+        "context",
+        "envKeys",
+        "evidenceDir",
+        "fixturePassword",
+        "login",
+        "memberGoals",
+        "modules",
+        "nativePlaywright",
+        "nav",
+        "now",
+        "officeRoute",
+        "ownerCookie",
+        "page",
+        "passive",
+        "previous",
+        "results",
+        "runtime",
+        "serveMode",
+        "temp",
+        "visual"
+      ],
+      "routes": [
+        "/api/agent-council/state",
+        "/api/agents-office/cities",
+        "/api/agents-office/connections",
+        "/api/agents-office/kong-snapshot",
+        "/api/app-qa-agent/status",
+        "/api/ceo/conversation-history",
+        "/api/ceo/go-live",
+        "/api/ceo/readiness",
+        "/api/fixture-owner-boundary",
+        "/api/github/repos",
+        "/api/github/repos/fixture/office-fixture/contents",
+        "/api/github/status",
+        "/api/legal-compliance/reports",
+        "/api/monthly-goals",
+        "/api/projects",
+        "/health"
+      ]
+    },
+    {
+      "path": "tests/kong-office-wing.test.ts",
+      "kind": "test",
+      "imports": [
+        "../client/src/lib/kong-office-wing",
+        "../client/src/lib/office-city-agents",
+        "../server/office-kong",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "cities",
+        "current",
+        "directory",
+        "disconnected",
+        "evidence",
+        "expired",
+        "ids",
+        "native",
+        "now",
+        "wing"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/kong-operations-routes.test.ts",
       "kind": "test",
       "imports": [
@@ -27719,6 +27979,9 @@
     "tests/google-connector.test.ts",
     "tests/google-drive-folder-command.test.ts",
     "tests/google-drive-oauth.test.ts",
+    "tests/kong-company-routes.test.ts",
+    "tests/kong-company.test.ts",
+    "tests/kong-office-wing.test.ts",
     "tests/kong-operations-routes.test.ts",
     "tests/kong-operations.test.ts",
     "tests/legacy-publication-containment.test.ts",
