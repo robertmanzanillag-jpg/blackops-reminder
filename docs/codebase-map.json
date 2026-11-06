@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T21:26:31.032Z",
+  "generatedAt": "2026-11-06T21:54:39.655Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\blackops-reminder",
   "packageName": "rest-express",
   "scripts": {
@@ -124,53 +124,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 828,
-    "filesIndexed": 739,
-    "imports": 2652,
+    "filesVisible": 830,
+    "filesIndexed": 741,
+    "imports": 2655,
     "routes": 555,
-    "symbols": 16458
+    "symbols": 16482
   },
   "directories": {
-    "client/src/lib": {
-      "files": 18,
-      "indexed": 18,
-      "kinds": {
-        "client-lib": 18
-      }
-    },
-    "docs": {
-      "files": 38,
-      "indexed": 37,
-      "kinds": {
-        "docs": 38
-      }
-    },
     "server": {
-      "files": 170,
-      "indexed": 165,
+      "files": 171,
+      "indexed": 166,
       "kinds": {
-        "server": 170
-      }
-    },
-    "shared": {
-      "files": 16,
-      "indexed": 16,
-      "kinds": {
-        "shared": 16
-      }
-    },
-    "tests/fixtures": {
-      "files": 2,
-      "indexed": 2,
-      "kinds": {
-        "test": 2
-      }
-    },
-    "tests": {
-      "files": 188,
-      "indexed": 184,
-      "kinds": {
-        "test": 188
+        "server": 171
       }
     },
     ".": {
@@ -294,6 +259,13 @@
         "client-hook": 3
       }
     },
+    "client/src/lib": {
+      "files": 18,
+      "indexed": 18,
+      "kinds": {
+        "client-lib": 18
+      }
+    },
     "client/src/pages": {
       "files": 26,
       "indexed": 24,
@@ -306,6 +278,13 @@
       "indexed": 1,
       "kinds": {
         "other": 1
+      }
+    },
+    "docs": {
+      "files": 39,
+      "indexed": 38,
+      "kinds": {
+        "docs": 39
       }
     },
     "examples/clippers-motivation": {
@@ -351,11 +330,32 @@
         "server": 3
       }
     },
+    "shared": {
+      "files": 16,
+      "indexed": 16,
+      "kinds": {
+        "shared": 16
+      }
+    },
     "shared/models": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 188,
+      "indexed": 184,
+      "kinds": {
+        "test": 188
+      }
+    },
+    "tests/fixtures": {
+      "files": 2,
+      "indexed": 2,
+      "kinds": {
+        "test": 2
       }
     },
     "tests/harness": {
@@ -5501,6 +5501,14 @@
     },
     {
       "path": "docs/revenue-engine-launch-runbook.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/whatsapp-consumer-integration-test.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -16613,6 +16621,23 @@
       "routes": []
     },
     {
+      "path": "server/evidence-json.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "canonicalEvidenceDigest",
+        "canonicalEvidenceJson"
+      ],
+      "symbols": [
+        "canonicalEvidenceDigest",
+        "canonicalEvidenceJson",
+        "normalize"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/finance.ts",
       "kind": "server",
       "imports": [
@@ -18743,12 +18768,14 @@
         "createInternalWorkRunner",
         "parseInternalWork",
         "prepareInternalArtifact",
-        "readInternalWorkSnapshot"
+        "readInternalWorkSnapshot",
+        "recoverRadioReadOnly"
       ],
       "symbols": [
         "active",
         "approvals",
         "artifactSchema",
+        "at",
         "clean",
         "client",
         "clock",
@@ -18760,6 +18787,7 @@
         "item",
         "jobSchema",
         "jobs",
+        "lease",
         "now",
         "parseInternalWork",
         "prepareInternalArtifact",
@@ -18771,6 +18799,7 @@
         "radioTrainingHistory",
         "readInternalWorkSnapshot",
         "records",
+        "recoverRadioReadOnly",
         "reserved",
         "result",
         "retained",
@@ -18970,6 +18999,7 @@
         "../shared/agent-council",
         "../shared/office-role-lifecycle",
         "../shared/radio-slot-policies",
+        "./evidence-json",
         "node:crypto",
         "node:perf_hooks"
       ],
@@ -18978,6 +19008,7 @@
         "RadioTrainingEvidence",
         "RadioTrainingMeasurement",
         "RadioTrainingReceipt",
+        "matchesRadioEvidenceDigest",
         "qualifyRadioIncumbent",
         "radioEvidenceDigest",
         "radioImplementationVersion",
@@ -18991,7 +19022,9 @@
         "RADIO_TRAINING_MAX_FAMILY_MS",
         "appliedAt",
         "evaluation",
+        "matchesRadioEvidenceDigest",
         "measure",
+        "original",
         "owner",
         "qualifyRadioIncumbent",
         "radioEvidenceDigest",
@@ -27106,6 +27139,7 @@
         "backend",
         "base",
         "cities",
+        "configured",
         "connector",
         "createBackendHttpFixture",
         "outfile",
@@ -28275,14 +28309,21 @@
         "f",
         "fixture",
         "handlers",
+        "job",
+        "jsonbRoundtrip",
         "key",
+        "late",
         "make",
+        "options",
+        "original",
         "oversized",
         "pool",
         "radioQuery",
         "raw",
         "read",
+        "receipt",
         "response",
+        "results",
         "snapshot",
         "source",
         "tasks",
@@ -28458,24 +28499,33 @@
         "../shared/agent-company",
         "../shared/office-role-lifecycle",
         "node:assert/strict",
+        "node:crypto",
         "node:test"
       ],
       "exports": [],
       "symbols": [
         "NOW",
+        "altered",
         "changed",
         "company",
         "deps",
         "evidence",
+        "extra",
         "f",
         "fixture",
         "forged",
         "invalid",
+        "legacyHash",
         "missing",
+        "oracle",
+        "receipt",
+        "reorder",
         "result",
         "roles",
+        "stored",
         "trainee",
-        "uncertain"
+        "uncertain",
+        "wrong"
       ],
       "routes": []
     },

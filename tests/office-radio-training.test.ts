@@ -1,9 +1,26 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import {createHash} from "node:crypto";
+import {validRadioTrainingReceipt,radioEvidenceDigest} from "../server/office-radio-training";
 import {runRadioTrainingTrial,validateRadioTrainingEvidence,qualifyRadioIncumbent,radioImplementationVersion,resolveSavedRadioPolicy} from "../server/office-radio-training";
 import {advanceCompany,emptyCompanyState} from "../shared/agent-company";
 import {emptyRoleLifecycleState,reconcileRoleLifecycles} from "../shared/office-role-lifecycle";
 const NOW=Date.parse("2026-11-06T20:00:00Z");
+const reorder=(value:any):any=>Array.isArray(value)?value.map(reorder):value && typeof value==="object"?Object.fromEntries(Object.keys(value).sort((a,b)=>a.length-b.length || a.localeCompare(b)).map(k=>[k,reorder(value[k])])):value;
+test("JSONB key reordering preserves new and exact legacy receipts without accepting altered evidence",()=>{
+ const f=fixture(),evidence=runRadioTrainingTrial();
+ const receipt=qualifyRadioIncumbent(f.roles,f.company,evidence,NOW,"legacy") .receipt!;
+ const legacyHash=createHash("sha256").update(JSON.stringify(evidence)).digest("hex");
+ assert.equal(validateRadioTrainingEvidence(reorder(evidence)),true);
+ assert.equal(radioEvidenceDigest(evidence),radioEvidenceDigest(reorder(evidence)));
+ for(const artifactId of [receipt.artifactId,legacyHash]) {
+  const stored=reorder({...receipt,artifactId});assert.equal(validRadioTrainingReceipt(stored),true);assert.equal(stored.artifactId,artifactId);
+  const altered=structuredClone(stored);altered.evidence.timings[0].candidateDurationMs+=0.1;assert.equal(validRadioTrainingReceipt(altered),false);
+  const oracle=structuredClone(stored);oracle.evidence.evaluation.artifacts[0].candidateQuality=99;assert.equal(validRadioTrainingReceipt(oracle),false);
+  const extra=structuredClone(stored);extra.evidence.timings[0].unverified=true;assert.equal(validRadioTrainingReceipt(extra),false);
+  const wrong=structuredClone(stored);wrong.artifactId="0".repeat(64);assert.equal(validRadioTrainingReceipt(wrong),false);
+ }
+});
 function fixture(){
  const company=advanceCompany(emptyCompanyState(),{now:NOW-1000,roles:{radio:"Radio"},statuses:{radio:{state:"working",label:"fixture",evidenceId:"setup"}}}).state;
  const roles=reconcileRoleLifecycles(emptyRoleLifecycleState(),company,NOW);const role=roles.roles.radio;

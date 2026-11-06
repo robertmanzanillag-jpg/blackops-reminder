@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-06T21:26:31.032Z
+Generated: 2026-11-06T21:54:39.655Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\blackops-reminder`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 828 | 739 | 2652 | 555 | 16458 |
+| 830 | 741 | 2655 | 555 | 16482 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,11 +29,11 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `tests` | 188 | 184 | test:188 |
-| `server` | 170 | 165 | server:170 |
+| `server` | 171 | 166 | server:171 |
 | `script` | 91 | 83 | script:91 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 38 | 37 | docs:38 |
+| `docs` | 39 | 38 | docs:39 |
 | `client/src/components` | 28 | 28 | client-component:28 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |

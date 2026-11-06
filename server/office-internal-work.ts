@@ -18,7 +18,11 @@ const artifactSchema = z.object({ version:z.literal("internal-planning-v1"), rol
 const jobSchema = z.object({ id:z.string().uuid(), role:z.enum(["ceo","assistant","radio"]), slot:z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   fence:z.string().uuid(), policyVersion:z.string().min(1), generation:z.number().int().positive(), startedAt:z.string().datetime(), expiresAt:z.string().datetime(),
   status:z.enum(["running","completed","blocked","unknown"]), completedAt:z.string().datetime().optional(), reason:z.string().max(100).optional(),
-  artifact:artifactSchema.optional(), artifactId:z.string().regex(/^[a-f0-9]{64}$/).optional(),training:z.custom<RadioTrainingReceipt>(validRadioTrainingReceipt).optional() }).strict();
+  artifact:artifactSchema.optional(), artifactId:z.string().regex(/^[a-f0-9]{64}$/).optional(),training:z.custom<RadioTrainingReceipt>(validRadioTrainingReceipt).optional(),
+  interruptedAttempts:z.array(z.object({fence:z.string().uuid(),startedAt:z.string().datetime(),expiresAt:z.string().datetime(),status:z.literal("unknown"),operatorAuditId:z.string().min(1).max(200),reconciledAt:z.string().datetime(),
+   priorJob:z.object({id:z.string().uuid(),role:z.literal("radio"),slot:z.string(),policyVersion:z.string(),generation:z.number().int().positive(),status:z.enum(["running","unknown"]),reason:z.string().optional(),completedAt:z.string().optional()}).strict(),
+   priorLease:z.object({executionId:z.string(),fence:z.string(),policyVersion:z.string(),generation:z.number(),startedAt:z.string(),expiresAt:z.string(),status:z.enum(["running","unknown"]),artifactId:z.string().optional(),completedAt:z.string().optional()}).strict()
+  }).strict()).max(10).optional() }).strict();
 export type InternalWorkJob = z.infer<typeof jobSchema>;
 export type InternalWorkState = { version:1; jobs:InternalWorkJob[]; radioTrainingHistory?:RadioTrainingReceipt[] };
 export function parseInternalWork(value:unknown):InternalWorkState {
@@ -29,7 +33,7 @@ export function parseInternalWork(value:unknown):InternalWorkState {
     if(Date.parse(job.expiresAt)<=Date.parse(job.startedAt) || (job.status === "completed" && (!job.artifact || job.artifactId !== digest(job.artifact)))) throw new Error("Invalid internal work evidence");
     if(job.artifact && (job.artifact.role !== job.role || digest(job.artifact) !== digest(prepareInternalArtifact(job.role,job.artifact.snapshot,job.artifact.implementationVersion)))) throw new Error("Invalid internal work source");
     if(job.role==="radio" && job.artifact && job.artifact.implementationVersion!==radioImplementationVersion(job.policyVersion,job.generation))throw new Error("Radio artifact policy mismatch");
-    if(job.training && (job.role!=="radio" || job.training.id!==job.id || job.training.generation!==job.generation || job.training.appliedPolicyVersion!==job.policyVersion || job.training.artifactId!==radioEvidenceDigest(job.training.evidence)))throw new Error("Invalid Radio training assignment");
+    if(job.training && (job.role!=="radio" || job.training.id!==job.id || job.training.generation!==job.generation || job.training.appliedPolicyVersion!==job.policyVersion))throw new Error("Invalid Radio training assignment");
   }
   if(new Set(state.jobs.map(j=>j.id)).size !== state.jobs.length || new Set(state.jobs.map(j=>`${j.role}:${j.slot}`)).size !== state.jobs.length) throw new Error("Duplicate internal work assignment");
   return state;
@@ -121,4 +125,37 @@ export function createInternalWorkRunner(options:{council:Pick<ReturnType<typeof
       });
     }
   }};
+}
+
+/** Operator-only, read-only recovery. No route or scheduler calls this function.
+ * Caller must independently stop/drain the old worker and retain an audit record.
+ * The prior attempt remains unknown; only a fresh fenced read can prove success. */
+export async function recoverRadioReadOnly(options:{council:Pick<ReturnType<typeof createAgentCouncil>,"updateOfficeExecution">;owner:string;jobId:string;expectedFence:string;operatorAuditId:string;read:()=>Promise<InternalWorkSnapshot>;now?:()=>number}) {
+ const now=options.now || Date.now,start=now(),fence=randomUUID();let admitted:InternalWorkJob|undefined;
+ if(!Number.isFinite(start) || !options.owner.trim() || !options.operatorAuditId.trim() || options.operatorAuditId.length>200)throw new Error("Operator audit required");
+ await options.council.updateOfficeExecution(state=>{
+  admitted=undefined;
+  const work=parseInternalWork(state.internalWork),job=work.jobs.find(j=>j.id===options.jobId),role=state.roles.roles.radio;
+  const lease=role?.leases.find(l=>l.executionId===options.jobId);
+  if(!job || job.role!=="radio" || !["running","unknown"].includes(job.status) || job.fence!==options.expectedFence || job.artifact || job.artifactId || job.completedAt || Date.parse(job.expiresAt)>start || (job.interruptedAttempts?.length || 0)>=10 ||
+   !lease || !["running","unknown"].includes(lease.status) || lease.fence!==job.fence || lease.startedAt!==job.startedAt || lease.expiresAt!==job.expiresAt || lease.artifactId || lease.completedAt || Date.parse(lease.expiresAt)>start || lease.generation!==job.generation || lease.policyVersion!==job.policyVersion ||
+   role.status!=="active" || role.generation!==job.generation || role.activePolicy?.version!==job.policyVersion || role.activePolicy.generation!==job.generation ||
+   role.leases.some(l=>l.executionId!==job.id && ["running","unknown"].includes(l.status)) ||
+   !work.radioTrainingHistory?.some(r=>validRadioTrainingReceipt(r) && r.generation===job.generation && r.appliedPolicyVersion===job.policyVersion))throw new Error("Radio recovery not eligible");
+  const at=new Date(start).toISOString(),expiresAt=new Date(start+300000).toISOString();
+  admitted={...job,fence,startedAt:at,expiresAt,status:"running",reason:undefined,completedAt:undefined,interruptedAttempts:[...(job.interruptedAttempts || []),{fence:job.fence,startedAt:job.startedAt,expiresAt:job.expiresAt,status:"unknown",operatorAuditId:options.operatorAuditId,reconciledAt:at,priorJob:{id:job.id,role:"radio",slot:job.slot,policyVersion:job.policyVersion,generation:job.generation,status:job.status as "running"|"unknown",reason:job.reason,completedAt:job.completedAt},priorLease:{...lease,status:lease.status as "running"|"unknown"}}]};
+  return {...state,roles:{...state.roles,roles:{...state.roles.roles,radio:{...role,leases:role.leases.map(l=>l.executionId===job.id?{...l,fence,startedAt:at,expiresAt,status:"running" as const}:l),history:[...role.history,{at,event:"operator_read_only_recovery_prior_attempt_unknown",policyVersion:job.policyVersion,evidenceIds:[options.operatorAuditId,job.fence]}]}}},internalWork:{...work,jobs:work.jobs.map(j=>j.id===job.id?admitted!:j)}};
+ });
+ if(!admitted)throw new Error("Radio recovery not admitted");
+ const job:InternalWorkJob=admitted;let artifact:ReturnType<typeof prepareInternalArtifact>|undefined;
+ try {if(now()>=Date.parse(job.expiresAt))throw new Error("Recovery lease expired");const source=await options.read();if(source.ownerKey!==digest(options.owner) || Date.parse(source.observedAt)<start-30000 || Date.parse(source.observedAt)>now()+30000)throw new Error("Source mismatch");artifact=prepareInternalArtifact("radio",source,radioImplementationVersion(job.policyVersion,job.generation));}catch{/* Unknown prior attempt is retained; failed source is not misconduct. */}
+ await options.council.updateOfficeExecution(state=>{
+  const work=parseInternalWork(state.internalWork),stored=work.jobs.find(j=>j.id===job.id);
+  if(!stored || stored.fence!==fence || stored.status!=="running")throw new Error("Radio recovery fence changed");
+  const end=now(),artifactId=artifact?digest(artifact):digest({id:job.id,fence,reason:"canonical_source_unavailable"});
+  const result=completeRoleExecution(state.roles,{roleId:"radio",executionId:job.id,fence,policyVersion:job.policyVersion,now:end,artifactId,success:!!artifact});
+  const completed:InternalWorkJob=result.accepted?{...stored,status:artifact?"completed":"blocked",completedAt:new Date(end).toISOString(),...(artifact?{artifact,artifactId}:{reason:"canonical_source_unavailable"})}:{...stored,status:"unknown",reason:"Recovery lease or generation changed"};
+  return {...state,roles:result.state,internalWork:{...work,jobs:work.jobs.map(j=>j.id===job.id?completed:j),radioTrainingHistory:work.radioTrainingHistory?.map(r=>result.accepted && artifact && !r.firstVerifiedRunId && r.generation===job.generation && r.appliedPolicyVersion===job.policyVersion?{...r,firstVerifiedRunId:job.id,firstVerifiedAt:new Date(end).toISOString(),firstExecutionArtifactId:artifactId}:r)}};
+ });
+ return {jobId:job.id,fence};
 }
