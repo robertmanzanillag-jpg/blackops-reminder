@@ -281,15 +281,25 @@ function treeHash(entries: Entry[]) {
     function encode(node: Node): string { return digest("tree", Buffer.concat([...node.children].sort(([an, av], [bn, bv]) => Buffer.compare(Buffer.from(an + ('children' in av ? "/" : "")), Buffer.from(bn + ('children' in bv ? "/" : "")))).map(([name, item]) => Buffer.concat([Buffer.from(`${'children' in item ? "40000" : item.mode} ${name}\0`), Buffer.from('children' in item ? encode(item) : item.sha, "hex")])))); }
     return encode(root);
 }
-export function createGitHubFactoryPullRequestPublisher(options: {
+export interface PreparedFactoryCandidate {
+    readonly repository: string;
+    readonly baseSha: string;
+    readonly headSha: string;
+    readonly patchSha256: string;
+    readonly treeSha: string;
+    readonly branch: string;
+    readonly changedFiles: readonly string[];
+}
+export function createGitHubFactoryCandidatePublisher(options: {
     client: FactoryGitHubPublisherClient;
     repositories: Readonly<Record<string, string>>;
-}): NonNullable<FactoryBuilderDependencies["publishPullRequest"]> {
+}) {
     const allowed = new Map(Object.entries(options.repositories)), client = options.client;
     for (const [repo, branch] of allowed)
         if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || !/^[-a-zA-Z0-9_/.]+$/.test(branch) || branch.includes("..") || branch.startsWith("/") || branch.endsWith("/") || branch.startsWith("factory/"))
             throw Error("FACTORY_PUBLISHER_CONFIGURATION_INVALID");
-    return async (raw) => {
+    const finalizers = new WeakMap<PreparedFactoryCandidate, () => ReturnType<NonNullable<FactoryBuilderDependencies["publishPullRequest"]>>>();
+    const prepare = async (raw: Parameters<NonNullable<FactoryBuilderDependencies["publishPullRequest"]>>[0]): Promise<PreparedFactoryCandidate> => {
         const input = { ...raw }, base = allowed.get(input.repository);
         if (!base || !sha.test(input.baseSha) || createHash("sha256").update(input.patch).digest("hex") !== input.expectedPatchSha256)
             fail();
@@ -322,9 +332,13 @@ export function createGitHubFactoryPullRequestPublisher(options: {
         const expectedTree = treeHash(tree.tree.map(e => updates.find(u => u.path === e.path) ?? e));
         if (expectedTree === tree.sha)
             fail();
-        const verifyCommit = async (head: string) => { if (!sha.test(head))
-            fail(); const c = (await client.git.getCommit({ ...scope, commit_sha: head })).data; if (c.sha !== head || c.tree.sha !== expectedTree || c.parents.length !== 1 || c.parents[0].sha !== input.baseSha || c.message !== message)
-            fail(); };
+        const verifyCommit = async (head: string) => {
+            if (!sha.test(head))
+                fail();
+            const c = (await client.git.getCommit({ ...scope, commit_sha: head })).data;
+            if (c.sha !== head || c.tree.sha !== expectedTree || c.parents.length !== 1 || c.parents[0].sha !== input.baseSha || c.message !== message)
+                fail();
+        };
         let head: string | undefined;
         try {
             const ref = (await client.git.getRef({ ...scope, ref: `heads/${branch}` })).data;
@@ -352,13 +366,42 @@ export function createGitHubFactoryPullRequestPublisher(options: {
             if (ref.ref !== `refs/heads/${branch}` || ref.object.sha !== head)
                 fail();
         }
-        const validatePull = (pr: Pull) => { if (!Number.isSafeInteger(pr.number) || pr.number < 1 || pr.state !== "open" || pr.draft !== true || pr.head.ref !== branch || pr.head.sha !== head || pr.head.repo?.full_name !== input.repository || pr.base.ref !== base || pr.base.repo?.full_name !== input.repository || pr.html_url !== `https://github.com/${input.repository}/pull/${pr.number}`)
-            fail(); return { headSha: head!, prUrl: pr.html_url, appliedPatchSha256: input.expectedPatchSha256 }; };
-        const existing = (await client.pulls.list({ ...scope, head: `${owner}:${branch}`, base: base!, state: "all", per_page: 100 })).data;
-        if (existing.length > 1)
-            fail();
-        if (existing.length)
-            return validatePull(existing[0]);
-        return validatePull((await client.pulls.create({ ...scope, head: branch, base: base!, title: "Factory verified candidate", body: `Exact base: ${input.baseSha}\nPatch SHA256: ${input.expectedPatchSha256}\nIndependent review and release gates remain required.`, draft: true })).data);
+        const prepared: PreparedFactoryCandidate = Object.freeze({ repository: input.repository, baseSha: input.baseSha, headSha: head!, patchSha256: input.expectedPatchSha256, treeSha: expectedTree, branch, changedFiles: Object.freeze(files.map(file => file.path)) });
+        finalizers.set(prepared, async () => {
+            const currentBase = (await client.git.getRef({ ...scope, ref: `heads/${base}` })).data;
+            const currentHead = (await client.git.getRef({ ...scope, ref: `heads/${branch}` })).data;
+            if (currentBase.ref !== `refs/heads/${base}` || currentBase.object.sha !== input.baseSha || currentHead.ref !== `refs/heads/${branch}` || currentHead.object.sha !== head)
+                fail();
+            await verifyCommit(head!);
+            const validatePull = (pr: Pull) => {
+                if (!Number.isSafeInteger(pr.number) || pr.number < 1 || pr.state !== "open" || pr.draft !== true || pr.head.ref !== branch || pr.head.sha !== head || pr.head.repo?.full_name !== input.repository || pr.base.ref !== base || pr.base.repo?.full_name !== input.repository || pr.html_url !== `https://github.com/${input.repository}/pull/${pr.number}`)
+                    fail();
+                return { headSha: head!, prUrl: pr.html_url, appliedPatchSha256: input.expectedPatchSha256 };
+            };
+            const existing = (await client.pulls.list({ ...scope, head: `${owner}:${branch}`, base: base!, state: "all", per_page: 100 })).data;
+            if (existing.length > 1)
+                fail();
+            if (existing.length)
+                return validatePull(existing[0]);
+            return validatePull((await client.pulls.create({ ...scope, head: branch, base: base!, title: "Factory verified candidate", body: `Exact base: ${input.baseSha}\nPatch SHA256: ${input.expectedPatchSha256}\nIndependent review and release gates remain required.`, draft: true })).data);
+        });
+        return prepared;
     };
+    return {
+        prepare,
+        finalize: async (candidate: PreparedFactoryCandidate) => {
+            const finalize = finalizers.get(candidate);
+            if (!finalize)
+                throw Error("FACTORY_CANDIDATE_NOT_PREPARED");
+            return finalize();
+        },
+    };
+}
+/** Legacy composition: callers using local checks retain the original contract. */
+export function createGitHubFactoryPullRequestPublisher(options: Parameters<typeof createGitHubFactoryCandidatePublisher>[0]): NonNullable<FactoryBuilderDependencies["publishPullRequest"]> {
+    const publisher = createGitHubFactoryCandidatePublisher(options);
+    return async (input) => publisher.finalize(await publisher.prepare(input));
+}
+export function validateFactoryPublicationPatch(patch: string): string[] {
+    return parsePatch(patch).map(file => file.path);
 }

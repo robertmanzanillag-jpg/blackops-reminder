@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { createGitHubFactoryPullRequestPublisher, type FactoryGitHubPublisherClient } from "../server/software-factory-github-publisher";
+import { createGitHubFactoryPullRequestPublisher, createGitHubFactoryCandidatePublisher, type FactoryGitHubPublisherClient } from "../server/software-factory-github-publisher";
 const gitHash = (type: string, b: Buffer) => createHash("sha1").update(`${type} ${b.length}\0`).update(b).digest("hex");
 const blob = (s: string) => gitHash("blob", Buffer.from(s));
 const tree = (s: string) => gitHash("tree", Buffer.concat([Buffer.from("100644 app.ts\0"), Buffer.from(blob(s), "hex")]));
@@ -13,9 +13,13 @@ function fixture(source = before) {
     const writes: string[] = [];
     const pr = () => ({ number: 1, state: "open", draft: true, html_url: "https://github.com/owner/app/pull/1", head: { ref: branch, sha: head, repo: { full_name: "owner/app" } }, base: { ref: "main", repo: { full_name: "owner/app" } } });
     const client: FactoryGitHubPublisherClient = { git: {
-            getRef: async ({ ref }) => { if (ref === "heads/main")
-                return { data: { ref: "refs/heads/main", object: { sha: base } } }; if (!exists)
-                throw Object.assign(Error("missing"), { status: 404 }); return { data: { ref: `refs/heads/${branch}`, object: { sha: head } } }; },
+            getRef: async ({ ref }) => {
+                if (ref === "heads/main")
+                    return { data: { ref: "refs/heads/main", object: { sha: base } } };
+                if (!exists)
+                    throw Object.assign(Error("missing"), { status: 404 });
+                return { data: { ref: `refs/heads/${branch}`, object: { sha: head } } };
+            },
             getCommit: async ({ commit_sha }) => ({ data: { sha: commit_sha, tree: { sha: commit_sha === base ? tree(source) : tree(after) }, parents: commit_sha === base ? [] : [{ sha: base }], message: commit_sha === base ? "base" : `Factory candidate ${hash}` } }),
             getTree: async () => ({ data: { sha: tree(source), truncated: false, tree: [{ path: "app.ts", mode: "100644", type: "blob", sha: blob(source) }] } }),
             getBlob: async () => ({ data: { sha: blob(source), encoding: "base64", content: Buffer.from(source).toString("base64"), size: Buffer.byteLength(source) } }),
@@ -63,16 +67,20 @@ test("existing branch must match exact tree parent and patch identity", async ()
         const f = fixture();
         f.setExisting();
         const original = f.client.git.getCommit;
-        f.client.git.getCommit = async (args) => { const r = await original(args); if (args.commit_sha === head) {
-            if (mismatch === "missing")
-                throw Object.assign(Error("missing"), { status: 404 });
-            if (mismatch === "tree")
-                r.data.tree.sha = tree(before);
-            if (mismatch === "parent")
-                r.data.parents = [];
-            if (mismatch === "message")
-                r.data.message = "other";
-        } return r; };
+        f.client.git.getCommit = async (args) => {
+            const r = await original(args);
+            if (args.commit_sha === head) {
+                if (mismatch === "missing")
+                    throw Object.assign(Error("missing"), { status: 404 });
+                if (mismatch === "tree")
+                    r.data.tree.sha = tree(before);
+                if (mismatch === "parent")
+                    r.data.parents = [];
+                if (mismatch === "message")
+                    r.data.message = "other";
+            }
+            return r;
+        };
         await assert.rejects(f.publish());
         assert.deepEqual(f.writes, []);
     }
@@ -107,4 +115,18 @@ test("UTF-8 BOM source is rejected before any mutation rather than silently stri
     const f = fixture("\ufeffold\n");
     await assert.rejects(f.publish());
     assert.deepEqual(f.writes, []);
+});
+test("two-phase preparation creates no PR and finalization rejects altered branch or forged candidate", async () => {
+    const f = fixture(), publisher = createGitHubFactoryCandidatePublisher({ client: f.client, repositories: { "owner/app": "main" } });
+    const candidate = await publisher.prepare(f.input);
+    assert.deepEqual(f.writes, ["blob", "tree", "commit", "ref"]);
+    assert.equal(candidate.headSha, head);
+    await assert.rejects(publisher.finalize({ ...candidate }), /NOT_PREPARED/);
+    const original = f.client.git.getRef;
+    f.client.git.getRef = async (args) => args.ref === "heads/main" ? original(args) : { data: { ref: `refs/${args.ref}`, object: { sha: "c".repeat(40) } } };
+    await assert.rejects(publisher.finalize(candidate));
+    assert.equal(f.writes.includes("pr"), false);
+    f.client.git.getRef = original;
+    await publisher.finalize(candidate);
+    assert.equal(f.writes.at(-1), "pr");
 });

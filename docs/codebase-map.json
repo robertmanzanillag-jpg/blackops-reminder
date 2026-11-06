@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T09:11:39.119Z",
+  "generatedAt": "2026-11-06T09:37:22.817Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -126,25 +126,32 @@
     "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 817,
-    "filesIndexed": 734,
-    "imports": 2630,
+    "filesVisible": 823,
+    "filesIndexed": 738,
+    "imports": 2654,
     "routes": 556,
-    "symbols": 16348
+    "symbols": 16438
   },
   "directories": {
-    "server": {
-      "files": 175,
-      "indexed": 171,
+    ".github/workflows": {
+      "files": 2,
+      "indexed": 0,
       "kinds": {
-        "server": 175
+        "other": 2
+      }
+    },
+    "server": {
+      "files": 177,
+      "indexed": 173,
+      "kinds": {
+        "server": 177
       }
     },
     "tests": {
-      "files": 183,
-      "indexed": 180,
+      "files": 185,
+      "indexed": 182,
       "kinds": {
-        "test": 183
+        "test": 185
       }
     },
     ".": {
@@ -21094,6 +21101,50 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-actions.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "FactoryActionsClient",
+        "FactoryActionsProfile",
+        "createGitHubFactoryChecks"
+      ],
+      "symbols": [
+        "Candidate",
+        "Job",
+        "Run",
+        "Scope",
+        "abort",
+        "bytes",
+        "candidate",
+        "completed",
+        "content",
+        "createGitHubFactoryChecks",
+        "encoded",
+        "hash",
+        "job",
+        "jobs",
+        "now",
+        "polls",
+        "preflight",
+        "profile",
+        "profiles",
+        "r",
+        "reject",
+        "response",
+        "run",
+        "scope",
+        "sha",
+        "steps",
+        "timer",
+        "unknown",
+        "wait"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-builder.ts",
       "kind": "server",
       "imports": [
@@ -21180,7 +21231,10 @@
       ],
       "exports": [
         "FactoryGitHubPublisherClient",
-        "createGitHubFactoryPullRequestPublisher"
+        "PreparedFactoryCandidate",
+        "createGitHubFactoryCandidatePublisher",
+        "createGitHubFactoryPullRequestPublisher",
+        "validateFactoryPublicationPatch"
       ],
       "symbols": [
         "Commit",
@@ -21193,8 +21247,12 @@
         "baseRef",
         "blob",
         "body",
+        "c",
         "changed",
+        "createGitHubFactoryCandidatePublisher",
         "createGitHubFactoryPullRequestPublisher",
+        "currentBase",
+        "currentHead",
         "digest",
         "encode",
         "encoded",
@@ -21204,6 +21262,8 @@
         "fail",
         "file",
         "files",
+        "finalize",
+        "finalizers",
         "found",
         "h",
         "header",
@@ -21214,6 +21274,8 @@
         "name",
         "original",
         "parsePatch",
+        "prepare",
+        "publisher",
         "ref",
         "safePath",
         "segments",
@@ -21222,6 +21284,7 @@
         "text",
         "tree",
         "treeHash",
+        "validateFactoryPublicationPatch",
         "validatePull",
         "verifyCommit"
       ],
@@ -21468,6 +21531,53 @@
         "state",
         "validSha",
         "verified"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-remote-builder.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory",
+        "./software-factory-actions",
+        "./software-factory-builder",
+        "./software-factory-github-publisher",
+        "./software-factory-pipeline",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path"
+      ],
+      "exports": [
+        "FactoryRemoteBuilderOptions",
+        "FactoryRemoteCheckContext",
+        "FactoryRemoteCheckResult",
+        "createFactoryRemotePipelineBuilder",
+        "createGitHubActionsFactoryBuilder"
+      ],
+      "symbols": [
+        "age",
+        "candidate",
+        "changedFiles",
+        "checked",
+        "checks",
+        "createFactoryRemotePipelineBuilder",
+        "createGitHubActionsFactoryBuilder",
+        "entries",
+        "exported",
+        "generated",
+        "inspect",
+        "o",
+        "p",
+        "patchSha256",
+        "project",
+        "protectedName",
+        "published",
+        "publisher",
+        "result",
+        "rootStat",
+        "stopped",
+        "visit"
       ],
       "routes": []
     },
@@ -28571,6 +28681,34 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-actions.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-actions",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "branch",
+        "candidate",
+        "checks",
+        "f",
+        "fixture",
+        "incomplete",
+        "job",
+        "known",
+        "mutations",
+        "path",
+        "project",
+        "repository",
+        "run",
+        "verify"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-builder.test.ts",
       "kind": "test",
       "imports": [
@@ -28628,6 +28766,7 @@
       "symbols": [
         "before",
         "blob",
+        "candidate",
         "f",
         "fixture",
         "g",
@@ -28637,6 +28776,7 @@
         "original",
         "patch",
         "pr",
+        "r",
         "result",
         "tree",
         "writes"
@@ -28875,6 +29015,40 @@
         "status",
         "store",
         "verify"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-remote-builder.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory",
+        "../server/software-factory-actions",
+        "../server/software-factory-github-publisher",
+        "../server/software-factory-pipeline",
+        "../server/software-factory-remote-builder",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "base",
+        "blob",
+        "build",
+        "f",
+        "fixture",
+        "g",
+        "gitHash",
+        "patch",
+        "patchHash",
+        "project",
+        "result",
+        "state",
+        "tree",
+        "workflow"
       ],
       "routes": []
     },
@@ -29409,6 +29583,7 @@
     "tests/revenue-stripe.test.ts",
     "tests/session-config.test.ts",
     "tests/shopify-oauth.test.ts",
+    "tests/software-factory-actions.test.ts",
     "tests/software-factory-builder.test.ts",
     "tests/software-factory-gcs.test.ts",
     "tests/software-factory-github-publisher.test.ts",
@@ -29419,6 +29594,7 @@
     "tests/software-factory-openai.test.ts",
     "tests/software-factory-pipeline.test.ts",
     "tests/software-factory-postgres.test.ts",
+    "tests/software-factory-remote-builder.test.ts",
     "tests/software-factory-routes.test.ts",
     "tests/software-factory-runtime.test.ts",
     "tests/software-factory-simulator.test.ts",

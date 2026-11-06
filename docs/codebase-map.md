@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-06T09:11:39.119Z
+Generated: 2026-11-06T09:37:22.817Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\software-factory`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 817 | 734 | 2630 | 556 | 16348 |
+| 823 | 738 | 2654 | 556 | 16438 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,8 +28,8 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 183 | 180 | test:183 |
-| `server` | 175 | 171 | server:175 |
+| `tests` | 185 | 182 | test:185 |
+| `server` | 177 | 173 | server:177 |
 | `script` | 87 | 82 | script:87 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
@@ -196,6 +196,7 @@ Package: `rest-express`
 - `tests/revenue-stripe.test.ts`
 - `tests/session-config.test.ts`
 - `tests/shopify-oauth.test.ts`
+- `tests/software-factory-actions.test.ts`
 - `tests/software-factory-builder.test.ts`
 - `tests/software-factory-gcs.test.ts`
 - `tests/software-factory-github-publisher.test.ts`
@@ -206,6 +207,7 @@ Package: `rest-express`
 - `tests/software-factory-openai.test.ts`
 - `tests/software-factory-pipeline.test.ts`
 - `tests/software-factory-postgres.test.ts`
+- `tests/software-factory-remote-builder.test.ts`
 - `tests/software-factory-routes.test.ts`
 - `tests/software-factory-runtime.test.ts`
 - `tests/software-factory-simulator.test.ts`
