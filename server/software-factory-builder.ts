@@ -1,3 +1,9 @@
+export const factoryPatchDiagnostics = [
+  "PROVIDER_OUTPUT_LIMIT", "PROVIDER_INCOMPLETE", "PROVIDER_RESPONSE_CANCELLED", "PROVIDER_RESPONSE_FAILED", "PROVIDER_NOT_COMPLETED", "PROVIDER_REFUSAL", "PROVIDER_EMPTY_TEXT", "PROVIDER_BLOCKED", "PROVIDER_FAILED",
+  "MALFORMED_JSON", "INVALID_EDIT_SHAPE", "INVALID_EDIT_TEXT", "NONUNIQUE_EDIT", "NON_TEXT_EDIT", "UNSUPPORTED_SOURCE", "EMPTY_PATCH",
+] as const;
+export type FactoryPatchDiagnostic = typeof factoryPatchDiagnostics[number];
+
 import { createHash, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { mkdtemp, rm, writeFile, readdir, lstat } from 'node:fs/promises';
@@ -19,7 +25,7 @@ export interface FactoryBuilderDependencies {
   // Trusted control-plane adapters only. Never load these from project code.
   // Export only tracked source at EXACT sha, without git metadata/credentials.
   exportSource?: (repository: string, sha: string, destination: string) => Promise<{ sha: string }>;
-  generatePatch?: (input: FactoryBuildInput, context: { workspace: string; maxCostCents: number; signal?: AbortSignal }) => Promise<{ patch: string; costCents: number }>;
+  generatePatch?: (input: FactoryBuildInput, context: { workspace: string; maxCostCents: number; signal?: AbortSignal }) => Promise<{ patch: string; costCents: number; diagnostic?: FactoryPatchDiagnostic }>;
   runIsolated?: (command: IsolatedCommand) => Promise<void>;
   publishPullRequest?: (input: { repository: string; baseSha: string; patch: string; expectedPatchSha256: string }) => Promise<{ headSha: string; prUrl: string; appliedPatchSha256: string }>;
 }

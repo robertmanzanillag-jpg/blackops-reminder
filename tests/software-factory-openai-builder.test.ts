@@ -50,7 +50,7 @@ test("ambiguous model execution throws; terminal failure retains its cost", asyn
     const unknown = createOpenAiFactoryPatchGenerator({ ...common, generateText: async () => ({ status: "unknown", reason: "timeout", costCents: 0 }) });
     await assert.rejects(unknown(input, { workspace, maxCostCents: 10 }), /UNCONFIRMED/);
     const failed = createOpenAiFactoryPatchGenerator({ ...common, generateText: async () => ({ status: "failed", reason: "refusal", costCents: 3 }) });
-    assert.deepEqual(await failed(input, { workspace, maxCostCents: 10 }), { patch: "", costCents: 3 });
+    assert.deepEqual(await failed(input, { workspace, maxCostCents: 10 }), { patch: "", costCents: 3, diagnostic: "PROVIDER_FAILED" });
   } finally { await rm(workspace, { recursive: true, force: true }); }
 });
 
@@ -100,11 +100,11 @@ test("plain text edits construct exact complete hunks and reject ambiguous or st
       ['health.json', 'other.json'], ['missing', 'New'], ['Old wording.', '<script>'], ['Old wording.', 'https://example.com'],
       ['Old wording.', '&lt;script&gt;'], ['Old wording.', 'New\nline'], ['Old wording.', ''], ['Old wording.', 'x'.repeat(5001)],
     ].map(([before, after]) => JSON.stringify({ before, after }))]) {
-      assert.deepEqual(await run(response), { patch: "", costCents: 1 });
+      const rejected = await run(response); assert.equal(rejected.patch, ""); assert.equal(rejected.costCents, 1); assert.ok(rejected.diagnostic);
     }
     for (const unsafe of [source.replace('Health</a>', 'Old wording.</a>'), source.replace('<h1>', '<script>'), source.replace('<h1>', '<!--'), source.replace('<h1>Old wording.</h1>', '<h1 title="x > Old wording.">Other</h1>'), source.slice(0, -1), '\uFEFF' + source]) {
       await writeFile(path.join(workspace, "site/index.html"), unsafe);
-      assert.deepEqual(await run(JSON.stringify({ before: 'Old wording.', after: 'New wording.' })), { patch: "", costCents: 1 });
+      const rejected = await run(JSON.stringify({ before: "Old wording.", after: "New wording." })); assert.equal(rejected.patch, ""); assert.equal(rejected.costCents, 1); assert.ok(rejected.diagnostic);
     }
     assert.throws(() => createOpenAiFactoryPatchGenerator({ sourcePaths: { "owner/app": ["app.ts"] }, patchMode: "plainTextEdits", maxOutputTokens: 100, generateText: async () => { throw Error("must not call"); } }), /PLAIN_TEXT_SOURCE_REQUIRED/);
   } finally { await rm(workspace, { recursive: true, force: true }); }

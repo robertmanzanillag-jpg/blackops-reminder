@@ -51,3 +51,17 @@ test("timeout after submission is unknown and cancellation between calls prevent
  const cancel=createOpenAiFactoryTextProvider({...config,request:async()=>{calls++;controller.abort();return count();}});
  assert.equal((await cancel({...input(),signal:controller.signal})).status,"blocked");assert.equal(calls,1);
 });
+
+
+test("terminal diagnostics are static and never include provider error details",async()=>{
+ for(const [status,details,expected] of [
+  ["incomplete",{reason:"max_output_tokens"},"FACTORY_OPENAI_OUTPUT_LIMIT"],
+  ["incomplete",{reason:"PRIVATE_DETAIL"},"FACTORY_OPENAI_INCOMPLETE"],
+  ["failed",null,"FACTORY_OPENAI_RESPONSE_FAILED"],
+  ["cancelled",null,"FACTORY_OPENAI_RESPONSE_CANCELLED"],
+ ] as const){
+  let calls=0;const generate=createOpenAiFactoryTextProvider({...config,request:async()=>++calls===1?count():json({...result(),status,incomplete_details:details,error:{message:"PRIVATE_DETAIL"}})});
+  const outcome=await generate(input());assert.equal(outcome.status,"failed");assert.equal(outcome.costCents,1);
+  assert.equal("reason" in outcome && outcome.reason,expected);assert.ok(!JSON.stringify(outcome).includes("PRIVATE_DETAIL"));
+ }
+});

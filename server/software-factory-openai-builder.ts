@@ -1,33 +1,33 @@
 import { lstat, readFile } from "node:fs/promises";
 import path from "node:path";
-import type { FactoryBuilderDependencies } from "./software-factory-builder";
+import type { FactoryBuilderDependencies, FactoryPatchDiagnostic } from "./software-factory-builder";
 import type { createOpenAiFactoryTextProvider } from "./software-factory-openai";
 
 /** Convert a bounded textual edit into a complete diff without trusting model
  * hunk coordinates. Unsupported HTML/source forms remain blocked. */
-function plainTextPatch(source: string, response: string): string {
+function plainTextPatch(source: string, response: string, diagnose: (reason: FactoryPatchDiagnostic) => string): string {
   try {
-    if (!source.endsWith("\n") || /[\r\0\uFEFF]/.test(source) || /<!--|<\s*(?:script|style|textarea|xmp|iframe|noembed|noframes|plaintext)\b/i.test(source)) return "";
+    if (!source.endsWith("\n") || /[\r\0\uFEFF]/.test(source) || /<!--|<\s*(?:script|style|textarea|xmp|iframe|noembed|noframes|plaintext)\b/i.test(source)) return diagnose("UNSUPPORTED_SOURCE");
     const edit = JSON.parse(response);
-    if (!edit || typeof edit !== "object" || Array.isArray(edit) || Object.keys(edit).sort().join(",") !== "after,before") return "";
+    if (!edit || typeof edit !== "object" || Array.isArray(edit) || Object.keys(edit).sort().join(",") !== "after,before") return diagnose("INVALID_EDIT_SHAPE");
     const valid = (text: unknown): text is string => typeof text === "string" && text.trim().length > 0 && text.length <= 5000 &&
       !/[<>&\x00-\x1f\x7f]/.test(text) && !/(?:[a-z][a-z0-9+.-]*:|\/\/|www\.)/i.test(text);
-    if (!valid(edit.before) || !valid(edit.after) || edit.before === edit.after) return "";
+    if (!valid(edit.before) || !valid(edit.after) || edit.before === edit.after) return diagnose("INVALID_EDIT_TEXT");
     const offset = source.indexOf(edit.before);
-    if (offset < 0 || source.indexOf(edit.before, offset + 1) !== -1) return "";
+    if (offset < 0 || source.indexOf(edit.before, offset + 1) !== -1) return diagnose("NONUNIQUE_EDIT");
     // Only a substring wholly inside a text node, never attributes or tags.
     let textStart = 0, inText = false;
     for (const tag of source.matchAll(/<(?:"[^"]*"|'[^']*'|[^'">])*>/g)) {
       if (offset >= textStart && offset + edit.before.length <= tag.index!) inText = true;
       textStart = tag.index! + tag[0].length;
     }
-    if (!inText) return "";
+    if (!inText) return diagnose("NON_TEXT_EDIT");
     const updated = source.slice(0, offset) + edit.after + source.slice(offset + edit.before.length);
     const oldLines = source.slice(0, -1).split("\n"), newLines = updated.slice(0, -1).split("\n");
     return ["diff --git a/site/index.html b/site/index.html", "--- a/site/index.html", "+++ b/site/index.html",
       `@@ -1,${oldLines.length} +1,${newLines.length} @@`,
       ...oldLines.map(line => `-${line}`), ...newLines.map(line => `+${line}`), ""].join("\n");
-  } catch { return ""; }
+  } catch { return diagnose("MALFORMED_JSON"); }
 }
 
 /** Operator-owned file allowlist. Never accept paths or credentials from the
@@ -87,8 +87,20 @@ export function createOpenAiFactoryPatchGenerator(options: {
     // Model text may omit its final line delimiter. Add only that delimiter;
     // never trim hunk whitespace, unwrap commentary, or repair truncated hunks.
     // The strict downstream parser still validates the entire resulting patch.
-    const text = result.status === "completed" ? result.text : "";
-    const patch = patchMode === "plainTextEdits" ? plainTextPatch(contents[0].text, text) : text && !text.endsWith("\n") ? `${text}\n` : text;
-    return { patch, costCents: result.costCents };
+    let diagnostic: FactoryPatchDiagnostic | undefined;
+    if (result.status !== "completed") {
+      diagnostic = result.reason === "FACTORY_OPENAI_OUTPUT_LIMIT" ? "PROVIDER_OUTPUT_LIMIT" :
+        result.reason === "FACTORY_OPENAI_INCOMPLETE" ? "PROVIDER_INCOMPLETE" :
+        result.reason === "FACTORY_OPENAI_RESPONSE_CANCELLED" ? "PROVIDER_RESPONSE_CANCELLED" :
+        result.reason === "FACTORY_OPENAI_RESPONSE_FAILED" ? "PROVIDER_RESPONSE_FAILED" :
+        result.reason === "FACTORY_OPENAI_NOT_COMPLETED" ? "PROVIDER_NOT_COMPLETED" :
+        result.reason === "FACTORY_OPENAI_REFUSAL" ? "PROVIDER_REFUSAL" :
+        result.reason === "FACTORY_OPENAI_EMPTY_TEXT" ? "PROVIDER_EMPTY_TEXT" :
+        result.status === "blocked" ? "PROVIDER_BLOCKED" : "PROVIDER_FAILED";
+      return { patch: "", costCents: result.costCents, diagnostic };
+    }
+    const text = result.text;
+    const patch = patchMode === "plainTextEdits" ? plainTextPatch(contents[0].text, text, reason => { diagnostic = reason; return ""; }) : text && !text.endsWith("\n") ? `${text}\n` : text;
+    return { patch, costCents: result.costCents, ...(!patch ? { diagnostic: diagnostic ?? "EMPTY_PATCH" as const } : {}) };
   };
 }

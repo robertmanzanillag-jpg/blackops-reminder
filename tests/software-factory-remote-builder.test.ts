@@ -159,3 +159,15 @@ test("classifier cannot replace verified identity and failures preserve the PR",
   f.options.classifyCandidate=async()=>{throw Error('unavailable');};
   const unknown=await f.run();assert.ok('candidate' in unknown);if('candidate' in unknown)assert.equal(unknown.candidate.risk,'unknown');
 });
+
+
+test("empty patches report only allowlisted diagnostics while preserving known model cost", async () => {
+  for (const diagnostic of ["PROVIDER_NOT_COMPLETED", "MALFORMED_JSON", "secret/raw-provider-response"]) {
+    const f = fixture();
+    f.options.generatePatch = async () => ({ patch: "", costCents: 1, diagnostic: diagnostic as any });
+    const result = await f.run() as any;
+    assert.equal(result.status, "failed"); assert.equal(result.costCents, 1);
+    assert.equal(result.reason, diagnostic === "secret/raw-provider-response" ? "FACTORY_REMOTE_BUILD_FAILED:PATCH" : `FACTORY_REMOTE_BUILD_FAILED:${diagnostic}`);
+    assert.equal(f.calls.includes("prepare"), false);
+  }
+});

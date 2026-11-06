@@ -1,3 +1,4 @@
+import { factoryPatchDiagnostics } from "./software-factory-builder";
 import { createGitHubFactoryChecks, type FactoryActionsClient, type FactoryActionsProfile } from "./software-factory-actions";
 import { createHash } from "node:crypto";
 import { mkdtemp, rm, readdir, lstat } from "node:fs/promises";
@@ -101,6 +102,8 @@ export function createFactoryRemotePipelineBuilder(options: FactoryRemoteBuilder
             uncertain = false;
             stopped();
             phase = "PATCH";
+            if (!generated.patch && generated.diagnostic && factoryPatchDiagnostics.includes(generated.diagnostic))
+                return result("failed", `FACTORY_REMOTE_BUILD_FAILED:${generated.diagnostic}`);
             const changedFiles = validateFactoryPublicationPatch(generated.patch);
             if (changedFiles.some(file => file.split("/")[0].toLowerCase() === ".github"))
                 throw Error("FACTORY_REMOTE_WORKFLOW_CHANGE");

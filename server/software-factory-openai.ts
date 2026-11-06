@@ -55,7 +55,10 @@ export function createOpenAiFactoryTextProvider(config:{
    const costCents=cost(usage.input_tokens,usage.output_tokens);
    if(!Number.isSafeInteger(costCents)||usage.input_tokens!==counted.input_tokens||usage.output_tokens>input.maxOutputTokens||costCents>input.maxCostCents)throw Error("usage bounds");
    if(!["completed","failed","incomplete","cancelled"].includes(response.status))throw Error("execution still active");
-   if(response.status!=="completed"||response.error||response.incomplete_details)return {status:"failed",reason:"FACTORY_OPENAI_NOT_COMPLETED",costCents};
+   if(response.status!=="completed"||response.error||response.incomplete_details){
+    const reason=response.status==="incomplete" ? (response.incomplete_details?.reason==="max_output_tokens" ? "FACTORY_OPENAI_OUTPUT_LIMIT" : "FACTORY_OPENAI_INCOMPLETE") : response.status==="cancelled" ? "FACTORY_OPENAI_RESPONSE_CANCELLED" : response.status==="failed" ? "FACTORY_OPENAI_RESPONSE_FAILED" : "FACTORY_OPENAI_NOT_COMPLETED";
+    return {status:"failed",reason,costCents};
+   }
    if(!Array.isArray(response.output))throw Error("output");
    let text="";
    for(const item of response.output){
