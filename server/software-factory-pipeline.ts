@@ -13,7 +13,7 @@ export interface FactoryPipelineState {
   rollback?: { healthy: boolean; restoredSha: string };
   deployment?: { id: string; headSha: string; target: "staging" | "production" };
 }
-interface StageContext { signal: AbortSignal; maxCostCents: number }
+interface StageContext { signal: AbortSignal; maxCostCents: number; source?: Readonly<Record<string, unknown>> }
 interface Costed { costCents: number }
 /** All callbacks are trusted control-plane functions, never loaded from app code or request data. */
 export interface FactoryPipelineDependencies {
@@ -77,7 +77,7 @@ export function createFactoryPipeline(deps: FactoryPipelineDependencies): Pick<F
     if (!projectReadiness(project).allowed) return { status: "blocked", costCents: 0, reason: projectReadiness(project).reasons.join(",") };
     const checkCost = (cost: number) => { if (!Number.isSafeInteger(cost) || cost < 0 || cost > context.maxCostCents) throw new Error("FACTORY_STAGE_BILLING_UNCONFIRMED"); };
     if (kind === "discover") {
-      const found = await deps.discover!(clone(project), context); checkCost(found.costCents);
+      const found = await deps.discover!(clone(project), { ...context, source: clone(job.payload) }); checkCost(found.costCents);
       const findings = found.findings ?? (found.finding ? [found.finding] : []);
       if (!findings.length) return { status: "completed", costCents: found.costCents, reason: "FACTORY_NO_ACTIONABLE_FINDING" };
       let selected: FactoryPipelineState["finding"] | undefined;
@@ -99,7 +99,7 @@ export function createFactoryPipeline(deps: FactoryPipelineDependencies): Pick<F
       if (built.candidate.projectId !== project.id || built.candidate.baseSha !== state.finding.baseSha || !validSha(built.candidate.headSha)) throw new Error("FACTORY_BUILD_IDENTITY_INVALID");
       state.candidate = { ...built.candidate, repairAttempts: state.repairAttempts }; state.evidence = [built.tests];
       if (!evidenceMatches(state, built.tests, "tests") || !built.tests.passed || built.tests.warnings.length) return result(state, built.costCents, { status: "blocked", reason: "FACTORY_BUILD_CHECKS_FAILED" });
-      if (state.finding.kind === "bug" && (!built.tests.journeyIds?.includes(state.finding.regressionScenarioId!) || !built.candidate.changedFiles.some(p => /(^|\/)(tests?|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$/.test(p)))) return result(state, built.costCents, { status: "blocked", reason: "FACTORY_PERMANENT_REGRESSION_TEST_REQUIRED" });
+      if ((state.finding.kind === "bug" || state.finding.regressionScenarioId) && (!built.tests.journeyIds?.includes(state.finding.regressionScenarioId!) || !built.candidate.changedFiles.some(p => /(^|\/)(tests?|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$/.test(p)))) return result(state, built.costCents, { status: "blocked", reason: "FACTORY_PERMANENT_REGRESSION_TEST_REQUIRED" });
       return result(state, built.costCents, { next: next(job, "simulate", state) });
     }
     if (kind === "simulate" || kind === "review") {

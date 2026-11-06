@@ -3,6 +3,34 @@ import test from "node:test";
 import express from "express";
 import { registerSoftwareFactoryRoutes } from "../server/software-factory-routes";
 import { createSignedLocalAuthCookieValue } from "../server/user-context";
+import { ASISTENTE_REPOSITORY } from "../server/software-factory-company";
+
+test("company orders use owner-only guarded admission, never generic enqueue or completion", async t => {
+  const saved = { ...process.env };
+  Object.assign(process.env, { NODE_ENV: "test", DEFAULT_USER_ID: "factory-owner", SESSION_SECRET: "factory-fixture-secret", ALLOW_DEV_USER_FALLBACK: "true" });
+  t.after(() => { for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key]; Object.assign(process.env, saved); });
+  let admissions = 0, denied = false, reads = 0;
+  const app = express(); app.use(express.json());
+  registerSoftwareFactoryRoutes(app, {
+    store: { projects: async owner => { assert.equal(owner, "factory-owner"); reads++; return [{ id: "asistente", repo: ASISTENTE_REPOSITORY }]; } } as any,
+    companyAdmission: { reservationCents: 1,
+      readMainOrder: async (owner, id) => { assert.equal(owner, "factory-owner"); return id === "order-1" ? { id, text: "Mejora los filtros de Asistente", createdAt: "2026-11-06T12:00:00Z", assignees: [{ agentId: "code", status: "en_curso", note: "" }] } : undefined; },
+      admitWithinCredits: async (owner, job) => { admissions++; assert.equal(owner, "factory-owner"); assert.equal(job.kind, "discover"); if (denied) throw Error("PRIVATE_CREDIT_GUARD"); return { ...job, id: "root-1", status: "pending" } as any; },
+    },
+  });
+  const server = app.listen(0, "127.0.0.1"); await new Promise<void>(resolve => server.once("listening", resolve));
+  t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
+  const base = `http://127.0.0.1:${(server.address() as any).port}`;
+  process.env.PUBLIC_APP_URL = base;
+  const post = (owner: string, company = "main") => fetch(`${base}/api/software-factory/company-orders`, { method: "POST", headers: { "content-type": "application/json", origin: base, cookie: `blackops.uid=${createSignedLocalAuthCookieValue(owner)}` }, body: JSON.stringify({ company, orderId: "order-1", projectId: "asistente" }) });
+  assert.equal((await post("other")).status, 403); assert.equal(reads, 0);
+  assert.equal((await post("factory-owner", "kong")).status, 400); assert.equal(admissions, 0);
+  const admitted = await post("factory-owner"); assert.equal(admitted.status, 202);
+  assert.deepEqual(await admitted.json(), { jobId: "root-1", status: "pending", orderId: "order-1", delivered: false });
+  denied = true;
+  const blocked = await post("factory-owner"); assert.equal(blocked.status, 409);
+  assert.doesNotMatch(await blocked.text(), /PRIVATE_CREDIT_GUARD/);
+});
 
 test("factory HTTP requires real owner and same origin; forbids policy/evidence injection", async t => {
   const saved = { ...process.env };
@@ -36,6 +64,9 @@ test("factory HTTP requires real owner and same origin; forbids policy/evidence 
   assert.equal((await post("pause", { paused: false }, { origin: "https://other.example" })).status, 403);
   assert.equal((await post("pause", { paused: false, limitCents: 999999 })).status, 400);
   assert.equal((await post("budget", { fixedCents: 10001 })).status, 400);
+  assert.equal((await post("company-orders", { company: "kong", orderId: "a", projectId: "office" })).status, 400);
+  assert.equal((await post("company-orders", { company: "main", orderId: "a", projectId: "office" }, { origin: "https://other.example" })).status, 403);
+  assert.equal((await post("company-orders", { company: "main", orderId: "a", projectId: "office" })).status, 503);
   assert.equal(writes, 0);
   assert.equal((await post("pause", { paused: false })).status, 200);
   assert.equal((await post("budget", { fixedCents: 2000 })).status, 200);

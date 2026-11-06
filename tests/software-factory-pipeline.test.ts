@@ -102,6 +102,15 @@ test("bug repair cannot continue without a permanent regression test", async () 
   f.deps.build = async (...args) => { const result = await build(...args); if ("status" in result) throw new Error("Unexpected failed fixture"); result.candidate.changedFiles = ["client/src/button.tsx"]; return result; };
   const run = await f.run(); assert.equal(run.result.reason, "FACTORY_PERMANENT_REGRESSION_TEST_REQUIRED"); assert.deepEqual(run.stages, ["discover", "build"]);
 });
+test("company improvement acceptance cannot bypass the permanent regression test gate", async () => {
+  const f = fixture(), discover = f.deps.discover!, build = f.deps.build!;
+  f.deps.discover = async (...args) => { const found = await discover(...args); found.finding!.kind = "improvement"; return found; };
+  f.deps.build = async (...args) => { const built = await build(...args); if ("status" in built) throw Error("fixture"); built.candidate.changedFiles = ["client/src/button.tsx"]; return built; };
+  const run = await f.run();
+  assert.equal(run.result.reason, "FACTORY_PERMANENT_REGRESSION_TEST_REQUIRED");
+  assert.deepEqual(run.stages, ["discover", "build"]);
+});
+
 test("fixture launch attestation is required and cleanup runs on refusal", async () => {
   const f = fixture(); await f.run(); const state = (([...f.jobs.values()].find(j => j.kind === "build")!.result as any).evidence.pipelineState) as FactoryPipelineState;
   let closed = false, ran = false;

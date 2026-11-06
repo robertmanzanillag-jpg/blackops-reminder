@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-06T20:41:04.141Z",
+  "generatedAt": "2026-11-06T21:50:08.497Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\software-factory",
   "packageName": "rest-express",
   "scripts": {
@@ -126,32 +126,32 @@
     "test:factory": "node --import tsx --test tests/software-factory*.test.ts tests/software-factory*.test.mjs"
   },
   "totals": {
-    "filesVisible": 833,
-    "filesIndexed": 748,
-    "imports": 2701,
-    "routes": 556,
-    "symbols": 16578
+    "filesVisible": 836,
+    "filesIndexed": 751,
+    "imports": 2715,
+    "routes": 557,
+    "symbols": 16621
   },
   "directories": {
-    "script": {
-      "files": 88,
-      "indexed": 83,
+    "docs": {
+      "files": 38,
+      "indexed": 37,
       "kinds": {
-        "script": 88
+        "docs": 38
       }
     },
     "server": {
-      "files": 182,
-      "indexed": 178,
+      "files": 183,
+      "indexed": 179,
       "kinds": {
-        "server": 182
+        "server": 183
       }
     },
     "tests": {
-      "files": 189,
-      "indexed": 186,
+      "files": 190,
+      "indexed": 187,
       "kinds": {
-        "test": 189
+        "test": 190
       }
     },
     ".": {
@@ -296,19 +296,19 @@
         "other": 1
       }
     },
-    "docs": {
-      "files": 37,
-      "indexed": 36,
-      "kinds": {
-        "docs": 37
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 88,
+      "indexed": 83,
+      "kinds": {
+        "script": 88
       }
     },
     "scripts": {
@@ -5467,6 +5467,16 @@
       "imports": [],
       "exports": [],
       "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-asistente-integration.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [
+        "of"
+      ],
       "routes": []
     },
     {
@@ -21188,10 +21198,12 @@
         "FactoryBuildInput",
         "FactoryBuildResult",
         "FactoryBuilderDependencies",
+        "FactoryPatchDiagnostic",
         "IsolatedCommand",
         "createDockerFactoryRunner",
         "createFactoryBuilderAdapter",
-        "createFactoryPipelineBuilder"
+        "createFactoryPipelineBuilder",
+        "factoryPatchDiagnostics"
       ],
       "symbols": [
         "args",
@@ -21207,6 +21219,7 @@
         "env",
         "executable",
         "exported",
+        "factoryPatchDiagnostics",
         "forbidden",
         "generated",
         "inspectExport",
@@ -21222,6 +21235,37 @@
         "stop",
         "timer",
         "workspace"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-company.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "./software-factory",
+        "./software-factory-pipeline",
+        "./software-factory-store",
+        "node:crypto"
+      ],
+      "exports": [
+        "ASISTENTE_REPOSITORY",
+        "companyOrderJob",
+        "createCompanyOrderDiscovery"
+      ],
+      "symbols": [
+        "ASISTENTE_REPOSITORY",
+        "admitted",
+        "baseSha",
+        "companyOrderJob",
+        "createCompanyOrderDiscovery",
+        "current",
+        "digest",
+        "engineering",
+        "inspected",
+        "order",
+        "revision",
+        "source"
       ],
       "routes": []
     },
@@ -21567,9 +21611,17 @@
       ],
       "symbols": [
         "createOpenAiFactoryPatchGenerator",
+        "edit",
+        "end",
         "files",
         "generate",
         "input",
+        "modelFiles",
+        "offset",
+        "oldLines",
+        "patch",
+        "plainTextNodes",
+        "plainTextPatch",
         "protectedSegment",
         "raw",
         "result",
@@ -21577,7 +21629,10 @@
         "segments",
         "signal",
         "sources",
-        "stat"
+        "stat",
+        "text",
+        "updated",
+        "valid"
       ],
       "routes": []
     },
@@ -21605,6 +21660,7 @@
         "post",
         "prompt",
         "reader",
+        "reason",
         "response",
         "timer",
         "usage"
@@ -21783,9 +21839,11 @@
       "path": "server/software-factory-routes.ts",
       "kind": "server",
       "imports": [
+        "../shared/agent-company",
         "../shared/software-factory-view",
         "./office-routes",
         "./software-factory",
+        "./software-factory-company",
         "./software-factory-pipeline",
         "./software-factory-store",
         "./software-factory-store-provider",
@@ -21810,8 +21868,10 @@
         "healthyVerification",
         "id",
         "input",
+        "job",
         "month",
         "now",
+        "order",
         "owner",
         "pauseSchema",
         "pipelineState",
@@ -21831,6 +21891,7 @@
       "routes": [
         "/api/software-factory",
         "/api/software-factory/budget",
+        "/api/software-factory/company-orders",
         "/api/software-factory/pause",
         "/api/software-factory/projects"
       ]
@@ -28940,6 +29001,26 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-company.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory",
+        "../server/software-factory-company",
+        "../shared/agent-company",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "context",
+        "discover",
+        "first",
+        "project",
+        "result"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-encrypted-state.test.ts",
       "kind": "test",
       "imports": [
@@ -28998,10 +29079,12 @@
         "actions",
         "bytes",
         "client",
+        "dispatch",
         "failed",
         "json",
         "scope",
         "sha",
+        "valid",
         "workspace"
       ],
       "routes": []
@@ -29155,6 +29238,7 @@
       "path": "tests/software-factory-openai-builder.test.ts",
       "kind": "test",
       "imports": [
+        "../server/software-factory-github-publisher",
         "../server/software-factory-openai-builder",
         "node:assert/strict",
         "node:fs/promises",
@@ -29166,13 +29250,19 @@
       "symbols": [
         "common",
         "context",
+        "data",
         "failed",
         "generate",
         "generateText",
         "input",
         "patch",
+        "rejected",
+        "result",
+        "run",
+        "source",
         "sourcePaths",
         "unknown",
+        "valid",
         "workspace"
       ],
       "routes": []
@@ -29368,6 +29458,7 @@
       "path": "tests/software-factory-routes.test.ts",
       "kind": "test",
       "imports": [
+        "../server/software-factory-company",
         "../server/software-factory-routes",
         "../server/user-context",
         "express",
@@ -29376,8 +29467,10 @@
       ],
       "exports": [],
       "symbols": [
+        "admitted",
         "app",
         "base",
+        "blocked",
         "cookie",
         "evidenceJob",
         "failure",
@@ -29899,6 +29992,7 @@
     "tests/shopify-oauth.test.ts",
     "tests/software-factory-actions.test.ts",
     "tests/software-factory-builder.test.ts",
+    "tests/software-factory-company.test.ts",
     "tests/software-factory-encrypted-state.test.ts",
     "tests/software-factory-gcs.test.ts",
     "tests/software-factory-github-client.test.ts",

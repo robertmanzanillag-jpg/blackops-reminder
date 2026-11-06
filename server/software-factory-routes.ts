@@ -7,6 +7,8 @@ import type { FactoryPipelineState } from "./software-factory-pipeline";
 import type { SoftwareFactoryView } from "../shared/software-factory-view";
 import { FACTORY_POLICY, projectReadiness } from "./software-factory";
 import { configuredSoftwareFactoryStore as softwareFactoryStore } from "./software-factory-store-provider";
+import { companyOrderJob } from "./software-factory-company";
+import type { CompanyOrder } from "../shared/agent-company";
 
 function pipelineState(job: FactoryJob): FactoryPipelineState | undefined {
   const result = job.result as { evidence?: { pipelineState?: FactoryPipelineState } } | undefined;
@@ -38,9 +40,31 @@ const budgetSchema = z.object({ fixedCents: z.number().int().min(0).max(10_000) 
 export function registerSoftwareFactoryRoutes(app: Express, options: {
   store?: Pick<typeof softwareFactoryStore, "status" | "list" | "setPaused" | "initializeMonth" | "projects" | "saveProject">;
   now?: () => Date;
+  // Installed by the trusted runtime only after the same ledger, credit guard and
+  // Asistente worker are connected. Never enabled by a browser request.
+  companyAdmission?: { reservationCents: number; readMainOrder(owner: string, id: string): Promise<CompanyOrder | undefined>;
+    // Must atomically enforce the verified credit grant and expiry on the worker's
+    // existing ledger. Generic monthly-budget enqueue is deliberately insufficient.
+    admitWithinCredits: typeof softwareFactoryStore.enqueue };
 } = {}) {
   const store = options.store ?? softwareFactoryStore;
   const now = options.now ?? (() => new Date());
+  app.post("/api/software-factory/company-orders", async (req, res) => {
+    const owner = requireOwner(req, res);
+    if (!owner) return;
+    if (!officeSameOrigin(req)) return res.status(403).json({ error: "La solicitud debe salir de esta oficina." });
+    const input = z.object({ company: z.literal("main"), orderId: z.string().min(1).max(200), projectId: z.string().min(1).max(100) }).strict().safeParse(req.body);
+    if (!input.success) return res.status(400).json({ error: "Selecciona una orden de la empresa principal y su proyecto." });
+    if (!options.companyAdmission || typeof options.companyAdmission.admitWithinCredits !== "function") return res.status(503).json({ error: "El ejecutor de Asistente aún no está conectado. No se ha enviado ni cobrado la orden." });
+    try {
+      const project = (await store.projects(owner)).find(p => p.id === input.data.projectId);
+      const order = await options.companyAdmission.readMainOrder(owner, input.data.orderId);
+      if (!project || !order) return res.status(404).json({ error: "Orden o proyecto no disponible." });
+      if (order.id !== input.data.orderId) throw Error("FACTORY_COMPANY_ORDER_MISMATCH");
+      const job = await options.companyAdmission.admitWithinCredits(owner, companyOrderJob(order, project, options.companyAdmission.reservationCents));
+      res.status(202).json({ jobId: job.id, status: job.status, orderId: order.id, delivered: false });
+    } catch { res.status(409).json({ error: "No se confirmó la admisión. Revisa el alcance de la orden, el presupuesto y la conexión del ejecutor." }); }
+  });
   app.get("/api/software-factory", async (req, res) => {
     const owner = requireOwner(req, res);
     if (!owner) return;
