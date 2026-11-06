@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-06T21:54:39.655Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\blackops-reminder",
+  "generatedAt": "2026-11-06T22:00:16.453Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-factory-integration",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,18 +124,60 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 830,
-    "filesIndexed": 741,
-    "imports": 2655,
-    "routes": 555,
-    "symbols": 16482
+    "filesVisible": 885,
+    "filesIndexed": 795,
+    "imports": 2911,
+    "routes": 564,
+    "symbols": 17325
   },
   "directories": {
-    "server": {
-      "files": 171,
-      "indexed": 166,
+    ".github/workflows": {
+      "files": 2,
+      "indexed": 0,
       "kinds": {
-        "server": 171
+        "other": 2
+      }
+    },
+    "client/src/components": {
+      "files": 29,
+      "indexed": 29,
+      "kinds": {
+        "client-component": 29
+      }
+    },
+    "docs": {
+      "files": 40,
+      "indexed": 39,
+      "kinds": {
+        "docs": 40
+      }
+    },
+    "script": {
+      "files": 93,
+      "indexed": 85,
+      "kinds": {
+        "script": 93
+      }
+    },
+    "server": {
+      "files": 195,
+      "indexed": 190,
+      "kinds": {
+        "server": 195
+      }
+    },
+    "shared": {
+      "files": 17,
+      "indexed": 17,
+      "kinds": {
+        "shared": 17
+      }
+    },
+    "tests": {
+      "files": 213,
+      "indexed": 209,
+      "kinds": {
+        "test": 213
       }
     },
     ".": {
@@ -162,13 +204,6 @@
       }
     },
     ".agents/skills/codebase-overview/agents": {
-      "files": 1,
-      "indexed": 0,
-      "kinds": {
-        "other": 1
-      }
-    },
-    ".github/workflows": {
       "files": 1,
       "indexed": 0,
       "kinds": {
@@ -208,13 +243,6 @@
       "indexed": 3,
       "kinds": {
         "other": 3
-      }
-    },
-    "client/src/components": {
-      "files": 28,
-      "indexed": 28,
-      "kinds": {
-        "client-component": 28
       }
     },
     "client/src/components/agents-building": {
@@ -280,26 +308,12 @@
         "other": 1
       }
     },
-    "docs": {
-      "files": 39,
-      "indexed": 38,
-      "kinds": {
-        "docs": 39
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
-      }
-    },
-    "script": {
-      "files": 91,
-      "indexed": 83,
-      "kinds": {
-        "script": 91
       }
     },
     "scripts": {
@@ -330,25 +344,11 @@
         "server": 3
       }
     },
-    "shared": {
-      "files": 16,
-      "indexed": 16,
-      "kinds": {
-        "shared": 16
-      }
-    },
     "shared/models": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 188,
-      "indexed": 184,
-      "kinds": {
-        "test": 188
       }
     },
     "tests/fixtures": {
@@ -1857,6 +1857,34 @@
         "queryClient",
         "syncMutation",
         "zohoSyncMutation"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/software-factory-panel.tsx",
+      "kind": "client-component",
+      "imports": [
+        "@/components/ui/button",
+        "@/components/ui/dialog",
+        "@/lib/queryClient",
+        "@shared/software-factory-view",
+        "@tanstack/react-query",
+        "react"
+      ],
+      "exports": [
+        "SoftwareFactoryPanel"
+      ],
+      "symbols": [
+        "SoftwareFactoryPanel",
+        "client",
+        "data",
+        "endpoint",
+        "fixedCents",
+        "money",
+        "mutation",
+        "projectFields",
+        "query",
+        "registration"
       ],
       "routes": []
     },
@@ -3960,6 +3988,7 @@
         "@/components/kong-operations-panel",
         "@/components/kong-supervisor-panel",
         "@/components/office-connections-panel",
+        "@/components/software-factory-panel",
         "@/components/ui/button",
         "@/lib/agent-live-status",
         "@/lib/owner-office-storage",
@@ -5449,6 +5478,16 @@
       "imports": [],
       "exports": [],
       "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-asistente-integration.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [
+        "of"
+      ],
       "routes": []
     },
     {
@@ -10796,6 +10835,59 @@
         "main",
         "options",
         "result"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/software-factory-pilot-exports.ts",
+      "kind": "script",
+      "imports": [
+        "../server/software-factory",
+        "../server/software-factory-actions",
+        "../server/software-factory-github-client",
+        "../server/software-factory-github-state",
+        "../server/software-factory-object-store",
+        "../server/software-factory-openai",
+        "../server/software-factory-pilot-review",
+        "../server/software-factory-responses-runtime",
+        "../server/software-factory-runtime"
+      ],
+      "exports": [
+        "createFactoryPilotGitHubClient, createFactoryPilotGitHubSourceExporter ",
+        "createGitHubFactoryChecks ",
+        "createGitHubFactoryStateTransport ",
+        "createOpenAiFactoryTextProvider ",
+        "createPilotIndependentReview, classifyPilotTextChange ",
+        "createResponsesFactoryWorker ",
+        "createSoftwareFactoryObjectStore ",
+        "currentFactoryProductionDeployment ",
+        "releaseGate, rehearsalGate "
+      ],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "script/software-factory-worker.ts",
+      "kind": "script",
+      "imports": [
+        "../server/software-factory-loop",
+        "../server/software-factory-runtime",
+        "../server/software-factory-store-provider",
+        "../server/software-factory-worker",
+        "node:fs/promises",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [],
+      "symbols": [
+        "main",
+        "module",
+        "modulePath",
+        "owner",
+        "shutdown",
+        "state",
+        "stop",
+        "worker"
       ],
       "routes": []
     },
@@ -20753,6 +20845,7 @@
         "./reminder-scheduler",
         "./revenue-engine",
         "./revenue-stripe-routes",
+        "./software-factory-routes",
         "./storage",
         "./telegram-routes",
         "./trust-executor",
@@ -21666,6 +21759,1003 @@
         "APPROVED_SINGLE_USER_OWNER_USERNAMES",
         "isConfiguredSingleUserOwner",
         "user"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-actions.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "FactoryActionsClient",
+        "FactoryActionsProfile",
+        "createGitHubFactoryChecks"
+      ],
+      "symbols": [
+        "Candidate",
+        "Job",
+        "Run",
+        "Scope",
+        "abort",
+        "bytes",
+        "candidate",
+        "completed",
+        "content",
+        "createGitHubFactoryChecks",
+        "encoded",
+        "event",
+        "hash",
+        "job",
+        "jobs",
+        "now",
+        "polls",
+        "preflight",
+        "profile",
+        "profiles",
+        "r",
+        "ref",
+        "reject",
+        "response",
+        "run",
+        "scope",
+        "sha",
+        "steps",
+        "timer",
+        "unknown",
+        "wait"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-builder.ts",
+      "kind": "server",
+      "imports": [
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path"
+      ],
+      "exports": [
+        "FactoryBuildInput",
+        "FactoryBuildResult",
+        "FactoryBuilderDependencies",
+        "FactoryPatchDiagnostic",
+        "IsolatedCommand",
+        "createDockerFactoryRunner",
+        "createFactoryBuilderAdapter",
+        "createFactoryPipelineBuilder",
+        "factoryPatchDiagnostics"
+      ],
+      "symbols": [
+        "args",
+        "attestation",
+        "build",
+        "candidate",
+        "child",
+        "commands",
+        "createDockerFactoryRunner",
+        "createFactoryBuilderAdapter",
+        "createFactoryPipelineBuilder",
+        "entry",
+        "env",
+        "executable",
+        "exported",
+        "factoryPatchDiagnostics",
+        "forbidden",
+        "generated",
+        "inspectExport",
+        "limit",
+        "name",
+        "output",
+        "patchSha256",
+        "paths",
+        "pr",
+        "removal",
+        "result",
+        "sha",
+        "stop",
+        "timer",
+        "workspace"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-company.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "./software-factory",
+        "./software-factory-pipeline",
+        "./software-factory-store",
+        "node:crypto"
+      ],
+      "exports": [
+        "ASISTENTE_REPOSITORY",
+        "companyOrderJob",
+        "createCompanyOrderDiscovery"
+      ],
+      "symbols": [
+        "ASISTENTE_REPOSITORY",
+        "admitted",
+        "baseSha",
+        "companyOrderJob",
+        "createCompanyOrderDiscovery",
+        "current",
+        "digest",
+        "engineering",
+        "inspected",
+        "order",
+        "revision",
+        "source"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-encrypted-state.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-object-store",
+        "node:crypto"
+      ],
+      "exports": [
+        "createEncryptedFactoryTransport"
+      ],
+      "symbols": [
+        "body",
+        "bytes",
+        "ciphertext",
+        "createEncryptedFactoryTransport",
+        "decipher",
+        "decode",
+        "envelope",
+        "key",
+        "limit",
+        "nonce",
+        "transport",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-gcs.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-object-store",
+        "node:crypto"
+      ],
+      "exports": [
+        "createGcsFactoryTransport"
+      ],
+      "symbols": [
+        "base",
+        "chunk",
+        "controller",
+        "createGcsFactoryTransport",
+        "data",
+        "generation",
+        "metadata",
+        "reader",
+        "request",
+        "response",
+        "result",
+        "timer",
+        "url"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-github-client.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-actions",
+        "./software-factory-builder",
+        "./software-factory-github",
+        "./software-factory-github-publisher"
+      ],
+      "exports": [
+        "FACTORY_PILOT_REPOSITORY",
+        "FactoryPilotGitHubClient",
+        "createFactoryPilotGitHubClient",
+        "createFactoryPilotGitHubSourceExporter"
+      ],
+      "symbols": [
+        "FACTORY_PILOT_REPOSITORY",
+        "branch",
+        "branchPattern",
+        "call",
+        "chunk",
+        "controller",
+        "createFactoryPilotGitHubClient",
+        "createFactoryPilotGitHubSourceExporter",
+        "data",
+        "encoded",
+        "expired",
+        "exporter",
+        "id",
+        "invalid",
+        "owner",
+        "paths",
+        "request",
+        "root",
+        "safePath",
+        "scope",
+        "sha",
+        "shaPattern",
+        "timeoutMs",
+        "tree"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-github-publisher.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-builder",
+        "node:crypto"
+      ],
+      "exports": [
+        "FactoryGitHubPublisherClient",
+        "PreparedFactoryCandidate",
+        "createGitHubFactoryCandidatePublisher",
+        "createGitHubFactoryPullRequestPublisher",
+        "validateFactoryPublicationPatch"
+      ],
+      "symbols": [
+        "Commit",
+        "Entry",
+        "Node",
+        "Pull",
+        "allowed",
+        "apply",
+        "baseCommit",
+        "baseRef",
+        "blob",
+        "body",
+        "c",
+        "changed",
+        "createGitHubFactoryCandidatePublisher",
+        "createGitHubFactoryPullRequestPublisher",
+        "currentBase",
+        "currentHead",
+        "digest",
+        "encode",
+        "encoded",
+        "entry",
+        "existing",
+        "expectedTree",
+        "fail",
+        "file",
+        "files",
+        "finalize",
+        "finalizers",
+        "found",
+        "h",
+        "header",
+        "hunk",
+        "input",
+        "line",
+        "lines",
+        "name",
+        "original",
+        "parsePatch",
+        "prepare",
+        "publisher",
+        "ref",
+        "safePath",
+        "segments",
+        "sha",
+        "start",
+        "text",
+        "tree",
+        "treeHash",
+        "validateFactoryPublicationPatch",
+        "validatePull",
+        "verifyCommit"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-github-state.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-encrypted-state",
+        "./software-factory-object-store",
+        "node:crypto"
+      ],
+      "exports": [
+        "createGitHubFactoryStateTransport"
+      ],
+      "symbols": [
+        "base",
+        "blob",
+        "blobSha",
+        "bytes",
+        "call",
+        "createGitHubFactoryStateTransport",
+        "decodeGeneration",
+        "encoded",
+        "encodedLimit",
+        "generation",
+        "limit",
+        "m",
+        "meta",
+        "path",
+        "r",
+        "reader",
+        "repository",
+        "response",
+        "sha",
+        "shaValid",
+        "validateRepository"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-github.ts",
+      "kind": "server",
+      "imports": [
+        "./github-client",
+        "./software-factory-builder",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "FactoryGitHubExportOptions",
+        "FactoryGitHubReadClient",
+        "createGitHubFactorySourceExporter"
+      ],
+      "symbols": [
+        "GitTreeEntry",
+        "actualSha",
+        "allowed",
+        "blob",
+        "bytes",
+        "client",
+        "commit",
+        "createGitHubFactorySourceExporter",
+        "encoded",
+        "info",
+        "limit",
+        "maxFiles",
+        "normalized",
+        "parts",
+        "privateKeyName",
+        "protectedPath",
+        "protectedSegment",
+        "repo",
+        "repositoryParts",
+        "root",
+        "rootInfo",
+        "safePath",
+        "seen",
+        "segments",
+        "selected",
+        "sha",
+        "target",
+        "tree"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-loop.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-worker"
+      ],
+      "exports": [
+        "FACTORY_IDLE_POLL_MS",
+        "FactoryLoopClock",
+        "runSoftwareFactoryLoop"
+      ],
+      "symbols": [
+        "FACTORY_IDLE_POLL_MS",
+        "clock",
+        "finish",
+        "maintain",
+        "report",
+        "runSoftwareFactoryLoop",
+        "stop",
+        "timer",
+        "wait"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-object-store.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory",
+        "./software-factory-store",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "FactoryObjectStoreOptions",
+        "FactoryObjectTransport",
+        "createSoftwareFactoryObjectStore"
+      ],
+      "symbols": [
+        "Context",
+        "LIMIT",
+        "Ledger",
+        "addJob",
+        "assertKey",
+        "b",
+        "budget",
+        "bytes",
+        "capacity",
+        "clone",
+        "control",
+        "cost",
+        "createSoftwareFactoryObjectStore",
+        "effectiveBudget",
+        "exposed",
+        "fit",
+        "hash",
+        "inputSchema",
+        "jobSchema",
+        "jobs",
+        "key",
+        "keySchema",
+        "ledgerSchema",
+        "maxBytes",
+        "month",
+        "mutate",
+        "mutationId",
+        "open",
+        "ownerKey",
+        "projectSchema",
+        "proof",
+        "protectedTransfer",
+        "rank",
+        "read",
+        "state",
+        "time",
+        "total",
+        "unique",
+        "validate"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-openai-builder.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-builder",
+        "./software-factory-openai",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "createOpenAiFactoryPatchGenerator"
+      ],
+      "symbols": [
+        "createOpenAiFactoryPatchGenerator",
+        "edit",
+        "end",
+        "files",
+        "generate",
+        "input",
+        "modelFiles",
+        "offset",
+        "oldLines",
+        "patch",
+        "plainTextNodes",
+        "plainTextPatch",
+        "protectedSegment",
+        "raw",
+        "result",
+        "rootStat",
+        "segments",
+        "signal",
+        "sources",
+        "stat",
+        "text",
+        "updated",
+        "valid"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-openai.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "FactoryTextResult",
+        "createOpenAiFactoryTextProvider"
+      ],
+      "symbols": [
+        "blocked",
+        "c",
+        "controller",
+        "cost",
+        "costCents",
+        "counted",
+        "createOpenAiFactoryTextProvider",
+        "expiry",
+        "fresh",
+        "input",
+        "nonnegative",
+        "positive",
+        "post",
+        "prompt",
+        "reader",
+        "reason",
+        "response",
+        "timer",
+        "usage"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-pilot-review.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory",
+        "./software-factory-openai",
+        "./software-factory-pipeline",
+        "node:crypto"
+      ],
+      "exports": [
+        "PilotReviewSource",
+        "classifyPilotTextChange",
+        "createPilotIndependentReview"
+      ],
+      "symbols": [
+        "a",
+        "candidate",
+        "classifyPilotTextChange",
+        "createPilotIndependentReview",
+        "digest",
+        "parsed",
+        "pieces",
+        "repository",
+        "result",
+        "source",
+        "unknown"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-pipeline.ts",
+      "kind": "server",
+      "imports": [
+        "./app-qa-agent",
+        "./software-factory",
+        "./software-factory-simulator",
+        "./software-factory-store",
+        "./software-factory-worker",
+        "node:crypto"
+      ],
+      "exports": [
+        "FactoryPipelineDependencies",
+        "FactoryPipelineState",
+        "createAppQaFactoryDiscovery",
+        "createFactoryPipeline",
+        "createPipelineSimulator"
+      ],
+      "symbols": [
+        "Costed",
+        "StageContext",
+        "a",
+        "assessment",
+        "built",
+        "checkCost",
+        "checked",
+        "clone",
+        "createAppQaFactoryDiscovery",
+        "createFactoryPipeline",
+        "createPipelineSimulator",
+        "deployed",
+        "evaluated",
+        "evidenceMatches",
+        "findingKey",
+        "findings",
+        "fixture",
+        "found",
+        "gate",
+        "healthy",
+        "hour",
+        "id",
+        "kind",
+        "load",
+        "missing",
+        "next",
+        "now",
+        "outcome",
+        "prefix",
+        "previous",
+        "priority",
+        "project",
+        "readiness",
+        "recurring",
+        "regressionScenarioId",
+        "report",
+        "restored",
+        "result",
+        "snapshot",
+        "state",
+        "timestamp",
+        "validSha",
+        "verified"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-remote-builder.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory",
+        "./software-factory-actions",
+        "./software-factory-builder",
+        "./software-factory-github-publisher",
+        "./software-factory-pipeline",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path"
+      ],
+      "exports": [
+        "FactoryRemoteBuilderOptions",
+        "FactoryRemoteCheckContext",
+        "FactoryRemoteCheckResult",
+        "createFactoryRemotePipelineBuilder",
+        "createGitHubActionsFactoryBuilder"
+      ],
+      "symbols": [
+        "age",
+        "candidate",
+        "changedFiles",
+        "checked",
+        "checks",
+        "classified",
+        "createFactoryRemotePipelineBuilder",
+        "createGitHubActionsFactoryBuilder",
+        "entries",
+        "exported",
+        "generated",
+        "inspect",
+        "o",
+        "p",
+        "patchSha256",
+        "project",
+        "protectedName",
+        "published",
+        "publisher",
+        "result",
+        "rootStat",
+        "stopped",
+        "visit"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-responses-runtime.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-openai",
+        "./software-factory-openai-builder",
+        "./software-factory-remote-builder",
+        "./software-factory-runtime",
+        "./software-factory-worker"
+      ],
+      "exports": [
+        "ResponsesFactoryBuildOptions",
+        "createResponsesFactoryBuild",
+        "createResponsesFactoryWorker"
+      ],
+      "symbols": [
+        "build",
+        "createResponsesFactoryBuild",
+        "createResponsesFactoryWorker",
+        "generatePatch",
+        "generateText",
+        "repositories",
+        "workerOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-routes.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "../shared/software-factory-view",
+        "./office-routes",
+        "./software-factory",
+        "./software-factory-company",
+        "./software-factory-pipeline",
+        "./software-factory-store",
+        "./software-factory-store-provider",
+        "./user-context",
+        "express",
+        "zod"
+      ],
+      "exports": [
+        "registerSoftwareFactoryRoutes"
+      ],
+      "symbols": [
+        "activeWorkers",
+        "age",
+        "blocker",
+        "budgetSchema",
+        "capabilities",
+        "completed",
+        "costCents",
+        "costs",
+        "eligible",
+        "evidenceCount",
+        "healthyVerification",
+        "id",
+        "input",
+        "job",
+        "month",
+        "now",
+        "order",
+        "owner",
+        "pauseSchema",
+        "pipelineState",
+        "project",
+        "projectSchema",
+        "proofAge",
+        "registerSoftwareFactoryRoutes",
+        "remainingCents",
+        "reported",
+        "requireOwner",
+        "result",
+        "seen",
+        "stages",
+        "state",
+        "store"
+      ],
+      "routes": [
+        "/api/software-factory",
+        "/api/software-factory/budget",
+        "/api/software-factory/company-orders",
+        "/api/software-factory/pause",
+        "/api/software-factory/projects"
+      ]
+    },
+    {
+      "path": "server/software-factory-runtime.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory",
+        "./software-factory-pipeline",
+        "./software-factory-store",
+        "./software-factory-store-provider",
+        "./software-factory-worker",
+        "node:crypto"
+      ],
+      "exports": [
+        "FactoryRuntimeOptions",
+        "TrustedFactoryStages",
+        "createTrustedFactoryWorkerOptions",
+        "currentFactoryProductionDeployment",
+        "validateFactoryWorkerOptions"
+      ],
+      "symbols": [
+        "adapter",
+        "adapters",
+        "completed",
+        "createTrustedFactoryWorkerOptions",
+        "currentFactoryProductionDeployment",
+        "expectedKey",
+        "jobs",
+        "latest",
+        "owner",
+        "pipeline",
+        "production",
+        "releases",
+        "reservations",
+        "reserve",
+        "s",
+        "scope",
+        "stages",
+        "state",
+        "status",
+        "validateFactoryWorkerOptions",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-simulator.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "playwright",
+        "zod"
+      ],
+      "exports": [
+        "FactorySimulationCase",
+        "FactorySimulationInput",
+        "factorySimulationSchema",
+        "runFactorySimulation"
+      ],
+      "symbols": [
+        "abort",
+        "baseline",
+        "browser",
+        "bytes",
+        "context",
+        "digest",
+        "factorySimulationSchema",
+        "input",
+        "localUrl",
+        "page",
+        "record",
+        "regressions",
+        "report",
+        "response",
+        "root",
+        "runFactorySimulation",
+        "runId",
+        "screenshot",
+        "selector",
+        "serialized",
+        "stepSchema",
+        "timeout",
+        "u",
+        "version"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-store-provider.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-store",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "configuredSoftwareFactoryStore",
+        "createFactoryStoreProvider"
+      ],
+      "symbols": [
+        "Configuration",
+        "FactoryStore",
+        "config",
+        "configuredSoftwareFactoryStore",
+        "createFactoryStoreProvider",
+        "module",
+        "resolve",
+        "store"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-store.ts",
+      "kind": "server",
+      "imports": [
+        "./office-cloud-store",
+        "./software-factory",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "FactoryJob",
+        "FactoryJobInput",
+        "FactoryOutcome",
+        "createSoftwareFactorySchemaSql",
+        "createSoftwareFactoryStore",
+        "factoryJobKinds",
+        "softwareFactoryStore"
+      ],
+      "symbols": [
+        "active",
+        "config",
+        "createSoftwareFactorySchemaSql",
+        "createSoftwareFactoryStore",
+        "date",
+        "decode",
+        "factoryJobKinds",
+        "input",
+        "inputSchema",
+        "job",
+        "month",
+        "monthNow",
+        "ownerKey",
+        "pool",
+        "previous",
+        "protectedTransfer",
+        "raw",
+        "result",
+        "row",
+        "run",
+        "selected",
+        "softwareFactoryStore",
+        "state",
+        "stored",
+        "transaction",
+        "updated"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-worker.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory",
+        "./software-factory-store",
+        "./software-factory-store-provider",
+        "node:crypto"
+      ],
+      "exports": [
+        "FactoryAdapter",
+        "FactoryAdapterResult",
+        "FactoryTickResult",
+        "FactoryWorkerOptions",
+        "TrustedReleaseContext",
+        "createSoftwareFactoryWorker",
+        "validateFactoryTransition"
+      ],
+      "symbols": [
+        "adapter",
+        "attempts",
+        "block",
+        "context",
+        "createSoftwareFactoryWorker",
+        "next",
+        "now",
+        "recovery",
+        "remaining",
+        "reserve",
+        "state",
+        "store",
+        "timeout",
+        "validateFactoryTransition",
+        "workerId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "FACTORY_POLICY",
+        "FactoryBudget",
+        "FactoryCandidate",
+        "FactoryEvidence",
+        "FactoryGate",
+        "FactoryProject",
+        "FactoryStage",
+        "LearningCase",
+        "canRepair",
+        "evaluateLearning",
+        "projectReadiness",
+        "rehearsalGate",
+        "releaseGate",
+        "reserveBudget",
+        "settleBudget"
+      ],
+      "symbols": [
+        "FACTORY_POLICY",
+        "canRepair",
+        "evaluateLearning",
+        "gate",
+        "group",
+        "latest",
+        "projectReadiness",
+        "protectedPath",
+        "reasons",
+        "recent",
+        "records",
+        "rehearsalGate",
+        "releaseGate",
+        "reserveBudget",
+        "settleBudget",
+        "sha",
+        "validUrl",
+        "validateBudget"
       ],
       "routes": []
     },
@@ -23716,6 +24806,16 @@
         "weeklyTasks",
         "yearlyGoals"
       ],
+      "routes": []
+    },
+    {
+      "path": "shared/software-factory-view.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "SoftwareFactoryView"
+      ],
+      "symbols": [],
       "routes": []
     },
     {
@@ -29265,6 +30365,684 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-actions.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-actions",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "branch",
+        "candidate",
+        "checks",
+        "f",
+        "fixture",
+        "incomplete",
+        "job",
+        "known",
+        "mutations",
+        "path",
+        "project",
+        "repository",
+        "run",
+        "verify"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-builder.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-builder",
+        "node:assert/strict",
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "build",
+        "dir",
+        "executable",
+        "fixture",
+        "patch",
+        "prior",
+        "record",
+        "result",
+        "run"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-company.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory",
+        "../server/software-factory-company",
+        "../shared/agent-company",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "context",
+        "discover",
+        "first",
+        "project",
+        "result"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-encrypted-state.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-encrypted-state",
+        "../server/software-factory-object-store",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "e",
+        "f",
+        "fixture",
+        "key",
+        "next",
+        "raw",
+        "wrapped"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-gcs.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-gcs",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "body",
+        "json",
+        "metadata",
+        "options",
+        "request",
+        "transport"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-github-client.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-github-client",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "actions",
+        "bytes",
+        "client",
+        "dispatch",
+        "failed",
+        "json",
+        "scope",
+        "sha",
+        "valid",
+        "workspace"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-github-publisher.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-github-publisher",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "before",
+        "blob",
+        "candidate",
+        "f",
+        "fixture",
+        "g",
+        "gitHash",
+        "hash",
+        "input",
+        "original",
+        "patch",
+        "pr",
+        "r",
+        "result",
+        "tree",
+        "writes"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-github-state.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-github-state",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "bytes",
+        "f",
+        "first",
+        "fixture",
+        "json",
+        "method",
+        "path",
+        "repository",
+        "request",
+        "second",
+        "t"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-github.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-github",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "blob",
+        "blobSha",
+        "cases",
+        "commit",
+        "commitSha",
+        "content",
+        "dir",
+        "f",
+        "fixture",
+        "small",
+        "tree",
+        "workspace"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-loop.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-loop",
+        "../server/software-factory-store",
+        "../server/software-factory-worker",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "Clock",
+        "clock",
+        "flush",
+        "job",
+        "loop",
+        "maintain",
+        "setup",
+        "store",
+        "tick",
+        "worker"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-object-store.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-object-store",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "MemoryTransport",
+        "attempts",
+        "before",
+        "claimed",
+        "deploy",
+        "deployed",
+        "exactCapacity",
+        "f",
+        "fixture",
+        "input",
+        "j",
+        "job",
+        "ledger",
+        "owner",
+        "project",
+        "rollback",
+        "store",
+        "tight",
+        "transport",
+        "unknown",
+        "verify",
+        "writes"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-openai-builder.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-github-publisher",
+        "../server/software-factory-openai-builder",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "common",
+        "context",
+        "data",
+        "failed",
+        "generate",
+        "generateText",
+        "input",
+        "patch",
+        "rejected",
+        "result",
+        "run",
+        "source",
+        "sourcePaths",
+        "unknown",
+        "valid",
+        "workspace"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-openai.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-openai",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "c",
+        "cancel",
+        "config",
+        "controller",
+        "count",
+        "generate",
+        "input",
+        "json",
+        "model",
+        "outcome",
+        "result"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-panel.test.mjs",
+      "kind": "test",
+      "imports": [
+        "esbuild",
+        "express",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "app",
+        "browser",
+        "origin",
+        "page",
+        "server",
+        "temp",
+        "values"
+      ],
+      "routes": [
+        "/",
+        "/api/software-factory",
+        "/api/software-factory/:action",
+        "/panel.js"
+      ]
+    },
+    {
+      "path": "tests/software-factory-pilot-review.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-pilot-review",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "before",
+        "candidate",
+        "context",
+        "make",
+        "restoration",
+        "result",
+        "review",
+        "source",
+        "state"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-pipeline.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory",
+        "../server/software-factory-pipeline",
+        "../server/software-factory-store",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "deploy",
+        "deployment",
+        "discover",
+        "evidence",
+        "execute",
+        "f",
+        "failed",
+        "fixture",
+        "forged",
+        "found",
+        "healthy",
+        "initial",
+        "jobs",
+        "now",
+        "original",
+        "pipeline",
+        "restored",
+        "result",
+        "run",
+        "second",
+        "simulator",
+        "verify"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-postgres.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-cloud-store",
+        "../server/software-factory-store",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test",
+        "node:util",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "bin",
+        "claims",
+        "deploy",
+        "env",
+        "exec",
+        "input",
+        "jobs",
+        "next",
+        "outcomes",
+        "reset",
+        "rollback",
+        "root",
+        "setup",
+        "status",
+        "store",
+        "verify"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-remote-builder.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory",
+        "../server/software-factory-actions",
+        "../server/software-factory-github-publisher",
+        "../server/software-factory-pipeline",
+        "../server/software-factory-remote-builder",
+        "../server/software-factory-responses-runtime",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "base",
+        "blob",
+        "body",
+        "build",
+        "f",
+        "fixture",
+        "g",
+        "gitHash",
+        "patch",
+        "patchHash",
+        "project",
+        "r",
+        "result",
+        "state",
+        "tree",
+        "unknown",
+        "workflow"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-company",
+        "../server/software-factory-routes",
+        "../server/user-context",
+        "express",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "admitted",
+        "app",
+        "base",
+        "blocked",
+        "cookie",
+        "evidenceJob",
+        "failure",
+        "headSha",
+        "metrics",
+        "post",
+        "project",
+        "ready",
+        "response",
+        "saved",
+        "server",
+        "stale",
+        "view"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-runtime.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-runtime",
+        "../server/software-factory-store",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "context",
+        "f",
+        "fixture",
+        "owner",
+        "project",
+        "redeployed",
+        "reservations",
+        "restored",
+        "result",
+        "runtime",
+        "stages",
+        "store"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-simulator.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-simulator",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "node:http",
+        "node:os",
+        "node:path",
+        "node:test",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "browser",
+        "browserOptions",
+        "bytes",
+        "candidate",
+        "candidateAddress",
+        "failure",
+        "input",
+        "isBroken",
+        "options",
+        "result",
+        "root",
+        "scenarios",
+        "server",
+        "sha"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-store-provider.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-store",
+        "../server/software-factory-store-provider",
+        "node:assert/strict",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "f",
+        "fixture",
+        "object",
+        "options",
+        "postgres",
+        "store"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-store.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-store",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "pool"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-worker.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-store",
+        "../server/software-factory-worker",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "candidate",
+        "evidence",
+        "h",
+        "harness",
+        "job",
+        "project",
+        "releaseFixture",
+        "sha",
+        "task",
+        "time"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "cases",
+        "full",
+        "now",
+        "original",
+        "overrun"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/telegram-chat-flow.test.ts",
       "kind": "test",
       "imports": [
@@ -29712,6 +31490,30 @@
     "tests/revenue-stripe.test.ts",
     "tests/session-config.test.ts",
     "tests/shopify-oauth.test.ts",
+    "tests/software-factory-actions.test.ts",
+    "tests/software-factory-builder.test.ts",
+    "tests/software-factory-company.test.ts",
+    "tests/software-factory-encrypted-state.test.ts",
+    "tests/software-factory-gcs.test.ts",
+    "tests/software-factory-github-client.test.ts",
+    "tests/software-factory-github-publisher.test.ts",
+    "tests/software-factory-github-state.test.ts",
+    "tests/software-factory-github.test.ts",
+    "tests/software-factory-loop.test.ts",
+    "tests/software-factory-object-store.test.ts",
+    "tests/software-factory-openai-builder.test.ts",
+    "tests/software-factory-openai.test.ts",
+    "tests/software-factory-pilot-review.test.ts",
+    "tests/software-factory-pipeline.test.ts",
+    "tests/software-factory-postgres.test.ts",
+    "tests/software-factory-remote-builder.test.ts",
+    "tests/software-factory-routes.test.ts",
+    "tests/software-factory-runtime.test.ts",
+    "tests/software-factory-simulator.test.ts",
+    "tests/software-factory-store-provider.test.ts",
+    "tests/software-factory-store.test.ts",
+    "tests/software-factory-worker.test.ts",
+    "tests/software-factory.test.ts",
     "tests/telegram-chat-flow.test.ts",
     "tests/telegram-chat-handler.test.ts",
     "tests/telegram-command.test.ts",
