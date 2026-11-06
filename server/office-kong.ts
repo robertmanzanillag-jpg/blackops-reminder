@@ -20,8 +20,17 @@ const agentSchema = z.object({
   owner: text,
   responsibility: text,
   state: z.enum(["healthy", "running", "attention", "stale", "unknown", "disabled"]),
-  operationMode: z.enum(["on_demand", "scheduled"]).optional(),
+  operationMode: z.enum(["on_demand", "scheduled", "event_driven"]).optional(),
   evidencePending: z.boolean().optional(),
+  // Aggregate receipt history is not proof of a live reader or completed group read.
+  verifiedActivity: z.object({
+    windowDays: z.number().int().positive(),
+    receivedCount: z.number().int().nonnegative(),
+    appliedCount: z.number().int().nonnegative(),
+    pendingCount: z.number().int().nonnegative(),
+    lastReceivedAt: nullableTimestamp,
+    lastAppliedAt: nullableTimestamp,
+  }).strict().optional(),
   lastRunAt: nullableTimestamp,
   nextRunAt: nullableTimestamp,
   blocker: text.nullable(),
