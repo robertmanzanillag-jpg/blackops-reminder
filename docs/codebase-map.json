@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T00:43:12.044Z",
+  "generatedAt": "2026-11-07T00:48:00.271Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-factory-integration",
   "packageName": "rest-express",
   "scripts": {
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 938,
-    "filesIndexed": 844,
+    "filesVisible": 932,
+    "filesIndexed": 842,
     "imports": 3116,
     "routes": 564,
-    "symbols": 17904
+    "symbols": 17905
   },
   "directories": {
     ".": {
@@ -162,10 +162,10 @@
       }
     },
     ".github/workflows": {
-      "files": 4,
+      "files": 2,
       "indexed": 0,
       "kinds": {
-        "other": 4
+        "other": 2
       }
     },
     "bin": {
@@ -274,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 45,
-      "indexed": 42,
+      "files": 41,
+      "indexed": 40,
       "kinds": {
-        "docs": 45
+        "docs": 41
       }
     },
     "examples/clippers-motivation": {
@@ -5434,22 +5434,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -23061,6 +23045,7 @@
         "fresh",
         "input",
         "nonnegative",
+        "pinnedModel",
         "positive",
         "post",
         "prompt",
