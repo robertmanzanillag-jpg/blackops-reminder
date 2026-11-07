@@ -20,6 +20,7 @@ import { initializeBlackRoomRemoteControlPersistence } from "./blackroom-remote-
 import { shouldStartResourceIntensiveSchedulers } from "./background-scheduler-policy";
 import { officeWebProtocol } from "./office-protocol";
 import {officeWebSourceStatus,startOfficeWebSourceExporter} from "./office-web-source-scheduler";
+import {officeEditorialSourceStatus} from "./office-editorial-scheduler";
 
 const app = express();
 const httpServer = createServer(app);
@@ -37,6 +38,7 @@ app.get(["/health", "/api/health"], (_req, res) => {
     service: "blackops-reminder",
     officeProtocol: officeWebProtocol(),
     officeSources:officeWebSourceStatus(),
+    officeEditorialSources:officeEditorialSourceStatus(),
     instanceId,
     checkedAt: new Date().toISOString(),
     startedAt: instanceStartedAt.toISOString(),

@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T03:54:36.925Z
+Generated: 2026-11-07T04:53:04.797Z
 Repo: `/home/runner/workspace`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1010 | 904 | 3331 | 570 | 18551 |
+| 1039 | 933 | 3440 | 571 | 18840 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 250 | 246 | test:250 |
-| `server` | 230 | 225 | server:230 |
-| `client/src` | 144 | 142 | ui-component:55, client-component:38, client-page:26, client-lib:18 |
-| `script` | 103 | 92 | script:103 |
+| `tests` | 259 | 255 | test:259 |
+| `server` | 243 | 238 | server:243 |
+| `client/src` | 145 | 143 | ui-component:55, client-component:39, client-page:26, client-lib:18 |
+| `script` | 104 | 93 | script:104 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 60 | 56 | docs:60 |
+| `docs` | 65 | 61 | docs:65 |
 | `.` | 36 | 18 | other:24, docs:11, package:1 |
 | `shared` | 18 | 18 | shared:18 |
 | `.agents/memory` | 14 | 14 | docs:14 |
@@ -64,6 +64,7 @@ Package: `rest-express`
 - `server/kong-supervisor-routes.ts`: `/api/kong-supervisor/chat`, `/api/kong-supervisor/state`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
 - `server/marketing-learning-routes.ts`: `/api/marketing-command-center`, `/api/marketing-command-center/run-day`
+- `server/office-business-routes.ts`: `/api/agents-office/${route.path}`
 - `server/office-review-benchmarks.ts`: `/diagnostics`, `/notes`, `/profile`, `/projects/:id`, `/report`, `/users/:id`
 - `server/office-routes.ts`: `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/contact-action`, `/api/agents-office/kong-snapshot`, `/api/agents-office/runs`
 - `server/replit_integrations/chat/routes.ts`: `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/messages`
@@ -180,13 +181,18 @@ Package: `rest-express`
 - `tests/office-academy-benchmarks.test.ts`
 - `tests/office-academy-promotion.test.ts`
 - `tests/office-academy-runner.test.ts`
+- `tests/office-business-routes.test.ts`
+- `tests/office-business-work.test.ts`
 - `tests/office-capability-lifecycle.test.ts`
 - `tests/office-capability-training.test.ts`
+- `tests/office-career-reconciliation.test.ts`
 - `tests/office-city-agents.test.ts`
 - `tests/office-claude.test.ts`
 - `tests/office-cloud-runtime.test.ts`
 - `tests/office-cloud-store.test.ts`
 - `tests/office-council-migration.test.ts`
+- `tests/office-editorial-scheduler.test.ts`
+- `tests/office-editorial-work.test.ts`
 - `tests/office-execution.test.ts`
 - `tests/office-github.test.ts`
 - `tests/office-internal-work.test.ts`
@@ -197,6 +203,7 @@ Package: `rest-express`
 - `tests/office-openai.test.ts`
 - `tests/office-protocol.test.ts`
 - `tests/office-radio-training.test.ts`
+- `tests/office-revenue-work.test.ts`
 - `tests/office-review-benchmarks.test.ts`
 - `tests/office-role-academy-integration.test.ts`
 - `tests/office-role-academy.test.ts`
@@ -257,6 +264,7 @@ Package: `rest-express`
 - `tests/software-factory-office-mode.test.ts`
 - `tests/software-factory-office-ui-artifact.test.ts`
 - `tests/software-factory-office-ui-evidence.test.ts`
+- `tests/software-factory-once.test.ts`
 - `tests/software-factory-openai-builder.test.ts`
 - `tests/software-factory-openai-transport.test.ts`
 - `tests/software-factory-openai.test.ts`

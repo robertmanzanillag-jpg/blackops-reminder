@@ -19,12 +19,12 @@ function setup(clock:Clock, jobs:FactoryJob[]=[]) {
  return {calls,store,jobs};
 }
 function job(clock:Clock,kind:FactoryJob["kind"]="build"):FactoryJob{return {id:kind,key:kind,kind,projectId:"pilot",ownerKey:"owner",month:"2026-11",status:"running",payload:{},headSha:"a".repeat(40),reservedCents:10,recoveryCents:0,createdAt:new Date(clock.time).toISOString(),leaseExpiresAt:new Date(clock.time+60000).toISOString()};}
-test("confirmed idle sleeps an hour with no database maintenance and stop interrupts promptly",async()=>{
+test("confirmed idle maintains process presence while claims remain hourly and stop clears timers",async()=>{
  const clock=new Clock(),f=setup(clock),shutdown=new AbortController();
  const worker=createSoftwareFactoryWorker({store:f.store as any,now:()=>new Date(clock.time)});
  const loop=runSoftwareFactoryLoop(worker,{clock,signal:shutdown.signal});await flush();
- assert.deepEqual(f.calls,["expire","claim","idleState"]);assert.equal(clock.timers.size,1);
- await clock.advance(FACTORY_IDLE_POLL_MS-1);assert.equal(f.calls.length,3);
+ assert.deepEqual(f.calls,["expire","idleState","heartbeat","expire","claim","idleState"]);assert.equal(clock.timers.size,2);
+ await clock.advance(FACTORY_IDLE_POLL_MS-1);assert.equal(f.calls.filter(call=>call==="claim").length,1);assert.ok(f.calls.filter(call=>call==="heartbeat").length>200);
  await clock.advance(1);assert.equal(f.calls.filter(call=>call==="claim").length,2);
  shutdown.abort();await loop;assert.equal(clock.timers.size,0);
 });
@@ -32,8 +32,8 @@ test("active job retains 15 second maintenance and lease abort without idle poll
  const clock=new Clock(),f=setup(clock,[job(clock)]),shutdown=new AbortController();let aborted=false;
  const worker=createSoftwareFactoryWorker({store:f.store as any,now:()=>new Date(clock.time),adapters:{build:{execute:async(_job,{signal})=>new Promise(resolve=>signal.addEventListener("abort",()=>{aborted=true;resolve({status:"unknown",costCents:0});},{once:true}))}}});
  const loop=runSoftwareFactoryLoop(worker,{clock,signal:shutdown.signal});await flush();
- assert.equal(f.calls.filter(call=>call==="heartbeat").length,1);
- await clock.advance(15000);assert.equal(f.calls.filter(call=>call==="heartbeat").length,2);
+ assert.equal(f.calls.filter(call=>call==="heartbeat").length,2);
+ await clock.advance(15000);assert.equal(f.calls.filter(call=>call==="heartbeat").length,3);
  await clock.advance(45000);await loop;
  assert.equal(aborted,true);assert.equal(f.calls.filter(call=>call==="claim").length,1);assert.equal(clock.timers.size,0);
 });
@@ -42,7 +42,7 @@ test("verification and rollback follow immediately without a dormant interval",a
  const worker=createSoftwareFactoryWorker({store:f.store as any,now:()=>new Date(clock.time),adapters:{verify:{execute:async()=>{stages.push("verify");return {status:"completed",costCents:1,next:{key:"next",projectId:"pilot",kind:"rollback",headSha:"a".repeat(40),reservedCents:5}};}},rollback:{execute:async()=>{stages.push("rollback");return {status:"completed",costCents:1};}}}});
  const loop=runSoftwareFactoryLoop(worker,{clock,signal:shutdown.signal});await flush();
  assert.deepEqual(stages,["verify","rollback"]);assert.equal(f.calls.filter(call=>call==="claim").length,3);
- assert.deepEqual([...clock.timers.values()].map(timer=>timer.at-clock.time),[FACTORY_IDLE_POLL_MS]);shutdown.abort();await loop;
+ assert.deepEqual([...clock.timers.values()].map(timer=>timer.at-clock.time).sort((a,b)=>a-b),[15000,FACTORY_IDLE_POLL_MS]);shutdown.abort();await loop;
 });
 test("unknown global slot quarantines without heartbeat or recurring database calls",async()=>{
  const clock=new Clock(),f=setup(clock);f.store.idleState=async()=>({kind:"unknown"});
@@ -89,4 +89,28 @@ test("inflight maintenance cannot heartbeat after uncertain execution quarantine
  f.store.expire=async()=>new Promise(resolve=>{finishExpire=resolve;});
  const maintain=worker.maintain();await flush();finishAdapter();assert.deepEqual(await tick,{kind:"quarantined"});
  finishExpire(0);await maintain;assert.equal(f.calls.filter(call=>call==="heartbeat").length,1);
+});
+
+
+test("idle maintenance is serialized and stop during lookup cannot renew presence",async()=>{
+ const clock=new Clock(),f=setup(clock);let resolve!:()=>void;let reads=0;
+ f.store.idleState=async()=>{reads++;await new Promise<void>(r=>{resolve=r;});return {kind:"idle"};};
+ const worker=createSoftwareFactoryWorker({store:f.store as any,now:()=>new Date(clock.time)});
+ const first=worker.maintain();await flush();await worker.maintain();assert.equal(reads,1);
+ worker.stop();resolve();await first;await worker.maintain();assert.equal(f.calls.includes("heartbeat"),false);
+});
+test("unknown work discovered during hourly dormancy stops maintenance and all timers",async()=>{
+ const clock=new Clock(),f=setup(clock);const worker=createSoftwareFactoryWorker({store:f.store as any,now:()=>new Date(clock.time)});
+ const loop=runSoftwareFactoryLoop(worker,{clock,signal:new AbortController().signal});await flush();const count=f.calls.filter(x=>x==="heartbeat").length;
+ f.store.idleState=async()=>({kind:"unknown"});await clock.advance(15000);await loop;
+ assert.equal(f.calls.filter(x=>x==="heartbeat").length,count);assert.equal(clock.timers.size,0);
+});
+test("idle process heartbeat preserves read-only capabilities and never claims work",async()=>{
+ const clock=new Clock(),f=setup(clock);let capabilities:any;
+ (f.store as any).heartbeat=async(_id:any,c:any)=>{capabilities=c;};
+ const adapter={execute:async()=>({status:"completed" as const,costCents:0})};
+ const worker=createSoftwareFactoryWorker({store:f.store as any,now:()=>new Date(clock.time),releaseMode:"review-only",adapters:{build:adapter,deploy:adapter}});
+ await worker.maintain();assert.deepEqual(capabilities,{build:true,deploy:false});assert.equal(f.calls.includes("claim"),false);
+ f.store.idleState=async()=>({kind:"running",leaseExpiresAt:new Date(clock.time-1).toISOString()}) as any;
+ await assert.rejects(worker.maintain(),/IDLE_STATE/);assert.deepEqual(await worker.tick(),{kind:"quarantined"});
 });

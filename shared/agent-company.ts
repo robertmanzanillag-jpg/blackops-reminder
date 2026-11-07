@@ -12,7 +12,10 @@ export type Personality = { nickname: string; traits: string[]; motto: string };
 
 export type MemoryEntry = { at: string; text: string };
 
+export type CareerScoreReconciliation = {version:1;status:"needs_scope_qualification";recordId:string;originalCareerDigest:string};
+
 export type AgentCareer = {
+  scoreReconciliation?: CareerScoreReconciliation;
   agentId: string;
   generation: number;
   nickname: string;
@@ -343,6 +346,10 @@ export function advanceCompany(
           hiredAt: iso,
           memory: [{ at: iso, text: `Contratado como ${input.roles[agentId] || agentId}.` }],
         };
+    // A preserved legacy score is not proof of misconduct or qualification.
+    // Any reconciliation marker freezes career-wide scoring pending a separate,
+    // explicitly evidenced qualification process. Never silently repair its life.
+    if(career.scoreReconciliation !== undefined){careers[agentId]=career;continue;}
     const evidence=status.evidenceId?.trim();
     if(career.evaluatedEvidenceIds !== undefined && (!Array.isArray(career.evaluatedEvidenceIds) || career.evaluatedEvidenceIds.some(id=>typeof id !== "string"))) { careers[agentId]=career;continue; }
     if (!evidence || evidence === career.lastEvidenceId || career.evaluatedEvidenceIds?.includes(evidence)) { careers[agentId] = career; continue; }
@@ -687,7 +694,7 @@ export function completeOrder(state: CompanyState, orderId: string, now: number,
   const careers = { ...state.careers };
   for (const assignee of order.assignees) {
     const career = careers[assignee.agentId];
-    if (!career) continue;
+    if (!career || career.scoreReconciliation !== undefined) continue;
     const earned = verified && assignee.status === "en_curso" ? 25 : 0;
     const skilled = earned ? addSkill(career, { id: `orden:${orderTopic(order.text)}`, title: `Ejecuta: ${orderTopic(order.text)}`, source: "orden" }, iso) : career;
     careers[assignee.agentId] = {

@@ -42,13 +42,28 @@ export function createSoftwareFactoryWorker(options: FactoryWorkerOptions = {}) 
   const now = options.now || (() => new Date());
   const capabilities = () => Object.fromEntries(Object.entries(options.adapters || {}).map(([kind, adapter]) => [kind,
     typeof adapter?.execute === "function" && !(options.releaseMode === "review-only" && ["deploy", "verify", "rollback", "evaluate"].includes(kind))]));
-  let busy = false; let quarantined = false; let active: AbortController | undefined; let deadline = 0;
+  let maintaining = false; let busy = false; let quarantined = false; let active: AbortController | undefined; let deadline = 0;
   return {
     async maintain() {
-      if (!busy || quarantined) return;
-      if (now().getTime() >= deadline) { quarantined=true; active?.abort(); }
-      await store.expire();
-      if (!quarantined && active) await store.heartbeat(workerId,capabilities());
+      if (quarantined || maintaining) return;
+      maintaining=true;
+      try {
+        if (busy && now().getTime() >= deadline) { quarantined=true; active?.abort(); }
+        await store.expire();
+        if (quarantined) return;
+        if (!busy) {
+          if(typeof store.idleState!=="function")throw Error("FACTORY_IDLE_STATE_UNVERIFIED");
+          const state=await store.idleState();
+          if(quarantined)return;
+          if(state.kind==="unknown" || state.kind==="running" && (!Number.isFinite(Date.parse(state.leaseExpiresAt)) || Date.parse(state.leaseExpiresAt)<=now().getTime())) {
+            quarantined=true;throw Error("FACTORY_IDLE_STATE_UNVERIFIED");
+          }
+        }
+        if(busy && now().getTime()>=deadline){quarantined=true;active?.abort();}
+        // Process presence only; capabilities still describe installed adapters.
+        // Never claim a job or change publication readiness from a heartbeat.
+        if(!quarantined && (!busy || active))await store.heartbeat(workerId,capabilities());
+      } finally {maintaining=false;}
     },
     async schedule() {
       if (options.discoveryMode === "company-orders-only") {
