@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T02:43:06.110Z",
+  "generatedAt": "2026-11-07T02:48:48.045Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-output-cap",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 873,
     "imports": 3285,
     "routes": 570,
-    "symbols": 18427
+    "symbols": 18428
   },
   "directories": {
     ".": {
@@ -22955,7 +22955,6 @@
       "path": "server/software-factory-build-recovery.ts",
       "kind": "server",
       "imports": [
-        "../script/software-factory-ui-static.mjs",
         "./agent-council-store",
         "./shared-openai-credit-ledger",
         "./software-factory",
@@ -22969,6 +22968,7 @@
       "exports": [
         "FactoryBuildRecoveryRequest",
         "RECOVERY_EQUIVALENT_PATHS",
+        "RECOVERY_HARNESS_FILES",
         "buildRecoveryDigest",
         "buildRecoverySchemaSql",
         "enqueueFailedBuildRecovery",
@@ -22978,6 +22978,7 @@
       ],
       "symbols": [
         "RECOVERY_EQUIVALENT_PATHS",
+        "RECOVERY_HARNESS_FILES",
         "RebaseProof",
         "WorkflowBlobChange",
         "admitted",
@@ -32498,6 +32499,7 @@
       "path": "tests/software-factory-build-recovery.test.ts",
       "kind": "test",
       "imports": [
+        "../script/software-factory-ui-static.mjs",
         "../server/agent-council-store",
         "../server/software-factory-build-recovery",
         "../server/software-factory-pipeline",

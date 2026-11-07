@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T02:43:06.110Z
+Generated: 2026-11-07T02:48:48.045Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-output-cap`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 971 | 873 | 3285 | 570 | 18427 |
+| 971 | 873 | 3285 | 570 | 18428 |
 
 ## Entrypoints
 - `client/src/App.tsx`
