@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T00:55:31.728Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-role-completion",
+  "generatedAt": "2026-11-07T01:09:30.976Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-factory-windows",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,13 +124,27 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 942,
+    "filesVisible": 940,
     "filesIndexed": 848,
-    "imports": 3138,
+    "imports": 3149,
     "routes": 564,
-    "symbols": 17982
+    "symbols": 18010
   },
   "directories": {
+    "script": {
+      "files": 97,
+      "indexed": 87,
+      "kinds": {
+        "script": 97
+      }
+    },
+    "tests": {
+      "files": 239,
+      "indexed": 235,
+      "kinds": {
+        "test": 239
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -162,10 +176,10 @@
       }
     },
     ".github/workflows": {
-      "files": 4,
+      "files": 2,
       "indexed": 0,
       "kinds": {
-        "other": 4
+        "other": 2
       }
     },
     "bin": {
@@ -274,10 +288,10 @@
       }
     },
     "docs": {
-      "files": 45,
-      "indexed": 42,
+      "files": 41,
+      "indexed": 40,
       "kinds": {
-        "docs": 45
+        "docs": 41
       }
     },
     "examples/clippers-motivation": {
@@ -286,13 +300,6 @@
       "kinds": {
         "docs": 1,
         "other": 70
-      }
-    },
-    "script": {
-      "files": 94,
-      "indexed": 86,
-      "kinds": {
-        "script": 94
       }
     },
     "scripts": {
@@ -342,13 +349,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 238,
-      "indexed": 234,
-      "kinds": {
-        "test": 238
       }
     },
     "tests/fixtures": {
@@ -5434,22 +5434,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -10955,6 +10939,47 @@
       "routes": []
     },
     {
+      "path": "script/software-factory-windows-worker.mjs",
+      "kind": "script",
+      "imports": [
+        "./office-windows-worker.mjs",
+        "./office-worker-ownership.mjs",
+        "node:child_process",
+        "node:fs",
+        "node:path",
+        "node:url",
+        "node:util"
+      ],
+      "exports": [
+        "factoryWorkerEnvironment",
+        "superviseFactoryChild"
+      ],
+      "symbols": [
+        "args",
+        "code",
+        "configPath",
+        "entry",
+        "env",
+        "factoryWorkerEnvironment",
+        "fail",
+        "localEnvFiles",
+        "main",
+        "office",
+        "ownership",
+        "paths",
+        "privateFile",
+        "relative",
+        "repo",
+        "resolved",
+        "result",
+        "stop",
+        "superviseFactoryChild",
+        "timer",
+        "unsafe"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/software-factory-worker.ts",
       "kind": "script",
       "imports": [
@@ -10969,6 +10994,7 @@
       "exports": [],
       "symbols": [
         "main",
+        "message",
         "module",
         "modulePath",
         "owner",
@@ -32523,6 +32549,26 @@
       "exports": [],
       "symbols": [
         "pool"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-windows.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/software-factory-windows-worker.mjs",
+        "node:assert/strict",
+        "node:events",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "child",
+        "code",
+        "env",
+        "github",
+        "office",
+        "paths"
       ],
       "routes": []
     },
