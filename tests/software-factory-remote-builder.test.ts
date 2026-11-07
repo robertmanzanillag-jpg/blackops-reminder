@@ -162,7 +162,7 @@ test("classifier cannot replace verified identity and failures preserve the PR",
 
 
 test("empty patches report only allowlisted diagnostics while preserving known model cost", async () => {
-  for (const diagnostic of ["PROVIDER_NOT_COMPLETED", "MALFORMED_JSON", "secret/raw-provider-response"]) {
+  for (const diagnostic of ["PROVIDER_NOT_COMPLETED", "MALFORMED_JSON", "EDIT_PATH_NOT_ALLOWED", "OVERLAPPING_EDITS", "EDIT_LIMIT_EXCEEDED", "secret/raw-provider-response"]) {
     const f = fixture();
     f.options.generatePatch = async () => ({ patch: "", costCents: 1, diagnostic: diagnostic as any });
     const result = await f.run() as any;

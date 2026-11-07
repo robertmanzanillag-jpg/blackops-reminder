@@ -78,6 +78,7 @@ export async function createTrustedFactoryWorkerOptions(options: FactoryRuntimeO
 }
 
 export type FactoryProposalRuntimeOptions=Pick<FactoryRuntimeOptions,"owner"|"store"|"now"> & {
+  recoveryPrevious?: FactoryPipelineDependencies['recoveryPrevious'];
   scheduleCompanyOrders?: FactoryWorkerOptions["scheduleCompanyOrders"];
   stages:Required<Pick<FactoryPipelineDependencies,"discover"|"build"|"simulate"|"review">>;
   reservations:Record<"discover"|"build"|"simulate"|"review",number>;
@@ -95,6 +96,7 @@ export async function createTrustedFactoryProposalWorkerOptions(options:FactoryP
   // Zero denotes disabled stages, not an allowance or a working adapter.
   const reservations={...options.reservations,deploy:0,verify:0,rollback:0,evaluate:0};
   const pipeline=createFactoryPipeline({...Object.fromEntries(kinds.map(kind=>[kind,options.stages[kind]])),executionMode:"review-only",reservations,now:options.now,
+    recoveryPrevious:options.recoveryPrevious ? async(actual,id,jobId)=>{scope(actual);return options.recoveryPrevious!(actual,id,jobId);} : undefined,
     project:async(actual,id)=>{scope(actual);return store.projectByOwnerKey(actual,id);},
     previous:async(actual,id)=>{scope(actual);return store.getCompletedJob(actual,id);},
     claimFinding:async(actual,id,finding,job)=>{scope(actual);return store.claimFinding(actual,id,finding,job);},

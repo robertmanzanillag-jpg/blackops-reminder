@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T02:54:12.817Z
+Generated: 2026-11-07T02:54:35.189Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\office-marketing-persistence`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 970 | 876 | 3295 | 570 | 18406 |
+| 982 | 882 | 3318 | 570 | 18500 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,15 +28,15 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 248 | 244 | test:248 |
-| `server` | 228 | 223 | server:228 |
+| `tests` | 249 | 245 | test:249 |
+| `server` | 229 | 224 | server:229 |
 | `script` | 103 | 92 | script:103 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 46 | 44 | docs:46 |
+| `docs` | 52 | 48 | docs:52 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
-| `.` | 34 | 18 | other:22, docs:11, package:1 |
+| `.` | 35 | 18 | other:23, docs:11, package:1 |
 | `client/src/lib` | 18 | 18 | client-lib:18 |
 | `shared` | 18 | 18 | shared:18 |
 | `.agents/memory` | 5 | 5 | docs:5 |
@@ -240,6 +240,7 @@ Package: `rest-express`
 - `tests/software-factory-asistente-review.test.ts`
 - `tests/software-factory-asistente-source.test.ts`
 - `tests/software-factory-asistente-success.test.ts`
+- `tests/software-factory-build-recovery.test.ts`
 - `tests/software-factory-builder.test.ts`
 - `tests/software-factory-company-scheduler.test.ts`
 - `tests/software-factory-company.test.ts`
