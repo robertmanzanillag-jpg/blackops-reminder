@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T01:41:34.240Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-timeout-acceptance",
+  "generatedAt": "2026-11-07T01:58:44.090Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-artifact-hosts",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,13 +124,20 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 959,
-    "filesIndexed": 864,
-    "imports": 3245,
+    "filesVisible": 958,
+    "filesIndexed": 865,
+    "imports": 3248,
     "routes": 570,
-    "symbols": 18268
+    "symbols": 18277
   },
   "directories": {
+    "server": {
+      "files": 224,
+      "indexed": 219,
+      "kinds": {
+        "server": 224
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -162,10 +169,10 @@
       }
     },
     ".github/workflows": {
-      "files": 4,
+      "files": 2,
       "indexed": 0,
       "kinds": {
-        "other": 4
+        "other": 2
       }
     },
     "bin": {
@@ -300,13 +307,6 @@
       "indexed": 1,
       "kinds": {
         "script": 4
-      }
-    },
-    "server": {
-      "files": 223,
-      "indexed": 218,
-      "kinds": {
-        "server": 223
       }
     },
     "server/replit_integrations/batch": {
@@ -22664,6 +22664,20 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-artifact-host.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "verifiedGitHubArtifactLocation"
+      ],
+      "symbols": [
+        "authority",
+        "location",
+        "verifiedGitHubArtifactLocation"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-asistente-build.ts",
       "kind": "server",
       "imports": [
@@ -23358,6 +23372,7 @@
       "kind": "server",
       "imports": [
         "../script/software-factory-ui-static.mjs",
+        "./software-factory-artifact-host",
         "./software-factory-office-ui-evidence",
         "node:crypto",
         "node:zlib"
@@ -23728,6 +23743,7 @@
       "path": "server/software-factory-role-artifact.ts",
       "kind": "server",
       "imports": [
+        "./software-factory-artifact-host",
         "./software-factory-role-acceptance",
         "./software-factory-role-deadline",
         "node:crypto",
@@ -32611,8 +32627,10 @@
       ],
       "exports": [],
       "symbols": [
+        "allowed",
         "apiRequest",
         "archive",
+        "denied",
         "directory",
         "f",
         "files",
@@ -32624,6 +32642,7 @@
         "reader",
         "repository",
         "sourceFiles",
+        "wrongRun",
         "zipFiles"
       ],
       "routes": []
@@ -32911,6 +32930,7 @@
       "kind": "test",
       "imports": [
         "../server/office-role-work",
+        "../server/software-factory-artifact-host",
         "../server/software-factory-role-acceptance",
         "../server/software-factory-role-artifact",
         "node:assert/strict",
@@ -32921,9 +32941,12 @@
       "symbols": [
         "archive",
         "bridge",
+        "bytes",
         "child",
         "code",
         "digest",
+        "options",
+        "pins",
         "report",
         "safe"
       ],

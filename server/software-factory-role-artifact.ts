@@ -1,3 +1,4 @@
+import {verifiedGitHubArtifactLocation} from "./software-factory-artifact-host";
 import {ROLE_WORK_DEADLINE_ID,ROLE_WORK_DEADLINE_ASSERTIONS} from "./software-factory-role-deadline";
 import {createHash} from "node:crypto";
 import {inflateRawSync} from "node:zlib";
@@ -34,7 +35,7 @@ export function readAcceptanceZip(zip:Buffer,expectedDigest:string):Buffer{
 /** Call only AFTER existing checks authenticate pinned workflow/run/job identity.
  * apiRequest is the dedicated authenticated GET transport; download sends NO
  * credentials to an operator-pinned HTTPS archive host and follows no redirects. */
-export function createRoleAcceptanceArtifactReader(options:{apiRequest:(url:string,init:RequestInit)=>Promise<Response>;download:(url:string,init:RequestInit)=>Promise<Response>;archiveHosts:readonly string[];now?:()=>number}){
+export function createRoleAcceptanceArtifactReader(options:{apiRequest:(url:string,init:RequestInit)=>Promise<Response>;download:(url:string,init:RequestInit)=>Promise<Response>;archiveHosts:readonly string[];allowGitHubResultsAzureHosts?:boolean;now?:()=>number}){
  if(!options.archiveHosts.length||options.archiveHosts.some(h=>!/^[-a-z0-9]+\.blob\.core\.windows\.net$/.test(h)))throw Error("QA_ARCHIVE_HOST_REQUIRED");
  return async(input:{runId:number;baseSha:string;headSha:string;signal:AbortSignal})=>{
   input={...input,signal:AbortSignal.any([input.signal,AbortSignal.timeout(30000)])};
@@ -45,7 +46,7 @@ export function createRoleAcceptanceArtifactReader(options:{apiRequest:(url:stri
   const matches=listing.artifacts.filter((a:any)=>a.name==="office-role-acceptance-v1");if(matches.length!==1)throw Error("QA_ARTIFACT_REQUIRED");const a=matches[0];
   if(!Number.isSafeInteger(a.id)||a.id<1||a.expired!==false||a.workflow_run?.id!==input.runId||a.workflow_run?.head_sha!==input.headSha||!/^sha256:[a-f0-9]{64}$/.test(a.digest)||a.size_in_bytes>2097152||a.archive_download_url!==`${root}/actions/artifacts/${a.id}/zip`)throw Error("QA_ARTIFACT_IDENTITY_INVALID");
   const redirect=await options.apiRequest(a.archive_download_url,{method:"GET",signal:input.signal,redirect:"manual"});if(redirect.status!==302)throw Error("QA_ARCHIVE_REDIRECT_REQUIRED");
-  const location=new URL(redirect.headers.get("location")||"");if(location.protocol!=="https:"||location.username||location.password||location.hash||location.port||!options.archiveHosts.includes(location.hostname))throw Error("QA_ARCHIVE_HOST_INVALID");
+  const location=verifiedGitHubArtifactLocation(redirect.headers.get("location")||"",options.archiveHosts,options.allowGitHubResultsAzureHosts);
   const archive=await options.download(location.href,{method:"GET",signal:input.signal,redirect:"error",credentials:"omit",headers:{}});if(!archive.ok)throw Error("QA_ARCHIVE_UNAVAILABLE");
   const chunks:Uint8Array[]=[];let total=0;const reader=archive.body?.getReader();if(!reader)throw Error("QA_ARCHIVE_EMPTY");try{for(;;){const r=await reader.read();if(r.done)break;total+=r.value.length;if(total>2097152)throw Error("QA_ARCHIVE_TOO_LARGE");chunks.push(r.value);}}finally{await reader.cancel();}
   const bytes=readAcceptanceZip(Buffer.concat(chunks),a.digest.slice(7)),digest=createHash("sha256").update(bytes).digest("hex");
