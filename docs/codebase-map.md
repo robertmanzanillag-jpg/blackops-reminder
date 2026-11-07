@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T00:22:06.678Z
+Generated: 2026-11-07T00:42:41.868Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\office-role-completion`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 936 | 842 | 3113 | 564 | 17900 |
+| 934 | 844 | 3134 | 564 | 17968 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 236 | 232 | test:236 |
-| `server` | 216 | 211 | server:216 |
-| `script` | 93 | 85 | script:93 |
+| `tests` | 237 | 233 | test:237 |
+| `server` | 218 | 213 | server:218 |
+| `script` | 94 | 86 | script:94 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 45 | 42 | docs:45 |
+| `docs` | 41 | 40 | docs:41 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
@@ -255,6 +255,7 @@ Package: `rest-express`
 - `tests/software-factory-postgres.test.ts`
 - `tests/software-factory-proposal-runtime.test.ts`
 - `tests/software-factory-remote-builder.test.ts`
+- `tests/software-factory-role-acceptance.test.ts`
 - `tests/software-factory-routes.test.ts`
 - `tests/software-factory-runtime.test.ts`
 - `tests/software-factory-simulator.test.ts`

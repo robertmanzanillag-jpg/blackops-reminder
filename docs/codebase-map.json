@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T00:22:06.678Z",
+  "generatedAt": "2026-11-07T00:42:41.868Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-role-completion",
   "packageName": "rest-express",
   "scripts": {
@@ -124,13 +124,34 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 936,
-    "filesIndexed": 842,
-    "imports": 3113,
+    "filesVisible": 934,
+    "filesIndexed": 844,
+    "imports": 3134,
     "routes": 564,
-    "symbols": 17900
+    "symbols": 17968
   },
   "directories": {
+    "script": {
+      "files": 94,
+      "indexed": 86,
+      "kinds": {
+        "script": 94
+      }
+    },
+    "server": {
+      "files": 218,
+      "indexed": 213,
+      "kinds": {
+        "server": 218
+      }
+    },
+    "tests": {
+      "files": 237,
+      "indexed": 233,
+      "kinds": {
+        "test": 237
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -162,10 +183,10 @@
       }
     },
     ".github/workflows": {
-      "files": 4,
+      "files": 2,
       "indexed": 0,
       "kinds": {
-        "other": 4
+        "other": 2
       }
     },
     "bin": {
@@ -274,10 +295,10 @@
       }
     },
     "docs": {
-      "files": 45,
-      "indexed": 42,
+      "files": 41,
+      "indexed": 40,
       "kinds": {
-        "docs": 45
+        "docs": 41
       }
     },
     "examples/clippers-motivation": {
@@ -288,25 +309,11 @@
         "other": 70
       }
     },
-    "script": {
-      "files": 93,
-      "indexed": 85,
-      "kinds": {
-        "script": 93
-      }
-    },
     "scripts": {
       "files": 4,
       "indexed": 1,
       "kinds": {
         "script": 4
-      }
-    },
-    "server": {
-      "files": 216,
-      "indexed": 211,
-      "kinds": {
-        "server": 216
       }
     },
     "server/replit_integrations/batch": {
@@ -342,13 +349,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 236,
-      "indexed": 232,
-      "kinds": {
-        "test": 236
       }
     },
     "tests/fixtures": {
@@ -5434,22 +5434,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -10906,6 +10890,40 @@
         "releaseGate, rehearsalGate "
       ],
       "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "script/software-factory-role-acceptance.ts",
+      "kind": "script",
+      "imports": [
+        "../server/software-factory-role-acceptance",
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "node:url",
+        "node:util"
+      ],
+      "exports": [],
+      "symbols": [
+        "args",
+        "baseline",
+        "baselineRoot",
+        "bytes",
+        "candidateModule",
+        "checkedRoot",
+        "child",
+        "exec",
+        "git",
+        "main",
+        "name",
+        "report",
+        "resolved",
+        "revision",
+        "runId",
+        "runtime",
+        "timeout"
+      ],
       "routes": []
     },
     {
@@ -22361,6 +22379,7 @@
         "Run",
         "Scope",
         "abort",
+        "acceptance",
         "bytes",
         "candidate",
         "completed",
@@ -22398,6 +22417,7 @@
         "./shared-openai-credit-ledger",
         "./software-factory-actions",
         "./software-factory-github-client",
+        "./software-factory-github-publisher",
         "./software-factory-openai",
         "./software-factory-openai-builder",
         "./software-factory-pipeline",
@@ -22409,6 +22429,7 @@
       ],
       "symbols": [
         "build",
+        "checks",
         "client",
         "createAsistenteFactoryBuild",
         "deadline",
@@ -22419,6 +22440,7 @@
         "model",
         "paths",
         "profile",
+        "publisher",
         "remainingMs",
         "repository",
         "requestSha256",
@@ -22827,6 +22849,7 @@
       ],
       "symbols": [
         "accept",
+        "artifactDownload",
         "createAsistenteGitHubTransport",
         "headers",
         "root",
@@ -23227,6 +23250,82 @@
         "generateText",
         "repositories",
         "workerOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-role-acceptance.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto",
+        "node:perf_hooks",
+        "node:stream"
+      ],
+      "exports": [
+        "ROLE_WORK_ACCEPTANCE_ID",
+        "ROLE_WORK_ASSERTIONS",
+        "acceptanceRpc",
+        "measureRoleWorkAcceptance",
+        "remoteAcceptanceRuntime",
+        "serveAcceptanceRuntime"
+      ],
+      "symbols": [
+        "ROLE_WORK_ACCEPTANCE_ID",
+        "ROLE_WORK_ASSERTIONS",
+        "acceptanceRpc",
+        "close",
+        "council",
+        "digest",
+        "journal",
+        "make",
+        "measureRoleWorkAcceptance",
+        "o",
+        "options",
+        "remoteAcceptanceRuntime",
+        "runners",
+        "send",
+        "serveAcceptanceRuntime",
+        "stable",
+        "started",
+        "tampered"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-role-artifact.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-role-acceptance",
+        "node:crypto",
+        "node:zlib",
+        "zod"
+      ],
+      "exports": [
+        "createRoleAcceptanceArtifactReader",
+        "readAcceptanceZip",
+        "verifyRoleAcceptanceReport"
+      ],
+      "symbols": [
+        "archive",
+        "bytes",
+        "c",
+        "createRoleAcceptanceArtifactReader",
+        "data",
+        "e",
+        "flags",
+        "location",
+        "matches",
+        "measured",
+        "metadata",
+        "readAcceptanceZip",
+        "redirect",
+        "report",
+        "response",
+        "root",
+        "schema",
+        "sha",
+        "start",
+        "verifyRoleAcceptanceReport"
       ],
       "routes": []
     },
@@ -31499,10 +31598,12 @@
         "incomplete",
         "job",
         "known",
+        "missing",
         "mutations",
         "path",
         "project",
         "repository",
+        "result",
         "run",
         "verify"
       ],
@@ -31842,6 +31943,7 @@
       "exports": [],
       "symbols": [
         "request",
+        "root",
         "signal",
         "token"
       ],
@@ -32212,6 +32314,28 @@
         "tree",
         "unknown",
         "workflow"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-role-acceptance.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-role-work",
+        "../server/software-factory-role-acceptance",
+        "../server/software-factory-role-artifact",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "archive",
+        "bridge",
+        "child",
+        "code",
+        "digest",
+        "report"
       ],
       "routes": []
     },
@@ -32875,6 +32999,7 @@
     "tests/software-factory-postgres.test.ts",
     "tests/software-factory-proposal-runtime.test.ts",
     "tests/software-factory-remote-builder.test.ts",
+    "tests/software-factory-role-acceptance.test.ts",
     "tests/software-factory-routes.test.ts",
     "tests/software-factory-runtime.test.ts",
     "tests/software-factory-simulator.test.ts",

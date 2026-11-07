@@ -133,3 +133,39 @@ and shared-credit runtime settings are absent. The selected production database
 has the council and Office queue, but not the factory tables. The owner currently
 has no open engineering orders. No migration, grant initialization, worker switch,
 new paid request or Replit publication was performed for these adapters.
+
+## Measured Office backend acceptance (not browser simulation)
+
+The pinned candidate workflow now has a fixed acceptance producer for
+`office-role-work-owner-cas-v1`. Only factory branches execute it. It fetches the
+exact candidate and its sole parent, executes the **parent's reviewed harness**
+outside both tested-code containers; each revision runs in its own network-disabled, read-only container without provider credentials,
+and uploads one controller-owned `acceptance.json` artifact. Neither tested-code container mounts the output directory or host Docker socket. A bounded RPC channel exposes runtime operations and transaction callbacks, never authority to declare the assertions passed. An early successful process exit or forged pass output fails verification. The checks exercise actual role-work
+modules using synthetic records and an in-memory transaction adapter: single
+reservation, completion proof, restart deduplication, owner rejection, tamper
+rejection, and unchanged careers. This is not a PostgreSQL concurrency test.
+
+The Actions adapter can consume `createRoleAcceptanceArtifactReader` after its
+existing immutable-workflow/run/step verification. The reader checks the GitHub
+artifact SHA256, exact run/head identity, complete assertions and source revisions,
+then propagates the measured scenario ID. Missing artifacts never receive an ID.
+The authenticated transport allows manual 302 only for the fixed artifact ZIP GET;
+the archive request carries no authorization and must use an exact operator-pinned
+Azure Blob hostname. Both the download and decompression are bounded. No install,
+credential, credit initialization, queue unpause, model call or deployment occurs.
+
+GitHub documents the artifact digest and 302 download protocol at
+https://docs.github.com/en/rest/actions/artifacts and the Azure Blob artifact
+network family at https://docs.github.com/en/actions/reference/runners/self-hosted-runners.
+Pin the exact observed storage hostname; do not accept all Azure storage.
+
+This supplies a backend acceptance receipt, not a completed four-stage installation.
+Both revisions may pass, which proves regression coverage but not improvement.
+A real eligible order must name this capability and include an appropriate permanent
+regression test; arbitrary orders cannot borrow this receipt. Discovery still needs
+zero-cost baseline acceptance tied to the exact order revision. The simulation
+stage still needs the actual relevant Office UI fixture at both revisions and
+mobile/desktop evidence. Generic simulator unit tests do not satisfy that gate.
+The shared credit ledger, dedicated repository credential, guarded admission and
+operator module remain explicit existing prerequisites. Never fill missing browser
+flags or mark the company order delivered from this backend report.
