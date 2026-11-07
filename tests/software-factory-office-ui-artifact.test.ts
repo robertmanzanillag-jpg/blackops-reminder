@@ -34,7 +34,7 @@ function zipFiles(files: Map<string, Buffer>) {
     end.writeUInt32LE(offset, 16);
     return Buffer.concat([...local, directory, end]);
 }
-function fixture() {
+function fixture(allowGitHubResultsAzureHosts = false) {
     const repository = 'robertmanzanillag-jpg/blackops-reminder', root = `https://api.github.com/repos/${repository}`, baseSha = 'a'.repeat(40), headSha = 'b'.repeat(40), branch = `factory/${baseSha}-${'c'.repeat(64)}`, now = new Date('2026-11-07T02:00:00Z');
     const input = { projectId: 'asistente', baseSha, headSha, runId: 123, signal: new AbortController().signal }, workflow = 'trusted workflow', workflowSha256 = hash(workflow), harnessSha256 = hash(JSON.stringify(OFFICE_UI_HARNESS_FILES.map((p: string) => [p, hash(p)])));
     const sourceFiles = [{ path: 'index.html', sha256: hash('html') }], source = { sourceManifestSha256: 'd'.repeat(64), staticManifest: { files: sourceFiles, sha256: hash(JSON.stringify(sourceFiles)) } };
@@ -66,7 +66,7 @@ function fixture() {
             return new Response(null, { status: 302, headers: { location: `https://${host}/archive?fixture=1` } });
         throw Error('Unexpected request');
     };
-    const reader = createOfficeUiArtifactReader({ apiRequest, download: async (_url, init) => { downloads++; assert.equal(init.credentials, 'omit'); assert.deepEqual(init.headers, {}); assert.equal(init.redirect, 'error'); return new Response(archive); }, archiveHosts: [host], workflowId: 7, workflowSha256, harnessSha256, now: () => now });
+    const reader = createOfficeUiArtifactReader({ apiRequest, download: async (_url, init) => { downloads++; assert.equal(init.credentials, 'omit'); assert.deepEqual(init.headers, {}); assert.equal(init.redirect, 'error'); return new Response(archive); }, archiveHosts: [host], allowGitHubResultsAzureHosts, workflowId: 7, workflowSha256, harnessSha256, now: () => now });
     return { reader, input, run, archive, files, get downloads() { return downloads; }, set host(h: string) { host = h; } };
 }
 test('authenticated run and artifact produce exact simulation evidence without archive credentials', async () => {
@@ -76,6 +76,14 @@ test('authenticated run and artifact produce exact simulation evidence without a
     assert.equal(e.headSha, f.input.headSha);
     assert.deepEqual(e.journeyIds, [...OFFICE_UI_JOURNEYS]);
     assert.equal(f.downloads, 1);
+});
+test('UI reader requires opt-in for authenticated GitHub result shard redirects', async () => {
+    const denied = fixture(); denied.host = 'productionresultssa12.blob.core.windows.net';
+    await assert.rejects(denied.reader(denied.input)); assert.equal(denied.downloads, 0);
+    const allowed = fixture(true); allowed.host = 'productionresultssa12.blob.core.windows.net';
+    assert.equal((await allowed.reader(allowed.input)).passed, true); assert.equal(allowed.downloads, 1);
+    const wrongRun = fixture(true); wrongRun.host = 'productionresultssa12.blob.core.windows.net'; wrongRun.run.head_sha = 'e'.repeat(40);
+    await assert.rejects(wrongRun.reader(wrongRun.input)); assert.equal(wrongRun.downloads, 0);
 });
 test('wrong run identity and unapproved redirect cannot reach download', async () => {
     for (const change of [(r: any) => r.head_sha = 'e'.repeat(40), (r: any) => r.run_attempt = 2, (r: any) => r.event = 'pull_request', (r: any) => r.conclusion = 'failure']) {

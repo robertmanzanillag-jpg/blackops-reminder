@@ -1,3 +1,4 @@
+import {ROLE_WORK_DEADLINE_ID} from "./software-factory-role-deadline";
 import { createHash } from "node:crypto";
 import { readFile, lstat, realpath } from "node:fs/promises";
 import path from "node:path";
@@ -27,12 +28,15 @@ const cents = z.number().int().min(1).max(100);
 const configSchema = z.object({ owner: z.string().min(1).max(200), projectId: z.literal("asistente"), baseBranch: z.enum(["main", "codex/office-integrated-repair-20261106"]),
     sourcePaths: z.array(z.enum(["server/office-role-work.ts", "tests/office-role-work.test.ts"])).min(1).max(2),
     checks: z.object({ trigger: z.literal("push"), workflowId: z.number().int().positive(), workflowPath: z.literal(".github/workflows/factory-candidate-checks.yml"), workflowSha256: digest, jobName: z.string().min(1), testStep: z.string().min(1), buildStep: z.string().min(1), browserStep: z.string().min(1) }).strict(),
+    allowGitHubResultsAzureHosts: z.boolean().default(false),
     archiveHosts: z.array(z.string().regex(/^[-a-z0-9]+\.blob\.core\.windows\.net$/)).min(1).max(10),
     reservations: z.object({ discover: cents, build: cents, simulate: cents, review: cents }).strict(), maxOutputTokens: z.number().int().min(16).max(4096), maxInputTokens: z.number().int().min(1).max(100000),
-    orders: z.array(z.object({ id: z.string().min(1).max(200), revision: digest, baseSha: sha, kind: z.enum(["bug", "improvement"]), scenarioId: z.literal(ROLE_WORK_ACCEPTANCE_ID) }).strict()).max(5),
+    orders: z.array(z.object({ id: z.string().min(1).max(200), revision: digest, baseSha: sha, kind: z.enum(["bug", "improvement"]), scenarioId: z.enum([ROLE_WORK_ACCEPTANCE_ID,ROLE_WORK_DEADLINE_ID]) }).strict()).max(5),
     ui: z.object({ workflowSha256: digest, harnessSha256: digest, workflowId: z.number().int().positive() }).strict(),
 }).strict();
 export type AsistenteOperatorConfig = z.input<typeof configSchema>;
+/** Strict noncredential operator configuration validation; no I/O or admission. */
+export function validateAsistenteOperatorConfig(raw:unknown){return configSchema.parse(structuredClone(raw));}
 export type OperatorUiReader = (input: {
     projectId: string;
     baseSha: string;
@@ -54,7 +58,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     readUi: OperatorUiReader;
     now: () => Date;
 }) {
-    const config = configSchema.parse(structuredClone(raw)), { store, credits, now } = deps;
+    const config = validateAsistenteOperatorConfig(raw), { store, credits, now } = deps;
     if (new Set(config.sourcePaths).size !== config.sourcePaths.length || !config.sourcePaths.includes("server/office-role-work.ts") || !config.sourcePaths.includes("tests/office-role-work.test.ts") || config.ui.workflowId !== config.checks.workflowId || config.ui.workflowSha256 !== config.checks.workflowSha256 || new Set(config.orders.map(o => o.id)).size !== config.orders.length || typeof deps.readUi !== "function")
         throw Error("FACTORY_OPERATOR_CONFIGURATION_INVALID");
     const owner = config.owner, ownerKey = createHash("sha256").update(owner).digest("hex");
@@ -109,7 +113,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
             throw Error("FACTORY_OPERATOR_ADMISSION_UNCONFIRMED");
         }
     };
-    const readAcceptance = createRoleAcceptanceArtifactReader({ apiRequest: deps.githubRequest, download: deps.download, archiveHosts: config.archiveHosts, now: () => now().getTime() });
+    const readAcceptance = createRoleAcceptanceArtifactReader({ apiRequest: deps.githubRequest, download: deps.download, archiveHosts: config.archiveHosts, allowGitHubResultsAzureHosts: config.allowGitHubResultsAzureHosts, now: () => now().getTime() });
     const model = { request: deps.modelRequest, model: credits.pricing.model, inputNanoUsdPerToken: credits.pricing.inputNanoUsdPerToken, outputNanoUsdPerToken: credits.pricing.outputNanoUsdPerToken, pricingValidUntil: credits.pricing.validUntil, maxInputTokens: config.maxInputTokens, now };
     const build = createAsistenteFactoryBuild({ ledger: credits.ledger, githubRequest: deps.githubRequest, model, baseBranch: config.baseBranch, sourcePaths: config.sourcePaths, checks: config.checks, maxOutputTokens: config.maxOutputTokens, readAcceptance, now });
     const review = createAsistenteIndependentReview({ ledger: credits.ledger, model, load: createAsistenteReviewSourceLoader(client, config.sourcePaths), now, maxOutputTokens: config.maxOutputTokens });
@@ -139,7 +143,7 @@ async function privateFile(value: string | undefined, max: number) {
 }
 async function installed(store: Store) {
     const env = { ...process.env }, now = () => new Date();
-    const config = configSchema.parse(JSON.parse(await privateFile(env.SOFTWARE_FACTORY_OPERATOR_CONFIG, 65536)));
+    const config = validateAsistenteOperatorConfig(JSON.parse(await privateFile(env.SOFTWARE_FACTORY_OPERATOR_CONFIG, 65536)));
     if (env.SOFTWARE_FACTORY_OWNER_ID !== config.owner || env.DEFAULT_USER_ID !== config.owner)
         throw Error("FACTORY_OPERATOR_OWNER_MISMATCH");
     const credits = await loadSharedCreditRuntime(env, now);
@@ -148,7 +152,7 @@ async function installed(store: Store) {
         throw Error("FACTORY_OPERATOR_CREDIT_UNAVAILABLE");
     const githubRequest = createAsistenteGitHubTransport(env.SOFTWARE_FACTORY_GITHUB_TOKEN || "");
     const modelRequest = createFactoryOpenAiTransport(env.OPENAI_API_KEY || "");
-    const readUi = createOfficeUiArtifactReader({ apiRequest: githubRequest, download: fetch, archiveHosts: config.archiveHosts, ...config.ui, now });
+    const readUi = createOfficeUiArtifactReader({ apiRequest: githubRequest, download: fetch, archiveHosts: config.archiveHosts, allowGitHubResultsAzureHosts: config.allowGitHubResultsAzureHosts, ...config.ui, now });
     return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, download: fetch, readUi, now, readOrders: async (owner) => { const raw = await (await getCouncilStore()).read(owner); if (!raw)
             throw Error("FACTORY_OPERATOR_COUNCIL_MISSING"); const state = JSON.parse(raw); if (!Array.isArray(state.company?.orders))
             throw Error("FACTORY_OPERATOR_COUNCIL_INVALID"); return state.company.orders; } });

@@ -190,12 +190,13 @@ function createScopedClient(repository: string, baseBranch: string, options: Cli
 export function createFactoryPilotGitHubSourceExporter(client: FactoryPilotGitHubClient): NonNullable<FactoryBuilderDependencies["exportSource"]> {
     return createScopedExporter(client, FACTORY_PILOT_REPOSITORY);
 }
-export function createFactoryAsistenteGitHubSourceExporter(client: FactoryPilotGitHubClient): NonNullable<FactoryBuilderDependencies["exportSource"]> {
-    return createScopedExporter(client, FACTORY_ASISTENTE_REPOSITORY);
+export function createFactoryAsistenteGitHubSourceExporter(client: FactoryPilotGitHubClient, options: {sourcePaths:readonly string[];signal:AbortSignal}): NonNullable<FactoryBuilderDependencies["exportSource"]> {
+    if(!options||!options.signal||!Array.isArray(options.sourcePaths)||!options.sourcePaths.length)throw Error("FACTORY_ASISTENTE_SOURCE_REQUIRED");
+    return createScopedExporter(client, FACTORY_ASISTENTE_REPOSITORY, options);
 }
-function createScopedExporter(client: FactoryPilotGitHubClient, allowedRepository: string): NonNullable<FactoryBuilderDependencies["exportSource"]> {
+function createScopedExporter(client: FactoryPilotGitHubClient, allowedRepository: string, options?: {sourcePaths:readonly string[];signal:AbortSignal}): NonNullable<FactoryBuilderDependencies["exportSource"]> {
     const [owner, repo] = allowedRepository.split("/");
-    const exporter = createGitHubFactorySourceExporter({ repositories: [allowedRepository], client: { rest: { git: {
+    const exporter = createGitHubFactorySourceExporter({ ...(options?{sourcePaths:options.sourcePaths,signal:options.signal,maxFileBytes:100000,maxTotalBytes:200000}:{}), repositories: [allowedRepository], client: { rest: { git: {
                     getCommit: client.git.getCommit, getBlob: client.git.getBlob,
                     getTree: input => { if (input.recursive !== "1")
                         invalid(); return client.git.getTree({ ...input, recursive: "1" }); },
@@ -204,7 +205,9 @@ function createScopedExporter(client: FactoryPilotGitHubClient, allowedRepositor
         if (repository !== allowedRepository)
             invalid();
         sha(revision);
+        options?.signal.throwIfAborted();
         await client.repos.get({ owner, repo });
+        options?.signal.throwIfAborted();
         return exporter(repository, revision, destination);
     };
 }

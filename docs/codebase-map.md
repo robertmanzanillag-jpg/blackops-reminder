@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T01:39:00.444Z
+Generated: 2026-11-07T02:27:26.731Z
 Repo: `/home/runner/workspace`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 983 | 882 | 3232 | 570 | 18223 |
+| 992 | 890 | 3262 | 570 | 18334 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,14 +28,14 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 243 | 239 | test:243 |
-| `server` | 222 | 217 | server:222 |
+| `tests` | 245 | 241 | test:245 |
+| `server` | 225 | 220 | server:225 |
 | `client/src` | 144 | 142 | ui-component:55, client-component:38, client-page:26, client-lib:18 |
 | `script` | 103 | 92 | script:103 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 53 | 50 | docs:53 |
+| `docs` | 56 | 52 | docs:56 |
 | `.` | 35 | 18 | other:23, docs:11, package:1 |
-| `shared` | 17 | 17 | shared:17 |
+| `shared` | 18 | 18 | shared:18 |
 | `.agents/memory` | 14 | 14 | docs:14 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `client/public` | 16 | 2 | other:16 |
@@ -177,6 +177,7 @@ Package: `rest-express`
 - `tests/office-academy-benchmarks.test.ts`
 - `tests/office-academy-promotion.test.ts`
 - `tests/office-academy-runner.test.ts`
+- `tests/office-capability-lifecycle.test.ts`
 - `tests/office-capability-training.test.ts`
 - `tests/office-city-agents.test.ts`
 - `tests/office-claude.test.ts`
@@ -261,6 +262,7 @@ Package: `rest-express`
 - `tests/software-factory-proposal-runtime.test.ts`
 - `tests/software-factory-remote-builder.test.ts`
 - `tests/software-factory-role-acceptance.test.ts`
+- `tests/software-factory-role-deadline.test.ts`
 - `tests/software-factory-routes.test.ts`
 - `tests/software-factory-runtime.test.ts`
 - `tests/software-factory-simulator.test.ts`
