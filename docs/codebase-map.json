@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T03:05:34.191Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-deadline-fixture",
+  "generatedAt": "2026-11-07T03:48:10.079Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-once",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -125,12 +125,40 @@
   },
   "totals": {
     "filesVisible": 982,
-    "filesIndexed": 882,
-    "imports": 3320,
+    "filesIndexed": 884,
+    "imports": 3326,
     "routes": 570,
-    "symbols": 18506
+    "symbols": 18544
   },
   "directories": {
+    "docs": {
+      "files": 49,
+      "indexed": 47,
+      "kinds": {
+        "docs": 49
+      }
+    },
+    "script": {
+      "files": 104,
+      "indexed": 93,
+      "kinds": {
+        "script": 104
+      }
+    },
+    "server": {
+      "files": 230,
+      "indexed": 225,
+      "kinds": {
+        "server": 230
+      }
+    },
+    "tests": {
+      "files": 250,
+      "indexed": 246,
+      "kinds": {
+        "test": 250
+      }
+    },
     ".": {
       "files": 35,
       "indexed": 18,
@@ -273,13 +301,6 @@
         "other": 1
       }
     },
-    "docs": {
-      "files": 52,
-      "indexed": 48,
-      "kinds": {
-        "docs": 52
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -288,25 +309,11 @@
         "other": 70
       }
     },
-    "script": {
-      "files": 103,
-      "indexed": 92,
-      "kinds": {
-        "script": 103
-      }
-    },
     "scripts": {
       "files": 4,
       "indexed": 1,
       "kinds": {
         "script": 4
-      }
-    },
-    "server": {
-      "files": 229,
-      "indexed": 224,
-      "kinds": {
-        "server": 229
       }
     },
     "server/replit_integrations/batch": {
@@ -342,13 +349,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 249,
-      "indexed": 245,
-      "kinds": {
-        "test": 249
       }
     },
     "tests/fixtures": {
@@ -5462,22 +5462,6 @@
       "routes": []
     },
     {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5537,6 +5521,14 @@
     },
     {
       "path": "docs/factory-exact-source-edits.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-once.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -11049,6 +11041,25 @@
         "screenshot",
         "u",
         "versions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/software-factory-once.ts",
+      "kind": "script",
+      "imports": [
+        "../server/software-factory-once"
+      ],
+      "exports": [],
+      "symbols": [
+        "config",
+        "main",
+        "owner",
+        "result",
+        "shutdown",
+        "state",
+        "stop",
+        "store"
       ],
       "routes": []
     },
@@ -19942,6 +19953,8 @@
         "parseRoleWork",
         "parsed",
         "proof",
+        "readWithinLease",
+        "remaining",
         "retained",
         "start",
         "ttl",
@@ -23727,6 +23740,32 @@
         "report",
         "source",
         "version"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-once.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-loop",
+        "./software-factory-worker"
+      ],
+      "exports": [
+        "FACTORY_CLAIM_WINDOW_MS",
+        "FactoryOnceResult",
+        "runSoftwareFactoryOnce"
+      ],
+      "symbols": [
+        "FACTORY_CLAIM_WINDOW_MS",
+        "deadline",
+        "maintain",
+        "now",
+        "outcome",
+        "remaining",
+        "result",
+        "runSoftwareFactoryOnce",
+        "started",
+        "stop"
       ],
       "routes": []
     },
@@ -31664,17 +31703,27 @@
       "symbols": [
         "NOW",
         "absent",
+        "admitted",
         "before",
         "body",
+        "company",
         "empty",
         "f",
         "fixture",
+        "hang",
+        "journal",
         "legacy",
         "mixed",
+        "next",
         "old",
+        "pending",
         "reorder",
+        "runner",
+        "saved",
         "snapshot",
         "tampered",
+        "target",
+        "tick",
         "webNews"
       ],
       "routes": []
@@ -33158,6 +33207,27 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-once.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-once",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "clock",
+        "f",
+        "fixture",
+        "g",
+        "intervals",
+        "running",
+        "signal",
+        "worker"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-openai-builder.test.ts",
       "kind": "test",
       "imports": [
@@ -34182,6 +34252,7 @@
     "tests/software-factory-office-mode.test.ts",
     "tests/software-factory-office-ui-artifact.test.ts",
     "tests/software-factory-office-ui-evidence.test.ts",
+    "tests/software-factory-once.test.ts",
     "tests/software-factory-openai-builder.test.ts",
     "tests/software-factory-openai-transport.test.ts",
     "tests/software-factory-openai.test.ts",

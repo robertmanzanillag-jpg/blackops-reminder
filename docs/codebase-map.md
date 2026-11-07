@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-07T03:05:34.191Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-deadline-fixture`
+Generated: 2026-11-07T03:48:10.079Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-once`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 982 | 882 | 3320 | 570 | 18506 |
+| 982 | 884 | 3326 | 570 | 18544 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 249 | 245 | test:249 |
-| `server` | 229 | 224 | server:229 |
-| `script` | 103 | 92 | script:103 |
+| `tests` | 250 | 246 | test:250 |
+| `server` | 230 | 225 | server:230 |
+| `script` | 104 | 93 | script:104 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 52 | 48 | docs:52 |
+| `docs` | 49 | 47 | docs:49 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 35 | 18 | other:23, docs:11, package:1 |
@@ -257,6 +257,7 @@ Package: `rest-express`
 - `tests/software-factory-office-mode.test.ts`
 - `tests/software-factory-office-ui-artifact.test.ts`
 - `tests/software-factory-office-ui-evidence.test.ts`
+- `tests/software-factory-once.test.ts`
 - `tests/software-factory-openai-builder.test.ts`
 - `tests/software-factory-openai-transport.test.ts`
 - `tests/software-factory-openai.test.ts`
