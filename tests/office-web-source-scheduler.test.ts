@@ -18,7 +18,7 @@ test("warming source host sends only bounded GET health and rejects alternate or
 
 
 test("health exposes only failure stage and allowlisted codes, then clears diagnostic on success",async()=>{
- for(const stage of ["read","persist"] as const)for(const [error,expected] of [[Object.assign(Error("SECRET"),{code:"42P01"}),"42P01"],[Object.assign(Error("SECRET"),{name:"ZodError"}),"INVALID_SOURCE_SCHEMA"],[Object.assign(Error("SECRET"),{code:"SECRET_CODE",name:"SECRET_NAME"}),"UNVERIFIED_EXPORT"]] as const){
+ for(const stage of ["read","persist"] as const)for(const [error,expected] of [[Error("Canonical owner absent"),"SOURCE_OWNER_ABSENT"],[Error("Invalid web source provenance"),"SOURCE_PROVENANCE_INVALID"],[Error("Connection terminated due to connection timeout"),"SOURCE_CONNECTION_TIMEOUT"],[Error("Canonical owner absent SECRET"),"UNVERIFIED_EXPORT"],[Object.assign(Error("SECRET"),{code:"42P01"}),"42P01"],[Object.assign(Error("SECRET"),{name:"ZodError"}),"INVALID_SOURCE_SCHEMA"],[Object.assign(Error("SECRET"),{code:"SECRET_CODE",name:"SECRET_NAME"}),"UNVERIFIED_EXPORT"]] as const){
   const cycle=createWebSourceExportCycle({read:async()=>{if(stage==="read")throw error;return [];},persist:async()=>{throw error;}});
   assert.equal(await cycle.tick(),false);const status=officeWebSourceStatus();assert.equal(status.failureStage,stage);assert.equal(status.failureCode,expected);assert.doesNotMatch(JSON.stringify(status),/SECRET/);
  }
