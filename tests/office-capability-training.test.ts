@@ -1,9 +1,9 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
-import {createCapabilityTrainer,parseCapabilityTraining,capabilityTrainingSummary,type CapabilityTrainingState} from "../server/office-capability-training";
+import {createCapabilityTrainer,parseCapabilityTraining,capabilityTrainingSummary,prepareCapabilityCancellation,applyCapabilityCancellation,type CapabilityTrainingState} from "../server/office-capability-training";
 import {auditSavedRole} from "../server/office-role-audits";
-import {sourceDigest as digest} from "../server/office-role-snapshots";
+import {sourceDigest as digest,PENDING_OFFICE_ROLES,type PendingOfficeRole} from "../server/office-role-snapshots";
 import {parseRoleWork,type RoleWorkJob,type RoleWorkState} from "../server/office-role-work";
 const NOW=Date.parse("2026-11-07T01:00:00Z"),owner="owner";
 function realJob(at:number):RoleWorkJob{
@@ -12,10 +12,12 @@ function realJob(at:number):RoleWorkJob{
  job.artifactId=digest({id:job.id,role:job.role,generation:1,fence:job.fence,source,audit});return job;
 }
 const reorder=(v:any):any=>Array.isArray(v)?v.map(reorder):v&&typeof v==="object"?Object.fromEntries(Object.keys(v).reverse().map(k=>[k,reorder(v[k])])):v;
-function fixture(mode:"improve"|"tie"|"costfail"|"late"|"regress"|"expensive"|"changed_during"="improve"){
- let busy=false; let clock=NOW,state:CapabilityTrainingState=parseCapabilityTraining(undefined,owner),calls=0;const generations:Record<string,number>={control:1};let work:RoleWorkState={version:1,ownerKey:digest(owner),jobs:[realJob(NOW)]};const requests=new Map<string,any>();
- const trainer=createCapabilityTrainer({owner,maxCallsPerDay:2,now:()=>clock,loadWork:async()=>parseRoleWork(work,owner),transact:async(change)=>{const next=change(structuredClone(state),generations,busy);state=parseCapabilityTraining(reorder(next),owner);return structuredClone(state);},run:async(raw,call)=>{
+function fixture(mode:"improve"|"tie"|"costfail"|"late"|"regress"|"expensive"|"changed_during"|"pause"|"unadmitted"="improve"){
+ let busy=false,stopped=false; let clock=NOW,state:CapabilityTrainingState=parseCapabilityTraining(undefined,owner),calls=0;const generations:Record<string,number>={control:1};let work:RoleWorkState={version:1,ownerKey:digest(owner),jobs:[realJob(NOW)]};const requests=new Map<string,any>();
+ const trainer=createCapabilityTrainer({owner,maxCallsPerDay:2,now:()=>clock,shouldStop:()=>stopped,loadWork:async()=>parseRoleWork(work,owner),transact:async(change)=>{const next=change(structuredClone(state),generations,busy);state=parseCapabilityTraining(reorder(next),owner);return structuredClone(state);},run:async(raw,call)=>{
   calls++;const prompt=JSON.parse(raw),task=prompt.source,trained=prompt.lessons.length>0,holdout=task.id.startsWith("source-triage-holdout");
+  if(mode==="unadmitted"&&holdout)throw Error("not admitted");
+  if(mode==="pause"&&holdout&&!trained)stopped=true;
   assert.ok(!("expected" in prompt));assert.ok(prompt.lessons.every((l:string)=>!l.includes("heldout:")));
   const sourceIssue=task.issueCodes.some((c:string)=>["SOURCE_MISSING","SOURCE_STALE"].includes(c));let decision=task.sourceBlocked||sourceIssue?"review_source":task.issueCodes.length?"review_findings":"record_audit";
   if(!trained && holdout && mode!=="tie")decision=decision==="record_audit"?"review_source":"record_audit";
@@ -58,4 +60,33 @@ test("holder changed during provider invocation cannot receive completion, and f
 test("shared academy admission and policy capacity fail closed without poisoning durable history",async()=>{
  const busy=fixture();busy.setBusy(true);await busy.trainer.tick();assert.equal(busy.calls(),0);busy.setBusy(false);await busy.trainer.tick();assert.equal(busy.calls(),1);
  const f=fixture();const state=parseCapabilityTraining(undefined,owner);for(let generation=2;generation<=100;generation++){const body={role:"control" as const,generation,parentVersion:null,lessons:[],trainingRunId:null};state.policies.push({...body,version:digest({capability:"source-triage-v1",...body}),status:"active"});}f.seed(state);await f.trainer.tick();assert.equal(f.calls(),1);assert.equal(f.state().policies.length,100);assert.equal(f.state().runs[0].status,"completed");assert.equal(f.state().policies.some(p=>p.status==="candidate"),false);parseCapabilityTraining(f.state(),owner);
+});
+
+test("all 14 current holders receive their first real audit before any candidate consumes paired calls",async()=>{
+ let clock=NOW,calls=0,state=parseCapabilityTraining(undefined,owner);const generations=Object.fromEntries(PENDING_OFFICE_ROLES.map(role=>[role,1]));
+ const job=(role:PendingOfficeRole,generation:number):RoleWorkJob=>{const audit=auditSavedRole(role,undefined,owner,clock),value:RoleWorkJob={id:randomUUID(),fence:randomUUID(),role,generation,slot:new Date(clock).toISOString().slice(0,10),startedAt:new Date(clock).toISOString(),expiresAt:new Date(clock+60000).toISOString(),completedAt:new Date(clock).toISOString(),status:"blocked",audit};value.artifactId=digest({id:value.id,role,generation,fence:value.fence,audit});return value;};
+ let work:RoleWorkState={version:1,ownerKey:digest(owner),jobs:PENDING_OFFICE_ROLES.map(role=>job(role,1))};
+ const make=()=>createCapabilityTrainer({owner,maxCallsPerDay:14,now:()=>clock,loadWork:async()=>parseRoleWork(work,owner),transact:async(change)=>{state=parseCapabilityTraining(reorder(change(structuredClone(state),generations)),owner);return structuredClone(state);},run:async()=>{calls++;clock++;return {text:"{}",provider:"openai",model:"same-model",sessionId:`resp_fair_${calls}`,completedAt:new Date(clock).toISOString(),usage:{inputTokens:1,outputTokens:1,totalTokens:2}};},verifyCost:async request=>({...request,receiptId:`verified:${request.responseId}`,currency:"USD",usd:0.001})});
+ for(let i=0;i<14;i++){await Promise.all([make().tick(),make().tick()]);assert.equal(calls,i+1);assert.equal(state.runs.every(r=>r.kind==="production"),true);}
+ assert.equal(new Set(state.runs.map(r=>r.role)).size,14);assert.equal(state.policies.filter(p=>p.status==="candidate").length,14);const history=structuredClone(state.runs);
+ await make().tick();assert.equal(calls,14);assert.deepEqual(state.runs,history);
+ // Once all holders have a baseline, resume the existing paired schedule.
+ clock=NOW+86400001;await make().tick();assert.equal(calls,16);assert.equal(state.runs.at(-1)!.kind,"holdout");
+ // An unseen replacement generation gets its own baseline before old holdouts.
+ const role=PENDING_OFFICE_ROLES[0];generations[role]=2;work={...work,jobs:[...work.jobs,job(role,2)]};await make().tick();assert.equal(calls,17);assert.equal(state.runs.at(-1)!.kind,"production");assert.equal(state.runs.at(-1)!.role,role);assert.equal(state.runs.at(-1)!.generation,2);assert.deepEqual(state.runs.slice(0,14),history);
+});
+
+test("cooperative pause after baseline drains the reserved pair and forbids new work",async()=>{
+ const f=fixture("pause");await f.trainer.tick();f.setTime(NOW+86400000);await f.trainer.tick();assert.equal(f.calls(),3);assert.equal(f.state().runs.at(-1)!.status,"completed");assert.ok(f.state().runs.at(-1)!.baseline);assert.ok(f.state().runs.at(-1)!.trained);f.setTime(NOW+2*86400000);await f.trainer.tick();assert.equal(f.calls(),3);
+});
+test("operator cancellation preserves zero-admission unknown history and rejects its candidate without retry",async()=>{
+ const f=fixture("unadmitted");await f.trainer.tick();f.setTime(NOW+86400000);await f.trainer.tick();const before=structuredClone(f.state()),run=before.runs.at(-1)!;assert.equal(run.status,"unknown");assert.equal(run.baseline,undefined);assert.equal(run.unverifiedResult,undefined);
+ const now=NOW+86400100,verify=async(request:any)=>({...request,verifiedAt:new Date(now).toISOString(),baselineNeverAdmitted:true as const,trainedNeverAdmitted:true as const,runtimeDrained:true as const,ledgerEvidenceId:"operator-locked-ledger-query",ledgerSnapshotSha256:"e".repeat(64)});
+ const options={raw:before,owner,runId:run.id,fence:run.fence,operatorAuditId:"cancel-zero-1",now,verify};
+ await assert.rejects(()=>prepareCapabilityCancellation({...options,verify:async request=>({...await verify(request),trainedNeverAdmitted:false as any})}));
+ const approval=await prepareCapabilityCancellation(options),after=applyCapabilityCancellation(before,owner,approval,now);assert.equal(after.runs.length,before.runs.length);assert.equal(after.runs.at(-1)!.status,"cancelled");assert.equal(after.runs.at(-1)!.reason,run.reason);assert.equal(after.policies.find(p=>p.version===run.policyVersion)!.status,"rejected");assert.equal(after.policies.find(p=>p.version===run.baselineVersion)!.status,"active");assert.doesNotThrow(()=>parseCapabilityTraining(reorder(after),owner));
+ assert.throws(()=>applyCapabilityCancellation(after,owner,approval,now));assert.throws(()=>applyCapabilityCancellation(before,owner,{...approval,fence:randomUUID()},now));assert.throws(()=>applyCapabilityCancellation(before,owner,approval,now+60001));
+ const forged=structuredClone(after);forged.runs.at(-1)!.cancellation!.trainedExecutionId="different";assert.throws(()=>parseCapabilityTraining(forged,owner));
+ f.seed(after);f.setTime(NOW+2*86400000);await f.trainer.tick();assert.equal(f.calls(),2);assert.equal(f.state().runs.length,2);
+ const paid=fixture("late");await paid.trainer.tick();const uncertain=paid.state().runs[0];await assert.rejects(()=>prepareCapabilityCancellation({...options,raw:paid.state(),runId:uncertain.id,fence:uncertain.fence}));
 });
