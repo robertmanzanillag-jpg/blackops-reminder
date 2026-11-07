@@ -51,7 +51,7 @@ export function createAsistenteFactoryBuild(options: {
     } });
     const generatePatch = createOpenAiFactoryPatchGenerator({ patchMode:"exactSourceEdits", sourcePaths: { [repository]: paths }, maxOutputTokens,
       generateText: async input => {
-        const requestSha256 = createHash("sha256").update(JSON.stringify([model.model, input.instructions, input.text, input.maxOutputTokens])).digest("hex");
+        const requestSha256 = createHash("sha256").update(JSON.stringify([model.model, input.instructions, input.text, input.maxOutputTokens, model.reasoningEffort ?? null])).digest("hex");
         return executeWithinSharedCredits(ledger, { key, consumer: "factory", requestSha256, maximumMicroUsd: input.maxCostCents * 10000 }, async () => {
           const result = await generate(input);
           if (result.status === "unknown") throw Error("FACTORY_MODEL_OUTCOME_UNKNOWN");

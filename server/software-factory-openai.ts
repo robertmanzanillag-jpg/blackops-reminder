@@ -12,6 +12,7 @@ export function createOpenAiFactoryTextProvider(config:{
  inputNanoUsdPerToken:number;outputNanoUsdPerToken:number;
  pricingValidUntil:string;now:()=>Date;maxInputTokens:number;
  timeoutMs?:number;maxResponseBytes?:number;
+ reasoningEffort?:"low";
 }) {
  const c={...config},timeout=c.timeoutMs??120000,byteLimit=c.maxResponseBytes??1048576;
  const positive=(n:unknown):n is number=>typeof n==="number"&&Number.isSafeInteger(n)&&n>0;
@@ -22,7 +23,7 @@ export function createOpenAiFactoryTextProvider(config:{
  // Do not infer that every undated alias is pinned. Response identity must still
  // match exactly, and operator pricing expires independently of model naming.
  const pinnedModel=c.model==="gpt-6-astra"||/^[-a-zA-Z0-9.]+-\d{4}-\d{2}-\d{2}$/.test(c.model);
- if(typeof c.request!=="function"||typeof c.now!=="function"||!pinnedModel||!positive(c.inputNanoUsdPerToken)||!positive(c.outputNanoUsdPerToken)||!positive(c.maxInputTokens)||!Number.isFinite(expiry)||!positive(timeout)||timeout>300000||!positive(byteLimit)||byteLimit>4194304)throw Error("FACTORY_OPENAI_CONFIGURATION_INVALID");
+ if((c.reasoningEffort!==undefined&&(c.reasoningEffort!=="low"||c.model!=="gpt-6-astra"))||typeof c.request!=="function"||typeof c.now!=="function"||!pinnedModel||!positive(c.inputNanoUsdPerToken)||!positive(c.outputNanoUsdPerToken)||!positive(c.maxInputTokens)||!Number.isFinite(expiry)||!positive(timeout)||timeout>300000||!positive(byteLimit)||byteLimit>4194304)throw Error("FACTORY_OPENAI_CONFIGURATION_INVALID");
  const cost=(input:number,output:number)=>Number((BigInt(input)*BigInt(c.inputNanoUsdPerToken)+BigInt(output)*BigInt(c.outputNanoUsdPerToken)+9999999n)/10000000n);
  return async function generateText(raw:{instructions:string;text:string;maxOutputTokens:number;maxCostCents:number;signal:AbortSignal}):Promise<FactoryTextResult>{
   const input={...raw};
@@ -48,7 +49,7 @@ export function createOpenAiFactoryTextProvider(config:{
   try {
    // Both calls receive the exact same model/instructions/text. No conversation,
    // previous response, tools, remote input or caller-supplied generation fields.
-   const prompt={model:c.model,instructions:input.instructions,input:input.text};
+   const prompt={model:c.model,instructions:input.instructions,input:input.text,...(c.reasoningEffort?{reasoning:{effort:c.reasoningEffort}}:{})};
    const counted=await post("/input_tokens",prompt,4096);
    if(counted?.object!=="response.input_tokens"||!nonnegative(counted.input_tokens)||counted.input_tokens>c.maxInputTokens)return blocked("FACTORY_OPENAI_COUNT_INVALID");
    if(cost(counted.input_tokens,input.maxOutputTokens)>input.maxCostCents)return blocked("FACTORY_OPENAI_BUDGET_UNAVAILABLE");
