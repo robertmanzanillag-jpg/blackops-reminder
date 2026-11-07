@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T00:07:30.904Z",
+  "generatedAt": "2026-11-07T00:09:38.601Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-role-completion",
   "packageName": "rest-express",
   "scripts": {
@@ -124,34 +124,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 918,
-    "filesIndexed": 828,
+    "filesVisible": 924,
+    "filesIndexed": 830,
     "imports": 3049,
     "routes": 564,
-    "symbols": 17731
+    "symbols": 17735
   },
   "directories": {
-    "docs": {
-      "files": 41,
-      "indexed": 40,
-      "kinds": {
-        "docs": 41
-      }
-    },
-    "server": {
-      "files": 210,
-      "indexed": 205,
-      "kinds": {
-        "server": 210
-      }
-    },
-    "tests": {
-      "files": 230,
-      "indexed": 226,
-      "kinds": {
-        "test": 230
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -183,10 +162,10 @@
       }
     },
     ".github/workflows": {
-      "files": 2,
+      "files": 4,
       "indexed": 0,
       "kinds": {
-        "other": 2
+        "other": 4
       }
     },
     "bin": {
@@ -294,6 +273,13 @@
         "other": 1
       }
     },
+    "docs": {
+      "files": 45,
+      "indexed": 42,
+      "kinds": {
+        "docs": 45
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -314,6 +300,13 @@
       "indexed": 1,
       "kinds": {
         "script": 4
+      }
+    },
+    "server": {
+      "files": 210,
+      "indexed": 205,
+      "kinds": {
+        "server": 210
       }
     },
     "server/replit_integrations/batch": {
@@ -349,6 +342,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 230,
+      "indexed": 226,
+      "kinds": {
+        "test": 230
       }
     },
     "tests/fixtures": {
@@ -5434,6 +5434,22 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -30559,14 +30575,18 @@
       "exports": [],
       "symbols": [
         "FakePool",
+        "acl",
+        "aclScript",
         "command",
         "config",
+        "configPath",
         "credit",
         "entry",
         "env",
         "extra",
         "guard",
         "helper",
+        "paths",
         "privatePath",
         "raw",
         "repo",
