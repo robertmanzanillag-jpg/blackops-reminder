@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-07T00:09:38.601Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\office-role-completion`
+Generated: 2026-11-07T00:17:30.227Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-factory-integration`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 924 | 830 | 3049 | 564 | 17735 |
+| 932 | 838 | 3092 | 564 | 17817 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,8 +28,8 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 230 | 226 | test:230 |
-| `server` | 210 | 205 | server:210 |
+| `tests` | 234 | 230 | test:234 |
+| `server` | 214 | 209 | server:214 |
 | `script` | 93 | 85 | script:93 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
@@ -229,14 +229,18 @@ Package: `rest-express`
 - `tests/shopify-oauth.test.ts`
 - `tests/software-factory-actions.test.ts`
 - `tests/software-factory-asistente-build.test.ts`
+- `tests/software-factory-asistente-review.test.ts`
+- `tests/software-factory-asistente-source.test.ts`
 - `tests/software-factory-asistente-success.test.ts`
 - `tests/software-factory-builder.test.ts`
+- `tests/software-factory-company-scheduler.test.ts`
 - `tests/software-factory-company.test.ts`
 - `tests/software-factory-encrypted-state.test.ts`
 - `tests/software-factory-gcs.test.ts`
 - `tests/software-factory-github-client.test.ts`
 - `tests/software-factory-github-publisher.test.ts`
 - `tests/software-factory-github-state.test.ts`
+- `tests/software-factory-github-transport.test.ts`
 - `tests/software-factory-github.test.ts`
 - `tests/software-factory-loop.test.ts`
 - `tests/software-factory-object-store.test.ts`
