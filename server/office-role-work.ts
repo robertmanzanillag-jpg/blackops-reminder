@@ -66,17 +66,31 @@ export function createRoleWorkRunner(options:{council:Pick<ReturnType<typeof cre
    });
    if(!assignment)continue;
    const job:RoleWorkJob=assignment;let source:RoleSnapshot|undefined,sourceFailed=false,webSource:WebRoleSource|undefined,webInvalid=false;
+   let timedOut=false;
+   // Bound the wait, not just admission. The losing read has no journal
+   // callback; Promise.race also consumes a late rejection.
+   const readWithinLease=async<T>(read:()=>Promise<T>):Promise<T>=>{
+    const remaining=Date.parse(job.expiresAt)-now();
+    if(remaining<=0){timedOut=true;throw new Error("Read lease expired");}
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    try{
+     return await Promise.race([
+      new Promise<never>((_,reject)=>{timer=setTimeout(()=>{timedOut=true;reject(new Error("Read lease expired"));},remaining);}),
+      Promise.resolve().then(read),
+     ]);
+    }finally{if(timer!==undefined)clearTimeout(timer);}
+   };
    const webMode=!!options.readWeb && WEB_SOURCE_ROLES.includes(role as WebSourceRole);
    if(SQL_AUDIT_ROLES.includes(role as SqlAuditRole)){
     try {
      if(options.shouldStop?.() || now()>=Date.parse(job.expiresAt))throw new Error("Read not admitted");
-     source=await options.read(role as SqlAuditRole);
+     source=await readWithinLease(()=>options.read(role as SqlAuditRole));
      if(source.role!==role || Date.parse(source.observedAt)<start-30000)throw new Error("Source assignment mismatch");
      validateRoleSnapshot(source,options.owner,now());
     }catch{source=undefined;sourceFailed=true;}
    }
    if(webMode){
-    try{if(options.shouldStop?.() || now()>=Date.parse(job.expiresAt))throw new Error("Read not admitted");const exported=await options.readWeb!(role as WebSourceRole);if(exported){webSource=validateWebRoleSource(exported,options.owner);if(webSource.role!==role || Date.parse(webSource.observedAt)<start-300000)throw new Error("Web source mismatch");auditWebRoleSource(webSource,options.owner,now());}}
+    try{if(options.shouldStop?.() || now()>=Date.parse(job.expiresAt))throw new Error("Read not admitted");const exported=await readWithinLease(()=>options.readWeb!(role as WebSourceRole));if(exported){webSource=validateWebRoleSource(exported,options.owner);if(webSource.role!==role || Date.parse(webSource.observedAt)<start-300000)throw new Error("Web source mismatch");auditWebRoleSource(webSource,options.owner,now());}}
     catch{webSource=undefined;webInvalid=true;}
    }
    await options.council.updateOfficeExecution((state,company)=>{
@@ -84,7 +98,8 @@ export function createRoleWorkRunner(options:{council:Pick<ReturnType<typeof cre
     if(!stored || stored.fence!==fence || stored.status!=="running")return state;
     const end=now(),holder=state.roles.roles[role],career=company.careers[role];
     let done:RoleWorkJob;
-    if(end<start || end>=Date.parse(stored.expiresAt) || holder?.generation!==job.generation || career?.generation!==job.generation){done={...stored,status:"unknown",reason:"lease_or_generation_changed"};}
+    if(timedOut || end>=Date.parse(stored.expiresAt)){done={...stored,status:"unknown",reason:"expired_no_automatic_retry"};}
+    else if(end<start || holder?.generation!==job.generation || career?.generation!==job.generation){done={...stored,status:"unknown",reason:"lease_or_generation_changed"};}
     else if(webMode){
      let verified=webSource,invalid=webInvalid,webAudit:WebWorkAudit;
      try{webAudit=verified?auditWebRoleSource(verified,options.owner,end):missingWebAudit(role,invalid);}catch{verified=undefined;invalid=true;webAudit=missingWebAudit(role,true);}
