@@ -3,10 +3,12 @@ import {persistWebRoleSources} from "./office-web-role-store";
 let publicStatus:{enabled:boolean;lastExportAt:string|null;status:"disabled"|"pending"|"ready"|"unavailable";failureStage?:"read"|"persist";failureCode?:string}={enabled:false,lastExportAt:null,status:"disabled"};
 export const officeWebSourceStatus=()=>({...publicStatus});
 function safeExportFailure(error:unknown):string {
- const value=error && typeof error==="object"?error as {code?:unknown;name?:unknown}:{};
+ const value=error && typeof error==="object"?error as {code?:unknown;name?:unknown;message?:unknown}:{};
  const codes=["42P01","42703","42501","23505","23502","23514","40001","40P01","57014","53300","57P01","08001","08006","ECONNREFUSED","ENOTFOUND","ETIMEDOUT"];
  if(typeof value.code==="string"&&codes.includes(value.code))return value.code;
  if(value.name==="ZodError")return "INVALID_SOURCE_SCHEMA";
+ const known:Record<string,string>={"Canonical owner absent":"SOURCE_OWNER_ABSENT","Configured owner required":"SOURCE_OWNER_INVALID","Invalid web source provenance":"SOURCE_PROVENANCE_INVALID","Web source row capability mismatch":"SOURCE_ROW_INVALID","Future web source":"SOURCE_FUTURE_TIMESTAMP","Connection terminated due to connection timeout":"SOURCE_CONNECTION_TIMEOUT","Connection terminated unexpectedly":"SOURCE_CONNECTION_CLOSED"};
+ if(typeof value.message==="string" && Object.hasOwn(known,value.message))return known[value.message];
  return "UNVERIFIED_EXPORT";
 }
 export function createWebSourceExportCycle(options:{read:()=>Promise<WebRoleSource[]>;persist:(sources:WebRoleSource[])=>Promise<void>;now?:()=>number}){
