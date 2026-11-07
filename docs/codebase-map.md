@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T02:27:14.679Z
+Generated: 2026-11-07T02:29:28.484Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-build-recovery`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 963 | 868 | 3271 | 570 | 18369 |
+| 971 | 874 | 3285 | 570 | 18407 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,17 +28,17 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 245 | 241 | test:245 |
-| `server` | 225 | 220 | server:225 |
+| `tests` | 246 | 242 | test:246 |
+| `server` | 226 | 221 | server:226 |
 | `script` | 103 | 92 | script:103 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 45 | 43 | docs:45 |
+| `docs` | 50 | 46 | docs:50 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
 | `client/src/lib` | 18 | 18 | client-lib:18 |
-| `shared` | 17 | 17 | shared:17 |
+| `shared` | 18 | 18 | shared:18 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `client/src/components/company-office` | 5 | 5 | client-component:5 |
 | `server/replit_integrations/chat` | 4 | 4 | server:4 |
@@ -177,6 +177,7 @@ Package: `rest-express`
 - `tests/office-academy-benchmarks.test.ts`
 - `tests/office-academy-promotion.test.ts`
 - `tests/office-academy-runner.test.ts`
+- `tests/office-capability-lifecycle.test.ts`
 - `tests/office-capability-training.test.ts`
 - `tests/office-city-agents.test.ts`
 - `tests/office-claude.test.ts`

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T02:27:14.679Z",
+  "generatedAt": "2026-11-07T02:29:28.484Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-build-recovery",
   "packageName": "rest-express",
   "scripts": {
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 963,
-    "filesIndexed": 868,
-    "imports": 3271,
+    "filesVisible": 971,
+    "filesIndexed": 874,
+    "imports": 3285,
     "routes": 570,
-    "symbols": 18369
+    "symbols": 18407
   },
   "directories": {
     ".": {
@@ -274,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 45,
-      "indexed": 43,
+      "files": 50,
+      "indexed": 46,
       "kinds": {
-        "docs": 45
+        "docs": 50
       }
     },
     "examples/clippers-motivation": {
@@ -303,10 +303,10 @@
       }
     },
     "server": {
-      "files": 225,
-      "indexed": 220,
+      "files": 226,
+      "indexed": 221,
       "kinds": {
-        "server": 225
+        "server": 226
       }
     },
     "server/replit_integrations/batch": {
@@ -331,10 +331,10 @@
       }
     },
     "shared": {
-      "files": 17,
-      "indexed": 17,
+      "files": 18,
+      "indexed": 18,
       "kinds": {
-        "shared": 17
+        "shared": 18
       }
     },
     "shared/models": {
@@ -345,10 +345,10 @@
       }
     },
     "tests": {
-      "files": 245,
-      "indexed": 241,
+      "files": 246,
+      "indexed": 242,
       "kinds": {
-        "test": 245
+        "test": 246
       }
     },
     "tests/fixtures": {
@@ -5449,6 +5449,22 @@
       "routes": []
     },
     {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5516,6 +5532,14 @@
     },
     {
       "path": "docs/metricool-tracking-runbook.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/office-capability-lifecycle.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -18864,9 +18888,40 @@
       "routes": []
     },
     {
+      "path": "server/office-capability-lifecycle.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/office-capability-lifecycle",
+        "./office-capability-training",
+        "./office-role-work"
+      ],
+      "exports": [
+        "capabilityLifecycleSummary",
+        "capabilityPolicyLife"
+      ],
+      "symbols": [
+        "Grade",
+        "Policy",
+        "Run",
+        "anyRunnable",
+        "blocking",
+        "capabilityLifecycleSummary",
+        "capabilityPolicyLife",
+        "current",
+        "life",
+        "localAdmissionEligible",
+        "pending",
+        "preparing",
+        "siblings",
+        "sourceExempt"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/office-capability-training.ts",
       "kind": "server",
       "imports": [
+        "./office-capability-lifecycle",
         "./office-openai",
         "./office-role-snapshots",
         "./office-role-work",
@@ -18928,6 +18983,7 @@
         "pairs",
         "parent",
         "parseCapabilityTraining",
+        "policies",
         "policy",
         "policySchema",
         "policyVersion",
@@ -25814,6 +25870,23 @@
       "routes": []
     },
     {
+      "path": "shared/office-capability-lifecycle.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "CAPABILITY_LIFE_RULES",
+        "CapabilityLifeEvidence",
+        "CapabilityPolicyLife",
+        "replayCapabilityPolicyLife"
+      ],
+      "symbols": [
+        "CAPABILITY_LIFE_RULES",
+        "replayCapabilityPolicyLife",
+        "seen"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/office-kong-supervisor.ts",
       "kind": "shared",
       "imports": [
@@ -30588,6 +30661,44 @@
       "routes": []
     },
     {
+      "path": "tests/office-capability-lifecycle.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-capability-lifecycle",
+        "../server/office-capability-training",
+        "../server/office-role-audits",
+        "../server/office-role-snapshots",
+        "../server/office-role-work",
+        "../shared/office-capability-lifecycle",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "add",
+        "after",
+        "body",
+        "f",
+        "fixture",
+        "generations",
+        "history",
+        "life",
+        "make",
+        "owner",
+        "r",
+        "records",
+        "removed",
+        "reorder",
+        "source",
+        "state",
+        "successor",
+        "summary",
+        "uncertain"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-capability-training.test.ts",
       "kind": "test",
       "imports": [
@@ -30895,6 +31006,7 @@
       "imports": [
         "esbuild",
         "node:assert/strict",
+        "node:fs",
         "node:path",
         "playwright"
       ],
@@ -30903,6 +31015,7 @@
         "browser",
         "bundle",
         "page",
+        "text",
         "url"
       ],
       "routes": []
@@ -33753,6 +33866,7 @@
     "tests/office-academy-benchmarks.test.ts",
     "tests/office-academy-promotion.test.ts",
     "tests/office-academy-runner.test.ts",
+    "tests/office-capability-lifecycle.test.ts",
     "tests/office-capability-training.test.ts",
     "tests/office-city-agents.test.ts",
     "tests/office-claude.test.ts",
