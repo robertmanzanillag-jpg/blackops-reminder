@@ -2,7 +2,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { OFFICE_UI_HARNESS_FILES } from "../script/software-factory-ui-static.mjs";
 import { canRepair } from "./software-factory";
 import { createSharedOpenAiCreditLedger, type SharedCreditState, type VerifiedCreditGrant } from "./shared-openai-credit-ledger";
 import type { CouncilPool } from "./agent-council-store";
@@ -22,7 +21,10 @@ export const buildRecoverySchemaSql = `CREATE TABLE IF NOT EXISTS software_facto
  created_at timestamptz NOT NULL DEFAULT CURRENT_TIMESTAMP,
  PRIMARY KEY(owner_key,failed_job_id), UNIQUE(owner_key,successor_job_id)
 );`;
-export const RECOVERY_EQUIVALENT_PATHS = ['server/office-role-work.ts', 'tests/office-role-work.test.ts', '.github/workflows/factory-candidate-checks.yml', ...OFFICE_UI_HARNESS_FILES];
+// Mirror the reviewed harness data without importing its executable CLI into the
+// production CJS bundle. A regression test requires exact equality with the CLI.
+export const RECOVERY_HARNESS_FILES = ['script/software-factory-office-ui-acceptance.ts', 'script/software-factory-office-ui-fixture.mjs', 'script/software-factory-office-ui-oracle.mjs', 'script/software-factory-ui-console.mjs', 'script/software-factory-ui-static.mjs', 'script/software-factory-role-acceptance.ts', 'server/software-factory-role-acceptance.ts', 'server/software-factory-role-deadline.ts', 'server/office-role-snapshots.ts'];
+export const RECOVERY_EQUIVALENT_PATHS = ['server/office-role-work.ts', 'tests/office-role-work.test.ts', '.github/workflows/factory-candidate-checks.yml', ...RECOVERY_HARNESS_FILES];
 type WorkflowBlobChange = { before: string; after: string };
 type RebaseProof = { originalBaseSha: string; targetBaseSha: string; files: Array<[string, string]>; reviewedWorkflowBlobChange?: WorkflowBlobChange };
 /** Reads immutable Git objects only; no checkout, fetch, shell or candidate execution. */

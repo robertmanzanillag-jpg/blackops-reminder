@@ -34,3 +34,6 @@ jobs:
       - name: Typecheck trusted operator
         working-directory: source
         run: node node_modules/typescript/bin/tsc --noEmit --incremental false
+      - name: Build production bundle
+        working-directory: source
+        run: node --import tsx script/build.ts

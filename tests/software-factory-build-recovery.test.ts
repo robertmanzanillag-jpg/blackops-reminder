@@ -7,11 +7,13 @@ import path from 'node:path';
 import os from 'node:os';
 import {createHash,randomUUID} from 'node:crypto';
 import {Pool} from 'pg';
-import {buildRecoveryDigest,buildRecoverySchemaSql,enqueueFailedBuildRecovery,loadFailedBuildRecovery,recoverableFailedBuild,verifyRecoveryRebase,RECOVERY_EQUIVALENT_PATHS} from '../server/software-factory-build-recovery';
+import {buildRecoveryDigest,buildRecoverySchemaSql,enqueueFailedBuildRecovery,loadFailedBuildRecovery,recoverableFailedBuild,verifyRecoveryRebase,RECOVERY_EQUIVALENT_PATHS,RECOVERY_HARNESS_FILES} from '../server/software-factory-build-recovery';
+import {OFFICE_UI_HARNESS_FILES} from '../script/software-factory-ui-static.mjs';
 import {createSoftwareFactorySchemaSql} from '../server/software-factory-store';
 import {councilSchemaSql} from '../server/agent-council-store';
 import {createFactoryPipeline} from '../server/software-factory-pipeline';
 const exec=promisify(execFile),digest=(v:unknown)=>createHash('sha256').update(JSON.stringify(v)).digest('hex'),owner='fixture-owner',ownerKey=createHash('sha256').update(owner).digest('hex');
+test('production recovery mirrors trusted harness paths without importing its executable CLI',()=>assert.deepEqual(RECOVERY_HARNESS_FILES,OFFICE_UI_HARNESS_FILES));
 test('authorization hashes survive PostgreSQL jsonb object ordering without changing array provider keys',()=>{
  assert.equal(buildRecoveryDigest({b:2,a:{z:3,y:4}}),buildRecoveryDigest({a:{y:4,z:3},b:2}));
  assert.equal(buildRecoveryDigest(['asistente','root',0]),digest(['asistente','root',0]));
