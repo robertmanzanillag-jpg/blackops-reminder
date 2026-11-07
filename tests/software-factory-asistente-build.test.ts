@@ -49,3 +49,21 @@ test("Asistente composition reserves shared credit before model calls and accoun
 });
 
 
+
+test("Asistente export failures and stage cancellation stop before any credit or model admission",async()=>{
+ const repo="robertmanzanillag-jpg/blackops-reminder",base="a".repeat(40),tree="b".repeat(40),workflow="trusted",workflowPath=".github/workflows/factory-candidate-checks.yml",source="export const value=1;\n";
+ const hash=(s:string)=>createHash("sha1").update(`blob ${Buffer.byteLength(s)}\0`).update(s).digest("hex");
+ for(const mode of ["missing","unsafe","mismatch","abort"]){let credit=0,model=0,blobs=0;const controller=new AbortController();
+  const build=createAsistenteFactoryBuild({ledger:{reserve:async()=>{credit++;throw Error("NOT_EXPECTED");}} as any,baseBranch:"main",sourcePaths:["server/role.ts"],maxOutputTokens:100,now:()=>new Date("2026-11-07T00:00:00Z"),checks:{workflowId:1,workflowPath,workflowSha256:createHash("sha256").update(workflow).digest("hex"),jobName:"checks",testStep:"test",buildStep:"build",browserStep:"browser"},
+   model:{model:"gpt-6-astra",inputNanoUsdPerToken:1,outputNanoUsdPerToken:1,maxInputTokens:1000,pricingValidUntil:"2026-11-20T00:00:00Z",now:()=>new Date("2026-11-07T00:00:00Z"),request:async()=>{model++;throw Error("NOT_EXPECTED");}},
+   githubRequest:async(url,init)=>{assert.ok(init.signal);const json=(v:unknown)=>Response.json(v);
+    if(url.endsWith(repo))return json({full_name:repo,private:false,archived:false,disabled:false,default_branch:"main"});
+    if(url.includes("/contents/"))return json({type:"file",path:workflowPath,sha:hash(workflow),encoding:"base64",size:workflow.length,content:Buffer.from(workflow).toString("base64")});
+    if(url.includes("/commits/"))return json({sha:base,tree:{sha:tree},parents:[],message:"base"});
+    if(url.includes("/trees/")){if(mode==="abort"){controller.abort();assert.equal(init.signal!.aborted,true);}return json({sha:tree,truncated:false,tree:[{path:"server",type:"tree",mode:"040000",sha:"c".repeat(40)},...(mode==="missing"?[]:[{path:mode==="unsafe"?"../escape":"server/role.ts",type:"blob",mode:"100644",sha:hash(source),size:source.length}])]});}
+    blobs++;return json({sha:hash(source),encoding:"base64",size:source.length,content:Buffer.from("x".repeat(source.length)).toString("base64")});
+   }});
+  const result=await build({id:"asistente",repo} as FactoryProject,{version:1,projectId:"asistente",rootJobId:"root",repairAttempts:0,finding:{baseSha:base,request:"Fix role"}} as FactoryPipelineState,{signal:controller.signal,maxCostCents:1});
+  assert.equal("status" in result&&result.status,"failed");assert.equal(credit,0);assert.equal(model,0);assert.equal(blobs,mode==="mismatch"?1:0);
+ }
+});

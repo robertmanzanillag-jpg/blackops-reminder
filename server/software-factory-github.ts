@@ -18,6 +18,9 @@ export interface FactoryGitHubExportOptions {
   client: FactoryGitHubReadClient;
   /** Trusted inventory allowlist, not supplied by a model or repository. */
   repositories: readonly string[];
+  /** Explicit trusted subset; omission retains the original full export. */
+  sourcePaths?: readonly string[];
+  signal?: AbortSignal;
   maxFiles?: number;
   maxFileBytes?: number;
   maxTotalBytes?: number;
@@ -56,17 +59,24 @@ export function createGitHubFactorySourceExporter(options: FactoryGitHubExportOp
   if (!options.repositories.length) throw new Error("FACTORY_GITHUB_REPOSITORY_ALLOWLIST_REQUIRED");
   const allowed = new Set(options.repositories.map(repository => { repositoryParts(repository); return repository.toLowerCase(); }));
   const maxFiles = limit(options.maxFiles, 10000), maxFileBytes = limit(options.maxFileBytes, 4 * 1024 * 1024), maxTotalBytes = limit(options.maxTotalBytes, 64 * 1024 * 1024);
-  const client = options.client;
+  const client = options.client, signal=options.signal;
+  const selected=options.sourcePaths===undefined?undefined:new Set(options.sourcePaths);
+  if(selected && (!selected.size||selected.size>64||selected.size!==options.sourcePaths!.length||[...selected].some(p=>!safePath(p)||protectedPath(p))))throw Error("FACTORY_GITHUB_SOURCE_PATHS_INVALID");
+  const check=()=>signal?.throwIfAborted();
   return async (repository, commitSha, destination) => {
+    check();
     const repo = repositoryParts(repository);
     if (!allowed.has(repository.toLowerCase())) throw new Error("FACTORY_GITHUB_REPOSITORY_NOT_ALLOWED");
     if (!sha.test(commitSha)) throw new Error("FACTORY_GITHUB_EXACT_COMMIT_REQUIRED");
     const rootInfo = await lstat(destination);
     if (!rootInfo.isDirectory() || rootInfo.isSymbolicLink() || (await readdir(destination)).length) throw new Error("FACTORY_GITHUB_EMPTY_WORKSPACE_REQUIRED");
     const root = await realpath(destination);
+    check();
     const commit = (await client.rest.git.getCommit({ ...repo, commit_sha: commitSha })).data;
+    check();
     if (commit.sha !== commitSha || !sha.test(commit.tree.sha)) throw new Error("FACTORY_GITHUB_COMMIT_MISMATCH");
     const tree = (await client.rest.git.getTree({ ...repo, tree_sha: commit.tree.sha, recursive: "1" })).data;
+    check();
     if (tree.sha !== commit.tree.sha || tree.truncated !== false || !Array.isArray(tree.tree) || tree.tree.length > maxFiles * 2) throw new Error("FACTORY_GITHUB_TREE_UNVERIFIED");
     const entries: Array<{ path: string; sha: string; size: number; executable: boolean }> = [];
     const seen = new Map<string, string>();
@@ -80,20 +90,25 @@ export function createGitHubFactorySourceExporter(options: FactoryGitHubExportOp
       if (entry.type === "tree" && entry.mode === "040000") continue;
       if (entry.type !== "blob" || !["100644", "100755"].includes(entry.mode || "")) throw new Error("FACTORY_GITHUB_SPECIAL_FILE_UNSUPPORTED");
       if (protectedPath(entry.path)) continue;
+      if(selected&&!selected.has(entry.path))continue;
+      if(selected&&entry.mode!=="100644")throw Error("FACTORY_GITHUB_SOURCE_MODE_INVALID");
       if (!Number.isSafeInteger(entry.size) || entry.size! < 0 || entry.size! > maxFileBytes) throw new Error("FACTORY_GITHUB_FILE_LIMIT");
       total += entry.size!;
       if (total > maxTotalBytes || entries.length >= maxFiles) throw new Error("FACTORY_GITHUB_EXPORT_LIMIT");
       entries.push({ path: entry.path, sha: entry.sha, size: entry.size!, executable: entry.mode === "100755" });
     }
+    if(selected&&entries.length!==selected.size)throw Error("FACTORY_GITHUB_SOURCE_MISSING");
     // No path can use an ordinary file as an ancestor, including case aliases.
-    for (const entry of entries) {
-      const segments = entry.path.normalize("NFC").toLowerCase().split("/");
+    for (const entryPath of seen.keys()) {
+      const segments = entryPath.split("/");
       for (let index = 1; index < segments.length; index++) {
         if (seen.get(segments.slice(0, index).join("/")) !== "tree") throw new Error("FACTORY_GITHUB_TREE_PARENT_INVALID");
       }
     }
     for (const entry of entries) {
+      check();
       const blob = (await client.rest.git.getBlob({ ...repo, file_sha: entry.sha })).data;
+      check();
       if (blob.sha !== entry.sha || blob.encoding !== "base64" || blob.size !== entry.size || typeof blob.content !== "string" || blob.content.length > Math.ceil(maxFileBytes / 3) * 4 + Math.ceil(maxFileBytes / 40)) throw new Error("FACTORY_GITHUB_BLOB_UNVERIFIED");
       const encoded = blob.content.replace(/[\r\n]/g, "");
       const bytes = Buffer.from(encoded, "base64");
@@ -109,8 +124,10 @@ export function createGitHubFactorySourceExporter(options: FactoryGitHubExportOp
         if (!info.isDirectory() || info.isSymbolicLink()) throw new Error("FACTORY_GITHUB_WORKSPACE_CHANGED");
         parent = path.dirname(parent);
       }
+      check();
       await writeFile(target, bytes, { flag: "wx", mode: entry.executable ? 0o700 : 0o600 });
     }
+    check();
     return { sha: commitSha };
   };
 }
