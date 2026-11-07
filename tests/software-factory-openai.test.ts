@@ -26,6 +26,20 @@ test("expired pricing, aliases and cancelled work cannot generate",async()=>{
  assert.equal((await createOpenAiFactoryTextProvider({...config,request,pricingValidUntil:"2020-01-01"})(input())).status,"blocked");
  const c=new AbortController();c.abort();assert.equal((await createOpenAiFactoryTextProvider({...config,request})({...input(),signal:c.signal})).status,"blocked");assert.equal(calls,0);
 });
+
+test("documented undated Astra snapshot retains exact identity and all budget gates",async()=>{
+ for(const responseModel of ["gpt-6-astra","gpt-6-astra-latest"]){
+  let calls=0;const generate=createOpenAiFactoryTextProvider({...config,model:"gpt-6-astra",request:async(_url,init)=>{
+   assert.equal(JSON.parse(String(init.body)).model,"gpt-6-astra");return ++calls===1?count():json({...result(),model:responseModel});
+  }});
+  assert.equal((await generate(input())).status,responseModel==="gpt-6-astra"?"completed":"unknown");assert.equal(calls,2);
+ }
+ for(const alias of ["gpt-6-astra-latest","gpt-6.1-sol","gpt-4.1"]){
+  assert.throws(()=>createOpenAiFactoryTextProvider({...config,model:alias,request:async()=>count()}),/CONFIGURATION/);
+ }
+ let calls=0;const capped=createOpenAiFactoryTextProvider({...config,model:"gpt-6-astra",outputNanoUsdPerToken:1000000,request:async()=>{calls++;return count();}});
+ assert.equal((await capped(input())).status,"blocked");assert.equal(calls,1);
+});
 test("missing usage, changed model, exceeded cap and ambiguous HTTP never become success or retry",async()=>{
  for(const response of [()=>json({...result(),status:"in_progress"}),()=>json({...result(),usage:null}),()=>json({...result(),model:"other"}),()=>json({...result(),usage:{input_tokens:101,output_tokens:20,total_tokens:121}}),()=>json({...result(),usage:{input_tokens:100,output_tokens:101,total_tokens:201}}),()=>new Response("private provider error",{status:503}),()=>{throw Error("lost acknowledgment");}]){
   let calls=0;const generate=createOpenAiFactoryTextProvider({...config,request:async()=>++calls===1?count():response()});
