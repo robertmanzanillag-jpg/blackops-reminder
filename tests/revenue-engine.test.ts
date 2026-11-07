@@ -200,17 +200,18 @@ test.beforeEach(() => {
 });
 
 test("scopes Revenue Engine JSON paths by authenticated user", () => {
+  const portablePath = (value: string) => value.replace(/\\/g, "/");
   const paths = buildRevenueUserDataPaths("user@example.com/with spaces");
 
-  assert.match(paths.baseDir, /revenue_engine_data\/users\/user_example_com_with_spaces-[a-f0-9]{12}$/);
-  assert.match(paths.ledgerPath, /revenue_engine_data\/users\/user_example_com_with_spaces-[a-f0-9]{12}\/ledger\.json$/);
+  assert.match(portablePath(paths.baseDir), /revenue_engine_data\/users\/user_example_com_with_spaces-[a-f0-9]{12}$/);
+  assert.match(portablePath(paths.ledgerPath), /revenue_engine_data\/users\/user_example_com_with_spaces-[a-f0-9]{12}\/ledger\.json$/);
 
   setRevenueUserDataScope("owner-a");
   const scopedSnapshot = getRevenueEngineSnapshot();
-  assert.match(scopedSnapshot.persistence.path, /revenue_engine_data\/users\/owner-a-[a-f0-9]{12}\/ledger\.json$/);
-  assert.match(scopedSnapshot.persistence.leadsPath, /revenue_engine_data\/users\/owner-a-[a-f0-9]{12}\/leads\.json$/);
-  assert.match(scopedSnapshot.persistence.outreachPath, /revenue_engine_data\/users\/owner-a-[a-f0-9]{12}\/outreach\.json$/);
-  assert.match(scopedSnapshot.persistence.publicLeadCandidatesPath, /revenue_engine_data\/users\/owner-a-[a-f0-9]{12}\/public_lead_candidates\.json$/);
+  assert.match(portablePath(scopedSnapshot.persistence.path), /revenue_engine_data\/users\/owner-a-[a-f0-9]{12}\/ledger\.json$/);
+  assert.match(portablePath(scopedSnapshot.persistence.leadsPath), /revenue_engine_data\/users\/owner-a-[a-f0-9]{12}\/leads\.json$/);
+  assert.match(portablePath(scopedSnapshot.persistence.outreachPath), /revenue_engine_data\/users\/owner-a-[a-f0-9]{12}\/outreach\.json$/);
+  assert.match(portablePath(scopedSnapshot.persistence.publicLeadCandidatesPath), /revenue_engine_data\/users\/owner-a-[a-f0-9]{12}\/public_lead_candidates\.json$/);
   assert.notEqual(buildRevenueDurableOwnerId("a/b"), buildRevenueDurableOwnerId("a_b"));
   assert.notEqual(
     buildRevenueDurableOwnerId(`${"same-prefix".repeat(20)}-a`),
@@ -3376,6 +3377,14 @@ test("serves revenue mockup previews over the generated route", async () => {
   });
   const app = express();
   app.use(express.json());
+  // Explicit test-only authenticated session. A caller-controlled x-user-id
+  // header is deliberately not authentication.
+  app.use((req, _res, next) => {
+    if (req.header("x-fixture-session") === "authenticated-preview-owner") {
+      (req as any).user = { id: "preview-owner" };
+    }
+    next();
+  });
   const server = createHttpServer(app);
   await registerRoutes(server, app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -3385,7 +3394,12 @@ test("serves revenue mockup previews over the generated route", async () => {
     assert.ok(address && typeof address === "object");
     const baseUrl = `http://127.0.0.1:${address.port}/api/revenue-engine/mockup-previews`;
 
-    const response = await fetch(`${baseUrl}/${preview.slug}`, { headers: { "x-user-id": "preview-owner" } });
+    const unauthenticated = await fetch(`${baseUrl}/${preview.slug}`);
+    assert.equal(unauthenticated.status, 401);
+    const spoofed = await fetch(`${baseUrl}/${preview.slug}`, { headers: { "x-user-id": "preview-owner" } });
+    assert.equal(spoofed.status, 401);
+
+    const response = await fetch(`${baseUrl}/${preview.slug}`, { headers: { "x-fixture-session": "authenticated-preview-owner" } });
     assert.equal(response.status, 200);
     assert.match(response.headers.get("content-type") || "", /text\/html/);
     const responseBody = await response.text();
@@ -3396,17 +3410,17 @@ test("serves revenue mockup previews over the generated route", async () => {
     assert.equal(response.headers.get("referrer-policy"), "no-referrer");
     assert.equal(response.headers.get("x-content-type-options"), "nosniff");
 
-    const invalid = await fetch(`${baseUrl}/%2E%2E%2Fbad`, { headers: { "x-user-id": "preview-owner" } });
+    const invalid = await fetch(`${baseUrl}/%2E%2E%2Fbad`, { headers: { "x-fixture-session": "authenticated-preview-owner" } });
     assert.equal(invalid.status, 400);
 
-    const missing = await fetch(`${baseUrl}/missing-preview`, { headers: { "x-user-id": "preview-owner" } });
+    const missing = await fetch(`${baseUrl}/missing-preview`, { headers: { "x-fixture-session": "authenticated-preview-owner" } });
     assert.equal(missing.status, 404);
 
     const previewPath = getRevenueMockupPreviewPath(preview.slug);
     const validHtml = readFileSync(previewPath, "utf8");
     writeFileSync(previewPath, validHtml.replace(/<meta\s+http-equiv="Content-Security-Policy"[^>]*>/i, ""), "utf8");
     try {
-      const insecure = await fetch(`${baseUrl}/${preview.slug}`, { headers: { "x-user-id": "preview-owner" } });
+      const insecure = await fetch(`${baseUrl}/${preview.slug}`, { headers: { "x-fixture-session": "authenticated-preview-owner" } });
       assert.equal(insecure.status, 500);
       assert.deepEqual(await insecure.json(), { error: "Mockup preview security policy missing" });
     } finally {

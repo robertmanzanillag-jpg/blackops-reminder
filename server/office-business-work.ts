@@ -4,8 +4,8 @@ import {z} from "zod";
 import {canonicalEvidenceDigest as digest} from "./evidence-json";
 import {BUSINESS_ROLES,readBusinessSources,validateBusinessSource,type BusinessRole,type BusinessPool,type BusinessSource} from "./office-business-sources";
 import {buildBusinessArtifact,type BusinessArtifact} from "./office-business-artifacts";
-export function eligibleBusinessGeneration(career:Pick<AgentCareer,"generation"|"battery"|"inTrainingUntilGeneration">|undefined):number|undefined{
- return career&&Number.isSafeInteger(career.generation)&&career.generation>=1&&Number.isFinite(career.battery)&&career.battery>0&&career.inTrainingUntilGeneration===undefined?career.generation:undefined;
+export function eligibleBusinessGeneration(career:Pick<AgentCareer,"generation"|"battery"|"inTrainingUntilGeneration"|"scoreReconciliation">|undefined):number|undefined{
+ return career&&career.scoreReconciliation===undefined&&Number.isSafeInteger(career.generation)&&career.generation>=1&&Number.isFinite(career.battery)&&career.battery>0&&career.inTrainingUntilGeneration===undefined?career.generation:undefined;
 }
 export const BUSINESS_WORK_KIND="office_business_work_v1",BUSINESS_WORK_MAX_JOBS=200;
 const TTL=60000,MAX_BYTES=4000000;

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T04:23:29.909Z",
+  "generatedAt": "2026-11-07T04:45:37.459Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-real-execution",
   "packageName": "rest-express",
   "scripts": {
@@ -124,39 +124,25 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 994,
-    "filesIndexed": 896,
-    "imports": 3370,
+    "filesVisible": 1010,
+    "filesIndexed": 912,
+    "imports": 3440,
     "routes": 571,
-    "symbols": 18672
+    "symbols": 18840
   },
   "directories": {
-    "client/src/components": {
-      "files": 30,
-      "indexed": 30,
-      "kinds": {
-        "client-component": 30
-      }
-    },
-    "docs": {
-      "files": 51,
-      "indexed": 49,
-      "kinds": {
-        "docs": 51
-      }
-    },
     "server": {
-      "files": 235,
-      "indexed": 230,
+      "files": 243,
+      "indexed": 238,
       "kinds": {
-        "server": 235
+        "server": 243
       }
     },
     "tests": {
-      "files": 254,
-      "indexed": 250,
+      "files": 259,
+      "indexed": 255,
       "kinds": {
-        "test": 254
+        "test": 259
       }
     },
     ".": {
@@ -231,6 +217,13 @@
         "other": 3
       }
     },
+    "client/src/components": {
+      "files": 30,
+      "indexed": 30,
+      "kinds": {
+        "client-component": 30
+      }
+    },
     "client/src/components/agents-building": {
       "files": 1,
       "indexed": 1,
@@ -292,6 +285,13 @@
       "indexed": 1,
       "kinds": {
         "other": 1
+      }
+    },
+    "docs": {
+      "files": 54,
+      "indexed": 52,
+      "kinds": {
+        "docs": 54
       }
     },
     "examples/clippers-motivation": {
@@ -1725,7 +1725,9 @@
         "Job",
         "OfficeBusinessHistory",
         "data",
-        "query"
+        "noCandidate",
+        "query",
+        "title"
       ],
       "routes": []
     },
@@ -5604,6 +5606,22 @@
       "routes": []
     },
     {
+      "path": "docs/office-career-reconciliation.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/office-editorial-work.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/office-internal-work.md",
       "kind": "docs",
       "imports": [],
@@ -5621,6 +5639,14 @@
     },
     {
       "path": "docs/office-radio-training.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/office-revenue-deliverable.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -10708,6 +10734,7 @@
         "capabilityTrainer",
         "checkProtocol",
         "current",
+        "editorialWork",
         "execution",
         "heartbeat",
         "internal",
@@ -10719,6 +10746,7 @@
         "protocolPool",
         "requireProtocol",
         "result",
+        "revenueWork",
         "reviewOnlyOwner",
         "roleAcademy",
         "roleAcademyEnabled",
@@ -17750,6 +17778,7 @@
         "./health-check",
         "./local-auth",
         "./market-news",
+        "./office-editorial-scheduler",
         "./office-protocol",
         "./office-web-source-scheduler",
         "./promo-video-agent",
@@ -19097,25 +19126,34 @@
       "path": "server/office-business-routes.ts",
       "kind": "server",
       "imports": [
-        "./office-business-work",
         "./user-context",
-        "express"
+        "express",
+        "node:crypto"
       ],
       "exports": [
+        "readOfficeDeliverableAvailability",
         "registerOfficeBusinessRoutes"
       ],
       "symbols": [
         "BusinessHistory",
+        "HistoryJob",
         "checkedAt",
         "expired",
         "history",
+        "historyPool",
         "jobs",
         "owner",
+        "readAvailability",
+        "readEditorial",
         "readHistory",
-        "registerOfficeBusinessRoutes"
+        "readOfficeDeliverableAvailability",
+        "readRevenue",
+        "registerOfficeBusinessRoutes",
+        "result",
+        "routes"
       ],
       "routes": [
-        "/api/agents-office/business-work"
+        "/api/agents-office/${route.path}"
       ]
     },
     {
@@ -19319,6 +19357,49 @@
       "routes": []
     },
     {
+      "path": "server/office-career-reconciliation.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "./evidence-json",
+        "zod"
+      ],
+      "exports": [
+        "CAREER_RECONCILIATION_KIND",
+        "CAREER_SCORER_CORRECTION",
+        "CareerReconciliationLedger",
+        "CareerReconciliationRecord",
+        "VerifiedCareerSnapshot",
+        "parseCareerReconciliationLedger",
+        "reconcileLegacyCareer",
+        "validateCareerReconciliationMarker"
+      ],
+      "symbols": [
+        "CAREER_RECONCILIATION_KIND",
+        "CAREER_SCORER_CORRECTION",
+        "body",
+        "careerSchema",
+        "existing",
+        "hash",
+        "ledger",
+        "legacyReason",
+        "markerFor",
+        "original",
+        "parseCareerReconciliationLedger",
+        "protectedCareerDigest",
+        "reasonSchema",
+        "reconcileLegacyCareer",
+        "recordDigest",
+        "recordSchema",
+        "snapshot",
+        "snapshotSchema",
+        "state",
+        "validateCareerReconciliationMarker",
+        "validateOriginal"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/office-claude.ts",
       "kind": "server",
       "imports": [
@@ -19506,6 +19587,135 @@
         "row",
         "source",
         "verified"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-editorial-artifacts.ts",
+      "kind": "server",
+      "imports": [
+        "./evidence-json",
+        "./office-editorial-source"
+      ],
+      "exports": [
+        "EditorialDelivery",
+        "prepareEditorialDelivery"
+      ],
+      "symbols": [
+        "body",
+        "fresh",
+        "limitations",
+        "prepareEditorialDelivery",
+        "reason",
+        "source",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-editorial-scheduler.ts",
+      "kind": "server",
+      "imports": [
+        "./office-business-sources",
+        "./office-editorial-source"
+      ],
+      "exports": [
+        "createEditorialExportCycle",
+        "officeEditorialSourceStatus",
+        "startOfficeEditorialExporter"
+      ],
+      "symbols": [
+        "createEditorialExportCycle",
+        "cycle",
+        "officeEditorialSourceStatus",
+        "startOfficeEditorialExporter"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-editorial-source.ts",
+      "kind": "server",
+      "imports": [
+        "./clippers-local-news-review-committee",
+        "./evidence-json",
+        "./office-business-sources",
+        "node:fs/promises",
+        "node:path",
+        "zod"
+      ],
+      "exports": [
+        "EDITORIAL_ROLES",
+        "EDITORIAL_SOURCE_KIND",
+        "EditorialRole",
+        "EditorialSource",
+        "isEditorialPublicUrl",
+        "persistEditorialSource",
+        "projectEditorialSource",
+        "readStoredEditorialSource",
+        "readWebEditorialSource",
+        "validateEditorialSource"
+      ],
+      "symbols": [
+        "EDITORIAL_ROLES",
+        "EDITORIAL_SOURCE_KIND",
+        "actual",
+        "assertOwner",
+        "body",
+        "canonical",
+        "eventSchema",
+        "hosts",
+        "isEditorialPublicUrl",
+        "itemSchema",
+        "persistEditorialSource",
+        "projectEditorialSource",
+        "projectionSchema",
+        "queue",
+        "queueSchema",
+        "readStoredEditorialSource",
+        "readWebEditorialSource",
+        "review",
+        "stamp",
+        "state",
+        "validateEditorialSource",
+        "verdict"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-editorial-work.ts",
+      "kind": "server",
+      "imports": [
+        "./evidence-json",
+        "./office-business-sources",
+        "./office-editorial-artifacts",
+        "./office-editorial-source",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "EDITORIAL_WORK_KIND",
+        "EditorialWorkJob",
+        "EditorialWorkState",
+        "createEditorialWorkRunner",
+        "editorialWorkCapacity",
+        "parseEditorialWork",
+        "readEditorialWork"
+      ],
+      "symbols": [
+        "EDITORIAL_WORK_KIND",
+        "RESERVE_BYTES",
+        "TTL",
+        "createEditorialWorkRunner",
+        "editorialWorkCapacity",
+        "generation",
+        "jobSchema",
+        "mutate",
+        "parseEditorialWork",
+        "proof",
+        "readEditorialWork",
+        "result",
+        "rows",
+        "value"
       ],
       "routes": []
     },
@@ -19898,6 +20108,116 @@
         "validateRadioTrainingEvidence",
         "value",
         "version"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-revenue-artifact.ts",
+      "kind": "server",
+      "imports": [
+        "./evidence-json",
+        "./office-revenue-source",
+        "./revenue-engine",
+        "node:crypto"
+      ],
+      "exports": [
+        "REVENUE_PREVIEW_CSP",
+        "RevenuePreviewArtifact",
+        "buildOfficeRevenuePreview",
+        "validateOfficeRevenuePreview"
+      ],
+      "symbols": [
+        "REVENUE_PREVIEW_CSP",
+        "body",
+        "buildOfficeRevenuePreview",
+        "escape",
+        "result",
+        "source",
+        "validateOfficeRevenuePreview"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-revenue-source.ts",
+      "kind": "server",
+      "imports": [
+        "./evidence-json",
+        "./office-business-sources",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "RevenuePreviewSource",
+        "composeRevenuePreviewSource",
+        "readRevenuePreviewSource",
+        "revenueCandidateVersion",
+        "revenueOwnerKey",
+        "revenuePreviewSourceSchema",
+        "safeRevenueEvidenceUrl",
+        "validateRevenuePreviewSource"
+      ],
+      "symbols": [
+        "body",
+        "candidate",
+        "client",
+        "composeRevenuePreviewSource",
+        "items",
+        "kind",
+        "proof",
+        "readRevenuePreviewSource",
+        "result",
+        "revenueCandidateVersion",
+        "revenueOwnerKey",
+        "revenuePreviewSourceSchema",
+        "row",
+        "safeRevenueEvidenceUrl",
+        "source",
+        "stamp",
+        "text",
+        "validateRevenuePreviewSource",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-revenue-work.ts",
+      "kind": "server",
+      "imports": [
+        "./evidence-json",
+        "./office-business-sources",
+        "./office-business-work",
+        "./office-revenue-artifact",
+        "./office-revenue-source",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "REVENUE_WORK_KIND",
+        "RevenueWorkJob",
+        "RevenueWorkState",
+        "createRevenueWorkRunner",
+        "eligibleBusinessGeneration",
+        "parseRevenueWork",
+        "readRevenueWork",
+        "revenueWorkCapacity"
+      ],
+      "symbols": [
+        "BUSINESS_ROLES",
+        "BusinessRole",
+        "RESERVE_BYTES",
+        "REVENUE_WORK_KIND",
+        "TTL",
+        "createRevenueWorkRunner",
+        "generation",
+        "jobSchema",
+        "mutate",
+        "parseRevenueWork",
+        "proof",
+        "readRevenueWork",
+        "result",
+        "revenueWorkCapacity",
+        "rows",
+        "value"
       ],
       "routes": []
     },
@@ -20408,8 +20728,10 @@
       "kind": "server",
       "imports": [
         "./marketing-learning-store",
+        "./office-editorial-scheduler",
         "./office-web-role-sources",
-        "./office-web-role-store"
+        "./office-web-role-store",
+        "node:path"
       ],
       "exports": [
         "createWebSourceExportCycle",
@@ -25545,6 +25867,7 @@
         "AgentCareer",
         "AgentSkill",
         "BATTERY_MAX",
+        "CareerScoreReconciliation",
         "CompanyOrder",
         "CompanyState",
         "CurriculumModule",
@@ -31141,14 +31464,21 @@
         "../server/office-business-work",
         "express",
         "node:assert/strict",
+        "node:crypto",
         "node:test"
       ],
       "exports": [],
       "symbols": [
         "app",
+        "count",
+        "editorial",
+        "editorialFailed",
+        "editorialUrl",
         "expired",
         "post",
         "response",
+        "roles",
+        "rows",
         "server",
         "url"
       ],
@@ -31295,6 +31625,30 @@
         "trainer",
         "training",
         "unknown"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-career-reconciliation.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/evidence-json",
+        "../server/office-career-reconciliation",
+        "../shared/agent-company",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "career",
+        "current",
+        "next",
+        "options",
+        "owner",
+        "r",
+        "retry",
+        "verify",
+        "withOrder"
       ],
       "routes": []
     },
@@ -31474,6 +31828,55 @@
         "data",
         "db",
         "result"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-editorial-scheduler.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-editorial-scheduler",
+        "../server/office-editorial-source",
+        "../server/office-web-source-scheduler",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "cycle",
+        "existing",
+        "missing",
+        "pending"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-editorial-work.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/clippers-local-news-review-committee",
+        "../server/evidence-json",
+        "../server/office-business-sources",
+        "../server/office-editorial-artifacts",
+        "../server/office-editorial-source",
+        "../server/office-editorial-work",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "claimIdentityHash",
+        "database",
+        "e",
+        "f",
+        "fixture",
+        "owner",
+        "query",
+        "review",
+        "source"
       ],
       "routes": []
     },
@@ -31819,6 +32222,55 @@
         "trainee",
         "uncertain",
         "wrong"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-revenue-preview-browser.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-revenue-artifact",
+        "../server/office-revenue-source",
+        "node:assert/strict",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "artifact",
+        "at",
+        "browser",
+        "executablePath",
+        "frame",
+        "source"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-revenue-work.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-business-sources",
+        "../server/office-revenue-artifact",
+        "../server/office-revenue-source",
+        "../server/office-revenue-work",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "a",
+        "candidate",
+        "candidates",
+        "database",
+        "f",
+        "first",
+        "next",
+        "now",
+        "read",
+        "records",
+        "s",
+        "source"
       ],
       "routes": []
     },
@@ -34500,11 +34952,14 @@
     "tests/office-business-work.test.ts",
     "tests/office-capability-lifecycle.test.ts",
     "tests/office-capability-training.test.ts",
+    "tests/office-career-reconciliation.test.ts",
     "tests/office-city-agents.test.ts",
     "tests/office-claude.test.ts",
     "tests/office-cloud-runtime.test.ts",
     "tests/office-cloud-store.test.ts",
     "tests/office-council-migration.test.ts",
+    "tests/office-editorial-scheduler.test.ts",
+    "tests/office-editorial-work.test.ts",
     "tests/office-execution.test.ts",
     "tests/office-github.test.ts",
     "tests/office-internal-work.test.ts",
@@ -34515,6 +34970,7 @@
     "tests/office-openai.test.ts",
     "tests/office-protocol.test.ts",
     "tests/office-radio-training.test.ts",
+    "tests/office-revenue-work.test.ts",
     "tests/office-review-benchmarks.test.ts",
     "tests/office-role-academy-integration.test.ts",
     "tests/office-role-academy.test.ts",

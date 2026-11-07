@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T04:23:29.909Z
+Generated: 2026-11-07T04:45:37.459Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\office-real-execution`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 994 | 896 | 3370 | 571 | 18672 |
+| 1010 | 912 | 3440 | 571 | 18840 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 254 | 250 | test:254 |
-| `server` | 235 | 230 | server:235 |
+| `tests` | 259 | 255 | test:259 |
+| `server` | 243 | 238 | server:243 |
 | `script` | 104 | 93 | script:104 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 51 | 49 | docs:51 |
+| `docs` | 54 | 52 | docs:54 |
 | `client/src/components` | 30 | 30 | client-component:30 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 35 | 18 | other:23, docs:11, package:1 |
@@ -64,7 +64,7 @@ Package: `rest-express`
 - `server/kong-supervisor-routes.ts`: `/api/kong-supervisor/chat`, `/api/kong-supervisor/state`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
 - `server/marketing-learning-routes.ts`: `/api/marketing-command-center`, `/api/marketing-command-center/run-day`
-- `server/office-business-routes.ts`: `/api/agents-office/business-work`
+- `server/office-business-routes.ts`: `/api/agents-office/${route.path}`
 - `server/office-review-benchmarks.ts`: `/diagnostics`, `/notes`, `/profile`, `/projects/:id`, `/report`, `/users/:id`
 - `server/office-routes.ts`: `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/contact-action`, `/api/agents-office/kong-snapshot`, `/api/agents-office/runs`
 - `server/replit_integrations/chat/routes.ts`: `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/messages`
@@ -185,11 +185,14 @@ Package: `rest-express`
 - `tests/office-business-work.test.ts`
 - `tests/office-capability-lifecycle.test.ts`
 - `tests/office-capability-training.test.ts`
+- `tests/office-career-reconciliation.test.ts`
 - `tests/office-city-agents.test.ts`
 - `tests/office-claude.test.ts`
 - `tests/office-cloud-runtime.test.ts`
 - `tests/office-cloud-store.test.ts`
 - `tests/office-council-migration.test.ts`
+- `tests/office-editorial-scheduler.test.ts`
+- `tests/office-editorial-work.test.ts`
 - `tests/office-execution.test.ts`
 - `tests/office-github.test.ts`
 - `tests/office-internal-work.test.ts`
@@ -200,6 +203,7 @@ Package: `rest-express`
 - `tests/office-openai.test.ts`
 - `tests/office-protocol.test.ts`
 - `tests/office-radio-training.test.ts`
+- `tests/office-revenue-work.test.ts`
 - `tests/office-review-benchmarks.test.ts`
 - `tests/office-role-academy-integration.test.ts`
 - `tests/office-role-academy.test.ts`

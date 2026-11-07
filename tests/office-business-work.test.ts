@@ -84,6 +84,7 @@ test("UTC database wall timestamps are projected with explicit timezone for Wind
 test("unapproved or retired careers cannot start or complete business work",async()=>{
  for(const career of [undefined,{generation:1,battery:0},{generation:1,battery:100,inTrainingUntilGeneration:1}])assert.equal(eligibleBusinessGeneration(career),undefined);
  assert.equal(eligibleBusinessGeneration({generation:2,battery:80}),2);
+ assert.equal(eligibleBusinessGeneration({generation:2,battery:80,scoreReconciliation:{version:1,status:"needs_scope_qualification",recordId:"a".repeat(64),originalCareerDigest:"b".repeat(64)}}),undefined);
  for(const phase of ["before","during"]){const f=database();let eligible=phase!=="before",reads=0;
  const runner=createBusinessWorkRunner({pool:f.pool,owner,now:()=>NOW,getGeneration:async role=>role==="automations"&&eligible?1:undefined,readSource:async role=>{reads++;eligible=false;return source(role);}});
  await runner.tick();const state=await runner.read();assert.equal(reads,phase==="before"?0:1);
