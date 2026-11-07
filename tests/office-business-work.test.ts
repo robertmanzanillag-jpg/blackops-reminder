@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {canonicalEvidenceDigest as digest} from "../server/evidence-json";
 import {BUSINESS_SOURCE_SQL,readBusinessSources,type BusinessPool,type BusinessRole,type BusinessSource} from "../server/office-business-sources";
 import {buildBusinessArtifact} from "../server/office-business-artifacts";
-import {BUSINESS_WORK_KIND,businessWorkCapacity,createBusinessWorkRunner,parseBusinessWork,readBusinessWork} from "../server/office-business-work";
+import {BUSINESS_WORK_KIND,eligibleBusinessGeneration,businessWorkCapacity,createBusinessWorkRunner,parseBusinessWork,readBusinessWork} from "../server/office-business-work";
 import {randomUUID} from "node:crypto";
 const NOW=Date.parse("2026-11-07T04:00:00Z"),owner="owner",iso=(at:number)=>new Date(at).toISOString();
 function source(role:BusinessRole,at=NOW,override:any={}):BusinessSource{
@@ -79,4 +79,14 @@ test("UTC database wall timestamps are projected with explicit timezone for Wind
  try{for(const zone of ["UTC","America/New_York"]){process.env.TZ=zone;assert.equal(types.getTypeParser(1184)("2026-11-07 04:00:00+00").toISOString(),"2026-11-07T04:00:00.000Z");}}
  finally{if(old===undefined)delete process.env.TZ;else process.env.TZ=old;}
  for(const [key,columns] of [["definitions",["next_run_at","last_run_at"]],["runs",["r.started_at","r.finished_at"]],["transactions",["date"]]] as const){for(const column of columns)assert.ok(BUSINESS_SOURCE_SQL[key].includes(`${column} AT TIME ZONE 'UTC' AS`));}
+});
+
+test("unapproved or retired careers cannot start or complete business work",async()=>{
+ for(const career of [undefined,{generation:1,battery:0},{generation:1,battery:100,inTrainingUntilGeneration:1}])assert.equal(eligibleBusinessGeneration(career),undefined);
+ assert.equal(eligibleBusinessGeneration({generation:2,battery:80}),2);
+ for(const phase of ["before","during"]){const f=database();let eligible=phase!=="before",reads=0;
+ const runner=createBusinessWorkRunner({pool:f.pool,owner,now:()=>NOW,getGeneration:async role=>role==="automations"&&eligible?1:undefined,readSource:async role=>{reads++;eligible=false;return source(role);}});
+ await runner.tick();const state=await runner.read();assert.equal(reads,phase==="before"?0:1);
+ if(phase==="before")assert.equal(state.jobs.length,0);else{assert.equal(state.jobs[0].reason,"HOLDER_CHANGED");assert.equal(state.jobs[0].status,"unknown");assert.equal(state.jobs[0].artifact,undefined);}
+ }
 });
