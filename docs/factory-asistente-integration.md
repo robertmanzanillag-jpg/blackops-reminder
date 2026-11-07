@@ -21,7 +21,46 @@ revision, resolves the exact repository head and requires trusted, zero-cost QA 
 identify a real acceptance/regression scenario. The pipeline requires a permanent
 test for that scenario, including when classification is an improvement.
 
-## Remaining activation requirements
+## Isolated UI bridge: implemented, not yet proven in CI
+
+The operator-installed UI bridge is restricted to `server/office-role-work.ts`
+and `tests/office-role-work.test.ts` candidate changes. It builds both immutable
+revisions in credentialless containers without network access. Only bounded,
+validated static bytes leave those containers; candidate Node code never runs in
+the controller and cannot mount the evidence directory.
+
+A separate pinned Playwright container runs the baseline's trusted authentication
+fixture and assertions against both static builds. It measures
+`office-session-login` and `office-company-navigation` in desktop and mobile
+viewports. External services and Google font CSS are synthetic adapters. This is
+UI regression coverage, not proof of role-work improvements, real provider
+connections, production availability or recovery. Backend acceptance retains its
+separate `office-role-acceptance-v1` artifact and scope.
+
+`office-ui-simulation-v1` contains the measured report and eight screenshots.
+`createOfficeUiArtifactReader` authenticates the exact public run, workflow and
+successful UI steps; checks operator-pinned workflow and aggregate harness hashes
+at base/head; and verifies archive, manifests, complete coverage and PNG hashes
+before returning simulation evidence. The redirect download receives no GitHub
+credentials. Configure its explicit archive host allowlist from authenticated
+GitHub redirect discovery, never from candidate input.
+
+The controller must first be installed in a reviewed baseline. Then a harmless
+allowed-leaf probe can exercise the bridge; that probe is infrastructure validation,
+not an agent improvement. No successful real UI bridge run is claimed here.
+The workflow's 25-minute ceiling must be reconciled with worker leases and check
+polling before enabling autonomous orders. Unit tests are not a substitute for
+this real run or the production release gate.
+
+The latest operator handoff reports an active shared-credit ledger and successful
+backend-acceptance proof; those do not activate the software-factory operator,
+orders, autonomous publication or rollback. This change does not configure them.
+
+## Historical integration observations and remaining activation requirements
+
+The revision and deployment observations below describe the earlier integration
+session. They are not current evidence that factory schema or configuration is
+absent; inspect the current deployed revision and ledger before taking action.
 
 Integration branch `codex/asistente-factory-integration` is based on office commit
 `049a0510e88b75ddc5df018c489ec6dda2b327c3`. It transfers only factory files and adds
