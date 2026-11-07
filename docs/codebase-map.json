@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T00:17:30.227Z",
+  "generatedAt": "2026-11-07T00:42:16.934Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-factory-integration",
   "packageName": "rest-express",
   "scripts": {
@@ -124,13 +124,27 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 932,
+    "filesVisible": 928,
     "filesIndexed": 838,
-    "imports": 3092,
+    "imports": 3095,
     "routes": 564,
-    "symbols": 17817
+    "symbols": 17821
   },
   "directories": {
+    "server": {
+      "files": 215,
+      "indexed": 210,
+      "kinds": {
+        "server": 215
+      }
+    },
+    "tests": {
+      "files": 235,
+      "indexed": 231,
+      "kinds": {
+        "test": 235
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -162,10 +176,10 @@
       }
     },
     ".github/workflows": {
-      "files": 4,
+      "files": 2,
       "indexed": 0,
       "kinds": {
-        "other": 4
+        "other": 2
       }
     },
     "bin": {
@@ -274,10 +288,10 @@
       }
     },
     "docs": {
-      "files": 45,
-      "indexed": 42,
+      "files": 41,
+      "indexed": 40,
       "kinds": {
-        "docs": 45
+        "docs": 41
       }
     },
     "examples/clippers-motivation": {
@@ -300,13 +314,6 @@
       "indexed": 1,
       "kinds": {
         "script": 4
-      }
-    },
-    "server": {
-      "files": 214,
-      "indexed": 209,
-      "kinds": {
-        "server": 214
       }
     },
     "server/replit_integrations/batch": {
@@ -342,13 +349,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 234,
-      "indexed": 230,
-      "kinds": {
-        "test": 234
       }
     },
     "tests/fixtures": {
@@ -5434,22 +5434,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -22929,6 +22913,18 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-openai-transport.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "createFactoryOpenAiTransport"
+      ],
+      "symbols": [
+        "createFactoryOpenAiTransport"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-openai.ts",
       "kind": "server",
       "imports": [],
@@ -31855,6 +31851,22 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-openai-transport.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-openai-transport",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "headers",
+        "key",
+        "request"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-openai.test.ts",
       "kind": "test",
       "imports": [
@@ -32713,6 +32725,7 @@
     "tests/software-factory-office-connection.test.ts",
     "tests/software-factory-office-mode.test.ts",
     "tests/software-factory-openai-builder.test.ts",
+    "tests/software-factory-openai-transport.test.ts",
     "tests/software-factory-openai.test.ts",
     "tests/software-factory-pilot-review.test.ts",
     "tests/software-factory-pipeline.test.ts",
