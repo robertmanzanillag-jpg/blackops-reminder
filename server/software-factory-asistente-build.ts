@@ -28,8 +28,7 @@ export function createAsistenteFactoryBuild(options: {
   const paths = [...options.sourcePaths];
   if (!paths.length) throw Error("FACTORY_ASISTENTE_SOURCE_REQUIRED");
   const repository = FACTORY_ASISTENTE_REPOSITORY;
-  const client = createFactoryAsistenteGitHubClient({ request: options.githubRequest,
-    baseBranch: options.baseBranch, writePaths: paths, allowDispatch: options.checks.trigger === "workflow_dispatch" });
+  const clientFor=(signal:AbortSignal)=>createFactoryAsistenteGitHubClient({request:async(url,init)=>{signal.throwIfAborted();return options.githubRequest(url,{...init,signal:init.signal?AbortSignal.any([signal,init.signal]):signal});},baseBranch:options.baseBranch,writePaths:paths,allowDispatch:options.checks.trigger==="workflow_dispatch"});
   const model = { ...options.model };
   const ledger = options.ledger, maxOutputTokens = options.maxOutputTokens;
   const profile = { baseBranch: options.baseBranch, checks: { ...options.checks } };
@@ -37,6 +36,11 @@ export function createAsistenteFactoryBuild(options: {
     if (project.repo !== repository || state.projectId !== project.id || !state.rootJobId || !Number.isSafeInteger(state.repairAttempts) || state.repairAttempts < 0) {
       return { status: "blocked", costCents: 0, reason: "FACTORY_ASISTENTE_SCOPE_INVALID" };
     }
+    const client=clientFor(context.signal);
+    const exportSource:ReturnType<typeof createFactoryAsistenteGitHubSourceExporter>=async(repo,sha,destination)=>{
+      const signal=AbortSignal.any([context.signal,AbortSignal.timeout(90000)]);
+      return createFactoryAsistenteGitHubSourceExporter(clientFor(signal),{sourcePaths:paths,signal})(repo,sha,destination);
+    };
     const key = `factory:${createHash("sha256").update(JSON.stringify([project.id, state.rootJobId, state.repairAttempts])).digest("hex")}`;
     const generate = createOpenAiFactoryTextProvider({ ...model, request: async (url, init) => {
       const remainingMs = await ledger.executionWindow(key);
@@ -57,7 +61,7 @@ export function createAsistenteFactoryBuild(options: {
     });
     const publisher=createGitHubFactoryCandidatePublisher({client,repositories:{[repository]:profile.baseBranch}});
     const checks=createGitHubFactoryChecks({client,repositories:{[repository]:profile.checks},readAcceptance:options.readAcceptance,now:options.now,maxPolls:options.maxPolls,wait:options.wait});
-    const build = createFactoryRemotePipelineBuilder({ exportSource: createFactoryAsistenteGitHubSourceExporter(client),generatePatch,
+    const build = createFactoryRemotePipelineBuilder({ exportSource,generatePatch,
       prepareCandidate:publisher.prepare,finalizeCandidate:publisher.finalize,verifyCandidate:checks.verifyCandidate,
       preflight:async(project,baseSha,context)=>({allowed:await checks.preflight(project.repo,baseSha,context.signal)}),publicationCostCents:0,now:options.now });
     return build(project, state, context);

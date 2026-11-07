@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T01:41:34.240Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-timeout-acceptance",
+  "generatedAt": "2026-11-07T01:58:05.757Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-scoped-export",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 959,
-    "filesIndexed": 864,
+    "filesVisible": 964,
+    "filesIndexed": 866,
     "imports": 3245,
     "routes": 570,
-    "symbols": 18268
+    "symbols": 18276
   },
   "directories": {
     ".": {
@@ -274,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 43,
-      "indexed": 42,
+      "files": 48,
+      "indexed": 44,
       "kinds": {
-        "docs": 43
+        "docs": 48
       }
     },
     "examples/clippers-motivation": {
@@ -5434,6 +5434,22 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -22685,6 +22701,7 @@
         "build",
         "checks",
         "client",
+        "clientFor",
         "createAsistenteFactoryBuild",
         "deadline",
         "generate",
@@ -23219,6 +23236,7 @@
         "allowed",
         "blob",
         "bytes",
+        "check",
         "client",
         "commit",
         "createGitHubFactorySourceExporter",
@@ -32122,11 +32140,14 @@
         "denied",
         "expired",
         "foreign",
+        "hash",
         "input",
         "json",
         "ledger",
         "now",
         "project",
+        "repo",
+        "result",
         "source",
         "workflowPath"
       ],
@@ -32484,6 +32505,7 @@
       ],
       "exports": [],
       "symbols": [
+        "a",
         "blob",
         "blobSha",
         "cases",
@@ -32491,8 +32513,10 @@
         "commitSha",
         "content",
         "dir",
+        "exporter",
         "f",
         "fixture",
+        "missing",
         "small",
         "tree",
         "workspace"
