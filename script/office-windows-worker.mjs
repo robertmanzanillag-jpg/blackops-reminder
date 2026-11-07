@@ -7,8 +7,8 @@ import { ownershipPaths, acquireWorkerOwnership, requestWorkerStop, resumeWorker
 
 const allowed = new Set(['DATABASE_URL','DEFAULT_USER_ID','OPENAI_API_KEY','OFFICE_OPENAI_MODEL','OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT','OFFICE_OPENAI_MAX_OUTPUT_TOKENS','OFFICE_ACADEMY_PREPARATION_ENABLED','OFFICE_ACADEMY_EXECUTION_ENABLED','OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED','OFFICE_EXPECTED_WEB_REVISION','GITHUB_TOKEN','OFFICE_INTERNAL_WORK_ENABLED']);
 const localEnvFiles = ['.env','.env.local','.env.development','.env.development.local','.env.production','.env.production.local','.env.replit','CEO_ASSISTANT_ENV','CEO_ASSISTANT_ENV.local'];
-const roleFlags=['OFFICE_ROLE_WORK_ENABLED','OFFICE_WEB_SOURCES_ENABLED','OFFICE_ROLE_ACADEMY_ENABLED','OPENAI_SHARED_CREDITS_REQUIRED'];
-for(const key of [...roleFlags,'OFFICE_WEB_SOURCE_ORIGIN','OFFICE_ROLE_ACADEMY_DAILY_PAIRS','OPENAI_SHARED_CREDIT_CONFIG'])allowed.add(key);
+const roleFlags=['OFFICE_ROLE_WORK_ENABLED','OFFICE_WEB_SOURCES_ENABLED','OFFICE_ROLE_ACADEMY_ENABLED','OFFICE_CAPABILITY_TRAINING_ENABLED','OPENAI_SHARED_CREDITS_REQUIRED'];
+for(const key of [...roleFlags,'OFFICE_WEB_SOURCE_ORIGIN','OFFICE_ROLE_ACADEMY_DAILY_PAIRS','OPENAI_SHARED_CREDIT_CONFIG','OFFICE_CAPABILITY_MAX_CALLS_PER_DAY'])allowed.add(key);
 const fail = code => { throw new Error(code); };
 export function assertPrivateConfigAcl(configPath, execute = spawnSync, inherited = process.env) {
   const script = "$ErrorActionPreference='Stop'; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User.Value; $acl=Get-Acl -LiteralPath $env:OFFICE_PRIVATE_CONFIG_PATH; if($acl.GetOwner([Security.Principal.SecurityIdentifier]).Value -notin @($sid,'S-1-5-18','S-1-5-32-544')){exit 1}; foreach($rule in $acl.Access){$id=$rule.IdentityReference.Translate([Security.Principal.SecurityIdentifier]).Value; if($rule.AccessControlType -eq 'Allow' -and $id -notin @($sid,'S-1-5-18','S-1-5-32-544')){exit 1}}; Write-Output 'PRIVATE_CONFIG_ACL_OK'";
@@ -49,6 +49,10 @@ export function parseWorkerConfig(raw) {
   if(config.OFFICE_ROLE_ACADEMY_ENABLED==='true'){
     const pairs=Number(config.OFFICE_ROLE_ACADEMY_DAILY_PAIRS);
     if(!Number.isSafeInteger(pairs)||pairs<1||pairs>14||!config.OPENAI_SHARED_CREDIT_CONFIG||config.OPENAI_SHARED_CREDITS_REQUIRED!=='true')fail('ROLE_ACADEMY_LIMITS_REQUIRED');
+  }
+  if(config.OFFICE_CAPABILITY_TRAINING_ENABLED==='true'){
+    const calls=Number(config.OFFICE_CAPABILITY_MAX_CALLS_PER_DAY);
+    if(!Number.isSafeInteger(calls)||calls<1||calls>28||!config.OPENAI_SHARED_CREDIT_CONFIG||config.OPENAI_SHARED_CREDITS_REQUIRED!=='true'||config.OFFICE_ROLE_WORK_ENABLED!=='true')fail('CAPABILITY_TRAINING_LIMITS_REQUIRED');
   }
   if(config.OFFICE_WEB_SOURCES_ENABLED==='true'){
     let origin;try{origin=new URL(config.OFFICE_WEB_SOURCE_ORIGIN);}catch{fail('WEB_SOURCE_ORIGIN_INVALID');}

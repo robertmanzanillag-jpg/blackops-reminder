@@ -1,0 +1,61 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {randomUUID} from "node:crypto";
+import {createCapabilityTrainer,parseCapabilityTraining,capabilityTrainingSummary,type CapabilityTrainingState} from "../server/office-capability-training";
+import {auditSavedRole} from "../server/office-role-audits";
+import {sourceDigest as digest} from "../server/office-role-snapshots";
+import {parseRoleWork,type RoleWorkJob,type RoleWorkState} from "../server/office-role-work";
+const NOW=Date.parse("2026-11-07T01:00:00Z"),owner="owner";
+function realJob(at:number):RoleWorkJob{
+ const sourceBody={version:1 as const,role:"control" as const,ownerKey:digest(owner),observedAt:new Date(at).toISOString(),total:1,rows:[{id:"permission1",scope:"publish",level:"autonomous",risk:"high",enabled:true}]},source={...sourceBody,sourceDigest:digest(sourceBody)};
+ const audit=auditSavedRole("control",source,owner,at),job:RoleWorkJob={id:randomUUID(),fence:randomUUID(),role:"control",generation:1,slot:new Date(at).toISOString().slice(0,10),startedAt:new Date(at).toISOString(),expiresAt:new Date(at+60000).toISOString(),completedAt:new Date(at).toISOString(),status:"completed",source,audit};
+ job.artifactId=digest({id:job.id,role:job.role,generation:1,fence:job.fence,source,audit});return job;
+}
+const reorder=(v:any):any=>Array.isArray(v)?v.map(reorder):v&&typeof v==="object"?Object.fromEntries(Object.keys(v).reverse().map(k=>[k,reorder(v[k])])):v;
+function fixture(mode:"improve"|"tie"|"costfail"|"late"|"regress"|"expensive"|"changed_during"="improve"){
+ let busy=false; let clock=NOW,state:CapabilityTrainingState=parseCapabilityTraining(undefined,owner),calls=0;const generations:Record<string,number>={control:1};let work:RoleWorkState={version:1,ownerKey:digest(owner),jobs:[realJob(NOW)]};const requests=new Map<string,any>();
+ const trainer=createCapabilityTrainer({owner,maxCallsPerDay:2,now:()=>clock,loadWork:async()=>parseRoleWork(work,owner),transact:async(change)=>{const next=change(structuredClone(state),generations,busy);state=parseCapabilityTraining(reorder(next),owner);return structuredClone(state);},run:async(raw,call)=>{
+  calls++;const prompt=JSON.parse(raw),task=prompt.source,trained=prompt.lessons.length>0,holdout=task.id.startsWith("source-triage-holdout");
+  assert.ok(!("expected" in prompt));assert.ok(prompt.lessons.every((l:string)=>!l.includes("heldout:")));
+  const sourceIssue=task.issueCodes.some((c:string)=>["SOURCE_MISSING","SOURCE_STALE"].includes(c));let decision=task.sourceBlocked||sourceIssue?"review_source":task.issueCodes.length?"review_findings":"record_audit";
+  if(!trained && holdout && mode!=="tie")decision=decision==="record_audit"?"review_source":"record_audit";
+  const text=(!trained&&!holdout)||(trained&&!holdout&&mode==="regress")?"{}":JSON.stringify({scope:"source-triage-v1",evidenceIds:task.evidenceIds,issueCodes:task.issueCodes,decision});
+  if(mode==="changed_during")generations.control=2;
+  clock+=mode==="late"?360000:trained?1:2;
+  const result={text,sessionId:`resp_${calls}`,provider:"openai" as const,model:"same-model",completedAt:new Date(clock).toISOString(),usage:{inputTokens:10,outputTokens:5,totalTokens:15}};requests.set(call.executionId,{result,trained});return result;
+ },verifyCost:async request=>{if(mode==="costfail")throw Error("unpriced");return {receiptId:`ledger:${request.responseId}`,executionId:request.executionId,responseId:request.responseId,model:request.model,usage:request.usage,currency:"USD",usd:requests.get(request.executionId).trained?(mode==="expensive"?0.003:0.001):0.002};}});
+ return {trainer,setBusy:(v:boolean)=>{busy=v;},seed:(s:CapabilityTrainingState)=>{state=parseCapabilityTraining(s,owner);},state:()=>state,calls:()=>calls,setTime:(v:number)=>{clock=v;},generations,addJob:(at:number)=>{work={...work,jobs:[...work.jobs,realJob(at)]};}};
+}
+test("real incumbent errors generate bounded lessons; separate priced holdouts apply only narrow policy on next real task",async()=>{
+ const f=fixture();await Promise.all([f.trainer.tick(),f.trainer.tick()]);assert.equal(f.calls(),1);let state=f.state();assert.equal(state.runs[0].kind,"production");assert.equal(state.policies.length,2);assert.deepEqual(state.policies.find(p=>p.status==="candidate")!.lessons,["invalid_output"]);
+ for(let day=1;day<=3;day++){f.setTime(NOW+day*86400000);await f.trainer.tick();}
+ state=f.state();assert.equal(state.runs.filter(r=>r.kind==="holdout").length,3);assert.equal(state.policies.find(p=>p.parentVersion!==null)!.status,"probation");
+ const next=NOW+4*86400000;f.setTime(next);f.addJob(next);await f.trainer.tick();state=f.state();const active=state.policies.find(p=>p.parentVersion!==null)!;assert.equal(active.status,"active");assert.equal(state.runs.at(-1)!.policyVersion,active.version);assert.equal(state.runs.at(-1)!.kind,"production");assert.equal(state.runs.at(-1)!.generation,1);
+ assert.ok(capabilityTrainingSummary(state,owner).every(s=>s.fullRolePromotion===false));assert.doesNotThrow(()=>parseCapabilityTraining(reorder(state),owner));
+ const corrupt=structuredClone(state);corrupt.runs[0].trained!.cost.usd=999;assert.throws(()=>parseCapabilityTraining(corrupt,owner));
+});
+test("equal held-out quality is rejected without policy activation",async()=>{
+ const f=fixture("tie");await f.trainer.tick();for(let day=1;day<=3;day++){f.setTime(NOW+day*86400000);await f.trainer.tick();}assert.equal(f.state().policies.find(p=>p.parentVersion!==null)!.status,"rejected");assert.equal(capabilityTrainingSummary(f.state(),owner).some(s=>s.comparisonQualified),false);
+});
+test("missing independent cost or late completion is unknown and never retried",async()=>{
+ for(const mode of ["costfail","late"] as const){const f=fixture(mode);await f.trainer.tick();assert.equal(f.state().runs[0].status,"unknown");f.setTime(NOW+2*86400000);await f.trainer.tick();assert.equal(f.calls(),1);assert.ok(f.state().runs[0].unverifiedResult);}
+});
+test("changed holder cannot consume old-generation production audit or training budget",async()=>{
+ const f=fixture();f.generations.control=2;await f.trainer.tick();assert.equal(f.calls(),0);assert.equal(f.state().runs.length,0);
+});
+test("higher measured cost prevents qualification and a failed first real application restores the parent policy",async()=>{
+ for(const mode of ["expensive","regress"] as const){const f=fixture(mode);await f.trainer.tick();for(let day=1;day<=3;day++){f.setTime(NOW+day*86400000);await f.trainer.tick();}
+  if(mode==="expensive"){assert.equal(f.state().policies.find(p=>p.parentVersion!==null)!.status,"rejected");continue;}
+  const next=NOW+4*86400000;f.setTime(next);f.addJob(next);await f.trainer.tick();assert.equal(f.state().policies.find(p=>p.parentVersion!==null)!.status,"rejected");assert.equal(f.state().policies.find(p=>p.parentVersion===null)!.status,"active");
+ }
+});
+test("holder changed during provider invocation cannot receive completion, and forged activation fails closed",async()=>{
+ const f=fixture("changed_during");await f.trainer.tick();assert.equal(f.state().runs[0].status,"unknown");
+ const training=fixture();await training.trainer.tick();const forged=structuredClone(training.state());forged.policies.find(p=>p.status==="candidate")!.status="active";assert.throws(()=>parseCapabilityTraining(forged,owner),/UNQUALIFIED/);
+ const lessons=structuredClone(training.state());lessons.policies.find(p=>p.status==="candidate")!.lessons=["decision_mismatch"];assert.throws(()=>parseCapabilityTraining(lessons,owner));
+});
+
+test("shared academy admission and policy capacity fail closed without poisoning durable history",async()=>{
+ const busy=fixture();busy.setBusy(true);await busy.trainer.tick();assert.equal(busy.calls(),0);busy.setBusy(false);await busy.trainer.tick();assert.equal(busy.calls(),1);
+ const f=fixture();const state=parseCapabilityTraining(undefined,owner);for(let generation=2;generation<=100;generation++){const body={role:"control" as const,generation,parentVersion:null,lessons:[],trainingRunId:null};state.policies.push({...body,version:digest({capability:"source-triage-v1",...body}),status:"active"});}f.seed(state);await f.trainer.tick();assert.equal(f.calls(),1);assert.equal(f.state().policies.length,100);assert.equal(f.state().runs[0].status,"completed");assert.equal(f.state().policies.some(p=>p.status==="candidate"),false);parseCapabilityTraining(f.state(),owner);
+});

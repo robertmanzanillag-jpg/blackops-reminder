@@ -4,6 +4,7 @@ import { getCurrentUserId, getSystemUserId } from "./user-context";
 import { agentProbes, summarizeProbe } from "@shared/agent-live-status";
 import { createKongSupervisorConversation } from "./kong-supervisor-conversation";
 import { registerKongSupervisorRoutes } from "./kong-supervisor-routes";
+import {capabilityTrainingSummary,gradeCapabilityTriage} from "./office-capability-training";
 
 const MANUAL_RUN_MIN_INTERVAL_MS = 60_000;
 
@@ -80,7 +81,8 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
         assessment:{passed:receipt.evidence.evaluation.qualified,quality:Math.min(...receipt.evidence.evaluation.artifacts.map(a=>a.candidateQuality)),incumbentQuality:Math.min(...receipt.evidence.evaluation.artifacts.map(a=>a.baselineQuality)),scope:"benchmark",completedAt:receipt.appliedAt},
       }));
       const roleWork=(state.officeExecution?.roleWork?.jobs || []).slice(-28).reverse().map(job=>({id:job.id,role:job.role,status:job.status,startedAt:job.startedAt,completedAt:job.completedAt,reason:job.reason,artifactId:job.artifactId,audit:job.audit,webAudit:job.webAudit}));
-      return res.json({...state.officeExecution?.internalWork || {version:1,jobs:[]},roleWork,roleAcademy:roleAcademySummary(state.officeExecution?.roleAcademy),academy:[...radioAcademy,...academy].sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt)).slice(0,20)});
+      const capabilityTraining={policies:capabilityTrainingSummary(state.officeExecution?.capabilityTraining,ownerUserId()),runs:(state.officeExecution?.capabilityTraining?.runs || []).slice(-28).reverse().map(run=>({id:run.id,role:run.role,kind:run.kind,status:run.status,startedAt:run.startedAt,policyVersion:run.policyVersion,artifactId:run.artifactId,reason:run.reason,...(run.trained?{quality:gradeCapabilityTriage(run.task,run.trained.result.text).quality,costUsd:run.trained.cost.usd,responseId:run.trained.result.sessionId}:{})}))};
+      return res.json({...state.officeExecution?.internalWork || {version:1,jobs:[]},roleWork,capabilityTraining,roleAcademy:roleAcademySummary(state.officeExecution?.roleAcademy),academy:[...radioAcademy,...academy].sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt)).slice(0,20)});
     } catch {return res.status(503).json({error:"No se pudo verificar el trabajo interno."});}
   });
 

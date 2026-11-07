@@ -1,6 +1,7 @@
 import { advanceKongCompany, isKongCompanyAgent } from "./kong-company";
 import { parseInternalWork } from "./office-internal-work";
 import {parseRoleAcademy} from "./office-role-academy";
+import {parseCapabilityTraining} from "./office-capability-training";
 import {parseRoleWork} from "./office-role-work";
 import { getSystemUserId } from "./user-context";
 import type { OfficeKongAuditResult } from "./office-kong";
@@ -290,6 +291,7 @@ function parseDurableCouncilState(raw: string | null, owner: string): CouncilSta
     parseRoleLifecycleState(value.officeExecution.roles);
     parseInternalWork(value.officeExecution.internalWork);
     parseRoleAcademy(value.officeExecution.roleAcademy);
+    parseCapabilityTraining(value.officeExecution.capabilityTraining,owner);
     parseRoleWork(value.officeExecution.roleWork,owner);
   }
   return parseCouncilState(raw);
@@ -613,6 +615,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
     let reservation: AcademyJob | undefined;
     const reserved = await mutate(state => {
       reservation = undefined;
+      if(parseCapabilityTraining(state.officeExecution?.capabilityTraining,deps.userId()).runs.some(run=>run.status==="running" && Date.parse(run.expiresAt)>deps.now()))return state;
       if(parseRoleAcademy(state.officeExecution?.roleAcademy).jobs.some(job=>job.status==="running" && Date.parse(job.expiresAt)>deps.now()))return state;
       state = settleReviewEvaluations(state, deps.now());
       const result = reserveAcademyReview(state.company, curriculum, deps.now());

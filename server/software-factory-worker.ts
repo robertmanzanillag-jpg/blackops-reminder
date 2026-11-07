@@ -14,6 +14,7 @@ export interface FactoryWorkerOptions {
   discoveryReservationCents?: number;
   /** Company orders are admitted explicitly through the shared credit gate. */
   discoveryMode?: "daily" | "company-orders-only";
+  scheduleCompanyOrders?: (owner: string) => Promise<void>;
   /** Operator policy, never a job payload. Stops both staging and production. */
   releaseMode?: "review-only" | "enabled";
   now?: () => Date;
@@ -35,6 +36,7 @@ export function validateFactoryTransition(job: FactoryJob, result: FactoryAdapte
 export function createSoftwareFactoryWorker(options: FactoryWorkerOptions = {}) {
   if(options.releaseMode!==undefined && !["review-only","enabled"].includes(options.releaseMode))throw Error("FACTORY_RELEASE_MODE_INVALID");
   if(options.discoveryMode!==undefined && !["daily","company-orders-only"].includes(options.discoveryMode))throw Error("FACTORY_DISCOVERY_MODE_INVALID");
+  if(options.scheduleCompanyOrders!==undefined && (typeof options.scheduleCompanyOrders!=="function" || options.discoveryMode!=="company-orders-only"))throw Error("FACTORY_COMPANY_SCHEDULER_INVALID");
   const store = options.store || softwareFactoryStore;
   const workerId = options.workerId || `factory-${randomUUID()}`;
   const now = options.now || (() => new Date());
@@ -49,7 +51,12 @@ export function createSoftwareFactoryWorker(options: FactoryWorkerOptions = {}) 
       if (!quarantined && active) await store.heartbeat(workerId,capabilities());
     },
     async schedule() {
-      if (options.discoveryMode === "company-orders-only") return;
+      if (options.discoveryMode === "company-orders-only") {
+        if(!options.scheduleCompanyOrders || !options.scheduleOwner || quarantined)return;
+        const state=await store.status(options.scheduleOwner);
+        if(state.paused || !state.configured)return;
+        await options.scheduleCompanyOrders(options.scheduleOwner);return;
+      }
       if (!options.scheduleOwner || !options.adapters?.discover) return;
       const reserve = options.discoveryReservationCents;
       if (!Number.isSafeInteger(reserve) || reserve! <= 0) throw new Error("FACTORY_DISCOVERY_COST_REQUIRED");
