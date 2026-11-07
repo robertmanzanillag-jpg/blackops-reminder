@@ -11,6 +11,8 @@ const roleWorkEnabled=process.env.OFFICE_ROLE_WORK_ENABLED === "true";
 const webSourcesEnabled=process.env.OFFICE_WEB_SOURCES_ENABLED === "true";
 if(webSourcesEnabled && (!roleWorkEnabled || !process.env.OFFICE_WEB_SOURCE_ORIGIN))throw new Error("Web source origin and role work must be configured together.");
 const roleAcademyEnabled=process.env.OFFICE_ROLE_ACADEMY_ENABLED === "true";
+const capabilityEnabled=process.env.OFFICE_CAPABILITY_TRAINING_ENABLED === "true";
+if(capabilityEnabled && (!roleWorkEnabled || process.env.OFFICE_REVIEW_PROVIDER!=="openai" || !process.env.OPENAI_SHARED_CREDIT_CONFIG))throw new Error("Capability training requires real role audits and shared credit admission.");
 if(roleAcademyEnabled && (process.env.OFFICE_REVIEW_PROVIDER!=="openai" || !process.env.OPENAI_SHARED_CREDIT_CONFIG))throw new Error("Role academy requires the verified shared credit ledger.");
 const requireProtocol = roleWorkEnabled || roleAcademyEnabled || internalEnabled || process.env.OFFICE_REVIEW_PROVIDER === "openai" || process.env.OFFICE_WORKER_REVIEW_ONLY === "true" || process.env.OFFICE_ACADEMY_EXECUTION_ENABLED === "true";
 if (requireProtocol && process.env.AGENT_COUNCIL_STORAGE !== "postgres") throw new Error("Dedicated council storage is required.");
@@ -45,8 +47,22 @@ const roleAcademy=roleExecution && academy?(await import("../server/office-role-
   if(!("provider" in result) || result.provider!=="openai" || !("usage" in result))throw new Error("Role academy requires measured OpenAI execution.");
   return result as import("../server/office-openai").OfficeOpenAIResult;
 }}):undefined;
+const capabilityModule=capabilityEnabled?await import("../server/office-capability-training"):undefined;
+const capabilityCredits=capabilityModule?await (await import("../server/shared-openai-credit-runtime")).loadSharedCreditRuntime(process.env,()=>new Date()):undefined;
+const capabilityExecution=capabilityCredits && academy?(await import("../server/office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"768"},Date.now,{sharedCredits:capabilityCredits}):undefined;
+const capabilityTrainer=capabilityModule && capabilityCredits && capabilityExecution && academy?capabilityModule.createCapabilityTrainer({owner:getSystemUserId(),maxCallsPerDay:Number(process.env.OFFICE_CAPABILITY_MAX_CALLS_PER_DAY),shouldStop:()=>stopping,
+ loadWork:async()=>{const state=await academy!.load();return (await import("../server/office-role-work")).parseRoleWork(state.officeExecution?.roleWork,getSystemUserId());},
+ transact:async change=>{const saved=await academy!.updateOfficeExecution((state,company)=>{
+  const current=capabilityModule.parseCapabilityTraining(state.capabilityTraining,getSystemUserId());
+  const next=change(current,Object.fromEntries(Object.entries(company.careers).map(([role,career])=>[role,career.generation])),Boolean(company.academyJobs?.some(j=>j.status==="running") || state.roleAcademy?.jobs.some(j=>j.status==="running")));
+  capabilityModule.parseCapabilityTraining(next,getSystemUserId());return {...state,capabilityTraining:next};
+ });return saved.capabilityTraining!;},
+ run:async(prompt,call)=>{const result=await capabilityExecution.run(prompt,call.executionId);if(!("provider" in result) || result.provider!=="openai" || !("usage" in result))throw Error("Measured OpenAI execution required");return result as import("../server/office-openai").OfficeOpenAIResult;},
+ verifyCost:(await import("../server/office-training-receipts")).createTrainingReceiptReader(capabilityCredits),
+}):undefined;
 const worker = createOfficeCloudWorker({ scheduledKongOwner, reviewOnlyOwner, ...(execution ? { execute: execution.execute, probeClaude: execution.probe, admission: execution.admission } : {}) });
 let lastAcademyTick = 0;
+let lastCapabilityTick = 0;
 let stopping = false;
 let consecutiveFailures = 0;
 process.on("SIGTERM", () => { stopping = true; });
@@ -64,14 +80,14 @@ try {
         lastAcademyTick = Date.now(); await academy.runCycle();
         if (!stopping && process.env.OFFICE_ACADEMY_EXECUTION_ENABLED === "true") await academy.runAcademyCycle();
         if(internal && !stopping) await internal.tick();
-        let sourcesReady=!webSourcesEnabled;
-        if(webSourcesEnabled && !stopping){try{await (await import("../server/office-web-source-scheduler")).warmOfficeWebSources(process.env.OFFICE_WEB_SOURCE_ORIGIN!);sourcesReady=true;}catch{console.error("Office source export unconfirmed; audit deferred without changing agent life.");}}
-        if(roleWork && sourcesReady && !stopping) await roleWork.tick();
+        if(webSourcesEnabled && !stopping){try{await (await import("../server/office-web-source-scheduler")).warmOfficeWebSources(process.env.OFFICE_WEB_SOURCE_ORIGIN!);}catch{console.error("Office source host wake unconfirmed; audits will validate stored source freshness independently.");}}
+        if(roleWork && !stopping) await roleWork.tick();
         if(roleAcademy && !stopping) await roleAcademy.tick();
         // The web scheduler is disabled in this deployment. Preserve the
         // scout's durable daily cadence here; it only reads public releases.
         if (!stopping) await academy.runScout();
       }
+      if(capabilityTrainer && !stopping && Date.now()-lastCapabilityTick>=60000){lastCapabilityTick=Date.now();await capabilityTrainer.tick();}
       if(!stopping) await worker.tick();
       consecutiveFailures = 0;
     }

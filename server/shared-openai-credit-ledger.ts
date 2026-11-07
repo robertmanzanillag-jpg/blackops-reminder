@@ -98,6 +98,16 @@ export function createSharedOpenAiCreditLedger(options: {
     async status() {
       return transaction((state, at) => ({ grantId: grant.id, ...totals(state), expired: Date.parse(at) >= Date.parse(grant.expiresAt) }));
     },
+    /** Trusted consumers can verify one already-settled receipt. Reading it
+     * grants no execution authority and never releases an uncertain hold. */
+    async settledReceipt(key: string) {
+      identifier.parse(key);
+      return transaction(state => {
+        const row=state.reservations.find(item=>item.key===key);
+        if(!row || row.status!=="settled")fail("SETTLED_RECEIPT_REQUIRED");
+        return row;
+      });
+    },
     async executionWindow(key: string) {
       identifier.parse(key);
       await transaction((state, at) => {

@@ -48,6 +48,9 @@ test('role work requires explicit bounded academy and shared credit configuratio
  for(const invalid of [extra.replace('DAILY_PAIRS=14','DAILY_PAIRS=15'),extra.replace('CREDITS_REQUIRED=true','CREDITS_REQUIRED=false'),extra.replace('https://robertwebsites.com','http://robertwebsites.com'),extra.replace('WORK_ENABLED=true','WORK_ENABLED=false'),extra.replace(credit,'relative.json')])assert.throws(()=>parseWorkerConfig(raw+invalid));
  assert.throws(()=>parseWorkerConfig(raw+'\nOFFICE_ROLE_ACADEMY_ENABLED=true'));
  assert.equal(safeWorkerEnvironment(parseWorkerConfig(raw),{OFFICE_ROLE_WORK_ENABLED:'true'}).OFFICE_ROLE_WORK_ENABLED,undefined);
+ const training=raw+`\nOFFICE_ROLE_WORK_ENABLED=true\nOPENAI_SHARED_CREDITS_REQUIRED=true\nOPENAI_SHARED_CREDIT_CONFIG=${credit}\nOFFICE_CAPABILITY_TRAINING_ENABLED=true\nOFFICE_CAPABILITY_MAX_CALLS_PER_DAY=14`;
+ assert.equal(parseWorkerConfig(training).OFFICE_CAPABILITY_MAX_CALLS_PER_DAY,'14');
+ for(const invalid of [training.replace('PER_DAY=14','PER_DAY=29'),training.replace('WORK_ENABLED=true','WORK_ENABLED=false'),training.replace('CREDITS_REQUIRED=true','CREDITS_REQUIRED=false')])assert.throws(()=>parseWorkerConfig(invalid));
 });
 test('real paths reject inside-repository config and fallback env files', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(),'office-windows-test-'));
