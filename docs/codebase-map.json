@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T01:29:58.963Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-factory-operator",
+  "generatedAt": "2026-11-07T01:30:39.542Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-factory-windows",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 956,
-    "filesIndexed": 861,
-    "imports": 3221,
+    "filesVisible": 960,
+    "filesIndexed": 863,
+    "imports": 3232,
     "routes": 570,
-    "symbols": 18195
+    "symbols": 18223
   },
   "directories": {
     ".": {
@@ -289,10 +289,10 @@
       }
     },
     "script": {
-      "files": 100,
-      "indexed": 91,
+      "files": 103,
+      "indexed": 92,
       "kinds": {
-        "script": 100
+        "script": 103
       }
     },
     "scripts": {
@@ -345,10 +345,10 @@
       }
     },
     "tests": {
-      "files": 242,
-      "indexed": 238,
+      "files": 243,
+      "indexed": 239,
       "kinds": {
-        "test": 242
+        "test": 243
       }
     },
     "tests/fixtures": {
@@ -11123,6 +11123,47 @@
       "routes": []
     },
     {
+      "path": "script/software-factory-windows-worker.mjs",
+      "kind": "script",
+      "imports": [
+        "./office-windows-worker.mjs",
+        "./office-worker-ownership.mjs",
+        "node:child_process",
+        "node:fs",
+        "node:path",
+        "node:url",
+        "node:util"
+      ],
+      "exports": [
+        "factoryWorkerEnvironment",
+        "superviseFactoryChild"
+      ],
+      "symbols": [
+        "args",
+        "code",
+        "configPath",
+        "entry",
+        "env",
+        "factoryWorkerEnvironment",
+        "fail",
+        "localEnvFiles",
+        "main",
+        "office",
+        "ownership",
+        "paths",
+        "privateFile",
+        "relative",
+        "repo",
+        "resolved",
+        "result",
+        "stop",
+        "superviseFactoryChild",
+        "timer",
+        "unsafe"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/software-factory-worker.ts",
       "kind": "script",
       "imports": [
@@ -11137,6 +11178,7 @@
       "exports": [],
       "symbols": [
         "main",
+        "message",
         "module",
         "modulePath",
         "owner",
@@ -32982,6 +33024,26 @@
         "out",
         "response",
         "root"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-windows.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/software-factory-windows-worker.mjs",
+        "node:assert/strict",
+        "node:events",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "child",
+        "code",
+        "env",
+        "github",
+        "office",
+        "paths"
       ],
       "routes": []
     },
