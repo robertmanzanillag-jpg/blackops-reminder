@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-07T02:54:35.189Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\office-marketing-persistence`
+Generated: 2026-11-07T03:05:34.191Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-deadline-fixture`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 982 | 882 | 3318 | 570 | 18500 |
+| 982 | 882 | 3320 | 570 | 18506 |
 
 ## Entrypoints
 - `client/src/App.tsx`
