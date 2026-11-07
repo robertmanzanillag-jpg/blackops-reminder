@@ -54,6 +54,7 @@ expertMode = true
 
 [userenv.shared]
 DEFAULT_USER_ID = "mock-user-123"
+OFFICE_WEB_REVISION = "fa4d9c8a8ed833bb410cb6806a88624f3cfda662"
 
 [postMerge]
 path = "scripts/post-merge.sh"
