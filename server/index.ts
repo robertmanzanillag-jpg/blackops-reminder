@@ -19,6 +19,7 @@ import { initializeRevenueEnginePersistence } from "./revenue-engine";
 import { initializeBlackRoomRemoteControlPersistence } from "./blackroom-remote-control";
 import { shouldStartResourceIntensiveSchedulers } from "./background-scheduler-policy";
 import { officeWebProtocol } from "./office-protocol";
+import {officeWebSourceStatus,startOfficeWebSourceExporter} from "./office-web-source-scheduler";
 
 const app = express();
 const httpServer = createServer(app);
@@ -35,6 +36,7 @@ app.get(["/health", "/api/health"], (_req, res) => {
     ready: true,
     service: "blackops-reminder",
     officeProtocol: officeWebProtocol(),
+    officeSources:officeWebSourceStatus(),
     instanceId,
     checkedAt: new Date().toISOString(),
     startedAt: instanceStartedAt.toISOString(),
@@ -426,6 +428,7 @@ app.use((req, res, next) => {
     },
     () => {
       log(`serving on ${host}:${port}`);
+      void startOfficeWebSourceExporter().catch(()=>log("Office source exporter unavailable; saved sources must not be treated as fresh.","scheduler"));
       startReminderScheduler();
       startHealthCheckScheduler();
       startMarketNewsScheduler();

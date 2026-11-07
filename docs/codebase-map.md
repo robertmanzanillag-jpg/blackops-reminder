@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T00:16:31.892Z
+Generated: 2026-11-07T00:17:30.227Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-factory-integration`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 908 | 818 | 3025 | 564 | 17586 |
+| 932 | 838 | 3092 | 564 | 17817 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 225 | 221 | test:225 |
-| `server` | 206 | 201 | server:206 |
+| `tests` | 234 | 230 | test:234 |
+| `server` | 214 | 209 | server:214 |
 | `script` | 93 | 85 | script:93 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 40 | 39 | docs:40 |
+| `docs` | 45 | 42 | docs:45 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
@@ -192,11 +192,20 @@ Package: `rest-express`
 - `tests/office-protocol.test.ts`
 - `tests/office-radio-training.test.ts`
 - `tests/office-review-benchmarks.test.ts`
+- `tests/office-role-academy-integration.test.ts`
+- `tests/office-role-academy.test.ts`
+- `tests/office-role-audits.test.ts`
+- `tests/office-role-curricula.test.ts`
 - `tests/office-role-lifecycle.test.ts`
+- `tests/office-role-snapshots.test.ts`
+- `tests/office-role-work.test.ts`
 - `tests/office-routes.test.ts`
 - `tests/office-runtime.test.ts`
 - `tests/office-shared-credits.test.ts`
 - `tests/office-token-budget.test.ts`
+- `tests/office-web-role-sources.test.ts`
+- `tests/office-web-role-store.test.ts`
+- `tests/office-web-source-scheduler.test.ts`
 - `tests/office-worker-capabilities.test.ts`
 - `tests/office-worker-watchdog.test.ts`
 - `tests/owner-office-storage.test.ts`
