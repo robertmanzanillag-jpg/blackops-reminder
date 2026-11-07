@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T02:02:28.732Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-artifact-hosts",
+  "generatedAt": "2026-11-07T02:27:14.679Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-build-recovery",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 965,
-    "filesIndexed": 867,
-    "imports": 3248,
+    "filesVisible": 963,
+    "filesIndexed": 868,
+    "imports": 3271,
     "routes": 570,
-    "symbols": 18285
+    "symbols": 18369
   },
   "directories": {
     ".": {
@@ -162,10 +162,10 @@
       }
     },
     ".github/workflows": {
-      "files": 4,
+      "files": 3,
       "indexed": 0,
       "kinds": {
-        "other": 4
+        "other": 3
       }
     },
     "bin": {
@@ -274,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 48,
-      "indexed": 44,
+      "files": 45,
+      "indexed": 43,
       "kinds": {
-        "docs": 48
+        "docs": 45
       }
     },
     "examples/clippers-motivation": {
@@ -303,10 +303,10 @@
       }
     },
     "server": {
-      "files": 224,
-      "indexed": 219,
+      "files": 225,
+      "indexed": 220,
       "kinds": {
-        "server": 224
+        "server": 225
       }
     },
     "server/replit_integrations/batch": {
@@ -345,10 +345,10 @@
       }
     },
     "tests": {
-      "files": 244,
-      "indexed": 240,
+      "files": 245,
+      "indexed": 241,
       "kinds": {
-        "test": 244
+        "test": 245
       }
     },
     "tests/fixtures": {
@@ -5449,22 +5449,6 @@
       "routes": []
     },
     {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5508,6 +5492,14 @@
     },
     {
       "path": "docs/factory-asistente-operator.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-build-recovery.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -19950,6 +19942,7 @@
         "zod"
       ],
       "exports": [
+        "BLACKROOM_SOURCE_PROJECTION_SQL",
         "SourcePool",
         "WEB_SOURCE_ROLES",
         "WebRoleSource",
@@ -19963,12 +19956,15 @@
         "webSourceRowSchema"
       ],
       "symbols": [
+        "BLACKROOM_SOURCE_PROJECTION_SQL",
         "Part",
         "WEB_SOURCE_ROLES",
         "all",
         "assertWebSourceOwner",
         "auditWebRoleSource",
         "body",
+        "boundedLeaf",
+        "candidates",
         "clipMetrics",
         "compose",
         "counts",
@@ -19987,6 +19983,7 @@
         "news",
         "now",
         "products",
+        "projectRemoteObject",
         "projected",
         "provenanceSchema",
         "rawClipCycle",
@@ -19999,6 +19996,11 @@
         "rawSocial",
         "rawSuppliers",
         "readWebRoleSources",
+        "remoteDeviceProjection",
+        "remoteQueue",
+        "remoteQueueProjection",
+        "remoteTotalsProjection",
+        "reportLimit",
         "row",
         "s",
         "social",
@@ -22807,6 +22809,7 @@
         "readAcceptance",
         "readMainOrder",
         "readUi",
+        "recoveryPrevious",
         "reservation",
         "resolved",
         "review",
@@ -22888,6 +22891,84 @@
         "seen",
         "text",
         "trees"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-build-recovery.ts",
+      "kind": "server",
+      "imports": [
+        "../script/software-factory-ui-static.mjs",
+        "./agent-council-store",
+        "./shared-openai-credit-ledger",
+        "./software-factory",
+        "./software-factory-pipeline",
+        "./software-factory-store",
+        "node:child_process",
+        "node:crypto",
+        "node:util",
+        "zod"
+      ],
+      "exports": [
+        "FactoryBuildRecoveryRequest",
+        "RECOVERY_EQUIVALENT_PATHS",
+        "buildRecoveryDigest",
+        "buildRecoverySchemaSql",
+        "enqueueFailedBuildRecovery",
+        "loadFailedBuildRecovery",
+        "recoverableFailedBuild",
+        "verifyRecoveryRebase"
+      ],
+      "symbols": [
+        "RECOVERY_EQUIVALENT_PATHS",
+        "RebaseProof",
+        "WorkflowBlobChange",
+        "admitted",
+        "approval",
+        "before",
+        "budget",
+        "buildRecoveryDigest",
+        "buildRecoverySchemaSql",
+        "c",
+        "canonical",
+        "control",
+        "credit",
+        "decode",
+        "enqueueFailedBuildRecovery",
+        "exception",
+        "existing",
+        "fail",
+        "failed",
+        "failedRow",
+        "git",
+        "hash",
+        "input",
+        "inserted",
+        "job",
+        "jobInput",
+        "key",
+        "ledger",
+        "loadFailedBuildRecovery",
+        "matched",
+        "matchesRecovery",
+        "namespace",
+        "next",
+        "outcome",
+        "ownerHash",
+        "prior",
+        "project",
+        "proof",
+        "rebase",
+        "recoverableFailedBuild",
+        "recoveryInput",
+        "request",
+        "requestSchema",
+        "root",
+        "rootRow",
+        "rows",
+        "run",
+        "state",
+        "verifyRecoveryRebase"
       ],
       "routes": []
     },
@@ -31407,6 +31488,7 @@
         "db",
         "fixture",
         "foreign",
+        "id",
         "news",
         "now",
         "pool",
@@ -31416,6 +31498,7 @@
         "secondId",
         "source",
         "sources",
+        "sql",
         "totals"
       ],
       "routes": []
@@ -32285,6 +32368,52 @@
         "subtree",
         "tree",
         "workflow"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-build-recovery.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/agent-council-store",
+        "../server/software-factory-build-recovery",
+        "../server/software-factory-pipeline",
+        "../server/software-factory-store",
+        "node:assert/strict",
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test",
+        "node:util",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "at",
+        "bin",
+        "credit",
+        "dir",
+        "env",
+        "exec",
+        "execute",
+        "file",
+        "git",
+        "grant",
+        "jobs",
+        "namespace",
+        "options",
+        "outcome",
+        "r",
+        "repository",
+        "retryCredit",
+        "retryState",
+        "root",
+        "rootInput",
+        "second",
+        "seed",
+        "state"
       ],
       "routes": []
     },
@@ -33683,6 +33812,7 @@
     "tests/software-factory-asistente-review.test.ts",
     "tests/software-factory-asistente-source.test.ts",
     "tests/software-factory-asistente-success.test.ts",
+    "tests/software-factory-build-recovery.test.ts",
     "tests/software-factory-builder.test.ts",
     "tests/software-factory-company-scheduler.test.ts",
     "tests/software-factory-company.test.ts",

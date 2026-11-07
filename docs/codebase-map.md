@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-07T02:02:28.732Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-artifact-hosts`
+Generated: 2026-11-07T02:27:14.679Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-build-recovery`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 965 | 867 | 3248 | 570 | 18285 |
+| 963 | 868 | 3271 | 570 | 18369 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 244 | 240 | test:244 |
-| `server` | 224 | 219 | server:224 |
+| `tests` | 245 | 241 | test:245 |
+| `server` | 225 | 220 | server:225 |
 | `script` | 103 | 92 | script:103 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 48 | 44 | docs:48 |
+| `docs` | 45 | 43 | docs:45 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
@@ -236,6 +236,7 @@ Package: `rest-express`
 - `tests/software-factory-asistente-review.test.ts`
 - `tests/software-factory-asistente-source.test.ts`
 - `tests/software-factory-asistente-success.test.ts`
+- `tests/software-factory-build-recovery.test.ts`
 - `tests/software-factory-builder.test.ts`
 - `tests/software-factory-company-scheduler.test.ts`
 - `tests/software-factory-company.test.ts`
