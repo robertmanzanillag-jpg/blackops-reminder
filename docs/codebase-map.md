@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T00:09:38.601Z
+Generated: 2026-11-07T00:20:34.969Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\office-role-completion`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 924 | 830 | 3049 | 564 | 17735 |
+| 922 | 832 | 3070 | 564 | 17818 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 230 | 226 | test:230 |
-| `server` | 210 | 205 | server:210 |
+| `tests` | 232 | 228 | test:232 |
+| `server` | 212 | 207 | server:212 |
 | `script` | 93 | 85 | script:93 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 45 | 42 | docs:45 |
+| `docs` | 41 | 40 | docs:41 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
@@ -176,6 +176,7 @@ Package: `rest-express`
 - `tests/office-academy-benchmarks.test.ts`
 - `tests/office-academy-promotion.test.ts`
 - `tests/office-academy-runner.test.ts`
+- `tests/office-capability-training.test.ts`
 - `tests/office-city-agents.test.ts`
 - `tests/office-claude.test.ts`
 - `tests/office-cloud-runtime.test.ts`
@@ -203,6 +204,7 @@ Package: `rest-express`
 - `tests/office-runtime.test.ts`
 - `tests/office-shared-credits.test.ts`
 - `tests/office-token-budget.test.ts`
+- `tests/office-training-receipts.test.ts`
 - `tests/office-web-role-sources.test.ts`
 - `tests/office-web-role-store.test.ts`
 - `tests/office-web-source-scheduler.test.ts`

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T00:09:38.601Z",
+  "generatedAt": "2026-11-07T00:20:34.969Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-role-completion",
   "packageName": "rest-express",
   "scripts": {
@@ -124,13 +124,27 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 924,
-    "filesIndexed": 830,
-    "imports": 3049,
+    "filesVisible": 922,
+    "filesIndexed": 832,
+    "imports": 3070,
     "routes": 564,
-    "symbols": 17735
+    "symbols": 17818
   },
   "directories": {
+    "server": {
+      "files": 212,
+      "indexed": 207,
+      "kinds": {
+        "server": 212
+      }
+    },
+    "tests": {
+      "files": 232,
+      "indexed": 228,
+      "kinds": {
+        "test": 232
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -162,10 +176,10 @@
       }
     },
     ".github/workflows": {
-      "files": 4,
+      "files": 2,
       "indexed": 0,
       "kinds": {
-        "other": 4
+        "other": 2
       }
     },
     "bin": {
@@ -274,10 +288,10 @@
       }
     },
     "docs": {
-      "files": 45,
-      "indexed": 42,
+      "files": 41,
+      "indexed": 40,
       "kinds": {
-        "docs": 45
+        "docs": 41
       }
     },
     "examples/clippers-motivation": {
@@ -300,13 +314,6 @@
       "indexed": 1,
       "kinds": {
         "script": 4
-      }
-    },
-    "server": {
-      "files": 210,
-      "indexed": 205,
-      "kinds": {
-        "server": 210
       }
     },
     "server/replit_integrations/batch": {
@@ -342,13 +349,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 230,
-      "indexed": 226,
-      "kinds": {
-        "test": 230
       }
     },
     "tests/fixtures": {
@@ -5449,22 +5449,6 @@
       "routes": []
     },
     {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -10536,6 +10520,7 @@
         "allowed",
         "args",
         "assertPrivateConfigAcl",
+        "calls",
         "cap",
         "code",
         "config",
@@ -10609,7 +10594,13 @@
       "exports": [],
       "symbols": [
         "capabilities",
+        "capabilityCredits",
+        "capabilityEnabled",
+        "capabilityExecution",
+        "capabilityModule",
+        "capabilityTrainer",
         "checkProtocol",
+        "current",
         "execution",
         "heartbeat",
         "internal",
@@ -10617,6 +10608,7 @@
         "internalModule",
         "main",
         "module",
+        "next",
         "protocolPool",
         "requireProtocol",
         "result",
@@ -11210,6 +11202,7 @@
         "./agent-council",
         "./kong-supervisor-conversation",
         "./kong-supervisor-routes",
+        "./office-capability-training",
         "./office-role-academy",
         "./user-context",
         "@shared/agent-live-status",
@@ -11223,6 +11216,7 @@
         "academy",
         "assessment",
         "body",
+        "capabilityTraining",
         "council",
         "councilInstance",
         "current",
@@ -11283,6 +11277,7 @@
         "./blackroom-office-operations",
         "./database-url",
         "./kong-company",
+        "./office-capability-training",
         "./office-internal-work",
         "./office-kong",
         "./office-role-academy",
@@ -18596,6 +18591,77 @@
       "routes": []
     },
     {
+      "path": "server/office-capability-training.ts",
+      "kind": "server",
+      "imports": [
+        "./office-openai",
+        "./office-role-snapshots",
+        "./office-role-work",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "CapabilityTrainingState",
+        "VerifiedCapabilityCost",
+        "capabilityHoldout",
+        "capabilityTrainingSummary",
+        "createCapabilityTrainer",
+        "gradeCapabilityTriage",
+        "parseCapabilityTraining"
+      ],
+      "symbols": [
+        "CAPABILITY",
+        "ErrorCode",
+        "Policy",
+        "Run",
+        "Task",
+        "action",
+        "began",
+        "body",
+        "candidate",
+        "candidates",
+        "capabilityHoldout",
+        "capabilityTrainingSummary",
+        "costSchema",
+        "createCapabilityTrainer",
+        "current",
+        "decision",
+        "durationMs",
+        "eligible",
+        "errors",
+        "fixtures",
+        "grade",
+        "gradeCapabilityTriage",
+        "issues",
+        "job",
+        "lessonRules",
+        "measured",
+        "measuredSchema",
+        "now",
+        "outputSchema",
+        "pairs",
+        "parent",
+        "parseCapabilityTraining",
+        "policy",
+        "policySchema",
+        "policyVersion",
+        "prompt",
+        "realTask",
+        "resultSchema",
+        "runProof",
+        "runSchema",
+        "sessions",
+        "sourceCodes",
+        "state",
+        "taskSchema",
+        "usageSchema",
+        "used",
+        "value",
+        "work"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/office-claude.ts",
       "kind": "server",
       "imports": [
@@ -19552,6 +19618,25 @@
         "requestSha256",
         "reservation",
         "signal"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-training-receipts.ts",
+      "kind": "server",
+      "imports": [
+        "./office-capability-training",
+        "./shared-openai-credit-runtime",
+        "node:crypto"
+      ],
+      "exports": [
+        "createTrainingReceiptReader"
+      ],
+      "symbols": [
+        "createTrainingReceiptReader",
+        "key",
+        "micro",
+        "receipt"
       ],
       "routes": []
     },
@@ -29684,6 +29769,39 @@
       "routes": []
     },
     {
+      "path": "tests/office-capability-training.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-capability-training",
+        "../server/office-role-audits",
+        "../server/office-role-snapshots",
+        "../server/office-role-work",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "audit",
+        "busy",
+        "corrupt",
+        "f",
+        "fixture",
+        "lessons",
+        "next",
+        "realJob",
+        "reorder",
+        "result",
+        "sourceBody",
+        "sourceIssue",
+        "text",
+        "trainer",
+        "training"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-city-agents.test.ts",
       "kind": "test",
       "imports": [
@@ -30248,7 +30366,9 @@
         "roleRun",
         "roles",
         "running",
-        "started"
+        "started",
+        "state",
+        "trainer"
       ],
       "routes": []
     },
@@ -30498,6 +30618,22 @@
       "routes": []
     },
     {
+      "path": "tests/office-training-receipts.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-training-receipts",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "reader",
+        "request"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-web-role-sources.test.ts",
       "kind": "test",
       "imports": [
@@ -30592,7 +30728,8 @@
         "repo",
         "result",
         "root",
-        "source"
+        "source",
+        "training"
       ],
       "routes": []
     },
@@ -31151,6 +31288,7 @@
         "input",
         "mutable",
         "operation",
+        "receipt",
         "reopened",
         "repeated",
         "restarted",
@@ -32428,6 +32566,7 @@
     "tests/office-academy-benchmarks.test.ts",
     "tests/office-academy-promotion.test.ts",
     "tests/office-academy-runner.test.ts",
+    "tests/office-capability-training.test.ts",
     "tests/office-city-agents.test.ts",
     "tests/office-claude.test.ts",
     "tests/office-cloud-runtime.test.ts",
@@ -32455,6 +32594,7 @@
     "tests/office-runtime.test.ts",
     "tests/office-shared-credits.test.ts",
     "tests/office-token-budget.test.ts",
+    "tests/office-training-receipts.test.ts",
     "tests/office-web-role-sources.test.ts",
     "tests/office-web-role-store.test.ts",
     "tests/office-web-source-scheduler.test.ts",

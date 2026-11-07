@@ -50,7 +50,7 @@ export function createRoleAcademyRunner(options:{council:Pick<ReturnType<typeof 
    admitted=undefined;const parsed=parseRoleAcademy(state.roleAcademy);
    const jobs=parsed.jobs.map(j=>j.status==="running" && Date.parse(j.expiresAt)<=start?{...j,status:"unknown" as const,reason:"Interrupted evaluation; reconcile before retry."}:j);
    const next={...state,roleAcademy:{version:1 as const,jobs}};
-   if(jobs.length>=200 || jobs.some(j=>j.status==="running") || company.academyJobs?.some(j=>j.status==="running"))return next;
+   if(jobs.length>=200 || jobs.some(j=>j.status==="running") || company.academyJobs?.some(j=>j.status==="running") || state.capabilityTraining?.runs.some(r=>r.status==="running"))return next;
    if(jobs.filter(j=>start-Date.parse(j.startedAt)<86400000).length>=options.dailyPairs)return next;
    // Fair order: all roles receive their first pair before any receives a second.
    const roles=[...OFFICE_CURRICULUM_ROLES].sort((a,b)=>jobs.filter(j=>j.role===a).length-jobs.filter(j=>j.role===b).length);
