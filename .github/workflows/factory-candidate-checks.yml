@@ -104,7 +104,17 @@ jobs:
           test "$(git -C baseline-checkout rev-parse HEAD)" = "$base"
           for tree in baseline-checkout checkout; do
             test -z "$(find "$tree" -path "$tree/.git" -prune -o -type l -print -quit)"
-            test -z "$(find "$tree" -path "$tree/.git" -prune -o -type d \( -name node_modules -o -name credentials -o -name secrets -o -name .aws -o -name .ssh \) -print -quit)"
+            test -z "$(find "$tree" -path "$tree/.git" -prune -o -type d \( -name node_modules -o -name .aws -o -name .ssh \) -print -quit)"
+            # Only the two tracked documentation placeholders may occupy these directories.
+            test -z "$(find "$tree" -path "$tree/.git" -prune -o -type d \( -name credentials -o -name secrets \) ! -path "$tree/credentials" ! -path "$tree/secrets" -print -quit)"
+            for protected in credentials secrets; do
+              if [ -d "$tree/$protected" ]; then
+                test -z "$(find "$tree/$protected" -mindepth 1 ! -path "$tree/$protected/README.md" -print -quit)"
+                test -f "$tree/$protected/README.md"
+                git -C "$tree" ls-files --error-unmatch "$protected/README.md" >/dev/null
+                cmp "baseline-checkout/$protected/README.md" "$tree/$protected/README.md"
+              fi
+            done
             test -z "$(find "$tree" -path "$tree/.git" -prune -o -type f \( -name '.env' -o -name '.env.*' -o -name '*.pem' -o -name '*.key' -o -name '*.p12' -o -name '*.pfx' -o -name id_rsa -o -name id_ed25519 \) -print -quit)"
           done
           cmp baseline-checkout/package.json checkout/package.json

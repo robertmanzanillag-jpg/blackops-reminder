@@ -24,7 +24,13 @@ async function revision(root:string,sha:string,controller:string,dependencies:st
  const timeout=setTimeout(()=>{runtime.close();child.kill();},60000);
  let stderr=0;child.stderr.on("data",b=>{stderr+=b.length;if(stderr>65536){runtime.close();child.kill();}});child.once("error",runtime.close);child.once("exit",runtime.close);
  try{return {headSha:sha,...await measureRoleWorkAcceptance(runtime)};}
- finally{clearTimeout(timeout);runtime.close();child.stdin.end();await exec("docker",["rm","-f",name],{timeout:15000,maxBuffer:65536});}
+ finally{
+  clearTimeout(timeout);runtime.close();child.stdin.end();
+  // --rm may already have removed the exited guest. Verify absence independently.
+  await exec("docker",["rm","-f",name],{timeout:15000,maxBuffer:65536}).catch(()=>undefined);
+  const remaining=await exec("docker",["ps","-aq","--filter",`name=^/${name}$`],{timeout:15000,maxBuffer:65536});
+  if(remaining.stdout.trim())throw Error("QA_CONTAINER_CLEANUP_FAILED");
+ }
 }
 async function main(){
  if(process.argv[2]==="--guest"){
