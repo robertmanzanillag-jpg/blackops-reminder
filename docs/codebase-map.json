@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T02:29:28.484Z",
+  "generatedAt": "2026-11-07T02:33:22.609Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-build-recovery",
   "packageName": "rest-express",
   "scripts": {
@@ -124,18 +124,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 971,
-    "filesIndexed": 874,
+    "filesVisible": 975,
+    "filesIndexed": 875,
     "imports": 3285,
     "routes": 570,
-    "symbols": 18407
+    "symbols": 18422
   },
   "directories": {
     ".": {
-      "files": 34,
+      "files": 35,
       "indexed": 18,
       "kinds": {
-        "other": 22,
+        "other": 23,
         "docs": 11,
         "package": 1
       }
@@ -274,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 50,
-      "indexed": 46,
+      "files": 51,
+      "indexed": 47,
       "kinds": {
-        "docs": 50
+        "docs": 51
       }
     },
     "examples/clippers-motivation": {
@@ -354,6 +354,13 @@
     "tests/fixtures": {
       "files": 2,
       "indexed": 2,
+      "kinds": {
+        "test": 2
+      }
+    },
+    "tests/fixtures/factory-exact-source": {
+      "files": 2,
+      "indexed": 0,
       "kinds": {
         "test": 2
       }
@@ -5516,6 +5523,14 @@
     },
     {
       "path": "docs/factory-build-recovery.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-exact-source-edits.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -22784,6 +22799,7 @@
         "paths",
         "profile",
         "publisher",
+        "ref",
         "remainingMs",
         "repository",
         "requestSha256",
@@ -23616,11 +23632,16 @@
         "createOpenAiFactoryPatchGenerator"
       ],
       "symbols": [
+        "before",
         "createOpenAiFactoryPatchGenerator",
         "edit",
+        "edits",
         "end",
+        "exactSourcePatch",
         "files",
         "generate",
+        "group",
+        "grouped",
         "input",
         "modelFiles",
         "offset",
@@ -23634,7 +23655,9 @@
         "rootStat",
         "segments",
         "signal",
+        "source",
         "sources",
+        "start",
         "stat",
         "text",
         "updated",
@@ -32361,6 +32384,7 @@
         "repo",
         "result",
         "source",
+        "stale",
         "workflowPath"
       ],
       "routes": []
@@ -32949,13 +32973,19 @@
       ],
       "exports": [],
       "symbols": [
+        "cases",
         "common",
         "context",
         "data",
+        "edits",
         "failed",
         "generate",
         "generateText",
+        "gitMissing",
+        "gitProbe",
         "input",
+        "make",
+        "originals",
         "patch",
         "rejected",
         "result",

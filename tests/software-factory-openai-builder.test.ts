@@ -131,3 +131,49 @@ test("plain text model context excludes all tags and attributes including quoted
     assert.equal(result.costCents,1);
   } finally {await rm(workspace,{recursive:true,force:true});}
 });
+
+test("exact source edits use original offsets across files and generate strict deterministic hunks",async()=>{
+ const workspace=await mkdtemp(path.join(os.tmpdir(),"factory-exact-edits-"));
+ try{
+  await writeFile(path.join(workspace,"app.ts"),"const first = 1;\nconst second = 2;\n");await writeFile(path.join(workspace,"test.ts"),"assert.equal(first, 1);\n");
+  const edits=[{path:"test.ts",before:"first, 1",after:"second, 1"},{path:"app.ts",before:"second",after:"third"},{path:"app.ts",before:"first",after:"second"}];
+  const make=(value:unknown)=>createOpenAiFactoryPatchGenerator({sourcePaths:{"owner/app":["app.ts","test.ts"]},maxOutputTokens:1000,patchMode:"exactSourceEdits",generateText:async request=>{assert.match(request.instructions,/ORIGINAL/);return {status:"completed",text:JSON.stringify(value),costCents:7,inputTokens:20,outputTokens:30};}});
+  const result=await make({edits})(input,{workspace,maxCostCents:10});
+  assert.equal(result.costCents,7);assert.equal(result.diagnostic,undefined);validateFactoryPublicationPatch(result.patch);
+  assert.equal(result.patch,"diff --git a/app.ts b/app.ts\n--- a/app.ts\n+++ b/app.ts\n@@ -1,2 +1,2 @@\n-const first = 1;\n-const second = 2;\n+const second = 1;\n+const third = 2;\ndiff --git a/test.ts b/test.ts\n--- a/test.ts\n+++ b/test.ts\n@@ -1,1 +1,1 @@\n-assert.equal(first, 1);\n+assert.equal(second, 1);\n");
+  assert.equal((await make({edits:[...edits].reverse()})(input,{workspace,maxCostCents:10})).patch,result.patch);
+ }finally{await rm(workspace,{recursive:true,force:true});}
+});
+
+test("invalid exact edits retain known usage and expose only static conversion diagnostics",async()=>{
+ const workspace=await mkdtemp(path.join(os.tmpdir(),"factory-exact-reject-"));
+ try{await writeFile(path.join(workspace,"app.ts"),"const first = 1;\nconst second = 2;\n");const edit={path:"app.ts",before:"first",after:"third"};
+  const cases:Array<[string,string]>=[['{',"MALFORMED_JSON"],[JSON.stringify({edits:[{...edit,extra:true}]}),"INVALID_EDIT_SHAPE"],[JSON.stringify({edits:[{...edit,path:"secrets/value"}]}),"EDIT_PATH_NOT_ALLOWED"],[JSON.stringify({edits:[{...edit,before:"const"}]}),"NONUNIQUE_EDIT"],[JSON.stringify({edits:[{...edit,before:"absent"}]}),"NONUNIQUE_EDIT"],[JSON.stringify({edits:[{...edit,before:"first = 1"},{...edit,before:"= 1"}]}),"OVERLAPPING_EDITS"],[JSON.stringify({edits:[{...edit,after:"x\r\ny"}]}),"INVALID_EDIT_TEXT"],[JSON.stringify({edits:[{...edit,after:"x\u0000y"}]}),"INVALID_EDIT_TEXT"],[JSON.stringify({edits:[{...edit,after:"\ud800"}]}),"INVALID_EDIT_TEXT"],[JSON.stringify({edits:Array(17).fill(edit)}),"EDIT_LIMIT_EXCEEDED"]];
+  for(const [text,diagnostic] of cases){const generate=createOpenAiFactoryPatchGenerator({sourcePaths:{"owner/app":["app.ts"]},maxOutputTokens:1000,patchMode:"exactSourceEdits",generateText:async()=>({status:"completed",text,costCents:7,inputTokens:20,outputTokens:30})});assert.deepEqual(await generate(input,{workspace,maxCostCents:10}),{patch:"",costCents:7,diagnostic});}
+ }finally{await rm(workspace,{recursive:true,force:true});}
+});
+
+test("unsupported exact source is rejected before a paid request",async()=>{
+ const workspace=await mkdtemp(path.join(os.tmpdir(),"factory-exact-source-"));let calls=0;
+ try{const generate=createOpenAiFactoryPatchGenerator({sourcePaths:{"owner/app":["app.ts"]},maxOutputTokens:100,patchMode:"exactSourceEdits",generateText:async()=>{calls++;throw Error("must not pay");}});
+  for(const source of ["no final newline","\ufeffsource\n","source\r\n","\tindent\n"]){await writeFile(path.join(workspace,"app.ts"),source);assert.deepEqual(await generate(input,{workspace,maxCostCents:10}),{patch:"",costCents:0,diagnostic:"UNSUPPORTED_SOURCE"});}assert.equal(calls,0);
+ }finally{await rm(workspace,{recursive:true,force:true});}
+});
+
+test("immutable 9895bb1 allowed files pass preflight and generated multi-file patch actually applies",async(t)=>{
+ const {readFile}=await import("node:fs/promises"),{createHash}=await import("node:crypto"),{spawnSync}=await import("node:child_process");
+ const workspace=await mkdtemp(path.join(os.tmpdir(),"factory-immutable-edits-"));
+ try{
+  const cases=[{path:"server/office-role-work.ts",fixture:"role-work.txt",sha:"920b748073f7f2304074142845f409d5e63e124b",before:"Role audit owner required",after:"Role audit owner is required"},{path:"tests/office-role-work.test.ts",fixture:"role-work-test.txt",sha:"94114a4e3cb401e5a8239f46b1da573ae295d823",before:'owner="owner"',after:'owner="synthetic-owner"'}];
+  const originals=new Map<string,string>();for(const file of cases){const bytes=await readFile(new URL(`./fixtures/factory-exact-source/${file.fixture}`,import.meta.url));assert.equal(createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex"),file.sha);assert.ok(bytes.at(-1)===10);assert.doesNotMatch(bytes.toString("utf8"),/[\x00-\x09\x0b-\x1f\x7f\uFEFF]/);await mkdir(path.dirname(path.join(workspace,file.path)),{recursive:true});await writeFile(path.join(workspace,file.path),bytes);originals.set(file.path,bytes.toString("utf8"));}
+  let calls=0;const generate=createOpenAiFactoryPatchGenerator({sourcePaths:{"owner/app":cases.map(f=>f.path)},patchMode:"exactSourceEdits",maxOutputTokens:1000,generateText:async request=>{calls++;const sent=JSON.parse(request.text);for(const file of sent.files)assert.equal(file.text,originals.get(file.path));return {status:"completed",text:JSON.stringify({edits:cases.map(({path,before,after})=>({path,before,after}))}),costCents:1,inputTokens:100,outputTokens:100};}});
+  const result=await generate(input,{workspace,maxCostCents:10});assert.equal(calls,1);assert.equal(result.diagnostic,undefined);validateFactoryPublicationPatch(result.patch);
+  const gitProbe=spawnSync("git",["--version"],{encoding:"utf8",timeout:10000,windowsHide:true});
+  const gitMissing=(gitProbe.error as NodeJS.ErrnoException|undefined)?.code==="ENOENT";
+  if(!gitMissing)assert.equal(gitProbe.status,0,gitProbe.error?.message||gitProbe.stderr);
+  await t.test("Git applies the generated patch to exact immutable inputs",{skip:!gitMissing?false:"Isolated Node image does not provide Git; immutable fixture and converter assertions still run"},async()=>{
+  for(const args of [["apply","--check","-"],["apply","-"]]){const applied=spawnSync("git",["-c","core.autocrlf=false",...args],{cwd:workspace,input:result.patch,encoding:"utf8",timeout:10000,windowsHide:true});assert.equal(applied.status,0,applied.error?.message||applied.stderr);}
+  for(const file of cases)assert.equal(await readFile(path.join(workspace,file.path),"utf8"),originals.get(file.path)!.replace(file.before,file.after));
+  });
+ }finally{await rm(workspace,{recursive:true,force:true});}
+});
