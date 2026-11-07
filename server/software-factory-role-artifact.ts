@@ -3,7 +3,7 @@ import {inflateRawSync} from "node:zlib";
 import {z} from "zod";
 import {ROLE_WORK_ACCEPTANCE_ID,ROLE_WORK_ASSERTIONS} from "./software-factory-role-acceptance";
 const sha=z.string().regex(/^[a-f0-9]{40}$/),hash=z.string().regex(/^[a-f0-9]{64}$/);
-const measured=z.object({headSha:sha,scenarioId:z.literal(ROLE_WORK_ACCEPTANCE_ID),kind:z.literal("backend-acceptance"),assertions:z.array(z.object({id:z.enum(ROLE_WORK_ASSERTIONS),passed:z.boolean()}).strict()).length(ROLE_WORK_ASSERTIONS.length),passed:z.boolean(),durationMs:z.number().finite().nonnegative().max(600000)}).strict();
+const measured=z.object({headSha:sha,sourceManifestSha256:hash,scenarioId:z.literal(ROLE_WORK_ACCEPTANCE_ID),kind:z.literal("backend-acceptance"),assertions:z.array(z.object({id:z.enum(ROLE_WORK_ASSERTIONS),passed:z.boolean()}).strict()).length(ROLE_WORK_ASSERTIONS.length),passed:z.boolean(),durationMs:z.number().finite().nonnegative().max(600000)}).strict();
 const schema=z.object({version:z.literal(1),repository:z.literal("robertmanzanillag-jpg/blackops-reminder"),scenarioId:z.literal(ROLE_WORK_ACCEPTANCE_ID),scope:z.literal("backend-acceptance-only"),createdAt:z.string().datetime(),baseline:measured,candidate:measured}).strict();
 export function verifyRoleAcceptanceReport(bytes:Buffer,expected:{baseSha:string;headSha:string;sha256:string;now:number}){
  if(bytes.length>65536||createHash("sha256").update(bytes).digest("hex")!==hash.parse(expected.sha256))throw Error("QA_REPORT_DIGEST_MISMATCH");
@@ -46,6 +46,3 @@ export function createRoleAcceptanceArtifactReader(options:{apiRequest:(url:stri
   return {regressionScenarioIds:[report.scenarioId],artifactIds:[`github-actions-artifact:${a.id}:${a.digest}`,`sha256:${digest}`],report};
  };
 }
-
-
-

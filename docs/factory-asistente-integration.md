@@ -169,3 +169,12 @@ mobile/desktop evidence. Generic simulator unit tests do not satisfy that gate.
 The shared credit ledger, dedicated repository credential, guarded admission and
 operator module remain explicit existing prerequisites. Never fill missing browser
 flags or mark the company order delivered from this backend report.
+
+The first real candidate trial stopped before runtime because the repository tracks
+`credentials/README.md` and `secrets/README.md`. Acceptance now exports each exact
+commit into a new source tree, omitting only the two root credential namespaces
+without reading their contents. It verifies every retained Git blob against the
+commit, rejects other sensitive paths and special entries, and records the exported
+manifest digest. Only these sanitized trees reach the read-only containers.
+Container cleanup tolerates an auto-removal race only when a separate exact-name
+Docker query proves that no container remains; daemon errors remain failures.
