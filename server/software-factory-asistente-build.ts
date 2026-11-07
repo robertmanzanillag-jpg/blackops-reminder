@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
 import { createFactoryAsistenteGitHubClient, createFactoryAsistenteGitHubSourceExporter, FACTORY_ASISTENTE_REPOSITORY } from "./software-factory-github-client";
-import { createGitHubActionsFactoryBuilder } from "./software-factory-remote-builder";
+import { createFactoryRemotePipelineBuilder } from "./software-factory-remote-builder";
+import {createGitHubFactoryChecks} from "./software-factory-actions";
+import {createGitHubFactoryCandidatePublisher} from "./software-factory-github-publisher";
 import { createOpenAiFactoryPatchGenerator } from "./software-factory-openai-builder";
 import { createOpenAiFactoryTextProvider } from "./software-factory-openai";
 import { executeWithinSharedCredits } from "./shared-openai-credit-execution";
@@ -11,6 +13,7 @@ import type { FactoryPipelineDependencies } from "./software-factory-pipeline";
 /** Concrete build-to-PR adapter. Does not install itself, enable a scheduler,
  * deploy, or claim low risk. Credentials stay in the two trusted transports. */
 export function createAsistenteFactoryBuild(options: {
+  readAcceptance?: Parameters<typeof createGitHubFactoryChecks>[0]["readAcceptance"];
   ledger: ReturnType<typeof createSharedOpenAiCreditLedger>;
   githubRequest: (url: string, init: RequestInit) => Promise<Response>;
   model: Parameters<typeof createOpenAiFactoryTextProvider>[0];
@@ -52,10 +55,11 @@ export function createAsistenteFactoryBuild(options: {
         });
       },
     });
-    const build = createGitHubActionsFactoryBuilder({ exportSource: createFactoryAsistenteGitHubSourceExporter(client),
-      generatePatch, publisherClient: client, actionsClient: client,
-      repositories: { [repository]: profile }, publicationCostCents: 0,
-      now: options.now, maxPolls: options.maxPolls, wait: options.wait });
+    const publisher=createGitHubFactoryCandidatePublisher({client,repositories:{[repository]:profile.baseBranch}});
+    const checks=createGitHubFactoryChecks({client,repositories:{[repository]:profile.checks},readAcceptance:options.readAcceptance,now:options.now,maxPolls:options.maxPolls,wait:options.wait});
+    const build = createFactoryRemotePipelineBuilder({ exportSource: createFactoryAsistenteGitHubSourceExporter(client),generatePatch,
+      prepareCandidate:publisher.prepare,finalizeCandidate:publisher.finalize,verifyCandidate:checks.verifyCandidate,
+      preflight:async(project,baseSha,context)=>({allowed:await checks.preflight(project.repo,baseSha,context.signal)}),publicationCostCents:0,now:options.now });
     return build(project, state, context);
   };
 }

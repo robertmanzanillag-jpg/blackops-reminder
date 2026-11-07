@@ -38,6 +38,7 @@ const hash = /^[a-f0-9]{64}$/;
 const reject = () => { throw new Error("FACTORY_ACTIONS_IDENTITY_UNVERIFIED"); };
 
 export function createGitHubFactoryChecks(options: {
+  readAcceptance?: (input: {runId:number;baseSha:string;headSha:string;signal:AbortSignal}) => Promise<{regressionScenarioIds:string[];artifactIds:string[]}>;
   client: FactoryActionsClient;
   repositories: Readonly<Record<string, FactoryActionsProfile>>;
   now?: () => Date;
@@ -119,9 +120,11 @@ export function createGitHubFactoryChecks(options: {
                 const steps = job.steps.filter(s => s.name === name);
                 if (steps.length !== 1 || steps[0].status !== "completed" || steps[0].conclusion !== "success") reject();
               }
+              const acceptance = options.readAcceptance ? await options.readAcceptance({runId:run.id,baseSha:candidate.baseSha,headSha:candidate.headSha,signal:context.signal}) : undefined;
+              context.signal.throwIfAborted();
               return { status: "passed" as const, costCents: 0, projectId: project.id,
                 baseSha: candidate.baseSha, headSha: candidate.headSha, testPassed: true as const, buildPassed: true as const,
-                actorId: "github-actions-isolated-runner", artifactIds: [run.html_url], createdAt: job.completed_at! };
+                actorId: "github-actions-isolated-runner", artifactIds: [run.html_url,...(acceptance?.artifactIds||[])], regressionScenarioIds:acceptance?.regressionScenarioIds, createdAt: job.completed_at! };
             }
           } else if (event === "workflow_dispatch" && !dispatched) {
             if (!options.client.actions.createWorkflowDispatch || !options.client.git?.getRef) reject();

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T00:28:30.270Z",
+  "generatedAt": "2026-11-07T01:03:09.874Z",
   "repoRoot": "/home/runner/workspace",
   "packageName": "rest-express",
   "scripts": {
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 959,
-    "filesIndexed": 861,
-    "imports": 3113,
+    "filesVisible": 965,
+    "filesIndexed": 867,
+    "imports": 3138,
     "routes": 564,
-    "symbols": 17900
+    "symbols": 17986
   },
   "directories": {
     ".": {
@@ -239,10 +239,10 @@
       }
     },
     "script": {
-      "files": 93,
-      "indexed": 85,
+      "files": 94,
+      "indexed": 86,
       "kinds": {
-        "script": 93
+        "script": 94
       }
     },
     "scripts": {
@@ -253,10 +253,10 @@
       }
     },
     "server": {
-      "files": 216,
-      "indexed": 211,
+      "files": 219,
+      "indexed": 214,
       "kinds": {
-        "server": 216
+        "server": 219
       }
     },
     "server/replit_integrations": {
@@ -281,10 +281,10 @@
       }
     },
     "tests": {
-      "files": 236,
-      "indexed": 232,
+      "files": 238,
+      "indexed": 234,
       "kinds": {
-        "test": 236
+        "test": 238
       }
     },
     "tests/fixtures": {
@@ -10997,6 +10997,52 @@
       "routes": []
     },
     {
+      "path": "script/software-factory-role-acceptance.ts",
+      "kind": "script",
+      "imports": [
+        "../server/software-factory-role-acceptance",
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:url",
+        "node:util"
+      ],
+      "exports": [
+        "acceptanceTreeEntries",
+        "removeAcceptanceContainer"
+      ],
+      "symbols": [
+        "acceptanceTreeEntries",
+        "args",
+        "baselineRoot",
+        "bytes",
+        "candidateModule",
+        "checkedRoot",
+        "child",
+        "destination",
+        "entries",
+        "exec",
+        "exportRevision",
+        "git",
+        "main",
+        "match",
+        "name",
+        "raw",
+        "removeAcceptanceContainer",
+        "report",
+        "resolved",
+        "result",
+        "revision",
+        "runId",
+        "runtime",
+        "source",
+        "timeout"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/software-factory-worker.ts",
       "kind": "script",
       "imports": [
@@ -19775,6 +19821,7 @@
         "body",
         "clipMetrics",
         "compose",
+        "counts",
         "cycleTotals",
         "daily",
         "dir",
@@ -19853,13 +19900,16 @@
       "symbols": [
         "base",
         "body",
+        "codes",
         "createWebSourceExportCycle",
         "cycle",
         "env",
         "officeWebSourceStatus",
         "owner",
         "response",
+        "safeExportFailure",
         "startOfficeWebSourceExporter",
+        "value",
         "warmOfficeWebSources"
       ],
       "routes": []
@@ -22449,6 +22499,7 @@
         "Run",
         "Scope",
         "abort",
+        "acceptance",
         "bytes",
         "candidate",
         "completed",
@@ -22486,6 +22537,7 @@
         "./shared-openai-credit-ledger",
         "./software-factory-actions",
         "./software-factory-github-client",
+        "./software-factory-github-publisher",
         "./software-factory-openai",
         "./software-factory-openai-builder",
         "./software-factory-pipeline",
@@ -22497,6 +22549,7 @@
       ],
       "symbols": [
         "build",
+        "checks",
         "client",
         "createAsistenteFactoryBuild",
         "deadline",
@@ -22507,6 +22560,7 @@
         "model",
         "paths",
         "profile",
+        "publisher",
         "remainingMs",
         "repository",
         "requestSha256",
@@ -22915,6 +22969,7 @@
       ],
       "symbols": [
         "accept",
+        "artifactDownload",
         "createAsistenteGitHubTransport",
         "headers",
         "root",
@@ -23118,6 +23173,18 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-openai-transport.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "createFactoryOpenAiTransport"
+      ],
+      "symbols": [
+        "createFactoryOpenAiTransport"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-openai.ts",
       "kind": "server",
       "imports": [],
@@ -23137,6 +23204,7 @@
         "fresh",
         "input",
         "nonnegative",
+        "pinnedModel",
         "positive",
         "post",
         "prompt",
@@ -23315,6 +23383,82 @@
         "generateText",
         "repositories",
         "workerOptions"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-role-acceptance.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto",
+        "node:perf_hooks",
+        "node:stream"
+      ],
+      "exports": [
+        "ROLE_WORK_ACCEPTANCE_ID",
+        "ROLE_WORK_ASSERTIONS",
+        "acceptanceRpc",
+        "measureRoleWorkAcceptance",
+        "remoteAcceptanceRuntime",
+        "serveAcceptanceRuntime"
+      ],
+      "symbols": [
+        "ROLE_WORK_ACCEPTANCE_ID",
+        "ROLE_WORK_ASSERTIONS",
+        "acceptanceRpc",
+        "close",
+        "council",
+        "digest",
+        "journal",
+        "make",
+        "measureRoleWorkAcceptance",
+        "o",
+        "options",
+        "remoteAcceptanceRuntime",
+        "runners",
+        "send",
+        "serveAcceptanceRuntime",
+        "stable",
+        "started",
+        "tampered"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-role-artifact.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-role-acceptance",
+        "node:crypto",
+        "node:zlib",
+        "zod"
+      ],
+      "exports": [
+        "createRoleAcceptanceArtifactReader",
+        "readAcceptanceZip",
+        "verifyRoleAcceptanceReport"
+      ],
+      "symbols": [
+        "archive",
+        "bytes",
+        "c",
+        "createRoleAcceptanceArtifactReader",
+        "data",
+        "e",
+        "flags",
+        "location",
+        "matches",
+        "measured",
+        "metadata",
+        "readAcceptanceZip",
+        "redirect",
+        "report",
+        "response",
+        "root",
+        "schema",
+        "sha",
+        "start",
+        "verifyRoleAcceptanceReport"
       ],
       "routes": []
     },
@@ -31587,10 +31731,12 @@
         "incomplete",
         "job",
         "known",
+        "missing",
         "mutations",
         "path",
         "project",
         "repository",
+        "result",
         "run",
         "verify"
       ],
@@ -31930,6 +32076,7 @@
       "exports": [],
       "symbols": [
         "request",
+        "root",
         "signal",
         "token"
       ],
@@ -32093,6 +32240,22 @@
         "unknown",
         "valid",
         "workspace"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-openai-transport.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-openai-transport",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "headers",
+        "key",
+        "request"
       ],
       "routes": []
     },
@@ -32300,6 +32463,29 @@
         "tree",
         "unknown",
         "workflow"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-role-acceptance.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-role-work",
+        "../server/software-factory-role-acceptance",
+        "../server/software-factory-role-artifact",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "archive",
+        "bridge",
+        "child",
+        "code",
+        "digest",
+        "report",
+        "safe"
       ],
       "routes": []
     },
@@ -32957,12 +33143,14 @@
     "tests/software-factory-office-connection.test.ts",
     "tests/software-factory-office-mode.test.ts",
     "tests/software-factory-openai-builder.test.ts",
+    "tests/software-factory-openai-transport.test.ts",
     "tests/software-factory-openai.test.ts",
     "tests/software-factory-pilot-review.test.ts",
     "tests/software-factory-pipeline.test.ts",
     "tests/software-factory-postgres.test.ts",
     "tests/software-factory-proposal-runtime.test.ts",
     "tests/software-factory-remote-builder.test.ts",
+    "tests/software-factory-role-acceptance.test.ts",
     "tests/software-factory-routes.test.ts",
     "tests/software-factory-runtime.test.ts",
     "tests/software-factory-simulator.test.ts",

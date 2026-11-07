@@ -80,9 +80,8 @@ try {
         lastAcademyTick = Date.now(); await academy.runCycle();
         if (!stopping && process.env.OFFICE_ACADEMY_EXECUTION_ENABLED === "true") await academy.runAcademyCycle();
         if(internal && !stopping) await internal.tick();
-        let sourcesReady=!webSourcesEnabled;
-        if(webSourcesEnabled && !stopping){try{await (await import("../server/office-web-source-scheduler")).warmOfficeWebSources(process.env.OFFICE_WEB_SOURCE_ORIGIN!);sourcesReady=true;}catch{console.error("Office source export unconfirmed; audit deferred without changing agent life.");}}
-        if(roleWork && sourcesReady && !stopping) await roleWork.tick();
+        if(webSourcesEnabled && !stopping){try{await (await import("../server/office-web-source-scheduler")).warmOfficeWebSources(process.env.OFFICE_WEB_SOURCE_ORIGIN!);}catch{console.error("Office source host wake unconfirmed; audits will validate stored source freshness independently.");}}
+        if(roleWork && !stopping) await roleWork.tick();
         if(roleAcademy && !stopping) await roleAcademy.tick();
         // The web scheduler is disabled in this deployment. Preserve the
         // scout's durable daily cadence here; it only reads public releases.

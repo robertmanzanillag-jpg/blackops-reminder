@@ -30,3 +30,11 @@ test("uncertain transport never retries or exposes provider errors",async()=>{
  await assert.rejects(request("https://api.github.com/repos/robertmanzanillag-jpg/blackops-reminder",{signal:new AbortController().signal}),/^Error: FACTORY_GITHUB_TRANSPORT_UNCONFIRMED$/);
  assert.equal(calls,1);
 });
+
+test("artifact redirect is manual only for exact read-only ZIP endpoint and never followed by bearer transport",async()=>{
+ const root="https://api.github.com/repos/robertmanzanillag-jpg/blackops-reminder";let calls=0;
+ const request=createAsistenteGitHubTransport("github_pat_"+"c".repeat(60),(async(url,init)=>{calls++;assert.equal(String(url),root+"/actions/artifacts/8/zip");assert.equal(init?.redirect,"manual");return new Response(null,{status:302,headers:{location:"https://storage.blob.core.windows.net/signed"}});}) as typeof fetch);
+ assert.equal((await request(root+"/actions/artifacts/8/zip",{signal:new AbortController().signal})).status,302);
+ for(const suffix of ["/actions/artifacts/8/zip?other=1","/actions/artifacts/8","/actions/artifacts/0/zip"])await assert.rejects(request(root+suffix,{signal:new AbortController().signal}));
+ await assert.rejects(request(root+"/actions/artifacts/8/zip",{method:"POST",signal:new AbortController().signal}));assert.equal(calls,1);
+});
