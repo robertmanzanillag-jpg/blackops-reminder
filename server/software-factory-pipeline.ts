@@ -20,6 +20,7 @@ export interface FactoryPipelineDependencies {
   executionMode?: "review-only";
   project(ownerKey: string, projectId: string): Promise<FactoryProject | undefined>;
   previous(ownerKey: string, jobId: string): Promise<FactoryJob | undefined>;
+  recoveryPrevious?: (ownerKey: string, failedJobId: string, recoveryJobId: string) => Promise<FactoryJob | undefined>;
   isCurrentDeployment?: (ownerKey: string, projectId: string, deployJobId: string) => Promise<boolean>;
   claimFinding(ownerKey: string, projectId: string, key: string, jobId: string): Promise<boolean>;
   reservations: Record<FactoryJob["kind"], number>;
@@ -51,6 +52,15 @@ export function createFactoryPipeline(deps: FactoryPipelineDependencies): Pick<F
   const load = async (job: FactoryJob): Promise<{ state: FactoryPipelineState; previous: FactoryJob }> => {
     const id = job.payload.previousJobId;
     if (typeof id !== "string") throw new Error("FACTORY_PREDECESSOR_REQUIRED");
+    if (proposalOnly && job.kind === "build" && job.key === `${id}.repair` && deps.recoveryPrevious) {
+      const previous = await deps.recoveryPrevious(job.ownerKey,id,job.id);
+      if (!previous || previous.status!=="failed" || previous.kind!=="build" || previous.ownerKey!==job.ownerKey || previous.projectId!==job.projectId) throw Error("FACTORY_RECOVERY_UNTRUSTED");
+      const {recoverableFailedBuild}=await import('./software-factory-build-recovery');
+      const state=recoverableFailedBuild(previous), marker=job.payload.recovery as any;
+      if(job.payload.repairAttempts!==state.repairAttempts+1 || marker?.rebase?.originalBaseSha!==state.finding.baseSha || !/^[a-f0-9]{40}$/.test(marker?.rebase?.targetBaseSha||'')) throw Error("FACTORY_RECOVERY_UNTRUSTED");
+      state.finding.baseSha=marker.rebase.targetBaseSha;
+      return {state,previous};
+    }
     const previous = await deps.previous(job.ownerKey, id);
     if (!previous || previous.ownerKey !== job.ownerKey || previous.projectId !== job.projectId || previous.status !== "completed" || !predecessors[job.kind].includes(previous.kind)) throw new Error("FACTORY_CHAIN_UNTRUSTED");
     const recurring = job.key !== `${previous.id}.next`;

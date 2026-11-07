@@ -56,6 +56,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     modelRequest: (url: string, init: RequestInit) => Promise<Response>;
     download: typeof fetch;
     readUi: OperatorUiReader;
+    recoveryPrevious?: import('./software-factory-pipeline').FactoryPipelineDependencies['recoveryPrevious'];
     now: () => Date;
 }) {
     const config = validateAsistenteOperatorConfig(raw), { store, credits, now } = deps;
@@ -122,7 +123,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
             throw Error("FACTORY_OPERATOR_ACCEPTANCE_BASE_CHANGED"); return { kind: mapping.kind, regressionScenarioId: mapping.scenarioId }; } });
     const schedule = createFactoryCompanyOrderScheduler({ owner, project, readOrders: async () => { const rows = await orders(); return rows.filter(o => config.orders.some(m => m.id === o.id)); }, ledger: credits.ledger, reservationCents: config.reservations.discover, admit: admitWithinCredits });
     return { owner, store, reservationCents: config.reservations.discover, readMainOrder, admitWithinCredits,
-        async createFactoryWorkerOptions() { await project(); return createTrustedFactoryProposalWorkerOptions({ owner, store, now, reservations: config.reservations, scheduleCompanyOrders: schedule, stages: { discover, build, review, simulate: async (p, state, context) => { if (!state.candidate || p.id !== config.projectId)
+        async createFactoryWorkerOptions() { await project(); return createTrustedFactoryProposalWorkerOptions({ owner, store, now, recoveryPrevious:deps.recoveryPrevious, reservations: config.reservations, scheduleCompanyOrders: schedule, stages: { discover, build, review, simulate: async (p, state, context) => { if (!state.candidate || p.id !== config.projectId)
                     throw Error("FACTORY_OPERATOR_CANDIDATE_REQUIRED"); const tests = state.evidence.filter(e => e.kind === "tests" && e.passed && e.headSha === state.candidate!.headSha && e.baseSha === state.candidate!.baseSha); const urls = tests.flatMap(e => e.artifactIds).filter(id => /^https:\/\/github\.com\/robertmanzanillag-jpg\/blackops-reminder\/actions\/runs\/[1-9][0-9]*$/.test(id)); if (urls.length !== 1)
                     throw Error("FACTORY_OPERATOR_RUN_UNVERIFIED"); return { costCents: 0, evidence: await deps.readUi({ projectId: p.id, baseSha: state.candidate.baseSha, headSha: state.candidate.headSha, runId: Number(urls[0].split("/").pop()), signal: context.signal }) }; } } }); }
     };
@@ -153,7 +154,13 @@ async function installed(store: Store) {
     const githubRequest = createAsistenteGitHubTransport(env.SOFTWARE_FACTORY_GITHUB_TOKEN || "");
     const modelRequest = createFactoryOpenAiTransport(env.OPENAI_API_KEY || "");
     const readUi = createOfficeUiArtifactReader({ apiRequest: githubRequest, download: fetch, archiveHosts: config.archiveHosts, allowGitHubResultsAzureHosts: config.allowGitHubResultsAzureHosts, ...config.ui, now });
-    return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, download: fetch, readUi, now, readOrders: async (owner) => { const raw = await (await getCouncilStore()).read(owner); if (!raw)
+    let recoveryPool: import('pg').Pool | undefined;
+    const recoveryPrevious=async(ownerKey:string,failedId:string,jobId:string)=>{
+      if(!recoveryPool){const [{Pool},{resolveDatabaseConnectionString}]=await Promise.all([import('pg'),import('./database-url')]);recoveryPool=new Pool({connectionString:resolveDatabaseConnectionString(),allowExitOnIdle:true,max:1,connectionTimeoutMillis:10000,statement_timeout:15000});}
+      const {loadFailedBuildRecovery}=await import('./software-factory-build-recovery');
+      return loadFailedBuildRecovery(recoveryPool,ownerKey,failedId,jobId);
+    };
+    return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, download: fetch, readUi, recoveryPrevious, now, readOrders: async (owner) => { const raw = await (await getCouncilStore()).read(owner); if (!raw)
             throw Error("FACTORY_OPERATOR_COUNCIL_MISSING"); const state = JSON.parse(raw); if (!Array.isArray(state.company?.orders))
             throw Error("FACTORY_OPERATOR_COUNCIL_INVALID"); return state.company.orders; } });
 }
