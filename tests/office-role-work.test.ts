@@ -1,8 +1,55 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createRoleWorkRunner,parseRoleWork} from "../server/office-role-work";
-import {PENDING_OFFICE_ROLES,sourceDigest,type RoleSnapshot,type SqlAuditRole} from "../server/office-role-snapshots";
-import type {WebRoleSource} from "../server/office-web-role-sources";
+import {PENDING_OFFICE_ROLES,SQL_AUDIT_ROLES,sourceDigest,type RoleSnapshot,type SqlAuditRole} from "../server/office-role-snapshots";
+import {WEB_SOURCE_ROLES,type WebRoleSource} from "../server/office-web-role-sources";
+for(const reader of ["sql","web"] as const)for(const late of ["resolve","reject"] as const){
+ test(`${reader} hung read expires at 60s, continues, never retries and ignores late ${late}`,async t=>{
+  t.mock.timers.enable({apis:["setTimeout"]});
+  const f=fixture();
+  f.company.budgets={daily:100,spent:7};
+  f.state().budgets={remaining:93};
+  const company=structuredClone(f.company),untouched=structuredClone(f.state());
+  const roles:readonly string[]=reader==="sql"?SQL_AUDIT_ROLES:WEB_SOURCE_ROLES;
+  const target=PENDING_OFFICE_ROLES.find(role=>roles.includes(role))!;
+  let resolve!:(value:any)=>void,reject!:(reason:Error)=>void,entered!:()=>void,calls=0;
+  const pending=new Promise<any>((yes,no)=>{resolve=yes;reject=no;});
+  const admitted=new Promise<void>(yes=>{entered=yes;});
+  const hang=()=>{calls++;entered();return pending;};
+  const runner=createRoleWorkRunner({owner,council:f.council,now:f.now,
+   read:async role=>reader==="sql" && role===target?hang():snapshot(role,f.now()),
+   readWeb:async role=>reader==="web" && role===target?hang():null,
+  });
+  let finished=false;
+  const tick=runner.tick().then(()=>{finished=true;});
+  await admitted;
+  f.setNow(NOW+59999);t.mock.timers.tick(59999);
+  await Promise.resolve();
+  assert.equal(finished,false);
+  assert.equal(parseRoleWork(f.state().roleWork,owner).jobs.find(j=>j.role===target)!.status,"running");
+  f.setNow(NOW+60000);t.mock.timers.tick(1);
+  await tick;
+  const journal=parseRoleWork(f.state().roleWork,owner),job=journal.jobs.find(j=>j.role===target)!;
+  assert.equal(job.status,"unknown");
+  assert.equal(job.reason,"expired_no_automatic_retry");
+  for(const key of ["source","audit","webSource","webAudit","artifactId","completedAt"] as const)assert.equal(job[key],undefined);
+  const next=PENDING_OFFICE_ROLES[PENDING_OFFICE_ROLES.indexOf(target)+1];
+  assert.ok(next);
+  assert.ok(journal.jobs.some(j=>j.role===next && ["completed","blocked"].includes(j.status)));
+  const saved=structuredClone(f.state());
+  if(late==="reject")reject(new Error("late private reader failure"));
+  else resolve(reader==="sql"?snapshot(target as SqlAuditRole,NOW):null);
+  await Promise.resolve();await Promise.resolve();
+  assert.deepEqual(f.state(),saved);
+  await runner.tick();
+  f.setNow(NOW+86400000);await runner.tick();
+  assert.equal(calls,1);
+  assert.deepEqual(parseRoleWork(f.state().roleWork,owner).jobs.find(j=>j.id===job.id),job);
+  assert.deepEqual(f.company,company);
+  const {roleWork,...rest}=f.state();
+  assert.deepEqual(rest,untouched);
+ });
+}
 const NOW=Date.parse("2026-11-07T01:00:00Z"),owner="owner";
 const reorder=(v:any):any=>Array.isArray(v)?v.map(reorder):v&&typeof v==="object"?Object.fromEntries(Object.keys(v).reverse().map(k=>[k,reorder(v[k])])):v;
 function fixture(){let clock=NOW,state:any={roles:{version:1,roles:Object.fromEntries(PENDING_OFFICE_ROLES.map(role=>[role,{generation:1}]))}};const company:any={careers:Object.fromEntries(PENDING_OFFICE_ROLES.map(role=>[role,{generation:1}]))};
