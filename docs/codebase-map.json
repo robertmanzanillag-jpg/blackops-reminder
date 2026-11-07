@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T01:11:12.788Z",
+  "generatedAt": "2026-11-07T01:27:03.855Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-browser-bridge",
   "packageName": "rest-express",
   "scripts": {
@@ -124,13 +124,20 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 945,
-    "filesIndexed": 855,
-    "imports": 3186,
+    "filesVisible": 947,
+    "filesIndexed": 856,
+    "imports": 3190,
     "routes": 570,
-    "symbols": 18110
+    "symbols": 18121
   },
   "directories": {
+    "script": {
+      "files": 100,
+      "indexed": 91,
+      "kinds": {
+        "script": 100
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -286,13 +293,6 @@
       "kinds": {
         "docs": 1,
         "other": 70
-      }
-    },
-    "script": {
-      "files": 98,
-      "indexed": 90,
-      "kinds": {
-        "script": 98
       }
     },
     "scripts": {
@@ -10886,13 +10886,17 @@
         "built",
         "bundle",
         "changed",
+        "code",
         "container",
+        "diagnostic",
         "digest",
+        "e",
         "exec",
         "harness",
         "main",
         "name",
         "staticManifest",
+        "stderr",
         "temp"
       ],
       "routes": []
@@ -10937,6 +10941,7 @@
       "kind": "script",
       "imports": [
         "./software-factory-office-ui-fixture.mjs",
+        "./software-factory-ui-console.mjs",
         "./software-factory-ui-static.mjs",
         "node:assert/strict",
         "node:crypto",
@@ -10949,9 +10954,12 @@
         "auth",
         "browser",
         "bytes",
+        "consoleDiagnostics",
+        "consoleErrors",
         "context",
         "digest",
         "errors",
+        "expected",
         "fixture",
         "headSha",
         "input",
@@ -10961,7 +10969,6 @@
         "record",
         "regressions",
         "report",
-        "response",
         "screenshot",
         "u",
         "versions"
@@ -11045,6 +11052,18 @@
       "routes": []
     },
     {
+      "path": "script/software-factory-ui-console.mjs",
+      "kind": "script",
+      "imports": [],
+      "exports": [
+        "isExpectedInitialSessionError"
+      ],
+      "symbols": [
+        "isExpectedInitialSessionError"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/software-factory-ui-static.mjs",
       "kind": "script",
       "imports": [
@@ -11055,6 +11074,7 @@
       ],
       "exports": [
         "OFFICE_UI_HARNESS_FILES",
+        "OFFICE_UI_STATIC_EXCLUSIONS",
         "collectStaticBundle",
         "materializeStaticBundle",
         "validateStaticBundle"
@@ -11062,6 +11082,7 @@
       "symbols": [
         "MAX",
         "OFFICE_UI_HARNESS_FILES",
+        "OFFICE_UI_STATIC_EXCLUSIONS",
         "bundle",
         "bytes",
         "collectStaticBundle",
@@ -23220,6 +23241,7 @@
       "path": "server/software-factory-office-ui-evidence.ts",
       "kind": "server",
       "imports": [
+        "../script/software-factory-ui-static.mjs",
         "./software-factory",
         "node:crypto"
       ],
@@ -32354,6 +32376,7 @@
       "path": "tests/software-factory-office-ui-evidence.test.ts",
       "kind": "test",
       "imports": [
+        "../script/software-factory-ui-static.mjs",
         "../server/software-factory-office-ui-evidence",
         "node:assert/strict",
         "node:crypto",
@@ -32783,6 +32806,7 @@
       "path": "tests/software-factory-ui-static.test.mjs",
       "kind": "test",
       "imports": [
+        "../script/software-factory-ui-console.mjs",
         "../script/software-factory-ui-static.mjs",
         "node:assert/strict",
         "node:fs/promises",
@@ -32793,7 +32817,10 @@
       "exports": [],
       "symbols": [
         "bundle",
+        "error",
+        "origin",
         "out",
+        "response",
         "root"
       ],
       "routes": []

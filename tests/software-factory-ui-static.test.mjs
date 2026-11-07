@@ -4,6 +4,19 @@ import { mkdtemp, writeFile, rm, readFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { collectStaticBundle, validateStaticBundle, materializeStaticBundle } from '../script/software-factory-ui-static.mjs';
+import { isExpectedInitialSessionError } from '../script/software-factory-ui-console.mjs';
+test('only the measured initial native session 401 is expected', () => {
+    const origin = 'http://127.0.0.1:3141';
+    const response = { url: `${origin}/api/auth/me`, method: 'GET', status: 401, phase: 'initial' };
+    const error = { url: response.url, phase: 'initial', text: 'Failed to load resource: the server responded with a status of 401 (Unauthorized)', argumentCount: 0, lineNumber: 0, columnNumber: 0 };
+    assert.equal(isExpectedInitialSessionError(error, [response], origin), true);
+    for (const change of [{ phase: 'login' }, { phase: 'authenticated' }, { argumentCount: 1 }, { lineNumber: 8 }, { columnNumber: 1 }, { url: `${origin}/assets/app.js` }, { text: 'Application failed' }])
+        assert.equal(isExpectedInitialSessionError({ ...error, ...change }, [response], origin), false);
+    for (const change of [{ phase: 'authenticated' }, { status: 500 }, { method: 'POST' }, { url: `${origin}/api/other` }])
+        assert.equal(isExpectedInitialSessionError(error, [{ ...response, ...change }], origin), false);
+    assert.equal(isExpectedInitialSessionError(error, [], origin), false);
+    assert.equal(isExpectedInitialSessionError(error, [response, response], origin), false);
+});
 test('candidate static bytes are bounded validated data, never imported Node modules', async () => {
     const root = await mkdtemp(path.join(tmpdir(), 'ui-static-'));
     try {

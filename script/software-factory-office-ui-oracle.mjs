@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { chromium } from 'playwright';
 import { launchOfficeUiFixture } from './software-factory-office-ui-fixture.mjs';
 import { collectStaticBundle, validateStaticBundle } from './software-factory-ui-static.mjs';
+import { isExpectedInitialSessionError } from './software-factory-ui-console.mjs';
 const digest = b => createHash('sha256').update(b).digest('hex');
 const input = JSON.parse(await readFile('/input/provenance.json', 'utf8'));
 assert.equal(input.scope, 'office-ui-regression');
@@ -23,6 +24,8 @@ try {
                 for (const scenarioId of journeyIds) {
                     const context = await browser.newContext({ viewport: viewport === 'desktop' ? { width: 1440, height: 1000 } : { width: 390, height: 844 }, serviceWorkers: 'block', acceptDownloads: false, reducedMotion: 'reduce' });
                     const errors = [], mockedResources = new Set();
+                    const consoleErrors = [], initialSessionResponses = [];
+                    let phase = 'initial';
                     const record = s => { if (errors.length < 30)
                         errors.push(s); };
                     const origin = new URL(fixture.baseUrl).origin;
@@ -43,20 +46,34 @@ try {
                     page.setDefaultTimeout(10000);
                     page.setDefaultNavigationTimeout(10000);
                     page.on('pageerror', () => record('Uncaught browser error'));
-                    page.on('console', message => { if (message.type() === 'error')
-                        record('Browser console error'); });
-                    page.on('response', r => { if (r.status() >= 500)
-                        record('Server response error'); });
+                    page.on('console', message => {
+                        if (message.type() !== 'error') return;
+                        if (consoleErrors.length >= 30) { record('Console error limit exceeded'); return; }
+                        consoleErrors.push({ ...message.location(), text: message.text().slice(0, 256), argumentCount: message.args().length, phase });
+                    });
+                    page.on('response', r => {
+                        if (r.status() >= 500) record('Server response error');
+                        if (phase === 'initial' && r.url() === origin + '/api/auth/me') {
+                            if (initialSessionResponses.length < 30)
+                                initialSessionResponses.push({ url: r.url(), method: r.request().method(), status: r.status(), phase });
+                            else record('Initial session response limit exceeded');
+                        }
+                    });
                     let screenshotSha256 = '';
                     const screenshot = `screenshots/${role}-${viewport}-${scenarioId}.png`;
                     try {
-                        const response = await page.goto(new URL('/agents-office', fixture.baseUrl).href);
+                        const [initialSession, response] = await Promise.all([
+                            page.waitForResponse(r => r.url() === origin + '/api/auth/me' && r.request().method() === 'GET'),
+                            page.goto(new URL('/agents-office', fixture.baseUrl).href)
+                        ]);
+                        assert.equal(initialSession.status(), 401);
                         assert.equal(response.status(), 200);
                         assert.equal(response.headers()['x-factory-head-sha'], headSha);
                         await page.getByLabel('Usuario', { exact: true }).waitFor();
                         assert.equal(await page.locator('.company-office').count(), 0);
                         await page.getByLabel('Usuario', { exact: true }).fill('fixture-member');
                         await page.getByLabel('Password', { exact: true }).fill('local-fixture-password');
+                        phase = 'login';
                         const [login, session] = await Promise.all([
                             page.waitForResponse(r => r.url() === origin + '/api/auth/login' && r.request().method() === 'POST'),
                             page.waitForResponse(r => r.url() === origin + '/api/auth/me' && r.request().method() === 'GET'),
@@ -67,6 +84,7 @@ try {
                         const auth = await session.json();
                         assert.equal(auth.sessionBacked, true);
                         assert.equal(auth.user.id, 'fixture-member');
+                        phase = 'authenticated';
                         await page.getByTestId('button-back-home').waitFor();
                         if (scenarioId === 'office-company-navigation') {
                             await page.getByRole('button', { name: /^Abrir Company World/ }).click();
@@ -85,7 +103,14 @@ try {
                     catch {
                         record('Screenshot unavailable');
                     }
-                    cases.push({ scenarioId, viewport, passed: errors.length === 0, errors, screenshot, screenshotSha256, mockedResources: [...mockedResources] });
+                    let expectedInitialSessionErrors = 0;
+                    const consoleDiagnostics = consoleErrors.map(error => {
+                        const expected = expectedInitialSessionErrors === 0 && isExpectedInitialSessionError(error, initialSessionResponses, origin);
+                        if (expected) expectedInitialSessionErrors++;
+                        else record('Browser console error');
+                        return { phase: error.phase, endpoint: error.url === origin + '/api/auth/me' ? '/api/auth/me' : 'other', nativeInitial401: expected, argumentCount: Math.min(error.argumentCount, 100), lineNumber: Math.min(Math.max(error.lineNumber, 0), 100000), columnNumber: Math.min(Math.max(error.columnNumber, 0), 100000), nativeTextSignature: error.text === 'Failed to load resource: the server responded with a status of 401 (Unauthorized)' };
+                    });
+                    cases.push({ scenarioId, viewport, passed: errors.length === 0, errors, screenshot, screenshotSha256, mockedResources: [...mockedResources], initialSessionStatus: initialSessionResponses[0]?.status, expectedInitialSessionErrors, consoleDiagnostics });
                     await context.close();
                 }
         }

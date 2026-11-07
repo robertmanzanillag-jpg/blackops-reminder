@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T01:11:12.788Z
+Generated: 2026-11-07T01:27:03.855Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-browser-bridge`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 945 | 855 | 3186 | 570 | 18110 |
+| 947 | 856 | 3190 | 570 | 18121 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,7 +30,7 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `tests` | 241 | 237 | test:241 |
 | `server` | 221 | 216 | server:221 |
-| `script` | 98 | 90 | script:98 |
+| `script` | 100 | 91 | script:100 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
 | `docs` | 41 | 40 | docs:41 |
