@@ -40,3 +40,20 @@ provider calls. Immutable 9895bb1 fixtures verify the two actual allowed files
 remain supported, and a local Git apply proves generated multi-file changes
 produce exactly the intended bytes. This does not prevent a later branch race;
 the publisher still rechecks immediately before publication.
+
+## Bounded build output
+
+The operator may configure up to 8,192 build output tokens. Independent review
+remains capped at 4,096 and retains its prior reasoning configuration. Only the
+Asistente builder using the explicitly supported `gpt-6-astra` model requests
+`reasoning.effort: low`; both exact token counting and generation receive that
+same setting, and its value is included in the shared-credit request fingerprint.
+Legacy callers omit the optional setting. Provider and credit execution deadlines
+are unchanged.
+
+At the explicitly configured upper-bound rates of 12,500 input and 50,000 output
+nanodollars/token, 32,000 input plus 8,192 output tokens rounds upward to 81 cents.
+This fits a 100-cent reservation; the provider still checks the exact counted
+input before generation. No grant, reservation, repair limit, pricing expiration
+or automatic retry is changed by this configuration allowance. Actual model
+quality must still pass the existing independent acceptance and review gates.

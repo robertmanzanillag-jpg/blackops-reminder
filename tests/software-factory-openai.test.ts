@@ -79,3 +79,15 @@ test("terminal diagnostics are static and never include provider error details",
   assert.equal("reason" in outcome && outcome.reason,expected);assert.ok(!JSON.stringify(outcome).includes("PRIVATE_DETAIL"));
  }
 });
+
+
+test("explicit Astra low reasoning preserves exact count and the 81-cent maximum output admission",async()=>{
+ const calls:any[]=[];
+ const settings={...config,model:"gpt-6-astra",reasoningEffort:"low" as const,maxInputTokens:32000,inputNanoUsdPerToken:12500,outputNanoUsdPerToken:50000};
+ const generate=createOpenAiFactoryTextProvider({...settings,request:async(url,init)=>{const body=JSON.parse(String(init.body));calls.push(body);if(url.endsWith("/input_tokens")){assert.deepEqual(body.reasoning,{effort:"low"});return json({object:"response.input_tokens",input_tokens:32000});}assert.deepEqual(body.reasoning,{effort:"low"});assert.equal(body.max_output_tokens,8192);return json({...result(),model:settings.model,usage:{input_tokens:32000,output_tokens:8192,total_tokens:40192}});}});
+ const bounded={...input(),maxOutputTokens:8192,maxCostCents:81};
+ const completed=await generate(bounded);assert.equal(completed.status,"completed");assert.equal(completed.costCents,81);assert.equal(calls.length,2);
+ calls.length=0;assert.equal((await generate({...bounded,maxCostCents:80})).status,"blocked");assert.equal(calls.length,1);
+ assert.throws(()=>createOpenAiFactoryTextProvider({...settings,model,request:async()=>count()}),/CONFIGURATION/);
+ assert.throws(()=>createOpenAiFactoryTextProvider({...settings,reasoningEffort:"high" as any,request:async()=>count()}),/CONFIGURATION/);
+});

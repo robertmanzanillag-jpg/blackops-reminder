@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T02:33:22.609Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-build-recovery",
+  "generatedAt": "2026-11-07T02:43:06.110Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-output-cap",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 975,
-    "filesIndexed": 875,
+    "filesVisible": 971,
+    "filesIndexed": 873,
     "imports": 3285,
     "routes": 570,
-    "symbols": 18422
+    "symbols": 18427
   },
   "directories": {
     ".": {
@@ -274,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 51,
-      "indexed": 47,
+      "files": 47,
+      "indexed": 45,
       "kinds": {
-        "docs": 51
+        "docs": 47
       }
     },
     "examples/clippers-motivation": {
@@ -5441,22 +5441,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -22852,6 +22836,7 @@
         "admitWithinCredits",
         "budget",
         "build",
+        "buildModel",
         "cents",
         "client",
         "config",
@@ -32409,6 +32394,7 @@
         "f",
         "first",
         "fixture",
+        "increased",
         "input",
         "ledger",
         "operator",
@@ -33024,8 +33010,10 @@
       ],
       "exports": [],
       "symbols": [
+        "bounded",
         "c",
         "cancel",
+        "completed",
         "config",
         "controller",
         "count",
@@ -33034,7 +33022,8 @@
         "json",
         "model",
         "outcome",
-        "result"
+        "result",
+        "settings"
       ],
       "routes": []
     },

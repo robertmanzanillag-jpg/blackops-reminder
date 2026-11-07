@@ -70,9 +70,12 @@ test("concurrent identical admissions enqueue at most once across separate opera
     assert.equal((await f.ledger.status()).reservedMicroUsd, 0);
 });
 
-test("operator rejects incompatible review limits, missing regression tests and unrelated workflow profiles",async()=>{
+test("operator permits bounded build output while preserving review ceiling and rejects invalid profiles",async()=>{
  const f=await fixture();
- for(const config of [{...f.config,maxOutputTokens:4097},{...f.config,sourcePaths:["server/office-role-work.ts"]},{...f.config,ui:{...f.config.ui,workflowId:2}},{...f.config,ui:{...f.config.ui,workflowSha256:"d".repeat(64)}}])assert.throws(()=>createAsistenteOperatorComposition(config as AsistenteOperatorConfig,f.deps));
+ const increased={...f.config,maxOutputTokens:8192};
+ assert.equal(validateAsistenteOperatorConfig(increased).maxOutputTokens,8192);
+ assert.doesNotThrow(()=>createAsistenteOperatorComposition(increased,f.deps));
+ for(const config of [{...f.config,maxOutputTokens:8193},{...f.config,sourcePaths:["server/office-role-work.ts"]},{...f.config,ui:{...f.config.ui,workflowId:2}},{...f.config,ui:{...f.config.ui,workflowSha256:"d".repeat(64)}}])assert.throws(()=>createAsistenteOperatorComposition(config as AsistenteOperatorConfig,f.deps));
  assert.equal(f.calls(),0);
 });
 
