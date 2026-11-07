@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T01:58:44.090Z",
+  "generatedAt": "2026-11-07T02:00:45.579Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-artifact-hosts",
   "packageName": "rest-express",
   "scripts": {
@@ -131,13 +131,6 @@
     "symbols": 18277
   },
   "directories": {
-    "server": {
-      "files": 224,
-      "indexed": 219,
-      "kinds": {
-        "server": 224
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -307,6 +300,13 @@
       "indexed": 1,
       "kinds": {
         "script": 4
+      }
+    },
+    "server": {
+      "files": 224,
+      "indexed": 219,
+      "kinds": {
+        "server": 224
       }
     },
     "server/replit_integrations/batch": {
