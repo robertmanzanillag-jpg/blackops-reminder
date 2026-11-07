@@ -102,3 +102,4 @@ export function createRoleWorkRunner(options:{council:Pick<ReturnType<typeof cre
   }
  }};
 }
+// Trusted deadline harness negative probe: no behavior change; never merge.
