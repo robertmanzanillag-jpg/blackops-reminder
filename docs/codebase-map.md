@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-07T02:48:48.045Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-output-cap`
+Generated: 2026-11-07T03:05:02.163Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-deadline-fixture`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 971 | 873 | 3285 | 570 | 18428 |
+| 971 | 873 | 3287 | 570 | 18434 |
 
 ## Entrypoints
 - `client/src/App.tsx`

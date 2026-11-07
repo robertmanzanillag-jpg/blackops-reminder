@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T02:48:48.045Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-output-cap",
+  "generatedAt": "2026-11-07T03:05:02.163Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-deadline-fixture",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -126,9 +126,9 @@
   "totals": {
     "filesVisible": 971,
     "filesIndexed": 873,
-    "imports": 3285,
+    "imports": 3287,
     "routes": 570,
-    "symbols": 18428
+    "symbols": 18434
   },
   "directories": {
     ".": {
@@ -23961,6 +23961,7 @@
       "exports": [
         "ROLE_WORK_DEADLINE_ASSERTIONS",
         "ROLE_WORK_DEADLINE_ID",
+        "createDeadlineControlSnapshot",
         "measureRoleWorkDeadline"
       ],
       "symbols": [
@@ -23968,9 +23969,11 @@
         "ROLE_WORK_DEADLINE_ID",
         "Runtime",
         "before",
+        "body",
         "cases",
         "completed",
         "council",
+        "createDeadlineControlSnapshot",
         "delay",
         "hanging",
         "journal",
@@ -33243,6 +33246,8 @@
       "path": "tests/software-factory-role-deadline.test.ts",
       "kind": "test",
       "imports": [
+        "../server/office-role-audits",
+        "../server/office-role-snapshots",
         "../server/software-factory-role-acceptance",
         "../server/software-factory-role-artifact",
         "../server/software-factory-role-deadline",
@@ -33255,7 +33260,11 @@
         "absent",
         "alreadyFixed",
         "base",
+        "blocked",
+        "completed",
+        "emptyBody",
         "noBaseline",
+        "owner",
         "r",
         "report",
         "result",
