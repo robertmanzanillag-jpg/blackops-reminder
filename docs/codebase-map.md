@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-07T01:28:57.593Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-browser-bridge`
+Generated: 2026-11-07T01:29:58.963Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-factory-operator`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 949 | 856 | 3190 | 570 | 18141 |
+| 956 | 861 | 3221 | 570 | 18195 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 241 | 237 | test:241 |
-| `server` | 221 | 216 | server:221 |
+| `tests` | 242 | 238 | test:242 |
+| `server` | 222 | 217 | server:222 |
 | `script` | 100 | 91 | script:100 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 41 | 40 | docs:41 |
+| `docs` | 46 | 43 | docs:46 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
@@ -232,6 +232,7 @@ Package: `rest-express`
 - `tests/shopify-oauth.test.ts`
 - `tests/software-factory-actions.test.ts`
 - `tests/software-factory-asistente-build.test.ts`
+- `tests/software-factory-asistente-operator.test.ts`
 - `tests/software-factory-asistente-review.test.ts`
 - `tests/software-factory-asistente-source.test.ts`
 - `tests/software-factory-asistente-success.test.ts`

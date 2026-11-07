@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T01:28:57.593Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-browser-bridge",
+  "generatedAt": "2026-11-07T01:29:58.963Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-factory-operator",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 949,
-    "filesIndexed": 856,
-    "imports": 3190,
+    "filesVisible": 956,
+    "filesIndexed": 861,
+    "imports": 3221,
     "routes": 570,
-    "symbols": 18141
+    "symbols": 18195
   },
   "directories": {
     ".": {
@@ -274,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 41,
-      "indexed": 40,
+      "files": 46,
+      "indexed": 43,
       "kinds": {
-        "docs": 41
+        "docs": 46
       }
     },
     "examples/clippers-motivation": {
@@ -303,10 +303,10 @@
       }
     },
     "server": {
-      "files": 221,
-      "indexed": 216,
+      "files": 222,
+      "indexed": 217,
       "kinds": {
-        "server": 221
+        "server": 222
       }
     },
     "server/replit_integrations/batch": {
@@ -345,10 +345,10 @@
       }
     },
     "tests": {
-      "files": 241,
-      "indexed": 237,
+      "files": 242,
+      "indexed": 238,
       "kinds": {
-        "test": 241
+        "test": 242
       }
     },
     "tests/fixtures": {
@@ -5449,6 +5449,22 @@
       "routes": []
     },
     {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5488,6 +5504,14 @@
       "symbols": [
         "of"
       ],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-asistente-operator.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {
@@ -22638,6 +22662,89 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-asistente-operator.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "./agent-council-store",
+        "./shared-openai-credit-runtime",
+        "./software-factory",
+        "./software-factory-asistente-build",
+        "./software-factory-asistente-review",
+        "./software-factory-asistente-source",
+        "./software-factory-company",
+        "./software-factory-company-scheduler",
+        "./software-factory-github-client",
+        "./software-factory-github-transport",
+        "./software-factory-office-ui-artifact",
+        "./software-factory-openai-transport",
+        "./software-factory-role-acceptance",
+        "./software-factory-role-artifact",
+        "./software-factory-runtime",
+        "./software-factory-store",
+        "./software-factory-store-provider",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "node:url",
+        "zod"
+      ],
+      "exports": [
+        "AsistenteOperatorConfig",
+        "OperatorUiReader",
+        "createAsistenteOperatorComposition",
+        "createFactoryOfficeAdmission",
+        "createFactoryWorkerOptions",
+        "preflightFactoryOperator"
+      ],
+      "symbols": [
+        "Credits",
+        "Store",
+        "admitWithinCredits",
+        "budget",
+        "build",
+        "cents",
+        "client",
+        "config",
+        "configSchema",
+        "createAsistenteOperatorComposition",
+        "createFactoryOfficeAdmission",
+        "createFactoryWorkerOptions",
+        "credits",
+        "discover",
+        "env",
+        "expected",
+        "githubRequest",
+        "hash",
+        "installed",
+        "job",
+        "key",
+        "mapped",
+        "matches",
+        "model",
+        "modelRequest",
+        "order",
+        "orders",
+        "owner",
+        "preflightFactoryOperator",
+        "privateFile",
+        "project",
+        "readAcceptance",
+        "readMainOrder",
+        "readUi",
+        "reservation",
+        "resolved",
+        "review",
+        "schedule",
+        "sha",
+        "source",
+        "stat",
+        "state",
+        "text"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-asistente-review.ts",
       "kind": "server",
       "imports": [
@@ -31930,6 +32037,35 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-asistente-operator.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/shared-openai-credit-ledger",
+        "../server/software-factory-asistente-operator",
+        "../server/software-factory-company",
+        "../server/software-factory-runtime",
+        "../shared/agent-company",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "a",
+        "deps",
+        "f",
+        "first",
+        "fixture",
+        "input",
+        "ledger",
+        "operator",
+        "owner",
+        "results",
+        "status"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-asistente-review.test.ts",
       "kind": "test",
       "imports": [
@@ -33356,6 +33492,7 @@
     "tests/shopify-oauth.test.ts",
     "tests/software-factory-actions.test.ts",
     "tests/software-factory-asistente-build.test.ts",
+    "tests/software-factory-asistente-operator.test.ts",
     "tests/software-factory-asistente-review.test.ts",
     "tests/software-factory-asistente-source.test.ts",
     "tests/software-factory-asistente-success.test.ts",
