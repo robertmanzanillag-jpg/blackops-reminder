@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { createAsistenteOperatorComposition, type AsistenteOperatorConfig } from "../server/software-factory-asistente-operator";
+import { createAsistenteOperatorComposition, validateAsistenteOperatorConfig, type AsistenteOperatorConfig } from "../server/software-factory-asistente-operator";
 import { createSharedOpenAiCreditLedger, type SharedCreditState, type CreditTransaction } from "../server/shared-openai-credit-ledger";
 import { companyOrderJob } from "../server/software-factory-company";
 import { validateFactoryWorkerOptions } from "../server/software-factory-runtime";
@@ -90,3 +90,5 @@ test("lost zero-cost settlement acknowledgment cannot overwrite a settled admiss
  const status=await f.ledger.status();assert.equal(status.reservedMicroUsd,0);assert.equal(status.uncertain,false);
  assert.equal((await operator.admitWithinCredits(owner,f.input)).id,"job");assert.equal(f.calls(),1);
 });
+
+test("operator mapping validator accepts only independently verified known scenarios",async()=>{const f=await fixture();const config=structuredClone(f.config);config.orders[0].scenarioId="office-role-work-reader-deadline-v1";assert.equal(validateAsistenteOperatorConfig(config).orders[0].scenarioId,"office-role-work-reader-deadline-v1");assert.throws(()=>validateAsistenteOperatorConfig({...config,orders:[{...config.orders[0],scenarioId:"arbitrary-pass"}]}));});
