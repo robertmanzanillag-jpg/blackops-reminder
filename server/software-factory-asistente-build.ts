@@ -49,7 +49,7 @@ export function createAsistenteFactoryBuild(options: {
       signal.throwIfAborted();
       return model.request(url, { ...init, signal });
     } });
-    const generatePatch = createOpenAiFactoryPatchGenerator({ sourcePaths: { [repository]: paths }, maxOutputTokens,
+    const generatePatch = createOpenAiFactoryPatchGenerator({ patchMode:"exactSourceEdits", sourcePaths: { [repository]: paths }, maxOutputTokens,
       generateText: async input => {
         const requestSha256 = createHash("sha256").update(JSON.stringify([model.model, input.instructions, input.text, input.maxOutputTokens])).digest("hex");
         return executeWithinSharedCredits(ledger, { key, consumer: "factory", requestSha256, maximumMicroUsd: input.maxCostCents * 10000 }, async () => {
@@ -63,7 +63,12 @@ export function createAsistenteFactoryBuild(options: {
     const checks=createGitHubFactoryChecks({client,repositories:{[repository]:profile.checks},readAcceptance:options.readAcceptance,now:options.now,maxPolls:options.maxPolls,wait:options.wait});
     const build = createFactoryRemotePipelineBuilder({ exportSource,generatePatch,
       prepareCandidate:publisher.prepare,finalizeCandidate:publisher.finalize,verifyCandidate:checks.verifyCandidate,
-      preflight:async(project,baseSha,context)=>({allowed:await checks.preflight(project.repo,baseSha,context.signal)}),publicationCostCents:0,now:options.now });
+      preflight:async(project,baseSha,context)=>{
+        const [owner,repo]=repository.split("/");
+        const ref=await client.git.getRef({owner,repo,ref:`heads/${profile.baseBranch}`});
+        if(ref.data.ref!==`refs/heads/${profile.baseBranch}` || ref.data.object.sha!==baseSha)return {allowed:false};
+        return {allowed:await checks.preflight(project.repo,baseSha,context.signal)};
+      },publicationCostCents:0,now:options.now });
     return build(project, state, context);
   };
 }
