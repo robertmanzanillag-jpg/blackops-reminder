@@ -1,7 +1,9 @@
 # Explicit failed-build recovery
 
 This operator action prepares a new attempt for a settled prepublication `PATCH`
-failure. It does not replay a provider call, erase history, create another order,
+or `PROVIDER_OUTPUT_LIMIT` failure. The exact diagnostic must have a matching
+settled receipt and no candidate or evidence; an output limit does not authorize
+automatic retry or raise the two-repair limit. It does not replay a provider call, erase history, create another order,
 unpause a worker, or publish/deploy an application. Only review-only Asistente is
 supported. Unknown outcomes and failures after publication never qualify.
 

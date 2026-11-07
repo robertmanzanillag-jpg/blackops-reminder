@@ -50,11 +50,12 @@ export async function verifyRecoveryRebase(repositoryPath: string, originalBaseS
 function decode(row: Record<string, any>): FactoryJob {
     return { ...row.input, id: row.id, ownerKey: row.owner_key, month: row.month, status: row.status, createdAt: new Date(row.created_at).toISOString(), completedAt: row.completed_at ? new Date(row.completed_at).toISOString() : undefined, result: row.result };
 }
-/** The only supported terminal recovery is a known-cost prepublication PATCH
- * failure with no candidate. Unknown execution and later phases never qualify. */
+/** Only these known-cost prepublication diagnostics qualify. A provider output
+ * limit has a settled receipt but no usable patch. Unknown execution and later
+ * phases never qualify, and this predicate never schedules a retry. */
 export function recoverableFailedBuild(job: FactoryJob): FactoryPipelineState {
     const outcome = job.result as any, state = outcome?.evidence?.pipelineState as FactoryPipelineState;
-    if (job.kind !== "build" || job.status !== "failed" || !job.completedAt || job.headSha || outcome?.status !== "failed" || outcome?.reason !== "FACTORY_REMOTE_BUILD_FAILED:PATCH" || !Number.isSafeInteger(outcome.costCents) || outcome.costCents < 0 || outcome.costCents > job.reservedCents ||
+    if (job.kind !== "build" || job.status !== "failed" || !job.completedAt || job.headSha || outcome?.status !== "failed" || !["FACTORY_REMOTE_BUILD_FAILED:PATCH", "FACTORY_REMOTE_BUILD_FAILED:PROVIDER_OUTPUT_LIMIT"].includes(outcome?.reason) || !Number.isSafeInteger(outcome.costCents) || outcome.costCents < 0 || outcome.costCents > job.reservedCents ||
         !state || state.version !== 1 || state.projectId !== "asistente" || job.projectId !== state.projectId || state.target !== "staging" || !canRepair(state.repairAttempts) || !Array.isArray(state.evidence) || state.evidence.length || state.candidate || state.deployment || state.verification || state.rollback || !state.finding || !/^[a-f0-9]{40}$/.test(state.finding.baseSha) || !state.finding.request?.trim() || !state.rootJobId) fail();
     return structuredClone(state);
 }

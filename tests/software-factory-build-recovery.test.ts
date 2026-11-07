@@ -34,6 +34,9 @@ test('rebase proof requires ancestor and identical protected blobs, without chec
 test('unknown, side effects, postpublication phase and repair limit never qualify',()=>{
  const job:any={id:randomUUID(),projectId:'asistente',kind:'build',status:'failed',completedAt:new Date().toISOString(),reservedCents:30,result:{status:'failed',costCents:23,reason:'FACTORY_REMOTE_BUILD_FAILED:PATCH',evidence:{pipelineState:{version:1,projectId:'asistente',rootJobId:randomUUID(),target:'staging',repairAttempts:0,evidence:[],finding:{baseSha:'a'.repeat(40),request:'real bug'}}}}};
  assert.equal(recoverableFailedBuild(job).repairAttempts,0);
+ job.result.reason='FACTORY_REMOTE_BUILD_FAILED:PROVIDER_OUTPUT_LIMIT';job.result.evidence.pipelineState.repairAttempts=1;
+ assert.equal(recoverableFailedBuild(job).repairAttempts,1);
+ for(const mutate of [(j:any)=>delete j.completedAt,(j:any)=>j.result.status='unknown',(j:any)=>j.result.reason='FACTORY_REMOTE_BUILD_FAILED:PROVIDER_OUTPUT_LIMIT:extra',(j:any)=>j.result.reason='PROVIDER_OUTPUT_LIMIT',(j:any)=>j.result.evidence.pipelineState.evidence=[{kind:'tests'}],(j:any)=>j.headSha='c'.repeat(40)]){const bad=structuredClone(job);mutate(bad);assert.throws(()=>recoverableFailedBuild(bad));}
  for(const mutate of [(j:any)=>j.status='unknown',(j:any)=>j.result.reason='FACTORY_REMOTE_BUILD_FAILED:FINALIZE',(j:any)=>j.result.evidence.pipelineState.candidate={},(j:any)=>j.result.evidence.pipelineState.repairAttempts=2,(j:any)=>j.result.costCents=31]){const bad=structuredClone(job);mutate(bad);assert.throws(()=>recoverableFailedBuild(bad));}
 });
 test('workflow exception is explicit exact pair and cannot permit changed editable source',async()=>{
@@ -93,7 +96,7 @@ test('real PostgreSQL recovery serializes duplicate admissions and rejects forge
   await pool.query('DELETE FROM software_factory_build_recoveries');assert.equal(await loadFailedBuildRecovery(pool,ownerKey,failedId,jobs[0].id),undefined);await assert.rejects(enqueueFailedBuildRecovery(options));
   await seed();const first=await enqueueFailedBuildRecovery(options);
   const retryState={...state,repairAttempts:1,finding:{...state.finding,baseSha:repo.target}};
-  await pool.query("UPDATE software_factory_jobs SET status='failed',completed_at=$2,result=$3 WHERE id=$1",[first.id,stamp,JSON.stringify({...outcome,costCents:7,evidence:{pipelineState:retryState}})]);
+  await pool.query("UPDATE software_factory_jobs SET status='failed',completed_at=$2,result=$3 WHERE id=$1",[first.id,stamp,JSON.stringify({...outcome,costCents:7,reason:'FACTORY_REMOTE_BUILD_FAILED:PROVIDER_OUTPUT_LIMIT',evidence:{pipelineState:retryState}})]);
   await pool.query('UPDATE software_factory_budget SET reserved_cents=0,spent_cents=30');
   const retryCredit=structuredClone(credit);retryCredit.reservations.push({...retryCredit.reservations[0],key:`factory:${digest(['asistente',rootId,1])}`,actualMicroUsd:70000,settlementEvidenceId:'provider-retry-receipt'});
   await pool.query('UPDATE agent_council_state SET state=$1',[JSON.stringify(retryCredit)]);
