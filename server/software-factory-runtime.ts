@@ -78,6 +78,7 @@ export async function createTrustedFactoryWorkerOptions(options: FactoryRuntimeO
 }
 
 export type FactoryProposalRuntimeOptions=Pick<FactoryRuntimeOptions,"owner"|"store"|"now"> & {
+  scheduleCompanyOrders?: FactoryWorkerOptions["scheduleCompanyOrders"];
   stages:Required<Pick<FactoryPipelineDependencies,"discover"|"build"|"simulate"|"review">>;
   reservations:Record<"discover"|"build"|"simulate"|"review",number>;
 };
@@ -99,7 +100,7 @@ export async function createTrustedFactoryProposalWorkerOptions(options:FactoryP
     claimFinding:async(actual,id,finding,job)=>{scope(actual);return store.claimFinding(actual,id,finding,job);},
   });
   if(!pipeline.readiness().ready)throw Error("FACTORY_PIPELINE_UNAVAILABLE");
-  return {store,scheduleOwner:owner,discoveryMode:"company-orders-only",releaseMode:"review-only",discoveryReservationCents:reservations.discover,now:options.now,
+  return {store,scheduleOwner:owner,scheduleCompanyOrders:options.scheduleCompanyOrders,discoveryMode:"company-orders-only",releaseMode:"review-only",discoveryReservationCents:reservations.discover,now:options.now,
     adapters:Object.fromEntries(kinds.map(kind=>[kind,{execute:async(...[job,context]:Parameters<FactoryAdapter["execute"]>)=>{scope(job.ownerKey);return pipeline.adapters![kind]!.execute(job,context);}}]))};
 }
 
@@ -110,6 +111,7 @@ export function validateFactoryWorkerOptions(config: unknown): asserts config is
   const value = config as Record<string, unknown>;
   if(value.releaseMode!==undefined && !["review-only","enabled"].includes(value.releaseMode as string))throw Error("FACTORY_RELEASE_MODE_INVALID");
   if(value.discoveryMode!==undefined && !["daily","company-orders-only"].includes(value.discoveryMode as string))throw Error("FACTORY_DISCOVERY_MODE_INVALID");
+  if(value.scheduleCompanyOrders!==undefined && (typeof value.scheduleCompanyOrders!=="function" || value.discoveryMode!=="company-orders-only"))throw Error("FACTORY_COMPANY_SCHEDULER_INVALID");
   if (value.adapters === null || typeof value.adapters !== "object") throw new Error("FACTORY_EXECUTORS_UNAVAILABLE");
   const adapters = value.adapters as Record<string, unknown>;
   const proposalOnly=value.releaseMode==="review-only";

@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T00:20:34.969Z
+Generated: 2026-11-07T00:22:06.678Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\office-role-completion`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 922 | 832 | 3070 | 564 | 17818 |
+| 936 | 842 | 3113 | 564 | 17900 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 232 | 228 | test:232 |
-| `server` | 212 | 207 | server:212 |
+| `tests` | 236 | 232 | test:236 |
+| `server` | 216 | 211 | server:216 |
 | `script` | 93 | 85 | script:93 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 41 | 40 | docs:41 |
+| `docs` | 45 | 42 | docs:45 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
@@ -231,14 +231,18 @@ Package: `rest-express`
 - `tests/shopify-oauth.test.ts`
 - `tests/software-factory-actions.test.ts`
 - `tests/software-factory-asistente-build.test.ts`
+- `tests/software-factory-asistente-review.test.ts`
+- `tests/software-factory-asistente-source.test.ts`
 - `tests/software-factory-asistente-success.test.ts`
 - `tests/software-factory-builder.test.ts`
+- `tests/software-factory-company-scheduler.test.ts`
 - `tests/software-factory-company.test.ts`
 - `tests/software-factory-encrypted-state.test.ts`
 - `tests/software-factory-gcs.test.ts`
 - `tests/software-factory-github-client.test.ts`
 - `tests/software-factory-github-publisher.test.ts`
 - `tests/software-factory-github-state.test.ts`
+- `tests/software-factory-github-transport.test.ts`
 - `tests/software-factory-github.test.ts`
 - `tests/software-factory-loop.test.ts`
 - `tests/software-factory-object-store.test.ts`

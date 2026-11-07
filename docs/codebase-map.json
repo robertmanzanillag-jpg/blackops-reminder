@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T00:20:34.969Z",
+  "generatedAt": "2026-11-07T00:22:06.678Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-role-completion",
   "packageName": "rest-express",
   "scripts": {
@@ -124,27 +124,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 922,
-    "filesIndexed": 832,
-    "imports": 3070,
+    "filesVisible": 936,
+    "filesIndexed": 842,
+    "imports": 3113,
     "routes": 564,
-    "symbols": 17818
+    "symbols": 17900
   },
   "directories": {
-    "server": {
-      "files": 212,
-      "indexed": 207,
-      "kinds": {
-        "server": 212
-      }
-    },
-    "tests": {
-      "files": 232,
-      "indexed": 228,
-      "kinds": {
-        "test": 232
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -176,10 +162,10 @@
       }
     },
     ".github/workflows": {
-      "files": 2,
+      "files": 4,
       "indexed": 0,
       "kinds": {
-        "other": 2
+        "other": 4
       }
     },
     "bin": {
@@ -288,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 41,
-      "indexed": 40,
+      "files": 45,
+      "indexed": 42,
       "kinds": {
-        "docs": 41
+        "docs": 45
       }
     },
     "examples/clippers-motivation": {
@@ -314,6 +300,13 @@
       "indexed": 1,
       "kinds": {
         "script": 4
+      }
+    },
+    "server": {
+      "files": 216,
+      "indexed": 211,
+      "kinds": {
+        "server": 216
       }
     },
     "server/replit_integrations/batch": {
@@ -349,6 +342,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 236,
+      "indexed": 232,
+      "kinds": {
+        "test": 236
       }
     },
     "tests/fixtures": {
@@ -5434,6 +5434,22 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -22412,6 +22428,77 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-asistente-review.ts",
+      "kind": "server",
+      "imports": [
+        "./shared-openai-credit-execution",
+        "./shared-openai-credit-ledger",
+        "./software-factory",
+        "./software-factory-github-client",
+        "./software-factory-openai",
+        "./software-factory-pipeline",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "AsistenteReviewSource",
+        "createAsistenteIndependentReview"
+      ],
+      "symbols": [
+        "actorId",
+        "candidate",
+        "createAsistenteIndependentReview",
+        "deadline",
+        "digest",
+        "expected",
+        "generate",
+        "generated",
+        "instructions",
+        "key",
+        "project",
+        "remaining",
+        "requestSha256",
+        "result",
+        "safePath",
+        "sha",
+        "signal",
+        "source",
+        "text",
+        "verdictSchema"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-asistente-source.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory",
+        "./software-factory-asistente-review",
+        "./software-factory-github-client",
+        "node:crypto"
+      ],
+      "exports": [
+        "createAsistenteReviewSourceLoader"
+      ],
+      "symbols": [
+        "a",
+        "allowed",
+        "blob",
+        "bytes",
+        "candidate",
+        "changed",
+        "commits",
+        "createAsistenteReviewSourceLoader",
+        "maps",
+        "normalized",
+        "safe",
+        "seen",
+        "text",
+        "trees"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-builder.ts",
       "kind": "server",
       "imports": [
@@ -22462,6 +22549,31 @@
         "stop",
         "timer",
         "workspace"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-company-scheduler.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "./shared-openai-credit-ledger",
+        "./software-factory",
+        "./software-factory-company",
+        "./software-factory-store",
+        "node:crypto"
+      ],
+      "exports": [
+        "createFactoryCompanyOrderScheduler"
+      ],
+      "symbols": [
+        "admitted",
+        "budget",
+        "createFactoryCompanyOrderScheduler",
+        "orders",
+        "ownerKey",
+        "scan",
+        "target"
       ],
       "routes": []
     },
@@ -22701,6 +22813,25 @@
         "sha",
         "shaValid",
         "validateRepository"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-github-transport.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-github-client"
+      ],
+      "exports": [
+        "createAsistenteGitHubTransport"
+      ],
+      "symbols": [
+        "accept",
+        "createAsistenteGitHubTransport",
+        "headers",
+        "root",
+        "route",
+        "target"
       ],
       "routes": []
     },
@@ -31409,6 +31540,59 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-asistente-review.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/shared-openai-credit-ledger",
+        "../server/software-factory",
+        "../server/software-factory-asistente-review",
+        "../server/software-factory-pipeline",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "body",
+        "f",
+        "fixture",
+        "invalidSources",
+        "ledger",
+        "model",
+        "now",
+        "project",
+        "repository",
+        "result",
+        "review",
+        "state"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-asistente-source.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory",
+        "../server/software-factory-asistente-source",
+        "../server/software-factory-github-client",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "base",
+        "candidate",
+        "client",
+        "content",
+        "f",
+        "fixture",
+        "hash",
+        "load",
+        "oldText"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-asistente-success.test.ts",
       "kind": "test",
       "imports": [
@@ -31467,6 +31651,36 @@
         "record",
         "result",
         "run"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-company-scheduler.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/shared-openai-credit-ledger",
+        "../server/software-factory",
+        "../server/software-factory-company-scheduler",
+        "../server/software-factory-store",
+        "../server/software-factory-worker",
+        "../shared/agent-company",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "admit",
+        "f",
+        "fixture",
+        "ledger",
+        "make",
+        "order",
+        "owner",
+        "project",
+        "receipt",
+        "scan",
+        "store"
       ],
       "routes": []
     },
@@ -31614,6 +31828,22 @@
         "request",
         "second",
         "t"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-github-transport.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-github-transport",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "request",
+        "signal",
+        "token"
       ],
       "routes": []
     },
@@ -32621,14 +32851,18 @@
     "tests/shopify-oauth.test.ts",
     "tests/software-factory-actions.test.ts",
     "tests/software-factory-asistente-build.test.ts",
+    "tests/software-factory-asistente-review.test.ts",
+    "tests/software-factory-asistente-source.test.ts",
     "tests/software-factory-asistente-success.test.ts",
     "tests/software-factory-builder.test.ts",
+    "tests/software-factory-company-scheduler.test.ts",
     "tests/software-factory-company.test.ts",
     "tests/software-factory-encrypted-state.test.ts",
     "tests/software-factory-gcs.test.ts",
     "tests/software-factory-github-client.test.ts",
     "tests/software-factory-github-publisher.test.ts",
     "tests/software-factory-github-state.test.ts",
+    "tests/software-factory-github-transport.test.ts",
     "tests/software-factory-github.test.ts",
     "tests/software-factory-loop.test.ts",
     "tests/software-factory-object-store.test.ts",
