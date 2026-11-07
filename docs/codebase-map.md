@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-07T00:55:31.728Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\office-role-completion`
+Generated: 2026-11-07T01:28:57.593Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-browser-bridge`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 942 | 848 | 3138 | 564 | 17982 |
+| 949 | 856 | 3190 | 570 | 18141 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 238 | 234 | test:238 |
-| `server` | 219 | 214 | server:219 |
-| `script` | 94 | 86 | script:94 |
+| `tests` | 241 | 237 | test:241 |
+| `server` | 221 | 216 | server:221 |
+| `script` | 100 | 91 | script:100 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 45 | 42 | docs:45 |
+| `docs` | 41 | 40 | docs:41 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
@@ -55,6 +55,7 @@ Package: `rest-express`
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/tools`
+- `script/software-factory-office-ui-fixture.mjs`: `/api/agent-council/state`, `/api/agents-office/connections`, `/api/agents-office/kong-snapshot`, `/api/ceo/conversation-history`, `/api/legal-compliance/reports`, `/api/monthly-goals`
 - `server/agent-council-routes.ts`: `/api/agent-company/orders`, `/api/agent-company/orders/:id/done`, `/api/agent-council/internal-work`, `/api/agent-council/run`, `/api/agent-council/state`
 - `server/assistant.ts`: `/api/assistant/chat`, `/api/assistant/context`, `/api/assistant/transcribe`
 - `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
@@ -248,6 +249,8 @@ Package: `rest-express`
 - `tests/software-factory-object-store.test.ts`
 - `tests/software-factory-office-connection.test.ts`
 - `tests/software-factory-office-mode.test.ts`
+- `tests/software-factory-office-ui-artifact.test.ts`
+- `tests/software-factory-office-ui-evidence.test.ts`
 - `tests/software-factory-openai-builder.test.ts`
 - `tests/software-factory-openai-transport.test.ts`
 - `tests/software-factory-openai.test.ts`

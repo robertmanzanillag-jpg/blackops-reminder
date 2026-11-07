@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T00:55:31.728Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-role-completion",
+  "generatedAt": "2026-11-07T01:28:57.593Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-browser-bridge",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 942,
-    "filesIndexed": 848,
-    "imports": 3138,
-    "routes": 564,
-    "symbols": 17982
+    "filesVisible": 949,
+    "filesIndexed": 856,
+    "imports": 3190,
+    "routes": 570,
+    "symbols": 18141
   },
   "directories": {
     ".": {
@@ -274,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 45,
-      "indexed": 42,
+      "files": 41,
+      "indexed": 40,
       "kinds": {
-        "docs": 45
+        "docs": 41
       }
     },
     "examples/clippers-motivation": {
@@ -289,10 +289,10 @@
       }
     },
     "script": {
-      "files": 94,
-      "indexed": 86,
+      "files": 100,
+      "indexed": 91,
       "kinds": {
-        "script": 94
+        "script": 100
       }
     },
     "scripts": {
@@ -303,10 +303,10 @@
       }
     },
     "server": {
-      "files": 219,
-      "indexed": 214,
+      "files": 221,
+      "indexed": 216,
       "kinds": {
-        "server": 219
+        "server": 221
       }
     },
     "server/replit_integrations/batch": {
@@ -345,10 +345,10 @@
       }
     },
     "tests": {
-      "files": 238,
-      "indexed": 234,
+      "files": 241,
+      "indexed": 237,
       "kinds": {
-        "test": 238
+        "test": 241
       }
     },
     "tests/fixtures": {
@@ -5434,22 +5434,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -10881,6 +10865,117 @@
       "routes": []
     },
     {
+      "path": "script/software-factory-office-ui-acceptance.ts",
+      "kind": "script",
+      "imports": [
+        "./software-factory-role-acceptance",
+        "./software-factory-ui-static.mjs",
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:url",
+        "node:util"
+      ],
+      "exports": [],
+      "symbols": [
+        "BROWSER",
+        "NODE",
+        "base",
+        "built",
+        "bundle",
+        "changed",
+        "code",
+        "container",
+        "diagnostic",
+        "digest",
+        "e",
+        "exec",
+        "harness",
+        "main",
+        "name",
+        "staticManifest",
+        "stderr",
+        "temp"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/software-factory-office-ui-fixture.mjs",
+      "kind": "script",
+      "imports": [
+        "./server/local-auth",
+        "esbuild",
+        "express",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "launchOfficeUiFixture"
+      ],
+      "symbols": [
+        "app",
+        "auth",
+        "close",
+        "html",
+        "keys",
+        "launchOfficeUiFixture",
+        "saved",
+        "temp",
+        "users"
+      ],
+      "routes": [
+        "/api/agent-council/state",
+        "/api/agents-office/connections",
+        "/api/agents-office/kong-snapshot",
+        "/api/ceo/conversation-history",
+        "/api/legal-compliance/reports",
+        "/api/monthly-goals"
+      ]
+    },
+    {
+      "path": "script/software-factory-office-ui-oracle.mjs",
+      "kind": "script",
+      "imports": [
+        "./software-factory-office-ui-fixture.mjs",
+        "./software-factory-ui-console.mjs",
+        "./software-factory-ui-static.mjs",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "actual",
+        "auth",
+        "browser",
+        "bytes",
+        "consoleDiagnostics",
+        "consoleErrors",
+        "context",
+        "digest",
+        "errors",
+        "expected",
+        "fixture",
+        "headSha",
+        "input",
+        "journeyIds",
+        "origin",
+        "page",
+        "record",
+        "regressions",
+        "report",
+        "screenshot",
+        "u",
+        "versions"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/software-factory-pilot-exports.ts",
       "kind": "script",
       "imports": [
@@ -10923,6 +11018,8 @@
       ],
       "exports": [
         "acceptanceTreeEntries",
+        "checkedRoot",
+        "exportRevision",
         "removeAcceptanceContainer"
       ],
       "symbols": [
@@ -10951,6 +11048,53 @@
         "runtime",
         "source",
         "timeout"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/software-factory-ui-console.mjs",
+      "kind": "script",
+      "imports": [],
+      "exports": [
+        "isExpectedInitialSessionError"
+      ],
+      "symbols": [
+        "isExpectedInitialSessionError"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/software-factory-ui-static.mjs",
+      "kind": "script",
+      "imports": [
+        "node:crypto",
+        "node:fs/promises",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "OFFICE_UI_HARNESS_FILES",
+        "OFFICE_UI_STATIC_EXCLUSIONS",
+        "collectStaticBundle",
+        "materializeStaticBundle",
+        "validateStaticBundle"
+      ],
+      "symbols": [
+        "MAX",
+        "OFFICE_UI_HARNESS_FILES",
+        "OFFICE_UI_STATIC_EXCLUSIONS",
+        "bundle",
+        "bytes",
+        "collectStaticBundle",
+        "file",
+        "files",
+        "manifest",
+        "materializeStaticBundle",
+        "names",
+        "sha",
+        "target",
+        "validateStaticBundle",
+        "walk"
       ],
       "routes": []
     },
@@ -18663,13 +18807,17 @@
         "zod"
       ],
       "exports": [
+        "CapabilityCancellationApproval",
+        "CapabilityCancellationVerification",
         "CapabilityTrainingState",
         "VerifiedCapabilityCost",
+        "applyCapabilityCancellation",
         "capabilityHoldout",
         "capabilityTrainingSummary",
         "createCapabilityTrainer",
         "gradeCapabilityTriage",
-        "parseCapabilityTraining"
+        "parseCapabilityTraining",
+        "prepareCapabilityCancellation"
       ],
       "symbols": [
         "CAPABILITY",
@@ -18678,8 +18826,12 @@
         "Run",
         "Task",
         "action",
+        "applyCapabilityCancellation",
         "began",
         "body",
+        "c",
+        "cancellation",
+        "cancellationSchema",
         "candidate",
         "candidates",
         "capabilityHoldout",
@@ -18691,6 +18843,7 @@
         "durationMs",
         "eligible",
         "errors",
+        "firstProduction",
         "fixtures",
         "grade",
         "gradeCapabilityTriage",
@@ -18707,6 +18860,8 @@
         "policy",
         "policySchema",
         "policyVersion",
+        "prepareCapabilityCancellation",
+        "productionJobs",
         "prompt",
         "realTask",
         "resultSchema",
@@ -18719,6 +18874,7 @@
         "usageSchema",
         "used",
         "value",
+        "verified",
         "work"
       ],
       "routes": []
@@ -19733,6 +19889,7 @@
         "body",
         "clipMetrics",
         "compose",
+        "counts",
         "cycleTotals",
         "daily",
         "dir",
@@ -19811,13 +19968,16 @@
       "symbols": [
         "base",
         "body",
+        "codes",
         "createWebSourceExportCycle",
         "cycle",
         "env",
         "officeWebSourceStatus",
         "owner",
         "response",
+        "safeExportFailure",
         "startOfficeWebSourceExporter",
+        "value",
         "warmOfficeWebSources"
       ],
       "routes": []
@@ -23038,6 +23198,86 @@
         "owner",
         "readMainOrder",
         "result"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-office-ui-artifact.ts",
+      "kind": "server",
+      "imports": [
+        "../script/software-factory-ui-static.mjs",
+        "./software-factory-office-ui-evidence",
+        "node:crypto",
+        "node:zlib"
+      ],
+      "exports": [
+        "createOfficeUiArtifactReader",
+        "readOfficeUiZip"
+      ],
+      "symbols": [
+        "a",
+        "archive",
+        "branch",
+        "bytes",
+        "c",
+        "central",
+        "config",
+        "content",
+        "createOfficeUiArtifactReader",
+        "digest",
+        "encoded",
+        "end",
+        "evidence",
+        "files",
+        "flags",
+        "hash",
+        "job",
+        "jobs",
+        "json",
+        "listing",
+        "localName",
+        "location",
+        "matches",
+        "name",
+        "packed",
+        "paths",
+        "readOfficeUiZip",
+        "reader",
+        "redirect",
+        "repo",
+        "repository",
+        "response",
+        "run",
+        "signal",
+        "steps"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-office-ui-evidence.ts",
+      "kind": "server",
+      "imports": [
+        "../script/software-factory-ui-static.mjs",
+        "./software-factory",
+        "node:crypto"
+      ],
+      "exports": [
+        "OFFICE_UI_JOURNEYS",
+        "officeUiSimulationEvidence"
+      ],
+      "symbols": [
+        "OFFICE_UI_JOURNEYS",
+        "age",
+        "artifactIds",
+        "c",
+        "hash",
+        "matches",
+        "names",
+        "officeUiSimulationEvidence",
+        "p",
+        "report",
+        "source",
+        "version"
       ],
       "routes": []
     },
@@ -30054,16 +30294,24 @@
       "exports": [],
       "symbols": [
         "NOW",
+        "approval",
         "audit",
         "busy",
         "corrupt",
         "f",
         "fixture",
+        "forged",
+        "job",
         "lessons",
+        "make",
         "next",
+        "now",
+        "options",
+        "paid",
         "realJob",
         "reorder",
         "result",
+        "role",
         "sourceBody",
         "sourceIssue",
         "text",
@@ -32119,6 +32367,58 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-office-ui-artifact.test.ts",
+      "kind": "test",
+      "imports": [
+        "../script/software-factory-ui-static.mjs",
+        "../server/software-factory-office-ui-artifact",
+        "../server/software-factory-office-ui-evidence",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "apiRequest",
+        "archive",
+        "directory",
+        "f",
+        "files",
+        "fixture",
+        "hash",
+        "input",
+        "n",
+        "path",
+        "reader",
+        "repository",
+        "sourceFiles",
+        "zipFiles"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-office-ui-evidence.test.ts",
+      "kind": "test",
+      "imports": [
+        "../script/software-factory-ui-static.mjs",
+        "../server/software-factory-office-ui-evidence",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "copy",
+        "expected",
+        "failed",
+        "files",
+        "hash",
+        "parse",
+        "screenshots"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-openai-builder.test.ts",
       "kind": "test",
       "imports": [
@@ -32523,6 +32823,29 @@
       "exports": [],
       "symbols": [
         "pool"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-ui-static.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/software-factory-ui-console.mjs",
+        "../script/software-factory-ui-static.mjs",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "bundle",
+        "error",
+        "origin",
+        "out",
+        "response",
+        "root"
       ],
       "routes": []
     },
@@ -33050,6 +33373,8 @@
     "tests/software-factory-object-store.test.ts",
     "tests/software-factory-office-connection.test.ts",
     "tests/software-factory-office-mode.test.ts",
+    "tests/software-factory-office-ui-artifact.test.ts",
+    "tests/software-factory-office-ui-evidence.test.ts",
     "tests/software-factory-openai-builder.test.ts",
     "tests/software-factory-openai-transport.test.ts",
     "tests/software-factory-openai.test.ts",

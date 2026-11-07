@@ -7,7 +7,7 @@ import {pathToFileURL} from "node:url";
 import {createHash,randomUUID} from "node:crypto";
 import {measureRoleWorkAcceptance,ROLE_WORK_ACCEPTANCE_ID,remoteAcceptanceRuntime,serveAcceptanceRuntime} from "../server/software-factory-role-acceptance";
 const exec=promisify(execFile);
-async function checkedRoot(root:string,sha:string){
+export async function checkedRoot(root:string,sha:string){
  if(!path.isAbsolute(root)||!/^[a-f0-9]{40}$/.test(sha)||/[\r\n,]/.test(root))throw Error("QA_EXACT_CHECKOUT_REQUIRED");
  const resolved=await realpath(root);
  const git=async(args:string[])=>(await exec("git",["-C",resolved,...args],{timeout:10000,maxBuffer:1024*1024})).stdout.trim();
@@ -28,7 +28,7 @@ export function acceptanceTreeEntries(raw:string){
  if(!entries.some(e=>e.path==="server/office-role-work.ts"))throw Error("QA_SOURCE_RUNTIME_MISSING");
  return entries;
 }
-async function exportRevision(root:string,sha:string){
+export async function exportRevision(root:string,sha:string){
  const raw=(await exec("git",["-C",root,"ls-tree","-rz",sha],{timeout:10000,maxBuffer:2097152})).stdout;
  const entries=acceptanceTreeEntries(raw),directory=await mkdtemp(path.join(os.tmpdir(),"office-acceptance-source-"));let bytesTotal=0;
  try{for(const entry of entries){
