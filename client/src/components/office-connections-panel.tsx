@@ -86,6 +86,8 @@ export function OfficeConnectionsPanel() {
       </div>
       {open && <div className="mt-2 max-h-[34dvh] space-y-3 overflow-y-auto overscroll-contain pb-2 pr-1">
         <OfficeBusinessHistory sessionScope={sessionScope} ownerId={routerId}/>
+      <OfficeBusinessHistory sessionScope={sessionScope} ownerId={routerId} kind="editorial"/>
+      <OfficeBusinessHistory sessionScope={sessionScope} ownerId={routerId} kind="revenue"/>
         {connections.isError && <p role="alert" className="text-sm text-amber-200">No se pudo comprobar el acceso a Claude y su ejecutor.</p>}
         {!connections.data && !connections.isError && <p className="text-sm text-slate-300">Comprobando conexiones…</p>}
         {connections.data && (["worker", "claude"] as const).map(name => {
