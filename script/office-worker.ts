@@ -40,6 +40,8 @@ if (process.env.OFFICE_REVIEW_PROVIDER === "openai" && !reviewOnlyOwner) throw n
 const execution = reviewOnlyOwner && academy ? (await import("../server/office-execution")).createOfficeExecution(academy) : undefined;
 const internalModule=internalEnabled ? await import("../server/office-internal-work"):undefined;
 const internal=internalModule && academy && protocolPool ? internalModule.createInternalWorkRunner({council:academy,owner:getSystemUserId(),read:role=>internalModule.readInternalWorkSnapshot(protocolPool,getSystemUserId(),role==="radio"),shouldStop:()=>stopping}):undefined;
+const businessModule=internalEnabled ? await import("../server/office-business-work"):undefined;
+const businessWork=businessModule && academy && protocolPool ? businessModule.createBusinessWorkRunner({pool:protocolPool,owner:getSystemUserId(),getGeneration:async role=>businessModule.eligibleBusinessGeneration((await academy!.load()).company.careers[role]),shouldStop:()=>stopping}):undefined;
 const roleWork=roleWorkEnabled && academy && protocolPool?(await import("../server/office-role-work")).createRoleWorkRunner({council:academy,owner:getSystemUserId(),read:role=>import("../server/office-role-snapshots").then(module=>module.readRoleSnapshot(protocolPool,getSystemUserId(),role)),...(webSourcesEnabled?{readWeb:(role:import("../server/office-web-role-sources").WebSourceRole)=>import("../server/office-web-role-store").then(module=>module.readStoredWebRoleSource(protocolPool,getSystemUserId(),getSystemUserId(),role))}:{}),shouldStop:()=>stopping}):undefined;
 const roleExecution=roleAcademyEnabled && academy?(await import("../server/office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"1536"}):undefined;
 const roleAcademy=roleExecution && academy?(await import("../server/office-role-academy")).createRoleAcademyRunner({council:academy,dailyPairs:Number(process.env.OFFICE_ROLE_ACADEMY_DAILY_PAIRS),shouldStop:()=>stopping,run:async(prompt,call)=>{
@@ -80,6 +82,7 @@ try {
         lastAcademyTick = Date.now(); await academy.runCycle();
         if (!stopping && process.env.OFFICE_ACADEMY_EXECUTION_ENABLED === "true") await academy.runAcademyCycle();
         if(internal && !stopping) await internal.tick();
+        if(businessWork && !stopping) await businessWork.tick();
         if(webSourcesEnabled && !stopping){try{await (await import("../server/office-web-source-scheduler")).warmOfficeWebSources(process.env.OFFICE_WEB_SOURCE_ORIGIN!);}catch{console.error("Office source host wake unconfirmed; audits will validate stored source freshness independently.");}}
         if(roleWork && !stopping) await roleWork.tick();
         if(roleAcademy && !stopping) await roleAcademy.tick();

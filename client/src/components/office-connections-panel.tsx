@@ -7,6 +7,7 @@ import { officeCitySnapshotExpiresAt } from "@/lib/office-city-agents";
 import type { OfficeKongAuditResult } from "../../../server/office-kong";
 import type { OfficeKongCollaboration } from "../../../server/office-kong-collaboration";
 import { kongSupervisorSessionScope, type SupervisorAuth } from "./kong-supervisor-session";
+import { OfficeBusinessHistory } from "./office-business-history";
 
 type Probe = { status: "ready" | "blocked"; reason: string; checkedAt: string };
 type Run = { id: string; key: string; kind: string; status: string; source?: "scheduled"; text?: string; createdAt: string; completedAt?: string; sessionId?: string; evidence?: OfficeKongAuditResult["evidence"]; error?: { reason: string }; review?: { verdict: string; headSha: string } };
@@ -84,6 +85,7 @@ export function OfficeConnectionsPanel() {
         <Button aria-expanded={open} size="sm" variant="ghost" className="h-8 px-2 text-xs" onClick={() => { setClock(Date.now()); setOpen(!open); }}>{open ? "Minimizar" : "Trabajo real"}</Button>
       </div>
       {open && <div className="mt-2 max-h-[34dvh] space-y-3 overflow-y-auto overscroll-contain pb-2 pr-1">
+        <OfficeBusinessHistory sessionScope={sessionScope} ownerId={routerId}/>
         {connections.isError && <p role="alert" className="text-sm text-amber-200">No se pudo comprobar el acceso a Claude y su ejecutor.</p>}
         {!connections.data && !connections.isError && <p className="text-sm text-slate-300">Comprobando conexiones…</p>}
         {connections.data && (["worker", "claude"] as const).map(name => {

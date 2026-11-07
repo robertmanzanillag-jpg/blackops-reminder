@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-07T03:56:20.682Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-once`
+Generated: 2026-11-07T04:23:29.909Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\office-real-execution`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 991 | 889 | 3337 | 570 | 18577 |
+| 994 | 896 | 3370 | 571 | 18672 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,13 +28,13 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 251 | 247 | test:251 |
-| `server` | 231 | 226 | server:231 |
+| `tests` | 254 | 250 | test:254 |
+| `server` | 235 | 230 | server:235 |
 | `script` | 104 | 93 | script:104 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 54 | 50 | docs:54 |
-| `client/src/components` | 29 | 29 | client-component:29 |
+| `docs` | 51 | 49 | docs:51 |
+| `client/src/components` | 30 | 30 | client-component:30 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 35 | 18 | other:23, docs:11, package:1 |
 | `client/src/lib` | 18 | 18 | client-lib:18 |
@@ -64,6 +64,7 @@ Package: `rest-express`
 - `server/kong-supervisor-routes.ts`: `/api/kong-supervisor/chat`, `/api/kong-supervisor/state`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
 - `server/marketing-learning-routes.ts`: `/api/marketing-command-center`, `/api/marketing-command-center/run-day`
+- `server/office-business-routes.ts`: `/api/agents-office/business-work`
 - `server/office-review-benchmarks.ts`: `/diagnostics`, `/notes`, `/profile`, `/projects/:id`, `/report`, `/users/:id`
 - `server/office-routes.ts`: `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/contact-action`, `/api/agents-office/kong-snapshot`, `/api/agents-office/runs`
 - `server/replit_integrations/chat/routes.ts`: `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/messages`
@@ -180,6 +181,8 @@ Package: `rest-express`
 - `tests/office-academy-benchmarks.test.ts`
 - `tests/office-academy-promotion.test.ts`
 - `tests/office-academy-runner.test.ts`
+- `tests/office-business-routes.test.ts`
+- `tests/office-business-work.test.ts`
 - `tests/office-capability-lifecycle.test.ts`
 - `tests/office-capability-training.test.ts`
 - `tests/office-city-agents.test.ts`

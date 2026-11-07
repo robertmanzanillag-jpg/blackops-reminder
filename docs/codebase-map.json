@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T03:56:20.682Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-once",
+  "generatedAt": "2026-11-07T04:23:29.909Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-real-execution",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,13 +124,41 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 991,
-    "filesIndexed": 889,
-    "imports": 3337,
-    "routes": 570,
-    "symbols": 18577
+    "filesVisible": 994,
+    "filesIndexed": 896,
+    "imports": 3370,
+    "routes": 571,
+    "symbols": 18672
   },
   "directories": {
+    "client/src/components": {
+      "files": 30,
+      "indexed": 30,
+      "kinds": {
+        "client-component": 30
+      }
+    },
+    "docs": {
+      "files": 51,
+      "indexed": 49,
+      "kinds": {
+        "docs": 51
+      }
+    },
+    "server": {
+      "files": 235,
+      "indexed": 230,
+      "kinds": {
+        "server": 235
+      }
+    },
+    "tests": {
+      "files": 254,
+      "indexed": 250,
+      "kinds": {
+        "test": 254
+      }
+    },
     ".": {
       "files": 35,
       "indexed": 18,
@@ -162,10 +190,10 @@
       }
     },
     ".github/workflows": {
-      "files": 5,
+      "files": 3,
       "indexed": 0,
       "kinds": {
-        "other": 5
+        "other": 3
       }
     },
     "bin": {
@@ -201,13 +229,6 @@
       "indexed": 3,
       "kinds": {
         "other": 3
-      }
-    },
-    "client/src/components": {
-      "files": 29,
-      "indexed": 29,
-      "kinds": {
-        "client-component": 29
       }
     },
     "client/src/components/agents-building": {
@@ -273,13 +294,6 @@
         "other": 1
       }
     },
-    "docs": {
-      "files": 54,
-      "indexed": 50,
-      "kinds": {
-        "docs": 54
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -300,13 +314,6 @@
       "indexed": 1,
       "kinds": {
         "script": 4
-      }
-    },
-    "server": {
-      "files": 231,
-      "indexed": 226,
-      "kinds": {
-        "server": 231
       }
     },
     "server/replit_integrations/batch": {
@@ -342,13 +349,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 251,
-      "indexed": 247,
-      "kinds": {
-        "test": 251
       }
     },
     "tests/fixtures": {
@@ -1711,12 +1711,32 @@
       "routes": []
     },
     {
+      "path": "client/src/components/office-business-history.tsx",
+      "kind": "client-component",
+      "imports": [
+        "@/lib/queryClient",
+        "@tanstack/react-query"
+      ],
+      "exports": [
+        "OfficeBusinessHistory"
+      ],
+      "symbols": [
+        "History",
+        "Job",
+        "OfficeBusinessHistory",
+        "data",
+        "query"
+      ],
+      "routes": []
+    },
+    {
       "path": "client/src/components/office-connections-panel.tsx",
       "kind": "client-component",
       "imports": [
         "../../../server/office-kong",
         "../../../server/office-kong-collaboration",
         "./kong-supervisor-session",
+        "./office-business-history",
         "@/components/ui/button",
         "@/lib/office-city-agents",
         "@/lib/queryClient",
@@ -5462,22 +5482,6 @@
       "routes": []
     },
     {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5577,6 +5581,14 @@
     },
     {
       "path": "docs/metricool-tracking-runbook.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/office-business-work.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -10686,6 +10698,8 @@
       ],
       "exports": [],
       "symbols": [
+        "businessModule",
+        "businessWork",
         "capabilities",
         "capabilityCredits",
         "capabilityEnabled",
@@ -19048,6 +19062,141 @@
       "routes": []
     },
     {
+      "path": "server/office-business-artifacts.ts",
+      "kind": "server",
+      "imports": [
+        "./evidence-json",
+        "./office-business-sources"
+      ],
+      "exports": [
+        "BusinessArtifact",
+        "BusinessFinding",
+        "buildBusinessArtifact"
+      ],
+      "symbols": [
+        "SCALE",
+        "add",
+        "atoms",
+        "body",
+        "buildBusinessArtifact",
+        "calculated",
+        "complete",
+        "decimal",
+        "h",
+        "matches",
+        "quantities",
+        "quantity",
+        "recorded",
+        "run",
+        "source",
+        "text"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-business-routes.ts",
+      "kind": "server",
+      "imports": [
+        "./office-business-work",
+        "./user-context",
+        "express"
+      ],
+      "exports": [
+        "registerOfficeBusinessRoutes"
+      ],
+      "symbols": [
+        "BusinessHistory",
+        "checkedAt",
+        "expired",
+        "history",
+        "jobs",
+        "owner",
+        "readHistory",
+        "registerOfficeBusinessRoutes"
+      ],
+      "routes": [
+        "/api/agents-office/business-work"
+      ]
+    },
+    {
+      "path": "server/office-business-sources.ts",
+      "kind": "server",
+      "imports": [
+        "./evidence-json",
+        "zod"
+      ],
+      "exports": [
+        "BUSINESS_ROLES",
+        "BUSINESS_SOURCE_SQL",
+        "BusinessPool",
+        "BusinessQuery",
+        "BusinessRole",
+        "BusinessSource",
+        "businessSourceSchema",
+        "readBusinessSources",
+        "validateBusinessSource"
+      ],
+      "symbols": [
+        "BUSINESS_ROLES",
+        "BUSINESS_SOURCE_SQL",
+        "businessSourceSchema",
+        "clean",
+        "common",
+        "definition",
+        "holding",
+        "id",
+        "read",
+        "readBusinessSources",
+        "run",
+        "s",
+        "source",
+        "trade",
+        "unique",
+        "validateBusinessSource"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-business-work.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "./evidence-json",
+        "./office-business-artifacts",
+        "./office-business-sources",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "BUSINESS_WORK_KIND",
+        "BusinessWorkJob",
+        "BusinessWorkState",
+        "businessWorkCapacity",
+        "createBusinessWorkRunner",
+        "eligibleBusinessGeneration",
+        "parseBusinessWork",
+        "readBusinessWork"
+      ],
+      "symbols": [
+        "BUSINESS_WORK_KIND",
+        "RESERVE_BYTES",
+        "TTL",
+        "businessWorkCapacity",
+        "createBusinessWorkRunner",
+        "eligibleBusinessGeneration",
+        "generation",
+        "jobSchema",
+        "mutate",
+        "parseBusinessWork",
+        "proof",
+        "readBusinessWork",
+        "result",
+        "rows",
+        "value"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/office-capability-lifecycle.ts",
       "kind": "server",
       "imports": [
@@ -21818,6 +21967,7 @@
         "./marketing-learning-routes",
         "./meeting-intelligence",
         "./metricool-analytics-sync",
+        "./office-business-routes",
         "./office-github",
         "./office-routes",
         "./office-runtime",
@@ -23594,6 +23744,7 @@
         "clock",
         "finish",
         "maintain",
+        "maintenanceStop",
         "report",
         "runSoftwareFactoryLoop",
         "stop",
@@ -30983,6 +31134,82 @@
       "routes": []
     },
     {
+      "path": "tests/office-business-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-business-routes",
+        "../server/office-business-work",
+        "express",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "app",
+        "expired",
+        "post",
+        "response",
+        "server",
+        "url"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-business-ui.mjs",
+      "kind": "test",
+      "imports": [
+        "esbuild",
+        "node:assert/strict",
+        "node:path",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "browser",
+        "bundle",
+        "page",
+        "url"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-business-work.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/evidence-json",
+        "../server/office-business-artifacts",
+        "../server/office-business-sources",
+        "../server/office-business-work",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "baseline",
+        "body",
+        "changed",
+        "corrupt",
+        "data",
+        "database",
+        "empty",
+        "f",
+        "holdings",
+        "missing",
+        "original",
+        "pending",
+        "read",
+        "records",
+        "reorder",
+        "report",
+        "runner",
+        "second",
+        "source"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-capability-lifecycle.test.ts",
       "kind": "test",
       "imports": [
@@ -33132,7 +33359,9 @@
       "exports": [],
       "symbols": [
         "Clock",
+        "adapter",
         "clock",
+        "first",
         "flush",
         "job",
         "loop",
@@ -34267,6 +34496,8 @@
     "tests/office-academy-benchmarks.test.ts",
     "tests/office-academy-promotion.test.ts",
     "tests/office-academy-runner.test.ts",
+    "tests/office-business-routes.test.ts",
+    "tests/office-business-work.test.ts",
     "tests/office-capability-lifecycle.test.ts",
     "tests/office-capability-training.test.ts",
     "tests/office-city-agents.test.ts",
