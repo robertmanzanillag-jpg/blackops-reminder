@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T01:30:39.542Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-factory-windows",
+  "generatedAt": "2026-11-07T01:56:21.920Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-scoped-export",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,13 +124,20 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 960,
-    "filesIndexed": 863,
+    "filesVisible": 955,
+    "filesIndexed": 861,
     "imports": 3232,
     "routes": 570,
-    "symbols": 18223
+    "symbols": 18246
   },
   "directories": {
+    "docs": {
+      "files": 43,
+      "indexed": 41,
+      "kinds": {
+        "docs": 43
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -162,10 +169,10 @@
       }
     },
     ".github/workflows": {
-      "files": 4,
+      "files": 2,
       "indexed": 0,
       "kinds": {
-        "other": 4
+        "other": 2
       }
     },
     "bin": {
@@ -271,13 +278,6 @@
       "indexed": 1,
       "kinds": {
         "other": 1
-      }
-    },
-    "docs": {
-      "files": 46,
-      "indexed": 43,
-      "kinds": {
-        "docs": 46
       }
     },
     "examples/clippers-motivation": {
@@ -5434,22 +5434,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -18873,12 +18857,14 @@
         "zod"
       ],
       "exports": [
+        "CAPABILITY_PROMPT_VERSION",
         "CapabilityCancellationApproval",
         "CapabilityCancellationVerification",
         "CapabilityTrainingState",
         "VerifiedCapabilityCost",
         "applyCapabilityCancellation",
         "capabilityHoldout",
+        "capabilityRunSummary",
         "capabilityTrainingSummary",
         "createCapabilityTrainer",
         "gradeCapabilityTriage",
@@ -18887,6 +18873,7 @@
       ],
       "symbols": [
         "CAPABILITY",
+        "CAPABILITY_PROMPT_VERSION",
         "ErrorCode",
         "Policy",
         "Run",
@@ -18901,6 +18888,7 @@
         "candidate",
         "candidates",
         "capabilityHoldout",
+        "capabilityRunSummary",
         "capabilityTrainingSummary",
         "costSchema",
         "createCapabilityTrainer",
@@ -18929,10 +18917,13 @@
         "prepareCapabilityCancellation",
         "productionJobs",
         "prompt",
+        "promptLabel",
+        "promptVersionSchema",
         "realTask",
         "resultSchema",
         "runProof",
         "runSchema",
+        "samePrompt",
         "sessions",
         "sourceCodes",
         "state",
@@ -22685,6 +22676,7 @@
         "build",
         "checks",
         "client",
+        "clientFor",
         "createAsistenteFactoryBuild",
         "deadline",
         "generate",
@@ -23216,6 +23208,7 @@
         "allowed",
         "blob",
         "bytes",
+        "check",
         "client",
         "commit",
         "createGitHubFactorySourceExporter",
@@ -30446,26 +30439,36 @@
         "approval",
         "audit",
         "busy",
+        "cancelled",
+        "completed",
+        "copy",
+        "corrected",
         "corrupt",
+        "current",
         "f",
         "fixture",
         "forged",
         "job",
+        "legacyState",
         "lessons",
         "make",
+        "mixed",
         "next",
         "now",
+        "old",
         "options",
         "paid",
         "realJob",
         "reorder",
         "result",
         "role",
+        "sessionPrefix",
         "sourceBody",
         "sourceIssue",
         "text",
         "trainer",
-        "training"
+        "training",
+        "unknown"
       ],
       "routes": []
     },
@@ -32068,11 +32071,14 @@
         "denied",
         "expired",
         "foreign",
+        "hash",
         "input",
         "json",
         "ledger",
         "now",
         "project",
+        "repo",
+        "result",
         "source",
         "workflowPath"
       ],
@@ -32430,6 +32436,7 @@
       ],
       "exports": [],
       "symbols": [
+        "a",
         "blob",
         "blobSha",
         "cases",
@@ -32437,8 +32444,10 @@
         "commitSha",
         "content",
         "dir",
+        "exporter",
         "f",
         "fixture",
+        "missing",
         "small",
         "tree",
         "workspace"
