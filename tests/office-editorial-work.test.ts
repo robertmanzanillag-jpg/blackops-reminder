@@ -1,4 +1,5 @@
 import test from "node:test";
+import {createHash} from "node:crypto";
 import assert from "node:assert/strict";
 import {mkdtemp,writeFile,readdir,rm} from "node:fs/promises";
 import {tmpdir} from "node:os";
@@ -11,7 +12,7 @@ import {createEditorialWorkRunner,readEditorialWork,parseEditorialWork,EDITORIAL
 import type {BusinessPool} from "../server/office-business-sources";
 const owner="owner",NOW=Date.parse("2026-11-07T04:00:00Z"),iso=(n=NOW)=>new Date(n).toISOString();
 function fixture(){
- const e={id:"event",lane:"ny-news",title:"Bridge maintenance",description:"The bridge closes at 22:00 on November 7.",instruction:"PRIVATE INSTRUCTION NEVER EXPORTED",location:"East bridge",eventType:"traffic",source:"Notify NYC",sourceUrl:"https://nyc.gov/bridge",revision:1,risk:"low",lifecycle:"active",effective:iso(NOW-60000),expires:iso(NOW+3600000),updatedAt:iso(),provenance:{connectorId:"notify",canonicalHost:"nyc.gov",fetchedAt:iso(),claimHash:digest("claim"),verified:true,sensitiveEligible:false}};
+ const e={id:"event",lane:"ny-news",title:"Bridge maintenance",description:"The bridge closes at 22:00 on November 7.",instruction:"PRIVATE INSTRUCTION NEVER EXPORTED",location:"East bridge",eventType:"traffic",source:"Notify NYC",sourceUrl:"https://nyc.gov/bridge",revision:1,risk:"low",lifecycle:"active",effective:iso(NOW-60000),expires:iso(NOW+3600000),updatedAt:iso(),provenance:{connectorId:"notify",canonicalHost:"nyc.gov",fetchedAt:iso(),claimHash:createHash("sha256").update(JSON.stringify(["fixture-event","Bridge maintenance","The bridge closes at 22:00 on November 7.","","East bridge","traffic","https://nyc.gov/bridge"])).digest("hex").slice(0,20),verified:true,sensitiveEligible:false}};
  const claimIdentityHash=hashLocalNewsReviewValue(e.provenance.claimHash),canonicalEventIdentity=hashLocalNewsCanonicalEventIdentity({eventId:e.id,eventRevision:e.revision,lane:e.lane,title:e.title,description:e.description,instruction:e.instruction,location:e.location,eventType:e.eventType,source:e.source,sourceUrl:e.sourceUrl,risk:"low",lifecycle:e.lifecycle,effective:e.effective,expires:e.expires,claimIdentityHash});
  const q:any={id:"queue-x",eventId:e.id,eventRevision:e.revision,lane:e.lane,platform:"x",copy:"Existing separately prepared copy",source:e.source,sourceUrl:e.sourceUrl,risk:"low",lifecycle:"active",canonicalEventIdentity,claimIdentityHash,verdicts:["source_verifier","safety_editor","monetization_editor"].map(role=>({role,verdict:"approve",reasons:[],evidence:[],checkedAt:iso()})),evidence:[],consensus:"unanimous_approve",publishDecision:"auto_publish",checkedAt:iso(),createdAt:iso(),originalPublishedAt:e.effective,expires:e.expires,status:"auto_eligible",gateReason:"cadence",notBefore:iso(NOW+60000)};
  const review=(q:any)=>hashLocalNewsQueueReview({queueItemId:q.id,eventId:q.eventId,eventRevision:q.eventRevision,lane:q.lane,copy:q.copy,platform:q.platform,risk:q.risk,canonicalEventIdentity:q.canonicalEventIdentity,claimIdentityHash:q.claimIdentityHash,verdicts:q.verdicts,evidence:q.evidence,consensus:q.consensus,publishDecision:q.publishDecision,checkedAt:q.checkedAt,originalPublishedAt:q.originalPublishedAt,expires:q.expires});q.reviewHash=review(q);const fb={...q,id:"queue-fb",platform:"facebook"};fb.reviewHash=review(fb);
@@ -33,6 +34,13 @@ test("expired uncertain role cannot retry and does not starve other roles; gener
 
 test("current producer review binds original publication, expiry and provenance claim to exact event",()=>{
  const f=fixture();assert.ok("originalPublishedAt" in f.queue[0]);assert.ok("expires" in f.queue[0]);assert.equal(source().items.length,1);
- f.events[0].provenance.claimHash=digest("different claim");assert.equal(projectEditorialSource(f,owner,NOW).items.length,0);
+ f.events[0].provenance.claimHash=digest("different claim").slice(0,20);assert.equal(projectEditorialSource(f,owner,NOW).items.length,0);
  for(const field of ["originalPublishedAt","expires"]){const changed=fixture();for(const q of changed.queue)q[field]=iso(NOW-1000);assert.equal(projectEditorialSource(changed,owner,NOW).items.length,0);}
+});
+
+test("canonical producer 20-hex provenance is accepted while review identities remain full SHA256",()=>{
+ const raw=fixture();assert.match(raw.events[0].provenance.claimHash,/^[a-f0-9]{20}$/);assert.match(raw.queue[0].claimIdentityHash,/^[a-f0-9]{64}$/);assert.match(raw.queue[0].reviewHash,/^[a-f0-9]{64}$/);
+ const saved=projectEditorialSource(raw,owner,NOW);assert.equal(saved.items[0].claimHash,raw.events[0].provenance.claimHash);assert.equal(prepareEditorialDelivery(saved,owner,"news:ny-news",NOW).status,"completed");
+ const incorrect=fixture();incorrect.events[0].provenance.claimHash=digest("noncanonical-full-hash");assert.throws(()=>projectEditorialSource(incorrect,owner,NOW));
+ const shortenedReview=fixture();shortenedReview.queue[0].reviewHash=shortenedReview.queue[0].reviewHash.slice(0,20);assert.throws(()=>projectEditorialSource(shortenedReview,owner,NOW));
 });
