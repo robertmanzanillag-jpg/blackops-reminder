@@ -37,6 +37,7 @@ export function capabilityLifecycleSummary(state:CapabilityTrainingState,current
       capabilityStatus:!current?"historical":anyRunnable?"policy_available":preparing?"awaiting_qualified_successor":"blocked_no_qualified_successor",
       ...(current&&!anyRunnable&&!preparing?{blockedReason:"Preparation exhausted: new verified feedback/curriculum is required; no automatic clone or life reset."}:{}),
       localAdmissionEligible,currentGenerationVerified:generations!==undefined,
+      currentGenerationMatches:generations?generations[policy.role]===policy.generation:undefined,
       productionAdmissible:localAdmissionEligible&&generations?.[policy.role]===policy.generation,
       pendingSourceJobIds:work?pending:undefined,queueEvidenceAvailable:Boolean(work),transferredFromPolicyVersion:policy.parentVersion,
       transferScope:"Only unconsumed saved-audit triage tasks; no business orders or full career transfer",
