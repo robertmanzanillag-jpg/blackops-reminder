@@ -8584,7 +8584,7 @@ export function buildRevenueMockup(input: RevenueMockupInput) {
   };
 }
 
-function renderRevenueMockupPreviewHtml(mockup: ReturnType<typeof buildRevenueMockup>) {
+function renderRevenueMockupPreviewHtml(mockup: ReturnType<typeof buildRevenueMockup>, standalone = false) {
   const accentMap: Record<string, string> = {
     emerald: "#10b981",
     rose: "#fb7185",
@@ -8669,7 +8669,7 @@ function renderRevenueMockupPreviewHtml(mockup: ReturnType<typeof buildRevenueMo
     '<meta charset="utf-8" />',
     '<meta name="viewport" content="width=device-width, initial-scale=1" />',
     '<meta name="theme-color" content="#090d12" />',
-    `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-${scriptHash}'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'" />`,
+    standalone ? `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />` : `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-${scriptHash}'; style-src 'unsafe-inline'; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'" />`,
     `<title>${escapeHtml(mockup.input.businessName)} Revenue Mockup</title>`,
     "<style>",
     ":root{color-scheme:dark;--accent:" + accent + ";--mint:#2dd4bf;--ink:#090d12;--paper:#f3f0e9;--muted:#aab4bf;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}",
@@ -8733,22 +8733,22 @@ function renderRevenueMockupPreviewHtml(mockup: ReturnType<typeof buildRevenueMo
     `<p class="note">${escapeHtml(mockup.decision.guardrail)}</p>`,
     `<ul class="automation-list">${automations}</ul>`,
     '<h3>QA gates before contact</h3>',
-    `<ul class="qa">${qa}</ul>`,
+    standalone ? `<p class="note">Concepto interno generado. Revision visual y validacion comercial pendientes; no acredita aprobacion, resultados ni publicacion.</p>` : `<ul class="qa">${qa}</ul>`,
     "</section>",
     "</main>",
-    `<script type="module">${threeScript}</script>`,
+    standalone ? "" : `<script type="module">${threeScript}</script>`,
     "</body>",
     "</html>",
   ].join("\n");
 }
 
-export function buildRevenueMockupPreview(input: RevenueMockupInput, options: { writeFile?: boolean } = {}) {
+export function buildRevenueMockupPreview(input: RevenueMockupInput, options: { writeFile?: boolean; standalone?: boolean } = {}) {
   const parsed = revenueMockupSchema.parse(input);
   const mockup = buildRevenueMockup(parsed);
   const slug = `${slugifyRevenueValue(parsed.businessName)}-${slugifyRevenueValue(parsed.area)}-${Date.now()}`;
   const previewDir = path.join(getRevenueMockupsDir(), slug);
   const previewPath = path.join(previewDir, "index.html");
-  const html = renderRevenueMockupPreviewHtml(mockup);
+  const html = renderRevenueMockupPreviewHtml(mockup, options.standalone === true);
   const shouldWrite = options.writeFile !== false;
 
   if (shouldWrite) {
@@ -8761,6 +8761,7 @@ export function buildRevenueMockupPreview(input: RevenueMockupInput, options: { 
     slug,
     previewUrl: `/api/revenue-engine/mockup-previews/${slug}`,
     fileWritten: shouldWrite,
+    ...(options.standalone ? { html } : {}),
     htmlBytes: Buffer.byteLength(html, "utf8"),
     mockup,
     guardrails: [
