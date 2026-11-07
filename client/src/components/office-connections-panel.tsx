@@ -11,6 +11,8 @@ import { kongSupervisorSessionScope, type SupervisorAuth } from "./kong-supervis
 type Probe = { status: "ready" | "blocked"; reason: string; checkedAt: string };
 type Run = { id: string; key: string; kind: string; status: string; source?: "scheduled"; text?: string; createdAt: string; completedAt?: string; sessionId?: string; evidence?: OfficeKongAuditResult["evidence"]; error?: { reason: string }; review?: { verdict: string; headSha: string } };
 type InternalHistory = {jobs:Array<{id:string;role:string;status:string;startedAt:string;completedAt?:string;reason?:string;artifact?:{text:string}}>;
+  roleWork?:Array<{id:string;role:string;status:string;startedAt:string;reason?:string;artifactId?:string;webAudit?:{scope:string;selected:number;total:number|null;diagnostics:string[];counts:Record<string,number>};audit?:{scope:string;selected:number;total:number|null;findings:Array<{code:string;detail:string}>;metrics:Record<string,number>}}>;
+  roleAcademy?:Array<{role:string;status:string;completedPairs:number;candidateQualified:boolean;reason?:string;productionBlocker:string;comparisons:Array<{id:string;candidate:{quality:number};incumbent:{quality:number}}>}>;
   academy:Array<{id:string;agentId:string;purpose?:string;policyCurrentlyApplied?:boolean;status:string;startedAt:string;reason?:string;benchmarkId:string;assessment?:{passed:boolean;quality:number;incumbentQuality:number;scope:string}}>};
 async function readOffice<T>(url:string):Promise<T> { const response=await apiRequest("GET",url);return response.json(); }
 const statuses: Record<string, string> = { accepted: "Registrada", pending: "Registrada", running: "En ejecucion", completed: "Completada", blocked: "Bloqueada", failed: "Fallo", unknown: "Resultado sin confirmar" };
@@ -188,7 +190,7 @@ export function OfficeConnectionsPanel() {
           </article>)}
         </section>
         <section aria-label="Preparación interna y academia" className="space-y-2">
-          <h3 className="text-sm font-semibold">CEO, asistente, Radio y academia</h3>
+          <h3 className="text-sm font-semibold">Trabajo interno y formación comprobada</h3>
           {internal.isError && <p className="text-xs text-amber-200">{internal.error.message.startsWith("403:") ? "Este historial requiere acceso del propietario." : "El historial privado no está disponible. No se ha confirmado que esté vacío."}</p>}
           {internal.isLoading && <p className="text-xs text-slate-300">Leyendo preparación guardada…</p>}
           {visibleInternal && internalJobs.length === 0 && <p className="text-xs text-slate-300">Todavía no hay preparaciones internas registradas.</p>}
@@ -204,8 +206,23 @@ export function OfficeConnectionsPanel() {
             <p>{job.purpose === "incumbent" ? "Entrenamiento del titular" : "Evaluación de candidato"} · {job.policyCurrentlyApplied ? "Esta política está aplicada actualmente" : "Aplicación de esta política no confirmada"}</p>
             <p className="text-slate-400">{new Date(job.startedAt).toLocaleString()} · {job.benchmarkId}</p>
             {job.reason && <p className="text-amber-200">{job.reason}</p>}
-            {job.assessment && <p>Evaluación {job.assessment.scope === "production" ? "de trabajo real" : "de prueba"}: {job.assessment.passed ? "superada" : "no superada"} · versión evaluada {job.assessment.quality}/100 · titular de referencia {job.assessment.incumbentQuality}/100. No confirma entrenamiento aplicado ni equivale por sí sola a una promoción.</p>}
+            {job.assessment && <p>Evaluación {job.assessment.scope === "production" ? "de trabajo real" : "de prueba"}: {job.assessment.passed ? "superada" : "no superada"} · versión evaluada {job.assessment.quality}/100 · titular de referencia {job.assessment.incumbentQuality}/100. {job.policyCurrentlyApplied ? "Aplicación registrada; alcance indicado arriba." : "Esta evaluación por sí sola no acredita una promoción."}</p>}
           </article>)}
+          <h4 className="text-sm font-semibold">Auditorías de los puestos pendientes</h4>
+          {(visibleInternal?.roleWork || []).map(job=><details key={job.id} className="rounded-lg border border-white/10 p-2 text-xs">
+            <summary>{job.role} · {statuses[job.status] || job.status} · {new Date(job.startedAt).toLocaleString()}</summary>
+            {job.reason && <p className="text-amber-200">{job.reason}</p>}
+            {job.audit && <><p>{job.audit.scope}</p><p>Registros: {job.audit.selected} de {job.audit.total ?? "total sin verificar"}</p>{job.audit.findings.map((finding,index)=><p key={index}>{finding.detail}</p>)}{Object.entries(job.audit.metrics).map(([key,value])=><p key={key}>{key}: {value}</p>)}</>}
+            {job.webAudit && <><p>{job.webAudit.scope}</p><p>Registros: {job.webAudit.selected} de {job.webAudit.total ?? "total sin verificar"}</p>{job.webAudit.diagnostics.map(code=><p key={code}>{code}</p>)}{Object.entries(job.webAudit.counts).map(([key,count])=><p key={key}>{key}: {count}</p>)}</>}
+          </details>)}
+          <h4 className="text-sm font-semibold">Formación específica por puesto</h4>
+          <p className="text-xs text-slate-400">Ejercicios de interpretación de evidencia. No sustituyen trabajo real ni activan reemplazos por sí solos.</p>
+          {(visibleInternal?.roleAcademy || []).map(row=><details key={row.role} className="rounded-lg border border-white/10 p-2 text-xs">
+            <summary>{row.role} · {statuses[row.status] || row.status} · {row.completedPairs}/3 comparaciones</summary>
+            {row.reason && <p className="text-amber-200">{row.reason}</p>}
+            {row.comparisons.map(pair=><p key={pair.id}>Titular: {pair.incumbent.quality}/100 · candidato: {pair.candidate.quality}/100</p>)}
+            <p>{row.candidateQualified ? "Superó las comparaciones de prueba; falta validar la capacidad en producción." : "Sin mejora sostenida demostrada para reemplazar al titular."}</p>
+          </details>)}
         </section>
       </div>}
     </aside>

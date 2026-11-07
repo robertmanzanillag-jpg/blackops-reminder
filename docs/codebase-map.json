@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-06T23:56:16.234Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-factory-integration",
+  "generatedAt": "2026-11-07T00:09:38.601Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-role-completion",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 900,
-    "filesIndexed": 810,
-    "imports": 2982,
+    "filesVisible": 924,
+    "filesIndexed": 830,
+    "imports": 3049,
     "routes": 564,
-    "symbols": 17504
+    "symbols": 17735
   },
   "directories": {
     ".": {
@@ -162,10 +162,10 @@
       }
     },
     ".github/workflows": {
-      "files": 2,
+      "files": 4,
       "indexed": 0,
       "kinds": {
-        "other": 2
+        "other": 4
       }
     },
     "bin": {
@@ -274,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 40,
-      "indexed": 39,
+      "files": 45,
+      "indexed": 42,
       "kinds": {
-        "docs": 40
+        "docs": 45
       }
     },
     "examples/clippers-motivation": {
@@ -303,10 +303,10 @@
       }
     },
     "server": {
-      "files": 202,
-      "indexed": 197,
+      "files": 210,
+      "indexed": 205,
       "kinds": {
-        "server": 202
+        "server": 210
       }
     },
     "server/replit_integrations/batch": {
@@ -345,10 +345,10 @@
       }
     },
     "tests": {
-      "files": 221,
-      "indexed": 217,
+      "files": 230,
+      "indexed": 226,
       "kinds": {
-        "test": 221
+        "test": 230
       }
     },
     "tests/fixtures": {
@@ -5449,6 +5449,22 @@
       "routes": []
     },
     {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5516,6 +5532,14 @@
     },
     {
       "path": "docs/office-radio-training.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/office-role-evidence.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -10515,6 +10539,7 @@
         "cap",
         "code",
         "config",
+        "creditPath",
         "env",
         "fail",
         "localEnvFiles",
@@ -10526,6 +10551,7 @@
         "ownedPaths",
         "owner",
         "ownership",
+        "pairs",
         "parseWorkerConfig",
         "paths",
         "pool",
@@ -10535,6 +10561,7 @@
         "repo",
         "require",
         "result",
+        "roleFlags",
         "safeWorkerEnvironment",
         "script",
         "superviseOwnedWorker",
@@ -10592,8 +10619,15 @@
         "module",
         "protocolPool",
         "requireProtocol",
+        "result",
         "reviewOnlyOwner",
+        "roleAcademy",
+        "roleAcademyEnabled",
+        "roleExecution",
+        "roleWork",
+        "roleWorkEnabled",
         "runOnce",
+        "webSourcesEnabled",
         "worker"
       ],
       "routes": []
@@ -11176,6 +11210,7 @@
         "./agent-council",
         "./kong-supervisor-conversation",
         "./kong-supervisor-routes",
+        "./office-role-academy",
         "./user-context",
         "@shared/agent-live-status",
         "express"
@@ -11201,6 +11236,7 @@
         "raw",
         "registerAgentCouncilRoutes",
         "requestUserId",
+        "roleWork",
         "scope",
         "state",
         "text",
@@ -11249,6 +11285,8 @@
         "./kong-company",
         "./office-internal-work",
         "./office-kong",
+        "./office-role-academy",
+        "./office-role-work",
         "./user-context",
         "@shared/agent-company",
         "@shared/agent-council",
@@ -17343,6 +17381,7 @@
         "./local-auth",
         "./market-news",
         "./office-protocol",
+        "./office-web-source-scheduler",
         "./promo-video-agent",
         "./reminder-scheduler",
         "./revenue-engine",
@@ -19187,6 +19226,191 @@
       ]
     },
     {
+      "path": "server/office-role-academy.ts",
+      "kind": "server",
+      "imports": [
+        "./agent-council",
+        "./evidence-json",
+        "./office-openai",
+        "./office-role-curricula",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "RoleAcademyCall",
+        "RoleAcademyJob",
+        "RoleAcademyState",
+        "createRoleAcademyRunner",
+        "parseRoleAcademy",
+        "roleAcademySummary"
+      ],
+      "symbols": [
+        "LESSONS",
+        "began",
+        "comparisons",
+        "completed",
+        "createRoleAcademyRunner",
+        "evidence",
+        "fixture",
+        "ids",
+        "jobSchema",
+        "jobs",
+        "journal",
+        "knownPreflight",
+        "next",
+        "now",
+        "parseRoleAcademy",
+        "previous",
+        "qualityImproved",
+        "resultSchema",
+        "roleAcademySummary",
+        "roleSchema",
+        "roles",
+        "rows",
+        "safeCode",
+        "save",
+        "start",
+        "state",
+        "updated",
+        "version"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-role-audits.ts",
+      "kind": "server",
+      "imports": [
+        "./office-role-snapshots"
+      ],
+      "exports": [
+        "RoleAudit",
+        "auditSavedRole"
+      ],
+      "symbols": [
+        "add",
+        "auditSavedRole",
+        "data",
+        "finish",
+        "limits",
+        "scopes"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-role-curricula.ts",
+      "kind": "server",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "CurriculumCase",
+        "OFFICE_CURRICULUM_ROLES",
+        "OfficeCurriculumRole",
+        "ROLE_CURRICULUM_LIMITS",
+        "RoleFixture",
+        "RoleGrade",
+        "buildRolePrompt",
+        "gradeRoleResponse",
+        "roleFixtures"
+      ],
+      "symbols": [
+        "Definition",
+        "OFFICE_CURRICULUM_ROLES",
+        "ROLE_CURRICULUM_LIMITS",
+        "buildRolePrompt",
+        "definitions",
+        "fail",
+        "fixture",
+        "fixtureById",
+        "gradeRoleResponse",
+        "profile",
+        "prompt",
+        "quality",
+        "responseSchema",
+        "roleFixtures"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-role-snapshots.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "AuditPool",
+        "PENDING_OFFICE_ROLES",
+        "PendingOfficeRole",
+        "RoleSnapshot",
+        "SQL_AUDIT_ROLES",
+        "SqlAuditRole",
+        "auditRows",
+        "readRoleSnapshot",
+        "sourceDigest",
+        "validateRoleSnapshot"
+      ],
+      "symbols": [
+        "PENDING_OFFICE_ROLES",
+        "SQL_AUDIT_ROLES",
+        "auditRows",
+        "body",
+        "client",
+        "clock",
+        "identity",
+        "normalize",
+        "permission",
+        "readRoleSnapshot",
+        "result",
+        "rows",
+        "s",
+        "snapshot",
+        "sourceDigest",
+        "timestamp",
+        "validateRoleSnapshot"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-role-work.ts",
+      "kind": "server",
+      "imports": [
+        "./agent-council",
+        "./office-role-audits",
+        "./office-role-snapshots",
+        "./office-web-role-sources",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "RoleWorkJob",
+        "RoleWorkState",
+        "createRoleWorkRunner",
+        "parseRoleWork"
+      ],
+      "symbols": [
+        "WebWorkAudit",
+        "career",
+        "createRoleWorkRunner",
+        "end",
+        "expected",
+        "finished",
+        "jobSchema",
+        "jobs",
+        "journal",
+        "missingWebAudit",
+        "now",
+        "parseRoleWork",
+        "parsed",
+        "proof",
+        "retained",
+        "start",
+        "ttl",
+        "webMode"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/office-routes.ts",
       "kind": "server",
       "imports": [
@@ -19328,6 +19552,126 @@
         "requestSha256",
         "reservation",
         "signal"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-web-role-sources.ts",
+      "kind": "server",
+      "imports": [
+        "./office-role-snapshots",
+        "node:fs/promises",
+        "node:path",
+        "zod"
+      ],
+      "exports": [
+        "SourcePool",
+        "WEB_SOURCE_ROLES",
+        "WebRoleSource",
+        "WebSourceRole",
+        "WebSourceRow",
+        "assertWebSourceOwner",
+        "auditWebRoleSource",
+        "readWebRoleSources",
+        "validateWebRoleSource",
+        "webRoleSourceSchema",
+        "webSourceRowSchema"
+      ],
+      "symbols": [
+        "Part",
+        "WEB_SOURCE_ROLES",
+        "all",
+        "assertWebSourceOwner",
+        "auditWebRoleSource",
+        "body",
+        "clipMetrics",
+        "compose",
+        "cycleTotals",
+        "daily",
+        "dir",
+        "empty",
+        "env",
+        "file",
+        "found",
+        "lane",
+        "last",
+        "learning",
+        "locate",
+        "metrics",
+        "news",
+        "now",
+        "products",
+        "projected",
+        "provenanceSchema",
+        "rawClipCycle",
+        "rawClipMetrics",
+        "rawClipReport",
+        "rawMarketing",
+        "rawNews",
+        "rawProducts",
+        "rawRemote",
+        "rawSocial",
+        "rawSuppliers",
+        "readWebRoleSources",
+        "row",
+        "s",
+        "social",
+        "source",
+        "stamp",
+        "stat",
+        "suppliers",
+        "validateWebRoleSource",
+        "webRoleSourceSchema",
+        "webSourceRowSchema",
+        "x"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-web-role-store.ts",
+      "kind": "server",
+      "imports": [
+        "./office-role-snapshots",
+        "./office-web-role-sources"
+      ],
+      "exports": [
+        "OFFICE_WEB_ROLE_SOURCE_SCHEMA_SQL",
+        "persistWebRoleSources",
+        "readStoredWebRoleSource"
+      ],
+      "symbols": [
+        "OFFICE_WEB_ROLE_SOURCE_SCHEMA_SQL",
+        "checked",
+        "persistWebRoleSources",
+        "readStoredWebRoleSource",
+        "result"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/office-web-source-scheduler.ts",
+      "kind": "server",
+      "imports": [
+        "./office-web-role-sources",
+        "./office-web-role-store"
+      ],
+      "exports": [
+        "createWebSourceExportCycle",
+        "officeWebSourceStatus",
+        "startOfficeWebSourceExporter",
+        "warmOfficeWebSources"
+      ],
+      "symbols": [
+        "base",
+        "body",
+        "createWebSourceExportCycle",
+        "cycle",
+        "env",
+        "officeWebSourceStatus",
+        "owner",
+        "response",
+        "startOfficeWebSourceExporter",
+        "warmOfficeWebSources"
       ],
       "routes": []
     },
@@ -29753,6 +30097,8 @@
         "NOW",
         "TOKEN",
         "actual",
+        "agent",
+        "aggregate",
         "audit",
         "base",
         "blocked",
@@ -29773,6 +30119,7 @@
         "operationData",
         "operations",
         "output",
+        "parsed",
         "payload",
         "probe",
         "reader",
@@ -29882,6 +30229,95 @@
       "routes": []
     },
     {
+      "path": "tests/office-role-academy-integration.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/agent-council",
+        "../server/office-role-academy",
+        "../shared/agent-company",
+        "../shared/agent-council",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "common",
+        "competing",
+        "council",
+        "now",
+        "roleRun",
+        "roles",
+        "running",
+        "started"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-role-academy.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-role-academy",
+        "../server/office-role-curricula",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "h",
+        "reorder",
+        "run",
+        "setup"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-role-audits.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-role-audits",
+        "../server/office-role-snapshots",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "changed",
+        "now",
+        "partial",
+        "r",
+        "reorder",
+        "row",
+        "rows",
+        "snap",
+        "source"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-role-curricula.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-role-curricula",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "answer",
+        "audited",
+        "fixtures",
+        "good",
+        "id",
+        "parsed",
+        "prompt",
+        "raw",
+        "role",
+        "wrong"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-role-lifecycle.test.ts",
       "kind": "test",
       "imports": [
@@ -29911,6 +30347,49 @@
         "setup",
         "state",
         "tasks"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-role-snapshots.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-role-snapshots",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "source"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-role-work.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-role-snapshots",
+        "../server/office-role-work",
+        "../server/office-web-role-sources",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "absent",
+        "before",
+        "body",
+        "empty",
+        "f",
+        "fixture",
+        "legacy",
+        "mixed",
+        "old",
+        "reorder",
+        "snapshot",
+        "tampered",
+        "webNews"
       ],
       "routes": []
     },
@@ -30019,6 +30498,69 @@
       "routes": []
     },
     {
+      "path": "tests/office-web-role-sources.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-web-role-sources",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "audit",
+        "changed",
+        "db",
+        "fixture",
+        "foreign",
+        "news",
+        "now",
+        "pool",
+        "put",
+        "reorder",
+        "root",
+        "secondId",
+        "source",
+        "sources",
+        "totals"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-web-role-store.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-role-snapshots",
+        "../server/office-web-role-sources",
+        "../server/office-web-role-store",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "source"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-web-source-scheduler.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-web-source-scheduler",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "before",
+        "cycle",
+        "first"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-windows-worker.test.mjs",
       "kind": "test",
       "imports": [
@@ -30033,12 +30575,18 @@
       "exports": [],
       "symbols": [
         "FakePool",
+        "acl",
+        "aclScript",
         "command",
         "config",
+        "configPath",
+        "credit",
         "entry",
         "env",
+        "extra",
         "guard",
         "helper",
+        "paths",
         "privatePath",
         "raw",
         "repo",
@@ -31694,6 +32242,7 @@
         "previous",
         "reader",
         "replay",
+        "short",
         "snapshot",
         "source",
         "value"
@@ -31895,11 +32444,20 @@
     "tests/office-protocol.test.ts",
     "tests/office-radio-training.test.ts",
     "tests/office-review-benchmarks.test.ts",
+    "tests/office-role-academy-integration.test.ts",
+    "tests/office-role-academy.test.ts",
+    "tests/office-role-audits.test.ts",
+    "tests/office-role-curricula.test.ts",
     "tests/office-role-lifecycle.test.ts",
+    "tests/office-role-snapshots.test.ts",
+    "tests/office-role-work.test.ts",
     "tests/office-routes.test.ts",
     "tests/office-runtime.test.ts",
     "tests/office-shared-credits.test.ts",
     "tests/office-token-budget.test.ts",
+    "tests/office-web-role-sources.test.ts",
+    "tests/office-web-role-store.test.ts",
+    "tests/office-web-source-scheduler.test.ts",
     "tests/office-worker-capabilities.test.ts",
     "tests/office-worker-watchdog.test.ts",
     "tests/owner-office-storage.test.ts",
