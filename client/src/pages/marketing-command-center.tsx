@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { queryClient } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
+import {kongSupervisorSessionScope,type SupervisorAuth} from "@/components/kong-supervisor-session";
 
 type MarketingClient = {
   id: string;
@@ -34,6 +35,8 @@ type MarketingClient = {
 };
 
 type MarketingSnapshot = {
+  ownerId:string;
+  evidence?:{metricsVerified:boolean;externalExecutionVerified:boolean;mode:string};
   cmoAgent: { id: string; name: string; scope: string; status: string; reportsTo: string; mandate: string };
   capacity: { maxClients: number; activeClients: number; openSlots: number; operatingRule: string };
   globalScorecard: {
@@ -91,25 +94,31 @@ function statusTone(status: string) {
 }
 
 export default function MarketingCommandCenterPage() {
-  const [lastRun, setLastRun] = useState("");
-  const { data: snapshot, isLoading } = useQuery<MarketingSnapshot>({
-    queryKey: ["marketing-command-center"],
+  const [lastRun, setLastRun] = useState<{owner:string;summary:string}|null>(null);
+  const routerAuth=useQuery<SupervisorAuth>({queryKey:["auth-me"],enabled:false});
+  const routerId=routerAuth.data?.user?.id || null;
+  const verifiedAuth=useQuery<SupervisorAuth>({queryKey:["marketing-owner-auth",routerId],queryFn:async()=>{const response=await fetch("/api/auth/me",{cache:"no-store"});if(!response.ok)throw Error("Authentication unavailable");return response.json();},enabled:Boolean(routerId)&&!routerAuth.isFetching,staleTime:0,gcTime:0,refetchOnMount:"always",retry:false});
+  const owner=kongSupervisorSessionScope(routerAuth.data,verifiedAuth.data,routerAuth.isFetching,verifiedAuth.isFetching,verifiedAuth.isError,routerAuth.isError);
+  const { data: snapshot, isLoading, isError } = useQuery<MarketingSnapshot>({
+    queryKey: ["marketing-command-center",owner],
+    enabled:Boolean(owner),staleTime:0,gcTime:0,retry:false,
     queryFn: async () => {
       const response = await fetch("/api/marketing-command-center");
       if (!response.ok) throw new Error("Failed to load marketing command center");
-      return response.json();
+      const data=await response.json();if(data.ownerId!==owner)throw Error("Marketing owner changed");return data;
     },
   });
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["marketing-command-center"] });
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["marketing-command-center",owner] });
   const runMutation = useMutation({
-    mutationFn: () => postJson<{ summary: string }>("/api/marketing-command-center/run-day", { focusClientId: "all" }),
+    mutationFn: async () => {if(!owner)throw Error("Authentication required");const data=await postJson<{ summary: string;ownerId:string }>("/api/marketing-command-center/run-day", { focusClientId: "all" });if(data.ownerId!==owner)throw Error("Marketing owner changed");return {...data,owner};},
     onSuccess: (data) => {
-      setLastRun(data.summary);
+      setLastRun({owner:data.owner,summary:data.summary});
       refresh();
     },
   });
 
+  if(!owner || isError)return <div role="alert" className="p-6">Historial privado no disponible. No se ha confirmado que este vacio.</div>;
   if (isLoading || !snapshot) {
     return <div className="flex min-h-screen items-center justify-center bg-black text-sm text-zinc-400">Cargando Marketing HQ...</div>;
   }
@@ -138,7 +147,7 @@ export default function MarketingCommandCenterPage() {
           <div className="flex flex-col gap-2 sm:flex-row">
             <Button onClick={() => runMutation.mutate()} disabled={runMutation.isPending} className="bg-emerald-600 text-white hover:bg-emerald-500">
               <RefreshCcw className="mr-2 h-4 w-4" />
-              Run self-improvement
+              Guardar preparacion interna
             </Button>
             <Link href="/dropshipping-ceo">
               <Button className="bg-zinc-800 text-white hover:bg-zinc-700">
@@ -153,14 +162,15 @@ export default function MarketingCommandCenterPage() {
           <Metric label="Clientes" value={`${snapshot.globalScorecard.clients}/${snapshot.capacity.maxClients}`} />
           <Metric label="Ready" value={String(snapshot.globalScorecard.readyClients)} />
           <Metric label="Slots libres" value={String(snapshot.capacity.openSlots)} />
-          <Metric label="Revenue" value={money.format(snapshot.globalScorecard.totalRevenueUsd)} />
-          <Metric label="Spend" value={money.format(snapshot.globalScorecard.totalSpendUsd)} />
-          <Metric label="Learning runs" value={String(snapshot.globalScorecard.learningRuns)} />
+          <Metric label="Revenue" value={snapshot.evidence?.metricsVerified?money.format(snapshot.globalScorecard.totalRevenueUsd):"Sin verificar"} />
+          <Metric label="Spend" value={snapshot.evidence?.metricsVerified?money.format(snapshot.globalScorecard.totalSpendUsd):"Sin verificar"} />
+          <Metric label="Preparaciones guardadas" value={String(snapshot.globalScorecard.learningRuns)} />
         </section>
 
-        {lastRun && (
+        {runMutation.isError && <p role="alert">No se confirmo el guardado. Reintentar conserva la misma preparacion diaria.</p>}
+        {lastRun?.owner===owner && (
           <Card className="mb-6 border-emerald-400/20 bg-emerald-400/10">
-            <CardContent className="p-4 text-sm leading-6 text-emerald-50">{lastRun}</CardContent>
+            <CardContent className="p-4 text-sm leading-6 text-emerald-50">{lastRun.summary}</CardContent>
           </Card>
         )}
 
@@ -219,9 +229,9 @@ export default function MarketingCommandCenterPage() {
                 </div>
                 <p className="text-sm leading-6 text-zinc-300">{client.currentFocus}</p>
                 <div className="mt-3 grid grid-cols-3 gap-2 text-xs text-zinc-500">
-                  <span>{money.format(client.metrics.revenueUsd)} rev</span>
-                  <span>{money.format(client.metrics.spendUsd)} spend</span>
-                  <span>{client.metrics.signals} signals</span>
+                  <span>{snapshot.evidence?.metricsVerified?money.format(client.metrics.revenueUsd):"Sin verificar"} rev</span>
+                  <span>{snapshot.evidence?.metricsVerified?money.format(client.metrics.spendUsd):"Sin verificar"} spend</span>
+                  <span>{snapshot.evidence?.metricsVerified?client.metrics.signals:"Sin verificar"} signals</span>
                 </div>
                 <div className="mt-3 flex flex-wrap gap-1">
                   {(client.marketingCapabilities || client.channels).slice(0, 4).map((channel) => (
@@ -313,7 +323,7 @@ export default function MarketingCommandCenterPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <Target className="h-4 w-4" />
-                  Self-improvement
+                  Preparacion de recomendaciones
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
@@ -355,13 +365,13 @@ export default function MarketingCommandCenterPage() {
               <CardHeader>
                 <CardTitle className="flex items-center gap-2 text-base">
                   <BarChart3 className="h-4 w-4" />
-                  Learning history
+                  Historial de preparacion
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {snapshot.recentLearningRuns.length ? snapshot.recentLearningRuns.map((run) => (
                   <p key={run.id} className="rounded-lg border border-zinc-800 bg-black px-3 py-2 text-sm leading-5 text-zinc-300">{run.summary}</p>
-                )) : <p className="text-sm text-zinc-500">Sin learning runs todavia.</p>}
+                )) : <p className="text-sm text-zinc-500">Sin preparaciones guardadas verificables.</p>}
               </CardContent>
             </Card>
           </div>

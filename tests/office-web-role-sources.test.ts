@@ -9,6 +9,16 @@ const pool={query:async(sql:string,args?:unknown[])=>({rows:sql.includes("FROM u
 async function fixture(t:any){const root=await mkdtemp(path.join(tmpdir(),"office-web-source-test-"));t.after(async()=>{assert.ok(path.resolve(root).startsWith(path.resolve(tmpdir())+path.sep));await rm(root,{recursive:true,force:true});});return root;}
 async function put(root:string,file:string,value:unknown){const name=path.join(root,file);await mkdir(path.dirname(name),{recursive:true});await writeFile(name,typeof value==="string"?value:JSON.stringify(value));}
 const news=(count=1)=>({version:1,updatedAt:old,lastRunAt:old,queue:Array.from({length:count},(_,i)=>({id:`private:https://internal/customer-${i}`,lane:i%2?"ny-news":"miami-news",status:"quarantined",createdAt:old,approvalRequired:true,autoEligible:false,qualityScore:50,copy:"SECRET_CUSTOMER",sourceUrl:"https://private/token=secret"}))});
+
+test("durable marketing history overrides ephemeral files, retains original time, and never falls back after DB failure",async t=>{
+ const root=await fixture(t);await put(root,"marketing_command_center_data/learning-runs.json","corrupt local data");
+ const saved=[{id:"durable",createdAt:old,focusClientId:"all",clientsReviewed:4,improvementsQueued:["private plan"],rulesUpdated:["private rule"],safetyBlocks:[]}];
+ const read=async(marketingLearning:()=>Promise<unknown|null>)=>(await readWebRoleSources({pool,owner:"owner",configuredOwner:"owner",root,now,marketingLearning})).find(s=>s.role==="marketing-cmo")!;
+ const valid=await read(async()=>saved);assert.equal(valid.rows[0].kind,"marketing_plan");assert.equal(valid.rows[0].sourceAt,old);assert.equal(valid.provenance[0].files,0);assert.equal(valid.provenance[0].records,1);assert.ok(!JSON.stringify(valid).includes("private plan"));
+ assert.equal((await read(async()=>null)).provenance[0].status,"missing");assert.equal((await read(async()=>[])).provenance[0].empty,true);
+ assert.equal((await read(async()=>{throw Error("private DB detail");})).provenance[0].status,"invalid");assert.equal((await read(async()=>({bad:true}))).provenance[0].status,"invalid");assert.equal((await read(async()=>[{...saved[0],createdAt:new Date(now+60000).toISOString()}])).provenance[0].status,"invalid");
+ assert.equal(await readFile(path.join(root,"marketing_command_center_data/learning-runs.json"),"utf8"),"corrupt local data");
+});
 test("missing files remain missing, no bootstrap or filesystem writes, foreign owner rejected",async t=>{
  const root=await fixture(t);const sources=await readWebRoleSources({pool,owner:"owner",configuredOwner:"owner",root,now});assert.equal(sources.length,7);assert.deepEqual(await readdir(root),[]);assert.ok(sources.every(s=>s.diagnostics.includes("SOURCE_MISSING")));assert.ok(sources.every(s=>auditWebRoleSource(s,"owner",now).status==="blocked"));
  let calls=0;await assert.rejects(()=>readWebRoleSources({pool:{query:async()=>{calls++;return {rows:[]};}},owner:"other",configuredOwner:"owner",root,now}));assert.equal(calls,0);

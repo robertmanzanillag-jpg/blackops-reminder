@@ -54,7 +54,7 @@ export async function assertWebSourceOwner(pool:SourcePool,owner:string,configur
 
 /** Runs on the source web host. Never creates directories/defaults or invokes
  * agents, providers, publishers, OAuth readers, or mutable status getters. */
-export async function readWebRoleSources(options:{pool:SourcePool;owner:string;configuredOwner:string;root:string;env?:Record<string,string|undefined>;now?:number}):Promise<WebRoleSource[]> {
+export async function readWebRoleSources(options:{pool:SourcePool;owner:string;configuredOwner:string;root:string;env?:Record<string,string|undefined>;now?:number;marketingLearning?:()=>Promise<unknown|null>}):Promise<WebRoleSource[]> {
  await assertWebSourceOwner(options.pool,options.owner,options.configuredOwner);
  const now=options.now ?? Date.now();if(!Number.isFinite(now))throw new Error("Invalid observation clock");
  const env=options.env||{},root=path.resolve(options.root);let fileCount=0,bytes=0;
@@ -75,7 +75,12 @@ export async function readWebRoleSources(options:{pool:SourcePool;owner:string;c
  const news=await file("news_state",path.join(locate("CLIPPERS_LOCAL_NEWS_WORKSPACE","clippers_workspace/local-news"),"state.json"),v=>{const x=rawNews.parse(v);return {sourceAt:x.lastRunAt||x.updatedAt,rows:x.queue.map(q=>row("news_queue",q.id,q.status,q.createdAt,{qualityScore:q.qualityScore,approvalRequired:Number(q.approvalRequired),autoEligible:Number(q.autoEligible)},{lane:q.lane}))};});
  const products=await file("products",locate("DROPSHIPPING_PRODUCTS_PATH","dropshipping_engine_data/products.json"),v=>{const x=rawProducts.parse(v);return {sourceAt:last(x.map(q=>q.updatedAt)),rows:x.map(q=>row("product",q.id,q.status,q.updatedAt,{}))};});
  const suppliers=await file("suppliers",locate("DROPSHIPPING_SUPPLIERS_PATH","dropshipping_engine_data/suppliers.json"),v=>{const x=rawSuppliers.parse(v);return {sourceAt:last(x.map(q=>q.updatedAt)),rows:x.map(q=>row("supplier",q.id,q.status,q.updatedAt,{supplierScore:q.score}))};});
- const learning=await file("marketing_learning",locate("MARKETING_COMMAND_CENTER_LEARNING_PATH","marketing_command_center_data/learning-runs.json"),v=>{const x=rawMarketing.parse(v);return {sourceAt:last(x.map(q=>q.createdAt)),rows:x.map(q=>row("marketing_plan",q.id,"recorded",q.createdAt,{clientsReviewed:q.clientsReviewed,improvementsQueued:q.improvementsQueued.length,rulesUpdated:q.rulesUpdated.length,safetyBlocks:q.safetyBlocks.length}))};});
+ const projectLearning=(v:unknown)=>{const x=rawMarketing.parse(v);return {sourceAt:last(x.map(q=>q.createdAt)),rows:x.map(q=>row("marketing_plan",q.id,"recorded",q.createdAt,{clientsReviewed:q.clientsReviewed,improvementsQueued:q.improvementsQueued.length,rulesUpdated:q.rulesUpdated.length,safetyBlocks:q.safetyBlocks.length}))};};
+ let learning:Part;
+ if(options.marketingLearning){
+  try{const raw=await options.marketingLearning();if(raw===null)learning=empty("marketing_learning","missing");else if(Buffer.byteLength(JSON.stringify(raw))>1000000)learning=empty("marketing_learning","limit");else{const projected=projectLearning(raw);if(projected.rows.some(row=>row.sourceAt&&Date.parse(row.sourceAt)>now+30000))throw Error("Future marketing source");learning={rows:projected.rows,provenance:{kind:"marketing_learning",status:"present",sourceAt:projected.sourceAt,digest:sourceDigest(raw),records:projected.rows.length,files:0,empty:projected.rows.length===0}};}}
+  catch{learning=empty("marketing_learning","invalid");}
+ }else learning=await file("marketing_learning",locate("MARKETING_COMMAND_CENTER_LEARNING_PATH","marketing_command_center_data/learning-runs.json"),projectLearning);
  const social=await file("social_metrics",locate("DROPSHIPPING_SOCIAL_METRICS_PATH","dropshipping_engine_data/social_metrics.json"),v=>{const x=rawSocial.parse(v);return {sourceAt:last(x.map(q=>q.createdAt)),rows:x.map(q=>row("campaign_metric",q.id,"recorded",q.createdAt,{impressions:q.impressions,views:q.views,orders:q.orders,revenueUsd:q.revenueUsd,spendUsd:q.spendUsd}))};});
  const clipMetrics=await file("clip_metrics",path.join(root,"clippers_workspace/metrics/metrics-summary.json"),v=>{const x=rawClipMetrics.parse(v);return {sourceAt:x.generatedAt,rows:x.records.map(q=>row("clip_metric",q.id,"recorded",x.generatedAt,{views:q.views,likes:q.likes,comments:q.comments,shares:q.shares,saves:q.saves}))};});
  const reports:Part[]=[];
