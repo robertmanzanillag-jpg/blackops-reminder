@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {mkdtemp,mkdir,writeFile,readdir,readFile,rm} from "node:fs/promises";
 import path from "node:path";
 import {tmpdir} from "node:os";
-import {readWebRoleSources,auditWebRoleSource,validateWebRoleSource} from "../server/office-web-role-sources";
+import {readWebRoleSources,auditWebRoleSource,validateWebRoleSource,BLACKROOM_SOURCE_PROJECTION_SQL} from "../server/office-web-role-sources";
 const now=Date.parse("2026-11-07T01:00:00Z"),at=new Date(now).toISOString(),old=new Date(now-172800000).toISOString();
 const pool={query:async(sql:string,args?:unknown[])=>({rows:sql.includes("FROM users")?[{id:args![0]}]:[]})};
 async function fixture(t:any){const root=await mkdtemp(path.join(tmpdir(),"office-web-source-test-"));t.after(async()=>{assert.ok(path.resolve(root).startsWith(path.resolve(tmpdir())+path.sep));await rm(root,{recursive:true,force:true});});return root;}
@@ -110,4 +110,19 @@ test("report provenance budget retains every selected source and explicit trunca
  for(let i=0;i<20;i++){const id=`2026-11-07T00-00-${String(i).padStart(2,"0")}-000Z`;await put(root,`clippers_workspace/reports/${id}.json`,{id,userId:"owner",createdAt:at,publishMode:"draft_only",plannedClips:[]});}
  const source=(await readWebRoleSources({pool,owner:"owner",configuredOwner:"owner",root,now})).find(s=>s.role==="clippers")!;
  assert.equal(source.rows.length,18);assert.equal(source.provenance.length,20);assert.equal(source.provenance.filter(p=>p.status==="present").length,18);assert.ok(source.provenance.some(p=>p.status==="limit"));assert.equal(auditWebRoleSource(source,"owner",now).completeCoverage,false);
+});
+
+
+test("remote SQL projects canonical queue before size guard; oversized unrelated history cannot hide stale queue",async t=>{
+ const root=await fixture(t),remote={version:1,updatedAt:at,device:{seenAt:old,queue:{updatedAt:old,totals:{queued:11,processing:0,retry:0,scheduled:12,completed:253,cancelled:13},analytics:"x".repeat(2408629)}}};
+ assert.ok(Buffer.byteLength(JSON.stringify(remote))>2_400_000);
+ const sql=BLACKROOM_SOURCE_PROJECTION_SQL;
+ assert.ok(sql.startsWith("WITH projected AS (SELECT CASE"));assert.ok(sql.endsWith("AS data FROM projected"));assert.ok(sql.includes("FROM blackroom_remote_control WHERE id=$1"));
+ assert.ok(sql.includes("WHERE key IN ('queued','processing','retry','scheduled','completed','cancelled')"));
+ assert.ok(sql.includes("WHERE key IN ('seenAt','queue')"));assert.ok(sql.includes("WHERE key IN ('updatedAt','totals')"));assert.ok(sql.includes("<=4096"));
+ assert.ok(!sql.includes("analytics"));assert.ok(!sql.includes("SELECT data FROM blackroom_remote_control"));
+ // DB-shaped result of the inspected projection; SQL is not executed by this fixture.
+ const db={query:async(query:string,args?:unknown[])=>{if(query.includes("FROM users"))return {rows:[{id:args![0]}]};assert.equal(query,sql);assert.deepEqual(args,["blackroom-primary"]);return {rows:[{data:{version:remote.version,updatedAt:remote.updatedAt,device:{seenAt:remote.device.seenAt,queue:{updatedAt:remote.device.queue.updatedAt,totals:remote.device.queue.totals}}}}]};}};
+ const source=(await readWebRoleSources({pool:db,owner:"owner",configuredOwner:"owner",root,now})).find(s=>s.role==="blackroom-videos")!;
+ assert.equal(source.rows[0].metrics.completed,253);assert.equal(source.rows[0].sourceAt,old);assert.ok(source.diagnostics.includes("SOURCE_STALE"));assert.ok(source.diagnostics.includes("NO_CURRENT_SESSION_PROOF"));assert.ok(!source.diagnostics.includes("SOURCE_INVALID"));assert.ok(!JSON.stringify(source).includes("analytics"));
 });
