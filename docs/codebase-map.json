@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T01:10:27.222Z",
+  "generatedAt": "2026-11-07T01:11:12.788Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-browser-bridge",
   "packageName": "rest-express",
   "scripts": {
@@ -131,27 +131,6 @@
     "symbols": 18110
   },
   "directories": {
-    "script": {
-      "files": 98,
-      "indexed": 90,
-      "kinds": {
-        "script": 98
-      }
-    },
-    "server": {
-      "files": 221,
-      "indexed": 216,
-      "kinds": {
-        "server": 221
-      }
-    },
-    "tests": {
-      "files": 241,
-      "indexed": 237,
-      "kinds": {
-        "test": 241
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -309,11 +288,25 @@
         "other": 70
       }
     },
+    "script": {
+      "files": 98,
+      "indexed": 90,
+      "kinds": {
+        "script": 98
+      }
+    },
     "scripts": {
       "files": 4,
       "indexed": 1,
       "kinds": {
         "script": 4
+      }
+    },
+    "server": {
+      "files": 221,
+      "indexed": 216,
+      "kinds": {
+        "server": 221
       }
     },
     "server/replit_integrations/batch": {
@@ -349,6 +342,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 241,
+      "indexed": 237,
+      "kinds": {
+        "test": 241
       }
     },
     "tests/fixtures": {

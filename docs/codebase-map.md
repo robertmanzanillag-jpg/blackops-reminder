@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T01:10:27.222Z
+Generated: 2026-11-07T01:11:12.788Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-browser-bridge`
 Package: `rest-express`
 
