@@ -39,6 +39,8 @@ test('factory panel uses truthful loading/errors, budget reservation, pause, and
  await page.getByText('Aplicación registrada; la publicación automática sigue pendiente de verificación.').waitFor();
  assert.deepEqual(writes.at(-1),{action:'projects',body:{...values,journeys:['login','logout']}});
  await page.keyboard.press('Escape');await page.getByRole('dialog').waitFor({state:'detached'});
+ // Radix restores focus asynchronously after the dialog has unmounted.
+ await page.locator('[data-testid="open-software-factory"]:focus').waitFor({state:'visible',timeout:3000});
  assert.equal(await page.getByRole('button',{name:'Fábrica de software',exact:true}).evaluate(element=>element===document.activeElement),true);
  failed=true;await page.getByRole('button',{name:'Fábrica de software',exact:true}).click();await page.getByRole('button',{name:'Reintentar'}).waitFor();
  assert.equal(await page.getByRole('button',{name:'Pausar cola'}).count(),0);
