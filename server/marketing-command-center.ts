@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import {AsyncLocalStorage} from "node:async_hooks";
 import path from "node:path";
 import { z } from "zod";
 import { getDropshippingCeoSnapshot } from "./dropshipping-ceo";
@@ -85,6 +86,14 @@ const money = new Intl.NumberFormat("en-US", {
 let learningRunsPathOverride: string | null = null;
 let learningRunsLoaded = false;
 const learningRuns: MarketingLearningRun[] = [];
+const learningContext=new AsyncLocalStorage<{owner:string;runs:MarketingLearningRun[];id?:string;at?:string}>();
+const currentRuns=()=>learningContext.getStore()?.runs || learningRuns;
+export const marketingRequiresPostgres=()=>process.env.NODE_ENV==="production"||process.env.REPLIT_DEPLOYMENT==="1"||process.env.AGENT_COUNCIL_STORAGE==="postgres";
+export function withMarketingLearningContext<T>(owner:string,runs:MarketingLearningRun[],work:()=>T,identity?:{id:string;at:string}):T{
+ if(!owner.trim())throw Error("MARKETING_OWNER_REQUIRED");
+ return learningContext.run({owner,runs:structuredClone(runs),...identity},work);
+}
+
 
 const marketingLearningRunPersistedSchema: z.ZodType<MarketingLearningRun, z.ZodTypeDef, unknown> = z.object({
   id: z.string(),
@@ -117,12 +126,15 @@ function writeLearningRuns(items: MarketingLearningRun[]) {
 }
 
 function loadLearningRuns() {
+  if(learningContext.getStore())return;
+  if(marketingRequiresPostgres())throw Error("MARKETING_DURABLE_CONTEXT_REQUIRED");
   if (learningRunsLoaded) return;
   learningRuns.splice(0, learningRuns.length, ...readLearningRuns());
   learningRunsLoaded = true;
 }
 
 function persistLearningRuns() {
+  if(learningContext.getStore())return;
   writeLearningRuns(learningRuns);
 }
 
@@ -139,7 +151,7 @@ function safeSnapshot<T>(producer: () => T): T | null {
 }
 
 function learningRulesForClient(clientId: string, fallback: string[]) {
-  const learnedRules = learningRuns
+  const learnedRules = currentRuns()
     .filter((run) => run.focusClientId === "all" || run.focusClientId === clientId)
     .slice(-3)
     .flatMap((run) => run.rulesUpdated)
@@ -193,7 +205,7 @@ function withReadyHandoff(client: MarketingClient): MarketingClient {
 }
 
 function buildMarketingClients(): MarketingClient[] {
-  const dropshipping = safeSnapshot(getDropshippingCeoSnapshot);
+  const dropshipping = learningContext.getStore()?null:safeSnapshot(getDropshippingCeoSnapshot);
   const dropshippingMetrics = dropshipping?.metrics;
   const dropshippingSpend = dropshippingMetrics?.socialSpendUsd || 0;
   const dropshippingRevenue = dropshippingMetrics?.socialRevenueUsd || dropshippingMetrics?.totalRevenueUsd || 0;
@@ -353,7 +365,7 @@ function buildMarketingClients(): MarketingClient[] {
     },
   ];
 
-  return coreClients.map(withReadyHandoff);
+  return coreClients.map(withReadyHandoff).map(client=>learningContext.getStore()?{...client,status:"needs_data" as const,handoff:client.handoff?{...client.handoff,status:"needs_setup" as const}:undefined}:client);
 }
 
 function buildSubagents(activeClients: number) {
@@ -464,7 +476,7 @@ function buildWorkstreams(clients: MarketingClient[]) {
 }
 
 function buildSelfImprovement(clients: MarketingClient[]) {
-  const latestRun = learningRuns.at(-1) || null;
+  const latestRun = currentRuns().at(-1) || null;
   return {
     status: "active",
     cadence: "daily_review_plus_after_each_campaign",
@@ -526,13 +538,13 @@ export function getMarketingCommandCenterSnapshot() {
       id: "marketing-cmo",
       name: "Marketing CMO",
       scope: "global",
-      status: "active",
+      status: learningContext.getStore()?"needs_data":"active",
       reportsTo: "CEO",
       mandate: "Operar como agencia interna para todos los proyectos: crecer ventas, contenido y demanda sin mezclar clientes ni ejecutar acciones externas sin approval.",
     },
     capacity: {
       maxClients,
-      activeClients: clients.length,
+      activeClients: learningContext.getStore()?0:clients.length,
       openSlots: Math.max(0, maxClients - clients.length),
       operatingRule: "Puede manejar 20 clientes si cada cliente mantiene presupuesto, cuentas, calendario, metricas y approvals separados.",
     },
@@ -544,7 +556,7 @@ export function getMarketingCommandCenterSnapshot() {
       totalSpendUsd,
       profitSignalUsd: roundMoney(totalRevenueUsd - totalSpendUsd),
       approvalsNeeded: clients.reduce((sum, client) => sum + (client.status === "approval_locked" ? 1 : 0), 0),
-      learningRuns: learningRuns.length,
+      learningRuns: currentRuns().length,
     },
     operatingModel: {
       mission: "Crear demanda y ventas para todos los trabajos de Robert como una agencia interna con subagentes especializados.",
@@ -557,20 +569,21 @@ export function getMarketingCommandCenterSnapshot() {
       requiresApproval: ["publicar", "gastar", "contactar clientes/proveedores", "usar credenciales", "usar assets externos", "activar automatizaciones externas"],
       blockedAlways: ["mezclar budgets", "mezclar cuentas", "usar datos privados sin permiso", "prometer resultados garantizados", "publicar contenido con copyright no permitido"],
     },
-    subagents: buildSubagents(activeClients),
+    subagents: buildSubagents(activeClients).map(agent=>learningContext.getStore()?{...agent,status:"planned"}:agent),
     skillStack: buildSkillStack(),
     clients,
-    detectedMarketingApps: buildDetectedMarketingApps(clients),
-    workstreams: buildWorkstreams(clients),
-    selfImprovement: buildSelfImprovement(clients),
-    recentLearningRuns: [...learningRuns].slice(-8).reverse(),
+    detectedMarketingApps: buildDetectedMarketingApps(clients).map(app=>learningContext.getStore()?{...app,status:"needs_setup"}:app),
+    workstreams: buildWorkstreams(clients).map(work=>learningContext.getStore()?{...work,status:"planned"}:work),
+    selfImprovement: learningContext.getStore()?{...buildSelfImprovement(clients),status:"preparation_only",loops:buildSelfImprovement(clients).loops.map(loop=>({...loop,status:"not_executed"}))}:buildSelfImprovement(clients),
+    evidence: {mode:learningContext.getStore()?"saved_preparation_only":"legacy_local",metricsVerified:false,externalExecutionVerified:false},
+    recentLearningRuns: [...currentRuns()].slice(-8).reverse(),
     executiveSummary: {
-      headline: `Marketing CMO global activo con ${readyClients}/${clients.length} clientes internos ready.`,
+      headline: learningContext.getStore()?"Preparacion interna guardada; conexiones, metricas y ejecucion comercial sin verificar.":`Marketing CMO global activo con ${readyClients}/${clients.length} clientes internos ready.`,
       nextCommand:
-        readyClients === clients.length
+        learningContext.getStore()?"Verificar fuentes y metricas antes de evaluar resultados; las recomendaciones guardadas son preparacion interna.":readyClients === clients.length
           ? "Todos los clientes detectados estan separados y ready; correr learning loop y preparar handoffs por cliente."
           : "Correr daily learning loop y preparar approvals por cliente.",
-      budgetPosture: totalSpendUsd > totalRevenueUsd ? "Proteger caja: spend mayor que revenue." : `Spend global ${money.format(totalSpendUsd)} contra revenue ${money.format(totalRevenueUsd)}.`,
+      budgetPosture: learningContext.getStore()?"Gasto e ingresos sin verificar; no se ejecutan pagos ni publicaciones.":totalSpendUsd > totalRevenueUsd ? "Proteger caja: spend mayor que revenue." : `Spend global ${money.format(totalSpendUsd)} contra revenue ${money.format(totalRevenueUsd)}.`,
     },
   };
 }
@@ -579,6 +592,7 @@ export function runMarketingCommandCenterDay(input: Partial<MarketingCommandCent
   const parsed = marketingCommandCenterDaySchema.parse(input);
   loadLearningRuns();
   const snapshot = getMarketingCommandCenterSnapshot();
+  if(parsed.focusClientId!=="all"&&!snapshot.clients.some(c=>c.id===parsed.focusClientId))throw Error("MARKETING_CLIENT_UNKNOWN");
   const targetClients = parsed.focusClientId === "all"
     ? snapshot.clients
     : snapshot.clients.filter((client) => client.id === parsed.focusClientId);
@@ -601,16 +615,16 @@ export function runMarketingCommandCenterDay(input: Partial<MarketingCommandCent
     "Mezcla de datos entre clientes bloqueada.",
   ];
   const run: MarketingLearningRun = {
-    id: `mkt-run-${Date.now()}`,
-    createdAt: new Date().toISOString(),
+    id: learningContext.getStore()?.id || `mkt-run-${Date.now()}`,
+    createdAt: learningContext.getStore()?.at || new Date().toISOString(),
     focusClientId: parsed.focusClientId,
     clientsReviewed: clientsToReview.length,
     improvementsQueued,
     rulesUpdated,
     safetyBlocks,
-    summary: `Marketing CMO reviso ${clientsToReview.length} cliente(s), actualizo ${rulesUpdated.length} regla(s) y dejo ${improvementsQueued.length} mejora(s) en cola sin ejecutar acciones externas.`,
+    summary: learningContext.getStore()?`Preparacion: ${clientsToReview.length} plantillas de cliente, ${rulesUpdated.length} recomendaciones y ${improvementsQueued.length} siguientes pasos guardados; no son aprendizaje validado ni tareas externas ejecutadas.`:`Marketing CMO reviso ${clientsToReview.length} cliente(s), actualizo ${rulesUpdated.length} regla(s) y dejo ${improvementsQueued.length} mejora(s) en cola sin ejecutar acciones externas.`,
   };
-  learningRuns.push(run);
+  currentRuns().push(run);
   persistLearningRuns();
 
   return {
