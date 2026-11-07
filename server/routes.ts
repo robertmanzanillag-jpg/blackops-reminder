@@ -50,7 +50,7 @@ import { getLocalNewsGrowthScoutStatus, readLocalNewsGrowthScoutStatus, runLocal
 import { getPublicLocalNewsBySlug, listPublicLocalNews, publicLocalNewsEtag, renderPublicLocalNewsShareHtml } from "./public-local-news";
 import { answerRevenueAutomationIntake, approveRevenueOutreachDraft, approveRevenuePublicLeadCandidate, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupTemplatePack, buildRevenueProjectPlan, closeRevenueAutomationOpportunity, closeRevenueWebsiteOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, createWebsiteDeliveryWorkspaceFromLead, deliverRevenueDeliveryWorkspace, deliverRevenueDeliveryWorkspaceFromTrustedApproval, deliveryReviewSchema, flushRevenueEnginePersistence, getRevenueDeliveryWorkspaceById, getRevenueEngineSnapshot, getRevenueMockupPreviewPath, getRevenueWebsiteWorkspaceSaleGate, improvementReviewSchema, isRevenueCodexBranchName, preflightRevenueExpense, prepareRevenueEngineState, previewRevenueMoneySprintSeeds, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryReleaseGate, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenueOutreachOutcome, recordRevenuePublicLeadCandidate, recordRevenuePublicLeadCandidateBatch, recordRevenuePublicScoutEvidence, recordRevenueSalesAutopilot, recordRevenueScoutingMission, recordRevenueVerifiedScoutConnectorResults, recordRevenueWebsiteOpportunity, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueDailyScoutSprintSchema, revenueDailyScoutSprintSubmitSchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceGithubHandoffSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueMoneySprintFromPublicCandidatesSchema, revenueMoneySprintSchema, revenueOutreachApproveSchema, revenueOutreachDraftSchema, revenueOutreachOutcomeSchema, revenueOutreachSendSchema, revenueProjectPlanSchema, revenuePublicLeadCandidateApproveSchema, revenuePublicLeadCandidateBatchSchema, revenuePublicLeadCandidateSchema, revenuePublicScoutAgentCommandSchema, revenuePublicScoutEvidenceSchema, revenueSalesAutopilotSchema, revenueScoutingMissionSchema, revenueVerifiedScoutConnectorSchema, revenueWebsiteDeliveryWorkspaceSchema, revenueWebsiteOpportunityCloseSchema, revenueWebsiteOpportunitySchema, runRevenueAutomationAgentCommand, runRevenueDailyScoutSprint, runRevenueMoneySprint, runRevenueMoneySprintFromPublicCandidates, runRevenuePublicScoutAgentCommand, runRevenueScoutDispatch, sendRevenueOutreachDraft, submitRevenueDailyScoutSprintEvidence, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
 import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingApprovalOutboxMigrationSchema, dropshippingAutopilotProductHunterSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, getDropshippingLaunchReadiness, getDropshippingLiveSignalReadiness, markDropshippingApprovalOutboxQueued, prepareDropshippingApprovalOutboxMigration, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingAutopilotProductHunter, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
-import { getMarketingCommandCenterSnapshot, marketingCommandCenterDaySchema, runMarketingCommandCenterDay } from "./marketing-command-center";
+import {registerMarketingLearningRoutes} from "./marketing-learning-routes";
 import { importMissingGithubApps, runCybersecurityScan } from "./cybersecurity-agent";
 import { runLegalComplianceReports } from "./legal-compliance-agent";
 import { runAppQaScan } from "./app-qa-agent";
@@ -58,6 +58,9 @@ import { createDeveloperAutopilotHandoff, createDeveloperAutopilotHandoffFromReq
 import { buildMonthlyAiSpendReport } from "./ai-cost-policy";
 import { getClipperWorkerRuntimeStatus } from "./clippers-runtime-status";
 import { registerOfficeRoutes } from "./office-routes";
+import { registerOfficeBusinessRoutes } from "./office-business-routes";
+import { registerSoftwareFactoryRoutes } from "./software-factory-routes";
+import { getFactoryOfficeAdmission } from "./software-factory-office-connection";
 import { getAuthenticatedCurrentUserId } from "./user-context";
 import { officeRuntime } from "./office-runtime";
 import { loadOfficePullRequest } from "./office-github";
@@ -303,6 +306,8 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   registerOfficeRoutes(app);
+  registerOfficeBusinessRoutes(app);
+  registerSoftwareFactoryRoutes(app, {resolveCompanyAdmission:getFactoryOfficeAdmission});
   const CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS = 120_000;
   const killClipperRouteScriptProcess = (child: ReturnType<typeof spawn>) => {
     if (child.pid) {
@@ -4413,25 +4418,7 @@ export async function registerRoutes(
 
   // ==================== MARKETING COMMAND CENTER ====================
 
-  app.get("/api/marketing-command-center", async (_req, res) => {
-    try {
-      res.json(getMarketingCommandCenterSnapshot());
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch marketing command center snapshot" });
-    }
-  });
-
-  app.post("/api/marketing-command-center/run-day", async (req, res) => {
-    try {
-      const input = marketingCommandCenterDaySchema.partial().parse(req.body || {});
-      res.json(runMarketingCommandCenterDay(input));
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
-      }
-      res.status(500).json({ error: "Failed to run marketing command center day" });
-    }
-  });
+  registerMarketingLearningRoutes(app);
 
   // ==================== DROPSHIPPING CEO ====================
 

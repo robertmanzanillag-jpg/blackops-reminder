@@ -4,6 +4,7 @@ import { getCurrentUserId, getSystemUserId } from "./user-context";
 import { agentProbes, summarizeProbe } from "@shared/agent-live-status";
 import { createKongSupervisorConversation } from "./kong-supervisor-conversation";
 import { registerKongSupervisorRoutes } from "./kong-supervisor-routes";
+import {capabilityTrainingSummary,capabilityRunSummary} from "./office-capability-training";
 
 const MANUAL_RUN_MIN_INTERVAL_MS = 60_000;
 
@@ -60,6 +61,31 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
     }
   });
 
+  app.get("/api/agent-council/internal-work", async (req,res)=>{
+    res.set("Cache-Control","no-store");
+    try {
+      if(requestUserId(req)!==ownerUserId()) return res.status(403).json({error:"Solo el propietario puede leer los resúmenes internos."});
+      const state=await councilInstance().load();
+      const academy=(state.company?.academyJobs || []).slice(-20).reverse().map(job=>{
+        const trainee=state.company.trainees.find(t=>t.id===job.traineeId);
+        const assessment=trainee?.assessments?.find(a=>a.runId===job.id);
+        return {id:job.id,agentId:trainee?.forAgentId || "unknown",purpose:trainee?.purpose || "candidate",
+          policyCurrentlyApplied:Boolean(trainee && state.officeExecution?.roles.roles[trainee.forAgentId]?.activePolicy?.candidateId === trainee.id),
+          status:job.status,startedAt:job.startedAt,reason:job.reason,
+          benchmarkId:job.benchmarkId,...(assessment?{assessment:{passed:assessment.passed,quality:assessment.quality,incumbentQuality:assessment.incumbentQuality,completedAt:assessment.completedAt,scope:assessment.scope || "benchmark"}}:{})};
+      });
+      const radioAcademy=(state.officeExecution?.internalWork?.radioTrainingHistory || []).map(receipt=>({id:receipt.id,agentId:"radio",purpose:"incumbent",status:"completed",startedAt:receipt.appliedAt,
+        policyCurrentlyApplied:state.officeExecution?.roles.roles.radio?.activePolicy?.version===receipt.appliedPolicyVersion,
+        benchmarkId:receipt.evidence.evaluation.profileId,
+        reason:`Solo parser de rangos horarios; misma persona y generación. ${receipt.firstVerifiedRunId?"Primera ejecución con registros guardados verificada.":"Primera ejecución con registros guardados todavía no confirmada."}`,
+        assessment:{passed:receipt.evidence.evaluation.qualified,quality:Math.min(...receipt.evidence.evaluation.artifacts.map(a=>a.candidateQuality)),incumbentQuality:Math.min(...receipt.evidence.evaluation.artifacts.map(a=>a.baselineQuality)),scope:"benchmark",completedAt:receipt.appliedAt},
+      }));
+      const roleWork=(state.officeExecution?.roleWork?.jobs || []).slice(-28).reverse().map(job=>({id:job.id,role:job.role,status:job.status,startedAt:job.startedAt,completedAt:job.completedAt,reason:job.reason,artifactId:job.artifactId,audit:job.audit,webAudit:job.webAudit}));
+      const capabilityTraining={policies:capabilityTrainingSummary(state.officeExecution?.capabilityTraining,ownerUserId(),Object.fromEntries(Object.entries(state.company.careers).map(([id,career])=>[id,career.generation]))),runs:(state.officeExecution?.capabilityTraining?.runs || []).slice(-28).reverse().map(capabilityRunSummary)};
+      return res.json({...state.officeExecution?.internalWork || {version:1,jobs:[]},roleWork,capabilityTraining,roleAcademy:roleAcademySummary(state.officeExecution?.roleAcademy),academy:[...radioAcademy,...academy].sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt)).slice(0,20)});
+    } catch {return res.status(503).json({error:"No se pudo verificar el trabajo interno."});}
+  });
+
   // CEO channel: Robert writes, the CEO routes the order to the right agents ($0, no AI).
   app.post("/api/agent-company/orders", async (req, res) => {
     try {
@@ -113,3 +139,4 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
     }
   });
 }
+import {roleAcademySummary} from "./office-role-academy";

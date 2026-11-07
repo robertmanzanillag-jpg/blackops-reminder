@@ -7,12 +7,15 @@
 //
 // This module is pure (no React, no fetch) so it can be unit tested with node.
 
-export type AgentLiveState = "working" | "needs-setup" | "error" | "offline" | "checking";
+export type AgentLiveState = "working" | "available" | "needs-setup" | "error" | "offline" | "checking";
 
 export type AgentLiveStatus = {
   state: AgentLiveState;
   label: string;
   detail?: string;
+  // Transport/configuration/idle states are not failures of assigned work.
+  lifePenaltyExempt?: boolean;
+  evidenceId?: string;
   // Short lines taken from the agent's real data, shown scrolling on its monitor.
   activity?: string[];
   // Concrete problems read from the agent's own data (a missed daily goal, a missing connector).
@@ -45,6 +48,23 @@ export type AgentProbe = {
   // city-news: which local-news lane (city) this desk owns.
   lane?: "miami-news" | "ny-news";
 };
+
+/** Availability and completed observations are not proof of a currently running
+ * assignment. Keep execution scoring separate from visual activity. */
+export function presentProbeStatus(probe:AgentProbe,status:AgentLiveStatus):AgentLiveStatus {
+  if(status.state !== "working") return status;
+  const labels:Partial<Record<AgentProbe["kind"],string>>={
+    calendar:"Calendario conectado; sincronización actual sin verificar", "ready-checks":"Configuración disponible; ejecución sin verificar",
+    github:"GitHub conectado; sin ejecución actual verificada", dropshipping:"Preparación disponible; orden no ejecutada",
+    marketing:"Datos de clientes disponibles",portfolio:"Resumen de inversiones disponible",radio:"Eventos guardados disponibles",
+    clippers:"Reporte del worker disponible; ejecución actual sin verificar",automations:"Resultados de ejecuciones anteriores",
+    "dev-health":"Registro de salud disponible",news:"Ronda de noticias registrada; publicación sin verificar",
+    "city-news":"Datos de la última ronda disponibles", "kong-videos":"Archivos de video existentes; edición actual sin verificar",
+    legal:"Informe de revisión disponible", "blackroom-videos":"Reporte de videos disponible", "kong-metrics":"Métricas registradas disponibles",
+  };
+  const label=probe.kind === "clippers" && status.label === "Ultima corrida OK" ? "Última ejecución completada; no está ejecutándose ahora" : labels[probe.kind] || "Información disponible; ejecución actual sin verificar";
+  return {...status,state:"available",label,lifePenaltyExempt:true};
+}
 
 // One desk per city of the local-news agent (Metro Current). Same endpoint as "news", so no extra calls.
 export const CITY_NEWS_AGENTS = [
@@ -129,6 +149,7 @@ function missingChecks(checks: unknown): string[] {
 
 export function summarizeProbe(probe: AgentProbe, result: ProbeResult | undefined, now: number = Date.now()): AgentLiveStatus {
   const status = summarizeStatus(probe, result, now);
+  if(!status.evidenceId) status.lifePenaltyExempt=true;
   // Activity comes only from a real JSON body; an error state still shows what the agent saw (e.g. the failed run).
   if (!result || !result.ok || result.body === null || result.body === undefined) return status;
   const activity = extractActivity(probe, result.body, now).filter(Boolean).slice(0, 4);
@@ -297,7 +318,7 @@ export function extractActivity(probe: AgentProbe, raw: unknown, now: number = D
 function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now: number): AgentLiveStatus {
   if (!result) return { state: "checking", label: "Verificando..." };
   if ("networkError" in result) {
-    return { state: "offline", label: "Servidor sin respuesta", detail: "No se pudo contactar el backend de BlackOps." };
+    return { state: "offline", lifePenaltyExempt: true, label: "Servidor sin respuesta", detail: "No se pudo contactar el backend de BlackOps." };
   }
   if (result.status === 401) {
     return { state: "needs-setup", label: "Requiere sesion", detail: "Inicia sesion en BlackOps para ver su estado." };
@@ -308,11 +329,11 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
   const body = asObject(result.body);
   const bodyError = body ? str(body.error) : null;
   if (!result.ok || bodyError) {
-    return { state: "error", label: "Con error", detail: bodyError || `El endpoint respondio ${result.status}.` };
+    return { state: "error", lifePenaltyExempt: true, label: "Con error", detail: bodyError || `El endpoint respondio ${result.status}.` };
   }
   // A 200 without JSON (SPA fallback, empty body) is never proof of work.
   if (result.body === null || result.body === undefined) {
-    return { state: "error", label: "Respuesta no valida", detail: "El endpoint no devolvio JSON." };
+    return { state: "error", lifePenaltyExempt: true, label: "Respuesta no valida", detail: "El endpoint no devolvio JSON." };
   }
 
   switch (probe.kind) {
@@ -334,7 +355,7 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       const status = str(body?.status);
       if (status === "warning") return { state: "working", label: "Operativo con avisos", detail };
       if (status === "blocked" || body?.ready === false) return { state: "needs-setup", label: "Falta configuracion", detail };
-      return { state: "error", label: "Estado desconocido", detail: "La respuesta no trae el formato esperado." };
+      return { state: "error", lifePenaltyExempt: true, label: "Estado desconocido", detail: "La respuesta no trae el formato esperado." };
     }
     case "github": {
       if (body?.connected !== true) return { state: "needs-setup", label: "GitHub sin conectar" };
@@ -362,14 +383,14 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       if (status === "blocked_needs_accounts") return { state: "needs-setup", label: "Faltan cuentas", detail: summary };
       if (status === "ready_for_test_order") return { state: "working", label: "Listo para orden de prueba", detail: summary };
       if (status === "pre_account_ready") return { state: "working", label: "Modo pre-cuentas", detail: summary };
-      return { state: "error", label: "Estado desconocido", detail: "La respuesta no trae el formato esperado." };
+      return { state: "error", lifePenaltyExempt: true, label: "Estado desconocido", detail: "La respuesta no trae el formato esperado." };
     }
     case "marketing": {
       const scorecard = asObject(body?.globalScorecard);
       const clients = num(scorecard?.clients);
       const ready = num(scorecard?.readyClients) ?? 0;
       const approvals = num(scorecard?.approvalsNeeded) ?? 0;
-      if (clients === null) return { state: "error", label: "Estado desconocido", detail: "La respuesta no trae el formato esperado." };
+      if (clients === null) return { state: "error", lifePenaltyExempt: true, label: "Estado desconocido", detail: "La respuesta no trae el formato esperado." };
       if (clients === 0) return { state: "needs-setup", label: "Sin clientes detectados" };
       return {
         state: "working",
@@ -378,13 +399,13 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       };
     }
     case "portfolio": {
-      if (num(body?.totalValue) === null) return { state: "error", label: "Estado desconocido" };
+      if (num(body?.totalValue) === null) return { state: "error", lifePenaltyExempt: true, label: "Estado desconocido" };
       if (!Array.isArray(body?.distribution) || body!.distribution.length === 0) return { state: "needs-setup", label: "Sin inversiones cargadas" };
       return { state: "working", label: "Siguiendo inversiones" };
     }
     case "radio": {
       const slots = Array.isArray(result.body) ? result.body.length : null;
-      if (slots === null) return { state: "error", label: "Estado desconocido" };
+      if (slots === null) return { state: "error", lifePenaltyExempt: true, label: "Estado desconocido" };
       if (slots === 0) return { state: "offline", label: "En espera", detail: "No hay eventos de radio proximos en el calendario." };
       return { state: "working", label: "Programando radio", detail: plural(slots, "evento proximo", "eventos proximos") };
     }
@@ -402,11 +423,11 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
           ? { state: "needs-setup", label: "Corrio, con bloqueos", detail: next }
           : { state: "working", label: "Ultima corrida OK", detail: next };
       }
-      return { state: "error", label: "Estado desconocido", detail: next };
+      return { state: "error", lifePenaltyExempt: true, label: "Estado desconocido", detail: next };
     }
     case "automations": {
       // /api/automation-runs: newest-first list of { status, startedAt }.
-      if (!Array.isArray(result.body)) return { state: "error", label: "Estado desconocido" };
+      if (!Array.isArray(result.body)) return { state: "error", lifePenaltyExempt: true, label: "Estado desconocido" };
       const runs = (result.body as unknown[]).map(asObject).filter(Boolean) as Json[];
       const dayAgo = now - 26 * 60 * 60_000;
       const recent = runs.filter((run) => {
@@ -417,9 +438,24 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       const failed = recent.filter((run) => run.status === "failed").length;
       const pending = runs.filter((run) => run.status === "pending_approval").length;
       const extra = pending ? plural(pending, "aprobacion pendiente", "aprobaciones pendientes") : undefined;
-      if (failed > 0) return { state: "error", label: plural(failed, "corrida fallida", "corridas fallidas"), detail: extra };
+      const latest = [...recent].sort((a,b) => Date.parse(str(b.startedAt) || "") - Date.parse(str(a.startedAt) || ""));
+      const failedRun = latest.find(run => run.status === "failed");
+      const runEvidence = (run: Json) => {
+        const started=Date.parse(str(run.startedAt) || ""),finished=Date.parse(str(run.finishedAt) || "");
+        return str(run.id) && Number.isFinite(started) && Number.isFinite(finished) && finished>=started && finished<=now ? `automation:${str(run.id)}` : undefined;
+      };
+      // A stored failure alone does not establish agent misconduct. Only explicit
+      // output-validation failures are scoreable; unknown/connector failures wait
+      // for diagnosis, while remaining visible as errors.
+      const attributable=(run:Json)=>{
+        const metadata=asObject(run.metadata), code=str(metadata?.errorCode);
+        const error=str(run.errorMessage) || "";
+        if(/connector|not connected|credential|oauth|token|quota|rate.?limit|timeout|timed out|network|database|ECONN|ENOTFOUND|HTTP\s*(401|403|429|5\d\d)/i.test(error)) return false;
+        return metadata?.failureKind === "agent_output" && ["INVALID_REVIEW","INVALID_RESULT","OUTPUT_VALIDATION_FAILED","TASK_REQUIREMENT_FAILED"].includes(code || "");
+      };
+      if (failed > 0) return { state: "error", evidenceId: runEvidence(failedRun!), lifePenaltyExempt:!attributable(failedRun!), label: plural(failed, "corrida fallida", "corridas fallidas"), detail: extra };
       if (recent.length === 0) return { state: "offline", label: "Sin corridas en 24 h", detail: extra };
-      return { state: "working", label: `${plural(recent.length, "corrida", "corridas")} en 24 h`, detail: extra };
+      return { state: "working", evidenceId: runEvidence(latest[0]), label: `${plural(recent.length, "corrida", "corridas")} en 24 h`, detail: extra };
     }
     case "dev-health": {
       const summary = asObject(body?.summary);
@@ -430,7 +466,7 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       const note = probe.onDemandNote;
       const degraded = num(summary?.degraded) ?? 0;
       const unknown = num(summary?.unknown) ?? 0;
-      if (!summary) return { state: "error", label: "Estado desconocido", detail: note };
+      if (!summary) return { state: "error", lifePenaltyExempt: true, label: "Estado desconocido", detail: note };
       if (apps === 0) return { state: "needs-setup", label: "Sin apps registradas", detail: note };
       // Findings about the apps need Robert's attention; they don't mean the agent itself is broken.
       if (critical > 0) return { state: "needs-setup", label: plural(critical, "incidente critico", "incidentes criticos"), detail: note };
@@ -460,7 +496,7 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       const agent = asObject(body?.agent);
       const totals = asObject(agent?.totals);
       const online = asObject(body?.remote)?.online === true;
-      if (!totals) return { state: "error", label: "Estado desconocido" };
+      if (!totals) return { state: "error", lifePenaltyExempt: true, label: "Estado desconocido" };
       const active = (num(totals.processing) ?? 0) + (num(totals.queued) ?? 0) + (num(totals.retry) ?? 0);
       if (!online) return { state: "needs-setup", label: "Publicador desconectado", detail: "El dispositivo que sube los videos de Black Room no esta en linea." };
       if ((num(totals.retry) ?? 0) > 0) return { state: "error", label: `${num(totals.retry)} videos reintentando` };
@@ -496,7 +532,7 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       return { state: "working", label: "Publicando noticias" };
     }
     case "kong-videos": {
-      if (!Array.isArray(body?.outputVideos)) return { state: "error", label: "Estado desconocido" };
+      if (!Array.isArray(body?.outputVideos)) return { state: "error", lifePenaltyExempt: true, label: "Estado desconocido" };
       const videos = Array.isArray(body?.outputVideos) ? (body!.outputVideos as unknown[]).map(asObject).filter(Boolean) as Json[] : [];
       const newest = videos.map((video) => Date.parse(str(video.modifiedAt) || "")).filter(Number.isFinite).sort((a, b) => b - a)[0];
       if (!newest) return { state: "needs-setup", label: "Sin videos editados", detail: "Agrega videos fuente para que edite los de Kong." };
@@ -508,7 +544,7 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       const critical = num(summary?.critico) ?? 0;
       const review = num(summary?.revisar) ?? 0;
       const targets = num(body?.totalTargets) ?? 0;
-      if (!summary) return { state: "error", label: "Estado desconocido" };
+      if (!summary) return { state: "error", lifePenaltyExempt: true, label: "Estado desconocido" };
       if (critical > 0) return { state: "needs-setup", label: plural(critical, "riesgo critico", "riesgos criticos"), detail: review ? `${review} por revisar` : undefined };
       if (targets === 0) return { state: "needs-setup", label: "Sin apps que revisar" };
       if (body?.githubConnected === false) return { state: "needs-setup", label: "GitHub sin conectar", detail: `Revisando ${plural(targets, "app", "apps")} sin datos de GitHub` };

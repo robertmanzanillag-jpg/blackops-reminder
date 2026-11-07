@@ -460,7 +460,8 @@ test("paused, external and not-built agents are never penalized, fired or repair
   assert.equal(state.company.careers["blackroom-videos"], undefined, "paused lane is not scored");
   assert.equal(state.company.careers["kong-videos"], undefined, "external KONG publisher is not scored");
   assert.ok(!state.proposals.some((proposal) => /blackroom-videos|kong-videos/.test(proposal.key)));
-  assert.ok(state.company.careers["news:miami-news"].firedCount >= 1, "an active city desk that fails is rotated");
+  assert.equal(state.company.careers["news:miami-news"].firedCount,0,"missing city data is not a failed execution and cannot retire a holder");
+  assert.equal(state.company.careers.radio.points,0,"repeated readiness without distinct work does not earn points");
   assert.match(state.lastStatuses["kong-videos"].label, /Externa/);
   const view = await council.view();
   assert.equal(view.integrations["blackroom-videos"].mode, "pausada");
@@ -605,4 +606,24 @@ test("agent factory: recurring blocked orders become one 'hire a specialist' pro
   fake.tick(MIN_CYCLE_GAP_MS + 1000);
   const again = await council.runCycle();
   assert.equal(again.proposals.filter((proposal) => proposal.key.startsWith("new_agent:specialist-")).length, 1, "never proposed twice");
+});
+
+test("durable council rejects corrupt persisted state without replacing it", async () => {
+  let raw = '{"version":9}'; let writes=0;
+  const fake=fakeDeps({readState:async()=>raw,transactState:async update=>{ const next=await update(raw);writes++;raw=next;return next; }});
+  const council=createAgentCouncil(fake.deps);
+  await assert.rejects(council.load(),/incompatible/);
+  await assert.rejects(council.placeOrder("review"),/incompatible/);
+  assert.equal(writes,0);
+});
+test("separate durable council replicas apply one company tick per cadence", async () => {
+  let raw:string|null=null;let serial=Promise.resolve();
+  const transactState=async(update:(value:string|null)=>Promise<string>)=>{
+    let result="";
+    const task=serial.then(async()=>{result=await update(raw);raw=result;});serial=task.catch(()=>{});await task;return result;
+  };
+  const fake=fakeDeps({readState:async()=>raw,transactState});
+  const first=createAgentCouncil(fake.deps);const second=createAgentCouncil(fake.deps);
+  await Promise.all([first.runCycle(),second.runCycle()]);
+  assert.equal((await second.load()).cycles,1);
 });

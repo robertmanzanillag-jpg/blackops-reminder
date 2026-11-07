@@ -2,8 +2,8 @@
 //
 // Pure and deterministic ($0, no AI). The server runs `advanceCompany` once per council cycle
 // with every agent's REAL status, and Robert's orders/feedback through the CEO channel.
-// Points only come from real evidence: an agent earns them while its endpoint says it works,
-// and when Robert marks one of its orders as done. Nothing here edits code: a "fired" agent is
+// Points require a distinct verified execution, or an order closed with verified evidence.
+// Availability, manual completion and repeated observations never score. A "fired" agent is
 // replaced by a new hire that trains in the academy, and the Mechanic opens a repair proposal.
 
 import type { AgentLiveState } from "./agent-live-status";
@@ -12,7 +12,10 @@ export type Personality = { nickname: string; traits: string[]; motto: string };
 
 export type MemoryEntry = { at: string; text: string };
 
+export type CareerScoreReconciliation = {version:1;status:"needs_scope_qualification";recordId:string;originalCareerDigest:string};
+
 export type AgentCareer = {
+  scoreReconciliation?: CareerScoreReconciliation;
   agentId: string;
   generation: number;
   nickname: string;
@@ -28,6 +31,10 @@ export type AgentCareer = {
   inTrainingUntilGeneration?: number;
   // Skills earned from real work: graduating, orders closed with evidence, council lessons.
   skills?: AgentSkill[];
+  reviewGuidance?: string[];
+  lastEvaluatedAt?: string;
+  evaluatedEvidenceIds?: string[];
+  lastEvidenceId?: string;
 };
 
 export type SkillSource = "academia" | "orden" | "leccion";
@@ -53,6 +60,15 @@ export type Trainee = {
   modulesDone: string[];
   knowledge: string[];
   graduatedAt?: string;
+  evaluationClosedAt?: string;
+  qualifiedAt?: string;
+  purpose?: "incumbent" | "candidate";
+  generation?: number;
+  awaitingEvidence?: boolean;
+  assessments?: AcademyAssessment[];
+  executionBlocker?: string;
+  curriculumSnapshot?: CurriculumModule[];
+
   // Tailored modules completed (id + title), turned into skills at graduation.
   learned?: Array<{ id: string; title: string }>;
 };
@@ -75,6 +91,68 @@ export function specialistTopicLabel(id: string): string {
   return id.slice(SPECIALIST_PREFIX.length).replace(/-/g, " ");
 }
 
+
+// Only trusted execution adapters may supply these records. Reading curriculum is not evidence.
+export type AcademyAssessment = {
+  scope?: "fixture" | "production" | "benchmark";
+  profileId?: string;
+  profileVersion?: string;
+  runId: string;
+  benchmarkId: string;
+  curriculumVersion: string;
+  completedAt: string;
+  artifactId: string;
+  passed: boolean;
+  quality: number;
+  incumbentQuality: number;
+  errors: number;
+  incumbentErrors: number;
+  durationMs: number;
+  incumbentDurationMs: number;
+  cost: number;
+  incumbentCost: number;
+  costBasis?: "subscription_no_incremental_api_charge" | "measured_tokens_not_usd";
+  artifacts?: { assignmentId: string; curriculumVersion: string; fixtureId: string; fixtureCode: string; incumbentText: string; candidateText: string; incumbentSessionId: string; candidateSessionId: string; profileId?: string; profileVersion?: string;
+    incumbentPolicyVersion?: string; candidatePolicyVersion?: string; candidateMeasuredCost?: number; incumbentMeasuredCost?: number;
+    candidateDurationMs?: number; incumbentDurationMs?: number; costBasis?: AcademyAssessment["costBasis"]; incumbentModel?: string; candidateModel?: string; provider?: string };
+};
+
+function validAssessment(a: unknown): a is AcademyAssessment {
+  if (!a || typeof a !== "object") return false;
+  const v = a as AcademyAssessment;
+  return [v.runId, v.benchmarkId, v.curriculumVersion, v.artifactId].every(s => typeof s === "string" && s.trim().length > 0) &&
+    typeof v.passed === "boolean" && typeof v.completedAt === "string" && Number.isFinite(Date.parse(v.completedAt)) &&
+    [v.quality, v.incumbentQuality, v.errors, v.incumbentErrors, v.durationMs, v.incumbentDurationMs, v.cost, v.incumbentCost]
+      .every(n => typeof n === "number" && Number.isFinite(n) && n >= 0) && v.quality <= 100 && v.incumbentQuality <= 100;
+}
+
+export function recordAcademyAssessment(state: CompanyState, traineeId: string, assessment: AcademyAssessment): CompanyState {
+  const trainee = state.trainees.find(t => t.id === traineeId && !t.graduatedAt && !t.evaluationClosedAt);
+  if (!validAssessment(assessment)) return state;
+  const values = [assessment.quality, assessment.incumbentQuality, assessment.errors, assessment.incumbentErrors,
+    assessment.durationMs, assessment.incumbentDurationMs, assessment.cost, assessment.incumbentCost];
+  if (!trainee || !validAssessment(assessment) || !assessment.runId || !assessment.benchmarkId || !assessment.curriculumVersion || !assessment.artifactId ||
+      !Number.isFinite(Date.parse(assessment.completedAt)) || Date.parse(assessment.completedAt) < Date.parse(trainee.startedAt) ||
+      values.some(v => !Number.isFinite(v) || v < 0) || assessment.quality > 100 || assessment.incumbentQuality > 100 ||
+      (Array.isArray(trainee.assessments) && trainee.assessments.some(a => a?.runId === assessment.runId))) return state;
+  return { ...state, trainees: state.trainees.map(t => t.id !== traineeId ? t : {
+    ...t, assessments: [...(Array.isArray(t.assessments) ? t.assessments.filter(validAssessment) : []), { ...assessment }].slice(-20),
+  }) };
+}
+
+function eligibleAcademyEvidence(trainee: Trainee, version: string, now: number): AcademyAssessment[] {
+  return (Array.isArray(trainee.assessments) ? trainee.assessments : []).filter(a => validAssessment(a) && a.curriculumVersion === version &&
+    Date.parse(a.completedAt) >= Date.parse(trainee.startedAt) && Date.parse(a.completedAt) <= now && now - Date.parse(a.completedAt) <= 7 * 86400000).slice(-3);
+}
+
+function readyForGraduation(trainee: Trainee, version: string, now: number): boolean {
+  const recent = eligibleAcademyEvidence(trainee, version, now);
+  return recent.length === 3 && new Set(recent.map(a => a.runId)).size === 3 && new Set(recent.map(a => a.artifactId)).size === 3 && new Set(recent.map(a => a.benchmarkId)).size === 3 && recent.every(a =>
+    a.passed === true && a.quality >= 80 && a.errors === 0 &&
+    (trainee.purpose === "incumbent" || (a.quality > a.incumbentQuality && a.errors <= a.incumbentErrors &&
+      a.cost <= a.incumbentCost && a.durationMs <= a.incumbentDurationMs)));
+}
+
 export type OrderStatus = "en_curso" | "bloqueada" | "hecha";
 export type CompanyOrder = {
   id: string;
@@ -95,6 +173,17 @@ export type CompanyState = {
   trainees: Trainee[];
   orders: CompanyOrder[];
   events: MemoryEntry[];
+  retiredCareers?: AgentCareer[];
+  academyJobs?: AcademyJob[];
+};
+
+export type AcademyJob = {
+  incumbentPolicyVersion?: string;
+  candidatePolicyVersion?: string;
+  id: string; traineeId: string; generation: number; curriculumVersion: string;
+  benchmarkId: string; startedAt: string; expiresAt: string;
+  status: "running" | "completed" | "blocked" | "unknown";
+  reason?: string;
 };
 
 export type CurriculumModule = { id: string; title: string; summary: string };
@@ -104,7 +193,6 @@ const MAX_MEMORY = 12;
 const MAX_ORDERS = 60;
 const MAX_EVENTS = 40;
 const MAX_TRAINEES = 30;
-const NEEDS_SETUP_FLOOR = 20;
 const MIN_TENURE_MS = 24 * 60 * 60_000;
 function toMsSafe(value: string | undefined): number {
   const ms = value ? Date.parse(value) : NaN;
@@ -113,11 +201,12 @@ function toMsSafe(value: string | undefined): number {
 
 // Points / battery per council cycle, by real state.
 const DELTA: Record<AgentLiveState, { points: number; battery: number }> = {
+  available: {points:0,battery:0},
   working: { points: 10, battery: 6 },
-  // Waiting on Robert (a key, an account): it slowly drains but never gets fired for it.
-  "needs-setup": { points: 0, battery: -2 },
+  // Configuration waits and absence of assigned work are not agent failures.
+  "needs-setup": { points: 0, battery: 0 },
   error: { points: -5, battery: -10 },
-  offline: { points: -2, battery: -6 },
+  offline: { points: 0, battery: 0 },
   checking: { points: 0, battery: 0 },
 };
 
@@ -142,8 +231,8 @@ function hash(text: string) {
 
 // Graduates are history and can be trimmed; someone still studying is never dropped.
 function capTrainees(trainees: Trainee[]): Trainee[] {
-  const studying = trainees.filter((trainee) => !trainee.graduatedAt);
-  const graduated = trainees.filter((trainee) => trainee.graduatedAt);
+  const studying = trainees.filter((trainee) => !trainee.graduatedAt && !trainee.evaluationClosedAt);
+  const graduated = trainees.filter((trainee) => trainee.graduatedAt || trainee.evaluationClosedAt);
   return [...studying, ...graduated.slice(0, Math.max(0, MAX_TRAINEES - studying.length))];
 }
 
@@ -177,7 +266,7 @@ export function personalityFor(agentId: string, generation: number): Personality
 }
 
 export function emptyCompanyState(): CompanyState {
-  return { version: 1, careers: {}, trainees: [], orders: [], events: [] };
+  return { version: 1, careers: {}, trainees: [], orders: [], events: [], retiredCareers: [], academyJobs: [] };
 }
 
 export function parseCompanyState(value: unknown): CompanyState {
@@ -190,10 +279,19 @@ export function parseCompanyState(value: unknown): CompanyState {
       careers[id] = { ...(c as AgentCareer), memory: Array.isArray(c.memory) ? c.memory : [] };
     }
   }
-  const trainees = v.trainees.filter((t): t is Trainee => Boolean(t) && typeof t === "object" && typeof t.id === "string" && Array.isArray(t.modulesDone) && Array.isArray(t.knowledge));
+  const trainees = v.trainees.filter((t): t is Trainee => Boolean(t) && typeof t === "object" && typeof t.id === "string" && Array.isArray(t.modulesDone) && Array.isArray(t.knowledge)).map(t => ({ ...t, assessments: Array.isArray(t.assessments) ? t.assessments.filter(validAssessment) : [] }));
   const orders = v.orders.filter((o): o is CompanyOrder => Boolean(o) && typeof o === "object" && typeof o.id === "string" && typeof o.text === "string" && Array.isArray(o.assignees));
   const events = Array.isArray(v.events) ? v.events.filter((e) => Boolean(e) && typeof e === "object" && typeof e.text === "string") : [];
-  return { version: 1, careers, trainees, orders, events };
+  return { version: 1, careers, trainees, orders, events,
+    retiredCareers: Array.isArray(v.retiredCareers) ? v.retiredCareers : [],
+    academyJobs: Array.isArray(v.academyJobs) ? v.academyJobs.map((j, index) => {
+      const valid = j && [j.id,j.traineeId,j.curriculumVersion,j.benchmarkId].every(s => typeof s === "string" && s.length > 0) &&
+        Number.isInteger(j.generation) && j.generation > 0 && Number.isFinite(Date.parse(j.startedAt)) && Number.isFinite(Date.parse(j.expiresAt)) &&
+        Date.parse(j.expiresAt) > Date.parse(j.startedAt) && ["running", "completed", "blocked", "unknown"].includes(j.status);
+      return valid ? j : { id: `invalid-${index}`, traineeId: "invalid", generation: 1, curriculumVersion: "invalid", benchmarkId: "invalid",
+        startedAt: "1970-01-01T00:00:00.000Z", expiresAt: "1970-01-01T00:00:01.000Z", status: "unknown" as const, reason: "INVALID_PERSISTED_ACADEMY_JOB" };
+    }) : [],
+  };
 }
 
 function remember(memory: MemoryEntry[], at: string, text: string) {
@@ -208,6 +306,7 @@ export function levelFor(points: number) {
 }
 
 const STATE_WORDS: Record<AgentLiveState, string> = {
+  available:"disponible sin ejecución actual",
   working: "trabajando",
   "needs-setup": "esperando configuracion",
   error: "con error",
@@ -218,12 +317,13 @@ const STATE_WORDS: Record<AgentLiveState, string> = {
 // One company tick: careers move with real states; empty batteries trigger a replacement.
 export function advanceCompany(
   state: CompanyState,
-  input: { now: number; statuses: Record<string, { state: AgentLiveState; label: string }>; roles: Record<string, string>; exempt?: string[] }
+  input: { now: number; statuses: Record<string, { state: AgentLiveState; label: string; evidenceId?: string; lifePenaltyExempt?: boolean }>; roles: Record<string, string>; exempt?: string[] }
 ): { state: CompanyState; fired: Array<{ agentId: string; nickname: string; generation: number; reason: string }> } {
   const iso = new Date(input.now).toISOString();
   const careers: Record<string, AgentCareer> = { ...state.careers };
   const fired: Array<{ agentId: string; nickname: string; generation: number; reason: string }> = [];
   let trainees = [...state.trainees];
+  let retiredCareers = [...(state.retiredCareers || [])];
   let events = [...state.events];
 
   for (const [agentId, status] of Object.entries(input.statuses)) {
@@ -246,15 +346,24 @@ export function advanceCompany(
           hiredAt: iso,
           memory: [{ at: iso, text: `Contratado como ${input.roles[agentId] || agentId}.` }],
         };
+    // A preserved legacy score is not proof of misconduct or qualification.
+    // Any reconciliation marker freezes career-wide scoring pending a separate,
+    // explicitly evidenced qualification process. Never silently repair its life.
+    if(career.scoreReconciliation !== undefined){careers[agentId]=career;continue;}
+    const evidence=status.evidenceId?.trim();
+    if(career.evaluatedEvidenceIds !== undefined && (!Array.isArray(career.evaluatedEvidenceIds) || career.evaluatedEvidenceIds.some(id=>typeof id !== "string"))) { careers[agentId]=career;continue; }
+    if (!evidence || evidence === career.lastEvidenceId || career.evaluatedEvidenceIds?.includes(evidence)) { careers[agentId] = career; continue; }
     // "checking" has no evidence yet, and a replacement in the academy is studying, not failing.
-    if (status.state === "checking" || career.inTrainingUntilGeneration) {
+    if (status.state === "available" || status.state === "checking" || status.state === "needs-setup" || status.state === "offline" || status.lifePenaltyExempt || career.inTrainingUntilGeneration) {
       careers[agentId] = career;
       continue;
     }
+    career.lastEvaluatedAt = iso;
+    career.evaluatedEvidenceIds=[...(career.evaluatedEvidenceIds || []),...(career.lastEvidenceId && !career.evaluatedEvidenceIds?.includes(career.lastEvidenceId) ? [career.lastEvidenceId] : []),evidence];
+    career.lastEvidenceId = evidence;
     const delta = DELTA[status.state];
     career.points = Math.max(0, career.points + delta.points);
-    const floor = status.state === "needs-setup" ? Math.min(career.battery, NEEDS_SETUP_FLOOR) : 0;
-    career.battery = Math.max(floor, Math.min(BATTERY_MAX, career.battery + delta.battery));
+    career.battery = Math.max(0, Math.min(BATTERY_MAX, career.battery + delta.battery));
     career.cyclesTotal += 1;
     if (status.state === "working") career.cyclesWorking += 1;
     if (career.lastState !== status.state) {
@@ -266,6 +375,7 @@ export function advanceCompany(
     // A new hire gets at least a day on the job before it can be fired again.
     if (!exempt && career.battery === 0 && input.now - toMsSafe(career.hiredAt) >= MIN_TENURE_MS) {
       const reason = `Bateria en cero (${status.label}).`;
+      retiredCareers = [...retiredCareers, { ...career, memory: [...career.memory] }];
       fired.push({ agentId, nickname: career.nickname, generation: career.generation, reason });
       events = [{ at: iso, text: `El CEO despidio a ${career.nickname} (${input.roles[agentId] || agentId}). ${reason} Entra un reemplazo a la academia.` }, ...events];
       const nextGeneration = career.generation + 1;
@@ -281,9 +391,9 @@ export function advanceCompany(
         inTrainingUntilGeneration: nextGeneration,
         memory: [{ at: iso, text: `Reemplaza a la generacion ${nextGeneration - 1}. Empieza en la academia.` }],
       };
-      if (!trainees.some((trainee) => trainee.forAgentId === agentId && !trainee.graduatedAt)) {
+      if (!trainees.some((trainee) => trainee.id === `${agentId}#${nextGeneration}` && !trainee.graduatedAt)) {
         trainees = [
-          { id: `${agentId}#${nextGeneration}`, forAgentId: agentId, role: input.roles[agentId] || agentId, nickname: replacement.nickname, startedAt: iso, modulesDone: [], knowledge: [] },
+          { id: `${agentId}#${nextGeneration}`, forAgentId: agentId, role: input.roles[agentId] || agentId, nickname: replacement.nickname, startedAt: iso, modulesDone: [], knowledge: [], generation: nextGeneration, purpose: "candidate" },
           ...trainees,
         ];
         trainees = capTrainees(trainees);
@@ -291,7 +401,7 @@ export function advanceCompany(
     }
     careers[agentId] = career;
   }
-  return { state: { ...state, careers, trainees, events: events.slice(0, MAX_EVENTS) }, fired };
+  return { state: { ...state, careers, trainees, retiredCareers, events: events.slice(0, MAX_EVENTS) }, fired };
 }
 
 // Academy: each cycle every trainee studies one more real module; graduation puts it to work.
@@ -300,10 +410,19 @@ export function advanceAcademy(state: CompanyState, curriculum: (trainee: Traine
   const careers = { ...state.careers };
   let events = [...state.events];
   const trainees = state.trainees.map((trainee) => {
-    if (trainee.graduatedAt) return trainee;
+    if (trainee.graduatedAt || trainee.evaluationClosedAt) return trainee;
+    const currentCareer = careers[trainee.forAgentId];
+    if (currentCareer && trainee.generation !== undefined && trainee.generation !== currentCareer.generation) {
+      return { ...trainee, awaitingEvidence: true, executionBlocker: "Career generation changed; this course cannot update the current holder." };
+    }
     const modules = curriculum(trainee);
+    trainee = { ...trainee, curriculumSnapshot: modules.map(module => ({ ...module })) };
     const next = modules.find((module) => !trainee.modulesDone.includes(module.id));
     if (!next) {
+      const version = JSON.stringify(modules.map(m => [m.id, m.title, m.summary]));
+      if (!modules.length || !readyForGraduation(trainee, version, now)) return { ...trainee, awaitingEvidence: true };
+      const currentEvidence = eligibleAcademyEvidence(trainee, version, now);
+      if (currentEvidence.some(a => a.scope !== "production")) return { ...trainee, qualifiedAt: trainee.qualifiedAt || iso, awaitingEvidence: true, executionBlocker: "Fixture qualification complete; real work and runtime handoff still unverified." };
       let career = careers[trainee.forAgentId];
       // A specialist is a brand-new agent: it is created when it graduates.
       if (!career && trainee.forAgentId.startsWith(SPECIALIST_PREFIX)) {
@@ -327,12 +446,12 @@ export function advanceAcademy(state: CompanyState, curriculum: (trainee: Traine
         for (const item of (trainee.learned || []).slice(0, 6)) career = addSkill(career, { id: item.id, title: item.title, source: "academia" }, iso);
         careers[trainee.forAgentId] = {
           ...career,
-          inTrainingUntilGeneration: undefined,
+          inTrainingUntilGeneration: trainee.id === `${career.agentId}#${career.generation}` && (trainee.generation === undefined || trainee.generation === career.generation) ? undefined : career.inTrainingUntilGeneration,
           memory: remember(career.memory, iso, `Se graduo de la academia (${trainee.modulesDone.length} modulos, ${(trainee.learned || []).length} sobre este puesto) y entra a trabajar.`),
         };
       }
       events = [{ at: iso, text: `${trainee.nickname} se graduo como ${trainee.role}.` }, ...events];
-      return { ...trainee, graduatedAt: iso };
+      return { ...trainee, graduatedAt: iso, awaitingEvidence: false };
     }
     const tailored = isTailoredModule(next.id);
     return {
@@ -450,6 +569,35 @@ export function enrollTrainee(state: CompanyState, input: { id: string; forAgent
   };
 }
 
+/** Bounded preparation queue. It never executes work, spends money or promotes a candidate.
+ * Each incumbent gets a versioned refresher and a supervised challenger. Jobs stay pending
+ * until a trusted evaluator records artifacts; unavailable execution must not count as study.
+ */
+export function scheduleAcademyTraining(state: CompanyState, roles: Record<string, string>, now: number, maxActive = 8): CompanyState {
+  if (!Number.isSafeInteger(maxActive) || maxActive < 0 || maxActive > 30) return state;
+  let next = state;
+  const week = Math.floor(now / (7 * 86400000));
+  const careers = Object.values(state.careers).filter(c => roles[c.agentId] && !c.inTrainingUntilGeneration)
+    .sort((a, b) => {
+      const last = (id: string) => Math.max(0, ...state.trainees.filter(t => t.forAgentId === id).map(t => toMsSafe(t.startedAt)));
+      return Number(b.agentId === "claude-reviewer") - Number(a.agentId === "claude-reviewer") || last(a.agentId) - last(b.agentId) || a.agentId.localeCompare(b.agentId);
+    });
+  for (const career of careers) {
+    for (const purpose of ["incumbent", "candidate"] as const) {
+      if (next.trainees.filter(t => !t.graduatedAt && !t.evaluationClosedAt).length >= maxActive) return next;
+      if (next.trainees.some(t => t.forAgentId === career.agentId && t.purpose === purpose && !t.graduatedAt && !t.evaluationClosedAt)) continue;
+      const id = `academy:${career.agentId}:${career.generation}:${purpose}:${week}`;
+      if (next.trainees.some(t => t.id === id)) continue;
+      next = enrollTrainee(next, { id, forAgentId: career.agentId, role: roles[career.agentId], now });
+      next = { ...next, trainees: next.trainees.map(t => t.id === id ? {
+        ...t, purpose, generation: career.generation,
+        nickname: purpose === "incumbent" ? career.nickname : t.nickname,
+      } : t) };
+    }
+  }
+  return next;
+}
+
 // CEO channel: deterministic routing from Robert's words to the right departments.
 const ROUTES: Array<{ words: string[]; agents: string[] }> = [
   { words: ["black room", "blackroom", "br "], agents: ["blackroom-videos", "radio"] },
@@ -546,7 +694,7 @@ export function completeOrder(state: CompanyState, orderId: string, now: number,
   const careers = { ...state.careers };
   for (const assignee of order.assignees) {
     const career = careers[assignee.agentId];
-    if (!career) continue;
+    if (!career || career.scoreReconciliation !== undefined) continue;
     const earned = verified && assignee.status === "en_curso" ? 25 : 0;
     const skilled = earned ? addSkill(career, { id: `orden:${orderTopic(order.text)}`, title: `Ejecuta: ${orderTopic(order.text)}`, source: "orden" }, iso) : career;
     careers[assignee.agentId] = {

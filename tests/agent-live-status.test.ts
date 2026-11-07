@@ -1,6 +1,30 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { agentProbes, runProbe, summarizeProbe } from "../shared/agent-live-status";
+import { agentProbes, runProbe, summarizeProbe, presentProbeStatus } from "../shared/agent-live-status";
+import {advanceCompany,emptyCompanyState} from "../shared/agent-company";
+
+test('connection, readiness and past reports never animate as current execution',()=>{
+  for(const id of ['assistant','ceo','github','code','marketing-cmo','portfolio','radio','app-qa','cybersecurity','news','kong-videos','legal','clippers','automations']) {
+    const status=presentProbeStatus(agentProbes[id],{state:'working',label:'Prior observation',activity:['source record'],evidenceId:id==='automations'?'stored-run':undefined});
+    assert.equal(status.state,'available');assert.equal(status.lifePenaltyExempt,true);assert.deepEqual(status.activity,['source record']);
+  }
+  const completed=presentProbeStatus(agentProbes.clippers,{state:'working',label:'Ultima corrida OK'});
+  assert.match(completed.label,/completada/);
+  const error={state:'error' as const,label:'Real error'};assert.deepEqual(presentProbeStatus(agentProbes.radio,error),error);
+});
+
+test('skipped and running polls never score; only a distinct completed success earns points',()=>{
+  const now=Date.parse('2026-11-06T12:00:00Z');
+  const row=(status:string,id=status)=>({id,status,startedAt:new Date(now-1000).toISOString(),finishedAt:new Date(now).toISOString()});
+  let state=emptyCompanyState();
+  const apply=(body:unknown[])=>{const status=summarizeProbe(agentProbes.automations,{ok:true,status:200,body},now);state=advanceCompany(state,{now,roles:{automations:'Automation'},statuses:{automations:status}}).state;return status;};
+  for(const status of ['skipped','running','pending_approval']) {assert.equal(apply([row(status)]).evidenceId,undefined);assert.equal(state.careers.automations.points,0);assert.equal(state.careers.automations.battery,80);}
+  assert.equal(apply([row('success','success-1')]).evidenceId,'automation:success-1');
+  const points=state.careers.automations.points,battery=state.careers.automations.battery;
+  apply([row('skipped'),row('success','success-1')]);
+  assert.equal(state.careers.automations.points,points);assert.equal(state.careers.automations.battery,battery);
+  apply([{...row('success','unfinished'),finishedAt:null}]);assert.equal(state.careers.automations.points,points);
+});
 
 // Fixtures mirror the real server responses:
 // - CEO: server/ceo-readiness.ts buildCeoReadinessReport -> { ready, status, checks: [{ id, label, status }] }
@@ -207,4 +231,27 @@ test("KONG metrics agent: status and results come from the operations state, fai
   assert.equal(summarizeProbe(agentProbes["kong-metrics"], ok({ ...body, status: { "kong-metrics": { state: "checking", label: "Datos disponibles" } } }), now).state, "checking");
   assert.equal(summarizeProbe(agentProbes["kong-metrics"], ok({ status: { "kong-metrics": { state: "working?" } } }), now).state, "error");
   assert.equal(summarizeProbe(agentProbes["kong-metrics"], { ok: false, status: 403, body: null }, now).state, "needs-setup");
+});
+
+test("shared transport failure is penalty-exempt and automation evidence IDs stay stable across polls",()=>{
+  const failed=summarizeProbe(agentProbes.automations,{ok:false,status:503,body:{error:"database unavailable"}},NOW);
+  assert.equal(failed.lifePenaltyExempt,true);
+  const body=[{id:"run-x",status:"failed",startedAt:new Date(NOW-1000).toISOString(),finishedAt:new Date(NOW).toISOString(),metadata:{failureKind:"agent_output",errorCode:"INVALID_RESULT"}}];
+  const one=summarizeProbe(agentProbes.automations,ok(body),NOW);
+  const two=summarizeProbe(agentProbes.automations,ok(body),NOW+60000);
+  assert.equal(one.evidenceId,two.evidenceId);assert.ok(one.evidenceId);assert.notEqual(one.lifePenaltyExempt,true);
+});
+
+test("connector, infrastructure and unclassified execution failures remain visible without life penalties",()=>{
+  for(const errorMessage of ['Google connector not connected','database unavailable','HTTP 429','request timeout','unclassified failure']) {
+    const run={id:'failure',status:'failed',startedAt:new Date(NOW-1000).toISOString(),finishedAt:new Date(NOW).toISOString(),errorMessage};
+    const status=summarizeProbe(agentProbes.automations,ok([run]),NOW);
+    assert.equal(status.state,'error');assert.equal(status.lifePenaltyExempt,true);
+  }
+  const readiness=summarizeProbe(agentProbes.github,ok({connected:true}),NOW);
+  assert.equal(readiness.lifePenaltyExempt,true);assert.equal(readiness.evidenceId,undefined);
+  const invalid={id:'invalid',status:'failed',startedAt:new Date(NOW-1000).toISOString(),finishedAt:new Date(NOW+1000).toISOString(),metadata:{failureKind:'agent_output',errorCode:'INVALID_RESULT'}};
+  assert.equal(summarizeProbe(agentProbes.automations,ok([invalid]),NOW).lifePenaltyExempt,true);
+  const infra={...invalid,finishedAt:new Date(NOW).toISOString(),errorMessage:'Google connector not connected'};
+  assert.equal(summarizeProbe(agentProbes.automations,ok([infra]),NOW).lifePenaltyExempt,true,'transport cause overrides contradictory attribution metadata');
 });

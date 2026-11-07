@@ -10,6 +10,8 @@ test("real council routes isolate KONG owner writes and strip KONG state for mem
   state.kongCompany.orders.push({ id: "private-order", text: "Owner private request", createdAt: new Date().toISOString(), assignees: [] });
   state.kongObservedAt = new Date().toISOString();
   state.kongLastStatuses["kong:venues"] = { state: "offline", label: "Fixture" };
+  state.kongLastStatuses["kong:whatsapp_reader"] = { state: "checking", label: "Owner-only reader evidence" };
+  state.kongEvidenceAt["kong:whatsapp_reader"] = new Date().toISOString();
   let raw = JSON.stringify(state);
   let cycles = 0;
   const council = createAgentCouncil({ now: () => Date.now(), userId: () => "owner", readState: async () => raw, writeState: async value => { raw = value; }, collect: async () => { cycles++; return {}; }, submitProposal: async () => "fixture", getPendingActionStatus: async () => null, fetchLatestRelease: async () => null, log: () => {} });
@@ -27,6 +29,8 @@ test("real council routes isolate KONG owner writes and strip KONG state for mem
   const memberView = await member.json();
   assert.deepEqual(memberView.kongCompany.orders, []);
   assert.deepEqual(memberView.kongLastStatuses, {});
+  assert.deepEqual(memberView.kongEvidenceAt, {});
+  assert.equal(JSON.stringify(memberView).includes("Owner-only reader evidence"), false);
   assert.equal(JSON.stringify(memberView).includes("Owner private request"), false);
   assert.equal((await (await request("/api/agent-council/state", "owner")).json()).kongCompany.orders[0].id, "private-order");
   assert.equal((await request("/api/agent-company/orders", "member", { company: "kong", text: "Reject me" })).status, 403);

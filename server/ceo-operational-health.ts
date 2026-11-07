@@ -1,4 +1,5 @@
 import type { AutomationDefinition, AutomationRun } from "@shared/schema";
+import { verifiedNextRunAt } from "./automation-definition-reads";
 
 export type CeoOperationalHealthStatus = "ready" | "warning" | "blocked";
 
@@ -43,8 +44,8 @@ function worstStatus(items: CeoOperationalHealthItem[]): CeoOperationalHealthSta
 
 function isOverdue(definition: AutomationDefinition, now: Date): boolean {
   if (definition.status !== "active") return false;
-  if (!definition.nextRunAt) return false;
-  return definition.nextRunAt.getTime() < now.getTime();
+  const next=verifiedNextRunAt(definition);
+  return !!next && next.getTime() < now.getTime();
 }
 
 export function buildCeoOperationalHealth(input: {
@@ -67,9 +68,11 @@ export function buildCeoOperationalHealth(input: {
   const items = input.automations.map<CeoOperationalHealthItem>((automation) => {
     const latestRun = runsByAutomation.get(automation.id)?.[0];
     const overdue = isOverdue(automation, now);
+    const nextRunAt=verifiedNextRunAt(automation);
+    const unknownSchedule=automation.status === "active" && !nextRunAt && !!(automation.schedule || automation.nextRunAt);
     const status: CeoOperationalHealthStatus = automation.status === "failed" || latestRun?.status === "failed"
       ? "blocked"
-      : overdue || latestRun?.status === "pending_approval" || automation.status === "paused"
+      : overdue || unknownSchedule || latestRun?.status === "pending_approval" || automation.status === "paused"
       ? "warning"
       : "ready";
     const detail = automation.status === "failed"
@@ -82,6 +85,8 @@ export function buildCeoOperationalHealth(input: {
       ? "Next run time is in the past."
       : automation.status === "paused"
       ? "Automation is paused."
+      : unknownSchedule
+      ? "Next scheduled dispatch is unverified; recorded run results are preserved."
       : latestRun
       ? `Latest run ${latestRun.status}.`
       : "No run history yet.";
@@ -92,7 +97,7 @@ export function buildCeoOperationalHealth(input: {
       status,
       detail,
       lastRunAt: automation.lastRunAt || latestRun?.startedAt || null,
-      nextRunAt: automation.nextRunAt || null,
+      nextRunAt,
       failureCount: automation.failureCount || 0,
     };
   });

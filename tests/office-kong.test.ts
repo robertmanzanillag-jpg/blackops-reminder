@@ -2,6 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { createOfficeKongConnector, OfficeKongError, OFFICE_KONG_CITY_CATEGORIES } from "../server/office-kong";
 
+test("invalid reader timestamps are removed at connector boundary, not forwarded as evidence", async () => {
+  const reader = { version:1, scopeId:"kong-venues-four-groups", ownerId:"11111111-1111-4111-8111-111111111111",observedAt:NOW.toISOString(),scheduler:"active",intervalMinutes:30,reader:"reading",session:"connected",lastAttemptAt:NOW.toISOString(),lastSuccessAt:null,lastSuccessGroupCount:0,groupsRead:0,blocker:"none",checkpointsRetained:false };
+  for (const patch of [{observedAt:new Date(NOW.getTime()+60000).toISOString()}, {lastSuccessAt:new Date(NOW.getTime()+60000).toISOString(),lastSuccessGroupCount:4}]) {
+    const audit = await connector(async()=>json({...operations(),whatsappReader:{...reader,...patch}})).runOfficeKongReadOnly();
+    assert.equal(audit.evidence.whatsappReader,undefined);
+    assert.equal(audit.evidence.agents.find(agent=>agent.id==="whatsapp_reader")?.state,"unknown");
+  }
+});
+
 const NOW = new Date("2026-11-05T03:00:00.000Z");
 const TOKEN = "test-only-office-admin-token";
 function operations() {
@@ -85,7 +94,7 @@ test("authenticated audit uses only fixed GET contract and preserves unknown evi
   const audit = await c.runOfficeKongReadOnly();
   assert.equal(audit.evidence.generatedAt, NOW.toISOString());
   assert.equal(audit.evidence.agents[0].lastRunAt, null);
-  assert.match(audit.text, /1 sin evidencia verificable/);
+  assert.match(audit.text, /2 sin evidencia verificable/);
   assert.match(audit.text, /no inicia agentes, no lee WhatsApp/);
 });
 
@@ -148,7 +157,7 @@ test("service-mode metadata from the new KONG operations contract survives stric
   assert.equal(probe.status, "ready");
   const audit = await client.runOfficeKongReadOnly();
   for (const agents of [probe.agents!, audit.evidence.agents]) {
-    assert.equal(agents.filter(agent => agent.kind === "system").length, 10);
+    assert.equal(agents.filter(agent => agent.kind === "system").length, 11);
     for (const expected of modes) {
       const actual = agents.find(agent => agent.id === expected.id)!;
       assert.equal(actual.operationMode, expected.operationMode);
@@ -170,6 +179,21 @@ test("service metadata remains optional and validates exact enum and boolean typ
     {operationMode: "scheduled", evidencePending: true, unrecognizedAgentField: "must reject"}]) {
     const payload = {...operations(), agents: [{...operations().agents[0], ...fields}]};
     await assert.rejects(connector(async () => json(payload)).runOfficeKongReadOnly(),
+      (error: unknown) => error instanceof OfficeKongError && error.code === "INVALID_RESPONSE");
+  }
+});
+
+test("event-driven receipt aggregates remain strict and do not establish live reader activity", async () => {
+  const aggregate = { windowDays: 30, receivedCount: 2, appliedCount: 1, pendingCount: 1, lastReceivedAt: null, lastAppliedAt: null };
+  const agent = { ...operations().agents[0], id: "black_room_whatsapp_reader", kind: "system", state: "unknown", operationMode: "event_driven", verifiedActivity: aggregate };
+  const payload = { ...operations(), agents: [...operations().agents, agent] };
+  const result = await connector(async () => json(payload)).runOfficeKongReadOnly();
+  const parsed = result.evidence.agents.find(item => item.id === agent.id)!;
+  assert.deepEqual(parsed.verifiedActivity, aggregate);
+  assert.equal(parsed.state, "unknown");
+  assert.equal(result.evidence.whatsappReader, undefined);
+  for (const invalid of [{ ...aggregate, chat: "private" }, { ...aggregate, receivedCount: -1 }, { ...aggregate, lastAppliedAt: "not-a-timestamp" }]) {
+    await assert.rejects(connector(async () => json({ ...payload, agents: [{ ...agent, verifiedActivity: invalid }] })).runOfficeKongReadOnly(),
       (error: unknown) => error instanceof OfficeKongError && error.code === "INVALID_RESPONSE");
   }
 });

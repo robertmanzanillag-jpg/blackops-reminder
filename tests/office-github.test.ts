@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import { createOfficeGitHubLoader, OfficeGitHubError, parseOfficePrUrl } from "../server/office-github";
+import { createOfficeGitHubLoader, getOfficePrReadClient, OfficeGitHubError, parseOfficePrUrl } from "../server/office-github";
 
 const PR = "https://github.com/owner/repo/pull/12";
 const HEAD = "a".repeat(40);
@@ -20,6 +20,42 @@ function loader(files: unknown[] = [file()], metadata: unknown[] = [meta(), meta
   };
 }
 const rejectsCode = (code: string) => (error: unknown) => error instanceof OfficeGitHubError && error.code === code;
+
+test("credentialless review worker exposes only anonymous public PR GETs", async () => {
+  const calls: Array<{ url: string; method?: string; authorization: string | null }> = [];
+  const client = await getOfficePrReadClient({ env: { OFFICE_WORKER_ENABLED: "true", OFFICE_WORKER_REVIEW_ONLY: "true" },
+    authenticated: async () => { throw new Error("must not request connector credentials"); },
+    publicFetch: (async (url, options) => {
+      calls.push({ url: String(url), method: options?.method, authorization: new Headers(options?.headers).get("authorization") });
+      return new Response(JSON.stringify(String(url).includes("/files") ? [file()] : meta()), { headers: { "content-type": "application/json" } });
+    }) as typeof fetch,
+  });
+  assert.deepEqual(Object.keys(client), ["pulls"]);
+  assert.deepEqual(Object.keys(client.pulls).sort(), ["get", "listFiles"]);
+  const packet = await createOfficeGitHubLoader({ getClient: async () => client }).loadOfficePullRequest(PR);
+  assert.equal(packet.headSha, HEAD);
+  assert.equal(calls.length, 3);
+  assert.ok(calls.every(call => call.url.startsWith("https://api.github.com/repos/owner/repo/pulls/12") && call.method === "GET" && call.authorization === null));
+});
+
+test("private repository denial stays blocked without credential escalation or anonymous retry", async () => {
+  let calls = 0;
+  const client = await getOfficePrReadClient({ env: { OFFICE_WORKER_ENABLED: "true", OFFICE_WORKER_REVIEW_ONLY: "true" },
+    authenticated: async () => { throw new Error("no connector lookup permitted"); },
+    publicFetch: (async () => { calls++; return new Response('{"message":"Not Found"}', { status:404, headers:{ "content-type":"application/json" } }); }) as typeof fetch,
+  });
+  await assert.rejects(createOfficeGitHubLoader({ getClient: async () => client }).loadOfficePullRequest(PR), rejectsCode("GITHUB_UNAVAILABLE"));
+  assert.equal(calls,1);
+});
+
+test("configured tokens, Replit identity, and nonworker callers retain authenticated path", async () => {
+  for (const patch of [{ GITHUB_TOKEN:"configured" }, { GH_TOKEN:"configured" }, { REPL_IDENTITY:"configured" }, { WEB_REPL_RENEWAL:"configured" }, { OFFICE_WORKER_REVIEW_ONLY:"false" }, { OFFICE_WORKER_ENABLED:"false" }]) {
+    let authenticated = 0;
+    const expected = { pulls: { get: async () => ({data:meta()}), listFiles: async () => ({data:[]}) } };
+    const actual = await getOfficePrReadClient({ env: { OFFICE_WORKER_ENABLED:"true", OFFICE_WORKER_REVIEW_ONLY:"true", ...patch }, authenticated: async () => { authenticated++; return expected; }, publicFetch: (async () => { throw new Error("no anonymous fallback"); }) as typeof fetch });
+    assert.equal(actual,expected); assert.equal(authenticated,1);
+  }
+});
 
 test("only canonical HTTPS github.com PR URLs are accepted", () => {
   assert.deepEqual(parseOfficePrUrl(PR), { prUrl: PR, owner: "owner", repo: "repo", repoFullName: "owner/repo", pullNumber: 12 });

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { whatsappReaderEvidenceSchema, whatsappOfficeView, withWhatsAppOfficeAgent, type WhatsAppReaderEvidence } from "../shared/whatsapp-office-agent";
 import { OFFICE_KONG_SUPERVISED_CATEGORIES, officeKongEventLoadSchema } from "../shared/office-kong-supervisor";
 
 // This is the existing authenticated KONG read contract, not a dispatch route.
@@ -19,8 +20,17 @@ const agentSchema = z.object({
   owner: text,
   responsibility: text,
   state: z.enum(["healthy", "running", "attention", "stale", "unknown", "disabled"]),
-  operationMode: z.enum(["on_demand", "scheduled"]).optional(),
+  operationMode: z.enum(["on_demand", "scheduled", "event_driven"]).optional(),
   evidencePending: z.boolean().optional(),
+  // Aggregate receipt history is not proof of a live reader or completed group read.
+  verifiedActivity: z.object({
+    windowDays: z.number().int().positive(),
+    receivedCount: z.number().int().nonnegative(),
+    appliedCount: z.number().int().nonnegative(),
+    pendingCount: z.number().int().nonnegative(),
+    lastReceivedAt: nullableTimestamp,
+    lastAppliedAt: nullableTimestamp,
+  }).strict().optional(),
   lastRunAt: nullableTimestamp,
   nextRunAt: nullableTimestamp,
   blocker: text.nullable(),
@@ -35,6 +45,7 @@ const briefSchema = z.object({
 }).strict();
 const count = z.number().int().nonnegative().nullable();
 const operationsSchema = z.object({
+  whatsappReader: whatsappReaderEvidenceSchema.optional().catch(undefined),
   generatedAt: timestamp,
   agents: z.array(agentSchema).min(1).max(500),
   objectives: z.array(z.object({
@@ -141,6 +152,7 @@ export interface OfficeKongAuditResult {
   text: string;
   completedAt: string;
   evidence: {
+    whatsappReader?: WhatsAppReaderEvidence;
     generatedAt: string;
     agents: OfficeKongAgent[];
     cities: OfficeKongCity[];
@@ -296,7 +308,8 @@ export function createOfficeKongConnector(dependencies: {
     if (age > MAX_SNAPSHOT_AGE_MS || age < -MAX_FUTURE_SKEW_MS) {
       return safeError("STALE_SNAPSHOT", "La evidencia de KONG esta caducada o tiene una fecha futura no verificable.");
     }
-    return snapshot;
+    const whatsappReader = whatsappOfficeView(snapshot.whatsappReader, now().getTime()).evidence ?? undefined;
+    return { ...snapshot, whatsappReader, agents: withWhatsAppOfficeAgent(snapshot.agents, whatsappReader, now().getTime()) };
   }
 
   async function probeOfficeKong(): Promise<OfficeKongProbe> {
@@ -334,7 +347,7 @@ export function createOfficeKongConnector(dependencies: {
     return {
       text: `Auditoria de operaciones KONG completada con evidencia del ${snapshot.generatedAt}. ${snapshot.agents.length} agentes: ${counts.get("healthy") ?? 0} con evidencia vigente, ${counts.get("running") ?? 0} en ejecucion, ${counts.get("attention") ?? 0} requieren atencion, ${counts.get("stale") ?? 0} con evidencia antigua, ${counts.get("unknown") ?? 0} sin evidencia verificable y ${counts.get("disabled") ?? 0} deshabilitados. Registro consultado: ${cities.length} ciudades, ${categoryCount}/${cities.length * OFFICE_KONG_CITY_CATEGORIES.length} trabajos con evidencia durable.${cityCoverageComplete ? "" : " Faltan trabajos: las categorias sin registro aparecen como desconocidas."} Esta consulta no inicia agentes, no lee WhatsApp y no modifica eventos ni precios.`,
       completedAt: now().toISOString(),
-      evidence: { generatedAt: snapshot.generatedAt, agents: snapshot.agents, cities, citySnapshotCheckedAt: checkedAt.toISOString(), cityAgentsEnabled: citySnapshot.enabled, cityCoverageComplete },
+      evidence: { generatedAt: snapshot.generatedAt, agents: snapshot.agents, cities, citySnapshotCheckedAt: checkedAt.toISOString(), cityAgentsEnabled: citySnapshot.enabled, cityCoverageComplete, ...(snapshot.whatsappReader ? { whatsappReader: snapshot.whatsappReader } : {}) },
     };
   }
 
