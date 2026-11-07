@@ -32,6 +32,17 @@ test("explicit grant bootstrap is required and concurrent Office/factory admissi
   assert.equal(f.state().reservations.length, 1);
 });
 
+test("receipt inspection never admits execution or changes unresolved holds",async()=>{
+ const f=fixture();await f.ledger.initialize();
+ await assert.rejects(f.ledger.settledReceipt("missing"),/SETTLED_RECEIPT_REQUIRED/);
+ await f.ledger.reserve(input("paid"));await assert.rejects(f.ledger.settledReceipt("paid"),/SETTLED_RECEIPT_REQUIRED/);
+ await f.ledger.settle({key:"paid",actualMicroUsd:50,evidenceId:"resp_paid"});
+ const receipt=await f.ledger.settledReceipt("paid");assert.equal(receipt.actualMicroUsd,50);receipt.actualMicroUsd=0;
+ assert.equal((await f.ledger.settledReceipt("paid")).actualMicroUsd,50);assert.equal((await f.ledger.reserve(input("paid"))).admitted,false);
+ await f.ledger.reserve(input("unknown",100));await f.ledger.markUnknown("unknown","lost");
+ await assert.rejects(f.ledger.settledReceipt("unknown"),/SETTLED_RECEIPT_REQUIRED/);assert.equal((await f.ledger.status()).reservedMicroUsd,100);
+});
+
 test("lost admission acknowledgment and process restart never authorize a duplicate paid call", async () => {
   const f = fixture(); await f.ledger.initialize(); f.loseAck();
   await assert.rejects(f.ledger.reserve(input("same")), /LOST_ACK/);

@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-07T00:17:30.227Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-factory-integration`
+Generated: 2026-11-07T00:22:06.678Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\office-role-completion`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 932 | 838 | 3092 | 564 | 17817 |
+| 936 | 842 | 3113 | 564 | 17900 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,8 +28,8 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 234 | 230 | test:234 |
-| `server` | 214 | 209 | server:214 |
+| `tests` | 236 | 232 | test:236 |
+| `server` | 216 | 211 | server:216 |
 | `script` | 93 | 85 | script:93 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
@@ -176,6 +176,7 @@ Package: `rest-express`
 - `tests/office-academy-benchmarks.test.ts`
 - `tests/office-academy-promotion.test.ts`
 - `tests/office-academy-runner.test.ts`
+- `tests/office-capability-training.test.ts`
 - `tests/office-city-agents.test.ts`
 - `tests/office-claude.test.ts`
 - `tests/office-cloud-runtime.test.ts`
@@ -203,6 +204,7 @@ Package: `rest-express`
 - `tests/office-runtime.test.ts`
 - `tests/office-shared-credits.test.ts`
 - `tests/office-token-budget.test.ts`
+- `tests/office-training-receipts.test.ts`
 - `tests/office-web-role-sources.test.ts`
 - `tests/office-web-role-store.test.ts`
 - `tests/office-web-source-scheduler.test.ts`
