@@ -44,16 +44,17 @@ export function remoteAcceptanceRuntime(input:Readable,output:Writable){
  peer=acceptanceRpc(input,output,async(op,v)=>{
   const o=options.get(v?.runner);if(!o)throw Error("QA_RUNNER_UNKNOWN");
   if(op==="read")return o.read(v.role);
+  if(op==="readWeb"&&typeof o.readWeb==="function")return o.readWeb(v.role);
   if(op==="transaction")return o.council.updateOfficeExecution(async(state:any,company:any)=>{const changed=await peer.request("mutate",{callback:v.callback,state,company});if(!changed||!changed.company||!changed.state)throw Error("QA_MUTATION_INVALID");for(const key of Object.keys(company))delete company[key];Object.assign(company,changed.company);return changed.state;});
   throw Error("QA_OPERATION_DENIED");
  });
- return {remote:true,close:peer.close,createRoleWorkRunner(o:any){const id=randomUUID();options.set(id,o);const ready=peer.request("create",{runner:id,owner:o.owner,now:o.now()});return {tick:async()=>{await ready;return peer.request("tick",{runner:id});}};},parseRoleWork:(state:any,owner:string)=>peer.request("parse",{state,owner})};
+ return {remote:true,close:peer.close,createRoleWorkRunner(o:any){const id=randomUUID();options.set(id,o);const ready=peer.request("create",{runner:id,owner:o.owner,now:o.now(),clockMode:o.clockMode,hasReadWeb:typeof o.readWeb==="function"});return {tick:async()=>{await ready;return peer.request("tick",{runner:id});}};},parseRoleWork:(state:any,owner:string)=>peer.request("parse",{state,owner})};
 }
 /** Guest bridge only. Candidate code executes here, never in the controller. */
 export function serveAcceptanceRuntime(input:Readable,output:Writable,runtime:{createRoleWorkRunner:Function;parseRoleWork:Function;remote?:boolean}){
  const runners=new Map<string,any>(),callbacks=new Map<string,Function>();let peer:ReturnType<typeof acceptanceRpc>;
  peer=acceptanceRpc(input,output,async(op,v)=>{
-  if(op==="create"){if(runners.size>=5||runners.has(v.runner))throw Error();runners.set(v.runner,runtime.createRoleWorkRunner({owner:v.owner,now:()=>v.now,read:(role:string)=>peer.request("read",{runner:v.runner,role}),council:{updateOfficeExecution:async(change:Function)=>{const callback=randomUUID();callbacks.set(callback,change);try{return await peer.request("transaction",{runner:v.runner,callback});}finally{callbacks.delete(callback);}}}}));return null;}
+  if(op==="create"){if(runners.size>=8||runners.has(v.runner))throw Error();const started=performance.now();runners.set(v.runner,runtime.createRoleWorkRunner({owner:v.owner,now:()=>v.now+(v.clockMode==="elapsed"?Math.floor(performance.now()-started):0),...(v.hasReadWeb?{readWeb:(role:string)=>peer.request("readWeb",{runner:v.runner,role})}:{}),read:(role:string)=>peer.request("read",{runner:v.runner,role}),council:{updateOfficeExecution:async(change:Function)=>{const callback=randomUUID();callbacks.set(callback,change);try{return await peer.request("transaction",{runner:v.runner,callback});}finally{callbacks.delete(callback);}}}}));return null;}
   if(op==="tick"){const runner=runners.get(v.runner);if(!runner)throw Error();await runner.tick();return null;}
   if(op==="parse")return runtime.parseRoleWork(v.state,v.owner);
   if(op==="mutate"){const callback=callbacks.get(v.callback);if(!callback)throw Error();return {state:callback(v.state,v.company),company:v.company};}

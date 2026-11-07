@@ -1,3 +1,4 @@
+import {ROLE_WORK_DEADLINE_ID} from "./software-factory-role-deadline";
 import { createHash } from "node:crypto";
 import { readFile, lstat, realpath } from "node:fs/promises";
 import path from "node:path";
@@ -29,7 +30,7 @@ const configSchema = z.object({ owner: z.string().min(1).max(200), projectId: z.
     checks: z.object({ trigger: z.literal("push"), workflowId: z.number().int().positive(), workflowPath: z.literal(".github/workflows/factory-candidate-checks.yml"), workflowSha256: digest, jobName: z.string().min(1), testStep: z.string().min(1), buildStep: z.string().min(1), browserStep: z.string().min(1) }).strict(),
     archiveHosts: z.array(z.string().regex(/^[-a-z0-9]+\.blob\.core\.windows\.net$/)).min(1).max(10),
     reservations: z.object({ discover: cents, build: cents, simulate: cents, review: cents }).strict(), maxOutputTokens: z.number().int().min(16).max(4096), maxInputTokens: z.number().int().min(1).max(100000),
-    orders: z.array(z.object({ id: z.string().min(1).max(200), revision: digest, baseSha: sha, kind: z.enum(["bug", "improvement"]), scenarioId: z.literal(ROLE_WORK_ACCEPTANCE_ID) }).strict()).max(5),
+    orders: z.array(z.object({ id: z.string().min(1).max(200), revision: digest, baseSha: sha, kind: z.enum(["bug", "improvement"]), scenarioId: z.enum([ROLE_WORK_ACCEPTANCE_ID,ROLE_WORK_DEADLINE_ID]) }).strict()).max(5),
     ui: z.object({ workflowSha256: digest, harnessSha256: digest, workflowId: z.number().int().positive() }).strict(),
 }).strict();
 export type AsistenteOperatorConfig = z.input<typeof configSchema>;
