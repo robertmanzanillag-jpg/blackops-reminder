@@ -15,13 +15,13 @@ try{
   if(url.pathname === '/api/auth/me')data={authenticated:true,user:{id:owner}};
   else if(url.pathname === '/api/agents-office/connections')data={workerEnabled:false,worker:{status:'blocked',reason:'Off',checkedAt:new Date().toISOString()}};
   else if(url.pathname === '/api/agents-office/runs'){reads++;if(owner!=='owner')return route.fulfill({status:403,body:'Forbidden'});data=[{id:'run318',kind:'claude_review',status:'completed',createdAt:new Date().toISOString(),text:'Persisted PR318 review'}];}
-  else if(url.pathname === '/api/agent-council/internal-work'){if(owner!=='owner')return route.fulfill({status:403,body:'Forbidden'});data={jobs:[{id:'job',role:'ceo',status:'completed',startedAt:new Date().toISOString(),artifact:{text:'Private CEO saved brief'}}],academy:[{id:'training',agentId:'claude-reviewer',status:'completed',startedAt:new Date().toISOString(),benchmarkId:'heldout',assessment:{passed:false,quality:60,incumbentQuality:90,scope:'benchmark'}}]};}
+  else if(url.pathname === '/api/agent-council/internal-work'){if(owner!=='owner')return route.fulfill({status:403,body:'Forbidden'});data={capabilityTraining:{policies:[],runs:[{id:'old-scope',role:'portfolio',kind:'production',status:'completed',quality:0,promptLabel:'Instrucción anterior: ambigüedad detectada; no demuestra incapacidad',instructionCorrected:false},{id:'new-scope',role:'portfolio',kind:'production',status:'completed',quality:100,promptLabel:'Instrucción corregida',instructionCorrected:true}]},jobs:[{id:'job',role:'ceo',status:'completed',startedAt:new Date().toISOString(),artifact:{text:'Private CEO saved brief'}}],academy:[{id:'training',agentId:'claude-reviewer',status:'completed',startedAt:new Date().toISOString(),benchmarkId:'heldout',assessment:{passed:false,quality:60,incumbentQuality:90,scope:'benchmark'}}]};}
   else return route.fulfill({status:503,body:'Unavailable fixture'});
   if(legacy && url.pathname === '/api/agent-council/internal-work')delete data.academy;
   return route.fulfill({contentType:'application/json',body:JSON.stringify(data)});
  });
  await page.goto('http://office-history.invalid/');await page.getByRole('button',{name:'Trabajo real',exact:true}).click();
- await page.getByText('Persisted PR318 review',{exact:true}).waitFor();assert.equal(reads,1);
+ await page.getByText('Persisted PR318 review',{exact:true}).waitFor();await page.getByText('Instrucción anterior: ambigüedad detectada; no demuestra incapacidad',{exact:true}).waitFor();await page.getByText('Instrucción corregida',{exact:true}).waitFor();assert.equal(reads,1);
  await page.getByText('CEO · Completada',{exact:false}).click();await page.getByText('Private CEO saved brief',{exact:true}).waitFor();
  await page.getByText('Evaluación de prueba: no superada',{exact:false}).waitFor();
  legacy=true;await page.reload();await page.getByRole('button',{name:'Trabajo real',exact:true}).click();await page.getByText('Persisted PR318 review',{exact:true}).waitFor();assert.ok(reads>=2);await page.getByText('Sin evaluaciones de academia ejecutadas.',{exact:true}).waitFor();
