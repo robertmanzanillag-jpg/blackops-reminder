@@ -38,7 +38,7 @@ and route/worker bundle compilation passed. None of these activates the executor
   `5f25d29`; council/company source differs and factory modules are absent there.
   Do not overwrite the concurrent office changes with this branch.
 - Bind the owner-specific council reader and a guarded admission operation to the
-  SAME encrypted ledger, verified credit grant/expiry and executor used for work.
+  SAME durable ledger, verified credit grant/expiry and executor used for work.
   This module does not establish an independent allowance or renew credits.
 - Install a real Asistente builder/checker with access to its repository. The
   deployed pilot token/client and text-only builder cannot do this.
@@ -100,3 +100,36 @@ own release/recovery rehearsals pass. Stop admissions before rollback; preserve
 all ledger rows and unknown reservations. Do not reset financial state when
 reverting code. No payment details, recharge, extra hosting or Kong changes are
 introduced by this work.
+
+
+## Authenticated adapters and order scan
+
+The dedicated GitHub transport accepts only the Asistente repository on
+api.github.com, requires cancellation, forbids redirects/retries, and supports
+only candidate object/branch and draft-PR creation endpoints. It preserves the
+verified Contents metadata media type. It has no workflow dispatch permission;
+use push-triggered checks. Payload/branch restrictions remain enforced by the
+scoped client. Its live read-only check verified repository identity, the Office
+integration head and workflow contents with zero writes.
+
+The independent reviewer now has a real immutable-source loader. It checks the
+single parent, compares the entire changed-file set, verifies Git blob hashes and
+fetches only changed allowed file bodies. UTF-8 bytes, including BOM, are preserved
+in the text passed for review. The reviewer reserves from the same credit ledger
+under a distinct stable job key; invalid billed responses cannot approve a change.
+Neither component claims release eligibility.
+
+An optional trusted company-order scan now connects to the existing worker loop.
+It uses existing eligible main-company orders, excludes Kong, checks shared credit,
+admits at most one pending order per scan, and uses durable order-revision keys.
+Local overlapping scans coalesce; cross-process deduplication belongs to the
+persistent admission operation. The balance precheck is not a reservation: the
+installed admission and paid provider operations must use the same guarded store.
+Pause/configuration checks run before the callback. No callback means manual
+admission only, without falling back to generic daily discovery.
+
+Operator observation: the existing Office worker is active but factory execution
+and shared-credit runtime settings are absent. The selected production database
+has the council and Office queue, but not the factory tables. The owner currently
+has no open engineering orders. No migration, grant initialization, worker switch,
+new paid request or Replit publication was performed for these adapters.

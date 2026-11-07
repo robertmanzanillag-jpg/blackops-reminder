@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-06T23:56:16.234Z
+Generated: 2026-11-07T00:16:31.892Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-factory-integration`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 900 | 810 | 2982 | 564 | 17504 |
+| 908 | 818 | 3025 | 564 | 17586 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,8 +28,8 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 221 | 217 | test:221 |
-| `server` | 202 | 197 | server:202 |
+| `tests` | 225 | 221 | test:225 |
+| `server` | 206 | 201 | server:206 |
 | `script` | 93 | 85 | script:93 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
@@ -220,14 +220,18 @@ Package: `rest-express`
 - `tests/shopify-oauth.test.ts`
 - `tests/software-factory-actions.test.ts`
 - `tests/software-factory-asistente-build.test.ts`
+- `tests/software-factory-asistente-review.test.ts`
+- `tests/software-factory-asistente-source.test.ts`
 - `tests/software-factory-asistente-success.test.ts`
 - `tests/software-factory-builder.test.ts`
+- `tests/software-factory-company-scheduler.test.ts`
 - `tests/software-factory-company.test.ts`
 - `tests/software-factory-encrypted-state.test.ts`
 - `tests/software-factory-gcs.test.ts`
 - `tests/software-factory-github-client.test.ts`
 - `tests/software-factory-github-publisher.test.ts`
 - `tests/software-factory-github-state.test.ts`
+- `tests/software-factory-github-transport.test.ts`
 - `tests/software-factory-github.test.ts`
 - `tests/software-factory-loop.test.ts`
 - `tests/software-factory-object-store.test.ts`
