@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T02:22:16.743Z",
+  "generatedAt": "2026-11-07T02:24:55.455Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-source-edits",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 866,
     "imports": 3248,
     "routes": 570,
-    "symbols": 18298
+    "symbols": 18311
   },
   "directories": {
     ".": {
@@ -138,20 +138,6 @@
         "other": 23,
         "docs": 11,
         "package": 1
-      }
-    },
-    "docs": {
-      "files": 45,
-      "indexed": 43,
-      "kinds": {
-        "docs": 45
-      }
-    },
-    "tests/fixtures/factory-exact-source": {
-      "files": 2,
-      "indexed": 0,
-      "kinds": {
-        "test": 2
       }
     },
     ".agents/memory": {
@@ -287,6 +273,13 @@
         "other": 1
       }
     },
+    "docs": {
+      "files": 45,
+      "indexed": 43,
+      "kinds": {
+        "docs": 45
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -361,6 +354,13 @@
     "tests/fixtures": {
       "files": 2,
       "indexed": 2,
+      "kinds": {
+        "test": 2
+      }
+    },
+    "tests/fixtures/factory-exact-source": {
+      "files": 2,
+      "indexed": 0,
       "kinds": {
         "test": 2
       }
@@ -19949,6 +19949,7 @@
         "zod"
       ],
       "exports": [
+        "BLACKROOM_SOURCE_PROJECTION_SQL",
         "SourcePool",
         "WEB_SOURCE_ROLES",
         "WebRoleSource",
@@ -19962,12 +19963,15 @@
         "webSourceRowSchema"
       ],
       "symbols": [
+        "BLACKROOM_SOURCE_PROJECTION_SQL",
         "Part",
         "WEB_SOURCE_ROLES",
         "all",
         "assertWebSourceOwner",
         "auditWebRoleSource",
         "body",
+        "boundedLeaf",
+        "candidates",
         "clipMetrics",
         "compose",
         "counts",
@@ -19986,6 +19990,7 @@
         "news",
         "now",
         "products",
+        "projectRemoteObject",
         "projected",
         "provenanceSchema",
         "rawClipCycle",
@@ -19998,6 +20003,11 @@
         "rawSocial",
         "rawSuppliers",
         "readWebRoleSources",
+        "remoteDeviceProjection",
+        "remoteQueue",
+        "remoteQueueProjection",
+        "remoteTotalsProjection",
+        "reportLimit",
         "row",
         "s",
         "social",
@@ -31414,6 +31424,7 @@
         "db",
         "fixture",
         "foreign",
+        "id",
         "news",
         "now",
         "pool",
@@ -31423,6 +31434,7 @@
         "secondId",
         "source",
         "sources",
+        "sql",
         "totals"
       ],
       "routes": []
@@ -32723,6 +32735,8 @@
         "failed",
         "generate",
         "generateText",
+        "gitMissing",
+        "gitProbe",
         "input",
         "make",
         "originals",

@@ -160,7 +160,7 @@ test("unsupported exact source is rejected before a paid request",async()=>{
  }finally{await rm(workspace,{recursive:true,force:true});}
 });
 
-test("immutable 9895bb1 allowed files pass preflight and generated multi-file patch actually applies",async()=>{
+test("immutable 9895bb1 allowed files pass preflight and generated multi-file patch actually applies",async(t)=>{
  const {readFile}=await import("node:fs/promises"),{createHash}=await import("node:crypto"),{spawnSync}=await import("node:child_process");
  const workspace=await mkdtemp(path.join(os.tmpdir(),"factory-immutable-edits-"));
  try{
@@ -168,7 +168,12 @@ test("immutable 9895bb1 allowed files pass preflight and generated multi-file pa
   const originals=new Map<string,string>();for(const file of cases){const bytes=await readFile(new URL(`./fixtures/factory-exact-source/${file.fixture}`,import.meta.url));assert.equal(createHash("sha1").update(`blob ${bytes.length}\0`).update(bytes).digest("hex"),file.sha);assert.ok(bytes.at(-1)===10);assert.doesNotMatch(bytes.toString("utf8"),/[\x00-\x09\x0b-\x1f\x7f\uFEFF]/);await mkdir(path.dirname(path.join(workspace,file.path)),{recursive:true});await writeFile(path.join(workspace,file.path),bytes);originals.set(file.path,bytes.toString("utf8"));}
   let calls=0;const generate=createOpenAiFactoryPatchGenerator({sourcePaths:{"owner/app":cases.map(f=>f.path)},patchMode:"exactSourceEdits",maxOutputTokens:1000,generateText:async request=>{calls++;const sent=JSON.parse(request.text);for(const file of sent.files)assert.equal(file.text,originals.get(file.path));return {status:"completed",text:JSON.stringify({edits:cases.map(({path,before,after})=>({path,before,after}))}),costCents:1,inputTokens:100,outputTokens:100};}});
   const result=await generate(input,{workspace,maxCostCents:10});assert.equal(calls,1);assert.equal(result.diagnostic,undefined);validateFactoryPublicationPatch(result.patch);
+  const gitProbe=spawnSync("git",["--version"],{encoding:"utf8",timeout:10000,windowsHide:true});
+  const gitMissing=(gitProbe.error as NodeJS.ErrnoException|undefined)?.code==="ENOENT";
+  if(!gitMissing)assert.equal(gitProbe.status,0,gitProbe.error?.message||gitProbe.stderr);
+  await t.test("Git applies the generated patch to exact immutable inputs",{skip:!gitMissing?false:"Isolated Node image does not provide Git; immutable fixture and converter assertions still run"},async()=>{
   for(const args of [["apply","--check","-"],["apply","-"]]){const applied=spawnSync("git",["-c","core.autocrlf=false",...args],{cwd:workspace,input:result.patch,encoding:"utf8",timeout:10000,windowsHide:true});assert.equal(applied.status,0,applied.error?.message||applied.stderr);}
   for(const file of cases)assert.equal(await readFile(path.join(workspace,file.path),"utf8"),originals.get(file.path)!.replace(file.before,file.after));
+  });
  }finally{await rm(workspace,{recursive:true,force:true});}
 });

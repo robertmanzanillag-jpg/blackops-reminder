@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T02:22:16.743Z
+Generated: 2026-11-07T02:24:55.455Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-source-edits`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 963 | 866 | 3248 | 570 | 18298 |
+| 963 | 866 | 3248 | 570 | 18311 |
 
 ## Entrypoints
 - `client/src/App.tsx`
