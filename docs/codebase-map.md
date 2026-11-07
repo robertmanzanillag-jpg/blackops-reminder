@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-07T00:48:00.271Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-factory-integration`
+Generated: 2026-11-07T00:55:31.728Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\office-role-completion`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 932 | 842 | 3116 | 564 | 17905 |
+| 942 | 848 | 3138 | 564 | 17982 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 237 | 233 | test:237 |
-| `server` | 217 | 212 | server:217 |
-| `script` | 93 | 85 | script:93 |
+| `tests` | 238 | 234 | test:238 |
+| `server` | 219 | 214 | server:219 |
+| `script` | 94 | 86 | script:94 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 41 | 40 | docs:41 |
+| `docs` | 45 | 42 | docs:45 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
@@ -256,6 +256,7 @@ Package: `rest-express`
 - `tests/software-factory-postgres.test.ts`
 - `tests/software-factory-proposal-runtime.test.ts`
 - `tests/software-factory-remote-builder.test.ts`
+- `tests/software-factory-role-acceptance.test.ts`
 - `tests/software-factory-routes.test.ts`
 - `tests/software-factory-runtime.test.ts`
 - `tests/software-factory-simulator.test.ts`

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { createGitHubFactoryChecks, type FactoryActionsClient } from "../server/software-factory-actions";
 
-function fixture(trigger: "push" | "workflow_dispatch" = "push") {
+function fixture(trigger: "push" | "workflow_dispatch" = "push",readAcceptance?:Parameters<typeof createGitHubFactoryChecks>[0]["readAcceptance"]) {
   const repository = "owner/repo", baseSha = "a".repeat(40), headSha = "b".repeat(40), patchSha256 = "c".repeat(64);
   const branch = `factory/${baseSha}-${patchSha256}`, workflow = Buffer.from("trusted workflow");
   const path = ".github/workflows/factory-candidate-checks.yml";
@@ -29,7 +29,7 @@ function fixture(trigger: "push" | "workflow_dispatch" = "push") {
       listJobsForWorkflowRunAttempt: async input => { assert.equal(input.attempt_number, 1); return { data: { total_count: 1, jobs: [job] } }; },
     },
   };
-  const checks = createGitHubFactoryChecks({ client, repositories: { [repository]: { trigger, workflowId: 3, workflowPath: path,
+  const checks = createGitHubFactoryChecks({ client, readAcceptance, repositories: { [repository]: { trigger, workflowId: 3, workflowPath: path,
     workflowSha256: createHash("sha256").update(workflow).digest("hex"), jobName: job.name,
     testStep: "Isolated tests", buildStep: "Isolated build", browserStep: "Isolated browser recovery tests" } }, maxPolls: 2,
     now: () => new Date("2026-11-06T10:01:00Z"), wait: async () => { waits++; } });
@@ -139,4 +139,11 @@ test("missing, skipped or duplicate browser recovery step blocks even a successf
     const f = fixture(); change(f);
     assert.equal((await f.verify()).status, "unknown");
   }
+});
+
+test("scenario IDs require verified acceptance artifact after immutable CI validation",async()=>{
+ let calls=0;const f=fixture("push",async input=>{calls++;assert.equal(input.runId,10);assert.equal(input.headSha,"b".repeat(40));return {regressionScenarioIds:["real-scenario"],artifactIds:["verified-archive-digest"]};});
+ const result=await f.verify();assert.equal(result.status,"passed");if(result.status==="passed"){assert.deepEqual(result.regressionScenarioIds,["real-scenario"]);assert.ok(result.artifactIds.includes("verified-archive-digest"));}assert.equal(calls,1);
+ f.change();assert.equal((await f.verify()).status,"unknown");assert.equal(calls,1);
+ const missing=fixture("push",async()=>{throw Error("missing");});assert.equal((await missing.verify()).status,"unknown");
 });

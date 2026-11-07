@@ -14,7 +14,8 @@ export function createAsistenteGitHubTransport(token: string, transport: typeof 
     if (method === "POST" && (!/^\/(?:git\/(?:blobs|trees|commits|refs)|pulls)$/.test(route) || target.search)) {
       throw Error("FACTORY_GITHUB_TRANSPORT_WRITE_DENIED");
     }
-    if (method === "GET" && !/^(?:$|\/git\/(?:commits|trees|blobs|ref)\/|\/contents\/|\/actions\/(?:workflows|runs)\/|\/pulls$)/.test(route)) {
+    const artifactDownload = method === "GET" && /^\/actions\/artifacts\/[1-9][0-9]*\/zip$/.test(route) && !target.search;
+    if (method === "GET" && !artifactDownload && !/^(?:$|\/git\/(?:commits|trees|blobs|ref)\/|\/contents\/|\/actions\/(?:workflows|runs)\/|\/pulls$)/.test(route)) {
       throw Error("FACTORY_GITHUB_TRANSPORT_READ_DENIED");
     }
     init.signal.throwIfAborted();
@@ -25,7 +26,7 @@ export function createAsistenteGitHubTransport(token: string, transport: typeof 
     headers.set("Accept", accept);
     headers.set("X-GitHub-Api-Version", "2026-03-10");
     headers.set("Content-Type", "application/json");
-    try { return await transport(target.href, { ...init, method, headers, redirect: "error", credentials: "omit" }); }
+    try { return await transport(target.href, { ...init, method, headers, redirect: artifactDownload ? "manual" : "error", credentials: "omit" }); }
     catch { throw Error("FACTORY_GITHUB_TRANSPORT_UNCONFIRMED"); }
   };
 }
