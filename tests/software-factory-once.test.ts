@@ -37,7 +37,12 @@ test("invalid bounds reject before schedule or claim",async()=>{
  const f=fixture();for(const changes of [{maxStages:0},{maxStages:9},{durationMs:FACTORY_CLAIM_WINDOW_MS-1},{durationMs:1800001}])await assert.rejects(runSoftwareFactoryOnce(f.worker,{...f.options,...changes}),/LIMIT_INVALID/);assert.equal(f.counts().scheduled,0);
 });
 
-test("hard invocation deadline stops active worker and never claims a successor",async()=>{
+test("hard deadline never hides a quarantined active outcome",async()=>{
  const f=fixture();let calls=0;f.worker.tick=async()=>{calls++;f.expire();return {kind:"quarantined"} as any;};
- assert.equal((await runSoftwareFactoryOnce(f.worker,f.options)).reason,"deadline");assert.equal(calls,1);assert.ok(f.counts().stopped>=1);assert.equal(f.counts().timers,0);
+ assert.equal((await runSoftwareFactoryOnce(f.worker,f.options)).reason,"quarantined");assert.equal(calls,1);assert.ok(f.counts().stopped>=1);assert.equal(f.counts().timers,0);
+});
+
+test("verified completion followed by invocation deadline is a clean bounded exit",async()=>{
+ const f=fixture();let calls=0;f.worker.tick=async()=>{calls++;f.expire();return {kind:"progressed"} as any;};
+ assert.equal((await runSoftwareFactoryOnce(f.worker,f.options)).reason,"deadline");assert.equal(calls,1);assert.equal(f.counts().timers,0);
 });
