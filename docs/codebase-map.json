@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T01:29:58.963Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-factory-operator",
+  "generatedAt": "2026-11-07T01:41:34.240Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-timeout-acceptance",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 956,
-    "filesIndexed": 861,
-    "imports": 3221,
+    "filesVisible": 959,
+    "filesIndexed": 864,
+    "imports": 3245,
     "routes": 570,
-    "symbols": 18195
+    "symbols": 18268
   },
   "directories": {
     ".": {
@@ -274,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 46,
-      "indexed": 43,
+      "files": 43,
+      "indexed": 42,
       "kinds": {
-        "docs": 46
+        "docs": 43
       }
     },
     "examples/clippers-motivation": {
@@ -289,10 +289,10 @@
       }
     },
     "script": {
-      "files": 100,
-      "indexed": 91,
+      "files": 103,
+      "indexed": 92,
       "kinds": {
-        "script": 100
+        "script": 103
       }
     },
     "scripts": {
@@ -303,10 +303,10 @@
       }
     },
     "server": {
-      "files": 222,
-      "indexed": 217,
+      "files": 223,
+      "indexed": 218,
       "kinds": {
-        "server": 222
+        "server": 223
       }
     },
     "server/replit_integrations/batch": {
@@ -345,10 +345,10 @@
       }
     },
     "tests": {
-      "files": 242,
-      "indexed": 238,
+      "files": 244,
+      "indexed": 240,
       "kinds": {
-        "test": 242
+        "test": 244
       }
     },
     "tests/fixtures": {
@@ -5449,22 +5449,6 @@
       "routes": []
     },
     {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5508,6 +5492,14 @@
     },
     {
       "path": "docs/factory-asistente-operator.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-reader-deadline-acceptance.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -11032,6 +11024,7 @@
       "kind": "script",
       "imports": [
         "../server/software-factory-role-acceptance",
+        "../server/software-factory-role-deadline",
         "node:child_process",
         "node:crypto",
         "node:fs/promises",
@@ -11123,6 +11116,47 @@
       "routes": []
     },
     {
+      "path": "script/software-factory-windows-worker.mjs",
+      "kind": "script",
+      "imports": [
+        "./office-windows-worker.mjs",
+        "./office-worker-ownership.mjs",
+        "node:child_process",
+        "node:fs",
+        "node:path",
+        "node:url",
+        "node:util"
+      ],
+      "exports": [
+        "factoryWorkerEnvironment",
+        "superviseFactoryChild"
+      ],
+      "symbols": [
+        "args",
+        "code",
+        "configPath",
+        "entry",
+        "env",
+        "factoryWorkerEnvironment",
+        "fail",
+        "localEnvFiles",
+        "main",
+        "office",
+        "ownership",
+        "paths",
+        "privateFile",
+        "relative",
+        "repo",
+        "resolved",
+        "result",
+        "stop",
+        "superviseFactoryChild",
+        "timer",
+        "unsafe"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/software-factory-worker.ts",
       "kind": "script",
       "imports": [
@@ -11137,6 +11171,7 @@
       "exports": [],
       "symbols": [
         "main",
+        "message",
         "module",
         "modulePath",
         "owner",
@@ -18831,12 +18866,14 @@
         "zod"
       ],
       "exports": [
+        "CAPABILITY_PROMPT_VERSION",
         "CapabilityCancellationApproval",
         "CapabilityCancellationVerification",
         "CapabilityTrainingState",
         "VerifiedCapabilityCost",
         "applyCapabilityCancellation",
         "capabilityHoldout",
+        "capabilityRunSummary",
         "capabilityTrainingSummary",
         "createCapabilityTrainer",
         "gradeCapabilityTriage",
@@ -18845,6 +18882,7 @@
       ],
       "symbols": [
         "CAPABILITY",
+        "CAPABILITY_PROMPT_VERSION",
         "ErrorCode",
         "Policy",
         "Run",
@@ -18859,6 +18897,7 @@
         "candidate",
         "candidates",
         "capabilityHoldout",
+        "capabilityRunSummary",
         "capabilityTrainingSummary",
         "costSchema",
         "createCapabilityTrainer",
@@ -18887,10 +18926,13 @@
         "prepareCapabilityCancellation",
         "productionJobs",
         "prompt",
+        "promptLabel",
+        "promptVersionSchema",
         "realTask",
         "resultSchema",
         "runProof",
         "runSchema",
+        "samePrompt",
         "sessions",
         "sourceCodes",
         "state",
@@ -22680,6 +22722,7 @@
         "./software-factory-openai-transport",
         "./software-factory-role-acceptance",
         "./software-factory-role-artifact",
+        "./software-factory-role-deadline",
         "./software-factory-runtime",
         "./software-factory-store",
         "./software-factory-store-provider",
@@ -22695,7 +22738,8 @@
         "createAsistenteOperatorComposition",
         "createFactoryOfficeAdmission",
         "createFactoryWorkerOptions",
-        "preflightFactoryOperator"
+        "preflightFactoryOperator",
+        "validateAsistenteOperatorConfig"
       ],
       "symbols": [
         "Credits",
@@ -22740,7 +22784,8 @@
         "source",
         "stat",
         "state",
-        "text"
+        "text",
+        "validateAsistenteOperatorConfig"
       ],
       "routes": []
     },
@@ -23684,23 +23729,30 @@
       "kind": "server",
       "imports": [
         "./software-factory-role-acceptance",
+        "./software-factory-role-deadline",
         "node:crypto",
         "node:zlib",
         "zod"
       ],
       "exports": [
         "createRoleAcceptanceArtifactReader",
+        "hasVerifiedDeadlineRegression",
         "readAcceptanceZip",
         "verifyRoleAcceptanceReport"
       ],
       "symbols": [
         "archive",
+        "before",
         "bytes",
         "c",
         "createRoleAcceptanceArtifactReader",
+        "d",
         "data",
+        "deadlineCase",
+        "deadlineSchema",
         "e",
         "flags",
+        "hasVerifiedDeadlineRegression",
         "location",
         "matches",
         "measured",
@@ -23714,6 +23766,40 @@
         "sha",
         "start",
         "verifyRoleAcceptanceReport"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-role-deadline.ts",
+      "kind": "server",
+      "imports": [
+        "./office-role-snapshots",
+        "./office-role-work",
+        "node:crypto",
+        "node:perf_hooks"
+      ],
+      "exports": [
+        "ROLE_WORK_DEADLINE_ASSERTIONS",
+        "ROLE_WORK_DEADLINE_ID",
+        "measureRoleWorkDeadline"
+      ],
+      "symbols": [
+        "ROLE_WORK_DEADLINE_ASSERTIONS",
+        "ROLE_WORK_DEADLINE_ID",
+        "Runtime",
+        "before",
+        "cases",
+        "completed",
+        "council",
+        "delay",
+        "hanging",
+        "journal",
+        "measureRoleWorkDeadline",
+        "now",
+        "options",
+        "owner",
+        "recorded",
+        "source"
       ],
       "routes": []
     },
@@ -30404,26 +30490,36 @@
         "approval",
         "audit",
         "busy",
+        "cancelled",
+        "completed",
+        "copy",
+        "corrected",
         "corrupt",
+        "current",
         "f",
         "fixture",
         "forged",
         "job",
+        "legacyState",
         "lessons",
         "make",
+        "mixed",
         "next",
         "now",
+        "old",
         "options",
         "paid",
         "realJob",
         "reorder",
         "result",
         "role",
+        "sessionPrefix",
         "sourceBody",
         "sourceIssue",
         "text",
         "trainer",
-        "training"
+        "training",
+        "unknown"
       ],
       "routes": []
     },
@@ -32834,6 +32930,30 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-role-deadline.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-role-acceptance",
+        "../server/software-factory-role-artifact",
+        "../server/software-factory-role-deadline",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "absent",
+        "alreadyFixed",
+        "base",
+        "noBaseline",
+        "r",
+        "report",
+        "result",
+        "verify"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-routes.test.ts",
       "kind": "test",
       "imports": [
@@ -32982,6 +33102,26 @@
         "out",
         "response",
         "root"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-windows.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/software-factory-windows-worker.mjs",
+        "node:assert/strict",
+        "node:events",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "child",
+        "code",
+        "env",
+        "github",
+        "office",
+        "paths"
       ],
       "routes": []
     },
@@ -33521,6 +33661,7 @@
     "tests/software-factory-proposal-runtime.test.ts",
     "tests/software-factory-remote-builder.test.ts",
     "tests/software-factory-role-acceptance.test.ts",
+    "tests/software-factory-role-deadline.test.ts",
     "tests/software-factory-routes.test.ts",
     "tests/software-factory-runtime.test.ts",
     "tests/software-factory-simulator.test.ts",

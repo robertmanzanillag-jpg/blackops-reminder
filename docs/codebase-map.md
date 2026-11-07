@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-07T01:29:58.963Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-factory-operator`
+Generated: 2026-11-07T01:41:34.240Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-timeout-acceptance`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 956 | 861 | 3221 | 570 | 18195 |
+| 959 | 864 | 3245 | 570 | 18268 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 242 | 238 | test:242 |
-| `server` | 222 | 217 | server:222 |
-| `script` | 100 | 91 | script:100 |
+| `tests` | 244 | 240 | test:244 |
+| `server` | 223 | 218 | server:223 |
+| `script` | 103 | 92 | script:103 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 46 | 43 | docs:46 |
+| `docs` | 43 | 42 | docs:43 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
@@ -261,6 +261,7 @@ Package: `rest-express`
 - `tests/software-factory-proposal-runtime.test.ts`
 - `tests/software-factory-remote-builder.test.ts`
 - `tests/software-factory-role-acceptance.test.ts`
+- `tests/software-factory-role-deadline.test.ts`
 - `tests/software-factory-routes.test.ts`
 - `tests/software-factory-runtime.test.ts`
 - `tests/software-factory-simulator.test.ts`

@@ -34,6 +34,8 @@ const configSchema = z.object({ owner: z.string().min(1).max(200), projectId: z.
     ui: z.object({ workflowSha256: digest, harnessSha256: digest, workflowId: z.number().int().positive() }).strict(),
 }).strict();
 export type AsistenteOperatorConfig = z.input<typeof configSchema>;
+/** Strict noncredential operator configuration validation; no I/O or admission. */
+export function validateAsistenteOperatorConfig(raw:unknown){return configSchema.parse(structuredClone(raw));}
 export type OperatorUiReader = (input: {
     projectId: string;
     baseSha: string;
@@ -55,7 +57,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     readUi: OperatorUiReader;
     now: () => Date;
 }) {
-    const config = configSchema.parse(structuredClone(raw)), { store, credits, now } = deps;
+    const config = validateAsistenteOperatorConfig(raw), { store, credits, now } = deps;
     if (new Set(config.sourcePaths).size !== config.sourcePaths.length || !config.sourcePaths.includes("server/office-role-work.ts") || !config.sourcePaths.includes("tests/office-role-work.test.ts") || config.ui.workflowId !== config.checks.workflowId || config.ui.workflowSha256 !== config.checks.workflowSha256 || new Set(config.orders.map(o => o.id)).size !== config.orders.length || typeof deps.readUi !== "function")
         throw Error("FACTORY_OPERATOR_CONFIGURATION_INVALID");
     const owner = config.owner, ownerKey = createHash("sha256").update(owner).digest("hex");
@@ -140,7 +142,7 @@ async function privateFile(value: string | undefined, max: number) {
 }
 async function installed(store: Store) {
     const env = { ...process.env }, now = () => new Date();
-    const config = configSchema.parse(JSON.parse(await privateFile(env.SOFTWARE_FACTORY_OPERATOR_CONFIG, 65536)));
+    const config = validateAsistenteOperatorConfig(JSON.parse(await privateFile(env.SOFTWARE_FACTORY_OPERATOR_CONFIG, 65536)));
     if (env.SOFTWARE_FACTORY_OWNER_ID !== config.owner || env.DEFAULT_USER_ID !== config.owner)
         throw Error("FACTORY_OPERATOR_OWNER_MISMATCH");
     const credits = await loadSharedCreditRuntime(env, now);
