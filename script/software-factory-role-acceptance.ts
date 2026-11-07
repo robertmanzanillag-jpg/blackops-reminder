@@ -1,3 +1,4 @@
+import {measureRoleWorkDeadline} from "../server/software-factory-role-deadline";
 import {execFile,spawn} from "node:child_process";
 import {promisify} from "node:util";
 import {realpath,writeFile,readFile,lstat,mkdtemp,mkdir,rm} from "node:fs/promises";
@@ -53,9 +54,9 @@ async function revision(root:string,sha:string,controller:string,dependencies:st
  // No /output or host socket mount; no credentials/environment passthrough.
  const child=spawn("docker",args,{stdio:["pipe","pipe","pipe"],windowsHide:true});
  const runtime=remoteAcceptanceRuntime(child.stdout,child.stdin);
- const timeout=setTimeout(()=>{runtime.close();child.kill();},60000);
+ const timeout=setTimeout(()=>{runtime.close();child.kill();},90000);
  let stderr=0;child.stderr.on("data",b=>{stderr+=b.length;if(stderr>65536){runtime.close();child.kill();}});child.once("error",runtime.close);child.once("exit",runtime.close);
- try{return {headSha:sha,sourceManifestSha256,...await measureRoleWorkAcceptance(runtime)};}
+ try{return {headSha:sha,sourceManifestSha256,...await measureRoleWorkAcceptance(runtime),deadline:await measureRoleWorkDeadline(runtime)};}
  finally{clearTimeout(timeout);runtime.close();child.stdin.end();await removeAcceptanceContainer(name);}
 }
 async function main(){

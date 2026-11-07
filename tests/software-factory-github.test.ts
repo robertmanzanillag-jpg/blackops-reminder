@@ -72,3 +72,17 @@ test("export bounds are checked before downloading blobs",async t=>{
  assert.throws(()=>createGitHubFactorySourceExporter({client:f.client,repositories:[]}),/ALLOWLIST/);
  assert.throws(()=>createGitHubFactorySourceExporter({client:f.client,repositories:["owner/app"],maxTotalBytes:Infinity}),/LIMIT_INVALID/);
 });
+
+test("explicit subset validates complete metadata but never fetches unrelated blobs",async t=>{
+ const f=fixture(),dir=await workspace(t);f.tree.tree.push({path:"unrelated.bin",type:"blob",mode:"100644",sha:"d".repeat(40),size:999999999});
+ const exporter=createGitHubFactorySourceExporter({client:f.client,repositories:["owner/app"],sourcePaths:["src/index.ts"],signal:new AbortController().signal});
+ await exporter("owner/app",commitSha,dir);assert.equal(f.calls.filter(([kind])=>kind==="blob").length,1);assert.deepEqual(await readdir(dir),["src"]);
+ const missing=fixture();await assert.rejects(createGitHubFactorySourceExporter({client:missing.client,repositories:["owner/app"],sourcePaths:["src/missing.ts"]})("owner/app",commitSha,await workspace(t)),/SOURCE_MISSING/);assert.equal(missing.calls.some(([kind])=>kind==="blob"),false);
+ for(const paths of [[],[".env"],["src/index.ts","src/index.ts"],["../escape"]])assert.throws(()=>createGitHubFactorySourceExporter({client:f.client,repositories:["owner/app"],sourcePaths:paths}),/SOURCE_PATHS_INVALID/);
+});
+
+test("subset does not hide unsafe unrelated metadata and cancellation stops before blob writes",async t=>{
+ const f=fixture();f.tree.tree.push({path:"missing-parent/ordinary.ts",type:"blob",mode:"100644",sha:"d".repeat(40),size:1});await assert.rejects(createGitHubFactorySourceExporter({client:f.client,repositories:["owner/app"],sourcePaths:["src/index.ts"]})("owner/app",commitSha,await workspace(t)),/TREE_PARENT/);assert.equal(f.calls.some(([kind])=>kind==="blob"),false);
+ const a=fixture(),abort=new AbortController(),getTree=a.client.rest.git.getTree;a.client.rest.git.getTree=async input=>{const result=await getTree(input);abort.abort();return result;};const dir=await workspace(t);
+ await assert.rejects(createGitHubFactorySourceExporter({client:a.client,repositories:["owner/app"],sourcePaths:["src/index.ts"],signal:abort.signal})("owner/app",commitSha,dir));assert.equal(a.calls.some(([kind])=>kind==="blob"),false);assert.deepEqual(await readdir(dir),[]);
+});

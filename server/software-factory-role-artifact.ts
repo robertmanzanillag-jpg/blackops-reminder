@@ -1,15 +1,23 @@
+import {verifiedGitHubArtifactLocation} from "./software-factory-artifact-host";
+import {ROLE_WORK_DEADLINE_ID,ROLE_WORK_DEADLINE_ASSERTIONS} from "./software-factory-role-deadline";
 import {createHash} from "node:crypto";
 import {inflateRawSync} from "node:zlib";
 import {z} from "zod";
 import {ROLE_WORK_ACCEPTANCE_ID,ROLE_WORK_ASSERTIONS} from "./software-factory-role-acceptance";
 const sha=z.string().regex(/^[a-f0-9]{40}$/),hash=z.string().regex(/^[a-f0-9]{64}$/);
-const measured=z.object({headSha:sha,sourceManifestSha256:hash,scenarioId:z.literal(ROLE_WORK_ACCEPTANCE_ID),kind:z.literal("backend-acceptance"),assertions:z.array(z.object({id:z.enum(ROLE_WORK_ASSERTIONS),passed:z.boolean()}).strict()).length(ROLE_WORK_ASSERTIONS.length),passed:z.boolean(),durationMs:z.number().finite().nonnegative().max(600000)}).strict();
+const deadlineCase=z.object({reader:z.enum(["sql","web"]),passed:z.boolean(),timedOut:z.boolean(),elapsedMs:z.number().finite().nonnegative().max(90000),assertions:z.array(z.object({id:z.enum(ROLE_WORK_DEADLINE_ASSERTIONS),passed:z.boolean()}).strict()).length(ROLE_WORK_DEADLINE_ASSERTIONS.length)}).strict();
+const deadlineSchema=z.object({scenarioId:z.literal(ROLE_WORK_DEADLINE_ID),passed:z.boolean(),cases:z.array(deadlineCase).length(2)}).strict();
+const measured=z.object({headSha:sha,sourceManifestSha256:hash,scenarioId:z.literal(ROLE_WORK_ACCEPTANCE_ID),kind:z.literal("backend-acceptance"),assertions:z.array(z.object({id:z.enum(ROLE_WORK_ASSERTIONS),passed:z.boolean()}).strict()).length(ROLE_WORK_ASSERTIONS.length),passed:z.boolean(),durationMs:z.number().finite().nonnegative().max(600000),deadline:deadlineSchema.optional()}).strict();
 const schema=z.object({version:z.literal(1),repository:z.literal("robertmanzanillag-jpg/blackops-reminder"),scenarioId:z.literal(ROLE_WORK_ACCEPTANCE_ID),scope:z.literal("backend-acceptance-only"),createdAt:z.string().datetime(),baseline:measured,candidate:measured}).strict();
 export function verifyRoleAcceptanceReport(bytes:Buffer,expected:{baseSha:string;headSha:string;sha256:string;now:number}){
  if(bytes.length>65536||createHash("sha256").update(bytes).digest("hex")!==hash.parse(expected.sha256))throw Error("QA_REPORT_DIGEST_MISMATCH");
  const report=schema.parse(JSON.parse(bytes.toString("utf8"))),age=expected.now-Date.parse(report.createdAt);
  if(report.baseline.headSha!==expected.baseSha||report.candidate.headSha!==expected.headSha||!Number.isFinite(age)||age<0||age>86400000)throw Error("QA_REPORT_IDENTITY_MISMATCH");
  for(const version of [report.baseline,report.candidate])if(new Set(version.assertions.map(a=>a.id)).size!==ROLE_WORK_ASSERTIONS.length||version.passed!==version.assertions.every(a=>a.passed))throw Error("QA_ASSERTIONS_INCOMPLETE");
+ for(const version of [report.baseline,report.candidate])if(version.deadline){
+  const d=version.deadline;if(new Set(d.cases.map(c=>c.reader)).size!==2||d.passed!==d.cases.every(c=>c.passed))throw Error("QA_DEADLINE_ASSERTIONS_INVALID");
+  for(const c of d.cases){if(new Set(c.assertions.map(a=>a.id)).size!==ROLE_WORK_DEADLINE_ASSERTIONS.length||c.passed!==c.assertions.every(a=>a.passed)||(c.passed&&(c.timedOut||c.elapsedMs<58000||c.elapsedMs>=68000)))throw Error("QA_DEADLINE_ASSERTIONS_INVALID");}
+ }
  if(!report.candidate.passed)throw Error("QA_CANDIDATE_FAILED");
  return report;
 }
@@ -27,7 +35,7 @@ export function readAcceptanceZip(zip:Buffer,expectedDigest:string):Buffer{
 /** Call only AFTER existing checks authenticate pinned workflow/run/job identity.
  * apiRequest is the dedicated authenticated GET transport; download sends NO
  * credentials to an operator-pinned HTTPS archive host and follows no redirects. */
-export function createRoleAcceptanceArtifactReader(options:{apiRequest:(url:string,init:RequestInit)=>Promise<Response>;download:(url:string,init:RequestInit)=>Promise<Response>;archiveHosts:readonly string[];now?:()=>number}){
+export function createRoleAcceptanceArtifactReader(options:{apiRequest:(url:string,init:RequestInit)=>Promise<Response>;download:(url:string,init:RequestInit)=>Promise<Response>;archiveHosts:readonly string[];allowGitHubResultsAzureHosts?:boolean;now?:()=>number}){
  if(!options.archiveHosts.length||options.archiveHosts.some(h=>!/^[-a-z0-9]+\.blob\.core\.windows\.net$/.test(h)))throw Error("QA_ARCHIVE_HOST_REQUIRED");
  return async(input:{runId:number;baseSha:string;headSha:string;signal:AbortSignal})=>{
   input={...input,signal:AbortSignal.any([input.signal,AbortSignal.timeout(30000)])};
@@ -38,11 +46,17 @@ export function createRoleAcceptanceArtifactReader(options:{apiRequest:(url:stri
   const matches=listing.artifacts.filter((a:any)=>a.name==="office-role-acceptance-v1");if(matches.length!==1)throw Error("QA_ARTIFACT_REQUIRED");const a=matches[0];
   if(!Number.isSafeInteger(a.id)||a.id<1||a.expired!==false||a.workflow_run?.id!==input.runId||a.workflow_run?.head_sha!==input.headSha||!/^sha256:[a-f0-9]{64}$/.test(a.digest)||a.size_in_bytes>2097152||a.archive_download_url!==`${root}/actions/artifacts/${a.id}/zip`)throw Error("QA_ARTIFACT_IDENTITY_INVALID");
   const redirect=await options.apiRequest(a.archive_download_url,{method:"GET",signal:input.signal,redirect:"manual"});if(redirect.status!==302)throw Error("QA_ARCHIVE_REDIRECT_REQUIRED");
-  const location=new URL(redirect.headers.get("location")||"");if(location.protocol!=="https:"||location.username||location.password||location.hash||location.port||!options.archiveHosts.includes(location.hostname))throw Error("QA_ARCHIVE_HOST_INVALID");
+  const location=verifiedGitHubArtifactLocation(redirect.headers.get("location")||"",options.archiveHosts,options.allowGitHubResultsAzureHosts);
   const archive=await options.download(location.href,{method:"GET",signal:input.signal,redirect:"error",credentials:"omit",headers:{}});if(!archive.ok)throw Error("QA_ARCHIVE_UNAVAILABLE");
   const chunks:Uint8Array[]=[];let total=0;const reader=archive.body?.getReader();if(!reader)throw Error("QA_ARCHIVE_EMPTY");try{for(;;){const r=await reader.read();if(r.done)break;total+=r.value.length;if(total>2097152)throw Error("QA_ARCHIVE_TOO_LARGE");chunks.push(r.value);}}finally{await reader.cancel();}
   const bytes=readAcceptanceZip(Buffer.concat(chunks),a.digest.slice(7)),digest=createHash("sha256").update(bytes).digest("hex");
   const report=verifyRoleAcceptanceReport(bytes,{...input,sha256:digest,now:(options.now||Date.now)()});
-  return {regressionScenarioIds:[report.scenarioId],artifactIds:[`github-actions-artifact:${a.id}:${a.digest}`,`sha256:${digest}`],report};
+  return {regressionScenarioIds:[report.scenarioId,...(hasVerifiedDeadlineRegression(report)?[ROLE_WORK_DEADLINE_ID]:[])],artifactIds:[`github-actions-artifact:${a.id}:${a.digest}`,`sha256:${digest}`],report};
  };
+}
+
+/** An old safety pass never substitutes for the independently measured regression. */
+export function hasVerifiedDeadlineRegression(report:ReturnType<typeof verifyRoleAcceptanceReport>){
+ const before=report.baseline.deadline,after=report.candidate.deadline;
+ return report.baseline.passed&&report.candidate.passed&&!!before&&!!after&&!before.passed&&after.passed&&before.cases.every(c=>c.timedOut&&c.elapsedMs>=68000&&!c.assertions.find(a=>a.id==="deadline-respected")!.passed);
 }
