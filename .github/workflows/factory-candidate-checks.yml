@@ -117,6 +117,15 @@ jobs:
           # different read-only container; neither container mounts this output.
           cleanup_acceptance() { ids=$(timeout --kill-after=5 10 docker ps -aq --filter "label=office.factory.acceptance=$GITHUB_RUN_ID") || return 1; if [ -n "$ids" ]; then timeout --kill-after=5 15 docker rm -f $ids >/dev/null 2>&1 || true; fi; remaining=$(timeout --kill-after=5 10 docker ps -aq --filter "label=office.factory.acceptance=$GITHUB_RUN_ID") || return 1; test -z "$remaining"; }
           trap 'status=$?; cleanup_acceptance || status=1; exit "$status"' EXIT
+          # Trusted host imports resolve the isolated lockfile dependencies from
+          # their parent; neither exact Git checkout is modified.
+          # Candidate code is never executed on the host.
+          if [ -e node_modules ] || [ -L node_modules ]; then
+            test -L node_modules
+            test "$(readlink -f node_modules)" = "$(readlink -f dependencies/node_modules)"
+          else
+            ln -s "$PWD/dependencies/node_modules" "$PWD/node_modules"
+          fi
           FACTORY_QA_ISOLATED=true timeout --kill-after=10 300 node --import ./dependencies/node_modules/tsx/dist/loader.mjs \
             baseline-checkout/script/software-factory-role-acceptance.ts \
             "$PWD/baseline-checkout" "$base" "$PWD/checkout" "$GITHUB_SHA" \
@@ -141,6 +150,15 @@ jobs:
           git -C baseline-checkout cat-file -e "$base:script/software-factory-office-ui-acceptance.ts"
           cleanup_ui() { ids=$(timeout --kill-after=5 10 docker ps -aq --filter "label=office.factory.ui=$GITHUB_RUN_ID") || return 1; if [ -n "$ids" ]; then timeout --kill-after=5 15 docker rm -f $ids >/dev/null 2>&1 || true; fi; remaining=$(timeout --kill-after=5 10 docker ps -aq --filter "label=office.factory.ui=$GITHUB_RUN_ID") || return 1; test -z "$remaining"; }
           trap 'status=$?; cleanup_ui || status=1; exit "$status"' EXIT
+          # Trusted host imports resolve the isolated lockfile dependencies from
+          # their parent; neither exact Git checkout is modified.
+          # Candidate code is never executed on the host.
+          if [ -e node_modules ] || [ -L node_modules ]; then
+            test -L node_modules
+            test "$(readlink -f node_modules)" = "$(readlink -f dependencies/node_modules)"
+          else
+            ln -s "$PWD/dependencies/node_modules" "$PWD/node_modules"
+          fi
           FACTORY_QA_ISOLATED=true timeout --kill-after=10 620 node --import ./dependencies/node_modules/tsx/dist/loader.mjs \
             baseline-checkout/script/software-factory-office-ui-acceptance.ts \
             "$PWD/baseline-checkout" "$base" "$PWD/checkout" "$GITHUB_SHA" \
