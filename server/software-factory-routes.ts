@@ -1,3 +1,4 @@
+import {readFactoryOrderProposals,readFactoryRecoveredBuild} from "./software-factory-order-evidence";
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
 import { getAuthenticatedCurrentUserId, getSystemUserId } from "./user-context";
@@ -39,7 +40,8 @@ const projectSchema = z.object({
 const budgetSchema = z.object({ fixedCents: z.number().int().min(0).max(10_000) }).strict();
 
 export function registerSoftwareFactoryRoutes(app: Express, options: {
-  store?: Pick<typeof softwareFactoryStore, "status" | "list" | "setPaused" | "initializeMonth" | "projects" | "saveProject">;
+  store?: Pick<typeof softwareFactoryStore, "status" | "list" | "setPaused" | "initializeMonth" | "projects" | "saveProject"> & Partial<Pick<typeof softwareFactoryStore,"getCompletedJob">>;
+  getRecoveredBuild?:typeof readFactoryRecoveredBuild;
   now?: () => Date;
   resolveCompanyAdmission?:()=>Promise<FactoryOfficeAdmission|undefined>;
   // Installed by the trusted runtime only after the same ledger, credit guard and
@@ -98,7 +100,9 @@ export function registerSoftwareFactoryRoutes(app: Express, options: {
         return projectReadiness(project).allowed && project.automaticRelease && new Set(project.rehearsalRunIds).size >= FACTORY_POLICY.minimumRehearsals && Number.isFinite(proofAge) && proofAge >= 0 && proofAge <= FACTORY_POLICY.evidenceMaxAgeMs;
       });
       if (projects.length && !eligible) blockers.push("La publicación automática requiere ensayos y recuperación verificados de una aplicación.");
+      const proposalEvidence=store.getCompletedJob ? await readFactoryOrderProposals({owner,jobs,projects,getCompletedJob:(key,id)=>store.getCompletedJob!(key,id),getRecoveredBuild:options.getRecoveredBuild??(options.store?undefined:readFactoryRecoveredBuild),now:now().getTime()}) : {proposals:[],status:"unavailable" as const};
       const view: SoftwareFactoryView = {
+        reviewedProposals:proposalEvidence.proposals,proposalEvidenceStatus:proposalEvidence.status,
         checkedAt: now().toISOString(), paused: state.paused,
         readiness: state.paused ? "paused" : blockers.length ? "blocked" : "available", blockers,
         budget: { month: state.month, limitCents: state.limitCents, fixedCents: state.fixedCents, spentCents: state.spentCents, reservedCents: state.reservedCents, remainingCents, configured: state.configured },
