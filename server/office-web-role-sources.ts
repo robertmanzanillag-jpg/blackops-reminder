@@ -3,6 +3,16 @@ import path from "node:path";
 import {z} from "zod";
 import {sourceDigest} from "./office-role-snapshots";
 export const WEB_SOURCE_ROLES=["news","news:ny-news","news:miami-news","blackroom-videos","dropshipping","marketing-cmo","clippers"] as const;
+// Fixed SQL projection only: never fetch the remote document's media, analytics,
+// commands or credentials. Preserve absent keys, explicit null and malformed types.
+const boundedLeaf=(expression:string)=>`CASE WHEN octet_length((${expression})::text)<=4096 THEN ${expression} ELSE 'null'::jsonb END`;
+function projectRemoteObject(expression:string,fields:Record<string,string>):string {
+ return `CASE WHEN jsonb_typeof(${expression})='object' THEN (SELECT COALESCE(jsonb_object_agg(key,CASE key ${Object.entries(fields).map(([key,value])=>`WHEN '${key}' THEN ${value}`).join(" ")} END),'{}'::jsonb) FROM jsonb_each(${expression}) WHERE key IN (${Object.keys(fields).map(key=>`'${key}'`).join(",")})) ELSE ${boundedLeaf(expression)} END`;
+}
+const remoteTotalsProjection=projectRemoteObject("data->'device'->'queue'->'totals'",Object.fromEntries(["queued","processing","retry","scheduled","completed","cancelled"].map(key=>[key,boundedLeaf(`data->'device'->'queue'->'totals'->'${key}'`)])));
+const remoteQueueProjection=projectRemoteObject("data->'device'->'queue'",{updatedAt:boundedLeaf("data->'device'->'queue'->'updatedAt'"),totals:remoteTotalsProjection});
+const remoteDeviceProjection=projectRemoteObject("data->'device'",{seenAt:boundedLeaf("data->'device'->'seenAt'"),queue:remoteQueueProjection});
+export const BLACKROOM_SOURCE_PROJECTION_SQL=`WITH projected AS (SELECT ${projectRemoteObject("data",{version:boundedLeaf("data->'version'"),updatedAt:boundedLeaf("data->'updatedAt'"),device:remoteDeviceProjection})} AS data FROM blackroom_remote_control WHERE id=$1) SELECT CASE WHEN octet_length(data::text)<=1048576 THEN data ELSE NULL END AS data FROM projected`;
 export type WebSourceRole=typeof WEB_SOURCE_ROLES[number];
 export type SourcePool={query:(sql:string,args?:unknown[])=>Promise<{rows:any[]}>};
 const stamp=z.string().datetime({offset:true}),id=z.string().min(1).max(500),num=z.number().finite().nonnegative();
@@ -16,7 +26,8 @@ const rawClipReport=z.object({id,userId:id,createdAt:stamp,publishMode:z.enum(["
 const cycleTotals=z.object({posts:num.int(),dailyTargetPosts:num.int(),weeklyTargetClips:num.int(),backlogPosts:num.int(),gapToDailyTarget:num.int(),scheduled:num.int(),readyForManual:num.int(),blocked:num.int(),draftReady:num.int(),rightsReview:num.int(),needsSource:num.int()});
 const rawClipCycle=z.object({id,userId:id,createdAt:stamp,automation:z.object({id,createdAt:stamp,status:z.enum(["blocked","partial","ready"]),totals:cycleTotals,posts:z.array(z.unknown()).max(10000)})});
 const rawClipMetrics=z.object({generatedAt:stamp.nullable(),records:z.array(z.object({id,accountId:id,clipId:id,publishedAt:stamp.nullable(),views:num,likes:num,comments:num,shares:num,saves:num})).max(10000)});
-const rawRemote=z.object({version:z.literal(1),updatedAt:stamp,device:z.object({seenAt:stamp,queue:z.object({updatedAt:stamp,totals:z.object({queued:num,processing:num,retry:num,scheduled:num,completed:num,cancelled:num})})}).nullable()});
+const rawRemote=z.object({version:z.literal(1),updatedAt:stamp,device:z.object({seenAt:stamp,queue:z.record(z.unknown())}).nullable()});
+const remoteQueue=z.object({updatedAt:stamp,totals:z.object({queued:num,processing:num,retry:num,scheduled:num,completed:num,cancelled:num})});
 const metrics=z.record(z.enum(["qualityScore","approvalRequired","autoEligible","supplierScore","clientsReviewed","improvementsQueued","rulesUpdated","safetyBlocks","impressions","views","orders","revenueUsd","spendUsd","plannedClips","likes","comments","shares","saves","queued","processing","retry","scheduled","completed","cancelled","posts","dailyTargetPosts","weeklyTargetClips","backlogPosts","gapToDailyTarget","readyForManual","blocked","draftReady","rightsReview","needsSource"]),num);
 export const webSourceRowSchema=z.object({id:z.string().regex(/^[a-f0-9]{64}$/),kind:z.enum(["news_queue","product","supplier","marketing_plan","campaign_metric","clip_plan","clip_cycle","clip_metric","remote_queue"]),state:z.enum(["approval_required","auto_eligible","quarantined","rejected","research","qualified","sample_recommended","launch_ready","blocked","approved_candidate","needs_backup_supplier","recorded","draft_only","auto_after_connection","partial","ready"]),sourceAt:stamp.nullable(),lane:lane.optional(),metrics}).strict();
 export type WebSourceRow=z.infer<typeof webSourceRowSchema>;
@@ -69,8 +80,12 @@ export async function readWebRoleSources(options:{pool:SourcePool;owner:string;c
  const clipMetrics=await file("clip_metrics",path.join(root,"clippers_workspace/metrics/metrics-summary.json"),v=>{const x=rawClipMetrics.parse(v);return {sourceAt:x.generatedAt,rows:x.records.map(q=>row("clip_metric",q.id,"recorded",x.generatedAt,{views:q.views,likes:q.likes,comments:q.comments,shares:q.shares,saves:q.saves}))};});
  const reports:Part[]=[];
  try{
-  const dir=path.join(root,"clippers_workspace/reports"),entries=(await readdir(dir,{withFileTypes:true})).filter(e=>e.isFile()&&e.name.endsWith(".json")).sort((a,b)=>b.name.localeCompare(a.name));
-  for(const entry of entries.slice(0,Math.max(0,20-fileCount))){
+  const dir=path.join(root,"clippers_workspace/reports"),entries=(await readdir(dir,{withFileTypes:true})).filter(e=>e.isFile()&&e.name.endsWith(".json")).sort((a,b)=>b.name.replace(/^automation-cycle-/,"").localeCompare(a.name.replace(/^automation-cycle-/,"")));
+  const candidates=entries.filter(e=>/^(?:automation-cycle-)?\d{4}-/.test(e.name));
+  if(candidates.length!==entries.length)reports.push(empty("clip_reports","invalid"));
+  // Reserve provenance for metrics, unknown contracts and the limit marker.
+  const reportLimit=Math.min(Math.max(0,20-fileCount),18-reports.length);
+  for(const entry of candidates.slice(0,reportLimit)){
    const daily=/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/.test(entry.name),cycle=/^automation-cycle-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/.test(entry.name);
    if(!daily&&!cycle){reports.push(empty("clip_reports","invalid"));continue;}
    reports.push(await file("clip_reports",path.join(dir,entry.name),v=>{
@@ -78,10 +93,10 @@ export async function readWebRoleSources(options:{pool:SourcePool;owner:string;c
     const x=rawClipReport.parse(v);if(x.userId!==options.owner)throw new Error("Foreign report");return {sourceAt:x.createdAt,rows:[row("clip_plan",x.id,x.publishMode,x.createdAt,{plannedClips:x.plannedClips.length})]};
    }));
   }
-  if(entries.length>reports.length)reports.push(empty("clip_reports","limit"));if(!entries.length)reports.push({rows:[],provenance:{kind:"clip_reports",status:"present",sourceAt:null,digest:sourceDigest([]),records:0,files:0,empty:true}});
+  if(candidates.length>reportLimit)reports.push(empty("clip_reports","limit"));if(!entries.length)reports.push({rows:[],provenance:{kind:"clip_reports",status:"present",sourceAt:null,digest:sourceDigest([]),records:0,files:0,empty:true}});
  }catch(error){reports.push(empty("clip_reports",(error as NodeJS.ErrnoException).code==="ENOENT"?"missing":"invalid"));}
  let remote=empty("blackroom_remote","missing");
- try{const result=await options.pool.query("SELECT CASE WHEN octet_length(data::text)<=1048576 THEN data ELSE NULL END AS data FROM blackroom_remote_control WHERE id=$1",["blackroom-primary"]);if(result.rows.length){const x=rawRemote.parse(result.rows[0].data);if(x.device){const q=x.device.queue;if([x.updatedAt,x.device.seenAt,q.updatedAt].some(t=>Date.parse(t)>now+30000))throw new Error("Future remote source");remote={rows:[row("remote_queue","blackroom-primary","recorded",q.updatedAt,q.totals)],provenance:{kind:"blackroom_remote",status:"present",sourceAt:q.updatedAt,heartbeatAt:x.device.seenAt,digest:sourceDigest({seenAt:x.device.seenAt,queueAt:q.updatedAt,totals:q.totals}),records:1,files:0,empty:false}};}else{if(Date.parse(x.updatedAt)>now+30000)throw new Error("Future remote source");remote={rows:[],provenance:{kind:"blackroom_remote",status:"present",sourceAt:x.updatedAt,digest:sourceDigest({updatedAt:x.updatedAt,device:null}),records:0,files:0,empty:true}};}}}catch{remote=empty("blackroom_remote","invalid");}
+ try{const result=await options.pool.query(BLACKROOM_SOURCE_PROJECTION_SQL,["blackroom-primary"]);if(result.rows.length){const x=rawRemote.parse(result.rows[0].data);if(x.device){const parsedQueue=remoteQueue.safeParse(x.device.queue);if(!parsedQueue.success){const invalidValue=parsedQueue.error.issues.some(issue=>issue.path.reduce<any>((value,key)=>value?.[key],x.device!.queue)!==undefined);const queueTime=x.device.queue.updatedAt;const futureQueue=typeof queueTime==="string"&&Date.parse(queueTime)>now+30000;remote=empty("blackroom_remote",invalidValue||futureQueue?"invalid":"missing");remote.provenance.heartbeatAt=x.device.seenAt;if([x.updatedAt,x.device.seenAt].some(t=>Date.parse(t)>now+30000))throw new Error("Future remote source");}else{const q=parsedQueue.data;if([x.updatedAt,x.device.seenAt].some(t=>Date.parse(t)>now+30000))throw new Error("Future remote source");if(Date.parse(q.updatedAt)>now+30000){remote=empty("blackroom_remote","invalid");remote.provenance.heartbeatAt=x.device.seenAt;}else remote={rows:[row("remote_queue","blackroom-primary","recorded",q.updatedAt,q.totals)],provenance:{kind:"blackroom_remote",status:"present",sourceAt:q.updatedAt,heartbeatAt:x.device.seenAt,digest:sourceDigest({seenAt:x.device.seenAt,queueAt:q.updatedAt,totals:q.totals}),records:1,files:0,empty:false}};}}else{if(Date.parse(x.updatedAt)>now+30000)throw new Error("Future remote source");remote={rows:[],provenance:{kind:"blackroom_remote",status:"present",sourceAt:x.updatedAt,digest:sourceDigest({updatedAt:x.updatedAt,device:null}),records:0,files:0,empty:true}};}}}catch{remote=empty("blackroom_remote","invalid");}
  const compose=(role:WebSourceRole,parts:Part[],filter?:(r:WebSourceRow)=>boolean):WebRoleSource=>{
   // Reject every implicated part rather than silently merging conflicting IDs.
   // Keep other roles exportable and mark affected coverage explicitly invalid.
