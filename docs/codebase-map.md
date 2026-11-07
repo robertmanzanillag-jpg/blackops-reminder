@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-07T02:33:22.609Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-build-recovery`
+Generated: 2026-11-07T02:51:57.081Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\office-factory-evidence`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 975 | 875 | 3285 | 570 | 18422 |
+| 974 | 876 | 3296 | 570 | 18449 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 246 | 242 | test:246 |
-| `server` | 226 | 221 | server:226 |
+| `tests` | 247 | 243 | test:247 |
+| `server` | 227 | 222 | server:227 |
 | `script` | 103 | 92 | script:103 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 51 | 47 | docs:51 |
+| `docs` | 48 | 46 | docs:48 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 35 | 18 | other:23, docs:11, package:1 |
@@ -257,6 +257,7 @@ Package: `rest-express`
 - `tests/software-factory-openai-builder.test.ts`
 - `tests/software-factory-openai-transport.test.ts`
 - `tests/software-factory-openai.test.ts`
+- `tests/software-factory-order-evidence.test.ts`
 - `tests/software-factory-pilot-review.test.ts`
 - `tests/software-factory-pipeline.test.ts`
 - `tests/software-factory-postgres.test.ts`

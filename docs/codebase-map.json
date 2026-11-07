@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T02:33:22.609Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-build-recovery",
+  "generatedAt": "2026-11-07T02:51:57.081Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-factory-evidence",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,13 +124,34 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 975,
-    "filesIndexed": 875,
-    "imports": 3285,
+    "filesVisible": 974,
+    "filesIndexed": 876,
+    "imports": 3296,
     "routes": 570,
-    "symbols": 18422
+    "symbols": 18449
   },
   "directories": {
+    "docs": {
+      "files": 48,
+      "indexed": 46,
+      "kinds": {
+        "docs": 48
+      }
+    },
+    "server": {
+      "files": 227,
+      "indexed": 222,
+      "kinds": {
+        "server": 227
+      }
+    },
+    "tests": {
+      "files": 247,
+      "indexed": 243,
+      "kinds": {
+        "test": 247
+      }
+    },
     ".": {
       "files": 35,
       "indexed": 18,
@@ -273,13 +294,6 @@
         "other": 1
       }
     },
-    "docs": {
-      "files": 51,
-      "indexed": 47,
-      "kinds": {
-        "docs": 51
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -300,13 +314,6 @@
       "indexed": 1,
       "kinds": {
         "script": 4
-      }
-    },
-    "server": {
-      "files": 226,
-      "indexed": 221,
-      "kinds": {
-        "server": 226
       }
     },
     "server/replit_integrations/batch": {
@@ -342,13 +349,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 246,
-      "indexed": 242,
-      "kinds": {
-        "test": 246
       }
     },
     "tests/fixtures": {
@@ -5456,22 +5456,6 @@
       "routes": []
     },
     {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5531,6 +5515,14 @@
     },
     {
       "path": "docs/factory-exact-source-edits.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-order-evidence.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -23710,6 +23702,41 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-order-evidence.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/software-factory-view",
+        "./software-factory",
+        "./software-factory-build-recovery",
+        "./software-factory-pipeline",
+        "./software-factory-store",
+        "node:crypto"
+      ],
+      "exports": [
+        "readFactoryOrderProposals",
+        "readFactoryRecoveredBuild"
+      ],
+      "symbols": [
+        "expectedCount",
+        "failed",
+        "failedId",
+        "hash",
+        "later",
+        "old",
+        "owner",
+        "ownerHash",
+        "project",
+        "readFactoryOrderProposals",
+        "readFactoryRecoveredBuild",
+        "result",
+        "root",
+        "safeId",
+        "snapshot",
+        "stateOf"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-pilot-review.ts",
       "kind": "server",
       "imports": [
@@ -24007,6 +24034,7 @@
         "./software-factory",
         "./software-factory-company",
         "./software-factory-office-connection",
+        "./software-factory-order-evidence",
         "./software-factory-pipeline",
         "./software-factory-store",
         "./software-factory-store-provider",
@@ -24046,6 +24074,7 @@
         "reported",
         "requireOwner",
         "result",
+        "reviewedProposals",
         "seen",
         "stages",
         "state",
@@ -26380,6 +26409,7 @@
       "kind": "shared",
       "imports": [],
       "exports": [
+        "FactoryOrderProposal",
         "SoftwareFactoryView"
       ],
       "symbols": [],
@@ -33039,6 +33069,30 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-order-evidence.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-order-evidence",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "at",
+        "candidate",
+        "evidence",
+        "f",
+        "finding",
+        "fixture",
+        "hash",
+        "jobs",
+        "project",
+        "run"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-panel.test.mjs",
       "kind": "test",
       "imports": [
@@ -33976,6 +34030,7 @@
     "tests/software-factory-openai-builder.test.ts",
     "tests/software-factory-openai-transport.test.ts",
     "tests/software-factory-openai.test.ts",
+    "tests/software-factory-order-evidence.test.ts",
     "tests/software-factory-pilot-review.test.ts",
     "tests/software-factory-pipeline.test.ts",
     "tests/software-factory-postgres.test.ts",

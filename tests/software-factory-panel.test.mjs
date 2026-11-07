@@ -3,19 +3,19 @@ import assert from 'node:assert/strict';
 import { build } from 'esbuild';
 import express from 'express';
 import { chromium } from 'playwright';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 
 test('factory panel uses truthful loading/errors, budget reservation, pause, and safe project registration', async t => {
  const temp = await mkdtemp(path.join(os.tmpdir(),'factory-panel-'));
  t.after(() => rm(temp,{recursive:true,force:true}));
- await build({stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{QueryClientProvider}from'@tanstack/react-query';import{queryClient}from'./client/src/lib/queryClient';import{SoftwareFactoryPanel}from'./client/src/components/software-factory-panel';createRoot(document.getElementById('root')).render(<QueryClientProvider client={queryClient}><SoftwareFactoryPanel/></QueryClientProvider>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,format:'iife',platform:'browser',outfile:path.join(temp,'panel.js'),jsx:'automatic',define:{'process.env.NODE_ENV':'"production"'}});
+ await build({nodePaths:process.env.NODE_PATH?.split(path.delimiter),stdin:{contents:`import React from 'react';import{createRoot}from'react-dom/client';import{QueryClientProvider}from'@tanstack/react-query';import{queryClient}from'./client/src/lib/queryClient';import{SoftwareFactoryPanel}from'./client/src/components/software-factory-panel';createRoot(document.getElementById('root')).render(<QueryClientProvider client={queryClient}><SoftwareFactoryPanel/></QueryClientProvider>);`,resolveDir:process.cwd(),loader:'tsx'},bundle:true,format:'iife',platform:'browser',outfile:path.join(temp,'panel.js'),jsx:'automatic',define:{'process.env.NODE_ENV':'"production"'}});
  const app=express();app.use(express.json());
  let paused=true,configured=false,failed=false;const writes=[];const errors=[];
  app.get('/',(_req,res)=>res.type('html').send('<html lang="es"><head><title>Factory isolated QA</title></head><body><div id="root"></div><script src="/panel.js"></script></body></html>'));
  app.get('/panel.js',(_req,res)=>res.sendFile(path.join(temp,'panel.js')));
- app.get('/api/software-factory',(_req,res)=>failed?res.status(503).json({error:'fixture unavailable'}):res.json({checkedAt:new Date().toISOString(),paused,readiness:'blocked',blockers:['No hay señal reciente del ejecutor de la fábrica.'],budget:{month:'2026-11',limitCents:10000,fixedCents:configured?2000:0,spentCents:0,reservedCents:0,remainingCents:configured?8000:10000,configured},metrics:{verifiedDeliveries:0,stagingVerifications:0,regressions:0,humanInterventions:null,rollbacks:0,blockedJobs:0,completedJobs:0,averageCompletedCostCents:null},jobs:[],projects:[]}));
+ app.get('/api/software-factory',(_req,res)=>failed?res.status(503).json({error:'fixture unavailable'}):res.json({checkedAt:new Date().toISOString(),paused,readiness:'blocked',blockers:['No hay señal reciente del ejecutor de la fábrica.'],budget:{month:'2026-11',limitCents:10000,fixedCents:configured?2000:0,spentCents:0,reservedCents:0,remainingCents:configured?8000:10000,configured},metrics:{verifiedDeliveries:0,stagingVerifications:0,regressions:0,humanInterventions:null,rollbacks:0,blockedJobs:0,completedJobs:0,averageCompletedCostCents:null},proposalEvidenceStatus:"complete",reviewedProposals:[{orderId:"historical-order",orderRevision:"c".repeat(64),reviewJobId:"review",projectId:"project",prUrl:"https://github.com/example/repo/pull/1",baseSha:"a".repeat(40),headSha:"b".repeat(40),completedAt:"2026-11-07T01:00:00Z",scope:"reviewed_proposal",orderLink:"historical_unverified",published:false,careerCredit:false}],jobs:[],projects:[]}));
  app.post('/api/software-factory/:action',(req,res)=>{writes.push({action:req.params.action,body:req.body});if(req.params.action==='pause')paused=req.body.paused;if(req.params.action==='budget')configured=true;res.json({ok:true});});
  const server=app.listen(0,'127.0.0.1');await new Promise(resolve=>server.once('listening',resolve));t.after(()=>new Promise(resolve=>server.close(resolve)));
  const origin=`http://127.0.0.1:${server.address().port}`;
@@ -25,6 +25,12 @@ test('factory panel uses truthful loading/errors, budget reservation, pause, and
  await page.route('**/*',route=>new URL(route.request().url()).origin===origin?route.continue():route.abort());
  await page.goto(origin);await page.getByRole('button',{name:'Fábrica de software',exact:true}).click();
  await page.getByRole('heading',{name:'Fábrica pausada'}).waitFor();
+ new TextDecoder('utf-8',{fatal:true}).decode(await readFile('client/src/components/software-factory-panel.tsx'));
+ assert.ok(!(await page.locator('body').innerText()).includes('\uFFFD'));
+ await page.getByText('Vínculo histórico; vigencia de la orden sin verificar.',{exact:true}).waitFor();
+ assert.equal(await page.getByRole('link',{name:'Ver propuesta en GitHub'}).getAttribute('href'),'https://github.com/example/repo/pull/1');
+ assert.equal(writes.length,0);assert.match(await page.locator('body').innerText(),/0 entregas verificadas/);
+
  await page.getByLabel('Alojamiento y otros costes fijos').fill('20');
  await page.getByRole('button',{name:'Registrar costes del mes'}).click();
  await page.getByRole('button',{name:'Registrar costes del mes'}).waitFor({state:'detached'});
