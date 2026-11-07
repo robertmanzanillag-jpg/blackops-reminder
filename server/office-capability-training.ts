@@ -42,7 +42,8 @@ const resultSchema=z.object({text:z.string().max(8000),sessionId:z.string().rege
 export type VerifiedCapabilityCost={receiptId:string;executionId:string;responseId:string;model:string;usage:z.infer<typeof usageSchema>;currency:"USD";usd:number};
 const costSchema=z.object({receiptId:z.string().min(1),executionId:z.string(),responseId:z.string(),model:z.string(),usage:usageSchema,currency:z.literal("USD"),usd:z.number().finite().nonnegative()}).strict();
 const measuredSchema=z.object({result:resultSchema,cost:costSchema,durationMs:z.number().finite().nonnegative()}).strict();
-const runSchema=z.object({id:z.string().uuid(),fence:z.string().uuid(),role:z.enum(PENDING_OFFICE_ROLES),generation:z.number().int().positive(),kind:z.enum(["production","holdout"]),policyVersion:z.string(),baselineVersion:z.string().optional(),fixtureIndex:z.number().int().min(0).max(2).optional(),task:taskSchema,sourceJob:z.unknown().optional(),startedAt:z.string().datetime(),expiresAt:z.string().datetime(),status:z.enum(["running","completed","unknown"]),reason:z.string().max(100).optional(),baseline:measuredSchema.optional(),trained:measuredSchema.optional(),unverifiedResult:resultSchema.optional(),artifactId:z.string().optional()}).strict();
+const cancellationSchema=z.object({version:z.literal(1),operatorAuditId:z.string().regex(/^[a-zA-Z0-9:_-]{1,160}$/),verifiedAt:z.string().datetime(),priorRunSha256:z.string().regex(/^[a-f0-9]{64}$/),baselineExecutionId:z.string(),baselineNeverAdmitted:z.literal(true),trainedExecutionId:z.string(),trainedNeverAdmitted:z.literal(true),runtimeDrained:z.literal(true),ledgerEvidenceId:z.string().min(1).max(200),ledgerSnapshotSha256:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
+const runSchema=z.object({id:z.string().uuid(),fence:z.string().uuid(),role:z.enum(PENDING_OFFICE_ROLES),generation:z.number().int().positive(),kind:z.enum(["production","holdout"]),policyVersion:z.string(),baselineVersion:z.string().optional(),fixtureIndex:z.number().int().min(0).max(2).optional(),task:taskSchema,sourceJob:z.unknown().optional(),startedAt:z.string().datetime(),expiresAt:z.string().datetime(),status:z.enum(["running","completed","unknown","cancelled"]),reason:z.string().max(100).optional(),baseline:measuredSchema.optional(),trained:measuredSchema.optional(),unverifiedResult:resultSchema.optional(),artifactId:z.string().optional(),cancellation:cancellationSchema.optional()}).strict();
 type Run=z.infer<typeof runSchema>;
 export type CapabilityTrainingState={version:1;ownerKey:string;policies:Policy[];runs:Run[]};
 function policyVersion(p:Omit<Policy,"version"|"status">){return digest({capability:CAPABILITY,...p});}
@@ -63,6 +64,10 @@ export function parseCapabilityTraining(raw:unknown,owner:string):CapabilityTrai
   for(const [side,measured] of [["baseline",r.baseline],["trained",r.trained]] as const)if(measured){const {result,cost}=measured;
    if(result.usage.totalTokens!==result.usage.inputTokens+result.usage.outputTokens || cost.executionId!==`${r.id}:${side}` || cost.responseId!==result.sessionId || cost.model!==result.model || digest(cost.usage)!==digest(result.usage) || Date.parse(result.completedAt)<Date.parse(r.startedAt)-30000 || Date.parse(result.completedAt)>Date.parse(r.expiresAt) || sessions.has(result.sessionId) || receipts.has(cost.receiptId))throw Error("CAPABILITY_RECEIPT_INVALID");sessions.add(result.sessionId);receipts.add(cost.receiptId);
   }
+  if(r.status==="cancelled"){
+   const c=r.cancellation,{artifactId,cancellation,...prior}=r;
+   if(!c || r.kind!=="holdout" || r.baseline || r.trained || r.unverifiedResult || c.baselineExecutionId!==`${r.id}:baseline` || c.trainedExecutionId!==`${r.id}:trained` || c.priorRunSha256!==digest({...prior,status:"unknown"}) || r.artifactId!==runProof(r) || Date.parse(c.verifiedAt)<Date.parse(r.startedAt) || !state.policies.some(p=>p.version===r.policyVersion&&p.status==="rejected"))throw Error("CAPABILITY_CANCELLATION_INVALID");
+  }else if(r.cancellation)throw Error("CAPABILITY_UNEXPECTED_CANCELLATION");
   if(r.status==="completed" && (!r.trained || (r.kind==="holdout" && (!r.baseline || r.baseline.result.model!==r.trained.result.model)) || r.artifactId!==runProof(r)))throw Error("CAPABILITY_RESULT_INVALID");
  }
  for(const p of state.policies){
@@ -97,7 +102,7 @@ export function createCapabilityTrainer(options:{owner:string;transact:(change:(
   const work=parseRoleWork(await options.loadWork(),options.owner),start=now(),id=randomUUID(),fence=randomUUID();let assignment:Run|undefined,policies:Policy[]=[];
   await options.transact((raw,generations,otherAcademyRunning)=>{
    assignment=undefined;let state=parseCapabilityTraining(raw,options.owner);state={...state,runs:state.runs.map((r):Run=>r.status==="running" && Date.parse(r.expiresAt)<=start?{...r,status:"unknown",reason:"Expired; no automatic retry"}:r)};
-   if(otherAcademyRunning || state.runs.length>=200||state.policies.length>=100||state.runs.some(r=>["running","unknown"].includes(r.status)))return state;
+   if(options.shouldStop?.() || otherAcademyRunning || state.runs.length>=200||state.policies.length>=100||state.runs.some(r=>["running","unknown"].includes(r.status)))return state;
    const used=state.runs.filter(r=>start-Date.parse(r.startedAt)<86400000).reduce((n,r)=>n+(r.kind==="holdout"?2:1),0);
    // Give each current holder one real audit before spending paired calls on
    // already-observed holders. Historical runs and generation fences stay intact.
@@ -118,7 +123,8 @@ export function createCapabilityTrainer(options:{owner:string;transact:(change:(
   if(!assignment)return;const run:Run=assignment;let unverified:OfficeOpenAIResult|undefined;
   try{
    for(const side of (run.kind==="holdout"?["baseline","trained"]:["trained"]) as Array<"baseline"|"trained">){
-    if(options.shouldStop?.()||now()>=Date.parse(run.expiresAt))throw Error("CAPABILITY_STOPPED");
+    // Drain an already reserved pair; pause only blocks new assignments.
+    if(now()>=Date.parse(run.expiresAt))throw Error("CAPABILITY_EXPIRED");
     const policy=policies.find(p=>p.version===(side==="baseline"?run.baselineVersion:run.policyVersion))!;
     const began=now(),executionId=`${id}:${side}`,result=resultSchema.parse(await options.run(prompt(run.task,policy),{executionId,maxOutputTokens:768}));unverified=result;
     const durationMs=now()-began,cost=costSchema.parse(await options.verifyCost({executionId,responseId:result.sessionId,model:result.model,usage:result.usage}));
@@ -145,4 +151,29 @@ export function createCapabilityTrainer(options:{owner:string;transact:(change:(
    await options.transact((raw,generations,otherAcademyRunning)=>{const state=parseCapabilityTraining(raw,options.owner);return {...state,runs:state.runs.map((r):Run=>r.id===id&&r.fence===fence&&r.status==="running"?{...r,status:"unknown",reason:"Result or price unconfirmed; reconcile before retry",...(unverified?{unverifiedResult:unverified}:{})}:r)};});
   }
  }};
+}
+
+export type CapabilityCancellationVerification={ownerKey:string;runId:string;fence:string;verifiedAt:string;baselineExecutionId:string;baselineNeverAdmitted:true;trainedExecutionId:string;trainedNeverAdmitted:true;runtimeDrained:true;ledgerEvidenceId:string;ledgerSnapshotSha256:string};
+export type CapabilityCancellationApproval={stateSha256:string;runId:string;fence:string;cancellation:z.infer<typeof cancellationSchema>};
+/** Operator-only. The verifier must independently inspect ALL admission ledgers
+ * under their locks, verify paused/drained runtime, and prove the missing phase
+ * never admitted. Absence from this training journal alone is insufficient.
+ * Hold these locks through apply + durable CAS; never retry an unknown provider. */
+export async function prepareCapabilityCancellation(options:{raw:unknown;owner:string;runId:string;fence:string;operatorAuditId:string;now:number;verify:(request:{ownerKey:string;runId:string;fence:string;baselineExecutionId:string;trainedExecutionId:string})=>Promise<CapabilityCancellationVerification>}):Promise<CapabilityCancellationApproval>{
+ const state=parseCapabilityTraining(options.raw,options.owner),run=state.runs.find(r=>r.id===options.runId);
+ if(!Number.isFinite(options.now)||!run||run.fence!==options.fence||run.status!=="unknown"||run.kind!=="holdout"||run.baseline||run.trained||run.unverifiedResult||run.artifactId||run.cancellation)throw Error("CAPABILITY_CANCELLATION_NOT_ELIGIBLE");
+ const candidate=state.policies.find(p=>p.version===run.policyVersion);if(candidate?.status!=="candidate"||candidate.parentVersion!==run.baselineVersion||!state.policies.some(p=>p.version===run.baselineVersion&&p.status==="active"))throw Error("CAPABILITY_CANCELLATION_POLICY_CHANGED");
+ const verified=await options.verify({ownerKey:state.ownerKey,runId:run.id,fence:run.fence,baselineExecutionId:`${run.id}:baseline`,trainedExecutionId:`${run.id}:trained`});
+ if(verified.ownerKey!==state.ownerKey||verified.runId!==run.id||verified.fence!==run.fence||verified.baselineExecutionId!==`${run.id}:baseline`||verified.trainedExecutionId!==`${run.id}:trained`)throw Error("CAPABILITY_CANCELLATION_VERIFIER_MISMATCH");
+ const {ownerKey,runId,fence,...proof}=verified;
+ const cancellation=cancellationSchema.parse({...proof,version:1,operatorAuditId:options.operatorAuditId,priorRunSha256:digest(run)}),age=options.now-Date.parse(cancellation.verifiedAt);
+ if(age<0||age>60000||Date.parse(cancellation.verifiedAt)<Date.parse(run.startedAt))throw Error("CAPABILITY_CANCELLATION_PROOF_INVALID");
+ return {stateSha256:digest(state),runId:run.id,fence:run.fence,cancellation};
+}
+/** Apply only while the independently checked ledgers and council are locked. */
+export function applyCapabilityCancellation(raw:unknown,owner:string,approval:CapabilityCancellationApproval,now:number):CapabilityTrainingState{
+ const state=parseCapabilityTraining(raw,owner),cancellation=cancellationSchema.parse(approval.cancellation),age=now-Date.parse(cancellation.verifiedAt),run=state.runs.find(r=>r.id===approval.runId);
+ if(!Number.isFinite(now)||age<0||age>60000||digest(state)!==approval.stateSha256||!run||run.fence!==approval.fence||run.status!=="unknown"||digest(run)!==cancellation.priorRunSha256)throw Error("CAPABILITY_CANCELLATION_STATE_CHANGED");
+ const cancelled:Run={...run,status:"cancelled",cancellation};cancelled.artifactId=runProof(cancelled);
+ return parseCapabilityTraining({...state,runs:state.runs.map(r=>r.id===run.id?cancelled:r),policies:state.policies.map(p=>p.version===run.policyVersion?{...p,status:"rejected"}:p)},owner);
 }
