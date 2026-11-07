@@ -1,3 +1,4 @@
+import {readMarketingLearning} from "./marketing-learning-store";
 import {readWebRoleSources,type WebRoleSource} from "./office-web-role-sources";
 import {persistWebRoleSources} from "./office-web-role-store";
 let publicStatus:{enabled:boolean;lastExportAt:string|null;status:"disabled"|"pending"|"ready"|"unavailable";failureStage?:"read"|"persist";failureCode?:string}={enabled:false,lastExportAt:null,status:"disabled"};
@@ -26,7 +27,7 @@ export async function startOfficeWebSourceExporter(){
  const [{default:pg},{resolveDatabaseConnectionString},{getSystemUserId}]=await Promise.all([import("pg"),import("./database-url"),import("./user-context")]);
  const owner=getSystemUserId(),pool=new pg.Pool({connectionString:resolveDatabaseConnectionString(),max:1,allowExitOnIdle:true,connectionTimeoutMillis:10000,statement_timeout:10000});
  const env=Object.fromEntries(["CLIPPERS_LOCAL_NEWS_WORKSPACE","DROPSHIPPING_PRODUCTS_PATH","DROPSHIPPING_SUPPLIERS_PATH","DROPSHIPPING_SOCIAL_METRICS_PATH","MARKETING_COMMAND_CENTER_LEARNING_PATH"].map(key=>[key,process.env[key]]));
- const cycle=createWebSourceExportCycle({read:()=>readWebRoleSources({pool,owner,configuredOwner:owner,root:process.cwd(),env}),persist:sources=>persistWebRoleSources(pool,owner,owner,sources)});
+ const cycle=createWebSourceExportCycle({read:()=>readWebRoleSources({pool,owner,configuredOwner:owner,root:process.cwd(),env,marketingLearning:()=>readMarketingLearning(pool,owner)}),persist:sources=>persistWebRoleSources(pool,owner,owner,sources)});
  installed=true;publicStatus={enabled:true,lastExportAt:null,status:"pending"};
  await cycle.tick();const timer=setInterval(()=>{void cycle.tick();},60000);timer.unref();
 }
