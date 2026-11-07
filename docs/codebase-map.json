@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T03:05:05.237Z",
+  "generatedAt": "2026-11-07T03:16:58.369Z",
   "repoRoot": "/home/runner/workspace",
   "packageName": "rest-express",
   "scripts": {
@@ -126,9 +126,9 @@
   "totals": {
     "filesVisible": 1007,
     "filesIndexed": 901,
-    "imports": 3318,
+    "imports": 3320,
     "routes": 570,
-    "symbols": 18500
+    "symbols": 18518
   },
   "directories": {
     ".": {
@@ -20023,6 +20023,8 @@
         "parseRoleWork",
         "parsed",
         "proof",
+        "readWithinLease",
+        "remaining",
         "retained",
         "start",
         "ttl",
@@ -24167,6 +24169,7 @@
       "exports": [
         "ROLE_WORK_DEADLINE_ASSERTIONS",
         "ROLE_WORK_DEADLINE_ID",
+        "createDeadlineControlSnapshot",
         "measureRoleWorkDeadline"
       ],
       "symbols": [
@@ -24174,9 +24177,11 @@
         "ROLE_WORK_DEADLINE_ID",
         "Runtime",
         "before",
+        "body",
         "cases",
         "completed",
         "council",
+        "createDeadlineControlSnapshot",
         "delay",
         "hanging",
         "journal",
@@ -31742,17 +31747,27 @@
       "symbols": [
         "NOW",
         "absent",
+        "admitted",
         "before",
         "body",
+        "company",
         "empty",
         "f",
         "fixture",
+        "hang",
+        "journal",
         "legacy",
         "mixed",
+        "next",
         "old",
+        "pending",
         "reorder",
+        "runner",
+        "saved",
         "snapshot",
         "tampered",
+        "target",
+        "tick",
         "webNews"
       ],
       "routes": []
@@ -33531,6 +33546,8 @@
       "path": "tests/software-factory-role-deadline.test.ts",
       "kind": "test",
       "imports": [
+        "../server/office-role-audits",
+        "../server/office-role-snapshots",
         "../server/software-factory-role-acceptance",
         "../server/software-factory-role-artifact",
         "../server/software-factory-role-deadline",
@@ -33543,7 +33560,11 @@
         "absent",
         "alreadyFixed",
         "base",
+        "blocked",
+        "completed",
+        "emptyBody",
         "noBaseline",
+        "owner",
         "r",
         "report",
         "result",
