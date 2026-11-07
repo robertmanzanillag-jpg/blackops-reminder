@@ -20,9 +20,8 @@ function wait(clock: FactoryLoopClock, ms: number, signal: AbortSignal) {
   });
 }
 
-/** A live process can be dormant without claiming a fresh database heartbeat.
- * Long sleep begins only after the worker confirms no active slot or recovery.
- * This reduces idle queries, not an all-in provider billing guarantee. */
+/** Claims remain hourly while idle; process presence is maintained every 15s.
+ * A heartbeat never certifies running work or release readiness. */
 export async function runSoftwareFactoryLoop(worker: ReturnType<typeof createSoftwareFactoryWorker>, options: {
   signal: AbortSignal; clock?: FactoryLoopClock; onError?: (message: string) => void;
 }): Promise<void> {
@@ -34,13 +33,14 @@ export async function runSoftwareFactoryLoop(worker: ReturnType<typeof createSof
     while (!options.signal.aborted) {
       let maintenance: Promise<void> | undefined;
       let maintenanceFailed = false;
+      const maintenanceStop=new AbortController();
       const maintain = () => {
         if (maintenance || maintenanceFailed || options.signal.aborted) return;
         maintenance = worker.maintain().catch(() => {
-          maintenanceFailed = true; worker.stop(); report("Factory persistence unavailable; execution stopped.");
+          maintenanceFailed = true; worker.stop(); maintenanceStop.abort(); report("Factory persistence unavailable; execution stopped.");
         }).finally(() => { maintenance = undefined; });
       };
-      // No timer survives the active cycle into the dormant interval.
+      // Maintenance remains live during the idle claim interval.
       const timer = clock.setInterval(maintain, 15000);
       let result: FactoryTickResult = { kind: "quarantined" };
       try {
@@ -51,16 +51,18 @@ export async function runSoftwareFactoryLoop(worker: ReturnType<typeof createSof
         do {
           result = await worker.tick();
         } while (result.kind === "progressed" && !maintenanceFailed && !options.signal.aborted);
+        if(!maintenanceFailed && result.kind!=="quarantined" && !options.signal.aborted)
+          await wait(clock,result.kind==="idle"?FACTORY_IDLE_POLL_MS:result.kind==="retry"?result.delayMs:1,AbortSignal.any([options.signal,maintenanceStop.signal]));
       } catch {
         worker.stop(); report("Factory cycle outcome unconfirmed; operator reconciliation required.");
         result = { kind: "quarantined" };
       } finally {
         clock.clearInterval(timer);
-        // A maintenance call already in flight must finish before dormancy.
+        // Join maintenance before starting another cycle or completing shutdown.
         await maintenance;
       }
       if (maintenanceFailed || result.kind === "quarantined" || options.signal.aborted) break;
-      await wait(clock, result.kind === "idle" ? FACTORY_IDLE_POLL_MS : result.kind === "retry" ? result.delayMs : 1, options.signal);
+
     }
   } finally { options.signal.removeEventListener("abort", stop); worker.stop(); }
 }

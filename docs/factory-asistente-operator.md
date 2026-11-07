@@ -69,3 +69,8 @@ and sa12, not a GitHub guarantee. Other Azure accounts, explicit ports (includin
 443), userinfo, HTTP and fragments are rejected. Downloads carry no credentials
 or cookies, follow no redirects, and retain archive/digest/evidence validation.
 This opt-in does not enable general network access or change the shared budget.
+
+
+## Idle process presence
+
+The long-lived Windows loop keeps a 15-second database maintenance heartbeat while idle. Its claim/admission poll remains hourly. Presence means the process can reach its existing ledger; it does not mean a job is running, a proposal succeeded, or publication is enabled. Adapter capability flags are unchanged. Unknown work, invalid/expired leases and persistence failures stop renewed presence; shutdown clears the interval and idle wait. Maintenance calls are serialized and a lookup finishing after stop cannot start a new heartbeat. An already-issued database write can finish after stop; its timestamp expires naturally in the dashboard window. No provider requests or model usage are introduced by idle maintenance.
