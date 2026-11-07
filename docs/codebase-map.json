@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T00:42:41.868Z",
+  "generatedAt": "2026-11-07T00:55:31.728Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-role-completion",
   "packageName": "rest-express",
   "scripts": {
@@ -124,34 +124,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 934,
-    "filesIndexed": 844,
-    "imports": 3134,
+    "filesVisible": 942,
+    "filesIndexed": 848,
+    "imports": 3138,
     "routes": 564,
-    "symbols": 17968
+    "symbols": 17982
   },
   "directories": {
-    "script": {
-      "files": 94,
-      "indexed": 86,
-      "kinds": {
-        "script": 94
-      }
-    },
-    "server": {
-      "files": 218,
-      "indexed": 213,
-      "kinds": {
-        "server": 218
-      }
-    },
-    "tests": {
-      "files": 237,
-      "indexed": 233,
-      "kinds": {
-        "test": 237
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -183,10 +162,10 @@
       }
     },
     ".github/workflows": {
-      "files": 2,
+      "files": 4,
       "indexed": 0,
       "kinds": {
-        "other": 2
+        "other": 4
       }
     },
     "bin": {
@@ -295,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 41,
-      "indexed": 40,
+      "files": 45,
+      "indexed": 42,
       "kinds": {
-        "docs": 41
+        "docs": 45
       }
     },
     "examples/clippers-motivation": {
@@ -309,11 +288,25 @@
         "other": 70
       }
     },
+    "script": {
+      "files": 94,
+      "indexed": 86,
+      "kinds": {
+        "script": 94
+      }
+    },
     "scripts": {
       "files": 4,
       "indexed": 1,
       "kinds": {
         "script": 4
+      }
+    },
+    "server": {
+      "files": 219,
+      "indexed": 214,
+      "kinds": {
+        "server": 219
       }
     },
     "server/replit_integrations/batch": {
@@ -349,6 +342,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 238,
+      "indexed": 234,
+      "kinds": {
+        "test": 238
       }
     },
     "tests/fixtures": {
@@ -5434,6 +5434,22 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -10900,28 +10916,40 @@
         "node:child_process",
         "node:crypto",
         "node:fs/promises",
+        "node:os",
         "node:path",
         "node:url",
         "node:util"
       ],
-      "exports": [],
+      "exports": [
+        "acceptanceTreeEntries",
+        "removeAcceptanceContainer"
+      ],
       "symbols": [
+        "acceptanceTreeEntries",
         "args",
-        "baseline",
         "baselineRoot",
         "bytes",
         "candidateModule",
         "checkedRoot",
         "child",
+        "destination",
+        "entries",
         "exec",
+        "exportRevision",
         "git",
         "main",
+        "match",
         "name",
+        "raw",
+        "removeAcceptanceContainer",
         "report",
         "resolved",
+        "result",
         "revision",
         "runId",
         "runtime",
+        "source",
         "timeout"
       ],
       "routes": []
@@ -23053,6 +23081,18 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-openai-transport.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "createFactoryOpenAiTransport"
+      ],
+      "symbols": [
+        "createFactoryOpenAiTransport"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-openai.ts",
       "kind": "server",
       "imports": [],
@@ -23072,6 +23112,7 @@
         "fresh",
         "input",
         "nonnegative",
+        "pinnedModel",
         "positive",
         "post",
         "prompt",
@@ -32111,6 +32152,22 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-openai-transport.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-openai-transport",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "headers",
+        "key",
+        "request"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-openai.test.ts",
       "kind": "test",
       "imports": [
@@ -32335,7 +32392,8 @@
         "child",
         "code",
         "digest",
-        "report"
+        "report",
+        "safe"
       ],
       "routes": []
     },
@@ -32993,6 +33051,7 @@
     "tests/software-factory-office-connection.test.ts",
     "tests/software-factory-office-mode.test.ts",
     "tests/software-factory-openai-builder.test.ts",
+    "tests/software-factory-openai-transport.test.ts",
     "tests/software-factory-openai.test.ts",
     "tests/software-factory-pilot-review.test.ts",
     "tests/software-factory-pipeline.test.ts",
