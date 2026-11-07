@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T02:21:26.201Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-capability-lifecycle",
+  "generatedAt": "2026-11-07T02:29:17.924Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-source-edits",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,18 +124,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 965,
-    "filesIndexed": 869,
+    "filesVisible": 971,
+    "filesIndexed": 872,
     "imports": 3262,
     "routes": 570,
-    "symbols": 18334
+    "symbols": 18349
   },
   "directories": {
     ".": {
-      "files": 34,
+      "files": 35,
       "indexed": 18,
       "kinds": {
-        "other": 22,
+        "other": 23,
         "docs": 11,
         "package": 1
       }
@@ -162,10 +162,10 @@
       }
     },
     ".github/workflows": {
-      "files": 4,
+      "files": 2,
       "indexed": 0,
       "kinds": {
-        "other": 4
+        "other": 2
       }
     },
     "bin": {
@@ -274,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 45,
-      "indexed": 43,
+      "files": 50,
+      "indexed": 46,
       "kinds": {
-        "docs": 45
+        "docs": 50
       }
     },
     "examples/clippers-motivation": {
@@ -354,6 +354,13 @@
     "tests/fixtures": {
       "files": 2,
       "indexed": 2,
+      "kinds": {
+        "test": 2
+      }
+    },
+    "tests/fixtures/factory-exact-source": {
+      "files": 2,
+      "indexed": 0,
       "kinds": {
         "test": 2
       }
@@ -5449,6 +5456,22 @@
       "routes": []
     },
     {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5492,6 +5515,14 @@
     },
     {
       "path": "docs/factory-asistente-operator.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-exact-source-edits.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -22760,6 +22791,7 @@
         "paths",
         "profile",
         "publisher",
+        "ref",
         "remainingMs",
         "repository",
         "requestSha256",
@@ -23513,11 +23545,16 @@
         "createOpenAiFactoryPatchGenerator"
       ],
       "symbols": [
+        "before",
         "createOpenAiFactoryPatchGenerator",
         "edit",
+        "edits",
         "end",
+        "exactSourcePatch",
         "files",
         "generate",
+        "group",
+        "grouped",
         "input",
         "modelFiles",
         "offset",
@@ -23531,7 +23568,9 @@
         "rootStat",
         "segments",
         "signal",
+        "source",
         "sources",
+        "start",
         "stat",
         "text",
         "updated",
@@ -32258,6 +32297,7 @@
         "repo",
         "result",
         "source",
+        "stale",
         "workflowPath"
       ],
       "routes": []
@@ -32800,13 +32840,19 @@
       ],
       "exports": [],
       "symbols": [
+        "cases",
         "common",
         "context",
         "data",
+        "edits",
         "failed",
         "generate",
         "generateText",
+        "gitMissing",
+        "gitProbe",
         "input",
+        "make",
+        "originals",
         "patch",
         "rejected",
         "result",
