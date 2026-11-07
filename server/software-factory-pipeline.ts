@@ -1,4 +1,4 @@
-import { canRepair, evaluateLearning, projectReadiness, releaseGate, rehearsalGate, type FactoryCandidate, type FactoryEvidence, type FactoryProject, type LearningCase } from "./software-factory";
+import { canRepair, evaluateLearning, projectReadiness, proposalReadiness, proposalEvidenceGate, releaseGate, rehearsalGate, type FactoryCandidate, type FactoryEvidence, type FactoryProject, type LearningCase } from "./software-factory";
 import { createHash } from "node:crypto";
 import type { FactorySimulationInput, runFactorySimulation } from "./software-factory-simulator";
 import type { AppQaFinding } from "./app-qa-agent";
@@ -17,6 +17,7 @@ interface StageContext { signal: AbortSignal; maxCostCents: number; source?: Rea
 interface Costed { costCents: number }
 /** All callbacks are trusted control-plane functions, never loaded from app code or request data. */
 export interface FactoryPipelineDependencies {
+  executionMode?: "review-only";
   project(ownerKey: string, projectId: string): Promise<FactoryProject | undefined>;
   previous(ownerKey: string, jobId: string): Promise<FactoryJob | undefined>;
   isCurrentDeployment?: (ownerKey: string, projectId: string, deployJobId: string) => Promise<boolean>;
@@ -39,9 +40,12 @@ const clone = <T>(value: T): T => JSON.parse(JSON.stringify(value));
 const validSha = (value: string) => /^[a-f0-9]{40,64}$/.test(value);
 export function createFactoryPipeline(deps: FactoryPipelineDependencies): Pick<FactoryWorkerOptions, "adapters" | "releaseContext"> & { readiness(): { ready: boolean; missing: string[] } } {
   const now = deps.now || (() => new Date());
+  const proposalOnly=deps.executionMode==="review-only";
+  const enabledStages:FactoryJob["kind"][]=proposalOnly?["discover","build","simulate","review"]:Object.keys(predecessors) as FactoryJob["kind"][];
   const readiness = () => {
-    const missing = (["discover", "build", "simulate", "review", "deploy", "verify", "rollback", "evaluate", "recordValidation"] as const).filter(key => !deps[key]).map(String);
-    for (const kind of Object.keys(predecessors) as FactoryJob["kind"][]) if (!Number.isSafeInteger(deps.reservations[kind]) || deps.reservations[kind] < 1 || deps.reservations[kind] > 10000) missing.push(`reservation:${kind}`);
+    const missing = enabledStages.filter(key => !deps[key]).map(String);
+    if(!proposalOnly && !deps.recordValidation)missing.push("recordValidation");
+    for (const kind of enabledStages) if (!Number.isSafeInteger(deps.reservations[kind]) || deps.reservations[kind] < 1 || deps.reservations[kind] > 10000) missing.push(`reservation:${kind}`);
     return { ready: !missing.length, missing };
   };
   const load = async (job: FactoryJob): Promise<{ state: FactoryPipelineState; previous: FactoryJob }> => {
@@ -67,14 +71,15 @@ export function createFactoryPipeline(deps: FactoryPipelineDependencies): Pick<F
   const result = (state: FactoryPipelineState, costCents: number, extra: Partial<FactoryAdapterResult> = {}): FactoryAdapterResult => ({ status: "completed", costCents, evidence: { pipelineState: state }, ...extra });
   const evidenceMatches = (state: FactoryPipelineState, evidence: FactoryEvidence, kind: FactoryEvidence["kind"]) => !!state.candidate && evidence.kind === kind && evidence.projectId === state.projectId && evidence.headSha === state.candidate.headSha && evidence.baseSha === state.candidate.baseSha;
   const adapters: Partial<Record<FactoryJob["kind"], FactoryAdapter>> = {};
-  for (const kind of Object.keys(predecessors) as FactoryJob["kind"][]) adapters[kind] = { async execute(job, context) {
+  for (const kind of enabledStages) adapters[kind] = { async execute(job, context) {
     context.signal.throwIfAborted();
     if (job.kind !== kind) return { status: "blocked", costCents: 0, reason: "FACTORY_STAGE_MISMATCH" };
     const missing = readiness().missing;
     if (missing.length) return { status: "blocked", costCents: 0, reason: `FACTORY_PIPELINE_UNAVAILABLE:${missing.join(",")}` };
     const project = await deps.project(job.ownerKey, job.projectId);
     if (!project) return { status: "blocked", costCents: 0, reason: "FACTORY_PROJECT_UNREGISTERED" };
-    if (!projectReadiness(project).allowed) return { status: "blocked", costCents: 0, reason: projectReadiness(project).reasons.join(",") };
+    const projectGate=(proposalOnly?proposalReadiness:projectReadiness)(project);
+    if (!projectGate.allowed) return { status: "blocked", costCents: 0, reason: projectGate.reasons.join(",") };
     const checkCost = (cost: number) => { if (!Number.isSafeInteger(cost) || cost < 0 || cost > context.maxCostCents) throw new Error("FACTORY_STAGE_BILLING_UNCONFIRMED"); };
     if (kind === "discover") {
       const found = await deps.discover!(clone(project), { ...context, source: clone(job.payload) }); checkCost(found.costCents);
@@ -107,6 +112,10 @@ export function createFactoryPipeline(deps: FactoryPipelineDependencies): Pick<F
       if (!evidenceMatches(state, checked.evidence, kind === "simulate" ? "simulation" : "review")) throw new Error("FACTORY_EVIDENCE_IDENTITY_MISMATCH");
       state.evidence.push(checked.evidence);
       if (!checked.evidence.passed || checked.evidence.warnings.length) return result(state, checked.costCents, canRepair(state.repairAttempts) ? { next: next(job, "build", state), reason: "FACTORY_REPAIR_REQUESTED" } : { status: "blocked", reason: "FACTORY_REPAIR_LIMIT" });
+      if(proposalOnly && kind==="review"){
+        const gate=proposalEvidenceGate(project,state.candidate!,state.evidence,now().getTime());
+        return result(state,checked.costCents,gate.allowed?{reason:"FACTORY_PR_REVIEWED_NOT_DEPLOYED"}:{status:"blocked",reason:gate.reasons.join(",")});
+      }
       return result(state, checked.costCents, { next: next(job, kind === "simulate" ? "review" : "deploy", state) });
     }
     if (kind === "deploy") {

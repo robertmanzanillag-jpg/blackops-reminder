@@ -12,6 +12,10 @@ export interface FactoryWorkerOptions {
   releaseContext?: (job: FactoryJob) => Promise<TrustedReleaseContext>;
   scheduleOwner?: string;
   discoveryReservationCents?: number;
+  /** Company orders are admitted explicitly through the shared credit gate. */
+  discoveryMode?: "daily" | "company-orders-only";
+  /** Operator policy, never a job payload. Stops both staging and production. */
+  releaseMode?: "review-only" | "enabled";
   now?: () => Date;
 }
 export type FactoryTickResult = { kind: "progressed" | "idle" | "quarantined" } | { kind: "retry"; delayMs: number };
@@ -29,18 +33,23 @@ export function validateFactoryTransition(job: FactoryJob, result: FactoryAdapte
   if (Number(next.payload.repairAttempts) > 2) throw new Error("FACTORY_REPAIR_LIMIT");
 }
 export function createSoftwareFactoryWorker(options: FactoryWorkerOptions = {}) {
+  if(options.releaseMode!==undefined && !["review-only","enabled"].includes(options.releaseMode))throw Error("FACTORY_RELEASE_MODE_INVALID");
+  if(options.discoveryMode!==undefined && !["daily","company-orders-only"].includes(options.discoveryMode))throw Error("FACTORY_DISCOVERY_MODE_INVALID");
   const store = options.store || softwareFactoryStore;
   const workerId = options.workerId || `factory-${randomUUID()}`;
   const now = options.now || (() => new Date());
+  const capabilities = () => Object.fromEntries(Object.entries(options.adapters || {}).map(([kind, adapter]) => [kind,
+    typeof adapter?.execute === "function" && !(options.releaseMode === "review-only" && ["deploy", "verify", "rollback", "evaluate"].includes(kind))]));
   let busy = false; let quarantined = false; let active: AbortController | undefined; let deadline = 0;
   return {
     async maintain() {
       if (!busy || quarantined) return;
       if (now().getTime() >= deadline) { quarantined=true; active?.abort(); }
       await store.expire();
-      if (!quarantined && active) await store.heartbeat(workerId,Object.fromEntries(Object.entries(options.adapters || {}).map(([kind,adapter])=>[kind,typeof adapter?.execute === "function"])));
+      if (!quarantined && active) await store.heartbeat(workerId,capabilities());
     },
     async schedule() {
+      if (options.discoveryMode === "company-orders-only") return;
       if (!options.scheduleOwner || !options.adapters?.discover) return;
       const reserve = options.discoveryReservationCents;
       if (!Number.isSafeInteger(reserve) || reserve! <= 0) throw new Error("FACTORY_DISCOVERY_COST_REQUIRED");
@@ -70,13 +79,19 @@ export function createSoftwareFactoryWorker(options: FactoryWorkerOptions = {}) 
           return { kind: "idle" };
         }
         deadline=Date.parse(job.leaseExpiresAt || ""); if (!Number.isFinite(deadline) || deadline <= now().getTime()) {quarantined=true; return { kind: "quarantined" };}
-        await store.heartbeat(workerId,Object.fromEntries(Object.entries(options.adapters || {}).map(([kind,adapter])=>[kind,typeof adapter?.execute === "function"])));
+        await store.heartbeat(workerId,capabilities());
         const block = async (reason: string): Promise<FactoryTickResult> => {
           if (!await store.complete(job, { status: "blocked", costCents: 0, reason })) quarantined = true;
           return { kind: quarantined ? "quarantined" : "progressed" };
         };
         let requiredRollbackCents: number | undefined;
         const adapter = options.adapters?.[job.kind];
+        if (options.releaseMode === "review-only" && ["deploy", "verify", "rollback", "evaluate"].includes(job.kind)) {
+          // A previous deployment may still need recovery. Never release its
+          // escrow by completing a claimed recovery job as a zero-cost block.
+          await store.complete(job,{status:"unknown",costCents:0,reason:"FACTORY_RELEASE_REQUIRES_OPERATOR_RECONCILIATION"});
+          quarantined=true;return {kind:"quarantined"};
+        }
         if (!adapter) return await block(`FACTORY_ADAPTER_UNAVAILABLE:${job.kind}`);
         if (job.kind === "deploy") {
           if (!options.releaseContext) return await block("FACTORY_TRUSTED_RELEASE_EVIDENCE_UNAVAILABLE");
@@ -98,6 +113,10 @@ export function createSoftwareFactoryWorker(options: FactoryWorkerOptions = {}) 
           if (quarantined || controller.signal.aborted) { await store.expire(); return { kind: "quarantined" }; }
           try { validateFactoryTransition(job,result); if(job.kind==="deploy" && result.status==="completed" && result.next?.recoveryCents!==requiredRollbackCents)throw new Error("FACTORY_ROLLBACK_ESCROW_REQUIRED"); }
           catch { result={status:"unknown",costCents:0,reason:"FACTORY_INVALID_ADAPTER_RESULT"}; }
+          if (options.releaseMode === "review-only" && job.kind === "review" && result.status === "completed" && result.next?.kind === "deploy") {
+            const { next: _release, ...reviewed } = result;
+            result = { ...reviewed, reason: "FACTORY_PR_REVIEWED_NOT_DEPLOYED" };
+          }
           const {next,...outcome}=result;
           if (!await store.complete(job,outcome,next)) quarantined=true;
           if (outcome.status === "unknown") quarantined=true;
