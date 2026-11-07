@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T01:58:05.757Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-scoped-export",
+  "generatedAt": "2026-11-07T02:14:06.930Z",
+  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-capability-lifecycle",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,13 +124,41 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 964,
-    "filesIndexed": 866,
-    "imports": 3245,
+    "filesVisible": 962,
+    "filesIndexed": 868,
+    "imports": 3258,
     "routes": 570,
-    "symbols": 18276
+    "symbols": 18313
   },
   "directories": {
+    "docs": {
+      "files": 45,
+      "indexed": 43,
+      "kinds": {
+        "docs": 45
+      }
+    },
+    "server": {
+      "files": 224,
+      "indexed": 219,
+      "kinds": {
+        "server": 224
+      }
+    },
+    "shared": {
+      "files": 18,
+      "indexed": 18,
+      "kinds": {
+        "shared": 18
+      }
+    },
+    "tests": {
+      "files": 245,
+      "indexed": 241,
+      "kinds": {
+        "test": 245
+      }
+    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -162,10 +190,10 @@
       }
     },
     ".github/workflows": {
-      "files": 4,
+      "files": 2,
       "indexed": 0,
       "kinds": {
-        "other": 4
+        "other": 2
       }
     },
     "bin": {
@@ -273,13 +301,6 @@
         "other": 1
       }
     },
-    "docs": {
-      "files": 48,
-      "indexed": 44,
-      "kinds": {
-        "docs": 48
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -300,13 +321,6 @@
       "indexed": 1,
       "kinds": {
         "script": 4
-      }
-    },
-    "server": {
-      "files": 223,
-      "indexed": 218,
-      "kinds": {
-        "server": 223
       }
     },
     "server/replit_integrations/batch": {
@@ -330,25 +344,11 @@
         "server": 3
       }
     },
-    "shared": {
-      "files": 17,
-      "indexed": 17,
-      "kinds": {
-        "shared": 17
-      }
-    },
     "shared/models": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 244,
-      "indexed": 240,
-      "kinds": {
-        "test": 244
       }
     },
     "tests/fixtures": {
@@ -5449,22 +5449,6 @@
       "routes": []
     },
     {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5524,6 +5508,14 @@
     },
     {
       "path": "docs/metricool-tracking-runbook.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/office-capability-lifecycle.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -18872,9 +18864,40 @@
       "routes": []
     },
     {
+      "path": "server/office-capability-lifecycle.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/office-capability-lifecycle",
+        "./office-capability-training",
+        "./office-role-work"
+      ],
+      "exports": [
+        "capabilityLifecycleSummary",
+        "capabilityPolicyLife"
+      ],
+      "symbols": [
+        "Grade",
+        "Policy",
+        "Run",
+        "anyRunnable",
+        "blocking",
+        "capabilityLifecycleSummary",
+        "capabilityPolicyLife",
+        "current",
+        "life",
+        "localAdmissionEligible",
+        "pending",
+        "preparing",
+        "siblings",
+        "sourceExempt"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/office-capability-training.ts",
       "kind": "server",
       "imports": [
+        "./office-capability-lifecycle",
         "./office-openai",
         "./office-role-snapshots",
         "./office-role-work",
@@ -18936,6 +18959,7 @@
         "pairs",
         "parent",
         "parseCapabilityTraining",
+        "policies",
         "policy",
         "policySchema",
         "policyVersion",
@@ -25717,6 +25741,23 @@
       "routes": []
     },
     {
+      "path": "shared/office-capability-lifecycle.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "CAPABILITY_LIFE_RULES",
+        "CapabilityLifeEvidence",
+        "CapabilityPolicyLife",
+        "replayCapabilityPolicyLife"
+      ],
+      "symbols": [
+        "CAPABILITY_LIFE_RULES",
+        "replayCapabilityPolicyLife",
+        "seen"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/office-kong-supervisor.ts",
       "kind": "shared",
       "imports": [
@@ -30491,6 +30532,44 @@
       "routes": []
     },
     {
+      "path": "tests/office-capability-lifecycle.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-capability-lifecycle",
+        "../server/office-capability-training",
+        "../server/office-role-audits",
+        "../server/office-role-snapshots",
+        "../server/office-role-work",
+        "../shared/office-capability-lifecycle",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "add",
+        "after",
+        "body",
+        "f",
+        "fixture",
+        "generations",
+        "history",
+        "life",
+        "make",
+        "owner",
+        "r",
+        "records",
+        "removed",
+        "reorder",
+        "source",
+        "state",
+        "successor",
+        "summary",
+        "uncertain"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-capability-training.test.ts",
       "kind": "test",
       "imports": [
@@ -33601,6 +33680,7 @@
     "tests/office-academy-benchmarks.test.ts",
     "tests/office-academy-promotion.test.ts",
     "tests/office-academy-runner.test.ts",
+    "tests/office-capability-lifecycle.test.ts",
     "tests/office-capability-training.test.ts",
     "tests/office-city-agents.test.ts",
     "tests/office-claude.test.ts",
