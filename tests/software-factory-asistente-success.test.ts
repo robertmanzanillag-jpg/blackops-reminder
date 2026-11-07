@@ -15,7 +15,7 @@ test("Asistente exact source to tested draft PR charges shared credit once and n
   const repository = "robertmanzanillag-jpg/blackops-reminder", baseBranch = "codex/office-integrated-repair-20261106";
   const base = "a".repeat(40), head = "b".repeat(40), at = "2026-11-06T12:00:00.000Z", now = () => new Date(at);
   const before = "export const count = 1;\n", after = "export const count = 2;\n";
-  const patch = "diff --git a/server/agent-search.ts b/server/agent-search.ts\n--- a/server/agent-search.ts\n+++ b/server/agent-search.ts\n@@ -1 +1 @@\n-export const count = 1;\n+export const count = 2;\n";
+  const patch = "diff --git a/server/agent-search.ts b/server/agent-search.ts\n--- a/server/agent-search.ts\n+++ b/server/agent-search.ts\n@@ -1,1 +1,1 @@\n-export const count = 1;\n+export const count = 2;\n";
   const patchSha = createHash("sha256").update(patch).digest("hex"), branch = `factory/${base}-${patchSha}`;
   const workflow = "trusted fixture workflow", workflowPath = ".github/workflows/factory-candidate-checks.yml";
   const calls: string[] = []; let pushed = false, checked = false, prCreated = false, modelCalls = 0;
@@ -37,7 +37,7 @@ test("Asistente exact source to tested draft PR charges shared credit once and n
         if (url.endsWith("/input_tokens")) { calls.push("count"); return json({ object: "response.input_tokens", input_tokens: 100 }); }
         calls.push("model"); const body = JSON.parse(String(init.body)); assert.deepEqual(body.tools, []); assert.equal(body.store, false);
         return json({ object: "response", model: body.model, status: "completed", usage: { input_tokens: 100, output_tokens: 100, total_tokens: 200 },
-          output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: patch }] }] });
+          output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: JSON.stringify({edits:[{path:"server/agent-search.ts",before,after}]}) }] }] });
       } },
     githubRequest: async (url, init) => {
       const prefix = `https://api.github.com/repos/${repository}`; assert.ok(url.startsWith(prefix));

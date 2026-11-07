@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T02:27:26.731Z",
+  "generatedAt": "2026-11-07T03:05:05.237Z",
   "repoRoot": "/home/runner/workspace",
   "packageName": "rest-express",
   "scripts": {
@@ -124,18 +124,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 992,
-    "filesIndexed": 890,
-    "imports": 3262,
+    "filesVisible": 1007,
+    "filesIndexed": 901,
+    "imports": 3318,
     "routes": 570,
-    "symbols": 18334
+    "symbols": 18500
   },
   "directories": {
     ".": {
-      "files": 35,
+      "files": 36,
       "indexed": 18,
       "kinds": {
-        "other": 23,
+        "other": 24,
         "docs": 11,
         "package": 1
       }
@@ -163,10 +163,10 @@
       }
     },
     ".github/workflows": {
-      "files": 2,
+      "files": 3,
       "indexed": 0,
       "kinds": {
-        "other": 2
+        "other": 3
       }
     },
     "agent_council_data": {
@@ -224,10 +224,10 @@
       }
     },
     "docs": {
-      "files": 56,
-      "indexed": 52,
+      "files": 59,
+      "indexed": 55,
       "kinds": {
-        "docs": 56
+        "docs": 59
       }
     },
     "examples/clippers-motivation": {
@@ -253,10 +253,10 @@
       }
     },
     "server": {
-      "files": 225,
-      "indexed": 220,
+      "files": 229,
+      "indexed": 224,
       "kinds": {
-        "server": 225
+        "server": 229
       }
     },
     "server/replit_integrations": {
@@ -281,17 +281,17 @@
       }
     },
     "tests": {
-      "files": 245,
-      "indexed": 241,
+      "files": 249,
+      "indexed": 245,
       "kinds": {
-        "test": 245
+        "test": 249
       }
     },
     "tests/fixtures": {
-      "files": 2,
+      "files": 4,
       "indexed": 2,
       "kinds": {
-        "test": 2
+        "test": 4
       }
     },
     "tests/harness": {
@@ -4889,6 +4889,7 @@
       "path": "client/src/pages/marketing-command-center.tsx",
       "kind": "client-page",
       "imports": [
+        "@/components/kong-supervisor-session",
         "@/components/ui/badge",
         "@/components/ui/button",
         "@/components/ui/card",
@@ -4907,12 +4908,17 @@
         "MarketingClient",
         "MarketingSnapshot",
         "Metric",
+        "data",
         "money",
+        "owner",
         "postJson",
         "refresh",
         "response",
+        "routerAuth",
+        "routerId",
         "runMutation",
-        "statusTone"
+        "statusTone",
+        "verifiedAuth"
       ],
       "routes": []
     },
@@ -5595,6 +5601,22 @@
       "routes": []
     },
     {
+      "path": "docs/factory-build-recovery.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-exact-source-edits.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/factory-reader-deadline-acceptance.md",
       "kind": "docs",
       "imports": [],
@@ -5604,6 +5626,14 @@
     },
     {
       "path": "docs/legacy-publication-containment-validation.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/marketing-learning-persistence.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -18529,6 +18559,7 @@
       "kind": "server",
       "imports": [
         "./dropshipping-ceo",
+        "node:async_hooks",
         "node:fs",
         "node:path",
         "zod"
@@ -18536,9 +18567,11 @@
       "exports": [
         "getMarketingCommandCenterSnapshot",
         "marketingCommandCenterDaySchema",
+        "marketingRequiresPostgres",
         "resetMarketingCommandCenterForTests",
         "runMarketingCommandCenterDay",
-        "setMarketingCommandCenterLearningPathForTests"
+        "setMarketingCommandCenterLearningPathForTests",
+        "withMarketingLearningContext"
       ],
       "symbols": [
         "MarketingClient",
@@ -18555,6 +18588,7 @@
         "buildWorkstreams",
         "clients",
         "clientsToReview",
+        "currentRuns",
         "dropshipping",
         "dropshippingMetrics",
         "dropshippingRevenue",
@@ -18565,9 +18599,11 @@
         "improvementsQueued",
         "latestRun",
         "learnedRules",
+        "learningContext",
         "learningRulesForClient",
         "loadLearningRuns",
         "marketingCommandCenterDaySchema",
+        "marketingRequiresPostgres",
         "maxClients",
         "money",
         "normalized",
@@ -18588,8 +18624,98 @@
         "targetClients",
         "totalRevenueUsd",
         "totalSpendUsd",
+        "withMarketingLearningContext",
         "withReadyHandoff",
         "writeLearningRuns"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/marketing-learning-routes.ts",
+      "kind": "server",
+      "imports": [
+        "./marketing-learning-service",
+        "./user-context",
+        "express"
+      ],
+      "exports": [
+        "registerMarketingLearningRoutes"
+      ],
+      "symbols": [
+        "code",
+        "failure",
+        "registerMarketingLearningRoutes"
+      ],
+      "routes": [
+        "/api/marketing-command-center",
+        "/api/marketing-command-center/run-day"
+      ]
+    },
+    {
+      "path": "server/marketing-learning-service.ts",
+      "kind": "server",
+      "imports": [
+        "./marketing-command-center",
+        "./marketing-learning-store",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "createLocalMarketingLearningStore",
+        "createMarketingLearningService",
+        "getMarketingCommandCenterForOwner",
+        "runMarketingCommandCenterForOwner"
+      ],
+      "symbols": [
+        "Store",
+        "createLocalMarketingLearningStore",
+        "createMarketingLearningService",
+        "file",
+        "getMarketingCommandCenterForOwner",
+        "hash",
+        "identity",
+        "parsed",
+        "read",
+        "runMarketingCommandCenterForOwner",
+        "saved",
+        "service",
+        "snapshot"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/marketing-learning-store.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "MARKETING_LEARNING_KIND",
+        "MarketingPool",
+        "MarketingQuery",
+        "SavedMarketingRun",
+        "createMarketingLearningStore",
+        "marketingLearningRunSchema",
+        "readMarketingLearning"
+      ],
+      "symbols": [
+        "MARKETING_LEARNING_KIND",
+        "assertOwner",
+        "before",
+        "createMarketingLearningStore",
+        "hash",
+        "id",
+        "marketingLearningRunSchema",
+        "next",
+        "ownerKey",
+        "parse",
+        "readMarketingLearning",
+        "result",
+        "run",
+        "stateSchema",
+        "transact"
       ],
       "routes": []
     },
@@ -20113,12 +20239,12 @@
         "found",
         "lane",
         "last",
-        "learning",
         "locate",
         "metrics",
         "news",
         "now",
         "products",
+        "projectLearning",
         "projectRemoteObject",
         "projected",
         "provenanceSchema",
@@ -20176,6 +20302,7 @@
       "path": "server/office-web-source-scheduler.ts",
       "kind": "server",
       "imports": [
+        "./marketing-learning-store",
         "./office-web-role-sources",
         "./office-web-role-store"
       ],
@@ -21732,7 +21859,7 @@
         "./local-news-delivery-safety",
         "./local-news-growth-scout",
         "./market-news",
-        "./marketing-command-center",
+        "./marketing-learning-routes",
         "./meeting-intelligence",
         "./metricool-analytics-sync",
         "./office-github",
@@ -22354,8 +22481,6 @@
         "/api/investments",
         "/api/investments/:id",
         "/api/legal-compliance/reports",
-        "/api/marketing-command-center",
-        "/api/marketing-command-center/run-day",
         "/api/monthly-goals",
         "/api/monthly-goals/:id",
         "/api/monthly-goals/all",
@@ -22864,6 +22989,7 @@
         "paths",
         "profile",
         "publisher",
+        "ref",
         "remainingMs",
         "repository",
         "requestSha256",
@@ -22916,6 +23042,7 @@
         "admitWithinCredits",
         "budget",
         "build",
+        "buildModel",
         "cents",
         "client",
         "config",
@@ -22945,6 +23072,7 @@
         "readAcceptance",
         "readMainOrder",
         "readUi",
+        "recoveryPrevious",
         "reservation",
         "resolved",
         "review",
@@ -23026,6 +23154,85 @@
         "seen",
         "text",
         "trees"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-build-recovery.ts",
+      "kind": "server",
+      "imports": [
+        "./agent-council-store",
+        "./shared-openai-credit-ledger",
+        "./software-factory",
+        "./software-factory-pipeline",
+        "./software-factory-store",
+        "node:child_process",
+        "node:crypto",
+        "node:util",
+        "zod"
+      ],
+      "exports": [
+        "FactoryBuildRecoveryRequest",
+        "RECOVERY_EQUIVALENT_PATHS",
+        "RECOVERY_HARNESS_FILES",
+        "buildRecoveryDigest",
+        "buildRecoverySchemaSql",
+        "enqueueFailedBuildRecovery",
+        "loadFailedBuildRecovery",
+        "recoverableFailedBuild",
+        "verifyRecoveryRebase"
+      ],
+      "symbols": [
+        "RECOVERY_EQUIVALENT_PATHS",
+        "RECOVERY_HARNESS_FILES",
+        "RebaseProof",
+        "WorkflowBlobChange",
+        "admitted",
+        "approval",
+        "before",
+        "budget",
+        "buildRecoveryDigest",
+        "buildRecoverySchemaSql",
+        "c",
+        "canonical",
+        "control",
+        "credit",
+        "decode",
+        "enqueueFailedBuildRecovery",
+        "exception",
+        "existing",
+        "fail",
+        "failed",
+        "failedRow",
+        "git",
+        "hash",
+        "input",
+        "inserted",
+        "job",
+        "jobInput",
+        "key",
+        "ledger",
+        "loadFailedBuildRecovery",
+        "matched",
+        "matchesRecovery",
+        "namespace",
+        "next",
+        "outcome",
+        "ownerHash",
+        "prior",
+        "project",
+        "proof",
+        "rebase",
+        "recoverableFailedBuild",
+        "recoveryInput",
+        "request",
+        "requestSchema",
+        "root",
+        "rootRow",
+        "rows",
+        "run",
+        "state",
+        "verifyRecoveryRebase"
       ],
       "routes": []
     },
@@ -23617,11 +23824,16 @@
         "createOpenAiFactoryPatchGenerator"
       ],
       "symbols": [
+        "before",
         "createOpenAiFactoryPatchGenerator",
         "edit",
+        "edits",
         "end",
+        "exactSourcePatch",
         "files",
         "generate",
+        "group",
+        "grouped",
         "input",
         "modelFiles",
         "offset",
@@ -23635,7 +23847,9 @@
         "rootStat",
         "segments",
         "signal",
+        "source",
         "sources",
+        "start",
         "stat",
         "text",
         "updated",
@@ -30502,6 +30716,85 @@
       "routes": []
     },
     {
+      "path": "tests/marketing-learning-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/marketing-learning-routes",
+        "../server/user-context",
+        "express",
+        "node:assert/strict",
+        "node:test",
+        "zod"
+      ],
+      "exports": [],
+      "symbols": [
+        "app",
+        "denied",
+        "get",
+        "server",
+        "url"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/marketing-learning-store.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/marketing-command-center",
+        "../server/marketing-learning-service",
+        "../server/marketing-learning-store",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "before",
+        "data",
+        "day1",
+        "dir",
+        "f",
+        "files",
+        "fixture",
+        "focus",
+        "foreign",
+        "previous",
+        "query",
+        "reorder",
+        "repeated",
+        "restarted",
+        "result",
+        "results",
+        "saved",
+        "service"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/marketing-learning-ui.mjs",
+      "kind": "test",
+      "imports": [
+        "../server/marketing-command-center.ts",
+        "esbuild",
+        "node:assert/strict",
+        "node:fs",
+        "node:path",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "browser",
+        "browserPath",
+        "bundle",
+        "page",
+        "snapshot"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/metricool-analytics-sync.test.ts",
       "kind": "test",
       "imports": [
@@ -31607,13 +31900,16 @@
         "now",
         "pool",
         "put",
+        "read",
         "reorder",
         "root",
+        "saved",
         "secondId",
         "source",
         "sources",
         "sql",
-        "totals"
+        "totals",
+        "valid"
       ],
       "routes": []
     },
@@ -32362,6 +32658,7 @@
         "repo",
         "result",
         "source",
+        "stale",
         "workflowPath"
       ],
       "routes": []
@@ -32386,6 +32683,7 @@
         "f",
         "first",
         "fixture",
+        "increased",
         "input",
         "ledger",
         "operator",
@@ -32482,6 +32780,53 @@
         "subtree",
         "tree",
         "workflow"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-build-recovery.test.ts",
+      "kind": "test",
+      "imports": [
+        "../script/software-factory-ui-static.mjs",
+        "../server/agent-council-store",
+        "../server/software-factory-build-recovery",
+        "../server/software-factory-pipeline",
+        "../server/software-factory-store",
+        "node:assert/strict",
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test",
+        "node:util",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "at",
+        "bin",
+        "credit",
+        "dir",
+        "env",
+        "exec",
+        "execute",
+        "file",
+        "git",
+        "grant",
+        "jobs",
+        "namespace",
+        "options",
+        "outcome",
+        "r",
+        "repository",
+        "retryCredit",
+        "retryState",
+        "root",
+        "rootInput",
+        "second",
+        "seed",
+        "state"
       ],
       "routes": []
     },
@@ -32904,13 +33249,19 @@
       ],
       "exports": [],
       "symbols": [
+        "cases",
         "common",
         "context",
         "data",
+        "edits",
         "failed",
         "generate",
         "generateText",
+        "gitMissing",
+        "gitProbe",
         "input",
+        "make",
+        "originals",
         "patch",
         "rejected",
         "result",
@@ -32949,8 +33300,10 @@
       ],
       "exports": [],
       "symbols": [
+        "bounded",
         "c",
         "cancel",
+        "completed",
         "config",
         "controller",
         "count",
@@ -32959,7 +33312,8 @@
         "json",
         "model",
         "outcome",
-        "result"
+        "result",
+        "settings"
       ],
       "routes": []
     },
@@ -33816,6 +34170,8 @@
     "tests/local-youtube-queue.test.ts",
     "tests/local-youtube-worker-queue.test.ts",
     "tests/marketing-command-center.test.ts",
+    "tests/marketing-learning-routes.test.ts",
+    "tests/marketing-learning-store.test.ts",
     "tests/metricool-analytics-sync.test.ts",
     "tests/metricool-tracking.test.ts",
     "tests/office-academy-benchmarks.test.ts",
@@ -33881,6 +34237,7 @@
     "tests/software-factory-asistente-review.test.ts",
     "tests/software-factory-asistente-source.test.ts",
     "tests/software-factory-asistente-success.test.ts",
+    "tests/software-factory-build-recovery.test.ts",
     "tests/software-factory-builder.test.ts",
     "tests/software-factory-company-scheduler.test.ts",
     "tests/software-factory-company.test.ts",

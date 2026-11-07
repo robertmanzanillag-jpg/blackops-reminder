@@ -7,7 +7,7 @@ import type { FactoryProject } from "../server/software-factory";
 import type { FactoryPipelineState } from "../server/software-factory-pipeline";
 
 test("Asistente composition reserves shared credit before model calls and accounts known incomplete usage", async () => {
- let clock='2026-11-06T12:00:00Z', expireAfterCounting=false;
+ let clock='2026-11-06T12:00:00Z', expireAfterCounting=false, staleBase=false;
  const now=()=>new Date(clock), repo='robertmanzanillag-jpg/blackops-reminder', base='a'.repeat(40), tree='b'.repeat(40);
  const source=Buffer.from('export const count = 1;\n'), workflow=Buffer.from('trusted workflow fixture');
  const blob=createHash('sha1').update(`blob ${source.length}\0`).update(source).digest('hex');
@@ -20,6 +20,7 @@ test("Asistente composition reserves shared credit before model calls and accoun
   githubRequest:async(url,init)=>{
    if(init.method!=='GET'){mutations++;throw Error('unexpected publication');}
    const json=(data:unknown)=>new Response(JSON.stringify(data),{status:200});
+   if(url.includes('/git/ref/'))return json({ref:'refs/heads/codex/office-integrated-repair-20261106',object:{type:'commit',sha:staleBase?'c'.repeat(40):base}});
    if(url.endsWith(repo))return json({full_name:repo,private:false,archived:false,disabled:false,default_branch:'main'});
    if(url.includes('/contents/'))return json({type:'file',path:workflowPath,sha:createHash('sha1').update(`blob ${workflow.length}\0`).update(workflow).digest('hex'),encoding:'base64',size:workflow.length,content:workflow.toString('base64')});
    if(url.includes('/git/commits/'))return json({sha:base,tree:{sha:tree},parents:[],message:'base'});
@@ -32,6 +33,10 @@ test("Asistente composition reserves shared credit before model calls and accoun
  const project={id:'asistente',repo} as FactoryProject;
  const input={version:1,projectId:'asistente',rootJobId:'order-root',repairAttempts:0,finding:{baseSha:base,request:'Improve agent search'}} as FactoryPipelineState;
  const context={signal:new AbortController().signal,maxCostCents:2};
+ staleBase=true;
+ const stale=await build(project,input,context);
+ assert.equal('status' in stale && stale.status,'blocked');assert.equal(apiCalls,0);assert.equal(mutations,0);assert.equal(state.reservations.length,0);
+ staleBase=false;
  const denied=await build(project,input,context);
  assert.equal('status' in denied && denied.status,'unknown',JSON.stringify(denied));assert.equal(apiCalls,0);assert.equal(mutations,0);
  await ledger.initialize();
@@ -57,6 +62,7 @@ test("Asistente export failures and stage cancellation stop before any credit or
   const build=createAsistenteFactoryBuild({ledger:{reserve:async()=>{credit++;throw Error("NOT_EXPECTED");}} as any,baseBranch:"main",sourcePaths:["server/role.ts"],maxOutputTokens:100,now:()=>new Date("2026-11-07T00:00:00Z"),checks:{workflowId:1,workflowPath,workflowSha256:createHash("sha256").update(workflow).digest("hex"),jobName:"checks",testStep:"test",buildStep:"build",browserStep:"browser"},
    model:{model:"gpt-6-astra",inputNanoUsdPerToken:1,outputNanoUsdPerToken:1,maxInputTokens:1000,pricingValidUntil:"2026-11-20T00:00:00Z",now:()=>new Date("2026-11-07T00:00:00Z"),request:async()=>{model++;throw Error("NOT_EXPECTED");}},
    githubRequest:async(url,init)=>{assert.ok(init.signal);const json=(v:unknown)=>Response.json(v);
+    if(url.includes("/git/ref/"))return json({ref:"refs/heads/main",object:{type:"commit",sha:base}});
     if(url.endsWith(repo))return json({full_name:repo,private:false,archived:false,disabled:false,default_branch:"main"});
     if(url.includes("/contents/"))return json({type:"file",path:workflowPath,sha:hash(workflow),encoding:"base64",size:workflow.length,content:Buffer.from(workflow).toString("base64")});
     if(url.includes("/commits/"))return json({sha:base,tree:{sha:tree},parents:[],message:"base"});

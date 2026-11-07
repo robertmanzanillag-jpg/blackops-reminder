@@ -818,7 +818,7 @@ async function collectReal(userId: string): Promise<Omit<CouncilSignals, "now">>
     import("./storage"),
     import("./clippers-runtime-status"),
     import("./dropshipping-ceo"),
-    import("./marketing-command-center"),
+    import("./marketing-learning-service"),
   ]);
   // Database rows carry Date objects; the rules read JSON, like the HTTP endpoints do.
   const plain = <T,>(value: T): T => (value === undefined ? value : JSON.parse(JSON.stringify(value)));
@@ -827,7 +827,7 @@ async function collectReal(userId: string): Promise<Omit<CouncilSignals, "now">>
   return {
     clippers: await safe("clippers", () => clippersRuntime.getClipperWorkerRuntimeStatus()),
     dropshipping: await safe("dropshipping", () => dropshipping.getDropshippingLaunchReadiness()),
-    marketing: await safe("marketing", () => marketing.getMarketingCommandCenterSnapshot()),
+    marketing: await safe("marketing", () => marketing.getMarketingCommandCenterForOwner(userId)),
     automationRuns: plain(await safe("automation runs", () => storage.getAutomationRuns(userId, undefined, 50))),
     appProjects: projects?.map((app) => ({ id: app.id, name: app.name, status: app.status })),
     appIncidents: plain(await safe("incidents", () => storage.getAppIncidents(userId))),
