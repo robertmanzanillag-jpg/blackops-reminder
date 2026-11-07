@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T03:16:58.369Z
+Generated: 2026-11-07T03:54:36.925Z
 Repo: `/home/runner/workspace`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1007 | 901 | 3320 | 570 | 18518 |
+| 1010 | 904 | 3331 | 570 | 18551 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 249 | 245 | test:249 |
-| `server` | 229 | 224 | server:229 |
+| `tests` | 250 | 246 | test:250 |
+| `server` | 230 | 225 | server:230 |
 | `client/src` | 144 | 142 | ui-component:55, client-component:38, client-page:26, client-lib:18 |
 | `script` | 103 | 92 | script:103 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 59 | 55 | docs:59 |
+| `docs` | 60 | 56 | docs:60 |
 | `.` | 36 | 18 | other:24, docs:11, package:1 |
 | `shared` | 18 | 18 | shared:18 |
 | `.agents/memory` | 14 | 14 | docs:14 |
@@ -260,6 +260,7 @@ Package: `rest-express`
 - `tests/software-factory-openai-builder.test.ts`
 - `tests/software-factory-openai-transport.test.ts`
 - `tests/software-factory-openai.test.ts`
+- `tests/software-factory-order-evidence.test.ts`
 - `tests/software-factory-pilot-review.test.ts`
 - `tests/software-factory-pipeline.test.ts`
 - `tests/software-factory-postgres.test.ts`

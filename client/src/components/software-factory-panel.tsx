@@ -83,6 +83,18 @@ export function SoftwareFactoryPanel() {
             </form>
           </details>
         </section>
+        <section aria-labelledby="factory-proposals">
+          <h3 id="factory-proposals" className="font-semibold">Propuestas revisadas por orden</h3>
+          <p className="text-xs text-muted-foreground">Evidencia registrada por la fábrica; no acredita publicación, vigencia de la orden ni rendimiento de una generación de agentes.</p>
+          {data.proposalEvidenceStatus!=="complete" && <p role="status">No se pudo completar la consulta de evidencia; los resultados pueden estar incompletos.</p>}
+          {!(data.reviewedProposals?.length) ? <p className="text-sm">Sin propuestas verificadas en esta consulta.</p> : <ol>{data.reviewedProposals.map(proposal=><li key={proposal.reviewJobId} className="rounded-lg border p-3 text-sm">
+            <p>Orden {proposal.orderId} · Propuesta revisada, no publicada</p>
+            <p>Vínculo histórico; vigencia de la orden sin verificar.</p>
+            <a href={proposal.prUrl} target="_blank" rel="noopener noreferrer" className="underline">Ver propuesta en GitHub</a>
+            <p className="break-all text-xs">Revisión de orden: {proposal.orderRevision} · Versión: {proposal.headSha}</p>
+            <time dateTime={proposal.completedAt}>{new Date(proposal.completedAt).toLocaleString("es")}</time>
+          </li>)}</ol>}
+        </section>
         <section aria-labelledby="factory-results">
           <h3 id="factory-results" className="font-semibold">Resultados recientes</h3>
           <p className="text-xs text-muted-foreground">Resumen de los últimos 100 trabajos; abajo se muestran los 50 más recientes.</p>

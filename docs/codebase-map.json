@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T03:16:58.369Z",
+  "generatedAt": "2026-11-07T03:54:36.925Z",
   "repoRoot": "/home/runner/workspace",
   "packageName": "rest-express",
   "scripts": {
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1007,
-    "filesIndexed": 901,
-    "imports": 3320,
+    "filesVisible": 1010,
+    "filesIndexed": 904,
+    "imports": 3331,
     "routes": 570,
-    "symbols": 18518
+    "symbols": 18551
   },
   "directories": {
     ".": {
@@ -224,10 +224,10 @@
       }
     },
     "docs": {
-      "files": 59,
-      "indexed": 55,
+      "files": 60,
+      "indexed": 56,
       "kinds": {
-        "docs": 59
+        "docs": 60
       }
     },
     "examples/clippers-motivation": {
@@ -253,10 +253,10 @@
       }
     },
     "server": {
-      "files": 229,
-      "indexed": 224,
+      "files": 230,
+      "indexed": 225,
       "kinds": {
-        "server": 229
+        "server": 230
       }
     },
     "server/replit_integrations": {
@@ -281,10 +281,10 @@
       }
     },
     "tests": {
-      "files": 249,
-      "indexed": 245,
+      "files": 250,
+      "indexed": 246,
       "kinds": {
-        "test": 249
+        "test": 250
       }
     },
     "tests/fixtures": {
@@ -5610,6 +5610,14 @@
     },
     {
       "path": "docs/factory-exact-source-edits.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-order-evidence.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -23904,6 +23912,46 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-order-evidence.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/software-factory-view",
+        "./software-factory",
+        "./software-factory-build-recovery",
+        "./software-factory-pipeline",
+        "./software-factory-store",
+        "node:crypto"
+      ],
+      "exports": [
+        "readFactoryOrderProposals",
+        "readFactoryRecoveredBuild"
+      ],
+      "symbols": [
+        "answer",
+        "clock",
+        "expectedCount",
+        "failed",
+        "failedId",
+        "hash",
+        "later",
+        "old",
+        "owner",
+        "ownerHash",
+        "project",
+        "read",
+        "readFactoryOrderProposals",
+        "readFactoryRecoveredBuild",
+        "remaining",
+        "result",
+        "root",
+        "safeId",
+        "snapshot",
+        "stateOf",
+        "storageFailure"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-pilot-review.ts",
       "kind": "server",
       "imports": [
@@ -24204,6 +24252,7 @@
         "./software-factory",
         "./software-factory-company",
         "./software-factory-office-connection",
+        "./software-factory-order-evidence",
         "./software-factory-pipeline",
         "./software-factory-store",
         "./software-factory-store-provider",
@@ -24238,6 +24287,7 @@
         "project",
         "projectSchema",
         "proofAge",
+        "proposalEvidence",
         "registerSoftwareFactoryRoutes",
         "remainingCents",
         "reported",
@@ -26577,6 +26627,7 @@
       "kind": "shared",
       "imports": [],
       "exports": [
+        "FactoryOrderProposal",
         "SoftwareFactoryView"
       ],
       "symbols": [],
@@ -33333,6 +33384,31 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-order-evidence.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-order-evidence",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "at",
+        "candidate",
+        "evidence",
+        "f",
+        "finding",
+        "fixture",
+        "hash",
+        "jobs",
+        "project",
+        "result",
+        "run"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-panel.test.mjs",
       "kind": "test",
       "imports": [
@@ -34278,6 +34354,7 @@
     "tests/software-factory-openai-builder.test.ts",
     "tests/software-factory-openai-transport.test.ts",
     "tests/software-factory-openai.test.ts",
+    "tests/software-factory-order-evidence.test.ts",
     "tests/software-factory-pilot-review.test.ts",
     "tests/software-factory-pipeline.test.ts",
     "tests/software-factory-postgres.test.ts",
