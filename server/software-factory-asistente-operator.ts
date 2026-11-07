@@ -1,3 +1,4 @@
+import {ROLE_WORK_DEADLINE_ID} from "./software-factory-role-deadline";
 import { createHash } from "node:crypto";
 import { readFile, lstat, realpath } from "node:fs/promises";
 import path from "node:path";
@@ -29,10 +30,12 @@ const configSchema = z.object({ owner: z.string().min(1).max(200), projectId: z.
     checks: z.object({ trigger: z.literal("push"), workflowId: z.number().int().positive(), workflowPath: z.literal(".github/workflows/factory-candidate-checks.yml"), workflowSha256: digest, jobName: z.string().min(1), testStep: z.string().min(1), buildStep: z.string().min(1), browserStep: z.string().min(1) }).strict(),
     archiveHosts: z.array(z.string().regex(/^[-a-z0-9]+\.blob\.core\.windows\.net$/)).min(1).max(10),
     reservations: z.object({ discover: cents, build: cents, simulate: cents, review: cents }).strict(), maxOutputTokens: z.number().int().min(16).max(4096), maxInputTokens: z.number().int().min(1).max(100000),
-    orders: z.array(z.object({ id: z.string().min(1).max(200), revision: digest, baseSha: sha, kind: z.enum(["bug", "improvement"]), scenarioId: z.literal(ROLE_WORK_ACCEPTANCE_ID) }).strict()).max(5),
+    orders: z.array(z.object({ id: z.string().min(1).max(200), revision: digest, baseSha: sha, kind: z.enum(["bug", "improvement"]), scenarioId: z.enum([ROLE_WORK_ACCEPTANCE_ID,ROLE_WORK_DEADLINE_ID]) }).strict()).max(5),
     ui: z.object({ workflowSha256: digest, harnessSha256: digest, workflowId: z.number().int().positive() }).strict(),
 }).strict();
 export type AsistenteOperatorConfig = z.input<typeof configSchema>;
+/** Strict noncredential operator configuration validation; no I/O or admission. */
+export function validateAsistenteOperatorConfig(raw:unknown){return configSchema.parse(structuredClone(raw));}
 export type OperatorUiReader = (input: {
     projectId: string;
     baseSha: string;
@@ -54,7 +57,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     readUi: OperatorUiReader;
     now: () => Date;
 }) {
-    const config = configSchema.parse(structuredClone(raw)), { store, credits, now } = deps;
+    const config = validateAsistenteOperatorConfig(raw), { store, credits, now } = deps;
     if (new Set(config.sourcePaths).size !== config.sourcePaths.length || !config.sourcePaths.includes("server/office-role-work.ts") || !config.sourcePaths.includes("tests/office-role-work.test.ts") || config.ui.workflowId !== config.checks.workflowId || config.ui.workflowSha256 !== config.checks.workflowSha256 || new Set(config.orders.map(o => o.id)).size !== config.orders.length || typeof deps.readUi !== "function")
         throw Error("FACTORY_OPERATOR_CONFIGURATION_INVALID");
     const owner = config.owner, ownerKey = createHash("sha256").update(owner).digest("hex");
@@ -139,7 +142,7 @@ async function privateFile(value: string | undefined, max: number) {
 }
 async function installed(store: Store) {
     const env = { ...process.env }, now = () => new Date();
-    const config = configSchema.parse(JSON.parse(await privateFile(env.SOFTWARE_FACTORY_OPERATOR_CONFIG, 65536)));
+    const config = validateAsistenteOperatorConfig(JSON.parse(await privateFile(env.SOFTWARE_FACTORY_OPERATOR_CONFIG, 65536)));
     if (env.SOFTWARE_FACTORY_OWNER_ID !== config.owner || env.DEFAULT_USER_ID !== config.owner)
         throw Error("FACTORY_OPERATOR_OWNER_MISMATCH");
     const credits = await loadSharedCreditRuntime(env, now);

@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T01:56:21.920Z
+Generated: 2026-11-07T01:58:05.757Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-scoped-export`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 955 | 861 | 3232 | 570 | 18246 |
+| 964 | 866 | 3245 | 570 | 18276 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 243 | 239 | test:243 |
-| `server` | 222 | 217 | server:222 |
+| `tests` | 244 | 240 | test:244 |
+| `server` | 223 | 218 | server:223 |
 | `script` | 103 | 92 | script:103 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 43 | 41 | docs:43 |
+| `docs` | 48 | 44 | docs:48 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
@@ -261,6 +261,7 @@ Package: `rest-express`
 - `tests/software-factory-proposal-runtime.test.ts`
 - `tests/software-factory-remote-builder.test.ts`
 - `tests/software-factory-role-acceptance.test.ts`
+- `tests/software-factory-role-deadline.test.ts`
 - `tests/software-factory-routes.test.ts`
 - `tests/software-factory-runtime.test.ts`
 - `tests/software-factory-simulator.test.ts`
