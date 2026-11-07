@@ -1,3 +1,4 @@
+import {verifiedGitHubArtifactLocation} from "../server/software-factory-artifact-host";
 import test from "node:test";
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
@@ -40,4 +41,21 @@ test("cleanup accepts an auto-remove race only after exact container absence is 
  await removeAcceptanceContainer(name,async args=>{calls++;if(args[0]==="rm")throw Error("no such container");assert.deepEqual(args,["ps","-aq","--filter",`name=^/${name}$`]);return {stdout:""};});assert.equal(calls,2);
  await assert.rejects(()=>removeAcceptanceContainer(name,async args=>{if(args[0]==="rm")throw Error("failure");return {stdout:"still-present"};}));
  await assert.rejects(()=>removeAcceptanceContainer(name,async()=>{throw Error("daemon unavailable");}));
+});
+
+
+test("artifact host policy rejects alternate authorities and defaults to exact pins",()=>{
+ const pins=["fixture.blob.core.windows.net"],good="https://productionresultssa12.blob.core.windows.net/archive?sig=synthetic";
+ assert.throws(()=>verifiedGitHubArtifactLocation(good,pins));
+ assert.equal(verifiedGitHubArtifactLocation(good,pins,true).hostname,"productionresultssa12.blob.core.windows.net");
+ assert.equal(verifiedGitHubArtifactLocation("https://fixture.blob.core.windows.net/a",pins).hostname,pins[0]);
+ for(const raw of ["http://productionresultssa12.blob.core.windows.net/a","https://productionresultssa12.blob.core.windows.net:443/a","https://productionresultssa12.blob.core.windows.net:444/a","https://user@productionresultssa12.blob.core.windows.net/a","https://productionresultssa12.blob.core.windows.net.evil.example/a","https://unrelated.blob.core.windows.net/a","https://productionresultssa.blob.core.windows.net/a","https://productionresultssa12x.blob.core.windows.net/a","https://productionresultssa12.blob.core.windows.net/a#fragment","https://productionresultssa12.blob.core.windows.net/a#"])
+ assert.throws(()=>verifiedGitHubArtifactLocation(raw,pins,true),raw);
+});
+test("backend reader admits new result shards only after explicit opt-in",async()=>{
+ const bytes=Buffer.from(JSON.stringify(await report())),zip=archive(bytes),root="https://api.github.com/repos/robertmanzanillag-jpg/blackops-reminder";
+ let downloads=0;const input={runId:7,baseSha:base,headSha:head,signal:new AbortController().signal};
+ const options={archiveHosts:["fixture.blob.core.windows.net"],now:()=>now,apiRequest:async(url:string)=>url.endsWith("/zip")?new Response(null,{status:302,headers:{location:"https://productionresultssa12.blob.core.windows.net/signed"}}):Response.json({total_count:1,artifacts:[{name:"office-role-acceptance-v1",id:8,expired:false,workflow_run:{id:7,head_sha:head},digest:`sha256:${digest(zip)}`,size_in_bytes:zip.length,archive_download_url:`${root}/actions/artifacts/8/zip`}]}),download:async(_url:string,init:RequestInit)=>{downloads++;assert.deepEqual(init.headers,{});assert.equal(init.credentials,"omit");assert.equal(init.redirect,"error");return new Response(zip);}};
+ await assert.rejects(createRoleAcceptanceArtifactReader(options)(input));assert.equal(downloads,0);
+ assert.deepEqual((await createRoleAcceptanceArtifactReader({...options,allowGitHubResultsAzureHosts:true})(input)).regressionScenarioIds,[ROLE_WORK_ACCEPTANCE_ID]);assert.equal(downloads,1);
 });

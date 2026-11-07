@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T02:14:06.930Z",
+  "generatedAt": "2026-11-07T02:17:29.245Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-capability-lifecycle",
   "packageName": "rest-express",
   "scripts": {
@@ -124,41 +124,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 962,
-    "filesIndexed": 868,
-    "imports": 3258,
+    "filesVisible": 969,
+    "filesIndexed": 871,
+    "imports": 3262,
     "routes": 570,
-    "symbols": 18313
+    "symbols": 18323
   },
   "directories": {
-    "docs": {
-      "files": 45,
-      "indexed": 43,
-      "kinds": {
-        "docs": 45
-      }
-    },
-    "server": {
-      "files": 224,
-      "indexed": 219,
-      "kinds": {
-        "server": 224
-      }
-    },
-    "shared": {
-      "files": 18,
-      "indexed": 18,
-      "kinds": {
-        "shared": 18
-      }
-    },
-    "tests": {
-      "files": 245,
-      "indexed": 241,
-      "kinds": {
-        "test": 245
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -190,10 +162,10 @@
       }
     },
     ".github/workflows": {
-      "files": 2,
+      "files": 4,
       "indexed": 0,
       "kinds": {
-        "other": 2
+        "other": 4
       }
     },
     "bin": {
@@ -301,6 +273,13 @@
         "other": 1
       }
     },
+    "docs": {
+      "files": 49,
+      "indexed": 45,
+      "kinds": {
+        "docs": 49
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -321,6 +300,13 @@
       "indexed": 1,
       "kinds": {
         "script": 4
+      }
+    },
+    "server": {
+      "files": 225,
+      "indexed": 220,
+      "kinds": {
+        "server": 225
       }
     },
     "server/replit_integrations/batch": {
@@ -344,11 +330,25 @@
         "server": 3
       }
     },
+    "shared": {
+      "files": 18,
+      "indexed": 18,
+      "kinds": {
+        "shared": 18
+      }
+    },
     "shared/models": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 245,
+      "indexed": 241,
+      "kinds": {
+        "test": 245
       }
     },
     "tests/fixtures": {
@@ -5434,6 +5434,22 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -22704,6 +22720,20 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-artifact-host.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "verifiedGitHubArtifactLocation"
+      ],
+      "symbols": [
+        "authority",
+        "location",
+        "verifiedGitHubArtifactLocation"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-asistente-build.ts",
       "kind": "server",
       "imports": [
@@ -23400,6 +23430,7 @@
       "kind": "server",
       "imports": [
         "../script/software-factory-ui-static.mjs",
+        "./software-factory-artifact-host",
         "./software-factory-office-ui-evidence",
         "node:crypto",
         "node:zlib"
@@ -23770,6 +23801,7 @@
       "path": "server/software-factory-role-artifact.ts",
       "kind": "server",
       "imports": [
+        "./software-factory-artifact-host",
         "./software-factory-role-acceptance",
         "./software-factory-role-deadline",
         "node:crypto",
@@ -30877,6 +30909,7 @@
       "imports": [
         "esbuild",
         "node:assert/strict",
+        "node:fs",
         "node:path",
         "playwright"
       ],
@@ -30885,6 +30918,7 @@
         "browser",
         "bundle",
         "page",
+        "text",
         "url"
       ],
       "routes": []
@@ -32714,8 +32748,10 @@
       ],
       "exports": [],
       "symbols": [
+        "allowed",
         "apiRequest",
         "archive",
+        "denied",
         "directory",
         "f",
         "files",
@@ -32727,6 +32763,7 @@
         "reader",
         "repository",
         "sourceFiles",
+        "wrongRun",
         "zipFiles"
       ],
       "routes": []
@@ -33014,6 +33051,7 @@
       "kind": "test",
       "imports": [
         "../server/office-role-work",
+        "../server/software-factory-artifact-host",
         "../server/software-factory-role-acceptance",
         "../server/software-factory-role-artifact",
         "node:assert/strict",
@@ -33024,9 +33062,12 @@
       "symbols": [
         "archive",
         "bridge",
+        "bytes",
         "child",
         "code",
         "digest",
+        "options",
+        "pins",
         "report",
         "safe"
       ],

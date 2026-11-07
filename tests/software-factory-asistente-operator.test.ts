@@ -92,3 +92,5 @@ test("lost zero-cost settlement acknowledgment cannot overwrite a settled admiss
 });
 
 test("operator mapping validator accepts only independently verified known scenarios",async()=>{const f=await fixture();const config=structuredClone(f.config);config.orders[0].scenarioId="office-role-work-reader-deadline-v1";assert.equal(validateAsistenteOperatorConfig(config).orders[0].scenarioId,"office-role-work-reader-deadline-v1");assert.throws(()=>validateAsistenteOperatorConfig({...config,orders:[{...config.orders[0],scenarioId:"arbitrary-pass"}]}));});
+
+test("artifact shard opt-in defaults off and rejects nonboolean configuration",async()=>{const f=await fixture();assert.equal(validateAsistenteOperatorConfig(f.config).allowGitHubResultsAzureHosts,false);assert.equal(validateAsistenteOperatorConfig({...f.config,allowGitHubResultsAzureHosts:true}).allowGitHubResultsAzureHosts,true);assert.throws(()=>validateAsistenteOperatorConfig({...f.config,allowGitHubResultsAzureHosts:"true"}));});

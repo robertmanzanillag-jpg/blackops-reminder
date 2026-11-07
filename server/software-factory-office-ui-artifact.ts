@@ -1,3 +1,4 @@
+import {verifiedGitHubArtifactLocation} from "./software-factory-artifact-host";
 import { createHash } from 'node:crypto';
 import { inflateRawSync } from 'node:zlib';
 import { officeUiSimulationEvidence, OFFICE_UI_JOURNEYS } from './software-factory-office-ui-evidence';
@@ -71,6 +72,7 @@ export function createOfficeUiArtifactReader(options: {
     apiRequest: (url: string, init: RequestInit) => Promise<Response>;
     download: (url: string, init: RequestInit) => Promise<Response>;
     archiveHosts: readonly string[];
+    allowGitHubResultsAzureHosts?: boolean;
     workflowId: number;
     workflowSha256: string;
     harnessSha256: string;
@@ -149,9 +151,7 @@ export function createOfficeUiArtifactReader(options: {
             throw Error('UI_ARCHIVE_REDIRECT');
         }
         await redirect.body?.cancel();
-        const location = new URL(redirect.headers.get('location') ?? '');
-        if (location.protocol !== 'https:' || location.username || location.password || location.port || location.hash || !config.archiveHosts.includes(location.hostname))
-            throw Error('UI_ARCHIVE_HOST');
+        const location = verifiedGitHubArtifactLocation(redirect.headers.get('location') ?? '', config.archiveHosts, config.allowGitHubResultsAzureHosts);
         const response = await config.download(location.href, { method: 'GET', signal, redirect: 'error', credentials: 'omit', headers: {} });
         if (response.status !== 200) {
             await response.body?.cancel();
