@@ -1,12 +1,19 @@
 import {readWebRoleSources,type WebRoleSource} from "./office-web-role-sources";
 import {persistWebRoleSources} from "./office-web-role-store";
-let publicStatus:{enabled:boolean;lastExportAt:string|null;status:"disabled"|"pending"|"ready"|"unavailable"}={enabled:false,lastExportAt:null,status:"disabled"};
+let publicStatus:{enabled:boolean;lastExportAt:string|null;status:"disabled"|"pending"|"ready"|"unavailable";failureStage?:"read"|"persist";failureCode?:string}={enabled:false,lastExportAt:null,status:"disabled"};
 export const officeWebSourceStatus=()=>({...publicStatus});
+function safeExportFailure(error:unknown):string {
+ const value=error && typeof error==="object"?error as {code?:unknown;name?:unknown}:{};
+ const codes=["42P01","42703","42501","23505","23502","23514","40001","40P01","57014","53300","57P01","08001","08006","ECONNREFUSED","ENOTFOUND","ETIMEDOUT"];
+ if(typeof value.code==="string"&&codes.includes(value.code))return value.code;
+ if(value.name==="ZodError")return "INVALID_SOURCE_SCHEMA";
+ return "UNVERIFIED_EXPORT";
+}
 export function createWebSourceExportCycle(options:{read:()=>Promise<WebRoleSource[]>;persist:(sources:WebRoleSource[])=>Promise<void>;now?:()=>number}){
  let running=false,stopped=false;const now=options.now || Date.now;
- return {stop(){stopped=true;},async tick(){if(running || stopped)return false;running=true;
-  try{const sources=await options.read();if(stopped)return false;await options.persist(sources);publicStatus={enabled:true,lastExportAt:new Date(now()).toISOString(),status:"ready"};return true;}
-  catch{publicStatus={...publicStatus,enabled:true,status:"unavailable"};return false;}finally{running=false;}
+ return {stop(){stopped=true;},async tick(){if(running || stopped)return false;running=true;let failureStage:"read"|"persist"="read";
+  try{const sources=await options.read();if(stopped)return false;failureStage="persist";await options.persist(sources);publicStatus={enabled:true,lastExportAt:new Date(now()).toISOString(),status:"ready"};return true;}
+  catch(error){publicStatus={...publicStatus,enabled:true,status:"unavailable",failureStage,failureCode:safeExportFailure(error)};return false;}finally{running=false;}
  }};
 }
 let installed=false;
