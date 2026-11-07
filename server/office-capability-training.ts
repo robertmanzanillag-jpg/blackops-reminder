@@ -99,11 +99,15 @@ export function createCapabilityTrainer(options:{owner:string;transact:(change:(
    assignment=undefined;let state=parseCapabilityTraining(raw,options.owner);state={...state,runs:state.runs.map((r):Run=>r.status==="running" && Date.parse(r.expiresAt)<=start?{...r,status:"unknown",reason:"Expired; no automatic retry"}:r)};
    if(otherAcademyRunning || state.runs.length>=200||state.policies.length>=100||state.runs.some(r=>["running","unknown"].includes(r.status)))return state;
    const used=state.runs.filter(r=>start-Date.parse(r.startedAt)<86400000).reduce((n,r)=>n+(r.kind==="holdout"?2:1),0);
+   // Give each current holder one real audit before spending paired calls on
+   // already-observed holders. Historical runs and generation fences stay intact.
+   const productionJobs=[...work.jobs].reverse().filter(j=>generations[j.role]===j.generation && ["completed","blocked"].includes(j.status) && !state.runs.some(r=>r.kind==="production" && r.task.id===j.id));
+   const firstProduction=productionJobs.find(j=>!state.runs.some(r=>r.kind==="production" && r.role===j.role && r.generation===j.generation));
    const candidates=state.policies.filter(p=>p.status==="candidate" && generations[p.role]===p.generation && work.jobs.some(j=>j.role===p.role && j.generation===p.generation));
    const candidate=candidates.find(p=>!state.runs.some(r=>r.kind==="holdout" && r.role===p.role && start-Date.parse(r.startedAt)<86400000) && state.runs.filter(r=>r.kind==="holdout"&&r.policyVersion===p.version).length<3);
-   if(candidate && used+2<=options.maxCallsPerDay){const index=[0,1,2].find(i=>!state.runs.some(r=>r.kind==="holdout"&&r.policyVersion===candidate.version&&r.fixtureIndex===i))!;assignment={id,fence,role:candidate.role,generation:candidate.generation,kind:"holdout",policyVersion:candidate.version,baselineVersion:candidate.parentVersion!,fixtureIndex:index,task:capabilityHoldout(candidate.role,index),startedAt:new Date(start).toISOString(),expiresAt:new Date(start+ttl).toISOString(),status:"running"};}
+   if(!firstProduction && candidate && used+2<=options.maxCallsPerDay){const index=[0,1,2].find(i=>!state.runs.some(r=>r.kind==="holdout"&&r.policyVersion===candidate.version&&r.fixtureIndex===i))!;assignment={id,fence,role:candidate.role,generation:candidate.generation,kind:"holdout",policyVersion:candidate.version,baselineVersion:candidate.parentVersion!,fixtureIndex:index,task:capabilityHoldout(candidate.role,index),startedAt:new Date(start).toISOString(),expiresAt:new Date(start+ttl).toISOString(),status:"running"};}
    else if(used+1<=options.maxCallsPerDay){
-    const job=[...work.jobs].reverse().find(j=>generations[j.role]===j.generation && ["completed","blocked"].includes(j.status) && !state.runs.some(r=>r.kind==="production" && r.task.id===j.id));
+    const job=firstProduction || productionJobs[0];
     if(job){let policy=state.policies.find(p=>p.role===job.role&&p.generation===job.generation&&["active","probation"].includes(p.status));
      if(!policy){const body={role:job.role,generation:job.generation,parentVersion:null,lessons:[],trainingRunId:null};policy={...body,version:policyVersion(body),status:"active"};state={...state,policies:[...state.policies,policy]};}
      assignment={id,fence,role:job.role,generation:job.generation,kind:"production",policyVersion:policy.version,sourceJob:job,task:realTask(job,start),startedAt:new Date(start).toISOString(),expiresAt:new Date(start+ttl).toISOString(),status:"running"};
@@ -142,5 +146,3 @@ export function createCapabilityTrainer(options:{owner:string;transact:(change:(
   }
  }};
 }
-
-

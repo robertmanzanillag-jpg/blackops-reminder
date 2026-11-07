@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {randomUUID} from "node:crypto";
 import {createCapabilityTrainer,parseCapabilityTraining,capabilityTrainingSummary,type CapabilityTrainingState} from "../server/office-capability-training";
 import {auditSavedRole} from "../server/office-role-audits";
-import {sourceDigest as digest} from "../server/office-role-snapshots";
+import {sourceDigest as digest,PENDING_OFFICE_ROLES,type PendingOfficeRole} from "../server/office-role-snapshots";
 import {parseRoleWork,type RoleWorkJob,type RoleWorkState} from "../server/office-role-work";
 const NOW=Date.parse("2026-11-07T01:00:00Z"),owner="owner";
 function realJob(at:number):RoleWorkJob{
@@ -58,4 +58,18 @@ test("holder changed during provider invocation cannot receive completion, and f
 test("shared academy admission and policy capacity fail closed without poisoning durable history",async()=>{
  const busy=fixture();busy.setBusy(true);await busy.trainer.tick();assert.equal(busy.calls(),0);busy.setBusy(false);await busy.trainer.tick();assert.equal(busy.calls(),1);
  const f=fixture();const state=parseCapabilityTraining(undefined,owner);for(let generation=2;generation<=100;generation++){const body={role:"control" as const,generation,parentVersion:null,lessons:[],trainingRunId:null};state.policies.push({...body,version:digest({capability:"source-triage-v1",...body}),status:"active"});}f.seed(state);await f.trainer.tick();assert.equal(f.calls(),1);assert.equal(f.state().policies.length,100);assert.equal(f.state().runs[0].status,"completed");assert.equal(f.state().policies.some(p=>p.status==="candidate"),false);parseCapabilityTraining(f.state(),owner);
+});
+
+test("all 14 current holders receive their first real audit before any candidate consumes paired calls",async()=>{
+ let clock=NOW,calls=0,state=parseCapabilityTraining(undefined,owner);const generations=Object.fromEntries(PENDING_OFFICE_ROLES.map(role=>[role,1]));
+ const job=(role:PendingOfficeRole,generation:number):RoleWorkJob=>{const audit=auditSavedRole(role,undefined,owner,clock),value:RoleWorkJob={id:randomUUID(),fence:randomUUID(),role,generation,slot:new Date(clock).toISOString().slice(0,10),startedAt:new Date(clock).toISOString(),expiresAt:new Date(clock+60000).toISOString(),completedAt:new Date(clock).toISOString(),status:"blocked",audit};value.artifactId=digest({id:value.id,role,generation,fence:value.fence,audit});return value;};
+ let work:RoleWorkState={version:1,ownerKey:digest(owner),jobs:PENDING_OFFICE_ROLES.map(role=>job(role,1))};
+ const make=()=>createCapabilityTrainer({owner,maxCallsPerDay:14,now:()=>clock,loadWork:async()=>parseRoleWork(work,owner),transact:async(change)=>{state=parseCapabilityTraining(reorder(change(structuredClone(state),generations)),owner);return structuredClone(state);},run:async()=>{calls++;clock++;return {text:"{}",provider:"openai",model:"same-model",sessionId:`resp_fair_${calls}`,completedAt:new Date(clock).toISOString(),usage:{inputTokens:1,outputTokens:1,totalTokens:2}};},verifyCost:async request=>({...request,receiptId:`verified:${request.responseId}`,currency:"USD",usd:0.001})});
+ for(let i=0;i<14;i++){await Promise.all([make().tick(),make().tick()]);assert.equal(calls,i+1);assert.equal(state.runs.every(r=>r.kind==="production"),true);}
+ assert.equal(new Set(state.runs.map(r=>r.role)).size,14);assert.equal(state.policies.filter(p=>p.status==="candidate").length,14);const history=structuredClone(state.runs);
+ await make().tick();assert.equal(calls,14);assert.deepEqual(state.runs,history);
+ // Once all holders have a baseline, resume the existing paired schedule.
+ clock=NOW+86400001;await make().tick();assert.equal(calls,16);assert.equal(state.runs.at(-1)!.kind,"holdout");
+ // An unseen replacement generation gets its own baseline before old holdouts.
+ const role=PENDING_OFFICE_ROLES[0];generations[role]=2;work={...work,jobs:[...work.jobs,job(role,2)]};await make().tick();assert.equal(calls,17);assert.equal(state.runs.at(-1)!.kind,"production");assert.equal(state.runs.at(-1)!.role,role);assert.equal(state.runs.at(-1)!.generation,2);assert.deepEqual(state.runs.slice(0,14),history);
 });
