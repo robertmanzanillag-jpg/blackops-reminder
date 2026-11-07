@@ -2,11 +2,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { officeUiSimulationEvidence, OFFICE_UI_JOURNEYS } from '../server/software-factory-office-ui-evidence';
+import { OFFICE_UI_STATIC_EXCLUSIONS } from '../script/software-factory-ui-static.mjs';
 const hash = (v: string | Uint8Array) => createHash('sha256').update(v).digest('hex');
 test('only exact complete two-version/two-viewport browser evidence is admitted', () => {
     const expected = { projectId: 'asistente', baseSha: 'a'.repeat(40), headSha: 'b'.repeat(40), runId: '123', runAttempt: '1', workflowSha256: 'c'.repeat(64), harnessSha256: 'd'.repeat(64), now: new Date('2026-11-07T01:00:00Z') };
     const screenshots = new Map<string, Uint8Array>();
     const report: any = { version: 1, projectId: 'asistente', synthetic: true, scope: 'office-ui-regression', createdAt: expected.now.toISOString(), scenarioSha256: hash(JSON.stringify(OFFICE_UI_JOURNEYS)), passed: true, provenance: { ...expected, version: 1, scope: 'office-ui-regression', repository: 'robertmanzanillag-jpg/blackops-reminder' } };
+    report.provenance.staticExclusions = OFFICE_UI_STATIC_EXCLUSIONS;
     for (const role of ['baseline', 'candidate']) {
         const files = [{ path: 'index.html', sha256: hash('synthetic HTML') }];
         report.provenance[role] = { sourceManifestSha256: 'e'.repeat(64), staticManifest: { files, sha256: hash(JSON.stringify(files)) } };

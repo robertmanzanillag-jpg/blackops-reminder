@@ -6,11 +6,20 @@ import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { checkedRoot, exportRevision, removeAcceptanceContainer } from "./software-factory-role-acceptance";
-import { materializeStaticBundle, OFFICE_UI_HARNESS_FILES } from "./software-factory-ui-static.mjs";
+import { materializeStaticBundle, OFFICE_UI_HARNESS_FILES, OFFICE_UI_STATIC_EXCLUSIONS } from "./software-factory-ui-static.mjs";
 const exec = promisify(execFile);
 const NODE = "docker.io/library/node@sha256:c0a93797ee78814ae6d32fcca2561fdbbe423149c3f5389aad32d86e9fd85bd4";
 const BROWSER = "mcr.microsoft.com/playwright@sha256:5b8f294aff9041b7191c34a4bab3ac270157a28774d4b0660e9743297b697e48";
 const digest = (b: string | Buffer) => createHash('sha256').update(b).digest('hex');
+let stage = 'startup';
+function diagnostic(error: unknown) {
+    const e = error as {code?: unknown; message?: unknown; stderr?: unknown};
+    const code = typeof e?.code === 'number' ? `EXIT_${e.code}` : typeof e?.code === 'string' && /^[A-Z0-9_]{1,64}$/.test(e.code) ? e.code : typeof e?.message === 'string' && /^(UI|QA)_[A-Z0-9_]{1,60}$/.test(e.message) ? e.message : 'UNCONFIRMED';
+    // Only bounded stderr from credentialless containers, never stdout bundles,
+    // host environment, exception command strings, private configuration or keys.
+    const stderr = typeof e?.stderr === 'string' ? e.stderr.slice(-4096).replace(/\x1b\[[0-9;]*[a-zA-Z]/g,'').replace(/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/g,'').replace(/(?:sk-|github_pat_|ghp_)[A-Za-z0-9_-]+/g,'[redacted]').replace(/postgres(?:ql)?:\/\/\S+/g,'[redacted]') : undefined;
+    console.error(JSON.stringify({scope:'isolated-ui-diagnostic',stage,code,...(stderr?{stderr}:{})}));
+}
 async function container(args: string[], timeout: number, maxBuffer = 1048576) {
     const name = `factory-acceptance-${randomUUID()}`;
     try {
@@ -21,6 +30,7 @@ async function container(args: string[], timeout: number, maxBuffer = 1048576) {
     }
 }
 async function main() {
+    stage = 'validate-input';
     if (process.platform !== 'linux' || process.env.FACTORY_QA_ISOLATED !== 'true' || !/^\d+$/.test(process.env.GITHUB_RUN_ID ?? '') || !/^\d+$/.test(process.env.GITHUB_RUN_ATTEMPT ?? ''))
         throw Error('UI_ISOLATED_CI_REQUIRED');
     const [baseRoot, baseSha, headRoot, headSha, output, dependencyRoot] = process.argv.slice(2);
@@ -39,20 +49,24 @@ async function main() {
     const temp = await mkdtemp(path.join(os.tmpdir(), 'factory-ui-'));
     let baseline: any, candidate: any;
     try {
+        stage = 'export-source';
         baseline = await exportRevision(base, baseSha);
         candidate = await exportRevision(head, headSha);
         await mkdir(path.join(temp, 'static'));
         await mkdir(path.join(temp, 'input'));
         await mkdir(output, { recursive: false });
         const harness = await Promise.all(OFFICE_UI_HARNESS_FILES.map(async (file: string) => [file, digest(await readFile(path.join(base, file)))]));
-        const provenance: any = { version: 1, scope: 'office-ui-regression', projectId: 'asistente', repository: 'robertmanzanillag-jpg/blackops-reminder', baseSha, headSha, runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT, workflowSha256: digest(await readFile(path.join(base, '.github/workflows/factory-candidate-checks.yml'))), harnessSha256: digest(JSON.stringify(harness)) };
+        const provenance: any = { version: 1, scope: 'office-ui-regression', projectId: 'asistente', repository: 'robertmanzanillag-jpg/blackops-reminder', baseSha, headSha, runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT, workflowSha256: digest(await readFile(path.join(base, '.github/workflows/factory-candidate-checks.yml'))), harnessSha256: digest(JSON.stringify(harness)), staticExclusions: OFFICE_UI_STATIC_EXCLUSIONS };
         for (const [role, source] of [['baseline', baseline], ['candidate', candidate]] as const) {
-            const built = await container(['--tmpfs', '/work:rw,nosuid,size=512m,mode=1777', '--tmpfs', '/build-output:rw,nosuid,size=64m,mode=1777', '--tmpfs', '/dependencies/node_modules/.vite-temp:rw,nosuid,size=32m,mode=1777', '--mount', `type=bind,src=${source.directory},dst=/source,readonly`, '--mount', `type=bind,src=${baseline.directory},dst=/controller,readonly`, '--mount', `type=bind,src=${deps},dst=/dependencies/node_modules,readonly`, '--workdir', '/work', NODE, 'sh', '-c', 'cp -R /source/. /work/ && ln -s /dependencies/node_modules node_modules && node /dependencies/node_modules/vite/bin/vite.js build --outDir /build-output --emptyOutDir >/tmp/build.log 2>&1 && node /controller/script/software-factory-ui-static.mjs export /build-output'], 180000, 48 * 1024 * 1024);
+            stage = `build-${role}`;
+            const built = await container(['--tmpfs', '/work:rw,nosuid,size=512m,mode=1777', '--tmpfs', '/build-output:rw,nosuid,size=64m,mode=1777', '--tmpfs', '/dependencies/node_modules/.vite-temp:rw,nosuid,size=32m,mode=1777', '--mount', `type=bind,src=${source.directory},dst=/source,readonly`, '--mount', `type=bind,src=${baseline.directory},dst=/controller,readonly`, '--mount', `type=bind,src=${deps},dst=/dependencies/node_modules,readonly`, '--workdir', '/work', NODE, 'sh', '-c', 'cp -R /source/. /work/ && ln -s /dependencies/node_modules node_modules && (node /dependencies/node_modules/vite/bin/vite.js build --outDir /build-output --emptyOutDir >/tmp/build.log 2>&1 || { status=$?; tail -c 4096 /tmp/build.log >&2; exit "$status"; }) && node /controller/script/software-factory-ui-static.mjs export /build-output'], 180000, 48 * 1024 * 1024);
+            stage = `validate-static-${role}`;
             const bundle = JSON.parse(built.stdout);
             const staticManifest = await materializeStaticBundle(bundle, path.join(temp, 'static', role));
             provenance[role] = { sourceManifestSha256: source.sourceManifestSha256, staticManifest };
         }
         await writeFile(path.join(temp, 'input', 'provenance.json'), JSON.stringify(provenance), { flag: 'wx' });
+        stage = 'browser-oracle';
         await container(['--mount', `type=bind,src=${baseline.directory},dst=/controller,readonly`, '--mount', `type=bind,src=${deps},dst=/node_modules,readonly`, '--mount', `type=bind,src=${path.join(temp, 'static')},dst=/static,readonly`, '--mount', `type=bind,src=${path.join(temp, 'input')},dst=/input,readonly`, '--mount', `type=bind,src=${output},dst=/evidence`, '--workdir', '/controller', BROWSER, 'node', 'script/software-factory-office-ui-oracle.mjs'], 240000);
     }
     finally {
@@ -64,4 +78,4 @@ async function main() {
     }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href)
-    void main().catch(() => { console.error('Isolated UI acceptance failed; no UI pass is inferred.'); process.exitCode = 1; });
+    void main().catch(error => { diagnostic(error); console.error('Isolated UI acceptance failed; no UI pass is inferred.'); process.exitCode = 1; });
