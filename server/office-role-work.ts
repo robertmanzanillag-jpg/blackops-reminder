@@ -102,3 +102,4 @@ export function createRoleWorkRunner(options:{council:Pick<ReturnType<typeof cre
   }
  }};
 }
+// Isolated UI acceptance probe: no runtime behavior change.
