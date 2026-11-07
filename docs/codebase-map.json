@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T02:54:37.643Z",
+  "generatedAt": "2026-11-07T03:50:29.397Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-factory-evidence",
   "packageName": "rest-express",
   "scripts": {
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 978,
-    "filesIndexed": 878,
-    "imports": 3296,
+    "filesVisible": 981,
+    "filesIndexed": 883,
+    "imports": 3331,
     "routes": 570,
-    "symbols": 18461
+    "symbols": 18551
   },
   "directories": {
     ".": {
@@ -274,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 52,
-      "indexed": 48,
+      "files": 49,
+      "indexed": 47,
       "kinds": {
-        "docs": 52
+        "docs": 49
       }
     },
     "examples/clippers-motivation": {
@@ -303,10 +303,10 @@
       }
     },
     "server": {
-      "files": 227,
-      "indexed": 222,
+      "files": 230,
+      "indexed": 225,
       "kinds": {
-        "server": 227
+        "server": 230
       }
     },
     "server/replit_integrations/batch": {
@@ -345,10 +345,10 @@
       }
     },
     "tests": {
-      "files": 247,
-      "indexed": 243,
+      "files": 250,
+      "indexed": 246,
       "kinds": {
-        "test": 247
+        "test": 250
       }
     },
     "tests/fixtures": {
@@ -4872,6 +4872,7 @@
       "path": "client/src/pages/marketing-command-center.tsx",
       "kind": "client-page",
       "imports": [
+        "@/components/kong-supervisor-session",
         "@/components/ui/badge",
         "@/components/ui/button",
         "@/components/ui/card",
@@ -4890,12 +4891,17 @@
         "MarketingClient",
         "MarketingSnapshot",
         "Metric",
+        "data",
         "money",
+        "owner",
         "postJson",
         "refresh",
         "response",
+        "routerAuth",
+        "routerId",
         "runMutation",
-        "statusTone"
+        "statusTone",
+        "verifiedAuth"
       ],
       "routes": []
     },
@@ -5456,22 +5462,6 @@
       "routes": []
     },
     {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5547,6 +5537,14 @@
     },
     {
       "path": "docs/factory-reader-deadline-acceptance.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/marketing-learning-persistence.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -18472,6 +18470,7 @@
       "kind": "server",
       "imports": [
         "./dropshipping-ceo",
+        "node:async_hooks",
         "node:fs",
         "node:path",
         "zod"
@@ -18479,9 +18478,11 @@
       "exports": [
         "getMarketingCommandCenterSnapshot",
         "marketingCommandCenterDaySchema",
+        "marketingRequiresPostgres",
         "resetMarketingCommandCenterForTests",
         "runMarketingCommandCenterDay",
-        "setMarketingCommandCenterLearningPathForTests"
+        "setMarketingCommandCenterLearningPathForTests",
+        "withMarketingLearningContext"
       ],
       "symbols": [
         "MarketingClient",
@@ -18498,6 +18499,7 @@
         "buildWorkstreams",
         "clients",
         "clientsToReview",
+        "currentRuns",
         "dropshipping",
         "dropshippingMetrics",
         "dropshippingRevenue",
@@ -18508,9 +18510,11 @@
         "improvementsQueued",
         "latestRun",
         "learnedRules",
+        "learningContext",
         "learningRulesForClient",
         "loadLearningRuns",
         "marketingCommandCenterDaySchema",
+        "marketingRequiresPostgres",
         "maxClients",
         "money",
         "normalized",
@@ -18531,8 +18535,98 @@
         "targetClients",
         "totalRevenueUsd",
         "totalSpendUsd",
+        "withMarketingLearningContext",
         "withReadyHandoff",
         "writeLearningRuns"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/marketing-learning-routes.ts",
+      "kind": "server",
+      "imports": [
+        "./marketing-learning-service",
+        "./user-context",
+        "express"
+      ],
+      "exports": [
+        "registerMarketingLearningRoutes"
+      ],
+      "symbols": [
+        "code",
+        "failure",
+        "registerMarketingLearningRoutes"
+      ],
+      "routes": [
+        "/api/marketing-command-center",
+        "/api/marketing-command-center/run-day"
+      ]
+    },
+    {
+      "path": "server/marketing-learning-service.ts",
+      "kind": "server",
+      "imports": [
+        "./marketing-command-center",
+        "./marketing-learning-store",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "createLocalMarketingLearningStore",
+        "createMarketingLearningService",
+        "getMarketingCommandCenterForOwner",
+        "runMarketingCommandCenterForOwner"
+      ],
+      "symbols": [
+        "Store",
+        "createLocalMarketingLearningStore",
+        "createMarketingLearningService",
+        "file",
+        "getMarketingCommandCenterForOwner",
+        "hash",
+        "identity",
+        "parsed",
+        "read",
+        "runMarketingCommandCenterForOwner",
+        "saved",
+        "service",
+        "snapshot"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/marketing-learning-store.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "MARKETING_LEARNING_KIND",
+        "MarketingPool",
+        "MarketingQuery",
+        "SavedMarketingRun",
+        "createMarketingLearningStore",
+        "marketingLearningRunSchema",
+        "readMarketingLearning"
+      ],
+      "symbols": [
+        "MARKETING_LEARNING_KIND",
+        "assertOwner",
+        "before",
+        "createMarketingLearningStore",
+        "hash",
+        "id",
+        "marketingLearningRunSchema",
+        "next",
+        "ownerKey",
+        "parse",
+        "readMarketingLearning",
+        "result",
+        "run",
+        "stateSchema",
+        "transact"
       ],
       "routes": []
     },
@@ -19840,6 +19934,8 @@
         "parseRoleWork",
         "parsed",
         "proof",
+        "readWithinLease",
+        "remaining",
         "retained",
         "start",
         "ttl",
@@ -20056,12 +20152,12 @@
         "found",
         "lane",
         "last",
-        "learning",
         "locate",
         "metrics",
         "news",
         "now",
         "products",
+        "projectLearning",
         "projectRemoteObject",
         "projected",
         "provenanceSchema",
@@ -20119,6 +20215,7 @@
       "path": "server/office-web-source-scheduler.ts",
       "kind": "server",
       "imports": [
+        "./marketing-learning-store",
         "./office-web-role-sources",
         "./office-web-role-store"
       ],
@@ -21675,7 +21772,7 @@
         "./local-news-delivery-safety",
         "./local-news-growth-scout",
         "./market-news",
-        "./marketing-command-center",
+        "./marketing-learning-routes",
         "./meeting-intelligence",
         "./metricool-analytics-sync",
         "./office-github",
@@ -22297,8 +22394,6 @@
         "/api/investments",
         "/api/investments/:id",
         "/api/legal-compliance/reports",
-        "/api/marketing-command-center",
-        "/api/marketing-command-center/run-day",
         "/api/monthly-goals",
         "/api/monthly-goals/:id",
         "/api/monthly-goals/all",
@@ -24025,6 +24120,7 @@
       "exports": [
         "ROLE_WORK_DEADLINE_ASSERTIONS",
         "ROLE_WORK_DEADLINE_ID",
+        "createDeadlineControlSnapshot",
         "measureRoleWorkDeadline"
       ],
       "symbols": [
@@ -24032,9 +24128,11 @@
         "ROLE_WORK_DEADLINE_ID",
         "Runtime",
         "before",
+        "body",
         "cases",
         "completed",
         "council",
+        "createDeadlineControlSnapshot",
         "delay",
         "hanging",
         "journal",
@@ -30577,6 +30675,85 @@
       "routes": []
     },
     {
+      "path": "tests/marketing-learning-routes.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/marketing-learning-routes",
+        "../server/user-context",
+        "express",
+        "node:assert/strict",
+        "node:test",
+        "zod"
+      ],
+      "exports": [],
+      "symbols": [
+        "app",
+        "denied",
+        "get",
+        "server",
+        "url"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/marketing-learning-store.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/marketing-command-center",
+        "../server/marketing-learning-service",
+        "../server/marketing-learning-store",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "before",
+        "data",
+        "day1",
+        "dir",
+        "f",
+        "files",
+        "fixture",
+        "focus",
+        "foreign",
+        "previous",
+        "query",
+        "reorder",
+        "repeated",
+        "restarted",
+        "result",
+        "results",
+        "saved",
+        "service"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/marketing-learning-ui.mjs",
+      "kind": "test",
+      "imports": [
+        "../server/marketing-command-center.ts",
+        "esbuild",
+        "node:assert/strict",
+        "node:fs",
+        "node:path",
+        "playwright"
+      ],
+      "exports": [],
+      "symbols": [
+        "browser",
+        "browserPath",
+        "bundle",
+        "page",
+        "snapshot"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/metricool-analytics-sync.test.ts",
       "kind": "test",
       "imports": [
@@ -31524,17 +31701,27 @@
       "symbols": [
         "NOW",
         "absent",
+        "admitted",
         "before",
         "body",
+        "company",
         "empty",
         "f",
         "fixture",
+        "hang",
+        "journal",
         "legacy",
         "mixed",
+        "next",
         "old",
+        "pending",
         "reorder",
+        "runner",
+        "saved",
         "snapshot",
         "tampered",
+        "target",
+        "tick",
         "webNews"
       ],
       "routes": []
@@ -31682,13 +31869,16 @@
         "now",
         "pool",
         "put",
+        "read",
         "reorder",
         "root",
+        "saved",
         "secondId",
         "source",
         "sources",
         "sql",
-        "totals"
+        "totals",
+        "valid"
       ],
       "routes": []
     },
@@ -33335,6 +33525,8 @@
       "path": "tests/software-factory-role-deadline.test.ts",
       "kind": "test",
       "imports": [
+        "../server/office-role-audits",
+        "../server/office-role-snapshots",
         "../server/software-factory-role-acceptance",
         "../server/software-factory-role-artifact",
         "../server/software-factory-role-deadline",
@@ -33347,7 +33539,11 @@
         "absent",
         "alreadyFixed",
         "base",
+        "blocked",
+        "completed",
+        "emptyBody",
         "noBaseline",
+        "owner",
         "r",
         "report",
         "result",
@@ -33974,6 +34170,8 @@
     "tests/local-youtube-queue.test.ts",
     "tests/local-youtube-worker-queue.test.ts",
     "tests/marketing-command-center.test.ts",
+    "tests/marketing-learning-routes.test.ts",
+    "tests/marketing-learning-store.test.ts",
     "tests/metricool-analytics-sync.test.ts",
     "tests/metricool-tracking.test.ts",
     "tests/office-academy-benchmarks.test.ts",

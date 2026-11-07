@@ -309,6 +309,8 @@ if (sessionMiddleware) {
   log("SESSION_SECRET not configured; local session auth is disabled", "auth");
 }
 
+// Also protect authentication failures before the owner-bound route runs.
+app.use("/api/marketing-command-center", (_req,res,next)=>{res.setHeader("Cache-Control","no-store");next();});
 app.use(requireAppUser);
 
 export function log(message: string, source = "express") {
