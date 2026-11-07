@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import type { FactoryEvidence } from './software-factory';
+import { OFFICE_UI_STATIC_EXCLUSIONS } from '../script/software-factory-ui-static.mjs';
 const hash = (bytes: string | Uint8Array) => createHash('sha256').update(bytes).digest('hex');
 export const OFFICE_UI_JOURNEYS = ['office-session-login', 'office-company-navigation'] as const;
 /** Caller must authenticate the exact artifact/run/workflow before invoking this
@@ -18,6 +19,7 @@ export function officeUiSimulationEvidence(reportBytes: Uint8Array, screenshots:
         throw Error('UI_EVIDENCE_SIZE');
     const report = JSON.parse(new TextDecoder('utf8', { fatal: true }).decode(reportBytes));
     const p = report.provenance;
+    if (JSON.stringify(p?.staticExclusions) !== JSON.stringify(OFFICE_UI_STATIC_EXCLUSIONS)) throw Error('UI_EVIDENCE_EXCLUSIONS');
     if (![expected.baseSha, expected.headSha].every(s => /^[a-f0-9]{40}$/.test(s)) || expected.baseSha === expected.headSha || ![expected.workflowSha256, expected.harnessSha256].every(s => /^[a-f0-9]{64}$/.test(s)) || report.version !== 1 || report.synthetic !== true || report.scope !== 'office-ui-regression' || report.projectId !== expected.projectId || p?.version !== 1 || p.scope !== 'office-ui-regression' || p.projectId !== expected.projectId || p.repository !== 'robertmanzanillag-jpg/blackops-reminder' || p.baseSha !== expected.baseSha || p.headSha !== expected.headSha || p.runId !== expected.runId || p.runAttempt !== expected.runAttempt || p.workflowSha256 !== expected.workflowSha256 || p.harnessSha256 !== expected.harnessSha256 || report.scenarioSha256 !== hash(JSON.stringify(OFFICE_UI_JOURNEYS)))
         throw Error('UI_EVIDENCE_IDENTITY');
     const age = expected.now.getTime() - Date.parse(report.createdAt);

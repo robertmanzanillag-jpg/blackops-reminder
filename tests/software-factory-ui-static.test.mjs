@@ -8,6 +8,7 @@ test('candidate static bytes are bounded validated data, never imported Node mod
     const root = await mkdtemp(path.join(tmpdir(), 'ui-static-'));
     try {
         await writeFile(path.join(root, 'index.html'), '<h1>Actual built bytes</h1>');
+        await writeFile(path.join(root, '._opengraph.jpg'), 'Synthetic AppleDouble metadata');
         const bundle = await collectStaticBundle(root), manifest = validateStaticBundle(bundle);
         assert.equal(manifest.files.length, 1);
         const out = path.join(root, 'copied');

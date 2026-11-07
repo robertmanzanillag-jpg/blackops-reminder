@@ -28,6 +28,9 @@ and `tests/office-role-work.test.ts` candidate changes. It builds both immutable
 revisions in credentialless containers without network access. Only bounded,
 validated static bytes leave those containers; candidate Node code never runs in
 the controller and cannot mount the evidence directory.
+The static export explicitly excludes AppleDouble metadata (`._` filenames),
+which the fixture's dotfile-denying static server would not serve. This exclusion
+is recorded in provenance. Other hidden names and traversal remain rejected.
 
 A separate pinned Playwright container runs the baseline's trusted authentication
 fixture and assertions against both static builds. It measures

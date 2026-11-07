@@ -12,6 +12,7 @@ export interface OfficeUiStaticManifest {
   sha256: string;
 }
 export const OFFICE_UI_HARNESS_FILES: readonly string[];
+export const OFFICE_UI_STATIC_EXCLUSIONS: readonly string[];
 export function validateStaticBundle(value: unknown): OfficeUiStaticManifest;
 export function collectStaticBundle(root: string): Promise<OfficeUiStaticBundle>;
 export function materializeStaticBundle(bundle: OfficeUiStaticBundle, root: string): Promise<OfficeUiStaticManifest>;

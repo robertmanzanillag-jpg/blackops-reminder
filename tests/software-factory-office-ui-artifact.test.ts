@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { createOfficeUiArtifactReader, readOfficeUiZip } from '../server/software-factory-office-ui-artifact';
 import { OFFICE_UI_JOURNEYS } from '../server/software-factory-office-ui-evidence';
-import { OFFICE_UI_HARNESS_FILES } from '../script/software-factory-ui-static.mjs';
+import { OFFICE_UI_HARNESS_FILES, OFFICE_UI_STATIC_EXCLUSIONS } from '../script/software-factory-ui-static.mjs';
 const hash = (v: string | Buffer) => createHash('sha256').update(v).digest('hex');
 function zipFiles(files: Map<string, Buffer>) {
     const local: Buffer[] = [], central: Buffer[] = [];
@@ -39,6 +39,7 @@ function fixture() {
     const input = { projectId: 'asistente', baseSha, headSha, runId: 123, signal: new AbortController().signal }, workflow = 'trusted workflow', workflowSha256 = hash(workflow), harnessSha256 = hash(JSON.stringify(OFFICE_UI_HARNESS_FILES.map((p: string) => [p, hash(p)])));
     const sourceFiles = [{ path: 'index.html', sha256: hash('html') }], source = { sourceManifestSha256: 'd'.repeat(64), staticManifest: { files: sourceFiles, sha256: hash(JSON.stringify(sourceFiles)) } };
     const report: any = { version: 1, projectId: 'asistente', synthetic: true, scope: 'office-ui-regression', createdAt: now.toISOString(), scenarioSha256: hash(JSON.stringify(OFFICE_UI_JOURNEYS)), passed: true, provenance: { version: 1, scope: 'office-ui-regression', projectId: 'asistente', repository, baseSha, headSha, runId: '123', runAttempt: '1', workflowSha256, harnessSha256, baseline: source, candidate: source } };
+    report.provenance.staticExclusions = OFFICE_UI_STATIC_EXCLUSIONS;
     const files = new Map<string, Buffer>();
     for (const role of ['baseline', 'candidate'])
         report[role] = { role, headSha: role === 'baseline' ? baseSha : headSha, cases: ['desktop', 'mobile'].flatMap(viewport => OFFICE_UI_JOURNEYS.map(scenarioId => { const screenshot = `screenshots/${role}-${viewport}-${scenarioId}.png`, bytes = Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), Buffer.alloc(101)]); files.set(screenshot, bytes); return { scenarioId, viewport, passed: true, errors: [], screenshot, screenshotSha256: hash(bytes) }; })) };
