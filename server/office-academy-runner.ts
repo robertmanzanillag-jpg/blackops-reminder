@@ -10,7 +10,7 @@ export const academyCurriculumVersion = (modules: CurriculumModule[]) => JSON.st
 /** A real, read-only paired review. The scheduler persists reservation before calling this.
  * Fixtures prove only this narrow review capability, never production completion or general intelligence.
  */
-export function createAcademyReviewRunner(options: { run?: typeof runOfficeClaude; now?: () => number } = {}) {
+export function createAcademyReviewRunner(options: { run?: (prompt: string, executionId?: string) => ReturnType<typeof runOfficeClaude>; now?: () => number } = {}) {
   const run = options.run || runOfficeClaude;
   const now = options.now || Date.now;
   return async (state: CompanyState, job: AcademyJob) => {
@@ -20,11 +20,11 @@ export function createAcademyReviewRunner(options: { run?: typeof runOfficeClaud
     const fixture = REVIEW_BENCHMARK_TASKS.find(f => f.id === job.benchmarkId);
     if (!trainee || !career || career.generation !== job.generation || !fixture) throw new Error("ACADEMY_ASSIGNMENT_CHANGED");
     const startIncumbent = now();
-    const incumbent = await run(buildReviewBenchmarkPrompt(fixture, career.reviewGuidance || []));
+    const incumbent = await run(buildReviewBenchmarkPrompt(fixture, career.reviewGuidance || []), `academy:${job.id}:incumbent`);
     const incumbentDurationMs = Math.max(1, now() - startIncumbent);
     if (Date.parse(job.expiresAt) <= now()) throw new Error("ACADEMY_LEASE_EXPIRED");
     const startCandidate = now();
-    const candidate = await run(buildReviewBenchmarkPrompt(fixture, trainee.knowledge));
+    const candidate = await run(buildReviewBenchmarkPrompt(fixture, trainee.knowledge), `academy:${job.id}:candidate`);
     const durationMs = Math.max(1, now() - startCandidate);
     if (incumbent.sessionId === candidate.sessionId || !candidate.sessionId || !incumbent.sessionId) throw new Error("ACADEMY_UNVERIFIED_SESSIONS");
     if (incumbent.text.length > 16000 || candidate.text.length > 16000) throw new Error("ACADEMY_ARTIFACT_TOO_LARGE");

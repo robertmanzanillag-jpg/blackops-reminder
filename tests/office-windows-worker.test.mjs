@@ -39,6 +39,16 @@ test('child environment excludes inherited secrets, node injection and alternate
   assert.equal(env.OFFICE_WORKER_RUN_ONCE,'false'); assert.equal(env.OFFICE_WORKER_FAIL_FAST,'true'); assert.equal(env.OFFICE_WORKER_REVIEW_ONLY,'true');
   assert.equal(env.OFFICE_ACADEMY_EXECUTION_ENABLED,'false'); assert.equal(env.PATH,'safe-path');
 });
+
+test('role work requires explicit bounded academy and shared credit configuration',()=>{
+ const credit=path.resolve(os.tmpdir(),'office-private','shared-credit.json');
+ const extra=`\nOFFICE_ROLE_WORK_ENABLED=true\nOFFICE_WEB_SOURCES_ENABLED=true\nOFFICE_WEB_SOURCE_ORIGIN=https://robertwebsites.com\nOFFICE_ROLE_ACADEMY_ENABLED=true\nOFFICE_ROLE_ACADEMY_DAILY_PAIRS=14\nOPENAI_SHARED_CREDITS_REQUIRED=true\nOPENAI_SHARED_CREDIT_CONFIG=${credit}`;
+ const config=parseWorkerConfig(raw+extra),env=safeWorkerEnvironment(config,{OPENAI_SHARED_CREDIT_CONFIG:'injected'});
+ assert.equal(env.OPENAI_SHARED_CREDIT_CONFIG,credit);assert.equal(env.OFFICE_ROLE_ACADEMY_DAILY_PAIRS,'14');
+ for(const invalid of [extra.replace('DAILY_PAIRS=14','DAILY_PAIRS=15'),extra.replace('CREDITS_REQUIRED=true','CREDITS_REQUIRED=false'),extra.replace('https://robertwebsites.com','http://robertwebsites.com'),extra.replace('WORK_ENABLED=true','WORK_ENABLED=false'),extra.replace(credit,'relative.json')])assert.throws(()=>parseWorkerConfig(raw+invalid));
+ assert.throws(()=>parseWorkerConfig(raw+'\nOFFICE_ROLE_ACADEMY_ENABLED=true'));
+ assert.equal(safeWorkerEnvironment(parseWorkerConfig(raw),{OFFICE_ROLE_WORK_ENABLED:'true'}).OFFICE_ROLE_WORK_ENABLED,undefined);
+});
 test('real paths reject inside-repository config and fallback env files', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(),'office-windows-test-'));
   try {
@@ -103,4 +113,35 @@ test('native GUI launcher uses hidden synchronous run with no shell or policy ch
   assert.ok(source.includes('InStr(value, "%")')); assert.ok(source.includes('Chr(34)'));
   assert.ok(source.includes('WScript.Arguments.Count <> 3'));
   assert.ok(!/powershell|cmd\.exe|ExecutionPolicy|Bypass/i.test(source));
+});
+
+
+test('cooperative CLI stop persists hold and owned nonce when credit configuration disappears', {skip:process.platform !== 'win32'}, async()=>{
+ const {fileURLToPath}=await import('node:url');
+ const {ownershipPaths,acquireWorkerOwnership}=await import('../script/office-worker-ownership.mjs');
+ const root=fs.mkdtempSync(path.join(os.tmpdir(),'office-stop-credit-'));
+ let ownership;
+ try {
+  const repo=path.join(root,'repo'),privateDir=path.join(root,'private');
+  fs.mkdirSync(path.join(repo,'script'),{recursive:true});fs.mkdirSync(path.join(repo,'node_modules','tsx'),{recursive:true});fs.mkdirSync(privateDir);
+  fs.writeFileSync(path.join(repo,'package.json'),JSON.stringify({name:'rest-express'}));fs.writeFileSync(path.join(repo,'script','office-worker.ts'),'');fs.writeFileSync(path.join(repo,'node_modules','tsx','package.json'),'{}');
+  // Restrict only this disposable fixture directory, never a production path.
+  const aclScript="$ErrorActionPreference='Stop'; $sid=[Security.Principal.WindowsIdentity]::GetCurrent().User; $acl=New-Object Security.AccessControl.DirectorySecurity; $acl.SetOwner($sid); $acl.SetAccessRuleProtection($true,$false); $rule=New-Object Security.AccessControl.FileSystemAccessRule($sid,'FullControl','ContainerInherit,ObjectInherit','None','Allow'); $acl.AddAccessRule($rule); Set-Acl -LiteralPath $env:OFFICE_TEST_PRIVATE_PATH -AclObject $acl";
+  const acl=spawnSync(path.join(process.env.SystemRoot,'System32','WindowsPowerShell','v1.0','powershell.exe'),['-NoProfile','-NonInteractive','-Command',aclScript],{encoding:'utf8',windowsHide:true,shell:false,timeout:10000,env:{SystemRoot:process.env.SystemRoot,WINDIR:process.env.WINDIR,TEMP:os.tmpdir(),TMP:os.tmpdir(),OFFICE_TEST_PRIVATE_PATH:privateDir}});
+  assert.equal(acl.status,0,acl.stderr);
+  const configPath=path.join(privateDir,'worker.conf'),missingCredit=path.join(privateDir,'missing-credit.json');
+  fs.writeFileSync(configPath,raw+'\nOPENAI_SHARED_CREDITS_REQUIRED=true\nOPENAI_SHARED_CREDIT_CONFIG='+missingCredit);
+  assert.equal(fs.existsSync(missingCredit),false);
+  const paths=ownershipPaths(fs.realpathSync(repo),fs.realpathSync(configPath),'owner-123');
+  ownership=acquireWorkerOwnership(paths);
+  const result=spawnSync(process.execPath,[fileURLToPath(new URL('../script/office-windows-worker.mjs',import.meta.url)),'--repo',repo,'--config',configPath,'--stop'],{encoding:'utf8',windowsHide:true,shell:false,timeout:15000});
+  assert.equal(result.status,0,result.stderr);
+  assert.match(result.stdout,/Worker pause persisted/);
+  assert.equal(ownership.stopRequested(),true);
+  assert.equal(fs.existsSync(missingCredit),false);
+ } finally {
+  ownership?.release();
+  assert.ok(path.resolve(root).startsWith(path.resolve(os.tmpdir())+path.sep));
+  fs.rmSync(root,{recursive:true,force:true});
+ }
 });

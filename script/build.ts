@@ -176,6 +176,13 @@ async function buildAll() {
     external: externals,
     logLevel: "error",
   });
+  await esbuild({
+    entryPoints: ["script/software-factory-worker.ts"],
+    platform: "node", bundle: true, format: "cjs",
+    outfile: "dist/software-factory-worker.cjs",
+    define: { "process.env.NODE_ENV": '"production"' },
+    minify: true, external: externals, logLevel: "error",
+  });
   // Prepared artifact only: building never applies this migration.
   await writeFile("dist/office-cloud-schema.sql", createOfficeCloudSchemaSql(), "utf8");
 }

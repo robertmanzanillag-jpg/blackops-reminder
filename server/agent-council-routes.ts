@@ -79,7 +79,8 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
         reason:`Solo parser de rangos horarios; misma persona y generación. ${receipt.firstVerifiedRunId?"Primera ejecución con registros guardados verificada.":"Primera ejecución con registros guardados todavía no confirmada."}`,
         assessment:{passed:receipt.evidence.evaluation.qualified,quality:Math.min(...receipt.evidence.evaluation.artifacts.map(a=>a.candidateQuality)),incumbentQuality:Math.min(...receipt.evidence.evaluation.artifacts.map(a=>a.baselineQuality)),scope:"benchmark",completedAt:receipt.appliedAt},
       }));
-      return res.json({...state.officeExecution?.internalWork || {version:1,jobs:[]},academy:[...radioAcademy,...academy].sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt)).slice(0,20)});
+      const roleWork=(state.officeExecution?.roleWork?.jobs || []).slice(-28).reverse().map(job=>({id:job.id,role:job.role,status:job.status,startedAt:job.startedAt,completedAt:job.completedAt,reason:job.reason,artifactId:job.artifactId,audit:job.audit,webAudit:job.webAudit}));
+      return res.json({...state.officeExecution?.internalWork || {version:1,jobs:[]},roleWork,roleAcademy:roleAcademySummary(state.officeExecution?.roleAcademy),academy:[...radioAcademy,...academy].sort((a,b)=>Date.parse(b.startedAt)-Date.parse(a.startedAt)).slice(0,20)});
     } catch {return res.status(503).json({error:"No se pudo verificar el trabajo interno."});}
   });
 
@@ -136,3 +137,4 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
     }
   });
 }
+import {roleAcademySummary} from "./office-role-academy";
