@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T01:27:03.855Z",
+  "generatedAt": "2026-11-07T01:28:57.593Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-browser-bridge",
   "packageName": "rest-express",
   "scripts": {
@@ -124,20 +124,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 947,
+    "filesVisible": 949,
     "filesIndexed": 856,
     "imports": 3190,
     "routes": 570,
-    "symbols": 18121
+    "symbols": 18141
   },
   "directories": {
-    "script": {
-      "files": 100,
-      "indexed": 91,
-      "kinds": {
-        "script": 100
-      }
-    },
     ".": {
       "files": 34,
       "indexed": 18,
@@ -169,10 +162,10 @@
       }
     },
     ".github/workflows": {
-      "files": 2,
+      "files": 4,
       "indexed": 0,
       "kinds": {
-        "other": 2
+        "other": 4
       }
     },
     "bin": {
@@ -293,6 +286,13 @@
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 100,
+      "indexed": 91,
+      "kinds": {
+        "script": 100
       }
     },
     "scripts": {
@@ -18807,13 +18807,17 @@
         "zod"
       ],
       "exports": [
+        "CapabilityCancellationApproval",
+        "CapabilityCancellationVerification",
         "CapabilityTrainingState",
         "VerifiedCapabilityCost",
+        "applyCapabilityCancellation",
         "capabilityHoldout",
         "capabilityTrainingSummary",
         "createCapabilityTrainer",
         "gradeCapabilityTriage",
-        "parseCapabilityTraining"
+        "parseCapabilityTraining",
+        "prepareCapabilityCancellation"
       ],
       "symbols": [
         "CAPABILITY",
@@ -18822,8 +18826,12 @@
         "Run",
         "Task",
         "action",
+        "applyCapabilityCancellation",
         "began",
         "body",
+        "c",
+        "cancellation",
+        "cancellationSchema",
         "candidate",
         "candidates",
         "capabilityHoldout",
@@ -18835,6 +18843,7 @@
         "durationMs",
         "eligible",
         "errors",
+        "firstProduction",
         "fixtures",
         "grade",
         "gradeCapabilityTriage",
@@ -18851,6 +18860,8 @@
         "policy",
         "policySchema",
         "policyVersion",
+        "prepareCapabilityCancellation",
+        "productionJobs",
         "prompt",
         "realTask",
         "resultSchema",
@@ -18863,6 +18874,7 @@
         "usageSchema",
         "used",
         "value",
+        "verified",
         "work"
       ],
       "routes": []
@@ -19877,6 +19889,7 @@
         "body",
         "clipMetrics",
         "compose",
+        "counts",
         "cycleTotals",
         "daily",
         "dir",
@@ -19955,13 +19968,16 @@
       "symbols": [
         "base",
         "body",
+        "codes",
         "createWebSourceExportCycle",
         "cycle",
         "env",
         "officeWebSourceStatus",
         "owner",
         "response",
+        "safeExportFailure",
         "startOfficeWebSourceExporter",
+        "value",
         "warmOfficeWebSources"
       ],
       "routes": []
@@ -30278,16 +30294,24 @@
       "exports": [],
       "symbols": [
         "NOW",
+        "approval",
         "audit",
         "busy",
         "corrupt",
         "f",
         "fixture",
+        "forged",
+        "job",
         "lessons",
+        "make",
         "next",
+        "now",
+        "options",
+        "paid",
         "realJob",
         "reorder",
         "result",
+        "role",
         "sourceBody",
         "sourceIssue",
         "text",

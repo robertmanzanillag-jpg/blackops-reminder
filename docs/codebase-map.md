@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T01:27:03.855Z
+Generated: 2026-11-07T01:28:57.593Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-browser-bridge`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 947 | 856 | 3190 | 570 | 18121 |
+| 949 | 856 | 3190 | 570 | 18141 |
 
 ## Entrypoints
 - `client/src/App.tsx`

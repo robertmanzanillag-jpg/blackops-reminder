@@ -59,3 +59,20 @@ test("a fresh BlackRoom heartbeat never launders an old queue timestamp",async t
  const root=await fixture(t);const db={query:async(sql:string,args?:unknown[])=>({rows:sql.includes("FROM users")?[{id:args![0]}]:[{data:{version:1,updatedAt:at,device:{seenAt:at,queue:{updatedAt:old,totals:{queued:1,processing:0,retry:0,scheduled:0,completed:0,cancelled:0}}}}}]})};
  const source=(await readWebRoleSources({pool:db,owner:"owner",configuredOwner:"owner",root,now})).find(s=>s.role==="blackroom-videos")!;assert.equal(source.rows[0].sourceAt,old);assert.equal(source.provenance[0].sourceAt,old);assert.equal(source.provenance[0].heartbeatAt,at);assert.ok(source.diagnostics.includes("SOURCE_STALE"));
 });
+
+
+test("duplicate IDs invalidate affected report parts without suppressing six other role exports",async t=>{
+ const root=await fixture(t),report={id:"repeated-report",userId:"owner",createdAt:at,publishMode:"draft_only",plannedClips:[]};
+ for(const file of ["2026-11-07T00-00-00-000Z.json","2026-11-07T00-01-00-000Z.json"])await put(root,`clippers_workspace/reports/${file}`,report);
+ const sources=await readWebRoleSources({pool,owner:"owner",configuredOwner:"owner",root,now});
+ assert.equal(sources.length,7);const affected=sources.find(s=>s.role==="clippers")!;
+ assert.equal(affected.rows.length,0);assert.ok(affected.diagnostics.includes("SOURCE_INVALID"));assert.ok(affected.diagnostics.includes("PARTIAL_COVERAGE"));assert.equal(affected.provenance.filter(p=>p.kind==="clip_reports").every(p=>p.status==="invalid"),true);
+ const audit=auditWebRoleSource(affected,"owner",now);assert.equal(audit.status,"blocked");assert.equal(audit.completeCoverage,false);
+ for(const source of sources.filter(s=>s.role!=="clippers"))assert.equal(validateWebRoleSource(source,"owner").role,source.role);
+});
+
+test("duplicate rows inside one canonical file become invalid evidence, never silent deduplication",async t=>{
+ const root=await fixture(t),item={id:"same",updatedAt:at,status:"research"};await put(root,"dropshipping_engine_data/products.json",[item,item]);
+ const sources=await readWebRoleSources({pool,owner:"owner",configuredOwner:"owner",root,now}),drop=sources.find(s=>s.role==="dropshipping")!;
+ assert.equal(sources.length,7);assert.equal(drop.rows.length,0);assert.equal(drop.provenance.find(p=>p.kind==="products")!.status,"invalid");assert.equal(auditWebRoleSource(drop,"owner",now).completeCoverage,false);
+});
