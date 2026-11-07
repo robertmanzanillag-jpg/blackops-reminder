@@ -4,6 +4,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
 const MAX = 32 * 1024 * 1024;
+export const OFFICE_UI_STATIC_EXCLUSIONS = ['AppleDouble metadata filenames starting with ._'];
 export const OFFICE_UI_HARNESS_FILES = ['script/software-factory-office-ui-acceptance.ts', 'script/software-factory-office-ui-fixture.mjs', 'script/software-factory-office-ui-oracle.mjs', 'script/software-factory-ui-static.mjs', 'script/software-factory-role-acceptance.ts', 'server/software-factory-role-acceptance.ts'];
 export function validateStaticBundle(value) {
     if (!value || value.version !== 1 || !Array.isArray(value.files) || !value.files.length || value.files.length > 2000)
@@ -27,6 +28,9 @@ export async function collectStaticBundle(root) {
     let total = 0;
     async function walk(dir, prefix = '') {
         for (const name of (await readdir(dir)).sort()) {
+            // Vite copies tracked macOS metadata from client/public. Express's
+            // dotfiles:'deny' never serves it; do not admit other hidden files.
+            if (name.startsWith('._')) continue;
             const file = path.join(dir, name), stat = await lstat(file), relative = prefix + name;
             if (stat.isSymbolicLink() || (!stat.isDirectory() && !stat.isFile()))
                 throw Error('UI_STATIC_SPECIAL_FILE');
