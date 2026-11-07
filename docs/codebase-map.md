@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-07T01:58:05.757Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-scoped-export`
+Generated: 2026-11-07T02:02:28.732Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-artifact-hosts`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 964 | 866 | 3245 | 570 | 18276 |
+| 965 | 867 | 3248 | 570 | 18285 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -29,7 +29,7 @@ Package: `rest-express`
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
 | `tests` | 244 | 240 | test:244 |
-| `server` | 223 | 218 | server:223 |
+| `server` | 224 | 219 | server:224 |
 | `script` | 103 | 92 | script:103 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |

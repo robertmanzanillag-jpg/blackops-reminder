@@ -56,3 +56,16 @@ The independent UI artifact reader is a direct reviewed import, not an optional
 placeholder. Integration of its code and real CI proof is required before this
 module can be installed. Tests use synthetic transports and make no paid calls.
 No installation or activation is performed by adding these files.
+
+
+Artifact transport policy: `allowGitHubResultsAzureHosts` defaults to false. Exact
+operator archive pins remain valid. When explicitly enabled, both readers also
+accept `productionresultssa` + decimal shard + `.blob.core.windows.net`, only on
+a fresh redirect from the authenticated artifact endpoint after identity checks.
+GitHub documents `*.blob.core.windows.net` for artifact transport at
+https://docs.github.com/en/actions/reference/runners/self-hosted-runners . The
+narrower production-result prefix is an inference from observed shards sa6, sa7,
+and sa12, not a GitHub guarantee. Other Azure accounts, explicit ports (including
+443), userinfo, HTTP and fragments are rejected. Downloads carry no credentials
+or cookies, follow no redirects, and retain archive/digest/evidence validation.
+This opt-in does not enable general network access or change the shared budget.
