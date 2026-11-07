@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-06T23:44:33.299Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-factory-integration`
+Generated: 2026-11-07T00:07:30.904Z
+Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\office-role-completion`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 896 | 806 | 2963 | 564 | 17465 |
+| 918 | 828 | 3049 | 564 | 17731 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 218 | 214 | test:218 |
-| `server` | 201 | 196 | server:201 |
+| `tests` | 230 | 226 | test:230 |
+| `server` | 210 | 205 | server:210 |
 | `script` | 93 | 85 | script:93 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 40 | 39 | docs:40 |
+| `docs` | 41 | 40 | docs:41 |
 | `client/src/components` | 29 | 29 | client-component:29 |
 | `client/src/pages` | 26 | 24 | client-page:26 |
 | `.` | 34 | 18 | other:22, docs:11, package:1 |
@@ -192,11 +192,20 @@ Package: `rest-express`
 - `tests/office-protocol.test.ts`
 - `tests/office-radio-training.test.ts`
 - `tests/office-review-benchmarks.test.ts`
+- `tests/office-role-academy-integration.test.ts`
+- `tests/office-role-academy.test.ts`
+- `tests/office-role-audits.test.ts`
+- `tests/office-role-curricula.test.ts`
 - `tests/office-role-lifecycle.test.ts`
+- `tests/office-role-snapshots.test.ts`
+- `tests/office-role-work.test.ts`
 - `tests/office-routes.test.ts`
 - `tests/office-runtime.test.ts`
 - `tests/office-shared-credits.test.ts`
 - `tests/office-token-budget.test.ts`
+- `tests/office-web-role-sources.test.ts`
+- `tests/office-web-role-store.test.ts`
+- `tests/office-web-source-scheduler.test.ts`
 - `tests/office-worker-capabilities.test.ts`
 - `tests/office-worker-watchdog.test.ts`
 - `tests/owner-office-storage.test.ts`
@@ -231,11 +240,14 @@ Package: `rest-express`
 - `tests/software-factory-github.test.ts`
 - `tests/software-factory-loop.test.ts`
 - `tests/software-factory-object-store.test.ts`
+- `tests/software-factory-office-connection.test.ts`
+- `tests/software-factory-office-mode.test.ts`
 - `tests/software-factory-openai-builder.test.ts`
 - `tests/software-factory-openai.test.ts`
 - `tests/software-factory-pilot-review.test.ts`
 - `tests/software-factory-pipeline.test.ts`
 - `tests/software-factory-postgres.test.ts`
+- `tests/software-factory-proposal-runtime.test.ts`
 - `tests/software-factory-remote-builder.test.ts`
 - `tests/software-factory-routes.test.ts`
 - `tests/software-factory-runtime.test.ts`

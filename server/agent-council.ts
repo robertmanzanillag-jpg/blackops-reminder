@@ -1,5 +1,7 @@
 import { advanceKongCompany, isKongCompanyAgent } from "./kong-company";
 import { parseInternalWork } from "./office-internal-work";
+import {parseRoleAcademy} from "./office-role-academy";
+import {parseRoleWork} from "./office-role-work";
 import { getSystemUserId } from "./user-context";
 import type { OfficeKongAuditResult } from "./office-kong";
 // Server side of the agent council (see shared/agent-council.ts).
@@ -275,7 +277,7 @@ function deriveSpecialistProposals(state: CouncilState, now: number): CouncilPro
   return created;
 }
 
-function parseDurableCouncilState(raw: string | null): CouncilState {
+function parseDurableCouncilState(raw: string | null, owner: string): CouncilState {
   if (raw === null) return emptyCouncilState();
   const value = JSON.parse(raw);
   const object = (v: unknown) => v !== null && typeof v === "object" && !Array.isArray(v);
@@ -287,6 +289,8 @@ function parseDurableCouncilState(raw: string | null): CouncilState {
     if (!object(value.officeExecution) || !object(value.officeExecution.tokens)) throw new Error("Invalid office execution state");
     parseRoleLifecycleState(value.officeExecution.roles);
     parseInternalWork(value.officeExecution.internalWork);
+    parseRoleAcademy(value.officeExecution.roleAcademy);
+    parseRoleWork(value.officeExecution.roleWork,owner);
   }
   return parseCouncilState(raw);
 }
@@ -327,8 +331,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
   const integrationsNow = () => (deps.integrations ? deps.integrations() : effectiveIntegrations(parseIntegrationOverrides(process.env.AGENT_INTEGRATION_OVERRIDES)));
 
   async function load(): Promise<CouncilState> {
-    if (deps.transactState) return parseDurableCouncilState(await deps.readState());
-    if (deps.versioned) return parseDurableCouncilState((await deps.versioned.read()).raw);
+    if (deps.transactState) return parseDurableCouncilState(await deps.readState(),deps.userId());
+    if (deps.versioned) return parseDurableCouncilState((await deps.versioned.read()).raw,deps.userId());
     if (cached) return cached;
     cached = parseCouncilState(await deps.readState().catch(() => null));
     return cached;
@@ -342,11 +346,11 @@ export function createAgentCouncil(deps: CouncilDeps) {
     const job = queue.then(async () => {
       if (deps.transactState) {
         const raw = await deps.transactState(async raw => {
-          const current = parseDurableCouncilState(raw);
+          const current = parseDurableCouncilState(raw,deps.userId());
           const next = await change(current);
           return JSON.stringify(next === SKIP ? current : next);
         });
-        return parseDurableCouncilState(raw);
+        return parseDurableCouncilState(raw,deps.userId());
       }
       if (!deps.versioned) {
         const current = await load();
@@ -358,7 +362,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
       }
       for (let attempt = 0; ; attempt++) {
         const { raw, revision } = await deps.versioned.read();
-        const current = parseDurableCouncilState(raw);
+        const current = parseDurableCouncilState(raw,deps.userId());
         const next = await change(current);
         if (next === SKIP) { cached = current; return current; }
         try {
@@ -608,6 +612,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
     const curriculum = await deps.loadCurriculum?.() || [];
     let reservation: AcademyJob | undefined;
     const reserved = await mutate(state => {
+      reservation = undefined;
+      if(parseRoleAcademy(state.officeExecution?.roleAcademy).jobs.some(job=>job.status==="running" && Date.parse(job.expiresAt)>deps.now()))return state;
       state = settleReviewEvaluations(state, deps.now());
       const result = reserveAcademyReview(state.company, curriculum, deps.now());
       reservation = result.job;
