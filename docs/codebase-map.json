@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T01:14:51.128Z",
+  "generatedAt": "2026-11-07T01:30:39.542Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-05\\quioero\\work\\asistente-factory-windows",
   "packageName": "rest-express",
   "scripts": {
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 959,
-    "filesIndexed": 862,
-    "imports": 3228,
+    "filesVisible": 960,
+    "filesIndexed": 863,
+    "imports": 3232,
     "routes": 570,
-    "symbols": 18192
+    "symbols": 18223
   },
   "directories": {
     ".": {
@@ -289,10 +289,10 @@
       }
     },
     "script": {
-      "files": 102,
-      "indexed": 91,
+      "files": 103,
+      "indexed": 92,
       "kinds": {
-        "script": 102
+        "script": 103
       }
     },
     "scripts": {
@@ -10910,13 +10910,17 @@
         "built",
         "bundle",
         "changed",
+        "code",
         "container",
+        "diagnostic",
         "digest",
+        "e",
         "exec",
         "harness",
         "main",
         "name",
         "staticManifest",
+        "stderr",
         "temp"
       ],
       "routes": []
@@ -10961,6 +10965,7 @@
       "kind": "script",
       "imports": [
         "./software-factory-office-ui-fixture.mjs",
+        "./software-factory-ui-console.mjs",
         "./software-factory-ui-static.mjs",
         "node:assert/strict",
         "node:crypto",
@@ -10973,9 +10978,12 @@
         "auth",
         "browser",
         "bytes",
+        "consoleDiagnostics",
+        "consoleErrors",
         "context",
         "digest",
         "errors",
+        "expected",
         "fixture",
         "headSha",
         "input",
@@ -10985,7 +10993,6 @@
         "record",
         "regressions",
         "report",
-        "response",
         "screenshot",
         "u",
         "versions"
@@ -11069,6 +11076,18 @@
       "routes": []
     },
     {
+      "path": "script/software-factory-ui-console.mjs",
+      "kind": "script",
+      "imports": [],
+      "exports": [
+        "isExpectedInitialSessionError"
+      ],
+      "symbols": [
+        "isExpectedInitialSessionError"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/software-factory-ui-static.mjs",
       "kind": "script",
       "imports": [
@@ -11079,6 +11098,7 @@
       ],
       "exports": [
         "OFFICE_UI_HARNESS_FILES",
+        "OFFICE_UI_STATIC_EXCLUSIONS",
         "collectStaticBundle",
         "materializeStaticBundle",
         "validateStaticBundle"
@@ -11086,6 +11106,7 @@
       "symbols": [
         "MAX",
         "OFFICE_UI_HARNESS_FILES",
+        "OFFICE_UI_STATIC_EXCLUSIONS",
         "bundle",
         "bytes",
         "collectStaticBundle",
@@ -18852,13 +18873,17 @@
         "zod"
       ],
       "exports": [
+        "CapabilityCancellationApproval",
+        "CapabilityCancellationVerification",
         "CapabilityTrainingState",
         "VerifiedCapabilityCost",
+        "applyCapabilityCancellation",
         "capabilityHoldout",
         "capabilityTrainingSummary",
         "createCapabilityTrainer",
         "gradeCapabilityTriage",
-        "parseCapabilityTraining"
+        "parseCapabilityTraining",
+        "prepareCapabilityCancellation"
       ],
       "symbols": [
         "CAPABILITY",
@@ -18867,8 +18892,12 @@
         "Run",
         "Task",
         "action",
+        "applyCapabilityCancellation",
         "began",
         "body",
+        "c",
+        "cancellation",
+        "cancellationSchema",
         "candidate",
         "candidates",
         "capabilityHoldout",
@@ -18880,6 +18909,7 @@
         "durationMs",
         "eligible",
         "errors",
+        "firstProduction",
         "fixtures",
         "grade",
         "gradeCapabilityTriage",
@@ -18896,6 +18926,8 @@
         "policy",
         "policySchema",
         "policyVersion",
+        "prepareCapabilityCancellation",
+        "productionJobs",
         "prompt",
         "realTask",
         "resultSchema",
@@ -18908,6 +18940,7 @@
         "usageSchema",
         "used",
         "value",
+        "verified",
         "work"
       ],
       "routes": []
@@ -19922,6 +19955,7 @@
         "body",
         "clipMetrics",
         "compose",
+        "counts",
         "cycleTotals",
         "daily",
         "dir",
@@ -20000,13 +20034,16 @@
       "symbols": [
         "base",
         "body",
+        "codes",
         "createWebSourceExportCycle",
         "cycle",
         "env",
         "officeWebSourceStatus",
         "owner",
         "response",
+        "safeExportFailure",
         "startOfficeWebSourceExporter",
+        "value",
         "warmOfficeWebSources"
       ],
       "routes": []
@@ -23369,6 +23406,7 @@
       "path": "server/software-factory-office-ui-evidence.ts",
       "kind": "server",
       "imports": [
+        "../script/software-factory-ui-static.mjs",
         "./software-factory",
         "node:crypto"
       ],
@@ -30405,16 +30443,24 @@
       "exports": [],
       "symbols": [
         "NOW",
+        "approval",
         "audit",
         "busy",
         "corrupt",
         "f",
         "fixture",
+        "forged",
+        "job",
         "lessons",
+        "make",
         "next",
+        "now",
+        "options",
+        "paid",
         "realJob",
         "reorder",
         "result",
+        "role",
         "sourceBody",
         "sourceIssue",
         "text",
@@ -32532,6 +32578,7 @@
       "path": "tests/software-factory-office-ui-evidence.test.ts",
       "kind": "test",
       "imports": [
+        "../script/software-factory-ui-static.mjs",
         "../server/software-factory-office-ui-evidence",
         "node:assert/strict",
         "node:crypto",
@@ -32961,6 +33008,7 @@
       "path": "tests/software-factory-ui-static.test.mjs",
       "kind": "test",
       "imports": [
+        "../script/software-factory-ui-console.mjs",
         "../script/software-factory-ui-static.mjs",
         "node:assert/strict",
         "node:fs/promises",
@@ -32971,7 +33019,10 @@
       "exports": [],
       "symbols": [
         "bundle",
+        "error",
+        "origin",
         "out",
+        "response",
         "root"
       ],
       "routes": []

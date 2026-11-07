@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-07T01:14:51.128Z
+Generated: 2026-11-07T01:30:39.542Z
 Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-05\quioero\work\asistente-factory-windows`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 959 | 862 | 3228 | 570 | 18192 |
+| 960 | 863 | 3232 | 570 | 18223 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,7 +30,7 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `tests` | 243 | 239 | test:243 |
 | `server` | 222 | 217 | server:222 |
-| `script` | 102 | 91 | script:102 |
+| `script` | 103 | 92 | script:103 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `client/src/components/ui` | 55 | 55 | ui-component:55 |
 | `docs` | 46 | 43 | docs:46 |
