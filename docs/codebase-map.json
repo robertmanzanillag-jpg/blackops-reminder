@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-07T02:17:29.245Z",
+  "generatedAt": "2026-11-07T02:21:26.201Z",
   "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-capability-lifecycle",
   "packageName": "rest-express",
   "scripts": {
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 969,
-    "filesIndexed": 871,
+    "filesVisible": 965,
+    "filesIndexed": 869,
     "imports": 3262,
     "routes": 570,
-    "symbols": 18323
+    "symbols": 18334
   },
   "directories": {
     ".": {
@@ -274,10 +274,10 @@
       }
     },
     "docs": {
-      "files": 49,
-      "indexed": 45,
+      "files": 45,
+      "indexed": 43,
       "kinds": {
-        "docs": 49
+        "docs": 45
       }
     },
     "examples/clippers-motivation": {
@@ -5434,22 +5434,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -19990,6 +19974,7 @@
         "zod"
       ],
       "exports": [
+        "BLACKROOM_SOURCE_PROJECTION_SQL",
         "SourcePool",
         "WEB_SOURCE_ROLES",
         "WebRoleSource",
@@ -20003,12 +19988,15 @@
         "webSourceRowSchema"
       ],
       "symbols": [
+        "BLACKROOM_SOURCE_PROJECTION_SQL",
         "Part",
         "WEB_SOURCE_ROLES",
         "all",
         "assertWebSourceOwner",
         "auditWebRoleSource",
         "body",
+        "boundedLeaf",
+        "candidates",
         "clipMetrics",
         "compose",
         "counts",
@@ -20027,6 +20015,7 @@
         "news",
         "now",
         "products",
+        "projectRemoteObject",
         "projected",
         "provenanceSchema",
         "rawClipCycle",
@@ -20039,6 +20028,11 @@
         "rawSocial",
         "rawSuppliers",
         "readWebRoleSources",
+        "remoteDeviceProjection",
+        "remoteQueue",
+        "remoteQueueProjection",
+        "remoteTotalsProjection",
+        "reportLimit",
         "row",
         "s",
         "social",
@@ -31504,6 +31498,7 @@
         "db",
         "fixture",
         "foreign",
+        "id",
         "news",
         "now",
         "pool",
@@ -31513,6 +31508,7 @@
         "secondId",
         "source",
         "sources",
+        "sql",
         "totals"
       ],
       "routes": []

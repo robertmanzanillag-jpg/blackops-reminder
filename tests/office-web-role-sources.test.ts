@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import {mkdtemp,mkdir,writeFile,readdir,readFile,rm} from "node:fs/promises";
 import path from "node:path";
 import {tmpdir} from "node:os";
-import {readWebRoleSources,auditWebRoleSource,validateWebRoleSource} from "../server/office-web-role-sources";
+import {readWebRoleSources,auditWebRoleSource,validateWebRoleSource,BLACKROOM_SOURCE_PROJECTION_SQL} from "../server/office-web-role-sources";
 const now=Date.parse("2026-11-07T01:00:00Z"),at=new Date(now).toISOString(),old=new Date(now-172800000).toISOString();
 const pool={query:async(sql:string,args?:unknown[])=>({rows:sql.includes("FROM users")?[{id:args![0]}]:[]})};
 async function fixture(t:any){const root=await mkdtemp(path.join(tmpdir(),"office-web-source-test-"));t.after(async()=>{assert.ok(path.resolve(root).startsWith(path.resolve(tmpdir())+path.sep));await rm(root,{recursive:true,force:true});});return root;}
@@ -33,7 +33,7 @@ test("remote queue reads existing SQL only, preserves old heartbeat and retry co
  const source=(await readWebRoleSources({pool:db,owner:"owner",configuredOwner:"owner",root,now})).find(s=>s.role==="blackroom-videos")!;assert.ok(source.diagnostics.includes("RETRY_BACKLOG"));assert.ok(source.diagnostics.includes("SOURCE_STALE"));assert.ok(source.diagnostics.includes("NO_CURRENT_SESSION_PROOF"));assert.ok(!JSON.stringify(source).includes("secret"));assert.equal(source.rows[0].metrics.retry,3);
 });
 test("report enumeration and cumulative input bytes are bounded without creating directories",async t=>{
- const root=await fixture(t);for(let i=0;i<25;i++)await put(root,`clippers_workspace/reports/${i}.json`,{id:`r${i}`,userId:"owner",createdAt:at,publishMode:"draft_only",plannedClips:[]});
+ const root=await fixture(t);for(let i=0;i<25;i++)await put(root,`clippers_workspace/reports/2026-11-07T00-00-${String(i).padStart(2,"0")}-000Z.json`,{id:`r${i}`,userId:"owner",createdAt:at,publishMode:"draft_only",plannedClips:[]});
  const source=(await readWebRoleSources({pool,owner:"owner",configuredOwner:"owner",root,now})).find(s=>s.role==="clippers")!;assert.ok(source.diagnostics.includes("SOURCE_LIMIT"));assert.ok(source.rows.length<=20);assert.equal(auditWebRoleSource(source,"owner",now).completeCoverage,false);
 });
 test("existing empty report directory and null remote device are valid empty sources, never missing",async t=>{
@@ -75,4 +75,54 @@ test("duplicate rows inside one canonical file become invalid evidence, never si
  const root=await fixture(t),item={id:"same",updatedAt:at,status:"research"};await put(root,"dropshipping_engine_data/products.json",[item,item]);
  const sources=await readWebRoleSources({pool,owner:"owner",configuredOwner:"owner",root,now}),drop=sources.find(s=>s.role==="dropshipping")!;
  assert.equal(sources.length,7);assert.equal(drop.rows.length,0);assert.equal(drop.provenance.find(p=>p.kind==="products")!.status,"invalid");assert.equal(auditWebRoleSource(drop,"owner",now).completeCoverage,false);
+});
+
+
+test("heartbeat without queue capability is missing queue evidence, not an invalid device or completed work",async t=>{
+ const root=await fixture(t);
+ for(const queue of [{},{updatedAt:at,totals:{queued:1}}]){
+ const db={query:async(sql:string,args?:unknown[])=>({rows:sql.includes("FROM users")?[{id:args![0]}]:[{data:{version:1,updatedAt:at,device:{seenAt:at,queue}}}]})};
+ const source=(await readWebRoleSources({pool:db,owner:"owner",configuredOwner:"owner",root,now})).find(s=>s.role==="blackroom-videos")!;
+ assert.equal(source.rows.length,0);assert.equal(source.provenance[0].heartbeatAt,at);assert.equal(source.provenance[0].sourceAt,null);assert.ok(source.diagnostics.includes("SOURCE_MISSING"));assert.ok(!source.diagnostics.includes("SOURCE_INVALID"));assert.equal(auditWebRoleSource(source,"owner",now).status,"blocked");
+ }
+});
+
+test("unrelated report names cannot crowd out canonical reports; corrupt canonical reports remain visible",async t=>{
+ const root=await fixture(t);for(let i=0;i<25;i++)await put(root,`clippers_workspace/reports/z-other-${i}.json`,{});
+ const id="2026-11-07T00-00-00-000Z";await put(root,`clippers_workspace/reports/${id}.json`,{id,userId:"owner",createdAt:at,publishMode:"draft_only",plannedClips:[]});
+ await put(root,"clippers_workspace/reports/2026-11-broken.json","invalid json");
+ const source=(await readWebRoleSources({pool,owner:"owner",configuredOwner:"owner",root,now})).find(s=>s.role==="clippers")!;
+ assert.equal(source.rows.length,1);assert.ok(source.diagnostics.includes("SOURCE_INVALID"));assert.equal(auditWebRoleSource(source,"owner",now).status,"blocked");
+});
+
+
+test("malformed queue values remain invalid while preserving independently valid heartbeat",async t=>{
+ const root=await fixture(t),totals={queued:0,processing:0,retry:0,scheduled:0,completed:0,cancelled:0};
+ for(const queue of [{updatedAt:new Date(now+60000).toISOString(),totals},{updatedAt:at,totals:{...totals,retry:-1}},{updatedAt:"bad",totals},{updatedAt:new Date(now+60000).toISOString(),totals:{}},{updatedAt:at,totals:{...totals,queued:"1"}}]){
+ const db={query:async(sql:string,args?:unknown[])=>({rows:sql.includes("FROM users")?[{id:args![0]}]:[{data:{version:1,updatedAt:at,device:{seenAt:at,queue}}}]})};
+ const source=(await readWebRoleSources({pool:db,owner:"owner",configuredOwner:"owner",root,now})).find(s=>s.role==="blackroom-videos")!;
+ assert.equal(source.rows.length,0);assert.equal(source.provenance[0].heartbeatAt,at);assert.ok(source.diagnostics.includes("SOURCE_INVALID"));
+ }
+});
+
+test("report provenance budget retains every selected source and explicit truncation",async t=>{
+ const root=await fixture(t);
+ for(let i=0;i<20;i++){const id=`2026-11-07T00-00-${String(i).padStart(2,"0")}-000Z`;await put(root,`clippers_workspace/reports/${id}.json`,{id,userId:"owner",createdAt:at,publishMode:"draft_only",plannedClips:[]});}
+ const source=(await readWebRoleSources({pool,owner:"owner",configuredOwner:"owner",root,now})).find(s=>s.role==="clippers")!;
+ assert.equal(source.rows.length,18);assert.equal(source.provenance.length,20);assert.equal(source.provenance.filter(p=>p.status==="present").length,18);assert.ok(source.provenance.some(p=>p.status==="limit"));assert.equal(auditWebRoleSource(source,"owner",now).completeCoverage,false);
+});
+
+
+test("remote SQL projects canonical queue before size guard; oversized unrelated history cannot hide stale queue",async t=>{
+ const root=await fixture(t),remote={version:1,updatedAt:at,device:{seenAt:old,queue:{updatedAt:old,totals:{queued:11,processing:0,retry:0,scheduled:12,completed:253,cancelled:13},analytics:"x".repeat(2408629)}}};
+ assert.ok(Buffer.byteLength(JSON.stringify(remote))>2_400_000);
+ const sql=BLACKROOM_SOURCE_PROJECTION_SQL;
+ assert.ok(sql.startsWith("WITH projected AS (SELECT CASE"));assert.ok(sql.endsWith("AS data FROM projected"));assert.ok(sql.includes("FROM blackroom_remote_control WHERE id=$1"));
+ assert.ok(sql.includes("WHERE key IN ('queued','processing','retry','scheduled','completed','cancelled')"));
+ assert.ok(sql.includes("WHERE key IN ('seenAt','queue')"));assert.ok(sql.includes("WHERE key IN ('updatedAt','totals')"));assert.ok(sql.includes("<=4096"));
+ assert.ok(!sql.includes("analytics"));assert.ok(!sql.includes("SELECT data FROM blackroom_remote_control"));
+ // DB-shaped result of the inspected projection; SQL is not executed by this fixture.
+ const db={query:async(query:string,args?:unknown[])=>{if(query.includes("FROM users"))return {rows:[{id:args![0]}]};assert.equal(query,sql);assert.deepEqual(args,["blackroom-primary"]);return {rows:[{data:{version:remote.version,updatedAt:remote.updatedAt,device:{seenAt:remote.device.seenAt,queue:{updatedAt:remote.device.queue.updatedAt,totals:remote.device.queue.totals}}}}]};}};
+ const source=(await readWebRoleSources({pool:db,owner:"owner",configuredOwner:"owner",root,now})).find(s=>s.role==="blackroom-videos")!;
+ assert.equal(source.rows[0].metrics.completed,253);assert.equal(source.rows[0].sourceAt,old);assert.ok(source.diagnostics.includes("SOURCE_STALE"));assert.ok(source.diagnostics.includes("NO_CURRENT_SESSION_PROOF"));assert.ok(!source.diagnostics.includes("SOURCE_INVALID"));assert.ok(!JSON.stringify(source).includes("analytics"));
 });
