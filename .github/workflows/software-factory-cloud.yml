@@ -1,0 +1,84 @@
+name: Software factory (cloud)
+
+# Runs the reviewed Asistente factory in the cloud: no PC required. Every two hours GitHub starts a
+# clean, isolated machine; `software-factory-once` claims at most four stages from the PostgreSQL
+# queue, exits as soon as the queue is idle, and never replays uncertain work. It stays review-only
+# and company-orders-only: no publication, deployment, credentials or KONG changes.
+#
+# Scheduled workflows only run from the default branch, so this file lives on `main` and executes
+# the factory source named by the repository variable FACTORY_SOURCE_REF (the branch in production).
+
+on:
+  schedule:
+    - cron: "17 */2 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: software-factory-cloud
+  cancel-in-progress: false
+
+jobs:
+  factory-once:
+    # Never on forks; only scheduled or manual runs of this repository can see the factory secrets.
+    if: github.repository == 'robertmanzanillag-jpg/blackops-reminder' && vars.SOFTWARE_FACTORY_CLOUD_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    # 30-minute run budget plus startup and bounded settlement/cleanup.
+    timeout-minutes: 45
+    steps:
+      - name: Check out the factory source in production
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ vars.FACTORY_SOURCE_REF }}
+          persist-credentials: false
+
+      - name: Verify the reviewed entrypoint exists
+        run: test -f script/software-factory-once.ts
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install private configuration outside the checkout
+        env:
+          OPENAI_SHARED_CREDIT_CONFIG_JSON: ${{ secrets.OPENAI_SHARED_CREDIT_CONFIG_JSON }}
+          SOFTWARE_FACTORY_OPERATOR_CONFIG_JSON: ${{ secrets.SOFTWARE_FACTORY_OPERATOR_CONFIG_JSON }}
+        run: |
+          set -euo pipefail
+          umask 077
+          dir="$RUNNER_TEMP/factory-config"
+          mkdir -p "$dir"
+          test -n "$OPENAI_SHARED_CREDIT_CONFIG_JSON" && test -n "$SOFTWARE_FACTORY_OPERATOR_CONFIG_JSON"
+          printf '%s' "$OPENAI_SHARED_CREDIT_CONFIG_JSON" > "$dir/shared-credit.json"
+          printf '%s' "$SOFTWARE_FACTORY_OPERATOR_CONFIG_JSON" > "$dir/operator.json"
+          node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFileSync(f, "utf8"))' "$dir/shared-credit.json" "$dir/operator.json"
+          echo "FACTORY_CONFIG_DIR=$dir" >> "$GITHUB_ENV"
+
+      - name: Run the factory once (exits when idle)
+        env:
+          NODE_ENV: production
+          SOFTWARE_FACTORY_ENABLED: "true"
+          SOFTWARE_FACTORY_STORAGE_BACKEND: postgres
+          AGENT_COUNCIL_STORAGE: postgres
+          OPENAI_SHARED_CREDITS_REQUIRED: "true"
+          DATABASE_URL: ${{ secrets.FACTORY_DATABASE_URL }}
+          DEFAULT_USER_ID: ${{ secrets.FACTORY_OWNER_ID }}
+          SOFTWARE_FACTORY_OWNER_ID: ${{ secrets.FACTORY_OWNER_ID }}
+          OPENAI_API_KEY: ${{ secrets.FACTORY_OPENAI_API_KEY }}
+          SOFTWARE_FACTORY_GITHUB_TOKEN: ${{ secrets.SOFTWARE_FACTORY_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          export OPENAI_SHARED_CREDIT_CONFIG="$FACTORY_CONFIG_DIR/shared-credit.json"
+          export SOFTWARE_FACTORY_OPERATOR_CONFIG="$FACTORY_CONFIG_DIR/operator.json"
+          # 32 minutes: the worker's own 30-minute budget, then SIGTERM for bounded settlement.
+          timeout --signal=TERM --kill-after=5m 32m node --import tsx script/software-factory-once.ts
+
+      - name: Remove private configuration
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/factory-config"
