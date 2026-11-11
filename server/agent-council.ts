@@ -94,6 +94,8 @@ export type CouncilDeps = {
   log: (message: string) => void;
   // Real status of every agent (same data its endpoint serves). Optional so tests can stay small.
   collectKongEvidence?: () => Promise<OfficeKongAuditResult["evidence"]>;
+  /** Schedules a KONG-only catch-up after a round that could not verify KONG (default: unref'd setTimeout). */
+  scheduleKongCatchUp?: (run: () => void, ms: number) => void;
   collectStatuses?: (userId: string) => Promise<Record<string, AgentLiveStatus>>;
   // Real documents the academy teaches.
   loadCurriculum?: () => Promise<CurriculumModule[]>;
@@ -116,6 +118,14 @@ export class OrderEvidenceError extends Error {}
 
 // Another instance (Autoscale) that ran a round this recently already did the work.
 export const MIN_CYCLE_GAP_MS = 10 * 60_000;
+/** After a round without verified KONG evidence, retry KONG alone this often, at most this many times. */
+export const KONG_CATCHUP_MS = 2 * 60_000;
+export const KONG_CATCHUP_ATTEMPTS = 3;
+function kongReadCode(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && /^[A-Z_]{2,40}$/.test(code)) return code;
+  return error instanceof Error && /sin respuesta/.test(error.message) ? "TIMEOUT" : "UNAVAILABLE";
+}
 const SKIP = Symbol("skip");
 
 export const KONG_TEAM = ["KONG AI", "Promoters + Mesas", "Venues", "Kong Legal"];
@@ -441,6 +451,50 @@ export function createAgentCouncil(deps: CouncilDeps) {
     return mutate((fresh) => mergeProposalSync(fresh, patches));
   }
 
+  // KONG evidence: retry once inside the call, and report only a reason code.
+  async function readKongEvidence(timeoutMs: number): Promise<{ evidence?: OfficeKongAuditResult["evidence"]; code: string | null }> {
+    const readKong = deps.collectKongEvidence;
+    if (!readKong) return { code: null };
+    let code: string | null = null;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        return { evidence: await withTimeout(readKong(), timeoutMs, "evidencia KONG"), code: null };
+      } catch (error) {
+        code = kongReadCode(error);
+        deps.log(`KONG evidence read failed (attempt ${attempt + 1}/2): ${code}`);
+      }
+    }
+    return { code };
+  }
+
+  // A round that could not verify KONG (cold start, event-loop stall, KONG briefly slow) must not
+  // freeze KONG careers for another 15+ minutes: retry KONG alone a few times, between rounds.
+  function scheduleKongCatchUp(attempt: number) {
+    if (attempt > KONG_CATCHUP_ATTEMPTS) return;
+    const schedule = deps.scheduleKongCatchUp ?? ((run, ms) => { setTimeout(run, ms).unref?.(); });
+    schedule(() => { void runKongCatchUp(attempt).catch(error => deps.log(`KONG catch-up failed: ${error instanceof Error ? error.message.slice(0, 120) : "unknown"}`)); }, KONG_CATCHUP_MS);
+  }
+
+  async function runKongCatchUp(attempt = 1): Promise<CouncilState> {
+    const { evidence, code } = await readKongEvidence(deps.collectTimeoutMs ?? COLLECT_TIMEOUT_MS);
+    const curriculum = deps.loadCurriculum
+      ? await withTimeout(deps.loadCurriculum(), CURRICULUM_TIMEOUT_MS, "academia").catch(() => [] as CurriculumModule[])
+      : [];
+    let verified = false;
+    const written = await mutate((state) => {
+      const now = deps.now();
+      // Another instance (or the round) already verified KONG recently: nothing to catch up.
+      if (state.kongObservedAt && now - Date.parse(state.kongObservedAt) < KONG_CATCHUP_MS) { verified = true; return SKIP; }
+      const kong = advanceKongCompany({ company: state.kongCompany, evidenceAt: state.kongEvidenceAt, evidence, now, curriculum });
+      verified = Boolean(kong.observedAt);
+      const kongRead = { at: new Date(now).toISOString(), ok: verified, code: verified ? null : code ?? "NOT_VERIFIED" };
+      if (!verified) return { ...state, kongRead };
+      return { ...state, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt, kongCollaboration: kong.collaboration, kongRead };
+    });
+    if (!verified) scheduleKongCatchUp(attempt + 1);
+    return written;
+  }
+
   async function runCycleOnce(force: boolean): Promise<CouncilState> {
     const userId = deps.userId();
     const recent = (state: CouncilState) => !force && Boolean(state.lastCycleAt) && deps.now() - toMs(state.lastCycleAt) < MIN_CYCLE_GAP_MS;
@@ -453,24 +507,12 @@ export function createAgentCouncil(deps: CouncilDeps) {
       // KONG is read first and in parallel: reading it after the slow collectors let its 15 s request
       // time out under load, and the failure was swallowed, freezing KONG careers. One retry; the
       // reason is logged (no secrets: OfficeKongError messages are fixed Spanish text).
-      const readKong = deps.collectKongEvidence;
-      const kongPending = readKong
-        ? (async () => {
-            for (let attempt = 0; attempt < 2; attempt++) {
-              try {
-                return await withTimeout(readKong(), collectTimeout, "evidencia KONG");
-              } catch (error) {
-                console.warn(`[agent-council] KONG evidence read failed (attempt ${attempt + 1}/2): ${error instanceof Error ? error.message.slice(0, 160) : "unknown"}`);
-              }
-            }
-            return undefined;
-          })()
-        : Promise.resolve(undefined);
+      const kongPending = readKongEvidence(collectTimeout);
       const collected = await withTimeout(deps.collect(userId), collectTimeout, "lectura de senales");
       const everyone = deps.collectStatuses
         ? await withTimeout(deps.collectStatuses(userId), collectTimeout, "estado de los agentes").catch(() => ({} as Record<string, AgentLiveStatus>))
         : {};
-      const kongEvidence = await kongPending;
+      const { evidence: kongEvidence, code: kongCode } = await kongPending;
       const curriculum = deps.loadCurriculum
         ? await withTimeout(deps.loadCurriculum(), CURRICULUM_TIMEOUT_MS, "academia").catch(() => [] as CurriculumModule[])
         : [];
@@ -491,7 +533,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
         let next = finishCycle(state, { findings, statuses: scored, now, agentNames: AGENT_NAMES });
         next = advanceCompanyCycle(next, statuses, curriculum, now, integrations);
         const kong = advanceKongCompany({ company: state.kongCompany, evidenceAt: state.kongEvidenceAt, evidence: kongEvidence, now, curriculum });
-        next = { ...next, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt, kongCollaboration: kong.collaboration };
+        next = { ...next, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt ?? state.kongObservedAt, kongCollaboration: kong.collaboration };
+        if (deps.collectKongEvidence) next = { ...next, kongRead: { at: new Date(now).toISOString(), ok: Boolean(kong.observedAt), code: kong.observedAt ? null : kongCode ?? "NOT_VERIFIED" } };
         // This completes only a read-only readiness review, never the worker's commercial task.
         next = { ...next, kongSupervision: reviewKongReadiness(state.kongSupervision, everyone, now) };
         next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, Object.fromEntries(Object.entries(statuses).filter(([id]) => !isKongCompanyAgent(id))), now, AGENT_NAMES, unscored), ...deriveSpecialistProposals(next, now), ...next.proposals]) };
@@ -500,6 +543,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
       });
       // Only the instance whose round was actually written talks to the Trust Center, and only after
       // the write: a retried or skipped round never creates approval requests (no duplicates).
+      if (wroteRound && deps.collectKongEvidence && written.kongRead && !written.kongRead.ok) scheduleKongCatchUp(1);
       if (!wroteRound) return written;
       return await syncProposals(written, userId);
     } catch (error) {
@@ -735,7 +779,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
     return state.officeExecution!;
   }
-  return { runCycle, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution };
+  return { runCycle, runKongCatchUp, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {

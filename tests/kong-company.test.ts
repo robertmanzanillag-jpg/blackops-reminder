@@ -204,19 +204,55 @@ test("central departments reporting healthy with report notes are credited; bloc
 test("a transient KONG read failure is retried within the round instead of freezing KONG careers", async () => {
   let raw: string | null = null;
   let reads = 0;
-  const warnings: string[] = [];
-  const originalWarn = console.warn;
-  console.warn = (...args: unknown[]) => { warnings.push(args.map(String).join(" ")); };
-  try {
-    const council = createAgentCouncil({ now: () => NOW, userId: () => "owner", readState: async () => raw, writeState: async (value: string) => { raw = value; }, collect: async () => ({}),
-      collectKongEvidence: async () => { reads++; if (reads === 1) throw new Error("KONG no respondio a tiempo"); return evidence(); },
-      submitProposal: async () => "proposal", getPendingActionStatus: async () => null, fetchLatestRelease: async () => null, log: () => {} });
-    await council.runCycle();
-    const view = await council.view();
-    assert.equal(reads, 2, "one retry");
-    assert.equal(view.kongCompany.careers["kong:venues"].points, 10, "the retried read still credits the round");
-    assert.ok(warnings.some(line => /KONG evidence read failed \(attempt 1\/2\): KONG no respondio a tiempo/.test(line)), "the reason is logged, not swallowed");
-  } finally {
-    console.warn = originalWarn;
-  }
+  const logs: string[] = [];
+  const council = createAgentCouncil({ now: () => NOW, userId: () => "owner", readState: async () => raw, writeState: async (value: string) => { raw = value; }, collect: async () => ({}),
+    collectKongEvidence: async () => { reads++; if (reads === 1) throw Object.assign(new Error("KONG no respondio dentro del tiempo permitido."), { code: "TIMEOUT" }); return evidence(); },
+    submitProposal: async () => "proposal", getPendingActionStatus: async () => null, fetchLatestRelease: async () => null, log: (line: string) => { logs.push(line); } });
+  await council.runCycle();
+  const view = await council.view();
+  assert.equal(reads, 2, "one retry");
+  assert.equal(view.kongCompany.careers["kong:venues"].points, 10, "the retried read still credits the round");
+  assert.ok(logs.some(line => /KONG evidence read failed \(attempt 1\/2\): TIMEOUT/.test(line)), "the reason code is logged, not swallowed");
+  assert.deepEqual({ ok: view.kongRead?.ok, code: view.kongRead?.code }, { ok: true, code: null });
+});
+
+test("a round without verified KONG records the reason and catches KONG up between rounds", async () => {
+  let raw: string | null = null;
+  let now = NOW;
+  let failing = true;
+  const scheduled: Array<{ run: () => void; ms: number }> = [];
+  const council = createAgentCouncil({ now: () => now, userId: () => "owner", readState: async () => raw, writeState: async (value: string) => { raw = value; }, collect: async () => ({}),
+    collectKongEvidence: async () => { if (failing) throw Object.assign(new Error("x"), { code: "CONNECTION_FAILED" }); return evidence(); },
+    scheduleKongCatchUp: (run: () => void, ms: number) => { scheduled.push({ run, ms }); },
+    submitProposal: async () => "proposal", getPendingActionStatus: async () => null, fetchLatestRelease: async () => null, log: () => {} });
+  await council.runCycle();
+  let view = await council.view();
+  assert.deepEqual({ ok: view.kongRead?.ok, code: view.kongRead?.code }, { ok: false, code: "CONNECTION_FAILED" }, "the reason is visible in the state");
+  assert.equal(view.kongCompany.careers["kong:venues"], undefined);
+  assert.equal(scheduled.length, 1, "a KONG-only catch-up is scheduled");
+  assert.equal(scheduled[0].ms, 2 * 60_000);
+  // KONG recovers before the next 15-minute round.
+  failing = false;
+  now += 2 * 60_000;
+  await council.runKongCatchUp(1);
+  view = await council.view();
+  assert.equal(view.kongCompany.careers["kong:venues"].points, 10, "careers advance without waiting for the next round");
+  assert.equal(view.kongRead?.ok, true);
+  assert.ok(view.kongObservedAt);
+  assert.equal(scheduled.length, 1, "no further retries after success");
+});
+
+test("KONG catch-up stops after three failed attempts", async () => {
+  let raw: string | null = null;
+  const scheduled: Array<() => void> = [];
+  const council = createAgentCouncil({ now: () => NOW, userId: () => "owner", readState: async () => raw, writeState: async (value: string) => { raw = value; }, collect: async () => ({}),
+    collectKongEvidence: async () => { throw Object.assign(new Error("x"), { code: "UNAUTHENTICATED" }); },
+    scheduleKongCatchUp: (run: () => void) => { scheduled.push(run); },
+    submitProposal: async () => "proposal", getPendingActionStatus: async () => null, fetchLatestRelease: async () => null, log: () => {} });
+  await council.runCycle();
+  await council.runKongCatchUp(1);
+  await council.runKongCatchUp(2);
+  await council.runKongCatchUp(3);
+  assert.equal(scheduled.length, 3, "round + attempts 1 and 2 schedule; attempt 3 is the last");
+  assert.equal((await council.view()).kongRead?.code, "UNAUTHENTICATED");
 });
