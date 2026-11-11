@@ -73,6 +73,8 @@ export const CITY_NEWS_AGENTS = [
 ];
 
 const MINUTE = 60_000;
+// Tolerated difference between the clock that built an observation and the clock that reads it.
+export const CLOCK_SKEW_MS = 5_000;
 
 export const agentProbes: Record<string, AgentProbe> = {
   // Calendar status calls Zoho when configured, so it is polled gently.
@@ -315,6 +317,14 @@ export function extractActivity(probe: AgentProbe, raw: unknown, now: number = D
   }
 }
 
+function newsNeverRanDetail(body: Json | null): string {
+  const scheduler = asObject(body?.scheduler);
+  if (scheduler?.enabled === false) return "El programador de noticias esta desactivado (CLIPPERS_LOCAL_NEWS_SCHEDULER_ENABLED=false).";
+  if (str(scheduler?.lastError)) return `El programador fallo: ${clip(str(scheduler?.lastError)!, 120)}`;
+  if (scheduler && scheduler.started !== true) return "El programador de noticias no arranco en esta instancia.";
+  return "El agente de noticias no ha corrido nunca.";
+}
+
 function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now: number): AgentLiveStatus {
   if (!result) return { state: "checking", label: "Verificando..." };
   if ("networkError" in result) {
@@ -358,7 +368,7 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       return { state: "error", lifePenaltyExempt: true, label: "Estado desconocido", detail: "La respuesta no trae el formato esperado." };
     }
     case "github": {
-      if (body?.connected !== true) return { state: "needs-setup", label: "GitHub sin conectar" };
+      if (body?.connected !== true) return { state: "needs-setup", label: "GitHub sin conectar", detail: str(body?.reason) || "Configura GITHUB_TOKEN (o GH_TOKEN) o conecta el conector GitHub de Replit." };
       const login = str(asObject(body.user)?.login);
       return { state: "working", label: "Conectado a GitHub", detail: login ? `@${login}` : undefined };
     }
@@ -453,7 +463,12 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
         if(/connector|not connected|credential|oauth|token|quota|rate.?limit|timeout|timed out|network|database|ECONN|ENOTFOUND|HTTP\s*(401|403|429|5\d\d)/i.test(error)) return false;
         return metadata?.failureKind === "agent_output" && ["INVALID_REVIEW","INVALID_RESULT","OUTPUT_VALIDATION_FAILED","TASK_REQUIREMENT_FAILED"].includes(code || "");
       };
-      if (failed > 0) return { state: "error", evidenceId: runEvidence(failedRun!), lifePenaltyExempt:!attributable(failedRun!), label: plural(failed, "corrida fallida", "corridas fallidas"), detail: extra };
+      if (failed > 0) {
+        const blame = attributable(failedRun!);
+        // A connector/infrastructure failure names its cause so Robert can fix the setup, not the agent.
+        const cause = !blame && str(failedRun!.errorMessage) ? `Causa: ${clip(str(failedRun!.errorMessage)!, 90)}` : undefined;
+        return { state: "error", evidenceId: runEvidence(failedRun!), lifePenaltyExempt: !blame, label: plural(failed, "corrida fallida", "corridas fallidas"), detail: [cause, extra].filter(Boolean).join(" · ") || undefined };
+      }
       if (recent.length === 0) return { state: "offline", label: "Sin corridas en 24 h", detail: extra };
       return { state: "working", evidenceId: runEvidence(latest[0]), label: `${plural(recent.length, "corrida", "corridas")} en 24 h`, detail: extra };
     }
@@ -484,7 +499,9 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       if (operations) {
         const worker = asObject(operations.worker);
         const age = now - Date.parse(str(operations.checkedAt) || "");
-        if (!Number.isFinite(age) || age < 0 || age > 90_000) return { state: "needs-setup", label: "Evidencia desactualizada" };
+        // The observation is built a few ms after the reader took its clock (and browser/server clocks
+        // differ slightly): a small negative age is the same fresh observation, not stale evidence.
+        if (!Number.isFinite(age) || age < -CLOCK_SKEW_MS || age > 90_000) return { state: "needs-setup", label: "Evidencia desactualizada" };
         if (operations.state === "paused") return { state: "checking", label: "BlackRoom pausado", detail: "Se respeta la pausa; la supervision no inicia publicaciones." };
         if (worker?.online !== true) return { state: "needs-setup", label: "Publicador desconectado" };
         if (operations.state === "blocked") return { state: "needs-setup", label: "BlackRoom requiere atencion" };
@@ -515,7 +532,7 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
     case "city-news": {
       const last = Date.parse(str(body?.lastRunAt) || "");
       const lane = asObject(asObject(body?.lanes)?.[probe.lane || ""]);
-      if (body?.bootstrapped === false) return { state: "needs-setup", label: "Sin configurar", detail: "El agente de noticias no ha corrido nunca." };
+      if (body?.bootstrapped === false) return { state: "needs-setup", label: "Sin configurar", detail: newsNeverRanDetail(body) };
       if (!lane) return { state: "error", label: "Ciudad sin datos", detail: "El estado de noticias no trae esta ciudad." };
       if (!Number.isFinite(last)) return { state: "needs-setup", label: "Sin rondas todavia" };
       // A quiet city is not a failure: the desk is working if its rounds are fresh.
@@ -526,7 +543,7 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
     }
     case "news": {
       const last = Date.parse(str(body?.lastRunAt) || "");
-      if (body?.bootstrapped === false) return { state: "needs-setup", label: "Sin configurar", detail: "El agente de noticias no ha corrido nunca." };
+      if (body?.bootstrapped === false) return { state: "needs-setup", label: "Sin configurar", detail: newsNeverRanDetail(body) };
       if (!Number.isFinite(last)) return { state: "needs-setup", label: "Sin rondas todavia" };
       if (now - last > 26 * 60 * 60_000) return { state: "needs-setup", label: "Sin rondas en 24 h" };
       return { state: "working", label: "Publicando noticias" };

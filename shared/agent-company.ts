@@ -212,6 +212,16 @@ const DELTA: Record<AgentLiveState, { points: number; battery: number }> = {
 // A scheduled turn that passed without any run: smaller than a recorded failure, scored once per turn.
 const MISSED_TURN_DELTA = { points: -2, battery: -3 };
 
+// An agent blocked only by missing setup (credentials, connectors) or by an infrastructure
+// failure that is not its fault slowly recovers toward a neutral battery, so that a legacy low
+// battery does not leave it one mistake away from being fired the day its setup arrives.
+// Never above neutral (no points, no free credit) and never downward.
+export const SETUP_NEUTRAL_BATTERY = 50;
+export const SETUP_RECOVERY_PER_CYCLE = 2;
+function blockedOnlyBySetup(status: { state: AgentLiveState; lifePenaltyExempt?: boolean }): boolean {
+  return status.state === "needs-setup" || (status.state === "error" && status.lifePenaltyExempt === true);
+}
+
 const NICKNAMES = ["Vale", "Teo", "Luna", "Bruno", "Mia", "Leo", "Sofi", "Nico", "Ari", "Dani", "Gabo", "Emi", "Rafa", "Isa", "Tomi", "Cami", "Santi", "Paz", "Joaco", "Abril", "Iker", "Ema", "Thiago", "Zoe"];
 const TRAITS = ["metodico", "curioso", "rapido", "detallista", "creativo", "competitivo", "calmado", "estratega", "directo", "obsesivo con la calidad", "colaborador", "esceptico"];
 const MOTTOS = [
@@ -352,6 +362,11 @@ export function advanceCompany(
     // Any reconciliation marker freezes career-wide scoring pending a separate,
     // explicitly evidenced qualification process. Never silently repair its life.
     if(career.scoreReconciliation !== undefined){careers[agentId]=career;continue;}
+    if (blockedOnlyBySetup(status) && !career.inTrainingUntilGeneration && career.battery < SETUP_NEUTRAL_BATTERY) {
+      career.battery = Math.min(SETUP_NEUTRAL_BATTERY, career.battery + SETUP_RECOVERY_PER_CYCLE);
+      careers[agentId] = career;
+      continue;
+    }
     const evidence=status.evidenceId?.trim();
     if(career.evaluatedEvidenceIds !== undefined && (!Array.isArray(career.evaluatedEvidenceIds) || career.evaluatedEvidenceIds.some(id=>typeof id !== "string"))) { careers[agentId]=career;continue; }
     if (!evidence || evidence === career.lastEvidenceId || career.evaluatedEvidenceIds?.includes(evidence)) { careers[agentId] = career; continue; }
