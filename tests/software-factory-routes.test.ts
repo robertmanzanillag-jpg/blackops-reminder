@@ -101,3 +101,52 @@ test("factory HTTP requires real owner and same origin; forbids policy/evidence 
   assert.equal(failure.status, 503);
   assert.doesNotMatch(await failure.text(), /private database failure/);
 });
+
+test("review-only proposal readiness is reported separately and never relaxes publication readiness", async t => {
+  const saved = { ...process.env };
+  Object.assign(process.env, { NODE_ENV: "test", DEFAULT_USER_ID: "factory-owner", SESSION_SECRET: "factory-fixture-secret", ALLOW_DEV_USER_FALLBACK: "true" });
+  t.after(() => { for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key]; Object.assign(process.env, saved); });
+  // Mirrors a review-only worker: release stages are reported false by design.
+  const workers = [{ id: "cloud", last_seen_at: new Date().toISOString(), capabilities: { discover: true, build: true, simulate: true, review: true, deploy: false, verify: false, rollback: false, evaluate: false } }];
+  let projects: any[] = [{ id: "asistente", repo: ASISTENTE_REPOSITORY, testCommand: "", buildCommand: "", rollbackCommand: "", stagingUrl: "", productionUrl: "", healthUrl: "", journeys: ["office-session-login", "office-company-navigation"], automaticRelease: false, providerSupportsRelease: false, providerSupportsRollback: false, rehearsalRunIds: [] }];
+  const jobs = [
+    { id: "b1", key: "b1", projectId: "asistente", ownerKey: "k", kind: "build", status: "blocked", createdAt: "2026-11-10T00:00:00Z", month: "2026-11", reservedCents: 10, payload: {}, result: { costCents: 0, reason: "FACTORY_REMOTE_PREFLIGHT_BLOCKED" } },
+    { id: "b2", key: "b2", projectId: "asistente", ownerKey: "k", kind: "build", status: "failed", createdAt: "2026-11-10T00:00:00Z", month: "2026-11", reservedCents: 10, payload: {}, result: { costCents: 0, reason: "free text <script> with spaces" } },
+    { id: "b3", key: "b3", projectId: "asistente", ownerKey: "k", kind: "build", status: "blocked", createdAt: "2026-11-10T00:00:00Z", month: "2026-11", reservedCents: 10, payload: {}, result: { costCents: 0, reason: "project_commands_missing,journeys_missing_or_duplicate" } },
+    { id: "b4", key: "b4", projectId: "asistente", ownerKey: "k", kind: "build", status: "failed", createdAt: "2026-11-10T00:00:00Z", month: "2026-11", reservedCents: 10, payload: {}, result: { costCents: 0, reason: "FACTORY_REMOTE_BUILD_FAILED:PROVIDER_OUTPUT_LIMIT" } },
+    { id: "b5", key: "b5", projectId: "asistente", ownerKey: "k", kind: "build", status: "blocked", createdAt: "2026-11-10T00:00:00Z", month: "2026-11", reservedCents: 10, payload: {}, result: { costCents: 0, reason: "DO-NOT-EXPOSE" } },
+  ];
+  const app = express(); app.use(express.json());
+  registerSoftwareFactoryRoutes(app, { store: {
+    status: async () => ({ paused: false, month: "2026-11", fixedCents: 0, spentCents: 0, reservedCents: 0, limitCents: 10000, configured: true, workers }),
+    list: async () => jobs, projects: async () => projects,
+    setPaused: async () => undefined, initializeMonth: async () => undefined, saveProject: async (_o: string, c: any) => c,
+  } as any });
+  const server = app.listen(0, "127.0.0.1"); await new Promise<void>(resolve => server.once("listening", resolve));
+  t.after(() => new Promise<void>(resolve => server.close(() => resolve())));
+  const base = `http://127.0.0.1:${(server.address() as any).port}`;
+  const read = async () => (await fetch(`${base}/api/software-factory`, { headers: { cookie: `blackops.uid=${createSignedLocalAuthCookieValue("factory-owner")}` } })).json();
+  let view = await read();
+  assert.equal(view.readiness, "blocked");
+  assert.ok(view.blockers.includes("Faltan ejecutores configurados para completar todas las etapas."));
+  assert.equal(view.proposal.mode, "review-only");
+  assert.equal(view.proposal.readiness, "blocked");
+  assert.deepEqual(view.projects[0].proposalReadiness, ["project_commands_missing"]);
+  assert.equal(view.jobs.find((j: any) => j.id === "b1").reasonCode, "FACTORY_REMOTE_PREFLIGHT_BLOCKED");
+  assert.equal(view.jobs.find((j: any) => j.id === "b2").reasonCode, undefined);
+  assert.equal(view.jobs.find((j: any) => j.id === "b3").reasonCode, "project_commands_missing,journeys_missing_or_duplicate");
+  assert.equal(view.jobs.find((j: any) => j.id === "b4").reasonCode, "FACTORY_REMOTE_BUILD_FAILED:PROVIDER_OUTPUT_LIMIT");
+  assert.equal(view.jobs.find((j: any) => j.id === "b5").reasonCode, undefined);
+  projects = [{ ...projects[0], testCommand: "node --import tsx --test tests/office-role-work.test.ts", buildCommand: "npm run build" }];
+  view = await read();
+  assert.equal(view.proposal.readiness, "available");
+  assert.deepEqual(view.proposal.blockers, []);
+  // Publication stays blocked: release stages, environment and provider proof are still missing.
+  assert.equal(view.readiness, "blocked");
+  assert.ok(view.blockers.includes("La publicación automática requiere ensayos y recuperación verificados de una aplicación."));
+  assert.ok(view.projects[0].readiness.includes("isolated_environment_missing"));
+  assert.equal(view.projects[0].automaticRelease, false);
+  workers[0].capabilities.review = false;
+  view = await read();
+  assert.ok(view.proposal.blockers.includes("Faltan ejecutores de propuestas (descubrir, construir, simular y revisar)."));
+});

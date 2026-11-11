@@ -123,3 +123,80 @@ test("declared central roles without a verified result stay unscored", () => {
     assert.equal(result.company.careers["kong:venues"], undefined);
   }
 });
+
+// Production shape since 2026-11-06: every round closes with a coverage incident, so KONG reports "attention".
+function warned(overrides: Record<string, unknown> = {}) {
+  const snapshot = evidence();
+  snapshot.cities[0].categories[0] = { ...snapshot.cities[0].categories[0], state: "attention", issues: ["Incidencia registrada. Revisa el detalle en KONG."], recordedFailure: false, attemptsSinceSuccess: 0, ...overrides };
+  return snapshot;
+}
+const CLUBS = "kong-city:miami:clubs";
+
+test("a completed round flagged as attention for coverage incidents is credited once", () => {
+  const first = advanceKongCompany({ ...start(), evidence: warned() });
+  assert.equal(first.company.careers[CLUBS].points, 10);
+  assert.equal(first.evidenceAt[CLUBS], at(-1));
+  const again = advanceKongCompany({ ...start(), evidence: warned(), company: first.company, evidenceAt: first.evidenceAt });
+  assert.deepEqual(again.company, first.company);
+  // Even when the success stamp is written a few ms after the completion stamp (same round).
+  const next = advanceKongCompany({ ...start(), evidence: warned({ lastRunAt: at(0), lastSuccessAt: new Date(NOW + 5).toISOString(), lastStartedAt: at(-0.5) }), company: first.company, evidenceAt: first.evidenceAt, now: NOW + 10 });
+  assert.equal(next.company.careers[CLUBS].points, 20);
+});
+
+test("a partial round limited by HTTP 429 is credited when it completed, and a stamped error on the same round does not drain", () => {
+  const limited = advanceKongCompany({ ...start(), evidence: warned({ issues: ["Incidencia registrada. Revisa el detalle en KONG.", "La fuente limitó las consultas (HTTP 429)."] }) });
+  assert.equal(limited.company.careers[CLUBS].points, 10);
+  const stamped = advanceKongCompany({ ...start(), evidence: warned({ recordedFailure: true }) });
+  assert.equal(stamped.company.careers[CLUBS].points, 10);
+  assert.equal(stamped.company.careers[CLUBS].battery, 86);
+});
+
+test("a real failure without a new success drains battery once", () => {
+  const base = advanceKongCompany({ ...start(), evidence: warned() });
+  for (const failure of [{ recordedFailure: true }, { recordedFailure: false, attemptsSinceSuccess: 1 }]) {
+    const failed = warned({ ...failure, lastStartedAt: at(-0.5), lastRunAt: at(0), lastSuccessAt: at(-1 - 60) });
+    const first = advanceKongCompany({ ...start(), evidence: failed, company: base.company, evidenceAt: { [CLUBS]: at(-61) } });
+    assert.equal(first.company.careers[CLUBS].battery, base.company.careers[CLUBS].battery - 10);
+    assert.equal(first.company.careers[CLUBS].points, 5);
+    const again = advanceKongCompany({ ...start(), evidence: failed, company: first.company, evidenceAt: first.evidenceAt });
+    assert.deepEqual(again.company, first.company);
+  }
+  // A closed attempt with no success, no error and no pending attempts proves nothing either way.
+  const unclear = advanceKongCompany({ ...start(), evidence: warned({ lastRunAt: at(0), lastSuccessAt: at(-61), lastStartedAt: at(-0.5) }), company: base.company, evidenceAt: { [CLUBS]: at(-61) } });
+  assert.deepEqual(unclear.company, base.company);
+});
+
+test("a missed turn is penalized once per nextRunAt, and a later real run still earns credit", () => {
+  const base = advanceKongCompany({ ...start(), evidence: warned() });
+  const missed = warned({ lastStartedAt: at(-300), lastRunAt: at(-299), lastSuccessAt: at(-299), nextRunAt: at(-239) });
+  const ledger = { [CLUBS]: at(-299) };
+  const first = advanceKongCompany({ ...start(), evidence: missed, company: base.company, evidenceAt: ledger });
+  assert.equal(first.company.careers[CLUBS].points, 8);
+  assert.equal(first.company.careers[CLUBS].battery, base.company.careers[CLUBS].battery - 3);
+  assert.equal(first.evidenceAt[CLUBS], at(-239));
+  const again = advanceKongCompany({ ...start(), evidence: missed, company: first.company, evidenceAt: first.evidenceAt });
+  assert.deepEqual(again.company, first.company);
+  // Late by less than three hours is not a missed turn.
+  const late = advanceKongCompany({ ...start(), evidence: warned({ lastStartedAt: at(-200), lastRunAt: at(-199), lastSuccessAt: at(-199), nextRunAt: at(-139) }), company: base.company, evidenceAt: { [CLUBS]: at(-199) } });
+  assert.deepEqual(late.company, base.company);
+  const recovered = advanceKongCompany({ ...start(), evidence: warned({ lastStartedAt: at(-1), lastRunAt: at(-0.5), lastSuccessAt: at(-0.5), nextRunAt: at(59) }), company: first.company, evidenceAt: first.evidenceAt });
+  assert.equal(recovered.company.careers[CLUBS].points, 18);
+});
+
+test("a stale snapshot credits and penalizes nothing, including warned, failed or missed jobs", () => {
+  const base = advanceKongCompany({ ...start(), evidence: warned() });
+  for (const snapshot of [warned({ lastRunAt: at(0), lastSuccessAt: at(0) }), warned({ recordedFailure: true, lastRunAt: at(0), lastSuccessAt: at(-61) }), warned({ nextRunAt: at(-239), lastRunAt: at(-299), lastSuccessAt: at(-299), lastStartedAt: at(-300) })]) {
+    const result = advanceKongCompany({ company: base.company, evidenceAt: base.evidenceAt, evidence: snapshot, now: NOW + 6 * 60000 });
+    assert.deepEqual(result.company, base.company);
+    assert.deepEqual(result.evidenceAt, base.evidenceAt);
+  }
+});
+
+test("central departments reporting healthy with report notes are credited; blockers and attention are not", () => {
+  const notes = evidence(); notes.agents[0].issues = ["Cobertura parcial"];
+  assert.equal(advanceKongCompany({ ...start(), evidence: notes }).company.careers["kong:venues"].points, 10);
+  const blocked = evidence(); blocked.agents[0].blocker = "Falta credencial";
+  assert.equal(advanceKongCompany({ ...start(), evidence: blocked }).company.careers["kong:venues"], undefined);
+  const attention = evidence(); attention.agents[0].state = "attention";
+  assert.equal(advanceKongCompany({ ...start(), evidence: attention }).company.careers["kong:venues"], undefined);
+});

@@ -91,3 +91,19 @@ test("the scheduler needs an opted-in owner and a recent KONG probe while normal
   assert.deepEqual(admissions, ["configured-owner"]);
   assert.equal(claims, 6);
 });
+
+test("scheduled cloud executor between runs stays blocked but states its cadence honestly", async () => {
+  const capabilities = { claude: probe(), kong: probe() };
+  const cloud = (ageMs: number): OfficeWorkerHeartbeat => ({ workerId: "office-cloud-0f8e2a8c-1d2b-4c3d-9e4f-5a6b7c8d9e0f", lastSeenAt: new Date(now.getTime() - ageMs).toISOString(), capabilities });
+  const between = await probeOfficeWorker({ getHeartbeat: async () => cloud(5 * 60_000) }, () => now);
+  assert.equal(between.status, "blocked");
+  assert.equal(between.capabilities.claude.status, "blocked");
+  assert.match(between.reason, /programado.*hace 5 min.*proxima ejecucion/);
+  const running = await probeOfficeWorker({ getHeartbeat: async () => cloud(10_000) }, () => now);
+  assert.equal(running.status, "ready");
+  for (const record of [cloud(30 * 60_000 + 1), { ...cloud(5 * 60_000), workerId: "office-pc" }]) {
+    const stale = await probeOfficeWorker({ getHeartbeat: async () => record }, () => now);
+    assert.equal(stale.status, "blocked");
+    assert.match(stale.reason, /No hay una señal reciente/);
+  }
+});

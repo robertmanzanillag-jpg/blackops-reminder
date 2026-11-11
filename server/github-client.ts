@@ -1,6 +1,6 @@
 // GitHub integration using Replit Connectors
 import { Octokit } from '@octokit/rest';
-import { hasRealValue } from "./ceo-doctor-cli";
+import { diagnoseGitHubTokenEnv, gitHubSetupReason } from "./github-token-diagnosis";
 
 let connectionSettings: any;
 
@@ -22,10 +22,7 @@ const BLOCKED_GITHUB_FILE_NAMES = new Set([
 ]);
 
 export function getConfiguredGitHubToken(env: NodeJS.ProcessEnv = process.env): string | null {
-  return [env.GITHUB_TOKEN, env.GH_TOKEN]
-    .filter(hasRealValue)
-    .map((token) => token.trim())
-    .find((token) => /^(ghp|github_pat|gho|ghu|ghs|ghr)_[A-Za-z0-9_]+$/.test(token)) || null;
+  return diagnoseGitHubTokenEnv(env).token;
 }
 
 function githubInputError(message: string): Error & { status?: number; statusCode?: number } {
@@ -727,6 +724,24 @@ export async function getAuthenticatedUser() {
     avatar_url: data.avatar_url,
     html_url: data.html_url
   };
+}
+
+// Same check as isGitHubConnected, with a credential-free reason when it fails.
+export async function diagnoseGitHubConnection(): Promise<{ connected: boolean; reason?: string }> {
+  const env = diagnoseGitHubTokenEnv();
+  let client: Octokit;
+  try {
+    client = await getGitHubClient();
+  } catch {
+    return { connected: false, reason: gitHubSetupReason(env, { stage: "connector" }) };
+  }
+  try {
+    await client.users.getAuthenticated();
+    return { connected: true };
+  } catch (error) {
+    const status = typeof (error as { status?: unknown })?.status === "number" ? (error as { status: number }).status : undefined;
+    return { connected: false, reason: gitHubSetupReason(env, { stage: "api", status }) };
+  }
 }
 
 // Check if GitHub is connected

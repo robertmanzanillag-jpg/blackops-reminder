@@ -46,6 +46,7 @@ import {
   type CouncilState,
 } from "@shared/agent-council";
 import { CITY_NEWS_AGENTS, agentProbes, summarizeProbe, type AgentLiveStatus } from "@shared/agent-live-status";
+import { withUptimeHealth } from "@shared/app-health-uptime";
 import {
   INTEGRATION_LABEL,
   effectiveIntegrations,
@@ -823,7 +824,10 @@ async function collectReal(userId: string): Promise<Omit<CouncilSignals, "now">>
   // Database rows carry Date objects; the rules read JSON, like the HTTP endpoints do.
   const plain = <T,>(value: T): T => (value === undefined ? value : JSON.parse(JSON.stringify(value)));
   const docs = await safe("skills", () => readSkillDocs());
-  const projects = await safe("app projects", () => storage.getAppProjects(userId));
+  const storedProjects = await safe("app projects", () => storage.getAppProjects(userId));
+  // Apps never scanned take the uptime monitor's fresh result for the same host/repo (read-only).
+  const monitors = storedProjects?.length ? await safe("uptime monitor", () => storage.getMonitoredProjects(userId)) : undefined;
+  const projects = storedProjects && monitors ? withUptimeHealth(storedProjects, monitors) : storedProjects;
   return {
     clippers: await safe("clippers", () => clippersRuntime.getClipperWorkerRuntimeStatus()),
     dropshipping: await safe("dropshipping", () => dropshipping.getDropshippingLaunchReadiness()),
@@ -852,10 +856,12 @@ async function cachedSlowRead(key: string, work: () => Promise<unknown>): Promis
 }
 
 async function collectStatusesReal(userId: string): Promise<Record<string, AgentLiveStatus>> {
-  const now = Date.now();
   const statuses: Record<string, AgentLiveStatus> = {};
+  // Each read is judged with the clock at the moment its data arrived. A clock taken before the
+  // reads made fresh observations (e.g. BlackRoom's checkedAt) look like they came from the future,
+  // which the probe treated as stale evidence on every round.
   const summarize = (agentId: string, body: unknown) => {
-    statuses[agentId] = summarizeProbe(agentProbes[agentId], { ok: true, status: 200, body: JSON.parse(JSON.stringify(body ?? null)) }, now);
+    statuses[agentId] = summarizeProbe(agentProbes[agentId], { ok: true, status: 200, body: JSON.parse(JSON.stringify(body ?? null)) }, Date.now());
   };
   const read = async (agentIds: string[], work: () => Promise<unknown>) => {
     try {
@@ -868,17 +874,38 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
   };
   const hasValue = (value: string | undefined) => Boolean(value && value.trim() && !/^(changeme|placeholder|xxx)/i.test(value.trim()));
   await Promise.all([
-    read(["assistant"], async () => ({ google: await (await import("./google-calendar")).isGoogleCalendarConnected(), zoho: false })),
+    // Same sources as /api/calendar/status: Google connector or Zoho (it was hardcoded to false).
+    read(["assistant"], async () => {
+      const [google, zoho] = await Promise.all([
+        import("./google-calendar").then((module) => module.isGoogleCalendarConnected()).catch(() => false),
+        import("./zoho-calendar").then((module) => module.checkZohoConnection()).then((status) => status.connected === true).catch(() => false),
+      ]);
+      return { google, zoho };
+    }),
     read(["code", "github"], async () => {
       const gh = await import("./github-client");
-      const connected = await gh.isGitHubConnected();
-      return connected ? { connected: true, user: await gh.getAuthenticatedUser() } : { connected: false };
+      const diagnosis = await gh.diagnoseGitHubConnection();
+      return diagnosis.connected ? { connected: true, user: await gh.getAuthenticatedUser() } : { connected: false, reason: diagnosis.reason };
     }),
-    read(["claude-reviewer"], async () => ({ workerEnabled: process.env.OFFICE_WORKER_ENABLED !== "false" })),
+    // Same evidence as /api/agents-office/connections: in the cloud runtime the worker heartbeat
+    // (cheap database read). Without worker/claude fields the probe could never report ready.
+    read(["claude-reviewer"], async () => {
+      const workerEnabled = process.env.OFFICE_WORKER_ENABLED !== "false";
+      if (!workerEnabled) return { workerEnabled };
+      const { usesOfficeCloudRuntime } = await import("./office-runtime");
+      if (!usesOfficeCloudRuntime()) return { workerEnabled };
+      const { capabilities, ...worker } = await (await import("./office-cloud-runtime")).probeOfficeWorker();
+      return { workerEnabled, worker, claude: capabilities?.claude };
+    }),
     read(["ceo"], async () => {
       const { storage } = await import("./storage");
       const config = await storage.getTelegramConfig(userId);
-      const checks = { telegram: hasValue(process.env.TELEGRAM_BOT_TOKEN) && Boolean(config?.enabled && config.chatId), ai: hasValue(process.env.AI_INTEGRATIONS_GEMINI_API_KEY) || hasValue(process.env.OPENAI_API_KEY) };
+      // Named per missing piece so the office says exactly what to configure.
+      const checks = {
+        TELEGRAM_BOT_TOKEN: hasValue(process.env.TELEGRAM_BOT_TOKEN),
+        telegram_chat_activo: Boolean(config?.enabled && config.chatId),
+        AI_INTEGRATIONS_GEMINI_API_KEY_u_OPENAI_API_KEY: hasValue(process.env.AI_INTEGRATIONS_GEMINI_API_KEY) || hasValue(process.env.OPENAI_API_KEY),
+      };
       return { ready: Object.values(checks).every(Boolean), checks };
     }),
     read(["revenue"], async () => {
