@@ -121,6 +121,7 @@ export const MIN_CYCLE_GAP_MS = 10 * 60_000;
 /** After a round without verified KONG evidence, retry KONG alone this often, at most this many times. */
 export const KONG_CATCHUP_MS = 2 * 60_000;
 export const KONG_CATCHUP_ATTEMPTS = 3;
+export const KONG_REREAD_AFTER_MS = 60_000;
 function kongReadCode(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
   if (typeof code === "string" && /^[A-Z_]{2,40}$/.test(code)) return code;
@@ -452,27 +453,29 @@ export function createAgentCouncil(deps: CouncilDeps) {
   }
 
   // KONG evidence: retry once inside the call, and report only a reason code.
-  async function readKongEvidence(timeoutMs: number): Promise<{ evidence?: OfficeKongAuditResult["evidence"]; code: string | null }> {
+  async function readKongEvidence(timeoutMs: number, attempts = 2): Promise<{ evidence?: OfficeKongAuditResult["evidence"]; code: string | null; readAt: number }> {
     const readKong = deps.collectKongEvidence;
-    if (!readKong) return { code: null };
+    if (!readKong) return { code: null, readAt: deps.now() };
     let code: string | null = null;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < attempts; attempt++) {
       try {
-        return { evidence: await withTimeout(readKong(), timeoutMs, "evidencia KONG"), code: null };
+        return { evidence: await withTimeout(readKong(), timeoutMs, "evidencia KONG"), code: null, readAt: deps.now() };
       } catch (error) {
         code = kongReadCode(error);
-        deps.log(`KONG evidence read failed (attempt ${attempt + 1}/2): ${code}`);
+        deps.log(`KONG evidence read failed (attempt ${attempt + 1}/${attempts}): ${code}`);
       }
     }
-    return { code };
+    return { code, readAt: deps.now() };
   }
 
   // A round that could not verify KONG (cold start, event-loop stall, KONG briefly slow) must not
   // freeze KONG careers for another 15+ minutes: retry KONG alone a few times, between rounds.
+  let kongCatchUpPending = false;
   function scheduleKongCatchUp(attempt: number) {
-    if (attempt > KONG_CATCHUP_ATTEMPTS) return;
+    if (attempt > KONG_CATCHUP_ATTEMPTS || (attempt === 1 && kongCatchUpPending)) return;
+    kongCatchUpPending = true;
     const schedule = deps.scheduleKongCatchUp ?? ((run, ms) => { setTimeout(run, ms).unref?.(); });
-    schedule(() => { void runKongCatchUp(attempt).catch(error => deps.log(`KONG catch-up failed: ${error instanceof Error ? error.message.slice(0, 120) : "unknown"}`)); }, KONG_CATCHUP_MS);
+    schedule(() => { void runKongCatchUp(attempt).catch(error => { kongCatchUpPending = false; deps.log(`KONG catch-up failed: ${error instanceof Error ? error.message.slice(0, 120) : "unknown"}`); }); }, KONG_CATCHUP_MS);
   }
 
   async function runKongCatchUp(attempt = 1): Promise<CouncilState> {
@@ -491,7 +494,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
       if (!verified) return { ...state, kongRead };
       return { ...state, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt, kongCollaboration: kong.collaboration, kongRead };
     });
-    if (!verified) scheduleKongCatchUp(attempt + 1);
+    if (verified || attempt >= KONG_CATCHUP_ATTEMPTS) kongCatchUpPending = false;
+    else scheduleKongCatchUp(attempt + 1);
     return written;
   }
 
@@ -512,10 +516,17 @@ export function createAgentCouncil(deps: CouncilDeps) {
       const everyone = deps.collectStatuses
         ? await withTimeout(deps.collectStatuses(userId), collectTimeout, "estado de los agentes").catch(() => ({} as Record<string, AgentLiveStatus>))
         : {};
-      const { evidence: kongEvidence, code: kongCode } = await kongPending;
+      let { evidence: kongEvidence, code: kongCode, readAt: kongReadAt } = await kongPending;
       const curriculum = deps.loadCurriculum
         ? await withTimeout(deps.loadCurriculum(), CURRICULUM_TIMEOUT_MS, "academia").catch(() => [] as CurriculumModule[])
         : [];
+      // Freshness is scored when the round is written, after the slow collectors. A snapshot read
+      // minutes earlier (and already up to 5 min old at KONG) would be judged stale even though the
+      // read worked, so re-read KONG right before scoring when the first read is no longer fresh.
+      if (deps.collectKongEvidence && deps.now() - kongReadAt > KONG_REREAD_AFTER_MS) {
+        const again = await readKongEvidence(collectTimeout, 1);
+        if (again.evidence || !kongEvidence) ({ evidence: kongEvidence, code: kongCode } = again);
+      }
       let wroteRound = false;
       const written = await mutate(async (state) => {
         wroteRound = false;

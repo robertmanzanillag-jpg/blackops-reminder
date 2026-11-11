@@ -256,3 +256,26 @@ test("KONG catch-up stops after three failed attempts", async () => {
   assert.equal(scheduled.length, 3, "round + attempts 1 and 2 schedule; attempt 3 is the last");
   assert.equal((await council.view()).kongRead?.code, "UNAUTHENTICATED");
 });
+
+test("a KONG snapshot read before slow collectors is re-read before scoring instead of expiring", async () => {
+  let raw: string | null = null;
+  let now = NOW;
+  let reads = 0;
+  const council = createAgentCouncil({ now: () => now, userId: () => "owner", readState: async () => raw, writeState: async (value: string) => { raw = value; },
+    // A cold start: the other collectors take 5.5 minutes, longer than KONG's 5-minute freshness window.
+    collect: async () => { await new Promise(resolve => setTimeout(resolve, 5)); now += 5.5 * 60_000; return {}; },
+    collectKongEvidence: async () => {
+      reads++;
+      const snapshot = evidence();
+      const shift = (value: string | null) => value && new Date(Date.parse(value) + (now - NOW)).toISOString();
+      snapshot.generatedAt = shift(snapshot.generatedAt)!; snapshot.citySnapshotCheckedAt = shift(snapshot.citySnapshotCheckedAt)!;
+      return snapshot;
+    },
+    scheduleKongCatchUp: () => { throw new Error("no catch-up needed"); },
+    submitProposal: async () => "proposal", getPendingActionStatus: async () => null, fetchLatestRelease: async () => null, log: () => {} });
+  await council.runCycle();
+  const view = await council.view();
+  assert.equal(reads, 2, "re-read once right before scoring");
+  assert.equal(view.kongRead?.ok, true);
+  assert.equal(view.kongCompany.careers["kong:venues"].points, 10);
+});
