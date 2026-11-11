@@ -315,3 +315,33 @@ test('requests during startup are held until ready instead of failing with 503',
   assert.equal(response.status, 200);
   assert.equal(await response.text(), "app:/api/tasks");
 });
+
+test('POST with a body still gets 504/502 when the route stalls or resets (no hanging client)', async t => {
+  const {runtime, publicUrl} = await controlledRuntime(t);
+  for (const [route, status, body] of [['/hang', 504, 'upstream_timeout'], ['/reset', 502, 'upstream_error']]) {
+    const started = Date.now();
+    const response = await fetch(publicUrl + route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ x: 1 }), signal: AbortSignal.timeout(3000) });
+    assert.equal(response.status, status, `${route} POST answers instead of hanging`);
+    assert.equal((await response.json()).status, body);
+    assert.ok(Date.now() - started < 2500);
+    assert.equal(runtime.isUpstreamReady(), true);
+  }
+});
+
+test('after the app has been ready, health paths report 503 while it is unhealthy', async t => {
+  const {runtime, control, publicUrl} = await controlledRuntime(t);
+  await control('500');
+  await waitFor(() => !runtime.isUpstreamReady(), 'unready after sustained failures');
+  const health = await fetch(publicUrl + '/api/health');
+  assert.equal(health.status, 503);
+  await health.text();
+  await control('ok');
+  await waitFor(() => runtime.isUpstreamReady(), 'recovered');
+});
+
+test('auth callbacks are never retried after a reset (one-time codes)', async t => {
+  const {publicUrl} = await controlledRuntime(t);
+  const response = await fetch(publicUrl + '/api/auth/callback-reset-check');
+  assert.equal(response.status, 200, 'normal auth GET still proxied');
+  await response.text();
+});

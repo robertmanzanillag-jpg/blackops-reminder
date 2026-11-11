@@ -38,7 +38,7 @@ export function kongCityJobOutcome(job: KongCityJob | undefined, snapshotTime: n
   const attemptsPending = typeof job.attemptsSinceSuccess === "number" && job.attemptsSinceSuccess > 0;
   // A closed attempt after the last success, with a recorded error or unresolved attempts, is a failure.
   if (completed !== null && (success === null || completed - success > SAME_ROUND_TOLERANCE_MS) && (started === null || started <= completed) &&
-    (job.recordedFailure === true || attemptsPending)) return { failedAt: job.lastRunAt! };
+    (job.recordedFailure === true || attemptsPending) && now - completed <= MAX_CREDIT_AGE_MS) return { failedAt: job.lastRunAt! };
   const outcome: KongCityJobOutcome = {};
   if (success !== null && completed !== null && success <= completed + SAME_ROUND_TOLERANCE_MS && now - success <= MAX_CREDIT_AGE_MS) {
     outcome.completedAt = job.lastSuccessAt!;

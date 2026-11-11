@@ -151,7 +151,7 @@ export async function startReplitFastStart(options = {}) {
       upstreamResponse.pipe(res);
       upstreamResponse.on("aborted", () => res.destroy());
     });
-    const clientGone = () => !res.writableFinished && (res.destroyed || req.destroyed);
+    const clientGone = () => !res.writableFinished && (res.destroyed || Boolean(req.socket?.destroyed));
     const onClientClose = () => {
       if (!res.writableFinished) upstream.destroy();
     };
@@ -162,7 +162,8 @@ export async function startReplitFastStart(options = {}) {
       // A client that went away is not an upstream failure.
       if (clientGone()) return;
       if (res.headersSent) return res.destroy();
-      const retryable = attempt === 0 && !responded && RETRYABLE_METHODS.has(req.method || "GET")
+      const oneTimePath = /^\/(api\/auth|auth|oauth|callback)(\/|$)|callback/i.test(new URL(req.url || "/", "http://replit.local").pathname);
+      const retryable = attempt === 0 && !responded && !oneTimePath && RETRYABLE_METHODS.has(req.method || "GET")
         && !requestHasBody(req) && RETRYABLE_ERROR_CODES.has(error?.code);
       if (retryable) {
         const timer = setTimeout(() => {
@@ -181,7 +182,9 @@ export async function startReplitFastStart(options = {}) {
   const proxyRequest = async (req, res) => {
     const path = new URL(req.url || "/", "http://replit.local").pathname;
     if (!upstreamReady) {
-      if (STARTUP_HEALTH_PATHS.has(path)) {
+      // Before first readiness the platform must get an instant 200; once the app has been ready
+      // and later fails, health paths report 503 so the platform can see the instance is unhealthy.
+      if (STARTUP_HEALTH_PATHS.has(path) && !everReady) {
         // Platform health checks must be answered instantly; a browser asking
         // for "/" gets a self-refreshing page instead of raw JSON.
         if (path === "/" && String(req.headers.accept || "").includes("text/html")) {
