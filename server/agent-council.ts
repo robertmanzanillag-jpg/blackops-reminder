@@ -543,7 +543,16 @@ export function createAgentCouncil(deps: CouncilDeps) {
         wroteRound = false;
         if (recent(state)) return SKIP;
         const now = deps.now();
-        if (deps.transactState && state.lastCycleAt && now - toMs(state.lastCycleAt) < COUNCIL_CYCLE_MS) return state;
+        if (deps.transactState && state.lastCycleAt && now - toMs(state.lastCycleAt) < COUNCIL_CYCLE_MS) {
+          // Another process wrote a round 10-15 min ago, so this round is not repeated. KONG must
+          // still advance when that process could not verify it (e.g. an older office worker).
+          const observed = state.kongObservedAt ? Date.parse(state.kongObservedAt) : 0;
+          if (!deps.collectKongEvidence || now - observed <= KONG_STALE_AFTER_MS) return state;
+          const kong = advanceKongCompany({ company: state.kongCompany, evidenceAt: state.kongEvidenceAt, evidence: kongEvidence, now, curriculum });
+          const kongRead = { at: new Date(now).toISOString(), ok: Boolean(kong.observedAt), code: kong.observedAt ? null : kongCode ?? "NOT_VERIFIED" };
+          if (!kong.observedAt) return { ...state, kongRead };
+          return { ...state, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt, kongCollaboration: kong.collaboration, kongRead };
+        }
         const signals: CouncilSignals = { ...collected, now };
         const findings = runCrossChecks(signals);
         const statuses: Record<string, AgentLiveStatus> = { ...everyone, ...statusesFromSignals(signals) };

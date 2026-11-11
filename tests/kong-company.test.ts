@@ -302,3 +302,21 @@ test("when another process ran the round without KONG, this instance still catch
   await council.runCycle();
   assert.equal(reads, 1);
 });
+
+test("a round 10-15 min after another process's round still advances stale KONG (durable storage)", async () => {
+  const other = emptyCouncilState();
+  other.lastCycleAt = new Date(NOW - 13 * 60_000).toISOString();
+  other.cycles = 9;
+  let raw: string | null = JSON.stringify(other);
+  const council = createAgentCouncil({ now: () => NOW, userId: () => "owner", readState: async () => raw, writeState: async (value: string) => { raw = value; },
+    transactState: async (update: (current: string | null) => Promise<string>) => { raw = await update(raw); return raw; },
+    collect: async () => ({}),
+    collectKongEvidence: async () => evidence(),
+    scheduleKongCatchUp: () => {},
+    submitProposal: async () => "proposal", getPendingActionStatus: async () => null, fetchLatestRelease: async () => null, log: () => {} });
+  await council.runCycle();
+  const view = await council.view();
+  assert.equal(view.cycles, 9, "the other process's round is not repeated");
+  assert.equal(view.kongCompany.careers["kong:venues"].points, 10, "KONG still advances");
+  assert.equal(view.kongRead?.ok, true);
+});
