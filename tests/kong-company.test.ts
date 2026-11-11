@@ -200,3 +200,23 @@ test("central departments reporting healthy with report notes are credited; bloc
   const attention = evidence(); attention.agents[0].state = "attention";
   assert.equal(advanceKongCompany({ ...start(), evidence: attention }).company.careers["kong:venues"], undefined);
 });
+
+test("a transient KONG read failure is retried within the round instead of freezing KONG careers", async () => {
+  let raw: string | null = null;
+  let reads = 0;
+  const warnings: string[] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => { warnings.push(args.map(String).join(" ")); };
+  try {
+    const council = createAgentCouncil({ now: () => NOW, userId: () => "owner", readState: async () => raw, writeState: async (value: string) => { raw = value; }, collect: async () => ({}),
+      collectKongEvidence: async () => { reads++; if (reads === 1) throw new Error("KONG no respondio a tiempo"); return evidence(); },
+      submitProposal: async () => "proposal", getPendingActionStatus: async () => null, fetchLatestRelease: async () => null, log: () => {} });
+    await council.runCycle();
+    const view = await council.view();
+    assert.equal(reads, 2, "one retry");
+    assert.equal(view.kongCompany.careers["kong:venues"].points, 10, "the retried read still credits the round");
+    assert.ok(warnings.some(line => /KONG evidence read failed \(attempt 1\/2\): KONG no respondio a tiempo/.test(line)), "the reason is logged, not swallowed");
+  } finally {
+    console.warn = originalWarn;
+  }
+});
