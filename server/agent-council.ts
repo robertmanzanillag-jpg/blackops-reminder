@@ -122,6 +122,8 @@ export const MIN_CYCLE_GAP_MS = 10 * 60_000;
 export const KONG_CATCHUP_MS = 2 * 60_000;
 export const KONG_CATCHUP_ATTEMPTS = 3;
 export const KONG_REREAD_AFTER_MS = 60_000;
+/** KONG evidence older than this is caught up even when another process ran the round. */
+export const KONG_STALE_AFTER_MS = 10 * 60_000;
 function kongReadCode(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
   if (typeof code === "string" && /^[A-Z_]{2,40}$/.test(code)) return code;
@@ -505,7 +507,16 @@ export function createAgentCouncil(deps: CouncilDeps) {
     try {
       // Another instance already ran this round: skip the reads too.
       const before = await load();
-      if (recent(before)) return before;
+      if (recent(before)) {
+        // Another process (e.g. an older office worker) ran this round. KONG must not depend on
+        // that process having a working KONG reader: catch KONG up here when it is not fresh.
+        const observed = before.kongObservedAt ? Date.parse(before.kongObservedAt) : 0;
+        if (deps.collectKongEvidence && !kongCatchUpPending && deps.now() - observed > KONG_STALE_AFTER_MS) {
+          kongCatchUpPending = true;
+          try { return await runKongCatchUp(1); } catch (error) { kongCatchUpPending = false; throw error; }
+        }
+        return before;
+      }
       // Slow reads happen outside the queue; the state change itself is serialized.
       const collectTimeout = deps.collectTimeoutMs ?? COLLECT_TIMEOUT_MS;
       // KONG is read first and in parallel: reading it after the slow collectors let its 15 s request

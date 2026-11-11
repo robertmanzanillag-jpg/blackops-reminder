@@ -279,3 +279,26 @@ test("a KONG snapshot read before slow collectors is re-read before scoring inst
   assert.equal(view.kongRead?.ok, true);
   assert.equal(view.kongCompany.careers["kong:venues"].points, 10);
 });
+
+test("when another process ran the round without KONG, this instance still catches KONG up", async () => {
+  // An older office worker wrote a recent round but has no working KONG reader.
+  const other = emptyCouncilState();
+  other.lastCycleAt = new Date(NOW - 60_000).toISOString();
+  other.cycles = 7;
+  let raw: string | null = JSON.stringify(other);
+  let reads = 0;
+  const council = createAgentCouncil({ now: () => NOW, userId: () => "owner", readState: async () => raw, writeState: async (value: string) => { raw = value; },
+    collect: async () => { throw new Error("the round must be skipped"); },
+    collectKongEvidence: async () => { reads++; return evidence(); },
+    scheduleKongCatchUp: () => {},
+    submitProposal: async () => "proposal", getPendingActionStatus: async () => null, fetchLatestRelease: async () => null, log: () => {} });
+  await council.runCycle();
+  const view = await council.view();
+  assert.equal(reads, 1);
+  assert.equal(view.cycles, 7, "the other process's round is not repeated");
+  assert.equal(view.kongCompany.careers["kong:venues"].points, 10, "KONG is credited anyway");
+  assert.equal(view.kongRead?.ok, true);
+  // Fresh KONG: the next skipped round does not read KONG again.
+  await council.runCycle();
+  assert.equal(reads, 1);
+});
