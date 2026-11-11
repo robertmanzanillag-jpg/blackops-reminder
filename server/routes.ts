@@ -13,6 +13,7 @@ import { registerAssistantRoutes } from "./assistant";
 import { getPrice, getMarketOverview, searchSymbol, getBatchCryptoPrices, getHistoricalData, getPortfolioNews, getMarketNews, getCompanyNews } from "./finance";
 import { insertInvestmentSchema, insertTransactionSchema, insertWatchlistSchema, insertPriceAlertSchema, insertMonitoredProjectSchema, insertAppProjectSchema, insertAutomationDefinitionSchema } from "@shared/schema";
 import { checkSingleProject } from "./health-check";
+import { withUptimeHealth } from "@shared/app-health-uptime";
 import { sendDailyMarketUpdateForUser, calculatePortfolioSummary } from "./market-news";
 import { insertPortfolioHistorySchema, insertDjContactSchema } from "@shared/schema";
 import { analyzeRadioEvents, sendRadioSlotsSummary, getRadioSlotsForMonth, importDjsFromRadioHistory, generateDjMessage } from "./radio-agent";
@@ -6858,7 +6859,10 @@ export async function registerRoutes(
   app.get("/api/developer-health/dashboard", async (req, res) => {
     try {
       const userId = getCurrentUserId(req);
-      const apps = await storage.getAppProjects(userId);
+      const storedApps = await storage.getAppProjects(userId);
+      // Apps never scanned show the uptime monitor's fresh result for the same host/repo (read-only).
+      const monitors = storedApps.length ? await storage.getMonitoredProjects(userId).catch(() => []) : [];
+      const apps = withUptimeHealth(storedApps, monitors);
       const incidents = await storage.getAppIncidents(userId);
       const openIncidents = incidents.filter((incident) => ["open", "investigating", "pending_action"].includes(incident.status));
 
