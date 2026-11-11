@@ -1,0 +1,99 @@
+name: Office worker (cloud)
+
+# Runs the reviewed Agents Office executor in the cloud: no PC required. Every fifteen minutes GitHub
+# starts a clean, isolated machine; `office-worker-once` takes the exclusive PostgreSQL ownership lock
+# (never stolen), refuses to run while the PC worker still reports presence, runs the same reviewed
+# office cycle for at most 13 minutes, never claims work without its full lease inside that budget,
+# never replays uncertain or fenced work, then releases ownership and exits. It stays review-only:
+# no publication, deployment, credentials, messages or KONG changes.
+#
+# Scheduled workflows only run from the default branch, so this file must also live on `main`; it
+# executes the office source named by the repository variable OFFICE_SOURCE_REF (the production branch).
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: office-worker-cloud
+  cancel-in-progress: false
+
+jobs:
+  office-once:
+    # Never on forks; only scheduled or manual runs of this repository can see the office secrets.
+    # Setting OFFICE_WORKER_CLOUD_ENABLED to anything but 'true' is the persistent maintenance pause.
+    if: github.repository == 'robertmanzanillag-jpg/blackops-reminder' && vars.OFFICE_WORKER_CLOUD_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    # 13-minute run budget plus startup and bounded settlement/cleanup.
+    timeout-minutes: 25
+    steps:
+      - name: Check out the office source in production
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ vars.OFFICE_SOURCE_REF }}
+          persist-credentials: false
+
+      - name: Verify the reviewed entrypoint exists
+        run: test -f script/office-worker-once.ts && test -f server/office-worker-once.ts
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install private configuration outside the checkout
+        env:
+          OPENAI_SHARED_CREDIT_CONFIG_JSON: ${{ secrets.OPENAI_SHARED_CREDIT_CONFIG_JSON }}
+        run: |
+          set -euo pipefail
+          umask 077
+          dir="$RUNNER_TEMP/office-config"
+          mkdir -p "$dir"
+          # Only needed when role academy, capability training or shared credits are enabled.
+          if [ -n "$OPENAI_SHARED_CREDIT_CONFIG_JSON" ]; then
+            printf '%s' "$OPENAI_SHARED_CREDIT_CONFIG_JSON" > "$dir/shared-credit.json"
+            node -e 'JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"))' "$dir/shared-credit.json"
+            echo "OFFICE_SHARED_CREDIT_FILE=$dir/shared-credit.json" >> "$GITHUB_ENV"
+          fi
+
+      - name: Run the office executor once (bounded)
+        env:
+          NODE_ENV: production
+          OFFICE_WORKER_CLOUD_ENABLED: ${{ vars.OFFICE_WORKER_CLOUD_ENABLED }}
+          # Must be a direct (session) PostgreSQL URL: the exclusive ownership lock is a session advisory lock.
+          DATABASE_URL: ${{ secrets.OFFICE_DATABASE_URL }}
+          DEFAULT_USER_ID: ${{ secrets.OFFICE_OWNER_ID }}
+          OPENAI_API_KEY: ${{ secrets.OFFICE_OPENAI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.OFFICE_GITHUB_TOKEN }}
+          OFFICE_EXPECTED_WEB_REVISION: ${{ vars.OFFICE_EXPECTED_WEB_REVISION }}
+          OFFICE_OPENAI_MODEL: ${{ vars.OFFICE_OPENAI_MODEL }}
+          OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT: ${{ vars.OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT }}
+          OFFICE_OPENAI_MAX_OUTPUT_TOKENS: ${{ vars.OFFICE_OPENAI_MAX_OUTPUT_TOKENS }}
+          OFFICE_ACADEMY_PREPARATION_ENABLED: ${{ vars.OFFICE_ACADEMY_PREPARATION_ENABLED || 'false' }}
+          OFFICE_ACADEMY_EXECUTION_ENABLED: ${{ vars.OFFICE_ACADEMY_EXECUTION_ENABLED || 'false' }}
+          OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED: ${{ vars.OFFICE_REVIEW_BENCHMARK_PROMOTION_ENABLED || 'false' }}
+          OFFICE_INTERNAL_WORK_ENABLED: ${{ vars.OFFICE_INTERNAL_WORK_ENABLED || 'false' }}
+          OFFICE_ROLE_WORK_ENABLED: ${{ vars.OFFICE_ROLE_WORK_ENABLED || 'false' }}
+          OFFICE_WEB_SOURCES_ENABLED: ${{ vars.OFFICE_WEB_SOURCES_ENABLED || 'false' }}
+          OFFICE_WEB_SOURCE_ORIGIN: ${{ vars.OFFICE_WEB_SOURCE_ORIGIN }}
+          OFFICE_ROLE_ACADEMY_ENABLED: ${{ vars.OFFICE_ROLE_ACADEMY_ENABLED || 'false' }}
+          OFFICE_ROLE_ACADEMY_DAILY_PAIRS: ${{ vars.OFFICE_ROLE_ACADEMY_DAILY_PAIRS }}
+          OFFICE_CAPABILITY_TRAINING_ENABLED: ${{ vars.OFFICE_CAPABILITY_TRAINING_ENABLED || 'false' }}
+          OFFICE_CAPABILITY_MAX_CALLS_PER_DAY: ${{ vars.OFFICE_CAPABILITY_MAX_CALLS_PER_DAY }}
+          OPENAI_SHARED_CREDITS_REQUIRED: ${{ vars.OFFICE_SHARED_CREDITS_REQUIRED || 'false' }}
+        run: |
+          set -euo pipefail
+          if [ -n "${OFFICE_SHARED_CREDIT_FILE:-}" ]; then export OPENAI_SHARED_CREDIT_CONFIG="$OFFICE_SHARED_CREDIT_FILE"; fi
+          # 15 minutes: the worker's own 13-minute budget, then SIGTERM for bounded settlement.
+          timeout --signal=TERM --kill-after=3m 15m node --import tsx script/office-worker-once.ts
+
+      - name: Remove private configuration
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/office-config"
