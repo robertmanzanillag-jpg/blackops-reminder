@@ -4,6 +4,29 @@ import { spawn } from "node:child_process";
 import { pathToFileURL } from "node:url";
 
 const STARTUP_HEALTH_PATHS = new Set(["/", "/health", "/api/health"]);
+const RETRYABLE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+const RETRYABLE_ERROR_CODES = new Set(["ECONNRESET", "ECONNREFUSED", "EPIPE"]);
+const JSON_HEADERS = { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" };
+const STARTING_PAGE = "<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"><meta http-equiv=\"refresh\" content=\"2\">"
+  + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>BlackOps</title></head>"
+  + "<body style=\"font-family:system-ui,sans-serif;background:#0b0b0b;color:#eee;display:grid;place-items:center;height:100vh;margin:0\">"
+  + "<p>Iniciando BlackOps&hellip;</p></body></html>";
+
+function numberOption(value, fallback) {
+  const parsed = Number(value);
+  return value === undefined || value === null || value === "" || !Number.isFinite(parsed) ? fallback : parsed;
+}
+
+function sendJson(res, status, body, extraHeaders = {}) {
+  if (res.headersSent || res.destroyed) return;
+  res.writeHead(status, { ...JSON_HEADERS, ...extraHeaders });
+  res.end(JSON.stringify(body));
+}
+
+function requestHasBody(req) {
+  const length = req.headers["content-length"];
+  return Boolean(req.headers["transfer-encoding"]) || (length !== undefined && Number(length) > 0);
+}
 
 function listen(server, port, host) {
   return new Promise((resolve, reject) => {
@@ -60,12 +83,25 @@ export async function startReplitFastStart(options = {}) {
   const upstreamPort = Number(options.upstreamPort ?? process.env.REPLIT_UPSTREAM_PORT ?? 5001);
   const childEntry = options.childEntry || process.env.REPLIT_CHILD_ENTRY || "dist/index.cjs";
   const preflightEntry = options.preflightEntry === false ? null : options.preflightEntry || process.env.REPLIT_PREFLIGHT_ENTRY || "dist/compact-local-news-state.cjs";
-  const readinessIntervalMs = Number(options.readinessIntervalMs ?? 1_000);
-  const readinessTimeoutMs = Number(options.readinessTimeoutMs ?? 3_000);
-  const readinessFailureThreshold = Number(options.readinessFailureThreshold ?? 3);
-  const proxyTimeoutMs = Number(options.proxyTimeoutMs ?? 30_000);
+  const env = process.env;
+  // Once ready: one probe per second, each allowed 3 s, and only N consecutive
+  // failures (or the child exiting) take the application out of rotation.
+  const readinessIntervalMs = numberOption(options.readinessIntervalMs ?? env.REPLIT_READINESS_INTERVAL_MS, 1_000);
+  // Before the first success probe faster so cold starts are released quickly.
+  const startupIntervalMs = numberOption(options.startupIntervalMs ?? env.REPLIT_STARTUP_INTERVAL_MS, Math.min(250, readinessIntervalMs));
+  const readinessTimeoutMs = numberOption(options.readinessTimeoutMs ?? env.REPLIT_READINESS_TIMEOUT_MS, 3_000);
+  const readinessFailureThreshold = Math.max(1, numberOption(options.readinessFailureThreshold ?? env.REPLIT_READINESS_FAILURE_THRESHOLD, 5));
+  const proxyTimeoutMs = numberOption(options.proxyTimeoutMs ?? env.REPLIT_PROXY_TIMEOUT_MS, 30_000);
+  // Application requests that arrive while the app is not ready wait this long
+  // for readiness before receiving 503 + Retry-After (0 = answer immediately).
+  const startupHoldMs = Math.max(0, numberOption(options.startupHoldMs ?? env.REPLIT_STARTUP_HOLD_MS, 15_000));
+  const retryDelayMs = Math.max(0, numberOption(options.retryDelayMs, 150));
+  const log = options.log || ((message) => console.log(message));
+  const logError = options.logError || ((message) => console.error(message));
   const startupStartedAt = Date.now();
   let upstreamReady = false;
+  let everReady = false;
+  const readyWaiters = new Set();
   let stopping = false;
   let child;
   let childEnded = false;
@@ -73,19 +109,35 @@ export async function startReplitFastStart(options = {}) {
   let activeProbe;
   let failedProbes = 0;
 
-  const proxyRequest = (req, res) => {
-    const path = new URL(req.url || "/", "http://replit.local").pathname;
-    if (!upstreamReady) {
-      if (STARTUP_HEALTH_PATHS.has(path)) {
-        res.writeHead(200, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
-        res.end(JSON.stringify({ status: "starting", uptimeMs: Date.now() - startupStartedAt }));
-        return;
-      }
-      res.writeHead(503, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "retry-after": "1" });
-      res.end(JSON.stringify({ status: "starting" }));
-      return;
-    }
+  const notReadyBody = () => ({ status: everReady ? "unavailable" : "starting" });
 
+  const waitForReady = (req, timeoutMs) => new Promise((resolve) => {
+    if (upstreamReady) return resolve(true);
+    if (timeoutMs <= 0 || stopping || childEnded) return resolve(false);
+    let timer;
+    const done = (ready) => {
+      clearTimeout(timer);
+      readyWaiters.delete(done);
+      req.off("close", onClose);
+      resolve(ready);
+    };
+    const onClose = () => done(false);
+    timer = setTimeout(() => done(false), timeoutMs);
+    timer.unref();
+    readyWaiters.add(done);
+    req.once("close", onClose);
+  });
+
+  const releaseWaiters = (ready) => {
+    for (const waiter of [...readyWaiters]) waiter(ready);
+  };
+
+  // Per-request failures never change global readiness: only the health probe
+  // and the child process lifecycle do. A failed request gets 502/504 for that
+  // request alone; idempotent requests without a body are retried once when the
+  // connection failed before any response arrived.
+  const forward = (req, res, attempt = 0) => {
+    let responded = false;
     const upstream = http.request({
       host: upstreamHost,
       port: upstreamPort,
@@ -93,17 +145,60 @@ export async function startReplitFastStart(options = {}) {
       path: req.url,
       headers: proxyHeaders(req, `${upstreamHost}:${upstreamPort}`),
     }, (upstreamResponse) => {
+      responded = true;
+      if (res.destroyed) return upstreamResponse.destroy();
       res.writeHead(upstreamResponse.statusCode || 502, upstreamResponse.headers);
       upstreamResponse.pipe(res);
+      upstreamResponse.on("aborted", () => res.destroy());
     });
-    upstream.setTimeout(proxyTimeoutMs, () => upstream.destroy(new Error("upstream timeout")));
-    upstream.on("error", () => {
-      // A route timeout/reset says nothing about the rest of the application.
+    const clientGone = () => !res.writableFinished && (res.destroyed || req.destroyed);
+    const onClientClose = () => {
+      if (!res.writableFinished) upstream.destroy();
+    };
+    res.once("close", onClientClose);
+    upstream.setTimeout(proxyTimeoutMs, () => upstream.destroy(Object.assign(new Error("upstream timeout"), { code: "UPSTREAM_TIMEOUT" })));
+    upstream.on("error", (error) => {
+      res.off("close", onClientClose);
+      // A client that went away is not an upstream failure.
+      if (clientGone()) return;
       if (res.headersSent) return res.destroy();
-      res.writeHead(503, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "retry-after": "1" });
-      res.end(JSON.stringify({ status: "upstream_unavailable" }));
+      const retryable = attempt === 0 && !responded && RETRYABLE_METHODS.has(req.method || "GET")
+        && !requestHasBody(req) && RETRYABLE_ERROR_CODES.has(error?.code);
+      if (retryable) {
+        const timer = setTimeout(() => {
+          if (!clientGone()) forward(req, res, 1);
+        }, retryDelayMs);
+        timer.unref();
+        return;
+      }
+      if (error?.code === "UPSTREAM_TIMEOUT") return sendJson(res, 504, { status: "upstream_timeout" });
+      sendJson(res, 502, { status: "upstream_error" });
     });
-    req.pipe(upstream);
+    if (attempt === 0 && requestHasBody(req)) req.pipe(upstream);
+    else upstream.end();
+  };
+
+  const proxyRequest = async (req, res) => {
+    const path = new URL(req.url || "/", "http://replit.local").pathname;
+    if (!upstreamReady) {
+      if (STARTUP_HEALTH_PATHS.has(path)) {
+        // Platform health checks must be answered instantly; a browser asking
+        // for "/" gets a self-refreshing page instead of raw JSON.
+        if (path === "/" && String(req.headers.accept || "").includes("text/html")) {
+          res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store", "retry-after": "2" });
+          res.end(STARTING_PAGE);
+          return;
+        }
+        sendJson(res, 200, { status: "starting", uptimeMs: Date.now() - startupStartedAt });
+        return;
+      }
+      const ready = await waitForReady(req, startupHoldMs);
+      if (!ready) {
+        sendJson(res, 503, notReadyBody(), { "retry-after": "2" });
+        return;
+      }
+    }
+    forward(req, res);
   };
 
   const server = http.createServer(proxyRequest);
@@ -124,7 +219,7 @@ export async function startReplitFastStart(options = {}) {
   await listen(server, publicPort, publicHost);
   const address = server.address();
   const boundPort = typeof address === "object" && address ? address.port : publicPort;
-  console.log(`[replit-fast-start] listening on ${publicHost}:${boundPort}; booting application on ${upstreamHost}:${upstreamPort}`);
+  log(`[replit-fast-start] listening on ${publicHost}:${boundPort}; booting application on ${upstreamHost}:${upstreamPort}`);
 
   await runNodePreflight(preflightEntry, options);
 
@@ -155,13 +250,22 @@ export async function startReplitFastStart(options = {}) {
         failedProbes = 0;
         if (!upstreamReady) {
           upstreamReady = true;
-          console.log(`[replit-fast-start] application ready on ${upstreamHost}:${upstreamPort}`);
+          log(everReady
+            ? `[replit-fast-start] application recovered on ${upstreamHost}:${upstreamPort}`
+            : `[replit-fast-start] application ready on ${upstreamHost}:${upstreamPort} after ${Date.now() - startupStartedAt}ms`);
+          everReady = true;
+          releaseWaiters(true);
         }
       } else {
         failedProbes += 1;
-        if (failedProbes >= readinessFailureThreshold) upstreamReady = false;
+        if (upstreamReady && failedProbes >= readinessFailureThreshold) {
+          upstreamReady = false;
+          logError(`[replit-fast-start] application unhealthy after ${failedProbes} consecutive failed health probes`);
+        } else if (upstreamReady && failedProbes === 1) {
+          log("[replit-fast-start] health probe failed; still serving traffic");
+        }
       }
-      readinessTimer = setTimeout(pollReadiness, readinessIntervalMs);
+      readinessTimer = setTimeout(pollReadiness, everReady ? readinessIntervalMs : startupIntervalMs);
       readinessTimer.unref();
     };
     const request = http.get({ host: upstreamHost, port: upstreamPort, path: "/api/health" }, (response) => {
@@ -185,6 +289,7 @@ export async function startReplitFastStart(options = {}) {
   };
   const stopReadiness = () => {
     upstreamReady = false;
+    releaseWaiters(false);
     clearTimeout(readinessTimer);
     activeProbe?.destroy();
   };
@@ -194,7 +299,7 @@ export async function startReplitFastStart(options = {}) {
     childEnded = true;
     stopReadiness();
     if (stopping) return;
-    console.error(`[replit-fast-start] application exited (${signal || code || 0})`);
+    logError(`[replit-fast-start] application exited (${signal || code || 0})`);
     await closeServer(server);
     process.exitCode = code || (signal ? 1 : 0);
   });
@@ -202,7 +307,7 @@ export async function startReplitFastStart(options = {}) {
     childEnded = true;
     stopReadiness();
     if (stopping) return;
-    console.error(`[replit-fast-start] failed to launch application: ${error.message}`);
+    logError(`[replit-fast-start] failed to launch application: ${error.message}`);
     await closeServer(server);
     process.exitCode = 1;
   });
@@ -221,6 +326,8 @@ export async function startReplitFastStart(options = {}) {
     server,
     stop,
     isUpstreamReady: () => upstreamReady,
+    failedProbeCount: () => failedProbes,
+    config: { readinessIntervalMs, startupIntervalMs, readinessTimeoutMs, readinessFailureThreshold, proxyTimeoutMs, startupHoldMs },
   };
 }
 
