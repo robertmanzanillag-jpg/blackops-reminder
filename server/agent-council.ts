@@ -450,11 +450,27 @@ export function createAgentCouncil(deps: CouncilDeps) {
       if (recent(before)) return before;
       // Slow reads happen outside the queue; the state change itself is serialized.
       const collectTimeout = deps.collectTimeoutMs ?? COLLECT_TIMEOUT_MS;
+      // KONG is read first and in parallel: reading it after the slow collectors let its 15 s request
+      // time out under load, and the failure was swallowed, freezing KONG careers. One retry; the
+      // reason is logged (no secrets: OfficeKongError messages are fixed Spanish text).
+      const readKong = deps.collectKongEvidence;
+      const kongPending = readKong
+        ? (async () => {
+            for (let attempt = 0; attempt < 2; attempt++) {
+              try {
+                return await withTimeout(readKong(), collectTimeout, "evidencia KONG");
+              } catch (error) {
+                console.warn(`[agent-council] KONG evidence read failed (attempt ${attempt + 1}/2): ${error instanceof Error ? error.message.slice(0, 160) : "unknown"}`);
+              }
+            }
+            return undefined;
+          })()
+        : Promise.resolve(undefined);
       const collected = await withTimeout(deps.collect(userId), collectTimeout, "lectura de senales");
       const everyone = deps.collectStatuses
         ? await withTimeout(deps.collectStatuses(userId), collectTimeout, "estado de los agentes").catch(() => ({} as Record<string, AgentLiveStatus>))
         : {};
-      const kongEvidence = deps.collectKongEvidence ? await withTimeout(deps.collectKongEvidence(), collectTimeout, "evidencia KONG").catch(() => undefined) : undefined;
+      const kongEvidence = await kongPending;
       const curriculum = deps.loadCurriculum
         ? await withTimeout(deps.loadCurriculum(), CURRICULUM_TIMEOUT_MS, "academia").catch(() => [] as CurriculumModule[])
         : [];
