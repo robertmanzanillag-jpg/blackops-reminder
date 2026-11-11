@@ -42,6 +42,10 @@ export async function probeOfficeWorker(store: Pick<typeof officeCloudStore, "ge
   try {
     const heartbeat = await store.getHeartbeat();
     const age = heartbeat ? now().getTime() - Date.parse(heartbeat.lastSeenAt) : NaN;
+    // Scheduled cloud runs (script/office-worker-once.ts) are not continuous. Between runs the
+    // executor stays blocked, but the reason states the cadence honestly instead of implying an outage.
+    if (heartbeat?.workerId.startsWith("office-cloud-") && Number.isFinite(age) && age > 45_000 && age <= 30 * 60_000)
+      return blocked(`Ejecutor de nube programado: la ultima ejecucion termino hace ${Math.max(1, Math.round(age / 60_000))} min. Las tareas pendientes se procesan en la proxima ejecucion programada (cada 15 min); ahora no hay ninguna en ejecucion.`);
     if (!Number.isFinite(age) || age < -30_000 || age > 45_000) return blocked("No hay una señal reciente del ejecutor de nube. Las tareas no se consideran en ejecucion.");
     const provider = (probe: OfficeClaudeProbe | undefined) => {
       const age = probe ? now().getTime() - Date.parse(probe.checkedAt) : NaN;
