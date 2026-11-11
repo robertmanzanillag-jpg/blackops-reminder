@@ -124,6 +124,7 @@ export const KONG_CATCHUP_ATTEMPTS = 3;
 export const KONG_REREAD_AFTER_MS = 60_000;
 /** KONG evidence older than this is caught up even when another process ran the round. */
 export const KONG_STALE_AFTER_MS = 10 * 60_000;
+export const KONG_UPKEEP_INTERVAL_MS = 5 * 60_000;
 function kongReadCode(error: unknown): string {
   const code = (error as { code?: unknown } | null)?.code;
   if (typeof code === "string" && /^[A-Z_]{2,40}$/.test(code)) return code;
@@ -481,6 +482,10 @@ export function createAgentCouncil(deps: CouncilDeps) {
   }
 
   async function runKongCatchUp(attempt = 1): Promise<CouncilState> {
+    // The durable store writes the row on every transaction, even a skipped one, so an absent row
+    // must be detected before opening one: KONG-only work never initializes the council row.
+    const existing = await load();
+    if (!existing.lastCycleAt) { kongCatchUpPending = false; return existing; }
     const { evidence, code } = await readKongEvidence(deps.collectTimeoutMs ?? COLLECT_TIMEOUT_MS);
     const curriculum = deps.loadCurriculum
       ? await withTimeout(deps.loadCurriculum(), CURRICULUM_TIMEOUT_MS, "academia").catch(() => [] as CurriculumModule[])
@@ -488,6 +493,9 @@ export function createAgentCouncil(deps: CouncilDeps) {
     let verified = false;
     const written = await mutate((state) => {
       const now = deps.now();
+      // Never initialize the council row from a KONG-only write: an absent row must stay absent
+      // until the council history is imported (docs/office-openai-rollout.md).
+      if (!state.lastCycleAt) { verified = true; return SKIP; }
       // Another instance (or the round) already verified KONG recently: nothing to catch up.
       if (state.kongObservedAt && now - Date.parse(state.kongObservedAt) < KONG_CATCHUP_MS) { verified = true; return SKIP; }
       const kong = advanceKongCompany({ company: state.kongCompany, evidenceAt: state.kongEvidenceAt, evidence, now, curriculum });
@@ -499,6 +507,16 @@ export function createAgentCouncil(deps: CouncilDeps) {
     if (verified || attempt >= KONG_CATCHUP_ATTEMPTS) kongCatchUpPending = false;
     else scheduleKongCatchUp(attempt + 1);
     return written;
+  }
+
+  // KONG-only upkeep for instances that do not run council rounds: refresh KONG careers when no
+  // process has verified KONG for a while. Never repeats a round; never chains retries.
+  async function catchUpKongIfStale(): Promise<CouncilState> {
+    const before = await load();
+    const observed = before.kongObservedAt ? Date.parse(before.kongObservedAt) : 0;
+    if (!before.lastCycleAt || !deps.collectKongEvidence || kongCatchUpPending || deps.now() - observed <= KONG_STALE_AFTER_MS) return before;
+    kongCatchUpPending = true;
+    try { return await runKongCatchUp(KONG_CATCHUP_ATTEMPTS); } finally { kongCatchUpPending = false; }
   }
 
   async function runCycleOnce(force: boolean): Promise<CouncilState> {
@@ -810,7 +828,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
     return state.officeExecution!;
   }
-  return { runCycle, runKongCatchUp, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution };
+  return { runCycle, runKongCatchUp, catchUpKongIfStale, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {
@@ -1202,7 +1220,15 @@ export function systemUserId(): string {
 
 export async function startAgentCouncilScheduler(env: NodeJS.ProcessEnv = process.env) {
   if (!isAgentCouncilEnabled(env)) {
-    console.log("[agent-council] disabled by AGENT_COUNCIL_ENABLED=false");
+    console.log("[agent-council] disabled by AGENT_COUNCIL_ENABLED=false; KONG-only upkeep stays on");
+    // Council rounds run elsewhere (the office worker), but KONG careers must not freeze when that
+    // process cannot read KONG. KONG_UPKEEP_ENABLED=false turns this off too.
+    if (String(env.KONG_UPKEEP_ENABLED || "").trim().toLowerCase() !== "false") {
+      setAgentCouncilUser(getSystemUserId());
+      const upkeep = () => { getAgentCouncil().catchUpKongIfStale().catch((error) => console.warn("[agent-council] KONG upkeep error:", error instanceof Error ? error.message : error)); };
+      setTimeout(upkeep, 60_000).unref?.();
+      setInterval(upkeep, KONG_UPKEEP_INTERVAL_MS).unref?.();
+    }
     return;
   }
   setAgentCouncilUser(getSystemUserId());
