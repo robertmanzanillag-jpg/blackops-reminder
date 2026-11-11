@@ -100,6 +100,8 @@ export type CouncilState = {
   kongLegacyCompany: CompanyState;
   kongEvidenceAt: Record<string, string>;
   kongObservedAt: string | null;
+  /** Last council attempt to read KONG: reason code only (never messages, bodies or secrets). */
+  kongRead: { at: string; ok: boolean; code: string | null } | null;
   kongCollaboration: OfficeKongCollaboration;
   kongLastStatuses: Record<string, { state: AgentLiveStatus["state"]; label: string }>;
   lastStatuses: Record<string, { state: AgentLiveStatus["state"]; label: string }>;
@@ -143,6 +145,7 @@ export function emptyCouncilState(): CouncilState {
     kongLegacyCompany: emptyCompanyState(),
     kongEvidenceAt: {},
     kongObservedAt: null,
+    kongRead: null,
     kongCollaboration: { verified: false, observedAt: null, totalFindings: 0, exchanges: [] },
     kongLastStatuses: {},
     lastStatuses: {},
@@ -189,6 +192,9 @@ export function parseCouncilState(raw: string | null): CouncilState {
       kongEvidenceAt: Object.fromEntries(Object.entries(obj(value.kongEvidenceAt) || {}).filter(([, v]) => typeof v === "string" && Number.isFinite(Date.parse(v)))),
       kongCollaboration: obj(value.kongCollaboration) && Array.isArray(value.kongCollaboration.exchanges) ? value.kongCollaboration : base.kongCollaboration,
       kongObservedAt: typeof value.kongObservedAt === "string" ? value.kongObservedAt : null,
+      kongRead: obj(value.kongRead) && typeof value.kongRead.at === "string" && typeof value.kongRead.ok === "boolean"
+        ? { at: value.kongRead.at, ok: value.kongRead.ok, code: typeof value.kongRead.code === "string" ? value.kongRead.code.slice(0, 40) : null }
+        : null,
       kongLastStatuses: obj(value.kongLastStatuses) ? value.kongLastStatuses : {},
       kongSupervision: parseKongSupervision(value.kongSupervision),
       lastStatuses: obj(value.lastStatuses) ? value.lastStatuses : {},

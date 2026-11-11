@@ -53,6 +53,7 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
         view.kongLastStatuses = {};
         view.kongEvidenceAt = {};
         view.kongObservedAt = null;
+        view.kongRead = null;
         view.kongCollaboration = { verified: false, observedAt: null, totalFindings: 0, exchanges: [] };
       }
       res.json(view);
