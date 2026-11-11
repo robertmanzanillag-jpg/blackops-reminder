@@ -340,3 +340,17 @@ test("KONG-only upkeep refreshes stale KONG without running a council round", as
   await council.catchUpKongIfStale();
   assert.equal(reads, 1, "fresh KONG is not re-read");
 });
+
+test("KONG-only upkeep never creates the council row in an empty store", async () => {
+  let raw: string | null = null;
+  let writes = 0;
+  const council = createAgentCouncil({ now: () => NOW, userId: () => "owner", readState: async () => raw, writeState: async (value: string) => { writes++; raw = value; },
+    // Like the real Postgres store: every transaction upserts the row, even when nothing changed.
+    transactState: async (update: (current: string | null) => Promise<string>) => { const next = await update(raw); writes++; raw = next; return next; },
+    collect: async () => ({}), collectKongEvidence: async () => evidence(), scheduleKongCatchUp: () => {},
+    submitProposal: async () => "proposal", getPendingActionStatus: async () => null, fetchLatestRelease: async () => null, log: () => {} });
+  await council.catchUpKongIfStale();
+  await council.runKongCatchUp(3);
+  assert.equal(raw, null, "no row is initialized");
+  assert.equal(writes, 0);
+});

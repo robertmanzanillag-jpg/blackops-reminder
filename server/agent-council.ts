@@ -482,6 +482,10 @@ export function createAgentCouncil(deps: CouncilDeps) {
   }
 
   async function runKongCatchUp(attempt = 1): Promise<CouncilState> {
+    // The durable store writes the row on every transaction, even a skipped one, so an absent row
+    // must be detected before opening one: KONG-only work never initializes the council row.
+    const existing = await load();
+    if (!existing.lastCycleAt) { kongCatchUpPending = false; return existing; }
     const { evidence, code } = await readKongEvidence(deps.collectTimeoutMs ?? COLLECT_TIMEOUT_MS);
     const curriculum = deps.loadCurriculum
       ? await withTimeout(deps.loadCurriculum(), CURRICULUM_TIMEOUT_MS, "academia").catch(() => [] as CurriculumModule[])
@@ -489,6 +493,9 @@ export function createAgentCouncil(deps: CouncilDeps) {
     let verified = false;
     const written = await mutate((state) => {
       const now = deps.now();
+      // Never initialize the council row from a KONG-only write: an absent row must stay absent
+      // until the council history is imported (docs/office-openai-rollout.md).
+      if (!state.lastCycleAt) { verified = true; return SKIP; }
       // Another instance (or the round) already verified KONG recently: nothing to catch up.
       if (state.kongObservedAt && now - Date.parse(state.kongObservedAt) < KONG_CATCHUP_MS) { verified = true; return SKIP; }
       const kong = advanceKongCompany({ company: state.kongCompany, evidenceAt: state.kongEvidenceAt, evidence, now, curriculum });
@@ -507,7 +514,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
   async function catchUpKongIfStale(): Promise<CouncilState> {
     const before = await load();
     const observed = before.kongObservedAt ? Date.parse(before.kongObservedAt) : 0;
-    if (!deps.collectKongEvidence || kongCatchUpPending || deps.now() - observed <= KONG_STALE_AFTER_MS) return before;
+    if (!before.lastCycleAt || !deps.collectKongEvidence || kongCatchUpPending || deps.now() - observed <= KONG_STALE_AFTER_MS) return before;
     kongCatchUpPending = true;
     try { return await runKongCatchUp(KONG_CATCHUP_ATTEMPTS); } finally { kongCatchUpPending = false; }
   }
