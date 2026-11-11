@@ -6,7 +6,7 @@ import { officeSameOrigin } from "./office-routes";
 import type { FactoryJob } from "./software-factory-store";
 import type { FactoryPipelineState } from "./software-factory-pipeline";
 import type { SoftwareFactoryView } from "../shared/software-factory-view";
-import { FACTORY_POLICY, projectReadiness } from "./software-factory";
+import { FACTORY_POLICY, projectReadiness, proposalReadiness } from "./software-factory";
 import { configuredSoftwareFactoryStore as softwareFactoryStore } from "./software-factory-store-provider";
 import { companyOrderJob } from "./software-factory-company";
 import type { CompanyOrder } from "../shared/agent-company";
@@ -100,11 +100,24 @@ export function registerSoftwareFactoryRoutes(app: Express, options: {
         return projectReadiness(project).allowed && project.automaticRelease && new Set(project.rehearsalRunIds).size >= FACTORY_POLICY.minimumRehearsals && Number.isFinite(proofAge) && proofAge >= 0 && proofAge <= FACTORY_POLICY.evidenceMaxAgeMs;
       });
       if (projects.length && !eligible) blockers.push("La publicación automática requiere ensayos y recuperación verificados de una aplicación.");
+      // Review-only (PR proposal) mode is reported separately. It never relaxes the
+      // publication readiness above: deploy/verify/rollback/evaluate stay required there.
+      const proposalBlockers: string[] = [];
+      if (!state.configured) proposalBlockers.push("Registra el coste fijo del mes antes de ejecutar trabajos.");
+      if (state.configured && remainingCents === 0) proposalBlockers.push("El presupuesto mensual está agotado o comprometido.");
+      if (!activeWorkers.length) proposalBlockers.push("No hay señal reciente del ejecutor de la fábrica.");
+      const proposalStages = ["discover", "build", "simulate", "review"] as const;
+      if (activeWorkers.length && !proposalStages.every(stage => activeWorkers.some(worker => {
+        const reported = worker.capabilities;
+        return reported !== null && typeof reported === "object" && !Array.isArray(reported) && (reported as Record<string, unknown>)[stage] === true;
+      }))) proposalBlockers.push("Faltan ejecutores de propuestas (descubrir, construir, simular y revisar).");
+      if (!projects.some(project => proposalReadiness(project).allowed)) proposalBlockers.push("Registra una aplicación con repositorio, comandos de pruebas y construcción, y recorridos.");
       const proposalEvidence=store.getCompletedJob ? await readFactoryOrderProposals({owner,jobs,projects,getCompletedJob:(key,id)=>store.getCompletedJob!(key,id),getRecoveredBuild:options.getRecoveredBuild??(options.store?undefined:readFactoryRecoveredBuild),now:now().getTime()}) : {proposals:[],status:"unavailable" as const};
       const view: SoftwareFactoryView = {
         reviewedProposals:proposalEvidence.proposals,proposalEvidenceStatus:proposalEvidence.status,
         checkedAt: now().toISOString(), paused: state.paused,
         readiness: state.paused ? "paused" : blockers.length ? "blocked" : "available", blockers,
+        proposal: { mode: "review-only", readiness: state.paused ? "paused" : proposalBlockers.length ? "blocked" : "available", blockers: proposalBlockers },
         budget: { month: state.month, limitCents: state.limitCents, fixedCents: state.fixedCents, spentCents: state.spentCents, reservedCents: state.reservedCents, remainingCents, configured: state.configured },
         metrics: {
           verifiedDeliveries: jobs.filter(job => healthyVerification(job, "production")).length,
@@ -120,13 +133,15 @@ export function registerSoftwareFactoryRoutes(app: Express, options: {
             return costs.length && costs.every((cost): cost is number => typeof cost === "number" && Number.isSafeInteger(cost) && cost >= 0) ? Math.round(costs.reduce((sum, cost) => sum + cost, 0) / costs.length) : null;
           })(),
         },
-        projects: projects.map(project => ({ id: project.id, repo: project.repo, readiness: projectReadiness(project).reasons, automaticRelease: project.automaticRelease })),
+        projects: projects.map(project => ({ id: project.id, repo: project.repo, readiness: projectReadiness(project).reasons, proposalReadiness: proposalReadiness(project).reasons, automaticRelease: project.automaticRelease })),
         jobs: jobs.slice(0, 50).map(job => {
           const result = job.result && typeof job.result === "object" ? job.result as Record<string, unknown> : {};
           const costCents = typeof result.costCents === "number" && Number.isSafeInteger(result.costCents) && result.costCents >= 0 ? result.costCents : null;
           const evidenceCount = Array.isArray(result.evidence) ? result.evidence.length : result.evidence && typeof result.evidence === "object" ? 1 : 0;
           const blocker = typeof result.reason === "string" && result.reason.startsWith("FACTORY_ADAPTER_UNAVAILABLE:") ? "Falta conectar el ejecutor de esta etapa." : job.status === "unknown" ? "Hay que reconciliar el resultado antes de continuar." : job.status === "blocked" ? "No se cumplieron los requisitos de ejecución o verificación." : undefined;
-          return { costCents, evidenceCount, ...(blocker ? { blocker } : {}), id: job.id, projectId: job.projectId, kind: job.kind, status: job.status, createdAt: job.createdAt, ...(job.headSha ? { headSha: job.headSha } : {}) }; }),
+          // Static internal outcome codes only (FACTORY_* or snake_case gate reasons); any other text stays hidden.
+          const reasonCode = job.status !== "completed" && typeof result.reason === "string" && result.reason.length <= 300 && result.reason.split(",").every(token => /^FACTORY_[A-Z0-9_]{1,100}(:[A-Za-z0-9_]{1,100})?$|^[a-z][a-z0-9]*(_[a-z0-9]+)+$/.test(token)) ? result.reason : undefined;
+          return { costCents, evidenceCount, ...(blocker ? { blocker } : {}), ...(reasonCode ? { reasonCode } : {}), id: job.id, projectId: job.projectId, kind: job.kind, status: job.status, createdAt: job.createdAt, ...(job.headSha ? { headSha: job.headSha } : {}) }; }),
       };
       res.json(view);
     } catch { res.status(503).json({ error: "No se pudo verificar el registro persistente de la fábrica. No se confirma actividad." }); }
