@@ -184,6 +184,10 @@ export async function startReplitFastStart(options = {}) {
     if (!upstreamReady) {
       // Before first readiness the platform must get an instant 200; once the app has been ready
       // and later fails, health paths report 503 so the platform can see the instance is unhealthy.
+      if (STARTUP_HEALTH_PATHS.has(path) && everReady) {
+        sendJson(res, 503, notReadyBody(), { "retry-after": "2" });
+        return;
+      }
       if (STARTUP_HEALTH_PATHS.has(path) && !everReady) {
         // Platform health checks must be answered instantly; a browser asking
         // for "/" gets a self-refreshing page instead of raw JSON.
