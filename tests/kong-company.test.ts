@@ -320,3 +320,23 @@ test("a round 10-15 min after another process's round still advances stale KONG 
   assert.equal(view.kongCompany.careers["kong:venues"].points, 10, "KONG still advances");
   assert.equal(view.kongRead?.ok, true);
 });
+
+test("KONG-only upkeep refreshes stale KONG without running a council round", async () => {
+  const other = emptyCouncilState();
+  other.lastCycleAt = new Date(NOW - 3 * 60_000).toISOString();
+  other.cycles = 4;
+  let raw: string | null = JSON.stringify(other);
+  let reads = 0;
+  const council = createAgentCouncil({ now: () => NOW, userId: () => "owner", readState: async () => raw, writeState: async (value: string) => { raw = value; },
+    collect: async () => { throw new Error("upkeep must not run a round"); },
+    collectKongEvidence: async () => { reads++; return evidence(); },
+    scheduleKongCatchUp: () => { throw new Error("upkeep never chains retries"); },
+    submitProposal: async () => "proposal", getPendingActionStatus: async () => null, fetchLatestRelease: async () => null, log: () => {} });
+  await council.catchUpKongIfStale();
+  let view = await council.view();
+  assert.equal(view.cycles, 4);
+  assert.equal(view.kongCompany.careers["kong:venues"].points, 10);
+  assert.equal(view.kongRead?.ok, true);
+  await council.catchUpKongIfStale();
+  assert.equal(reads, 1, "fresh KONG is not re-read");
+});
