@@ -56,6 +56,11 @@ export function SoftwareFactoryPanel() {
           <p className="text-sm text-muted-foreground">Pausar impide tomar nuevos trabajos; una operación ya iniciada puede terminar.</p>
           <Button className="mt-2" disabled={mutation.isPending || query.isFetching} onClick={() => mutation.mutate({ path: "pause", body: { paused: !data.paused } })}>{data.paused ? "Reanudar cola" : "Pausar cola"}</Button>
           {data.blockers.length > 0 && <ul className="mt-3 list-disc space-y-1 pl-5 text-sm">{data.blockers.map(blocker => <li key={blocker}>{blocker}</li>)}</ul>}
+          {data.proposal && <div className="mt-3 rounded-lg border p-3 text-sm">
+            <p className="font-medium">Modo propuestas (solo revisión, sin publicar): {data.proposal.readiness === "available" ? "disponible" : data.proposal.readiness === "paused" ? "pausado" : "necesita preparación"}</p>
+            <p className="text-xs text-muted-foreground">Construye, prueba en GitHub Actions y revisa un PR. No despliega ni publica; la publicación automática sigue bloqueada arriba.</p>
+            {data.proposal.blockers.length > 0 && <ul className="mt-2 list-disc space-y-1 pl-5">{data.proposal.blockers.map(blocker => <li key={blocker}>{blocker}</li>)}</ul>}
+          </div>}
         </section>
         <section aria-labelledby="factory-budget">
           <h3 id="factory-budget" className="font-semibold">Presupuesto · {data.budget.month}</h3>
@@ -105,6 +110,7 @@ export function SoftwareFactoryPanel() {
             <p className="font-medium">{stages[job.kind] ?? job.kind} · {job.projectId}</p>
             <p>{statuses[job.status] ?? job.status}</p>
             {job.blocker && <p>{job.blocker}</p>}
+            {job.reasonCode && <p className="break-all text-xs text-muted-foreground">Código: {job.reasonCode}</p>}
             <p className="text-xs text-muted-foreground">{job.evidenceCount} registros de evidencia · Coste: {job.costCents === null ? "sin confirmar" : money(job.costCents)}</p>
             <p className="break-all text-xs text-muted-foreground">{job.headSha ? `Versión: ${job.headSha}` : "Versión todavía sin registrar"}</p>
             <time className="text-xs text-muted-foreground" dateTime={job.createdAt}>{new Date(job.createdAt).toLocaleString("es")}</time>
