@@ -260,8 +260,11 @@ export function draftFromMessage(original: string, now: Date): { draft: Record<s
 function intentFor(key: CeoChatIntentKey, original: string, normalized: string, now: Date): CeoChatIntent {
   switch (key) {
     case "analytics": {
-      const daily = /\b(hoy|ayer|diario|del dia|de hoy)\b/.test(normalized) && !/\bsemana|semanal\b/.test(normalized);
-      return { key, agentId: "blackroom-analytics", operation: daily ? "daily-report" : "weekly-report", input: {}, label: daily ? "Reporte del dia" : "Reporte de la semana", readOnly: false };
+      const monthly = /\b(mes|mensual|30 dias)\b/.test(normalized);
+      const daily = !monthly && /\b(hoy|ayer|diario|del dia|de hoy)\b/.test(normalized) && !/\bsemana|semanal\b/.test(normalized);
+      const operation = monthly ? "monthly-report" : daily ? "daily-report" : "weekly-report";
+      // refresh: read Metricool live when the token exists (read-only); otherwise the stored imports.
+      return { key, agentId: "blackroom-analytics", operation, input: { refresh: true }, label: monthly ? "Reporte del mes" : daily ? "Reporte del dia" : "Reporte de la semana", readOnly: false };
     }
     case "competition":
       return { key, agentId: "blackroom-competition", operation: "run", input: {}, label: "Revisar a la competencia", readOnly: false };
@@ -314,7 +317,9 @@ export function routeCeoChatMessage(text: string, now: Date = new Date()): CeoCh
   // specialists' "requires Black Room" words apply; "assistant" is only the no-match sentinel.
   const specialists = routeOrder(` black room ${normalized}`, [...SPECIALISTS, "assistant"]).filter((id) => id !== "assistant");
   for (const extra of EXTRA_WORDS) if (extra.words.some((word) => normalized.includes(word)) && !specialists.includes(extra.agent)) specialists.push(extra.agent);
-  const legacy = routeOrder(normalized, ["blackroom-videos", "radio", "assistant"]).filter((id) => id !== "assistant");
+  // The chat is already Black Room: "black room" alone must not pull in the videos/radio agents.
+  const withoutBrand = normalized.replace(/\bblack ?room\b|\bbr\b/g, " ").replace(/\s+/g, " ").trim();
+  const legacy = withoutBrand ? routeOrder(withoutBrand, ["blackroom-videos", "radio", "assistant"]).filter((id) => id !== "assistant") : [];
 
   let picked = [...specialists];
   // "reporte de la competencia" is a competition task, not the social media report.
@@ -445,6 +450,10 @@ function detailsFor(intent: CeoChatIntent, result: BlackRoomTeamRunResult): stri
       const entry = obj(idea);
       return [clip(entry?.title, 90), clip(entry?.hook, 120)].filter(Boolean).join(" — ");
     }).filter(Boolean);
+  }
+  if (intent.key === "analytics" && report && typeof report.text === "string") {
+    // Network breakdown, best/worst posts, best hours and recommendations (the header line is the summary).
+    return report.text.split(/\n+/).slice(1).map((line) => line.trim()).filter((line) => line && !/^Recomendaciones:?$/.test(line)).slice(0, 14).map((line) => line.slice(0, 220));
   }
   const lines = String(result.summary || "").split(/\n+/).map((line) => line.trim()).filter(Boolean);
   return lines.slice(1, 6).map((line) => line.slice(0, 200));
