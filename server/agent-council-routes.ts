@@ -87,6 +87,7 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
         view.kongObservedAt = null;
         view.kongRead = null;
         view.kongCollaboration = { verified: false, observedAt: null, totalFindings: 0, exchanges: [] };
+        view.roleWorkToday = [];
       }
       res.json(view);
     } catch (error) {
