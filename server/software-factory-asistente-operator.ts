@@ -108,6 +108,9 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     /** Optional office handoff (operator flag). Enqueues one read-only office
      * review per verified draft PR head; no factory provider call. */
     enqueueOfficeReview?: FactoryOfficeReviewEnqueue;
+    /** Optional office career sweep (operator flag): scores committed stage rows
+     * into the factory engineers' main-company careers. No provider call. */
+    scoreOfficeCareers?: () => Promise<unknown>;
     log?: (message: string) => void;
     now: () => Date;
 }) {
@@ -229,6 +232,8 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
             throw Error("FACTORY_OPERATOR_OWNER_MISMATCH");
         // A review handoff failure never blocks or quarantines order scheduling.
         if (reviewSweep) await reviewSweep().catch(() => { deps.log?.("Factory office review handoff unconfirmed; it will be reconciled on the next sweep."); });
+        // Same isolation: a career scoring failure never blocks or quarantines scheduling.
+        if (deps.scoreOfficeCareers) await deps.scoreOfficeCareers().catch(() => { deps.log?.("Factory career scoring unconfirmed; it will be reconciled on the next sweep."); });
         return schedule(requestOwner);
     };
     return { owner, store, reservationCents: config.reservations.discover, readMainOrder, admitWithinCredits, reviewSweep,
@@ -278,7 +283,15 @@ async function installed(store: Store) {
         const office = createOfficeCloudStore();
         enqueueOfficeReview = (owner, input) => office.enqueueFactoryReview(owner, input);
     }
-    return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, download: fetch, readUi, recoveryPrevious, enqueueOfficeReview, log: message => console.error(message), now, readOrders: async (owner) => { const raw = await (await getCouncilStore()).read(owner); if (!raw)
+    // Default off. When enabled, the factory reconciles its committed stage rows
+    // into the factory engineers' careers through the durable council transaction.
+    let scoreOfficeCareers: (() => Promise<unknown>) | undefined;
+    if (env.SOFTWARE_FACTORY_OFFICE_CAREERS_ENABLED === "true") {
+        const [{ createFactoryCareerSweep }, { getAgentCouncil, setAgentCouncilUser }] = await Promise.all([import("./software-factory-office-careers"), import("./agent-council")]);
+        setAgentCouncilUser(config.owner);
+        scoreOfficeCareers = createFactoryCareerSweep({ owner: config.owner, council: getAgentCouncil(), readJobs: () => store.list(config.owner) });
+    }
+    return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, download: fetch, readUi, recoveryPrevious, enqueueOfficeReview, scoreOfficeCareers, log: message => console.error(message), now, readOrders: async (owner) => { const raw = await (await getCouncilStore()).read(owner); if (!raw)
             throw Error("FACTORY_OPERATOR_COUNCIL_MISSING"); const state = JSON.parse(raw); if (!Array.isArray(state.company?.orders))
             throw Error("FACTORY_OPERATOR_COUNCIL_INVALID"); return state.company.orders; } });
 }

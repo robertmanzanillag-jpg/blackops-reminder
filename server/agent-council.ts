@@ -3,6 +3,7 @@ import { parseInternalWork } from "./office-internal-work";
 import {parseRoleAcademy} from "./office-role-academy";
 import {parseCapabilityTraining} from "./office-capability-training";
 import {parseRoleWork} from "./office-role-work";
+import { FACTORY_AGENT_NAMES, factoryAgentsView, isFactoryAgentId, parseFactoryCareerLedger } from "../shared/factory-office-agents";
 import { getSystemUserId } from "./user-context";
 import type { OfficeKongAuditResult } from "./office-kong";
 // Server side of the agent council (see shared/agent-council.ts).
@@ -165,6 +166,8 @@ export const AGENT_NAMES: Record<string, string> = {
   news: "Noticias",
   "kong-videos": "Videos Kong",
   mechanic: "Mecanico",
+  // Software Factory engineers: main-company careers scored only from real factory stage rows.
+  ...FACTORY_AGENT_NAMES,
   ...Object.fromEntries(KONG_TEAM.map((name) => [`kong:${name}`, name])),
 };
 
@@ -308,6 +311,7 @@ function parseDurableCouncilState(raw: string | null, owner: string): CouncilSta
     parseRoleAcademy(value.officeExecution.roleAcademy);
     parseCapabilityTraining(value.officeExecution.capabilityTraining,owner);
     parseRoleWork(value.officeExecution.roleWork,owner);
+    parseFactoryCareerLedger(value.officeExecution.factoryCareers);
   }
   return parseCouncilState(raw);
 }
@@ -769,7 +773,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
     }
   }
 
-  async function view() {
+  async function view(options: { factoryLiveJobs?: Parameters<typeof factoryAgentsView>[0]["liveJobs"]; factoryOwnerKey?: string } = {}) {
     const loaded = await load();
     // The KONG conversation is owner-only (served by /api/kong-supervisor/state with an owner check).
     // This view is readable by any signed-in user, so it only carries the readiness records.
@@ -783,7 +787,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
         agentId: role.roleId, status: role.status, generation: role.generation,
         policyVersion: role.activePolicy?.version,
         qualificationScope: role.activePolicy?.qualificationScope,
-        reason: role.status === "unsupported" ? "No verified execution/training adapter is installed for this role."
+        reason: isFactoryAgentId(role.roleId) ? "Factory stage engineer: life is scored from recorded factory stage outcomes; no verified academy adapter qualifies a successor yet."
+          : role.status === "unsupported" ? "No verified execution/training adapter is installed for this role."
           : role.leases.some(lease => lease.status === "unknown") ? "An execution is uncertain; reconciliation is required."
           : role.status === "vacant" ? "Awaiting a candidate with verified comparable evaluations."
           : role.status === "probation" ? "Awaiting the replacement's first verified execution."
@@ -798,6 +803,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
       kongCollaboration: state.kongCollaboration.observedAt && deps.now() - Date.parse(state.kongCollaboration.observedAt) <= 5 * 60_000 ? state.kongCollaboration : { verified: false, observedAt: null, totalFindings: 0, exchanges: [] },
       leaderboard: leaderboard(state.company, ["ceo", ...Object.keys(state.company.careers).filter(isKongCompanyAgent), ...EXEMPT_IDS, ...unscoredAgentIds(integrationsNow())]),
       integrations: integrationsNow(),
+      // Persisted last observation only; the route may overlay a read-only live lease read for the owner.
+      factoryAgents: factoryAgentsView({ ledger: loaded.officeExecution?.factoryCareers, liveJobs: options.factoryLiveJobs, ownerKey: options.factoryOwnerKey, now: deps.now() }),
       personalities,
       overrides: applyLessons(state.debates, state.lessons),
       nextCycleInMs: state.lastCycleAt ? Math.max(0, Date.parse(state.lastCycleAt) + COUNCIL_CYCLE_MS - deps.now()) : 0,

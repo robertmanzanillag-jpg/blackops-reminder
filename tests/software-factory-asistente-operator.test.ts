@@ -415,6 +415,25 @@ test("office review handoff sweep runs before order scheduling, is off by defaul
     assert.equal(logs.length, 1);
 });
 
+test("office career scoring sweep runs before order scheduling, is off by default and never blocks scheduling", async () => {
+    let f = await fixture();
+    let worker = await createAsistenteOperatorComposition(f.config, f.deps).createFactoryWorkerOptions();
+    await worker.scheduleCompanyOrders!(owner);
+    assert.equal(f.calls(), 1);
+    f = await fixture();
+    const order: string[] = [];
+    const enqueue = f.store.enqueue; f.store.enqueue = async (...args: any[]) => { order.push("schedule"); return enqueue(...args); };
+    worker = await createAsistenteOperatorComposition(f.config, { ...f.deps, scoreOfficeCareers: async () => { order.push("careers"); } }).createFactoryWorkerOptions();
+    await worker.scheduleCompanyOrders!(owner);
+    assert.deepEqual(order, ["careers", "schedule"]);
+    f = await fixture();
+    const logs: string[] = [];
+    worker = await createAsistenteOperatorComposition(f.config, { ...f.deps, log: (m: string) => logs.push(m), scoreOfficeCareers: async () => { throw Error("COUNCIL_DOWN"); } }).createFactoryWorkerOptions();
+    await worker.scheduleCompanyOrders!(owner);
+    assert.equal(f.calls(), 1);
+    assert.match(logs.join("\n"), /career scoring unconfirmed/);
+});
+
 test("operator config accepts the production integration base branch and rejects unlisted branches", async () => {
     const f = await fixture();
     for (const baseBranch of ["main", "codex/office-integrated-repair-20261106", "claude/integration-20261111"])
