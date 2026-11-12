@@ -29,6 +29,7 @@ import { BLACKROOM_TIMEZONE } from "../blackroom-metricool-bridge";
 import { extractGoogleDriveFileIdFromUrl } from "../google-drive-file-url";
 import type { RadioVideoProcessResult } from "../radio-video-edit-agent";
 import { createBlackRoomTeamStateStore, readBlackRoomTeamState } from "./state";
+import { classifyBlackRoomRenderFailure, type BlackRoomEditJobFailureKind } from "./edit-job-failure";
 import publisherAgent, { isViewerPageMediaUrl } from "./blackroom-publisher";
 import {
   BLACKROOM_SCRIPT_DURATIONS,
@@ -93,6 +94,8 @@ export type BlackRoomEditPlanPreview = {
   steps: string[];
 };
 
+export type { BlackRoomEditJobFailureKind } from "./edit-job-failure";
+
 export type BlackRoomEditJob = {
   id: string;
   createdAt: string;
@@ -110,6 +113,8 @@ export type BlackRoomEditJob = {
   startedAt: string | null;
   finishedAt: string | null;
   error: string | null;
+  /** Set when status is "failed"; older jobs may not have it (inferred from the error). */
+  failureKind?: BlackRoomEditJobFailureKind | null;
   pendingActionId: string | null;
   plan: BlackRoomEditPlanPreview | null;
   clips: BlackRoomEditClip[];
@@ -268,6 +273,7 @@ function recoverStaleJobs(state: BlackRoomScriptsState, now: Date): number {
     const started = job.startedAt ? Date.parse(job.startedAt) : Number.NaN;
     if (Number.isFinite(started) && now.getTime() - started < BLACKROOM_SCRIPTS_STALE_RENDER_MS) continue;
     job.status = "failed";
+    job.failureKind = "interrupted";
     job.error = "El render se interrumpio (posible reinicio del servidor). Usa retry-edit-job para intentarlo de nuevo.";
     job.finishedAt = now.toISOString();
     job.updatedAt = now.toISOString();
@@ -478,9 +484,11 @@ export function createBlackRoomScriptsAgent(deps: BlackRoomScriptsDeps = {}): Bl
     await ctx.state.save(state);
 
     let outcome: BlackRoomRenderOutcome;
+    let thrown = false;
     try {
       outcome = await render(job, { userId: ctx.userId, workspaceRoot });
     } catch (error) {
+      thrown = true;
       outcome = { status: "failed", error: error instanceof Error ? error.message.slice(0, 300) : "Error desconocido en el render" };
     }
 
@@ -505,12 +513,15 @@ export function createBlackRoomScriptsAgent(deps: BlackRoomScriptsDeps = {}): Bl
     } else if (outcome.status === "queued") {
       // The pipeline left its own confirmation; approving it there renders outside this job, so no loop here.
       current.status = "failed";
+      current.failureKind = "awaiting_confirmation";
       current.finishedAt = at;
       current.error = `El pipeline dejo una confirmacion pendiente${outcome.pendingActionId ? ` (${outcome.pendingActionId})` : ""}. Si la apruebas, los clips quedan en Drive fuera de este trabajo.`;
     } else {
       current.status = "failed";
       current.finishedAt = at;
       current.error = outcome.error || (outcome.status === "completed" ? "El render termino sin clips." : "El render fallo sin detalle.");
+      // An exception before any output is usually missing Drive/pipeline setup; the classifier decides.
+      current.failureKind = thrown || outcome.status === "failed" ? classifyBlackRoomRenderFailure(current.error) : "render";
     }
     await ctx.state.save(after);
     return { job: current, ok: false, message: `Video ${current.id}: ${current.error}` };
@@ -750,6 +761,7 @@ export function createBlackRoomScriptsAgent(deps: BlackRoomScriptsDeps = {}): Bl
       if (djName) job.djName = djName;
       job.status = "queued";
       job.error = null;
+      job.failureKind = null;
       job.finishedAt = null;
       job.pendingActionId = null;
       job.updatedAt = ctx.now().toISOString();

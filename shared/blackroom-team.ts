@@ -192,6 +192,27 @@ export type BlackRoomTeamContext = {
   state: BlackRoomTeamStateStore;
   /** Status of another Black Room member (new team or legacy videos/radio); null when unavailable. */
   readTeammateStatus(id: BlackRoomTeamMemberId): Promise<BlackRoomTeamStatus | null>;
+  /**
+   * Rules this agent learned from real outcomes (posts rejected or approved, failed jobs, posts
+   * above/below the team median, owner/partner feedback). Deterministic; empty when nothing was
+   * learned yet. Optional so isolated tests can omit it.
+   */
+  readLessons?(): Promise<BlackRoomTeamLessonRule[]>;
+};
+
+/** One deterministic rule derived from recorded outcomes (server/blackroom-team/lessons.ts). */
+export type BlackRoomTeamLessonRule = {
+  id: string;
+  agentId: BlackRoomTeamMemberId;
+  /** "evitar": repeated rejections/failures; "repetir": what worked; "corregir": explicit feedback. */
+  kind: "evitar" | "repetir" | "corregir";
+  /** Spanish rule the agent (and its academy trainees) can apply. */
+  text: string;
+  /** How many recorded outcomes support it. */
+  support: number;
+  /** Ids of the outcomes behind the rule (evidence, never invented). */
+  evidence: string[];
+  updatedAt: string;
 };
 
 export type BlackRoomTeamActionHandler = (ctx: BlackRoomTeamContext, input: Record<string, unknown>) => Promise<BlackRoomTeamRunResult>;

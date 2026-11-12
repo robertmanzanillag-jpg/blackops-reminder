@@ -16,6 +16,7 @@ import {
 } from "@shared/blackroom-team";
 import { agentProbes, summarizeProbe, type AgentLiveStatus } from "@shared/agent-live-status";
 import { BLACKROOM_TEAM_DATA_DIR, createBlackRoomTeamStateStore } from "./state";
+import { getBlackRoomLessons } from "./lessons";
 import ceo from "./blackroom-ceo";
 import analytics from "./blackroom-analytics";
 import competition from "./blackroom-competition";
@@ -104,6 +105,8 @@ export function createBlackRoomTeamContext(agentId: BlackRoomTeamAgentId, option
     userId,
     actor: options.actor ?? null,
     state: createBlackRoomTeamStateStore(dataDir, agentId),
+    // Lessons learned from real outcomes; a store that cannot be read means "no lessons", never an error.
+    readLessons: () => getBlackRoomLessons(agentId, { dataDir, now: options.now }).then((lessons) => lessons.rules).catch(() => []),
     async readTeammateStatus(id: BlackRoomTeamMemberId) {
       if (id === agentId || depth > 0) return null;
       try {

@@ -156,6 +156,11 @@ function missingChecks(checks: unknown): string[] {
 }
 
 export function summarizeProbe(probe: AgentProbe, result: ProbeResult | undefined, now: number = Date.now()): AgentLiveStatus {
+  // Partner ("socio") view: the server answered with a redacted summary (shared/workspace-access.ts).
+  const redacted = result?.ok ? asObject(result.body) : null;
+  if (redacted?.redacted === true && redacted.scope === "owner") {
+    return { state: "offline", label: "Solo Robert", detail: str(redacted.summary) || "Vista de socio: el detalle de este agente es privado.", lifePenaltyExempt: true };
+  }
   const status = summarizeStatus(probe, result, now);
   if(!status.evidenceId) status.lifePenaltyExempt=true;
   // Activity comes only from a real JSON body; an error state still shows what the agent saw (e.g. the failed run).

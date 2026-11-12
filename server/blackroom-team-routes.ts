@@ -29,9 +29,14 @@ export type BlackRoomTeamRouteOptions = {
   context?: Omit<BlackRoomTeamContextOptions, "modules" | "userId" | "actor">;
   /** Audit sink for who ran what; defaults to <dataDir>/audit.json. */
   audit?: (entry: BlackRoomTeamAuditEntry) => Promise<void>;
+  /** Busy set shared with the CEO chat; defaults to BLACKROOM_TEAM_RUNNING. */
+  running?: Set<string>;
 };
 
 const MAX_INPUT_KEYS = 50;
+
+/** Agents running right now, shared with the CEO chat so the same agent never runs twice at once. */
+export const BLACKROOM_TEAM_RUNNING = new Set<string>();
 
 function defaultRequestUserId(req: Request): string | null {
   try {
@@ -67,7 +72,7 @@ export function registerBlackRoomTeamRoutes(app: Express, options: BlackRoomTeam
   const modules = options.modules ?? BLACKROOM_TEAM_MODULES;
   const dataDir = options.context?.dataDir ?? path.resolve(process.cwd(), BLACKROOM_TEAM_DATA_DIR);
   const audit = options.audit ?? ((entry: BlackRoomTeamAuditEntry) => appendBlackRoomTeamAudit(dataDir, entry));
-  const running = new Set<BlackRoomTeamAgentId>();
+  const running = options.running ?? BLACKROOM_TEAM_RUNNING;
 
   const member = async (req: Request, res: Response): Promise<RequestActorResolution | null> => {
     res.set("Cache-Control", "no-store");

@@ -235,3 +235,34 @@ test("unset runtime and production override cannot authenticate a mock user", ()
     }
   }
 });
+
+test("auth middleware rejects mixed-case /API paths that Express still routes to /api handlers", async () => {
+  const previous = { NODE_ENV: process.env.NODE_ENV, DEFAULT_USER_ID: process.env.DEFAULT_USER_ID, ALLOW_DEV_USER_FALLBACK: process.env.ALLOW_DEV_USER_FALLBACK };
+  process.env.NODE_ENV = "production";
+  delete process.env.DEFAULT_USER_ID;
+  delete process.env.ALLOW_DEV_USER_FALLBACK;
+  const { default: express } = await import("express");
+  const app = express();
+  app.use(requireAppUser);
+  app.get("/api/github/status", (_req, res) => { res.json({ ok: true }); });
+  app.post("/api/auth/login", (_req, res) => { res.json({ login: true }); });
+  const server = app.listen(0);
+  try {
+    await new Promise<void>((resolve) => server.once("listening", () => resolve()));
+    const port = (server.address() as { port: number }).port;
+    for (const path of ["/api/github/status", "/API/github/status", "/Api/github/status", "/%41PI/github/status"]) {
+      const response = await fetch(`http://127.0.0.1:${port}${path}`);
+      assert.notEqual(response.status, 200, `${path} must not reach the handler without a session`);
+    }
+    const upper = await fetch(`http://127.0.0.1:${port}/API/github/status`);
+    assert.equal(upper.status, 401);
+    const login = await fetch(`http://127.0.0.1:${port}/API/auth/login`, { method: "POST" });
+    assert.equal(login.status, 200);
+  } finally {
+    server.close();
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});

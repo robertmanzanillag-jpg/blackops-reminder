@@ -24,6 +24,8 @@ export const WORKSPACE_INVITATION_TTL_MS = 7 * 24 * 60 * 60_000;
 export const WORKSPACE_INVITATION_TOKEN_BYTES = 32;
 export const WORKSPACE_INVITE_PATH_PREFIX = "/invite/";
 export const WORKSPACE_MAX_OPEN_INVITATIONS = 20;
+/** New invitations are refused once this many partners are active. */
+export const WORKSPACE_MAX_ACTIVE_PARTNERS = 50;
 
 export const PARTNER_SCOPE_NOTE = "Solo Robert";
 /** An accept that crashed mid-way frees its claim after this long. */
@@ -89,7 +91,10 @@ export function parseWorkspaceAccessState(raw: unknown): WorkspaceAccessState {
     if (!userId || !username || !invitedBy || !invitationId || !joinedAt) continue;
     partners.push({ userId, username, invitedBy, invitationId, joinedAt, revokedAt: iso(entry.revokedAt), revokedBy: text(entry.revokedBy) });
   }
-  return { version: 1, invitations: invitations.slice(-200), partners: partners.slice(-50) };
+  // Partner records are never dropped: losing one would silently erase a revocation (or the
+  // partner sandbox) for that account. Growth is bounded by WORKSPACE_MAX_ACTIVE_PARTNERS at
+  // invitation time instead.
+  return { version: 1, invitations: invitations.slice(-200), partners };
 }
 
 export type InvitationStatus = "open" | "used" | "expired" | "revoked" | "claimed";
@@ -164,6 +169,10 @@ export const PARTNER_ALLOWED_ROUTES: readonly Rule[] = [
   { method: "GET", pattern: /^\/api\/blackroom-team\/[a-z0-9-]{1,60}\/status$/ },
   { method: "POST", pattern: /^\/api\/blackroom-team\/[a-z0-9-]{1,60}\/run$/ },
   { method: "POST", pattern: /^\/api\/blackroom-team\/[a-z0-9-]{1,60}\/action\/[a-z][a-z0-9-]{0,39}$/ },
+  // Chat with the CEO Black Room (thread, messages, explicit approve/reject of publisher items).
+  { method: "GET", pattern: /^\/api\/blackroom-ceo-chat$/ },
+  { method: "POST", pattern: /^\/api\/blackroom-ceo-chat\/messages$/ },
+  { method: "POST", pattern: /^\/api\/blackroom-ceo-chat\/approvals\/[a-z0-9_-]{1,120}\/(?:approve|reject)$/ },
   // Office: read-only council view (redacted for partners in the handler) and Black Room CEO orders.
   { method: "GET", pattern: /^\/api\/agent-council\/state$/ },
   { method: "POST", pattern: /^\/api\/agent-company\/orders$/, when: companyIsBlackRoom },
@@ -226,7 +235,7 @@ export function isPartnerRedactedBody(body: unknown): boolean {
 // Council view redaction (GET /api/agent-council/state for partners)
 // ---------------------------------------------------------------------------
 
-type LooseCompany = { careers?: Record<string, { memory?: unknown[] } & Record<string, unknown>>; orders?: Array<{ assignees?: Array<{ agentId: string }> } & Record<string, unknown>>; events?: unknown[]; trainees?: Array<{ forAgentId?: string } & Record<string, unknown>> } & Record<string, unknown>;
+type LooseCompany = { careers?: Record<string, { memory?: unknown[] } & Record<string, unknown>>; retiredCareers?: Array<{ agentId?: string; memory?: unknown[] } & Record<string, unknown>>; orders?: Array<{ assignees?: Array<{ agentId: string }> } & Record<string, unknown>>; events?: unknown[]; trainees?: Array<{ forAgentId?: string } & Record<string, unknown>> } & Record<string, unknown>;
 
 /**
  * Keeps the office readable (careers, points, battery, leaderboard) but strips what belongs to
@@ -244,6 +253,9 @@ export function redactCouncilViewForPartner<T extends Record<string, unknown>>(v
     out.company = {
       ...company,
       careers,
+      // Fired agents keep their full memory (Robert's order texts, finance/KONG status labels).
+      retiredCareers: (company.retiredCareers || []).map((career) =>
+        isBlackRoomScopeAgent(career?.agentId) ? career : { ...career, memory: [], reviewGuidance: [] }),
       orders: (company.orders || []).filter((order) => isBlackRoomOnlyOrder(order)),
       events: [],
       trainees: (company.trainees || []).filter((trainee) => isBlackRoomScopeAgent(trainee.forAgentId)),
@@ -263,6 +275,10 @@ export function redactCouncilViewForPartner<T extends Record<string, unknown>>(v
       [id, isBlackRoomScopeAgent(id) ? status : { state: status?.state, label: PARTNER_SCOPE_NOTE }]));
   }
   if (Array.isArray(view.executionReadiness)) out.executionReadiness = view.executionReadiness.filter(bySubject("agentId"));
+  // The raw cycle error can name any probe (finance, KONG); partners only learn that it failed.
+  if (typeof view.lastCycleError === "string" && view.lastCycleError) out.lastCycleError = "El ultimo ciclo del consejo tuvo un error.";
+  // KONG is owner-only: drop its supervision records entirely for partners.
+  delete out.kongSupervision;
   out.costUsd = 0;
   out.workspaceRole = "partner";
   return out as T;

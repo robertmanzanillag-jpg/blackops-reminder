@@ -36,7 +36,7 @@ export async function readBlackRoomTeamAudit(dataDir: string): Promise<BlackRoom
 export function appendBlackRoomTeamAudit(dataDir: string, entry: BlackRoomTeamAuditEntry): Promise<void> {
   const filePath = path.join(dataDir, BLACKROOM_TEAM_AUDIT_FILE);
   const work = async () => {
-    const entries = await readBlackRoomTeamAudit(dataDir).catch(() => []);
+    const entries: BlackRoomTeamAuditEntry[] = await readBlackRoomTeamAudit(dataDir).catch((): BlackRoomTeamAuditEntry[] => []);
     entries.push({ ...entry, summary: entry.summary.slice(0, 200) });
     await mkdir(dataDir, { recursive: true });
     const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;

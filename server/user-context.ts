@@ -134,7 +134,17 @@ export function resolveCurrentUserId(req: Request): string | null {
 }
 
 export function isPublicApiPath(path: string): boolean {
-  return PUBLIC_API_PATHS.includes(path) || PUBLIC_API_PATTERNS.some((pattern) => pattern.test(path));
+  // Express routing is case-insensitive, so compare lowercased paths.
+  const lowered = String(path || "").toLowerCase();
+  return PUBLIC_API_PATHS.includes(lowered) || PUBLIC_API_PATTERNS.some((pattern) => pattern.test(lowered));
+}
+
+function isApiRequestPath(path: string): boolean {
+  // Express 4 matches routes case-insensitively: "/API/x" reaches "/api/x" handlers.
+  const raw = String(path || "");
+  let decoded = raw;
+  try { decoded = decodeURIComponent(raw); } catch { /* keep the raw path */ }
+  return raw.toLowerCase().startsWith("/api") || decoded.toLowerCase().startsWith("/api");
 }
 
 export function resolveRequestApiPath(req: Request): string {
@@ -167,7 +177,7 @@ export function getCurrentUserId(req: Request): string {
 }
 
 export function requireAppUser(req: Request, res: Response, next: NextFunction): void {
-  if (!req.path.startsWith("/api")) return next();
+  if (!isApiRequestPath(req.path)) return next();
   if (isPublicApiRequest(req)) return next();
 
   const userId = resolveCurrentUserId(req);

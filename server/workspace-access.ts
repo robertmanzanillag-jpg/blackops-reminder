@@ -16,6 +16,7 @@ import {
   BLACKROOM_SCOPE_AGENT_IDS,
   WORKSPACE_INVITATION_TOKEN_BYTES,
   WORKSPACE_INVITATION_TTL_MS,
+  WORKSPACE_MAX_ACTIVE_PARTNERS,
   WORKSPACE_MAX_OPEN_INVITATIONS,
   PARTNER_SCOPE_NOTE,
   classifyPartnerRequest,
@@ -96,7 +97,11 @@ export function defaultWorkspaceAccessStore(): WorkspaceAccessStore {
   if (!hasDatabase) {
     let revision = 0;
     return {
-      read: async () => ({ raw: await readFile(FILE, "utf8").catch(() => null), revision }),
+      // Only a missing file means "no state yet". Any other read error must reach the fail-closed path.
+      read: async () => ({
+        raw: await readFile(FILE, "utf8").catch((error: NodeJS.ErrnoException) => (error?.code === "ENOENT" ? null : Promise.reject(error))),
+        revision,
+      }),
       write: async (raw, expected) => {
         if (expected !== null && expected !== revision) throw new WorkspaceAccessConflict("state conflict");
         await mkdir(path.dirname(FILE), { recursive: true });
@@ -137,7 +142,7 @@ export function defaultWorkspaceAccessStore(): WorkspaceAccessStore {
 // ---------------------------------------------------------------------------
 
 export type WorkspaceAccessResolution = {
-  /** "owner", "partner", or null for any other signed-in user (legacy behavior, unchanged). */
+  /** "owner", "partner", or null for any other signed-in user (denied by enforceWorkspaceAccess unless WORKSPACE_ALLOW_UNLISTED_USERS=true). */
   role: WorkspaceRole | null;
   /** True when the user was a partner and the owner revoked the access. Every /api call is refused. */
   revoked: boolean;
@@ -241,6 +246,9 @@ export function createWorkspaceAccess(deps: WorkspaceAccessDeps) {
       if (state.invitations.filter((item) => isInvitationUsable(item, now)).length >= WORKSPACE_MAX_OPEN_INVITATIONS) {
         throw new WorkspaceAccessError("too_many_invitations", "Hay demasiadas invitaciones abiertas. Revoca alguna antes de crear otra.");
       }
+      if (state.partners.filter((item) => !item.revokedAt).length >= WORKSPACE_MAX_ACTIVE_PARTNERS) {
+        throw new WorkspaceAccessError("too_many_invitations", "Ya hay demasiados socios activos. Revoca alguno antes de invitar a otro.");
+      }
       state.invitations.push(invitation);
     });
     return { token, invitation: invitationView(invitation, now) };
@@ -326,7 +334,38 @@ export function createWorkspaceAccess(deps: WorkspaceAccessDeps) {
     });
   }
 
-  return { load, resolve, getWorkspaceRole, createInvitation, listInvitations, listPartners, revokeInvitation, revokePartner, previewInvitation, claimInvitation, releaseInvitationClaim, completeInvitation };
+  /**
+   * Compensation when an invitation accept created the account but could not record the partner:
+   * writes a revoked partner record for that account so it can never act as an unlisted user,
+   * and releases the claim so the invitee can try again. Retried; throws if it never lands.
+   */
+  async function quarantineOrphanedAccount(invitationId: string, user: { id: string; username: string }, attempts = 3) {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      try {
+        const now = new Date(deps.now()).toISOString();
+        await mutate((state) => {
+          const invitation = state.invitations.find((item) => item.id === invitationId);
+          if (invitation && !invitation.usedAt) invitation.claimedAt = null;
+          const existing = partnerRecord(state, user.id);
+          if (existing) {
+            if (!existing.revokedAt) { existing.revokedAt = now; existing.revokedBy = "system:accept_failed"; }
+            return;
+          }
+          state.partners.push({ userId: user.id, username: user.username, invitedBy: invitation?.createdBy || "system", invitationId, joinedAt: now, revokedAt: now, revokedBy: "system:accept_failed" });
+        });
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError;
+  }
+
+  /** The owner rule alone (used when the access store is unreachable). */
+  const isOwner = (userId: string) => deps.isOwner(userId);
+
+  return { load, resolve, isOwner, getWorkspaceRole, createInvitation, listInvitations, listPartners, revokeInvitation, revokePartner, previewInvitation, claimInvitation, releaseInvitationClaim, completeInvitation, quarantineOrphanedAccount };
 }
 
 export type WorkspaceAccess = ReturnType<typeof createWorkspaceAccess>;
@@ -417,13 +456,25 @@ export function requirePartnerOrOwner(access?: WorkspaceAccess): RequestHandler 
 }
 
 /**
- * Global partner gate (mounted right after requireAppUser). Owners and other users pass through
+ * Legacy escape hatch: WORKSPACE_ALLOW_UNLISTED_USERS=true lets signed-in users who are neither
+ * the owner nor a partner through unfiltered (the pre-partner behavior). Off by default.
+ */
+function allowsUnlistedUsers(): boolean {
+  return process.env.WORKSPACE_ALLOW_UNLISTED_USERS === "true";
+}
+
+/**
+ * Global partner gate (mounted right after requireAppUser). Owners pass through
  * unchanged; partners only reach the explicit allowlist, redacted probes get a summary, and
- * everything else is 403. Revoked partners are refused on every /api route.
+ * everything else is 403. Revoked partners are refused on every /api route, and any other signed-in
+ * account (neither owner nor active partner) is refused too unless WORKSPACE_ALLOW_UNLISTED_USERS=true.
  */
 export function enforceWorkspaceAccess(access?: WorkspaceAccess): RequestHandler {
   return async (req: Request, res: Response, next: NextFunction) => {
-    if (!req.path.startsWith("/api")) return next();
+    // Express routing is case-insensitive: "/API/x" reaches "/api/x" handlers, so match the same way.
+    let lowered = req.path.toLowerCase();
+    try { lowered = decodeURIComponent(req.path).toLowerCase(); } catch { /* keep the raw path */ }
+    if (!lowered.startsWith("/api") && !req.path.toLowerCase().startsWith("/api")) return next();
     if (isPublicApiRequest(req)) return next();
     const userId = resolveCurrentUserId(req);
     if (!userId) return next();
@@ -434,13 +485,31 @@ export function enforceWorkspaceAccess(access?: WorkspaceAccess): RequestHandler
     } catch {
       // Cannot tell whether this user is a partner: only the owner continues.
       try {
-        if ((await service.resolve(userId)).role === "owner") return next();
+        if (await service.isOwner(userId)) return next();
       } catch { /* fall through */ }
       res.set("Cache-Control", "no-store");
       return void res.status(503).json({ error: "No se pudo verificar el acceso. Intenta de nuevo.", reason: "workspace_access_unavailable" });
     }
-    if (resolution.revoked) return json403(res, "Tu acceso de socio fue revocado.", "partner_revoked");
-    if (resolution.role !== "partner" || !resolution.ownerUserId) return next();
+    if (resolution.revoked) {
+      // The role endpoint stays readable so the client can tell the user why everything is closed.
+      if (req.method === "GET" && resolveRequestApiPath(req).split("?")[0] === "/api/workspace/me") return next();
+      return json403(res, "Tu acceso de socio fue revocado.", "partner_revoked");
+    }
+    if (resolution.role !== "partner" || !resolution.ownerUserId) {
+      // Single-owner workspace: only the owner and active partners may use the API. Any other
+      // signed-in account (for example one left behind by a failed invitation accept) is refused.
+      if (allowsUnlistedUsers()) return next();
+      let owner = false;
+      try {
+        owner = await service.isOwner(userId);
+      } catch {
+        res.set("Cache-Control", "no-store");
+        return void res.status(503).json({ error: "No se pudo verificar el acceso. Intenta de nuevo.", reason: "workspace_access_unavailable" });
+      }
+      if (owner) return next();
+      if (req.method === "GET" && resolveRequestApiPath(req).split("?")[0].toLowerCase() === "/api/workspace/me") return next();
+      return json403(res, "Esta cuenta no tiene acceso a este espacio de trabajo.", "workspace_member_only");
+    }
 
     const apiPath = resolveRequestApiPath(req);
     const decision = classifyPartnerRequest(req.method, apiPath, req.body);
@@ -574,10 +643,23 @@ export async function registerWorkspaceAccessRoutes(app: Express, options: Works
       await access().releaseInvitationClaim(invitation.id).catch(() => undefined);
       return res.status(409).json({ error: "Ese usuario ya existe. Elige otro." });
     }
+    let partner: Awaited<ReturnType<WorkspaceAccess["completeInvitation"]>>;
     try {
-      const partner = await access().completeInvitation(invitation.id, created.user);
+      partner = await access().completeInvitation(invitation.id, created.user);
+    } catch {
+      // The account exists but is not a recorded partner. Quarantine it (revoked partner record) so it
+      // can never sign in as an unlisted user; enforceWorkspaceAccess also denies unlisted users.
+      await access().quarantineOrphanedAccount(invitation.id, created.user).catch(() => undefined);
+      return res.status(503).json({ error: "No se pudo completar la invitacion. Pide a Robert un enlace nuevo.", reason: "invitation_not_completed" });
+    }
+    try {
       if (!await auth.signIn(req, res, created.user.id)) return res.status(500).json({ error: "La cuenta se creo, pero no se pudo iniciar sesion. Entra con tu usuario." });
       res.status(201).json({ authenticated: true, sessionBacked: true, usingDevFallback: false, user: { id: created.user.id, username: created.user.username }, role: "partner", partner });
     } catch (error) { fail(res, error); }
   });
+}
+
+/** True only for an active (not revoked) partner. Reads the access store, never the owner rule. */
+export async function isActiveWorkspacePartner(userId: string, access: WorkspaceAccess = getWorkspaceAccess()): Promise<boolean> {
+  return (await access.resolve(userId, { skipOwnerCheck: true })).role === "partner";
 }
