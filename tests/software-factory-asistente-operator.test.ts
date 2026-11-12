@@ -382,3 +382,35 @@ test("generic acceptance is satisfied only by checks on the exact head and the g
         assert.equal(out.reason, expected); assert.equal(out.status, expected ? "blocked" : "completed");
     }
 });
+test("office review handoff sweep runs before order scheduling, is off by default and never blocks scheduling", async () => {
+    // Disabled: no office review dependency means no proposal read at all.
+    let f = await fixture(), reads = 0;
+    f.store.projects = async () => { reads++; return [project]; };
+    f.store.getCompletedJob = async () => undefined;
+    let worker = await createAsistenteOperatorComposition(f.config, f.deps).createFactoryWorkerOptions();
+    await worker.scheduleCompanyOrders!(owner);
+    assert.equal(reads, 0);
+    assert.equal(f.calls(), 1);
+    // Enabled: the sweep reads verified proposals first; nothing recorded means no enqueue.
+    f = await fixture(); reads = 0;
+    const order: string[] = [];
+    f.store.projects = async () => { reads++; order.push("sweep"); return [project]; };
+    f.store.getCompletedJob = async () => undefined;
+    const enqueue = f.store.enqueue; f.store.enqueue = async (...args: any[]) => { order.push("schedule"); return enqueue(...args); };
+    let enqueued = 0;
+    const composition = createAsistenteOperatorComposition(f.config, { ...f.deps, enqueueOfficeReview: async () => { enqueued++; return { status: "enqueued" as const }; } });
+    worker = await composition.createFactoryWorkerOptions();
+    await worker.scheduleCompanyOrders!(owner);
+    assert.deepEqual(order, ["sweep", "schedule"]);
+    assert.equal(enqueued, 0);
+    await assert.rejects(worker.scheduleCompanyOrders!("someone-else"), /OWNER_MISMATCH/);
+    // A failing handoff is logged and reconciled later; scheduling still runs.
+    f = await fixture();
+    f.store.projects = async () => { throw Error("OFFICE_DB_DOWN"); };
+    f.store.getCompletedJob = async () => undefined;
+    const logs: string[] = [];
+    worker = await createAsistenteOperatorComposition(f.config, { ...f.deps, log: (m: string) => logs.push(m), enqueueOfficeReview: async () => { throw Error("unreachable"); } }).createFactoryWorkerOptions();
+    await worker.scheduleCompanyOrders!(owner);
+    assert.equal(f.calls(), 1);
+    assert.equal(logs.length, 1);
+});
