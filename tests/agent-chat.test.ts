@@ -274,3 +274,50 @@ test("approval flags and routing fixes from QA", () => {
   assert.equal(routeAgentMessage("legal", "revisa el contrato").approvalRequired, false);
   assert.equal(routeAgentMessage("code", "estado").approvalRequired, false);
 });
+
+// ---------- Final polish (re-QA) ----------
+test("technical nouns are not outreach; outreach toward a person still needs approval", () => {
+  for (const text of ["fix the email validation bug", "refactor the API call", "la función se llama getUser", "fix the pay button style"]) {
+    assert.equal(routeAgentMessage("code", text).approvalRequired, false, text);
+  }
+  for (const text of ["email the venue owner", "call the venue", "llámale al promotor", "llama al DJ mañana", "send an email to the promoter", "pay the supplier $200"]) {
+    assert.equal(routeAgentMessage("ceo", text).approvalRequired, true, text);
+  }
+  assert.deepEqual([routeAgentMessage("code", "fix the pay button style").decision, routeAgentMessage("code", "fix the pay button style").targetAgentId], ["keep", "code"]);
+});
+
+test("asking about another agent's status is answered from its data, with no order", async () => {
+  for (const text of ["tell me what Legal is doing", "¿qué está haciendo Legal?", "dime el estado de Legal"]) {
+    const route = routeAgentMessage("ceo", text);
+    assert.deepEqual([route.intent, route.decision, route.targetAgentId], ["status", "answer", "legal"], text);
+  }
+  const officeCouncil = council(stateWithStatuses());
+  const service = createAgentChatService({ store: createChatStorageThreadStore(memoryChatStorage(), "owner"), council: officeCouncil, now: () => Date.parse("2026-11-12T10:05:00Z") });
+  const result = await service.send("ceo", { text: "tell me what Legal is doing", requestId: "req-other-status" });
+  assert.match(result.messages[1].text, /Según el registro de \*\*Legal/);
+  assert.match(result.messages[1].text, /Revisando términos/);
+  assert.equal((await officeCouncil.load()).company.orders.length, 0);
+});
+
+test("retry after failure reuses the thread and the user message (requestId-idempotent)", async () => {
+  const storage = memoryChatStorage();
+  const officeCouncil = council(stateWithStatuses());
+  let failLoad = true;
+  const flakyCouncil = { load: async () => { if (failLoad) throw new Error("db down"); return officeCouncil.load(); }, placeChatOrder: officeCouncil.placeChatOrder };
+  const body = { text: "revisa el contrato del venue", requestId: "req-retry-thread" };
+  await assert.rejects(createAgentChatService({ store: createChatStorageThreadStore(storage, "owner"), council: flakyCouncil }).send("legal", body));
+  failLoad = false;
+  // New process, same requestId, no threadId (first message of a conversation).
+  const service = createAgentChatService({ store: createChatStorageThreadStore(storage, "owner"), council: flakyCouncil });
+  const result = await service.send("legal", body);
+  const threads = await service.threads("legal");
+  assert.equal(threads.length, 1);
+  const messages = (await service.thread("legal", threads[0].id)).messages;
+  assert.deepEqual(messages.map(m => m.role), ["user", "agent"]);
+  assert.equal(result.messages[0].id, messages[0].id);
+  // A third retry after success (fresh process) writes nothing new and returns the same order.
+  const again = await createAgentChatService({ store: createChatStorageThreadStore(storage, "owner"), council: officeCouncil }).send("legal", body);
+  assert.equal((await service.thread("legal", threads[0].id)).messages.length, 2);
+  assert.equal(again.order?.id, result.order?.id);
+  assert.equal((await officeCouncil.load()).company.orders.length, 1);
+});

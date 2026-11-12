@@ -13,17 +13,17 @@ import { AGENT_CHAT_IDS, AGENT_CHAT_PROFILES, agentChatName, handoffLog, isAgent
 import { effectiveIntegrations, integrationFor, parseIntegrationOverrides } from "@shared/agent-integrations";
 
 export type AgentChatRole = "user" | "agent" | "handoff" | "peer";
-export type AgentChatMessage = { id: string; threadId: string; role: AgentChatRole; agentId: string; fromAgentId?: string; text: string; at: string };
-export type AgentThread = { id: string; agentId: string; title: string; createdAt: string; inbox: boolean };
+export type AgentChatMessage = { id: string; threadId: string; role: AgentChatRole; agentId: string; fromAgentId?: string; text: string; at: string; requestId?: string };
+export type AgentThread = { id: string; agentId: string; title: string; createdAt: string; inbox: boolean; requestId?: string };
 
 export interface AgentThreadStore {
   listThreads(agentId: string): Promise<AgentThread[]>;
-  createThread(agentId: string, title: string): Promise<AgentThread>;
+  createThread(agentId: string, title: string, requestId?: string): Promise<AgentThread>;
   /** The single inbox thread where other agents' hand-offs to this agent land. */
   inboxThread(agentId: string): Promise<AgentThread>;
   getThread(threadId: string): Promise<AgentThread | null>;
   listMessages(threadId: string): Promise<AgentChatMessage[]>;
-  append(threadId: string, message: { role: AgentChatRole; agentId: string; fromAgentId?: string; text: string }): Promise<AgentChatMessage>;
+  append(threadId: string, message: { role: AgentChatRole; agentId: string; fromAgentId?: string; text: string; requestId?: string }): Promise<AgentChatMessage>;
 }
 
 export class AgentChatInputError extends Error {}
@@ -175,10 +175,19 @@ export function createAgentChatService(deps: {
   async function sendOnce(input: ReturnType<typeof validateAgentChatInput>) {
     let thread = input.threadId ? await deps.store.getThread(input.threadId) : null;
     if (input.threadId && (!thread || thread.agentId !== input.agentId)) throw new AgentChatNotFound("Conversación no encontrada.");
-    if (!thread) thread = await deps.store.createThread(input.agentId, input.text.replace(/\s+/g, " ").slice(0, 60));
-    const history = await deps.store.listMessages(thread.id);
-    const user = await deps.store.append(thread.id, { role: "user", agentId: input.agentId, text: input.text });
+    // A retry of a first message reuses the thread it already opened.
+    if (!thread) thread = (await deps.store.listThreads(input.agentId)).find(t => t.requestId === input.requestId)
+      || await deps.store.createThread(input.agentId, input.text.replace(/\s+/g, " ").slice(0, 60), input.requestId);
+    const all = await deps.store.listMessages(thread.id);
+    const prior = all.filter(m => m.requestId === input.requestId);
     const route = routeAgentMessage(input.agentId, input.text);
+    if (prior.some(m => m.role !== "user")) {
+      // Already answered (e.g. by another process): return the stored result, write nothing.
+      const existing = (await deps.council.load()).company.orders.find(o => o.chat?.requestId === `${input.agentId}:${input.requestId}`);
+      return { thread, messages: prior, peerMessages: [] as AgentChatMessage[], route, order: existing ? { id: existing.id, assignees: existing.assignees, chat: existing.chat } : null, model: "none" };
+    }
+    const history = all.filter(m => m.requestId !== input.requestId);
+    const user = prior.find(m => m.role === "user") || await deps.store.append(thread.id, { role: "user", agentId: input.agentId, text: input.text, requestId: input.requestId });
     const state = await deps.council.load();
     const facts = agentFacts(state, input.agentId, now(), deps.env);
     const out: AgentChatMessage[] = [user];
@@ -189,20 +198,24 @@ export function createAgentChatService(deps: {
       if (route.intent === "question") {
         const answer = await answerQuestion(route, facts, input.text, history, input.requestId);
         model = answer.model;
-        out.push(await deps.store.append(thread.id, { role: "agent", agentId: input.agentId, text: answer.text }));
+        out.push(await deps.store.append(thread.id, { role: "agent", agentId: input.agentId, text: answer.text, requestId: input.requestId }));
       } else {
-        out.push(await deps.store.append(thread.id, { role: "agent", agentId: input.agentId, text: deterministicAnswer(route, facts) }));
+        // Status of another agent ("dime qué está haciendo Legal"): that agent's recorded state, no order.
+        const other = route.targetAgentId !== input.agentId;
+        const text = other ? `Según el registro de **${agentChatName(route.targetAgentId)}**:\n\n${deterministicAnswer(route, agentFacts(state, route.targetAgentId, now(), deps.env))}` : deterministicAnswer(route, facts);
+        out.push(await deps.store.append(thread.id, { role: "agent", agentId: input.agentId, text, requestId: input.requestId }));
       }
     } else {
       order = await deps.council.placeChatOrder({ text: input.text, fromAgentId: input.agentId, toAgentId: route.targetAgentId, reason: route.reason, approvalRequired: route.approvalRequired, requestId: `${input.agentId}:${input.requestId}` });
       const approval = route.approvalRequired ? "\n\n⚠ **Requiere tu aprobación**: es una acción externa (publicar, desplegar, pagar, contactar o gastar). La oficina es solo de revisión y no la ejecuta." : "";
       if (route.decision === "handoff") {
-        out.push(await deps.store.append(thread.id, { role: "handoff", agentId: input.agentId, fromAgentId: input.agentId,
-          text: `${route.reason}\n\nDerivé la tarea a **${agentChatName(route.targetAgentId)}** → orden \`${order.id}\`. Puedes seguirla en su chat (Derivaciones recibidas) o en el consejo.${approval}` }));
+        // Deliver to the target first: the sender's reply is the "done" marker a retry checks for.
         peers.push(...await notifyTarget(order, input.agentId, route.targetAgentId, route.reason, state));
+        out.push(await deps.store.append(thread.id, { role: "handoff", agentId: input.agentId, fromAgentId: input.agentId, requestId: input.requestId,
+          text: `${route.reason}\n\nDerivé la tarea a **${agentChatName(route.targetAgentId)}** → orden \`${order.id}\`. Puedes seguirla en su chat (Derivaciones recibidas) o en el consejo.${approval}` }));
       } else {
         const assignee = order.assignees.find(a => a.agentId === input.agentId);
-        out.push(await deps.store.append(thread.id, { role: "agent", agentId: input.agentId,
+        out.push(await deps.store.append(thread.id, { role: "agent", agentId: input.agentId, requestId: input.requestId,
           text: `${route.reason} Anotada como orden \`${order.id}\` (${assignee?.status === "en_curso" ? "en curso" : "bloqueada"}).\n\n${assignee?.note || ""}${approval}` }));
       }
     }
@@ -257,14 +270,18 @@ export function createChatStorageThreadStore(storage: ChatStorageLike, userId: s
     if (!title.startsWith(PREFIX)) return null;
     const [agentId, ...rest] = title.slice(PREFIX.length).split("|");
     if (!isAgentChatId(agentId)) return null;
+    const requestId = rest.length > 1 && rest[rest.length - 1].startsWith("rid:") ? rest.pop()!.slice(4) : undefined;
     const name = rest.join("|");
-    return { id: String(row.id), agentId, title: name, createdAt: new Date(row.createdAt).toISOString(), inbox: name === INBOX_TITLE };
+    return { id: String(row.id), agentId, title: name, createdAt: new Date(row.createdAt).toISOString(), inbox: name === INBOX_TITLE, ...(requestId ? { requestId } : {}) };
   };
-  const encodeRole = (m: { role: AgentChatRole; fromAgentId?: string }) => m.role === "peer" || m.role === "handoff" ? `${m.role}:${m.fromAgentId}` : m.role === "agent" ? "assistant" : "user";
+  // Role column: "user", "assistant", "peer:<from>", "handoff:<from>", optionally "#<requestId>" for idempotent retries.
+  const encodeRole = (m: { role: AgentChatRole; fromAgentId?: string; requestId?: string }) =>
+    `${m.role === "peer" || m.role === "handoff" ? `${m.role}:${m.fromAgentId}` : m.role === "agent" ? "assistant" : "user"}${m.requestId && /^[a-zA-Z0-9_-]{8,80}$/.test(m.requestId) ? `#${m.requestId}` : ""}`;
   const decode = (threadId: string, agentId: string, row: { id: number; role: string; content: string; createdAt: Date | string }): AgentChatMessage => {
-    const [kind, from] = row.role.split(":");
+    const [head, requestId] = row.role.split("#");
+    const [kind, from] = head.split(":");
     const role: AgentChatRole = kind === "assistant" ? "agent" : kind === "peer" || kind === "handoff" ? kind : "user";
-    return { id: String(row.id), threadId, role, agentId, ...(from ? { fromAgentId: from } : {}), text: row.content, at: new Date(row.createdAt).toISOString() };
+    return { id: String(row.id), threadId, role, agentId, ...(from ? { fromAgentId: from } : {}), text: row.content, at: new Date(row.createdAt).toISOString(), ...(requestId ? { requestId } : {}) };
   };
   const inboxLocks = new Map<string, Promise<AgentThread>>();
   const get = async (threadId: string) => {
@@ -278,9 +295,10 @@ export function createChatStorageThreadStore(storage: ChatStorageLike, userId: s
       return rows.map(toThread).filter((t): t is AgentThread => !!t && t.agentId === agentId)
         .sort((a, b) => Number(b.inbox) - Number(a.inbox) || Date.parse(b.createdAt) - Date.parse(a.createdAt));
     },
-    async createThread(agentId, title) {
+    async createThread(agentId, title, requestId) {
       const clean = title.replace(/\|/g, "/").replace(/\s+/g, " ").trim().slice(0, 60) || "Nueva conversación";
-      return toThread(await storage.createConversation(`${PREFIX}${agentId}|${clean === INBOX_TITLE ? `${clean} (chat)` : clean}`, userId))!;
+      const rid = requestId && /^[a-zA-Z0-9_-]{8,80}$/.test(requestId) ? `|rid:${requestId}` : "";
+      return toThread(await storage.createConversation(`${PREFIX}${agentId}|${clean === INBOX_TITLE ? `${clean} (chat)` : clean}${rid}`, userId))!;
     },
     inboxThread(agentId) {
       // Serialized per agent so concurrent hand-offs never create two inbox threads.

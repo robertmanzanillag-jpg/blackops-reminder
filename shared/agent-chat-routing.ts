@@ -56,6 +56,8 @@ export const EXTRA_ROUTES: Array<{ words: string[]; agents: string[] }> = [
   { words: ["automate", "automation", "every day", "daily", "cron"], agents: ["automations"] },
   { words: ["code", "refactor", "pull request", "merge", "commit", "branch"], agents: ["code", "github"] },
   { words: ["issue"], agents: ["github"] },
+  // Clear engineering intent outranks business words ("fix the pay button style" stays with Code).
+  { words: ["fix", "button", "boton", "style", "estilo", "css", "refactor", "screen", "layout", "validation", "validacion", "endpoint", "api "], agents: ["code", "app-qa"] },
   { words: ["broken", "not working", "is down", "crash"], agents: ["mechanic", "app-qa"] },
   { words: ["qa", "test"], agents: ["app-qa"] },
   { words: ["new agent", "hire"], agents: ["agent-factory"] },
@@ -65,14 +67,16 @@ export const EXTRA_ROUTES: Array<{ words: string[]; agents: string[] }> = [
 ];
 
 // Actions that leave the office. They are recorded, flagged, and wait for Robert's approval.
+// Recipients that make "email / call / pay / llamar" an outreach action rather than a technical noun.
+const WHO = "(the |a |an |our |my |el |la |al |a la |a los |a las )?(venue|owner|duen[oa]|client|cliente|customer|promoter|promotor|dj|artist|artista|supplier|proveedor|vendor|lawyer|abogado|bank|banco|manager|gerente|team|equipo|investor|inversionista|staff|him|her|them|\\$|\\d)";
 const APPROVAL_PATTERNS = [
-  /\bpublic(a|ar|alo|ala|ad)\b/, /\bpublish/, /\bpost(ea|ear)?\b/, /\bdeploy/, /\bdespl(ie|e)g/, /\bmerge(a|ar)?\b/,
+  /\bpublic(a|ar|alo|ala|ad)\b/, /\bpublish/, /\bpost(ea|ear)\b/, /\bdeploy/, /\bdespl(ie|e)g/, /\bmerge(a|ar)?\b/,
   /\bproduccion\b/, /\bproduction\b/, /\benvi(a|ar)\w* (un |el |un )?(email|correo|mensaje|dm)/, /\bsend (an |the )?(email|message|dm)/,
-  /\bcontact(a|ar|e)?\b/, /\bpag(a|ar|ale)\b/, /\bpay\b/, /\btransfer/, /\bcompr(a|ar)\b/, /\bbuy\b/, /\bgast(a|ar)\b/, /\bspend\b/,
+  /\bcontact(a|ar|e)?\b/, new RegExp(`\\bpay ${WHO}`), /\btransfer/, /\bcompr(a|ar)\b/, /\bbuy\b/, /\bgast(a|ar)\b/, /\bspend\b/,
   /\blanz(a|ar) (la |una )?(campana|anuncio)/, /\blaunch\b/, /\bborr(a|ar)\b/, /\bdelete\b/, /\belimin(a|ar)\b/,
   /\b(manda|envia)\w* (un |una |el |la )?(email|correo|mensaje|dm|whatsapp|sms)/, /\bsub(e|ir|elo|ela|irlo)\b.*\b(tiktok|instagram|youtube|reel|facebook)/,
-  /\b(upload|post)\b.*\b(tiktok|instagram|youtube|facebook)/, /\bemail\b/, /\bwhatsapp\b/, /\bpag(a|ar|ale|arle|ales|arles|ue)\b/,
-  /\b(reembols|refund)/, /\bescr[ií]bele\b/, /\bescribe(le|les)? (a|al)\b/, /\bllam(a|ar|ale)\b/, /\bcall\b/, /\btext\b (him|her|them|the)/,
+  /\b(upload|post)\b.*\b(tiktok|instagram|youtube|facebook)/, new RegExp(`\\bemail ${WHO}`), /\bwhatsapp\b/, /\bpag(a|ar|ale|arle|ales|arles|ue)\b/,
+  /\b(reembols|refund)/, /\bescr[ií]bele\b/, /\bescribe(le|les)? (a|al)\b/, /(?<!se )\bllam(a|ar)\s+(a|al)\b/, /\bllam(ale|arle|ales|arles)\b/, new RegExp(`\\bcall ${WHO}`), /\btext (him|her|them)\b/,
 ];
 
 export type AgentChatIntent = "help" | "status" | "orders" | "last_work" | "handoffs" | "task" | "question";
@@ -136,10 +140,19 @@ export function explicitTarget(text: string): string | null {
   return aliases.find(({ alias }) => candidate === alias || candidate.startsWith(`${alias} `) || candidate.startsWith(`${alias},`) || candidate.startsWith(`${alias}:`))?.id || null;
 }
 
+/** An agent named anywhere in the text (longest alias wins), other than the one being talked to. */
+export function mentionedAgent(text: string, except?: string): string | null {
+  const normalized = ` ${normalizeChatText(text).replace(/[^a-z0-9: ]/g, " ")} `;
+  const aliases = AGENT_CHAT_PROFILES.filter(p => p.id !== except).flatMap(profile => [profile.name, ...profile.aliases].map(alias => ({ id: profile.id, alias: normalizeChatText(alias).replace(/[^a-z0-9: ]/g, " ") })))
+    .sort((a, b) => b.alias.length - a.alias.length);
+  return aliases.find(({ alias }) => alias.length > 2 && normalized.includes(` ${alias} `))?.id || null;
+}
+
 export function classifyIntent(text: string): AgentChatIntent {
   const t = normalizeChatText(text).replace(/[.!?]+$/g, "").trim();
   if (/^(ayuda|help|hola|hi|hello|hey|buenas|que puedes hacer|what can you do|capacidades)$/.test(t)) return "help";
   if (/^(estado|status|tu estado|your status|como estas|how are you|que estas haciendo|que haces|what are you doing|en que (estas )?trabaj\w*|estas trabajando|are you working|what are you working on)$/.test(t)) return "status";
+  if (/^(tell me|dime|cuentame)\b/.test(t) || /\b(que|what) (esta|is) \S+( \S+)? (haciendo|doing)\b|\bwhat is \S+( \S+)? (doing|working on)\b|\b(estado|status) (de|of)\b|\bque (esta|estan) haciendo \S+/.test(t)) return "status";
   if (/^(mis |tus |your |my )?(ordenes|tareas|pendientes|orders|tasks|backlog)( pendientes| abiertas| open)?$/.test(t) || /^que (ordenes|tareas) tienes/.test(t)) return "orders";
   if (/^(ultimo|ultima|last)\b|que hiciste|what did you (do|finish)|ultimo (trabajo|reporte|resultado)|last (run|report|work)|^(reporte|report|resultado)$/.test(t)) return "last_work";
   if (/^(derivaciones|handoffs|hand-offs|mensajes de (otros )?agentes|quien te (escribio|derivo)|who (sent|handed))/.test(t)) return "handoffs";
@@ -154,7 +167,11 @@ export function routeAgentMessage(agentId: string, text: string, available: read
   const normalized = normalizeChatText(text);
   const approvalRequired = APPROVAL_PATTERNS.some(pattern => pattern.test(normalized));
   const base = { intent, explicit: false, matchedWords: [] as string[], approvalRequired };
-  if (intent !== "task" && intent !== "question") return { ...base, decision: "answer", targetAgentId: agentId, reason: "Consulta sobre el estado registrado." };
+  if (intent !== "task" && intent !== "question") {
+    // "dime qué está haciendo Legal" / "tell me what Legal is doing": answered from Legal's recorded state, no order.
+    const other = intent === "status" ? mentionedAgent(text, agentId) : null;
+    return { ...base, approvalRequired: false, decision: "answer", targetAgentId: other && available.includes(other) ? other : agentId, reason: "Consulta sobre el estado registrado." };
+  }
   const explicit = explicitTarget(text);
   if (explicit && explicit !== agentId && available.includes(explicit)) {
     return { ...base, intent: "task", decision: "handoff", targetAgentId: explicit, explicit: true, reason: `Pediste pasárselo a ${agentChatName(explicit)}.` };
