@@ -49,7 +49,7 @@ export const EXTRA_ROUTES: Array<{ words: string[]; agents: string[] }> = [
   { words: ["contract", "privacy", "terms", "lawyer", "compliance", "gdpr"], agents: ["legal"] },
   { words: ["security", "password", "breach", "vulnerab", "phishing"], agents: ["cybersecurity"] },
   { words: ["campaign", "ad ", "ads", "marketing", "social media", "post idea"], agents: ["marketing-cmo"] },
-  { words: ["sale", "customer", "payment", "invoice", "revenue", "factura", "pipeline"], agents: ["revenue"] },
+  { words: ["sale", "customer", "payment", "invoice", "revenue", "factura", "pipeline", "pagale", "pagarle", "pagar", "paga ", "pay ", "refund", "reembols"], agents: ["revenue"] },
   { words: ["store", "product", "shopify"], agents: ["dropshipping"] },
   { words: ["stock", "invest", "portfolio", "crypto"], agents: ["portfolio"] },
   { words: ["calendar", "meeting", "reminder", "appointment"], agents: ["assistant"] },
@@ -70,6 +70,9 @@ const APPROVAL_PATTERNS = [
   /\bproduccion\b/, /\bproduction\b/, /\benvi(a|ar)\w* (un |el |un )?(email|correo|mensaje|dm)/, /\bsend (an |the )?(email|message|dm)/,
   /\bcontact(a|ar|e)?\b/, /\bpag(a|ar|ale)\b/, /\bpay\b/, /\btransfer/, /\bcompr(a|ar)\b/, /\bbuy\b/, /\bgast(a|ar)\b/, /\bspend\b/,
   /\blanz(a|ar) (la |una )?(campana|anuncio)/, /\blaunch\b/, /\bborr(a|ar)\b/, /\bdelete\b/, /\belimin(a|ar)\b/,
+  /\b(manda|envia)\w* (un |una |el |la )?(email|correo|mensaje|dm|whatsapp|sms)/, /\bsub(e|ir|elo|ela|irlo)\b.*\b(tiktok|instagram|youtube|reel|facebook)/,
+  /\b(upload|post)\b.*\b(tiktok|instagram|youtube|facebook)/, /\bemail\b/, /\bwhatsapp\b/, /\bpag(a|ar|ale|arle|ales|arles|ue)\b/,
+  /\b(reembols|refund)/, /\bescr[ií]bele\b/, /\bescribe(le|les)? (a|al)\b/, /\bllam(a|ar|ale)\b/, /\bcall\b/, /\btext\b (him|her|them|the)/,
 ];
 
 export type AgentChatIntent = "help" | "status" | "orders" | "last_work" | "handoffs" | "task" | "question";
@@ -122,7 +125,7 @@ export function scoreAgents(text: string, available: readonly string[] = AGENT_C
 export function explicitTarget(text: string): string | null {
   const normalized = normalizeChatText(text);
   const mention = /(?:^|\s)@([a-z0-9:_-]+)/.exec(normalized);
-  const verb = /(?:pasa(?:selo|sela|le|lo|la)?|deriva(?:lo|la|le)?|envia(?:selo|sela|le)?|manda(?:selo|sela|le)?|pregunta(?:le)?|dile|hand(?: this| it)? off|forward(?: this| it)?|send(?: this| it)?|ask|delegate(?: this| it)?)\s+(?:esto\s+|this\s+|it\s+)?(?:a|al|to|with)\s+(?:la\s+|el\s+|the\s+)?(.+)$/.exec(normalized);
+  const verb = /(?:pasa(?:selo|sela|le|lo|la)?|deriva(?:lo|la|le)?|envia(?:selo|sela|le)?|manda(?:selo|sela|le)?|pregunta(?:le)?|dile|hand(?: this| it)? off|forward(?: this| it)?|send(?: this| it)?|ask|tell|pide(?:le)?|delegate(?: this| it)?)\s+(?:esto\s+|this\s+|it\s+)?(?:(?:a|al|to|with)\s+)?(?:la\s+|el\s+|the\s+)?(.+)$/.exec(normalized);
   const candidate = mention?.[1] || verb?.[1];
   if (!candidate) return null;
   const byId = AGENT_CHAT_PROFILES.find(profile => profile.id === candidate);
@@ -180,7 +183,7 @@ export function routeAgentMessage(agentId: string, text: string, available: read
 
 /** A company order assigned to exactly one agent, annotated with where it came from. Pure. */
 export function createChatOrder(company: CompanyState, input: {
-  text: string; now: number; fromAgentId: string; toAgentId: string; reason: string; approvalRequired: boolean;
+  text: string; now: number; fromAgentId: string; toAgentId: string; reason: string; approvalRequired: boolean; requestId?: string;
   statuses: Record<string, { state: "working" | "available" | "idle" | "error" | "offline" | string; label: string }>;
   names: Record<string, string>;
 }) {
@@ -188,7 +191,7 @@ export function createChatOrder(company: CompanyState, input: {
   const { state, order } = createOrder(company, { text: input.text, now: input.now, statuses: input.statuses as never, available: [input.toAgentId], names: input.names });
   const name = (id: string) => input.names[id] || agentChatName(id);
   const iso = new Date(input.now).toISOString();
-  const annotated = { ...order, chat: { fromAgentId: input.fromAgentId, handoff, reason: input.reason.slice(0, 200), approvalRequired: input.approvalRequired },
+  const annotated = { ...order, chat: { fromAgentId: input.fromAgentId, handoff, reason: input.reason.slice(0, 200), approvalRequired: input.approvalRequired, ...(input.requestId ? { requestId: input.requestId } : {}) },
     assignees: order.assignees.map(a => input.approvalRequired ? { ...a, note: `${a.note} Acción externa: requiere tu aprobación; la oficina no publica ni despliega.` } : a) };
   const event = handoff
     ? `${name(input.fromAgentId)} derivó a ${name(input.toAgentId)}: "${input.text.slice(0, 60)}" (${annotated.id}).`
@@ -209,4 +212,17 @@ export function handoffLog(company: CompanyState, limit = 40) {
     toAgentIds: order.assignees.map(a => a.agentId), text: order.text, reason: order.chat!.reason,
     approvalRequired: order.chat!.approvalRequired, status: order.doneAt ? "hecha" : order.assignees[0]?.status || "bloqueada",
   }));
+}
+
+const CHAT_EVENT = /derivó a |desde su chat|^Derivé "/;
+/** Non-owner council view: drop everything the owner-only per-agent chat wrote into the company. */
+export function redactChatActivity(company: CompanyState): CompanyState {
+  const chatTexts = company.orders.filter(order => order.chat).map(order => order.text.slice(0, 60));
+  const fromChat = (text: string) => CHAT_EVENT.test(text) || chatTexts.some(t => t && text.includes(`"${t}`));
+  return {
+    ...company,
+    orders: company.orders.filter(order => !order.chat),
+    events: company.events.filter(event => !fromChat(event.text)),
+    careers: Object.fromEntries(Object.entries(company.careers).map(([id, career]) => [id, { ...career, memory: (career.memory || []).filter(m => !fromChat(m.text)) }])),
+  };
 }

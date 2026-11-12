@@ -26,6 +26,8 @@ export default function AgentChatPage() {
   const [error, setError] = useState<string | null>(null);
   const [showLog, setShowLog] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
+  // One requestId per draft: a retry after an error reuses it (server dedupes), reset only on success.
+  const requestIdRef = useRef<string | null>(null);
 
   const agents = useQuery({ queryKey: ["agent-chat", "agents"], queryFn: () => getJson<{ agents: AgentRow[] }>("/api/agent-chat/agents"), staleTime: 30_000 });
   const threads = useQuery({ queryKey: ["agent-chat", "threads", agentId], enabled: !!agentId,
@@ -51,7 +53,9 @@ export default function AgentChatPage() {
     setDraft("");
     setPending({ id: "pending", threadId: threadId || "", role: "user", agentId, text, at: new Date().toISOString() });
     try {
-      const res = await apiRequest("POST", `/api/agent-chat/${enc(agentId)}/messages`, { text, requestId: newRequestId(), ...(threadId ? { threadId } : {}) });
+      requestIdRef.current ||= newRequestId();
+      const res = await apiRequest("POST", `/api/agent-chat/${enc(agentId)}/messages`, { text, requestId: requestIdRef.current, ...(threadId ? { threadId } : {}) });
+      requestIdRef.current = null;
       const body = await res.json() as { thread: Thread; peerMessages: Message[]; route: { decision: string; targetAgentId: string } };
       setThreadId(body.thread.id);
       await Promise.all([
@@ -152,7 +156,7 @@ export default function AgentChatPage() {
             </div>
             {error && <p role="alert" className="border-t border-red-400/20 bg-red-950/40 px-3 py-2 text-xs text-red-200">{error}</p>}
             <form className="flex items-end gap-2 border-t border-white/10 p-3" onSubmit={e => { e.preventDefault(); void send(); }}>
-              <textarea value={draft} onChange={e => setDraft(e.target.value)} maxLength={2000} rows={1}
+              <textarea value={draft} onChange={e => { setDraft(e.target.value); requestIdRef.current = null; }} maxLength={2000} rows={1}
                 onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
                 placeholder={`Escribe a ${agent?.name || "este agente"}…`} className="max-h-40 min-h-[44px] flex-1 resize-y rounded-xl border border-white/10 bg-black px-3 py-2.5 text-base sm:text-sm" />
               <button type="submit" disabled={!draft.trim() || !!pending} className="flex h-11 w-11 items-center justify-center rounded-full bg-zinc-100 text-zinc-950 disabled:opacity-40" aria-label="Enviar"><Send className="h-4 w-4" /></button>

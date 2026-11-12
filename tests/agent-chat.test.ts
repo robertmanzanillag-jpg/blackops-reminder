@@ -198,3 +198,79 @@ test("routes: 401 without session, 403 for non-owner, 400 bad input, 200 owner",
   assert.equal(sent.status, 200);
   assert.equal((await call(app, "GET /api/agent-chat/:agentId/threads/:threadId", { user: "owner", params: { agentId: "legal", threadId: sent.body.thread.id } })).status, 404);
 });
+
+// ---------- QA regressions (PR #402 review) ----------
+test("concurrent sends with the same requestId create one order and one hand-off", async () => {
+  const storage = memoryChatStorage();
+  const officeCouncil = council(stateWithStatuses());
+  const service = createAgentChatService({ store: createChatStorageThreadStore(storage, "owner"), council: officeCouncil });
+  const body = { text: "redacta el contrato del DJ", requestId: "req-concurrent-1" };
+  await Promise.all([service.send("code", body), service.send("code", body), service.send("code", body)]);
+  assert.equal((await officeCouncil.load()).company.orders.length, 1);
+  const legal = await service.threads("legal");
+  assert.equal(legal.filter(t => t.inbox).length, 1);
+  assert.equal((await service.thread("legal", legal[0].id)).messages.filter(m => m.role === "peer").length, 1);
+});
+
+test("retry after a partial failure (order placed, inbox append failed) reuses the order", async () => {
+  const storage = memoryChatStorage();
+  const officeCouncil = council(stateWithStatuses());
+  const real = createChatStorageThreadStore(storage, "owner");
+  let failInbox = true;
+  const flaky = { ...real, inboxThread: async (id: string) => { if (failInbox) throw new Error("db down"); return real.inboxThread(id); } };
+  const service = createAgentChatService({ store: flaky, council: officeCouncil });
+  const body = { text: "redacta el contrato del DJ", requestId: "req-partial-1" };
+  await assert.rejects(service.send("code", body));
+  failInbox = false;
+  const retry = await service.send("code", body);
+  const orders = (await officeCouncil.load()).company.orders;
+  assert.equal(orders.length, 1);
+  assert.equal(retry.order?.id, orders[0].id);
+  // A fresh process (no in-memory cache) retrying again still does not duplicate the order or the hand-off.
+  await createAgentChatService({ store: real, council: officeCouncil }).send("code", body);
+  assert.equal((await officeCouncil.load()).company.orders.length, 1);
+  const inbox = await real.inboxThread("legal");
+  assert.equal((await real.listMessages(inbox.id)).filter(m => m.role === "peer").length, 1);
+});
+
+test("concurrent inbox creation yields one inbox thread", async () => {
+  const store = createChatStorageThreadStore(memoryChatStorage(), "owner");
+  const threads = await Promise.all([store.inboxThread("legal"), store.inboxThread("legal"), store.inboxThread("legal")]);
+  assert.equal(new Set(threads.map(t => t.id)).size, 1);
+});
+
+test("council view for non-owners hides chat orders, hand-off events and hand-off memory", async () => {
+  const { redactChatActivity } = await import("../shared/agent-chat-routing");
+  const seeded = council(stateWithStatuses());
+  await seeded.placeChatOrder({ text: "redacta el contrato secreto", fromAgentId: "code", toAgentId: "legal", reason: "x", approvalRequired: false, requestId: "r1" });
+  await seeded.placeChatOrder({ text: "revisa el PR privado", fromAgentId: "code", toAgentId: "code", reason: "x", approvalRequired: false, requestId: "r2" });
+  await seeded.placeOrder("orden del CEO visible");
+  const company = (await seeded.load()).company;
+  const red = redactChatActivity(company);
+  assert.deepEqual(red.orders.map(o => o.text), ["orden del CEO visible"]);
+  assert.ok(red.events.every(e => !/secreto|privado/.test(e.text)));
+  for (const career of Object.values(red.careers)) assert.ok(career.memory.every(m => !/secreto|privado/.test(m.text)), JSON.stringify(career.memory));
+  const crafted = redactChatActivity({ ...company, careers: { code: { agentId: "code", memory: [{ at: "x", text: "Orden normal" }, { at: "y", text: 'Derivé "redacta el contrato secreto" a Legal.' }] } as never } });
+  assert.deepEqual(crafted.careers.code.memory.map(m => m.text), ["Orden normal"]);
+
+  const { registerAgentCouncilRoutes } = await import("../server/agent-council-routes");
+  const app = fakeApp();
+  registerAgentCouncilRoutes(app as never, { council: seeded as never, requestUserId: ((req: any) => req.user) as never, ownerUserId: () => "owner", readFactoryJobs: async () => [] });
+  const other = await call(app, "GET /api/agent-council/state", { user: "someone" });
+  assert.equal(other.status, 200);
+  assert.doesNotMatch(JSON.stringify(other.body.company), /secreto|privado/);
+  const owner = await call(app, "GET /api/agent-council/state", { user: "owner" });
+  assert.match(JSON.stringify(owner.body.company), /secreto/);
+});
+
+test("approval flags and routing fixes from QA", () => {
+  for (const text of ["manda un correo al venue", "sube el video a TikTok", "email the venue owner", "pagarle al DJ", "escríbele por WhatsApp al promotor", "reembolsa la entrada", "págale al DJ"]) {
+    assert.equal(routeAgentMessage("ceo", text).approvalRequired, true, text);
+  }
+  assert.equal(routeAgentMessage("ceo", "págale al DJ").targetAgentId, "revenue");
+  assert.equal(explicitTarget("ask GitHub to review the open PRs"), "github");
+  assert.equal(explicitTarget("dile a Legal que revise esto"), "legal");
+  assert.equal(routeAgentMessage("code", "ask GitHub to review the open PRs").targetAgentId, "github");
+  assert.equal(routeAgentMessage("legal", "revisa el contrato").approvalRequired, false);
+  assert.equal(routeAgentMessage("code", "estado").approvalRequired, false);
+});

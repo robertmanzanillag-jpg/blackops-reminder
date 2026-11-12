@@ -165,7 +165,7 @@ export type CompanyOrder = {
   evidence?: OrderEvidence;
   // Set when the order came from a per-agent chat (shared/agent-chat-routing.ts): who received it
   // and, when that agent was not the right one, the deterministic reason it was handed off.
-  chat?: { fromAgentId: string; handoff: boolean; reason: string; approvalRequired: boolean };
+  chat?: { fromAgentId: string; handoff: boolean; reason: string; approvalRequired: boolean; requestId?: string };
 };
 
 export type OrderEvidence = { ref: string; source: "automation_run"; summary: string; at: string };

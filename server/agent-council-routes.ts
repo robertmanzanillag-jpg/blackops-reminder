@@ -7,6 +7,7 @@ import { registerKongSupervisorRoutes } from "./kong-supervisor-routes";
 import {capabilityTrainingSummary,capabilityRunSummary} from "./office-capability-training";
 import { createHash } from "node:crypto";
 import { factoryAgentForStage, type FactoryJobRow } from "@shared/factory-office-agents";
+import { redactChatActivity } from "@shared/agent-chat-routing";
 
 const FACTORY_LIVE_CACHE_MS = 30_000;
 const FACTORY_LIVE_TIMEOUT_MS = 3_000;
@@ -87,6 +88,8 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
         view.kongObservedAt = null;
         view.kongRead = null;
         view.kongCollaboration = { verified: false, observedAt: null, totalFindings: 0, exchanges: [] };
+        // Owner-only per-agent chat: orders, hand-off events and hand-off memory never reach other users.
+        view.company = redactChatActivity(view.company);
       }
       res.json(view);
     } catch (error) {

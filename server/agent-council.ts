@@ -700,10 +700,13 @@ export function createAgentCouncil(deps: CouncilDeps) {
 
   // Per-agent chat (server/agent-chat.ts): one explicit assignee chosen by shared/agent-chat-routing.ts.
   // Same order record as the CEO channel; a hand-off is visible in company.events and the order's `chat` field.
-  async function placeChatOrder(input: { text: string; fromAgentId: string; toAgentId: string; reason: string; approvalRequired: boolean }) {
+  async function placeChatOrder(input: { text: string; fromAgentId: string; toAgentId: string; reason: string; approvalRequired: boolean; requestId?: string }) {
     if (!(input.toAgentId in AGENT_NAMES) || input.toAgentId.startsWith("kong")) throw new Error("Agente no válido");
     let placed: CompanyState["orders"][number] | undefined;
     await mutate((state) => {
+      // A retried or concurrent send with the same requestId returns the order it already created.
+      const existing = input.requestId ? state.company.orders.find(order => order.chat?.requestId === input.requestId) : undefined;
+      if (existing) { placed = existing; return SKIP; }
       const now = deps.now();
       const fresh = state.lastCycleAt && now - toMs(state.lastCycleAt) < STATUS_FRESH_MS && !state.lastCycleError;
       const result = createChatOrder(state.company, { ...input, text: input.text.trim().slice(0, 500), now, statuses: fresh ? { ...state.lastStatuses } : {}, names: AGENT_NAMES });
