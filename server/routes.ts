@@ -34,6 +34,7 @@ import { buildCeoOperationalHealth } from "./ceo-operational-health";
 import { registerTelegramRoutes } from "./telegram-routes";
 import { registerRevenueStripeRoutes } from "./revenue-stripe-routes";
 import { registerAgentCouncilRoutes } from "./agent-council-routes";
+import { registerAgentChatRoutes } from "./agent-chat-routes";
 import { registerKongOperationsRoutes } from "./kong-operations-routes";
 import { getKongOperations } from "./kong-operations";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
@@ -853,6 +854,8 @@ export async function registerRoutes(
   registerTelegramRoutes(app);
   registerRevenueStripeRoutes(app);
   registerAgentCouncilRoutes(app);
+  // Per-agent chat: threads, deterministic routing and hand-offs recorded as company orders. Owner-only.
+  registerAgentChatRoutes(app);
   // KONG operations (cards -> Videos KONG, single publisher lease, UUID ledger, metrics). Owner-only.
   registerKongOperationsRoutes(app, getKongOperations(), {
     requestUserId: (req) => {
