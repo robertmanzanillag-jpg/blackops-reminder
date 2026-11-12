@@ -300,3 +300,8 @@ test("run validates maxPages and respects the crawl bound", async () => {
     assert.ok(report.skipped.some((line) => line.includes("paginas sin revisar")));
   });
 });
+
+test("browser hint links (preconnect to Google Fonts, stylesheets, icons) are not treated as links", () => {
+  const html = `<head><link rel="preconnect" href="https://fonts.googleapis.com/"><link href="https://fonts.gstatic.com/" rel="preconnect" crossorigin><link rel="stylesheet" href="/app.css"><link rel="icon" href="/favicon.ico"></head><body><a href="https://tickets.example.com/e/1">Tickets</a></body>`;
+  assert.deepEqual(extractLinks(html, "https://blackroomus.com/"), ["https://tickets.example.com/e/1"]);
+});

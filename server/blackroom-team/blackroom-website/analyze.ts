@@ -91,10 +91,13 @@ export function pageTitle(html: string): string | null {
 /** href/src targets of a page, resolved against the page URL; only http(s), fragments dropped. */
 export function extractLinks(html: string, pageUrl: string): string[] {
   const found = new Set<string>();
-  const pattern = /<(?:a|link)\b[^>]*?\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/gi;
+  const pattern = /<(a|link)\b([^>]*?)\bhref\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))([^>]*)>/gi;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(html))) {
-    const raw = decodeEntities((match[1] ?? match[2] ?? match[3] ?? "").trim());
+    // <link rel="preconnect|dns-prefetch|preload|..."> are browser hints to an origin, not links a
+    // visitor follows: their bare origins (fonts.googleapis.com/) answer 404 by design.
+    if (match[1].toLowerCase() === "link" && /\brel\s*=\s*["']?[^"'>]*\b(preconnect|dns-prefetch|preload|prefetch|modulepreload|manifest|icon|apple-touch-icon|mask-icon|stylesheet|alternate|canonical)\b/i.test(`${match[2]} ${match[6]}`)) continue;
+    const raw = decodeEntities((match[3] ?? match[4] ?? match[5] ?? "").trim());
     if (!raw || raw.startsWith("#") || /^(mailto|tel|javascript|data|sms|whatsapp):/i.test(raw)) continue;
     try {
       const url = new URL(raw, pageUrl);

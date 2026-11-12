@@ -45,7 +45,17 @@ export type BlackRoomAnalyticsMetricoolCollector = (options: {
   fetch: typeof fetch;
   now: Date;
   importedSamplesByNetwork: Partial<Record<string, BlackRoomAnalyticsSample[]>>;
-}) => Promise<{ networkSamples?: Record<string, number>; networkErrors?: Record<string, string>; lastCheckedAt?: string }>;
+}) => Promise<BlackRoomAnalyticsLiveResult>;
+
+/** What the live Metricool collection returns (aggregates per network; per-post detail is not guaranteed). */
+export type BlackRoomAnalyticsLiveResult = {
+  networkSamples?: Record<string, number>;
+  networkErrors?: Record<string, string>;
+  lastCheckedAt?: string;
+  networkMedianViews?: Record<string, number>;
+  networkEngagementRate?: Record<string, number>;
+  recommendedTimesByNetwork?: Record<string, string[]>;
+};
 
 export type BlackRoomAnalyticsDeps = {
   /** Reads the stored Black Room remote-control state. Must not create rows. */
@@ -70,6 +80,8 @@ export type BlackRoomAnalyticsAgentState = {
   /** Exact needs from the last run when it found no data at all. */
   lastNeeds: string[];
   lastReport: BlackRoomAnalyticsReport | null;
+  /** Summary built from Metricool's live per-network totals when no per-post detail exists. */
+  lastLiveSummary?: { at: string; text: string } | null;
   history: HistoryEntry[];
 };
 
@@ -95,6 +107,7 @@ async function loadState(ctx: BlackRoomTeamContext): Promise<BlackRoomAnalyticsA
     ...EMPTY_STATE,
     ...raw,
     lastNeeds: Array.isArray(raw.lastNeeds) ? raw.lastNeeds.filter((need): need is string => typeof need === "string") : [],
+    lastLiveSummary: raw.lastLiveSummary && typeof raw.lastLiveSummary === "object" && typeof raw.lastLiveSummary.text === "string" ? raw.lastLiveSummary : null,
     history: Array.isArray(raw.history) ? raw.history.slice(-HISTORY_LIMIT) : [],
   };
 }
@@ -208,6 +221,30 @@ export function friendlyAnalyticsSummary(report: BlackRoomAnalyticsReport, now: 
   return parts.join(" ");
 }
 
+const NETWORK_LABELS: Record<string, string> = { tiktok: "TikTok", facebook: "Facebook", youtube: "YouTube", instagram: "Instagram" };
+
+/** Readable totals from Metricool's live collection: posts tracked, median views, engagement, best hours. */
+export function liveTotalsSummary(live: BlackRoomAnalyticsLiveResult): string | null {
+  const samples = live.networkSamples ?? {};
+  const networks = Object.keys(samples).filter((network) => Number(samples[network]) > 0);
+  if (!networks.length) return null;
+  const parts = networks
+    .sort((a, b) => (live.networkMedianViews?.[b] ?? 0) - (live.networkMedianViews?.[a] ?? 0))
+    .map((network) => {
+      const bits = [`${samples[network]} posts`];
+      const median = live.networkMedianViews?.[network];
+      if (Number.isFinite(median)) bits.push(`mediana ${compact(Number(median))} vistas por post`);
+      const engagement = live.networkEngagementRate?.[network];
+      if (Number.isFinite(engagement)) bits.push(`engagement ${(Number(engagement) * (Number(engagement) <= 1 ? 100 : 1)).toFixed(1)}%`);
+      const times = live.recommendedTimesByNetwork?.[network]?.slice(0, 2);
+      if (times?.length) bits.push(`mejores horas ${times.join(" y ")}`);
+      return `${NETWORK_LABELS[network] ?? network}: ${bits.join(", ")}`;
+    });
+  const errors = Object.entries(live.networkErrors ?? {}).filter(([network]) => !networks.includes(network)).map(([network]) => NETWORK_LABELS[network] ?? network);
+  const when = shortDate(live.lastCheckedAt);
+  return `Metricool en vivo${when ? ` (${when})` : ""}: ${parts.join(" · ")}.${errors.length ? ` Sin datos de: ${errors.join(", ")}.` : ""}`;
+}
+
 export function createBlackRoomAnalyticsAgent(deps: BlackRoomAnalyticsDeps = {}): BlackRoomTeamAgentModule {
   const readSourceState = deps.readSourceState ?? defaultReadSourceState;
   const collectMetricool = deps.collectMetricool ?? defaultCollectMetricool;
@@ -233,13 +270,14 @@ export function createBlackRoomAnalyticsAgent(deps: BlackRoomAnalyticsDeps = {})
       importedAtByNetwork[network] = typeof imported?.importedAt === "string" ? imported.importedAt : null;
     }
     let coverage = coverageFromCommands(source?.commands);
+    let live: BlackRoomAnalyticsLiveResult | null = null;
 
     if (input.refresh === true) {
       if (!hasToken(ctx.env)) {
         sourceErrors.push("No actualice Metricool en vivo: falta METRICOOL_USER_TOKEN.");
       } else {
         try {
-          const live = await collectMetricool({
+          live = await collectMetricool({
             env: ctx.env as NodeJS.ProcessEnv,
             fetch: createReadOnlyMetricoolFetch(ctx.fetch),
             now,
@@ -290,9 +328,21 @@ export function createBlackRoomAnalyticsAgent(deps: BlackRoomAnalyticsDeps = {})
     await ctx.state.save(next);
 
     if (!hasData) {
+      // No per-post detail, but Metricool live may still have real totals per network: report those.
+      const liveText = live ? liveTotalsSummary(live) : null;
+      if (liveText) {
+        const latest = await loadState(ctx);
+        await ctx.state.save({ ...latest, lastOkAt: at, lastError: null, lastNeeds: [], lastLiveSummary: { at, text: liveText } });
+        return {
+          ok: true,
+          summary: `${liveText} Para ver el detalle por post (mejores y peores, por dia) hacen falta los CSV de Metricool con fecha de publicacion.`,
+          report: { ...report, liveTotals: live },
+        };
+      }
+      const why = sourceErrors.length ? ` (${sourceErrors.join(" ")})` : "";
       return {
         ok: false,
-        summary: `Sin datos reales para el reporte. Falta: ${needs[0]}`,
+        summary: `No tengo metricas reales de tus redes todavia${why}. Falta: ${needs[0]}`,
         report,
         error: "no_data",
       };
@@ -320,6 +370,9 @@ export function createBlackRoomAnalyticsAgent(deps: BlackRoomAnalyticsDeps = {})
     const fresh = Number.isFinite(lastOk) && lastOk <= nowMs && nowMs - lastOk <= BLACKROOM_TEAM_WORKING_FRESH_MS;
     const lastRunFailed = Boolean(state.lastRunAt && state.lastRunAt !== state.lastOkAt);
 
+    if (!report && fresh && !lastRunFailed && state.lastLiveSummary) {
+      return { id: ID, state: "working", label: "Totales de Metricool al dia", summary: state.lastLiveSummary.text, needs: [], lastRunAt: state.lastOkAt };
+    }
     if (report && fresh && !lastRunFailed) {
       const missing = report.networksMissing.map((network) => report.networks[network].label);
       return {
