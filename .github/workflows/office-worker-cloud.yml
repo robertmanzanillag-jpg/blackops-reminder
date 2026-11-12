@@ -9,24 +9,47 @@ name: Office worker (cloud)
 #
 # Scheduled workflows only run from the default branch, so this file must also live on `main`; it
 # executes the office source named by the repository variable OFFICE_SOURCE_REF (the production branch).
+#
+# This file is also the single scheduled path for the Software Factory (`factory-once` job below):
+# every two hours (cron "17 */2 * * *") it runs `software-factory-once` from FACTORY_SOURCE_REF
+# (falling back to OFFICE_SOURCE_REF), gated by SOFTWARE_FACTORY_CLOUD_ENABLED. The office never runs
+# on that factory-only schedule. A manual or external dispatch without inputs runs only the office
+# (input `target` defaults to `office`); pass `target=factory` or `target=both` to run the factory.
+# `software-factory-cloud.yml` is kept as a manual-only fallback with no schedule.
 
 on:
   schedule:
     - cron: "*/15 * * * *"
-  workflow_dispatch: {}
+    - cron: "17 */2 * * *"
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Which worker to run: office (default), factory or both"
+        required: false
+        type: choice
+        default: office
+        options:
+          - office
+          - factory
+          - both
 
 permissions:
   contents: read
-
-concurrency:
-  group: office-worker-cloud
-  cancel-in-progress: false
 
 jobs:
   office-once:
     # Never on forks; only scheduled or manual runs of this repository can see the office secrets.
     # Setting OFFICE_WORKER_CLOUD_ENABLED to anything but 'true' is the persistent maintenance pause.
-    if: github.repository == 'robertmanzanillag-jpg/blackops-reminder' && vars.OFFICE_WORKER_CLOUD_ENABLED == 'true'
+    # Skipped on the factory-only schedule and on dispatches that ask only for the factory; a dispatch
+    # without inputs (external cron) still runs the office.
+    if: >-
+      github.repository == 'robertmanzanillag-jpg/blackops-reminder' &&
+      vars.OFFICE_WORKER_CLOUD_ENABLED == 'true' &&
+      github.event.schedule != '17 */2 * * *' &&
+      (github.event_name != 'workflow_dispatch' || inputs.target != 'factory')
+    concurrency:
+      group: office-worker-cloud
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     # 13-minute run budget plus startup and bounded settlement/cleanup.
     timeout-minutes: 25
@@ -99,3 +122,77 @@ jobs:
       - name: Remove private configuration
         if: always()
         run: rm -rf "$RUNNER_TEMP/office-config"
+
+  factory-once:
+    # Never on forks; only scheduled or manual runs of this repository can see the factory secrets.
+    # Setting SOFTWARE_FACTORY_CLOUD_ENABLED to anything but 'true' keeps the factory paused.
+    # Runs on the two-hourly factory schedule, or on a dispatch with target factory|both.
+    if: >-
+      github.repository == 'robertmanzanillag-jpg/blackops-reminder' &&
+      vars.SOFTWARE_FACTORY_CLOUD_ENABLED == 'true' &&
+      (
+        (github.event_name == 'schedule' && github.event.schedule == '17 */2 * * *') ||
+        (github.event_name == 'workflow_dispatch' && (inputs.target == 'factory' || inputs.target == 'both'))
+      )
+    concurrency:
+      group: software-factory-cloud
+      cancel-in-progress: false
+    runs-on: ubuntu-24.04
+    # 30-minute run budget plus startup and bounded settlement/cleanup.
+    timeout-minutes: 45
+    steps:
+      - name: Check out the factory source in production
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ vars.FACTORY_SOURCE_REF || vars.OFFICE_SOURCE_REF }}
+          persist-credentials: false
+
+      - name: Verify the reviewed entrypoint exists
+        run: test -f script/software-factory-once.ts
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Install private configuration outside the checkout
+        env:
+          OPENAI_SHARED_CREDIT_CONFIG_JSON: ${{ secrets.OPENAI_SHARED_CREDIT_CONFIG_JSON }}
+          SOFTWARE_FACTORY_OPERATOR_CONFIG_JSON: ${{ secrets.SOFTWARE_FACTORY_OPERATOR_CONFIG_JSON }}
+        run: |
+          set -euo pipefail
+          umask 077
+          dir="$RUNNER_TEMP/factory-config"
+          mkdir -p "$dir"
+          test -n "$OPENAI_SHARED_CREDIT_CONFIG_JSON" && test -n "$SOFTWARE_FACTORY_OPERATOR_CONFIG_JSON"
+          printf '%s' "$OPENAI_SHARED_CREDIT_CONFIG_JSON" > "$dir/shared-credit.json"
+          printf '%s' "$SOFTWARE_FACTORY_OPERATOR_CONFIG_JSON" > "$dir/operator.json"
+          node -e 'for (const f of process.argv.slice(1)) JSON.parse(require("fs").readFileSync(f, "utf8"))' "$dir/shared-credit.json" "$dir/operator.json"
+          echo "FACTORY_CONFIG_DIR=$dir" >> "$GITHUB_ENV"
+
+      - name: Run the factory once (exits when idle)
+        env:
+          NODE_ENV: production
+          SOFTWARE_FACTORY_ENABLED: "true"
+          SOFTWARE_FACTORY_STORAGE_BACKEND: postgres
+          AGENT_COUNCIL_STORAGE: postgres
+          OPENAI_SHARED_CREDITS_REQUIRED: "true"
+          # Factory-specific secrets win; otherwise reuse the office ones (same database, owner and ledger).
+          DATABASE_URL: ${{ secrets.FACTORY_DATABASE_URL || secrets.OFFICE_DATABASE_URL }}
+          DEFAULT_USER_ID: ${{ secrets.FACTORY_OWNER_ID || secrets.OFFICE_OWNER_ID }}
+          SOFTWARE_FACTORY_OWNER_ID: ${{ secrets.FACTORY_OWNER_ID || secrets.OFFICE_OWNER_ID }}
+          OPENAI_API_KEY: ${{ secrets.FACTORY_OPENAI_API_KEY || secrets.OFFICE_OPENAI_API_KEY }}
+          SOFTWARE_FACTORY_GITHUB_TOKEN: ${{ secrets.SOFTWARE_FACTORY_GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          export OPENAI_SHARED_CREDIT_CONFIG="$FACTORY_CONFIG_DIR/shared-credit.json"
+          export SOFTWARE_FACTORY_OPERATOR_CONFIG="$FACTORY_CONFIG_DIR/operator.json"
+          # 32 minutes: the worker's own 30-minute budget, then SIGTERM for bounded settlement.
+          timeout --signal=TERM --kill-after=5m 32m node --import tsx script/software-factory-once.ts
+
+      - name: Remove private configuration
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/factory-config"
