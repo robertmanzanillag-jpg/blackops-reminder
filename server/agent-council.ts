@@ -46,6 +46,7 @@ import {
   type CouncilState,
 } from "@shared/agent-council";
 import { CITY_NEWS_AGENTS, agentProbes, summarizeProbe, type AgentLiveStatus } from "@shared/agent-live-status";
+import { BLACKROOM_DEPARTMENT_ORDER, BLACKROOM_TEAM, BLACKROOM_TEAM_IDS } from "@shared/blackroom-team";
 import { withUptimeHealth } from "@shared/app-health-uptime";
 import {
   INTEGRATION_LABEL,
@@ -78,7 +79,12 @@ import {
   type CompanyState,
   type AcademyJob,
   type AcademyAssessment,
+  applyQualitySignals,
+  type QualitySignal,
 } from "@shared/agent-company";
+import { advanceBlackRoomAcademy, scheduleBlackRoomAcademy, BLACKROOM_ACADEMY_ROLES } from "@shared/blackroom-academy";
+import type { BlackRoomTeamLessonRule } from "@shared/blackroom-team";
+import { blackRoomCurriculumModules } from "./office-role-blackroom-curricula";
 
 export type CouncilDeps = {
   academyReview?: (state: CompanyState, job: AcademyJob) => Promise<AcademyAssessment>;
@@ -97,6 +103,9 @@ export type CouncilDeps = {
   /** Schedules a KONG-only catch-up after a round that could not verify KONG (default: unref'd setTimeout). */
   scheduleKongCatchUp?: (run: () => void, ms: number) => void;
   collectStatuses?: (userId: string) => Promise<Record<string, AgentLiveStatus>>;
+  // Black Room team: quality signals from real outcomes (posts approved/rejected, failed edit jobs,
+  // posts above the team median) and the lessons derived from them. Optional so tests stay small.
+  collectBlackRoomLife?: (userId: string) => Promise<BlackRoomLifeInput>;
   // Real documents the academy teaches.
   loadCurriculum?: () => Promise<CurriculumModule[]>;
   // Which agents are paused / external / not built (never scored). Defaults to the shared table + env overrides.
@@ -162,6 +171,7 @@ export const AGENT_NAMES: Record<string, string> = {
   "agent-factory": "Fabrica de agentes",
   kong: "Equipo Kong",
   "blackroom-videos": "Videos Black Room",
+  ...Object.fromEntries(BLACKROOM_TEAM.map((agent) => [agent.id, agent.name])),
   news: "Noticias",
   "kong-videos": "Videos Kong",
   mechanic: "Mecanico",
@@ -216,18 +226,24 @@ const CURRICULUM_TIMEOUT_MS = 30_000;
 // Last resort: a round that has not finished after this long no longer blocks the next one.
 export const CYCLE_WATCHDOG_MS = 5 * 60_000;
 
+export type BlackRoomLifeInput = { signals: QualitySignal[]; rules: Record<string, BlackRoomTeamLessonRule[]> };
+
 function advanceCompanyCycle(
   state: CouncilState,
   statuses: Record<string, AgentLiveStatus>,
   curriculum: CurriculumModule[],
   now: number,
-  integrations: Record<string, AgentIntegration> = {}
+  integrations: Record<string, AgentIntegration> = {},
+  blackroom: BlackRoomLifeInput = { signals: [], rules: {} }
 ): CouncilState {
   const unscored = new Set([...EXEMPT_IDS, ...unscoredAgentIds(integrations)]);
   const compact = Object.fromEntries(Object.entries(statuses).map(([id, status]) => [id, { state: status.state, label: status.label, ...(status.evidenceId ? { evidenceId: status.evidenceId } : {}), ...(status.lifePenaltyExempt ? { lifePenaltyExempt: true } : {}) }]));
   // Connection/readiness probes cannot penalize the reviewer; its worker scores actual results.
   if (compact["claude-reviewer"]) compact["claude-reviewer"].lifePenaltyExempt = true;
   let company = advanceCompany(state.company, { now, statuses: Object.fromEntries(Object.entries(compact).filter(([id]) => !isKongCompanyAgent(id))), roles: AGENT_NAMES, exempt: [...unscored] }).state;
+  // Black Room quality: real outcomes score once each (rejections and failed jobs cost, approvals and
+  // posts above the team median earn). Paused/external agents and trainees are never scored.
+  company = applyQualitySignals(company, blackroom.signals, { now, roles: AGENT_NAMES, exempt: [...unscored] }).state;
   // Orders routed to a paused/external agent are blocked with the honest reason, never "assigned".
   for (const id of unscored) {
     const integration = integrationFor(id, integrations);
@@ -247,6 +263,12 @@ function advanceCompanyCycle(
   // its lessons), then the general docs.
   const modules = curriculum.length ? curriculum : [{ id: "core-rules", title: "Reglas basicas", summary: "PR-first, QA antes de publicar, nada de gasto sin aprobacion de Robert." }];
   if (process.env.OFFICE_ACADEMY_PREPARATION_ENABLED === "true") company = scheduleAcademyTraining(company, Object.fromEntries(Object.entries(AGENT_NAMES).filter(([id]) => !unscored.has(id) && !isKongCompanyAgent(id))), now);
+  // Black Room area of the academy: continuous, bounded enrollment ($0; evaluations run in the worker).
+  // Opt-in, like OFFICE_ACADEMY_PREPARATION_ENABLED: enrolling trainees that no worker evaluates
+  // (the worker runs only with OFFICE_BLACKROOM_ACADEMY_DAILY_PAIRS) would only clutter the office.
+  if (process.env.OFFICE_BLACKROOM_ACADEMY_ENABLED === "true" || (process.env.OFFICE_BLACKROOM_ACADEMY_ENABLED !== "false" && process.env.OFFICE_BLACKROOM_ACADEMY_DAILY_PAIRS)) {
+    company = scheduleBlackRoomAcademy(company, Object.fromEntries(BLACKROOM_ACADEMY_ROLES.filter((id) => AGENT_NAMES[id] && !unscored.has(id)).map((id) => [id, AGENT_NAMES[id]])), now);
+  }
   const academyBase = company;
   company = advanceAcademy(
     company,
@@ -256,10 +278,13 @@ function advanceCompanyCycle(
         lessons: state.lessons,
         topic: isSpecialistId(trainee.forAgentId) ? trainee.forAgentId.slice(SPECIALIST_PREFIX.length) : undefined,
       }),
+      // Black Room roles study their own curriculum and the team's real lessons first.
+      ...blackRoomCurriculumModules(trainee.forAgentId, blackroom.rules[trainee.forAgentId] || []),
       ...modules,
     ],
     now
   );
+  company = advanceBlackRoomAcademy(company, compact, now);
   return { ...state, company, lastStatuses: compact, ...(state.officeExecution ? { officeExecution: { ...state.officeExecution, roles: reconcileRoleLifecycles(state.officeExecution.roles, company, now) } } : {}) };
 }
 
@@ -545,6 +570,9 @@ export function createAgentCouncil(deps: CouncilDeps) {
       const everyone = deps.collectStatuses
         ? await withTimeout(deps.collectStatuses(userId), collectTimeout, "estado de los agentes").catch(() => ({} as Record<string, AgentLiveStatus>))
         : {};
+      const blackroomLife: BlackRoomLifeInput = deps.collectBlackRoomLife
+        ? await withTimeout(deps.collectBlackRoomLife(userId), collectTimeout, "vida de Black Room").catch(() => ({ signals: [], rules: {} }))
+        : { signals: [], rules: {} };
       let { evidence: kongEvidence, code: kongCode, readAt: kongReadAt } = await kongPending;
       const curriculum = deps.loadCurriculum
         ? await withTimeout(deps.loadCurriculum(), CURRICULUM_TIMEOUT_MS, "academia").catch(() => [] as CurriculumModule[])
@@ -580,7 +608,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
         const unscored = [...EXEMPT_IDS, ...unscoredAgentIds(integrations)];
         const scored = Object.fromEntries(Object.entries(statuses).filter(([id]) => !unscored.includes(id) && !isKongCompanyAgent(id)));
         let next = finishCycle(state, { findings, statuses: scored, now, agentNames: AGENT_NAMES });
-        next = advanceCompanyCycle(next, statuses, curriculum, now, integrations);
+        next = advanceCompanyCycle(next, statuses, curriculum, now, integrations, blackroomLife);
         const kong = advanceKongCompany({ company: state.kongCompany, evidenceAt: state.kongEvidenceAt, evidence: kongEvidence, now, curriculum });
         next = { ...next, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt ?? state.kongObservedAt, kongCollaboration: kong.collaboration };
         if (deps.collectKongEvidence) next = { ...next, kongRead: { at: new Date(now).toISOString(), ok: Boolean(kong.observedAt), code: kong.observedAt ? null : kongCode ?? "NOT_VERIFIED" } };
@@ -667,7 +695,17 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
   }
 
-  function placeOrder(text: string, scope: "main" | "kong" = "main") {
+  /**
+   * options.assignees (Black Room scope only): the agents that actually own the order, e.g. the
+   * specialist the CEO chat ran. Filtered to Black Room members; when any remain they replace the
+   * text routing (agent names and quoted messages otherwise match unrelated members).
+   */
+  function placeOrder(text: string, scope: "main" | "kong" | "blackroom" = "main", placedBy?: { userId: string; role: "owner" | "partner" | null }, options: { assignees?: string[] } = {}) {
+    const stamp = (company: CompanyState): CompanyState => {
+      if (!placedBy?.role || !company.orders[0]) return company;
+      const [first, ...rest] = company.orders;
+      return { ...company, orders: [{ ...first, placedBy: { userId: placedBy.userId, role: placedBy.role } }, ...rest] };
+    };
     return mutate((state) => {
       if (scope === "kong") {
         const now = deps.now();
@@ -678,9 +716,13 @@ export function createAgentCouncil(deps: CouncilDeps) {
         // Recorded for review only: an office order does not dispatch a remote worker.
         const statuses = Object.fromEntries(available.map(id => [id, { state: "offline" as const, label: "Orden registrada para revisión; sin despacho remoto" }]));
         const result = createOrder(state.kongCompany, { text, now, statuses, available, names: {} });
-        return { ...state, kongCompany: result.state };
+        return { ...state, kongCompany: stamp(result.state) };
       }
-      const available = Object.keys(AGENT_NAMES).filter((id) => !id.startsWith("kong:") && id !== "kong");
+      // Black Room scope (the Black Room CEO channel, also used by partners): only Black Room members
+      // can be assigned; without a matching word the order goes to the Black Room CEO.
+      const available = scope === "blackroom"
+        ? [...BLACKROOM_DEPARTMENT_ORDER].filter((id) => id in AGENT_NAMES)
+        : Object.keys(AGENT_NAMES).filter((id) => !id.startsWith("kong:") && id !== "kong");
       const now = deps.now();
       const fresh = state.lastCycleAt && now - toMs(state.lastCycleAt) < STATUS_FRESH_MS && !state.lastCycleError;
       const statuses: Record<string, { state: AgentLiveStatus["state"]; label: string }> = fresh ? { ...state.lastStatuses } : {};
@@ -688,8 +730,13 @@ export function createAgentCouncil(deps: CouncilDeps) {
       const specialistNames = Object.fromEntries(
         Object.keys(state.company.careers).filter(isSpecialistId).map((id) => [id, `Especialista en ${specialistTopicLabel(id)}`])
       );
-      const result = createOrder(state.company, { text, now, statuses, available, names: { ...AGENT_NAMES, ...specialistNames } });
-      return { ...state, company: result.state };
+      const assignees = scope === "blackroom" ? (options.assignees || []).filter((id) => available.includes(id)) : [];
+      const result = createOrder(state.company, { text, now, statuses, available, names: { ...AGENT_NAMES, ...specialistNames }, ...(assignees.length ? { assignees } : {}) });
+      const company = scope === "blackroom"
+        // Academy specialists are not Black Room members: keep the order inside the Black Room team.
+        ? { ...result.state, orders: [{ ...result.state.orders[0], assignees: result.state.orders[0].assignees.filter((assignee) => available.includes(assignee.agentId)) }, ...result.state.orders.slice(1)] }
+        : result.state;
+      return { ...state, company: stamp(company) };
     });
   }
 
@@ -828,7 +875,21 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
     return state.officeExecution!;
   }
-  return { runCycle, runKongCatchUp, catchUpKongIfStale, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution };
+  // Black Room academy journal (worker only). `busy` is true while another academy track runs, so
+  // the tracks never spend in parallel. Callbacks must be pure because CAS may replay them.
+  async function updateBlackRoomAcademy(change: (company: CompanyState, busy: boolean) => CompanyState) {
+    const state = await mutate(current => {
+      const at = deps.now();
+      const busy = Boolean(
+        current.company.academyJobs?.some(job => job.status === "running" && Date.parse(job.expiresAt) > at) ||
+        current.officeExecution?.roleAcademy?.jobs.some(job => job.status === "running" && Date.parse(job.expiresAt) > at) ||
+        current.officeExecution?.capabilityTraining?.runs.some(run => run.status === "running" && Date.parse(run.expiresAt) > at)
+      );
+      return { ...current, company: change(current.company, busy) };
+    });
+    return state.company;
+  }
+  return { runCycle, runKongCatchUp, catchUpKongIfStale, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution, updateBlackRoomAcademy };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {
@@ -1035,6 +1096,8 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
     read(["news", ...CITY_NEWS_AGENTS.map((agent) => agent.id)], async () => (await import("./clippers-local-news-agent")).getClipperLocalNewsStatus()),
     read(["kong-videos"], async () => (await import("./promo-video-agent")).getPromoVideoStatus(userId)),
     read(["kong-metrics"], async () => (await import("./kong-operations")).getKongOperations().view()),
+    // Black Room team: each agent's own getStatus (read-only), one read per agent.
+    ...BLACKROOM_TEAM_IDS.map((id) => read([id], async () => (await import("./blackroom-team")).getBlackRoomTeamStatus(id, { userId }))),
     read(["blackroom-videos"], async () => {
       const remoteModule = await import("./blackroom-remote-control");
       const routesModule = await import("./blackroom-control-routes");
@@ -1202,6 +1265,10 @@ export function getAgentCouncil() {
     fetchLatestRelease: fetchLatestReleaseReal,
     log: (message) => console.warn(`[agent-council] ${message}`),
     collectStatuses: collectStatusesReal,
+    collectBlackRoomLife: async () => {
+      const { signals, rules } = await (await import("./blackroom-team/lessons")).syncBlackRoomLessons();
+      return { signals, rules };
+    },
     collectKongEvidence: async () => (await (await import("./office-kong")).runOfficeKongReadOnly()).evidence,
     loadCurriculum: () => loadCurriculumReal(),
   });

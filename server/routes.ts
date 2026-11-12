@@ -35,6 +35,8 @@ import { registerTelegramRoutes } from "./telegram-routes";
 import { registerRevenueStripeRoutes } from "./revenue-stripe-routes";
 import { registerAgentCouncilRoutes } from "./agent-council-routes";
 import { registerKongOperationsRoutes } from "./kong-operations-routes";
+import { registerBlackRoomTeamRoutes } from "./blackroom-team-routes";
+import { registerBlackRoomCeoChatRoutes } from "./blackroom-ceo-chat-routes";
 import { getKongOperations } from "./kong-operations";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
@@ -853,6 +855,10 @@ export async function registerRoutes(
   registerTelegramRoutes(app);
   registerRevenueStripeRoutes(app);
   registerAgentCouncilRoutes(app);
+  // Black Room team (CEO, analiticas, competencia, publicador, guiones, website). Owner-only; approvals before anything outward.
+  registerBlackRoomTeamRoutes(app);
+  // Chat with the CEO Black Room (owner + partners): routes requests to the team and runs them; approvals stay explicit.
+  registerBlackRoomCeoChatRoutes(app);
   // KONG operations (cards -> Videos KONG, single publisher lease, UUID ledger, metrics). Owner-only.
   registerKongOperationsRoutes(app, getKongOperations(), {
     requestUserId: (req) => {

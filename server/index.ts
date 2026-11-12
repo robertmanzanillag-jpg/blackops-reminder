@@ -11,6 +11,7 @@ import { setupTelegramWebhook } from "./telegram-chat";
 import { storage } from "./storage";
 import { getSystemUserId, requireAppUser } from "./user-context";
 import { registerLocalAuthRoutes } from "./local-auth";
+import { enforceWorkspaceAccess, registerWorkspaceAccessRoutes } from "./workspace-access";
 import { createSessionMiddleware, resolveSessionRuntimeSettings } from "./session-config";
 import { startPromoVideoDailyScheduler } from "./promo-video-agent";
 import { startCybersecurityScheduler } from "./cybersecurity-agent";
@@ -314,6 +315,8 @@ if (sessionMiddleware) {
 // Also protect authentication failures before the owner-bound route runs.
 app.use("/api/marketing-command-center", (_req,res,next)=>{res.setHeader("Cache-Control","no-store");next();});
 app.use(requireAppUser);
+// Partners (socios) only reach the explicit Black Room / read-only office allowlist; see server/workspace-access.ts.
+app.use(enforceWorkspaceAccess());
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -395,6 +398,7 @@ app.use((req, res, next) => {
 
 (async () => {
   registerLocalAuthRoutes(app);
+  await registerWorkspaceAccessRoutes(app);
   await initializeRevenueEnginePersistence();
   await initializeBlackRoomRemoteControlPersistence();
   await registerRoutes(httpServer, app);
