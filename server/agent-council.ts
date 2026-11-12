@@ -5,6 +5,7 @@ import {parseCapabilityTraining} from "./office-capability-training";
 import {parseRoleWork} from "./office-role-work";
 import { FACTORY_AGENT_NAMES, factoryAgentsView, isFactoryAgentId, parseFactoryCareerLedger } from "../shared/factory-office-agents";
 import { getSystemUserId } from "./user-context";
+import { createChatOrder } from "../shared/agent-chat-routing";
 import type { OfficeKongAuditResult } from "./office-kong";
 // Server side of the agent council (see shared/agent-council.ts).
 //
@@ -697,6 +698,21 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
   }
 
+  // Per-agent chat (server/agent-chat.ts): one explicit assignee chosen by shared/agent-chat-routing.ts.
+  // Same order record as the CEO channel; a hand-off is visible in company.events and the order's `chat` field.
+  async function placeChatOrder(input: { text: string; fromAgentId: string; toAgentId: string; reason: string; approvalRequired: boolean }) {
+    if (!(input.toAgentId in AGENT_NAMES) || input.toAgentId.startsWith("kong")) throw new Error("Agente no válido");
+    let placed: CompanyState["orders"][number] | undefined;
+    await mutate((state) => {
+      const now = deps.now();
+      const fresh = state.lastCycleAt && now - toMs(state.lastCycleAt) < STATUS_FRESH_MS && !state.lastCycleError;
+      const result = createChatOrder(state.company, { ...input, text: input.text.trim().slice(0, 500), now, statuses: fresh ? { ...state.lastStatuses } : {}, names: AGENT_NAMES });
+      placed = result.order;
+      return { ...state, company: result.state };
+    });
+    return placed!;
+  }
+
   // evidenceRunId: an automation run of this user that finished with "success". Verified here,
   // never trusted from the client; one run can close only one order.
   async function finishOrder(orderId: string, evidenceRunId?: string, requesterId?: string, scope: "main" | "kong" = "main") {
@@ -835,7 +851,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
     return state.officeExecution!;
   }
-  return { runCycle, runKongCatchUp, catchUpKongIfStale, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution };
+  return { runCycle, runKongCatchUp, catchUpKongIfStale, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, placeChatOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {

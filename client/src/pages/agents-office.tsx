@@ -2599,6 +2599,11 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
                   <Send className="mr-2 h-4 w-4" />
                   {isChatOpen ? "Responder" : "Abrir chat"}
                 </Button>
+                <Link href={`/agent-chat?agent=${encodeURIComponent(contact.id)}`}>
+                  <Button type="button" variant="outline" className="h-10 rounded-full border-white/10 bg-black/40 px-4 text-white hover:bg-white/10" data-testid="button-office-agent-full-chat">
+                    Chat completo
+                  </Button>
+                </Link>
                 {openHref && (
                   <Link href={openHref}>
                     <Button type="button" variant="outline" className="h-10 rounded-full border-white/10 bg-black/40 px-4 text-white hover:bg-white/10">

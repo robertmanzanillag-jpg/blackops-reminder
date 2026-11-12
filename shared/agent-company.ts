@@ -163,6 +163,9 @@ export type CompanyOrder = {
   // How it was closed: with a verifiable run (points) or by hand (record only, no points).
   closedBy?: "evidencia" | "robert";
   evidence?: OrderEvidence;
+  // Set when the order came from a per-agent chat (shared/agent-chat-routing.ts): who received it
+  // and, when that agent was not the right one, the deterministic reason it was handed off.
+  chat?: { fromAgentId: string; handoff: boolean; reason: string; approvalRequired: boolean };
 };
 
 export type OrderEvidence = { ref: string; source: "automation_run"; summary: string; at: string };
@@ -616,7 +619,7 @@ export function scheduleAcademyTraining(state: CompanyState, roles: Record<strin
 }
 
 // CEO channel: deterministic routing from Robert's words to the right departments.
-const ROUTES: Array<{ words: string[]; agents: string[] }> = [
+export const ROUTES: Array<{ words: string[]; agents: string[] }> = [
   { words: ["black room", "blackroom", "br "], agents: ["blackroom-videos", "radio"] },
   { words: ["kong"], agents: ["kong-videos"] },
   { words: ["video", "reel", "clip", "tiktok", "subir"], agents: ["clippers", "blackroom-videos", "kong-videos"] },
