@@ -89,7 +89,7 @@ export type CeoChatMessage = {
   results?: CeoChatResultCard[];
   orderIds?: string[];
   /** How the CEO understood the message. */
-  routedBy?: "reglas" | "ia" | "ninguno";
+  routedBy?: "reglas" | "ia" | "ninguno" | "conversacion";
 };
 
 export type CeoChatState = { version: 1; messages: CeoChatMessage[] };
@@ -126,6 +126,11 @@ export type CeoChatOrders = {
   place(text: string, placedBy: BlackRoomTeamActor, assignees?: string[]): Promise<string | null>;
   /** Closes an order by hand (record only; points need verified evidence). */
   finish(orderId: string): Promise<void>;
+  /**
+   * Owner only: records a request that is not Black Room work as a task for the main office
+   * (same as the classic CEO channel). Returns the order id and the names of the assignees.
+   */
+  placeGeneral?(text: string, placedBy: BlackRoomTeamActor): Promise<{ orderId: string | null; assignees: string[] } | null>;
 };
 
 export type CeoChatDeps = {
@@ -453,6 +458,36 @@ function firstLine(text: string): string {
 // Service
 // ---------------------------------------------------------------------------
 
+const GREETING_WORDS = /^(hola|holi|hey|buenas|buenos dias|buenas tardes|buenas noches|que tal|que onda|saludos|hello|hi)\b/;
+const THANKS_WORDS = /^(gracias|muchas gracias|thanks|thank you|ok gracias|perfecto|genial|excelente|dale|listo|ok|okay|vale)\W*$/;
+const HELP_WORDS = /\b(que puedes hacer|que sabes hacer|ayuda|ayudame|como funciona|que haces|menu|opciones)\b/;
+
+export const CEO_CHAT_MENU = [
+  "• \"Dame el reporte de la semana\" (o \"de hoy\") — cómo nos fue en redes",
+  "• \"¿Qué está haciendo la competencia?\"",
+  "• \"Hazme 3 ideas de video para el viernes\" — con guion",
+  "• \"Revisa la web\" — links rotos, eventos viejos, si está caída",
+  "• \"Prepara un post para el viernes a las 8pm con <link>: \"texto\"\" — queda pendiente de tu aprobación",
+  "• \"¿Qué hay por aprobar?\" o \"¿Cómo va el equipo?\"",
+].join("\n");
+
+/** Greeting / thanks / help messages get a direct friendly answer without running any agent. */
+export function smalltalkReply(text: string, name: string): string | null {
+  const normalized = normalizeCeoText(text).replace(/[!?.,¡¿]+/g, " ").replace(/\s+/g, " ").trim();
+  const first = name.split(/\s+/)[0] || "";
+  if (THANKS_WORDS.test(normalized)) return `¡Con gusto${first ? `, ${first}` : ""}! Aquí estoy si necesitas algo más.`;
+  const greeting = GREETING_WORDS.test(normalized);
+  const help = HELP_WORDS.test(normalized);
+  if (!greeting && !help) return null;
+  // "hola, dame el reporte" is a real request: only answer smalltalk when nothing else is asked.
+  if (greeting && !help && normalized.split(" ").length > 4) return null;
+  return [
+    `${greeting ? `¡Hola${first ? ` ${first}` : ""}! ` : ""}Soy el CEO de Black Room. Dime qué necesitas y lo pongo a trabajar con el equipo. Por ejemplo:`,
+    CEO_CHAT_MENU,
+    "Si me pides algo que no es de Black Room, lo dejo anotado como tarea para el resto de la oficina.",
+  ].join("\n");
+}
+
 export function createCeoChat(deps: CeoChatDeps = {}) {
   const dataDir = deps.dataDir ?? path.resolve(process.cwd(), BLACKROOM_TEAM_DATA_DIR);
   const modules = deps.modules ?? BLACKROOM_TEAM_MODULES;
@@ -601,18 +636,22 @@ export function createCeoChat(deps: CeoChatDeps = {}) {
   function composeReply(plan: CeoChatPlan, cards: CeoChatResultCard[], intro: string | null): string {
     const parts: string[] = [];
     if (!cards.length) {
-      parts.push("No entendi que tarea quieres para el equipo. Puedo: dar el reporte de la semana, revisar la competencia, preparar ideas de video, revisar la web, preparar un posteo (queda pendiente de aprobacion) o decirte que espera aprobacion.");
-      if (plan.approvalRequested) parts.push("Las aprobaciones no las hago yo: usa los botones Aprobar / Rechazar de la lista.");
+      if (plan.approvalRequested) {
+        parts.push("Las aprobaciones las haces tú con los botones Aprobar / Rechazar de arriba; yo nunca apruebo solo.");
+        return parts.join("\n");
+      }
+      parts.push("Mmm, no estoy seguro de qué quieres que haga. Puedo ayudarte con esto:");
+      parts.push(CEO_CHAT_MENU);
       return parts.join("\n");
     }
-    parts.push(intro || (cards.length === 1 ? "Listo, le pase el pedido al equipo:" : `Repartí el pedido entre ${cards.length} agentes:`));
+    parts.push(intro || (cards.length === 1 ? "¡Listo! Esto es lo que encontré:" : `¡Listo! Puse a trabajar a ${cards.length} agentes. Esto es lo que encontraron:`));
     for (const card of cards) {
       const mark = card.ok ? "✔" : card.blocked ? "⛔" : "✖";
       parts.push(`${mark} ${card.agentName} · ${card.label}: ${card.summary}`);
       if (!card.ok && card.needs.length) parts.push(`   Necesita: ${card.needs.join("; ")}`);
     }
     const waiting = cards.reduce((sum, card) => sum + card.approvals.length, 0);
-    if (waiting) parts.push(`${waiting} posteo(s) esperan aprobacion: revisalos abajo. Nada se publica sin aprobar.`);
+    if (waiting) parts.push(`Te dejé ${waiting} posteo(s) esperando tu aprobación arriba. Nada se publica sin que lo apruebes.`);
     if (plan.approvalRequested) parts.push("No apruebo ni rechazo desde el chat: usa los botones Aprobar / Rechazar.");
     if (plan.dropped.length) parts.push(`Solo hago ${CEO_CHAT_MAX_EXECUTIONS} tareas por mensaje. Pideme despues: ${plan.dropped.map((intent) => intent.label.toLowerCase()).join(", ")}.`);
     return parts.join("\n");
@@ -633,6 +672,21 @@ export function createCeoChat(deps: CeoChatDeps = {}) {
         text,
       };
       await mutateCeoChatState(dataDir, workspace, (state) => ({ ...state, messages: [...state.messages, userMessage] }));
+
+      const small = smalltalkReply(text, userMessage.author.name);
+      if (small) {
+        const reply: CeoChatMessage = {
+          id: `msg-${randomUUID()}`,
+          at: now().toISOString(),
+          author: { userId: CEO_ID, role: "ceo", name: BLACKROOM_TEAM_BY_ID[CEO_ID].name },
+          text: small,
+          results: [],
+          orderIds: [],
+          routedBy: "conversacion",
+        };
+        await mutateCeoChatState(dataDir, workspace, (state) => ({ ...state, messages: [...state.messages, reply] }));
+        return { message: userMessage, reply, pendingApprovals: await pendingApprovals(workspace) };
+      }
 
       let plan = routeCeoChatMessage(text, now());
       if (!plan.intents.length && ai) {
@@ -659,12 +713,27 @@ export function createCeoChat(deps: CeoChatDeps = {}) {
         cards.push(card);
       }
 
+      // Not Black Room work: the owner's request becomes a task for the rest of the office (classic CEO channel).
+      let generalNote: string | null = null;
+      if (!cards.length && !plan.approvalRequested && input.actor.role === "owner" && orders?.placeGeneral) {
+        try {
+          const placed = await withTimeout(orders.placeGeneral(text, input.actor), ORDER_TIMEOUT_MS);
+          if (placed?.orderId) {
+            orderIds.push(placed.orderId);
+            const who = placed.assignees.length ? placed.assignees.join(", ") : "el equipo";
+            generalNote = `Eso no es de Black Room, así que lo anoté como tarea para ${who} en la oficina. Esos agentes todavía no lo ejecutan solos: lo ves en la pestaña Tareas.`;
+          }
+        } catch (error) {
+          console.warn("[blackroom-ceo-chat] general order not recorded:", error instanceof Error ? error.message : error);
+        }
+      }
+
       const intro = await aiIntro(workspace, text, cards);
       const reply: CeoChatMessage = {
         id: `msg-${randomUUID()}`,
         at: now().toISOString(),
         author: { userId: CEO_ID, role: "ceo", name: BLACKROOM_TEAM_BY_ID[CEO_ID].name },
-        text: composeReply(plan, cards, intro),
+        text: generalNote ?? composeReply(plan, cards, intro),
         results: cards,
         orderIds,
         routedBy: plan.routedBy,
@@ -723,6 +792,14 @@ export const defaultCeoChatOrders: CeoChatOrders = {
   async finish(orderId) {
     const { getAgentCouncil } = await import("./agent-council");
     await getAgentCouncil().finishOrder(orderId);
+  },
+  async placeGeneral(text, placedBy) {
+    if (placedBy.role !== "owner") return null;
+    const { getAgentCouncil, AGENT_NAMES } = await import("./agent-council");
+    const state = await getAgentCouncil().placeOrder(text, "main", placedBy);
+    const order = state.company.orders[0];
+    if (!order) return null;
+    return { orderId: order.id, assignees: order.assignees.map((assignee) => AGENT_NAMES[assignee.agentId] || assignee.agentId) };
   },
 };
 

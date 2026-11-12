@@ -514,11 +514,10 @@ export function AgentsOfficeWorld({
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" onClick={() => changeWing(officeWing === "kong" ? "main" : "kong")} className="rounded-full bg-violet-500 px-3 py-2 text-xs font-bold" data-testid="world-kong-wing">{officeWing === "kong" ? "Volver a la oficina principal" : "Ver oficina KONG"}</button>
             <button type="button" onClick={() => focusRoom(null)} className="rounded-full border border-white/20 px-3 py-2 text-xs" data-testid="world-overview">Vista general</button>
-            <button type="button" onClick={() => setOverlay(overlay === "ceo" ? "none" : "ceo")} className="rounded-full border border-amber-200/40 px-3 py-2 text-xs text-amber-100" data-testid="world-ceo-channel">{workspace.isPartner ? "Canal con el CEO Black Room" : "Canal con el CEO"}</button>
+            <button type="button" onClick={() => { const target = canChatBlackRoomCeo && officeWing === "main" ? "blackroom-ceo-chat" : "ceo"; setOverlay(overlay === target ? "none" : target); }} className="rounded-full bg-amber-300 px-3 py-2 text-xs font-bold text-black hover:bg-amber-200" data-testid="world-ceo-channel">💬 {canChatBlackRoomCeo && officeWing === "main" ? "Chat con el CEO" : workspace.isPartner ? "Canal con el CEO Black Room" : "Canal con el CEO"}</button>
             <button type="button" onClick={() => setOverlay(overlay === "ranking" ? "none" : "ranking")} className="rounded-full border border-emerald-200/40 px-3 py-2 text-xs text-emerald-100" data-testid="world-ranking">Tabla de posiciones</button>
             {officeWing === "main" && <button type="button" onClick={() => setOverlay(overlay === "blackroom-academy" ? "none" : "blackroom-academy")} className="rounded-full border border-fuchsia-200/40 px-3 py-2 text-xs text-fuchsia-100" data-testid="world-blackroom-academy">Academia Black Room</button>}
             {!workspace.isPartner && <button type="button" onClick={runCouncil} disabled={busy || !council.view} className="rounded-full border border-violet-200/40 px-3 py-2 text-xs disabled:opacity-50" data-testid="world-council-run">Reunir consejo</button>}
-            {canChatBlackRoomCeo && officeWing === "main" && <button type="button" onClick={() => setOverlay(overlay === "blackroom-ceo-chat" ? "none" : "blackroom-ceo-chat")} className="rounded-full border border-fuchsia-200/40 px-3 py-2 text-xs text-fuchsia-100" data-testid="world-blackroom-ceo-chat">Chat CEO Black Room</button>}
             {workspace.isOwner && <button type="button" onClick={() => setOverlay(overlay === "partners" ? "none" : "partners")} className="rounded-full border border-fuchsia-200/40 px-3 py-2 text-xs text-fuchsia-100" data-testid="world-partner-invite">Invitar socio</button>}
             {officeWing === "kong" && <>
               <button type="button" onClick={() => setOverlay(overlay === "kong-talk" ? "none" : "kong-talk")} className="rounded-full border border-cyan-200/40 px-3 py-2 text-xs text-cyan-100" data-testid="world-kong-collaboration">Colaboración · {kongCollaboration?.exchanges.length ?? 0}</button>
@@ -590,13 +589,16 @@ export function AgentsOfficeWorld({
 
       {overlay === "partners" && workspace.isOwner && <PartnerInvitePanel onClose={() => setOverlay("none")} />}
       {overlay === "blackroom-academy" && officeWing === "main" && <BlackRoomAcademyPanel company={companyView.company} onClose={() => setOverlay("none")} />}
-      {overlay === "blackroom-ceo-chat" && canChatBlackRoomCeo && <BlackRoomCeoChatPanel onClose={() => setOverlay("none")} />}
+      {overlay === "blackroom-ceo-chat" && canChatBlackRoomCeo && <BlackRoomCeoChatPanel onClose={() => setOverlay("none")} onShowTasks={officeWing === "main" ? () => setOverlay("ceo") : undefined} />}
 
       {overlay === "ceo" && (
         <section className="absolute top-[220px] right-3 z-30 sm:top-36 lg:top-24 flex max-h-[45%] w-[min(420px,calc(100vw-1.5rem))] flex-col rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-4 text-white shadow-2xl [color-scheme:dark]" data-testid="world-ceo-panel">
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200">Canal directo con el CEO</p>
-            <button type="button" onClick={() => setOverlay("none")} className="text-xs text-zinc-400 hover:text-white">✕</button>
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200">{officeWing === "main" && canChatBlackRoomCeo ? "Tareas de la oficina" : "Canal directo con el CEO"}</p>
+            <div className="flex items-center gap-2">
+              {officeWing === "main" && canChatBlackRoomCeo && <button type="button" onClick={() => setOverlay("blackroom-ceo-chat")} className="rounded-full bg-amber-300 px-2.5 py-1 text-[11px] font-bold text-black" data-testid="world-ceo-back-to-chat">💬 Volver al chat</button>}
+              <button type="button" onClick={() => setOverlay("none")} className="text-xs text-zinc-400 hover:text-white">✕</button>
+            </div>
           </div>
           {workspace.isPartner && <p className="mt-1 text-[11px] text-fuchsia-200" data-testid="world-ceo-partner-note">{ceoOrdersLocked ? "Solo Robert: las órdenes de KONG no están disponibles para socios." : "Tus órdenes van al CEO de Black Room y solo se asignan a su equipo."}</p>}
           <p className="mt-1 text-[11px] text-zinc-400">{officeWing === "kong" ? "Escribe una orden para coordinar al equipo KONG. Queda asignada, pero no activa ejecutores. Aquí puedes cerrarla a mano con 0 puntos; los resultados de KONG se verifican por separado." : "Escribe lo que necesitas y el CEO lo asigna al departamento correcto. Queda anotado como tarea: los agentes no la ejecutan solos. Para dar puntos, ciérrala con una ejecución exitosa como evidencia; cerrarla a mano solo la anota."}</p>

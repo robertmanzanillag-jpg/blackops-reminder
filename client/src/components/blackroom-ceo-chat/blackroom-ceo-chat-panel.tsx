@@ -23,15 +23,25 @@ function time(iso: string): string {
   return Number.isFinite(at) ? new Date(at).toLocaleString("es", { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "";
 }
 
-const SUGGESTIONS = ["Dame el reporte de la semana", "¿Qué está haciendo la competencia?", "Hazme 3 ideas de video para el viernes", "Revisa la web", "¿Qué hay por aprobar?"];
+const SUGGESTIONS = ["Dame el reporte de la semana", "¿Qué está haciendo la competencia?", "Hazme 3 ideas de video para el viernes", "Revisa la web", "¿Qué hay por aprobar?", "¿Cómo va el equipo?"];
 
-export function BlackRoomCeoChatPanel({ onClose }: { onClose: () => void }) {
+function TypingDots() {
+  return (
+    <span className="inline-flex items-center gap-1" aria-label="El CEO está escribiendo">
+      {[0, 1, 2].map((i) => <span key={i} className="h-1.5 w-1.5 animate-bounce rounded-full bg-fuchsia-200" style={{ animationDelay: `${i * 150}ms` }} />)}
+    </span>
+  );
+}
+
+export function BlackRoomCeoChatPanel({ onClose, onShowTasks, title = "Chat con el CEO" }: { onClose: () => void; onShowTasks?: () => void; title?: string }) {
   const queryClient = useQueryClient();
   const [text, setText] = useState("");
   const [sending, setSending] = useState(false);
   const [deciding, setDeciding] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const [pendingText, setPendingText] = useState<string | null>(null);
   const chat = useQuery<ChatView>({
     queryKey: BLACKROOM_CEO_CHAT_KEY,
     queryFn: async () => readJson<ChatView>(await fetch("/api/blackroom-ceo-chat", { credentials: "same-origin", headers: { Accept: "application/json" } })),
@@ -44,7 +54,8 @@ export function BlackRoomCeoChatPanel({ onClose }: { onClose: () => void }) {
   useEffect(() => {
     const node = listRef.current;
     if (node) node.scrollTop = node.scrollHeight;
-  }, [messages.length]);
+  }, [messages.length, pendingText]);
+  useEffect(() => { inputRef.current?.focus(); }, []);
 
   const post = async (url: string, body?: unknown) => readJson<{ pendingApprovals?: Approval[] }>(await fetch(url, {
     method: "POST",
@@ -58,15 +69,19 @@ export function BlackRoomCeoChatPanel({ onClose }: { onClose: () => void }) {
     if (!message || sending) return;
     setSending(true);
     setError(null);
+    setPendingText(message);
+    setText("");
     try {
       await post("/api/blackroom-ceo-chat/messages", { text: message });
-      setText("");
     } catch (err) {
+      setText(message);
       setError(err instanceof Error ? err.message : "No se pudo enviar el mensaje.");
     }
     await queryClient.invalidateQueries({ queryKey: BLACKROOM_CEO_CHAT_KEY });
     await queryClient.invalidateQueries({ queryKey: ["agent-council-state"] });
+    setPendingText(null);
     setSending(false);
+    inputRef.current?.focus();
   };
 
   const decide = async (id: string, decision: "approve" | "reject") => {
@@ -82,77 +97,113 @@ export function BlackRoomCeoChatPanel({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <section className="absolute top-[220px] right-3 z-30 sm:top-36 lg:top-24 flex max-h-[70%] w-[min(460px,calc(100vw-1.5rem))] flex-col rounded-2xl border border-fuchsia-200/25 bg-[#12051a]/95 p-4 text-white shadow-2xl [color-scheme:dark]" aria-label="Chat con el CEO Black Room" data-testid="blackroom-ceo-chat">
-      <div className="flex shrink-0 items-center justify-between">
-        <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-fuchsia-200">Chat con el CEO Black Room</p>
-        <button type="button" onClick={onClose} className="text-xs text-zinc-400 hover:text-white" aria-label="Cerrar chat">✕</button>
-      </div>
-      <p className="mt-1 shrink-0 text-[11px] text-zinc-400">
-        Pide lo que necesites: el CEO lo reparte al equipo y lo ejecuta (máximo {chat.data?.maxExecutions ?? 3} tareas por mensaje). Nada se publica sin que alguien lo apruebe aquí.
-        {chat.data?.role === "partner" ? " Estás como socio: Robert ve esta misma conversación." : ""}
-      </p>
+    <section className="absolute top-[220px] right-3 z-30 sm:top-36 lg:top-24 flex h-[min(620px,72vh)] w-[min(460px,calc(100vw-1.5rem))] flex-col overflow-hidden rounded-2xl border border-fuchsia-200/25 bg-[#0f0616]/95 text-white shadow-2xl [color-scheme:dark]" aria-label={title} data-testid="blackroom-ceo-chat">
+      <header className="flex shrink-0 items-center gap-3 border-b border-white/10 px-4 py-3">
+        <div className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-to-br from-fuchsia-400 to-amber-300 text-sm font-black text-black">CEO</div>
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-bold">{title}</p>
+          <p className="truncate text-[11px] text-emerald-300">{sending ? "escribiendo..." : "en línea · Black Room"}{chat.data?.role === "partner" ? " · Robert ve esta conversación" : ""}</p>
+        </div>
+        {onShowTasks && <button type="button" onClick={onShowTasks} className="rounded-full border border-white/15 px-2 py-1 text-[11px] text-zinc-300 hover:bg-white/10" data-testid="blackroom-ceo-chat-tasks">Tareas</button>}
+        <button type="button" onClick={onClose} className="rounded-full px-2 py-1 text-sm text-zinc-400 hover:bg-white/10 hover:text-white" aria-label="Cerrar chat">✕</button>
+      </header>
 
       {pending.length > 0 && (
-        <div className="mt-2 shrink-0 space-y-1.5 rounded-xl border border-amber-200/25 bg-amber-300/5 p-2" data-testid="blackroom-ceo-chat-approvals">
-          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-200">Esperan aprobación · {pending.length}</p>
-          {pending.slice(0, 5).map((item) => (
-            <div key={item.id} className="rounded-lg bg-black/40 p-2 text-[11px]" data-testid="blackroom-ceo-chat-approval">
-              <p className="font-semibold">{item.title}</p>
-              {item.summary && <p className="text-zinc-300">{item.summary}</p>}
-              <p className="text-[10px] text-zinc-500">{item.networks?.join(", ")}{item.dryRun ? " · modo simulación" : ""}</p>
-              <div className="mt-1 flex gap-2">
-                <button type="button" disabled={deciding !== null} onClick={() => decide(item.id, "approve")} className="rounded-full bg-emerald-400 px-3 py-1 text-[11px] font-bold text-black disabled:opacity-50" data-testid="blackroom-ceo-chat-approve">Aprobar</button>
-                <button type="button" disabled={deciding !== null} onClick={() => decide(item.id, "reject")} className="rounded-full border border-rose-300/50 px-3 py-1 text-[11px] text-rose-100 disabled:opacity-50" data-testid="blackroom-ceo-chat-reject">Rechazar</button>
+        <div className="shrink-0 space-y-1.5 border-b border-amber-200/20 bg-amber-300/5 px-3 py-2" data-testid="blackroom-ceo-chat-approvals">
+          <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-200">Esperan tu aprobación · {pending.length}</p>
+          {pending.slice(0, 3).map((item) => (
+            <div key={item.id} className="flex items-center gap-2 rounded-lg bg-black/40 p-2 text-[11px]" data-testid="blackroom-ceo-chat-approval">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-semibold">{item.title}</p>
+                <p className="truncate text-[10px] text-zinc-400">{item.networks?.join(", ")}{item.dryRun ? " · modo simulación" : ""}</p>
               </div>
+              <button type="button" disabled={deciding !== null} onClick={() => decide(item.id, "approve")} className="rounded-full bg-emerald-400 px-2.5 py-1 text-[11px] font-bold text-black disabled:opacity-50" data-testid="blackroom-ceo-chat-approve">Aprobar</button>
+              <button type="button" disabled={deciding !== null} onClick={() => decide(item.id, "reject")} className="rounded-full border border-rose-300/50 px-2.5 py-1 text-[11px] text-rose-100 disabled:opacity-50" data-testid="blackroom-ceo-chat-reject">Rechazar</button>
             </div>
           ))}
         </div>
       )}
 
-      <div ref={listRef} className="mt-2 min-h-[120px] flex-1 space-y-2 overflow-y-auto pr-1" data-testid="blackroom-ceo-chat-messages">
-        {chat.isLoading && <p className="text-xs text-zinc-500">Cargando conversación...</p>}
-        {chat.isError && <p className="text-xs text-rose-200">{chat.error instanceof Error ? chat.error.message : "No se pudo cargar el chat."}</p>}
-        {!chat.isLoading && !chat.isError && messages.length === 0 && <p className="text-xs text-zinc-500">Todavía no hay mensajes. Prueba con una de las sugerencias.</p>}
+      <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto px-3 py-3" data-testid="blackroom-ceo-chat-messages">
+        {chat.isLoading && <p className="text-center text-xs text-zinc-500">Cargando conversación...</p>}
+        {chat.isError && <p className="text-center text-xs text-rose-200">{chat.error instanceof Error ? chat.error.message : "No se pudo cargar el chat."}</p>}
+        {!chat.isLoading && !chat.isError && messages.length === 0 && !pendingText && (
+          <div className="flex gap-2">
+            <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gradient-to-br from-fuchsia-400 to-amber-300 text-[9px] font-black text-black">CEO</div>
+            <div className="max-w-[85%] rounded-2xl rounded-tl-sm bg-white/[0.07] px-3 py-2 text-[13px] leading-5 text-zinc-100">
+              ¡Hola! Soy el CEO de Black Room. Pídeme lo que necesites y pongo al equipo a trabajar: reportes de redes, competencia, ideas de video, revisar la web o preparar posts. Toca una sugerencia abajo para empezar.
+            </div>
+          </div>
+        )}
         {messages.map((message) => {
           const fromCeo = message.author.role === "ceo";
-          return (
-            <article key={message.id} className={cn("rounded-xl p-2 text-xs", fromCeo ? "border border-fuchsia-300/15 bg-fuchsia-400/5" : "ml-6 bg-white/[0.06]")} data-testid="blackroom-ceo-chat-message">
-              <p className="text-[10px] text-zinc-400"><b className={fromCeo ? "text-fuchsia-200" : "text-white"}>{message.author.name}</b>{message.author.role === "partner" ? " · socio" : message.author.role === "owner" ? " · owner" : ""} · {time(message.at)}</p>
-              <p className="mt-1 whitespace-pre-wrap leading-5 text-zinc-100">{message.text}</p>
-              {(message.results || []).map((card, index) => (
-                <div key={`${message.id}-${index}`} className={cn("mt-1.5 rounded-lg border p-2", card.ok ? "border-emerald-300/25 bg-emerald-400/5" : "border-rose-300/25 bg-rose-500/5")} data-testid="blackroom-ceo-chat-result">
-                  <p className="text-[11px] font-semibold">{card.agentName} · {card.label}</p>
-                  <p className={cn("text-[11px]", card.ok ? "text-emerald-100" : "text-rose-100")}>{card.ok ? "Hecho" : card.timedOut ? "Sin respuesta a tiempo" : "Bloqueado"}: {card.summary}</p>
-                  {card.details.map((line) => <p key={line} className="text-[10px] text-zinc-300">· {line}</p>)}
-                  {!card.ok && card.needs.length > 0 && <p className="mt-0.5 text-[10px] text-amber-200">Necesita: {card.needs.join("; ")}</p>}
-                  {card.orderId && <p className="mt-0.5 text-[10px] text-zinc-500">Orden {card.orderClosed ? "cerrada (sin puntos)" : "abierta"} en la empresa.</p>}
+          if (!fromCeo) {
+            return (
+              <div key={message.id} className="flex justify-end" data-testid="blackroom-ceo-chat-message">
+                <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-fuchsia-500/80 px-3 py-2 text-[13px] leading-5 text-white">
+                  {message.author.role === "partner" && <p className="text-[10px] font-semibold text-fuchsia-100/80">{message.author.name} · socio</p>}
+                  <p className="whitespace-pre-wrap">{message.text}</p>
+                  <p className="mt-0.5 text-right text-[10px] text-fuchsia-100/70">{time(message.at)}</p>
                 </div>
-              ))}
-            </article>
+              </div>
+            );
+          }
+          return (
+            <div key={message.id} className="flex gap-2" data-testid="blackroom-ceo-chat-message">
+              <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gradient-to-br from-fuchsia-400 to-amber-300 text-[9px] font-black text-black">CEO</div>
+              <div className="max-w-[85%] space-y-1.5">
+                <div className="rounded-2xl rounded-tl-sm bg-white/[0.07] px-3 py-2 text-[13px] leading-5 text-zinc-100">
+                  <p className="whitespace-pre-wrap">{message.text.split("\n").filter((line) => !/^\s*(✔|⛔|✖|Necesita:)/.test(line)).join("\n")}</p>
+                  <p className="mt-0.5 text-[10px] text-zinc-500">{time(message.at)}</p>
+                </div>
+                {(message.results || []).map((card, index) => (
+                  <details key={`${message.id}-${index}`} open={card.ok && card.details.length > 0 && card.details.length <= 6} className={cn("rounded-xl border px-3 py-2", card.ok ? "border-emerald-300/25 bg-emerald-400/5" : "border-amber-300/30 bg-amber-400/5")} data-testid="blackroom-ceo-chat-result">
+                    <summary className="cursor-pointer list-none text-[12px]">
+                      <span className="font-semibold">{card.ok ? "✅" : card.timedOut ? "⏳" : "⚠️"} {card.agentName}</span>
+                      <span className="text-zinc-400"> · {card.label}</span>
+                      <p className={cn("mt-0.5 text-[12px]", card.ok ? "text-emerald-100" : "text-amber-100")}>{card.summary}</p>
+                    </summary>
+                    {card.details.length > 0 && <ul className="mt-1 space-y-0.5">{card.details.map((line) => <li key={line} className="text-[11px] text-zinc-300">• {line}</li>)}</ul>}
+                    {!card.ok && card.needs.length > 0 && <p className="mt-1 text-[11px] text-amber-200">Para que funcione falta: {card.needs.join("; ")}</p>}
+                  </details>
+                ))}
+              </div>
+            </div>
           );
         })}
-        {sending && <p className="text-xs text-fuchsia-200">El CEO está trabajando con el equipo...</p>}
+        {pendingText && (
+          <>
+            <div className="flex justify-end">
+              <div className="max-w-[85%] rounded-2xl rounded-tr-sm bg-fuchsia-500/60 px-3 py-2 text-[13px] leading-5 text-white"><p className="whitespace-pre-wrap">{pendingText}</p></div>
+            </div>
+            <div className="flex gap-2">
+              <div className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-gradient-to-br from-fuchsia-400 to-amber-300 text-[9px] font-black text-black">CEO</div>
+              <div className="rounded-2xl rounded-tl-sm bg-white/[0.07] px-3 py-2.5"><TypingDots /></div>
+            </div>
+          </>
+        )}
       </div>
 
-      {error && <p role="status" className="mt-1 shrink-0 text-[11px] text-rose-200">{error}</p>}
-      {messages.length === 0 && (
-        <div className="mt-2 flex shrink-0 flex-wrap gap-1">
-          {SUGGESTIONS.map((suggestion) => <button key={suggestion} type="button" disabled={sending} onClick={() => send(suggestion)} className="rounded-full border border-white/15 px-2 py-0.5 text-[10px] text-zinc-300 hover:bg-white/10">{suggestion}</button>)}
+      <div className="shrink-0 border-t border-white/10 px-3 pb-3 pt-2">
+        {error && <p role="status" className="mb-1 text-[11px] text-rose-200">{error}</p>}
+        <div className="mb-2 flex gap-1 overflow-x-auto pb-1">
+          {SUGGESTIONS.map((suggestion) => <button key={suggestion} type="button" disabled={sending} onClick={() => send(suggestion)} className="shrink-0 rounded-full border border-white/15 px-2.5 py-1 text-[11px] text-zinc-300 hover:bg-white/10 disabled:opacity-40">{suggestion}</button>)}
         </div>
-      )}
-      <div className="mt-2 flex shrink-0 gap-2">
-        <input
-          value={text}
-          onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => { if (event.key === "Enter") void send(); }}
-          aria-label="Mensaje para el CEO Black Room"
-          placeholder="Ej: prepara un post para el viernes a las 8pm"
-          maxLength={1000}
-          disabled={sending}
-          className="min-w-0 flex-1 rounded-full border border-white/10 bg-black/50 px-3 py-2 text-xs text-white placeholder:text-zinc-500 focus:border-fuchsia-200/50 focus:outline-none"
-          data-testid="blackroom-ceo-chat-input"
-        />
-        <button type="button" onClick={() => send()} disabled={sending || !text.trim()} className="rounded-full bg-fuchsia-300 px-3 py-2 text-xs font-bold text-black hover:bg-fuchsia-200 disabled:opacity-50" data-testid="blackroom-ceo-chat-send">Enviar</button>
+        <div className="flex gap-2">
+          <input
+            ref={inputRef}
+            value={text}
+            onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => { if (event.key === "Enter") void send(); }}
+            aria-label="Mensaje para el CEO"
+            placeholder="Escríbele al CEO..."
+            maxLength={1000}
+            disabled={sending}
+            className="min-w-0 flex-1 rounded-full border border-white/10 bg-black/50 px-4 py-2.5 text-[13px] text-white placeholder:text-zinc-500 focus:border-fuchsia-200/50 focus:outline-none"
+            data-testid="blackroom-ceo-chat-input"
+          />
+          <button type="button" onClick={() => send()} disabled={sending || !text.trim()} aria-label="Enviar" className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-fuchsia-400 text-base font-bold text-black hover:bg-fuchsia-300 disabled:opacity-40" data-testid="blackroom-ceo-chat-send">➤</button>
+        </div>
       </div>
     </section>
   );

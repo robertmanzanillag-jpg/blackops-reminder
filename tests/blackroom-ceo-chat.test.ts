@@ -235,7 +235,7 @@ test("a post goes to the publisher as pending and is never approved by the CEO",
     assert.equal(card.approvals[0].status, "pending");
     assert.equal(out.pendingApprovals.length, 1);
     assert.equal(finished.length, 0, "an order waiting for approval stays open");
-    assert.match(out.reply.text, /esperan aprobacion/);
+    assert.match(out.reply.text, /esperando tu aprobaci[oó]n/);
 
     const asked = await chat.sendMessage({ text: "apruebalo y publicalo ya", actor: PARTNER, authorName: "Socio", contextUserId: "robert" });
     assert.match(asked.reply.text, /No apruebo ni rechazo desde el chat/);
@@ -386,4 +386,45 @@ test("council placeOrder: explicit Black Room assignees replace the text routing
   // Non Black Room ids are filtered out; nothing left falls back to the text routing inside the team.
   const filtered = await council.placeOrder(text, "blackroom", { userId: "robert", role: "owner" }, { assignees: ["portfolio"] });
   for (const assignee of filtered.company.orders[0].assignees) assert.ok((BLACKROOM_DEPARTMENT_ORDER as readonly string[]).includes(assignee.agentId));
+});
+
+test("greetings and help get a friendly answer without running agents or placing orders", async () => {
+  const dir = await tempDir();
+  try {
+    const { chat, calls, placed } = setup(dir);
+    const hello = await chat.sendMessage({ text: "Hola!", actor: OWNER, authorName: "Robert", contextUserId: "robert" });
+    assert.match(hello.reply.text, /Hola Robert/);
+    assert.match(hello.reply.text, /reporte de la semana/);
+    const thanks = await chat.sendMessage({ text: "gracias", actor: OWNER, authorName: "Robert", contextUserId: "robert" });
+    assert.match(thanks.reply.text, /Con gusto/);
+    assert.equal(calls.filter((call) => call.operation !== "list").length, 0, "only the approvals list is read");
+    assert.equal(placed.length, 0);
+    // A greeting followed by a real request still runs the agent.
+    await chat.sendMessage({ text: "hola, revisa la web por favor", actor: OWNER, authorName: "Robert", contextUserId: "robert" });
+    assert.ok(calls.some((call) => call.agentId === "blackroom-website"));
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("non Black Room requests from the owner become a task for the main office; partners never do", async () => {
+  const dir = await tempDir();
+  try {
+    const general: Array<{ text: string; role: string }> = [];
+    const { orders } = fakeOrders();
+    orders.placeGeneral = async (text, placedBy) => { general.push({ text, role: placedBy.role }); return { orderId: "main-1", assignees: ["Asistente"] }; };
+    const { chat, calls } = setup(dir, { orders });
+    const out = await chat.sendMessage({ text: "agenda una reunion con el contador el lunes", actor: OWNER, authorName: "Robert", contextUserId: "robert" });
+    assert.equal(calls.filter((call) => call.operation !== "list").length, 0, "only the approvals list is read");
+    assert.deepEqual(general, [{ text: "agenda una reunion con el contador el lunes", role: "owner" }]);
+    assert.match(out.reply.text, /no es de Black Room/);
+    assert.match(out.reply.text, /Asistente/);
+    assert.deepEqual(out.reply.orderIds, ["main-1"]);
+
+    const partner = await chat.sendMessage({ text: "agenda una reunion con el contador el lunes", actor: PARTNER, authorName: "Socio", contextUserId: "robert" });
+    assert.equal(general.length, 1, "a partner request never reaches the main office");
+    assert.match(partner.reply.text, /no estoy seguro/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
 });
