@@ -147,3 +147,17 @@ test("scenario IDs require verified acceptance artifact after immutable CI valid
  f.change();assert.equal((await f.verify()).status,"unknown");assert.equal(calls,1);
  const missing=fixture("push",async()=>{throw Error("missing");});assert.equal((await missing.verify()).status,"unknown");
 });
+
+test("generic company-order acceptance is read only after authenticated successful test/build/browser steps", async () => {
+  const { companyOrderChecksAcceptance, COMPANY_ORDER_CHECKS_ID } = await import("../server/software-factory-company-auto");
+  let reads = 0;
+  const reader = async (input: Parameters<typeof companyOrderChecksAcceptance>[0]) => { reads++; return companyOrderChecksAcceptance(input); };
+  const ok = fixture("push", reader), passed = await ok.verify() as any;
+  assert.equal(passed.status, "passed"); assert.deepEqual(passed.regressionScenarioIds, [COMPANY_ORDER_CHECKS_ID]);
+  assert.ok(passed.artifactIds.includes(`factory-candidate-checks:10:${"b".repeat(40)}`));
+  const failed = fixture("push", reader); failed.run.conclusion = "failure"; failed.job.conclusion = "failure";
+  assert.equal((await failed.verify()).status, "failed");
+  const skipped = fixture("push", reader); skipped.job.steps[1].conclusion = "skipped";
+  assert.equal((await skipped.verify()).status, "unknown");
+  assert.equal(reads, 1);
+});

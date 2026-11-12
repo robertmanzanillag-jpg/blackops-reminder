@@ -66,7 +66,7 @@ guard (`kong`, `software-factory`, `office-token-budget`, `credit`, `auth`,
 modes `100644`/`100755`, so symlinks, submodules and trees cannot be written; the
 exporter already requires every selected file to be an ordinary regular blob.
 
-File selection is explicit and deterministic: there is no paid selection stage.
+For mapped orders, file selection is explicit and deterministic: there is no paid selection stage (automatic orders use the bounded selection described below).
 Discovery copies the mapping's `paths` into the job's persisted
 `finding.sourcePaths`. Build, repair attempts, the independent review loader and
 build recovery reuse that persisted list verbatim and never re-select, while
@@ -110,6 +110,76 @@ Example (synthetic values only, no credentials):
       "paths": ["server/office-role-work.ts", "tests/office-role-work.test.ts"] }
   ],
   "ui": { "workflowId": 123, "workflowSha256": "<64 hex>", "harnessSha256": "<64 hex>" }
+}
+```
+
+## Automatic owner orders (`autoAdmit`)
+
+Optional and disabled by default (absent or `enabled: false`). When enabled,
+orders created by the authenticated owner through `POST /api/agent-company/orders`
+flow into the factory without a hand-written mapping, still ending only in a
+reviewed draft PR.
+
+| Field | Default | Bounds | Meaning |
+| --- | --- | --- | --- |
+| `autoAdmit.enabled` | absent (off) | boolean | Turns automatic admission on. |
+| `autoAdmit.since` | required | ISO datetime | Only orders with `createdAt >= since` are admitted. |
+| `autoAdmit.maxPerDay` | `maxDraftPullRequestsPerDay` | 1..`maxDraftPullRequestsPerDay` | Automatic admissions per UTC day. |
+
+Admission. Explicit `orders[]` mappings keep working unchanged and take
+precedence: a mapped id (any revision) is never admitted automatically. Eligible
+orders follow the existing `companyOrderJob` rules (open, at most 500 characters,
+no Kong assignee or Kong text, a pending engineering assignee); Kong orders are
+never admitted. The scheduler admits mapped orders first (newest first, as
+before), then automatic ones oldest first, at most one new admission per scan.
+The durable admission key is still the order revision. Before any credit hold,
+both the draft PR cap and `maxPerDay` are checked (scheduler and owner route);
+capped means no hold and no queue write. Settled admissions that left the
+bounded 100-row job window are treated as history and never re-admitted.
+
+Discovery. The base is the current head of `baseBranch` (no pinned SHA). The
+operator lists the tree at that exact commit through the scoped read-only GitHub
+client: paths only, ordinary `100644` blobs allowed by the code-owned write scope
+and `writeRoots`, at most 4000 (more fails closed). One bounded model call,
+reserved in the shared credit ledger under a stable key per order revision
+(`factory-select:*`), with at most 1024 output tokens and a strict JSON schema,
+returns `{kind: "bug"|"improvement", paths: [...]}`. Code validates it with
+`validateFactoryOrderPaths`, membership in the listing, at most
+`maxFilesPerOrder` files and at least one test file. Anything invalid (malformed
+JSON, extra keys, denied, missing or too many paths, no test file, provider not
+completed) is a terminal `blocked` discovery with the known billed cost and no
+further cost. Unavailable credit blocks before any provider call at zero cost. An
+unknown provider outcome leaves the hold `unknown` (factory pauses for operator
+reconciliation); an existing selection reservation is never replayed (a settled
+one blocks with `FACTORY_AUTO_SELECTION_ALREADY_EXECUTED`). The selection and
+kind are persisted into `finding.sourcePaths`/`finding.kind`, so build, repair,
+review, recovery and replay reuse them exactly like explicit paths. The selection
+cost is charged against `reservations.discover`; size it for the repository
+listing (roughly one input token per four characters of paths) or the provider
+budget check blocks the selection at zero cost and consumes that revision's key
+(edit the order to obtain a new revision).
+
+Acceptance. Automatic orders use the code-owned scenario
+`company-order-checks-v1`: it is satisfied only when the pinned isolated
+workflow's test, build and browser steps succeed on the exact candidate head, and
+the candidate changes at least one test file. It does not require the
+`office-role-work` backend artifact. Mapped orders keep their role-work scenarios
+and artifact reader unchanged. The proposal gate still requires passing checks,
+measured simulation and an independent review on the exact head, and the PR is
+always a draft; nothing merges or deploys.
+
+Order text is requirements only. It cannot widen paths, select the scenario,
+change kind outside the enum, budgets, credentials, permissions or reach Kong;
+those are enforced in code.
+
+Example additions (synthetic values only):
+
+```json
+{
+  "maxDraftPullRequestsPerDay": 5,
+  "reservations": { "discover": 10, "build": 100, "simulate": 1, "review": 50 },
+  "orders": [],
+  "autoAdmit": { "enabled": true, "since": "2026-11-12T00:00:00Z", "maxPerDay": 3 }
 }
 ```
 
