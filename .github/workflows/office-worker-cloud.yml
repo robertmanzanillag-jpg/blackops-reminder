@@ -188,6 +188,8 @@ jobs:
           SOFTWARE_FACTORY_GITHUB_TOKEN: ${{ secrets.SOFTWARE_FACTORY_GITHUB_TOKEN }}
           # Optional office handoff: only the exact string 'true' enqueues one read-only office review per verified draft PR head.
           SOFTWARE_FACTORY_OFFICE_REVIEW_ENABLED: ${{ vars.SOFTWARE_FACTORY_OFFICE_REVIEW_ENABLED || 'false' }}
+          # Optional: score factory stage outcomes as office careers (lives, presence, successors).
+          SOFTWARE_FACTORY_OFFICE_CAREERS_ENABLED: ${{ vars.SOFTWARE_FACTORY_OFFICE_CAREERS_ENABLED || 'false' }}
         run: |
           set -euo pipefail
           export OPENAI_SHARED_CREDIT_CONFIG="$FACTORY_CONFIG_DIR/shared-credit.json"
