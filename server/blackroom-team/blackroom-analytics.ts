@@ -18,6 +18,7 @@ import type {
 import { BLACKROOM_TEAM_WORKING_FRESH_MS } from "@shared/blackroom-team";
 import {
   BLACKROOM_ANALYTICS_NETWORKS,
+  blackRoomAnalyticsWindowLabel,
   buildBlackRoomAnalyticsReport,
   normalizeBlackRoomAnalyticsSamples,
   type BlackRoomAnalyticsCoverage,
@@ -155,7 +156,56 @@ function parseWindow(value: unknown): BlackRoomAnalyticsWindow | null {
   if (value === undefined || value === null || value === "") return "weekly";
   if (value === "daily" || value === "diario" || value === "dia") return "daily";
   if (value === "weekly" || value === "semanal" || value === "semana") return "weekly";
+  if (value === "monthly" || value === "mensual" || value === "mes") return "monthly";
   return null;
+}
+
+
+const WIDER_WINDOWS: Record<BlackRoomAnalyticsWindow, BlackRoomAnalyticsWindow[]> = { daily: ["weekly", "monthly"], weekly: ["monthly"], monthly: [] };
+const STALE_DATA_MS = 3 * 24 * 60 * 60_000;
+
+function compact(value: number): string {
+  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(1).replace(/\.0$/, "")}M`;
+  if (value >= 10_000) return `${Math.round(value / 1_000)}K`;
+  if (value >= 1_000) return `${(value / 1_000).toFixed(1).replace(/\.0$/, "")}K`;
+  return String(Math.round(value));
+}
+
+function shortDate(iso: string | null | undefined): string | null {
+  const at = iso ? Date.parse(iso) : Number.NaN;
+  return Number.isFinite(at) ? new Date(at).toLocaleDateString("es", { day: "numeric", month: "short", timeZone: "America/New_York" }) : null;
+}
+
+/** One readable paragraph for the chat: period, totals per network, best post and how fresh the data is. */
+export function friendlyAnalyticsSummary(report: BlackRoomAnalyticsReport, now: Date, liveConnected: boolean): string {
+  const parts: string[] = [];
+  const label = blackRoomAnalyticsWindowLabel(report.window);
+  if (report.requestedWindow) {
+    const asked = report.requestedWindow === "daily" ? "En las ultimas 24 horas no hubo publicaciones nuevas" : "En los ultimos 7 dias no hubo publicaciones nuevas";
+    const last = shortDate(report.latestPostAt);
+    parts.push(`${asked}${last ? ` (la ultima fue el ${last})` : ""}, asi que te muestro los ${label}.`);
+  }
+  const views = report.totals.current.views;
+  parts.push(`${label[0].toUpperCase()}${label.slice(1)}: ${report.totals.current.posts} publicaciones${views !== undefined ? ` y ${compact(views)} vistas` : ""}.`);
+  const byNetwork = report.networksWithData
+    .map((network) => report.networks[network])
+    .filter((entry) => entry.current.posts > 0)
+    .sort((a, b) => (b.current.views ?? 0) - (a.current.views ?? 0))
+    .map((entry) => `${entry.label} ${compact(entry.current.views ?? 0)} vistas (${entry.current.posts} posts)`);
+  if (byNetwork.length) parts.push(`Por red: ${byNetwork.join(" · ")}.`);
+  const best = report.networksWithData
+    .flatMap((network) => report.networks[network].topPosts.slice(0, 1).map((post) => ({ post, label: report.networks[network].label })))
+    .sort((a, b) => b.post.views - a.post.views)[0];
+  if (best) parts.push(`Mejor post: ${best.label}, ${compact(best.post.views)} vistas${shortDate(best.post.publishedAt) ? ` (${shortDate(best.post.publishedAt)})` : ""}.`);
+  const missing = report.networksMissing.map((network) => report.networks[network].label);
+  if (missing.length) parts.push(`Sin datos de: ${missing.join(", ")}.`);
+  const asOf = report.dataAsOf ? Date.parse(report.dataAsOf) : Number.NaN;
+  if (Number.isFinite(asOf) && now.getTime() - asOf > STALE_DATA_MS) {
+    parts.push(`Ojo: estos numeros son de Metricool al ${shortDate(report.dataAsOf)}. ${liveConnected ? "La actualizacion en vivo no trajo datos nuevos." : "Para tenerlos al dia hay que conectar Metricool en vivo (METRICOOL_USER_TOKEN)."}`);
+  } else if (shortDate(report.dataAsOf)) {
+    parts.push(`Datos de Metricool al ${shortDate(report.dataAsOf)}.`);
+  }
+  return parts.join(" ");
 }
 
 export function createBlackRoomAnalyticsAgent(deps: BlackRoomAnalyticsDeps = {}): BlackRoomTeamAgentModule {
@@ -202,7 +252,18 @@ export function createBlackRoomAnalyticsAgent(deps: BlackRoomAnalyticsDeps = {})
       }
     }
 
-    const report = buildBlackRoomAnalyticsReport({ window, now, samplesByNetwork, importedAtByNetwork, coverage });
+    // A window without any new post says nothing useful ("0 publicaciones"): widen it to the
+    // next window that has posts, and say so, unless the caller asked for the exact window.
+    let report = buildBlackRoomAnalyticsReport({ window, now, samplesByNetwork, importedAtByNetwork, coverage });
+    if (input.autoExpand !== false && report.networksWithData.length && report.totals.current.posts === 0) {
+      for (const wider of WIDER_WINDOWS[window]) {
+        const candidate = buildBlackRoomAnalyticsReport({ window: wider, now, samplesByNetwork, importedAtByNetwork, coverage });
+        if (candidate.totals.current.posts > 0) {
+          report = { ...candidate, requestedWindow: window };
+          break;
+        }
+      }
+    }
     if (sourceErrors.length) report.limitations.push(...sourceErrors);
     const hasData = report.networksWithData.length > 0;
     const needs = hasData ? [] : [
@@ -236,10 +297,9 @@ export function createBlackRoomAnalyticsAgent(deps: BlackRoomAnalyticsDeps = {})
         error: "no_data",
       };
     }
-    const missing = report.networksMissing.map((network) => report.networks[network].label);
     return {
       ok: true,
-      summary: `Reporte ${report.windowLabel}: ${report.totals.current.posts} publicaciones, ${report.totals.current.views ?? 0} vistas en ${report.networksWithData.length} redes${missing.length ? `; sin datos: ${missing.join(", ")}` : ""}.`,
+      summary: friendlyAnalyticsSummary(report, now, hasToken(ctx.env)),
       report,
     };
   }
@@ -250,7 +310,7 @@ export function createBlackRoomAnalyticsAgent(deps: BlackRoomAnalyticsDeps = {})
     const report = state.lastReport;
     const metrics: Record<string, number | string> = {};
     if (report) {
-      metrics.ventana = report.window === "daily" ? "diaria" : "semanal";
+      metrics.ventana = report.window === "daily" ? "diaria" : report.window === "weekly" ? "semanal" : "mensual";
       metrics.publicaciones = report.totals.current.posts;
       if (report.totals.current.views !== undefined) metrics.vistas = report.totals.current.views;
       metrics.redesConDatos = report.networksWithData.length;
@@ -312,6 +372,7 @@ export function createBlackRoomAnalyticsAgent(deps: BlackRoomAnalyticsDeps = {})
     actions: {
       "daily-report": (ctx, input) => run(ctx, { ...input, window: "daily" }),
       "weekly-report": (ctx, input) => run(ctx, { ...input, window: "weekly" }),
+      "monthly-report": (ctx, input) => run(ctx, { ...input, window: "monthly" }),
       async "last-report"(ctx) {
         const state = await loadState(ctx);
         if (!state.lastReport) return { ok: false, summary: "Todavia no hay un reporte con datos reales.", error: "no_report" };
