@@ -42,3 +42,31 @@ export function createBlackRoomTeamStateStore(dataDir: string, id: BlackRoomTeam
     save: (value) => writeBlackRoomTeamState(dataDir, id, value),
   };
 }
+
+const SHARED_FILE_NAME = /^[a-z][a-z0-9-]{0,40}\.json$/;
+
+/** Reads a shared team file (e.g. scheduler.json) in the data dir; fixed names only, no paths. */
+export async function readBlackRoomTeamStateFile<T>(dataDir: string, fileName: string, fallback: T): Promise<T> {
+  if (!SHARED_FILE_NAME.test(fileName)) throw new Error(`Nombre de archivo no valido: ${fileName}`);
+  try {
+    return JSON.parse(await readFile(path.join(dataDir, fileName), "utf8")) as T;
+  } catch (error: any) {
+    if (error?.code === "ENOENT") return fallback;
+    throw error;
+  }
+}
+
+/** Atomically replaces a shared team file in the data dir. */
+export async function writeBlackRoomTeamStateFile<T>(dataDir: string, fileName: string, value: T): Promise<void> {
+  if (!SHARED_FILE_NAME.test(fileName)) throw new Error(`Nombre de archivo no valido: ${fileName}`);
+  const filePath = path.join(dataDir, fileName);
+  await mkdir(dataDir, { recursive: true });
+  const temporaryPath = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
+  try {
+    await writeFile(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+    await rename(temporaryPath, filePath);
+  } catch (error) {
+    await unlink(temporaryPath).catch(() => undefined);
+    throw error;
+  }
+}
