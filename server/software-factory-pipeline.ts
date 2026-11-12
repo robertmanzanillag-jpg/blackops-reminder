@@ -26,7 +26,8 @@ export interface FactoryPipelineDependencies {
   isCurrentDeployment?: (ownerKey: string, projectId: string, deployJobId: string) => Promise<boolean>;
   claimFinding(ownerKey: string, projectId: string, key: string, jobId: string): Promise<boolean>;
   reservations: Record<FactoryJob["kind"], number>;
-  discover?: (project: FactoryProject, context: StageContext) => Promise<Costed & { finding?: FactoryPipelineState["finding"]; findings?: FactoryPipelineState["finding"][] }>;
+  /** status "blocked": terminal, known-cost stop (e.g. an invalid automatic file selection). */
+  discover?: (project: FactoryProject, context: StageContext) => Promise<Costed & { status?: "blocked"; reason?: string; finding?: FactoryPipelineState["finding"]; findings?: FactoryPipelineState["finding"][] }>;
   build?: (project: FactoryProject, state: FactoryPipelineState, context: StageContext) => Promise<(Costed & { candidate: FactoryCandidate; tests: FactoryEvidence }) | { status: "blocked" | "failed" | "unknown"; costCents: number; reason?: string; deferUntil?: string }>;
   simulate?: (project: FactoryProject, state: FactoryPipelineState, context: StageContext) => Promise<Costed & { evidence: FactoryEvidence }>;
   review?: (project: FactoryProject, state: FactoryPipelineState, context: StageContext) => Promise<Costed & { evidence: FactoryEvidence }>;
@@ -96,6 +97,8 @@ export function createFactoryPipeline(deps: FactoryPipelineDependencies): Pick<F
     const checkCost = (cost: number) => { if (!Number.isSafeInteger(cost) || cost < 0 || cost > context.maxCostCents) throw new Error("FACTORY_STAGE_BILLING_UNCONFIRMED"); };
     if (kind === "discover") {
       const found = await deps.discover!(clone(project), { ...context, source: clone(job.payload) }); checkCost(found.costCents);
+      if (found.status === "blocked") return { status: "blocked", costCents: found.costCents, reason: typeof found.reason === "string" && found.reason ? found.reason : "FACTORY_DISCOVERY_BLOCKED" };
+      if (found.status !== undefined) throw new Error("FACTORY_DISCOVERY_RESULT_INVALID");
       const findings = found.findings ?? (found.finding ? [found.finding] : []);
       if (!findings.length) return { status: "completed", costCents: found.costCents, reason: "FACTORY_NO_ACTIONABLE_FINDING" };
       let selected: FactoryPipelineState["finding"] | undefined;

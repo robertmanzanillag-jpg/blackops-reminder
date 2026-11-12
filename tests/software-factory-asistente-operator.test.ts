@@ -188,3 +188,197 @@ test("discovery persists the mapped per-order selection into the job state", asy
  assert.deepEqual((found.evidence as any).pipelineState.finding.sourcePaths, ["server/office-role-work.ts", testPath]);
  assert.equal(found.next?.kind, "build");
 });
+
+// ---------------------------------------------------------------------------
+// Phase 3: automatic owner orders (autoAdmit), bounded file selection and the
+// generic checks-based acceptance scenario.
+import { COMPANY_ORDER_CHECKS_ID, companyOrderChecksAcceptance } from "../server/software-factory-company-auto";
+import { createFactoryPipeline } from "../server/software-factory-pipeline";
+import { proposalEvidenceGate } from "../server/software-factory";
+const autoBase = "e".repeat(40), autoTree = "f".repeat(40), fixtureModel = "fixture-model-2026-01-01";
+const listing = ["server/office-search.ts", "server/office-role-work.ts", "client/src/pages/office.tsx", "tests/office-search.test.ts", "tests/office-role-work.test.ts"];
+const autoOrder = (id: string, createdAt: string, text = "Improve office search ranking"): CompanyOrder => ({ id, text, createdAt, assignees: [{ agentId: "code", status: "en_curso", note: "" }] });
+async function autoFixture(options: { orders?: CompanyOrder[]; grant?: number; autoAdmit?: AsistenteOperatorConfig["autoAdmit"] | null; reply?: () => string; generation?: () => Promise<Response> } = {}) {
+    const base = await fixture();
+    let state: SharedCreditState = { version: 1, grant: null, lastObservedAt: null, reservations: [] }, tail: Promise<unknown> = Promise.resolve();
+    const transact: CreditTransaction = async (fn) => { const p = tail.then(() => { const copy = structuredClone(state), r = fn(copy); state = copy; return r; }); tail = p.catch(() => { }); return p; };
+    const ledger = createSharedOpenAiCreditLedger({ transact, now: () => at, maximumGrantObservationAgeMs: 60000, grant: { id: "grant", accountScope: "same-account", availableMicroUsd: options.grant ?? 1000000, observedAt: at.toISOString(), expiresAt: "2026-11-20T00:00:00Z", verificationEvidenceId: "verified" } });
+    await ledger.initialize();
+    const orders = options.orders ?? [autoOrder("auto-1", at.toISOString())];
+    const jobs: any[] = [];
+    let enqueued = 0, modelCalls = 0, generations = 0, githubCalls = 0;
+    const store: any = { status: async () => ({ configured: true, paused: false, limitCents: 10000, fixedCents: 0, spentCents: 0, reservedCents: 0 }), projectByOwnerKey: async () => project, list: async () => jobs,
+        claimFinding: async () => true,
+        enqueue: async (_o: string, i: any) => { enqueued++; const job = { ...i, id: `job-${enqueued}`, ownerKey, status: "pending", createdAt: at.toISOString() }; jobs.push(job); return job; } };
+    const reply = options.reply ?? (() => JSON.stringify({ kind: "improvement", paths: ["server/office-search.ts", "tests/office-search.test.ts"] }));
+    const deps = { ...base.deps, store, credits: { ledger, pricing: { model: fixtureModel, inputNanoUsdPerToken: 1, outputNanoUsdPerToken: 1, validUntil: "2026-11-20T00:00:00Z" } }, readOrders: async () => orders,
+        githubRequest: async (url: string) => { githubCalls++;
+            if (url.endsWith("/git/ref/heads/main")) return Response.json({ ref: "refs/heads/main", object: { type: "commit", sha: autoBase } });
+            if (url.endsWith(`/git/commits/${autoBase}`)) return Response.json({ sha: autoBase, tree: { sha: autoTree } });
+            if (url.endsWith(`/git/trees/${autoTree}?recursive=1`)) return Response.json({ sha: autoTree, truncated: false, tree: [...listing, "server/kong.ts", ".github/workflows/x.yml", "package.json", "docs/x.md"].map(path => ({ path, type: "blob", mode: "100644", sha: "1".repeat(40) })).concat([{ path: "server", type: "tree", mode: "040000", sha: "2".repeat(40) }]) });
+            throw Error(`UNEXPECTED_GITHUB_${url}`); },
+        modelRequest: async (url: string, init: RequestInit) => { modelCalls++; const body = JSON.parse(String(init.body));
+            assert.equal(body.text.format.type, "json_schema"); assert.equal(body.text.format.strict, true);
+            if (url.endsWith("/input_tokens")) return Response.json({ object: "response.input_tokens", input_tokens: 100 });
+            generations++; if (options.generation) return options.generation();
+            assert.ok(body.max_output_tokens <= 1024);
+            return Response.json({ object: "response", model: fixtureModel, status: "completed", usage: { input_tokens: 100, output_tokens: 50, total_tokens: 150 }, output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: reply() }] }] }); } };
+    const config: AsistenteOperatorConfig = { ...base.config, orders: [], ...(options.autoAdmit === null ? {} : { autoAdmit: options.autoAdmit ?? { enabled: true, since: "2026-11-06T00:00:00Z" } }) };
+    const discoverJob = (order: CompanyOrder) => { const input = companyOrderJob(order, project, 1); return { id: "44444444-4444-4444-8444-444444444444", ownerKey, projectId: "asistente", kind: "discover", key: input.key, payload: input.payload, reservedCents: 1, recoveryCents: 0, month: "2026-11", status: "running", createdAt: at.toISOString() } as any; };
+    return { config, deps, ledger, jobs, store, orders, discoverJob, counts: () => ({ enqueued, modelCalls, generations, githubCalls }) };
+}
+const signal = () => new AbortController().signal;
+
+test("autoAdmit is strict, optional and disabled by default; caps are bounded by the draft PR cap", async () => {
+    const f = await autoFixture({ autoAdmit: null });
+    assert.equal(validateAsistenteOperatorConfig(f.config).autoAdmit, undefined);
+    assert.equal(validateAsistenteOperatorConfig({ ...f.config, autoAdmit: { enabled: true, since: "2026-11-06T00:00:00Z", maxPerDay: 5 } }).autoAdmit?.maxPerDay, 5);
+    for (const autoAdmit of [{ enabled: true }, { enabled: "yes", since: "2026-11-06T00:00:00Z" }, { enabled: true, since: "yesterday" }, { enabled: true, since: "2026-11-06T00:00:00Z", maxPerDay: 0 }, { enabled: true, since: "2026-11-06T00:00:00Z", maxPerDay: 6 }, { enabled: true, since: "2026-11-06T00:00:00Z", paths: ["server/x.ts"] }])
+        assert.throws(() => validateAsistenteOperatorConfig({ ...f.config, autoAdmit } as any), undefined, JSON.stringify(autoAdmit));
+    assert.equal(validateAsistenteOperatorConfig({ ...f.config, maxDraftPullRequestsPerDay: 8, autoAdmit: { enabled: true, since: "2026-11-06T00:00:00Z", maxPerDay: 8 } }).autoAdmit?.maxPerDay, 8);
+});
+
+test("auto admission off: unmapped orders are never admitted by the scheduler or the owner route", async () => {
+    for (const autoAdmit of [null, { enabled: false, since: "2026-11-06T00:00:00Z" }] as const) {
+        const f = await autoFixture({ autoAdmit }), operator = createAsistenteOperatorComposition(f.config, f.deps);
+        await (await operator.createFactoryWorkerOptions()).scheduleCompanyOrders!(owner);
+        await assert.rejects(operator.admitWithinCredits(owner, companyOrderJob(f.orders[0], project, 1)), /NOT_MAPPED/);
+        assert.equal(f.counts().enqueued, 0); assert.equal((await f.ledger.status()).reservedMicroUsd, 0);
+    }
+});
+
+test("auto admission on: since filter, Kong rejection and oldest-first single admission per scan", async () => {
+    const orders = [autoOrder("newest", "2026-11-06T20:00:00Z"), autoOrder("old", "2026-11-05T23:59:59Z"), autoOrder("kong-text", "2026-11-06T01:00:00Z", "Ajustar Kong"),
+        { ...autoOrder("kong-agent", "2026-11-06T01:00:00Z"), assignees: [{ agentId: "kong", status: "en_curso", note: "" }, { agentId: "code", status: "en_curso", note: "" }] }, autoOrder("oldest-eligible", "2026-11-06T02:00:00Z")] as CompanyOrder[];
+    const f = await autoFixture({ orders }), operator = createAsistenteOperatorComposition(f.config, f.deps), worker = await operator.createFactoryWorkerOptions();
+    await worker.scheduleCompanyOrders!(owner);
+    assert.deepEqual(f.jobs.map(j => j.payload.companyOrder.orderId), ["oldest-eligible"]);
+    // The pending admission stops the next scan; once it settles, the next one follows.
+    await worker.scheduleCompanyOrders!(owner); assert.equal(f.counts().enqueued, 1);
+    f.jobs[0].status = "completed"; await worker.scheduleCompanyOrders!(owner);
+    assert.deepEqual(f.jobs.map(j => j.payload.companyOrder.orderId), ["oldest-eligible", "newest"]);
+    for (const kong of [orders[2], orders[3]]) assert.throws(() => companyOrderJob(kong, project, 1), /INELIGIBLE/);
+    for (const id of ["kong-text", "kong-agent"]) await assert.rejects(operator.admitWithinCredits(owner, { ...companyOrderJob(orders[0], project, 1), payload: { companyOrder: { version: 1, company: "main", orderId: id, revision: "0".repeat(64) } } }), /INELIGIBLE/);
+    await assert.rejects(operator.admitWithinCredits(owner, companyOrderJob(orders[1], project, 1)), /NOT_MAPPED/); // Before since.
+    assert.equal(f.counts().enqueued, 2); assert.equal((await f.ledger.status()).reservedMicroUsd, 0); assert.equal(f.counts().modelCalls, 0);
+    // An older settled admission that left the bounded window is history, never re-admitted.
+    f.jobs[1].status = "completed"; f.jobs.splice(0, 1); await worker.scheduleCompanyOrders!(owner); assert.equal(f.counts().enqueued, 2);
+});
+
+test("auto admission honors maxPerDay and the draft PR cap with no credit hold", async () => {
+    const orders = [autoOrder("a", "2026-11-06T01:00:00Z"), autoOrder("b", "2026-11-06T02:00:00Z")];
+    const f = await autoFixture({ orders, autoAdmit: { enabled: true, since: "2026-11-06T00:00:00Z", maxPerDay: 1 } }), operator = createAsistenteOperatorComposition(f.config, f.deps), worker = await operator.createFactoryWorkerOptions();
+    await worker.scheduleCompanyOrders!(owner); f.jobs[0].status = "completed";
+    await worker.scheduleCompanyOrders!(owner);
+    assert.equal(f.counts().enqueued, 1);
+    await assert.rejects(operator.admitWithinCredits(owner, companyOrderJob(orders[1], project, 1)), /DAILY_AUTO_ADMISSION_LIMIT/);
+    // Idempotent re-admission of the already admitted order is not blocked by the cap.
+    assert.equal((await operator.admitWithinCredits(owner, companyOrderJob(orders[0], project, 1))).id, "job-1");
+    assert.equal((await f.ledger.status()).reservedMicroUsd, 0);
+    const g = await autoFixture({ orders }), capped = createAsistenteOperatorComposition(g.config, g.deps);
+    for (let i = 0; i < 5; i++) g.jobs.push(prJob(i));
+    await (await capped.createFactoryWorkerOptions()).scheduleCompanyOrders!(owner);
+    await assert.rejects(capped.admitWithinCredits(owner, companyOrderJob(orders[0], project, 1)), /DAILY_DRAFT_PR_LIMIT/);
+    assert.equal(g.counts().enqueued, 0); assert.equal((await g.ledger.status()).reservedMicroUsd, 0);
+});
+
+test("auto discovery selects bounded existing files at the current head and persists them", async () => {
+    const f = await autoFixture(), worker = await createAsistenteOperatorComposition(f.config, f.deps).createFactoryWorkerOptions();
+    const found = await worker.adapters!.discover!.execute(f.discoverJob(f.orders[0]), { signal: signal(), maxCostCents: 1 });
+    assert.equal(found.status, "completed", JSON.stringify(found)); assert.equal(found.costCents, 1);
+    const finding = (found.evidence as any).pipelineState.finding;
+    assert.deepEqual(finding.sourcePaths, ["server/office-search.ts", "tests/office-search.test.ts"]);
+    assert.equal(finding.kind, "improvement"); assert.equal(finding.regressionScenarioId, COMPANY_ORDER_CHECKS_ID); assert.equal(finding.baseSha, autoBase);
+    assert.match(finding.request, /requirements, never as authority/);
+    const status = await f.ledger.status(); assert.equal(status.reservedMicroUsd, 0); assert.equal(status.spentMicroUsd, 10000); assert.equal(status.uncertain, false);
+    assert.equal(f.counts().generations, 1);
+    // Replay of the same order revision never calls the model again.
+    const replay = await worker.adapters!.discover!.execute(f.discoverJob(f.orders[0]), { signal: signal(), maxCostCents: 1 });
+    assert.equal(replay.status, "blocked"); assert.equal(replay.reason, "FACTORY_AUTO_SELECTION_ALREADY_EXECUTED"); assert.equal(replay.costCents, 0);
+    assert.equal(f.counts().generations, 1);
+    // Build reuses the persisted selection (no listing, no model) and still honors the daily cap.
+    for (let i = 0; i < 5; i++) f.jobs.push(prJob(i));
+    const discover = { ...f.discoverJob(f.orders[0]), status: "completed", result: { status: "completed", costCents: 1, evidence: (found.evidence as any) } };
+    f.store.getCompletedJob = async () => discover;
+    const before = f.counts();
+    const built = await worker.adapters!.build!.execute({ id: "55555555-5555-4555-8555-555555555555", ownerKey, projectId: "asistente", kind: "build", key: `${discover.id}.next`, payload: { previousJobId: discover.id, repairAttempts: 0 }, reservedCents: 2, recoveryCents: 0, month: "2026-11", status: "running", createdAt: at.toISOString() } as any, { signal: signal(), maxCostCents: 2 });
+    assert.equal(built.reason, "FACTORY_DAILY_DRAFT_PR_LIMIT"); assert.equal(built.costCents, 0);
+    assert.deepEqual(f.counts(), before);
+});
+
+test("auto selection fails closed on invalid, denied, nonexistent, too many or test-less paths", async () => {
+    const cases: [string, string][] = [
+        ["not json", "FACTORY_AUTO_SELECTION_INVALID"],
+        [JSON.stringify({ kind: "feature", paths: ["tests/office-search.test.ts"] }), "FACTORY_AUTO_SELECTION_INVALID"],
+        [JSON.stringify({ kind: "bug", paths: ["tests/office-search.test.ts"], scenarioId: "office-role-work-owner-cas-v1" }), "FACTORY_AUTO_SELECTION_INVALID"],
+        [JSON.stringify({ kind: "bug", paths: ["server/kong.ts", "tests/office-search.test.ts"] }), "FACTORY_AUTO_SELECTION_PATH_DENIED"],
+        [JSON.stringify({ kind: "bug", paths: [".github/workflows/x.yml", "tests/office-search.test.ts"] }), "FACTORY_AUTO_SELECTION_PATH_DENIED"],
+        [JSON.stringify({ kind: "bug", paths: ["server/missing.ts", "tests/office-search.test.ts"] }), "FACTORY_AUTO_SELECTION_PATH_NOT_FOUND"],
+        [JSON.stringify({ kind: "bug", paths: [...listing, "server/a.ts", "server/b.ts"] }), "FACTORY_AUTO_SELECTION_PATHS_INVALID"],
+        [JSON.stringify({ kind: "bug", paths: [] }), "FACTORY_AUTO_SELECTION_PATHS_INVALID"],
+        [JSON.stringify({ kind: "bug", paths: ["server/office-search.ts"] }), "FACTORY_AUTO_SELECTION_TEST_PATH_REQUIRED"],
+    ];
+    for (const [text, reason] of cases) {
+        const f = await autoFixture({ reply: () => text }), worker = await createAsistenteOperatorComposition(f.config, f.deps).createFactoryWorkerOptions();
+        const found = await worker.adapters!.discover!.execute(f.discoverJob(f.orders[0]), { signal: signal(), maxCostCents: 1 });
+        assert.equal(found.status, "blocked", text); assert.equal(found.reason, reason, text); assert.equal(found.next, undefined);
+        assert.equal(found.costCents, 1, text); // Known billed selection; zero further cost.
+        const status = await f.ledger.status(); assert.equal(status.uncertain, false); assert.equal(status.reservedMicroUsd, 0);
+        assert.equal(f.counts().generations, 1);
+    }
+});
+
+test("auto selection with unavailable credit blocks at zero cost without any provider call", async () => {
+    const f = await autoFixture({ grant: 5000 }), worker = await createAsistenteOperatorComposition(f.config, f.deps).createFactoryWorkerOptions();
+    const found = await worker.adapters!.discover!.execute(f.discoverJob(f.orders[0]), { signal: signal(), maxCostCents: 1 });
+    assert.equal(found.status, "blocked"); assert.equal(found.reason, "FACTORY_AUTO_SELECTION_CREDIT_UNAVAILABLE"); assert.equal(found.costCents, 0);
+    assert.equal(f.counts().modelCalls, 0);
+    const g = await autoFixture(); await g.ledger.reserve({ key: "office", consumer: "office", maximumMicroUsd: 10000, requestSha256: "d".repeat(64) }); await g.ledger.markUnknown("office", "lost");
+    const blocked = await (await createAsistenteOperatorComposition(g.config, g.deps).createFactoryWorkerOptions()).adapters!.discover!.execute(g.discoverJob(g.orders[0]), { signal: signal(), maxCostCents: 1 });
+    assert.equal(blocked.reason, "FACTORY_AUTO_SELECTION_CREDIT_UNAVAILABLE"); assert.equal(g.counts().modelCalls, 0);
+});
+
+test("unknown selection outcome keeps the hold and is never replayed", async () => {
+    const f = await autoFixture({ generation: async () => { throw Error("CONNECTION_RESET_AFTER_SUBMIT"); } }), worker = await createAsistenteOperatorComposition(f.config, f.deps).createFactoryWorkerOptions();
+    await assert.rejects(worker.adapters!.discover!.execute(f.discoverJob(f.orders[0]), { signal: signal(), maxCostCents: 1 }), /OUTCOME_UNKNOWN/);
+    let status = await f.ledger.status(); assert.equal(status.uncertain, true); assert.equal(status.reservedMicroUsd, 10000);
+    await assert.rejects(worker.adapters!.discover!.execute(f.discoverJob(f.orders[0]), { signal: signal(), maxCostCents: 1 }), /OUTCOME_UNKNOWN/);
+    status = await f.ledger.status(); assert.equal(status.reservedMicroUsd, 10000);
+    assert.equal(f.counts().generations, 1);
+});
+
+test("mapped orders keep precedence: pinned base, mapped scenario and paths, no selection call", async () => {
+    const f = await autoFixture(), input = companyOrderJob(f.orders[0], project, 1), revision = (input.payload!.companyOrder as any).revision;
+    const config = { ...f.config, orders: [{ id: f.orders[0].id, revision, baseSha: autoBase, kind: "bug" as const, scenarioId: "office-role-work-owner-cas-v1" as const, paths: ["server/office-role-work.ts", testPath] }] };
+    const found = await (await createAsistenteOperatorComposition(config, f.deps).createFactoryWorkerOptions()).adapters!.discover!.execute(f.discoverJob(f.orders[0]), { signal: signal(), maxCostCents: 1 });
+    const finding = (found.evidence as any).pipelineState.finding;
+    assert.equal(finding.regressionScenarioId, "office-role-work-owner-cas-v1"); assert.deepEqual(finding.sourcePaths, ["server/office-role-work.ts", testPath]); assert.equal(found.costCents, 0);
+    assert.equal(f.counts().modelCalls, 0);
+    // An explicitly mapped id with an edited revision never falls back to automatic admission.
+    const edited = { ...f.orders[0], text: "Improve office search ranking v2" };
+    await assert.rejects(createAsistenteOperatorComposition(config, { ...f.deps, readOrders: async () => [edited] }).admitWithinCredits(owner, companyOrderJob(edited, project, 1)), /NOT_MAPPED/);
+});
+
+test("generic acceptance is satisfied only by checks on the exact head and the gate still needs independent review", async () => {
+    const accepted = await companyOrderChecksAcceptance({ runId: 7, baseSha: "a".repeat(40), headSha: "b".repeat(40), signal: signal() });
+    assert.deepEqual(accepted.regressionScenarioIds, [COMPANY_ORDER_CHECKS_ID]);
+    await assert.rejects(companyOrderChecksAcceptance({ runId: 7, baseSha: "a".repeat(40), headSha: "a".repeat(40), signal: signal() }));
+    const candidate: any = { projectId: "asistente", baseSha: "a".repeat(40), headSha: "b".repeat(40), prUrl: "https://github.com/robertmanzanillag-jpg/blackops-reminder/pull/9", builderId: "factory-remote-builder", risk: "unknown", reversible: true, changedFiles: ["server/office-search.ts", "tests/office-search.test.ts"], affectsContracts: false, affectsData: false, repairAttempts: 0 };
+    const now = at.getTime(), ev = (kind: string, extra: any = {}) => ({ projectId: "asistente", baseSha: candidate.baseSha, headSha: candidate.headSha, kind, passed: true, warnings: [], createdAt: at.toISOString(), actorId: "checker", artifactIds: ["x"], ...extra });
+    const sim = ev("simulation", { syntheticData: true, externalServicesMocked: true, viewports: ["mobile", "desktop"], journeyIds: project.journeys, baselineJourneyIds: project.journeys });
+    const full: any = { ...project, testCommand: "npm test", buildCommand: "npm run build" };
+    assert.ok(proposalEvidenceGate(full, candidate, [ev("tests", { journeyIds: [COMPANY_ORDER_CHECKS_ID] }), sim] as any, now).reasons.includes("review_evidence_missing_or_failed"));
+    assert.ok(proposalEvidenceGate(full, candidate, [ev("tests"), sim, ev("review", { actorId: candidate.builderId })] as any, now).reasons.includes("independent_review_required"));
+    assert.ok(proposalEvidenceGate(full, candidate, [sim, ev("review")] as any, now).reasons.includes("tests_evidence_missing_or_failed"));
+    assert.equal(proposalEvidenceGate(full, candidate, [ev("tests"), sim, ev("review")] as any, now).allowed, true);
+    // Build stage: the generic scenario must come from the checks and a test file must change.
+    const finding = { id: "f", kind: "improvement" as const, regressionScenarioId: COMPANY_ORDER_CHECKS_ID, request: "x", baseSha: candidate.baseSha, artifactIds: ["a"], sourcePaths: candidate.changedFiles };
+    const discover = { id: "d", ownerKey, projectId: "asistente", kind: "discover", status: "completed", key: "k", payload: {}, result: { status: "completed", costCents: 0, evidence: { pipelineState: { version: 1, projectId: "asistente", rootJobId: "d", target: "staging", finding, evidence: [], repairAttempts: 0 } } } };
+    for (const [tests, changed, expected] of [[[], candidate.changedFiles, "FACTORY_PERMANENT_REGRESSION_TEST_REQUIRED"], [[COMPANY_ORDER_CHECKS_ID], ["server/office-search.ts"], "FACTORY_PERMANENT_REGRESSION_TEST_REQUIRED"], [[COMPANY_ORDER_CHECKS_ID], candidate.changedFiles, undefined]] as const) {
+        const pipeline = createFactoryPipeline({ executionMode: "review-only", project: async () => full, previous: async () => discover as any, claimFinding: async () => true, reservations: { discover: 1, build: 1, simulate: 1, review: 1, deploy: 1, verify: 1, rollback: 1, evaluate: 1 },
+            discover: async () => ({ costCents: 0 }), simulate: async () => ({ costCents: 0, evidence: sim as any }), review: async () => ({ costCents: 0, evidence: ev("review") as any }),
+            build: async () => ({ costCents: 0, candidate: { ...candidate, changedFiles: [...changed] }, tests: ev("tests", { journeyIds: [...tests] }) as any }), now: () => at });
+        const out = await pipeline.adapters.build!.execute({ id: "b", ownerKey, projectId: "asistente", kind: "build", key: "d.next", payload: { previousJobId: "d", repairAttempts: 0 }, reservedCents: 1, recoveryCents: 0 } as any, { signal: signal(), maxCostCents: 1 });
+        assert.equal(out.reason, expected); assert.equal(out.status, expected ? "blocked" : "completed");
+    }
+});

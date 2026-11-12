@@ -9,6 +9,7 @@ import { executeWithinSharedCredits } from "./shared-openai-credit-execution";
 import type { createSharedOpenAiCreditLedger } from "./shared-openai-credit-ledger";
 import type { FactoryActionsProfile } from "./software-factory-actions";
 import type { FactoryPipelineDependencies } from "./software-factory-pipeline";
+import { COMPANY_ORDER_CHECKS_ID, companyOrderChecksAcceptance } from "./software-factory-company-auto";
 import { FACTORY_DEFAULT_WRITE_ROOTS, FACTORY_MAX_DRAFT_PULL_REQUESTS_PER_DAY, FACTORY_MAX_FILES_PER_ORDER, utcDayStart, validateFactoryOrderPaths, validateFactoryWriteRoots } from "./software-factory-write-scope";
 
 /** Concrete build-to-PR adapter. Does not install itself, enable a scheduler,
@@ -77,8 +78,12 @@ export function createAsistenteFactoryBuild(options: {
         });
       },
     });
+    // Scenario is code-owned and persisted at discovery: automatic orders are
+    // accepted by the authenticated isolated checks on the exact head; mapped
+    // role-work orders keep their measured backend artifact reader.
+    const readAcceptance = state.finding?.regressionScenarioId === COMPANY_ORDER_CHECKS_ID ? companyOrderChecksAcceptance : options.readAcceptance;
     const publisher=createGitHubFactoryCandidatePublisher({client,repositories:{[repository]:profile.baseBranch}});
-    const checks=createGitHubFactoryChecks({client,repositories:{[repository]:profile.checks},readAcceptance:options.readAcceptance,now:options.now,maxPolls:options.maxPolls,wait:options.wait});
+    const checks=createGitHubFactoryChecks({client,repositories:{[repository]:profile.checks},readAcceptance,now:options.now,maxPolls:options.maxPolls,wait:options.wait});
     const build = createFactoryRemotePipelineBuilder({ exportSource,generatePatch,
       prepareCandidate:publisher.prepare,finalizeCandidate:publisher.finalize,verifyCandidate:checks.verifyCandidate,
       preflight:async(project,baseSha,context)=>{

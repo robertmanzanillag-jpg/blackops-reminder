@@ -12,8 +12,12 @@ export function createFactoryCompanyOrderScheduler(options:{
  owner:string; project:()=>Promise<FactoryProject>; readOrders:(owner:string)=>Promise<CompanyOrder[]>;
  ledger:ReturnType<typeof createSharedOpenAiCreditLedger>; reservationCents:number;
  admit:(owner:string,input:FactoryJobInput)=>Promise<FactoryJob>;
+ /** "as-read" keeps the caller's priority (explicit mappings first, then
+  * automatic orders oldest-first). Default remains newest-first. */
+ ordering?:"newest-first"|"as-read";
 }){
- const {owner,project,readOrders,ledger,reservationCents,admit}=options;
+ const {owner,project,readOrders,ledger,reservationCents,admit}=options,ordering=options.ordering??"newest-first";
+ if(!["newest-first","as-read"].includes(ordering))throw Error("FACTORY_COMPANY_SCHEDULE_INVALID");
  const ownerKey=createHash("sha256").update(owner).digest("hex");
  if(!owner.trim()||!Number.isSafeInteger(reservationCents)||reservationCents<1||reservationCents>10000)throw Error("FACTORY_COMPANY_SCHEDULE_INVALID");
  let active:Promise<void>|undefined;
@@ -24,7 +28,7 @@ export function createFactoryCompanyOrderScheduler(options:{
   if(target.repo!==ASISTENTE_REPOSITORY)throw Error("FACTORY_COMPANY_REPOSITORY_MISMATCH");
   const orders=structuredClone(await readOrders(owner));
   if(!Array.isArray(orders)||orders.length>1000||new Set(orders.map(o=>o.id)).size!==orders.length)throw Error("FACTORY_COMPANY_ORDERS_INVALID");
-  orders.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)||a.id.localeCompare(b.id));
+  if(ordering==="newest-first")orders.sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt)||a.id.localeCompare(b.id));
   for(const order of orders){
    let input:FactoryJobInput;
    try{input=companyOrderJob(order,target,reservationCents);}catch{continue;}
