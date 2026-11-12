@@ -46,6 +46,7 @@ import {
   type CouncilState,
 } from "@shared/agent-council";
 import { CITY_NEWS_AGENTS, agentProbes, summarizeProbe, type AgentLiveStatus } from "@shared/agent-live-status";
+import { BLACKROOM_TEAM, BLACKROOM_TEAM_IDS } from "@shared/blackroom-team";
 import { withUptimeHealth } from "@shared/app-health-uptime";
 import {
   INTEGRATION_LABEL,
@@ -162,6 +163,7 @@ export const AGENT_NAMES: Record<string, string> = {
   "agent-factory": "Fabrica de agentes",
   kong: "Equipo Kong",
   "blackroom-videos": "Videos Black Room",
+  ...Object.fromEntries(BLACKROOM_TEAM.map((agent) => [agent.id, agent.name])),
   news: "Noticias",
   "kong-videos": "Videos Kong",
   mechanic: "Mecanico",
@@ -1035,6 +1037,8 @@ async function collectStatusesReal(userId: string): Promise<Record<string, Agent
     read(["news", ...CITY_NEWS_AGENTS.map((agent) => agent.id)], async () => (await import("./clippers-local-news-agent")).getClipperLocalNewsStatus()),
     read(["kong-videos"], async () => (await import("./promo-video-agent")).getPromoVideoStatus(userId)),
     read(["kong-metrics"], async () => (await import("./kong-operations")).getKongOperations().view()),
+    // Black Room team: each agent's own getStatus (read-only), one read per agent.
+    ...BLACKROOM_TEAM_IDS.map((id) => read([id], async () => (await import("./blackroom-team")).getBlackRoomTeamStatus(id, { userId }))),
     read(["blackroom-videos"], async () => {
       const remoteModule = await import("./blackroom-remote-control");
       const routesModule = await import("./blackroom-control-routes");

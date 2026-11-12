@@ -616,8 +616,16 @@ export function scheduleAcademyTraining(state: CompanyState, roles: Record<strin
 }
 
 // CEO channel: deterministic routing from Robert's words to the right departments.
-const ROUTES: Array<{ words: string[]; agents: string[] }> = [
-  { words: ["black room", "blackroom", "br "], agents: ["blackroom-videos", "radio"] },
+// Routes with `requires` only fire when the order also names that context (e.g. Black Room), so
+// generic words like "reporte" or "web" do not pull the Black Room specialists into other work.
+const BLACKROOM_CONTEXT = ["black room", "blackroom"];
+const ROUTES: Array<{ words: string[]; agents: string[]; requires?: string[] }> = [
+  { words: ["analitica", "analytics", "metrica", "estadistica", "reporte", "insight", "alcance"], agents: ["blackroom-analytics"], requires: BLACKROOM_CONTEXT },
+  { words: ["competencia", "competidor", "rival"], agents: ["blackroom-competition"], requires: BLACKROOM_CONTEXT },
+  { words: ["postea", "postear", "posteo", "publica", "metricool", "meta ", "programa el post", "programar post"], agents: ["blackroom-publisher"], requires: BLACKROOM_CONTEXT },
+  { words: ["guion", "script", "idea", "editar video", "edita el video", "edicion"], agents: ["blackroom-scripts"], requires: BLACKROOM_CONTEXT },
+  { words: ["website", "web", "pagina", "sitio"], agents: ["blackroom-website"], requires: BLACKROOM_CONTEXT },
+  { words: ["black room", "blackroom", "br "], agents: ["blackroom-ceo", "blackroom-videos", "radio"] },
   { words: ["kong"], agents: ["kong-videos"] },
   { words: ["video", "reel", "clip", "tiktok", "subir"], agents: ["clippers", "blackroom-videos", "kong-videos"] },
   { words: ["radio", "dj", "set"], agents: ["radio"] },
@@ -641,6 +649,7 @@ export function routeOrder(text: string, available: string[]): string[] {
   const normalized = ` ${text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")} `;
   const picked: string[] = [];
   for (const route of ROUTES) {
+    if (route.requires && !route.requires.some((word) => normalized.includes(word))) continue;
     if (route.words.some((word) => normalized.includes(word))) {
       for (const agent of route.agents) if (available.includes(agent) && !picked.includes(agent)) picked.push(agent);
     }
