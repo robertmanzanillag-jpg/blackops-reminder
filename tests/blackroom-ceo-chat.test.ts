@@ -436,3 +436,13 @@ test("analytics questions only run the analytics agent, with a live refresh and 
   // Radio and videos still answer when asked by name.
   assert.ok(routeCeoChatMessage("como va la radio de black room", NOW).intents.some((intent) => intent.agentId === "radio"));
 });
+
+test("questions about how posts did go to analytics; the publisher only runs when a post is requested", () => {
+  const route = (text: string) => routeCeoChatMessage(text, NOW).intents.map((intent) => intent.agentId);
+  assert.deepEqual(route("como le han ido a los post de black room?"), ["blackroom-analytics"]);
+  assert.deepEqual(route("que tal funcionaron los posts esta semana"), ["blackroom-analytics"]);
+  assert.deepEqual(route("cuantas vistas tuvo el ultimo post"), ["blackroom-analytics"]);
+  assert.deepEqual(route("como van los posts"), ["blackroom-analytics"]);
+  assert.deepEqual(route("prepara un post para el viernes"), ["blackroom-publisher"]);
+  assert.deepEqual(route("programa el post de manana a las 8pm"), ["blackroom-publisher"]);
+});
