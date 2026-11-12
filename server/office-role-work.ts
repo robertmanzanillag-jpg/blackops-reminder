@@ -2,7 +2,7 @@ import {randomUUID} from "node:crypto";
 import {z} from "zod";
 import type {createAgentCouncil} from "./agent-council";
 import {auditSavedRole,type RoleAudit} from "./office-role-audits";
-import {PENDING_OFFICE_ROLES,SQL_AUDIT_ROLES,sourceDigest,validateRoleSnapshot,type PendingOfficeRole,type RoleSnapshot,type SqlAuditRole} from "./office-role-snapshots";
+import {GITHUB_AUDIT_ROLES,PENDING_OFFICE_ROLES,SQL_AUDIT_ROLES,sourceDigest,validateRoleSnapshot,type GithubAuditRole,type PendingOfficeRole,type RoleSnapshot,type SqlAuditRole} from "./office-role-snapshots";
 import {WEB_SOURCE_ROLES,auditWebRoleSource,validateWebRoleSource,type WebRoleSource,type WebSourceRole} from "./office-web-role-sources";
 
 type WebWorkAudit=ReturnType<typeof auditWebRoleSource>|ReturnType<typeof missingWebAudit>;
@@ -38,14 +38,14 @@ export function parseRoleWork(value:unknown,owner:string):RoleWorkState {
     continue;
    }
    if(job.source){if(job.source.role!==job.role || Date.parse(job.source.observedAt)<start-30000)throw new Error("Role audit source assignment mismatch");validateRoleSnapshot(job.source,owner,completed);}
-   const expected=auditSavedRole(job.role,job.source,owner,completed);
+   const expected=auditSavedRole(job.role,job.source,owner,completed,{sourceAttempted:job.reason==="source_unavailable"});
    if(sourceDigest(expected)!==sourceDigest(job.audit) || job.status!==expected.status || job.artifactId!==proof(job))throw new Error("Role audit proof mismatch");
   }
  }
  return {version:1,ownerKey:parsed.ownerKey,jobs};
 }
 
-export function createRoleWorkRunner(options:{council:Pick<ReturnType<typeof createAgentCouncil>,"updateOfficeExecution">;owner:string;read:(role:SqlAuditRole)=>Promise<RoleSnapshot>;readWeb?:(role:WebSourceRole)=>Promise<WebRoleSource|null>;now?:()=>number;shouldStop?:()=>boolean}) {
+export function createRoleWorkRunner(options:{council:Pick<ReturnType<typeof createAgentCouncil>,"updateOfficeExecution">;owner:string;read:(role:SqlAuditRole)=>Promise<RoleSnapshot>;readGithub?:(role:GithubAuditRole)=>Promise<RoleSnapshot>;readWeb?:(role:WebSourceRole)=>Promise<WebRoleSource|null>;now?:()=>number;shouldStop?:()=>boolean}) {
  const now=options.now || Date.now;
  return {async tick(){
   for(const role of PENDING_OFFICE_ROLES){
@@ -81,10 +81,11 @@ export function createRoleWorkRunner(options:{council:Pick<ReturnType<typeof cre
     }finally{if(timer!==undefined)clearTimeout(timer);}
    };
    const webMode=!!options.readWeb && WEB_SOURCE_ROLES.includes(role as WebSourceRole);
-   if(SQL_AUDIT_ROLES.includes(role as SqlAuditRole)){
+   const githubMode=!!options.readGithub && GITHUB_AUDIT_ROLES.includes(role as GithubAuditRole);
+   if(SQL_AUDIT_ROLES.includes(role as SqlAuditRole) || githubMode){
     try {
      if(options.shouldStop?.() || now()>=Date.parse(job.expiresAt))throw new Error("Read not admitted");
-     source=await readWithinLease(()=>options.read(role as SqlAuditRole));
+     source=await readWithinLease(()=>githubMode?options.readGithub!(role as GithubAuditRole):options.read(role as SqlAuditRole));
      if(source.role!==role || Date.parse(source.observedAt)<start-30000)throw new Error("Source assignment mismatch");
      validateRoleSnapshot(source,options.owner,now());
     }catch{source=undefined;sourceFailed=true;}
@@ -108,7 +109,7 @@ export function createRoleWorkRunner(options:{council:Pick<ReturnType<typeof cre
      // Recompute inside the short transaction so historical evidence binds the
      // actual completion clock, including data-age and schedule findings.
      let audit:RoleAudit,verifiedSource=source,failed=sourceFailed;
-     try{audit=auditSavedRole(role,verifiedSource,options.owner,end);}catch{verifiedSource=undefined;failed=true;audit=auditSavedRole(role,undefined,options.owner,end);}
+     try{audit=auditSavedRole(role,verifiedSource,options.owner,end,{sourceAttempted:failed});}catch{verifiedSource=undefined;failed=true;audit=auditSavedRole(role,undefined,options.owner,end,{sourceAttempted:true});}
      done={...stored,status:audit.status,completedAt:new Date(end).toISOString(),...(verifiedSource?{source:verifiedSource}:{}),audit,...(failed?{reason:"source_unavailable"}:{})};
      done.artifactId=proof(done);
     }
