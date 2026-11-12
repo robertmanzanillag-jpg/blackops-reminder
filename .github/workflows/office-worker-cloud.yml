@@ -10,25 +10,29 @@ name: Office worker (cloud)
 # Scheduled workflows only run from the default branch, so this file must also live on `main`; it
 # executes the office source named by the repository variable OFFICE_SOURCE_REF (the production branch).
 #
-# This file is also the single scheduled path for the Software Factory (`factory-once` job below):
-# every two hours (cron "17 */2 * * *") it runs `software-factory-once` from FACTORY_SOURCE_REF
-# (falling back to OFFICE_SOURCE_REF), gated by SOFTWARE_FACTORY_CLOUD_ENABLED. The office never runs
-# on that factory-only schedule. A manual or external dispatch without inputs runs only the office
-# (input `target` defaults to `office`); pass `target=factory` or `target=both` to run the factory.
-# `software-factory-cloud.yml` is kept as a manual-only fallback with no schedule.
+# This file is also the single automatic path for the Software Factory (`factory-once` job below),
+# gated by SOFTWARE_FACTORY_CLOUD_ENABLED. GitHub's own `schedule` event has proven unreliable for
+# this repository (it never fired), and an external cron dispatches this workflow every 15 minutes
+# without inputs, so the factory cadence is decided here by the clock: in `auto` mode (the default,
+# used by schedules and by dispatches without inputs) the office always runs and the `factory-gate`
+# job also lets the factory run when the current UTC hour is even and the minute is below 30. That is
+# two chances per two hours, so one missed external tick does not skip the factory; a second pass in
+# the same window just continues queued work or exits idle in seconds (the factory is idempotent and
+# its concurrency group serializes runs). Explicit `target=office|factory|both` dispatches bypass the
+# clock. `software-factory-cloud.yml` is kept as a manual-only fallback with no schedule.
 
 on:
   schedule:
     - cron: "*/15 * * * *"
-    - cron: "17 */2 * * *"
   workflow_dispatch:
     inputs:
       target:
-        description: "Which worker to run: office (default), factory or both"
+        description: "Which worker to run: auto (default: office, plus the factory in its two-hourly window), office, factory or both"
         required: false
         type: choice
-        default: office
+        default: auto
         options:
+          - auto
           - office
           - factory
           - both
@@ -40,13 +44,12 @@ jobs:
   office-once:
     # Never on forks; only scheduled or manual runs of this repository can see the office secrets.
     # Setting OFFICE_WORKER_CLOUD_ENABLED to anything but 'true' is the persistent maintenance pause.
-    # Skipped on the factory-only schedule and on dispatches that ask only for the factory; a dispatch
-    # without inputs (external cron) still runs the office.
+    # Skipped only on dispatches that ask for the factory alone; a dispatch without inputs (external
+    # cron, target=auto) still runs the office.
     if: >-
       github.repository == 'robertmanzanillag-jpg/blackops-reminder' &&
       vars.OFFICE_WORKER_CLOUD_ENABLED == 'true' &&
-      github.event.schedule != '17 */2 * * *' &&
-      (github.event_name != 'workflow_dispatch' || inputs.target != 'factory')
+      inputs.target != 'factory'
     concurrency:
       group: office-worker-cloud
       cancel-in-progress: false
@@ -123,17 +126,37 @@ jobs:
         if: always()
         run: rm -rf "$RUNNER_TEMP/office-config"
 
-  factory-once:
-    # Never on forks; only scheduled or manual runs of this repository can see the factory secrets.
-    # Setting SOFTWARE_FACTORY_CLOUD_ENABLED to anything but 'true' keeps the factory paused.
-    # Runs on the two-hourly factory schedule, or on a dispatch with target factory|both.
+  factory-gate:
+    # Decides whether this run includes the factory. Never on forks; skipped (and so is the factory)
+    # unless SOFTWARE_FACTORY_CLOUD_ENABLED is exactly 'true'.
     if: >-
       github.repository == 'robertmanzanillag-jpg/blackops-reminder' &&
-      vars.SOFTWARE_FACTORY_CLOUD_ENABLED == 'true' &&
-      (
-        (github.event_name == 'schedule' && github.event.schedule == '17 */2 * * *') ||
-        (github.event_name == 'workflow_dispatch' && (inputs.target == 'factory' || inputs.target == 'both'))
-      )
+      vars.SOFTWARE_FACTORY_CLOUD_ENABLED == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 2
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+    steps:
+      - id: gate
+        env:
+          # Empty on schedule events; 'auto' on dispatches without inputs.
+          TARGET: ${{ inputs.target || 'auto' }}
+        run: |
+          set -euo pipefail
+          hour=$((10#$(date -u +%H))); minute=$((10#$(date -u +%M)))
+          case "$TARGET" in
+            factory|both) run=true ;;
+            auto) if [ $((hour % 2)) -eq 0 ] && [ "$minute" -lt 30 ]; then run=true; else run=false; fi ;;
+            *) run=false ;;
+          esac
+          echo "target=$TARGET utc=$(date -u +%H:%M) factory=$run"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+  factory-once:
+    # Setting SOFTWARE_FACTORY_CLOUD_ENABLED to anything but 'true' keeps the factory paused (the gate
+    # is skipped). Runs on dispatches with target factory|both, or in the two-hourly window (auto).
+    needs: factory-gate
+    if: needs.factory-gate.outputs.run == 'true'
     concurrency:
       group: software-factory-cloud
       cancel-in-progress: false
