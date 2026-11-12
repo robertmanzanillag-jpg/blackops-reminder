@@ -35,6 +35,8 @@ export type AgentCareer = {
   lastEvaluatedAt?: string;
   evaluatedEvidenceIds?: string[];
   lastEvidenceId?: string;
+  /** Quality signals already scored (approved/rejected posts, failed jobs...), so each counts once. */
+  qualitySignalIds?: string[];
 };
 
 export type SkillSource = "academia" | "orden" | "leccion";
@@ -163,6 +165,8 @@ export type CompanyOrder = {
   // How it was closed: with a verifiable run (points) or by hand (record only, no points).
   closedBy?: "evidencia" | "robert";
   evidence?: OrderEvidence;
+  /** Who wrote the order: Robert (owner) or an invited partner ("socio"). Absent on older orders. */
+  placedBy?: { userId: string; role: "owner" | "partner" };
 };
 
 export type OrderEvidence = { ref: string; source: "automation_run"; summary: string; at: string };
@@ -175,6 +179,20 @@ export type CompanyState = {
   events: MemoryEntry[];
   retiredCareers?: AgentCareer[];
   academyJobs?: AcademyJob[];
+  /** Black Room academy journal (its own track, so it never blocks the reviewer's daily job). */
+  blackroomAcademyJobs?: BlackRoomAcademyJob[];
+};
+
+/** One paired Black Room curriculum evaluation. Grades are computed on the server from fixed expectations. */
+export type BlackRoomAcademyJob = {
+  id: string; fence: string; traineeId: string; role: string; generation: number;
+  fixtureId: string; fixtureDigest: string; curriculumVersion: string;
+  /** A replacement for a fired agent has no incumbent to compare with: only the candidate runs. */
+  replacement: boolean;
+  startedAt: string; expiresAt: string;
+  status: "running" | "completed" | "blocked" | "unknown";
+  reason?: string; completedAt?: string;
+  candidateQuality?: number; incumbentQuality?: number | null; passed?: boolean; artifactId?: string;
 };
 
 export type AcademyJob = {
@@ -294,7 +312,12 @@ export function parseCompanyState(value: unknown): CompanyState {
   const trainees = v.trainees.filter((t): t is Trainee => Boolean(t) && typeof t === "object" && typeof t.id === "string" && Array.isArray(t.modulesDone) && Array.isArray(t.knowledge)).map(t => ({ ...t, assessments: Array.isArray(t.assessments) ? t.assessments.filter(validAssessment) : [] }));
   const orders = v.orders.filter((o): o is CompanyOrder => Boolean(o) && typeof o === "object" && typeof o.id === "string" && typeof o.text === "string" && Array.isArray(o.assignees));
   const events = Array.isArray(v.events) ? v.events.filter((e) => Boolean(e) && typeof e === "object" && typeof e.text === "string") : [];
+  const blackroomAcademyJobs = Array.isArray(v.blackroomAcademyJobs) ? v.blackroomAcademyJobs.filter((j): j is BlackRoomAcademyJob => Boolean(j) && typeof j === "object" &&
+    [j.id, j.fence, j.traineeId, j.role, j.fixtureId, j.fixtureDigest, j.curriculumVersion].every(s => typeof s === "string" && s.length > 0) &&
+    Number.isInteger(j.generation) && j.generation > 0 && Number.isFinite(Date.parse(j.startedAt)) && Number.isFinite(Date.parse(j.expiresAt)) &&
+    ["running", "completed", "blocked", "unknown"].includes(j.status)).slice(-200) : undefined;
   return { version: 1, careers, trainees, orders, events,
+    ...(blackroomAcademyJobs ? { blackroomAcademyJobs } : {}),
     retiredCareers: Array.isArray(v.retiredCareers) ? v.retiredCareers : [],
     academyJobs: Array.isArray(v.academyJobs) ? v.academyJobs.map((j, index) => {
       const valid = j && [j.id,j.traineeId,j.curriculumVersion,j.benchmarkId].every(s => typeof s === "string" && s.length > 0) &&
@@ -391,34 +414,100 @@ export function advanceCompany(
     const exempt = input.exempt?.includes(agentId);
     // A new hire gets at least a day on the job before it can be fired again.
     if (!exempt && career.battery === 0 && input.now - toMsSafe(career.hiredAt) >= MIN_TENURE_MS) {
-      const reason = `Bateria en cero (${status.label}).`;
-      retiredCareers = [...retiredCareers, { ...career, memory: [...career.memory] }];
-      fired.push({ agentId, nickname: career.nickname, generation: career.generation, reason });
-      events = [{ at: iso, text: `El CEO despidio a ${career.nickname} (${input.roles[agentId] || agentId}). ${reason} Entra un reemplazo a la academia.` }, ...events];
-      const nextGeneration = career.generation + 1;
-      const replacement = { nickname: uniqueNickname(personalityFor(agentId, nextGeneration).nickname, usedNicknames(careers, trainees, agentId)) };
-      career = {
-        ...career,
-        generation: nextGeneration,
-        nickname: replacement.nickname,
-        points: 0,
-        battery: 60,
-        firedCount: career.firedCount + 1,
-        hiredAt: iso,
-        inTrainingUntilGeneration: nextGeneration,
-        memory: [{ at: iso, text: `Reemplaza a la generacion ${nextGeneration - 1}. Empieza en la academia.` }],
-      };
-      if (!trainees.some((trainee) => trainee.id === `${agentId}#${nextGeneration}` && !trainee.graduatedAt)) {
-        trainees = [
-          { id: `${agentId}#${nextGeneration}`, forAgentId: agentId, role: input.roles[agentId] || agentId, nickname: replacement.nickname, startedAt: iso, modulesDone: [], knowledge: [], generation: nextGeneration, purpose: "candidate" },
-          ...trainees,
-        ];
-        trainees = capTrainees(trainees);
-      }
+      const result = fireAndReplace({ careers, trainees, retiredCareers, events }, career, `Bateria en cero (${status.label}).`, input.roles, iso);
+      ({ trainees, retiredCareers, events } = result);
+      fired.push(result.fired);
+      career = result.career;
     }
     careers[agentId] = career;
   }
   return { state: { ...state, careers, trainees, retiredCareers, events: events.slice(0, MAX_EVENTS) }, fired };
+}
+
+/** Retires a career at battery zero and starts its replacement in the academy (same rules for every cause). */
+function fireAndReplace(
+  current: { careers: Record<string, AgentCareer>; trainees: Trainee[]; retiredCareers: AgentCareer[]; events: MemoryEntry[] },
+  career: AgentCareer,
+  reason: string,
+  roles: Record<string, string>,
+  iso: string,
+) {
+  const agentId = career.agentId;
+  const retiredCareers = [...current.retiredCareers, { ...career, memory: [...career.memory] }];
+  const fired = { agentId, nickname: career.nickname, generation: career.generation, reason };
+  const events = [{ at: iso, text: `El CEO despidio a ${career.nickname} (${roles[agentId] || agentId}). ${reason} Entra un reemplazo a la academia.` }, ...current.events];
+  const nextGeneration = career.generation + 1;
+  const replacement = { nickname: uniqueNickname(personalityFor(agentId, nextGeneration).nickname, usedNicknames(current.careers, current.trainees, agentId)) };
+  const next: AgentCareer = {
+    ...career,
+    generation: nextGeneration,
+    nickname: replacement.nickname,
+    points: 0,
+    battery: 60,
+    firedCount: career.firedCount + 1,
+    hiredAt: iso,
+    inTrainingUntilGeneration: nextGeneration,
+    memory: [{ at: iso, text: `Reemplaza a la generacion ${nextGeneration - 1}. Empieza en la academia.` }],
+  };
+  let trainees = current.trainees;
+  if (!trainees.some((trainee) => trainee.id === `${agentId}#${nextGeneration}` && !trainee.graduatedAt)) {
+    trainees = capTrainees([
+      { id: `${agentId}#${nextGeneration}`, forAgentId: agentId, role: roles[agentId] || agentId, nickname: replacement.nickname, startedAt: iso, modulesDone: [], knowledge: [], generation: nextGeneration, purpose: "candidate" },
+      ...trainees,
+    ]);
+  }
+  return { career: next, trainees, retiredCareers, events, fired };
+}
+
+/**
+ * A scored result of real work that is not a live state: a post approved or rejected by Robert or
+ * the partner, a failed edit job, a published post above the team median. Each id scores once,
+ * only for the current generation (hired before the outcome) and never while it is in the academy.
+ */
+export type QualitySignal = { id: string; agentId: string; at: string; points: number; battery: number; text: string };
+const MAX_QUALITY_SIGNAL_IDS = 200;
+const QUALITY_SIGNAL_WINDOW_MS = 7 * 24 * 60 * 60_000;
+
+export function applyQualitySignals(
+  state: CompanyState,
+  signals: QualitySignal[],
+  input: { now: number; roles: Record<string, string>; exempt?: string[] },
+): { state: CompanyState; fired: Array<{ agentId: string; nickname: string; generation: number; reason: string }>; applied: string[] } {
+  const iso = new Date(input.now).toISOString();
+  const careers: Record<string, AgentCareer> = { ...state.careers };
+  let trainees = [...state.trainees];
+  let retiredCareers = [...(state.retiredCareers || [])];
+  let events = [...state.events];
+  const fired: Array<{ agentId: string; nickname: string; generation: number; reason: string }> = [];
+  const applied: string[] = [];
+  const ordered = [...signals].filter((signal) => signal && typeof signal.id === "string" && signal.id.trim() && Number.isFinite(signal.points) && Number.isFinite(signal.battery))
+    .sort((a, b) => toMsSafe(a.at) - toMsSafe(b.at) || a.id.localeCompare(b.id));
+  for (const signal of ordered) {
+    if (input.exempt?.includes(signal.agentId)) continue;
+    const existing = careers[signal.agentId];
+    if (!existing || existing.scoreReconciliation !== undefined || existing.inTrainingUntilGeneration) continue;
+    const at = toMsSafe(signal.at);
+    // Old outcomes and the previous generation's outcomes never reach the current holder.
+    if (!at || at > input.now + 5_000 || input.now - at > QUALITY_SIGNAL_WINDOW_MS || at < toMsSafe(existing.hiredAt)) continue;
+    if ((existing.qualitySignalIds || []).includes(signal.id)) continue;
+    let career: AgentCareer = {
+      ...existing,
+      points: Math.max(0, existing.points + Math.round(signal.points)),
+      battery: Math.max(0, Math.min(BATTERY_MAX, existing.battery + Math.round(signal.battery))),
+      qualitySignalIds: [...(existing.qualitySignalIds || []), signal.id].slice(-MAX_QUALITY_SIGNAL_IDS),
+      memory: remember(existing.memory, iso, `${signal.text.slice(0, 140)} (${signal.points >= 0 ? "+" : ""}${Math.round(signal.points)} pts).`),
+    };
+    applied.push(signal.id);
+    if (career.battery === 0 && input.now - toMsSafe(career.hiredAt) >= MIN_TENURE_MS) {
+      const result = fireAndReplace({ careers, trainees, retiredCareers, events }, career, `Bateria en cero por calidad (${signal.text.slice(0, 80)}).`, input.roles, iso);
+      ({ trainees, retiredCareers, events } = result);
+      fired.push(result.fired);
+      career = result.career;
+    }
+    careers[signal.agentId] = career;
+  }
+  if (!applied.length) return { state, fired, applied };
+  return { state: { ...state, careers, trainees, retiredCareers, events: events.slice(0, MAX_EVENTS) }, fired, applied };
 }
 
 // Academy: each cycle every trainee studies one more real module; graduation puts it to work.
@@ -660,19 +749,25 @@ export function routeOrder(text: string, available: string[]): string[] {
 
 export function createOrder(
   state: CompanyState,
-  input: { text: string; now: number; statuses: Record<string, { state: AgentLiveState; label: string }>; available: string[]; names: Record<string, string> }
+  input: {
+    text: string; now: number; statuses: Record<string, { state: AgentLiveState; label: string }>; available: string[]; names: Record<string, string>;
+    /** Explicit assignees (filtered to `available`). When any remain, they replace the text routing. */
+    assignees?: string[];
+  }
 ): { state: CompanyState; order: CompanyOrder } {
   const iso = new Date(input.now).toISOString();
   const text = input.text.trim().slice(0, 500);
-  const assigneeIds = routeOrder(text, input.available);
+  const explicit = [...new Set((input.assignees || []).filter((id) => input.available.includes(id)))];
+  const assigneeIds = explicit.length ? explicit : routeOrder(text, input.available);
   const order: CompanyOrder = {
     id: `ord-${input.now.toString(36)}-${hash(text).toString(36).slice(0, 4)}`,
     text,
     createdAt: iso,
     assignees: [
       ...assigneeIds,
-      // Specialists created by the academy take the orders whose topic is exactly theirs.
-      ...Object.keys(state.careers).filter((id) => isSpecialistId(id) && id === specialistIdFor(orderTopic(text))),
+      // Specialists created by the academy take the orders whose topic is exactly theirs
+      // (not when the caller named the assignees explicitly).
+      ...(explicit.length ? [] : Object.keys(state.careers).filter((id) => isSpecialistId(id) && id === specialistIdFor(orderTopic(text)))),
     ].map((agentId) => {
       const status = input.statuses[agentId];
       const specialist = isSpecialistId(agentId);
