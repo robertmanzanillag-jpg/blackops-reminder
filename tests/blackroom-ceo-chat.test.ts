@@ -428,3 +428,11 @@ test("non Black Room requests from the owner become a task for the main office; 
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test("analytics questions only run the analytics agent, with a live refresh and the full report in the card", async () => {
+  assert.deepEqual(routeCeoChatMessage("dame las analiticas de black room hoy", NOW).intents.map((intent) => `${intent.agentId}:${intent.operation}`), ["blackroom-analytics:daily-report"]);
+  assert.deepEqual(routeCeoChatMessage("como nos fue este mes en redes", NOW).intents.map((intent) => intent.operation), ["monthly-report"]);
+  assert.deepEqual(routeCeoChatMessage("dame las analiticas de black room hoy", NOW).intents[0].input, { refresh: true });
+  // Radio and videos still answer when asked by name.
+  assert.ok(routeCeoChatMessage("como va la radio de black room", NOW).intents.some((intent) => intent.agentId === "radio"));
+});

@@ -119,7 +119,8 @@ test("happy path: run stores the report and getStatus reports working with evide
     const ctx = createBlackRoomTeamContext("blackroom-analytics", { env: {}, now: () => NOW, fetch: fetchSpy, dataDir });
     const result = await agent.run(ctx, { window: "weekly" });
     assert.equal(result.ok, true, result.summary);
-    assert.match(result.summary, /sin datos: Facebook, Instagram/);
+    assert.match(result.summary, /Sin datos de: Facebook, Instagram/);
+    assert.match(result.summary, /Por red: TikTok 2K vistas \(4 posts\)/);
     assert.equal(result.needsApproval, undefined, "analytics never queues outward actions");
     assert.equal(fetchCalls, 0, "no network call without refresh");
     const stored = JSON.parse(await readFile(path.join(dataDir, "blackroom-analytics.json"), "utf8"));
@@ -178,7 +179,7 @@ test("invalid window is refused without touching state", async () => {
   await withDir(async (dataDir) => {
     const agent = createBlackRoomAnalyticsAgent({ readSourceState: async () => sourceState() });
     const ctx = createBlackRoomTeamContext("blackroom-analytics", { env: {}, now: () => NOW, fetch: failingFetch, dataDir });
-    const result = await agent.run(ctx, { window: "monthly" });
+    const result = await agent.run(ctx, { window: "yearly" });
     assert.equal(result.error, "invalid_window");
     assert.equal((await readdir(dataDir)).length, 0);
   });
@@ -217,4 +218,36 @@ test("read-only fetch guard lets tools/list and get* tools through", async () =>
   await assert.rejects(guarded("https://ai.metricool.com/mcp", { method: "POST", body: JSON.stringify({ method: "tools/call", params: { name: "post_schedule" } }) }));
   await assert.rejects(guarded("https://ai.metricool.com/mcp", { method: "POST", body: "not json" }));
   assert.equal(seen.length, 2);
+});
+
+test("a day without new posts widens to the last 7 days and says when the last post was", async () => {
+  await withDir(async (dataDir) => {
+    const state = sourceState();
+    // Nothing published in the last 24 hours.
+    state!.analyticsImports!.tiktok!.samples = (state!.analyticsImports!.tiktok!.samples as Array<Record<string, unknown>>).filter((sample) => sample.id !== "tt-a");
+    state!.analyticsImports!.youtube!.samples = (state!.analyticsImports!.youtube!.samples as Array<Record<string, unknown>>).filter((sample) => sample.id !== "yt-a");
+    const agent = createBlackRoomAnalyticsAgent({ readSourceState: async () => state });
+    const ctx = createBlackRoomTeamContext("blackroom-analytics", { env: {}, now: () => NOW, fetch: failingFetch, dataDir });
+    const result = await agent.run(ctx, { window: "daily" });
+    assert.equal(result.ok, true);
+    assert.match(result.summary, /En las ultimas 24 horas no hubo publicaciones nuevas \(la ultima fue el/);
+    assert.match(result.summary, /te muestro los ultimos 7 dias/);
+    assert.doesNotMatch(result.summary, /^.*: 0 publicaciones/);
+    const report = result.report as { window: string; requestedWindow?: string };
+    assert.equal(report.window, "weekly");
+    assert.equal(report.requestedWindow, "daily");
+  });
+});
+
+test("old data is flagged with its date instead of being shown as current", async () => {
+  await withDir(async (dataDir) => {
+    const later = new Date(NOW.getTime() + 10 * 24 * 60 * 60_000);
+    const agent = createBlackRoomAnalyticsAgent({ readSourceState: async () => sourceState() });
+    const ctx = createBlackRoomTeamContext("blackroom-analytics", { env: {}, now: () => later, fetch: failingFetch, dataDir });
+    const result = await agent.run(ctx, { window: "weekly" });
+    assert.equal(result.ok, true);
+    assert.match(result.summary, /ultimos 30 dias/);
+    assert.match(result.summary, /Ojo: estos numeros son de Metricool al/);
+    assert.match(result.summary, /METRICOOL_USER_TOKEN/);
+  });
 });

@@ -7,7 +7,7 @@
 export const BLACKROOM_ANALYTICS_TIMEZONE = "America/New_York";
 export const BLACKROOM_ANALYTICS_NETWORKS = ["tiktok", "facebook", "youtube", "instagram"] as const;
 export type BlackRoomAnalyticsReportNetwork = (typeof BLACKROOM_ANALYTICS_NETWORKS)[number];
-export type BlackRoomAnalyticsWindow = "daily" | "weekly";
+export type BlackRoomAnalyticsWindow = "daily" | "weekly" | "monthly";
 
 export const BLACKROOM_ANALYTICS_NETWORK_LABELS: Record<BlackRoomAnalyticsReportNetwork, string> = {
   tiktok: "TikTok",
@@ -30,7 +30,7 @@ const METRIC_LABELS: Record<BlackRoomAnalyticsSumMetric | "posts", string> = {
   impressions: "impresiones",
 };
 
-const WINDOW_MS: Record<BlackRoomAnalyticsWindow, number> = { daily: 24 * 60 * 60_000, weekly: 7 * 24 * 60 * 60_000 };
+const WINDOW_MS: Record<BlackRoomAnalyticsWindow, number> = { daily: 24 * 60 * 60_000, weekly: 7 * 24 * 60 * 60_000, monthly: 30 * 24 * 60 * 60_000 };
 const PATTERN_LOOKBACK_MS = 30 * 24 * 60 * 60_000;
 const MIN_BUCKET_SAMPLES = 2;
 const LOW_VIEW_THRESHOLD = 10;
@@ -121,6 +121,12 @@ export type BlackRoomAnalyticsReport = {
   limitations: string[];
   /** Spanish plain-text report "como estuvo todo", ready to read in the office or chat. */
   text: string;
+  /** Newest import/check time the numbers come from (null when unknown). */
+  dataAsOf?: string | null;
+  /** Latest publication date seen in any network (null when no dated post). */
+  latestPostAt?: string | null;
+  /** Set when the requested window had no posts and the report widened it. */
+  requestedWindow?: BlackRoomAnalyticsWindow;
 };
 
 function finiteNonNegative(value: unknown): number | undefined {
@@ -355,7 +361,7 @@ function formatDelta(delta: BlackRoomAnalyticsDelta | undefined): string {
 /** 3-5 concrete, data-backed recommendations. Fallbacks are about getting data, never invented insights. */
 export function buildBlackRoomAnalyticsRecommendations(reports: BlackRoomAnalyticsNetworkReport[], window: BlackRoomAnalyticsWindow): string[] {
   const recommendations: string[] = [];
-  const periodName = window === "daily" ? "ayer" : "la semana anterior";
+  const periodName = window === "daily" ? "ayer" : window === "weekly" ? "la semana anterior" : "el mes anterior";
   const withData = reports.filter((report) => report.status !== "missing");
   const drops = withData
     .filter((report) => (report.deltas.views?.changePct ?? 0) <= -20)
@@ -412,6 +418,18 @@ export function buildBlackRoomAnalyticsRecommendations(reports: BlackRoomAnalyti
   return recommendations.slice(0, 5);
 }
 
+export function blackRoomAnalyticsWindowLabel(window: BlackRoomAnalyticsWindow): string {
+  return window === "daily" ? "ultimas 24 horas" : window === "weekly" ? "ultimos 7 dias" : "ultimos 30 dias";
+}
+
+/** Newest moment the data reflects: latest import / Metricool check (cumulative views are as of then). */
+export function blackRoomAnalyticsDataAsOf(input: Pick<BlackRoomAnalyticsInput, "importedAtByNetwork" | "coverage">): string | null {
+  const stamps = [...Object.values(input.importedAtByNetwork ?? {}), input.coverage?.checkedAt ?? null]
+    .map((value) => (typeof value === "string" ? Date.parse(value) : Number.NaN))
+    .filter((value) => Number.isFinite(value));
+  return stamps.length ? new Date(Math.max(...stamps)).toISOString() : null;
+}
+
 export function buildBlackRoomAnalyticsReport(input: BlackRoomAnalyticsInput): BlackRoomAnalyticsReport {
   const periodEnd = input.now.getTime();
   const span = WINDOW_MS[input.window];
@@ -430,7 +448,7 @@ export function buildBlackRoomAnalyticsReport(input: BlackRoomAnalyticsInput): B
   const current = sumTotals(withData, "current");
   const previous = sumTotals(withData, "previous");
   const recommendations = buildBlackRoomAnalyticsRecommendations(networkReports, input.window);
-  const windowLabel = input.window === "daily" ? "ultimas 24 horas" : "ultimos 7 dias";
+  const windowLabel = blackRoomAnalyticsWindowLabel(input.window);
   const limitations = [
     "Metricool y el CSV dan el valor acumulado mas reciente de cada post: los posts del periodo anterior tuvieron mas tiempo para sumar vistas.",
     "Las publicaciones se asignan al periodo por su fecha de publicacion.",
@@ -480,5 +498,18 @@ export function buildBlackRoomAnalyticsReport(input: BlackRoomAnalyticsInput): B
     recommendations,
     limitations,
     text: lines.join("\n"),
+    dataAsOf: blackRoomAnalyticsDataAsOf(input),
+    latestPostAt: latestPublishedAt(input),
   };
+}
+
+function latestPublishedAt(input: BlackRoomAnalyticsInput): string | null {
+  let latest = Number.NaN;
+  for (const network of BLACKROOM_ANALYTICS_NETWORKS) {
+    for (const sample of normalizeBlackRoomAnalyticsSamples(input.samplesByNetwork[network] ?? [])) {
+      const at = sample.publishedAt ? Date.parse(sample.publishedAt) : Number.NaN;
+      if (Number.isFinite(at) && at <= input.now.getTime() && !(at <= latest)) latest = at;
+    }
+  }
+  return Number.isFinite(latest) ? new Date(latest).toISOString() : null;
 }
