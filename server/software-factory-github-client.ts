@@ -5,6 +5,10 @@ import type { FactoryBuilderDependencies } from "./software-factory-builder";
 import { isFactoryWritePathAllowed, isFactoryWritePathDenied, FACTORY_MAX_FILES_PER_ORDER } from "./software-factory-write-scope";
 export const FACTORY_PILOT_REPOSITORY = "robertmanzanillag-jpg/software-factory-pilot";
 export const FACTORY_ASISTENTE_REPOSITORY = "robertmanzanillag-jpg/blackops-reminder";
+/** Operator-approved Asistente base branches. Draft PRs target exactly the
+ * configured one; the client never writes it (only factory/* refs are created). */
+export const FACTORY_ASISTENTE_BASE_BRANCHES = ["main", "codex/office-integrated-repair-20261106", "claude/integration-20261111"] as const;
+export type FactoryAsistenteBaseBranch = typeof FACTORY_ASISTENTE_BASE_BRANCHES[number];
 const shaPattern = /^[a-f0-9]{40}$/;
 const branchPattern = /^factory\/[a-f0-9]{40}-[a-f0-9]{64}$/;
 function invalid(): never { throw Error("FACTORY_GITHUB_CLIENT_INPUT_INVALID"); }
@@ -34,8 +38,8 @@ export function createFactoryPilotGitHubClient(options: ClientOptions): FactoryP
 }
 /** Explicit trusted installation for Asistente. Never inferred from an order,
  * URL or model response; cannot grant access to other projects. */
-export function createFactoryAsistenteGitHubClient(options: ClientOptions & { baseBranch: "main" | "codex/office-integrated-repair-20261106"; writePaths: readonly string[] }): FactoryPilotGitHubClient {
-    if (!["main", "codex/office-integrated-repair-20261106"].includes(options.baseBranch)) invalid();
+export function createFactoryAsistenteGitHubClient(options: ClientOptions & { baseBranch: FactoryAsistenteBaseBranch; writePaths: readonly string[] }): FactoryPilotGitHubClient {
+    if (!(FACTORY_ASISTENTE_BASE_BRANCHES as readonly string[]).includes(options.baseBranch)) invalid();
     // An empty list yields a read-only client: every createTree is rejected.
     if (!Array.isArray(options.writePaths) || options.writePaths.length > FACTORY_MAX_FILES_PER_ORDER) invalid();
     const paths = new Set<string>();

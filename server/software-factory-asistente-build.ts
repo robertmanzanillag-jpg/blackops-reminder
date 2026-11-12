@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { createFactoryAsistenteGitHubClient, createFactoryAsistenteGitHubSourceExporter, FACTORY_ASISTENTE_REPOSITORY } from "./software-factory-github-client";
+import { createFactoryAsistenteGitHubClient, createFactoryAsistenteGitHubSourceExporter, FACTORY_ASISTENTE_REPOSITORY, type FactoryAsistenteBaseBranch } from "./software-factory-github-client";
 import { createFactoryRemotePipelineBuilder } from "./software-factory-remote-builder";
 import {createGitHubFactoryChecks} from "./software-factory-actions";
 import {createGitHubFactoryCandidatePublisher} from "./software-factory-github-publisher";
@@ -19,7 +19,7 @@ export function createAsistenteFactoryBuild(options: {
   ledger: ReturnType<typeof createSharedOpenAiCreditLedger>;
   githubRequest: (url: string, init: RequestInit) => Promise<Response>;
   model: Parameters<typeof createOpenAiFactoryTextProvider>[0];
-  baseBranch: "main" | "codex/office-integrated-repair-20261106";
+  baseBranch: FactoryAsistenteBaseBranch;
   /** Allowed roots; each job's persisted finding.sourcePaths must fit inside. */
   writeRoots?: readonly string[];
   maxFilesPerOrder: number;
