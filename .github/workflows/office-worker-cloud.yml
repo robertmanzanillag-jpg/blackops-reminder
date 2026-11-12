@@ -72,6 +72,8 @@ jobs:
           DEFAULT_USER_ID: ${{ secrets.OFFICE_OWNER_ID }}
           OPENAI_API_KEY: ${{ secrets.OFFICE_OPENAI_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.OFFICE_GITHUB_TOKEN }}
+          # Read-only KONG operations/city evidence for the council's KONG rounds (same token as the web app).
+          KONG_OFFICE_READ_TOKEN: ${{ secrets.KONG_OFFICE_READ_TOKEN }}
           OFFICE_EXPECTED_WEB_REVISION: ${{ vars.OFFICE_EXPECTED_WEB_REVISION }}
           OFFICE_OPENAI_MODEL: ${{ vars.OFFICE_OPENAI_MODEL }}
           OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT: ${{ vars.OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT }}
