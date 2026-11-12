@@ -59,6 +59,15 @@ export function validateRoleSnapshot(input:RoleSnapshot,owner:string,now:number)
 }
 const timestamp=(field:string)=>`to_char(${field} AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`;
 // Static SQL only: no caller-controlled table, fields, owner interpolation, or secret columns.
+/** The Revenue Engine stores its durable collections under its own owner key
+ * (`rev_` + sha256 of the canonical user id), not the raw user id; see
+ * buildRevenueDurableOwnerId in server/revenue-engine.ts. Querying the raw id
+ * always returned zero ledger rows (NO_SOURCE_RECORDS). */
+export function revenueDurableOwnerKey(owner:string):string {
+ const canonical=owner.trim();if(!canonical)throw new Error("Revenue owner required");
+ return `rev_${createHash("sha256").update(canonical).digest("hex")}`;
+}
+const queryOwner=(role:SqlAuditRole,owner:string)=>role==="revenue"?revenueDurableOwnerKey(owner):owner;
 const queries:Record<SqlAuditRole,string>={
  control:`SELECT id,scope,permission_level AS level,risk_limit AS risk,enabled,count(*) OVER() AS total FROM assistant_permissions WHERE user_id=$1 ORDER BY id LIMIT 200`,
  automations:`SELECT id,status,failure_count AS "failureCount",${timestamp("next_run_at")} AS "nextRunAt",${timestamp("last_run_at")} AS "lastRunAt",last_status AS "lastStatus",requires_approval AS "requiresApproval",permission_level AS level,count(*) OVER() AS total FROM automation_definitions WHERE owner_user_id=$1 ORDER BY id LIMIT 200`,
@@ -76,7 +85,7 @@ export async function readRoleSnapshot(pool:AuditPool,owner:string,role:SqlAudit
   await client.query("SET LOCAL TIME ZONE 'UTC'");
   const identity=await client.query("SELECT id FROM users WHERE id=$1",[owner]);
   if(identity.rows.length!==1 || identity.rows[0].id!==owner)throw new Error("Canonical owner absent");
-  const result=await client.query(queries[role],[owner]);
+  const result=await client.query(queries[role],[queryOwner(role,owner)]);
   const clock=await client.query("SELECT clock_timestamp() AS observed");
   const rows=result.rows.map(({total,...row})=>auditRows[role].parse(row));
   const body={version:1 as const,role,ownerKey:sourceDigest(owner),observedAt:new Date(clock.rows[0].observed).toISOString(),total:Number(result.rows[0]?.total ?? 0),rows};
