@@ -563,6 +563,7 @@ export function createBlackRoomPublisherAgent(deps: BlackRoomPublisherDeps = {})
       // Any edit requires a fresh approval.
       item.status = "pending";
       item.decidedAt = null;
+      item.decidedBy = null;
       item.dryRun = true;
       item.dispatch = freshDispatch();
       await ctx.state.save(state);
@@ -578,6 +579,7 @@ export function createBlackRoomPublisherAgent(deps: BlackRoomPublisherDeps = {})
       if (!(publicationTime(item) >= ctx.now().getTime() + BLACKROOM_PUBLISHER_MIN_LEAD_MS)) return fail("La fecha de publicacion ya paso o esta muy cerca; edita la fecha antes de aprobar.", "past_due");
       item.status = "approved";
       item.decidedAt = ctx.now().toISOString();
+      item.decidedBy = ctx.actor ?? null;
       await ctx.state.save(state);
       const live = isLive(ctx.env) && !liveModeNeeds(ctx.env).length;
       return { ok: true, summary: live ? "Aprobado. Se programara en la proxima revision de la cola." : "Aprobado. En modo simulacion: no se publicara hasta activar la publicacion real.", report: { item } };
@@ -590,6 +592,7 @@ export function createBlackRoomPublisherAgent(deps: BlackRoomPublisherDeps = {})
       if (isFrozen(item)) return fail("Ese posteo ya se envio (o pudo enviarse) a Metricool; cancelalo alli.", "frozen");
       item.status = "rejected";
       item.decidedAt = ctx.now().toISOString();
+      item.decidedBy = ctx.actor ?? null;
       item.dryRun = true;
       await ctx.state.save(state);
       return { ok: true, summary: "Posteo rechazado; no se publicara.", report: { item } };

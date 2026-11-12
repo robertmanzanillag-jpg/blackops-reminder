@@ -6,6 +6,7 @@ import {
   isBlackRoomTeamAgentId,
   parseBlackRoomTeamStatus,
   type BlackRoomLegacyMemberId,
+  type BlackRoomTeamActor,
   type BlackRoomTeamAgentId,
   type BlackRoomTeamAgentModule,
   type BlackRoomTeamContext,
@@ -40,6 +41,8 @@ export type BlackRoomTeamContextOptions = {
   fetch?: typeof fetch;
   dataDir?: string;
   userId?: string | null;
+  /** Who triggered the work (owner or partner), recorded by modules on approvals. */
+  actor?: BlackRoomTeamActor | null;
   modules?: BlackRoomTeamModules;
   readLegacyMember?: LegacyMemberReader;
 };
@@ -99,6 +102,7 @@ export function createBlackRoomTeamContext(agentId: BlackRoomTeamAgentId, option
     fetch: options.fetch ?? fetch,
     dataDir,
     userId,
+    actor: options.actor ?? null,
     state: createBlackRoomTeamStateStore(dataDir, agentId),
     async readTeammateStatus(id: BlackRoomTeamMemberId) {
       if (id === agentId || depth > 0) return null;

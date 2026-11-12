@@ -26,6 +26,8 @@ export const WORKSPACE_INVITE_PATH_PREFIX = "/invite/";
 export const WORKSPACE_MAX_OPEN_INVITATIONS = 20;
 
 export const PARTNER_SCOPE_NOTE = "Solo Robert";
+/** An accept that crashed mid-way frees its claim after this long. */
+export const WORKSPACE_INVITATION_CLAIM_MS = 2 * 60_000;
 
 export type WorkspaceInvitation = {
   id: string;
@@ -96,7 +98,7 @@ export function invitationStatus(invitation: WorkspaceInvitation, now: number): 
   if (invitation.revokedAt) return "revoked";
   if (invitation.usedAt) return "used";
   if (!(Date.parse(invitation.expiresAt) > now)) return "expired";
-  if (invitation.claimedAt) return "claimed";
+  if (invitation.claimedAt && now - Date.parse(invitation.claimedAt) < WORKSPACE_INVITATION_CLAIM_MS) return "claimed";
   return "open";
 }
 

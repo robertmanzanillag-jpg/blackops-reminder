@@ -138,6 +138,12 @@ export type BlackRoomTeamStatus = {
   pendingApprovals?: number;
 };
 
+/**
+ * Who triggered a run/action: Robert (owner) or an invited partner ("socio"). Structurally the
+ * same as WorkspaceActor in shared/workspace-access.ts (kept here to avoid an import cycle).
+ */
+export type BlackRoomTeamActor = { userId: string; role: "owner" | "partner" };
+
 /** Anything outward-facing (post, message, purchase, upload) waits here for Robert. */
 export type BlackRoomTeamApproval = {
   id: string;
@@ -149,6 +155,8 @@ export type BlackRoomTeamApproval = {
   createdAt: string;
   status: "pending" | "approved" | "rejected";
   decidedAt?: string | null;
+  /** Who approved/rejected it (owner or partner); null/absent for older items. */
+  decidedBy?: BlackRoomTeamActor | null;
   /** Always true until Robert approves and an explicit live flag is configured. */
   dryRun: boolean;
 };
@@ -178,6 +186,8 @@ export type BlackRoomTeamContext = {
   dataDir: string;
   /** Owner user id when known (routes and council pass it); null in isolated tests. */
   userId: string | null;
+  /** Who triggered this run/action (owner or partner); null for the council, schedulers and tests. */
+  actor?: BlackRoomTeamActor | null;
   /** This agent's own JSON state file. */
   state: BlackRoomTeamStateStore;
   /** Status of another Black Room member (new team or legacy videos/radio); null when unavailable. */
