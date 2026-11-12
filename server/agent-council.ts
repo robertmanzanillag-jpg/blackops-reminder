@@ -94,6 +94,8 @@ export type CouncilDeps = {
   log: (message: string) => void;
   // Real status of every agent (same data its endpoint serves). Optional so tests can stay small.
   collectKongEvidence?: () => Promise<OfficeKongAuditResult["evidence"]>;
+  /** Schedules a KONG-only catch-up after a round that could not verify KONG (default: unref'd setTimeout). */
+  scheduleKongCatchUp?: (run: () => void, ms: number) => void;
   collectStatuses?: (userId: string) => Promise<Record<string, AgentLiveStatus>>;
   // Real documents the academy teaches.
   loadCurriculum?: () => Promise<CurriculumModule[]>;
@@ -116,6 +118,18 @@ export class OrderEvidenceError extends Error {}
 
 // Another instance (Autoscale) that ran a round this recently already did the work.
 export const MIN_CYCLE_GAP_MS = 10 * 60_000;
+/** After a round without verified KONG evidence, retry KONG alone this often, at most this many times. */
+export const KONG_CATCHUP_MS = 2 * 60_000;
+export const KONG_CATCHUP_ATTEMPTS = 3;
+export const KONG_REREAD_AFTER_MS = 60_000;
+/** KONG evidence older than this is caught up even when another process ran the round. */
+export const KONG_STALE_AFTER_MS = 10 * 60_000;
+export const KONG_UPKEEP_INTERVAL_MS = 5 * 60_000;
+function kongReadCode(error: unknown): string {
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === "string" && /^[A-Z_]{2,40}$/.test(code)) return code;
+  return error instanceof Error && /sin respuesta/.test(error.message) ? "TIMEOUT" : "UNAVAILABLE";
+}
 const SKIP = Symbol("skip");
 
 export const KONG_TEAM = ["KONG AI", "Promoters + Mesas", "Venues", "Kong Legal"];
@@ -441,45 +455,122 @@ export function createAgentCouncil(deps: CouncilDeps) {
     return mutate((fresh) => mergeProposalSync(fresh, patches));
   }
 
+  // KONG evidence: retry once inside the call, and report only a reason code.
+  async function readKongEvidence(timeoutMs: number, attempts = 2): Promise<{ evidence?: OfficeKongAuditResult["evidence"]; code: string | null; readAt: number }> {
+    const readKong = deps.collectKongEvidence;
+    if (!readKong) return { code: null, readAt: deps.now() };
+    let code: string | null = null;
+    for (let attempt = 0; attempt < attempts; attempt++) {
+      try {
+        return { evidence: await withTimeout(readKong(), timeoutMs, "evidencia KONG"), code: null, readAt: deps.now() };
+      } catch (error) {
+        code = kongReadCode(error);
+        deps.log(`KONG evidence read failed (attempt ${attempt + 1}/${attempts}): ${code}`);
+      }
+    }
+    return { code, readAt: deps.now() };
+  }
+
+  // A round that could not verify KONG (cold start, event-loop stall, KONG briefly slow) must not
+  // freeze KONG careers for another 15+ minutes: retry KONG alone a few times, between rounds.
+  let kongCatchUpPending = false;
+  function scheduleKongCatchUp(attempt: number) {
+    if (attempt > KONG_CATCHUP_ATTEMPTS || (attempt === 1 && kongCatchUpPending)) return;
+    kongCatchUpPending = true;
+    const schedule = deps.scheduleKongCatchUp ?? ((run, ms) => { setTimeout(run, ms).unref?.(); });
+    schedule(() => { void runKongCatchUp(attempt).catch(error => { kongCatchUpPending = false; deps.log(`KONG catch-up failed: ${error instanceof Error ? error.message.slice(0, 120) : "unknown"}`); }); }, KONG_CATCHUP_MS);
+  }
+
+  async function runKongCatchUp(attempt = 1): Promise<CouncilState> {
+    // The durable store writes the row on every transaction, even a skipped one, so an absent row
+    // must be detected before opening one: KONG-only work never initializes the council row.
+    const existing = await load();
+    if (!existing.lastCycleAt) { kongCatchUpPending = false; return existing; }
+    const { evidence, code } = await readKongEvidence(deps.collectTimeoutMs ?? COLLECT_TIMEOUT_MS);
+    const curriculum = deps.loadCurriculum
+      ? await withTimeout(deps.loadCurriculum(), CURRICULUM_TIMEOUT_MS, "academia").catch(() => [] as CurriculumModule[])
+      : [];
+    let verified = false;
+    const written = await mutate((state) => {
+      const now = deps.now();
+      // Never initialize the council row from a KONG-only write: an absent row must stay absent
+      // until the council history is imported (docs/office-openai-rollout.md).
+      if (!state.lastCycleAt) { verified = true; return SKIP; }
+      // Another instance (or the round) already verified KONG recently: nothing to catch up.
+      if (state.kongObservedAt && now - Date.parse(state.kongObservedAt) < KONG_CATCHUP_MS) { verified = true; return SKIP; }
+      const kong = advanceKongCompany({ company: state.kongCompany, evidenceAt: state.kongEvidenceAt, evidence, now, curriculum });
+      verified = Boolean(kong.observedAt);
+      const kongRead = { at: new Date(now).toISOString(), ok: verified, code: verified ? null : code ?? "NOT_VERIFIED" };
+      if (!verified) return { ...state, kongRead };
+      return { ...state, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt, kongCollaboration: kong.collaboration, kongRead };
+    });
+    if (verified || attempt >= KONG_CATCHUP_ATTEMPTS) kongCatchUpPending = false;
+    else scheduleKongCatchUp(attempt + 1);
+    return written;
+  }
+
+  // KONG-only upkeep for instances that do not run council rounds: refresh KONG careers when no
+  // process has verified KONG for a while. Never repeats a round; never chains retries.
+  async function catchUpKongIfStale(): Promise<CouncilState> {
+    const before = await load();
+    const observed = before.kongObservedAt ? Date.parse(before.kongObservedAt) : 0;
+    if (!before.lastCycleAt || !deps.collectKongEvidence || kongCatchUpPending || deps.now() - observed <= KONG_STALE_AFTER_MS) return before;
+    kongCatchUpPending = true;
+    try { return await runKongCatchUp(KONG_CATCHUP_ATTEMPTS); } finally { kongCatchUpPending = false; }
+  }
+
   async function runCycleOnce(force: boolean): Promise<CouncilState> {
     const userId = deps.userId();
     const recent = (state: CouncilState) => !force && Boolean(state.lastCycleAt) && deps.now() - toMs(state.lastCycleAt) < MIN_CYCLE_GAP_MS;
     try {
       // Another instance already ran this round: skip the reads too.
       const before = await load();
-      if (recent(before)) return before;
+      if (recent(before)) {
+        // Another process (e.g. an older office worker) ran this round. KONG must not depend on
+        // that process having a working KONG reader: catch KONG up here when it is not fresh.
+        const observed = before.kongObservedAt ? Date.parse(before.kongObservedAt) : 0;
+        if (deps.collectKongEvidence && !kongCatchUpPending && deps.now() - observed > KONG_STALE_AFTER_MS) {
+          kongCatchUpPending = true;
+          try { return await runKongCatchUp(1); } catch (error) { kongCatchUpPending = false; throw error; }
+        }
+        return before;
+      }
       // Slow reads happen outside the queue; the state change itself is serialized.
       const collectTimeout = deps.collectTimeoutMs ?? COLLECT_TIMEOUT_MS;
       // KONG is read first and in parallel: reading it after the slow collectors let its 15 s request
       // time out under load, and the failure was swallowed, freezing KONG careers. One retry; the
       // reason is logged (no secrets: OfficeKongError messages are fixed Spanish text).
-      const readKong = deps.collectKongEvidence;
-      const kongPending = readKong
-        ? (async () => {
-            for (let attempt = 0; attempt < 2; attempt++) {
-              try {
-                return await withTimeout(readKong(), collectTimeout, "evidencia KONG");
-              } catch (error) {
-                console.warn(`[agent-council] KONG evidence read failed (attempt ${attempt + 1}/2): ${error instanceof Error ? error.message.slice(0, 160) : "unknown"}`);
-              }
-            }
-            return undefined;
-          })()
-        : Promise.resolve(undefined);
+      const kongPending = readKongEvidence(collectTimeout);
       const collected = await withTimeout(deps.collect(userId), collectTimeout, "lectura de senales");
       const everyone = deps.collectStatuses
         ? await withTimeout(deps.collectStatuses(userId), collectTimeout, "estado de los agentes").catch(() => ({} as Record<string, AgentLiveStatus>))
         : {};
-      const kongEvidence = await kongPending;
+      let { evidence: kongEvidence, code: kongCode, readAt: kongReadAt } = await kongPending;
       const curriculum = deps.loadCurriculum
         ? await withTimeout(deps.loadCurriculum(), CURRICULUM_TIMEOUT_MS, "academia").catch(() => [] as CurriculumModule[])
         : [];
+      // Freshness is scored when the round is written, after the slow collectors. A snapshot read
+      // minutes earlier (and already up to 5 min old at KONG) would be judged stale even though the
+      // read worked, so re-read KONG right before scoring when the first read is no longer fresh.
+      if (deps.collectKongEvidence && deps.now() - kongReadAt > KONG_REREAD_AFTER_MS) {
+        const again = await readKongEvidence(collectTimeout, 1);
+        if (again.evidence || !kongEvidence) ({ evidence: kongEvidence, code: kongCode } = again);
+      }
       let wroteRound = false;
       const written = await mutate(async (state) => {
         wroteRound = false;
         if (recent(state)) return SKIP;
         const now = deps.now();
-        if (deps.transactState && state.lastCycleAt && now - toMs(state.lastCycleAt) < COUNCIL_CYCLE_MS) return state;
+        if (deps.transactState && state.lastCycleAt && now - toMs(state.lastCycleAt) < COUNCIL_CYCLE_MS) {
+          // Another process wrote a round 10-15 min ago, so this round is not repeated. KONG must
+          // still advance when that process could not verify it (e.g. an older office worker).
+          const observed = state.kongObservedAt ? Date.parse(state.kongObservedAt) : 0;
+          if (!deps.collectKongEvidence || now - observed <= KONG_STALE_AFTER_MS) return state;
+          const kong = advanceKongCompany({ company: state.kongCompany, evidenceAt: state.kongEvidenceAt, evidence: kongEvidence, now, curriculum });
+          const kongRead = { at: new Date(now).toISOString(), ok: Boolean(kong.observedAt), code: kong.observedAt ? null : kongCode ?? "NOT_VERIFIED" };
+          if (!kong.observedAt) return { ...state, kongRead };
+          return { ...state, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt, kongCollaboration: kong.collaboration, kongRead };
+        }
         const signals: CouncilSignals = { ...collected, now };
         const findings = runCrossChecks(signals);
         const statuses: Record<string, AgentLiveStatus> = { ...everyone, ...statusesFromSignals(signals) };
@@ -491,7 +582,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
         let next = finishCycle(state, { findings, statuses: scored, now, agentNames: AGENT_NAMES });
         next = advanceCompanyCycle(next, statuses, curriculum, now, integrations);
         const kong = advanceKongCompany({ company: state.kongCompany, evidenceAt: state.kongEvidenceAt, evidence: kongEvidence, now, curriculum });
-        next = { ...next, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt, kongCollaboration: kong.collaboration };
+        next = { ...next, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt ?? state.kongObservedAt, kongCollaboration: kong.collaboration };
+        if (deps.collectKongEvidence) next = { ...next, kongRead: { at: new Date(now).toISOString(), ok: Boolean(kong.observedAt), code: kong.observedAt ? null : kongCode ?? "NOT_VERIFIED" } };
         // This completes only a read-only readiness review, never the worker's commercial task.
         next = { ...next, kongSupervision: reviewKongReadiness(state.kongSupervision, everyone, now) };
         next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, Object.fromEntries(Object.entries(statuses).filter(([id]) => !isKongCompanyAgent(id))), now, AGENT_NAMES, unscored), ...deriveSpecialistProposals(next, now), ...next.proposals]) };
@@ -500,6 +592,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
       });
       // Only the instance whose round was actually written talks to the Trust Center, and only after
       // the write: a retried or skipped round never creates approval requests (no duplicates).
+      if (wroteRound && deps.collectKongEvidence && written.kongRead && !written.kongRead.ok) scheduleKongCatchUp(1);
       if (!wroteRound) return written;
       return await syncProposals(written, userId);
     } catch (error) {
@@ -735,7 +828,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
     return state.officeExecution!;
   }
-  return { runCycle, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution };
+  return { runCycle, runKongCatchUp, catchUpKongIfStale, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {
@@ -1127,7 +1220,15 @@ export function systemUserId(): string {
 
 export async function startAgentCouncilScheduler(env: NodeJS.ProcessEnv = process.env) {
   if (!isAgentCouncilEnabled(env)) {
-    console.log("[agent-council] disabled by AGENT_COUNCIL_ENABLED=false");
+    console.log("[agent-council] disabled by AGENT_COUNCIL_ENABLED=false; KONG-only upkeep stays on");
+    // Council rounds run elsewhere (the office worker), but KONG careers must not freeze when that
+    // process cannot read KONG. KONG_UPKEEP_ENABLED=false turns this off too.
+    if (String(env.KONG_UPKEEP_ENABLED || "").trim().toLowerCase() !== "false") {
+      setAgentCouncilUser(getSystemUserId());
+      const upkeep = () => { getAgentCouncil().catchUpKongIfStale().catch((error) => console.warn("[agent-council] KONG upkeep error:", error instanceof Error ? error.message : error)); };
+      setTimeout(upkeep, 60_000).unref?.();
+      setInterval(upkeep, KONG_UPKEEP_INTERVAL_MS).unref?.();
+    }
     return;
   }
   setAgentCouncilUser(getSystemUserId());
