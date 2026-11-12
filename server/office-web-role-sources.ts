@@ -53,14 +53,18 @@ export async function assertWebSourceOwner(pool:SourcePool,owner:string,configur
 }
 
 /** Runs on the source web host. Never creates directories/defaults or invokes
- * agents, providers, publishers, OAuth readers, or mutable status getters. */
-export async function readWebRoleSources(options:{pool:SourcePool;owner:string;configuredOwner:string;root:string;env?:Record<string,string|undefined>;now?:number;marketingLearning?:()=>Promise<unknown|null>}):Promise<WebRoleSource[]> {
+ * agents, providers, publishers, OAuth readers, or mutable status getters.
+ * With files:false (the office worker's database-only observation) no file or
+ * directory is touched: every file-backed part is reported missing, never
+ * present, so only database-backed provenance can complete an audit. */
+export async function readWebRoleSources(options:{pool:SourcePool;owner:string;configuredOwner:string;root:string;env?:Record<string,string|undefined>;now?:number;marketingLearning?:()=>Promise<unknown|null>;files?:boolean}):Promise<WebRoleSource[]> {
  await assertWebSourceOwner(options.pool,options.owner,options.configuredOwner);
  const now=options.now ?? Date.now();if(!Number.isFinite(now))throw new Error("Invalid observation clock");
  const env=options.env||{},root=path.resolve(options.root);let fileCount=0,bytes=0;
  const locate=(key:string,fallback:string)=>path.resolve(env[key]||path.join(root,fallback));
  const empty=(kind:Part["provenance"]["kind"],status:Part["provenance"]["status"]):Part=>({provenance:{kind,status,sourceAt:null,digest:null,records:0,files:0,empty:false},rows:[]});
  async function file(kind:Part["provenance"]["kind"],filename:string,project:(v:unknown)=>{rows:WebSourceRow[];sourceAt:string|null}):Promise<Part>{
+  if(options.files===false)return empty(kind,"missing");
   try{
    const stat=await lstat(filename);if(!stat.isFile() || stat.isSymbolicLink())return empty(kind,"invalid");
    if(fileCount>=20 || stat.size>1048576-bytes)return empty(kind,"limit");
@@ -84,7 +88,8 @@ export async function readWebRoleSources(options:{pool:SourcePool;owner:string;c
  const social=await file("social_metrics",locate("DROPSHIPPING_SOCIAL_METRICS_PATH","dropshipping_engine_data/social_metrics.json"),v=>{const x=rawSocial.parse(v);return {sourceAt:last(x.map(q=>q.createdAt)),rows:x.map(q=>row("campaign_metric",q.id,"recorded",q.createdAt,{impressions:q.impressions,views:q.views,orders:q.orders,revenueUsd:q.revenueUsd,spendUsd:q.spendUsd}))};});
  const clipMetrics=await file("clip_metrics",path.join(root,"clippers_workspace/metrics/metrics-summary.json"),v=>{const x=rawClipMetrics.parse(v);return {sourceAt:x.generatedAt,rows:x.records.map(q=>row("clip_metric",q.id,"recorded",x.generatedAt,{views:q.views,likes:q.likes,comments:q.comments,shares:q.shares,saves:q.saves}))};});
  const reports:Part[]=[];
- try{
+ if(options.files===false)reports.push(empty("clip_reports","missing"));
+ else try{
   const dir=path.join(root,"clippers_workspace/reports"),entries=(await readdir(dir,{withFileTypes:true})).filter(e=>e.isFile()&&e.name.endsWith(".json")).sort((a,b)=>b.name.replace(/^automation-cycle-/,"").localeCompare(a.name.replace(/^automation-cycle-/,"")));
   const candidates=entries.filter(e=>/^(?:automation-cycle-)?\d{4}-/.test(e.name));
   if(candidates.length!==entries.length)reports.push(empty("clip_reports","invalid"));

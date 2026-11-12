@@ -3,14 +3,15 @@ import {readWebRoleSources,type WebRoleSource} from "./office-web-role-sources";
 import {persistWebRoleSources} from "./office-web-role-store";
 import path from "node:path";
 import {startOfficeEditorialExporter} from "./office-editorial-scheduler";
+import {withConnectionRetry} from "./office-source-pool";
 let publicStatus:{enabled:boolean;lastExportAt:string|null;status:"disabled"|"pending"|"ready"|"unavailable";failureStage?:"read"|"persist";failureCode?:string}={enabled:false,lastExportAt:null,status:"disabled"};
 export const officeWebSourceStatus=()=>({...publicStatus});
 function safeExportFailure(error:unknown):string {
  const value=error && typeof error==="object"?error as {code?:unknown;name?:unknown;message?:unknown}:{};
- const codes=["42P01","42703","42501","23505","23502","23514","40001","40P01","57014","53300","57P01","08001","08006","ECONNREFUSED","ENOTFOUND","ETIMEDOUT"];
+ const codes=["42P01","42703","42501","23505","23502","23514","40001","40P01","57014","53300","57P01","08001","08006","ECONNREFUSED","ECONNRESET","ENOTFOUND","ETIMEDOUT"];
  if(typeof value.code==="string"&&codes.includes(value.code))return value.code;
  if(value.name==="ZodError")return "INVALID_SOURCE_SCHEMA";
- const known:Record<string,string>={"Canonical owner absent":"SOURCE_OWNER_ABSENT","Configured owner required":"SOURCE_OWNER_INVALID","Invalid web source provenance":"SOURCE_PROVENANCE_INVALID","Web source row capability mismatch":"SOURCE_ROW_INVALID","Future web source":"SOURCE_FUTURE_TIMESTAMP","Connection terminated due to connection timeout":"SOURCE_CONNECTION_TIMEOUT","Connection terminated unexpectedly":"SOURCE_CONNECTION_CLOSED"};
+ const known:Record<string,string>={"Canonical owner absent":"SOURCE_OWNER_ABSENT","Configured owner required":"SOURCE_OWNER_INVALID","Invalid web source provenance":"SOURCE_PROVENANCE_INVALID","Web source row capability mismatch":"SOURCE_ROW_INVALID","Future web source":"SOURCE_FUTURE_TIMESTAMP","Connection terminated due to connection timeout":"SOURCE_CONNECTION_TIMEOUT","Connection terminated unexpectedly":"SOURCE_CONNECTION_CLOSED","timeout exceeded when trying to connect":"SOURCE_POOL_TIMEOUT"};
  if(typeof value.message==="string" && Object.hasOwn(known,value.message))return known[value.message];
  return "UNVERIFIED_EXPORT";
 }
@@ -21,13 +22,19 @@ export function createWebSourceExportCycle(options:{read:()=>Promise<WebRoleSour
   catch(error){publicStatus={...publicStatus,enabled:true,status:"unavailable",failureStage,failureCode:safeExportFailure(error)};return false;}finally{running=false;}
  }};
 }
+export const OFFICE_SOURCE_CONNECT_TIMEOUT_MS=20000;
 let installed=false;
 /** Host-owned read/export only: no agents, model calls or publishers are started. */
 export async function startOfficeWebSourceExporter(){
  if(process.env.OFFICE_WEB_SOURCE_EXPORT_ENABLED!=="true" || installed)return;
  if(process.env.AGENT_COUNCIL_STORAGE!=="postgres")throw Error("Web sources require production PostgreSQL");
  const [{default:pg},{resolveDatabaseConnectionString},{getSystemUserId}]=await Promise.all([import("pg"),import("./database-url"),import("./user-context")]);
- const owner=getSystemUserId(),pool=new pg.Pool({connectionString:resolveDatabaseConnectionString(),max:1,allowExitOnIdle:true,connectionTimeoutMillis:10000,statement_timeout:10000});
+ // One connection only. A serverless database can take well over ten seconds
+ // to accept the first connection after both it and this autoscaled host wake,
+ // so allow a longer connect and a bounded retry of connection-level failures.
+ const owner=getSystemUserId(),raw=new pg.Pool({connectionString:resolveDatabaseConnectionString(),max:1,allowExitOnIdle:true,connectionTimeoutMillis:OFFICE_SOURCE_CONNECT_TIMEOUT_MS,statement_timeout:10000});
+ raw.on("error",()=>undefined);
+ const pool={...withConnectionRetry(raw),connect:()=>raw.connect()};
  const env=Object.fromEntries(["CLIPPERS_LOCAL_NEWS_WORKSPACE","DROPSHIPPING_PRODUCTS_PATH","DROPSHIPPING_SUPPLIERS_PATH","DROPSHIPPING_SOCIAL_METRICS_PATH","MARKETING_COMMAND_CENTER_LEARNING_PATH"].map(key=>[key,process.env[key]]));
  const cycle=createWebSourceExportCycle({read:()=>readWebRoleSources({pool,owner,configuredOwner:owner,root:process.cwd(),env,marketingLearning:()=>readMarketingLearning(pool,owner)}),persist:sources=>persistWebRoleSources(pool,owner,owner,sources)});
  installed=true;publicStatus={enabled:true,lastExportAt:null,status:"pending"};
