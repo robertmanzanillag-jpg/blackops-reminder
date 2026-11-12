@@ -88,6 +88,7 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
         view.kongObservedAt = null;
         view.kongRead = null;
         view.kongCollaboration = { verified: false, observedAt: null, totalFindings: 0, exchanges: [] };
+        view.roleWorkToday = [];
         // Owner-only per-agent chat: orders, hand-off events and hand-off memory never reach other users.
         view.company = redactChatActivity(view.company);
       }

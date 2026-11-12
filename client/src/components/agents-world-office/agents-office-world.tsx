@@ -21,6 +21,7 @@ import { buildKongOfficeWing, createKongRingAssignment, type KongRingAssignment 
 import type { WhatsAppOfficeView } from "@shared/whatsapp-office-agent";
 import { kongOfficeSnapshotKey, readOwnerKongSnapshot } from "@/lib/whatsapp-office-query";
 import { createOfficeScene, type SceneData, type SceneDepartment } from "./office-scene";
+import { applyRoleWorkActivity, countRoleWorkCompleted, parseRoleWorkActivity } from "@shared/office-role-work-activity";
 import { FACTORY_AGENTS, FACTORY_DEPARTMENT, factoryAgentStatus, type FactoryAgentView } from "@shared/factory-office-agents";
 import { buildOfficeCityRoomsFromSnapshot, officeCitySnapshotExpiresAt, parseOfficeCityDirectory, type OfficeCityAgent } from "@/lib/office-city-agents";
 
@@ -239,6 +240,12 @@ export function AgentsOfficeWorld({
     if (integration.mode !== "externa" || !statuses[id]) continue;
     statuses[id] = { state: "offline", label: integration.owner === "externo:codex" ? "Externo · lo publica Codex" : "Externo", detail: integration.reason, activity: ["Publicador externo: un solo publicador", ...(statuses[id].activity || [])].slice(0, 4), problems: statuses[id].problems };
   }
+  // Role work the office executor (cloud or PC) recorded today in the shared council state.
+  const roleWorkToday = parseRoleWorkActivity((council.view as unknown as { roleWorkToday?: unknown } | null)?.roleWorkToday);
+  for (const activity of roleWorkToday) {
+    const next = applyRoleWorkActivity(statuses[activity.agentId], activity, clock);
+    if (next) statuses[activity.agentId] = next;
+  }
 
   const panelAgents = new Map<string, PanelAgent>();
   for (const agent of agents) panelAgents.set(agent.id, { id: agent.id, name: agent.name, role: agent.role, description: agent.activity || agent.role, href: agent.href, status: statuses[agent.id] ?? { state: "checking", label: "Verificando..." }, color: colorFromGradient(agent.color) });
@@ -437,6 +444,7 @@ export function AgentsOfficeWorld({
 
   const companyIds = departments.flatMap((department) => department.agentIds);
   const workingCount = companyIds.filter((id) => panelAgents.get(id)?.status.state === "working").length;
+  const verifiedTodayCount = officeWing === "main" ? countRoleWorkCompleted(roleWorkToday, companyIds) : 0;
   const focused = departments.find((department) => department.id === focusedDepartment) || null;
   const focusedAgents = focused ? focused.agentIds.map((id) => panelAgents.get(id)).filter((agent): agent is PanelAgent => Boolean(agent)) : [];
   const panelAgent = (panelAgentId && focusedAgents.find((agent) => agent.id === panelAgentId)) || focusedAgents[0] || null;
@@ -496,6 +504,7 @@ export function AgentsOfficeWorld({
         </div>
         <div id="world-office-panel-content" hidden={mainPanelMinimized}>
           <p className="mt-2 text-lg font-black" data-testid="world-working-count">{workingCount} de {companyIds.length} en ejecución actual verificada</p>
+          {officeWing === "main" && <p className="mt-1 text-sm font-semibold text-emerald-200" data-testid="world-verified-today-count">{verifiedTodayCount} de {companyIds.length} con trabajo verificado hoy (ejecutor de la oficina)</p>}
           {officeWing === "kong" && <p className="mt-1 text-xs text-zinc-300">Todos los puestos centrales y {cityRooms.length} ciudades en la misma oficina. La oficina observa y coordina; abrirla no activa los ejecutores.</p>}
           {officeWing === "kong" && <div className="mt-2 space-y-1 text-[11px] text-zinc-300" data-testid="world-kong-rings-legend">
             <p><span className="text-amber-200">1 · Equipo central</span> · <span className="text-cyan-200">2 · Ciudades prioritarias ({kongRingAssignment?.busyCityIds.length ?? 0})</span> · <span className="text-violet-200">3 · Resto de ciudades</span></p>
