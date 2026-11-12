@@ -15,6 +15,7 @@ import { OFFICE_KONG_CITY_TASKS, scoreOfficeKongSnapshot } from "@shared/office-
 import type { OfficeKongAuditResult } from "../../../../server/office-kong";
 import type { OfficeKongCollaboration } from "../../../../server/office-kong-collaboration";
 import { CITY_NEWS_AGENTS } from "@shared/agent-live-status";
+import { BLACKROOM_DEPARTMENT_ORDER, BLACKROOM_TEAM } from "@shared/blackroom-team";
 import { INTEGRATION_LABEL, effectiveIntegrations, integrationFor, type AgentIntegration } from "@shared/agent-integrations";
 import { buildOfficeKongCentralSignals, OFFICE_KONG_CENTRAL_SEATS, officeCityEvidenceNotice, type OfficeKongCentralSignal } from "@/lib/office-kong-central-agents";
 import { buildKongOfficeWing, createKongRingAssignment, type KongRingAssignment } from "@/lib/kong-office-wing";
@@ -27,6 +28,7 @@ export type WorldAgent = BuildingAgent & { activity?: string; href?: string };
 
 // Real agents that live in the backend but not in the classic office list.
 const EXTRA_AGENTS: Array<{ id: string; name: string; role: string; description: string; color: string; href?: string }> = [
+  ...BLACKROOM_TEAM.map(({ id, name, role, description, color }) => ({ id, name, role, description, color })),
   { id: "blackroom-videos", name: "Videos Black Room", role: "Sube los videos de Black Room", description: "Edita y programa los videos de Black Room con su dispositivo de publicacion.", color: "#e879f9", href: "/clippers" },
   { id: "kong-videos", name: "Videos Kong", role: "Edita los videos de Kong", description: "Edita los videos de Kong y los guarda en Drive (Videos de Kong). Recibe las fichas verificadas de Venues y Promoters en su bandeja.", color: "#a3e635", href: "/promo-video" },
   { id: "kong-metrics", name: "Metricas KONG", role: "Resultados por publicacion", description: "Agente separado: mide cada publicacion confirmada de KONG (vistas, alcance, interacciones) con los datos de Metricool, enlazados por UUID.", color: "#bef264" },
@@ -51,7 +53,7 @@ const DEPARTMENTS: Array<{ id: string; name: string; color: string; agentIds: st
   { id: "consejo", name: "Consejo", color: "#c084fc", agentIds: ["skills-scout", "agent-factory", "mechanic"] },
   { id: "direccion", name: "Direccion", color: "#fbbf24", agentIds: ["ceo", "assistant", "control"] },
   { id: "negocios", name: "Negocios", color: "#34d399", agentIds: ["revenue", "dropshipping", "portfolio"] },
-  { id: "blackroom", name: "Black Room", color: "#e879f9", agentIds: ["blackroom-videos", "radio"] },
+  { id: "blackroom", name: "Black Room", color: "#e879f9", agentIds: [...BLACKROOM_DEPARTMENT_ORDER] },
   { id: "kong", name: "Kong", color: "#a3e635", agentIds: ["kong-videos", "kong-metrics", "kong:KONG AI", "kong:Promoters + Mesas", "kong:Venues", "kong:Kong Legal"] },
   { id: "medios", name: "Marketing y medios", color: "#f472b6", agentIds: ["marketing-cmo", "clippers"] },
   { id: "noticias-ciudad", name: "Noticias por ciudad", color: "#fb923c", agentIds: ["news", ...CITY_NEWS_AGENTS.map((agent) => agent.id)] },
@@ -61,6 +63,7 @@ const DEPARTMENTS: Array<{ id: string; name: string; color: string; agentIds: st
 ];
 
 const SCREEN_KIND: Record<string, SceneDepartment["agents"][number]["screen"]> = {
+  ...Object.fromEntries(BLACKROOM_TEAM.map((agent) => [agent.id, agent.screen])),
   radio: "timeline", clippers: "timeline", "blackroom-videos": "timeline", "kong-videos": "timeline", "kong-metrics": "chart", "news:miami-news": "list", "news:ny-news": "list",
   revenue: "chart", portfolio: "chart", "marketing-cmo": "chart", dropshipping: "chart", news: "chart",
   code: "code", github: "code", "claude-reviewer": "code", "app-qa": "code", cybersecurity: "code", mechanic: "code",
@@ -71,6 +74,7 @@ const CITY_COUNTRY_COLORS: Record<string, string> = {
 const cityRefreshInterval = ({ state }: { state: { error: Error | null } }) => /^(401|403):/.test(state.error?.message ?? "") ? false as const : 60_000;
 
 const SOURCE_NAME: Record<string, string> = {
+  ...Object.fromEntries(BLACKROOM_TEAM.map((agent) => [agent.id, agent.sourceName])),
   assistant: "Google Calendar", ceo: "Telegram + IA", control: "Salud de apps", revenue: "Stripe", dropshipping: "Shopify (pre-cuentas)",
   portfolio: "Mercados", "marketing-cmo": "Clientes de marketing", clippers: "Worker de clips", radio: "Calendario de radio",
   code: "GitHub", github: "GitHub", "claude-reviewer": "GitHub", "app-qa": "Salud de apps", cybersecurity: "Salud de apps",
