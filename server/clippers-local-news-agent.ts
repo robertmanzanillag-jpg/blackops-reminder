@@ -10,6 +10,7 @@ import { buildLocalNewsGrowthPackage, type LocalNewsGrowthPackage, type LocalNew
 import { detectLocalNewsLanguage, getDefaultLocalNewsTranslator, type LocalNewsTranslator } from "./clippers-local-news-translation";
 import { getLocalNewsGrowthScoutPattern } from "./local-news-growth-scout";
 import { archiveAndCompactLocalNewsState } from "./clippers-local-news-state-retention";
+import { mirrorOfficeSourceFile } from "./office-source-document-sync";
 
 export type ClipperLocalNewsLane = "miami-news" | "ny-news";
 export type ClipperLocalNewsPlatform = "x" | "facebook";
@@ -758,6 +759,7 @@ async function persist(dir: string, state: LocalNewsState): Promise<void> {
       items: state.queue.filter((item) => item.organicGrowth).map((item) => ({ queueItemId: item.id, lane: item.lane, platform: item.platform, ...item.organicGrowth })),
     }, null, 2)}\n`),
   ]);
+  mirrorOfficeSourceFile({ kind: "news_state", filePath: path.join(dir, FILES.state), raw: state });
 }
 
 function summarizeMetrics(metrics: ClipperLocalNewsMetric[]) {

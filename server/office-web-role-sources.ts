@@ -2,6 +2,7 @@ import {open,lstat,readdir} from "node:fs/promises";
 import path from "node:path";
 import {z} from "zod";
 import {sourceDigest} from "./office-role-snapshots";
+import {canonicalOfficeSourcePath,cycleTotals,CYCLE_REPORT_NAME,DAILY_REPORT_NAME,OFFICE_SOURCE_DOCUMENT_DB_MAX_BYTES,parseStoredOfficeSourceDocument,projectOfficeSourceDocument,type OfficeSourceDocumentKind,type OfficeSourceDocumentSet,type StoredDocument,type StoredOfficeSourceEntry} from "./office-source-documents";
 export const WEB_SOURCE_ROLES=["news","news:ny-news","news:miami-news","blackroom-videos","dropshipping","marketing-cmo","clippers"] as const;
 // Fixed SQL projection only: never fetch the remote document's media, analytics,
 // commands or credentials. Preserve absent keys, explicit null and malformed types.
@@ -14,18 +15,14 @@ const remoteQueueProjection=projectRemoteObject("data->'device'->'queue'",{updat
 const remoteDeviceProjection=projectRemoteObject("data->'device'",{seenAt:boundedLeaf("data->'device'->'seenAt'"),queue:remoteQueueProjection});
 export const BLACKROOM_SOURCE_PROJECTION_SQL=`WITH projected AS (SELECT ${projectRemoteObject("data",{version:boundedLeaf("data->'version'"),updatedAt:boundedLeaf("data->'updatedAt'"),device:remoteDeviceProjection})} AS data FROM blackroom_remote_control WHERE id=$1) SELECT CASE WHEN octet_length(data::text)<=1048576 THEN data ELSE NULL END AS data FROM projected`;
 export type WebSourceRole=typeof WEB_SOURCE_ROLES[number];
+/** Non-report JSON artifacts that Clippers tools/scripts write into
+ * clippers_workspace/reports. Skipped by exact name only: any other unexpected
+ * file still makes the report folder invalid evidence. */
+export const CLIPPERS_NON_REPORT_FILES:ReadonlySet<string>=new Set(["metricool-approval-report.json","clippers-operational-readiness.json","clippers-external-closeout-pack.json","clippers-external-closeout-proof-todo.json","clippers-external-closeout-operator-queue.json","clippers-external-go-live-audit.json","clippers-external-operator-action-sheet.json","clippers-external-next-work-run.json","clippers-external-closeout-evidence-import-report.json","clippers-external-closeout-repair-work-packet.json","clippers-motivation-ledger.json","marketplace-supply-report.json","marketplace-refresh-report.json"]);
 export type SourcePool={query:(sql:string,args?:unknown[])=>Promise<{rows:any[]}>};
-const stamp=z.string().datetime({offset:true}),id=z.string().min(1).max(500),num=z.number().finite().nonnegative();
-const lane=z.enum(["miami-news","ny-news"]),newsState=z.enum(["approval_required","auto_eligible","quarantined","rejected"]);
-const rawNews=z.object({version:z.literal(1),updatedAt:stamp,lastRunAt:stamp.nullable(),queue:z.array(z.object({id,lane,status:newsState,createdAt:stamp,approvalRequired:z.boolean(),autoEligible:z.boolean(),qualityScore:num})).max(10000)});
-const rawProducts=z.array(z.object({id,updatedAt:stamp,status:z.enum(["research","qualified","approval_required","sample_recommended","launch_ready","blocked"])})).max(10000);
-const rawSuppliers=z.array(z.object({id,updatedAt:stamp,status:z.enum(["approved_candidate","needs_backup_supplier","blocked"]),score:num})).max(10000);
-const rawMarketing=z.array(z.object({id,createdAt:stamp,focusClientId:id,clientsReviewed:num,improvementsQueued:z.array(z.string()),rulesUpdated:z.array(z.string()),safetyBlocks:z.array(z.string())})).max(10000);
-const rawSocial=z.array(z.object({id,createdAt:stamp,campaignId:z.string().max(500),postId:id,platform:z.enum(["tiktok","instagram","facebook","youtube_shorts","pinterest","email","manual"]),impressions:num,views:num,orders:num,revenueUsd:num,spendUsd:num})).max(10000);
-const rawClipReport=z.object({id,userId:id,createdAt:stamp,publishMode:z.enum(["draft_only","approval_required","auto_after_connection"]),plannedClips:z.array(z.unknown()).max(10000)});
-const cycleTotals=z.object({posts:num.int(),dailyTargetPosts:num.int(),weeklyTargetClips:num.int(),backlogPosts:num.int(),gapToDailyTarget:num.int(),scheduled:num.int(),readyForManual:num.int(),blocked:num.int(),draftReady:num.int(),rightsReview:num.int(),needsSource:num.int()});
-const rawClipCycle=z.object({id,userId:id,createdAt:stamp,automation:z.object({id,createdAt:stamp,status:z.enum(["blocked","partial","ready"]),totals:cycleTotals,posts:z.array(z.unknown()).max(10000)})});
-const rawClipMetrics=z.object({generatedAt:stamp.nullable(),records:z.array(z.object({id,accountId:id,clipId:id,publishedAt:stamp.nullable(),views:num,likes:num,comments:num,shares:num,saves:num})).max(10000)});
+const stamp=z.string().datetime({offset:true}),num=z.number().finite().nonnegative();
+const lane=z.enum(["miami-news","ny-news"]);
+const rawMarketing=z.array(z.object({id:z.string().min(1).max(500),createdAt:stamp,focusClientId:z.string().min(1).max(500),clientsReviewed:num,improvementsQueued:z.array(z.string()),rulesUpdated:z.array(z.string()),safetyBlocks:z.array(z.string())})).max(10000);
 const rawRemote=z.object({version:z.literal(1),updatedAt:stamp,device:z.object({seenAt:stamp,queue:z.record(z.unknown())}).nullable()});
 const remoteQueue=z.object({updatedAt:stamp,totals:z.object({queued:num,processing:num,retry:num,scheduled:num,completed:num,cancelled:num})});
 const metrics=z.record(z.enum(["qualityScore","approvalRequired","autoEligible","supplierScore","clientsReviewed","improvementsQueued","rulesUpdated","safetyBlocks","impressions","views","orders","revenueUsd","spendUsd","plannedClips","likes","comments","shares","saves","queued","processing","retry","scheduled","completed","cancelled","posts","dailyTargetPosts","weeklyTargetClips","backlogPosts","gapToDailyTarget","readyForManual","blocked","draftReady","rightsReview","needsSource"]),num);
@@ -35,7 +32,10 @@ const provenanceSchema=z.object({kind:z.enum(["news_state","products","suppliers
 export const webRoleSourceSchema=z.object({version:z.literal(1),ownerKey:z.string().regex(/^[a-f0-9]{64}$/),role:z.enum(WEB_SOURCE_ROLES),observedAt:stamp,rows:z.array(webSourceRowSchema).max(200),total:z.number().int().nonnegative(),truncated:z.boolean(),provenance:z.array(provenanceSchema).max(20),diagnostics:z.array(z.enum(["SOURCE_MISSING","SOURCE_INVALID","SOURCE_LIMIT","SOURCE_STALE","SOURCE_TIME_UNKNOWN","NO_RECORDS","PARTIAL_COVERAGE","RECORDED_BLOCKS","RETRY_BACKLOG","COLLECTED_METRICS_ONLY","PLANS_NOT_EXECUTION","NO_CURRENT_SESSION_PROOF"])),sourceDigest:z.string().regex(/^[a-f0-9]{64}$/)}).strict();
 export type WebRoleSource=z.infer<typeof webRoleSourceSchema>;
 type Part={provenance:z.infer<typeof provenanceSchema>;rows:WebSourceRow[]};
-const row=(kind:WebSourceRow["kind"],rawId:string,state:WebSourceRow["state"],sourceAt:string|null,values:Record<string,number>,extra:Partial<WebSourceRow>={}):WebSourceRow=>webSourceRowSchema.parse({id:sourceDigest([kind,rawId]),kind,state,sourceAt,metrics:values,...extra});
+/** id is the row id digest (sha256 of [kind, rawId]); stored documents
+ * already carry it, so raw producer ids never leave the producer. */
+const rowAt=(kind:WebSourceRow["kind"],id:string,state:WebSourceRow["state"],sourceAt:string|null,values:Record<string,number>,extra:Partial<WebSourceRow>={}):WebSourceRow=>webSourceRowSchema.parse({id,kind,state,sourceAt,metrics:values,...extra});
+const row=(kind:WebSourceRow["kind"],rawId:string,state:WebSourceRow["state"],sourceAt:string|null,values:Record<string,number>,extra:Partial<WebSourceRow>={}):WebSourceRow=>rowAt(kind,sourceDigest([kind,rawId]),state,sourceAt,values,extra);
 const last=(dates:Array<string|null>)=>dates.filter((v):v is string=>!!v).sort((a,b)=>Date.parse(b)-Date.parse(a))[0]||null;
 export function validateWebRoleSource(value:unknown,owner:string):WebRoleSource {
  const s=webRoleSourceSchema.parse(value),{sourceDigest:hash,...body}=s;
@@ -56,8 +56,11 @@ export async function assertWebSourceOwner(pool:SourcePool,owner:string,configur
  * agents, providers, publishers, OAuth readers, or mutable status getters.
  * With files:false (the office worker's database-only observation) no file or
  * directory is touched: every file-backed part is reported missing, never
- * present, so only database-backed provenance can complete an audit. */
-export async function readWebRoleSources(options:{pool:SourcePool;owner:string;configuredOwner:string;root:string;env?:Record<string,string|undefined>;now?:number;marketingLearning?:()=>Promise<unknown|null>;files?:boolean}):Promise<WebRoleSource[]> {
+ * present, so only database-backed provenance can complete an audit.
+ * sourceDocuments (office_source_documents) takes precedence per document
+ * kind; files are read only for kinds without a durable copy, and only when
+ * files are allowed (the web host). */
+export async function readWebRoleSources(options:{pool:SourcePool;owner:string;configuredOwner:string;root:string;env?:Record<string,string|undefined>;now?:number;marketingLearning?:()=>Promise<unknown|null>;sourceDocuments?:()=>Promise<OfficeSourceDocumentSet|null>;files?:boolean}):Promise<WebRoleSource[]> {
  await assertWebSourceOwner(options.pool,options.owner,options.configuredOwner);
  const now=options.now ?? Date.now();if(!Number.isFinite(now))throw new Error("Invalid observation clock");
  const env=options.env||{},root=path.resolve(options.root);let fileCount=0,bytes=0;
@@ -76,32 +79,58 @@ export async function readWebRoleSources(options:{pool:SourcePool;owner:string;c
    return {rows:projected.rows,provenance:{kind,status:"present",sourceAt:projected.sourceAt,digest:sourceDigest(projected),records:projected.rows.length,files:1,empty:projected.rows.length===0}};
   }catch(e){return empty(kind,(e as NodeJS.ErrnoException).code==="ENOENT"?"missing":"invalid");}
  }
- const news=await file("news_state",path.join(locate("CLIPPERS_LOCAL_NEWS_WORKSPACE","clippers_workspace/local-news"),"state.json"),v=>{const x=rawNews.parse(v);return {sourceAt:x.lastRunAt||x.updatedAt,rows:x.queue.map(q=>row("news_queue",q.id,q.status,q.createdAt,{qualityScore:q.qualityScore,approvalRequired:Number(q.approvalRequired),autoEligible:Number(q.autoEligible)},{lane:q.lane}))};});
- const products=await file("products",locate("DROPSHIPPING_PRODUCTS_PATH","dropshipping_engine_data/products.json"),v=>{const x=rawProducts.parse(v);return {sourceAt:last(x.map(q=>q.updatedAt)),rows:x.map(q=>row("product",q.id,q.status,q.updatedAt,{}))};});
- const suppliers=await file("suppliers",locate("DROPSHIPPING_SUPPLIERS_PATH","dropshipping_engine_data/suppliers.json"),v=>{const x=rawSuppliers.parse(v);return {sourceAt:last(x.map(q=>q.updatedAt)),rows:x.map(q=>row("supplier",q.id,q.status,q.updatedAt,{supplierScore:q.score}))};});
+ // Durable copies (office_source_documents) win over the host's ephemeral
+ // files. A failed database read is invalid evidence, never a file fallback.
+ let documents:OfficeSourceDocumentSet|null=null,documentsFailed=false,documentBytes=0;
+ if(options.sourceDocuments){try{documents=await options.sourceDocuments();}catch{documentsFailed=true;}}
+ const fresh=(projected:{rows:WebSourceRow[];sourceAt:string|null})=>!(projected.sourceAt && Date.parse(projected.sourceAt)>now+30000 || projected.rows.some(r=>r.sourceAt && Date.parse(r.sourceAt)>now+30000));
+ function fromDocument<K extends OfficeSourceDocumentKind>(kind:Part["provenance"]["kind"],documentKind:K,item:StoredOfficeSourceEntry,toRows:(x:StoredDocument<K>)=>{rows:WebSourceRow[];sourceAt:string|null}):Part{
+  if(item.status!=="present")return empty(kind,item.status);
+  if(item.oversized || item.document===null || fileCount>=20)return empty(kind,"limit");
+  const size=Buffer.byteLength(JSON.stringify(item.document));if(documentBytes+size>2*OFFICE_SOURCE_DOCUMENT_DB_MAX_BYTES)return empty(kind,"limit");
+  fileCount++;documentBytes+=size;
+  try{const projected=toRows(parseStoredOfficeSourceDocument(documentKind,item.document,item.key));if(!fresh(projected))return empty(kind,"invalid");
+   return {rows:projected.rows,provenance:{kind,status:"present",sourceAt:projected.sourceAt,digest:sourceDigest(projected),records:projected.rows.length,files:0,empty:projected.rows.length===0}};}
+  catch{return empty(kind,"invalid");}
+ }
+ async function source<K extends Exclude<OfficeSourceDocumentKind,"clip_report">>(kind:Part["provenance"]["kind"],documentKind:K,toRows:(x:StoredDocument<K>)=>{rows:WebSourceRow[];sourceAt:string|null}):Promise<Part>{
+  if(documentsFailed)return empty(kind,"invalid");
+  const item=documents?.singletons[documentKind];if(item)return fromDocument(kind,documentKind,item,toRows);
+  return file(kind,canonicalOfficeSourcePath(documentKind,{root,env}),v=>toRows(projectOfficeSourceDocument(documentKind,v,{owner:options.owner})));
+ }
+ const reportRows=(x:StoredDocument<"clip_report">)=>x.type==="cycle"?{sourceAt:x.createdAt,rows:[rowAt("clip_cycle",x.id,x.status,x.createdAt,x.totals)]}:{sourceAt:x.createdAt,rows:[rowAt("clip_plan",x.id,x.publishMode,x.createdAt,{plannedClips:x.plannedClips})]};
+ const news=await source("news_state","news_state",x=>({sourceAt:x.lastRunAt||x.updatedAt,rows:x.queue.map(q=>rowAt("news_queue",q.id,q.status,q.createdAt,{qualityScore:q.qualityScore,approvalRequired:Number(q.approvalRequired),autoEligible:Number(q.autoEligible)},{lane:q.lane}))}));
+ const products=await source("products","products",x=>({sourceAt:last(x.map(q=>q.updatedAt)),rows:x.map(q=>rowAt("product",q.id,q.status,q.updatedAt,{}))}));
+ const suppliers=await source("suppliers","suppliers",x=>({sourceAt:last(x.map(q=>q.updatedAt)),rows:x.map(q=>rowAt("supplier",q.id,q.status,q.updatedAt,{supplierScore:q.score}))}));
  const projectLearning=(v:unknown)=>{const x=rawMarketing.parse(v);return {sourceAt:last(x.map(q=>q.createdAt)),rows:x.map(q=>row("marketing_plan",q.id,"recorded",q.createdAt,{clientsReviewed:q.clientsReviewed,improvementsQueued:q.improvementsQueued.length,rulesUpdated:q.rulesUpdated.length,safetyBlocks:q.safetyBlocks.length}))};};
  let learning:Part;
  if(options.marketingLearning){
   try{const raw=await options.marketingLearning();if(raw===null)learning=empty("marketing_learning","missing");else if(Buffer.byteLength(JSON.stringify(raw))>1000000)learning=empty("marketing_learning","limit");else{const projected=projectLearning(raw);if(projected.rows.some(row=>row.sourceAt&&Date.parse(row.sourceAt)>now+30000))throw Error("Future marketing source");learning={rows:projected.rows,provenance:{kind:"marketing_learning",status:"present",sourceAt:projected.sourceAt,digest:sourceDigest(raw),records:projected.rows.length,files:0,empty:projected.rows.length===0}};}}
   catch{learning=empty("marketing_learning","invalid");}
  }else learning=await file("marketing_learning",locate("MARKETING_COMMAND_CENTER_LEARNING_PATH","marketing_command_center_data/learning-runs.json"),projectLearning);
- const social=await file("social_metrics",locate("DROPSHIPPING_SOCIAL_METRICS_PATH","dropshipping_engine_data/social_metrics.json"),v=>{const x=rawSocial.parse(v);return {sourceAt:last(x.map(q=>q.createdAt)),rows:x.map(q=>row("campaign_metric",q.id,"recorded",q.createdAt,{impressions:q.impressions,views:q.views,orders:q.orders,revenueUsd:q.revenueUsd,spendUsd:q.spendUsd}))};});
- const clipMetrics=await file("clip_metrics",path.join(root,"clippers_workspace/metrics/metrics-summary.json"),v=>{const x=rawClipMetrics.parse(v);return {sourceAt:x.generatedAt,rows:x.records.map(q=>row("clip_metric",q.id,"recorded",x.generatedAt,{views:q.views,likes:q.likes,comments:q.comments,shares:q.shares,saves:q.saves}))};});
+ const social=await source("social_metrics","social_metrics",x=>({sourceAt:last(x.map(q=>q.createdAt)),rows:x.map(q=>rowAt("campaign_metric",q.id,"recorded",q.createdAt,{impressions:q.impressions,views:q.views,orders:q.orders,revenueUsd:q.revenueUsd,spendUsd:q.spendUsd}))}));
+ const clipMetrics=await source("clip_metrics","clip_metrics",x=>({sourceAt:x.generatedAt,rows:x.records.map(q=>rowAt("clip_metric",q.id,"recorded",x.generatedAt,{views:q.views,likes:q.likes,comments:q.comments,shares:q.shares,saves:q.saves}))}));
  const reports:Part[]=[];
- if(options.files===false)reports.push(empty("clip_reports","missing"));
+ if(documentsFailed)reports.push(empty("clip_reports","invalid"));
+ else if(documents && documents.reports.length){
+  // Durable reports replace the directory listing entirely (same slot budget).
+  const candidates=documents.reports.slice().sort((a,b)=>b.key.replace(/^automation-cycle-/,"").localeCompare(a.key.replace(/^automation-cycle-/,"")));
+  const reportLimit=Math.min(Math.max(0,20-fileCount),18);
+  for(const item of candidates.slice(0,reportLimit))reports.push(fromDocument("clip_reports","clip_report",item,reportRows));
+  if(documents.reportTotal>reportLimit)reports.push(empty("clip_reports","limit"));
+ }
+ else if(options.files===false)reports.push(empty("clip_reports","missing"));
  else try{
-  const dir=path.join(root,"clippers_workspace/reports"),entries=(await readdir(dir,{withFileTypes:true})).filter(e=>e.isFile()&&e.name.endsWith(".json")).sort((a,b)=>b.name.replace(/^automation-cycle-/,"").localeCompare(a.name.replace(/^automation-cycle-/,"")));
+  // Known non-report artifacts that other Clippers tools keep in this folder
+  // are skipped by exact name; any other unexpected file still marks it invalid.
+  const dir=path.join(root,"clippers_workspace/reports"),entries=(await readdir(dir,{withFileTypes:true})).filter(e=>e.isFile()&&e.name.endsWith(".json")&&!CLIPPERS_NON_REPORT_FILES.has(e.name)).sort((a,b)=>b.name.replace(/^automation-cycle-/,"").localeCompare(a.name.replace(/^automation-cycle-/,"")));
   const candidates=entries.filter(e=>/^(?:automation-cycle-)?\d{4}-/.test(e.name));
   if(candidates.length!==entries.length)reports.push(empty("clip_reports","invalid"));
   // Reserve provenance for metrics, unknown contracts and the limit marker.
   const reportLimit=Math.min(Math.max(0,20-fileCount),18-reports.length);
   for(const entry of candidates.slice(0,reportLimit)){
-   const daily=/^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/.test(entry.name),cycle=/^automation-cycle-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/.test(entry.name);
-   if(!daily&&!cycle){reports.push(empty("clip_reports","invalid"));continue;}
-   reports.push(await file("clip_reports",path.join(dir,entry.name),v=>{
-    if(cycle){const x=rawClipCycle.parse(v);if(x.userId!==options.owner || x.id!==x.automation.id || x.createdAt!==x.automation.createdAt || x.automation.posts.length!==x.automation.totals.posts)throw new Error("Invalid cycle report");return {sourceAt:x.createdAt,rows:[row("clip_cycle",x.id,x.automation.status,x.createdAt,x.automation.totals)]};}
-    const x=rawClipReport.parse(v);if(x.userId!==options.owner)throw new Error("Foreign report");return {sourceAt:x.createdAt,rows:[row("clip_plan",x.id,x.publishMode,x.createdAt,{plannedClips:x.plannedClips.length})]};
-   }));
+   if(!DAILY_REPORT_NAME.test(entry.name)&&!CYCLE_REPORT_NAME.test(entry.name)){reports.push(empty("clip_reports","invalid"));continue;}
+   reports.push(await file("clip_reports",path.join(dir,entry.name),v=>reportRows(projectOfficeSourceDocument("clip_report",v,{owner:options.owner,key:entry.name}))));
   }
   if(candidates.length>reportLimit)reports.push(empty("clip_reports","limit"));if(!entries.length)reports.push({rows:[],provenance:{kind:"clip_reports",status:"present",sourceAt:null,digest:sourceDigest([]),records:0,files:0,empty:true}});
  }catch(error){reports.push(empty("clip_reports",(error as NodeJS.ErrnoException).code==="ENOENT"?"missing":"invalid"));}

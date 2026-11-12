@@ -2,14 +2,17 @@ import {readMarketingLearning} from "./marketing-learning-store";
 import {withConnectionRetry} from "./office-source-pool";
 import {auditWebRoleSource,readWebRoleSources,type SourcePool,type WebRoleSource,type WebSourceRole} from "./office-web-role-sources";
 import {readStoredWebRoleSource} from "./office-web-role-store";
+import {readOfficeSourceDocuments} from "./office-source-documents";
 
-/** Roles with at least one canonical source that lives in the shared database
- * (marketing learning in revenue_engine_state, blackroom_remote_control). The
- * office worker can observe these itself, so it never needs the private,
- * autoscaled web host to be awake. marketing-cmo still needs the host's
- * social-metrics file: observed from the database alone it stays blocked with
- * SOURCE_MISSING, but its learning evidence is current and honest. */
-export const DATABASE_WEB_SOURCE_ROLES=["blackroom-videos","marketing-cmo"] as const satisfies readonly WebSourceRole[];
+/** Roles whose canonical sources all have a shared-database copy:
+ * blackroom_remote_control, marketing learning in revenue_engine_state, and
+ * office_source_documents (local-news state, dropshipping products/suppliers/
+ * social metrics, Clippers metrics summary and reports, written through by the
+ * web-host producers). The office worker observes these itself, so it never
+ * needs the private, autoscaled web host to be awake. A kind without a durable
+ * copy yet (migration not applied, producer not redeployed or never run) is
+ * reported missing and the audit stays blocked: never inferred from files. */
+export const DATABASE_WEB_SOURCE_ROLES=["news","news:ny-news","news:miami-news","blackroom-videos","dropshipping","marketing-cmo","clippers"] as const satisfies readonly WebSourceRole[];
 /** A stored host export is preferred only while it can still pass the audit at
  * completion time (exports expire after five minutes; keep a lease margin). */
 export const STORED_EXPORT_PREFERRED_MAX_AGE_MS=240000;
@@ -35,7 +38,7 @@ export async function readWorkerWebRoleSource(options:{pool:SourcePool;owner:str
  if(!storedFailed && preferStored(stored,options.owner,now()))return stored;
  if((DATABASE_WEB_SOURCE_ROLES as readonly WebSourceRole[]).includes(options.role)){
   const pool=withConnectionRetry(options.pool);
-  const sources=await readWebRoleSources({pool,owner:options.owner,configuredOwner:options.configuredOwner,root:"/",files:false,now:now(),marketingLearning:()=>readMarketingLearning(pool,options.owner)});
+  const sources=await readWebRoleSources({pool,owner:options.owner,configuredOwner:options.configuredOwner,root:"/",files:false,now:now(),marketingLearning:()=>readMarketingLearning(pool,options.owner),sourceDocuments:()=>readOfficeSourceDocuments(pool,options.owner)});
   const live=sources.find(source=>source.role===options.role);
   if(!live)throw new Error("Web source role missing");
   return live;
