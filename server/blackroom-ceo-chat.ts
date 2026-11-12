@@ -167,6 +167,9 @@ const EXTRA_WORDS: Array<{ agent: (typeof SPECIALISTS)[number]; words: string[] 
 const ANALYTICS_STRONG = ["analitica", "analytics", "metrica", "estadistica", "insight", "alcance", "como estuvo", "numeros", " vistas", "rendimiento", "como nos fue", "redes"];
 const PENDING_WORDS = ["por aprobar", "pendiente", "aprobacion", "que falta aprobar", "cola de posteos", "cola del publicador"];
 const STATUS_WORDS = ["como va el equipo", "como esta el equipo", "estado del equipo", "resumen del equipo", "brief", "que hace el equipo", "como vamos"];
+const CREATE_POST = /\b(prepara|preparame|preparar|crea|creame|crear|arma|armame|armar|hazme|haz un|haz el|programa|programalo|programar|agenda|agendalo|sube|subelo|subir|publica|publicalo|publicar|postea|postealo|postear|redacta|redactame|escribe un|escribeme|nuevo post|nueva publicacion)\b/;
+const PERFORMANCE_QUESTION = /\b(como (?:le |les |nos |me )?(?:ha|han|fue|fueron|va|van|esta|estan|anda|andan|salio|salieron|funciono|funcionaron|rindio|rindieron)|como estuvieron|que tal (?:les |le |nos )?(?:fue|va|van|funciono|funcionaron)|resultados?|rendimiento|desempeno|performance|cuantas vistas|cuantos likes|engagement|funcionaron|funciono|les ha ido|le ha ido|nos ha ido)\b/;
+const CONTENT_TOPIC = /\b(posts?|posteos?|publicacion(?:es)?|videos?|reels?|clips?|tiktok|instagram|facebook|youtube|redes|contenido|stories|historias)\b/;
 const APPROVE_WORDS = /\b(aprueba|apruebalo|apruebala|aprobar|approve|rechaza|rechazalo|rechazar)\b/;
 
 const NUMBER_WORDS: Record<string, number> = { un: 1, una: 1, uno: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5 };
@@ -327,8 +330,18 @@ export function routeCeoChatMessage(text: string, now: Date = new Date()): CeoCh
     picked = picked.filter((id) => id !== "blackroom-analytics");
   }
   // Asking what is pending/approving is a read of the queue, not a new post.
-  if (keys.includes("pending") && !/\b(prepara|preparame|crea|creame|arma|armame|hazme|haz|programa|nuevo|nueva)\b/.test(normalized)) {
+  if (keys.includes("pending") && !CREATE_POST.test(normalized)) {
     picked = picked.filter((id) => id !== "blackroom-publisher");
+  }
+  // "como le han ido a los posts", "que tal funcionaron los videos": a question about results is
+  // analytics, never a new post. The Publicador only runs when a post is asked to be made.
+  if (PERFORMANCE_QUESTION.test(normalized) && CONTENT_TOPIC.test(normalized) && !CREATE_POST.test(normalized)) {
+    picked = picked.filter((id) => id !== "blackroom-publisher");
+    if (!picked.includes("blackroom-analytics") && !picked.includes("blackroom-competition")) picked.unshift("blackroom-analytics");
+  } else if (picked.includes("blackroom-publisher") && !CREATE_POST.test(normalized)) {
+    // Mentioning "post" without asking to make one is a question about posts: answer with analytics.
+    picked = picked.filter((id) => id !== "blackroom-publisher");
+    if (!picked.length) picked.push("blackroom-analytics");
   }
   // "ideas de video" or "postea el video" are scripts/publisher work, not a status read of the videos agent.
   const legacyPicked = legacy.filter((id) => !(id === "blackroom-videos" && (picked.includes("blackroom-scripts") || picked.includes("blackroom-publisher"))));
