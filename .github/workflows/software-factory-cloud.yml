@@ -1,6 +1,11 @@
-name: Software factory (cloud)
+name: Software factory (cloud, manual fallback)
 
-# Runs the reviewed Asistente factory in the cloud: no PC required. Every two hours GitHub starts a
+# MANUAL-ONLY FALLBACK. The unified workflow `office-worker-cloud.yml` (job `factory-once`) is now the
+# scheduled path for the Software Factory; this file has no schedule so there are never two
+# schedulers. Both share the `software-factory-cloud` concurrency group, so a manual run here and a
+# scheduled run there never overlap.
+#
+# Runs the reviewed Asistente factory in the cloud: no PC required. When dispatched, GitHub starts a
 # clean, isolated machine; `software-factory-once` claims at most four stages from the PostgreSQL
 # queue, exits as soon as the queue is idle, and never replays uncertain work. It stays review-only
 # and company-orders-only: no publication, deployment, credentials or KONG changes.
@@ -9,8 +14,7 @@ name: Software factory (cloud)
 # the factory source named by the repository variable FACTORY_SOURCE_REF (the branch in production).
 
 on:
-  schedule:
-    - cron: "17 */2 * * *"
+  # Manual only: the scheduled path is the `factory-once` job in office-worker-cloud.yml.
   workflow_dispatch: {}
 
 permissions:
