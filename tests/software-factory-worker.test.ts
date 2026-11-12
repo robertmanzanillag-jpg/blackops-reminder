@@ -35,3 +35,19 @@ test("provider cannot spend rollback escrow or drop it from continuation",async(
  const h=harness({...job("deploy"),reservedCents:150,recoveryCents:50});await createSoftwareFactoryWorker({store:h.store,releaseContext:async()=>releaseFixture(),adapters:{deploy:{execute:async()=>({status:"completed",costCents:bad.costCents,next:{key:"next",projectId:"pilot",kind:"verify",headSha:sha,reservedCents:50,recoveryCents:bad.nextRecovery}})}}}).tick();assert.equal(h.completions[0][1].status,"unknown");assert.equal(h.completions[0][2],undefined);
  }
 });
+
+test("zero-cost deferral requeues through the store instead of completing, and never becomes unknown",async()=>{
+ const at=new Date("2026-11-07T10:00:00.000Z"),now=()=>at,deferUntil="2026-11-08T00:00:00.000Z";
+ const run=async(result:any,withDefer=true,task=job())=>{const h=harness(task);const deferred:any[]=[];if(withDefer)h.store.defer=async(...args:any[])=>{deferred.push(args);return true;};
+  const w=createSoftwareFactoryWorker({store:h.store,now,adapters:{build:{execute:async()=>result}}});task.leaseExpiresAt=new Date(at.getTime()+600000).toISOString();const tick=await w.tick();return {h,deferred,tick};};
+ const ok=await run({status:"blocked",costCents:0,reason:"FACTORY_DAILY_DRAFT_PR_LIMIT",deferUntil});
+ assert.equal(ok.h.completions.length,0);assert.deepEqual(ok.deferred[0][1],{reason:"FACTORY_DAILY_DRAFT_PR_LIMIT",notBefore:deferUntil});assert.equal(ok.tick.kind,"progressed");
+ // Invalid deferrals fall back to a terminal zero-cost block (never unknown, never charged).
+ for(const [result,withDefer] of [[{status:"blocked",costCents:0,reason:"X",deferUntil:"2026-12-01T00:00:00.000Z"},true],[{status:"blocked",costCents:1,reason:"X",deferUntil},true],[{status:"failed",costCents:0,reason:"X",deferUntil},true],[{status:"blocked",costCents:0,reason:"X",deferUntil:"2026-11-07T09:00:00.000Z"},true],[{status:"blocked",costCents:0,reason:"X",deferUntil:"2026-11-09T12:00:00.000Z"},true],[{status:"blocked",costCents:0,reason:"X",deferUntil},false]] as const){
+  const r=await run(result,withDefer);assert.equal(r.deferred.length,0);assert.equal(r.h.completions.length,1);assert.notEqual(r.h.completions[0][1].status,"unknown");assert.equal("deferUntil" in r.h.completions[0][1],false);
+ }
+ // An unconfirmed deferral write quarantines the worker rather than replaying the job.
+ const t=job();t.leaseExpiresAt=new Date(at.getTime()+600000).toISOString();
+ const h=harness(t);h.store.defer=async()=>false;
+ assert.equal((await createSoftwareFactoryWorker({store:h.store,now,adapters:{build:{execute:async()=>({status:"blocked",costCents:0,reason:"X",deferUntil})}}}).tick()).kind,"quarantined");
+});

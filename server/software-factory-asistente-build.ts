@@ -9,6 +9,7 @@ import { executeWithinSharedCredits } from "./shared-openai-credit-execution";
 import type { createSharedOpenAiCreditLedger } from "./shared-openai-credit-ledger";
 import type { FactoryActionsProfile } from "./software-factory-actions";
 import type { FactoryPipelineDependencies } from "./software-factory-pipeline";
+import { FACTORY_DEFAULT_WRITE_ROOTS, FACTORY_MAX_DRAFT_PULL_REQUESTS_PER_DAY, FACTORY_MAX_FILES_PER_ORDER, utcDayStart, validateFactoryOrderPaths, validateFactoryWriteRoots } from "./software-factory-write-scope";
 
 /** Concrete build-to-PR adapter. Does not install itself, enable a scheduler,
  * deploy, or claim low risk. Credentials stay in the two trusted transports. */
@@ -18,17 +19,23 @@ export function createAsistenteFactoryBuild(options: {
   githubRequest: (url: string, init: RequestInit) => Promise<Response>;
   model: Parameters<typeof createOpenAiFactoryTextProvider>[0];
   baseBranch: "main" | "codex/office-integrated-repair-20261106";
-  sourcePaths: readonly string[];
+  /** Allowed roots; each job's persisted finding.sourcePaths must fit inside. */
+  writeRoots?: readonly string[];
+  maxFilesPerOrder: number;
+  /** Durable owner-wide cap checked before export, model credit or publication. */
+  dailyDraftLimit?: { maxPerDay: number; countToday(now: Date, signal: AbortSignal): Promise<number> };
   checks: FactoryActionsProfile;
   maxOutputTokens: number;
   now: () => Date;
   maxPolls?: number;
   wait?: (milliseconds: number, signal: AbortSignal) => Promise<void>;
 }): NonNullable<FactoryPipelineDependencies["build"]> {
-  const paths = [...options.sourcePaths];
-  if (!paths.length) throw Error("FACTORY_ASISTENTE_SOURCE_REQUIRED");
+  const roots = validateFactoryWriteRoots(options.writeRoots ?? [...FACTORY_DEFAULT_WRITE_ROOTS]), maxFiles = options.maxFilesPerOrder;
+  if (!Number.isSafeInteger(maxFiles) || maxFiles < 1 || maxFiles > FACTORY_MAX_FILES_PER_ORDER) throw Error("FACTORY_ASISTENTE_SCOPE_CONFIGURATION_INVALID");
+  const limit = options.dailyDraftLimit;
+  if (limit && (typeof limit.countToday !== "function" || !Number.isSafeInteger(limit.maxPerDay) || limit.maxPerDay < 1 || limit.maxPerDay > FACTORY_MAX_DRAFT_PULL_REQUESTS_PER_DAY)) throw Error("FACTORY_DRAFT_LIMIT_INVALID");
   const repository = FACTORY_ASISTENTE_REPOSITORY;
-  const clientFor=(signal:AbortSignal)=>createFactoryAsistenteGitHubClient({request:async(url,init)=>{signal.throwIfAborted();return options.githubRequest(url,{...init,signal:init.signal?AbortSignal.any([signal,init.signal]):signal});},baseBranch:options.baseBranch,writePaths:paths,allowDispatch:options.checks.trigger==="workflow_dispatch"});
+  const clientFor=(signal:AbortSignal,paths:readonly string[])=>createFactoryAsistenteGitHubClient({request:async(url,init)=>{signal.throwIfAborted();return options.githubRequest(url,{...init,signal:init.signal?AbortSignal.any([signal,init.signal]):signal});},baseBranch:options.baseBranch,writePaths:paths,allowDispatch:options.checks.trigger==="workflow_dispatch"});
   const model = { ...options.model };
   const ledger = options.ledger, maxOutputTokens = options.maxOutputTokens;
   const profile = { baseBranch: options.baseBranch, checks: { ...options.checks } };
@@ -36,10 +43,21 @@ export function createAsistenteFactoryBuild(options: {
     if (project.repo !== repository || state.projectId !== project.id || !state.rootJobId || !Number.isSafeInteger(state.repairAttempts) || state.repairAttempts < 0) {
       return { status: "blocked", costCents: 0, reason: "FACTORY_ASISTENTE_SCOPE_INVALID" };
     }
-    const client=clientFor(context.signal);
+    // Persisted per-order selection: replay, repair and recovery reuse it verbatim.
+    let paths: string[];
+    try { paths = validateFactoryOrderPaths(state.finding?.sourcePaths, { roots, maxFiles }); }
+    catch { return { status: "blocked", costCents: 0, reason: "FACTORY_ASISTENTE_PATHS_INVALID" }; }
+    if (limit) {
+      const at = options.now(), tomorrow = new Date(Date.parse(utcDayStart(at)) + 86400000).toISOString();
+      let used: number;
+      try { used = await limit.countToday(at, context.signal); }
+      catch { context.signal.throwIfAborted(); return { status: "blocked", costCents: 0, reason: "FACTORY_DAILY_DRAFT_PR_COUNT_UNAVAILABLE", deferUntil: new Date(at.getTime() + 3600000).toISOString() }; }
+      if (!Number.isSafeInteger(used) || used < 0 || used >= limit.maxPerDay) return { status: "blocked", costCents: 0, reason: "FACTORY_DAILY_DRAFT_PR_LIMIT", deferUntil: tomorrow };
+    }
+    const client=clientFor(context.signal,paths);
     const exportSource:ReturnType<typeof createFactoryAsistenteGitHubSourceExporter>=async(repo,sha,destination)=>{
       const signal=AbortSignal.any([context.signal,AbortSignal.timeout(90000)]);
-      return createFactoryAsistenteGitHubSourceExporter(clientFor(signal),{sourcePaths:paths,signal})(repo,sha,destination);
+      return createFactoryAsistenteGitHubSourceExporter(clientFor(signal,paths),{sourcePaths:paths,signal})(repo,sha,destination);
     };
     const key = `factory:${createHash("sha256").update(JSON.stringify([project.id, state.rootJobId, state.repairAttempts])).digest("hex")}`;
     const generate = createOpenAiFactoryTextProvider({ ...model, request: async (url, init) => {

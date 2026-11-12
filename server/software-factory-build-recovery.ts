@@ -7,13 +7,14 @@ import { createSharedOpenAiCreditLedger, type SharedCreditState, type VerifiedCr
 import type { CouncilPool } from "./agent-council-store";
 import type { FactoryJob, FactoryJobInput } from "./software-factory-store";
 import type { FactoryPipelineState } from "./software-factory-pipeline";
+import { FACTORY_DEFAULT_WRITE_ROOTS, FACTORY_MAX_FILES_PER_ORDER, validateFactoryOrderPaths } from "./software-factory-write-scope";
 
 const canonical = (v: any): any => Array.isArray(v) ? v.map(canonical) : v && typeof v==='object' ? Object.fromEntries(Object.keys(v).sort().map(k=>[k,canonical(v[k])])) : v;
 export const buildRecoveryDigest = (v: unknown) => createHash("sha256").update(JSON.stringify(canonical(v))).digest("hex");
 const hash=buildRecoveryDigest;
 const ownerHash = (v: string) => createHash("sha256").update(v).digest("hex");
 const fail = (): never => { throw Error("FACTORY_BUILD_RECOVERY_UNVERIFIED"); };
-const requestSchema = z.object({ failedJobId: z.string().uuid(), rootJobId: z.string().uuid(), baseSha: z.string().regex(/^[a-f0-9]{40}$/), attempt: z.number().int().min(0).max(1), reservedCents: z.number().int().min(1).max(100) }).strict();
+const requestSchema = z.object({ failedJobId: z.string().uuid(), rootJobId: z.string().uuid(), baseSha: z.string().regex(/^[a-f0-9]{40}$/), attempt: z.number().int().min(0).max(1), reservedCents: z.number().int().min(1).max(100), sourcePaths: z.array(z.string()).min(1).max(FACTORY_MAX_FILES_PER_ORDER) }).strict();
 export type FactoryBuildRecoveryRequest = z.infer<typeof requestSchema>;
 export const buildRecoverySchemaSql = `CREATE TABLE IF NOT EXISTS software_factory_build_recoveries (
  owner_key text NOT NULL, failed_job_id uuid NOT NULL, successor_job_id uuid NOT NULL,
@@ -24,18 +25,25 @@ export const buildRecoverySchemaSql = `CREATE TABLE IF NOT EXISTS software_facto
 // Mirror the reviewed harness data without importing its executable CLI into the
 // production CJS bundle. A regression test requires exact equality with the CLI.
 export const RECOVERY_HARNESS_FILES = ['script/software-factory-office-ui-acceptance.ts', 'script/software-factory-office-ui-fixture.mjs', 'script/software-factory-office-ui-oracle.mjs', 'script/software-factory-ui-console.mjs', 'script/software-factory-ui-static.mjs', 'script/software-factory-role-acceptance.ts', 'server/software-factory-role-acceptance.ts', 'server/software-factory-role-deadline.ts', 'server/office-role-snapshots.ts'];
-export const RECOVERY_EQUIVALENT_PATHS = ['server/office-role-work.ts', 'tests/office-role-work.test.ts', '.github/workflows/factory-candidate-checks.yml', ...RECOVERY_HARNESS_FILES];
+export const RECOVERY_FIXED_PATHS = ['.github/workflows/factory-candidate-checks.yml', ...RECOVERY_HARNESS_FILES];
+/** The job's persisted per-order selection plus the fixed workflow/harness files. */
+export function recoveryEquivalentPaths(sourcePaths: readonly string[]): string[] {
+    const selected = validateFactoryOrderPaths([...sourcePaths], { roots: [...FACTORY_DEFAULT_WRITE_ROOTS], maxFiles: FACTORY_MAX_FILES_PER_ORDER });
+    return [...new Set([...selected, ...RECOVERY_FIXED_PATHS])];
+}
 type WorkflowBlobChange = { before: string; after: string };
 type RebaseProof = { originalBaseSha: string; targetBaseSha: string; files: Array<[string, string]>; reviewedWorkflowBlobChange?: WorkflowBlobChange };
 /** Reads immutable Git objects only; no checkout, fetch, shell or candidate execution. */
-export async function verifyRecoveryRebase(repositoryPath: string, originalBaseSha: string, targetBaseSha: string, reviewedWorkflowBlobChange?: WorkflowBlobChange): Promise<RebaseProof> {
+export async function verifyRecoveryRebase(repositoryPath: string, originalBaseSha: string, targetBaseSha: string, sourcePaths: readonly string[], reviewedWorkflowBlobChange?: WorkflowBlobChange): Promise<RebaseProof> {
     if (![originalBaseSha,targetBaseSha].every(s=>/^[a-f0-9]{40}$/.test(s))) fail();
+    let equivalent: string[];
+    try { equivalent = recoveryEquivalentPaths(sourcePaths); } catch { return fail(); }
     const run = promisify(execFile);
     const git = async (args: string[]) => (await run('git', ['-C',repositoryPath,...args], {windowsHide:true,timeout:10000,maxBuffer:16384})).stdout.trim();
     await git(['merge-base','--is-ancestor',originalBaseSha,targetBaseSha]);
     const exception=reviewedWorkflowBlobChange===undefined?undefined:z.object({before:z.string().regex(/^[a-f0-9]{40}$/),after:z.string().regex(/^[a-f0-9]{40}$/)}).strict().parse(reviewedWorkflowBlobChange);
     const files: Array<[string,string]> = [];let exceptionUsed=false;
-    for (const file of RECOVERY_EQUIVALENT_PATHS) {
+    for (const file of equivalent) {
         const before=await git(['ls-tree',originalBaseSha,'--',file]),after=await git(['ls-tree',targetBaseSha,'--',file]);
         const matched=/^100644 blob ([a-f0-9]{40})\t(.+)$/.exec(before);
         if (!matched || matched[2]!==file) fail();
@@ -77,7 +85,7 @@ function matchesRecovery(job: FactoryJob, failed: FactoryJob): boolean {
 export async function enqueueFailedBuildRecovery(options: { pool: CouncilPool; owner: string; grant: VerifiedCreditGrant; request: FactoryBuildRecoveryRequest; repositoryPath: string; targetBaseSha: string; reviewedWorkflowBlobChange?: WorkflowBlobChange; now: () => Date }): Promise<FactoryJob> {
     const request = requestSchema.parse(options.request), owner = options.owner;
     if (!owner?.trim()) fail();
-    const rebase = await verifyRecoveryRebase(options.repositoryPath,request.baseSha,options.targetBaseSha,options.reviewedWorkflowBlobChange);
+    const rebase = await verifyRecoveryRebase(options.repositoryPath,request.baseSha,options.targetBaseSha,request.sourcePaths,options.reviewedWorkflowBlobChange);
     const key = ownerHash(owner), c = await options.pool.connect();
     try {
         await c.query("BEGIN");
@@ -87,7 +95,7 @@ export async function enqueueFailedBuildRecovery(options: { pool: CouncilPool; o
         const failedRow = (await c.query("SELECT * FROM software_factory_jobs WHERE owner_key=$1 AND id=$2 FOR UPDATE", [key, request.failedJobId])).rows[0];
         if (!failedRow) fail();
         const failed = decode(failedRow), state = recoverableFailedBuild(failed);
-        if (state.rootJobId !== request.rootJobId || state.finding.baseSha !== request.baseSha || state.repairAttempts !== request.attempt) fail();
+        if (state.rootJobId !== request.rootJobId || state.finding.baseSha !== request.baseSha || state.repairAttempts !== request.attempt || !Array.isArray(state.finding.sourcePaths) || hash(state.finding.sourcePaths) !== hash(request.sourcePaths)) fail();
         const existing = (await c.query("SELECT * FROM software_factory_jobs WHERE owner_key=$1 AND job_key=$2", [key, `${failed.id}.repair`])).rows[0];
         if (existing) {
             const job = decode(existing);

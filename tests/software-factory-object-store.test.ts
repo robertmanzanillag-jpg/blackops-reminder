@@ -160,3 +160,17 @@ test("older unknown liabilities carry until stopped reconciliation then charge s
  f.now=Date.parse("2027-01-01T00:00:00Z");await f.store.initializeMonth(owner,"2027-01",0);
  state=await f.store.status(owner);assert.equal(state.spentCents,0);assert.equal(state.reservedCents,6000);
 });
+
+test("object ledger deferral requeues a claimed job at zero cost until notBefore, within its month",async()=>{
+ const f=await fixture();await f.store.enqueue(owner,input("deferred",200));const job=(await f.store.claim("worker"))!;
+ const tomorrow="2026-11-07T00:00:00.000Z";
+ assert.equal(await f.store.defer({...job,fence:randomUUID()},{reason:"FACTORY_DAILY_DRAFT_PR_LIMIT",notBefore:tomorrow}),false);
+ assert.equal(await f.store.defer(job,{reason:"FACTORY_DAILY_DRAFT_PR_LIMIT",notBefore:"2026-12-01T00:00:00.000Z"}),false,"cross-month deferral is refused");
+ await assert.rejects(f.store.defer(job,{reason:"lower case",notBefore:tomorrow}));
+ assert.equal(await f.store.defer(job,{reason:"FACTORY_DAILY_DRAFT_PR_LIMIT",notBefore:tomorrow}),true);
+ assert.equal(await f.store.complete(job,{status:"completed",costCents:1}),false);
+ const status=await f.store.status(owner);assert.equal(status.reservedCents,200);assert.equal(status.spentCents,0);
+ assert.equal(await f.store.claim("worker"),undefined);assert.deepEqual(await f.store.idleState(),{kind:"idle"});
+ f.now=Date.parse(tomorrow);const again=(await f.store.claim("worker"))!;assert.equal(again.id,job.id);
+ assert.equal(await f.store.complete(again,{status:"completed",costCents:3}),true);assert.equal((await f.store.status(owner)).spentCents,3);
+});

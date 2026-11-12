@@ -3,16 +3,18 @@ import type {FactoryCandidate} from "./software-factory";
 import type {FactoryPilotGitHubClient} from "./software-factory-github-client";
 import {FACTORY_ASISTENTE_REPOSITORY} from "./software-factory-github-client";
 import type {AsistenteReviewSource} from "./software-factory-asistente-review";
+import {FACTORY_DEFAULT_WRITE_ROOTS,FACTORY_MAX_FILES_PER_ORDER,validateFactoryOrderPaths,validateFactoryWriteRoots} from "./software-factory-write-scope";
 
 /** Exact immutable GitHub diff, without cloning, executing repository code,
  * fetching unchanged file bodies or giving source code access to credentials. */
-export function createAsistenteReviewSourceLoader(client: FactoryPilotGitHubClient, paths: readonly string[]) {
- const allowed=new Set(paths),scope={owner:"robertmanzanillag-jpg",repo:"blackops-reminder"};
- const safe=(path:string)=>path.length<=1000&&/^(?:client\/src\/|server\/|shared\/|tests\/)/.test(path)&&
-  !/[\\:\x00-\x20\x7f]/.test(path)&&!path.split("/").some(s=>!s||s==="."||s===".."||/[. ]$/.test(s)||/^\.(?:env|git|aws|ssh)/i.test(s)||/^(?:credentials|secrets|node_modules|id_rsa|id_ed25519)$/i.test(s))&&
-  !/kong|software-factory|office-token-budget|credit|auth|permission|payment|migration|\.(?:pem|key|p12|pfx)$/i.test(path);
- if(!paths.length||paths.length>64||allowed.size!==paths.length||paths.some(p=>!safe(p)))throw Error("FACTORY_REVIEW_PATHS_INVALID");
- return async(rawCandidate:FactoryCandidate,signal:AbortSignal):Promise<AsistenteReviewSource>=>{
+export function createAsistenteReviewSourceLoader(client: FactoryPilotGitHubClient, policy: { writeRoots?: readonly string[]; maxFilesPerOrder: number }) {
+ const scope={owner:"robertmanzanillag-jpg",repo:"blackops-reminder"};
+ const roots=validateFactoryWriteRoots(policy?.writeRoots??[...FACTORY_DEFAULT_WRITE_ROOTS]),maxFiles=policy?.maxFilesPerOrder;
+ if(!Number.isSafeInteger(maxFiles)||maxFiles<1||maxFiles>FACTORY_MAX_FILES_PER_ORDER)throw Error("FACTORY_REVIEW_PATHS_INVALID");
+ /** paths is the job's persisted per-order selection (never re-selected). */
+ return async(rawCandidate:FactoryCandidate,signal:AbortSignal,paths:readonly string[]):Promise<AsistenteReviewSource>=>{
+  let allowed:Set<string>;
+  try{allowed=new Set(validateFactoryOrderPaths(structuredClone(paths),{roots,maxFiles}));}catch{throw Error("FACTORY_REVIEW_PATHS_INVALID");}
   const candidate=structuredClone(rawCandidate);
   signal.throwIfAborted();
   if(!/^[a-f0-9]{40}$/.test(candidate.baseSha)||!/^[a-f0-9]{40}$/.test(candidate.headSha)||candidate.baseSha===candidate.headSha||

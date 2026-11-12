@@ -22,21 +22,51 @@ import { createFactoryOpenAiTransport } from "./software-factory-openai-transpor
 import { createRoleAcceptanceArtifactReader } from "./software-factory-role-artifact";
 import { createOfficeUiArtifactReader } from "./software-factory-office-ui-artifact";
 import { ROLE_WORK_ACCEPTANCE_ID } from "./software-factory-role-acceptance";
+import { FACTORY_DEFAULT_WRITE_ROOTS, FACTORY_MAX_DRAFT_PULL_REQUESTS_PER_DAY, FACTORY_MAX_FILES_PER_ORDER, utcDayStart, validateFactoryOrderPaths, validateFactoryWriteRoots } from "./software-factory-write-scope";
+import type { FactoryJob } from "./software-factory-store";
 const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const sha = z.string().regex(/^[a-f0-9]{40}$/), digest = z.string().regex(/^[a-f0-9]{64}$/);
 const cents = z.number().int().min(1).max(100);
 const configSchema = z.object({ owner: z.string().min(1).max(200), projectId: z.literal("asistente"), baseBranch: z.enum(["main", "codex/office-integrated-repair-20261106"]),
-    sourcePaths: z.array(z.enum(["server/office-role-work.ts", "tests/office-role-work.test.ts"])).min(1).max(2),
+    writeRoots: z.array(z.string().min(1).max(200)).min(1).max(16).default([...FACTORY_DEFAULT_WRITE_ROOTS]),
+    maxFilesPerOrder: z.number().int().min(1).max(FACTORY_MAX_FILES_PER_ORDER).default(6),
+    maxDraftPullRequestsPerDay: z.number().int().min(1).max(FACTORY_MAX_DRAFT_PULL_REQUESTS_PER_DAY).default(5),
     checks: z.object({ trigger: z.literal("push"), workflowId: z.number().int().positive(), workflowPath: z.literal(".github/workflows/factory-candidate-checks.yml"), workflowSha256: digest, jobName: z.string().min(1), testStep: z.string().min(1), buildStep: z.string().min(1), browserStep: z.string().min(1) }).strict(),
     allowGitHubResultsAzureHosts: z.boolean().default(false),
     archiveHosts: z.array(z.string().regex(/^[-a-z0-9]+\.blob\.core\.windows\.net$/)).min(1).max(10),
     reservations: z.object({ discover: cents, build: cents, simulate: cents, review: cents }).strict(), maxOutputTokens: z.number().int().min(16).max(8192), maxInputTokens: z.number().int().min(1).max(100000),
-    orders: z.array(z.object({ id: z.string().min(1).max(200), revision: digest, baseSha: sha, kind: z.enum(["bug", "improvement"]), scenarioId: z.enum([ROLE_WORK_ACCEPTANCE_ID,ROLE_WORK_DEADLINE_ID]) }).strict()).max(5),
+    orders: z.array(z.object({ id: z.string().min(1).max(200), revision: digest, baseSha: sha, kind: z.enum(["bug", "improvement"]), scenarioId: z.enum([ROLE_WORK_ACCEPTANCE_ID,ROLE_WORK_DEADLINE_ID]), paths: z.array(z.string().min(1).max(1000)).min(1).max(FACTORY_MAX_FILES_PER_ORDER) }).strict()).max(5),
     ui: z.object({ workflowSha256: digest, harnessSha256: digest, workflowId: z.number().int().positive() }).strict(),
-}).strict();
+}).strict().superRefine((config, issue) => {
+    // Code-owned denials apply even when configuration tries to widen scope.
+    try { validateFactoryWriteRoots(config.writeRoots); } catch { issue.addIssue({ code: "custom", path: ["writeRoots"], message: "FACTORY_WRITE_ROOTS_INVALID" }); return; }
+    config.orders.forEach((order, index) => {
+        try { validateFactoryOrderPaths(order.paths, { roots: config.writeRoots, maxFiles: config.maxFilesPerOrder }); }
+        catch { issue.addIssue({ code: "custom", path: ["orders", index, "paths"], message: "FACTORY_ORDER_PATHS_INVALID" }); return; }
+        // The pipeline requires a permanent regression test in every candidate.
+        if (!order.paths.some(path => /(^|\/)(tests?|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$/.test(path))) issue.addIssue({ code: "custom", path: ["orders", index, "paths"], message: "FACTORY_ORDER_TEST_PATH_REQUIRED" });
+    });
+});
 export type AsistenteOperatorConfig = z.input<typeof configSchema>;
 /** Strict noncredential operator configuration validation; no I/O or admission. */
 export function validateAsistenteOperatorConfig(raw:unknown){return configSchema.parse(structuredClone(raw));}
+/** Draft PRs (or possibly published, unreconciled builds) started or finished
+ * in the current UTC day. Uses the bounded store listing and fails closed when
+ * the window cannot prove the full day is covered. */
+export function countDraftPullRequestsToday(jobs: readonly FactoryJob[], now: Date, ownerKey: string, listLimit = 100): number {
+    const since = Date.parse(utcDayStart(now));
+    if (!Array.isArray(jobs)) throw Error("FACTORY_DRAFT_COUNT_UNVERIFIED");
+    if (jobs.length >= listLimit && jobs.every(job => Date.parse(job.createdAt) >= since)) throw Error("FACTORY_DRAFT_COUNT_UNVERIFIED");
+    return jobs.filter(job => {
+        if (job.ownerKey !== ownerKey || job.kind !== "build") return false;
+        const created = Date.parse(job.createdAt), completed = Date.parse(job.completedAt ?? "");
+        if (!(created >= since || completed >= since)) return false;
+        const result = job.result as { reconciled?: unknown; evidence?: { pipelineState?: { candidate?: { prUrl?: unknown } } } } | undefined;
+        return typeof result?.evidence?.pipelineState?.candidate?.prUrl === "string" || job.status === "unknown" || result?.reconciled === true;
+    }).length;
+}
+/** Admission-side variant: an unprovable count defers admission (no hold). */
+function countDraftPullRequestsTodaySafe(jobs: readonly FactoryJob[], now: Date, ownerKey: string) { try { return countDraftPullRequestsToday(jobs, now, ownerKey); } catch { return Number.POSITIVE_INFINITY; } }
 export type OperatorUiReader = (input: {
     projectId: string;
     baseSha: string;
@@ -60,10 +90,10 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     now: () => Date;
 }) {
     const config = validateAsistenteOperatorConfig(raw), { store, credits, now } = deps;
-    if (new Set(config.sourcePaths).size !== config.sourcePaths.length || !config.sourcePaths.includes("server/office-role-work.ts") || !config.sourcePaths.includes("tests/office-role-work.test.ts") || config.ui.workflowId !== config.checks.workflowId || config.ui.workflowSha256 !== config.checks.workflowSha256 || new Set(config.orders.map(o => o.id)).size !== config.orders.length || typeof deps.readUi !== "function")
+    if (config.ui.workflowId !== config.checks.workflowId || config.ui.workflowSha256 !== config.checks.workflowSha256 || new Set(config.orders.map(o => o.id)).size !== config.orders.length || typeof deps.readUi !== "function")
         throw Error("FACTORY_OPERATOR_CONFIGURATION_INVALID");
     const owner = config.owner, ownerKey = createHash("sha256").update(owner).digest("hex");
-    const client = createFactoryAsistenteGitHubClient({ request: deps.githubRequest, baseBranch: config.baseBranch, writePaths: config.sourcePaths, allowDispatch: false });
+    const client = createFactoryAsistenteGitHubClient({ request: deps.githubRequest, baseBranch: config.baseBranch, writePaths: [], allowDispatch: false });
     const project = async () => { const p = await store.projectByOwnerKey(ownerKey, config.projectId); if (!p || p.repo !== ASISTENTE_REPOSITORY || p.id !== config.projectId || p.automaticRelease || p.providerSupportsRelease || p.providerSupportsRollback || p.journeys.length !== 2 || !["office-session-login", "office-company-navigation"].every(j => p.journeys.includes(j)))
         throw Error("FACTORY_OPERATOR_PROJECT_INVALID"); return p; };
     const orders = async () => { const rows = structuredClone(await deps.readOrders(owner)); if (!Array.isArray(rows) || rows.length > 1000 || new Set(rows.map(o => o.id)).size !== rows.length)
@@ -117,12 +147,13 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     const readAcceptance = createRoleAcceptanceArtifactReader({ apiRequest: deps.githubRequest, download: deps.download, archiveHosts: config.archiveHosts, allowGitHubResultsAzureHosts: config.allowGitHubResultsAzureHosts, now: () => now().getTime() });
     const model = { request: deps.modelRequest, model: credits.pricing.model, inputNanoUsdPerToken: credits.pricing.inputNanoUsdPerToken, outputNanoUsdPerToken: credits.pricing.outputNanoUsdPerToken, pricingValidUntil: credits.pricing.validUntil, maxInputTokens: config.maxInputTokens, now };
     const buildModel = model.model === "gpt-6-astra" ? { ...model, reasoningEffort: "low" as const } : model;
-    const build = createAsistenteFactoryBuild({ ledger: credits.ledger, githubRequest: deps.githubRequest, model: buildModel, baseBranch: config.baseBranch, sourcePaths: config.sourcePaths, checks: config.checks, maxOutputTokens: config.maxOutputTokens, readAcceptance, now });
-    const review = createAsistenteIndependentReview({ ledger: credits.ledger, model, load: createAsistenteReviewSourceLoader(client, config.sourcePaths), now, maxOutputTokens: Math.min(config.maxOutputTokens, 4096) });
+    const draftsToday = async (at: Date, signal?: AbortSignal) => { signal?.throwIfAborted(); return countDraftPullRequestsToday(await store.list(owner), at, ownerKey); };
+    const build = createAsistenteFactoryBuild({ ledger: credits.ledger, githubRequest: deps.githubRequest, model: buildModel, baseBranch: config.baseBranch, writeRoots: config.writeRoots, maxFilesPerOrder: config.maxFilesPerOrder, dailyDraftLimit: { maxPerDay: config.maxDraftPullRequestsPerDay, countToday: draftsToday }, checks: config.checks, maxOutputTokens: config.maxOutputTokens, readAcceptance, now });
+    const review = createAsistenteIndependentReview({ ledger: credits.ledger, model, load: createAsistenteReviewSourceLoader(client, { writeRoots: config.writeRoots, maxFilesPerOrder: config.maxFilesPerOrder }), now, maxOutputTokens: Math.min(config.maxOutputTokens, 4096) });
     const discover = createCompanyOrderDiscovery({ readMainOrder: id => readMainOrder(owner, id), resolveHead: async (repo, signal) => { signal.throwIfAborted(); if (repo !== ASISTENTE_REPOSITORY)
             throw Error("FACTORY_OPERATOR_REPOSITORY_INVALID"); return (await client.git.getRef({ owner: "robertmanzanillag-jpg", repo: "blackops-reminder", ref: `heads/${config.baseBranch}` })).data.object.sha; }, inspectOrder: async (order, baseSha, signal) => { signal.throwIfAborted(); const { mapping } = await mapped(order); if (baseSha !== mapping.baseSha)
-            throw Error("FACTORY_OPERATOR_ACCEPTANCE_BASE_CHANGED"); return { kind: mapping.kind, regressionScenarioId: mapping.scenarioId }; } });
-    const schedule = createFactoryCompanyOrderScheduler({ owner, project, readOrders: async () => { const rows = await orders(); return rows.filter(o => config.orders.some(m => m.id === o.id)); }, ledger: credits.ledger, reservationCents: config.reservations.discover, admit: admitWithinCredits });
+            throw Error("FACTORY_OPERATOR_ACCEPTANCE_BASE_CHANGED"); return { kind: mapping.kind, regressionScenarioId: mapping.scenarioId, sourcePaths: [...mapping.paths] }; } });
+    const schedule = createFactoryCompanyOrderScheduler({ owner, project, readOrders: async () => { const rows = await orders(); if (countDraftPullRequestsTodaySafe(await store.list(owner), now(), ownerKey) >= config.maxDraftPullRequestsPerDay) return []; return rows.filter(o => config.orders.some(m => m.id === o.id)); }, ledger: credits.ledger, reservationCents: config.reservations.discover, admit: admitWithinCredits });
     return { owner, store, reservationCents: config.reservations.discover, readMainOrder, admitWithinCredits,
         async createFactoryWorkerOptions() { await project(); return createTrustedFactoryProposalWorkerOptions({ owner, store, now, recoveryPrevious:deps.recoveryPrevious, reservations: config.reservations, scheduleCompanyOrders: schedule, stages: { discover, build, review, simulate: async (p, state, context) => { if (!state.candidate || p.id !== config.projectId)
                     throw Error("FACTORY_OPERATOR_CANDIDATE_REQUIRED"); const tests = state.evidence.filter(e => e.kind === "tests" && e.passed && e.headSha === state.candidate!.headSha && e.baseSha === state.candidate!.baseSha); const urls = tests.flatMap(e => e.artifactIds).filter(id => /^https:\/\/github\.com\/robertmanzanillag-jpg\/blackops-reminder\/actions\/runs\/[1-9][0-9]*$/.test(id)); if (urls.length !== 1)

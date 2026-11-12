@@ -15,7 +15,8 @@ commit. It retains the original order and outcome, records a successor and
 authorization atomically, and reserves the normal monthly budget. Duplicate
 operator requests return the same successor, even if subsequently unpaused.
 
-Rebase proof requires Git ancestry and identical blobs for both editable files,
+Rebase proof requires Git ancestry and identical blobs for every file in the
+job's persisted per-order selection (`request.sourcePaths`),
 the factory workflow and nine protected harness files. One separately reviewed
 workflow-only blob pair can be supplied explicitly; it is recorded in the proof.
 No generic workflow exception exists. Changed editable source or harness blocks
