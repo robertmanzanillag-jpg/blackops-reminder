@@ -10,6 +10,7 @@ import { getGoogleDriveOAuthStatus } from "./google-drive-oauth";
 import { hasRealValue, hasStrongSecret } from "./ceo-doctor-cli";
 import { getMetricoolConfigStatus, getMetricoolTrackingPlan, type MetricoolNetwork } from "./metricool-tracking";
 import { getSystemUserId } from "./user-context";
+import { mirrorOfficeSourceFile } from "./office-source-document-sync";
 import { LOCAL_ENV_FILES, loadLocalEnvFiles } from "./env-loader";
 
 export type ClipperAccountCategory = "sports" | "memes" | "streamers";
@@ -29994,6 +29995,7 @@ export async function importClipperMetricoolApprovalEvidence(userId = getSystemU
 
   const metrics = await buildMetricsSummary(accounts);
   await writeFile(METRICS_SUMMARY_PATH, JSON.stringify(metrics, null, 2));
+  mirrorOfficeSourceFile({ kind: "clip_metrics", filePath: METRICS_SUMMARY_PATH, raw: metrics });
 
   return { metricoolApprovalEvidenceImport, metrics, status: await getClipperStatus(userId) };
 }
@@ -32688,6 +32690,7 @@ export async function ingestClipperMetrics(userId = getSystemUserId()): Promise<
   const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
   const metrics = await buildMetricsSummary(accounts);
   await writeFile(METRICS_SUMMARY_PATH, JSON.stringify(metrics, null, 2));
+  mirrorOfficeSourceFile({ kind: "clip_metrics", filePath: METRICS_SUMMARY_PATH, raw: metrics });
   return { metrics, status: await getClipperStatus(userId) };
 }
 
@@ -45820,13 +45823,15 @@ export async function runClipperAutomationCycle(input: unknown = {}, userId = ge
 
   await writeFile(queuePath, JSON.stringify(queue, null, 2));
   await writeFile(schedulePath, JSON.stringify(automation, null, 2));
-  await writeFile(reportPath, JSON.stringify({
+  const cycleReport = {
     id,
     userId,
     createdAt: automation.createdAt,
     summary: `Ciclo diario Clippers: ${automation.totals.posts}/${automation.totals.dailyTargetPosts} posts evaluados para ${automation.totals.weeklyTargetClips}/semana, ${automation.totals.blocked} bloqueados, ${automation.totals.scheduled} programados.`,
     automation,
-  }, null, 2));
+  };
+  await writeFile(reportPath, JSON.stringify(cycleReport, null, 2));
+  mirrorOfficeSourceFile({ kind: "clip_report", filePath: reportPath, raw: cycleReport, owner: userId });
   return { automation, status: await getClipperStatus(userId) };
 }
 
@@ -45907,6 +45912,7 @@ export async function runClipperDailyPlan(input: unknown = {}, userId = getSyste
   };
 
   await writeFile(reportPath, JSON.stringify(report, null, 2));
+  mirrorOfficeSourceFile({ kind: "clip_report", filePath: reportPath, raw: report, owner: userId });
   return { report, status: await getClipperStatus(userId) };
 }
 
