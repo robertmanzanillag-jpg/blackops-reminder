@@ -186,6 +186,8 @@ jobs:
           SOFTWARE_FACTORY_OWNER_ID: ${{ secrets.FACTORY_OWNER_ID || secrets.OFFICE_OWNER_ID }}
           OPENAI_API_KEY: ${{ secrets.FACTORY_OPENAI_API_KEY || secrets.OFFICE_OPENAI_API_KEY }}
           SOFTWARE_FACTORY_GITHUB_TOKEN: ${{ secrets.SOFTWARE_FACTORY_GITHUB_TOKEN }}
+          # Optional office handoff: only the exact string 'true' enqueues one read-only office review per verified draft PR head.
+          SOFTWARE_FACTORY_OFFICE_REVIEW_ENABLED: ${{ vars.SOFTWARE_FACTORY_OFFICE_REVIEW_ENABLED || 'false' }}
         run: |
           set -euo pipefail
           export OPENAI_SHARED_CREDIT_CONFIG="$FACTORY_CONFIG_DIR/shared-credit.json"
