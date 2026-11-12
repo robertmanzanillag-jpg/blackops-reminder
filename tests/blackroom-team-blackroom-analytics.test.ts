@@ -251,3 +251,36 @@ test("old data is flagged with its date instead of being shown as current", asyn
     assert.match(result.summary, /METRICOOL_USER_TOKEN/);
   });
 });
+
+test("without per-post detail, Metricool live totals still give a real report; failures say why", async () => {
+  await withDir(async (dataDir) => {
+    const agent = createBlackRoomAnalyticsAgent({
+      readSourceState: async () => ({ analyticsImports: {}, commands: [] }),
+      collectMetricool: async () => ({
+        networkSamples: { tiktok: 120, youtube: 40, facebook: 0 },
+        networkErrors: { facebook: "sin datos" },
+        lastCheckedAt: NOW.toISOString(),
+        networkMedianViews: { tiktok: 850, youtube: 1300 },
+        networkEngagementRate: { tiktok: 0.062 },
+        recommendedTimesByNetwork: { tiktok: ["20:00", "22:00"] },
+      }),
+    });
+    const ctx = createBlackRoomTeamContext("blackroom-analytics", { env: { METRICOOL_USER_TOKEN: "tok" }, now: () => NOW, fetch: failingFetch, dataDir });
+    const result = await agent.run(ctx, { window: "daily", refresh: true });
+    assert.equal(result.ok, true, result.summary);
+    assert.match(result.summary, /Metricool en vivo/);
+    assert.match(result.summary, /YouTube: 40 posts, mediana 1.3K vistas por post/);
+    assert.match(result.summary, /TikTok: 120 posts, mediana 850 vistas por post, engagement 6.2%, mejores horas 20:00 y 22:00/);
+    assert.match(result.summary, /Sin datos de: Facebook/);
+    const status = await agent.getStatus(ctx);
+    assert.equal(status.state, "working");
+
+    const failing = createBlackRoomAnalyticsAgent({
+      readSourceState: async () => ({ analyticsImports: {}, commands: [] }),
+      collectMetricool: async () => { throw new Error("401 token invalido"); },
+    });
+    const bad = await failing.run(ctx, { window: "daily", refresh: true });
+    assert.equal(bad.ok, false);
+    assert.match(bad.summary, /401 token invalido/);
+  });
+});
