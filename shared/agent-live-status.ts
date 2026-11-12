@@ -7,6 +7,8 @@
 //
 // This module is pure (no React, no fetch) so it can be unit tested with node.
 
+import { BLACKROOM_TEAM_IDS, blackRoomTeamActivity, blackRoomTeamProblems, blackRoomTeamStatusUrl, blackRoomTeamToLiveStatus } from "./blackroom-team";
+
 export type AgentLiveState = "working" | "available" | "needs-setup" | "error" | "offline" | "checking";
 
 export type AgentLiveStatus = {
@@ -43,7 +45,8 @@ export type AgentProbe = {
     | "news"
     | "city-news"
     | "kong-videos"
-    | "kong-metrics";
+    | "kong-metrics"
+    | "blackroom-team";
   onDemandNote?: string;
   // city-news: which local-news lane (city) this desk owns.
   lane?: "miami-news" | "ny-news";
@@ -61,6 +64,7 @@ export function presentProbeStatus(probe:AgentProbe,status:AgentLiveStatus):Agen
     "dev-health":"Registro de salud disponible",news:"Ronda de noticias registrada; publicación sin verificar",
     "city-news":"Datos de la última ronda disponibles", "kong-videos":"Archivos de video existentes; edición actual sin verificar",
     legal:"Informe de revisión disponible", "blackroom-videos":"Reporte de videos disponible", "kong-metrics":"Métricas registradas disponibles",
+    "blackroom-team":"Reporte del equipo Black Room disponible; ejecución actual sin verificar",
   };
   const label=probe.kind === "clippers" && status.label === "Ultima corrida OK" ? "Última ejecución completada; no está ejecutándose ahora" : labels[probe.kind] || "Información disponible; ejecución actual sin verificar";
   return {...status,state:"available",label,lifePenaltyExempt:true};
@@ -116,6 +120,8 @@ export const agentProbes: Record<string, AgentProbe> = {
   "kong-metrics": { key: "kong-ops-state", url: "/api/kong-ops/state", intervalMs: 5 * MINUTE, kind: "kong-metrics" },
   // Not fetched by the building: it reuses the legal query the office page already runs.
   legal: { key: "legal-compliance-reports", url: "/api/legal-compliance/reports", intervalMs: MINUTE, kind: "legal" },
+  // Black Room team (CEO, analiticas, competencia, publicador, guiones, website): one owner-only status each.
+  ...Object.fromEntries(BLACKROOM_TEAM_IDS.map((id) => [id, { key: `blackroom-team:${id}`, url: blackRoomTeamStatusUrl(id), intervalMs: 2 * MINUTE, kind: "blackroom-team" as const }])),
 };
 
 export type ProbeResult =
@@ -163,6 +169,7 @@ const PLATFORM_NAMES: Record<string, string> = { facebook: "Facebook", x: "X", i
 
 // Problems come only from fields the agent itself reports; nothing is guessed.
 function extractProblems(probe: AgentProbe, raw: unknown): string[] {
+  if (probe.kind === "blackroom-team") return blackRoomTeamProblems(raw);
   if (probe.kind === "blackroom-videos") {
     const actions = asObject(asObject(raw)?.operations)?.actions;
     return (Array.isArray(actions) ? actions : []).map((action) => str(asObject(action)?.message) || "").filter(Boolean);
@@ -286,6 +293,8 @@ export function extractActivity(probe: AgentProbe, raw: unknown, now: number = D
         totals ? `${num(totals.scheduled) ?? 0} programados · ${num(totals.completed) ?? 0} publicados` : "",
       ];
     }
+    case "blackroom-team":
+      return blackRoomTeamActivity(raw).map((line) => clip(line));
     case "kong-metrics": {
       const results = Array.isArray(body?.results) ? (body!.results as unknown[]).map(asObject).filter(Boolean) as Json[] : [];
       return results.slice(0, 3).map((result) => `${str(result.title) || "Publicacion"} · ${str(result.network)}: ${num(result.impressions) ?? 0} vistas, ${num(result.engagements) ?? 0} interacciones`);
@@ -520,6 +529,8 @@ function summarizeStatus(probe: AgentProbe, result: ProbeResult | undefined, now
       if (active === 0 && (num(totals.scheduled) ?? 0) === 0) return { state: "offline", label: "Cola vacia", detail: "No hay videos de Black Room pendientes." };
       return { state: "checking", label: `${active} en cola · avance sin verificar`, detail: "Falta evidencia reciente del trabajador; no se otorgan puntos por tener cola." };
     }
+    case "blackroom-team":
+      return blackRoomTeamToLiveStatus(result.body, now);
     case "kong-metrics": {
       const status = asObject(asObject(body?.status)?.["kong-metrics"]);
       const state = str(status?.state);
