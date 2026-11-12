@@ -18,6 +18,10 @@ const PUBLIC_API_PATHS = [
   "/api/auth/register",
   "/api/auth/login",
   "/api/auth/logout",
+  // Partner invitations: the invitee has no account yet. The token is checked in the handler
+  // (sha256 hash lookup, single-use, 7-day expiry); see server/workspace-access.ts.
+  "/api/workspace/invitations/preview",
+  "/api/workspace/invitations/accept",
   "/api/telegram/webhook",
   "/api/stripe/revenue-webhook",
   "/api/google-drive/oauth/callback",

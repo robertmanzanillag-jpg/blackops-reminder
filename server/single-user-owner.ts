@@ -15,3 +15,9 @@ export async function isConfiguredSingleUserOwner(userId: string): Promise<boole
   const user = await storage.getUser(userId).catch(() => undefined);
   return Boolean(user?.username && APPROVED_SINGLE_USER_OWNER_USERNAMES.has(user.username.trim().toLowerCase()));
 }
+
+/** Usernames that the owner rule recognizes; no invited account may take one of them. */
+export function isReservedOwnerUsername(username: string): boolean {
+  const normalized = username.trim().toLowerCase();
+  return APPROVED_SINGLE_USER_OWNER_USERNAMES.has(normalized) || APPROVED_SINGLE_USER_OWNER_IDS.has(normalized);
+}
