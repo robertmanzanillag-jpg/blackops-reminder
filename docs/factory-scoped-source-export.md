@@ -8,11 +8,10 @@ blob, and its decoded bytes must match the immutable tree size and Git SHA.
 Unrelated bodies are never fetched or exposed to the model.
 
 The reusable primitive accepts an explicit subset of at most 64 paths. The
-installed Asistente operator separately requires exactly
-`server/office-role-work.ts` and `tests/office-role-work.test.ts`. For that exact
-operator configuration, export makes at most five GET requests: public repository
-metadata, commit, recursive tree and two blobs. The five-request statement does
-not apply to arbitrary larger scopes. Selected files are capped at 100,000 bytes
+installed Asistente operator now passes each job's persisted per-order selection
+(`finding.sourcePaths`, at most 8 files under the allowed write roots; see
+`docs/factory-asistente-operator.md`). Export makes at most 3 + N GET requests:
+public repository metadata, commit, recursive tree and one blob per selected file. Selected files are capped at 100,000 bytes
 each and 200,000 bytes total. Full-export pilot behavior is retained when no
 subset is explicitly requested through its existing separate helper.
 

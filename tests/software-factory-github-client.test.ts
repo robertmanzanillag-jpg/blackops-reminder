@@ -34,6 +34,28 @@ test("Asistente client confines candidate writes to trusted paths and exact base
  for(const path of ['server/kong-operations.ts','server/software-factory.ts','server/user-auth.ts','package.json']) assert.throws(()=>createFactoryAsistenteGitHubClient({baseBranch,writePaths:[path],request:async()=>json({})}));
 });
 
+test("Asistente GitHub write boundary rejects every code-owned denial, traversal, symlink and over-limit scope", async () => {
+ const target={owner:'robertmanzanillag-jpg',repo:'blackops-reminder'}, baseBranch='main' as const;
+ let writes=0;const request=async(url:string)=>{writes++;return url.endsWith('/git/trees')?json({sha:tree},201):json({});};
+ const denied=['.github/workflows/x.yml','.claude/settings.json','.agents/x.md','credentials/a.ts','server/secrets/a.ts','server/migrations/1.ts','drizzle/1.sql','node_modules/x/index.js','dist/index.js','client/dist/a.js',
+  '.env','server/.env.production','server/cert.pem','server/private.key','package.json','package-lock.json','pnpm-lock.yaml','.replit','replit.nix','drizzle.config.ts','AGENTS.md','CLAUDE.md','script/replit-sync.ts',
+  'server/../package.json','../server/x.ts','/server/x.ts','server//x.ts','docs/x.md','script/x.ts'];
+ for(const path of denied) assert.throws(()=>createFactoryAsistenteGitHubClient({baseBranch,writePaths:[path],request}),undefined,path);
+ assert.throws(()=>createFactoryAsistenteGitHubClient({baseBranch,writePaths:Array.from({length:9},(_,i)=>`server/f${i}.ts`),request}));
+ assert.throws(()=>createFactoryAsistenteGitHubClient({baseBranch,writePaths:['server/a.ts','server/a.ts'],request}));
+ const allowed=['server/office/a.ts','client/src/b.tsx','shared/c.ts','tests/d.test.ts'];
+ const client=createFactoryAsistenteGitHubClient({baseBranch,writePaths:allowed,request});
+ await client.git.createTree({...target,base_tree:tree,tree:allowed.map(path=>({path,sha,mode:'100644',type:'blob'}))});
+ assert.equal(writes,1);
+ for(const path of denied) await assert.rejects(client.git.createTree({...target,base_tree:tree,tree:[{path,sha,mode:'100644',type:'blob'}]}),undefined,path);
+ for(const entry of [{path:'server/office/a.ts',sha,mode:'120000',type:'blob'},{path:'server/office/a.ts',sha,mode:'160000',type:'commit'},{path:'server/office/a.ts',sha,mode:'040000',type:'tree'}] as any[])
+  await assert.rejects(client.git.createTree({...target,base_tree:tree,tree:[entry]}));
+ // A read-only client (empty selection) can never write.
+ const readOnly=createFactoryAsistenteGitHubClient({baseBranch,writePaths:[],request});
+ await assert.rejects(readOnly.git.createTree({...target,base_tree:tree,tree:[{path:'server/office/a.ts',sha,mode:'100644',type:'blob'}]}));
+ assert.equal(writes,1);
+});
+
 test("dispatch accepts validated 2026 run identity and legacy acknowledgement without retry", async () => {
  const valid={workflow_run_id:42293565576,run_url:`https://api.github.com/repos/${FACTORY_PILOT_REPOSITORY}/actions/runs/42293565576`,html_url:`https://github.com/${FACTORY_PILOT_REPOSITORY}/actions/runs/42293565576`};
  const dispatch={...scope,workflow_id:9,ref:branch};

@@ -16,15 +16,15 @@ command arguments or logs. The launcher sets `SOFTWARE_FACTORY_ADAPTER_MODULE`
 to the installed reviewed `server/software-factory-asistente-operator.ts` module.
 
 The operator JSON is strict and noncredential. Required fields are the owner,
-`projectId: "asistente"`, approved base branch, source paths, checks profile,
-archive host allowlist, four stage reservations in cents, model input/output
-limits, explicit order mappings and the UI workflow/harness digest profile.
-`sourcePaths` allows only `server/office-role-work.ts` and
-`tests/office-role-work.test.ts`; both files are mandatory. Output is capped at 4096 tokens for both independent calls. Each order mapping
-binds its exact ID, revision digest, exact current base commit, reviewed finding
-kind, and the fixed `office-role-work-owner-cas-v1` acceptance scenario. At most five orders may be mapped at once. Completed mappings must be explicitly
-removed by the operator before adding later orders; this does not delete their
-financial or queue records. Empty
+`projectId: "asistente"`, approved base branch, checks profile, archive host
+allowlist, four stage reservations in cents, model input/output limits, explicit
+order mappings and the UI workflow/harness digest profile. Output is capped at
+4096 tokens for the independent review call. Each order mapping binds its exact
+ID, revision digest, exact current base commit, reviewed finding kind, a fixed
+known acceptance scenario and an explicit per-order `paths` list. At most five
+orders may be mapped at once. Completed mappings must be explicitly removed by
+the operator before adding later orders; this does not delete their financial or
+queue records. Empty
 mappings mean no automatically selected orders. Arbitrary orders do not acquire
 an acceptance scenario from model output or keyword matching.
 
@@ -34,6 +34,84 @@ journeys `office-session-login` and `office-company-navigation`. Workflow and
 harness hashes must come from the final independently reviewed revision, with
 real successful workflow evidence and the observed allowed artifact hosts.
 Do not guess these values or fabricate a passing report.
+
+## Allowed folders, per-order files and daily draft PR cap
+
+The repository is fixed to `robertmanzanillag-jpg/blackops-reminder`. The former
+fixed `sourcePaths` field (exactly `server/office-role-work.ts` and
+`tests/office-role-work.test.ts`) has been removed; the strict schema now rejects
+it. Migrate by deleting `sourcePaths` and adding `paths` to every order mapping
+(the previous behavior is `paths: ["server/office-role-work.ts",
+"tests/office-role-work.test.ts"]`).
+
+| Field | Default | Bounds | Meaning |
+| --- | --- | --- | --- |
+| `writeRoots` | `["server/", "client/", "shared/", "tests/"]` | 1-16 entries | Folder prefixes (ending in `/`) the factory may edit. Each must be one of the four defaults or a subfolder of them. Configuration can only narrow scope. |
+| `maxFilesPerOrder` | `6` | 1-8 | Upper bound on each order's `paths`. |
+| `maxDraftPullRequestsPerDay` | `5` | 1-10 | Owner-wide draft PRs per UTC day. |
+| `orders[].paths` | required | 1..`maxFilesPerOrder` | Exact existing files the order may read and edit. At least one must be a test file because every candidate needs a permanent regression test. |
+
+Code-owned denials (`server/software-factory-write-scope.ts`) apply regardless of
+configuration and are re-checked at configuration, at discovery/build/review for
+the persisted selection, in the scoped exporter and at the GitHub `createTree`
+write boundary. Denied: any segment named `.github`, `.claude`, `.agents`,
+`credentials`, `secrets`, `migrations`, `drizzle`, `node_modules`, `dist` or
+`.git`; `.env*`; `*.pem`, `*.key`, `*.p12`, `*.pfx`; `package.json`,
+`package-lock.json`, `pnpm-lock.yaml`, `.replit`, `replit.nix`,
+`drizzle.config.ts`, `AGENTS.md`, `CLAUDE.md` at any depth; `script/replit-*`;
+any path containing `..`, absolute or drive paths, backslashes, empty or `.`
+segments, control characters or non-NFC text; and the pre-existing sensitive-name
+guard (`kong`, `software-factory`, `office-token-budget`, `credit`, `auth`,
+`permission`, `payment`, `migration`). The writer accepts only blob entries with
+modes `100644`/`100755`, so symlinks, submodules and trees cannot be written; the
+exporter already requires every selected file to be an ordinary regular blob.
+
+File selection is explicit and deterministic: there is no paid selection stage.
+Discovery copies the mapping's `paths` into the job's persisted
+`finding.sourcePaths`. Build, repair attempts, the independent review loader and
+build recovery reuse that persisted list verbatim and never re-select, while
+still re-validating it against the current roots and denials (a narrowed
+configuration blocks an in-flight job at zero cost). Jobs persisted before this
+change have no `finding.sourcePaths`; their builds block at zero cost with
+`FACTORY_ASISTENTE_PATHS_INVALID` and must be re-admitted under a new mapping.
+Build recovery now takes `request.sourcePaths`, which must equal the failed job's
+persisted selection; its rebase proof covers those files plus the factory
+workflow and the fixed harness files.
+
+The daily cap counts, from the factory store, build jobs created or completed in
+the current UTC day whose persisted state holds a draft PR URL, plus any build
+left `unknown` or later reconciled (conservatively assumed published). If the
+bounded 100-row listing cannot prove the whole day is covered, the count fails
+closed. When the cap is reached the scheduler admits no further orders (no
+credit hold, no queue write), and a build that reaches its stage returns a
+zero-cost deferral before export, model credit reservation or publication. The
+worker requeues that job (`store.defer`) until the next UTC midnight with its
+factory budget reservation retained; it is not marked failed or unknown. A
+deferral that would cross into another month, or a store without `defer`,
+degrades to a terminal zero-cost block. A count failure defers for one hour.
+
+Example (synthetic values only, no credentials):
+
+```json
+{
+  "owner": "<owner-id>",
+  "projectId": "asistente",
+  "baseBranch": "main",
+  "writeRoots": ["server/", "client/src/", "shared/", "tests/"],
+  "maxFilesPerOrder": 6,
+  "maxDraftPullRequestsPerDay": 5,
+  "checks": { "trigger": "push", "workflowId": 123, "workflowPath": ".github/workflows/factory-candidate-checks.yml", "workflowSha256": "<64 hex>", "jobName": "isolated", "testStep": "tests", "buildStep": "build", "browserStep": "browser" },
+  "archiveHosts": ["<account>.blob.core.windows.net"],
+  "reservations": { "discover": 1, "build": 100, "simulate": 1, "review": 50 },
+  "maxInputTokens": 32000,
+  "maxOutputTokens": 8192,
+  "orders": [
+    { "id": "<order-id>", "revision": "<64 hex>", "baseSha": "<40 hex>", "kind": "improvement", "scenarioId": "office-role-work-owner-cas-v1",
+      "paths": ["server/office-role-work.ts", "tests/office-role-work.test.ts"] }
+  ],
+  "ui": { "workflowId": 123, "workflowSha256": "<64 hex>", "harnessSha256": "<64 hex>" }
+}
+```
 
 Run exported `preflightFactoryOperator({store})` with the same configured store
 before installation. This reads configuration, existing credit state and project

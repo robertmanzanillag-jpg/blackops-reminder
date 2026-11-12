@@ -7,7 +7,9 @@ import type { FactoryAdapter, FactoryAdapterResult, FactoryWorkerOptions } from 
 
 export interface FactoryPipelineState {
   version: 1; projectId: string; rootJobId: string; target: "staging" | "production";
-  finding: { id: string; kind: "bug" | "improvement"; regressionScenarioId?: string; request: string; baseSha: string; artifactIds: string[] };
+  /** sourcePaths is the per-order file selection persisted at discovery; every
+   * later build, repair, recovery and review reuses it and never re-selects. */
+  finding: { id: string; kind: "bug" | "improvement"; regressionScenarioId?: string; request: string; baseSha: string; artifactIds: string[]; sourcePaths?: string[] };
   candidate?: FactoryCandidate; evidence: FactoryEvidence[]; repairAttempts: number;
   verification?: { healthy: boolean; headSha: string };
   rollback?: { healthy: boolean; restoredSha: string };
@@ -25,7 +27,7 @@ export interface FactoryPipelineDependencies {
   claimFinding(ownerKey: string, projectId: string, key: string, jobId: string): Promise<boolean>;
   reservations: Record<FactoryJob["kind"], number>;
   discover?: (project: FactoryProject, context: StageContext) => Promise<Costed & { finding?: FactoryPipelineState["finding"]; findings?: FactoryPipelineState["finding"][] }>;
-  build?: (project: FactoryProject, state: FactoryPipelineState, context: StageContext) => Promise<(Costed & { candidate: FactoryCandidate; tests: FactoryEvidence }) | { status: "blocked" | "failed" | "unknown"; costCents: number; reason?: string }>;
+  build?: (project: FactoryProject, state: FactoryPipelineState, context: StageContext) => Promise<(Costed & { candidate: FactoryCandidate; tests: FactoryEvidence }) | { status: "blocked" | "failed" | "unknown"; costCents: number; reason?: string; deferUntil?: string }>;
   simulate?: (project: FactoryProject, state: FactoryPipelineState, context: StageContext) => Promise<Costed & { evidence: FactoryEvidence }>;
   review?: (project: FactoryProject, state: FactoryPipelineState, context: StageContext) => Promise<Costed & { evidence: FactoryEvidence }>;
   deploy?: (project: FactoryProject, state: FactoryPipelineState, context: StageContext) => Promise<Costed & { deployment: NonNullable<FactoryPipelineState["deployment"]> }>;
@@ -58,6 +60,7 @@ export function createFactoryPipeline(deps: FactoryPipelineDependencies): Pick<F
       const {recoverableFailedBuild}=await import('./software-factory-build-recovery');
       const state=recoverableFailedBuild(previous), marker=job.payload.recovery as any;
       if(job.payload.repairAttempts!==state.repairAttempts+1 || marker?.rebase?.originalBaseSha!==state.finding.baseSha || !/^[a-f0-9]{40}$/.test(marker?.rebase?.targetBaseSha||'')) throw Error("FACTORY_RECOVERY_UNTRUSTED");
+      if(Array.isArray(state.finding.sourcePaths) && !state.finding.sourcePaths.every(p=>Array.isArray(marker.rebase.files) && marker.rebase.files.some((f:unknown)=>Array.isArray(f) && f[0]===p))) throw Error("FACTORY_RECOVERY_UNTRUSTED");
       state.finding.baseSha=marker.rebase.targetBaseSha;
       return {state,previous};
     }
@@ -99,6 +102,7 @@ export function createFactoryPipeline(deps: FactoryPipelineDependencies): Pick<F
       for (const finding of findings) {
         if (!validSha(finding.baseSha) || !finding.id || !finding.request.trim() || !finding.artifactIds.length) throw new Error("FACTORY_FINDING_UNVERIFIED");
         if (!["bug", "improvement"].includes(finding.kind) || (finding.kind === "bug" && !finding.regressionScenarioId?.trim())) throw new Error("FACTORY_REPRODUCTION_REQUIRED");
+        if (finding.sourcePaths !== undefined && (!Array.isArray(finding.sourcePaths) || !finding.sourcePaths.length || finding.sourcePaths.length > 64 || finding.sourcePaths.some(p => typeof p !== "string" || !p))) throw new Error("FACTORY_FINDING_PATHS_INVALID");
         const findingKey = createHash("sha256").update(JSON.stringify([project.id, finding.baseSha, finding.id])).digest("hex");
         if (await deps.claimFinding(job.ownerKey, project.id, findingKey, job.id)) { selected = finding; break; }
       }
@@ -110,7 +114,7 @@ export function createFactoryPipeline(deps: FactoryPipelineDependencies): Pick<F
     if (kind === "build") {
       if (previous.kind !== "discover") { if (!canRepair(state.repairAttempts)) return result(state, 0, { status: "blocked", reason: "FACTORY_REPAIR_LIMIT" }); state.repairAttempts++; }
       const built = await deps.build!(clone(project), clone(state), context); checkCost(built.costCents);
-      if ("status" in built) return result(state, built.costCents, { status: built.status, reason: built.reason });
+      if ("status" in built) return result(state, built.costCents, { status: built.status, reason: built.reason, ...(built.status === "blocked" && built.costCents === 0 && typeof built.deferUntil === "string" ? { deferUntil: built.deferUntil } : {}) });
       if (built.candidate.projectId !== project.id || built.candidate.baseSha !== state.finding.baseSha || !validSha(built.candidate.headSha)) throw new Error("FACTORY_BUILD_IDENTITY_INVALID");
       state.candidate = { ...built.candidate, repairAttempts: state.repairAttempts }; state.evidence = [built.tests];
       if (!evidenceMatches(state, built.tests, "tests") || !built.tests.passed || built.tests.warnings.length) return result(state, built.costCents, { status: "blocked", reason: "FACTORY_BUILD_CHECKS_FAILED" });
