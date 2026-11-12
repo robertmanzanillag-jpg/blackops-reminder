@@ -16,7 +16,7 @@ import { createTrustedFactoryProposalWorkerOptions } from "./software-factory-ru
 import { createAsistenteFactoryBuild } from "./software-factory-asistente-build";
 import { createAsistenteIndependentReview } from "./software-factory-asistente-review";
 import { createAsistenteReviewSourceLoader } from "./software-factory-asistente-source";
-import { createFactoryAsistenteGitHubClient } from "./software-factory-github-client";
+import { createFactoryAsistenteGitHubClient, FACTORY_ASISTENTE_BASE_BRANCHES } from "./software-factory-github-client";
 import { createAsistenteGitHubTransport } from "./software-factory-github-transport";
 import { createFactoryOpenAiTransport } from "./software-factory-openai-transport";
 import { createRoleAcceptanceArtifactReader } from "./software-factory-role-artifact";
@@ -30,7 +30,7 @@ import { COMPANY_ORDER_CHECKS_ID, createFactoryOrderFileSelector, isFactoryTestP
 const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const sha = z.string().regex(/^[a-f0-9]{40}$/), digest = z.string().regex(/^[a-f0-9]{64}$/);
 const cents = z.number().int().min(1).max(100);
-const configSchema = z.object({ owner: z.string().min(1).max(200), projectId: z.literal("asistente"), baseBranch: z.enum(["main", "codex/office-integrated-repair-20261106"]),
+const configSchema = z.object({ owner: z.string().min(1).max(200), projectId: z.literal("asistente"), baseBranch: z.enum(FACTORY_ASISTENTE_BASE_BRANCHES),
     writeRoots: z.array(z.string().min(1).max(200)).min(1).max(16).default([...FACTORY_DEFAULT_WRITE_ROOTS]),
     maxFilesPerOrder: z.number().int().min(1).max(FACTORY_MAX_FILES_PER_ORDER).default(6),
     maxDraftPullRequestsPerDay: z.number().int().min(1).max(FACTORY_MAX_DRAFT_PULL_REQUESTS_PER_DAY).default(5),

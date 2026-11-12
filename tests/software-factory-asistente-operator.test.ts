@@ -414,3 +414,13 @@ test("office review handoff sweep runs before order scheduling, is off by defaul
     assert.equal(f.calls(), 1);
     assert.equal(logs.length, 1);
 });
+
+test("operator config accepts the production integration base branch and rejects unlisted branches", async () => {
+    const f = await fixture();
+    for (const baseBranch of ["main", "codex/office-integrated-repair-20261106", "claude/integration-20261111"])
+        assert.equal(validateAsistenteOperatorConfig({ ...f.config, baseBranch }).baseBranch, baseBranch);
+    for (const baseBranch of ["claude/integration-20261110", "claude/other", "factory/x", "master", ""])
+        assert.throws(() => validateAsistenteOperatorConfig({ ...f.config, baseBranch }), undefined, baseBranch);
+    const operator = createAsistenteOperatorComposition({ ...f.config, baseBranch: "claude/integration-20261111" }, f.deps);
+    validateFactoryWorkerOptions(await operator.createFactoryWorkerOptions());
+});

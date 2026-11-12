@@ -176,3 +176,34 @@ test("public exact-source helper exports verified blobs without commands or prot
         await rm(workspace, { recursive: true, force: true });
     }
 });
+
+test("Asistente client accepts the production integration base, targets it for draft PRs and never writes it", async () => {
+ const target={owner:'robertmanzanillag-jpg',repo:'blackops-reminder'}, baseBranch='claude/integration-20261111' as const;
+ const requests:Array<{url:string;method:string;body?:any}>=[];
+ const client=createFactoryAsistenteGitHubClient({baseBranch,writePaths:['server/agent-search.ts','tests/agent-search.test.ts'],request:async(url,init)=>{
+  const body=init.body?JSON.parse(String(init.body)):undefined;requests.push({url,method:String(init.method),body});
+  if(url.endsWith('/pulls'))return json({number:7},201);
+  if(url.endsWith('/git/refs'))return json({ref:body.ref,object:{sha:body.sha,type:'commit'}},201);
+  return json({ref:`refs/heads/${baseBranch}`,object:{sha,type:'commit'}});
+ }});
+ const ref=await client.git.getRef({...target,ref:`heads/${baseBranch}`});
+ assert.equal(ref.data.object.sha,sha);
+ assert.equal(requests[0].url,`https://api.github.com/repos/${FACTORY_ASISTENTE_REPOSITORY}/git/ref/heads/claude/integration-20261111`);
+ await client.git.createRef({...target,ref:`refs/heads/${branch}`,sha});
+ await client.pulls.create({...target,head:branch,base:baseBranch,draft:true,title:'Candidate',body:'Reviewed code only'});
+ const pull=requests.find(r=>r.url.endsWith('/pulls'))!;
+ assert.equal(pull.method,'POST');assert.equal(pull.body.base,baseBranch);assert.equal(pull.body.draft,true);
+ const before=requests.length;
+ // The configured base branch, the default branch and any non-factory ref are never written.
+ for(const ref of [`refs/heads/${baseBranch}`,'refs/heads/main','refs/heads/codex/office-integrated-repair-20261106','refs/heads/claude/other','refs/tags/v1'])
+  await assert.rejects(client.git.createRef({...target,ref,sha}),undefined,ref);
+ // Draft PRs cannot target another base, even an otherwise allowed one.
+ for(const base of ['main','codex/office-integrated-repair-20261106'])
+  await assert.rejects(client.pulls.create({...target,head:branch,base,draft:true,title:'Candidate',body:'x'}));
+ await assert.rejects(client.pulls.create({...target,head:baseBranch,base:baseBranch,draft:true,title:'Candidate',body:'x'}));
+ await assert.rejects(client.pulls.list({...target,head:`robertmanzanillag-jpg:${branch}`,base:'main',state:'all',per_page:100}));
+ await assert.rejects(client.git.getRef({...target,ref:'heads/main'}));
+ assert.equal(requests.length,before);
+ for(const other of ['claude/integration-20261110','claude/integration','master','factory/x'])
+  assert.throws(()=>createFactoryAsistenteGitHubClient({baseBranch:other as any,writePaths:[],request:async()=>json({})}),undefined,other);
+});
