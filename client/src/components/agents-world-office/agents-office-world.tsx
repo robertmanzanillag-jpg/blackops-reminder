@@ -21,6 +21,7 @@ import { buildKongOfficeWing, createKongRingAssignment, type KongRingAssignment 
 import type { WhatsAppOfficeView } from "@shared/whatsapp-office-agent";
 import { kongOfficeSnapshotKey, readOwnerKongSnapshot } from "@/lib/whatsapp-office-query";
 import { createOfficeScene, type SceneData, type SceneDepartment } from "./office-scene";
+import { FACTORY_AGENTS, FACTORY_DEPARTMENT, factoryAgentStatus, type FactoryAgentView } from "@shared/factory-office-agents";
 import { buildOfficeCityRoomsFromSnapshot, officeCitySnapshotExpiresAt, parseOfficeCityDirectory, type OfficeCityAgent } from "@/lib/office-city-agents";
 
 export type WorldAgent = BuildingAgent & { activity?: string; href?: string };
@@ -56,6 +57,8 @@ const DEPARTMENTS: Array<{ id: string; name: string; color: string; agentIds: st
   { id: "medios", name: "Marketing y medios", color: "#f472b6", agentIds: ["marketing-cmo", "clippers"] },
   { id: "noticias-ciudad", name: "Noticias por ciudad", color: "#fb923c", agentIds: ["news", ...CITY_NEWS_AGENTS.map((agent) => agent.id)] },
   { id: "ingenieria", name: "Ingenieria y app", color: "#38bdf8", agentIds: ["code", "github", "claude-reviewer", "app-qa"] },
+  // Software Factory engineers: main-company careers, presence read from factory stage leases.
+  { id: "fabrica", name: FACTORY_DEPARTMENT, color: "#0ea5e9", agentIds: FACTORY_AGENTS.map((agent) => agent.id) },
   { id: "seguridad", name: "Seguridad y legal", color: "#a78bfa", agentIds: ["cybersecurity", "legal"] },
   { id: "operaciones", name: "Operaciones", color: "#2dd4bf", agentIds: ["automations"] },
 ];
@@ -64,6 +67,7 @@ const SCREEN_KIND: Record<string, SceneDepartment["agents"][number]["screen"]> =
   radio: "timeline", clippers: "timeline", "blackroom-videos": "timeline", "kong-videos": "timeline", "kong-metrics": "chart", "news:miami-news": "list", "news:ny-news": "list",
   revenue: "chart", portfolio: "chart", "marketing-cmo": "chart", dropshipping: "chart", news: "chart",
   code: "code", github: "code", "claude-reviewer": "code", "app-qa": "code", cybersecurity: "code", mechanic: "code",
+  ...Object.fromEntries(FACTORY_AGENTS.map((agent) => [agent.id, "code" as const])),
 };
 const CITY_COUNTRY_COLORS: Record<string, string> = {
   AR: "#fbbf24", US: "#38bdf8", GB: "#c084fc", ES: "#f472b6", FR: "#2dd4bf", AE: "#a3e635",
@@ -77,6 +81,7 @@ const SOURCE_NAME: Record<string, string> = {
   legal: "Reportes legales", automations: "Automatizaciones", "skills-scout": "Releases de GitHub", "agent-factory": "Consejo de agentes",
   mechanic: "Consejo de agentes", "blackroom-videos": "Publicador Black Room", news: "Noticias locales", "kong-videos": "Publicador externo KONG (Codex)", "kong-metrics": "Metricool (lectura) · registro por UUID",
   "news:miami-news": "Noticias locales", "news:ny-news": "Noticias locales",
+  ...Object.fromEntries(FACTORY_AGENTS.map((agent) => [agent.id, "Fabrica de software (GitHub Actions)"])),
 };
 
 const STATE_TEXT: Record<AgentLiveState, string> = {
@@ -88,7 +93,7 @@ const STATE_BAR: Record<AgentLiveState, string> = {
   working: "bg-emerald-400", "needs-setup": "bg-amber-300", error: "bg-rose-400", offline: "bg-zinc-600", checking: "bg-sky-300",
 };
 
-type CompanyView = { kongCompany?: CompanyState; kongLeaderboard?: LeaderboardRow[]; kongPersonalities?: Record<string, Personality>; kongCollaboration?: OfficeKongCollaboration; company?: CompanyState; leaderboard?: LeaderboardRow[]; personalities?: Record<string, Personality>; integrations?: Record<string, AgentIntegration> };
+type CompanyView = { factoryAgents?: FactoryAgentView[]; kongCompany?: CompanyState; kongLeaderboard?: LeaderboardRow[]; kongPersonalities?: Record<string, Personality>; kongCollaboration?: OfficeKongCollaboration; company?: CompanyState; leaderboard?: LeaderboardRow[]; personalities?: Record<string, Personality>; integrations?: Record<string, AgentIntegration> };
 export type WorldContact = { id: string; name: string; role: string; department: string; status: AgentLiveStatus; description: string; href?: string; color: string };
 type PanelAgent = { id: string; name: string; role: string; description: string; href?: string; status: AgentLiveStatus; kong?: boolean; color: string; cityAgent?: OfficeCityAgent; kongEvidence?: OfficeKongCentralSignal; whatsappEvidence?: WhatsAppOfficeView };
 
@@ -240,6 +245,13 @@ export function AgentsOfficeWorld({
   for (const agent of EXTRA_AGENTS) panelAgents.set(agent.id, { ...agent, status: statuses[agent.id] ?? { state: "checking", label: "Verificando..." },
     ...(agent.id === "kong-videos" ? { kongEvidence: centralSignalById.get("kong-videos") } : {}) });
   for (const [id, agent] of Object.entries(COUNCIL_AGENTS)) panelAgents.set(id, { id, ...agent, status: statuses[id] });
+  // Factory engineers are working only while a factory stage lease is live; otherwise "last worked at".
+  for (const agent of FACTORY_AGENTS) {
+    const view = companyView.factoryAgents?.find((item) => item.agentId === agent.id);
+    panelAgents.set(agent.id, { id: agent.id, name: agent.name, role: agent.role, color: "#0ea5e9",
+      description: `${agent.role}. Trabaja en la fabrica de software (PR borrador, alcance de escritura, limite diario y creditos sin cambios). Su vida sigue las mismas reglas que el resto: +6 por etapa verificada, -10 por fallo atribuible.`,
+      status: factoryAgentStatus(view, council.error ? "error" : council.view ? "ready" : "loading") });
+  }
   for (const member of centralKongTeam) {
     const seat = OFFICE_KONG_CENTRAL_SEATS.find(item => item.nativeName === member.name);
     if (!seat) continue;

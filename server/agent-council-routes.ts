@@ -5,6 +5,16 @@ import { agentProbes, summarizeProbe } from "@shared/agent-live-status";
 import { createKongSupervisorConversation } from "./kong-supervisor-conversation";
 import { registerKongSupervisorRoutes } from "./kong-supervisor-routes";
 import {capabilityTrainingSummary,capabilityRunSummary} from "./office-capability-training";
+import { createHash } from "node:crypto";
+import { factoryAgentForStage, type FactoryJobRow } from "@shared/factory-office-agents";
+
+const FACTORY_LIVE_CACHE_MS = 30_000;
+const FACTORY_LIVE_TIMEOUT_MS = 3_000;
+/** Read-only: the same owner-scoped list the factory dashboard already reads. Never claims, completes or writes. */
+async function readFactoryJobsReal(owner: string): Promise<FactoryJobRow[]> {
+  const { configuredSoftwareFactoryStore } = await import("./software-factory-store-provider");
+  return configuredSoftwareFactoryStore.list(owner) as Promise<FactoryJobRow[]>;
+}
 
 const MANUAL_RUN_MIN_INTERVAL_MS = 60_000;
 
@@ -14,11 +24,30 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
   requestUserId?: typeof getCurrentUserId;
   ownerUserId?: typeof getSystemUserId;
   enabled?: typeof isAgentCouncilEnabled;
+  /** Read-only factory stage rows for live presence (owner only). Tests inject a fake. */
+  readFactoryJobs?: (owner: string) => Promise<readonly FactoryJobRow[]>;
+  now?: () => number;
 } = {}) {
   const councilInstance = () => dependencies.council ?? getAgentCouncil();
   const requestUserId = dependencies.requestUserId ?? getCurrentUserId;
   const ownerUserId = dependencies.ownerUserId ?? getSystemUserId;
   const enabled = dependencies.enabled ?? isAgentCouncilEnabled;
+  const now = dependencies.now ?? Date.now;
+  const readFactoryJobs = dependencies.readFactoryJobs ?? readFactoryJobsReal;
+  let factoryCache: { at: number; jobs: FactoryJobRow[] | "unavailable" } | undefined;
+  // Minimal projection: stage, status and lease/completion times only. No payloads, results or provider output.
+  const liveFactoryJobs = async (owner: string): Promise<FactoryJobRow[] | "unavailable"> => {
+    if (factoryCache && now() - factoryCache.at < FACTORY_LIVE_CACHE_MS) return factoryCache.jobs;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let jobs: FactoryJobRow[] | "unavailable";
+    try {
+      const rows = await Promise.race([readFactoryJobs(owner), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(Error("timeout")), FACTORY_LIVE_TIMEOUT_MS); })]);
+      jobs = Array.isArray(rows) ? rows.filter(job => job && factoryAgentForStage(job.kind)).slice(0, 100).map(job => ({ id: String(job.id), kind: job.kind, status: job.status, ownerKey: job.ownerKey,
+        ...(job.completedAt ? { completedAt: job.completedAt } : {}), ...(job.leaseExpiresAt ? { leaseExpiresAt: job.leaseExpiresAt } : {}) })) : "unavailable";
+    } catch { jobs = "unavailable"; } finally { clearTimeout(timer); }
+    factoryCache = { at: now(), jobs };
+    return jobs;
+  };
   // Supervisor KONG (PR #315): owner-only chat and read-only readiness review.
   // It reads the Kong video status; it never edits, publishes or runs commercial orders.
   const kongConversation = createKongSupervisorConversation({
@@ -45,8 +74,11 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
   app.get("/api/agent-council/state", async (req, res) => {
     try {
       res.set("Cache-Control", "no-store");
-      const view = await councilInstance().view();
-      if (requestUserId(req) !== ownerUserId()) {
+      const isOwner = requestUserId(req) === ownerUserId();
+      const owner = isOwner ? ownerUserId() : "";
+      // Owner only: a read-only live lease read (the factory runs in GitHub Actions; this never writes).
+      const view = await councilInstance().view(isOwner ? { factoryLiveJobs: await liveFactoryJobs(owner), factoryOwnerKey: createHash("sha256").update(owner).digest("hex") } : undefined);
+      if (!isOwner) {
         view.kongCompany = { version: 1, careers: {}, trainees: [], orders: [], events: [] };
         view.kongLeaderboard = [];
         view.kongPersonalities = {};
