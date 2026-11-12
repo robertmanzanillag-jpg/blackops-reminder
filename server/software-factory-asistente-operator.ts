@@ -24,6 +24,8 @@ import { createOfficeUiArtifactReader } from "./software-factory-office-ui-artif
 import { ROLE_WORK_ACCEPTANCE_ID } from "./software-factory-role-acceptance";
 import { FACTORY_DEFAULT_WRITE_ROOTS, FACTORY_MAX_DRAFT_PULL_REQUESTS_PER_DAY, FACTORY_MAX_FILES_PER_ORDER, utcDayStart, validateFactoryOrderPaths, validateFactoryWriteRoots } from "./software-factory-write-scope";
 import type { FactoryJob } from "./software-factory-store";
+import { createFactoryOfficeReviewSweep, type FactoryOfficeReviewEnqueue } from "./software-factory-office-review";
+import { readFactoryOrderProposals } from "./software-factory-order-evidence";
 import { COMPANY_ORDER_CHECKS_ID, createFactoryOrderFileSelector, isFactoryTestPath, listFactorySelectablePaths } from "./software-factory-company-auto";
 const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const sha = z.string().regex(/^[a-f0-9]{40}$/), digest = z.string().regex(/^[a-f0-9]{64}$/);
@@ -103,6 +105,10 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     download: typeof fetch;
     readUi: OperatorUiReader;
     recoveryPrevious?: import('./software-factory-pipeline').FactoryPipelineDependencies['recoveryPrevious'];
+    /** Optional office handoff (operator flag). Enqueues one read-only office
+     * review per verified draft PR head; no factory provider call. */
+    enqueueOfficeReview?: FactoryOfficeReviewEnqueue;
+    log?: (message: string) => void;
     now: () => Date;
 }) {
     const config = validateAsistenteOperatorConfig(raw), { store, credits, now } = deps;
@@ -211,8 +217,22 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
                 if (admittedToday < auto.maxPerDay) automatic.push(order);
             }
             return [...explicit, ...automatic]; }, ordering: "as-read", ledger: credits.ledger, reservationCents: config.reservations.discover, admit: admitWithinCredits });
-    return { owner, store, reservationCents: config.reservations.discover, readMainOrder, admitWithinCredits,
-        async createFactoryWorkerOptions() { await project(); return createTrustedFactoryProposalWorkerOptions({ owner, store, now, recoveryPrevious:deps.recoveryPrevious, reservations: config.reservations, scheduleCompanyOrders: schedule, stages: { discover, build, review, simulate: async (p, state, context) => { if (!state.candidate || p.id !== config.projectId)
+    // Reconciliation sweep over verified, recorded draft PRs: crash-safe because
+    // every (factory job, head) maps to one permanent office idempotency key.
+    const reviewSweep = deps.enqueueOfficeReview ? createFactoryOfficeReviewSweep({ owner, maxPerDay: config.maxDraftPullRequestsPerDay, enqueue: deps.enqueueOfficeReview,
+        readProposals: async () => {
+            const [jobs, projects] = await Promise.all([store.list(owner), store.projects(owner)]);
+            return readFactoryOrderProposals({ owner, jobs, projects, getCompletedJob: (key, id) => store.getCompletedJob(key, id), getRecoveredBuild: deps.recoveryPrevious, now: now().getTime() });
+        } }) : undefined;
+    const scheduleWithReviews = async (requestOwner: string) => {
+        if (requestOwner !== owner)
+            throw Error("FACTORY_OPERATOR_OWNER_MISMATCH");
+        // A review handoff failure never blocks or quarantines order scheduling.
+        if (reviewSweep) await reviewSweep().catch(() => { deps.log?.("Factory office review handoff unconfirmed; it will be reconciled on the next sweep."); });
+        return schedule(requestOwner);
+    };
+    return { owner, store, reservationCents: config.reservations.discover, readMainOrder, admitWithinCredits, reviewSweep,
+        async createFactoryWorkerOptions() { await project(); return createTrustedFactoryProposalWorkerOptions({ owner, store, now, recoveryPrevious:deps.recoveryPrevious, reservations: config.reservations, scheduleCompanyOrders: scheduleWithReviews, stages: { discover, build, review, simulate: async (p, state, context) => { if (!state.candidate || p.id !== config.projectId)
                     throw Error("FACTORY_OPERATOR_CANDIDATE_REQUIRED"); const tests = state.evidence.filter(e => e.kind === "tests" && e.passed && e.headSha === state.candidate!.headSha && e.baseSha === state.candidate!.baseSha); const urls = tests.flatMap(e => e.artifactIds).filter(id => /^https:\/\/github\.com\/robertmanzanillag-jpg\/blackops-reminder\/actions\/runs\/[1-9][0-9]*$/.test(id)); if (urls.length !== 1)
                     throw Error("FACTORY_OPERATOR_RUN_UNVERIFIED"); return { costCents: 0, evidence: await deps.readUi({ projectId: p.id, baseSha: state.candidate.baseSha, headSha: state.candidate.headSha, runId: Number(urls[0].split("/").pop()), signal: context.signal }) }; } } }); }
     };
@@ -250,7 +270,15 @@ async function installed(store: Store) {
       const {loadFailedBuildRecovery}=await import('./software-factory-build-recovery');
       return loadFailedBuildRecovery(recoveryPool,ownerKey,failedId,jobId);
     };
-    return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, download: fetch, readUi, recoveryPrevious, now, readOrders: async (owner) => { const raw = await (await getCouncilStore()).read(owner); if (!raw)
+    // Default off. When enabled, the factory only enqueues; the office review-only
+    // worker (same owner) performs the review under its own credit ledger.
+    let enqueueOfficeReview: FactoryOfficeReviewEnqueue | undefined;
+    if (env.SOFTWARE_FACTORY_OFFICE_REVIEW_ENABLED === "true") {
+        const { createOfficeCloudStore } = await import("./office-cloud-store");
+        const office = createOfficeCloudStore();
+        enqueueOfficeReview = (owner, input) => office.enqueueFactoryReview(owner, input);
+    }
+    return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, download: fetch, readUi, recoveryPrevious, enqueueOfficeReview, log: message => console.error(message), now, readOrders: async (owner) => { const raw = await (await getCouncilStore()).read(owner); if (!raw)
             throw Error("FACTORY_OPERATOR_COUNCIL_MISSING"); const state = JSON.parse(raw); if (!Array.isArray(state.company?.orders))
             throw Error("FACTORY_OPERATOR_COUNCIL_INVALID"); return state.company.orders; } });
 }
