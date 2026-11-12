@@ -3,6 +3,7 @@ import { parseInternalWork } from "./office-internal-work";
 import {parseRoleAcademy} from "./office-role-academy";
 import {parseCapabilityTraining} from "./office-capability-training";
 import {parseRoleWork} from "./office-role-work";
+import { roleWorkActivityView } from "../shared/office-role-work-activity";
 import { FACTORY_AGENT_NAMES, factoryAgentsView, isFactoryAgentId, parseFactoryCareerLedger } from "../shared/factory-office-agents";
 import { getSystemUserId } from "./user-context";
 import type { OfficeKongAuditResult } from "./office-kong";
@@ -805,6 +806,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
       integrations: integrationsNow(),
       // Persisted last observation only; the route may overlay a read-only live lease read for the owner.
       factoryAgents: factoryAgentsView({ ledger: loaded.officeExecution?.factoryCareers, liveJobs: options.factoryLiveJobs, ownerKey: options.factoryOwnerKey, now: deps.now() }),
+      // Public summary of today's recorded role work (role, status, times only; no sources or audits).
+      roleWorkToday: roleWorkActivityView(loaded.officeExecution?.roleWork?.jobs, deps.now()),
       personalities,
       overrides: applyLessons(state.debates, state.lessons),
       nextCycleInMs: state.lastCycleAt ? Math.max(0, Date.parse(state.lastCycleAt) + COUNCIL_CYCLE_MS - deps.now()) : 0,
