@@ -1,6 +1,7 @@
 import {readMarketingLearning} from "./marketing-learning-store";
 import {readWebRoleSources,type WebRoleSource} from "./office-web-role-sources";
 import {persistWebRoleSources} from "./office-web-role-store";
+import {readOfficeSourceDocuments} from "./office-source-documents";
 import path from "node:path";
 import {startOfficeEditorialExporter} from "./office-editorial-scheduler";
 import {withConnectionRetry} from "./office-source-pool";
@@ -36,7 +37,7 @@ export async function startOfficeWebSourceExporter(){
  raw.on("error",()=>undefined);
  const pool={...withConnectionRetry(raw),connect:()=>raw.connect()};
  const env=Object.fromEntries(["CLIPPERS_LOCAL_NEWS_WORKSPACE","DROPSHIPPING_PRODUCTS_PATH","DROPSHIPPING_SUPPLIERS_PATH","DROPSHIPPING_SOCIAL_METRICS_PATH","MARKETING_COMMAND_CENTER_LEARNING_PATH"].map(key=>[key,process.env[key]]));
- const cycle=createWebSourceExportCycle({read:()=>readWebRoleSources({pool,owner,configuredOwner:owner,root:process.cwd(),env,marketingLearning:()=>readMarketingLearning(pool,owner)}),persist:sources=>persistWebRoleSources(pool,owner,owner,sources)});
+ const cycle=createWebSourceExportCycle({read:()=>readWebRoleSources({pool,owner,configuredOwner:owner,root:process.cwd(),env,marketingLearning:()=>readMarketingLearning(pool,owner),sourceDocuments:()=>readOfficeSourceDocuments(pool,owner)}),persist:sources=>persistWebRoleSources(pool,owner,owner,sources)});
  installed=true;publicStatus={enabled:true,lastExportAt:null,status:"pending"};
  await startOfficeEditorialExporter({pool,owner,workspaceDir:path.resolve(env.CLIPPERS_LOCAL_NEWS_WORKSPACE||path.join(process.cwd(),"clippers_workspace/local-news"))});
  await cycle.tick();const timer=setInterval(()=>{void cycle.tick();},60000);timer.unref();

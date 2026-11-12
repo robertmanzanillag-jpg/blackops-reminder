@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
+import { mirrorOfficeSourceFile } from "./office-source-document-sync";
 import { storage } from "./storage";
 import { sendTelegramPlainMessage } from "./telegram";
 import { getMetricoolConfigStatus } from "./metricool-tracking";
@@ -1895,7 +1896,9 @@ function loadAll() {
 }
 
 function persistProducts() {
-  writeJsonArray(getProductsPath(), products);
+  const filePath = getProductsPath();
+  writeJsonArray(filePath, products);
+  mirrorOfficeSourceFile({ kind: "products", filePath, raw: products });
 }
 
 function persistProductScoutCandidates() {
@@ -1903,7 +1906,9 @@ function persistProductScoutCandidates() {
 }
 
 function persistSuppliers() {
-  writeJsonArray(getSuppliersPath(), suppliers);
+  const filePath = getSuppliersPath();
+  writeJsonArray(filePath, suppliers);
+  mirrorOfficeSourceFile({ kind: "suppliers", filePath, raw: suppliers });
 }
 
 function persistLaunchPlans() {
@@ -1939,7 +1944,9 @@ function persistSocialPosts() {
 }
 
 function persistSocialMetrics() {
-  writeJsonArray(getSocialMetricsPath(), socialMetrics);
+  const filePath = getSocialMetricsPath();
+  writeJsonArray(filePath, socialMetrics);
+  mirrorOfficeSourceFile({ kind: "social_metrics", filePath, raw: socialMetrics });
 }
 
 function persistSocialAnalyses() {
