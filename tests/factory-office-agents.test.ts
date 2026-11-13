@@ -63,8 +63,18 @@ test("live presence: working only while a stage lease is live; otherwise last wo
   assert.equal(by["factory-scout"].lastWorkedAt, iso(now - H));
   assert.equal(by["factory-reviewer"].source, "none");
   assert.equal(factoryAgentStatus(by["factory-builder"], "ready").state, "working");
-  assert.equal(factoryAgentStatus(by["factory-scout"], "ready").state, "available");
-  assert.match(factoryAgentStatus(by["factory-scout"], "ready").label, /Ultimo trabajo/);
+  // Completed within the last day, no failure: on duty ("Activo · al día"), still not "working".
+  const scout = factoryAgentStatus(by["factory-scout"], "ready", now);
+  assert.equal(scout.state, "available");
+  assert.equal(scout.label, "Activo · al día");
+  assert.equal(scout.onDuty?.lastWorkAt, iso(now - H));
+  assert.match(scout.detail || "", /^Último trabajo \d{2}:\d{2}/);
+  // A day later the same completion is only "last worked at".
+  const later = factoryAgentStatus(by["factory-scout"], "ready", now + 25 * H);
+  assert.equal(later.onDuty, undefined);
+  assert.match(later.label, /Ultimo trabajo/);
+  // An attributable failure is never shown as on duty.
+  assert.equal(factoryAgentStatus({ ...by["factory-scout"], lastOutcome: "attributable_failure" }, "ready", now).onDuty, undefined);
   // Web asleep / store unreadable: persisted observation only, never optimistic.
   const persisted = applyFactoryStageOutcomes({ ...hired(now - 3 * H), jobs: [rows[0], rows[2]], ownerKey: KEY, now: now - 60_000 }).ledger;
   const offline = factoryAgentsView({ ledger: persisted, liveJobs: "unavailable", ownerKey: KEY, now: now + H });

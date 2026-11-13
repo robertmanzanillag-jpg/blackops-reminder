@@ -24,7 +24,11 @@ test("KONG includes every observed central agent and every configured city seat 
 
 test("completed evidence does not animate as working; expired evidence clears running", () => {
   const current = buildKongOfficeWing(evidence, [], {}, now);
-  assert.equal(current.agents.find(agent=>agent.id === "kong:chief_of_staff")?.status.state, "offline");
+  // Healthy scheduled desk that ran a minute ago: on duty, not "working".
+  const chief = current.agents.find(agent=>agent.id === "kong:chief_of_staff")?.status;
+  assert.equal(chief?.state, "available");
+  assert.equal(chief?.label, "Activo · al día");
+  assert.match(chief?.detail || "", /^Último trabajo \d{2}:\d{2}$/);
   assert.equal(current.agents.find(agent=>agent.id === "kong:new_department")?.status.state, "needs-setup");
   const expired = buildKongOfficeWing(evidence, [], {}, now + 300001);
   assert.ok(expired.agents.every(agent=>agent.status.state !== "working"));
@@ -119,4 +123,19 @@ test("system desks explain on-demand, first-run, missing-history and attention s
   const expired = buildKongOfficeWing(snapshot, [], {}, now + 300_001);
   assert.equal(desk("kong_ai_chat", expired).label, "Evidencia vencida");
   assert.equal(desk("finance_risk", expired).label, "Sin evidencia vigente");
+});
+
+test("central desks are on duty only when healthy, scheduled, recent and not overdue", async () => {
+  const { kongDeskStatus } = await import("../client/src/lib/kong-office-wing");
+  const base = evidence.agents[0];
+  const at = (delta: number) => new Date(now + delta).toISOString();
+  const growth = kongDeskStatus({ ...base, id: "growth_analytics", lastRunAt: at(-15 * 60_000), nextRunAt: at(45 * 60_000) }, false, now);
+  assert.equal(growth.label, "Activo · al día");
+  assert.match(growth.detail || "", /^Último trabajo \d{2}:\d{2} · próximo turno \d{2}:\d{2}$/);
+  assert.equal(kongDeskStatus({ ...base, operationMode: "on_demand" }, false, now).label, "Disponible bajo demanda");
+  assert.equal(kongDeskStatus({ ...base, lastRunAt: at(-25 * 3_600_000) }, false, now).label, "Último trabajo registrado");
+  assert.equal(kongDeskStatus({ ...base, lastRunAt: at(-60 * 60_000), nextRunAt: at(-20 * 60_000) }, false, now).label, "Último trabajo registrado");
+  assert.equal(kongDeskStatus({ ...base, lastRunAt: at(10 * 60_000) }, false, now).onDuty, undefined, "future dates are not on duty");
+  for (const state of ["stale", "attention", "unknown", "running"] as const) assert.equal(kongDeskStatus({ ...base, state }, false, now).onDuty, undefined, state);
+  assert.equal(kongDeskStatus(undefined, true, now).onDuty, undefined);
 });

@@ -13,6 +13,8 @@ export type SceneAgent = {
   name: string;
   label: string;
   state: SceneAgentState;
+  // "Activo · al día": fresh verified work without a live lease. Teal and still, never the working animation.
+  onDuty?: boolean;
   color: string;
   screen: "timeline" | "chart" | "code" | "list";
   activity: string[];
@@ -55,6 +57,10 @@ const STATE_HEX: Record<SceneAgentState, string> = {
   offline: "#71717a",
   checking: "#7dd3fc",
 };
+
+const ON_DUTY_HEX = "#2dd4bf";
+const agentHex = (agent: Pick<SceneAgent, "state" | "onDuty">) => agent.onDuty && agent.state === "available" ? ON_DUTY_HEX : STATE_HEX[agent.state];
+const isActiveAgent = (agent: Pick<SceneAgent, "state" | "onDuty">) => agent.state === "working" || (agent.state === "available" && Boolean(agent.onDuty));
 
 const RING_RADIUS = 17;
 const DESK_SPACING_X = 3.1;
@@ -143,7 +149,7 @@ function hexToNumber(hex: string) {
 function drawMonitor(ctx: CanvasRenderingContext2D, agent: SceneAgent, t: number) {
   const w = ctx.canvas.width;
   const h = ctx.canvas.height;
-  const accent = STATE_HEX[agent.state];
+  const accent = agentHex(agent);
   const live = agent.state === "working";
   ctx.fillStyle = "#050a14";
   ctx.fillRect(0, 0, w, h);
@@ -483,7 +489,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       book.position.set(0, 1.14, -0.35);
       group.add(book);
     }
-    const light = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 12), new THREE.MeshBasicMaterial({ color: hexToNumber(STATE_HEX[agent.state]) }));
+    const light = new THREE.Mesh(new THREE.SphereGeometry(0.13, 12, 12), new THREE.MeshBasicMaterial({ color: hexToNumber(agentHex(agent)) }));
     light.position.set(0.85, 2.75, 0.36);
     group.add(light);
 
@@ -510,7 +516,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
   }
 
   function updateDeskLabel(desk: DeskRuntime) {
-    const color = STATE_HEX[desk.agent.state];
+    const color = agentHex(desk.agent);
     desk.label.innerHTML = "";
     const name = document.createElement("span");
     if (desk.agent.cityRole) {
@@ -598,7 +604,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       screens.setColorAt(index, new THREE.Color(0x152034));
       set(screenLines, index * 2, x - 0.05, 1.12, z - 0.48);
       set(screenLines, index * 2 + 1, x + 0.03, 0.96, z - 0.48);
-      screenLines.setColorAt(index * 2, new THREE.Color(STATE_HEX[agent.state]));
+      screenLines.setColorAt(index * 2, new THREE.Color(agentHex(agent)));
       screenLines.setColorAt(index * 2 + 1, new THREE.Color(0x64748b));
     });
     if (running.length && !options.reducedMotion) arms.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -734,8 +740,12 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       label.dataset.testid = `world-dept-${department.id}`;
       if (ringPosition) label.dataset.officeRing = String(ringPosition.ring);
       const working = department.agents.filter((agent) => agent.state === "working").length;
-      label.textContent = cityOverview ? department.name : `${department.name} · ${working}/${department.agents.length}`;
-      if (cityOverview) label.setAttribute("aria-label", `Abrir ${department.name}, ${working} agentes en ejecución verificada`);
+      // Building labels count active desks (working now + on duty), not only instant live leases.
+      const active = department.agents.filter(isActiveAgent).length;
+      label.textContent = cityOverview ? department.name : `${department.name} · ${active}/${department.agents.length}`;
+      label.dataset.activeCount = String(active);
+      label.dataset.workingCount = String(working);
+      if (cityOverview) label.setAttribute("aria-label", `Abrir ${department.name}, ${active} activos, ${working} ejecutando ahora`);
       label.addEventListener("click", () => focusDepartment(department.id));
       label.addEventListener("pointerenter", () => { lastInteraction = performance.now(); hoveringLabel = true; });
       label.addEventListener("pointerleave", () => { hoveringLabel = false; });
@@ -753,7 +763,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
       mid.y = cityOverview ? 2.5 : 7;
       const curve = new THREE.QuadraticBezierCurve3(start, mid, end);
       const points = curve.getPoints(48);
-      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineDashedMaterial({ color: colorNum, dashSize: 0.35, gapSize: 0.35, transparent: true, opacity: cityOverview && !working ? 0.26 : 0.55 }));
+      const line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(points), new THREE.LineDashedMaterial({ color: colorNum, dashSize: 0.35, gapSize: 0.35, transparent: true, opacity: cityOverview && !active ? 0.26 : 0.55 }));
       line.computeLineDistances();
       const lineHolder = new THREE.Group();
       lineHolder.add(line);
@@ -783,6 +793,7 @@ export function createOfficeScene(THREE: any, host: HTMLDivElement, labelLayer: 
     const citySeats = data.departments.flatMap(department => department.agents).filter(agent => agent.id.startsWith("kong-city:"));
     host.dataset.cityDeskCount = String(citySeats.length);
     host.dataset.cityRunningDeskCount = String(citySeats.filter(agent => agent.state === "working").length);
+    host.dataset.cityActiveDeskCount = String(citySeats.filter(isActiveAgent).length);
     host.dataset.officeDeskCount = String(data.departments.reduce((sum, department) => sum + department.agents.length, 0));
     // World positions for desks (after platforms are oriented).
     scene.updateMatrixWorld(true);
