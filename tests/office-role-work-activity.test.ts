@@ -43,3 +43,18 @@ test("old servers without the field parse to an empty list", () => {
   assert.deepEqual(parseRoleWorkActivity(undefined), []);
   assert.deepEqual(parseRoleWorkActivity([{ agentId: "news" }, null, { agentId: "code", status: "completed", startedAt: "t", expiresAt: "t" }]).map(item => item.agentId), ["code"]);
 });
+
+test("completed today marks a healthy desk on duty; failures, setup, external and other days stay as they were", () => {
+  const [news] = roleWorkActivityView([job("news", "completed", "2026-11-12T09:00:00.000Z")], now);
+  const onDuty = applyRoleWorkActivity({ state: "offline", label: "Sin lectura" }, news, now)!;
+  assert.equal(onDuty.state, "available");
+  assert.equal(onDuty.label, "Activo · al día");
+  assert.equal(onDuty.onDuty?.lastWorkAt, "2026-11-12T09:00:05.000Z");
+  assert.match(onDuty.detail || "", /^Último trabajo \d{2}:\d{2} · turno diario del ejecutor de la oficina$/);
+  assert.equal(applyRoleWorkActivity({ state: "error", label: "Falló" }, news, now)?.onDuty, undefined);
+  assert.equal(applyRoleWorkActivity({ state: "needs-setup", label: "Falta conector" }, news, now)?.onDuty, undefined);
+  assert.equal(applyRoleWorkActivity({ state: "offline", label: "Externo · lo publica Codex" }, news, now)?.onDuty, undefined);
+  assert.equal(applyRoleWorkActivity({ state: "available", label: "x" }, news, Date.parse("2026-11-13T00:30:00Z"))?.onDuty, undefined);
+  const blocked = { agentId: "code", status: "blocked" as const, startedAt: "2026-11-12T08:00:00.000Z", expiresAt: "2026-11-12T08:01:00.000Z", completedAt: "2026-11-12T08:00:05.000Z" };
+  assert.equal(applyRoleWorkActivity({ state: "available", label: "x" }, blocked, now)?.onDuty, undefined);
+});

@@ -8,6 +8,7 @@
 // artifacts) and lets the panel show verified work without inventing any.
 
 import type { AgentLiveStatus } from "./agent-live-status";
+import { isOnDutyWindow, ON_DUTY_DAY_MS, onDutyStatus } from "./office-on-duty";
 
 export type RoleWorkActivityStatus = "running" | "completed" | "blocked" | "unknown";
 export type RoleWorkActivity = { agentId: string; status: RoleWorkActivityStatus; startedAt: string; expiresAt: string; completedAt?: string };
@@ -50,7 +51,7 @@ export function isRoleWorkLive(activity: RoleWorkActivity | undefined, now: numb
 }
 
 /** Overlays today's recorded role work on a desk status. Only a live lease makes a desk "working";
- * completed or blocked work adds a monitor line and never upgrades the state. External publishers
+ * completed work marks a healthy desk on duty (still "available"); blocked work only adds a monitor line. External publishers
  * (offline + "Externo") are never shown as executing inside the office. */
 export function applyRoleWorkActivity(status: AgentLiveStatus | undefined, activity: RoleWorkActivity | undefined, now: number): AgentLiveStatus | undefined {
   if (!activity) return status;
@@ -63,7 +64,15 @@ export function applyRoleWorkActivity(status: AgentLiveStatus | undefined, activ
   const line = activity.status === "completed" ? `Trabajo verificado hoy · ${hhmm(activity.completedAt || activity.startedAt)}`
     : activity.status === "blocked" ? `Turno de hoy bloqueado · ${hhmm(activity.completedAt || activity.startedAt)}`
       : "Turno de hoy sin confirmar";
-  return { ...base, activity: [line, ...(base.activity || []).filter(item => item !== line)].slice(0, 4) };
+  const activityLines = [line, ...(base.activity || []).filter(item => item !== line)].slice(0, 4);
+  // Completed today with no failure on the desk: on duty ("Activo · al día"), never "working".
+  // Errors, setup warnings and external publishers are never upgraded.
+  const completedAt = activity.completedAt || activity.startedAt;
+  if (activity.status === "completed" && !external && base.state !== "error" && base.state !== "needs-setup"
+    && completedAt.slice(0, 10) === utcDay(now) && isOnDutyWindow({ lastWorkAt: completedAt, maxAgeMs: ON_DUTY_DAY_MS, now })) {
+    return { ...onDutyStatus({ lastWorkAt: completedAt, now, base, extra: "turno diario del ejecutor de la oficina" }), activity: activityLines };
+  }
+  return { ...base, activity: activityLines };
 }
 
 /** Counts desks with work completed today, among the given ids. */
