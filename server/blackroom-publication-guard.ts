@@ -35,8 +35,12 @@ export class BlackRoomPublicationBlockedError extends Error {
   readonly retainAttempt = true;
   readonly preserveUpload = true;
   readonly definitelyNotSubmitted = true;
-  constructor(readonly reason: string) {
+  // Plain field (not a constructor parameter property): this module also runs under Node's native
+  // type stripping (the local BlackRoom ledger runner), which rejects parameter properties.
+  readonly reason: string;
+  constructor(reason: string) {
     super(`BlackRoom publication blocked: ${reason}`);
+    this.reason = reason;
     this.name = "BlackRoomPublicationBlockedError";
   }
 }

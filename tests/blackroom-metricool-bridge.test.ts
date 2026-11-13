@@ -22,7 +22,14 @@ import {
   scheduleBlackRoomMetricoolPost,
 } from "../server/blackroom-metricool-bridge";
 
+// The bridge is default-off (server/blackroom-publication-guard.ts): these tests exercise the
+// authorized path, so they opt in explicitly. Unauthorized behavior is covered by its own test.
+const PUBLISH_AUTHORIZED = { BLACKROOM_METRICOOL_BRIDGE_PUBLISH_AUTHORIZED: "true", METRICOOL_REQUIRE_APPROVAL_FOR_PUBLISH: "false" } as const;
+// Authoritative control that allows the test job (any job id) to publish now.
+const allowPublication = async () => ({ desiredEnabled: true, queue: { enabled: true, jobs: [{ id: input.jobId, status: "queued" }] } });
+
 const input = {
+  jobId: "job-test-1",
   caption: "REDAX flips the pressure switch. #BlackRoomRadio",
   publicationDateTime: "2026-07-22T05:00:00",
   timezone: "America/New_York",
@@ -255,7 +262,7 @@ test("schedules through Metricool's official MCP, then verifies before returning
     return Response.json({ data: [] });
   };
   const receipt = await scheduleBlackRoomMetricoolPost(input, {
-    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197", ...PUBLISH_AUTHORIZED }, readPublicationControl: allowPublication,
     fetch: mockFetch as typeof fetch,
   });
   assert.deepEqual(receipt, {
@@ -309,7 +316,7 @@ test("retries a transient Metricool media-normalization failure before schedulin
     return Response.json({ data: posts });
   };
   const receipt = await scheduleBlackRoomMetricoolPost(input, {
-    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197", ...PUBLISH_AUTHORIZED }, readPublicationControl: allowPublication,
     fetch: mockFetch as typeof fetch,
     normalizationRetryDelayMs: 0,
     verificationIntervalMs: 0,
@@ -329,7 +336,7 @@ test("returns an existing exact post before uploading media or creating a duplic
     ] });
   };
   const receipt = await scheduleBlackRoomMetricoolPost(input, {
-    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197", ...PUBLISH_AUTHORIZED }, readPublicationControl: allowPublication,
     fetch: mockFetch as typeof fetch,
   });
   assert.equal(receipt.metricoolId, "991");
@@ -350,7 +357,7 @@ test("recognizes legacy Facebook and YouTube captions without creating duplicate
     ] });
   };
   const receipt = await scheduleBlackRoomMetricoolPost(input, {
-    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197", ...PUBLISH_AUTHORIZED }, readPublicationControl: allowPublication,
     fetch: mockFetch as typeof fetch,
   });
   assert.equal(receipt.metricoolId, "991");
@@ -371,7 +378,7 @@ test("retries only the missing Facebook post after TikTok was already confirmed"
     return Response.json({ data: gets === 1 ? [tiktok, youtube] : [tiktok, facebook, youtube] });
   };
   const receipt = await scheduleBlackRoomMetricoolPost(input, {
-    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197", ...PUBLISH_AUTHORIZED }, readPublicationControl: allowPublication,
     fetch: mockFetch as typeof fetch,
   });
   const posts = calls.filter((call) => call.method === "POST");
@@ -391,7 +398,7 @@ test("schedules and verifies only the explicitly requested network", async () =>
     return Response.json({ data: gets === 1 ? [] : [facebook] });
   };
   const receipt = await scheduleBlackRoomMetricoolPost(input, {
-    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197", ...PUBLISH_AUTHORIZED }, readPublicationControl: allowPublication,
     fetch: mockFetch as typeof fetch,
     networks: ["facebook"],
   });
@@ -409,7 +416,7 @@ test("refuses to confirm when the verification response does not contain the pos
     return Response.json({ data: [] });
   };
   await assert.rejects(() => scheduleBlackRoomMetricoolPost(input, {
-    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197", ...PUBLISH_AUTHORIZED }, readPublicationControl: allowPublication,
     fetch: mockFetch as typeof fetch,
     verificationAttempts: 1,
     verificationIntervalMs: 0,
@@ -423,7 +430,7 @@ test("verification-only recovery never POSTs a possibly accepted network twice",
     return Response.json({ data: [] });
   };
   await assert.rejects(() => scheduleBlackRoomMetricoolPost(input, {
-    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197", ...PUBLISH_AUTHORIZED }, readPublicationControl: allowPublication,
     fetch: mockFetch as typeof fetch,
     verifyOnly: true,
   }), /verification is still pending/);
@@ -440,7 +447,7 @@ test("includes a bounded upstream validation message without leaking auth", asyn
     });
   };
   await assert.rejects(() => scheduleBlackRoomMetricoolPost(input, {
-    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197", ...PUBLISH_AUTHORIZED }, readPublicationControl: allowPublication,
     fetch: mockFetch as typeof fetch,
   }), (error: Error) => error.message.includes("invalid tiktokData") && !error.message.includes("super-secret-value"));
 });
@@ -451,7 +458,7 @@ test("includes a bounded MCP transport error without leaking auth", async () => 
     return new Response(JSON.stringify({ error: "could not fetch public MP4", token: "super-secret-value" }), { status: 500 });
   };
   await assert.rejects(() => scheduleBlackRoomMetricoolPost(input, {
-    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197" },
+    env: { METRICOOL_USER_TOKEN: "valid-token-that-is-long-enough", METRICOOL_USER_ID: "3558197", ...PUBLISH_AUTHORIZED }, readPublicationControl: allowPublication,
     fetch: mockFetch as typeof fetch,
   }), (error: Error) => error.message.includes("could not fetch public MP4") && !error.message.includes("super-secret-value"));
 });
