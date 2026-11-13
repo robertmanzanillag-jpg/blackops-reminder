@@ -6,7 +6,7 @@
 # Never deletes files, never touches tests/, .env*, secrets or deployment config.
 set -euo pipefail
 REPO="${SYNC_REPO:-https://github.com/robertmanzanillag-jpg/blackops-reminder.git}"
-BRANCH="${SYNC_BRANCH:-claude/integration-20261111}"
+BRANCH="${SYNC_BRANCH:-main}"
 BASE="${SYNC_BASE:-aecaff708961f88dcf2f2a5be2774c525270ab00}"
 APPLY=0; [ "${1:-}" = "--apply" ] && APPLY=1
 git fetch -q "$REPO" "$BRANCH"; THEIRS=$(git rev-parse FETCH_HEAD)
