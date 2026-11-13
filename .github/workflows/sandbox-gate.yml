@@ -142,10 +142,15 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
-      - name: Browser and PostgreSQL binaries for the tests that need them
+      - name: Tools, browser, PostgreSQL binaries and build output the tests rely on
         run: |
           set -euo pipefail
+          # ffmpeg (media renders), zsh (operator wrappers); origin/main (launch-agent installer test).
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends ffmpeg zsh > /dev/null
+          git fetch --quiet --depth=1 origin +refs/heads/main:refs/remotes/origin/main
           npx playwright install chromium
+          # Browser QA and bundle tests read dist/ (index.html, table.sql).
+          npm run build > "$RUNNER_TEMP/build.log" 2>&1 || { tail -60 "$RUNNER_TEMP/build.log"; exit 1; }
           pg_bin=$(find /usr/lib/postgresql -mindepth 2 -maxdepth 2 -type d -name bin | sort -V | tail -1)
           test -x "$pg_bin/initdb"
           echo "FACTORY_TEST_POSTGRES_BIN=$pg_bin" >> "$GITHUB_ENV"
@@ -237,17 +242,18 @@ jobs:
             node --import tsx "script/$migration.ts" --apply
             node --import tsx "script/$migration.ts" --apply
           done | tee "$GATE_REPORT_DIR/migrations.jsonl"
-          # A second schema push must find nothing destructive to do on top of the migrations.
-          npx drizzle-kit push --force
       - name: Seed a sandbox owner
         run: |
           set -euo pipefail
+          # Random per run, sandbox-only; masked anyway.
           GATE_OWNER_PASSWORD="sandbox-$(openssl rand -hex 12)"
+          echo "::add-mask::$GATE_OWNER_PASSWORD"
           export GATE_OWNER_PASSWORD
           id=$(node --import tsx script/create-local-user.ts --username=sandbox-owner --password-env=GATE_OWNER_PASSWORD --print-user-id | tail -1)
           [[ "$id" =~ ^[0-9a-f-]{36}$ ]]
-          echo "GATE_USER_ID=$id" >> "$GITHUB_ENV"
-          echo "SESSION_SECRET=sandbox-$(openssl rand -hex 32)" >> "$GITHUB_ENV"
+          session_secret="sandbox-$(openssl rand -hex 32)"
+          echo "::add-mask::$session_secret"
+          { echo "GATE_USER_ID=$id"; echo "GATE_OWNER_USERNAME=sandbox-owner"; echo "GATE_OWNER_PASSWORD=$GATE_OWNER_PASSWORD"; echo "SESSION_SECRET=$session_secret"; } >> "$GITHUB_ENV"
       - name: Production build
         run: |
           set -euo pipefail
@@ -289,6 +295,19 @@ jobs:
         if: always()
         run: |
           if [ -f "$GATE_REPORT_DIR/app.pid" ]; then kill "$(cat "$GATE_REPORT_DIR/app.pid")" 2>/dev/null || true; fi
+      - name: Schema drift guard (db:push must never propose a DROP)
+        run: |
+          set -euo pipefail
+          # Runs after the app created its runtime tables. Without a TTY drizzle-kit only prints
+          # the statements it would run; nothing is applied. Any DROP/data-loss statement here is
+          # what `npm run db:push` would do to the production database.
+          npx drizzle-kit push --verbose < /dev/null > "$GATE_REPORT_DIR/schema-drift.log" 2>&1 || true
+          if grep -nE 'DROP (TABLE|COLUMN|SCHEMA|TYPE)|data loss|truncate' "$GATE_REPORT_DIR/schema-drift.log"; then
+            echo "::error file=drizzle.config.ts::db:push would drop or truncate data; add the table to tablesFilter or to shared/schema.ts"
+            exit 1
+          fi
+          grep -qE 'No changes detected|Changes applied' "$GATE_REPORT_DIR/schema-drift.log" || { tail -20 "$GATE_REPORT_DIR/schema-drift.log"; echo "::error::schema drift: db:push wants changes the migrations did not make"; exit 1; }
+          echo "schema in sync, no destructive statements"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         if: always()
         with:

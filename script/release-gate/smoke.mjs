@@ -83,6 +83,29 @@ async function request(pathname, { auth = false, timeoutMs = 20_000 } = {}) {
   record("anonymous /api/auth/me answers without 5xx", me.status > 0 && me.status < 500, { status: me.status });
   const authed = await request("/api/auth/me", { auth: true });
   record("signed sandbox session is recognised", authed.status === 200 && JSON.stringify(authed.json || {}).includes(userId), { status: authed.status });
+  // Real login through the PostgreSQL session store (also creates user_sessions like production).
+  if (process.env.GATE_OWNER_USERNAME && process.env.GATE_OWNER_PASSWORD) {
+    const login = async (password) => {
+      try {
+        const response = await fetch(`${base}/api/auth/login`, {
+          method: "POST",
+          headers: { "content-type": "application/json", origin: base },
+          body: JSON.stringify({ username: process.env.GATE_OWNER_USERNAME, password }),
+          signal: AbortSignal.timeout(20_000),
+        });
+        return { status: response.status, cookies: response.headers.getSetCookie?.() || [] };
+      } catch { return { status: 0, cookies: [] }; }
+    };
+    const wrong = await login(`${process.env.GATE_OWNER_PASSWORD}-wrong`);
+    record("login with a wrong password is refused (401)", wrong.status === 401, { status: wrong.status });
+    const good = await login(process.env.GATE_OWNER_PASSWORD);
+    const sid = good.cookies.find((value) => value.startsWith("blackops.sid="));
+    record("login with the sandbox owner works and sets a session", good.status === 200 && Boolean(sid), { status: good.status });
+    if (sid) {
+      const me = await fetch(`${base}/api/auth/me`, { headers: { cookie: sid.split(";")[0] }, signal: AbortSignal.timeout(20_000) }).then(async (r) => ({ status: r.status, text: await r.text() })).catch(() => ({ status: 0, text: "" }));
+      record("the stored session authenticates /api/auth/me", me.status === 200 && me.text.includes(userId), { status: me.status });
+    }
+  }
 }
 
 // 3. Authenticated read-only API routes must never answer 5xx (or hang).
