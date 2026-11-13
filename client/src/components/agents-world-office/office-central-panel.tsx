@@ -47,7 +47,13 @@ export function OfficeCentralPanel({ agents, kongTeam, legal }: { agents: WorldA
 }
 
 function PanelShell({ children }: { children: ReactNode }) {
-  return <div className="min-h-screen bg-[#05060a] px-4 pb-16 pt-16 text-white sm:px-6" data-testid="central-panel">
+  // The page itself scrolls (document scrollbar): make it black like the panel's own lists.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.add("office-scrollbar");
+    return () => root.classList.remove("office-scrollbar");
+  }, []);
+  return <div className="office-scrollbar min-h-screen bg-[#05060a] px-4 pb-16 pt-16 text-white sm:px-6" data-testid="central-panel">
     <div className="mx-auto max-w-[1400px]">
       <div className="flex flex-wrap items-center gap-3">
         <Link href="/agents-office" className="rounded-xl border border-white/15 px-3 py-2 text-xs font-semibold text-white hover:bg-white/10" data-testid="central-panel-back">← Oficina 3D</Link>

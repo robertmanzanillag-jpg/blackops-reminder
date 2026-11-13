@@ -4,7 +4,7 @@ import {
   buildGlobalRanking, buildPanelRows, buildReportsFeed, filterPanelRows, panelCounters, panelStatusKind, readPanelParams, sectionForDepartment,
   officeDeepLinkStep, selectReplaceable, selectReplaced, type PanelAgentInput,
 } from "../client/src/lib/office-central-panel";
-import { clampPanelPosition, parseStoredPanelPosition, visiblePanelArea } from "../client/src/components/agents-world-office/use-draggable-panel";
+import { PANEL_BOTTOM_RESERVE, availablePanelHeight, clampPanelPosition, parseStoredPanelPosition, visiblePanelArea } from "../client/src/components/agents-world-office/use-draggable-panel";
 import type { AgentCareer, CompanyState, LeaderboardRow } from "../shared/agent-company";
 import { effectiveIntegrations, isMainCompanyUnscored } from "../shared/agent-integrations";
 import { EXEMPT_IDS } from "../server/agent-council";
@@ -167,6 +167,20 @@ test("draggable panels are placed inside their container's visible part, also af
   assert.deepEqual(clampPanelPosition({ x: 500, y: 900 }, { width: 300, height: 200 }, area), { x: 82, y: 592 });
   // Container entirely off screen: fall back to the container itself.
   assert.deepEqual(visiblePanelArea({ left: 0, top: -2000 }, { width: 1000, height: 800 }, { width: 390, height: 844 }), { left: 0, top: 0, width: 1000, height: 800 });
+});
+
+test("floating panels never reach the bottom band with the factory button and chat launcher", () => {
+  const phone = { left: 0, top: 0, width: 390, height: 844 };
+  // Dragged all the way down: the top stays high enough for a 120 px panel above the 72 px band.
+  const low = clampPanelPosition({ x: 0, y: 5000 }, { width: 300, height: 600 }, phone, PANEL_BOTTOM_RESERVE);
+  assert.deepEqual(low, { x: 8, y: 844 - 72 - 120 - 8 });
+  // Its height is capped so the bottom edge ends above the band, whatever the content.
+  assert.equal(low.y + availablePanelHeight(low.y, phone), 844 - PANEL_BOTTOM_RESERVE);
+  // Untouched panels (top 220 px on a phone, 96 px on a 768 px laptop) get the same cap.
+  assert.equal(availablePanelHeight(220, phone), 844 - 72 - 220);
+  assert.equal(availablePanelHeight(96, { left: 0, top: 0, width: 1366, height: 768 }), 768 - 72 - 96);
+  // Small panels keep their whole height when dragged low.
+  assert.deepEqual(clampPanelPosition({ x: 0, y: 5000 }, { width: 300, height: 80 }, phone, PANEL_BOTTOM_RESERVE), { x: 8, y: 844 - 72 - 80 - 8 });
 });
 
 test("office deep link switches to KONG once, never traps the user and gives up once data settled", () => {

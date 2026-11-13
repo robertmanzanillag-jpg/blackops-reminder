@@ -2308,7 +2308,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
               >
                 <X className="h-5 w-5" />
               </button>
-              <div className="absolute right-6 top-5 z-[120] max-h-[calc(100vh-5rem)] w-[min(420px,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-cyan-200/35 bg-zinc-950/96 p-4 text-white shadow-2xl shadow-black/70 backdrop-blur">
+              <div className="office-scrollbar absolute right-6 top-5 z-[120] max-h-[calc(100%-1.25rem-5.5rem)] w-[min(420px,calc(100vw-2rem))] overflow-y-auto rounded-lg border border-cyan-200/35 bg-zinc-950/96 p-4 text-white shadow-2xl shadow-black/70 backdrop-blur">
               <div className="flex items-start gap-3 pr-12">
                 <div className={cn("flex h-12 w-12 shrink-0 items-center justify-center rounded-md bg-gradient-to-br text-zinc-950", contact.color)}>
                   <ContactIcon className="h-6 w-6" />

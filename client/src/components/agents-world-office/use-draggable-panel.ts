@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 
 // Floating office panels the owner can drag (mouse, pen or touch). The panel keeps its
 // default Tailwind position until it is moved; then it is placed with absolute left/top inside
@@ -11,18 +11,31 @@ export type PanelOffset = { x: number; y: number };
 /** v2: offsets are relative to the panel's container (v1 stored viewport offsets). */
 const STORAGE_PREFIX = "agentsOffice.panelPosition.v2:";
 const MARGIN = 8;
+/**
+ * Bottom band no floating panel may enter: the "Fábrica de software" button (bottom-left) and a
+ * bottom-right chat launcher live there. 4.5rem = 72 px.
+ */
+export const PANEL_BOTTOM_RESERVE = 72;
+/** A dragged panel may be placed as low as this much height above the reserved band; it then scrolls. */
+export const PANEL_MIN_HEIGHT = 120;
 
 /** Area the panel may occupy, in container coordinates (left/top default to 0). */
 export type PanelArea = { width: number; height: number; left?: number; top?: number };
 
-/** Keeps at least `MARGIN` px of the panel inside the area (pure; tested). */
-export function clampPanelPosition(position: PanelOffset, size: { width: number; height: number }, area: PanelArea): PanelOffset {
+/**
+ * Keeps at least `MARGIN` px of the panel inside the area (pure; tested). With `reserveBottom`
+ * the bottom band of that height is off limits: the panel's top stays high enough that
+ * `PANEL_MIN_HEIGHT` px fit above the band (the panel's max-height then shrinks to fit).
+ */
+export function clampPanelPosition(position: PanelOffset, size: { width: number; height: number }, area: PanelArea, reserveBottom = 0): PanelOffset {
   const left = area.left ?? 0;
   const top = area.top ?? 0;
+  const usableHeight = Math.max(2 * MARGIN, area.height - reserveBottom);
   const minX = left + MARGIN;
   const minY = top + MARGIN;
   const maxX = Math.max(minX, left + area.width - size.width - MARGIN);
-  const maxY = Math.max(minY, top + area.height - Math.min(size.height, area.height - 2 * MARGIN) - MARGIN);
+  const keptHeight = reserveBottom > 0 ? Math.min(size.height, PANEL_MIN_HEIGHT) : size.height;
+  const maxY = Math.max(minY, top + usableHeight - Math.min(keptHeight, usableHeight - 2 * MARGIN) - MARGIN);
   return { x: Math.round(Math.min(Math.max(minX, position.x), maxX)), y: Math.round(Math.min(Math.max(minY, position.y), maxY)) };
 }
 
@@ -37,6 +50,14 @@ export function visiblePanelArea(origin: { left: number; top: number }, containe
   const bottom = Math.min(container.height, viewport.height - origin.top);
   if (right - left < 2 * MARGIN || bottom - top < 2 * MARGIN) return { left: 0, top: 0, width: container.width, height: container.height };
   return { left, top, width: right - left, height: bottom - top };
+}
+
+/**
+ * Max height (px) a panel whose top edge is at `panelTop` (container coordinates) may take so it
+ * ends `reserveBottom` px above the bottom of the visible area (pure; tested).
+ */
+export function availablePanelHeight(panelTop: number, area: Required<PanelArea>, reserveBottom = PANEL_BOTTOM_RESERVE): number {
+  return Math.max(PANEL_MIN_HEIGHT / 2, Math.floor(area.top + area.height - reserveBottom - panelTop));
 }
 
 export function parseStoredPanelPosition(raw: string | null): PanelOffset | null {
@@ -70,13 +91,39 @@ function containerFrame(element: HTMLElement | null) {
 export function useDraggablePanel(id: string) {
   const ref = useRef<HTMLElement | null>(null);
   const [position, setPosition] = useState<PanelOffset | null>(() => (typeof window === "undefined" ? null : readStored(id)));
+  const [available, setAvailable] = useState<number | null>(null);
   const drag = useRef<{ pointerId: number; dx: number; dy: number } | null>(null);
 
+  const visibleArea = () => {
+    const frame = containerFrame(ref.current);
+    return visiblePanelArea(frame.origin, frame.size, { width: window.innerWidth, height: window.innerHeight });
+  };
   const clampToContainer = useCallback((next: PanelOffset) => {
     const box = ref.current?.getBoundingClientRect();
-    const frame = containerFrame(ref.current);
-    return clampPanelPosition(next, { width: box?.width ?? 320, height: box?.height ?? 200 }, visiblePanelArea(frame.origin, frame.size, { width: window.innerWidth, height: window.innerHeight }));
+    return clampPanelPosition(next, { width: box?.width ?? 320, height: box?.height ?? 200 }, visibleArea(), PANEL_BOTTOM_RESERVE);
   }, []);
+
+  // Cap the panel's height (CSS variable --float-avail) so its bottom edge always stays above the
+  // reserved bottom band, wherever it sits and however much content it has; the panel scrolls instead.
+  useLayoutEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    const measure = () => {
+      const next = availablePanelHeight(element.offsetTop, visibleArea());
+      setAvailable(current => (current === next ? current : next));
+    };
+    measure();
+    window.addEventListener("resize", measure);
+    window.addEventListener("scroll", measure, true);
+    const parent = element.offsetParent;
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    if (parent) observer?.observe(parent);
+    return () => {
+      window.removeEventListener("resize", measure);
+      window.removeEventListener("scroll", measure, true);
+      observer?.disconnect();
+    };
+  }, [position?.x, position?.y]);
 
   // Re-clamp a remembered position when the window shrinks (rotating a phone, resizing).
   useEffect(() => {
@@ -115,7 +162,10 @@ export function useDraggablePanel(id: string) {
   };
   const reset = () => { setPosition(null); writeStored(id, null); };
 
-  const style: CSSProperties | undefined = position ? { position: "absolute", left: position.x, top: position.y, right: "auto", bottom: "auto" } : undefined;
+  const style = {
+    ...(position ? { position: "absolute", left: position.x, top: position.y, right: "auto", bottom: "auto" } : {}),
+    ...(available !== null ? { "--float-avail": `${available}px` } : {}),
+  } as CSSProperties;
   const handleProps = {
     onPointerDown, onPointerMove, onPointerUp: endDrag, onPointerCancel: endDrag,
     style: { touchAction: "none", cursor: "grab" } as CSSProperties,

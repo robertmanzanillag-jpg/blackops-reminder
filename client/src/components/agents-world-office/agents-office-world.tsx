@@ -301,7 +301,7 @@ export function AgentsOfficeWorld({
 
   if (failed && officeWing === "main") {
     return (
-      <div className="absolute inset-0 overflow-y-auto px-4 pb-10 pt-24">
+      <div className="office-scrollbar absolute inset-0 overflow-y-auto px-4 pb-10 pt-24">
         <p className="mx-auto mb-4 max-w-[900px] rounded-lg border border-amber-300/30 bg-amber-300/10 p-3 text-xs text-amber-100" data-testid="world-fallback">
           Este navegador no pudo abrir la oficina 3D ({failed}). Te muestro el edificio con los mismos datos en vivo.
         </p>
@@ -418,7 +418,7 @@ export function AgentsOfficeWorld({
           {message && <p role="status" className="mt-2 text-xs text-violet-100" data-testid="world-message">{message}</p>}
         </div>
       </>}</FloatingPanel>
-      {officeWing === "kong" && overlay === "kong-talk" && <FloatingPanel panelId="kong-talk" aria-label="Colaboración KONG" className={cn(FLOAT_RIGHT, "z-30 max-h-[48%] w-[min(420px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-cyan-200/25 bg-[#07131b]/95 p-4 text-xs text-white")} data-testid="world-kong-collaboration-panel">{handle => <>
+      {officeWing === "kong" && overlay === "kong-talk" && <FloatingPanel panelId="kong-talk" aria-label="Colaboración KONG" className={cn(FLOAT_RIGHT, "z-30 max-h-[min(48%,var(--float-avail,100%))] w-[min(420px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-cyan-200/25 bg-[#07131b]/95 p-4 text-xs text-white")} data-testid="world-kong-collaboration-panel">{handle => <>
         <div className="flex justify-between gap-2" {...handle}><h2 className="font-bold text-cyan-100"><span aria-hidden className="mr-1 text-zinc-500">⠿</span>Colaboración KONG</h2><button type="button" onClick={() => setOverlay("none")} aria-label="Cerrar colaboración">Cerrar</button></div>
         <p className="mt-2 text-zinc-300">Revisión automática de evidencia entre supervisión y operaciones. Son propuestas pendientes de revisión; no conversaciones de IA ni acciones ya ejecutadas.</p>
         {!kongCollaboration?.exchanges.length && <p className="mt-3">Sin intercambios con evidencia vigente.</p>}
@@ -429,7 +429,7 @@ export function AgentsOfficeWorld({
         </article>)}
       </>}</FloatingPanel>}
 
-      {officeWing === "kong" && overlay === "city-director" && <FloatingPanel panelId="city-director" aria-label="Director de ciudades de KONG" data-testid="world-city-director-panel" className={cn(FLOAT_RIGHT, "z-30 max-h-[45%] w-[min(410px,calc(100vw-1.5rem))] space-y-2 overflow-y-auto rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-3 text-xs text-white shadow-2xl [color-scheme:dark]")}>{handle => <>
+      {officeWing === "kong" && overlay === "city-director" && <FloatingPanel panelId="city-director" aria-label="Director de ciudades de KONG" data-testid="world-city-director-panel" className={cn(FLOAT_RIGHT, "z-30 max-h-[min(45%,var(--float-avail,100%))] w-[min(410px,calc(100vw-1.5rem))] space-y-2 overflow-y-auto rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-3 text-xs text-white shadow-2xl [color-scheme:dark]")}>{handle => <>
         <div className="flex items-center justify-between gap-2" {...handle}>
           <h2 className="text-sm font-bold text-amber-100"><span aria-hidden className="mr-1 text-zinc-500">⠿</span>Director de ciudades · KONG</h2>
           <button type="button" onClick={() => setOverlay("none")} className="rounded-full border border-white/20 px-2 py-1">Cerrar</button>
@@ -454,7 +454,7 @@ export function AgentsOfficeWorld({
         <a href="https://kongnightlife.com/admin/ceo" className="inline-block text-amber-100 underline">Abrir la revisión del CEO en KONG</a>
       </>}</FloatingPanel>}
       {overlay === "ranking" && (
-        <FloatingPanel panelId="ranking" className={cn(FLOAT_RIGHT, "z-30 max-h-[45%] w-[min(380px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-emerald-200/20 bg-[#06100d]/95 p-4 text-white shadow-2xl [color-scheme:dark]")} data-testid="world-ranking-panel">{handle => <>
+        <FloatingPanel panelId="ranking" className={cn(FLOAT_RIGHT, "z-30 max-h-[min(45%,var(--float-avail,100%))] w-[min(380px,calc(100vw-1.5rem))] overflow-y-auto rounded-2xl border border-emerald-200/20 bg-[#06100d]/95 p-4 text-white shadow-2xl [color-scheme:dark]")} data-testid="world-ranking-panel">{handle => <>
           <div className="flex items-center justify-between" {...handle}>
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-emerald-200"><span aria-hidden className="mr-1 text-zinc-500">⠿</span>Tabla de posiciones</p>
             <button type="button" onClick={() => setOverlay("none")} className="text-xs text-zinc-400 hover:text-white">✕</button>
@@ -475,12 +475,14 @@ export function AgentsOfficeWorld({
         </>}</FloatingPanel>
       )}
 
-      {overlay === "partners" && workspace.isOwner && <PartnerInvitePanel onClose={() => setOverlay("none")} />}
-      {overlay === "blackroom-academy" && officeWing === "main" && <BlackRoomAcademyPanel company={companyView.company} onClose={() => setOverlay("none")} />}
-      {overlay === "blackroom-ceo-chat" && canChatBlackRoomCeo && <BlackRoomCeoChatPanel onClose={() => setOverlay("none")} onShowTasks={officeWing === "main" ? () => setOverlay("ceo") : undefined} />}
+      {/* These overlays position themselves; the wrappers only add the black scrollbars and keep the
+          Black Room chat (fixed height) above the bottom band with the "Fábrica de software" button. */}
+      {overlay === "partners" && workspace.isOwner && <div className="office-scrollbar contents"><PartnerInvitePanel onClose={() => setOverlay("none")} /></div>}
+      {overlay === "blackroom-academy" && officeWing === "main" && <div className="office-scrollbar contents"><BlackRoomAcademyPanel company={companyView.company} onClose={() => setOverlay("none")} /></div>}
+      {overlay === "blackroom-ceo-chat" && canChatBlackRoomCeo && <div className="office-scrollbar contents [&>section]:max-h-[calc(100%-220px-4.5rem)] sm:[&>section]:max-h-[calc(100%-9rem-4.5rem)] lg:[&>section]:max-h-[calc(100%-6rem-4.5rem)]" data-testid="world-blackroom-ceo-chat-frame"><BlackRoomCeoChatPanel onClose={() => setOverlay("none")} onShowTasks={officeWing === "main" ? () => setOverlay("ceo") : undefined} /></div>}
 
       {overlay === "ceo" && (
-        <FloatingPanel panelId="ceo" className={cn(FLOAT_RIGHT, "z-30 flex max-h-[45%] w-[min(420px,calc(100vw-1.5rem))] flex-col rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-4 text-white shadow-2xl [color-scheme:dark]")} data-testid="world-ceo-panel">{handle => <>
+        <FloatingPanel panelId="ceo" className={cn(FLOAT_RIGHT, "z-30 flex max-h-[min(45%,var(--float-avail,100%))] w-[min(420px,calc(100vw-1.5rem))] flex-col rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-4 text-white shadow-2xl [color-scheme:dark]")} data-testid="world-ceo-panel">{handle => <>
           <div className="flex items-center justify-between" {...handle}>
             <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200"><span aria-hidden className="mr-1 text-zinc-500">⠿</span>{officeWing === "main" && canChatBlackRoomCeo ? "Tareas de la oficina" : "Canal directo con el CEO"}</p>
             <div className="flex items-center gap-2">
@@ -547,7 +549,7 @@ export function AgentsOfficeWorld({
       )}
 
       {focused && (
-        <FloatingPanel as="aside" panelId="department" className={cn(FLOAT_RIGHT, "z-20 flex max-h-[42%] w-[min(390px,calc(100vw-1.5rem))] flex-col overflow-y-auto rounded-2xl border border-white/10 bg-[#070b14]/95 p-3 text-white shadow-2xl sm:max-h-[65%]")} data-testid="world-panel">{handle => <>
+        <FloatingPanel as="aside" panelId="department" className={cn(FLOAT_RIGHT, "z-20 flex max-h-[min(42%,var(--float-avail,100%))] w-[min(390px,calc(100vw-1.5rem))] flex-col overflow-y-auto rounded-2xl border border-white/10 bg-[#070b14]/95 p-3 text-white shadow-2xl sm:max-h-[min(65%,var(--float-avail,100%))]")} data-testid="world-panel">{handle => <>
           <div className="flex shrink-0 items-start justify-between gap-2" {...handle}>
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.24em]" style={{ color: focused.color }}><span aria-hidden className="mr-1 text-zinc-500">⠿</span>{focused.name}</p>
@@ -766,9 +768,11 @@ export function AgentsOfficeWorld({
 }
 
 const CENTRAL_PANEL_PATH = "/agents-office/panel";
-// Floating panels start in the top band, under the toolbar, so they never sit on the bottom
-// "Fábrica de software" button or a bottom-right chat launcher. They can be dragged anywhere.
-const FLOAT_LEFT = "absolute left-3 top-[220px] sm:top-36 lg:top-24 max-h-[calc(100%-220px-4.5rem)] sm:max-h-[calc(100%-9rem-4.5rem)] lg:max-h-[calc(100%-6rem-4.5rem)]";
+// Floating panels start in the top band, under the toolbar, and their height is capped by
+// --float-avail (set by useDraggablePanel) so they never reach the bottom band holding the
+// "Fábrica de software" button and a bottom-right chat launcher, even when dragged or when their
+// content grows: they scroll instead.
+const FLOAT_LEFT = "absolute left-3 top-[220px] sm:top-36 lg:top-24 max-h-[var(--float-avail,calc(100%-220px-4.5rem))] sm:max-h-[var(--float-avail,calc(100%-9rem-4.5rem))] lg:max-h-[var(--float-avail,calc(100%-6rem-4.5rem))]";
 // Phones and tablets: just under the folded controls pill (top 220 px / 144 px). lg:top-28 keeps the right column
 // clear of the "Trabajo real" toggle (top-16, z-110).
 const FLOAT_RIGHT = "absolute right-3 top-[272px] sm:top-[196px] lg:top-28";
@@ -778,7 +782,7 @@ function FloatingPanel({ panelId, as = "section", className, children, ...rest }
   const drag = useDraggablePanel(panelId);
   const Tag = as;
   return (
-    <Tag ref={drag.ref as RefObject<HTMLElement>} style={drag.style} className={className} data-moved={drag.moved ? "true" : undefined} {...rest}>
+    <Tag ref={drag.ref as RefObject<HTMLElement>} style={drag.style} className={cn("office-scrollbar", className)} data-moved={drag.moved ? "true" : undefined} {...rest}>
       {children({ ...drag.handleProps, title: "Arrastra para mover · doble clic para volver a su lugar", onDoubleClick: drag.reset })}
     </Tag>
   );
