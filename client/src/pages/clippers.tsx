@@ -46,6 +46,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import { LocalNewsSourceDiagnostics } from "@/components/clippers/local-news-source-diagnostics";
+import type { SourceDiagnostics } from "../../../shared/local-news-source-diagnostics";
 
 type ClipperAccountCategory = "sports" | "memes" | "streamers";
 type ClipperAccountStatus = "ready" | "needs_connection" | "paused";
@@ -255,6 +257,9 @@ interface ClipperLocalNewsQueueSummary {
 }
 
 interface ClipperLocalNewsStatus {
+  sourceDiagnostics?: SourceDiagnostics;
+  deliveryPolicy?: { paused: boolean; reason: string };
+  deliverySummary?: { status: string; scheduled: number; publicationConfirmed: number; pendingReconciliation: number };
   generatedAt?: string;
   rootDir?: string;
   workspaceDir?: string;
@@ -395,6 +400,7 @@ interface ClipperAccount {
   dailyClipTarget: number;
   weeklyViewsGoal: number;
   lastWeekViews: number;
+  weeklyViewsEvidence?: "unavailable" | "verified";
   status: ClipperAccountStatus;
   contentPolicy: string;
 }
@@ -6273,7 +6279,7 @@ interface ClipperGrowthAudit {
   summary: string;
   items: ClipperGrowthAuditItem[];
   roadmap: string[];
-  weeklyGoalGap: number;
+  weeklyGoalGap: number | null;
 }
 
 interface ClipperDriveFolder {
@@ -8211,7 +8217,7 @@ export default function ClippersPage() {
       const review = data.totals?.reviewRequired ?? queue?.reviewRequired ?? queue?.approvalRequired ?? 0;
       toast({
         title: "Ciclo Local News completado",
-        description: `${queued} en cola; ${review} requieren revisión. Nada se cuenta publicado sin evidencia y métricas.`,
+        description: `${queued} en cola; ${review} requieren revisión. ${data.deliverySummary?.status === "paused" ? "Entregas PAUSADAS: no se programó ni publicó nada." : data.deliverySummary?.pendingReconciliation ? "Resultado incierto: exige conciliación, sin reenvío automático." : "Nada se cuenta publicado sin evidencia y métricas."}`,
       });
     },
     onError: (error: Error) => {
@@ -12735,6 +12741,12 @@ export default function ClippersPage() {
                 </div>
               </div>
 
+              <div className="mt-3 rounded-md border border-amber-400/40 bg-amber-950/20 p-3 text-xs text-amber-100" data-testid="local-news-delivery-pause">
+                {localNews?.deliveryPolicy?.paused !== false
+                  ? "Entregas de Miami y New York PAUSADAS. Los ciclos no autorizan programación ni publicación."
+                  : "La entrega requiere identidad, red y permiso vigentes."}
+                <p>{localNews?.deliveryPolicy?.reason}</p>
+              </div>
               <div className={cn(
                 "mt-3 rounded-md border p-3 text-xs leading-5",
                 localNews?.metricool?.platforms?.facebook?.ready
@@ -12751,6 +12763,7 @@ export default function ClippersPage() {
                     : `${localNews?.metricool?.platforms?.x?.connected ?? 0}/${localNews?.metricool?.platforms?.x?.required ?? 2} conectado; no bloquea Facebook`}
                 </span>
               </div>
+              <LocalNewsSourceDiagnostics diagnostics={localNews?.sourceDiagnostics} />
               <div className="mt-3 rounded-md border border-emerald-300/15 bg-emerald-950/10 p-3 text-xs leading-5 text-emerald-100/80" data-testid="clippers-local-news-evidence-gate">
                 Publicado con evidencia: <span className="font-semibold text-emerald-100">{formatNumber(localNewsPublishedWithEvidence)}</span>. Los items en cola, auto-eligible o scheduled no cuentan como publicados; solo una URL pública comprobada y métricas registradas cierran el ciclo.
               </div>
@@ -21352,7 +21365,7 @@ export default function ClippersPage() {
                       <Badge className={cn("border", growthAuditBadge(status.growthAudit.status))}>{status.growthAudit.status}</Badge>
                     </div>
                     <p className="mt-3 text-sm leading-6 text-zinc-400">{status.growthAudit.summary}</p>
-                    <p className="mt-2 text-xs text-amber-200">Gap semanal: {formatNumber(status.growthAudit.weeklyGoalGap)} views</p>
+                    <p className="mt-2 text-xs text-amber-200">Gap semanal: {status.growthAudit.weeklyGoalGap == null ? "Sin medición verificada" : `${formatNumber(status.growthAudit.weeklyGoalGap)} views`}</p>
                     <Progress value={status.growthAudit.score} className="mt-3 bg-white/10 [&>div]:bg-lime-200" />
                   </div>
 
@@ -25413,7 +25426,7 @@ export default function ClippersPage() {
 
         <div className="grid gap-4 xl:grid-cols-3">
           {(status?.accounts || []).map((account) => {
-            const progress = Math.min(Math.round((account.lastWeekViews / account.weeklyViewsGoal) * 100), 100);
+            const progress = account.weeklyViewsEvidence === "verified" ? Math.min(Math.round((account.lastWeekViews / account.weeklyViewsGoal) * 100), 100) : 0;
             return (
               <Card key={account.id} className="border-zinc-800 bg-zinc-950/70">
                 <CardHeader className="pb-3">
@@ -25434,7 +25447,7 @@ export default function ClippersPage() {
                   </div>
                   <div>
                     <div className="mb-2 flex justify-between text-xs text-zinc-500">
-                      <span>{formatNumber(account.lastWeekViews)} views</span>
+                      <span>{account.weeklyViewsEvidence !== "verified" ? "Sin medición semanal verificada" : `${formatNumber(account.lastWeekViews)} views`}</span>
                       <span>{formatNumber(account.weeklyViewsGoal)} goal</span>
                     </div>
                     <Progress value={progress} className="bg-white/10 [&>div]:bg-amber-200" />
@@ -25446,7 +25459,7 @@ export default function ClippersPage() {
                     </div>
                     <div className="rounded-md border border-white/10 bg-black/35 p-3">
                       <p className="text-xs text-zinc-500">Progreso</p>
-                      <p className="font-semibold">{progress}%</p>
+                      <p className="font-semibold">{account.weeklyViewsEvidence !== "verified" ? "Sin verificar" : `${progress}%`}</p>
                     </div>
                   </div>
                   <p className="text-xs leading-5 text-zinc-500">{account.contentPolicy}</p>

@@ -1,7 +1,10 @@
+import { CompanyOffice } from "@/components/company-office/company-office";
+import { SoftwareFactoryPanel } from "@/components/software-factory-panel";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { CSSProperties, PointerEvent, ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { ownerOfficeStorageKey } from "@/lib/owner-office-storage";
+import { motion, MotionConfig } from "framer-motion";
 import {
   ArrowLeft,
   BadgeDollarSign,
@@ -27,8 +30,16 @@ import {
 } from "lucide-react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { OfficeConnectionsPanel } from "@/components/office-connections-panel";
+import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { MonitoredProject } from "@shared/schema";
+import { AgentsBuilding } from "@/components/agents-building/agents-building";
+import { AgentsOfficeWorld } from "@/components/agents-world-office/agents-office-world";
+import { useWorkspaceRole } from "@/lib/workspace-role";
+import { KongSupervisorPanel } from "@/components/kong-supervisor-panel";
+import { KongOperationsPanel } from "@/components/kong-operations-panel";
+import type { AgentLiveStatus } from "@/lib/agent-live-status";
 
 type GitHubOverview = Record<
   string,
@@ -51,10 +62,10 @@ const agents = [
     href: "/assistant",
     icon: Bot,
     station: "Recepcion",
-    status: "Listo",
-    activity: "Recibiendo solicitudes y organizando agenda",
+    status: "Sin verificar",
+    activity: "Función prevista: Recibiendo solicitudes y organizando agenda",
     shortAction: "Agenda",
-    mode: "working",
+    mode: "break",
     color: "from-sky-400 to-cyan-300",
     outfit: "bg-sky-500",
     hair: "bg-zinc-900",
@@ -69,10 +80,10 @@ const agents = [
     href: "/ceo",
     icon: BriefcaseBusiness,
     station: "Sala principal",
-    status: "Revisando",
-    activity: "Definiendo prioridades del dia",
+    status: "Sin verificar",
+    activity: "Función prevista: Definiendo prioridades del dia",
     shortAction: "Prioridades",
-    mode: "working",
+    mode: "break",
     color: "from-amber-300 to-orange-400",
     outfit: "bg-amber-500",
     hair: "bg-stone-800",
@@ -87,10 +98,10 @@ const agents = [
     href: "/revenue-engine",
     icon: BadgeDollarSign,
     station: "Deals + Websites",
-    status: "Armando pipeline",
-    activity: "Buscando deals, creando landing pages y preparando websites de oportunidad",
+    status: "Sin verificar",
+    activity: "Función prevista: Buscando deals, creando landing pages y preparando websites de oportunidad",
     shortAction: "Deals",
-    mode: "working",
+    mode: "break",
     color: "from-emerald-300 to-sky-400",
     outfit: "bg-emerald-500",
     hair: "bg-zinc-950",
@@ -105,10 +116,10 @@ const agents = [
     href: "/dropshipping-ceo",
     icon: Store,
     station: "Dropshipping Lab",
-    status: "Validando",
-    activity: "Buscando productos virales, margen, suppliers y contenido sin comprar inventario",
+    status: "Sin verificar",
+    activity: "Función prevista: Buscando productos virales, margen, suppliers y contenido sin comprar inventario",
     shortAction: "Dropship",
-    mode: "working",
+    mode: "break",
     color: "from-emerald-200 to-lime-400",
     outfit: "bg-emerald-400",
     hair: "bg-zinc-950",
@@ -123,10 +134,10 @@ const agents = [
     href: "/marketing-command-center",
     icon: Megaphone,
     station: "Marketing HQ",
-    status: "Produciendo",
-    activity: "Dirigiendo marketing para todos los clientes internos con skills, analytics, safety y aprendizaje separado",
+    status: "Sin verificar",
+    activity: "Función prevista: Dirigiendo marketing para todos los clientes internos con skills, analytics, safety y aprendizaje separado",
     shortAction: "Marketing",
-    mode: "working",
+    mode: "break",
     color: "from-lime-300 to-emerald-400",
     outfit: "bg-lime-500",
     hair: "bg-zinc-950",
@@ -141,10 +152,10 @@ const agents = [
     href: "/code-agent",
     icon: Code2,
     station: "Mesa tecnica",
-    status: "En foco",
-    activity: "Trabajando cambios y revisando codigo",
+    status: "Sin verificar",
+    activity: "Función prevista: Trabajando cambios y revisando codigo",
     shortAction: "Codigo",
-    mode: "working",
+    mode: "break",
     color: "from-emerald-300 to-teal-400",
     outfit: "bg-emerald-500",
     hair: "bg-zinc-950",
@@ -159,10 +170,10 @@ const agents = [
     href: "/github-agent",
     icon: Github,
     station: "Control de versiones",
-    status: "Sincronizando",
-    activity: "Mirando PRs, ramas y checks",
+    status: "Sin verificar",
+    activity: "Función prevista: Mirando PRs, ramas y checks",
     shortAction: "PRs",
-    mode: "working",
+    mode: "break",
     color: "from-zinc-200 to-zinc-500",
     outfit: "bg-zinc-300",
     hair: "bg-zinc-900",
@@ -177,10 +188,10 @@ const agents = [
     href: "/github-agent",
     icon: Sparkles,
     station: "Dev + GitHub",
-    status: "Auditando",
-    activity: "Revisando cambios de Codex con criterio independiente antes de QA",
+    status: "Sin verificar",
+    activity: "Función prevista: Revisando cambios de Codex con criterio independiente antes de QA",
     shortAction: "Review",
-    mode: "working",
+    mode: "break",
     color: "from-orange-200 to-rose-300",
     outfit: "bg-orange-400",
     hair: "bg-stone-900",
@@ -195,10 +206,10 @@ const agents = [
     href: "/portfolio",
     icon: LineChart,
     station: "Pantalla de mercado",
-    status: "Monitoreando",
-    activity: "Analizando cartera y senales de mercado",
+    status: "Sin verificar",
+    activity: "Función prevista: Analizando cartera y senales de mercado",
     shortAction: "Mercado",
-    mode: "working",
+    mode: "break",
     color: "from-lime-300 to-green-500",
     outfit: "bg-lime-500",
     hair: "bg-stone-700",
@@ -213,10 +224,10 @@ const agents = [
     href: "/radio",
     icon: Radio,
     station: "Cabina creativa",
-    status: "Produciendo",
-    activity: "Preparando radio, flyers y calendario creativo",
+    status: "Sin verificar",
+    activity: "Función prevista: Preparando radio, flyers y calendario creativo",
     shortAction: "Radio",
-    mode: "working",
+    mode: "break",
     color: "from-fuchsia-300 to-rose-400",
     outfit: "bg-rose-500",
     hair: "bg-violet-950",
@@ -231,10 +242,10 @@ const agents = [
     href: "/clippers",
     icon: Clapperboard,
     station: "War room social",
-    status: "Planeando",
-    activity: "Organizando cuentas, fuentes permitidas, drafts diarios y reportes de views",
+    status: "Sin verificar",
+    activity: "Función prevista: Organizando cuentas, fuentes permitidas, drafts diarios y reportes de views",
     shortAction: "Clips",
-    mode: "working",
+    mode: "break",
     color: "from-amber-300 to-rose-400",
     outfit: "bg-amber-500",
     hair: "bg-zinc-950",
@@ -249,8 +260,8 @@ const agents = [
     href: "/automations",
     icon: Zap,
     station: "Rack operativo",
-    status: "Vigilando",
-    activity: "Esperando el proximo job programado",
+    status: "Sin verificar",
+    activity: "Función prevista: Esperando el proximo job programado",
     shortAction: "Rutinas",
     mode: "break",
     color: "from-violet-300 to-indigo-400",
@@ -267,10 +278,10 @@ const agents = [
     href: "/cybersecurity-agent",
     icon: ShieldAlert,
     station: "Security ops",
-    status: "Monitoreando",
-    activity: "Revisando apps, HTTPS, incidentes, repos y alertas por Telegram",
+    status: "Sin verificar",
+    activity: "Función prevista: Revisando apps, HTTPS, incidentes, repos y alertas por Telegram",
     shortAction: "Threats",
-    mode: "working",
+    mode: "break",
     color: "from-cyan-200 to-blue-400",
     outfit: "bg-cyan-500",
     hair: "bg-zinc-950",
@@ -285,10 +296,10 @@ const agents = [
     href: "/app-qa-agent",
     icon: MousePointerClick,
     station: "QA lab",
-    status: "Patrullando",
-    activity: "Entrando a paginas, revisando links, clicks esperados, APIs, errores e ideas de mejora",
+    status: "Sin verificar",
+    activity: "Función prevista: Entrando a paginas, revisando links, clicks esperados, APIs, errores e ideas de mejora",
     shortAction: "QA",
-    mode: "working",
+    mode: "break",
     color: "from-emerald-200 to-teal-400",
     outfit: "bg-emerald-500",
     hair: "bg-zinc-950",
@@ -303,10 +314,10 @@ const agents = [
     href: "/legal-compliance",
     icon: Scale,
     station: "Legal desk",
-    status: "Auditando",
-    activity: "Revisando contratos, privacidad, copyright, terminos, riesgos regulatorios y alertas criticas",
+    status: "Sin verificar",
+    activity: "Función prevista: Revisando contratos, privacidad, copyright, terminos, riesgos regulatorios y alertas criticas",
     shortAction: "Legal",
-    mode: "working",
+    mode: "break",
     color: "from-violet-200 to-indigo-400",
     outfit: "bg-indigo-400",
     hair: "bg-zinc-950",
@@ -321,10 +332,10 @@ const agents = [
     href: "/tools",
     icon: ShieldCheck,
     station: "Puerta segura",
-    status: "Activo",
-    activity: "Revisando permisos y acciones sensibles",
+    status: "Sin verificar",
+    activity: "Función prevista: Revisando permisos y acciones sensibles",
     shortAction: "Permisos",
-    mode: "working",
+    mode: "break",
     color: "from-red-300 to-stone-300",
     outfit: "bg-red-500",
     hair: "bg-stone-900",
@@ -342,6 +353,7 @@ type OfficeContact = {
   role: string;
   station: string;
   status: string;
+  statusSignal?: AgentLiveStatus;
   activity: string;
   href?: string;
   icon: Agent["icon"];
@@ -435,6 +447,8 @@ const OFFICE_GITHUB_HANDOFF_KEY = "office.githubAgentHandoff";
 const OFFICE_LAYOUT_KEY = "agentsOffice.roomLayout.v1";
 const OFFICE_AGENT_LOCATIONS_KEY = "agentsOffice.agentLocations.v1";
 const OFFICE_AGENT_OFFSETS_KEY = "agentsOffice.agentOffsets.v1";
+const OFFICE_VIEW_KEY = "agentsOffice.view.v2";
+type OfficeView = "world" | "building" | "office";
 const AGENT_WALK_MS = 1800;
 const defaultOfficeRooms: OfficeRoom[] = [
   { id: "reception", label: "Recepcion", x: 10, y: 19, w: 18, h: 29 },
@@ -1610,7 +1624,12 @@ function RoomPresenceDot({ item, label }: { item: RoomPresence; label: string })
   );
 }
 
-export default function AgentsOfficePage() {
+function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
+  const workspace = useWorkspaceRole();
+  const layoutKey = ownerOfficeStorageKey(OFFICE_LAYOUT_KEY, ownerId);
+  const locationsKey = ownerOfficeStorageKey(OFFICE_AGENT_LOCATIONS_KEY, ownerId);
+  const offsetsKey = ownerOfficeStorageKey(OFFICE_AGENT_OFFSETS_KEY, ownerId);
+  const handoffKey = ownerOfficeStorageKey(OFFICE_GITHUB_HANDOFF_KEY, ownerId);
   const officeMapRef = useRef<HTMLDivElement | null>(null);
   const walkingTimersRef = useRef<Partial<Record<AgentId, number>>>({});
   const [selectedAgent, setSelectedAgent] = useState<Agent>(agents[0]);
@@ -1619,12 +1638,32 @@ export default function AgentsOfficePage() {
   const [agentChats, setAgentChats] = useState<Record<string, ChatMessage[]>>({});
   const [directMessage, setDirectMessage] = useState("");
   const [editRooms, setEditRooms] = useState(false);
+  const [kongWingRequest, setKongWingRequest] = useState(0);
+  const openKongOffice = () => { changeOfficeView("world"); setKongWingRequest(value => value + 1); };
+  const [officeView, setOfficeView] = useState<OfficeView>(() => {
+    if (typeof window === "undefined") return "world";
+    try {
+      const stored = window.localStorage.getItem(OFFICE_VIEW_KEY);
+      return stored === "office" || stored === "building" ? stored : "world";
+    } catch {
+      return "world";
+    }
+  });
+  const changeOfficeView = (view: OfficeView) => {
+    setOfficeView(view);
+    if (view !== "office") setEditRooms(false);
+    try {
+      window.localStorage.setItem(OFFICE_VIEW_KEY, view);
+    } catch {
+      // Storage can be unavailable (private mode); the view still switches for this visit.
+    }
+  };
   const [walkingAgents, setWalkingAgents] = useState<Partial<Record<AgentId, boolean>>>({});
   const [closedConversationBubbles, setClosedConversationBubbles] = useState<Record<string, boolean>>({});
   const [officeRooms, setOfficeRooms] = useState<OfficeRoom[]>(() => {
     if (typeof window === "undefined") return defaultOfficeRooms;
     try {
-      const stored = window.localStorage.getItem(OFFICE_LAYOUT_KEY);
+      const stored = window.localStorage.getItem(layoutKey);
       if (!stored) return defaultOfficeRooms;
       const parsed = JSON.parse(stored) as OfficeRoom[];
       const roomById = new Map(parsed.map((room) => [room.id, room]));
@@ -1636,7 +1675,7 @@ export default function AgentsOfficePage() {
   const [agentLocations, setAgentLocations] = useState<AgentLocationMap>(() => {
     if (typeof window === "undefined") return defaultAgentLocations;
     try {
-      const stored = window.localStorage.getItem(OFFICE_AGENT_LOCATIONS_KEY);
+      const stored = window.localStorage.getItem(locationsKey);
       if (!stored) return defaultAgentLocations;
       return { ...defaultAgentLocations, ...(JSON.parse(stored) as AgentLocationMap) };
     } catch {
@@ -1646,7 +1685,7 @@ export default function AgentsOfficePage() {
   const [agentOffsets, setAgentOffsets] = useState<AgentRoomOffsetMap>(() => {
     if (typeof window === "undefined") return {};
     try {
-      const stored = window.localStorage.getItem(OFFICE_AGENT_OFFSETS_KEY);
+      const stored = window.localStorage.getItem(offsetsKey);
       return stored ? (JSON.parse(stored) as AgentRoomOffsetMap) : {};
     } catch {
       return {};
@@ -1675,20 +1714,20 @@ export default function AgentsOfficePage() {
     retry: false,
     refetchInterval: 60000,
   });
-  const { data: legalCompliance } = useQuery<LegalComplianceRun>({
+  const { data: legalCompliance, isError: legalComplianceError } = useQuery<LegalComplianceRun>({
     queryKey: ["legal-compliance-reports"],
     queryFn: () => fetch("/api/legal-compliance/reports").then((response) => response.json()),
     retry: false,
     refetchInterval: 60000,
   });
   useEffect(() => {
-    window.localStorage.setItem(OFFICE_LAYOUT_KEY, JSON.stringify(officeRooms));
+    try { window.localStorage.setItem(layoutKey, JSON.stringify(officeRooms)); } catch { /* Keep layout in memory when storage is unavailable. */ }
   }, [officeRooms]);
   useEffect(() => {
-    window.localStorage.setItem(OFFICE_AGENT_LOCATIONS_KEY, JSON.stringify(agentLocations));
+    try { window.localStorage.setItem(locationsKey, JSON.stringify(agentLocations)); } catch { /* Keep layout in memory when storage is unavailable. */ }
   }, [agentLocations]);
   useEffect(() => {
-    window.localStorage.setItem(OFFICE_AGENT_OFFSETS_KEY, JSON.stringify(agentOffsets));
+    try { window.localStorage.setItem(offsetsKey, JSON.stringify(agentOffsets)); } catch { /* Keep layout in memory when storage is unavailable. */ }
   }, [agentOffsets]);
   useEffect(() => {
     return () => {
@@ -1884,7 +1923,7 @@ export default function AgentsOfficePage() {
       if (current[nextContact.id]?.length) return current;
       return {
         ...current,
-        [nextContact.id]: [{ role: "agent", text: buildAgentGreeting(nextContact) }],
+        [nextContact.id]: [{ role: "agent", text: `Vista del rol; ejecución sin verificar. ${buildAgentGreeting(nextContact)}` }],
       };
     });
     setDirectMessage("");
@@ -1892,16 +1931,46 @@ export default function AgentsOfficePage() {
   const handleSendDirectMessage = () => {
     const text = directMessage.trim();
     if (!text) return;
+    const pr = /^(?:consultar pr\s+)?(https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/[1-9]\d*)$/i.exec(text);
+    const radio = /^analizar horarios(?: de radio)?[.!]?$/i.test(text);
+    const action = pr ? { action: "github_pull_request", prUrl: pr[1] } : radio ? { action: "radio_analysis" } : null;
+    if (workspace.isPartner && (action || !workspace.canInteractWith(contact.id))) {
+      // Partners ("socios") only chat with the Black Room team; owner data queries stay with Robert.
+      const contactId = contact.id;
+      setAgentChats(current => ({ ...current, [contactId]: [...(current[contactId] || []), { role: "user", text }, { role: "agent", text: "Solo Robert. Como socio puedes hablar y dar órdenes al equipo de Black Room." }] }));
+      setDirectMessage("");
+      return;
+    }
+    if (action) {
+      const specialist = pr ? { id: "github", name: "GitHub" } : { id: "radio", name: "Radio" };
+      const contactId = contact.id;
+      const append = (messages: ChatMessage[]) => setAgentChats(current => ({ ...current, [contactId]: [...(current[contactId] || []), ...messages] }));
+      const dispatch = contactId === specialist.id ? `${specialist.name} está consultando sus datos.` : `Derivé la consulta a ${specialist.name}. Esperando su resultado.`;
+      append([{ role: "user", text }, { role: "agent", text: dispatch }]);
+      setDirectMessage("");
+      void apiRequest("POST", "/api/agents-office/contact-action", action)
+        .then(response => response.json() as Promise<{ agentId: string; summary: string; checkedAt: string }>)
+        .then(result => {
+          if (result.agentId !== specialist.id || typeof result.summary !== "string" || !Number.isFinite(Date.parse(result.checkedAt))) throw new Error("Invalid receipt");
+          append([{ role: "agent", text: `${result.summary} Comprobado ${new Date(result.checkedAt).toLocaleString()}.` }]);
+        })
+        .catch(() => append([{ role: "agent", text: `${specialist.name} no pudo completar la consulta. Puedes reintentar o abrir su herramienta.` }]));
+      return;
+    }
     const isDevReviewContact = contact.name === "Code" || contact.name === "GitHub" || contact.id === "claude-reviewer";
     const repoContext =
       isDevReviewContact && selectedTarget
         ? `\n\nRepo objetivo: ${selectedTarget.label} (${selectedTarget.repo}).`
         : "";
-    const reply = buildAgentReply(contact, `${text}${repoContext}`);
-    if (isDevReviewContact && targetRepo !== "workspace") {
+    const asksStatus = /^(?:¿\s*)?(?:estado|como estas|que estas haciendo|estas trabajando)(?:[?!.\s]*)$/i.test(text.normalize("NFD").replace(/\p{Diacritic}/gu, ""));
+    const signal = contact.statusSignal;
+    const reply = asksStatus
+      ? signal ? `Última señal disponible: ${signal.label}. ${signal.detail ?? ""}`.trim() : `Mi función asignada es ${contact.role}. Esta conversación aún no tiene una señal de ejecución verificada.`
+      : `Este chat no tiene una acción conectada para esa solicitud. Puedes pedir «analizar horarios de radio» o «consultar PR» seguido del enlace. Orientación local: ${buildAgentReply(contact, `${text}${repoContext}`)}`;
+    if (!asksStatus && isDevReviewContact && targetRepo !== "workspace") {
       setLastRemoteTask(text);
-      window.localStorage.setItem(
-        OFFICE_GITHUB_HANDOFF_KEY,
+      try { window.localStorage.setItem(
+        handoffKey,
         JSON.stringify({
           repo: selectedTarget.repo,
           app: selectedTarget.label,
@@ -1909,7 +1978,7 @@ export default function AgentsOfficePage() {
           task: text,
           createdAt: new Date().toISOString(),
         })
-      );
+      ); } catch { /* Draft remains in memory; nothing is dispatched. */ }
     }
     setActiveChatContact(contact);
     setSelectedContact(contact);
@@ -1924,7 +1993,7 @@ export default function AgentsOfficePage() {
     setSentMessages((current) => [{ to: contact.name, text }, ...current].slice(0, 3));
     setDirectMessage("");
   };
-  const handleSelectAgent = (agent: Agent) => {
+  const handleSelectAgent = (agent: Agent, liveStatus?: AgentLiveStatus) => {
     setSelectedAgent(agent);
     setClosedConversationBubbles({});
     openContactChat({
@@ -1932,8 +2001,9 @@ export default function AgentsOfficePage() {
       name: agent.name,
       role: agent.role,
       station: getAgentStation(agent),
-      status: agent.status,
-      activity: agent.activity,
+      status: liveStatus ? liveStatus.label : agent.status,
+      statusSignal: liveStatus,
+      activity: liveStatus?.detail ? `${agent.activity}. Ahora: ${liveStatus.detail}` : agent.activity,
       href: agent.href,
       icon: agent.icon,
       color: agent.color,
@@ -1955,7 +2025,7 @@ export default function AgentsOfficePage() {
       name: agent.name,
       role: agent.job,
       station: team.app,
-      status: "Conectado",
+      status: "Guia local (sin backend propio)",
       activity: activityByName[agent.name] || `Trabaja en ${team.app} conectado al repo ${team.repo}.`,
       href: "/projects",
       icon: Github,
@@ -2065,6 +2135,8 @@ export default function AgentsOfficePage() {
   return (
     <div className="h-screen overflow-hidden bg-[#05060a] text-foreground">
       <section className="relative h-full overflow-hidden bg-black bg-[linear-gradient(90deg,rgba(148,163,184,0.035)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.035)_1px,transparent_1px)] bg-[size:64px_64px,64px_64px]">
+        <OfficeConnectionsPanel />
+        <SoftwareFactoryPanel />
         <div className="absolute left-5 top-5 z-[95]">
           <Link href="/">
             <Button variant="ghost" size="icon" className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03]" data-testid="button-back-home">
@@ -2100,7 +2172,7 @@ export default function AgentsOfficePage() {
                         <span className={cn("h-2 w-2 rounded-full bg-gradient-to-br", agent.color)} />
                         <span className="truncate">{agent.name.toLowerCase()}-agent</span>
                       </span>
-                      <span className="text-cyan-300">{agent.mode === "working" ? "A" : "I"}</span>
+                      <span className="text-cyan-300">?</span>
                     </button>
                   ))}
                   <p className="mt-3 text-slate-300">▾ workflows</p>
@@ -2112,13 +2184,43 @@ export default function AgentsOfficePage() {
             </div>
         </aside>
 
-        <div className="absolute left-20 right-4 top-5 z-[75] flex items-center justify-between gap-4">
-            <div className="flex h-12 min-w-[260px] flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-[#0c1018]/90 px-4 text-sm text-slate-400 shadow-xl shadow-black/30 backdrop-blur lg:max-w-[620px]">
+        <div className="pointer-events-none absolute left-4 right-4 top-12 z-[75] flex items-start justify-start gap-4 sm:left-20 sm:top-5 lg:right-40 lg:items-center lg:justify-between [&_button]:pointer-events-auto [&_a]:pointer-events-auto [&_input]:pointer-events-auto">
+            {/* Decorative search box: hidden below 1024px so the view toggle and the KONG buttons fit on screen. */}
+            <div className="hidden h-12 min-w-[260px] flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-[#0c1018]/90 px-4 text-sm text-slate-400 shadow-xl shadow-black/30 backdrop-blur xl:flex xl:max-w-[620px]">
               <Sparkles className="h-4 w-4 text-cyan-200" />
               <span>Type a command or search...</span>
               <span className="ml-auto rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px]">⌘ K</span>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            {/* On phones the row wraps to the left and leaves the top-right corner free for "Trabajo real". */}
+            <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 lg:shrink-0 lg:justify-end">
+              <div className="flex rounded-2xl border border-white/10 bg-[#0c1018]/90 p-1 shadow-xl shadow-black/30" role="group" aria-label="Vista de la oficina">
+                {(["world", "building", "office"] as const).map((view) => (
+                  <button
+                    key={view}
+                    type="button"
+                    onClick={() => changeOfficeView(view)}
+                    aria-pressed={officeView === view}
+                    data-testid={`button-office-view-${view}`}
+                    className={cn(
+                      "rounded-xl px-3 py-1.5 text-xs font-semibold transition",
+                      officeView === view ? "bg-cyan-100 text-slate-950" : "text-slate-300 hover:bg-white/10"
+                    )}
+                  >
+                    {view === "world" ? "Oficina 3D" : view === "building" ? "Edificio" : "Clasica"}
+                  </button>
+                ))}
+              </div>
+              {/* One button for every view (3D, Edificio, Clasica and the no-WebGL fallback). */}
+              <div data-testid="office-kong-supervisor-slot">
+                <KongSupervisorPanel />
+              </div>
+              <button type="button" data-testid="office-open-kong" onClick={openKongOffice} className="rounded-xl border border-lime-300/35 bg-lime-400/10 px-3 py-2 text-xs font-semibold text-lime-100">
+                Oficina KONG
+              </button>
+              <div data-testid="office-kong-operations-slot">
+                <KongOperationsPanel />
+              </div>
+              {officeView === "office" && (
               <Button
                 type="button"
                 variant={editRooms ? "secondary" : "outline"}
@@ -2127,7 +2229,8 @@ export default function AgentsOfficePage() {
               >
                 {editRooms ? "Terminar edicion" : "Editar oficina"}
               </Button>
-              {editRooms && (
+              )}
+              {officeView === "office" && editRooms && (
                 <Button
                   type="button"
                   variant="ghost"
@@ -2181,6 +2284,59 @@ export default function AgentsOfficePage() {
         </div>
 
         <div ref={officeMapRef} className="relative h-full min-h-[620px] w-full [perspective:1400px]">
+          {officeView === "world" && (
+            <AgentsOfficeWorld
+              onOpenKongOffice={openKongOffice}
+              kongWingRequest={kongWingRequest}
+              agents={agents}
+              kongTeam={githubAppTeams.find((team) => team.app === "Kong")?.agents ?? []}
+              legal={{ data: legalCompliance, isError: legalComplianceError }}
+              selectedAgentId={selectedContact?.id}
+              onSelectAgent={(agentId, status) => {
+                const agent = agentById[agentId as AgentId];
+                if (agent) handleSelectAgent(agent, status);
+              }}
+              onSelectKongAgent={(name) => {
+                const team = githubAppTeams.find((item) => item.app === "Kong");
+                const member = team?.agents.find((item) => item.name === name);
+                if (team && member) handleSelectTeamAgent(team, member);
+              }}
+              onOpenContact={(contact) =>
+                openContactChat({
+                  id: contact.id,
+                  name: contact.name,
+                  role: contact.role,
+                  station: contact.department,
+                  status: contact.status.label,
+                  activity: [contact.description, contact.status.detail, ...(contact.status.problems || []).map((problem) => `Problema: ${problem}`)].filter(Boolean).join(". "),
+                  href: contact.href,
+                  icon: Bot,
+                  color: contact.color,
+                })
+              }
+            />
+          )}
+          {officeView === "building" && (
+            <div className="absolute inset-0 overflow-y-auto px-4 pb-10 pt-24">
+              <AgentsBuilding
+                agents={agents}
+                kongTeam={githubAppTeams.find((team) => team.app === "Kong")?.agents ?? []}
+                legal={{ data: legalCompliance, isError: legalComplianceError }}
+                selectedAgentId={selectedContact?.id}
+                onSelectAgent={(agentId, status) => {
+                  const agent = agentById[agentId as AgentId];
+                  if (agent) handleSelectAgent(agent, status);
+                }}
+                onSelectKongAgent={(name) => {
+                  const team = githubAppTeams.find((item) => item.app === "Kong");
+                  const member = team?.agents.find((item) => item.name === name);
+                  if (team && member) handleSelectTeamAgent(team, member);
+                }}
+              />
+            </div>
+          )}
+          {officeView === "office" && (
+          <>
           <div className="absolute left-[9%] top-[7%] h-[68%] w-[78%] [transform:rotateX(58deg)_rotateZ(-34deg)] [transform-style:preserve-3d]">
             <div className="absolute inset-0 rounded-[34px] border border-cyan-100/10 bg-[linear-gradient(145deg,#151f2c_0%,#0b1018_58%,#05070c_100%)] shadow-[0_90px_130px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.09)]" />
             <div className="absolute left-5 right-5 top-5 bottom-5 rounded-[28px] border border-cyan-100/10 bg-[linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),radial-gradient(circle_at_35%_25%,rgba(34,211,238,0.16),transparent_32%)] bg-[size:54px_54px,54px_54px,auto]" />
@@ -2309,6 +2465,8 @@ export default function AgentsOfficePage() {
                 onSelect={() => handleSelectTeamAgent(team, agent)}
               />
             ))
+          )}
+          </>
           )}
           {selectedContact && (
             <div className="contents">
@@ -3048,4 +3206,22 @@ export default function AgentsOfficePage() {
       </section>
       </div>
   );
+}
+
+export default function AgentsOfficePage() {
+  const queryClient = useQueryClient();
+  const ownerId = queryClient.getQueryData<{ user?: { id: string } }>(["auth-me"])?.user?.id;
+  const [showWorld, setShowWorld] = useState(false);
+  const workspace = useWorkspaceRole();
+  if (!ownerId) return <p role="alert">No se pudo verificar el propietario de la sesión.</p>;
+  // Robert asked for the agents building as the main view: live status first, the Company World simulation below.
+  return <div className="bg-[#080e18]">
+    <MotionConfig reducedMotion="user"><LiveAgentsOffice key={ownerId} ownerId={ownerId} /></MotionConfig>
+    {!workspace.isPartner && <section className="mx-4 my-8 rounded-xl border border-white/10 bg-slate-900 p-4 text-slate-200">
+      <button type="button" aria-expanded={showWorld} aria-controls="company-world" onClick={() => setShowWorld(value => !value)} className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-200">
+        {showWorld ? "Ocultar" : "Abrir"} Company World · simulación de departamentos (sin gasto real)
+      </button>
+      <div id="company-world" hidden={!showWorld} className="mt-4">{showWorld && <CompanyOffice key={ownerId} ownerId={ownerId} />}</div>
+    </section>}
+  </div>;
 }

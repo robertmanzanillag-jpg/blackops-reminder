@@ -164,6 +164,10 @@ export function createClipperLocalNewsScheduler(deps: ClipperLocalNewsSchedulerD
       log(`[Clipper local news] cycle phase=bootstrapped rssMb=${memoryRssMb()}`);
       currentPhase = "ingest";
       const cycle = await runCycle({ env, fetch: boundedFetch });
+      for (const observation of cycle.sourceObservations ?? [])
+        log(`[Clipper local news source] ${JSON.stringify(observation)}`);
+      for (const error of cycle.diagnosticWriteErrors ?? [])
+        logError(`[Clipper local news diagnostics storage] ${JSON.stringify(error)}`);
       log(`[Clipper local news] cycle phase=ingested rssMb=${memoryRssMb()}`);
       if (controller.signal.aborted) throw new Error("cycle_aborted_after_timeout");
       currentPhase = "delivery";

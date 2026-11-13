@@ -124,12 +124,15 @@ test("Shopify connection routes are gated to the configured single-user owner", 
 
 test("shared GitHub and Shopify connector routes reject authenticated non-owners at runtime", async () => {
   const previousDefaultUserId = process.env.DEFAULT_USER_ID;
-  const previousAllowDevFallback = process.env.ALLOW_DEV_USER_FALLBACK;
   process.env.DEFAULT_USER_ID = "connector-owner";
-  process.env.ALLOW_DEV_USER_FALLBACK = "true";
 
   const app = express();
   app.use(express.json());
+  // Supply an authenticated request fixture; dev headers are not authentication.
+  app.use((req, _res, next) => {
+    (req as typeof req & { user: { id: string } }).user = { id: "authenticated-non-owner" };
+    next();
+  });
   const server = createServer(app);
   await registerRoutes(server, app);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -149,7 +152,7 @@ test("shared GitHub and Shopify connector routes reject authenticated non-owners
     for (const [method, route] of requests) {
       const response = await fetch(`${baseUrl}${route}`, {
         method,
-        headers: { "content-type": "application/json", "x-user-id": "authenticated-non-owner" },
+        headers: { "content-type": "application/json" },
       });
       assert.equal(response.status, 403, `${method} ${route} should reject a non-owner`);
     }
@@ -157,8 +160,6 @@ test("shared GitHub and Shopify connector routes reject authenticated non-owners
     await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
     if (previousDefaultUserId === undefined) delete process.env.DEFAULT_USER_ID;
     else process.env.DEFAULT_USER_ID = previousDefaultUserId;
-    if (previousAllowDevFallback === undefined) delete process.env.ALLOW_DEV_USER_FALLBACK;
-    else process.env.ALLOW_DEV_USER_FALLBACK = previousAllowDevFallback;
   }
 });
 
@@ -240,11 +241,8 @@ test("assistant shared connector commands are owner-only", () => {
   const assistantSource = readFileSync("server/assistant.ts", "utf8");
   const routesSource = readFileSync("server/routes.ts", "utf8");
 
-  assert.match(assistantSource, /getCurrentUserId, getSystemUserId/, "assistant should compare the active user against the configured owner");
-  assert.match(assistantSource, /APPROVED_SHARED_CONNECTOR_OWNER_IDS/, "assistant should allow Robert's explicitly approved production connector owner ids");
-  assert.match(assistantSource, /new Set\(\[DEFAULT_DEV_USER_ID, "robert"\]\)/, "approved production connector owners should include mock-user-123 and robert");
-  assert.match(assistantSource, /APPROVED_SHARED_CONNECTOR_OWNER_USERNAMES = new Set\(\["robert"\]\)/, "approved production connector owners should include Robert's local auth username");
-  assert.match(assistantSource, /storage\.getUser\(userId\)/, "assistant owner check should resolve local auth users by username when the session stores an internal id");
+  assert.match(assistantSource, /import \{ isConfiguredSingleUserOwner \} from "\.\/single-user-owner"/);
+  assert.match(assistantSource, /await isConfiguredSingleUserOwner\(userId\)/);
   assert.match(assistantSource, /writeOwnerOnlySharedConnectorBlock/, "assistant should emit a clear block message for non-owner shared connector commands");
   assert.match(assistantSource, /if \(!isOwnerUser\) \{[\s\S]*YouTube, Google Drive y clips de radio/s, "radio YouTube command execution should be owner-only");
   assert.match(assistantSource, /if \(!isOwnerUser\) \{[\s\S]*Google Calendar/s, "calendar command execution should be owner-only");

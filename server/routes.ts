@@ -13,6 +13,7 @@ import { registerAssistantRoutes } from "./assistant";
 import { getPrice, getMarketOverview, searchSymbol, getBatchCryptoPrices, getHistoricalData, getPortfolioNews, getMarketNews, getCompanyNews } from "./finance";
 import { insertInvestmentSchema, insertTransactionSchema, insertWatchlistSchema, insertPriceAlertSchema, insertMonitoredProjectSchema, insertAppProjectSchema, insertAutomationDefinitionSchema } from "@shared/schema";
 import { checkSingleProject } from "./health-check";
+import { withUptimeHealth } from "@shared/app-health-uptime";
 import { sendDailyMarketUpdateForUser, calculatePortfolioSummary } from "./market-news";
 import { insertPortfolioHistorySchema, insertDjContactSchema } from "@shared/schema";
 import { analyzeRadioEvents, sendRadioSlotsSummary, getRadioSlotsForMonth, importDjsFromRadioHistory, generateDjMessage } from "./radio-agent";
@@ -26,12 +27,17 @@ import { getCurrentUserId, getSystemUserId, isPublicApiRequest } from "./user-co
 import { syncGoogleCalendarToTasks } from "./calendar-sync";
 import { executeApprovedPendingAction } from "./trust-executor";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
-import { ensureDefaultAutomations, recordManualAutomationRun } from "./automation-registry";
+import { getExistingAutomations, recordManualAutomationRun } from "./automation-registry";
 import { getMetricoolAnalyticsSyncStatus, getMetricoolAnalyticsSchedulerStatus, syncMetricoolAnalytics } from "./metricool-analytics-sync";
 import { getMeetingPrepById, getUpcomingMeetingPreps } from "./meeting-intelligence";
 import { buildCeoOperationalHealth } from "./ceo-operational-health";
 import { registerTelegramRoutes } from "./telegram-routes";
 import { registerRevenueStripeRoutes } from "./revenue-stripe-routes";
+import { registerAgentCouncilRoutes } from "./agent-council-routes";
+import { registerKongOperationsRoutes } from "./kong-operations-routes";
+import { registerBlackRoomTeamRoutes } from "./blackroom-team-routes";
+import { registerBlackRoomCeoChatRoutes } from "./blackroom-ceo-chat-routes";
+import { getKongOperations } from "./kong-operations";
 import { createCanvaAuthorizationUrl, exchangeCanvaAuthorizationCode, getCanvaOAuthStatus } from "./canva-oauth";
 import { createGoogleDriveAuthorizationUrl, exchangeGoogleDriveAuthorizationCode, getGoogleDriveOAuthStatus } from "./google-drive-oauth";
 import { ensureAppDriveStructure } from "./google-drive";
@@ -41,18 +47,26 @@ import { revenueOutreachUpdateSchema, updateRevenueOutreachDraft } from "./reven
 import { bootstrapClipperAccounts, bootstrapClipperWorkspace, getClipperConnectAction, getClipperStatus, importClipperCredentialDropFiles, importClipperLaunchEvidenceDropFiles, importClipperMetricoolApprovalEvidence, importClipperSourceDropFiles, ingestClipperMetrics, ingestClipperTrends, prepareClipper100ClipsExecutionSprint, prepareClipperAccountCreationPack, prepareClipperAccountEvidenceVault, prepareClipperAccountIdentityKit, prepareClipperAccountLaunchKit, prepareClipperAccountSetupSession, prepareClipperAnalyticsReportingPack, prepareClipperAppReviewDemoPack, prepareClipperAppReviewSubmissionPack, prepareClipperAutomationSchedule, prepareClipperBlockerResolutionPack, prepareClipperCredentialDoctor, prepareClipperCredentialDropStarter, prepareClipperCredentialSetupCenter, prepareClipperDeveloperAppEvidenceVault, prepareClipperDeveloperApplicationDrafts, prepareClipperDraftSpecs, prepareClipperDriveWorkspace, prepareClipperDropzoneReadyPack, prepareClipperExternalAccountPermissionSprint, prepareClipperExternalConnectSprint, prepareClipperExternalExecutionHandoff, prepareClipperExternalExecutionSession, prepareClipperExternalLaunchDossier, prepareClipperExternalSetupQueue, prepareClipperGoLiveAutopilotBrief, prepareClipperGoLiveCompletionAudit, prepareClipperGoLiveOperatorBrief, prepareClipperGoLiveEvidenceBundle, prepareClipperGoLiveExecutionPack, prepareClipperHttpsTunnelPlan, prepareClipperIntakeKit, prepareClipperLaunchCommandCenter, prepareClipperLaunchEvidenceFixPack, prepareClipperLaunchLaneMatrix, prepareClipperLegalPolicyPack, prepareClipperManualPostingPack, prepareClipperMetricoolApprovalReport, prepareClipperMetricoolApprovalSession, prepareClipperMetricoolExecutionQueue, prepareClipperMetricoolMvpLaunchPack, prepareClipperMetricoolPublishingPlan, prepareClipperOAuthConnectionPack, prepareClipperOAuthGoLivePreflight, prepareClipperOfficialPermissionMatrix, prepareClipperOfficialPermissionSourceAudit, prepareClipperOwnerConnectPack, prepareClipperPermissionPack, prepareClipperPermissionRequestPack, prepareClipperPermissionSubmissionDossier, prepareClipperPermissionTracker, prepareClipperPlatformPortalChecklist, prepareClipperPlatformReadinessMatrix, prepareClipperProductionQueue, prepareClipperProductionUrlSetup, prepareClipperPublisherConnectors, prepareClipperPublisherExecutionQueue, prepareClipperPublishingPackage, prepareClipperRightsEvidenceLedger, prepareClipperRightsOutreachPack, prepareClipperRobertNextActions, prepareClipperSourceAcquisitionPlan, prepareClipperSourceDiscoveryHandoff, prepareClipperSourceHuntSheet, prepareClipperSourceIngestionSprint, prepareClipperSourceScout, prepareClipperSourceScoutDailySprint, prepareClipperSourceScoutExactUrlKit, prepareClipperSourceScoutPermissionPack, prepareClipperSourceScoutSourceFileKit, prepareClipperSourceScoutWorkQueue, prepareClipperSourceSupplyDropKit, prepareClipperTrendRightsOutreachPack, prepareClipperViralDiscoveryPack, prepareClipperWeeklyProductionFunnel, previewClipperCredentialSecretsBatch, previewClipperLaunchEvidenceBatch, readClipperReport, recordClipperAccountEvidence, recordClipperCredentialSecret, recordClipperCredentialSecretsBatch, recordClipperDeveloperAppEvidence, recordClipperLaunchEvidenceBatch, recordClipperMetricoolAccountEvidence, recordClipperOAuthCallback, recordClipperOwnerConnectProgress, recordClipperPermissionStatus, recordClipperProductionPublicUrl, recordClipperSourceIntakeBatch, recordClipperSourceRights, recordClipperSourceScoutIntake, recordClipperTrendCandidatesBatch, reloadClipperCredentials, renderClipperAppReviewDemoHtml, renderClipperDraftVideos, renderClipperPrivacyPolicyHtml, renderClipperTermsOfServiceHtml, runClipperAutomationCycle, runClipperDailyPlan, runClipperExternalCloseoutPack, runClipperExternalConnectAutopilot, runClipperGoLiveAutopilot, runClipperGoLivePrepSweep, runClipperIntakeRefreshSweep, runClipperLocalDropSync, runClipperPostConnectActivationSweep, verifyClipperProductionLocalPreflight, verifyClipperProductionUrl } from "./clippers-agent";
 import { bootstrapClipperLocalNews, getClipperLocalNewsStatus, ingestClipperLocalNewsEvents, recordClipperLocalNewsMetrics, runClipperLocalNewsCycle } from "./clippers-local-news-agent";
 import { deliverClipperLocalNewsToMetricool, getClipperLocalNewsMetricoolReadiness } from "./clippers-local-news-metricool";
+import { readLocalNewsDeliveryPolicy } from "./local-news-delivery-safety";
 import { getClipperLocalNewsSchedulerStatus } from "./clippers-local-news-scheduler";
 import { getLocalNewsGrowthScoutStatus, readLocalNewsGrowthScoutStatus, runLocalNewsGrowthScoutNow } from "./local-news-growth-scout";
 import { getPublicLocalNewsBySlug, listPublicLocalNews, publicLocalNewsEtag, renderPublicLocalNewsShareHtml } from "./public-local-news";
 import { answerRevenueAutomationIntake, approveRevenueOutreachDraft, approveRevenuePublicLeadCandidate, automationQuoteSchema, buildAutomationQuote, buildDeliveryReview, buildProposalEmail, buildRevenueEnginePlan, buildRevenueLaunchReadiness, buildRevenueLeadRadar, buildRevenueMockup, buildRevenueMockupTemplatePack, buildRevenueProjectPlan, closeRevenueAutomationOpportunity, closeRevenueWebsiteOpportunity, convertRevenueAutomationIntakeToOpportunity, createDeliveryWorkspaceFromAutomationOpportunity, createWebsiteDeliveryWorkspaceFromLead, deliverRevenueDeliveryWorkspace, deliverRevenueDeliveryWorkspaceFromTrustedApproval, deliveryReviewSchema, flushRevenueEnginePersistence, getRevenueDeliveryWorkspaceById, getRevenueEngineSnapshot, getRevenueMockupPreviewPath, getRevenueWebsiteWorkspaceSaleGate, improvementReviewSchema, isRevenueCodexBranchName, preflightRevenueExpense, prepareRevenueEngineState, previewRevenueMoneySprintSeeds, proposalEmailSchema, recordRevenueAgentRun, recordRevenueApprovalDecision, recordRevenueAutomationIntake, recordRevenueAutomationOpportunity, recordRevenueDeliveryReleaseGate, recordRevenueDeliveryWorkspace, recordRevenueDeliveryWorkspaceImprovementReview, recordRevenueImprovementReview, recordRevenueLead, recordRevenueLedgerEntry, recordRevenueOutreachDraft, recordRevenueOutreachOutcome, recordRevenuePublicLeadCandidate, recordRevenuePublicLeadCandidateBatch, recordRevenuePublicScoutEvidence, recordRevenueSalesAutopilot, recordRevenueScoutingMission, recordRevenueVerifiedScoutConnectorResults, recordRevenueWebsiteOpportunity, revenueAgentRunSchema, revenueApprovalDecisionSchema, revenueAutomationAgentCommandSchema, revenueAutomationIntakeAnswerSchema, revenueAutomationIntakeConvertSchema, revenueAutomationIntakeSchema, revenueAutomationOpportunityCloseSchema, revenueAutomationOpportunityDeliverySchema, revenueAutomationOpportunitySchema, revenueDailyScoutSprintSchema, revenueDailyScoutSprintSubmitSchema, revenueDeliveryWorkspaceDeliverSchema, revenueDeliveryWorkspaceGithubHandoffSchema, revenueDeliveryWorkspaceImprovementReviewSchema, revenueDeliveryWorkspaceSchema, revenueDeliveryWorkspaceUpdateSchema, revenueEnginePlanSchema, revenueExpensePreflightSchema, revenueLaunchReadinessSchema, revenueLeadRadarSchema, revenueLeadSchema, revenueLedgerEntrySchema, revenueMockupSchema, revenueMockupTemplatePackSchema, revenueMoneySprintFromPublicCandidatesSchema, revenueMoneySprintSchema, revenueOutreachApproveSchema, revenueOutreachDraftSchema, revenueOutreachOutcomeSchema, revenueOutreachSendSchema, revenueProjectPlanSchema, revenuePublicLeadCandidateApproveSchema, revenuePublicLeadCandidateBatchSchema, revenuePublicLeadCandidateSchema, revenuePublicScoutAgentCommandSchema, revenuePublicScoutEvidenceSchema, revenueSalesAutopilotSchema, revenueScoutingMissionSchema, revenueVerifiedScoutConnectorSchema, revenueWebsiteDeliveryWorkspaceSchema, revenueWebsiteOpportunityCloseSchema, revenueWebsiteOpportunitySchema, runRevenueAutomationAgentCommand, runRevenueDailyScoutSprint, runRevenueMoneySprint, runRevenueMoneySprintFromPublicCandidates, runRevenuePublicScoutAgentCommand, runRevenueScoutDispatch, sendRevenueOutreachDraft, submitRevenueDailyScoutSprintEvidence, updateRevenueDeliveryWorkspaceQa } from "./revenue-engine";
 import { analyzeDropshippingSocialPerformance, buildDropshippingCapitalPlan, buildDropshippingDailyReport, buildDropshippingGrowthSprint, buildDropshippingLaunchPack, buildDropshippingLaunchPlan, buildDropshippingMarketingCampaign, createDropshippingProductScoutCandidate, createDropshippingShopifyDraft, createDropshippingSocialPostBatch, dropshippingApprovalDecisionSchema, dropshippingApprovalOutboxMigrationSchema, dropshippingAutopilotProductHunterSchema, dropshippingCapitalPlanSchema, dropshippingCeoCycleSchema, dropshippingFulfillmentSchema, dropshippingGrowthSprintSchema, dropshippingLaunchPackApprovalQueueSchema, dropshippingLaunchPackSchema, dropshippingLaunchPlanSchema, dropshippingLedgerEntrySchema, dropshippingLearningReviewSchema, dropshippingMarketingCampaignSchema, dropshippingOrderSchema, dropshippingProductResearchSchema, dropshippingProductScoutBatchSchema, dropshippingProductScoutCandidateSchema, dropshippingProductScoutPromotionSchema, dropshippingShopifyDraftSchema, dropshippingSocialAnalysisSchema, dropshippingSocialMetricsSchema, dropshippingSocialPostBatchSchema, dropshippingSocialPublishSchema, dropshippingSupplierReviewSchema, getDropshippingCeoSnapshot, getDropshippingExecutionSetup, getDropshippingLaunchReadiness, getDropshippingLiveSignalReadiness, markDropshippingApprovalOutboxQueued, prepareDropshippingApprovalOutboxMigration, prepareDropshippingFulfillment, prepareDropshippingLaunchPackApprovalQueue, preflightDropshippingShopifyDraft, promoteDropshippingScoutCandidate, publishDropshippingSocialPost, recordDropshippingApprovalDecision, recordDropshippingApprovalOutboxRequests, recordDropshippingLedgerEntry, recordDropshippingLearningReview, recordDropshippingOrder, recordDropshippingSocialMetrics, researchDropshippingProduct, reviewDropshippingSupplier, runDropshippingAutopilotProductHunter, runDropshippingCeoCycle, runDropshippingDailyOperatingCycle, runDropshippingProductScoutBatch, sendDropshippingDailyReport } from "./dropshipping-ceo";
-import { getMarketingCommandCenterSnapshot, marketingCommandCenterDaySchema, runMarketingCommandCenterDay } from "./marketing-command-center";
+import {registerMarketingLearningRoutes} from "./marketing-learning-routes";
 import { importMissingGithubApps, runCybersecurityScan } from "./cybersecurity-agent";
 import { runLegalComplianceReports } from "./legal-compliance-agent";
 import { runAppQaScan } from "./app-qa-agent";
 import { createDeveloperAutopilotHandoff, createDeveloperAutopilotHandoffFromRequest, evaluateDeveloperReleaseGate } from "./developer-autopilot";
 import { buildMonthlyAiSpendReport } from "./ai-cost-policy";
 import { getClipperWorkerRuntimeStatus } from "./clippers-runtime-status";
+import { registerOfficeRoutes } from "./office-routes";
+import { registerOfficeBusinessRoutes } from "./office-business-routes";
+import { registerSoftwareFactoryRoutes } from "./software-factory-routes";
+import { getFactoryOfficeAdmission } from "./software-factory-office-connection";
+import { getAuthenticatedCurrentUserId } from "./user-context";
+import { officeRuntime } from "./office-runtime";
+import { loadOfficePullRequest } from "./office-github";
 
 function escapeHtml(value: unknown): string {
   return String(value ?? "")
@@ -294,6 +308,9 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  registerOfficeRoutes(app);
+  registerOfficeBusinessRoutes(app);
+  registerSoftwareFactoryRoutes(app, {resolveCompanyAdmission:getFactoryOfficeAdmission});
   const CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS = 120_000;
   const killClipperRouteScriptProcess = (child: ReturnType<typeof spawn>) => {
     if (child.pid) {
@@ -837,6 +854,22 @@ export async function registerRoutes(
 
   registerTelegramRoutes(app);
   registerRevenueStripeRoutes(app);
+  registerAgentCouncilRoutes(app);
+  // Black Room team (CEO, analiticas, competencia, publicador, guiones, website). Owner-only; approvals before anything outward.
+  registerBlackRoomTeamRoutes(app);
+  // Chat with the CEO Black Room (owner + partners): routes requests to the team and runs them; approvals stay explicit.
+  registerBlackRoomCeoChatRoutes(app);
+  // KONG operations (cards -> Videos KONG, single publisher lease, UUID ledger, metrics). Owner-only.
+  registerKongOperationsRoutes(app, getKongOperations(), {
+    requestUserId: (req) => {
+      try {
+        return getCurrentUserId(req);
+      } catch {
+        return null;
+      }
+    },
+    ownerUserId: () => getSystemUserId(),
+  });
 
   // GET all tasks
   app.get("/api/tasks", async (req, res) => {
@@ -2188,7 +2221,7 @@ export async function registerRoutes(
         getClipperLocalNewsMetricoolReadiness(),
         readLocalNewsGrowthScoutStatus(),
       ]);
-      res.json({ ...status, scheduler: getClipperLocalNewsSchedulerStatus(), metricool, growthScout, metricoolAnalytics: { sync: await getMetricoolAnalyticsSyncStatus(), scheduler: getMetricoolAnalyticsSchedulerStatus() } });
+      res.json({ ...status, deliveryPolicy: await readLocalNewsDeliveryPolicy(), scheduler: getClipperLocalNewsSchedulerStatus(), metricool, growthScout, metricoolAnalytics: { sync: await getMetricoolAnalyticsSyncStatus(), scheduler: getMetricoolAnalyticsSchedulerStatus() } });
     } catch (error: any) {
       res.status(500).json({ error: error.message || "Failed to inspect clippers local news status" });
     }
@@ -2228,7 +2261,13 @@ export async function registerRoutes(
       };
       const cycle = await runClipperLocalNewsCycle(input);
       const metricoolDelivery = await deliverClipperLocalNewsToMetricool({ status: cycle.status });
-      res.json({ ...cycle, metricoolDelivery });
+      res.json({
+        ...cycle, cycleExecution: "completed", metricoolDelivery,
+        status: { ...cycle.status, deliveryPolicy: await readLocalNewsDeliveryPolicy(), deliverySummary: {
+          status: metricoolDelivery.status, scheduled: metricoolDelivery.scheduled,
+          publicationConfirmed: metricoolDelivery.publicationConfirmed, pendingReconciliation: metricoolDelivery.pendingReconciliation,
+        } },
+      });
     } catch (error: any) {
       if (error instanceof z.ZodError) {
         return res.status(400).json({ error: "Invalid clippers local news cycle payload", details: error.errors });
@@ -4191,7 +4230,7 @@ export async function registerRoutes(
 
   app.get("/api/automations", async (req, res) => {
     try {
-      const automations = await ensureDefaultAutomations(getCurrentUserId(req));
+      const automations = await getExistingAutomations(getCurrentUserId(req));
       res.json(automations);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch automations" });
@@ -4356,7 +4395,7 @@ export async function registerRoutes(
   app.get("/api/automation-manager/summary", async (req, res) => {
     try {
       const userId = getCurrentUserId(req);
-      const automations = await ensureDefaultAutomations(userId);
+      const automations = await getExistingAutomations(userId);
       const runs = await storage.getAutomationRuns(userId, undefined, 25);
       const active = automations.filter((automation) => automation.status === "active");
       const paused = automations.filter((automation) => automation.status === "paused");
@@ -4386,25 +4425,7 @@ export async function registerRoutes(
 
   // ==================== MARKETING COMMAND CENTER ====================
 
-  app.get("/api/marketing-command-center", async (_req, res) => {
-    try {
-      res.json(getMarketingCommandCenterSnapshot());
-    } catch (error) {
-      res.status(500).json({ error: "Failed to fetch marketing command center snapshot" });
-    }
-  });
-
-  app.post("/api/marketing-command-center/run-day", async (req, res) => {
-    try {
-      const input = marketingCommandCenterDaySchema.partial().parse(req.body || {});
-      res.json(runMarketingCommandCenterDay(input));
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors });
-      }
-      res.status(500).json({ error: "Failed to run marketing command center day" });
-    }
-  });
+  registerMarketingLearningRoutes(app);
 
   // ==================== DROPSHIPPING CEO ====================
 
@@ -5586,7 +5607,8 @@ export async function registerRoutes(
   });
 
   app.post("/api/revenue-engine/delivery-workspaces/app-qa-gate", async (req, res) => {
-    const userId = getCurrentUserId(req);
+    const userId = getAuthenticatedCurrentUserId(req);
+    if (!userId) return res.status(401).json({ error: "Authentication required" });
     if (userId !== getSystemUserId()) {
       return res.status(403).json({
         error: "Revenue Engine App QA gates require the configured owner account.",
@@ -5664,8 +5686,14 @@ export async function registerRoutes(
         expectedControls: ["Run App QA", "Registrar release gate", "Entregar aprobado"],
       };
       const scan = await runAppQaScan(userId, input.notify, true, false, appQaTargetContext);
+      const reviewPacket = await loadOfficePullRequest(prStatus.pr.htmlUrl);
+      const claudeReview = reviewPacket.headSha === prStatus.pr.headSha
+        ? await officeRuntime.getReview(userId, reviewPacket.prUrl, reviewPacket.headSha, reviewPacket.diffSha256) : undefined;
       const gate = evaluateDeveloperReleaseGate(scan, {
         prUrl: prStatus.pr.htmlUrl,
+        prHeadSha: prStatus.pr.headSha,
+        prDiffSha256: reviewPacket.diffSha256,
+        claudeReview,
         requiredTargetContext: appQaTargetContext,
       });
       const appQaPrCommentBody = gate.status === "pass"
@@ -6569,7 +6597,7 @@ export async function registerRoutes(
         safe(storage.getAgentActions(userId), []),
         safe(storage.getScheduledReminders(userId), []),
         safe(storage.getDjContacts(userId), []),
-        safe(ensureDefaultAutomations(userId), []),
+        safe(getExistingAutomations(userId), []),
         safe(storage.getAutomationRuns(userId, undefined, 25), []),
         safe(getUpcomingMeetingPreps(userId, 5), []),
         safe(storage.getUserProfileDataByCategory(userId, "decision"), []),
@@ -6837,7 +6865,10 @@ export async function registerRoutes(
   app.get("/api/developer-health/dashboard", async (req, res) => {
     try {
       const userId = getCurrentUserId(req);
-      const apps = await storage.getAppProjects(userId);
+      const storedApps = await storage.getAppProjects(userId);
+      // Apps never scanned show the uptime monitor's fresh result for the same host/repo (read-only).
+      const monitors = storedApps.length ? await storage.getMonitoredProjects(userId).catch(() => []) : [];
+      const apps = withUptimeHealth(storedApps, monitors);
       const incidents = await storage.getAppIncidents(userId);
       const openIncidents = incidents.filter((incident) => ["open", "investigating", "pending_action"].includes(incident.status));
 
@@ -6946,9 +6977,14 @@ export async function registerRoutes(
 
   app.post("/api/developer-autopilot/qa-gate", async (req, res) => {
     try {
-      const scan = await runAppQaScan(getCurrentUserId(req), Boolean(req.body?.notify), true, false);
+      const userId = getAuthenticatedCurrentUserId(req);
+      if (!userId) return res.status(401).json({ error: "Authentication required" });
+      if (userId !== getSystemUserId()) return res.status(403).json({ error: "Owner required" });
+      const scan = await runAppQaScan(userId, Boolean(req.body?.notify), true, false);
       const prUrl = typeof req.body?.prUrl === "string" ? req.body.prUrl.trim() : null;
-      const gate = evaluateDeveloperReleaseGate(scan, { prUrl });
+      const packet = prUrl ? await loadOfficePullRequest(prUrl) : null;
+      const claudeReview = packet ? await officeRuntime.getReview(userId, packet.prUrl, packet.headSha, packet.diffSha256) : undefined;
+      const gate = evaluateDeveloperReleaseGate(scan, { prUrl, prHeadSha: packet?.headSha, prDiffSha256: packet?.diffSha256, claudeReview });
       res.json({
         scan,
         gate,
@@ -6965,7 +7001,7 @@ export async function registerRoutes(
   app.get("/api/app-qa-agent/history", async (req, res) => {
     try {
       const userId = getCurrentUserId(req);
-      const automations = await ensureDefaultAutomations(userId);
+      const automations = await getExistingAutomations(userId);
       const qaAutomation = automations.find((automation) => (automation.metadata as any)?.key === "app-qa-council");
       if (!qaAutomation) return res.json([]);
       const limit = Math.min(Number(req.query.limit || 20), 100);

@@ -1,4 +1,5 @@
 import { chmod, copyFile, mkdir, open, readdir, readFile, rename, stat, unlink, writeFile } from "fs/promises";
+import { withoutUnverifiedWeeklyViews,observedClipperPipeline,unverifiedClipperAgents,weeklyClipperGoalGap,missingWeeklyRecommendation } from "../shared/clipper-observed-status";
 import { existsSync, readFileSync, statSync } from "fs";
 import { spawn } from "child_process";
 import { createCipheriv, createHash, randomBytes } from "crypto";
@@ -168,6 +169,7 @@ export interface ClipperAccount {
   dailyClipTarget: number;
   weeklyViewsGoal: number;
   lastWeekViews: number;
+  weeklyViewsEvidence?: "unavailable";
   status: ClipperAccountStatus;
   contentPolicy: string;
 }
@@ -1677,7 +1679,7 @@ export interface ClipperGrowthAudit {
   summary: string;
   items: ClipperGrowthAuditItem[];
   roadmap: string[];
-  weeklyGoalGap: number;
+  weeklyGoalGap: number | null;
 }
 
 export interface ClipperDriveFolder {
@@ -7587,7 +7589,7 @@ const DEFAULT_ACCOUNTS: ClipperAccount[] = [
     platformAccounts: defaultPlatformAccounts("sportsdailyclips", "Sports Daily Clips"),
     dailyClipTarget: 10,
     weeklyViewsGoal: 1_000_000,
-    lastWeekViews: 286_000,
+    lastWeekViews: 0,
     status: "needs_connection",
     contentPolicy: "Use official highlights, licensed footage, owned commentary, or creator-approved clips.",
   },
@@ -7599,7 +7601,7 @@ const DEFAULT_ACCOUNTS: ClipperAccount[] = [
     platformAccounts: defaultPlatformAccounts("memeradarclips", "Meme Radar"),
     dailyClipTarget: 12,
     weeklyViewsGoal: 1_000_000,
-    lastWeekViews: 412_000,
+    lastWeekViews: 0,
     status: "needs_connection",
     contentPolicy: "Use original edits, permissioned templates, public-domain media, or remix-safe assets.",
   },
@@ -7611,7 +7613,7 @@ const DEFAULT_ACCOUNTS: ClipperAccount[] = [
     platformAccounts: defaultPlatformAccounts("streamerpulseclips", "Streamer Pulse"),
     dailyClipTarget: 8,
     weeklyViewsGoal: 1_000_000,
-    lastWeekViews: 198_000,
+    lastWeekViews: 0,
     status: "needs_connection",
     contentPolicy: "Use creator allowlists, owned VODs, or explicit clip permission before publishing.",
   },
@@ -9084,6 +9086,7 @@ async function readConfig(): Promise<{ accounts?: ClipperAccount[]; sources?: Cl
 }
 
 function ensureAccountShape(account: ClipperAccount): ClipperAccount {
+  account=withoutUnverifiedWeeklyViews(account);
   if (Array.isArray(account.platformAccounts) && account.platformAccounts.length) return account;
   const slug = account.id.replace(/[^a-z0-9]+/gi, "").toLowerCase();
   return {
@@ -9123,16 +9126,6 @@ export function getClipperCategoryLabel(category: ClipperAccountCategory): strin
   return "Streamers";
 }
 
-function buildPipeline(accounts: ClipperAccount[]): ClipperPipelineItem[] {
-  const dailyTarget = accounts.reduce((sum, account) => sum + account.dailyClipTarget, 0);
-  return [
-    { stage: "Trend scan", count: dailyTarget * 4, owner: "Trend Scout", status: "active" },
-    { stage: "Rights review", count: Math.ceil(dailyTarget * 1.8), owner: "Rights Gate", status: "review_required" },
-    { stage: "Draft edits", count: dailyTarget, owner: "Clip Factory", status: "waiting" },
-    { stage: "Scheduled posts", count: 0, owner: "Publisher", status: "waiting" },
-    { stage: "Performance loops", count: accounts.length, owner: "Optimizer", status: "active" },
-  ];
-}
 
 function getSourceFolderForCategory(category: ClipperAccountCategory): string {
   return path.join(SOURCES_DIR, category);
@@ -33481,7 +33474,7 @@ function buildGrowthAudit(input: {
   const totalPlatformAccounts = input.accounts.reduce((sum, account) => sum + account.platformAccounts.length, 0);
   const dailyClipTarget = input.accounts.reduce((sum, account) => sum + account.dailyClipTarget, 0);
   const missingCredentialCount = input.credentialChecks.reduce((sum, check) => sum + check.missingEnvVars.length, 0);
-  const weeklyGoalGap = input.accounts.reduce((sum, account) => sum + Math.max(account.weeklyViewsGoal - account.lastWeekViews, 0), 0);
+  const weeklyGoalGap = weeklyClipperGoalGap(input.accounts);
   const readyQueueItems = input.productionQueue.items.filter((item) => item.status === "draft_ready").length;
   const blockedPosts = input.automation.lastRun?.totals.blocked ?? input.productionQueue.items.length;
   const readyPermissionFiles = input.permissionPack.files.filter((file) => file.exists).length;
@@ -44218,8 +44211,8 @@ export async function getClipperStatus(userId = getSystemUserId()): Promise<Clip
     growthAudit,
     platformRequirements: PLATFORM_REQUIREMENTS,
     permissionQueue: PERMISSION_QUEUE,
-    agents: DEFAULT_AGENTS,
-    pipeline: buildPipeline(accounts),
+    agents: unverifiedClipperAgents(DEFAULT_AGENTS),
+    pipeline: observedClipperPipeline({trends:trendRadar.candidates,sources:productionQueue.sourceAssets,drafts:draftSpecs.items,publishProposals:publisherExecutionQueue.items,metrics:metrics.records}),
     goals: {
       weeklyViewsPerAccount,
       totalWeeklyGoal: accounts.length * weeklyViewsPerAccount,
@@ -45862,6 +45855,7 @@ function buildPlannedClips(accounts: ClipperAccount[], clipsPerAccount: number):
 
 function buildRecommendations(accounts: ClipperAccount[]): ClipperReport["accountRecommendations"] {
   return accounts.map((account) => {
+    const missing=missingWeeklyRecommendation(account);if(missing)return missing;
     const progress = account.lastWeekViews / account.weeklyViewsGoal;
     if (progress >= 0.75) {
       return {

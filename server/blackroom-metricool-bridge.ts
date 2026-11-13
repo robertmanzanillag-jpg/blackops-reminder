@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { BlackRoomPublicationBlockedError, blackRoomPublicationControlVeto, blackRoomPublicationFlagVeto, type BlackRoomPublicationControl } from "./blackroom-publication-guard";
 
 export const BLACKROOM_METRICOOL_BLOG_ID = 6585226;
 export const BLACKROOM_TIMEZONE = "America/New_York";
@@ -22,6 +23,7 @@ export interface BlackRoomMetricoolScheduleInput {
   durationSeconds: number;
   videoFormat: "vertical" | "horizontal";
   creativeStrategy?: "drop_first" | "instant_drop" | "build_then_drop";
+  jobId?: string;
 }
 
 export interface BlackRoomMetricoolReceipt {
@@ -85,8 +87,10 @@ export function formatMetricoolMcpDate(publicationDateTime: string, timezone = B
 
 export class BlackRoomMetricoolUncertainError extends Error {
   readonly uncertain = true;
-  constructor(message: string) {
+  readonly platformReceipts: Partial<Record<BlackRoomMetricoolNetwork, string>>;
+  constructor(message: string, platformReceipts: Partial<Record<BlackRoomMetricoolNetwork, string>> = {}) {
     super(message);
+    this.platformReceipts = { ...platformReceipts };
     this.name = "BlackRoomMetricoolUncertainError";
   }
 }
@@ -242,6 +246,15 @@ export function blackRoomYoutubeWatchUrl(sourceVideoId: string): string {
   return `https://www.youtube.com/watch?v=${videoId}`;
 }
 
+/**
+ * "Label: https://www.youtube.com/watch?v=..." followed by a newline, or "" when the clip has no
+ * full YouTube set (recorded clips without a published set). A malformed, non-empty id still throws.
+ */
+function fullSetLine(label: string, sourceVideoId: string | null | undefined): string {
+  if (!String(sourceVideoId ?? "").trim()) return "";
+  return `${label}: ${blackRoomYoutubeWatchUrl(String(sourceVideoId))}\n`;
+}
+
 export function buildBlackRoomFacebookCaption(
   caption: string,
   sourceVideoId: string,
@@ -252,14 +265,14 @@ export function buildBlackRoomFacebookCaption(
     ? "Sigue la experiencia completa de BlackRoom"
     : "Follow the full BlackRoom experience";
   const youtubeChannel = language === "es" ? "Canal oficial de BlackRoom" : "Official BlackRoom channel";
-  return `${caption.trim()}\n\n${fullVideo}: ${blackRoomYoutubeWatchUrl(sourceVideoId)}\n${youtubeChannel}: ${BLACKROOM_YOUTUBE_CHANNEL_URL}\n${callToAction}: ${BLACKROOM_FACEBOOK_MAIN_URL}`;
+  return `${caption.trim()}\n\n${fullSetLine(fullVideo, sourceVideoId)}${youtubeChannel}: ${BLACKROOM_YOUTUBE_CHANNEL_URL}\n${callToAction}: ${BLACKROOM_FACEBOOK_MAIN_URL}`;
 }
 
 export function buildBlackRoomYouTubeCaption(input: BlackRoomMetricoolScheduleInput): string {
   const fullVideo = input.language === "es" ? "Set completo" : "Full set";
   const channel = input.language === "es" ? "Canal BlackRoom" : "BlackRoom channel";
   const hashtags = isBlackRoomYouTubeShort(input) ? "#Shorts #BlackRoom" : "#BlackRoom #DJSet";
-  return `${input.caption.trim()}\n\n${channel}: ${BLACKROOM_YOUTUBE_CHANNEL_HANDLE}\n${fullVideo}: ${blackRoomYoutubeWatchUrl(input.sourceVideoId)}\n${hashtags}`;
+  return `${input.caption.trim()}\n\n${channel}: ${BLACKROOM_YOUTUBE_CHANNEL_HANDLE}\n${fullSetLine(fullVideo, input.sourceVideoId)}${hashtags}`;
 }
 
 function legacyBlackRoomFacebookCaption(input: BlackRoomMetricoolScheduleInput): string {
@@ -267,13 +280,13 @@ function legacyBlackRoomFacebookCaption(input: BlackRoomMetricoolScheduleInput):
   const callToAction = input.language === "es"
     ? "Sigue la experiencia completa de BlackRoom"
     : "Follow the full BlackRoom experience";
-  return `${input.caption.trim()}\n\n${fullVideo}: ${blackRoomYoutubeWatchUrl(input.sourceVideoId)}\n${callToAction}: ${BLACKROOM_FACEBOOK_MAIN_URL}`;
+  return `${input.caption.trim()}\n\n${fullSetLine(fullVideo, input.sourceVideoId)}${callToAction}: ${BLACKROOM_FACEBOOK_MAIN_URL}`;
 }
 
 function legacyBlackRoomYouTubeCaption(input: BlackRoomMetricoolScheduleInput): string {
   const fullVideo = input.language === "es" ? "Set completo" : "Full set";
   const hashtags = isBlackRoomYouTubeShort(input) ? "#Shorts #BlackRoom" : "#BlackRoom #DJSet";
-  return `${input.caption.trim()}\n\n${fullVideo}: ${blackRoomYoutubeWatchUrl(input.sourceVideoId)}\n${hashtags}`;
+  return `${input.caption.trim()}\n\n${fullSetLine(fullVideo, input.sourceVideoId)}${hashtags}`;
 }
 
 export function isBlackRoomYouTubeShort(input: Pick<BlackRoomMetricoolScheduleInput, "videoFormat" | "durationSeconds">): boolean {
@@ -488,10 +501,32 @@ export async function scheduleBlackRoomMetricoolPost(
     verificationIntervalMs?: number;
     normalizationRetryDelayMs?: number;
     networks?: BlackRoomMetricoolNetwork[];
+    readPublicationControl?: () => Promise<BlackRoomPublicationControl>;
+    now?: () => Date;
+    wait?: (milliseconds: number) => Promise<void>;
   } = {},
 ): Promise<BlackRoomMetricoolReceipt> {
   const env = options.env || process.env;
   const fetcher = options.fetch || fetch;
+  let submitted = false;
+  const platformReceipts: Partial<Record<BlackRoomMetricoolNetwork, string>> = {};
+  const assertPublicationAllowed = async () => {
+    let veto = blackRoomPublicationFlagVeto(env);
+    if (!veto) {
+      try {
+        veto = options.readPublicationControl
+          ? blackRoomPublicationControlVeto(await options.readPublicationControl(), input.jobId, (options.now || (() => new Date()))())
+          : "authoritative_control_missing";
+      } catch { veto = "authoritative_control_unavailable"; }
+    }
+    if (veto) {
+      if (submitted || Object.keys(platformReceipts).length) throw new BlackRoomMetricoolUncertainError(`Publication may have been accepted; further IO blocked: ${veto}`, platformReceipts);
+      throw new BlackRoomPublicationBlockedError(veto);
+    }
+  };
+  const wait = options.wait || ((milliseconds: number) => new Promise<void>(resolve => setTimeout(resolve, milliseconds)));
+  await assertPublicationAllowed();
+  try {
   const token = requiredEnv(env, "METRICOOL_USER_TOKEN");
   const userId = requiredEnv(env, "METRICOOL_USER_ID");
   const blogId = input.blogId || Number(env.BLACKROOM_METRICOOL_BLOG_ID || BLACKROOM_METRICOOL_BLOG_ID);
@@ -508,6 +543,7 @@ export async function scheduleBlackRoomMetricoolPost(
   const mcpDate = formatMetricoolMcpDate(input.publicationDateTime, localTimezone);
   const schedulerUrl = `https://app.metricool.com/api/v2/scheduler/posts?blogId=${blogId}&userId=${encodeURIComponent(userId)}&integrationSource=MCP`;
   const verifyUrl = `${schedulerUrl}&start=${date}T00%3A00%3A00&end=${date}T23%3A59%3A59&timezone=${timezone}&extendedRange=false`;
+  await assertPublicationAllowed();
   const existing = await metricoolJson(await fetcher(verifyUrl, { headers, signal: AbortSignal.timeout(60_000) }), "duplicate preflight");
   const captions: Record<BlackRoomMetricoolNetwork, string> = {
     tiktok: input.caption,
@@ -525,7 +561,6 @@ export async function scheduleBlackRoomMetricoolPost(
     throw new Error("Requested Metricool network is not eligible for this BlackRoom clip");
   }
   const requiredNetworks = requestedNetworks;
-  const platformReceipts: Partial<Record<BlackRoomMetricoolNetwork, string>> = {};
   const missingNetworks: BlackRoomMetricoolNetwork[] = [];
   for (const network of requiredNetworks) {
     const existingMatch = findVerifiedMetricoolPost(existing, verificationCaptions[network], input.publicationDateTime);
@@ -543,7 +578,7 @@ export async function scheduleBlackRoomMetricoolPost(
     };
   }
   if (options.verifyOnly) {
-    throw new BlackRoomMetricoolUncertainError(`Metricool verification is still pending for ${missingNetworks.join(", ")}`);
+    throw new BlackRoomMetricoolUncertainError(`Metricool verification is still pending for ${missingNetworks.join(", ")}`, platformReceipts);
   }
   for (const network of missingNetworks) {
     const payload = buildMetricoolPayload(input, "", network, captions[network]);
@@ -560,13 +595,15 @@ export async function scheduleBlackRoomMetricoolPost(
         info: JSON.stringify(payload),
         mediaFiles: [{
           download_url: input.mediaUrl,
-          file_id: `blackroom-${input.sourceVideoId}-${network}.mp4`,
+          file_id: `blackroom-${input.sourceVideoId || input.jobId || "clip"}-${network}.mp4`,
         }],
       };
       const normalizationAttempts = 3;
       const normalizationRetryDelayMs = Math.max(0, Math.min(10_000, options.normalizationRetryDelayMs ?? 1_500));
       for (let attempt = 1; attempt <= normalizationAttempts; attempt += 1) {
         try {
+          await assertPublicationAllowed();
+          submitted = true;
           scheduled = await callMetricoolMcpTool(fetcher, token, "createScheduledPost", createArgs);
           break;
         } catch (error) {
@@ -574,13 +611,14 @@ export async function scheduleBlackRoomMetricoolPost(
             && /Failed to normalize media/i.test(error.message)
             && attempt < normalizationAttempts;
           if (!canRetryNormalization) throw error;
-          if (normalizationRetryDelayMs) await new Promise((resolve) => setTimeout(resolve, attempt * normalizationRetryDelayMs));
+          if (normalizationRetryDelayMs) await wait(attempt * normalizationRetryDelayMs);
         }
       }
     } catch (error) {
-      if (error instanceof Error && /MCP createScheduledPost failed(?: with HTTP 4\d\d|:)/.test(error.message)) throw error;
+      if (error instanceof BlackRoomPublicationBlockedError) throw error;
       throw new BlackRoomMetricoolUncertainError(
         `Metricool ${network} scheduling outcome is uncertain: ${error instanceof Error ? error.message : String(error)}`,
+        platformReceipts,
       );
     }
 
@@ -589,7 +627,8 @@ export async function scheduleBlackRoomMetricoolPost(
     const verificationIntervalMs = Math.max(0, Math.min(10_000, options.verificationIntervalMs ?? 2_000));
     try {
       for (let attempt = 0; attempt < verificationAttempts && !matched; attempt += 1) {
-        if (attempt && verificationIntervalMs) await new Promise((resolve) => setTimeout(resolve, verificationIntervalMs));
+        if (attempt && verificationIntervalMs) await wait(attempt * verificationIntervalMs);
+        await assertPublicationAllowed();
         const verification = await metricoolJson(
           await fetcher(verifyUrl, { headers, signal: AbortSignal.timeout(60_000) }),
           `${network} post verification`,
@@ -599,17 +638,18 @@ export async function scheduleBlackRoomMetricoolPost(
     } catch (error) {
       throw new BlackRoomMetricoolUncertainError(
         `Metricool ${network} verification outcome is uncertain: ${error instanceof Error ? error.message : String(error)}`,
+        platformReceipts,
       );
     }
     if (!matched) {
-      throw new BlackRoomMetricoolUncertainError(`Metricool ${network} post was submitted but verification is still pending`);
+      throw new BlackRoomMetricoolUncertainError(`Metricool ${network} post was submitted but verification is still pending`, platformReceipts);
     }
     const id = matched.id ?? matched.uuid ?? scheduled?.id ?? scheduled?.uuid;
-    if (id == null || String(id).trim() === "") throw new Error(`Metricool scheduled ${network} post has no identifier`);
+    if (id == null || String(id).trim() === "") throw new BlackRoomMetricoolUncertainError(`Metricool scheduled ${network} post has no identifier`, platformReceipts);
     platformReceipts[network] = String(id);
   }
   if (requiredNetworks.some((network) => !platformReceipts[network])) {
-    throw new Error("Metricool did not confirm every BlackRoom network");
+    throw new BlackRoomMetricoolUncertainError("Metricool did not confirm every BlackRoom network", platformReceipts);
   }
   return {
     metricoolId: platformReceipts.tiktok || platformReceipts[requiredNetworks[0]]!,
@@ -618,4 +658,13 @@ export async function scheduleBlackRoomMetricoolPost(
     caption: input.caption,
     verified: true,
   };
+  } catch (error) {
+    if (error instanceof BlackRoomMetricoolUncertainError || error instanceof BlackRoomPublicationBlockedError) throw error;
+    if (submitted || Object.keys(platformReceipts).length) {
+      throw new BlackRoomMetricoolUncertainError(
+        `Metricool outcome requires reconciliation: ${error instanceof Error ? error.message : String(error)}`, platformReceipts,
+      );
+    }
+    throw new BlackRoomPublicationBlockedError(`pre_dispatch_failed: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }

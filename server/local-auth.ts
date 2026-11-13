@@ -1,6 +1,7 @@
 import type { Express, Request, Response } from "express";
 import { z } from "zod";
 import { storage } from "./storage";
+import type { User } from "@shared/schema";
 import {
   createSignedLocalAuthCookieValue,
   DEFAULT_DEV_USER_ID,
@@ -35,12 +36,12 @@ type RequestWithSession = Request & {
   };
 };
 
-const authBodySchema = z.object({
+export const localAuthAccountSchema = z.object({
   username: z.string().trim().min(2).max(80),
   password: z.string().min(8).max(200),
 });
 const LOCAL_AUTH_COOKIE_MAX_AGE_MS = 1000 * 60 * 60 * 24 * 30;
-const localAuthRateLimit = createRateLimiter({
+export const localAuthRateLimit = createRateLimiter({
   scope: "local-auth",
   limit: 20,
   windowMs: 15 * 60 * 1000,
@@ -108,7 +109,7 @@ function sameOriginMatchesRequestHost(req: Request, origin: string): boolean {
   }
 }
 
-function requireSameOriginAuthRequest(req: Request, res: Response, next: () => void): void {
+export function requireSameOriginAuthRequest(req: Request, res: Response, next: () => void): void {
   const fetchSite = req.get("sec-fetch-site");
   if (fetchSite && !["same-origin", "same-site", "none"].includes(fetchSite)) {
     res.status(403).json({ error: "Cross-site auth requests are not allowed" });
@@ -124,7 +125,7 @@ function requireSameOriginAuthRequest(req: Request, res: Response, next: () => v
   next();
 }
 
-function requireJsonAuthRequest(req: Request, res: Response, next: () => void): void {
+export function requireJsonAuthRequest(req: Request, res: Response, next: () => void): void {
   if (!req.is("application/json")) {
     res.status(415).json({ error: "Auth requests must use application/json" });
     return;
@@ -145,6 +146,35 @@ function saveLocalAuthSession(req: RequestWithSession): Promise<void> {
       resolve();
     });
   });
+}
+
+/**
+ * Creates a local username+password account (same normalization and scrypt hashing as
+ * /api/auth/register). Shared by registration and workspace partner invitations.
+ */
+export async function createLocalAuthUser(rawUsername: string, password: string): Promise<{ ok: true; user: User } | { ok: false; reason: "username_taken" }> {
+  const username = normalizeUsername(rawUsername);
+  const existing = await storage.getUserByUsername(username);
+  if (existing) return { ok: false, reason: "username_taken" };
+  const user = await storage.createUser({ username, password: await hashPassword(password) });
+  return { ok: true, user };
+}
+
+/** Signs the user in with the existing session + signed cookie. Returns false when the session could not be saved. */
+export async function signInLocalAuthUser(req: Request, res: Response, userId: string): Promise<boolean> {
+  const sessionReq = req as RequestWithSession;
+  if (sessionReq.session) sessionReq.session.userId = userId;
+  setLocalAuthUserCookie(res, userId);
+  try {
+    await saveLocalAuthSession(sessionReq);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function hasLocalAuthSession(req: Request): boolean {
+  return Boolean((req as RequestWithSession).session);
 }
 
 export function registerLocalAuthRoutes(app: Express): void {
@@ -184,22 +214,13 @@ export function registerLocalAuthRoutes(app: Express): void {
       }
       if (!ensureSessionAvailable(req, res)) return;
 
-      const body = authBodySchema.parse(req.body);
-      const username = normalizeUsername(body.username);
-      const existing = await storage.getUserByUsername(username);
-      if (existing) {
+      const body = localAuthAccountSchema.parse(req.body);
+      const created = await createLocalAuthUser(body.username, body.password);
+      if (!created.ok) {
         return res.status(409).json({ error: "Username already exists" });
       }
-
-      const user = await storage.createUser({
-        username,
-        password: await hashPassword(body.password),
-      });
-      if (req.session) req.session.userId = user.id;
-      setLocalAuthUserCookie(res, user.id);
-      try {
-        await saveLocalAuthSession(req);
-      } catch {
+      const user = created.user;
+      if (!await signInLocalAuthUser(req, res, user.id)) {
         return res.status(500).json({ error: "Session save failed" });
       }
       res.status(201).json({ authenticated: true, sessionBacked: true, usingDevFallback: false, user: sanitizeAuthUser(user) });
@@ -218,7 +239,7 @@ export function registerLocalAuthRoutes(app: Express): void {
       }
       if (!ensureSessionAvailable(req, res)) return;
 
-      const body = authBodySchema.parse(req.body);
+      const body = localAuthAccountSchema.parse(req.body);
       const user = await storage.getUserByUsername(normalizeUsername(body.username));
       if (!user || !(await verifyPassword(body.password, user.password))) {
         return res.status(401).json({ error: "Invalid username or password" });

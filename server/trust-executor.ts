@@ -222,6 +222,20 @@ export async function executeApprovedPendingAction(
         break;
       }
 
+      case "agent_council.lesson":
+      case "agent_council.skill_update":
+      case "agent_council.new_agent":
+      case "agent_council.repair": {
+        // Safe by design: records the approval in the council (lesson or ready PR-first brief).
+        // It never edits code, skills or agents.
+        const { getAgentCouncil } = await import("./agent-council");
+        const proposalKey = String(input.proposalKey || "");
+        if (!proposalKey) throw new Error("Propuesta del consejo sin proposalKey");
+        await getAgentCouncil().approveFromTrustCenter(proposalKey);
+        result = { applied: true, proposalKey };
+        break;
+      }
+
       default:
         throw new Error(`No executor registered for ${action.actionType}`);
     }

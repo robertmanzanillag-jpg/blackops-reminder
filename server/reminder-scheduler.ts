@@ -7,7 +7,7 @@ import { getPortfolioNews, type NewsItem } from "./finance";
 import { getSystemUserId } from "./user-context";
 import { generateCeoMorningBrief } from "./ceo-briefing";
 import { runDropshippingDailyOperatingCycle, sendDropshippingDailyReport } from "./dropshipping-ceo";
-import { ensureDefaultAutomations, recordScheduledAutomationRun, type ScheduledAutomationRunOutcome } from "./automation-registry";
+import { getExistingAutomations, recordScheduledAutomationRun, type ScheduledAutomationRunOutcome } from "./automation-registry";
 import { generateRadioTemplatesForDate, type RadioTemplateRunResult } from "./radio-template-agent";
 import { hasRealValue } from "./ceo-doctor-cli";
 import {
@@ -758,7 +758,7 @@ async function runDropshippingCeoDailyCycle(): Promise<void> {
 
 async function runRadioTemplateGenerationForUser(userId: string): Promise<string> {
   return runRadioTemplateGenerationForUserWithDeps(userId, {
-    ensureDefaultAutomations,
+    ensureDefaultAutomations: getExistingAutomations,
     generateRadioTemplatesForDate,
     createAutomationRun: storage.createAutomationRun.bind(storage),
     now: () => new Date(),

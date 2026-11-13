@@ -1,4 +1,5 @@
 import { storage } from "./storage";
+import { listExistingAutomationDefinitions } from "./automation-definition-reads";
 import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
 import type { AutomationDefinition, AutomationRun, AutomationRunStatus, InsertAutomationDefinition, InsertAutomationRun } from "@shared/schema";
 
@@ -297,29 +298,13 @@ export const DEFAULT_AUTOMATIONS: AutomationSeed[] = [
 ];
 
 export async function ensureDefaultAutomations(userId: string): Promise<AutomationDefinition[]> {
-  const existing = await storage.getAutomationDefinitions(userId);
+  // Compatibility export only: initialization is no longer implicit.
+  // Explicit default registration remains pending, not part of GET/startup/run.
+  return getExistingAutomations(userId);
+}
 
-  for (const seed of DEFAULT_AUTOMATIONS) {
-    const existingAutomation = existing.find((automation) => (automation.metadata as any)?.key === seed.key);
-    if (existingAutomation) {
-      if (seed.key === "metricool-daily-analytics-sync" && existingAutomation.status === "paused") {
-        await storage.updateAutomationDefinition(existingAutomation.id, {
-          status: "active",
-          description: seed.description,
-          metadata: { ...(existingAutomation.metadata as object), ...(seed.metadata as object) },
-        });
-      }
-      continue;
-    }
-    const { key, ...automation } = seed;
-    await storage.createAutomationDefinition(userId, {
-      ...automation,
-      nextRunAt: getNextRunAt(automation.schedule),
-      metadata: { ...(automation.metadata as object), key },
-    });
-  }
-
-  return storage.getAutomationDefinitions(userId);
+export function getExistingAutomations(userId: string): Promise<AutomationDefinition[]> {
+  return listExistingAutomationDefinitions(storage, userId);
 }
 
 export function getNextRunAt(schedule: unknown): Date | null {
@@ -489,7 +474,7 @@ export async function recordScheduledAutomationRun(
   startedAt: Date,
   outcome: ScheduledAutomationRunOutcome,
 ): Promise<AutomationRun | null> {
-  const automations = await ensureDefaultAutomations(userId);
+  const automations = await getExistingAutomations(userId);
   const automation = automations.find((item) => (item.metadata as any)?.key === automationKey);
   if (!automation) return null;
 

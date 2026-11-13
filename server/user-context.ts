@@ -4,7 +4,6 @@ import { hasRealValue } from "./ceo-doctor-cli";
 
 export const DEFAULT_DEV_USER_ID = "mock-user-123";
 export const LOCAL_AUTH_USER_COOKIE_NAME = "blackops.uid";
-const DEV_FALLBACK_ENVS = new Set(["development", "test"]);
 
 type RequestWithAuth = Request & {
   user?: { id?: string; userId?: string; sub?: string };
@@ -19,6 +18,10 @@ const PUBLIC_API_PATHS = [
   "/api/auth/register",
   "/api/auth/login",
   "/api/auth/logout",
+  // Partner invitations: the invitee has no account yet. The token is checked in the handler
+  // (sha256 hash lookup, single-use, 7-day expiry); see server/workspace-access.ts.
+  "/api/workspace/invitations/preview",
+  "/api/workspace/invitations/accept",
   "/api/telegram/webhook",
   "/api/stripe/revenue-webhook",
   "/api/google-drive/oauth/callback",
@@ -105,14 +108,13 @@ function readSignedLocalAuthCookie(req: Request): string | null {
 }
 
 export function allowsDevUserFallback(): boolean {
-  if (process.env.ALLOW_DEV_USER_FALLBACK === "true") return true;
-  if (process.env.ALLOW_DEV_USER_FALLBACK === "false") return false;
-  return DEV_FALLBACK_ENVS.has(process.env.NODE_ENV || "development");
+  // Request identity injection is available only to explicitly opted-in tests.
+  // The publicly reachable development workflow must require a real session.
+  return process.env.NODE_ENV === "test" && process.env.ALLOW_DEV_USER_FALLBACK === "true";
 }
 
-export function resolveCurrentUserId(req: Request): string | null {
+export function getAuthenticatedCurrentUserId(req: Request): string | null {
   const authReq = req as RequestWithAuth;
-  const requestFallbackAllowed = allowsDevUserFallback();
 
   return (
     cleanUserId(authReq.user?.id) ||
@@ -122,14 +124,27 @@ export function resolveCurrentUserId(req: Request): string | null {
     cleanUserId(authReq.session?.user?.id) ||
     cleanUserId(authReq.session?.user?.userId) ||
     cleanUserId(authReq.session?.user?.sub) ||
-    readSignedLocalAuthCookie(req) ||
-    (requestFallbackAllowed ? cleanUserId(req.header("x-user-id")) : null) ||
-    (requestFallbackAllowed ? DEFAULT_DEV_USER_ID : null)
+    readSignedLocalAuthCookie(req)
   );
 }
 
+export function resolveCurrentUserId(req: Request): string | null {
+  return getAuthenticatedCurrentUserId(req) ||
+    (allowsDevUserFallback() ? cleanUserId(req.header("x-user-id")) || DEFAULT_DEV_USER_ID : null);
+}
+
 export function isPublicApiPath(path: string): boolean {
-  return PUBLIC_API_PATHS.includes(path) || PUBLIC_API_PATTERNS.some((pattern) => pattern.test(path));
+  // Express routing is case-insensitive, so compare lowercased paths.
+  const lowered = String(path || "").toLowerCase();
+  return PUBLIC_API_PATHS.includes(lowered) || PUBLIC_API_PATTERNS.some((pattern) => pattern.test(lowered));
+}
+
+function isApiRequestPath(path: string): boolean {
+  // Express 4 matches routes case-insensitively: "/API/x" reaches "/api/x" handlers.
+  const raw = String(path || "");
+  let decoded = raw;
+  try { decoded = decodeURIComponent(raw); } catch { /* keep the raw path */ }
+  return raw.toLowerCase().startsWith("/api") || decoded.toLowerCase().startsWith("/api");
 }
 
 export function resolveRequestApiPath(req: Request): string {
@@ -147,8 +162,8 @@ export function isPublicApiRequest(req: Request): boolean {
  *
  * Supports provider-neutral auth state (Passport/Replit/Clerk/Auth.js adapters
  * can populate req.user or req.session). Request fallbacks such as x-user-id and
- * the mock user are limited to dev/test unless explicitly enabled with
- * ALLOW_DEV_USER_FALLBACK=true. DEFAULT_USER_ID is reserved for system jobs.
+ * the mock user require NODE_ENV=test and ALLOW_DEV_USER_FALLBACK=true.
+ * DEFAULT_USER_ID is reserved for system jobs.
  */
 export function getCurrentUserId(req: Request): string {
   const userId = resolveCurrentUserId(req);
@@ -162,7 +177,7 @@ export function getCurrentUserId(req: Request): string {
 }
 
 export function requireAppUser(req: Request, res: Response, next: NextFunction): void {
-  if (!req.path.startsWith("/api")) return next();
+  if (!isApiRequestPath(req.path)) return next();
   if (isPublicApiRequest(req)) return next();
 
   const userId = resolveCurrentUserId(req);

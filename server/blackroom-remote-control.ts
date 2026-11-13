@@ -1,4 +1,5 @@
 import { eq, sql } from "drizzle-orm";
+import { strictBlackRoomEnabled } from "./blackroom-publication-guard";
 import { blackRoomRemoteControl } from "@shared/schema";
 import type { BlackRoomRemoteCommand } from "./blackroom-chat";
 import type { BlackRoomPublicationExperiment } from "./blackroom-growth-ceo";
@@ -348,13 +349,13 @@ export function isBlackRoomRemoteDeviceOnline(state: BlackRoomRemoteControlState
   return Number.isFinite(seenAt) && now.getTime() - seenAt <= BLACKROOM_REMOTE_ONLINE_WINDOW_MS;
 }
 
-function normalizeRemoteControlState(value: unknown): BlackRoomRemoteControlState {
+export function normalizeRemoteControlState(value: unknown): BlackRoomRemoteControlState {
   const parsed = value && typeof value === "object" ? value as Partial<BlackRoomRemoteControlState> : {};
   const normalized: BlackRoomRemoteControlState = {
     ...createBlackRoomRemoteControlState(),
     ...parsed,
     version: 1,
-    desiredEnabled: Boolean(parsed.desiredEnabled),
+    desiredEnabled: strictBlackRoomEnabled(parsed.desiredEnabled),
     weeks: Math.max(2, Math.min(4, Math.floor(Number(parsed.weeks || 2)))),
     generation: Math.max(0, Math.floor(Number(parsed.generation || 0))),
     device: parsed.device || null,
@@ -397,6 +398,20 @@ export async function readBlackRoomRemoteControl(): Promise<BlackRoomRemoteContr
   const db = await database();
   const [row] = await db.select().from(blackRoomRemoteControl).where(eq(blackRoomRemoteControl.id, BLACKROOM_REMOTE_CONTROL_ID));
   return row ? normalizeRemoteControlState(row.data) : createBlackRoomRemoteControlState();
+}
+
+/** Existing state only. Never initializes a table or creates a default row.
+ * A missing table rejects; a missing row returns null. Neither authorizes work.
+ */
+export async function readExistingBlackRoomRemoteControl(
+  readRow: () => Promise<unknown> = async () => {
+    const db = await database();
+    const [row] = await db.select().from(blackRoomRemoteControl).where(eq(blackRoomRemoteControl.id, BLACKROOM_REMOTE_CONTROL_ID));
+    return row?.data ?? null;
+  },
+): Promise<BlackRoomRemoteControlState | null> {
+  const data = await readRow();
+  return data == null ? null : normalizeRemoteControlState(data);
 }
 
 export async function mutateBlackRoomRemoteControl(

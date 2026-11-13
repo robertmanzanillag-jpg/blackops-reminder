@@ -1,0 +1,7 @@
+# Historical reviewed proposals
+
+The owner-only factory dashboard reads at most 20 completed terminal reviews and three completed predecessors plus at most two ledger-verified failed-build recoveries per review. Only a complete discover/build/simulate/review chain with matching owner, project, root, order revision, base/head, PR identity and the existing proposal evidence gate is displayed. Evidence is validated at recorded completion time, so reopening historical work does not manufacture a new execution.
+
+The order link is always historical and its current validity is unverified: edited or deleted orders must never appear fulfilled. Stored artifact references are factory evidence metadata, not independent re-fetching of artifact contents. No provider calls, admission, expenses, publishing, order completion, career-generation attribution or life scoring occurs. Failed-build recovery is accepted only through the existing owner-scoped recovery ledger verifier and matching rebase/attempt identity. Ordinary repair loops outside this conservative stage shape remain absent until separately supported and verified. This feature does not make the code/GitHub career operational.
+
+Validation: focused fixtures cover owner isolation, chain breaks, order/version identity, unsafe PR URLs, incomplete or self-reviewed evidence, duplicate polling and historical timestamps. Run tests/software-factory-order-evidence.test.ts and existing factory route tests. Deployment and full App QA are separate gates.
