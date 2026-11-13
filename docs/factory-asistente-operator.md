@@ -125,6 +125,7 @@ reviewed draft PR.
 | `autoAdmit.enabled` | absent (off) | boolean | Turns automatic admission on. |
 | `autoAdmit.since` | required | ISO datetime | Only orders with `createdAt >= since` are admitted. |
 | `autoAdmit.maxPerDay` | `maxDraftPullRequestsPerDay` | 1..`maxDraftPullRequestsPerDay` | Automatic admissions per UTC day. |
+| `autoAdmit.systemOrders` | absent (false) | boolean | Also admit office self-heal system orders whose text equals the fixed template (see `docs/office-role-evidence.md`). |
 
 Admission. Explicit `orders[]` mappings keep working unchanged and take
 precedence: a mapped id (any revision) is never admitted automatically. Eligible

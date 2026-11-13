@@ -265,6 +265,27 @@ test("auto admission on: since filter, Kong rejection and oldest-first single ad
     f.jobs[1].status = "completed"; f.jobs.splice(0, 1); await worker.scheduleCompanyOrders!(owner); assert.equal(f.counts().enqueued, 2);
 });
 
+test("system self-heal orders are admitted only with autoAdmit.systemOrders and an exact template", async () => {
+    const { planSelfHeal } = await import("../server/office-self-heal");
+    const { githubRecordId } = await import("../server/office-role-snapshots");
+    const { emptyCompanyState } = await import("../shared/agent-company");
+    const repoId = githubRecordId("repository", "robertmanzanillag-jpg/blackops-reminder");
+    const journal = { jobs: [{ id: "g1", role: "github", status: "completed", completedAt: "2026-11-06T23:00:00Z", artifactId: "a".repeat(64), audit: { completeCoverage: true, findings: [{ code: "FAILING_DEFAULT_BRANCH", recordIds: [repoId], detail: "" }] }, source: { rows: [{ id: repoId, repo: "robertmanzanillag-jpg/blackops-reminder" }] } }] };
+    const system = planSelfHeal({ state: undefined, company: emptyCompanyState(), journal, owner, now: Date.parse("2026-11-06T23:30:00Z"), maxPerDay: 1 }).created[0];
+    const forged = { ...system, id: "ord-sh-forged", text: system.text.replace("añade una prueba", "omite la prueba") };
+    for (const [systemOrders, expected] of [[undefined, 0], [false, 0], [true, 1]] as const) {
+        const f = await autoFixture({ orders: [system, forged], autoAdmit: { enabled: true, since: "2026-11-06T00:00:00Z", ...(systemOrders === undefined ? {} : { systemOrders }) } });
+        const operator = createAsistenteOperatorComposition(f.config, f.deps);
+        await (await operator.createFactoryWorkerOptions()).scheduleCompanyOrders!(owner);
+        assert.equal(f.counts().enqueued, expected, String(systemOrders));
+        if (expected) assert.deepEqual(f.jobs.map(j => j.payload.companyOrder.orderId), [system.id]);
+        else await assert.rejects(operator.admitWithinCredits(owner, companyOrderJob(system, project, 1)), /NOT_MAPPED/);
+        await assert.rejects(operator.admitWithinCredits(owner, companyOrderJob(forged, project, 1)), /NOT_MAPPED/);
+    }
+    const baseConfig = (await autoFixture()).config;
+    assert.throws(() => validateAsistenteOperatorConfig({ ...baseConfig, autoAdmit: { enabled: true, since: "2026-11-06T00:00:00Z", systemOrders: "yes" } } as any));
+});
+
 test("auto admission honors maxPerDay and the draft PR cap with no credit hold", async () => {
     const orders = [autoOrder("a", "2026-11-06T01:00:00Z"), autoOrder("b", "2026-11-06T02:00:00Z")];
     const f = await autoFixture({ orders, autoAdmit: { enabled: true, since: "2026-11-06T00:00:00Z", maxPerDay: 1 } }), operator = createAsistenteOperatorComposition(f.config, f.deps), worker = await operator.createFactoryWorkerOptions();
