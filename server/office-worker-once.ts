@@ -37,6 +37,21 @@ export interface OfficeOnceClock {
 export type OfficeOnceReason = "paused" | "busy" | "pc-active" | "deadline" | "aborted" | "unconfirmed";
 export interface OfficeOnceResult { reason: OfficeOnceReason; cycles: number }
 
+/** Static diagnostic only: an uppercase code we authored, a driver/system code
+ * (SQLSTATE such as 28P01, or ENOTFOUND/ECONNREFUSED) or the error class name.
+ * Never the free-text message, which may contain hosts or configuration. */
+export function safeFailureCode(error: unknown): string {
+  try {
+    const message = error instanceof Error ? Object.getOwnPropertyDescriptor(error, "message")?.value : undefined;
+    if (typeof message === "string" && /^[A-Z][A-Z0-9_]{2,80}$/.test(message)) return message;
+    const code = error !== null && typeof error === "object" ? Object.getOwnPropertyDescriptor(error, "code")?.value : undefined;
+    if (typeof code === "string" && /^[A-Z0-9_]{2,40}$/.test(code)) return `CODE_${code}`;
+    const name = error instanceof Error ? error.name : undefined;
+    if (typeof name === "string" && /^[A-Za-z]{1,40}$/.test(name)) return `CLASS_${name}`;
+  } catch { /* a hostile error object must not break the report */ }
+  return "UNKNOWN";
+}
+
 const defaultClock: OfficeOnceClock = {
   setTimeout: (fn, ms) => setTimeout(fn, ms), clearTimeout: id => clearTimeout(id as ReturnType<typeof setTimeout>),
   setInterval: (fn, ms) => setInterval(fn, ms), clearInterval: id => clearInterval(id as ReturnType<typeof setInterval>),
@@ -75,7 +90,7 @@ export async function runOfficeWorkerOnce(host: OfficeOnceHost, options: {
       maintenance = (async () => {
         if (!(await ownership.verify())) throw Error("OFFICE_ONCE_OWNERSHIP_LOST");
         await host.maintain();
-      })().catch(() => { failed = true; stop(); }).finally(() => { maintenance = undefined; });
+      })().catch(error => { console.error(`Office worker maintenance unconfirmed; code=${safeFailureCode(error)}`); failed = true; stop(); }).finally(() => { maintenance = undefined; });
     }, maintainMs));
     timers.push(clock.setInterval(() => {
       if (probing || halted()) return;
@@ -97,15 +112,15 @@ export async function runOfficeWorkerOnce(host: OfficeOnceHost, options: {
         if (host.capabilityTick && !halted() && now() - lastCapabilityTick >= capabilityTickMs) { lastCapabilityTick = now(); await host.capabilityTick(); }
         // Re-check the cutoff: a claim must keep its full lease inside the run budget.
         if (!halted() && remaining() >= claimWindow) await host.tick();
-      } catch {
-        console.error("Office worker cycle unconfirmed; no task will be retried automatically");
+      } catch (error) {
+        console.error(`Office worker cycle unconfirmed; no task will be retried automatically. code=${safeFailureCode(error)}`);
         return result("unconfirmed");
       }
       cycles++;
       if (halted()) continue;
       await new Promise<void>(resolve => { const id = clock.setTimeout(() => { wake = undefined; resolve(); }, pollMs); wake = () => { clock.clearTimeout(id); wake = undefined; resolve(); }; });
     }
-  } catch { return result("unconfirmed"); }
+  } catch (error) { console.error(`Office worker run unconfirmed; code=${safeFailureCode(error)}`); return result("unconfirmed"); }
   finally {
     clock.clearTimeout(deadline); for (const id of timers) clock.clearInterval(id);
     host.requestStop(); options.signal.removeEventListener("abort", stop);

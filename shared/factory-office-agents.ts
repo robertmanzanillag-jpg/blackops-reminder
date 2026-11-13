@@ -10,6 +10,7 @@
 
 import { advanceCompany, isKongCompanyAgent, type CompanyState } from "./agent-company";
 import type { AgentLiveStatus } from "./agent-live-status";
+import { isOnDutyWindow, ON_DUTY_DAY_MS, onDutyStatus } from "./office-on-duty";
 
 export const FACTORY_DEPARTMENT = "Ingeniería / Fábrica";
 
@@ -217,11 +218,17 @@ const OUTCOME_WORDS: Record<FactoryLedgerOutcome, string> = {
 const shortTime = (value: string) => new Date(Date.parse(value)).toISOString().slice(0, 16).replace("T", " ") + " UTC";
 
 /** Office status for a factory engineer. "working" only from a live stage lease; never optimistic. */
-export function factoryAgentStatus(view: FactoryAgentView | undefined, council: "loading" | "ready" | "error"): AgentLiveStatus {
+export function factoryAgentStatus(view: FactoryAgentView | undefined, council: "loading" | "ready" | "error", now = Date.now()): AgentLiveStatus {
   if (!view) return council === "error" ? { state: "offline", label: "Sin conexion con el consejo" } : council === "loading" ? { state: "checking", label: "Verificando..." } : { state: "available", label: "Sin trabajo registrado de la fabrica" };
   const last = view.lastWorkedAt ? `Ultimo trabajo: ${shortTime(view.lastWorkedAt)}` : "Sin trabajo registrado";
   const outcome = view.lastOutcome ? ` · ${OUTCOME_WORDS[view.lastOutcome]}` : "";
   const live = view.live === "unavailable" ? "Lectura en vivo de la fabrica no disponible; se muestra la ultima observacion." : view.live === "not_read" ? "Ultima observacion guardada por la fabrica." : undefined;
   if (view.state === "working") return { state: "working", label: `Trabajando: etapa ${view.stage} en curso`, detail: "Lease vivo de la fabrica (GitHub Actions).", activity: [`Etapa ${view.stage} en curso`, last] };
-  return { state: "available", label: `${last}${outcome}`, ...(live ? { detail: live } : {}), activity: [last, ...(view.lastJobStatus ? [`Estado: ${view.lastJobStatus}`] : [])] };
+  const activity = [last, ...(view.lastJobStatus ? [`Estado: ${view.lastJobStatus}`] : [])];
+  // Completed stage in the last day without an attributable failure: on duty, never "working".
+  if (view.lastJobStatus === "completed" && view.lastWorkedAt && view.lastOutcome !== "attributable_failure"
+    && isOnDutyWindow({ lastWorkAt: view.lastWorkedAt, maxAgeMs: ON_DUTY_DAY_MS, now })) {
+    return { ...onDutyStatus({ lastWorkAt: view.lastWorkedAt, now, extra: [`etapa ${view.stage}`, view.lastOutcome ? OUTCOME_WORDS[view.lastOutcome] : "", live || ""].filter(Boolean).join(" · ") }), activity };
+  }
+  return { state: "available", label: `${last}${outcome}`, ...(live ? { detail: live } : {}), activity };
 }

@@ -1,7 +1,8 @@
 // Dedicated trusted cloud entrypoint: never loads repository .env files or adapters.
 // Runs the reviewed office executor once, bounded, then exits (see docs/office-worker-cloud.md).
 import { createHash, randomUUID } from "node:crypto";
-import { runOfficeWorkerOnce, OFFICE_ONCE_MAX_DURATION_MS, type OfficeOnceOwnership } from "../server/office-worker-once";
+import { runOfficeWorkerOnce, safeFailureCode, OFFICE_ONCE_MAX_DURATION_MS, type OfficeOnceOwnership } from "../server/office-worker-once";
+export { safeFailureCode };
 // Same validation and fixed review-only flags as the reviewed Windows launcher.
 import { parseWorkerConfig, safeWorkerEnvironment } from "./office-windows-worker.mjs";
 
@@ -78,20 +79,6 @@ async function main() {
     lockClient?.release();
     await lockPool.end().catch(() => undefined);
   }
-}
-/** Static diagnostic only: an uppercase code we authored, a driver/system code
- * (SQLSTATE such as 28P01, or ENOTFOUND/ECONNREFUSED) or the error class name.
- * Never the free-text message, which may contain hosts or configuration. */
-export function safeFailureCode(error: unknown): string {
-  try {
-    const message = error instanceof Error ? Object.getOwnPropertyDescriptor(error, "message")?.value : undefined;
-    if (typeof message === "string" && /^[A-Z][A-Z0-9_]{2,80}$/.test(message)) return message;
-    const code = error !== null && typeof error === "object" ? Object.getOwnPropertyDescriptor(error, "code")?.value : undefined;
-    if (typeof code === "string" && /^[A-Z0-9_]{2,40}$/.test(code)) return `CODE_${code}`;
-    const name = error instanceof Error ? error.name : undefined;
-    if (typeof name === "string" && /^[A-Za-z]{1,40}$/.test(name)) return `CLASS_${name}`;
-  } catch { /* a hostile error object must not break the report */ }
-  return "UNKNOWN";
 }
 if (process.argv[1]?.endsWith("office-worker-once.ts")) void main().catch(error => { console.error(`Office one-shot unavailable; no automatic replay. code=${safeFailureCode(error)}`); process.exitCode = 1; })
   // Shared database clients (council, queue) may keep the event loop alive after the bounded run.

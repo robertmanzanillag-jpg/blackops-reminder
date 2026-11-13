@@ -22,6 +22,9 @@ export type AgentLiveStatus = {
   activity?: string[];
   // Concrete problems read from the agent's own data (a missed daily goal, a missing connector).
   problems?: string[];
+  // "Activo · al día": last verified work finished inside its expected window with no failure.
+  // Only set with state "available"; never means a live execution (see shared/office-on-duty.ts).
+  onDuty?: { lastWorkAt: string; nextWorkAt?: string };
 };
 
 export type AgentProbe = {
