@@ -5,9 +5,9 @@ import { ArrowLeft, Inbox, Loader2, MessageSquarePlus, Send, Share2 } from "luci
 import { apiRequest } from "@/lib/queryClient";
 import { ChatMarkdown } from "@/components/agent-chat/chat-markdown";
 
-type AgentRow = { id: string; name: string; job: string; status: { state: string; label: string } | null; fresh: boolean; mode: string; openOrders: number };
+type AgentRow = { id: string; name: string; job: string; group?: string; groupLabel?: string; legacyIds?: string[]; status: { state: string; label: string } | null; fresh: boolean; mode: string; openOrders: number };
 type Thread = { id: string; agentId: string; title: string; createdAt: string; inbox: boolean };
-type Message = { id: string; threadId: string; role: "user" | "agent" | "handoff" | "peer"; agentId: string; fromAgentId?: string; text: string; at: string };
+type Message = { id: string; threadId: string; role: "user" | "agent" | "handoff" | "peer"; agentId: string; fromAgentId?: string; text: string; at: string; handoffTo?: string };
 type Handoff = { orderId: string; at: string; fromAgentId: string; toAgentIds: string[]; text: string; status: string; approvalRequired: boolean };
 
 const enc = encodeURIComponent;
@@ -38,13 +38,28 @@ export default function AgentChatPage() {
 
   const agent = agents.data?.agents.find(a => a.id === agentId);
   const names = useMemo(() => Object.fromEntries((agents.data?.agents || []).map(a => [a.id, a.name])), [agents.data]);
-  const visibleAgents = (agents.data?.agents || []).filter(a => !filter || `${a.name} ${a.job}`.toLowerCase().includes(filter.toLowerCase()));
+  const visibleAgents = (agents.data?.agents || []).filter(a => !filter || `${a.name} ${a.job} ${a.groupLabel || ""}`.toLowerCase().includes(filter.toLowerCase()));
+  // Grouped like the office: BlackOps, Black Room, KONG central, KONG cities, factory, academy.
+  const groups = useMemo(() => {
+    const map = new Map<string, AgentRow[]>();
+    for (const a of visibleAgents) map.set(a.groupLabel || "Agentes", [...(map.get(a.groupLabel || "Agentes") || []), a]);
+    return [...map.entries()];
+  }, [visibleAgents]);
+  // "Hablar con X": opens the agent that owns what Robert asked, keeping the URL shareable.
+  const openAgent = (id: string) => {
+    setAgentId(id);
+    try { window.history.replaceState(null, "", `/agent-chat?agent=${enc(id)}`); } catch { /* URL stays as is */ }
+  };
   const messages = [...(threadId ? thread.data?.messages || [] : []), ...(pending ? [pending] : [])];
 
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" }); }, [messages.length, pending]);
   useEffect(() => { setThreadId(null); setError(null); }, [agentId]);
-  // Agents without a chat (KONG workers, trainees) open the list instead of a dead conversation.
-  useEffect(() => { if (agentId && agents.data && !agents.data.agents.some(a => a.id === agentId)) setAgentId(null); }, [agentId, agents.data]);
+  // Office ids that differ from the chat id (e.g. the KONG team popup) resolve to the same agent;
+  // an agent that no longer exists (graduated trainee) opens the list instead of a dead conversation.
+  useEffect(() => {
+    if (!agentId || !agents.data || agents.data.agents.some(a => a.id === agentId)) return;
+    setAgentId(agents.data.agents.find(a => a.legacyIds?.includes(agentId))?.id || null);
+  }, [agentId, agents.data]);
 
   const send = async () => {
     const text = draft.trim();
@@ -90,7 +105,9 @@ export default function AgentChatPage() {
       <div className="flex-1 overflow-y-auto">
         {agents.isLoading && <p className="p-3 text-sm text-zinc-400">Cargando agentes…</p>}
         {agents.isError && <p className="p-3 text-sm text-red-300">No se pudieron cargar los agentes (solo el propietario puede usar estos chats).</p>}
-        {visibleAgents.map(a => (
+        {groups.map(([label, rows]) => (<div key={label}>
+          <p className="px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wide text-zinc-500">{label} · {rows.length}</p>
+          {rows.map(a => (
           <button key={a.id} onClick={() => setAgentId(a.id)} className={`flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-white/5 ${a.id === agentId ? "bg-white/10" : ""}`}>
             <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${stateDot(a.status?.state)}`} />
             <span className="min-w-0 flex-1">
@@ -98,7 +115,8 @@ export default function AgentChatPage() {
               <span className="block truncate text-xs text-zinc-500">{a.status?.label || a.job}</span>
             </span>
           </button>
-        ))}
+          ))}
+        </div>))}
       </div>
     </aside>
   );
@@ -136,7 +154,7 @@ export default function AgentChatPage() {
               {!messages.length && !thread.isLoading && (
                 <div className="mx-auto max-w-md pt-10 text-center text-sm text-zinc-400">
                   <p className="font-medium text-zinc-200">Habla con {agent?.name || "este agente"}</p>
-                  <p className="mt-1">Pregunta «estado», «órdenes» o «último trabajo», o dale una tarea. Si no es su trabajo, la deriva al agente correcto. Nada se publica ni despliega sin tu aprobación.</p>
+                  <p className="mt-1">Pregunta «estado», «órdenes» o «último trabajo», o dale una tarea. Responde solo con sus datos registrados; si no los tiene, te dice qué agente sí y te da el botón para hablar con él. Nada se publica ni despliega sin tu aprobación.</p>
                 </div>
               )}
               {thread.isLoading && <p className="text-sm text-zinc-400">Cargando…</p>}
@@ -148,6 +166,11 @@ export default function AgentChatPage() {
                       {m.id !== "pending" && <span className="ml-2 normal-case text-zinc-500">{new Date(m.at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>}
                     </p>
                     <ChatMarkdown text={m.text} />
+                    {m.handoffTo && m.handoffTo !== agentId && (
+                      <button type="button" onClick={() => openAgent(m.handoffTo!)} className="mt-2 rounded-full border border-cyan-300/40 bg-cyan-400/10 px-3 py-1 text-xs font-semibold text-cyan-100 hover:bg-cyan-400/20" data-testid="button-agent-chat-handoff">
+                        Hablar con {names[m.handoffTo] || m.handoffTo}
+                      </button>
+                    )}
                   </div>
                 </div>
               ))}
