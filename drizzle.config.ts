@@ -12,4 +12,14 @@ export default defineConfig({
   dbCredentials: {
     url: process.env.DATABASE_URL,
   },
+  // Tables owned by explicit migration scripts or created at runtime are NOT in shared/schema.ts.
+  // Without this filter `npm run db:push` proposes DROP TABLE for all of them (office council
+  // state, office queue, factory, source documents, login sessions). Found by the release gate.
+  tablesFilter: [
+    "!agent_council_state",
+    "!agent_office_cloud_jobs",
+    "!office_*",
+    "!software_factory_*",
+    "!user_sessions",
+  ],
 });
