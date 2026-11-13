@@ -1,10 +1,10 @@
 import { CompanyOffice } from "@/components/company-office/company-office";
 import { SoftwareFactoryPanel } from "@/components/software-factory-panel";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { CSSProperties, PointerEvent, ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ownerOfficeStorageKey } from "@/lib/owner-office-storage";
-import { motion, MotionConfig } from "framer-motion";
+import { defaultAgentLocations as sharedDefaultAgentLocations, loadOfficeLayout, saveOfficeLocations, saveOfficeOffsets, type OfficeRoom } from "@/lib/office-layout";
+import { MotionConfig } from "framer-motion";
 import {
   ArrowLeft,
   BadgeDollarSign,
@@ -428,88 +428,11 @@ type RoomPresence = {
   agent: AgentId;
   position: string;
 };
-type OfficeRoom = {
-  id: string;
-  label: string;
-  x: number;
-  y: number;
-  w: number;
-  h: number;
-};
-type OfficeRoomConnection = {
-  from: string;
-  to: string;
-};
 type AgentLocationMap = Partial<Record<AgentId, string>>;
+const defaultAgentLocations: AgentLocationMap = sharedDefaultAgentLocations;
 type AgentRoomOffsetMap = Partial<Record<AgentId, { x: number; y: number }>>;
 
 const OFFICE_GITHUB_HANDOFF_KEY = "office.githubAgentHandoff";
-const OFFICE_LAYOUT_KEY = "agentsOffice.roomLayout.v1";
-const OFFICE_AGENT_LOCATIONS_KEY = "agentsOffice.agentLocations.v1";
-const OFFICE_AGENT_OFFSETS_KEY = "agentsOffice.agentOffsets.v1";
-const AGENT_WALK_MS = 1800;
-const defaultOfficeRooms: OfficeRoom[] = [
-  { id: "reception", label: "Recepcion", x: 10, y: 19, w: 18, h: 29 },
-  { id: "kong", label: "Kong", x: 29, y: 19, w: 22, h: 45 },
-  { id: "deals", label: "Deals + Websites", x: 54, y: 27, w: 10, h: 29 },
-  { id: "dev", label: "Dev + GitHub", x: 65, y: 19, w: 25, h: 43 },
-  { id: "finance", label: "Finance", x: 10, y: 52, w: 18, h: 25 },
-  { id: "dropshipping-lab", label: "Dropshipping Lab", x: 46, y: 58, w: 18, h: 20 },
-  { id: "marketing-hq", label: "Marketing HQ", x: 65, y: 52, w: 15, h: 11 },
-  { id: "meeting", label: "Meeting Room", x: 31, y: 65, w: 14, h: 17 },
-  { id: "ops", label: "Ops", x: 10, y: 82, w: 18, h: 13 },
-  { id: "black-room", label: "Black Room", x: 30, y: 84, w: 13, h: 12 },
-  { id: "clippers", label: "Clippers", x: 68, y: 65, w: 12, h: 17 },
-  { id: "security", label: "Cybersecurity", x: 82, y: 65, w: 12, h: 17 },
-  { id: "legal", label: "Legal", x: 82, y: 84, w: 10, h: 12 },
-  { id: "break-room", label: "Break Room", x: 45, y: 84, w: 24, h: 12 },
-];
-const officeRoomConnections: OfficeRoomConnection[] = [
-  { from: "reception", to: "kong" },
-  { from: "reception", to: "finance" },
-  { from: "kong", to: "deals" },
-  { from: "kong", to: "meeting" },
-  { from: "deals", to: "dropshipping-lab" },
-  { from: "deals", to: "dev" },
-  { from: "dropshipping-lab", to: "marketing-hq" },
-  { from: "marketing-hq", to: "clippers" },
-  { from: "marketing-hq", to: "security" },
-  { from: "marketing-hq", to: "legal" },
-  { from: "dropshipping-lab", to: "security" },
-  { from: "dropshipping-lab", to: "legal" },
-  { from: "dev", to: "security" },
-  { from: "finance", to: "ops" },
-  { from: "meeting", to: "black-room" },
-  { from: "meeting", to: "break-room" },
-  { from: "meeting", to: "clippers" },
-  { from: "clippers", to: "security" },
-  { from: "security", to: "legal" },
-  { from: "legal", to: "break-room" },
-  { from: "ops", to: "black-room" },
-  { from: "black-room", to: "break-room" },
-];
-const defaultAgentLocations: AgentLocationMap = {
-  assistant: "reception",
-  ceo: "kong",
-  revenue: "deals",
-  dropshipping: "dropshipping-lab",
-  "marketing-cmo": "marketing-hq",
-  code: "dev",
-  github: "dev",
-  "claude-reviewer": "dev",
-  portfolio: "finance",
-  radio: "black-room",
-  clippers: "clippers",
-  automations: "ops",
-  cybersecurity: "security",
-  "app-qa": "dev",
-  legal: "legal",
-  control: "security",
-};
-
-function clamp(value: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, value));
-}
 
 const agentById = agents.reduce<Record<AgentId, Agent>>((lookup, agent) => {
   lookup[agent.id] = agent;
@@ -766,12 +689,6 @@ const meetingRoomThreads: RoomConversation[] = [
   { from: "marketing-cmo", text: "Yo manejo marketing global como agencia interna: cada cliente con su calendario, metricas, skills y learning loop." },
   { from: "cybersecurity", text: "Yo reviso superficie de ataque: apps, dominios, HTTPS, incidents y Telegram alerts." },
   { from: "app-qa", text: "Yo convierto el app en mapa vivo: paginas, botones esperados, APIs, errores e ideas de mejora." },
-];
-
-const breakRoomPresence: RoomPresence[] = [
-  { agent: "automations", position: "left-[50%] top-[89%]" },
-  { agent: "radio", position: "left-[55%] top-[89%]" },
-  { agent: "assistant", position: "left-[60%] top-[89%]" },
 ];
 
 const meetingRoomPresence: RoomPresence[] = [
@@ -1133,503 +1050,10 @@ const githubAppTeams = [
   },
 ];
 
-function OfficeDesk({ className, wide = false }: { className?: string; wide?: boolean }) {
-  return (
-    <div
-      className={cn(
-        "absolute rounded-2xl border border-white/10 bg-[#151924] shadow-[0_22px_55px_rgba(0,0,0,0.42)]",
-        wide ? "h-16 w-36" : "h-14 w-28",
-        className
-      )}
-    >
-      <div className="absolute inset-x-4 top-3 h-2 rounded-full bg-white/10" />
-      <div className="absolute left-4 top-5 h-7 w-10 rounded-lg border border-cyan-300/25 bg-cyan-300/20 shadow-[0_0_22px_rgba(34,211,238,0.2)]" />
-      <div className="absolute left-6 top-11 h-1.5 w-7 rounded-full bg-white/20" />
-      <div className="absolute bottom-4 right-4 h-2 w-12 rounded-full bg-white/15" />
-      <div className="absolute -bottom-3 left-5 h-4 w-2 rounded-b bg-slate-700" />
-      <div className="absolute -bottom-3 right-5 h-4 w-2 rounded-b bg-slate-700" />
-    </div>
-  );
-}
-
-function Chair({ className }: { className?: string }) {
-  return (
-    <div className={cn("absolute h-8 w-7 rounded-xl border border-white/10 bg-[#2a3142] shadow-lg shadow-black/30", className)}>
-      <div className="absolute left-1/2 top-6 h-7 w-1 -translate-x-1/2 rounded bg-slate-700" />
-      <div className="absolute -bottom-2 left-1 h-1.5 w-5 rounded bg-slate-700" />
-    </div>
-  );
-}
-
-function OfficePlant({ className }: { className?: string }) {
-  return (
-    <div className={cn("absolute h-16 w-14", className)}>
-      <div className="absolute bottom-0 left-5 h-6 w-6 border-2 border-[#594433] bg-[#8b6548]" />
-      <div className="absolute bottom-5 left-6 h-8 w-2 bg-[#236229]" />
-      <div className="absolute bottom-8 left-2 h-6 w-7 bg-[#2fa84f]" />
-      <div className="absolute bottom-11 left-6 h-7 w-7 bg-[#71c837]" />
-      <div className="absolute bottom-7 left-8 h-6 w-7 bg-[#247b39]" />
-    </div>
-  );
-}
-
-function AreaLabel({ className, children }: { className?: string; children: ReactNode }) {
-  return (
-    <div className={cn("absolute rounded-xl border border-cyan-300/20 bg-[#090d16]/92 px-3 py-1.5 text-center text-[11px] font-semibold uppercase tracking-wide text-cyan-100 shadow-[0_12px_30px_rgba(0,0,0,0.45)] backdrop-blur", className)}>
-      {children}
-    </div>
-  );
-}
-
-function Cubicle({
-  className,
-  label,
-  tone = "bg-[#111827]/82",
-}: {
-  className?: string;
-  label: string;
-  tone?: string;
-}) {
-  return (
-    <div className={cn("absolute rounded-[28px] border border-white/10 bg-[#0f1421]/74 shadow-[0_28px_80px_rgba(0,0,0,0.42)] backdrop-blur", tone, className)}>
-      <AreaLabel className="-top-4 left-4 right-4 z-[60] truncate">{label}</AreaLabel>
-      <div className="absolute inset-x-7 bottom-6 h-px bg-white/10" />
-      <div className="absolute right-7 top-16 h-16 w-px bg-white/10" />
-    </div>
-  );
-}
-
-function RoomZone({
-  label,
-  style,
-  editMode,
-  onMoveStart,
-  onResizeStart,
-  onLabelChange,
-}: {
-  label: string;
-  style: CSSProperties;
-  editMode: boolean;
-  onMoveStart: (event: PointerEvent<HTMLDivElement>) => void;
-  onResizeStart: (event: PointerEvent<HTMLButtonElement>) => void;
-  onLabelChange: (label: string) => void;
-}) {
-  return (
-    <div
-      style={style}
-      onPointerDown={editMode ? onMoveStart : undefined}
-      className={cn(
-        "absolute z-[12] rounded-[28px] border border-cyan-100/22 bg-[#07101d]/72 shadow-[inset_0_1px_0_rgba(255,255,255,0.08),0_18px_42px_rgba(0,0,0,0.28)] backdrop-blur-[1px]",
-        editMode && "z-[65] cursor-move ring-1 ring-cyan-200/45"
-      )}
-    >
-      <div className="absolute inset-x-5 top-12 h-px bg-cyan-100/12" />
-      <div className="absolute inset-y-5 left-5 w-px bg-cyan-100/10" />
-      <div className="absolute left-1/2 top-[-12px] z-[90] max-w-[calc(100%-1rem)] -translate-x-1/2 rounded-2xl border border-cyan-100/40 bg-[#02050d] px-3 py-1.5 text-center text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-cyan-50 shadow-xl shadow-black/70">
-        {editMode ? (
-          <input
-            value={label}
-            onChange={(event) => onLabelChange(event.target.value)}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => event.stopPropagation()}
-            className="h-5 w-full min-w-24 bg-transparent text-center uppercase text-cyan-50 outline-none placeholder:text-cyan-100/40"
-            aria-label={`Nombre de room ${label}`}
-            placeholder="Room"
-          />
-        ) : (
-          label
-        )}
-      </div>
-      {editMode && (
-        <button
-          type="button"
-          onPointerDown={onResizeStart}
-          className="absolute bottom-1 right-1 z-[95] flex h-11 w-11 cursor-se-resize items-end justify-end rounded-br-[24px] rounded-tl-2xl border-b-2 border-r-2 border-cyan-100/70 bg-cyan-300/20 p-2 text-cyan-50 shadow-[0_0_24px_rgba(34,211,238,0.35),0_12px_28px_rgba(0,0,0,0.55)] transition hover:bg-cyan-300/35"
-          aria-label={`Arrastrar esquina para cambiar tamano de ${label}`}
-          title="Arrastra esta esquina para agrandar o achicar"
-        >
-          <Scale className="h-4 w-4" />
-        </button>
-      )}
-    </div>
-  );
-}
-
-function OfficeConnections({
-  rooms,
-  connections,
-}: {
-  rooms: OfficeRoom[];
-  connections: OfficeRoomConnection[];
-}) {
-  const roomById = useMemo(() => new Map(rooms.map((room) => [room.id, room])), [rooms]);
-
-  return (
-    <svg
-      className="pointer-events-none absolute inset-0 z-[8] h-full w-full overflow-visible"
-      viewBox="0 0 100 100"
-      preserveAspectRatio="none"
-      aria-hidden="true"
-    >
-      <defs>
-        <filter id="office-connection-glow" x="-40%" y="-40%" width="180%" height="180%">
-          <feGaussianBlur stdDeviation="2.5" result="blur" />
-          <feMerge>
-            <feMergeNode in="blur" />
-            <feMergeNode in="SourceGraphic" />
-          </feMerge>
-        </filter>
-        <linearGradient id="office-tunnel-gradient" x1="0%" x2="100%" y1="0%" y2="0%">
-          <stop offset="0%" stopColor="rgba(34,211,238,0.1)" />
-          <stop offset="50%" stopColor="rgba(165,243,252,0.55)" />
-          <stop offset="100%" stopColor="rgba(34,211,238,0.1)" />
-        </linearGradient>
-      </defs>
-      {connections.map((connection) => {
-        const from = roomById.get(connection.from);
-        const to = roomById.get(connection.to);
-        if (!from || !to) return null;
-        const x1 = from.x + from.w / 2;
-        const y1 = from.y + from.h / 2;
-        const x2 = to.x + to.w / 2;
-        const y2 = to.y + to.h / 2;
-        const cx = (x1 + x2) / 2;
-        const tunnelPath = `M ${x1} ${y1} C ${cx} ${y1}, ${cx} ${y2}, ${x2} ${y2}`;
-        const key = `${connection.from}-${connection.to}`;
-
-        return (
-          <g key={key}>
-            <path
-              d={tunnelPath}
-              stroke="rgba(2,6,23,0.78)"
-              strokeLinecap="round"
-              strokeWidth="4.6"
-              fill="none"
-            />
-            <path
-              d={tunnelPath}
-              stroke="rgba(125,211,252,0.2)"
-              strokeLinecap="round"
-              strokeWidth="3.1"
-              fill="none"
-            />
-            <path
-              d={tunnelPath}
-              stroke="url(#office-tunnel-gradient)"
-              strokeLinecap="round"
-              strokeWidth="1.25"
-              fill="none"
-              filter="url(#office-connection-glow)"
-            />
-            <path
-              d={tunnelPath}
-              stroke="rgba(207,250,254,0.78)"
-              strokeDasharray="1.2 2.2"
-              strokeLinecap="round"
-              strokeWidth="0.55"
-              fill="none"
-            />
-            <circle cx={x1} cy={y1} r="0.72" fill="rgba(207,250,254,0.92)" />
-            <circle cx={x2} cy={y2} r="0.72" fill="rgba(207,250,254,0.92)" />
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-function Workstation({ className, wide = false }: { className?: string; wide?: boolean }) {
-  return (
-    <div className={cn("absolute", className)}>
-      <OfficeDesk wide={wide} />
-      <Chair className={wide ? "left-[62px] top-[62px]" : "left-[48px] top-[58px]"} />
-    </div>
-  );
-}
-
-function BreakRoom({ className }: { className?: string }) {
-  return (
-    <div className={cn("absolute border-4 border-[#334155] bg-[#0f172a]", className)}>
-      <div className="absolute left-5 top-8 h-16 w-28 border-2 border-[#020617] bg-[#1f2937] shadow-[4px_4px_0_rgba(0,0,0,0.45)]" />
-      <div className="absolute left-8 top-11 h-5 w-5 rounded-full bg-[#e5e7eb]" />
-      <div className="absolute left-16 top-13 h-3 w-8 bg-[#84cc16]" />
-      <div className="absolute right-6 top-7 h-20 w-10 border-2 border-[#475569] bg-[#111827]" />
-      <div className="absolute right-8 top-11 h-3 w-6 bg-[#70e1f5]" />
-      <div className="absolute left-8 bottom-5 h-9 w-16 border-2 border-[#353544] bg-[#5c5c6b]" />
-      <div className="absolute left-28 bottom-5 h-9 w-16 border-2 border-[#353544] bg-[#5c5c6b]" />
-    </div>
-  );
-}
-
-function AgentPerson({
-  agent,
-  style,
-  editMode,
-  selected,
-  walking,
-  onMoveStart,
-  onSelect,
-}: {
-  agent: Agent;
-  style?: CSSProperties;
-  editMode: boolean;
-  selected: boolean;
-  walking: boolean;
-  onMoveStart: (event: PointerEvent<HTMLButtonElement>) => void;
-  onSelect: (agent: Agent) => void;
-}) {
-  const Icon = agent.icon;
-
-  return (
-    <motion.button
-      type="button"
-      onClick={() => onSelect(agent)}
-      onPointerDown={editMode ? onMoveStart : undefined}
-      style={style}
-      className={cn(
-        "absolute z-30 flex h-28 w-[72px] -translate-x-1/2 -translate-y-1/2 flex-col items-center",
-        !style && agent.position,
-        walking && !editMode && "z-[88] transition-[left,top] duration-[1800ms] ease-[cubic-bezier(0.2,0.9,0.25,1)]",
-        editMode && "z-[85] cursor-grab active:cursor-grabbing"
-      )}
-      animate={{ y: walking ? [0, -7, 0, -4, 0] : selected ? [0, -7, 0] : [0, -3, 0] }}
-      transition={{ duration: walking ? 0.62 : selected ? 2 : 3.4, repeat: Infinity, ease: "easeInOut" }}
-      aria-label={`Ver agente ${agent.name}`}
-      data-testid={`agent-avatar-${agent.id}`}
-    >
-      <span className={cn("absolute bottom-3 h-5 w-14 rounded-full bg-black/55 blur-md", walking && "w-16 bg-cyan-950/80")} />
-      <span className="relative flex h-[84px] w-14 flex-col items-center [transform-style:preserve-3d]">
-        <span
-          className={cn(
-            "absolute top-0 h-11 w-11 rounded-[22px] border border-white/30 bg-gradient-to-br shadow-[inset_6px_8px_14px_rgba(255,255,255,0.22),inset_-8px_-10px_16px_rgba(0,0,0,0.22),0_18px_34px_rgba(0,0,0,0.42)]",
-            agent.color,
-            selected && "ring-2 ring-cyan-100"
-          )}
-        >
-          <span className="absolute left-1/2 top-[17px] h-3.5 w-7 -translate-x-1/2 rounded-full bg-[#04101d] shadow-[inset_0_0_10px_rgba(34,211,238,0.65),0_1px_4px_rgba(255,255,255,0.16)]">
-            <span className="absolute left-2 top-1 h-1.5 w-1.5 rounded-full bg-cyan-100" />
-            <span className="absolute right-2 top-1 h-1.5 w-1.5 rounded-full bg-cyan-100" />
-          </span>
-        </span>
-        <span
-          className={cn(
-            "absolute top-9 h-12 w-12 rounded-[24px] border border-white/25 bg-gradient-to-br shadow-[inset_7px_8px_14px_rgba(255,255,255,0.18),inset_-8px_-12px_18px_rgba(0,0,0,0.2),0_20px_38px_rgba(0,0,0,0.45)]",
-            agent.color
-          )}
-        >
-          <span className="absolute -left-2.5 top-3 h-7 w-3 rounded-full border border-white/20 bg-inherit shadow-[inset_-4px_-6px_8px_rgba(0,0,0,0.18)]" />
-          <span className="absolute -right-2.5 top-3 h-7 w-3 rounded-full border border-white/20 bg-inherit shadow-[inset_-4px_-6px_8px_rgba(0,0,0,0.18)]" />
-          <span className="absolute left-1/2 top-3 flex h-6 w-6 -translate-x-1/2 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white/65">
-            <Icon className="h-2.5 w-2.5" />
-          </span>
-          <span className="absolute left-2 top-2 h-8 w-2 rounded-full bg-white/20 blur-[1px]" />
-        </span>
-        <span
-          className={cn(
-            "absolute top-[78px] left-4 h-4 w-2 origin-top rounded-b bg-[#0b1220] shadow-[2px_4px_8px_rgba(0,0,0,0.35)]",
-            walking && "animate-[office-step-left_0.42s_ease-in-out_infinite]"
-          )}
-        />
-        <span
-          className={cn(
-            "absolute top-[78px] right-4 h-4 w-2 origin-top rounded-b bg-[#0b1220] shadow-[2px_4px_8px_rgba(0,0,0,0.35)]",
-            walking && "animate-[office-step-right_0.42s_ease-in-out_infinite]"
-          )}
-        />
-      </span>
-      <span className={cn("mt-1 max-w-20 truncate rounded-xl border px-2 py-0.5 text-[9px] font-semibold shadow-lg", selected ? "border-cyan-200 bg-cyan-100 text-slate-950" : "border-white/10 bg-[#070b12]/70 text-white/80")}>
-        {agent.name}
-      </span>
-    </motion.button>
-  );
-}
-
-function AgentSpeechBubble({
-  agent,
-  text,
-  style,
-  active,
-  onClose,
-}: {
-  agent: Agent;
-  text: string;
-  style?: CSSProperties;
-  active: boolean;
-  onClose: () => void;
-}) {
-  return (
-    <motion.div
-      style={style}
-      className={cn(
-        "pointer-events-auto absolute z-[92] w-[210px] -translate-x-1/2 -translate-y-full rounded-lg border bg-[#050a12]/95 px-3 py-2 pr-9 text-left shadow-2xl shadow-black/60 backdrop-blur",
-        active ? "border-cyan-100/70 text-cyan-50" : "border-white/15 text-zinc-200"
-      )}
-      initial={{ opacity: 0, y: 8, scale: 0.96 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.25, ease: "easeOut" }}
-      onPointerDown={(event) => event.stopPropagation()}
-    >
-      <button
-        type="button"
-        onPointerDown={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-        }}
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onClose();
-        }}
-        className="absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded-full border border-white/15 bg-white/10 text-cyan-50 transition hover:border-cyan-100/70 hover:bg-cyan-100 hover:text-slate-950"
-        aria-label={`Cerrar chat de ${agent.name}`}
-      >
-        <X className="h-3.5 w-3.5" />
-      </button>
-      <div className="mb-1 flex items-center gap-2">
-        <span className={cn("h-2 w-2 rounded-full bg-gradient-to-br", agent.color)} />
-        <p className="truncate text-[10px] font-black uppercase tracking-wide text-cyan-100">{agent.name}</p>
-      </div>
-      <p className="line-clamp-3 text-xs leading-4">{text}</p>
-      <span className="absolute left-1/2 top-full h-3 w-3 -translate-x-1/2 -translate-y-1/2 rotate-45 border-b border-r border-inherit bg-[#050a12]" />
-    </motion.div>
-  );
-}
-
-function AppAgentSprite({
-  name,
-  repo,
-  status,
-  position,
-  connected,
-}: {
-  name: string;
-  repo?: string | null;
-  status?: string;
-  position: string;
-  connected: boolean;
-}) {
-  return (
-    <Link href="/projects">
-      <motion.button
-        type="button"
-        className={cn("absolute z-40 flex h-28 w-20 -translate-x-1/2 -translate-y-1/2 flex-col items-center", position)}
-        animate={{ y: [0, -3, 0] }}
-        transition={{ duration: 3.2, repeat: Infinity, ease: "easeInOut" }}
-        data-testid={`app-agent-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
-        aria-label={`Abrir app agent ${name}`}
-      >
-        <span className="absolute bottom-3 h-4 w-14 rounded-full bg-black/45 blur-md" />
-        <span className="relative flex h-20 w-14 flex-col items-center">
-          <span className={cn("absolute top-0 h-10 w-10 rounded-[17px] border border-white/20 shadow-[inset_0_1px_10px_rgba(255,255,255,0.12),0_14px_28px_rgba(0,0,0,0.34)]", connected ? "bg-gradient-to-br from-lime-300 to-cyan-300" : "bg-gradient-to-br from-slate-400 to-slate-600")}>
-            <span className="absolute left-1/2 top-4 h-3 w-6 -translate-x-1/2 rounded-full bg-[#07111f]">
-              <span className="absolute left-1 top-1 h-1.5 w-1.5 rounded-full bg-cyan-200" />
-              <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-cyan-200" />
-            </span>
-          </span>
-          <span className={cn("absolute top-9 h-11 w-12 rounded-[19px] border border-white/20 shadow-[0_18px_36px_rgba(0,0,0,0.35)]", connected ? "bg-gradient-to-br from-cyan-300 to-emerald-300" : "bg-gradient-to-br from-slate-500 to-slate-700")}>
-            <span className="absolute left-1/2 top-2.5 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-xl bg-black/20 text-slate-950">
-              <Monitor className="h-3.5 w-3.5" />
-            </span>
-          </span>
-          <span className="absolute top-[72px] left-4 h-4 w-1.5 rounded-b bg-[#101827]" />
-          <span className="absolute top-[72px] right-4 h-4 w-1.5 rounded-b bg-[#101827]" />
-        </span>
-        <span className="mt-1 max-w-24 truncate rounded-full border border-white/10 bg-[#090d16]/90 px-2 py-0.5 text-[10px] font-semibold text-white shadow-lg">
-          {name}
-        </span>
-        <span
-          className={cn(
-            "mt-1 rounded-full border px-1.5 py-0.5 text-[9px] shadow-lg",
-            status === "online" && "border-emerald-300/30 bg-emerald-300/15 text-emerald-200",
-            status === "github" && "border-emerald-300/30 bg-emerald-300/15 text-emerald-200",
-            status === "offline" && "border-red-300/30 bg-red-300/15 text-red-200",
-            status === "degraded" && "border-amber-300/30 bg-amber-300/15 text-amber-200",
-            (!status || status === "unknown") && "border-slate-300/20 bg-white/10 text-slate-300"
-          )}
-        >
-          {connected ? status || "unknown" : "pendiente"}
-        </span>
-        {repo && <span className="mt-1 max-w-28 truncate text-[9px] text-slate-500">{repo}</span>}
-      </motion.button>
-    </Link>
-  );
-}
-
-function GitHubTeamAgent({
-  name,
-  job,
-  repo,
-  position,
-  tone,
-  onSelect,
-}: {
-  name: string;
-  job: string;
-  repo: string;
-  position: string;
-  tone: string;
-  onSelect: () => void;
-}) {
-  return (
-      <motion.button
-        type="button"
-        onClick={onSelect}
-        className={cn("absolute z-40 flex h-28 w-20 -translate-x-1/2 -translate-y-1/2 flex-col items-center", position)}
-        animate={{ y: [0, -3, 0] }}
-        transition={{ duration: 3.4, repeat: Infinity, ease: "easeInOut" }}
-        aria-label={`${name} en ${repo}`}
-        data-testid={`github-team-agent-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`}
-      >
-        <span className="absolute bottom-3 h-4 w-14 rounded-full bg-black/45 blur-md" />
-        <span className="relative flex h-20 w-14 flex-col items-center">
-          <span className={cn("absolute top-0 h-10 w-10 rounded-[17px] border border-white/20 shadow-[inset_0_1px_10px_rgba(255,255,255,0.14),0_14px_28px_rgba(0,0,0,0.34)]", tone)} />
-          <span className="absolute left-1/2 top-4 h-3 w-6 -translate-x-1/2 rounded-full bg-[#07111f]">
-            <span className="absolute left-1 top-1 h-1.5 w-1.5 rounded-full bg-cyan-200" />
-            <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-cyan-200" />
-          </span>
-          <span className={cn("absolute top-9 h-11 w-12 rounded-[19px] border border-white/20 shadow-[0_18px_36px_rgba(0,0,0,0.35)]", tone)}>
-            <span className="absolute left-1/2 top-2.5 flex h-7 w-7 -translate-x-1/2 items-center justify-center rounded-xl bg-black/20 text-slate-950">
-              <Github className="h-3.5 w-3.5" />
-            </span>
-          </span>
-          <span className="absolute top-[72px] left-4 h-4 w-1.5 rounded-b bg-[#101827]" />
-          <span className="absolute top-[72px] right-4 h-4 w-1.5 rounded-b bg-[#101827]" />
-        </span>
-        <span className="mt-1 max-w-28 truncate rounded-full border border-white/10 bg-[#090d16]/90 px-2 py-0.5 text-[9px] font-semibold text-white shadow-lg">
-          {name}
-        </span>
-      </motion.button>
-  );
-}
-
-function RoomPresenceDot({ item, label }: { item: RoomPresence; label: string }) {
-  const agent = agentById[item.agent];
-  const Icon = agent.icon;
-
-  return (
-    <button
-      type="button"
-      className={cn("absolute z-50 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center", item.position)}
-      aria-label={`${agent.name} en ${label}`}
-    >
-      <span className={cn("flex h-8 w-8 items-center justify-center rounded-full border border-white/25 bg-gradient-to-br text-zinc-950 shadow-lg shadow-black/40", agent.color)}>
-        <Icon className="h-3.5 w-3.5" />
-      </span>
-      <span className="mt-1 max-w-16 truncate rounded-full border border-white/10 bg-black/70 px-1.5 py-0.5 text-[8px] font-semibold text-white">
-        {agent.name}
-      </span>
-    </button>
-  );
-}
-
 function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   const workspace = useWorkspaceRole();
-  const layoutKey = ownerOfficeStorageKey(OFFICE_LAYOUT_KEY, ownerId);
-  const locationsKey = ownerOfficeStorageKey(OFFICE_AGENT_LOCATIONS_KEY, ownerId);
-  const offsetsKey = ownerOfficeStorageKey(OFFICE_AGENT_OFFSETS_KEY, ownerId);
   const handoffKey = ownerOfficeStorageKey(OFFICE_GITHUB_HANDOFF_KEY, ownerId);
   const officeMapRef = useRef<HTMLDivElement | null>(null);
-  const walkingTimersRef = useRef<Partial<Record<AgentId, number>>>({});
   // Agent-chat thread per popup contact: later messages continue the same conversation.
   const agentChatThreadsRef = useRef<Record<string, string>>({});
   const [selectedAgent, setSelectedAgent] = useState<Agent>(agents[0]);
@@ -1637,7 +1061,6 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   const [activeChatContact, setActiveChatContact] = useState<OfficeContact | null>(null);
   const [agentChats, setAgentChats] = useState<Record<string, ChatMessage[]>>({});
   const [directMessage, setDirectMessage] = useState("");
-  const [editRooms, setEditRooms] = useState(false);
   const [kongWingRequest, setKongWingRequest] = useState(0);
   const openKongOffice = () => setKongWingRequest(value => value + 1);
   // Deep link from the central panel: /agents-office?agent=<officeAgentId> opens that agent in the 3D office.
@@ -1646,39 +1069,11 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
     const value = new URLSearchParams(window.location.search).get("agent")?.trim();
     return value && value.length <= 200 ? value : undefined;
   }, []);
-  const [walkingAgents, setWalkingAgents] = useState<Partial<Record<AgentId, boolean>>>({});
-  const [closedConversationBubbles, setClosedConversationBubbles] = useState<Record<string, boolean>>({});
-  const [officeRooms, setOfficeRooms] = useState<OfficeRoom[]>(() => {
-    if (typeof window === "undefined") return defaultOfficeRooms;
-    try {
-      const stored = window.localStorage.getItem(layoutKey);
-      if (!stored) return defaultOfficeRooms;
-      const parsed = JSON.parse(stored) as OfficeRoom[];
-      const roomById = new Map(parsed.map((room) => [room.id, room]));
-      return defaultOfficeRooms.map((room) => ({ ...room, ...(roomById.get(room.id) || {}) }));
-    } catch {
-      return defaultOfficeRooms;
-    }
-  });
-  const [agentLocations, setAgentLocations] = useState<AgentLocationMap>(() => {
-    if (typeof window === "undefined") return defaultAgentLocations;
-    try {
-      const stored = window.localStorage.getItem(locationsKey);
-      if (!stored) return defaultAgentLocations;
-      return { ...defaultAgentLocations, ...(JSON.parse(stored) as AgentLocationMap) };
-    } catch {
-      return defaultAgentLocations;
-    }
-  });
-  const [agentOffsets, setAgentOffsets] = useState<AgentRoomOffsetMap>(() => {
-    if (typeof window === "undefined") return {};
-    try {
-      const stored = window.localStorage.getItem(offsetsKey);
-      return stored ? (JSON.parse(stored) as AgentRoomOffsetMap) : {};
-    } catch {
-      return {};
-    }
-  });
+  // Room names and seats are edited in the central panel ("Editar oficina"); same per-owner localStorage as before.
+  const [initialLayout] = useState(() => loadOfficeLayout(ownerId));
+  const officeRooms: OfficeRoom[] = initialLayout.rooms;
+  const [agentLocations, setAgentLocations] = useState<AgentLocationMap>(() => initialLayout.locations);
+  const [agentOffsets, setAgentOffsets] = useState<AgentRoomOffsetMap>(() => initialLayout.offsets);
   const [targetRepo, setTargetRepo] = useState("workspace");
   const [lastRemoteTask, setLastRemoteTask] = useState("");
   const [sentMessages, setSentMessages] = useState<{ to: string; text: string }[]>([]);
@@ -1708,22 +1103,8 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
     retry: false,
     refetchInterval: 60000,
   });
-  useEffect(() => {
-    try { window.localStorage.setItem(layoutKey, JSON.stringify(officeRooms)); } catch { /* Keep layout in memory when storage is unavailable. */ }
-  }, [officeRooms]);
-  useEffect(() => {
-    try { window.localStorage.setItem(locationsKey, JSON.stringify(agentLocations)); } catch { /* Keep layout in memory when storage is unavailable. */ }
-  }, [agentLocations]);
-  useEffect(() => {
-    try { window.localStorage.setItem(offsetsKey, JSON.stringify(agentOffsets)); } catch { /* Keep layout in memory when storage is unavailable. */ }
-  }, [agentOffsets]);
-  useEffect(() => {
-    return () => {
-      Object.values(walkingTimersRef.current).forEach((timer) => {
-        if (timer) window.clearTimeout(timer);
-      });
-    };
-  }, []);
+  useEffect(() => { saveOfficeLocations(ownerId, agentLocations as Record<string, string>); }, [agentLocations]);
+  useEffect(() => { saveOfficeOffsets(ownerId, agentOffsets as Record<string, { x: number; y: number }>); }, [agentOffsets]);
   const conversation = officeThreads[selectedAgent.id];
   const activeIndex = useMemo(
     () => agents.findIndex((agent) => agent.id === selectedAgent.id) + 1,
@@ -1748,20 +1129,6 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
     const text = `${project.name} ${project.description || ""} ${project.githubRepo || ""}`.toLowerCase();
     return text.includes("black room") || text.includes("blackroom");
   });
-  const appAgentPositions = ["left-[21%] top-[86%]", "left-[30%] top-[86%]", "left-[39%] top-[86%]", "left-[48%] top-[86%]"];
-  const appAgents = useMemo(() => {
-    return connectedProjects
-      .filter((project) => project.id !== kongProject?.id && project.id !== blackRoomProject?.id)
-      .slice(0, 4)
-      .map((project) => ({
-        key: project.id,
-        name: project.name,
-        repo: project.githubRepo,
-        status: project.status,
-        connected: true,
-      }));
-  }, [blackRoomProject, connectedProjects, kongProject]);
-  const totalVisibleAgents = agents.length + githubAppTeams.reduce((sum, team) => sum + team.agents.length, 0) + appAgents.length;
   const repoTargets = useMemo(() => {
     const remoteRepos = connectedProjects
       .filter((project) => project.githubRepo)
@@ -1818,91 +1185,14 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   const ContactIcon = contact.icon;
   const activeMessages = agentChats[contact.id] || [];
   const isChatOpen = activeChatContact?.id === contact.id;
-  const roomOccupants = useMemo(() => {
-    return agents.reduce<Record<string, AgentId[]>>((rooms, agent) => {
-      const roomId = agentLocations[agent.id] || defaultAgentLocations[agent.id];
-      if (!roomId) return rooms;
-      rooms[roomId] = [...(rooms[roomId] || []), agent.id];
-      return rooms;
-    }, {});
-  }, [agentLocations]);
-  const getAgentRoomStyle = (agent: Agent): CSSProperties | undefined => {
-    const roomId = agentLocations[agent.id] || defaultAgentLocations[agent.id];
-    if (!roomId) return undefined;
-    const room = officeRooms.find((item) => item.id === roomId);
-    if (!room) return undefined;
-    const manualOffset = agentOffsets[agent.id];
-    if (manualOffset) {
-      return {
-        left: `${room.x + (room.w * manualOffset.x) / 100}%`,
-        top: `${room.y + (room.h * manualOffset.y) / 100}%`,
-      };
-    }
-    const occupants = roomOccupants[roomId] || [];
-    const slot = Math.max(0, occupants.indexOf(agent.id));
-    const columns = Math.max(1, Math.min(3, Math.floor(room.w / 8)));
-    const row = Math.floor(slot / columns);
-    const column = slot % columns;
-    const x = room.x + (room.w * (column + 1)) / (columns + 1);
-    const y = room.y + room.h * clamp(0.34 + row * 0.22, 0.34, 0.74);
-
-    return { left: `${x}%`, top: `${y}%` };
-  };
-  const visibleConversationBubbles = (conversation || [])
-    .slice(0, 3)
-    .map((message, index) => {
-      const speaker = agentById[message.from];
-      const baseStyle = getAgentRoomStyle(speaker);
-      const top = typeof baseStyle?.top === "string" ? baseStyle.top : undefined;
-      const key = `${selectedAgent.id}-${message.from}-${index}`;
-
-      return {
-        key,
-        agent: speaker,
-        text: message.text,
-        active: message.from === selectedAgent.id,
-        style:
-          baseStyle && top
-            ? {
-                ...baseStyle,
-                top: `calc(${top} - ${94 + index * 22}px)`,
-              }
-            : baseStyle,
-      };
-    })
-    .filter((bubble) => !closedConversationBubbles[bubble.key]);
   const closeAgentCard = () => {
     setSelectedContact(null);
     setActiveChatContact(null);
     setDirectMessage("");
   };
-  const markAgentWalking = (agentId: AgentId) => {
-    const currentTimer = walkingTimersRef.current[agentId];
-    if (currentTimer) window.clearTimeout(currentTimer);
-
-    setWalkingAgents((current) => ({ ...current, [agentId]: true }));
-    walkingTimersRef.current[agentId] = window.setTimeout(() => {
-      setWalkingAgents((current) => ({ ...current, [agentId]: false }));
-      delete walkingTimersRef.current[agentId];
-    }, AGENT_WALK_MS + 260);
-  };
-  const stopAgentWalking = (agentId: AgentId) => {
-    const currentTimer = walkingTimersRef.current[agentId];
-    if (currentTimer) window.clearTimeout(currentTimer);
-    delete walkingTimersRef.current[agentId];
-    setWalkingAgents((current) => ({ ...current, [agentId]: false }));
-  };
   const moveAgentToRoom = (agentId: AgentId, roomId: string) => {
-    markAgentWalking(agentId);
-    window.requestAnimationFrame(() => {
-      setAgentLocations((current) => ({ ...current, [agentId]: roomId }));
-      setAgentOffsets((current) => ({ ...current, [agentId]: { x: 50, y: 50 } }));
-    });
-  };
-  const renameRoom = (roomId: string, label: string) => {
-    setOfficeRooms((current) =>
-      current.map((room) => (room.id === roomId ? { ...room, label } : room))
-    );
+    setAgentLocations((current) => ({ ...current, [agentId]: roomId }));
+    setAgentOffsets((current) => ({ ...current, [agentId]: { x: 50, y: 50 } }));
   };
   const openContactChat = (nextContact: OfficeContact) => {
     setSelectedContact(nextContact);
@@ -2003,7 +1293,6 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   };
   const handleSelectAgent = (agent: Agent, liveStatus?: AgentLiveStatus) => {
     setSelectedAgent(agent);
-    setClosedConversationBubbles({});
     openContactChat({
       id: agent.id,
       name: agent.name,
@@ -2045,99 +1334,6 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   };
   const handleApproveSkill = (skillId: string) => {
     setApprovedSkills((current) => (current.includes(skillId) ? current : [...current, skillId]));
-  };
-  const startRoomEdit = (
-    event: PointerEvent<HTMLElement>,
-    roomId: string,
-    mode: "move" | "resize"
-  ) => {
-    if (!editRooms || !officeMapRef.current) return;
-    event.preventDefault();
-    event.stopPropagation();
-
-    const bounds = officeMapRef.current.getBoundingClientRect();
-    const startX = event.clientX;
-    const startY = event.clientY;
-    const startRoom = officeRooms.find((room) => room.id === roomId);
-    if (!startRoom) return;
-
-    const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
-      const dx = ((moveEvent.clientX - startX) / bounds.width) * 100;
-      const dy = ((moveEvent.clientY - startY) / bounds.height) * 100;
-
-      setOfficeRooms((current) =>
-        current.map((room) => {
-          if (room.id !== roomId) return room;
-          if (mode === "move") {
-            return {
-              ...room,
-              x: clamp(startRoom.x + dx, 2, 96 - startRoom.w),
-              y: clamp(startRoom.y + dy, 10, 96 - startRoom.h),
-            };
-          }
-
-          return {
-            ...room,
-            w: clamp(startRoom.w + dx, 8, 92 - startRoom.x),
-            h: clamp(startRoom.h + dy, 8, 92 - startRoom.y),
-          };
-        })
-      );
-    };
-    const stopRoomEdit = () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stopRoomEdit);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stopRoomEdit);
-  };
-  const startAgentEdit = (event: PointerEvent<HTMLButtonElement>, agentId: AgentId) => {
-    if (!editRooms || !officeMapRef.current) return;
-    event.preventDefault();
-    event.stopPropagation();
-    stopAgentWalking(agentId);
-
-    const bounds = officeMapRef.current.getBoundingClientRect();
-    const currentRoomId = agentLocations[agentId] || defaultAgentLocations[agentId];
-
-    const updateAgentPosition = (clientX: number, clientY: number) => {
-      const x = clamp(((clientX - bounds.left) / bounds.width) * 100, 2, 96);
-      const y = clamp(((clientY - bounds.top) / bounds.height) * 100, 10, 96);
-      const targetRoom =
-        officeRooms.find((room) => x >= room.x && x <= room.x + room.w && y >= room.y && y <= room.y + room.h) ||
-        officeRooms.find((room) => room.id === currentRoomId);
-
-      if (!targetRoom) return;
-      const offsetX = clamp(((x - targetRoom.x) / targetRoom.w) * 100, 16, 84);
-      const offsetY = clamp(((y - targetRoom.y) / targetRoom.h) * 100, 24, 82);
-
-      setAgentLocations((current) => ({ ...current, [agentId]: targetRoom.id }));
-      setAgentOffsets((current) => ({ ...current, [agentId]: { x: offsetX, y: offsetY } }));
-    };
-
-    updateAgentPosition(event.clientX, event.clientY);
-
-    const handlePointerMove = (moveEvent: globalThis.PointerEvent) => {
-      updateAgentPosition(moveEvent.clientX, moveEvent.clientY);
-    };
-    const stopAgentEdit = () => {
-      window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", stopAgentEdit);
-    };
-
-    window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", stopAgentEdit);
-  };
-  const resetOfficeRooms = () => {
-    Object.values(walkingTimersRef.current).forEach((timer) => {
-      if (timer) window.clearTimeout(timer);
-    });
-    walkingTimersRef.current = {};
-    setWalkingAgents({});
-    setOfficeRooms(defaultOfficeRooms);
-    setAgentLocations(defaultAgentLocations);
-    setAgentOffsets({});
   };
 
   return (

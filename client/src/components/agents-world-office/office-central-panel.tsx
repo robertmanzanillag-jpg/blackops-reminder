@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Link, useLocation, useSearch } from "wouter";
 import { cn } from "@/lib/utils";
 import type { BuildingTeamAgent } from "@/components/agents-building/agents-building";
@@ -6,6 +7,9 @@ import type { AgentCareer, CompanyState, LeaderboardRow } from "@shared/agent-co
 import { isMainCompanyUnscored } from "@shared/agent-integrations";
 import { selfHealTotals } from "@shared/office-self-heal-view";
 import { useWorkspaceRole } from "@/lib/workspace-role";
+import {
+  ROOM_LABEL_MAX, defaultOfficeLayout, loadOfficeLayout, moveOfficeAgent, officeRoomOf, renameOfficeRoom, saveOfficeLayout, saveOfficeLocations, saveOfficeOffsets, saveOfficeRooms, type OfficeLayout,
+} from "@/lib/office-layout";
 import {
   BATTERY_DANGER, PANEL_SECTIONS, STATUS_KIND_LABEL, buildGlobalRanking, buildPanelRows, buildReportsFeed, filterPanelRows,
   panelCounters, readPanelParams, selectReplaceable, selectReplaced, type PanelAgentInput, type PanelCompany, type PanelRow, type PanelSectionId, type PanelStatusKind,
@@ -128,7 +132,7 @@ function OwnerCentralPanel({ agents, kongTeam, legal }: { agents: WorldAgent[]; 
   const lastRead = council.view ? when(new Date(clock).toISOString()) : "—";
 
   return <PanelShell>
-    <p className="text-xs text-zinc-400">Todos los agentes por sección, igual que en la oficina. Se actualiza solo con la misma lectura de la oficina (consejo cada minuto, sondas de cada agente y KONG cada minuto). Solo lectura: abrir este panel no inicia trabajos. Última revisión: {lastRead}.</p>
+    <p className="text-xs text-zinc-400">Todos los agentes por sección, igual que en la oficina. Se actualiza solo con la misma lectura de la oficina (consejo cada minuto, sondas de cada agente y KONG cada minuto). Abrir este panel no inicia trabajos. Última revisión: {lastRead}.</p>
     {council.error && <p role="status" className="mt-2 text-xs text-amber-200">Consejo sin conexión: {council.error}. Carreras, puntos y ranking pueden faltar.</p>}
 
     <section aria-label="Resumen" className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6" data-testid="central-panel-counters">
@@ -195,6 +199,8 @@ function OwnerCentralPanel({ agents, kongTeam, legal }: { agents: WorldAgent[]; 
       </li>)}</ul>
     </Card>
 
+    <OfficeLayoutEditor agents={agents} />
+
     <div className="sticky top-14 z-20 -mx-4 mt-4 border-b border-white/10 bg-[#05060a]/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6" data-testid="central-panel-filters">
       <div className="flex flex-wrap items-center gap-1.5">
         <SectionChip active={section === "all"} onClick={() => setSection("all")} label={`Todo · ${rows.length}`} testId="filter-all" />
@@ -224,6 +230,75 @@ function OwnerCentralPanel({ agents, kongTeam, legal }: { agents: WorldAgent[]; 
       })}
     </div>
   </PanelShell>;
+}
+
+/**
+ * Owner's office editor (moved here from the removed classic view): rename the office rooms, seat
+ * each BlackOps agent in a room and reset to the defaults. Same per-owner localStorage as before, so
+ * earlier customizations keep working; the 3D office shows them in the agent card (Área, room chips).
+ */
+function OfficeLayoutEditor({ agents }: { agents: WorldAgent[] }) {
+  const queryClient = useQueryClient();
+  const ownerId = queryClient.getQueryData<{ user?: { id: string } }>(["auth-me"])?.user?.id;
+  const [layout, setLayout] = useState<OfficeLayout | null>(() => (ownerId ? loadOfficeLayout(ownerId) : null));
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [notice, setNotice] = useState("");
+  if (!ownerId || !layout) return <p role="alert" className="mt-3 text-xs text-amber-200">No se pudo verificar el propietario de la sesión; la edición de la oficina no está disponible.</p>;
+
+  const commitRoom = (roomId: string) => {
+    const draft = drafts[roomId];
+    if (draft === undefined) return;
+    const rooms = renameOfficeRoom(layout.rooms, roomId, draft);
+    setLayout({ ...layout, rooms });
+    saveOfficeRooms(ownerId, rooms);
+    setDrafts(current => { const next = { ...current }; delete next[roomId]; return next; });
+    setNotice(`Sala guardada: ${rooms.find(room => room.id === roomId)?.label}.`);
+  };
+  const seat = (agentId: string, roomId: string) => {
+    const next = moveOfficeAgent(layout, agentId, roomId);
+    setLayout(next);
+    saveOfficeLocations(ownerId, next.locations);
+    saveOfficeOffsets(ownerId, next.offsets);
+    setNotice(`${agents.find(agent => agent.id === agentId)?.name ?? agentId} ahora está en ${officeRoomOf(next, agentId)?.label}.`);
+  };
+  const reset = () => {
+    if (!window.confirm("¿Volver a los nombres de sala y ubicaciones originales? Se pierden tus cambios de la oficina.")) return;
+    const next = defaultOfficeLayout();
+    setLayout(next);
+    setDrafts({});
+    saveOfficeLayout(ownerId, next);
+    setNotice("Oficina restablecida a los valores originales.");
+  };
+
+  return <details className="mt-3 rounded-2xl border border-cyan-200/20 bg-[#070b14] p-3" data-testid="central-panel-office-editor">
+    <summary className="cursor-pointer text-[11px] font-bold uppercase tracking-[0.18em] text-cyan-100">Editar oficina · salas y ubicación de agentes</summary>
+    <p className="mt-2 text-[11px] text-zinc-400">Lo mismo que editaba la vista clásica: nombres de las salas, en qué sala se sienta cada agente de BlackOps y volver a lo original. Se guarda en este navegador (como antes) y la oficina 3D lo muestra en la ficha del agente («Área» y salas). No cambia los departamentos del mapa 3D ni los datos del agente en el servidor.</p>
+    {notice && <p role="status" className="mt-2 text-xs text-emerald-200" data-testid="office-editor-notice">{notice}</p>}
+    <div className="mt-3 grid gap-3 lg:grid-cols-2">
+      <section aria-label="Salas" className="min-w-0">
+        <h3 className="text-[11px] font-bold uppercase tracking-wide text-zinc-300">Salas · {layout.rooms.length}</h3>
+        <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">{layout.rooms.map(room => <li key={room.id}>
+          <label className="block text-[10px] text-zinc-500" htmlFor={`office-room-${room.id}`}>{room.id}</label>
+          <input id={`office-room-${room.id}`} value={drafts[room.id] ?? room.label} maxLength={ROOM_LABEL_MAX}
+            onChange={event => setDrafts(current => ({ ...current, [room.id]: event.target.value }))}
+            onBlur={() => commitRoom(room.id)} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); commitRoom(room.id); } }}
+            className="w-full rounded-lg border border-white/15 bg-black/50 px-2 py-1 text-xs text-white focus:border-cyan-200/50 focus:outline-none" data-testid={`office-room-input-${room.id}`} />
+        </li>)}</ul>
+      </section>
+      <section aria-label="Ubicación de agentes" className="min-w-0">
+        <h3 className="text-[11px] font-bold uppercase tracking-wide text-zinc-300">Ubicación de agentes · {agents.length}</h3>
+        <ul className="mt-2 grid gap-1.5 sm:grid-cols-2">{agents.map(agent => <li key={agent.id} className="flex items-center gap-2 text-xs">
+          <label className="min-w-0 flex-1 truncate" htmlFor={`office-seat-${agent.id}`}>{agent.name}</label>
+          <select id={`office-seat-${agent.id}`} value={officeRoomOf(layout, agent.id)?.id ?? ""} onChange={event => seat(agent.id, event.target.value)}
+            className="w-40 shrink-0 rounded-lg border border-white/15 bg-black px-2 py-1 text-xs text-white" data-testid={`office-seat-${agent.id}`}>
+            {!officeRoomOf(layout, agent.id) && <option value="">Sin sala</option>}
+            {layout.rooms.map(room => <option key={room.id} value={room.id}>{room.label}</option>)}
+          </select>
+        </li>)}</ul>
+      </section>
+    </div>
+    <button type="button" onClick={reset} className="mt-3 rounded-full border border-rose-300/40 px-3 py-1.5 text-xs text-rose-100 hover:bg-rose-500/10" data-testid="office-editor-reset">Restablecer oficina</button>
+  </details>;
 }
 
 function Counter({ label, value, tone, testId, hint }: { label: string; value: number; tone: string; testId: string; hint?: string }) {
