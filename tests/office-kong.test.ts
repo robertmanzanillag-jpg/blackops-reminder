@@ -298,7 +298,7 @@ test("category state derives from durable timestamps, leases and actual failures
   const c = createOfficeKongConnector({ token: () => TOKEN, now: () => NOW, fetchImpl: async url => json(url === CITIES_URL ? cityData : operations()) });
   const audit = await c.runOfficeKongReadOnly();
   const states = Object.fromEntries(audit.evidence.cities[0].categories.map(category => [category.category, category.state]));
-  assert.deepEqual(states, { clubs: "healthy", vip: "running", restaurants: "attention", events: "stale", sports: "unknown", experiences: "attention", media: "unknown" });
+  assert.deepEqual(states, { clubs: "healthy", vip: "running", restaurants: "attention", events: "stale", sports: "unknown", experiences: "attention", media: "unknown", discovery: "healthy" });
   assert.equal(audit.evidence.cities[0].status, "needs_attention");
   assert.ok(!JSON.stringify(audit).includes(TOKEN));
   cityData.enabled = false;
@@ -329,4 +329,49 @@ test("newer KONG contract: idle, coverage and active city verdicts parse; one un
   const tolerant = await createOfficeKongConnector({ token: () => TOKEN, now: () => NOW,
     fetchImpl: async url => url === CITIES_URL ? json(cities) : json(bad) }).runOfficeKongReadOnly();
   assert.equal(tolerant.evidence.agents.find(agent => agent.id === "city:miami")?.coverage, undefined);
+});
+
+test("discovery (8th KONG category) is read with its counts, and the operations agent may carry discovery evidence", async () => {
+  const base = citiesFixture();
+  const done = { last_started_at: NOW.toISOString(), last_completed_at: NOW.toISOString(), last_success_at: NOW.toISOString() };
+  const cityData = { ...base, cities: base.cities.map(city => ({ ...city, jobs: city.jobs.map(job => job.category === "discovery"
+    ? { ...job, ...done, report: { status: "healthy", discovery: { mode: "deterministic", found: 9, added: 2, queuedForReview: 3, rejected: 4, alreadyInKong: 1, pagesChecked: 8, reviewPendingTotal: 5, titles: ["must be stripped"] } } }
+    : job) })) };
+  const ops = operations();
+  (ops.agents[0] as Record<string, unknown>).discovery = { mode: "deterministic", lastRunAt: NOW.toISOString(), found: 9, added: 2, queuedForReview: 3,
+    rejected: 4, alreadyInKong: 1, reviewPending: 5, aiSpentUsd: 0, aiCapUsd: 0 };
+  const c = createOfficeKongConnector({ token: () => TOKEN, now: () => NOW, fetchImpl: async url => json(url === CITIES_URL ? cityData : ops) });
+  const audit = await c.runOfficeKongReadOnly();
+  const discovery = audit.evidence.cities[0].categories.find(category => category.category === "discovery")!;
+  assert.equal(discovery.state, "healthy");
+  assert.deepEqual(discovery.discovery, { mode: "deterministic", found: 9, added: 2, queuedForReview: 3, rejected: 4, alreadyInKong: 1, pagesChecked: 8, reviewPendingTotal: 5 });
+  assert.equal(audit.evidence.cities[0].categories.length, 8);
+  assert.equal((audit.evidence.agents[0] as Record<string, any>).discovery.added, 2);
+  // Malformed discovery counts never fail the read; they are simply omitted.
+  const broken = { ...cityData, cities: cityData.cities.map(city => ({ ...city, jobs: city.jobs.map(job => job.category === "discovery" ? { ...job, report: { status: "healthy", discovery: { found: -1 } } } : job) })) };
+  const tolerant = await createOfficeKongConnector({ token: () => TOKEN, now: () => NOW, fetchImpl: async url => json(url === CITIES_URL ? broken : operations()) }).runOfficeKongReadOnly();
+  assert.equal(tolerant.evidence.cities[0].categories.find(category => category.category === "discovery")?.discovery, undefined);
+});
+
+test("an older KONG without discovery and a newer KONG with unknown categories both keep the city read working", async () => {
+  const legacy = citiesFixture();
+  legacy.cities[0].jobs = legacy.cities[0].jobs.filter(job => job.category !== "discovery");
+  const older = await createOfficeKongConnector({ token: () => TOKEN, now: () => NOW, fetchImpl: async url => json(url === CITIES_URL ? legacy : operations()) }).runOfficeKongReadOnly();
+  const missing = older.evidence.cities[0].categories.find(category => category.category === "discovery")!;
+  assert.deepEqual([missing.state, missing.evidence], ["unknown", "missing"]);
+
+  const future = citiesFixture();
+  future.cities[0].jobs = [...future.cities[0].jobs,
+    { ...future.cities[0].jobs[0], category: "future_agent" as any },
+    { category: "another_future_agent", unexpected: true } as any,
+  ];
+  const newer = await createOfficeKongConnector({ token: () => TOKEN, now: () => NOW, fetchImpl: async url => json(url === CITIES_URL ? future : operations()) }).runOfficeKongReadOnly();
+  assert.deepEqual(newer.evidence.cities[0].categories.map(category => category.category), [...OFFICE_KONG_CITY_CATEGORIES]);
+  assert.ok(newer.evidence.cities[0].categories.every(category => category.evidence === "persisted"));
+
+  // A KNOWN category with a malformed shape is still rejected: tolerance is per unknown category only.
+  const malformed = citiesFixture();
+  (malformed.cities[0].jobs[0] as Record<string, unknown>).interval_ms = "not-a-number";
+  await assert.rejects(createOfficeKongConnector({ token: () => TOKEN, now: () => NOW, fetchImpl: async url => json(url === CITIES_URL ? malformed : operations()) }).runOfficeKongReadOnly(),
+    (error: unknown) => error instanceof OfficeKongError && error.code === "INVALID_RESPONSE");
 });

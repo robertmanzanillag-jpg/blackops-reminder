@@ -19,7 +19,7 @@ type InternalHistory = {jobs:Array<{id:string;role:string;status:string;startedA
 async function readOffice<T>(url:string):Promise<T> { const response=await apiRequest("GET",url);return response.json(); }
 const statuses: Record<string, string> = { accepted: "Registrada", pending: "Registrada", running: "En ejecucion", completed: "Completada", blocked: "Bloqueada", failed: "Fallo", unknown: "Resultado sin confirmar" };
 const agentStates: Record<string, string> = { healthy: "Evidencia vigente", running: "En ejecucion", attention: "Necesita atencion", stale: "Evidencia antigua", unknown: "Sin evidencia", disabled: "Deshabilitado", idle: "Disponible bajo demanda" };
-const categoryNames: Record<string, string> = { clubs: "Clubs", vip: "VIP", restaurants: "Restaurantes", events: "Eventos", sports: "Deportes", experiences: "Experiencias", media: "Imagenes" };
+const categoryNames: Record<string, string> = { clubs: "Clubs", vip: "VIP", restaurants: "Restaurantes", events: "Eventos", sports: "Deportes", experiences: "Experiencias", media: "Imagenes", discovery: "Descubrimiento" };
 const qualityChecks = { events: "Calendarios y eventos", media: "Flyers e imágenes", vip: "Fuentes de reservas VIP" } as const;
 
 export function OfficeConnectionsPanel() {

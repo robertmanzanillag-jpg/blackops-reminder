@@ -1,18 +1,22 @@
 import { z } from "zod";
 import type { AgentLiveStatus } from "./agent-live-status";
 import { isOnDutyWindow, onDutyMaxAge, onDutyStatus, ON_DUTY_COLOR } from "@shared/office-on-duty";
-import { OFFICE_KONG_CITY_TASKS, officeKongEventLoadSchema, scoreOfficeKongSnapshot } from "@shared/office-kong-supervisor";
+import { OFFICE_KONG_CITY_TASKS, OFFICE_KONG_SUPERVISED_CATEGORIES, isOfficeKongSupervisedCategory, officeKongDiscoveryCountsSchema, officeKongDiscoverySummary, officeKongEventLoadSchema, scoreOfficeKongSnapshot } from "@shared/office-kong-supervisor";
 
 export const OFFICE_CITY_CATEGORIES = [
   { id: "clubs", name: "Clubs" }, { id: "vip", name: "Mesas VIP" },
   { id: "restaurants", name: "Restaurantes" }, { id: "events", name: "Eventos" },
   { id: "sports", name: "Deportes" }, { id: "experiences", name: "Experiencias" },
-  { id: "media", name: "Fotos y media" },
+  { id: "media", name: "Fotos y media" }, { id: "discovery", name: "Descubrimiento" },
 ] as const;
 const timestamp = z.string().datetime({ offset: true }).nullable();
 const directoryCitySchema = z.object({ id: z.string().min(1).max(200), name: z.string().min(1).max(200), countryCode: z.string().regex(/^[A-Z]{2}$/), timeZone: z.string().min(1).max(100), currency: z.string().regex(/^[A-Z]{3}$/) });
-const categorySchema = z.object({ category: z.enum(["clubs", "vip", "restaurants", "events", "sports", "experiences", "media"]), state: z.enum(["healthy", "running", "attention", "stale", "unknown", "disabled"]), evidence: z.enum(["persisted", "missing"]), lastRunAt: timestamp, lastSuccessAt: timestamp, lastStartedAt: timestamp, nextRunAt: timestamp, leaseUntil: timestamp.optional(), issues: z.array(z.string().max(20000)).max(500), intervalMs: z.number().int().positive().nullable().optional(), recordedFailure: z.boolean().optional() });
-const cityEvidenceSchema = directoryCitySchema.extend({ categories: z.array(categorySchema).max(7), eventLoad: officeKongEventLoadSchema.optional().catch(undefined) });
+const categorySchema = z.object({ category: z.enum(OFFICE_KONG_SUPERVISED_CATEGORIES), state: z.enum(["healthy", "running", "attention", "stale", "unknown", "disabled"]), evidence: z.enum(["persisted", "missing"]), lastRunAt: timestamp, lastSuccessAt: timestamp, lastStartedAt: timestamp, nextRunAt: timestamp, leaseUntil: timestamp.optional(), issues: z.array(z.string().max(20000)).max(500), intervalMs: z.number().int().positive().nullable().optional(), recordedFailure: z.boolean().optional(), discovery: officeKongDiscoveryCountsSchema.optional().catch(undefined) });
+// Unknown (future) categories in a stored audit are dropped one by one; the known ones stay strict.
+const categoriesSchema = z.array(z.unknown()).max(64)
+  .transform(items => items.filter(item => Boolean(item) && typeof item === "object" && isOfficeKongSupervisedCategory((item as { category?: unknown }).category)))
+  .pipe(z.array(categorySchema).max(OFFICE_KONG_SUPERVISED_CATEGORIES.length));
+const cityEvidenceSchema = directoryCitySchema.extend({ categories: categoriesSchema, eventLoad: officeKongEventLoadSchema.optional().catch(undefined) });
 const evidenceSchema = z.object({ generatedAt: z.string().datetime({ offset: true }), citySnapshotCheckedAt: z.string().datetime({ offset: true }).optional(), cityAgentsEnabled: z.boolean(), cities: z.array(cityEvidenceSchema).max(200) });
 export type OfficeCityDirectoryEntry = z.infer<typeof directoryCitySchema>;
 export interface OfficeCityAgent {
@@ -23,6 +27,8 @@ export interface OfficeCityAgent {
   intervalMs?: number | null;
   recordedFailure?: boolean;
   leaseUntil?: string | null;
+  /** Discovery agent only: per-run counts (found/added/review/rejected) from the latest audit. */
+  discoverySummary?: string | null;
 }
 export interface OfficeCityRoom { id: string; name: string; city: OfficeCityDirectoryEntry; agents: OfficeCityAgent[]; upcomingEvents: number | null }
 export interface OfficeCityCountry { code: string; name: string; cityCount: number }
@@ -131,7 +137,8 @@ export function buildOfficeCityRoomsFromSnapshot(directory: OfficeCityDirectoryE
         status, color: status.state === "working" ? "#34d399" : status.onDuty ? ON_DUTY_COLOR : status.state === "error" ? "#fb7185" : status.state === "needs-setup" ? "#fbbf24" : "#94a3b8",
         lastWorkAt: confirmed ? job!.lastRunAt : null, lastStartedAt: confirmed ? job!.lastStartedAt : null,
         nextWorkAt: confirmed ? job!.nextRunAt : null, blocker: status.detail || "", snapshotAt, hasDurableEvidence: Boolean(confirmed),
-        intervalMs: confirmed ? job!.intervalMs : undefined, recordedFailure: confirmed ? job!.recordedFailure : undefined, leaseUntil: confirmed ? job!.leaseUntil : undefined };
+        intervalMs: confirmed ? job!.intervalMs : undefined, recordedFailure: confirmed ? job!.recordedFailure : undefined, leaseUntil: confirmed ? job!.leaseUntil : undefined,
+        ...(category.id === "discovery" && confirmed ? { discoverySummary: officeKongDiscoverySummary(job!.discovery) } : {}) };
     });
     const load = record?.eventLoad;
     const loadAge = load?.checkedAt ? now - Date.parse(load.checkedAt) : Infinity;

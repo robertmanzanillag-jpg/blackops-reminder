@@ -111,8 +111,9 @@ export function officeCityMapPosition(index: number, count: number) {
 }
 
 export function officeCityDeskPosition(index: number) {
+  // Two rows of four desks (eight city categories, including Descubrimiento).
   const firstRow = index < 4;
-  return { x: ((index % 4) - (firstRow ? 1.5 : 1)) * 1.34, z: firstRow ? -1 : 1 };
+  return { x: ((index % 4) - 1.5) * 1.34, z: firstRow ? -1 : 1 };
 }
 
 type DeskRuntime = {

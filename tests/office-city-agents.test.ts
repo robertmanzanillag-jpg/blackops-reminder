@@ -10,11 +10,11 @@ const ba = { id: "buenos-aires", name: "Buenos Aires", countryCode: "AR", timeZo
 const job = (category: string, state = "healthy", options: Record<string, unknown> = {}) => ({ category, state, evidence: "persisted", lastRunAt: stamp(-90000), lastSuccessAt: stamp(-90000), lastStartedAt: stamp(-100000), nextRunAt: stamp(50000), leaseUntil: state === "running" ? stamp(360000) : null, issues: [], ...options });
 const run = (cities: unknown[], options: Record<string, unknown> = {}) => ({ id: "audit-1", kind: "kong_audit", status: "completed", createdAt: stamp(-3000), completedAt: stamp(-1000), evidence: { generatedAt: stamp(-2000), citySnapshotCheckedAt: stamp(-1000), cityAgentsEnabled: true, cities, ...options } });
 
-test("all 25 registered cities have separate map positions and seven distinct roles", () => {
+test("all 25 registered cities have separate map positions and eight distinct roles (including discovery)", () => {
   const cities = [miami, ...Array.from({ length: 23 }, (_, n) => ({ ...miami, id: `fixture-${n}`, name: `Fixture city ${n}` })), ba];
   const rooms = buildOfficeCityRooms(parseOfficeCityDirectory(cities), [], now);
   assert.equal(rooms.length, 25);
-  assert.equal(new Set(rooms.flatMap(room => room.agents.map(agent => agent.id))).size, 175);
+  assert.equal(new Set(rooms.flatMap(room => room.agents.map(agent => agent.id))).size, 25 * OFFICE_CITY_CATEGORIES.length);
   const positions = rooms.map((_, index) => officeCityMapPosition(index, rooms.length));
   assert.equal(new Set(positions.map(({ x, z }) => `${x},${z}`)).size, 25);
   assert.deepEqual(positions.map(({ x, z }) => Math.round(Math.hypot(x, z))), [...Array(8).fill(12), ...Array(17).fill(24)]);
@@ -24,7 +24,7 @@ test("all 25 registered cities have separate map positions and seven distinct ro
     const { x, z } = officeCityDeskPosition(deskIndex);
     return `${positions[cityIndex].x + x},${positions[cityIndex].z + z}`;
   }));
-  assert.equal(new Set(desks).size, 175);
+  assert.equal(new Set(desks).size, 25 * OFFICE_CITY_CATEGORIES.length);
 });
 
 test("fresh evidence animates only running jobs; completed jobs are distinct and missing jobs stay gray", () => {
@@ -169,4 +169,21 @@ test("on duty needs a fresh completion inside its window and no missed turn; nev
   assert.equal(agents[1].status.label, "Completado · no ejecutando");
   assert.equal(agents[2].status.label, "Completado · no ejecutando");
   assert.ok(agents.every(agent => agent.status.state !== "working"));
+});
+
+test("Descubrimiento desk shows its counts; an unknown future category in a stored audit is dropped without hiding the city", () => {
+  const categories = [...OFFICE_CITY_CATEGORIES.map(category => category.id === "discovery"
+    ? job("discovery", "healthy", { discovery: { mode: "deterministic", found: 6, added: 1, queuedForReview: 2, rejected: 3, reviewPendingTotal: 4 } })
+    : job(category.id)), job("future_agent"), { category: "another_future_agent", junk: true }];
+  const rooms = buildOfficeCityRooms([miami], [run([{ ...miami, categories }])], now);
+  const agents = rooms[0].agents;
+  assert.equal(agents.length, 8);
+  assert.ok(agents.every(agent => agent.hasDurableEvidence), "known categories keep their evidence");
+  const discovery = agents.find(agent => agent.category === "discovery")!;
+  assert.equal(discovery.role, "Descubrimiento");
+  assert.equal(discovery.discoverySummary, "Novedades del último turno: 6 encontradas · 1 añadidas · 2 a revisión · 3 rechazadas · 4 pendientes de revisar.");
+  // An older audit with seven categories still renders; the discovery desk simply has no evidence yet.
+  const legacy = buildOfficeCityRooms([miami], [run([{ ...miami, categories: OFFICE_CITY_CATEGORIES.filter(category => category.id !== "discovery").map(category => job(category.id)) }])], now);
+  assert.equal(legacy[0].agents.filter(agent => agent.hasDurableEvidence).length, 7);
+  assert.equal(legacy[0].agents.find(agent => agent.category === "discovery")?.hasDurableEvidence, false);
 });
