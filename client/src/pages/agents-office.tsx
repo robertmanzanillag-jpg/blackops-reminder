@@ -1632,6 +1632,8 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   const handoffKey = ownerOfficeStorageKey(OFFICE_GITHUB_HANDOFF_KEY, ownerId);
   const officeMapRef = useRef<HTMLDivElement | null>(null);
   const walkingTimersRef = useRef<Partial<Record<AgentId, number>>>({});
+  // Agent-chat thread per popup contact: later messages continue the same conversation.
+  const agentChatThreadsRef = useRef<Record<string, string>>({});
   const [selectedAgent, setSelectedAgent] = useState<Agent>(agents[0]);
   const [selectedContact, setSelectedContact] = useState<OfficeContact | null>(null);
   const [activeChatContact, setActiveChatContact] = useState<OfficeContact | null>(null);
@@ -1979,6 +1981,26 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
           createdAt: new Date().toISOString(),
         })
       ); } catch { /* Draft remains in memory; nothing is dispatched. */ }
+    }
+    if (!workspace.isPartner) {
+      // Owner: the reply comes from the agent's recorded data (/api/agent-chat), never from local canned text.
+      const contactId = contact.id;
+      const append = (messages: ChatMessage[]) => setAgentChats(current => ({ ...current, [contactId]: [...(current[contactId] || []), ...messages] }));
+      setActiveChatContact(contact);
+      setSelectedContact(contact);
+      append([{ role: "user", text }]);
+      setDirectMessage("");
+      const requestId = `ao${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+      const threadId = agentChatThreadsRef.current[contactId];
+      void apiRequest("POST", `/api/agent-chat/${encodeURIComponent(contactId)}/messages`, { text, requestId, ...(threadId ? { threadId } : {}) })
+        .then(response => response.json() as Promise<{ thread?: { id: string }; messages: Array<{ role: string; text: string }>; handoff: { name: string } | null }>)
+        .then(result => {
+          if (result.thread?.id) agentChatThreadsRef.current[contactId] = result.thread.id;
+          const answer = [...result.messages].reverse().find(message => message.role !== "user");
+          append([{ role: "agent", text: `${answer?.text || "Sin respuesta registrada."}${result.handoff ? `\n\nPulsa «Chat completo» y luego «Hablar con ${result.handoff.name}».` : ""}` }]);
+        })
+        .catch(() => append([{ role: "agent", text: "No pude consultar los datos de este agente. Abre «Chat completo» para intentarlo de nuevo." }]));
+      return;
     }
     setActiveChatContact(contact);
     setSelectedContact(contact);

@@ -22,7 +22,7 @@ const labels: Record<string, string> = {
   stale: "Evidencia vencida", unknown: "Sin evidencia reciente", idle: "Disponible bajo demanda",
 };
 const station = "rounded-lg border border-white/20 px-3 py-2 text-sm text-slate-100 hover:bg-white/10 focus-visible:outline focus-visible:outline-cyan-200";
-type Desk = { id: string; name: string; owner: string; responsibility: string; status: string; lastRunAt: string | null; blocker: string | null };
+type Desk = { id: string; name: string; owner: string; responsibility: string; status: string; lastRunAt: string | null; blocker: string | null; detail?: string | null };
 const searchKey = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
 export function KongTeamOffice({ onClose }: { onClose: () => void }) {
@@ -66,6 +66,7 @@ export function KongTeamOffice({ onClose }: { onClose: () => void }) {
     id: agent.id, name: agent.name, owner: "Coordinador de ciudades",
     responsibility: OFFICE_KONG_CITY_TASKS[agent.category],
     status: agent.status.label, lastRunAt: agent.lastWorkAt, blocker: agent.recordedFailure || agent.status.state === "needs-setup" ? agent.blocker : null,
+    detail: agent.discoverySummary ?? null,
   })));
   const all = [...byId.values(), ...cityDesks];
   const desk = all.find(agent => agent.id === selected);
@@ -143,6 +144,7 @@ export function KongTeamOffice({ onClose }: { onClose: () => void }) {
         <p className="text-sm">{desk.status}</p>
         <p className="text-sm">Última evidencia · {desk.lastRunAt ? new Date(desk.lastRunAt).toLocaleString("es", { timeZone: "America/New_York" }) : "Sin registro"}</p>
         {media[desk.id]?.activity?.map(detail => <p key={detail} className="text-sm">{detail}</p>)}
+        {desk.detail && <p className="text-sm">{desk.detail}</p>}
         {desk.blocker && <p className="text-sm text-amber-200">Bloqueo · {desk.blocker}</p>}
       </section>}
     </dialog>
