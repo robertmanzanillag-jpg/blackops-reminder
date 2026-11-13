@@ -107,6 +107,9 @@ export function scoreAgents(text: string, available: readonly string[] = AGENT_C
   const scores = new Map<string, { score: number; order: number; words: string[] }>();
   let order = 0;
   for (const route of [...ROUTES, ...EXTRA_ROUTES]) {
+    // Context-gated routes (e.g. Black Room specialists) only fire when the text names that context.
+    const requires = (route as { requires?: string[] }).requires;
+    if (requires && !requires.some(word => normalized.includes(word))) continue;
     const words = route.words.filter(word => wordMatches(normalized, word));
     if (!words.length) continue;
     route.agents.forEach((agent, index) => {

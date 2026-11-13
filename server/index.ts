@@ -11,6 +11,7 @@ import { setupTelegramWebhook } from "./telegram-chat";
 import { storage } from "./storage";
 import { getSystemUserId, requireAppUser } from "./user-context";
 import { registerLocalAuthRoutes } from "./local-auth";
+import { enforceWorkspaceAccess, registerWorkspaceAccessRoutes } from "./workspace-access";
 import { createSessionMiddleware, resolveSessionRuntimeSettings } from "./session-config";
 import { startPromoVideoDailyScheduler } from "./promo-video-agent";
 import { startCybersecurityScheduler } from "./cybersecurity-agent";
@@ -314,6 +315,8 @@ if (sessionMiddleware) {
 // Also protect authentication failures before the owner-bound route runs.
 app.use("/api/marketing-command-center", (_req,res,next)=>{res.setHeader("Cache-Control","no-store");next();});
 app.use(requireAppUser);
+// Partners (socios) only reach the explicit Black Room / read-only office allowlist; see server/workspace-access.ts.
+app.use(enforceWorkspaceAccess());
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -395,6 +398,7 @@ app.use((req, res, next) => {
 
 (async () => {
   registerLocalAuthRoutes(app);
+  await registerWorkspaceAccessRoutes(app);
   await initializeRevenueEnginePersistence();
   await initializeBlackRoomRemoteControlPersistence();
   await registerRoutes(httpServer, app);
@@ -439,6 +443,17 @@ app.use((req, res, next) => {
       // Zero-cost peer review between agents (no AI calls). Disable with AGENT_COUNCIL_ENABLED=false.
       void import("./agent-council").then((council) => council.startAgentCouncilScheduler()).catch((error) => {
         log(`Failed to start agent council: ${error instanceof Error ? error.message : String(error)}`, "scheduler");
+      });
+      // Black Room team works on its own schedule (reports, web, competition, approved posts, CEO brief).
+      // Read-only or approval-gated work only; disable with BLACKROOM_TEAM_SCHEDULER_ENABLED=false.
+      void Promise.all([import("./blackroom-team/scheduler"), import("./blackroom-team-routes"), import("./user-context")]).then(([scheduler, routes, users]) => {
+        const started = scheduler.startBlackRoomTeamScheduler({
+          running: routes.BLACKROOM_TEAM_RUNNING,
+          ownerUserId: () => { try { return users.getSystemUserId(); } catch { return null; } },
+        });
+        log(started ? "Black Room team scheduler started" : "Black Room team scheduler disabled", "scheduler");
+      }).catch((error) => {
+        log(`Failed to start Black Room team scheduler: ${error instanceof Error ? error.message : String(error)}`, "scheduler");
       });
       // Publishing and analytics are revenue-critical and intentionally stay
       // active on the small Replit deployment. The metadata growth scout is the
