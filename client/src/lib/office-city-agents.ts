@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { AgentLiveStatus } from "./agent-live-status";
+import { isOnDutyWindow, onDutyMaxAge, onDutyStatus, ON_DUTY_COLOR } from "@shared/office-on-duty";
 import { OFFICE_KONG_CITY_TASKS, officeKongEventLoadSchema, scoreOfficeKongSnapshot } from "@shared/office-kong-supervisor";
 
 export const OFFICE_CITY_CATEGORIES = [
@@ -81,6 +82,9 @@ export function buildOfficeCityRooms(directory: OfficeCityDirectoryEntry[], runs
   return buildOfficeCityRoomsFromSnapshot(directory, readCityEvidence(runs), now);
 }
 
+const onDuty = (job: { lastRunAt: string | null; nextRunAt: string | null; intervalMs?: number | null; recordedFailure?: boolean }, now = Date.now()) =>
+  job.recordedFailure !== true && isOnDutyWindow({ lastWorkAt: job.lastRunAt, nextWorkAt: job.nextRunAt, maxAgeMs: onDutyMaxAge(job.intervalMs), now });
+
 export function buildOfficeCityRoomsFromSnapshot(directory: OfficeCityDirectoryEntry[], snapshot: unknown, now = Date.now()): OfficeCityRoom[] {
   const parsed = evidenceSchema.safeParse(snapshot);
   const evidence = parsed.success ? parsed.data : undefined;
@@ -101,12 +105,21 @@ export function buildOfficeCityRoomsFromSnapshot(directory: OfficeCityDirectoryE
         if (future) status = { state: "offline", label: "Fechas sin verificar", detail: "El trabajo contiene fechas futuras no verificables." };
         else if (job.state === "running" && job.lastStartedAt && job.leaseUntil && Date.parse(job.leaseUntil) > Math.max(now, Date.parse(job.lastStartedAt))) status = { state: "working", label: "Ejecutando · verificado", detail: OFFICE_KONG_CITY_TASKS[category.id] };
         else if (job.state === "running") status = { state: "offline", label: "Ejecucion sin vigencia", detail: "La auditoria registro actividad, pero no hay una reserva de ejecucion vigente." };
-        else if (job.state === "healthy" && job.lastRunAt && job.lastSuccessAt) status = { state: "offline", label: "Completado · no ejecutando", detail: "Hay un resultado confirmado; no equivale a estar trabajando ahora." };
+        else if (job.state === "healthy" && job.lastRunAt && job.lastSuccessAt) {
+          const score = scores.get(city.id)?.find(item => item.category === category.id);
+          // Completed (or scheduled) on time with no failure: on duty, never "working".
+          status = (score?.state === "completed" || score?.state === "scheduled") && onDuty(job, now)
+            ? onDutyStatus({ lastWorkAt: job.lastRunAt, nextWorkAt: job.nextRunAt, now })
+            : { state: "offline", label: "Completado · no ejecutando", detail: "Hay un resultado confirmado; no equivale a estar trabajando ahora." };
+        }
         else if (job.state === "attention") {
           const score = scores.get(city.id)?.find(item => item.category === category.id);
+          const coverage = job.issues.join(" · ") || score?.reason;
           status = score?.state === "completed_with_warnings"
             // Ran on schedule without a recorded error: coverage findings are informational (KONG #306).
-            ? { state: "available", label: "Activo · cobertura con pendientes", detail: job.issues.join(" · ") || score.reason }
+            ? (job.lastRunAt && onDuty(job, now)
+              ? onDutyStatus({ lastWorkAt: job.lastRunAt, nextWorkAt: job.nextRunAt, now, extra: `Cobertura con pendientes: ${coverage}` })
+              : { state: "available", label: "Activo · cobertura con pendientes", detail: coverage })
             : { state: "error", label: score?.state === "failed" ? "Falló la última ejecución" : "Requiere atención", detail: job.issues.join(" · ") || score?.reason || "KONG registra un bloqueo en este trabajo." };
         }
         else if (job.state === "disabled") status = { state: "needs-setup", label: "Deshabilitado", detail: "Este trabajo esta deshabilitado." };
@@ -115,7 +128,7 @@ export function buildOfficeCityRoomsFromSnapshot(directory: OfficeCityDirectoryE
       }
       const confirmed = usable && job?.evidence === "persisted";
       return { id: `kong-city:${city.id}:${category.id}`, name: `${city.name} · ${category.name}`, role: category.name, cityId: city.id, cityName: city.name, category: category.id,
-        status, color: status.state === "working" ? "#34d399" : status.state === "error" ? "#fb7185" : status.state === "needs-setup" ? "#fbbf24" : "#94a3b8",
+        status, color: status.state === "working" ? "#34d399" : status.onDuty ? ON_DUTY_COLOR : status.state === "error" ? "#fb7185" : status.state === "needs-setup" ? "#fbbf24" : "#94a3b8",
         lastWorkAt: confirmed ? job!.lastRunAt : null, lastStartedAt: confirmed ? job!.lastStartedAt : null,
         nextWorkAt: confirmed ? job!.nextRunAt : null, blocker: status.detail || "", snapshotAt, hasDurableEvidence: Boolean(confirmed),
         intervalMs: confirmed ? job!.intervalMs : undefined, recordedFailure: confirmed ? job!.recordedFailure : undefined, leaseUntil: confirmed ? job!.leaseUntil : undefined };
