@@ -11,8 +11,11 @@
 //     factory operator configuration)
 // Needs the PR label `gate-justified` (owner decision, explained in the PR body):
 //   - changes to .replit, replit.nix, package.json, package-lock.json
-//   - modifying or deleting existing release-gate files (script/release-gate/**, sandbox-gate.yml)
-//   - NEW entries in script/release-gate/known-failures.json (fixing a test never needs it)
+//   - modifying or deleting existing release-gate files (script/release-gate/**, sandbox-gate.yml,
+//     .github/CODEOWNERS)
+//   - NEW or CHANGED entries in script/release-gate/known-failures.json (flaky, statuses, reason,
+//     timeouts, added failing names...). Removing an entry or removing names from its "failing"
+//     list (a test was fixed) never needs it.
 //
 // Usage: node script/release-gate/diff-hygiene.mjs --base <rev>
 // Env:   GATE_PR_LABELS="a,b"; GATE_REQUIRE_LABELS=false outside pull requests
@@ -47,7 +50,7 @@ const FORBIDDEN_PATH = [
 ];
 const ALLOWED_ENV_EXAMPLES = /(^|\/)\.env\.(example|sample|template)$/;
 const LABEL_PATHS = [/^\.replit$/, /^replit\.nix$/, /^package\.json$/, /^package-lock\.json$/];
-const GATE_PATHS = [/^script\/release-gate\//, /^\.github\/workflows\/sandbox-gate\.yml$/];
+const GATE_PATHS = [/^script\/release-gate\//, /^\.github\/workflows\/sandbox-gate\.yml$/, /^\.github\/CODEOWNERS$/];
 const PINNED = ".github/workflows/factory-candidate-checks.yml";
 
 const SECRET_PATTERNS = [
@@ -109,7 +112,16 @@ if (after) {
   for (const section of ["knownFailures", "sandboxIntegrationRoutes"]) {
     for (const [key, entry] of Object.entries(after[section] || {})) {
       if (!entry || typeof entry.reason !== "string" || entry.reason.trim().length < 10) fail("script/release-gate/known-failures.json", `${section}["${key}"] needs a real reason`);
-      if (before && !(key in (before[section] || {}))) needsLabel.push({ file: "script/release-gate/known-failures.json", rule: `new allowlist entry ${section}["${key}"]` });
+      if (!before) continue;
+      const previous = (before[section] || {})[key];
+      if (previous === undefined) { needsLabel.push({ file: "script/release-gate/known-failures.json", rule: `new allowlist entry ${section}["${key}"]` }); continue; }
+      if (JSON.stringify(previous) === JSON.stringify(entry)) continue;
+      // The only change that never needs a label: removing names from "failing" (a test was fixed).
+      const { failing: oldFailing, ...oldRest } = previous || {};
+      const { failing: newFailing, ...newRest } = entry || {};
+      const shrinkOnly = JSON.stringify(oldRest) === JSON.stringify(newRest) && Array.isArray(oldFailing) && Array.isArray(newFailing)
+        && newFailing.every((name) => oldFailing.includes(name));
+      if (!shrinkOnly) needsLabel.push({ file: "script/release-gate/known-failures.json", rule: `changed allowlist entry ${section}["${key}"]` });
     }
   }
 }

@@ -34,7 +34,8 @@ concurrency:
 
 jobs:
   watch:
-    if: github.repository == 'robertmanzanillag-jpg/blackops-reminder' && vars.POST_PUBLISH_WATCH_ENABLED != 'false'
+    # Only from main (schedules always are; a dispatch from another branch would run its copy).
+    if: github.repository == 'robertmanzanillag-jpg/blackops-reminder' && github.ref == 'refs/heads/main' && vars.POST_PUBLISH_WATCH_ENABLED != 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -42,8 +43,15 @@ jobs:
       actions: read
       issues: write
     steps:
+      - name: Refuse to run without a reviewed production source
+        env:
+          OFFICE_SOURCE_REF: ${{ vars.OFFICE_SOURCE_REF }}
+        run: |
+          # An empty ref would make actions/checkout fall back to the dispatching branch.
+          if [ -z "$OFFICE_SOURCE_REF" ]; then echo "::error::repository variable OFFICE_SOURCE_REF is empty"; exit 1; fi
+
       - name: Check out the reviewed production source
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ vars.OFFICE_SOURCE_REF }}
           persist-credentials: false
@@ -60,7 +68,7 @@ jobs:
             echo "ready=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         if: steps.verify.outputs.ready == 'true'
         with:
           node-version: '22'

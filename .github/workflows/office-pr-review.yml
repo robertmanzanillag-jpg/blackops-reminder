@@ -2,9 +2,13 @@ name: Office PR review (manual, second reviewer)
 
 # Optional second, independent reviewer for a PR. pull_request runs cannot see the office secrets
 # (and must not, for forks), so this is a manual dispatch: given a PR number it enqueues ONE office
-# `claude_review` job for the PR's exact head SHA through the same store path the web app uses
+# `claude_review` job for that PR through the same store path the web app uses
 # (script/release-gate/office-review-enqueue.ts -> createOfficeCloudStore().submit). The next office
 # cloud cycle claims it and records a pass/block verdict in the Agents Office.
+#
+# The head SHA read at dispatch time is only recorded for idempotency (one job per PR head); the
+# reviewer reviews whatever head the PR has when it runs. Before trusting a verdict, compare its
+# `review.headSha` with the commit being merged; if they differ, dispatch again.
 #
 #   apply=false (default)  read-only check of the queue (READ ONLY transaction, rolled back)
 #   apply=true             enqueue; idempotent per (PR, head SHA): dispatching twice does not duplicate
@@ -35,10 +39,18 @@ concurrency:
 
 jobs:
   enqueue:
-    if: github.repository == 'robertmanzanillag-jpg/blackops-reminder'
+    # Only from main: a dispatch from another branch would run that branch's copy of this file.
+    if: github.repository == 'robertmanzanillag-jpg/blackops-reminder' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
+      - name: Refuse to run without a reviewed production source
+        env:
+          OFFICE_SOURCE_REF: ${{ vars.OFFICE_SOURCE_REF }}
+        run: |
+          # An empty ref would make actions/checkout fall back to the dispatching branch.
+          if [ -z "$OFFICE_SOURCE_REF" ]; then echo "::error::repository variable OFFICE_SOURCE_REF is empty"; exit 1; fi
+
       - name: Resolve the PR head
         id: pr
         env:
@@ -56,7 +68,7 @@ jobs:
           { echo "url=$url"; echo "sha=$sha"; } >> "$GITHUB_OUTPUT"
 
       - name: Check out the reviewed production source (not the PR)
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           ref: ${{ vars.OFFICE_SOURCE_REF }}
           persist-credentials: false
@@ -64,7 +76,7 @@ jobs:
       - name: Verify the reviewed script exists
         run: test -f script/release-gate/office-review-enqueue.ts && test -f server/office-cloud-store.ts
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
           cache: npm
