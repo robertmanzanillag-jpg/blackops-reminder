@@ -56,6 +56,8 @@ function testEnv() {
 }
 
 function runOne(file) {
+  // A known-hanging file may carry a shorter "timeoutMs" so it does not hold the job for the full limit.
+  const limit = Math.min(timeoutMs, Number(known.get(file)?.timeoutMs) || timeoutMs);
   return new Promise((resolve) => {
     const started = Date.now();
     const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-reporter=dot", file], {
@@ -75,7 +77,7 @@ function runOne(file) {
     const timer = setTimeout(() => {
       timedOut = true;
       try { process.kill(-child.pid, "SIGKILL"); } catch { child.kill("SIGKILL"); }
-    }, timeoutMs);
+    }, limit);
     child.on("close", (code, signal) => {
       clearTimeout(timer);
       // Kill any orphaned grandchildren (servers, browsers) the test left behind.

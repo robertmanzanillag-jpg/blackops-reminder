@@ -33,7 +33,12 @@ cambio (PR) ──> sandbox ──> gate exigente ──> revisión independient
      `/projects`, `/automations`, `/tools`, `/app-qa-agent`, `/marketing-command-center`, `/news`.
      Sin excepciones JavaScript, sin 5xx del propio servidor; **la oficina de agentes debe
      renderizar con cero errores de consola**.
+   - Login real con usuario y contraseña (sesión guardada en PostgreSQL, como en producción).
    - Al final se comprueba que el servidor sigue vivo y que su log no tiene firmas de caída.
+   - **Guardia de esquema**: después de todo, `drizzle-kit push` (sin aplicar nada) no puede
+     proponer ningún `DROP`/pérdida de datos. Esta guardia encontró que `npm run db:push` habría
+     borrado las tablas de la oficina, la fábrica y las sesiones; `drizzle.config.ts` ahora las
+     excluye con `tablesFilter`.
    Se sube un artefacto `release-gate-sandbox` (smoke.json, capturas, log de arranque y build).
 3. **Gate exigente** (mismo workflow, jobs en paralelo):
    - `typecheck`: `tsc --noEmit` completo (8 GB de memoria).
@@ -90,7 +95,10 @@ rama antes de abrir el PR o para repetir la verificación de producción.
 
 `script/release-gate/known-failures.json`:
 
-- `knownFailures`: `"tests/archivo.test.ts": { "reason": "...", "flaky": false }`. Arreglar un test
+- `knownFailures`: `"tests/archivo.test.ts": { "reason": "...", "flaky": false, "timeoutMs": 120000 }`
+  (`flaky: true` tolera que a veces pase; `timeoutMs` acorta el límite de un test que se cuelga).
+  Hoy hay 16 entradas: casi todas son tests del toolchain del Mac del operador (LaunchAgent, zsh,
+  ImageMagick, `/private/tmp`) o fallos ya existentes; ver el motivo de cada una. Arreglar un test
   = borrar su entrada en el mismo PR (no necesita etiqueta). Añadir una entrada necesita la
   etiqueta `gate-justified` y una explicación.
 - `sandboxIntegrationRoutes`: ruta + código exacto que el sandbox tolera porque allí no existen

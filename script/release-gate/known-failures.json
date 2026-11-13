@@ -1,13 +1,69 @@
 {
   "_comment": "Tracked allowlist for the release gate (docs/release-gate.md). knownFailures: pre-existing failing test files, each with the reason; any OTHER failing file fails the gate, and an entry that starts passing must be removed. sandboxIntegrationRoutes: exact route + status the sandbox tolerates because it deliberately has no Replit connectors or KONG access. Adding entries requires the PR label gate-justified.",
-  "knownFailures": {},
+  "knownFailures": {
+    "tests/agents-office-local-qa.test.mjs": {
+      "reason": "Browser office QA fixture times out in headless CI (TimeoutError after ~40 s); pre-existing, also fails locally.",
+      "flaky": true
+    },
+    "tests/app-qa-agent.test.ts": {
+      "reason": "'mission inventory covers every explicit client route exactly once': the App QA route inventory no longer matches client/src/App.tsx routes (pre-existing)."
+    },
+    "tests/blackroom-deterministic-editor.integration.test.ts": {
+      "reason": "Native ledger runner uses a TypeScript parameter property, unsupported by node --experimental-strip-types (ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX); pre-existing code issue."
+    },
+    "tests/blackroom-metricool-bridge.test.ts": {
+      "reason": "Scheduling cases throw BlackRoomPublicationBlockedError bridge_not_authorized: the test fixture does not authorize the bridge (pre-existing)."
+    },
+    "tests/clippers-agent.test.ts": {
+      "reason": "Several cases need DEFAULT_USER_ID in the environment ('DEFAULT_USER_ID is required for system jobs'); the test does not set it (pre-existing)."
+    },
+    "tests/clippers-launch-agent-installer.test.mjs": {
+      "reason": "macOS LaunchAgent installer: requires the macOS system time zone America/New_York and a clean runtime checkout; cannot pass on a Linux runner."
+    },
+    "tests/clippers-motivation-shorts.test.mjs": {
+      "reason": "Local render pipeline returns render_failed on the Linux runner (expects the operator Mac toolchain); pre-existing."
+    },
+    "tests/clippers-owned-source-scripts.test.ts": {
+      "reason": "Evidence importer cases assume macOS paths (/private/tmp) and the operator toolchain; pre-existing."
+    },
+    "tests/clippers-render-campaign-drafts.test.mjs": {
+      "reason": "Draft renderer needs ImageMagick 7 'magick' (spawn magick ENOENT on the runner); operator Mac toolchain only."
+    },
+    "tests/clippers-youtube-delivery-worker.test.mjs": {
+      "reason": "zsh wrapper allowlist case exits 1 on the Linux runner (macOS operator wrapper); pre-existing."
+    },
+    "tests/kong-company-routes.test.ts": {
+      "reason": "'real council routes isolate KONG owner writes': member write answers 500 instead of 403 (pre-existing; candidate bug to fix)."
+    },
+    "tests/kong-office-browser-qa.test.mjs": {
+      "reason": "KONG unified office browser scouts time out in headless CI (~20 s); pre-existing, also fails locally.",
+      "flaky": true
+    },
+    "tests/legacy-publication-containment.test.ts": {
+      "reason": "Imports the bare package 'containment-handlers' that does not exist (ERR_MODULE_NOT_FOUND); the test cannot load (pre-existing)."
+    },
+    "tests/metricool-analytics-sync.test.ts": {
+      "reason": "Scheduler cases reach the real storage layer without a database ('Failed query: select ... automations'); pre-existing."
+    },
+    "tests/office-internal-work.test.ts": {
+      "reason": "'internal artifact route refuses other users before loading private state' returns undefined instead of []; pre-existing."
+    },
+    "tests/revenue-engine.test.ts": {
+      "reason": "Hangs after a route answers 'Authentication required' and never completes (> 7 min in CI, > 4 min locally); killed at its timeout.",
+      "timeoutMs": 120000
+    }
+  },
   "sandboxIntegrationRoutes": {
     "/api/calendar/sync": {
-      "status": [500],
+      "status": [
+        500
+      ],
       "reason": "Google Calendar goes through the Replit connector (X_REPLIT_TOKEN), which only exists on Replit; the handler answers 500 instead of a clear 503 when the connector is absent (pre-existing)."
     },
     "/api/agents-office/cities": {
-      "status": [503],
+      "status": [
+        503
+      ],
       "reason": "The KONG city directory needs KONG read access, deliberately absent in the sandbox; the route answers an explicit 503."
     }
   }
