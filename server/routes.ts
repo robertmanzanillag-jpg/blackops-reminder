@@ -34,6 +34,7 @@ import { buildCeoOperationalHealth } from "./ceo-operational-health";
 import { registerTelegramRoutes } from "./telegram-routes";
 import { registerRevenueStripeRoutes } from "./revenue-stripe-routes";
 import { registerAgentCouncilRoutes } from "./agent-council-routes";
+import { registerAgentChatRoutes } from "./agent-chat-routes";
 import { registerKongOperationsRoutes } from "./kong-operations-routes";
 import { registerBlackRoomTeamRoutes } from "./blackroom-team-routes";
 import { registerBlackRoomCeoChatRoutes } from "./blackroom-ceo-chat-routes";
@@ -855,6 +856,8 @@ export async function registerRoutes(
   registerTelegramRoutes(app);
   registerRevenueStripeRoutes(app);
   registerAgentCouncilRoutes(app);
+  // Per-agent chat: threads, deterministic routing and hand-offs recorded as company orders. Owner-only.
+  registerAgentChatRoutes(app);
   // Black Room team (CEO, analiticas, competencia, publicador, guiones, website). Owner-only; approvals before anything outward.
   registerBlackRoomTeamRoutes(app);
   // Chat with the CEO Black Room (owner + partners): routes requests to the team and runs them; approvals stay explicit.

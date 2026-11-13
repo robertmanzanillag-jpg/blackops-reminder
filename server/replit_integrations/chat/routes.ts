@@ -12,7 +12,8 @@ export function registerChatRoutes(app: Express): void {
   app.get("/api/conversations", async (req: Request, res: Response) => {
     try {
       const conversations = await chatStorage.getAllConversations(getCurrentUserId(req));
-      res.json(conversations.map(stripConversationOwner));
+      // Per-agent chat threads (server/agent-chat.ts) live in /agent-chat, not in the assistant sidebar.
+      res.json(conversations.map(stripConversationOwner).filter((conversation) => !conversation.title.startsWith("agent-chat|")));
     } catch (error) {
       console.error("Error fetching conversations:", error);
       res.status(500).json({ error: "Failed to fetch conversations" });

@@ -1,4 +1,7 @@
-export interface FactoryOrderProposal { orderId:string;orderRevision:string;reviewJobId:string;projectId:string;prUrl:string;baseSha:string;headSha:string;completedAt:string;evidenceCount:number;scope:"reviewed_proposal";orderLink:"historical_unverified";published:false;careerCredit:false }
+export interface FactoryOrderProposal { orderId:string;orderRevision:string;reviewJobId:string;projectId:string;prUrl:string;baseSha:string;headSha:string;completedAt:string;evidenceCount:number;scope:"reviewed_proposal";orderLink:"historical_unverified";published:false;careerCredit:false;
+  /** Read-only link to the office reviewer's verdict for this exact PR head. Never merges or closes the order. */
+  officeReview?: FactoryOfficeReviewLink }
+export interface FactoryOfficeReviewLink { status:"not_requested"|"pending"|"running"|"pass"|"block"|"failed"|"head_mismatch"|"unavailable"; findingsCount?:number; runId?:string; completedAt?:string }
 /** Public owner dashboard. Never includes job payloads, credentials or provider output. */
 export interface SoftwareFactoryView {
   proposalEvidenceStatus?: "complete"|"partial"|"unavailable";

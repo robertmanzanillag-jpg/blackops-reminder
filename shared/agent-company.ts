@@ -165,6 +165,9 @@ export type CompanyOrder = {
   // How it was closed: with a verifiable run (points) or by hand (record only, no points).
   closedBy?: "evidencia" | "robert";
   evidence?: OrderEvidence;
+  // Set when the order came from a per-agent chat (shared/agent-chat-routing.ts): who received it
+  // and, when that agent was not the right one, the deterministic reason it was handed off.
+  chat?: { fromAgentId: string; handoff: boolean; reason: string; approvalRequired: boolean; requestId?: string };
   /** Who wrote the order: Robert (owner) or an invited partner ("socio"). Absent on older orders. */
   placedBy?: { userId: string; role: "owner" | "partner" };
 };
@@ -708,7 +711,7 @@ export function scheduleAcademyTraining(state: CompanyState, roles: Record<strin
 // Routes with `requires` only fire when the order also names that context (e.g. Black Room), so
 // generic words like "reporte" or "web" do not pull the Black Room specialists into other work.
 const BLACKROOM_CONTEXT = ["black room", "blackroom"];
-const ROUTES: Array<{ words: string[]; agents: string[]; requires?: string[] }> = [
+export const ROUTES: Array<{ words: string[]; agents: string[]; requires?: string[] }> = [
   { words: ["analitica", "analytics", "metrica", "estadistica", "reporte", "insight", "alcance"], agents: ["blackroom-analytics"], requires: BLACKROOM_CONTEXT },
   { words: ["competencia", "competidor", "rival"], agents: ["blackroom-competition"], requires: BLACKROOM_CONTEXT },
   { words: ["postea", "postear", "posteo", "publica", "metricool", "meta ", "programa el post", "programar post"], agents: ["blackroom-publisher"], requires: BLACKROOM_CONTEXT },
