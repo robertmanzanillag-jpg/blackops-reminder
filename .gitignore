@@ -30,3 +30,9 @@ revenue_mockups/*
 dropshipping_engine_data/*
 marketing_command_center_data/*
 agent_office_data/
+
+# Personal data exports and code snapshots must never be committed (the repository is public).
+data_export*.sql
+data_export*.csv
+*.b64.txt
+replit-*.tar.gz
