@@ -116,6 +116,9 @@ jobs:
           OFFICE_CAPABILITY_TRAINING_ENABLED: ${{ vars.OFFICE_CAPABILITY_TRAINING_ENABLED || 'false' }}
           OFFICE_CAPABILITY_MAX_CALLS_PER_DAY: ${{ vars.OFFICE_CAPABILITY_MAX_CALLS_PER_DAY }}
           OPENAI_SHARED_CREDITS_REQUIRED: ${{ vars.OFFICE_SHARED_CREDITS_REQUIRED || 'false' }}
+          # Office self-heal (finding -> order -> factory -> re-audit). Off unless the variable is 'true'.
+          OFFICE_SELF_HEAL_ENABLED: ${{ vars.OFFICE_SELF_HEAL_ENABLED || 'false' }}
+          OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY: ${{ vars.OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY || '1' }}
         run: |
           set -euo pipefail
           if [ -n "${OFFICE_SHARED_CREDIT_FILE:-}" ]; then export OPENAI_SHARED_CREDIT_CONFIG="$OFFICE_SHARED_CREDIT_FILE"; fi
@@ -213,6 +216,9 @@ jobs:
           SOFTWARE_FACTORY_OFFICE_REVIEW_ENABLED: ${{ vars.SOFTWARE_FACTORY_OFFICE_REVIEW_ENABLED || 'false' }}
           # Optional: score factory stage outcomes as office careers (lives, presence, successors).
           SOFTWARE_FACTORY_OFFICE_CAREERS_ENABLED: ${{ vars.SOFTWARE_FACTORY_OFFICE_CAREERS_ENABLED || 'false' }}
+          # Office self-heal (finding -> order -> factory -> re-audit). Off unless the variable is 'true'.
+          OFFICE_SELF_HEAL_ENABLED: ${{ vars.OFFICE_SELF_HEAL_ENABLED || 'false' }}
+          OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY: ${{ vars.OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY || '1' }}
         run: |
           set -euo pipefail
           export OPENAI_SHARED_CREDIT_CONFIG="$FACTORY_CONFIG_DIR/shared-credit.json"
