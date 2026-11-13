@@ -3,7 +3,11 @@ import { parseInternalWork } from "./office-internal-work";
 import {parseRoleAcademy} from "./office-role-academy";
 import {parseCapabilityTraining} from "./office-capability-training";
 import {parseRoleWork} from "./office-role-work";
+import { roleWorkActivityView } from "../shared/office-role-work-activity";
+import { FACTORY_AGENT_NAMES, factoryAgentsView, isFactoryAgentId, parseFactoryCareerLedger } from "../shared/factory-office-agents";
+import { parseSelfHealState, selfHealOfficeView } from "./office-self-heal";
 import { getSystemUserId } from "./user-context";
+import { createChatOrder } from "../shared/agent-chat-routing";
 import type { OfficeKongAuditResult } from "./office-kong";
 // Server side of the agent council (see shared/agent-council.ts).
 //
@@ -175,6 +179,8 @@ export const AGENT_NAMES: Record<string, string> = {
   news: "Noticias",
   "kong-videos": "Videos Kong",
   mechanic: "Mecanico",
+  // Software Factory engineers: main-company careers scored only from real factory stage rows.
+  ...FACTORY_AGENT_NAMES,
   ...Object.fromEntries(KONG_TEAM.map((name) => [`kong:${name}`, name])),
 };
 
@@ -333,6 +339,8 @@ function parseDurableCouncilState(raw: string | null, owner: string): CouncilSta
     parseRoleAcademy(value.officeExecution.roleAcademy);
     parseCapabilityTraining(value.officeExecution.capabilityTraining,owner);
     parseRoleWork(value.officeExecution.roleWork,owner);
+    parseFactoryCareerLedger(value.officeExecution.factoryCareers);
+    parseSelfHealState(value.officeExecution.selfHeal,owner);
   }
   return parseCouncilState(raw);
 }
@@ -740,6 +748,24 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
   }
 
+  // Per-agent chat (server/agent-chat.ts): one explicit assignee chosen by shared/agent-chat-routing.ts.
+  // Same order record as the CEO channel; a hand-off is visible in company.events and the order's `chat` field.
+  async function placeChatOrder(input: { text: string; fromAgentId: string; toAgentId: string; reason: string; approvalRequired: boolean; requestId?: string }) {
+    if (!(input.toAgentId in AGENT_NAMES) || input.toAgentId.startsWith("kong")) throw new Error("Agente no válido");
+    let placed: CompanyState["orders"][number] | undefined;
+    await mutate((state) => {
+      // A retried or concurrent send with the same requestId returns the order it already created.
+      const existing = input.requestId ? state.company.orders.find(order => order.chat?.requestId === input.requestId) : undefined;
+      if (existing) { placed = existing; return SKIP; }
+      const now = deps.now();
+      const fresh = state.lastCycleAt && now - toMs(state.lastCycleAt) < STATUS_FRESH_MS && !state.lastCycleError;
+      const result = createChatOrder(state.company, { ...input, text: input.text.trim().slice(0, 500), now, statuses: fresh ? { ...state.lastStatuses } : {}, names: AGENT_NAMES });
+      placed = result.order;
+      return { ...state, company: result.state };
+    });
+    return placed!;
+  }
+
   // evidenceRunId: an automation run of this user that finished with "success". Verified here,
   // never trusted from the client; one run can close only one order.
   async function finishOrder(orderId: string, evidenceRunId?: string, requesterId?: string, scope: "main" | "kong" = "main") {
@@ -816,7 +842,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
     }
   }
 
-  async function view() {
+  async function view(options: { factoryLiveJobs?: Parameters<typeof factoryAgentsView>[0]["liveJobs"]; factoryOwnerKey?: string } = {}) {
     const loaded = await load();
     // The KONG conversation is owner-only (served by /api/kong-supervisor/state with an owner check).
     // This view is readable by any signed-in user, so it only carries the readiness records.
@@ -830,7 +856,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
         agentId: role.roleId, status: role.status, generation: role.generation,
         policyVersion: role.activePolicy?.version,
         qualificationScope: role.activePolicy?.qualificationScope,
-        reason: role.status === "unsupported" ? "No verified execution/training adapter is installed for this role."
+        reason: isFactoryAgentId(role.roleId) ? "Factory stage engineer: life is scored from recorded factory stage outcomes; no verified academy adapter qualifies a successor yet."
+          : role.status === "unsupported" ? "No verified execution/training adapter is installed for this role."
           : role.leases.some(lease => lease.status === "unknown") ? "An execution is uncertain; reconciliation is required."
           : role.status === "vacant" ? "Awaiting a candidate with verified comparable evaluations."
           : role.status === "probation" ? "Awaiting the replacement's first verified execution."
@@ -845,6 +872,12 @@ export function createAgentCouncil(deps: CouncilDeps) {
       kongCollaboration: state.kongCollaboration.observedAt && deps.now() - Date.parse(state.kongCollaboration.observedAt) <= 5 * 60_000 ? state.kongCollaboration : { verified: false, observedAt: null, totalFindings: 0, exchanges: [] },
       leaderboard: leaderboard(state.company, ["ceo", ...Object.keys(state.company.careers).filter(isKongCompanyAgent), ...EXEMPT_IDS, ...unscoredAgentIds(integrationsNow())]),
       integrations: integrationsNow(),
+      // Persisted last observation only; the route may overlay a read-only live lease read for the owner.
+      factoryAgents: factoryAgentsView({ ledger: loaded.officeExecution?.factoryCareers, liveJobs: options.factoryLiveJobs, ownerKey: options.factoryOwnerKey, now: deps.now() }),
+      // Public summary of today's recorded role work (role, status, times only; no sources or audits).
+      roleWorkToday: roleWorkActivityView(loaded.officeExecution?.roleWork?.jobs, deps.now()),
+      // Public self-heal counts per agent (detected / in repair / verified / needs owner); no ids or audit details.
+      selfHeal: selfHealOfficeView(loaded.officeExecution?.selfHeal, loaded.officeExecution?.roleWork, deps.now(), process.env.OFFICE_SELF_HEAL_ENABLED === "true" || loaded.officeExecution?.selfHeal !== undefined),
       personalities,
       overrides: applyLessons(state.debates, state.lessons),
       nextCycleInMs: state.lastCycleAt ? Math.max(0, Date.parse(state.lastCycleAt) + COUNCIL_CYCLE_MS - deps.now()) : 0,
@@ -889,7 +922,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
     return state.company;
   }
-  return { runCycle, runKongCatchUp, catchUpKongIfStale, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution, updateBlackRoomAcademy };
+  return { runCycle, runKongCatchUp, catchUpKongIfStale, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, placeChatOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution, updateBlackRoomAcademy };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {

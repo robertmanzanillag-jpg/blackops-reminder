@@ -93,3 +93,30 @@ test("three-ring layout keeps every platform distinct and reserves space between
   assert.equal(emptyMiddle.radii.length,3);
   assert.ok(emptyMiddle.radii[2]>emptyMiddle.radii[1]);
 });
+
+test("system desks explain on-demand, first-run, missing-history and attention states honestly", () => {
+  const base = { kind: "system", owner: "KONG", responsibility: "Servicio", lastRunAt: null, nextRunAt: null, blocker: null, issues: [] as string[] };
+  const agents = [
+    { ...base, id: "kong_ai_chat", name: "Asistente", state: "idle", operationMode: "on_demand", nextAction: "Disponible bajo demanda; aún no hay solicitudes registradas" },
+    { ...base, id: "legacy_ceo", name: "CEO anterior", state: "healthy", operationMode: "on_demand", lastRunAt: new Date(now - 86_400_000).toISOString(), nextAction: "Se ejecuta cuando se solicita" },
+    { ...base, id: "image_health", name: "Imágenes", state: "unknown", operationMode: "scheduled", evidencePending: true, nextAction: "Programado desde 2026-11-05T20:00:00Z; esperando su primera ejecución registrada" },
+    { ...base, id: "backend_watchdog", name: "Vigilancia", state: "unknown", operationMode: "scheduled", evidencePending: true, nextAction: "Comprobar si la programación está habilitada y conectar su historial" },
+    { ...base, id: "scrapers", name: "Importadores", state: "attention", blocker: "La última ejecución registrada falló", issues: ["Fuente caída"], nextAction: "Revisar registros" },
+    { ...base, id: "venue_events", name: "Eventos", state: "stale", blocker: "Sin ejecuciones correctas dentro de su intervalo", nextAction: "Comprobar el worker" },
+  ];
+  const snapshot = { ...evidence, agents } as OfficeKongAuditResult["evidence"];
+  const desk = (id: string, wing = buildKongOfficeWing(snapshot, [], {}, now)) => wing.agents.find(agent => agent.id === `kong:${id}`)!.status;
+  assert.deepEqual([desk("kong_ai_chat").state, desk("kong_ai_chat").label, desk("kong_ai_chat").detail], ["available", "Disponible bajo demanda", agents[0].nextAction]);
+  assert.deepEqual([desk("legacy_ceo").state, desk("legacy_ceo").label], ["available", "Disponible bajo demanda"]);
+  assert.deepEqual([desk("image_health").state, desk("image_health").label, desk("image_health").detail], ["offline", "Programado · esperando primera ejecución", agents[2].nextAction]);
+  assert.deepEqual([desk("backend_watchdog").label, desk("backend_watchdog").detail], ["Sin historial conectado", agents[3].nextAction]);
+  const attention = desk("scrapers");
+  assert.equal(attention.label, "Requiere atención");
+  assert.equal(attention.detail, "La última ejecución registrada falló · Fuente caída");
+  assert.deepEqual(attention.problems, ["La última ejecución registrada falló", "Fuente caída"]);
+  assert.equal(desk("venue_events").label, "Sin ejecución reciente");
+  assert.ok(buildKongOfficeWing(snapshot, [], {}, now).agents.filter(agent => agent.id.startsWith("kong:")).every(agent => agent.status.state !== "working"), "no desk invents activity");
+  const expired = buildKongOfficeWing(snapshot, [], {}, now + 300_001);
+  assert.equal(desk("kong_ai_chat", expired).label, "Evidencia vencida");
+  assert.equal(desk("finance_risk", expired).label, "Sin evidencia vigente");
+});

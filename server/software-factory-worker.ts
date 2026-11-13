@@ -2,7 +2,9 @@ import { randomUUID } from "node:crypto";
 import type { FactoryJob, FactoryJobInput, FactoryOutcome } from "./software-factory-store";
 import { configuredSoftwareFactoryStore as softwareFactoryStore } from "./software-factory-store-provider";
 import { releaseGate, rehearsalGate, type FactoryProject, type FactoryCandidate, type FactoryEvidence } from "./software-factory";
-export interface FactoryAdapterResult extends FactoryOutcome { next?: FactoryJobInput }
+/** deferUntil: a zero-cost blocked result may ask to be requeued (same UTC
+ * month, at most 48h ahead). Without store support it stays a terminal block. */
+export interface FactoryAdapterResult extends FactoryOutcome { next?: FactoryJobInput; deferUntil?: string }
 export interface FactoryAdapter { execute(job: FactoryJob, context: { signal: AbortSignal; maxCostCents: number }): Promise<FactoryAdapterResult> }
 export interface TrustedReleaseContext { target?: "staging" | "production"; recoveryBudget?: {verifyCents:number;rollbackCents:number}; project: FactoryProject; candidate: FactoryCandidate; evidence: FactoryEvidence[] }
 export interface FactoryWorkerOptions {
@@ -138,6 +140,15 @@ export function createSoftwareFactoryWorker(options: FactoryWorkerOptions = {}) 
           if (options.releaseMode === "review-only" && job.kind === "review" && result.status === "completed" && result.next?.kind === "deploy") {
             const { next: _release, ...reviewed } = result;
             result = { ...reviewed, reason: "FACTORY_PR_REVIEWED_NOT_DEPLOYED" };
+          }
+          if (result.deferUntil !== undefined) {
+            const { deferUntil, ...rest } = result, until = Date.parse(deferUntil), at = now().getTime();
+            const notBefore = Number.isFinite(until) ? new Date(until).toISOString() : "";
+            if (rest.status === "blocked" && rest.costCents === 0 && !rest.next && until > at && until - at <= 48 * 3600000 && notBefore.slice(0, 7) === job.month && typeof store.defer === "function") {
+              if (!await store.defer(job, { reason: rest.reason || "FACTORY_DEFERRED", notBefore })) quarantined = true;
+              return { kind: quarantined ? "quarantined" : "progressed" };
+            }
+            result = rest;
           }
           const {next,...outcome}=result;
           if (!await store.complete(job,outcome,next)) quarantined=true;

@@ -5,6 +5,7 @@ import type { FactoryPipelineDependencies } from "./software-factory-pipeline";
 import { FACTORY_ASISTENTE_REPOSITORY } from "./software-factory-github-client";
 import { createOpenAiFactoryTextProvider } from "./software-factory-openai";
 import { executeWithinSharedCredits } from "./shared-openai-credit-execution";
+import { isFactoryWritePathAllowed } from "./software-factory-write-scope";
 import type { createSharedOpenAiCreditLedger } from "./shared-openai-credit-ledger";
 
 export interface AsistenteReviewSource {
@@ -16,12 +17,7 @@ const digest = (value: unknown) => createHash("sha256").update(JSON.stringify(va
 const sha = /^[a-f0-9]{40}$/;
 const verdictSchema = z.object({ passed: z.boolean(), warnings: z.array(z.string().trim().min(1).max(1000)).max(20) }).strict()
   .refine(result => !result.passed || result.warnings.length === 0);
-function safePath(path: string) {
-  return typeof path === "string" && path.length <= 1000 && /^(?:client\/src\/|server\/|shared\/|tests\/)/.test(path) &&
-    !/[\\:\x00-\x20\x7f]/.test(path) && !/kong|software-factory|office-token-budget|credit|auth|permission|payment|migration/i.test(path) &&
-    !path.split("/").some(part => !part || part === "." || part === ".." || /[. ]$/.test(part) ||
-      /^(?:\.env(?:\..*)?|\.git|\.aws|\.ssh|credentials|secrets|node_modules|id_rsa|id_ed25519)$/i.test(part) || /\.(?:pem|key|p12|pfx)$/i.test(part));
-}
+const safePath = (path: string) => isFactoryWritePathAllowed(path);
 
 /** Separate stateless reviewer; never reuses a builder response or grants release
  * eligibility. load must authenticate immutable blobs and include ALL changes.
@@ -29,7 +25,8 @@ function safePath(path: string) {
 export function createAsistenteIndependentReview(options: {
   ledger: ReturnType<typeof createSharedOpenAiCreditLedger>;
   model: Parameters<typeof createOpenAiFactoryTextProvider>[0];
-  load(candidate: FactoryCandidate, signal: AbortSignal): Promise<AsistenteReviewSource>;
+  /** paths is the job's persisted per-order selection from finding.sourcePaths. */
+  load(candidate: FactoryCandidate, signal: AbortSignal, paths: readonly string[]): Promise<AsistenteReviewSource>;
   now: () => Date;
   maxOutputTokens: number;
 }): NonNullable<FactoryPipelineDependencies["review"]> {
@@ -43,8 +40,9 @@ export function createAsistenteIndependentReview(options: {
       !sha.test(candidate.baseSha) || !sha.test(candidate.headSha) || candidate.baseSha === candidate.headSha || !candidate.builderId?.trim() || candidate.builderId === actorId ||
       typeof state.rootJobId !== "string" || !state.rootJobId || state.rootJobId.length > 200 || !Number.isInteger(state.repairAttempts) || state.repairAttempts < 0 || state.repairAttempts > 2 ||
       !Array.isArray(candidate.changedFiles) || !candidate.changedFiles.length || candidate.changedFiles.length > 64 || new Set(candidate.changedFiles).size !== candidate.changedFiles.length || !candidate.changedFiles.every(safePath) ||
+      !Array.isArray(state.finding?.sourcePaths) || !candidate.changedFiles.every(path => state.finding.sourcePaths!.includes(path)) ||
       !Number.isSafeInteger(context.maxCostCents) || context.maxCostCents < 1 || context.maxCostCents > 10000 || !state.finding?.request?.trim()) throw Error("ASISTENTE_REVIEW_CONTEXT_INVALID");
-    const source = structuredClone(await load(structuredClone(candidate), context.signal));
+    const source = structuredClone(await load(structuredClone(candidate), context.signal, [...state.finding.sourcePaths!]));
     context.signal.throwIfAborted();
     const expected = [...candidate.changedFiles].sort();
     if (source.repository !== project.repo || source.baseSha !== candidate.baseSha || source.headSha !== candidate.headSha ||

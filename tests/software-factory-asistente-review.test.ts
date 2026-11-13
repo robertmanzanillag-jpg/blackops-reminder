@@ -9,7 +9,7 @@ const repository = "robertmanzanillag-jpg/blackops-reminder", base = "a".repeat(
 const model = "gpt-4.1-mini-2025-04-14", at = "2026-11-06T12:00:00.000Z";
 const project = { id: "asistente", repo: repository } as FactoryProject;
 const state = { version: 1, projectId: project.id, rootJobId: "root-1", repairAttempts: 0,
-  finding: { id: "order", request: "Fix agent search", baseSha: base, kind: "bug", regressionScenarioId: "search", artifactIds: ["reproduction"] },
+  finding: { id: "order", request: "Fix agent search", baseSha: base, kind: "bug", regressionScenarioId: "search", artifactIds: ["reproduction"], sourcePaths: ["server/agent-search.ts", "tests/agent-search.test.ts"] },
   candidate: { projectId: project.id, baseSha: base, headSha: head, changedFiles: ["server/agent-search.ts", "tests/agent-search.test.ts"], builderId: "factory-remote-builder", risk: "unknown" },
 } as FactoryPipelineState;
 const source: AsistenteReviewSource = { repository, baseSha: base, headSha: head, changedFiles: [...state.candidate!.changedFiles],
@@ -23,8 +23,8 @@ async function fixture() {
     expiresAt: "2026-11-20T00:00:00.000Z", verificationEvidenceId: "proof" }, now, maximumGrantObservationAgeMs: 1000,
     transact: async change => { const copy = structuredClone(credit), result = change(copy); credit = copy; return result; } });
   await ledger.initialize();
-  const review = createAsistenteIndependentReview({ ledger, now, maxOutputTokens: 512, load: async (candidate, signal) => {
-    loads++; assert.equal(signal.aborted, false); assert.equal(candidate.headSha, head); return loaded;
+  const review = createAsistenteIndependentReview({ ledger, now, maxOutputTokens: 512, load: async (candidate, signal, paths) => {
+    loads++; assert.deepEqual(paths, state.finding.sourcePaths); assert.equal(signal.aborted, false); assert.equal(candidate.headSha, head); return loaded;
   }, model: { model, inputNanoUsdPerToken: 400, outputNanoUsdPerToken: 1600, now, maxInputTokens: 12000, pricingValidUntil: "2026-12-20T00:00:00.000Z",
     request: async (url, init) => {
       calls++; assert.equal(credit.reservations.at(-1)?.status, "reserved"); assert.ok(credit.reservations.at(-1)?.key.startsWith("factory-review:"));
@@ -59,7 +59,9 @@ test("invalid source identity, omitted files, excessive content and self-review 
     { ...source, files: [{ ...source.files[0], candidate: "x".repeat(100001) }, source.files[1]] } ];
   for (const invalid of invalidSources) { const f = await fixture(); f.source(invalid); await assert.rejects(f.run(), /SOURCE_MISMATCH/); assert.equal(f.calls(), 0); assert.equal(f.credit().reservations.length, 0); }
   for (const modified of [ { ...state, candidate: { ...state.candidate!, builderId: "asistente-independent-response-reviewer" } },
-    { ...state, candidate: { ...state.candidate!, changedFiles: ["server/kong.ts"] } }, { ...state, repairAttempts: -1 } ]) {
+    { ...state, candidate: { ...state.candidate!, changedFiles: ["server/kong.ts"] } }, { ...state, repairAttempts: -1 },
+    { ...state, finding: { ...state.finding, sourcePaths: undefined } }, { ...state, finding: { ...state.finding, sourcePaths: ["server/agent-search.ts"] } },
+    { ...state, candidate: { ...state.candidate!, changedFiles: ["package.json"] }, finding: { ...state.finding, sourcePaths: ["package.json"] } } ]) {
     const f = await fixture(); await assert.rejects(f.run(modified), /CONTEXT_INVALID/); assert.equal(f.calls(), 0); assert.equal(f.loads(), 0);
   }
 });

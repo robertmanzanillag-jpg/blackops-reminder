@@ -3,7 +3,22 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { apiRequest } from "@/lib/queryClient";
-import type { SoftwareFactoryView } from "@shared/software-factory-view";
+import type { SoftwareFactoryView, FactoryOfficeReviewLink } from "@shared/software-factory-view";
+
+/** Read-only display of the office reviewer's verdict. Never implies merge or order completion. */
+function officeReviewLabel(review: FactoryOfficeReviewLink): string {
+  const findings = review.findingsCount ?? 0;
+  switch (review.status) {
+    case "pass": return "aprobada · 0 hallazgos (sin fusión automática)";
+    case "block": return `bloqueada · ${findings} ${findings === 1 ? "hallazgo" : "hallazgos"}`;
+    case "pending": return "en cola";
+    case "running": return "en curso";
+    case "head_mismatch": return "no vinculada: la versión revisada no coincide con la propuesta";
+    case "failed": return "sin dictamen verificable";
+    case "unavailable": return "no se pudo consultar";
+    default: return "no solicitada";
+  }
+}
 
 const projectFields = [
   ["id", "Identificador de la aplicación"], ["repo", "Repositorio (propietario/nombre)"],
@@ -97,6 +112,7 @@ export function SoftwareFactoryPanel() {
             <p>Vínculo histórico; vigencia de la orden sin verificar.</p>
             <a href={proposal.prUrl} target="_blank" rel="noopener noreferrer" className="underline">Ver propuesta en GitHub</a>
             <p className="break-all text-xs">Revisión de orden: {proposal.orderRevision} · Versión: {proposal.headSha}</p>
+            {proposal.officeReview && <p className="text-xs" data-testid="factory-office-review">Revisión de oficina: {officeReviewLabel(proposal.officeReview)}</p>}
             <time dateTime={proposal.completedAt}>{new Date(proposal.completedAt).toLocaleString("es")}</time>
           </li>)}</ol>}
         </section>

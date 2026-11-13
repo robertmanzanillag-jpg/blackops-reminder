@@ -2,8 +2,13 @@ import type { FactoryActionsClient } from "./software-factory-actions";
 import type { FactoryGitHubPublisherClient } from "./software-factory-github-publisher";
 import { createGitHubFactorySourceExporter } from "./software-factory-github";
 import type { FactoryBuilderDependencies } from "./software-factory-builder";
+import { isFactoryWritePathAllowed, isFactoryWritePathDenied, FACTORY_MAX_FILES_PER_ORDER } from "./software-factory-write-scope";
 export const FACTORY_PILOT_REPOSITORY = "robertmanzanillag-jpg/software-factory-pilot";
 export const FACTORY_ASISTENTE_REPOSITORY = "robertmanzanillag-jpg/blackops-reminder";
+/** Operator-approved Asistente base branches. Draft PRs target exactly the
+ * configured one; the client never writes it (only factory/* refs are created). */
+export const FACTORY_ASISTENTE_BASE_BRANCHES = ["main", "codex/office-integrated-repair-20261106", "claude/integration-20261111"] as const;
+export type FactoryAsistenteBaseBranch = typeof FACTORY_ASISTENTE_BASE_BRANCHES[number];
 const shaPattern = /^[a-f0-9]{40}$/;
 const branchPattern = /^factory\/[a-f0-9]{40}-[a-f0-9]{64}$/;
 function invalid(): never { throw Error("FACTORY_GITHUB_CLIENT_INPUT_INVALID"); }
@@ -33,13 +38,14 @@ export function createFactoryPilotGitHubClient(options: ClientOptions): FactoryP
 }
 /** Explicit trusted installation for Asistente. Never inferred from an order,
  * URL or model response; cannot grant access to other projects. */
-export function createFactoryAsistenteGitHubClient(options: ClientOptions & { baseBranch: "main" | "codex/office-integrated-repair-20261106"; writePaths: readonly string[] }): FactoryPilotGitHubClient {
-    if (!["main", "codex/office-integrated-repair-20261106"].includes(options.baseBranch)) invalid();
-    if (!Array.isArray(options.writePaths) || options.writePaths.length > 64) invalid();
+export function createFactoryAsistenteGitHubClient(options: ClientOptions & { baseBranch: FactoryAsistenteBaseBranch; writePaths: readonly string[] }): FactoryPilotGitHubClient {
+    if (!(FACTORY_ASISTENTE_BASE_BRANCHES as readonly string[]).includes(options.baseBranch)) invalid();
+    // An empty list yields a read-only client: every createTree is rejected.
+    if (!Array.isArray(options.writePaths) || options.writePaths.length > FACTORY_MAX_FILES_PER_ORDER) invalid();
     const paths = new Set<string>();
     for (const path of options.writePaths) {
         safePath(path);
-        if (/kong|software-factory|office-token-budget|credit|auth|permission|payment|migration/i.test(path) || path.startsWith(".github/") || !/^(?:client\/src\/|server\/|shared\/|tests\/)/.test(path)) invalid();
+        if (!isFactoryWritePathAllowed(path) || paths.has(path)) invalid();
         paths.add(path);
     }
     return createScopedClient(FACTORY_ASISTENTE_REPOSITORY, options.baseBranch, options, paths);
@@ -135,7 +141,7 @@ function createScopedClient(repository: string, baseBranch: string, options: Cli
             if (!Array.isArray(input.tree) || !input.tree.length || input.tree.length > 64)
                 invalid();
             const paths = new Set<string>();
-            const tree = input.tree.map(e => { safePath(e.path); sha(e.sha); if ((writePaths && !writePaths.has(e.path)) || e.path.split("/")[0].toLowerCase() === ".github" || paths.has(e.path) || e.type !== "blob" || !["100644", "100755"].includes(e.mode))
+            const tree = input.tree.map(e => { safePath(e.path); sha(e.sha); if ((writePaths && (!writePaths.has(e.path) || !isFactoryWritePathAllowed(e.path))) || (repository === FACTORY_ASISTENTE_REPOSITORY && (!writePaths || isFactoryWritePathDenied(e.path))) || e.path.split("/")[0].toLowerCase() === ".github" || paths.has(e.path) || e.type !== "blob" || !["100644", "100755"].includes(e.mode))
                 invalid(); paths.add(e.path); return { path: e.path, sha: e.sha, type: e.type, mode: e.mode }; });
             const data = await call("/git/trees", "POST", { base_tree: input.base_tree, tree }, 201);
             sha(data.sha);
@@ -192,6 +198,7 @@ export function createFactoryPilotGitHubSourceExporter(client: FactoryPilotGitHu
 }
 export function createFactoryAsistenteGitHubSourceExporter(client: FactoryPilotGitHubClient, options: {sourcePaths:readonly string[];signal:AbortSignal}): NonNullable<FactoryBuilderDependencies["exportSource"]> {
     if(!options||!options.signal||!Array.isArray(options.sourcePaths)||!options.sourcePaths.length)throw Error("FACTORY_ASISTENTE_SOURCE_REQUIRED");
+    if(options.sourcePaths.length>FACTORY_MAX_FILES_PER_ORDER||new Set(options.sourcePaths).size!==options.sourcePaths.length||options.sourcePaths.some(p=>!isFactoryWritePathAllowed(p)))throw Error("FACTORY_ASISTENTE_SOURCE_PATHS_INVALID");
     return createScopedExporter(client, FACTORY_ASISTENTE_REPOSITORY, options);
 }
 function createScopedExporter(client: FactoryPilotGitHubClient, allowedRepository: string, options?: {sourcePaths:readonly string[];signal:AbortSignal}): NonNullable<FactoryBuilderDependencies["exportSource"]> {

@@ -24,3 +24,12 @@ test("health exposes only failure stage and allowlisted codes, then clears diagn
  }
  await createWebSourceExportCycle({read:async()=>[],persist:async()=>{}}).tick();assert.equal(officeWebSourceStatus().failureStage,undefined);assert.equal(officeWebSourceStatus().failureCode,undefined);
 });
+test("export cycle recovers from a cold-start connection timeout through the bounded retry pool",async()=>{
+ const {withConnectionRetry}=await import("../server/office-source-pool");
+ let attempts=0;const pool=withConnectionRetry({query:async()=>{attempts++;if(attempts<3)throw Error("Connection terminated due to connection timeout");return {rows:[]};}},{sleep:async()=>undefined});
+ assert.equal(await createWebSourceExportCycle({read:async()=>{await pool.query("SELECT 1");return [];},persist:async()=>{}}).tick(),true);assert.equal(attempts,3);assert.equal(officeWebSourceStatus().status,"ready");
+ const exhausted=withConnectionRetry({query:async()=>{throw Error("Connection terminated due to connection timeout");}},{sleep:async()=>undefined});
+ assert.equal(await createWebSourceExportCycle({read:async()=>{await exhausted.query("SELECT 1");return [];},persist:async()=>{}}).tick(),false);assert.equal(officeWebSourceStatus().failureCode,"SOURCE_CONNECTION_TIMEOUT");
+ const queued=withConnectionRetry({query:async()=>{throw Error("timeout exceeded when trying to connect");}},{sleep:async()=>undefined});
+ assert.equal(await createWebSourceExportCycle({read:async()=>[],persist:async()=>{await queued.query("SELECT 1");}}).tick(),false);assert.equal(officeWebSourceStatus().failureStage,"persist");assert.equal(officeWebSourceStatus().failureCode,"SOURCE_POOL_TIMEOUT");
+});

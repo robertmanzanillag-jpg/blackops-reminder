@@ -121,9 +121,13 @@ test("malformed core DTO and unexpected agent fields never become connected", as
   invalidState.agents[0].state = "connected";
   const unexpectedAgentField = operations();
   (unexpectedAgentField.agents[0] as Record<string, unknown>).privateToken = TOKEN;
-  for (const payload of [missing, invalidState, unexpectedAgentField, { ...operations(), agents: [] }]) {
+  for (const payload of [missing, unexpectedAgentField, { ...operations(), agents: [] }]) {
     assert.equal((await connector(async () => json(payload)).probeOfficeKong()).status, "blocked");
   }
+  // An unrecognized state is never treated as connected: it degrades to "unknown" for that agent only.
+  const probe = await connector(async () => json(invalidState)).probeOfficeKong();
+  assert.equal(probe.status, "ready");
+  assert.equal(probe.agents?.[0].state, "unknown");
 });
 
 test("new operations root metadata is discarded rather than exposed or treated as evidence", async () => {
@@ -300,4 +304,29 @@ test("category state derives from durable timestamps, leases and actual failures
   cityData.enabled = false;
   const disabled = await c.runOfficeKongReadOnly();
   assert.ok(disabled.evidence.cities[0].categories.every(category => category.state === "disabled"));
+});
+
+test("newer KONG contract: idle, coverage and active city verdicts parse; one unknown state degrades only that agent", async () => {
+  const coverage = { percent: 62, categoriesComplete: 4, categoriesTotal: 7, pendingItems: 12, configurationNotices: ["Google Places: $0 (desactivado)."] };
+  const payload = { ...operations(), agents: [
+    { ...operations().agents[0], state: "healthy", coverage },
+    { ...operations().agents[0], id: "kong_ai_chat", name: "Asistente", kind: "system", state: "idle", operationMode: "on_demand", evidencePending: false, blocker: null, nextAction: "Disponible bajo demanda" },
+    { ...operations().agents[0], id: "future_service", name: "Futuro", kind: "system", state: "hibernating", blocker: null },
+  ] };
+  const cities = citiesFixture();
+  cities.cities[0].status = "active";
+  const client = createOfficeKongConnector({ token: () => TOKEN, now: () => NOW,
+    fetchImpl: async url => url === CITIES_URL ? json(cities) : json(payload) });
+  assert.equal((await client.probeOfficeKong()).status, "ready");
+  const audit = await client.runOfficeKongReadOnly();
+  const byId = new Map(audit.evidence.agents.map(agent => [agent.id, agent]));
+  assert.deepEqual(byId.get("city:miami")?.coverage, coverage);
+  assert.equal(byId.get("kong_ai_chat")?.state, "idle");
+  assert.equal(byId.get("future_service")?.state, "unknown");
+  assert.equal(audit.evidence.cities[0].id, "miami");
+  // A malformed informational coverage block is dropped, not fatal.
+  const bad = { ...payload, agents: [{ ...payload.agents[0], coverage: { percent: "62" } }, ...payload.agents.slice(1)] };
+  const tolerant = await createOfficeKongConnector({ token: () => TOKEN, now: () => NOW,
+    fetchImpl: async url => url === CITIES_URL ? json(cities) : json(bad) }).runOfficeKongReadOnly();
+  assert.equal(tolerant.evidence.agents.find(agent => agent.id === "city:miami")?.coverage, undefined);
 });
