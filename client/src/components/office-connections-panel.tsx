@@ -18,7 +18,7 @@ type InternalHistory = {jobs:Array<{id:string;role:string;status:string;startedA
   academy:Array<{id:string;agentId:string;purpose?:string;policyCurrentlyApplied?:boolean;status:string;startedAt:string;reason?:string;benchmarkId:string;assessment?:{passed:boolean;quality:number;incumbentQuality:number;scope:string}}>};
 async function readOffice<T>(url:string):Promise<T> { const response=await apiRequest("GET",url);return response.json(); }
 const statuses: Record<string, string> = { accepted: "Registrada", pending: "Registrada", running: "En ejecucion", completed: "Completada", blocked: "Bloqueada", failed: "Fallo", unknown: "Resultado sin confirmar" };
-const agentStates: Record<string, string> = { healthy: "Evidencia vigente", running: "En ejecucion", attention: "Necesita atencion", stale: "Evidencia antigua", unknown: "Sin evidencia", disabled: "Deshabilitado" };
+const agentStates: Record<string, string> = { healthy: "Evidencia vigente", running: "En ejecucion", attention: "Necesita atencion", stale: "Evidencia antigua", unknown: "Sin evidencia", disabled: "Deshabilitado", idle: "Disponible bajo demanda" };
 const categoryNames: Record<string, string> = { clubs: "Clubs", vip: "VIP", restaurants: "Restaurantes", events: "Eventos", sports: "Deportes", experiences: "Experiencias", media: "Imagenes" };
 const qualityChecks = { events: "Calendarios y eventos", media: "Flyers e imágenes", vip: "Fuentes de reservas VIP" } as const;
 
@@ -158,7 +158,7 @@ export function OfficeConnectionsPanel() {
           {kongEvidence.cities.map(city => { const score = supervision.cities.find(row => row.id === city.id); return <details key={city.id} className="rounded-xl border border-white/10 p-2 text-xs">
             <summary className="cursor-pointer font-semibold">{city.name} · {city.currency}{score?.points != null ? ` · ${score.points}/100` : ""}</summary>
             <div className="mt-2 space-y-2">{city.categories.map(category => { const grade = score?.categories.find(row => row.category === category.category); return <div key={category.category} className="border-t border-white/10 pt-2">
-              <p>{categoryNames[category.category] || category.category} · {!kongEvidenceFresh ? "Evidencia caducada" : grade?.state === "completed_with_warnings" ? "Completado con avisos" : grade?.state === "failed" ? "Falló la última ejecución" : category.state === "running" && grade?.state !== "running" ? "Ejecución sin confirmar" : (agentStates[category.state] || category.state)}</p>
+              <p>{categoryNames[category.category] || category.category} · {!kongEvidenceFresh ? "Evidencia caducada" : grade?.state === "completed_with_warnings" ? "Activo · cobertura con pendientes" : grade?.state === "failed" ? "Falló la última ejecución" : category.state === "running" && grade?.state !== "running" ? "Ejecución sin confirmar" : (agentStates[category.state] || category.state)}</p>
               {grade?.state === "running" && <p className="mt-1 text-emerald-200">{OFFICE_KONG_CITY_TASKS[category.category]}</p>}
               <p className="mt-1 text-slate-400">Ultima ejecucion: {category.lastRunAt ? new Date(category.lastRunAt).toLocaleString() : "Sin evidencia"}</p>
               <p className="text-slate-400">Proxima: {category.nextRunAt ? new Date(category.nextRunAt).toLocaleString() : "Sin programacion comprobada"}</p>
