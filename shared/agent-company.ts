@@ -170,6 +170,17 @@ export type CompanyOrder = {
   chat?: { fromAgentId: string; handoff: boolean; reason: string; approvalRequired: boolean; requestId?: string };
   /** Who wrote the order: Robert (owner) or an invited partner ("socio"). Absent on older orders. */
   placedBy?: { userId: string; role: "owner" | "partner" };
+  // Set only on system-authored orders from the office self-heal loop (server/office-self-heal.ts).
+  // The text is a fixed template derived from finding codes and record ids; `chain` mirrors the
+  // evidence (finding -> order -> factory job -> PR -> reviews -> re-audit). Never set by routes.
+  selfHeal?: SelfHealOrderMarker;
+};
+
+export type SelfHealOrderMarker = {
+  origin: "office-self-heal"; version: 1; entryId: string; key: string; attempt: 1 | 2;
+  role: string; code: string; recordId: string; prNumber?: number;
+  chain?: { status: string; readyToMerge: boolean; updatedAt: string; finding: Record<string, string>; failedReason?: string; prClosedAt?: string;
+    factory?: Record<string, unknown>; preMerge?: Record<string, unknown>; postMerge?: Record<string, unknown> };
 };
 
 export type OrderEvidence = { ref: string; source: "automation_run"; summary: string; at: string };
