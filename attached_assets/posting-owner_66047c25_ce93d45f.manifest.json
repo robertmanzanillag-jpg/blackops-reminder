@@ -1,0 +1,2539 @@
+{
+  "format": "isolated-posting-owner-cut-v1",
+  "base": "66047c25fee1f8e9700620e906cb07b0ac82dabe",
+  "base_tree_equals_approved_381": true,
+  "final": "ce93d45fbb33ca13ee932bfd5d5374a34b296bbb",
+  "final_tree": "041a66b2f5624b1d49e1abd2243819c551b3e10c",
+  "branch": "ui/posting-owner-registry-isolated",
+  "checkpoint_before_initial_builds": "b07ea666810dea5a0ecd5540c2c4f02d870ee066",
+  "checkpoint_before_final_client_build": "ce93d45fbb33ca13ee932bfd5d5374a34b296bbb",
+  "active_main_before_export": {
+    "head": "66047c25fee1f8e9700620e906cb07b0ac82dabe",
+    "branch": "publish/agents-world-reviewed-381ae4da",
+    "status": "?? attached_assets/Pasted-Prepara-el-siguiente-corte-aislado-y-revisable-sin-acti_1791516536572.txt\n"
+  },
+  "isolated_status": "clean",
+  "source_files": [
+    {
+      "path": ".agents/memory/agents-world-integration-safety.md",
+      "bytes": 2523,
+      "sha256": "fa2f6f5bee7c5d7731ea4e264fadbe500803caae6e37483cb4ccd75a04b44d73",
+      "blob_oid": "a276d3b912a57f11d1d8e7a1dd90a92faa5783bb"
+    },
+    {
+      "path": "client/src/components/company-office/agents-world-office.tsx",
+      "bytes": 9574,
+      "sha256": "b9648ca90d7db478fac1975a054535b8b533e13aa138096abce968d5d7195aee",
+      "blob_oid": "b29281ba0cc166a09a42e2e189deaf6fde9c1aa3"
+    },
+    {
+      "path": "client/src/components/company-office/posting-departments.css",
+      "bytes": 6266,
+      "sha256": "028a30208cfff73018e4a492f63586f3deb49ea3693ecee7333052f0239d0966",
+      "blob_oid": "5b270aa57e62dcaaeeea6af479fd112c775fc5fc"
+    },
+    {
+      "path": "client/src/components/company-office/posting-departments.tsx",
+      "bytes": 12064,
+      "sha256": "be0f19be1c9d0167747af35af140fec096676c8a1b32129ebdbaf5b600637df7",
+      "blob_oid": "09fbabce7f3adf13456e1dd0be0ebf79840e117d"
+    },
+    {
+      "path": "client/src/lib/posting-registry.ts",
+      "bytes": 6253,
+      "sha256": "b3326691c9ce5f4c93e58d6f1803e5954aa24ef9bbd86b95a9bb86974b1aeb1b",
+      "blob_oid": "6daab3d3befbe7a03e577880822b76d3f48e0907"
+    },
+    {
+      "path": "docs/codebase-map.json",
+      "bytes": 603654,
+      "sha256": "b088926cd08355ac59bda73ff33190c57bd6da881467c1491890157bbe5f908b",
+      "blob_oid": "180aaa0b1afb623712fc700f4d6e60540e85590c"
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "bytes": 31132,
+      "sha256": "e162bd632f710d26e6cd30e95db9de12b34d486e97b4f72af2a5d03cbc727b7e",
+      "blob_oid": "412664e62beeaab57152c81ff910cb8f0fc5c8a6"
+    },
+    {
+      "path": "docs/posting-registry-isolated.md",
+      "bytes": 3981,
+      "sha256": "ede49b5fb166972ab88b1dc78b3ee95984a0d613fad591ec6b35f3f7bbd14ccd",
+      "blob_oid": "9daede57adee35ecaaa982238b7f106fcb79d175"
+    },
+    {
+      "path": "server/posting-registry-routes.ts",
+      "bytes": 1544,
+      "sha256": "20e93ed5e7419b1914ba411d71c6bab4d8ddf5f1dceefe4d1d8fab670738aebd",
+      "blob_oid": "35c6db133b5cc39f808189e3246433255e2a2d5f"
+    },
+    {
+      "path": "server/posting-registry.ts",
+      "bytes": 8231,
+      "sha256": "fe61048e84d33a816cf2d7de15faf7b32f2c4d5897d85e594d9c38597f6655d3",
+      "blob_oid": "49acdb59d212e09f8e0f31933622bdc9108ef3a9"
+    },
+    {
+      "path": "server/routes.ts",
+      "bytes": 317035,
+      "sha256": "1122673a2219b272778cc348ad1ac6a9ce6a36738c3e0de405cf91a86b150a8e",
+      "blob_oid": "270604e41ccd56032bef1ed9d7ad98f91e2bbefc"
+    },
+    {
+      "path": "shared/posting-registry.ts",
+      "bytes": 720,
+      "sha256": "5829ede607082f8ab5915920cb23af7d31c6e8e4de7511c6660a38207407c1e2",
+      "blob_oid": "25951fb321112c23de72db20486d40b1e05aa00d"
+    },
+    {
+      "path": "tests/posting-departments-ui.mjs",
+      "bytes": 7776,
+      "sha256": "59b661dc9597fcc229246057a8935214f1649509b234c4310298033b4b2f11a0",
+      "blob_oid": "a056ebd36a6ae9ccfc04803b1db58893ae562c39"
+    },
+    {
+      "path": "tests/posting-registry-client.test.ts",
+      "bytes": 4180,
+      "sha256": "9f6fbd361163159b2abaebb5e4fa4b07cdc9d7847b42c7474def65d1466df468",
+      "blob_oid": "0df56e7f10e05b494c8a8fb992e0eb0bfb3a8b81"
+    },
+    {
+      "path": "tests/posting-registry.test.ts",
+      "bytes": 9939,
+      "sha256": "c7932f48348fac014dea21ba9201fd25213b9fe574c7645ba95d1eee721a032c",
+      "blob_oid": "295118b3453c553c9685376c556ccddbb0c3accd"
+    }
+  ],
+  "preimages": [
+    {
+      "path": ".agents/memory/agents-world-integration-safety.md",
+      "bytes": 1871,
+      "sha256": "af8a91dd79dbe3cb17f2a438b18f47cb445c23aecad1e69e2c8b541f0085c1fd",
+      "blob_oid": "8d107e852cae510e5a833874eea92585a0fefb13"
+    },
+    {
+      "path": "client/src/components/company-office/agents-world-office.tsx",
+      "bytes": 9424,
+      "sha256": "0a5ba5f0d2f4b7be9b30f5f391eb2d655f04e7e0d28ea27ef928f1780437005a",
+      "blob_oid": "b3c9783a9a9840829760f66900189e9f148fd9e3"
+    },
+    {
+      "path": "docs/codebase-map.json",
+      "bytes": 592510,
+      "sha256": "24aa3efebf9389641f996834be670000596644373fa23ccbd38bffb4db4d55b8",
+      "blob_oid": "c19973cd73f4f6b89932df8989c371861456221b"
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "bytes": 30874,
+      "sha256": "3871ea910f24ab5c391b59f7403c34b5f21f70733fa6846c9960ac5f1b1f1de4",
+      "blob_oid": "e1eb70735eadc577aa336fada9946838c3207c39"
+    },
+    {
+      "path": "server/routes.ts",
+      "bytes": 316904,
+      "sha256": "9d2b370861edd49574db2aff337f51409df5241afae9b8ad30d59c2a88f29fc8",
+      "blob_oid": "5b6fd1e9b07cc4a8ee39a8b8a69bbef48edfd04d"
+    }
+  ],
+  "protected_existing_files": [
+    {
+      "path": ".replit",
+      "mode": "100644",
+      "blob_oid": "8fdfbf9078de2d73f213eba075ed5e96856d817a",
+      "bytes": 1155,
+      "sha256": "8fcbc90c8575a996e52b4cb36412c1a455b14661ec240ac403536c0472a3a1e5"
+    },
+    {
+      "path": "config/local-news-delivery-policy.json",
+      "mode": "100644",
+      "blob_oid": "0f030eef66c066f72800cd717f220711b876ad69",
+      "bytes": 187,
+      "sha256": "34849079dc415f522e25899b4183630a4dd203b1cc2a286495d59b576cf0f547"
+    },
+    {
+      "path": "package-lock.json",
+      "mode": "100644",
+      "blob_oid": "dce6151f19e38b4eb13d35262a2d6119bdc2d88f",
+      "bytes": 373796,
+      "sha256": "5fff1ee287ad8f2cd05e6739f319d759548c02c1427f44a71285eae7b0e3d507"
+    },
+    {
+      "path": "package.json",
+      "mode": "100644",
+      "blob_oid": "dc8952bed7a1a7a272dcd60d2c70d03703911e3d",
+      "bytes": 14841,
+      "sha256": "e29ae51c91bf917c2ef88047369ca092b5967e2cf3b0f977da55283f851f2481"
+    },
+    {
+      "path": "postcss.config.js",
+      "mode": "100644",
+      "blob_oid": "2e7af2b7f1a6f391da1631d93968a9d487ba977d",
+      "bytes": 80,
+      "sha256": "190c877db466995bf1482f4a16abd06e04a89ede3119341e2a86ff96e1737b27"
+    },
+    {
+      "path": "script/blackroom-control-server.mjs",
+      "mode": "100644",
+      "blob_oid": "916d122de9aa2a2a8ffc66c25d7f221a7c3c46a2",
+      "bytes": 19934,
+      "sha256": "1f2af90df23a67f33b76ca13737720e0891547793e2ecf267761baadba83fa00"
+    },
+    {
+      "path": "script/blackroom-daily-agent.ts",
+      "mode": "100644",
+      "blob_oid": "91ece79e39d51ea137cf7b59d1dc29ba8c91114a",
+      "bytes": 4988,
+      "sha256": "0ae8e00e146de0cd7f8044f307d838e0811a771d18573beae002c912189933ae"
+    },
+    {
+      "path": "script/blackroom-deterministic-editor.ts",
+      "mode": "100644",
+      "blob_oid": "c2541e9e46b7815f860a2ead57327b9181ebe9f9",
+      "bytes": 14074,
+      "sha256": "d229e6283fdbef84ddfcee8c6bddbfe87903c954febafacac5c5951b7f087ee0"
+    },
+    {
+      "path": "script/blackroom-local-worker.ts",
+      "mode": "100644",
+      "blob_oid": "d40f4884c447c037e4f52e33a6962105ac63c1b4",
+      "bytes": 21075,
+      "sha256": "c1c3860b5531ccc2e096a01bd0a61c808e7b99fb7632dd336494faa833bdd5a8"
+    },
+    {
+      "path": "script/blackroom-metricool-csv-bridge.mjs",
+      "mode": "100644",
+      "blob_oid": "94df18a3ca76fb7005738a92d4cde746aa2978b9",
+      "bytes": 5865,
+      "sha256": "5a19b1edda658af9710aa90159ea219265b00b2991d715f794848da801b4e018"
+    },
+    {
+      "path": "script/blackroom-metricool-exporter.mjs",
+      "mode": "100644",
+      "blob_oid": "f60bd30b5153bd3dc2cb9b12be1c6082f2047d09",
+      "bytes": 10426,
+      "sha256": "07cf9b3137f22666a5926862077a5dfb8ed8b471288134f694ac82e4e5e80a67"
+    },
+    {
+      "path": "script/blackroom-remote-sync.mjs",
+      "mode": "100644",
+      "blob_oid": "7fc83bc1119e7f07e749a8f63198b051957181d1",
+      "bytes": 5314,
+      "sha256": "efd9d4c5b0cd81a78785aa34045ef83278a1c99d4a01596e54c4f0984ec0c96e"
+    },
+    {
+      "path": "script/blackroom-worker-ledger.ts",
+      "mode": "100644",
+      "blob_oid": "0e50169037ee942118b0de6ac1b7fa489ad240cb",
+      "bytes": 8722,
+      "sha256": "afccc83301b000d016f34486fc2e903bf930b4a37ca3d59d274b8e180529dea3"
+    },
+    {
+      "path": "script/build-agents-world-client.mjs",
+      "mode": "100644",
+      "blob_oid": "f6c3760c542b75c6a3d77907fd2583b055ba7352",
+      "bytes": 637,
+      "sha256": "98b3327ad5915162483c3b45ff295df5c34220d57c955a96caee6cc13a8e0ca6"
+    },
+    {
+      "path": "script/build-containment-static.mjs",
+      "mode": "100644",
+      "blob_oid": "652797a09842c698eef854b21dae5a8eca4c3ae7",
+      "bytes": 2109,
+      "sha256": "68cd98115947c02c12d126e7ec94ca168e033b0d50bbb03494d1f8f854e5432f"
+    },
+    {
+      "path": "script/build.ts",
+      "mode": "100644",
+      "blob_oid": "1c600a41dbd3b7696897e83a348f9cde6661bf47",
+      "bytes": 4274,
+      "sha256": "c47851d4631e13d86a80de7b6e630363b5366a3ac2b69bba210df562970c9659"
+    },
+    {
+      "path": "script/cache-local-news-models.mjs",
+      "mode": "100644",
+      "blob_oid": "4269088c16b22ba2fa3f6a28c48a692be71b84d8",
+      "bytes": 641,
+      "sha256": "efded28e0bd8f6ccf074d55e738ba2ddc1617188e330e9381f60400495f904bc"
+    },
+    {
+      "path": "script/ceo-backup-check.ts",
+      "mode": "100644",
+      "blob_oid": "97ecfd21b37ae575c485efbe336093031786fc49",
+      "bytes": 1681,
+      "sha256": "492e76ddfcd975c803f1c610fd3eb8bf157799aa615bdfb0fa03ed1987176d64"
+    },
+    {
+      "path": "script/ceo-backup.ts",
+      "mode": "100644",
+      "blob_oid": "3d7186e72e7c6146416192cce9b189536c70796a",
+      "bytes": 2012,
+      "sha256": "ac140bf5f8aade73ded909f59dd2140039bbb448647a7e977241fb79f0cb64a8"
+    },
+    {
+      "path": "script/ceo-db-check.ts",
+      "mode": "100644",
+      "blob_oid": "4659724539373222ec0870cd4949b7290e255c6d",
+      "bytes": 1355,
+      "sha256": "7aa29ac56c127acaa5259c6e16e32e41008ba239b899f9767ee3612f462c9583"
+    },
+    {
+      "path": "script/ceo-doctor.ts",
+      "mode": "100644",
+      "blob_oid": "14ade4036ada8cc725b7a2f6205bea97ec0508be",
+      "bytes": 528,
+      "sha256": "6fcb508663f0aeb17384fcc3b2a037451db5132badfec954f4a684749bedb179"
+    },
+    {
+      "path": "script/ceo-go-live.ts",
+      "mode": "100644",
+      "blob_oid": "d383feef860bd9cc7d270c91eafb98bc4289d97f",
+      "bytes": 4122,
+      "sha256": "f15d8bba6319348d2ca242761c671ec73494f1252f98a0a2164a91d27f4bc544"
+    },
+    {
+      "path": "script/ceo-handoff.mjs",
+      "mode": "100644",
+      "blob_oid": "314ed0b4c8b5ce198eeacc2a762543c8e5835f4d",
+      "bytes": 114,
+      "sha256": "2f1da7fd1f3137430c18048326260aa4090e13935365596534047cf9a368fc0c"
+    },
+    {
+      "path": "script/ceo-readiness.ts",
+      "mode": "100644",
+      "blob_oid": "665d64f337003b8b8e84463ae01bdaaff541b766",
+      "bytes": 2945,
+      "sha256": "2730b672e8f45e6756fe3ae21bf7f1c72fc94b20b4713dbc1f9eb941a8de2533"
+    },
+    {
+      "path": "script/ceo-restore.ts",
+      "mode": "100644",
+      "blob_oid": "c0c3d97d294730830c365a52af127ca85c4120c4",
+      "bytes": 2821,
+      "sha256": "30e052245414f49cecd6ed6ff0317955f853c5a25a9bbfe3a32f5537fbc995d6"
+    },
+    {
+      "path": "script/ceo-smoke.ts",
+      "mode": "100644",
+      "blob_oid": "61a481b9dfa6bd4696e2860212abc403d5091c2f",
+      "bytes": 6652,
+      "sha256": "b8f1810187346fcac5708278586ad2c9c2418c5516b6be6e32cbfce6617577d6"
+    },
+    {
+      "path": "script/ceo-verify-local.mjs",
+      "mode": "100644",
+      "blob_oid": "d75240a2a906eac21ea99be56b0e4987437b4372",
+      "bytes": 1129,
+      "sha256": "6538a36805e7863104c6f64d78f7befd02d209b7ba423042d890651898bcd9b9"
+    },
+    {
+      "path": "script/clippers-account-permission-readiness.mjs",
+      "mode": "100644",
+      "blob_oid": "b66c4247eeedf79bec2e9c829466e4c8fab4735c",
+      "bytes": 30317,
+      "sha256": "54ab7092a20d3fe8cd8eb730a94398fad6c500ab7f718ce8573320eb7f08e41d"
+    },
+    {
+      "path": "script/clippers-cleanup-published-vyro-media.mjs",
+      "mode": "100644",
+      "blob_oid": "e4ba03f0c40ce2294379c6ba325469b26b8edb00",
+      "bytes": 8208,
+      "sha256": "3e2d7b6eb1bca4c75d954581b61654d876565b341540e5a453b94f59b8d6eacc"
+    },
+    {
+      "path": "script/clippers-content-learning-ceo.mjs",
+      "mode": "100644",
+      "blob_oid": "3c33f01ea592b0f89986aa209d685b3639b6a4b9",
+      "bytes": 17710,
+      "sha256": "f1da6708f18f2c888b545cf55fdd989e7faed608109abcf3109022683b244289"
+    },
+    {
+      "path": "script/clippers-content-local-worker.mjs",
+      "mode": "100644",
+      "blob_oid": "1960780d91b19d38e23cf8472252aeb776c00f3e",
+      "bytes": 24871,
+      "sha256": "6387ece85504b40ee0e6abe2012e5018829b0c49e2fe6be0f4ea204e22495479"
+    },
+    {
+      "path": "script/clippers-daily-watchdog.mjs",
+      "mode": "100644",
+      "blob_oid": "76cd833f249842f8c64a99aaba8cf054adc36651",
+      "bytes": 18865,
+      "sha256": "2b0f6ccdd108522207f3367d4a244106dea55fc74867f64e8c8d77cbbbc2d15a"
+    },
+    {
+      "path": "script/clippers-external-closeout-pack.mjs",
+      "mode": "100644",
+      "blob_oid": "b6d8a7ef8e9c196ac16a203501d0ed3a6e9cd741",
+      "bytes": 89749,
+      "sha256": "30f584c03fa8d0385a23efb2a0a9387563e08076afb707766e2c2117448ed834"
+    },
+    {
+      "path": "script/clippers-free-local-worker.mjs",
+      "mode": "100644",
+      "blob_oid": "5ad2a5b74cc53bb9b7cca743c478a81179c3e102",
+      "bytes": 12416,
+      "sha256": "5dcf819d75b4b4f00e5fa87d33538749128fdf96788f5c6ee9be769917b177ae"
+    },
+    {
+      "path": "script/clippers-generate-owned-gap-sources.mjs",
+      "mode": "100644",
+      "blob_oid": "072dbd23e303fb7d90f8edf531ffcb927dfe9a79",
+      "bytes": 9317,
+      "sha256": "df317ebba2165d7344028c02711e54f4fedc434f8487db2df35c83af97b4587d"
+    },
+    {
+      "path": "script/clippers-generate-owned-meme-sources.ts",
+      "mode": "100644",
+      "blob_oid": "41df92f350d6770019aa9152755353630e2c86be",
+      "bytes": 7146,
+      "sha256": "218001d8d6762e41508bf3d55fd6babdf1027579dd28bd5ff18fd6dfa8eeed48"
+    },
+    {
+      "path": "script/clippers-generate-owned-sports-streamer-sources.ts",
+      "mode": "100644",
+      "blob_oid": "1e275e025b0146e3cf69bb69eb41a75882e281d4",
+      "bytes": 9946,
+      "sha256": "fa50b400626c902d872044afbb8cf70f009fd3a1be9c8a78dc7713f60b86d951"
+    },
+    {
+      "path": "script/clippers-generate-owned-weekly-backlog-sources.ts",
+      "mode": "100644",
+      "blob_oid": "b68d2bd5092bf4e86d4dc7f235ad91989c9de911",
+      "bytes": 13799,
+      "sha256": "21276e780410cd9d4989469aafb62415a1c42c8135d138595d54dd87185f1a49"
+    },
+    {
+      "path": "script/clippers-import-external-closeout-evidence.ts",
+      "mode": "100644",
+      "blob_oid": "6ca12611022cab4786895ab54e5a0a6bb0d9f2f3",
+      "bytes": 35539,
+      "sha256": "722a09838711145fe3770323e805a2773237416a55717dcaead683287ab91b29"
+    },
+    {
+      "path": "script/clippers-local-subtitles.mjs",
+      "mode": "100644",
+      "blob_oid": "cde060393ab99bc7a87bcbb2842d8ec7094adc79",
+      "bytes": 9574,
+      "sha256": "3bde95060440357e6f133de6fb9c3b38beddf3ea691df93aaee896a42dafb751"
+    },
+    {
+      "path": "script/clippers-marketplace-intake.mjs",
+      "mode": "100644",
+      "blob_oid": "b33dfe9f4b880c40098be017ea943449046779b8",
+      "bytes": 14862,
+      "sha256": "2ae66d0aaeaf78e54eb1567d9a6dde168917af8d0aa005401246ee1f582f0ff8"
+    },
+    {
+      "path": "script/clippers-marketplace-refresh.mjs",
+      "mode": "100644",
+      "blob_oid": "79dae81405ce11eb71fcade7b8c9bec614a6fe4a",
+      "bytes": 12235,
+      "sha256": "718a1010a9162804ac0a2893ed56a33ef230af6772da188e98caadb46f1fa099"
+    },
+    {
+      "path": "script/clippers-metricool-autopilot.mjs",
+      "mode": "100644",
+      "blob_oid": "c5617e434c28889da5ba1015f78109cf4e2cb4d7",
+      "bytes": 24740,
+      "sha256": "ec0191009f1d948fda6aaa187f52c4e8ac96851370786d1cc5db7787faef034f"
+    },
+    {
+      "path": "script/clippers-motivation-shorts.mjs",
+      "mode": "100644",
+      "blob_oid": "4fee965166fb14faf132918d888c912a94c8dcf4",
+      "bytes": 33905,
+      "sha256": "3492a7049a1a38801bba406782fc29cb4d614da4b4339e143d533be0773e3e6b"
+    },
+    {
+      "path": "script/clippers-operational-readiness.mjs",
+      "mode": "100644",
+      "blob_oid": "23c6413e31a4338d2e46d0a3f1c01b66c8dc5ea9",
+      "bytes": 15659,
+      "sha256": "a2538d818a7f85364a85bbb019b307897e10591966ccd6955c544e1c0ba15670"
+    },
+    {
+      "path": "script/clippers-prepare-vyro-campaign-drafts.mjs",
+      "mode": "100644",
+      "blob_oid": "06c388905d9eca862fef92797958030dac7facd6",
+      "bytes": 5490,
+      "sha256": "0314e7a1d4f29f7b14c226c852377095e3af49c2bde5365aeb11a0663b66d88b"
+    },
+    {
+      "path": "script/clippers-reconcile-publications.mjs",
+      "mode": "100644",
+      "blob_oid": "380bd2dbbc8af672c59ea1829ce9b8242dfcc48d",
+      "bytes": 14606,
+      "sha256": "363b57589d5d62e0c7489c6b2f0075900f4e27fcca612fedc426a2817c908376"
+    },
+    {
+      "path": "script/clippers-record-owned-meme-rights.ts",
+      "mode": "100644",
+      "blob_oid": "5170f355b05ce4d1959d733ee791878c525cd583",
+      "bytes": 1776,
+      "sha256": "cd749170adf5449c55602c81a618fe26a2ad26add5a8d70c1801e3375df9213c"
+    },
+    {
+      "path": "script/clippers-record-owned-source-rights.mjs",
+      "mode": "100644",
+      "blob_oid": "a9ea23fb92fb3199c604a1eb0562f2b8a19e4f60",
+      "bytes": 19673,
+      "sha256": "48bd2a19a5d107b46edf2720517f87e7b4305f2e8913ffe307f470ef1cf6e552"
+    },
+    {
+      "path": "script/clippers-render-campaign-drafts.mjs",
+      "mode": "100644",
+      "blob_oid": "bc7c28a53aeec77c2aaae5011251d64f4b2bebc8",
+      "bytes": 22444,
+      "sha256": "fd8491a1057cb9361422a612f11cb425628f9bb2eafb8887526cb14cbb0cace9"
+    },
+    {
+      "path": "script/clippers-selected-env.mjs",
+      "mode": "100644",
+      "blob_oid": "68649e2b6818ffdf6253d7400cf65b85323fd9f5",
+      "bytes": 2407,
+      "sha256": "24b3e88386e554a607c31c3ecf38219cd5651688a1275d603cdb7f7fe570c9a2"
+    },
+    {
+      "path": "script/clippers-sleep-video-generator.mjs",
+      "mode": "100644",
+      "blob_oid": "75b241e4dbabda49a96b52acfe5c9a2be69fd362",
+      "bytes": 21872,
+      "sha256": "c5353fcb25ff630a7c1b2cef44b5ece157ee79ea67133e747d940db3249486f9"
+    },
+    {
+      "path": "script/clippers-streamer-growth-ceo.mjs",
+      "mode": "100644",
+      "blob_oid": "8d8b6a317dce7aa883d6cd340032b0f1f98088d8",
+      "bytes": 42225,
+      "sha256": "7d0ab4a62e3b1f924042ea1584d577ff502d3e265adc6e3d12afdfe3bae68895"
+    },
+    {
+      "path": "script/clippers-sync-metricool-source-readiness.mjs",
+      "mode": "100644",
+      "blob_oid": "c821cbf80cc13f8c91991a2cc58c275f1567caf3",
+      "bytes": 8365,
+      "sha256": "30aa05d96aa232c1ec2d8e4b21ccc97c9929905594dfd083361fab17f110983b"
+    },
+    {
+      "path": "script/clippers-tiktok-preflight.ts",
+      "mode": "100644",
+      "blob_oid": "d7a2e9640b4a58e978645654d0dd160052903d58",
+      "bytes": 3210,
+      "sha256": "78aca23e2eefbe2291536b4d56ef2abf6b7199ae2ac62ad3e8631bb962463a38"
+    },
+    {
+      "path": "script/clippers-upload-metricool-media.ts",
+      "mode": "100644",
+      "blob_oid": "73258c68efdb73706f4b71bc8eba49cf3e1b5936",
+      "bytes": 15434,
+      "sha256": "332a1ddb671da7d2f885a665f66220dc595236c155fed9aa3644417b8c3b2530"
+    },
+    {
+      "path": "script/clippers-youtube-delivery-worker.mjs",
+      "mode": "100755",
+      "blob_oid": "eef4cbe30f3854fc1dc26fa6a29b834950313ae6",
+      "bytes": 7887,
+      "sha256": "b281ec53766da0458e624bbde13a4365feb9e87542b5bfb8fdb1e0e1667ee88a"
+    },
+    {
+      "path": "script/clippers-youtube-oauth-bootstrap.mjs",
+      "mode": "100644",
+      "blob_oid": "fb5a397c5ff34ecc11921f403d66814f435166b4",
+      "bytes": 14027,
+      "sha256": "df47c193b434eb8361539cf104ef06f9505621d78e9fee95d35cc14b3ca1aa2d"
+    },
+    {
+      "path": "script/clippers-youtube-publish-worker.mjs",
+      "mode": "100644",
+      "blob_oid": "deff3186a8ca4ddb60b99d22acb7e3814cd03c72",
+      "bytes": 23901,
+      "sha256": "b750328c3f47c4d03ba4319f6ad9c4013f1d18b134ff18bd3068fd68a4767d0f"
+    },
+    {
+      "path": "script/clippers-youtube-upload-packager.mjs",
+      "mode": "100644",
+      "blob_oid": "59b80c5470b696afc909cbce63dfedf167857a98",
+      "bytes": 31400,
+      "sha256": "fa41edc44c32927b8e52d78597492e6e6fc3aa2c23d5c27d9efc1ba4d471dbd9"
+    },
+    {
+      "path": "script/clippers-youtube-uploader.mjs",
+      "mode": "100644",
+      "blob_oid": "674cc4c12154c3355dc34b6353292a0e54b85707",
+      "bytes": 23341,
+      "sha256": "6beb2ac363bb063caba4756746bf994b275b05840acfc187ab182c450bdaaf57"
+    },
+    {
+      "path": "script/codebase-map.ts",
+      "mode": "100644",
+      "blob_oid": "2a4f22d85b4e68dbe741af961083850febe1eaab",
+      "bytes": 11107,
+      "sha256": "2dc235f8ad1fd40a4711d7c457ea37ba89c3f036bfc65340c8f9f39cd589754a"
+    },
+    {
+      "path": "script/compact-local-news-state.ts",
+      "mode": "100644",
+      "blob_oid": "214c737442135debb84d070113dba528f9891017",
+      "bytes": 2032,
+      "sha256": "a1d6930251562509c2dc4ce01dea86db3f56047d1833319dc1f0ad3c02d0bd4f"
+    },
+    {
+      "path": "script/configure-telegram.ts",
+      "mode": "100644",
+      "blob_oid": "26d40e0dee7248176a36003b895e9e8c29a6c501",
+      "bytes": 1826,
+      "sha256": "d5f54475e4b95db0136c97f556ae74a89c1b2c0a0261be5450ace07f05985be0"
+    },
+    {
+      "path": "script/create-ceo-go-live-task.ts",
+      "mode": "100644",
+      "blob_oid": "aafca1277702445aee3ab16b5a18ab946c0206b0",
+      "bytes": 4059,
+      "sha256": "f3e064b066c7b28ffedca24e5ec7ccda767bddb0ed3cd530da0e64250015fcd4"
+    },
+    {
+      "path": "script/create-local-user.ts",
+      "mode": "100644",
+      "blob_oid": "ea3281a67a61d98f534a19d2527ea6b0b5d216b0",
+      "bytes": 1297,
+      "sha256": "f959c3d5d0cd2dc237eb92eb8ee77e7e38745e2d697e8d96c3aa496bafe5d331"
+    },
+    {
+      "path": "script/ensure-radio-tiktok-drive-folder.ts",
+      "mode": "100644",
+      "blob_oid": "a713732b85f81dd92d93b4a53d3c22252b7b7732",
+      "bytes": 721,
+      "sha256": "2ed188a3acfb91e82a00cce328694c7e79d7b7ad0718e56066f1c0bdc75572f5"
+    },
+    {
+      "path": "script/import-developer-health-inventory.ts",
+      "mode": "100644",
+      "blob_oid": "0d15fcd8aac653adc825c1cdb25dbdecbccd151b",
+      "bytes": 3043,
+      "sha256": "13106077bc12ec646031567a6e3fa2ac349f1817f8a9de82a74606822155b259"
+    },
+    {
+      "path": "script/install-blackroom-local-worker-launch-agent.sh",
+      "mode": "100755",
+      "blob_oid": "d4d50d75dc2a252b2aeec038e23971cec0491fca",
+      "bytes": 2163,
+      "sha256": "385c925c5eff7607e275cace7b617a524c505b20ffd22fa782c87914168d4399"
+    },
+    {
+      "path": "script/install-clippers-free-local-worker-launch-agent.sh",
+      "mode": "100755",
+      "blob_oid": "74412d223e0f65f8084c3ebb54bcd2c9dce7b568",
+      "bytes": 15312,
+      "sha256": "82faff99f9446a023f6a32926c7f607b575dd149f1c99b5ae005d25fef91c774"
+    },
+    {
+      "path": "script/metricool-plan.ts",
+      "mode": "100644",
+      "blob_oid": "d2e87440402b5d15da3e1c9eb21ee95cf93273a5",
+      "bytes": 907,
+      "sha256": "5758afc5153e33fba72cbda7aea45fb026c0f03a0b639b703be7d66f4a12da77"
+    },
+    {
+      "path": "script/migrate-user.ts",
+      "mode": "100644",
+      "blob_oid": "ad8dd495224603aa15073ad2c077544d9eef2106",
+      "bytes": 3992,
+      "sha256": "1f3ab90de3ea1a0eee207262fb81751e1d6a94d78e1fb0c2b7ecbe3e068b4683"
+    },
+    {
+      "path": "script/native-typescript-loader.mjs",
+      "mode": "100644",
+      "blob_oid": "f753118f0495ac8befb2374a7fbba5e23427b62a",
+      "bytes": 454,
+      "sha256": "e5655749b966c63260653cf0c1a16aa808500b2794d5b95a85b1abf6dab6a670"
+    },
+    {
+      "path": "script/radio-local-worker.ts",
+      "mode": "100644",
+      "blob_oid": "e95c945d4f42926112c9d1c00ac37d6a38dccbd4",
+      "bytes": 5552,
+      "sha256": "03de4e43fff1c68832f63926305ede48dfd14bc0f3deeb71258d95662741210a"
+    },
+    {
+      "path": "script/radio-local-youtube-worker.ts",
+      "mode": "100644",
+      "blob_oid": "88c74ce9c75d560b53680fa981084265199f9608",
+      "bytes": 5685,
+      "sha256": "d5798b2f1534f6850739ccdce6969abbe7d765e242432f277b12ab6a85630bd0"
+    },
+    {
+      "path": "script/radio-video-edits.ts",
+      "mode": "100644",
+      "blob_oid": "c09d1b386ac21a9def2fb835de14f789934e5104",
+      "bytes": 2477,
+      "sha256": "4addf43ebc6baee8f05cac5cf5562b0f44c227be1c49631821290596b5401e0d"
+    },
+    {
+      "path": "script/register-native-typescript.mjs",
+      "mode": "100644",
+      "blob_oid": "934d51d80185e84492b844b4423a104fa6fe8b3b",
+      "bytes": 102,
+      "sha256": "5b1b3b1c7ad1738b1aa27c81855b79091dc4651b3d2994ff3a800b031346fb55"
+    },
+    {
+      "path": "script/replit-fast-start.mjs",
+      "mode": "100644",
+      "blob_oid": "3b1dbb8f0793e2128f16043c1d16253d34e880a5",
+      "bytes": 7283,
+      "sha256": "b55ba01567dccad89f1da4498028302ea197a687a6d5087c0fd957ccbbe1a387"
+    },
+    {
+      "path": "script/revenue-engine-money-readiness.ts",
+      "mode": "100644",
+      "blob_oid": "785a911ef0ac55f116aba18ca722d3c652b41802",
+      "bytes": 1252,
+      "sha256": "e256aa6a12283784ae1334a5f81c00f5d6d0083c426ae26c50e62fa4c1dca635"
+    },
+    {
+      "path": "script/run-clippers-youtube-delivery-worker.sh",
+      "mode": "100755",
+      "blob_oid": "60ccb7b0b47bf97bb45d869bd1c558c8c659de3d",
+      "bytes": 1865,
+      "sha256": "e18bd6f326efc05a313565a070736b8694674c0453e594465921f74ce7652355"
+    },
+    {
+      "path": "script/send-ceo-brief.ts",
+      "mode": "100644",
+      "blob_oid": "54e44e0ec9074fcdc39a57373a1de566a458c695",
+      "bytes": 772,
+      "sha256": "c22c7fc89ce1abfaf49f0ac4185df6a600e4dddb75fc880687fa2f46befb72fa"
+    },
+    {
+      "path": "script/telegram-webhook.ts",
+      "mode": "100644",
+      "blob_oid": "f71d89710ddcc2df4514a3c4fb021642c98d11f2",
+      "bytes": 1434,
+      "sha256": "561901e5a1afdabd94f9fc6a27ac4f6d806d1fce68062e0b41038d1249d2d733"
+    },
+    {
+      "path": "script/test-legacy-containment.mjs",
+      "mode": "100644",
+      "blob_oid": "b62650a7512df116bab84102dfb9558ccf392082",
+      "bytes": 6441,
+      "sha256": "87213ca27dd51b4b73d90804911322b99189082e3eabc04be98127230a184cd1"
+    },
+    {
+      "path": "script/upload-radio-edits-to-drive.ts",
+      "mode": "100644",
+      "blob_oid": "95240ac537f501a299e8f835266fb337211cfc1c",
+      "bytes": 3199,
+      "sha256": "85cada26ebce800a2649423cf27565023f13ce54e1ce7fe42894fb50301ddf23"
+    },
+    {
+      "path": "server/._dropshipping-ceo.ts",
+      "mode": "100644",
+      "blob_oid": "907307187ca2e55497fbbdc7a83bc8c87c4920d1",
+      "bytes": 163,
+      "sha256": "cd987e40e76980ee36188ea4edc18b65d7aaf07239c25339264464e502c5a4b3"
+    },
+    {
+      "path": "server/._local-auth.ts",
+      "mode": "100644",
+      "blob_oid": "907307187ca2e55497fbbdc7a83bc8c87c4920d1",
+      "bytes": 163,
+      "sha256": "cd987e40e76980ee36188ea4edc18b65d7aaf07239c25339264464e502c5a4b3"
+    },
+    {
+      "path": "server/._radio-video-edit-agent.ts",
+      "mode": "100644",
+      "blob_oid": "907307187ca2e55497fbbdc7a83bc8c87c4920d1",
+      "bytes": 163,
+      "sha256": "cd987e40e76980ee36188ea4edc18b65d7aaf07239c25339264464e502c5a4b3"
+    },
+    {
+      "path": "server/._radio-youtube-command.ts",
+      "mode": "100644",
+      "blob_oid": "907307187ca2e55497fbbdc7a83bc8c87c4920d1",
+      "bytes": 163,
+      "sha256": "cd987e40e76980ee36188ea4edc18b65d7aaf07239c25339264464e502c5a4b3"
+    },
+    {
+      "path": "server/._rate-limit.ts",
+      "mode": "100644",
+      "blob_oid": "907307187ca2e55497fbbdc7a83bc8c87c4920d1",
+      "bytes": 163,
+      "sha256": "cd987e40e76980ee36188ea4edc18b65d7aaf07239c25339264464e502c5a4b3"
+    },
+    {
+      "path": "server/._routes.ts",
+      "mode": "100644",
+      "blob_oid": "907307187ca2e55497fbbdc7a83bc8c87c4920d1",
+      "bytes": 163,
+      "sha256": "cd987e40e76980ee36188ea4edc18b65d7aaf07239c25339264464e502c5a4b3"
+    },
+    {
+      "path": "server/._user-context.ts",
+      "mode": "100644",
+      "blob_oid": "907307187ca2e55497fbbdc7a83bc8c87c4920d1",
+      "bytes": 163,
+      "sha256": "cd987e40e76980ee36188ea4edc18b65d7aaf07239c25339264464e502c5a4b3"
+    },
+    {
+      "path": "server/._youtube-downloader.ts",
+      "mode": "100644",
+      "blob_oid": "907307187ca2e55497fbbdc7a83bc8c87c4920d1",
+      "bytes": 163,
+      "sha256": "cd987e40e76980ee36188ea4edc18b65d7aaf07239c25339264464e502c5a4b3"
+    },
+    {
+      "path": "server/agent-actions.ts",
+      "mode": "100644",
+      "blob_oid": "c80e1ffec0298f6a986bd40f8231637888c3dfb8",
+      "bytes": 14724,
+      "sha256": "f60b0c4d7d8f14bc72e2d3566f441a66d774dae23b66fb8748f818a4e1139634"
+    },
+    {
+      "path": "server/ai-cost-notifications.ts",
+      "mode": "100644",
+      "blob_oid": "eaeb2c1ebc67026e6c3d233a11e3cde85e3c8199",
+      "bytes": 4819,
+      "sha256": "4c79308e36287e74a9034a4c96b9314ff3fdcaa50f808b9c7953a0d1e7d37066"
+    },
+    {
+      "path": "server/ai-cost-policy.ts",
+      "mode": "100644",
+      "blob_oid": "b2df68bd9d936c08fd8d45e4eb4cc7df57f4d5ff",
+      "bytes": 8130,
+      "sha256": "e8b182de86af22a39103e04eaf5296ac5ff8ac7f0b19ff4a3cc0aad95660ca13"
+    },
+    {
+      "path": "server/ai-router.ts",
+      "mode": "100644",
+      "blob_oid": "6da099b72b9f77aa2a7cfb84c6bf5b2b13b32f5a",
+      "bytes": 5531,
+      "sha256": "f3bef7ec73486b7ca7a31d35cee55f1748a13b241883972a8cda2c85b8bbb462"
+    },
+    {
+      "path": "server/app-qa-agent.ts",
+      "mode": "100644",
+      "blob_oid": "2d7c192b4cc8abef70a20b0a1af356a1f20a1128",
+      "bytes": 73375,
+      "sha256": "6e775a4a0833344a80fe4984b76bdc0f3fadecf7ba74f5400eb405906189dd76"
+    },
+    {
+      "path": "server/assistant.ts",
+      "mode": "100644",
+      "blob_oid": "772988130e3b4cce130fde5cca643848104d54d2",
+      "bytes": 133298,
+      "sha256": "79b86bd0eb7755b70f2e532dcad58466d573535e12841858b3b68dc77ea03adb"
+    },
+    {
+      "path": "server/automation-definition-reads.ts",
+      "mode": "100644",
+      "blob_oid": "bbf2ce7499cd7f5cd229f50f3b1d7f35c882bf40",
+      "bytes": 682,
+      "sha256": "f87c5709cc3d03cda22365b3cde1ef33acc2bd48207a0ab1f30baa00ba1fe55e"
+    },
+    {
+      "path": "server/automation-registry.ts",
+      "mode": "100644",
+      "blob_oid": "4d6b19e13245916ab3dcca2aa5f866f4475d397b",
+      "bytes": 17781,
+      "sha256": "edf9fabaf078fef3f66e13c6973d870065437731d1f20b34368e04593ff3d5eb"
+    },
+    {
+      "path": "server/background-scheduler-policy.ts",
+      "mode": "100644",
+      "blob_oid": "3979cfdccbbbfe1d1e907ba94693c58589e94b6a",
+      "bytes": 473,
+      "sha256": "1df797d559c18670b0b21978735e16363fc8248f20cfc1ebb31fe638120cf8f0"
+    },
+    {
+      "path": "server/blackroom-chat-service.ts",
+      "mode": "100644",
+      "blob_oid": "675e11ad8775e428e37fd4259f5cc7ab052dfcac",
+      "bytes": 2191,
+      "sha256": "f31252c79e978bb72a344d59dc91a251f7f91af9198ed0ecf868a0bf40205566"
+    },
+    {
+      "path": "server/blackroom-chat.ts",
+      "mode": "100644",
+      "blob_oid": "2d2f97a4c55262692101c0b252ed794526195e01",
+      "bytes": 8724,
+      "sha256": "08da18cdb2bed0ce5f68c9d15660700c9eba7b511a9fe7fae3e7a68afb93e797"
+    },
+    {
+      "path": "server/blackroom-content-agent.ts",
+      "mode": "100644",
+      "blob_oid": "90a9dcaea0a44f7f343d3349fa50dcb0e490cbc8",
+      "bytes": 19952,
+      "sha256": "55974bd970091eb34ff8a77ba57e70e9fde32f49700f3b1343eae097a264febe"
+    },
+    {
+      "path": "server/blackroom-control-routes.ts",
+      "mode": "100644",
+      "blob_oid": "ba433cdea8c74a563e7fc3c360b742e3e3d036d3",
+      "bytes": 54722,
+      "sha256": "5f9b0b4bf5c39780a20609e36e621a7a1f6d835ef2c3cd1e2367ea539b97e296"
+    },
+    {
+      "path": "server/blackroom-daily-queue.ts",
+      "mode": "100644",
+      "blob_oid": "59db5e46e71ddae76057427ca2633aa80e703ff2",
+      "bytes": 31060,
+      "sha256": "444a9162cf09b8b8fd679f368d14d77f1adad63235b8e7fd3bd1519a11510bc7"
+    },
+    {
+      "path": "server/blackroom-deterministic-editor.ts",
+      "mode": "100644",
+      "blob_oid": "e48913c263eb0fea994ba801176b22ca2c4ff575",
+      "bytes": 26861,
+      "sha256": "cb79e992732904c3255e09830e646cb96b2124a5e2f2faf378ea220db6090f27"
+    },
+    {
+      "path": "server/blackroom-growth-ceo.ts",
+      "mode": "100644",
+      "blob_oid": "d7036c74d9c818fd15e2fdffa4dd9f9f9aa762b5",
+      "bytes": 74224,
+      "sha256": "9c9e47d8ccefa15233874dd51cade4bcf866518e22e9b37553eacab8d56c057c"
+    },
+    {
+      "path": "server/blackroom-learning-observations.ts",
+      "mode": "100644",
+      "blob_oid": "38a813f2ddfc4dc7a4213e5a59035a64d4c5c3bc",
+      "bytes": 4398,
+      "sha256": "79e06b7c4819b94157b5178ede9c763c30394dd12322bffb9d5e17692458c5c0"
+    },
+    {
+      "path": "server/blackroom-learning-panel.ts",
+      "mode": "100644",
+      "blob_oid": "809bba7180e190814126157720329512f9995c03",
+      "bytes": 2971,
+      "sha256": "8e791aacb25592505e4e61acc09f9b085b61d817ef8fe7f52017947e1abe3a4b"
+    },
+    {
+      "path": "server/blackroom-links.ts",
+      "mode": "100644",
+      "blob_oid": "6a1317123ce200b2d0ef01f3637180ae1f47bb29",
+      "bytes": 16262,
+      "sha256": "8150593c64cab4604af2801e42c8af716e7541ee7660a9208bc179e27d4fee91"
+    },
+    {
+      "path": "server/blackroom-local-worker.ts",
+      "mode": "100644",
+      "blob_oid": "6a9582a48f4cdbd3405db2125db2e5624e6e5f4d",
+      "bytes": 21167,
+      "sha256": "4aec830c731b1a878ebdf824d77d26d62412267e096db8b20e18c1c307e24081"
+    },
+    {
+      "path": "server/blackroom-metricool-bridge.ts",
+      "mode": "100644",
+      "blob_oid": "f32bb46f062a69d4c1d50fbd9c194223347f5926",
+      "bytes": 30447,
+      "sha256": "e5c322817d494b5478f7361743bac6c0935e48be5f42ff87c0a4a2e009c73f3c"
+    },
+    {
+      "path": "server/blackroom-publication-guard.ts",
+      "mode": "100644",
+      "blob_oid": "c5b9bfceb93fec985432c7c54f8ad4e762e09d14",
+      "bytes": 1952,
+      "sha256": "8e602c612b89fdec23f949ecd644a0bfc3c5947fca620e941e61658ec00cd793"
+    },
+    {
+      "path": "server/blackroom-remote-control.ts",
+      "mode": "100644",
+      "blob_oid": "b369b8850611a668408c85d08faa183dcfca86ac",
+      "bytes": 21045,
+      "sha256": "a5b8b6a4684af3d062ad1f84e825053c8294277e1b6ed3234528ce4ff60f8c01"
+    },
+    {
+      "path": "server/blackroom-verified-learning.ts",
+      "mode": "100644",
+      "blob_oid": "81bdb2e2b0e706ae43d890e370e4897901a151af",
+      "bytes": 10340,
+      "sha256": "ef4c30754ccf027768cf4513267e90d4582e71457a25f55125c1473539c6d3eb"
+    },
+    {
+      "path": "server/calendar-sync.ts",
+      "mode": "100644",
+      "blob_oid": "5cbe45dbb3ed9245a8bcc5c046774382a0ad7e13",
+      "bytes": 2230,
+      "sha256": "e4dcb712349a0a0582a46176009e517dba7f6bfa5dc6b6d315a676b8704ebb19"
+    },
+    {
+      "path": "server/canva-oauth.ts",
+      "mode": "100644",
+      "blob_oid": "de1752e32fdaf1c9a36817d7bbcfc44f2689b97e",
+      "bytes": 5847,
+      "sha256": "4fb6212adf3f7781ae036a2a6614a9484226f7c377d497702a677f149590853c"
+    },
+    {
+      "path": "server/ceo-backup-check-cli.ts",
+      "mode": "100644",
+      "blob_oid": "cf22fc25298e3a617534cb12f4de9cc71f1ff660",
+      "bytes": 6675,
+      "sha256": "c26bde4003e6e67c9bda427b0a539c0b36828d890817feed37f72a399a94ce96"
+    },
+    {
+      "path": "server/ceo-backup-run-cli.ts",
+      "mode": "100644",
+      "blob_oid": "832bc7da704fe87f01db375bc5ea42fd60b11961",
+      "bytes": 14005,
+      "sha256": "54f264805cae17565b1e5c6fd1e0918df4f3f93440a9d766776ab71f45b58444"
+    },
+    {
+      "path": "server/ceo-brief-cli.ts",
+      "mode": "100644",
+      "blob_oid": "517ab3ab0561cdcad6b8cbfae02beaba29fbe177",
+      "bytes": 889,
+      "sha256": "c7f451084f60f0b57458965e38fba0afd13fe6cce400a11c4d5af64a3fe1760f"
+    },
+    {
+      "path": "server/ceo-brief-format.ts",
+      "mode": "100644",
+      "blob_oid": "d191c5d911f7e4b0658b985ef394d6ded9b3f9ec",
+      "bytes": 15911,
+      "sha256": "a686bbdd1353ecef89eb83b8a868562f690ef11620f6a86535f8de90b9def1ca"
+    },
+    {
+      "path": "server/ceo-briefing.ts",
+      "mode": "100644",
+      "blob_oid": "582e47d63b0a788973d367ce45453f98a749b6e0",
+      "bytes": 4108,
+      "sha256": "bfe03770d841e1d796fbddcadd2d9877edd7b723b81d03a72d4208834f484b85"
+    },
+    {
+      "path": "server/ceo-conversation-history.ts",
+      "mode": "100644",
+      "blob_oid": "43b8f19e40d58307fa74904be4ef48c5eded08f8",
+      "bytes": 2289,
+      "sha256": "29cf80a248b7a788fd1c5d31612618ceb224a78474bbd11e6de2cc944ef61acc"
+    },
+    {
+      "path": "server/ceo-conversation-title.ts",
+      "mode": "100644",
+      "blob_oid": "b98facff447c462249166199123b59a2dab488c3",
+      "bytes": 391,
+      "sha256": "deefcd8defd891abaec7eb953cf7ef4da8e6b0f4fd7e7f4ae521cddfe2eea651"
+    },
+    {
+      "path": "server/ceo-db-check-cli.ts",
+      "mode": "100644",
+      "blob_oid": "ba76b956a64fbf72963dbea8243cb51aff8ec93c",
+      "bytes": 1818,
+      "sha256": "8f96bf15cdd022d8caaf8f4890beef85d854eb51d7cc5d6949c57c161b962df6"
+    },
+    {
+      "path": "server/ceo-doctor-cli.ts",
+      "mode": "100644",
+      "blob_oid": "585fb454c1b07786ac665be3c6dc9669df2d79ab",
+      "bytes": 9606,
+      "sha256": "9228f6d20f9f392e5b10b9562dd7f762d3bee2c7a38e1ecc3a849d6b0f706e99"
+    },
+    {
+      "path": "server/ceo-go-live-cli.ts",
+      "mode": "100644",
+      "blob_oid": "d3438d0bc3c4885645596f79b72004f4117a96d3",
+      "bytes": 13628,
+      "sha256": "790e485dc3e696a8cfe1408e57831736fbc8333412647af9a788defe3baf2696"
+    },
+    {
+      "path": "server/ceo-operational-health.ts",
+      "mode": "100644",
+      "blob_oid": "5ab9fb2e4563facb19bfa76f84f28843bb2c461c",
+      "bytes": 4839,
+      "sha256": "2766686cdf7e4542875bdf7085102b69a1109a28c9a4284294cc0622310aa53c"
+    },
+    {
+      "path": "server/ceo-readiness-cli.ts",
+      "mode": "100644",
+      "blob_oid": "fad068498b899b57a204561922b63b524187bae2",
+      "bytes": 1140,
+      "sha256": "16d4ff39bf17a1551146d1680c2c1963325891ca9fbfb49b30d7dcf524a6ad1e"
+    },
+    {
+      "path": "server/ceo-readiness.ts",
+      "mode": "100644",
+      "blob_oid": "6d358589c3d3f007d8d407019b2001d3489e3538",
+      "bytes": 5739,
+      "sha256": "d418da15e3a7c4f5453d8c7dd9ddbcb4b688e549e370e8182072c1c368f7b031"
+    },
+    {
+      "path": "server/ceo-smoke-cli.ts",
+      "mode": "100644",
+      "blob_oid": "97494f755af80bbb013820c1828b412a79c77525",
+      "bytes": 4406,
+      "sha256": "626ea03ddc2630bb138a5f253a438addbba660da31e8c7bf39d30d732d2e1616"
+    },
+    {
+      "path": "server/claude-skill-bridge.ts",
+      "mode": "100644",
+      "blob_oid": "3aa7bb634a20d12a712c6c9605db587cd226424a",
+      "bytes": 6566,
+      "sha256": "d00659a15894145f71342598d15910f659ee4b63f045a27c6b4cd2e5ea8ef2c1"
+    },
+    {
+      "path": "server/cli-validation.ts",
+      "mode": "100644",
+      "blob_oid": "a896a9de9bbc655e5ced034c7de3f73819dd286e",
+      "bytes": 247,
+      "sha256": "27862550b3c4ea11aae83f9bcf7641eb7dcb4d8c96b8e23a5df32b7cee648214"
+    },
+    {
+      "path": "server/clippers-agent.ts",
+      "mode": "100644",
+      "blob_oid": "df60122ffac28434ba97ab48be0b52fa39e4de85",
+      "bytes": 2098419,
+      "sha256": "43a27c816dd592609dc5ad565ef6b73840f68b678a2c532e2a45ab4bd7006b83"
+    },
+    {
+      "path": "server/clippers-local-news-agent.ts",
+      "mode": "100644",
+      "blob_oid": "89744888103602db9ef0779c1deff8f2537369c2",
+      "bytes": 109697,
+      "sha256": "765c2a3a7f7db34dfd90a7337ed0af4e7ee0f2dcfcce699274e8772c32a62873"
+    },
+    {
+      "path": "server/clippers-local-news-growth.ts",
+      "mode": "100644",
+      "blob_oid": "62dad48e0d6d4c9c853cda668940188b5103c0ac",
+      "bytes": 9602,
+      "sha256": "64560cec49e30eb097e88f99ed9c8558ab11dd780234c83d74dffabeac0a7feb"
+    },
+    {
+      "path": "server/clippers-local-news-metricool.ts",
+      "mode": "100644",
+      "blob_oid": "bc0de77c2ffffde0964922f6e82aa3a61bc05f60",
+      "bytes": 56744,
+      "sha256": "743f8d8fa086a0d95a07bb3e30a81a238f26616183b1ef587ba439af50104874"
+    },
+    {
+      "path": "server/clippers-local-news-review-committee.ts",
+      "mode": "100644",
+      "blob_oid": "1fbcb7b9b73d5438a1e2a624ef0d6502cb9f6388",
+      "bytes": 11505,
+      "sha256": "b396570223fdd234ca2006c2f0dac12046929604dbd8f91cc10267c44a99fbdb"
+    },
+    {
+      "path": "server/clippers-local-news-scheduler.ts",
+      "mode": "100644",
+      "blob_oid": "420f6ce66565afd13b8e856850f69e22f475b431",
+      "bytes": 9298,
+      "sha256": "495b988dab6ebe24e0fc7c772ec5091bba20cd1214b686d42971d0cd1b06b874"
+    },
+    {
+      "path": "server/clippers-local-news-state-retention.ts",
+      "mode": "100644",
+      "blob_oid": "3c25b37755169293186d815c07b7431baf0b519f",
+      "bytes": 5859,
+      "sha256": "4a49547b89411ecbcd5e2287a3abf5a9b4f2b34015c69ef9615f20e22fbf53f5"
+    },
+    {
+      "path": "server/clippers-local-news-translation.ts",
+      "mode": "100644",
+      "blob_oid": "4a7696bd943e55d71e6b65ae3ea809d929e2f1aa",
+      "bytes": 17225,
+      "sha256": "70f91d52ae0f0480bcf112c66c21de782941c0831aefd90e1e4b00746e3678bf"
+    },
+    {
+      "path": "server/clippers-runtime-status.ts",
+      "mode": "100644",
+      "blob_oid": "9f18e6edcc249f432997338f5cf36fa513bbc932",
+      "bytes": 8821,
+      "sha256": "978ddf88707ba2d769c7400604242ae2e136024320f0dd3375bb890e8c0010a0"
+    },
+    {
+      "path": "server/code-agent.ts",
+      "mode": "100644",
+      "blob_oid": "60d6e1d9e1db6d0a320ca16e5e722be8ee95943b",
+      "bytes": 13410,
+      "sha256": "70befbc24a0f8eab58a340a3212587a3660229642f3735934234914f11d57597"
+    },
+    {
+      "path": "server/code-generator.ts",
+      "mode": "100644",
+      "blob_oid": "07c167cef3bb1fd524bf2721e9839d0b02cbb3fe",
+      "bytes": 13897,
+      "sha256": "f11320e90279f52a39f64591ea94d8f2829f82377a951aacfb306477e19f4e24"
+    },
+    {
+      "path": "server/cybersecurity-agent.ts",
+      "mode": "100644",
+      "blob_oid": "41753d88d7e01e664649ad4d45857bd5f24b7789",
+      "bytes": 22917,
+      "sha256": "2123fe580f80a8cc24cb47d009caadf5f76b9b5938b39aff33c36f3a3df6c21d"
+    },
+    {
+      "path": "server/database-url.ts",
+      "mode": "100644",
+      "blob_oid": "0d213cb0d12b0471677d75beacb78071efa023df",
+      "bytes": 591,
+      "sha256": "50f0b7b684e4b6084cc11ef6c8b899f07a7bf8c41057cbc3b564c27075fcd1ea"
+    },
+    {
+      "path": "server/db.ts",
+      "mode": "100644",
+      "blob_oid": "e0e6b69b1048383cdfa7e4263343d07137ad8353",
+      "bytes": 289,
+      "sha256": "4ad462d434f22fbb70f85a66bf2a340e92685560cb720d90559ac0f1ccef5749"
+    },
+    {
+      "path": "server/developer-autopilot.ts",
+      "mode": "100644",
+      "blob_oid": "86c1db0e99235172c34f5f553c8f60d8c312fdc8",
+      "bytes": 31050,
+      "sha256": "58ebb3ed97e4e448e89a212dd29a09053f4109c0f3e73e5f52dbc713c14b340d"
+    },
+    {
+      "path": "server/developer-health-inventory.ts",
+      "mode": "100644",
+      "blob_oid": "8de07e2017b931fe1b33a11e1e6565691ade8b3a",
+      "bytes": 7654,
+      "sha256": "f459410e41e4c1f8d27f92a5c8d96822fa2348a221de3e56da4588652c9c1c18"
+    },
+    {
+      "path": "server/dropshipping-ceo.ts",
+      "mode": "100644",
+      "blob_oid": "13a2d9fd8fb3fd307703287e23eee173b6f470bc",
+      "bytes": 300166,
+      "sha256": "58e81b4927112a4d497f4c47b9f4b347003273c4f2916b95b83107ad721af2df"
+    },
+    {
+      "path": "server/env-loader-core.ts",
+      "mode": "100644",
+      "blob_oid": "a4b8ef737d74359fdc84cc1d03e5b8d5ca4769ae",
+      "bytes": 2591,
+      "sha256": "32fcd5c09d3a2c6dc02a83806e17f6431efd444a38d953df8c1716c10013090d"
+    },
+    {
+      "path": "server/env-loader.ts",
+      "mode": "100644",
+      "blob_oid": "3ed592021b335c1e1f070971c8705c18ce5f4d3a",
+      "bytes": 113,
+      "sha256": "00cfbefe66768ad93e919be098a91668e650d59be42b936c336aae45770c8b5a"
+    },
+    {
+      "path": "server/finance.ts",
+      "mode": "100644",
+      "blob_oid": "c8c8c8582b18595103e9ac38c8bee22b610ff6a8",
+      "bytes": 17172,
+      "sha256": "a3e89e153c6134de61866544426fc13924c869702f2851d55b39568091a2ad4b"
+    },
+    {
+      "path": "server/gemini-client.ts",
+      "mode": "100644",
+      "blob_oid": "c14346f167f0a517a21a457237cf0d490e9e77b9",
+      "bytes": 871,
+      "sha256": "ebc687d04edecd8b26dd2bb7a4904eabe625123acc7a6d4c0a5974272c19080c"
+    },
+    {
+      "path": "server/github-client.ts",
+      "mode": "100644",
+      "blob_oid": "b204187a705be91387fc0ae9276d2f1231ced7d0",
+      "bytes": 24275,
+      "sha256": "c98d95131957fd3b4dbe44c0eaf4cc7471d5745fd6dcab43292796468730dc12"
+    },
+    {
+      "path": "server/google-calendar.ts",
+      "mode": "100644",
+      "blob_oid": "112c7f99dfba1f83ad0fbc7601f69372582c62d1",
+      "bytes": 10686,
+      "sha256": "c46136f19bcccf2b05106f64c827040ae845852a0b075b21d2550428e9e8d081"
+    },
+    {
+      "path": "server/google-drive-file-url.ts",
+      "mode": "100644",
+      "blob_oid": "4017961afc0941362d5c7b8877be81c8c2132b10",
+      "bytes": 1042,
+      "sha256": "525f37db7207fad9d4338a5778680705c0681526a5f83c69cd5225e0eddb833b"
+    },
+    {
+      "path": "server/google-drive-folder-command.ts",
+      "mode": "100644",
+      "blob_oid": "f3426a725c7fbc11d5a134c9346d58d470b650e5",
+      "bytes": 5963,
+      "sha256": "a7bafd28be8adc6b0e1acacaf3af52a509f0d67c96b8df05b84094bbcbcdfcbf"
+    },
+    {
+      "path": "server/google-drive-folder-url.ts",
+      "mode": "100644",
+      "blob_oid": "1a9ce1b9d1c0e826f7287e6367ab9da8c5e178e2",
+      "bytes": 981,
+      "sha256": "e7d4e96aedcd244af0871abc0a6a70ef8a794a4d109e7175cd4ce3237635bd62"
+    },
+    {
+      "path": "server/google-drive-oauth.ts",
+      "mode": "100644",
+      "blob_oid": "cce105cb0d25f12e659818fb6f06f1088f693907",
+      "bytes": 9027,
+      "sha256": "563d58fb772cd2445abdb3fab15043892641c201dbc03085e947373d258d0911"
+    },
+    {
+      "path": "server/google-drive.ts",
+      "mode": "100644",
+      "blob_oid": "ee4a6162c5a53c091954024ff63e9f718bb65e2c",
+      "bytes": 17637,
+      "sha256": "929a238c7d0362f45b20f11473e62eb517fa95efa7c30b1ed3a7b68b2f8f5366"
+    },
+    {
+      "path": "server/health-check.ts",
+      "mode": "100644",
+      "blob_oid": "fce845900dd525cc3d5915da2a9f7cff74d8d8e5",
+      "bytes": 6851,
+      "sha256": "7c393f845c5e905624218b12774f20ab48ce441bc651138e3b64f1f5d715cb0c"
+    },
+    {
+      "path": "server/index.ts",
+      "mode": "100644",
+      "blob_oid": "141bf71acac5926029dffc350414f9e18f4775e0",
+      "bytes": 30848,
+      "sha256": "193d1fd67bf5947cdba380da7a0ad31ad08bdff94aa6bd2244f6405db386e032"
+    },
+    {
+      "path": "server/legal-compliance-agent.ts",
+      "mode": "100644",
+      "blob_oid": "c79a1af43cf53b143d7e420e96784aa9c4402259",
+      "bytes": 14963,
+      "sha256": "eaf171f20c0d57022b845ed96bab717ab8df5c53411a4f72690bf7e2c4f97932"
+    },
+    {
+      "path": "server/local-auth-cli.ts",
+      "mode": "100644",
+      "blob_oid": "7dcfe77235706d8c299a48e337e82daa7c7bec8e",
+      "bytes": 1795,
+      "sha256": "c00c241363d79bef19af577b4be5872aa9b4289816859b49728e907a55c5b7be"
+    },
+    {
+      "path": "server/local-auth-core.ts",
+      "mode": "100644",
+      "blob_oid": "bda91740576f9b5f7a77b73defcb478dbd05083c",
+      "bytes": 1862,
+      "sha256": "dd4ffef22ebd6b7f15041ed6c2539565b47e38278b123ff72ed86ca6db2247e2"
+    },
+    {
+      "path": "server/local-auth.ts",
+      "mode": "100644",
+      "blob_oid": "ff22465504ca9327fc57c1b577fb75cf4e2b8bb2",
+      "bytes": 8240,
+      "sha256": "a624d6c4b2a8b18deb5a059990f41f222a53143d625474d8d7d901db787cd60e"
+    },
+    {
+      "path": "server/local-news-delivery-attempts.ts",
+      "mode": "100644",
+      "blob_oid": "336e81b91f32a69fe3bd917ba56078957dd510db",
+      "bytes": 1237,
+      "sha256": "3af897dbd35df10c4554180f37ba27df38413344c3509322ad689349b5e2b22f"
+    },
+    {
+      "path": "server/local-news-delivery-safety.ts",
+      "mode": "100644",
+      "blob_oid": "c6c8da88d48e6d001c738157335a4de03853ca5b",
+      "bytes": 4059,
+      "sha256": "1c7e3e26ebf317f52724a194ffa0ef29af4766993a4548506bdfba31a14e904f"
+    },
+    {
+      "path": "server/local-news-growth-scout.ts",
+      "mode": "100644",
+      "blob_oid": "81427ed8d10397b7b957a9c5898242f53108eb22",
+      "bytes": 22047,
+      "sha256": "67e4e764c437ab6247035cf444fa130994f97403a26a1ac796fd43118c8b42fe"
+    },
+    {
+      "path": "server/local-news-source-diagnostics.ts",
+      "mode": "100644",
+      "blob_oid": "dc14c9a6e6bf72df75985b42a0e31b27c85b2be9",
+      "bytes": 10649,
+      "sha256": "61bdf2301317baa7fd736ed313536ffad29a9b257b7da5644d5ae8d4ec3e70cb"
+    },
+    {
+      "path": "server/local-youtube-queue.ts",
+      "mode": "100644",
+      "blob_oid": "7b86be2adb8f2b66d65b0078baebe18cc793f4c7",
+      "bytes": 3462,
+      "sha256": "73dbb66cbbe64e9b707be34de368e93cc3775f3ae7608ab0ab43f378a209d521"
+    },
+    {
+      "path": "server/local-youtube-worker-queue.ts",
+      "mode": "100644",
+      "blob_oid": "8093faa9a2fec5c3d3be56c451b3c37e164aaba1",
+      "bytes": 5162,
+      "sha256": "405d0e837eea8ad4a0ecd242485e18aaa93662a87d8bb36ed7e4120cc79f9b6c"
+    },
+    {
+      "path": "server/market-news.ts",
+      "mode": "100644",
+      "blob_oid": "4e6fb2a75dbb7949fdd14f792f8fcdfb5a43e22f",
+      "bytes": 6713,
+      "sha256": "dbac1214d4dba14089976c006e979b6ee05a535abfffc840469d75f7d2b4e918"
+    },
+    {
+      "path": "server/marketing-command-center.ts",
+      "mode": "100644",
+      "blob_oid": "1483d45e0c673de3d3e7f43c8ebe8cb55cfb356b",
+      "bytes": 31936,
+      "sha256": "e060bdbab1d72fa5d5f3b2e7e2552b67f16cf74acb0dcceb06b1ff785150156c"
+    },
+    {
+      "path": "server/meeting-intelligence.ts",
+      "mode": "100644",
+      "blob_oid": "cd698e4be7ffbacd9431caa6e4a7f42f274bc6ee",
+      "bytes": 5559,
+      "sha256": "351cceb1cab81ce769920f352d5a9867d5fe15476a8397ff25f968ad1555514e"
+    },
+    {
+      "path": "server/metricool-analytics-sync.ts",
+      "mode": "100644",
+      "blob_oid": "49ae75f221e26d97e5f720690e31d01f635782d8",
+      "bytes": 32419,
+      "sha256": "a04059937920c4c2685dcdf7a9e7b3b0adb6b2c726f2bf63fc5ce67fa84fb5ee"
+    },
+    {
+      "path": "server/metricool-chat-actions.ts",
+      "mode": "100644",
+      "blob_oid": "bca110e1b12d96e871eaca7d3a6fd805f10e9b57",
+      "bytes": 6925,
+      "sha256": "074de8eb4d1edb054c8453bcec582d23fb8d6aebe4e501d4cf0c99e8037baccf"
+    },
+    {
+      "path": "server/metricool-tracking.ts",
+      "mode": "100644",
+      "blob_oid": "f5de0acb70d3be1d88b60f58b1ec3a0d95488615",
+      "bytes": 6847,
+      "sha256": "dde669f4d8d658ad46012ed7427a22ff3433ddc3dd9108d130983c928a27600c"
+    },
+    {
+      "path": "server/openai-client.ts",
+      "mode": "100644",
+      "blob_oid": "22bc4671f63c7143824efeec5ff684264c9e2e95",
+      "bytes": 601,
+      "sha256": "2b5cbeecf6044b4cb66e1232744440143c1b14490319adcf972d5369e0ef352f"
+    },
+    {
+      "path": "server/portfolio-agent.ts",
+      "mode": "100644",
+      "blob_oid": "437fe0737ded542beaa4ec8c50dbc58f87496a99",
+      "bytes": 14811,
+      "sha256": "cd14efe09ec81281a07b625445b589f0e19a62e93050987c6289bf6a6fadc880"
+    },
+    {
+      "path": "server/proactive-insights.ts",
+      "mode": "100644",
+      "blob_oid": "c504c924a0afe393d2585ef0355d7ddbc908e4fb",
+      "bytes": 6302,
+      "sha256": "f224f454453ec3f1f6dcc37a00e00f2ed15c3130b09a61bca4226a75d0cd0260"
+    },
+    {
+      "path": "server/promo-video-agent.ts",
+      "mode": "100644",
+      "blob_oid": "3b7072e2e2e3a415b3c2784b268c21a45215be75",
+      "bytes": 21883,
+      "sha256": "077a68752631ce2535c085fd56312177a76d1577ee1fef816c0fb6e9ef0a033c"
+    },
+    {
+      "path": "server/public-local-news.ts",
+      "mode": "100644",
+      "blob_oid": "544d291a52cb6554a8eb83b0251518daeb4b317d",
+      "bytes": 31351,
+      "sha256": "e07c10ef3a7aacee386a645b6c4d09a1281033b47eb627c060b001e083c48387"
+    },
+    {
+      "path": "server/push-notifications.ts",
+      "mode": "100644",
+      "blob_oid": "565a5de2cd89d9db113ed9cc90ba6075e7e41408",
+      "bytes": 2928,
+      "sha256": "7e99f6ac832aa61a4fd29db33f961f3f040211719a598dc47d4a70f33deb4527"
+    },
+    {
+      "path": "server/radio-agent.ts",
+      "mode": "100644",
+      "blob_oid": "2db91ba48447cbc80aed9b82cb2e9514963198fd",
+      "bytes": 10055,
+      "sha256": "602fd71ee62c4797f03423367343b64af29c8c544f78e2472d725fc146fd11d0"
+    },
+    {
+      "path": "server/radio-template-agent.ts",
+      "mode": "100644",
+      "blob_oid": "c3d670b7dbc34b21469475228b71651160f9282e",
+      "bytes": 14392,
+      "sha256": "61dd987d61d020c55efa492e452da5775445943e420c55054c37285bf133bb0c"
+    },
+    {
+      "path": "server/radio-video-edit-agent.ts",
+      "mode": "100644",
+      "blob_oid": "53794aec730fdef0269b1a77c10588e41fc511fb",
+      "bytes": 56067,
+      "sha256": "a4a50b274c2cae2e4ba1edeef90d4136a579f097dd0cd16f15514c66ad181342"
+    },
+    {
+      "path": "server/radio-youtube-command.ts",
+      "mode": "100644",
+      "blob_oid": "d9fd1e858ceaa84a9aae90a1a884aa3ca54c6efa",
+      "bytes": 25653,
+      "sha256": "13f6bb3ff1d0bbc65905e37c43331c19eb16930e3225d3a6dd89f448ca99f6fe"
+    },
+    {
+      "path": "server/rate-limit.ts",
+      "mode": "100644",
+      "blob_oid": "03b8ef1ecada437e27df08c7af95b0ed848430e7",
+      "bytes": 2625,
+      "sha256": "dd519c8255ff86d791bbb44d42af5ef5409171415377586ea25ea1e3419d0652"
+    },
+    {
+      "path": "server/reminder-scheduler.ts",
+      "mode": "100644",
+      "blob_oid": "4646bcbce0e29be77e805d47e4b88c6d73667a1c",
+      "bytes": 40198,
+      "sha256": "a4563932b0e32b797d81c6e521d3ab5f20b0e908dcabe4277976274da1238525"
+    },
+    {
+      "path": "server/replit_integrations/batch/index.ts",
+      "mode": "100644",
+      "blob_oid": "4d7efd0dcadfae0e0c9b3aae852fec21bf55e121",
+      "bytes": 108,
+      "sha256": "f2593c4e55334f004d25b68ec78ea08e3981585f0c436934d45371039be9631f"
+    },
+    {
+      "path": "server/replit_integrations/batch/utils.ts",
+      "mode": "100644",
+      "blob_oid": "113aeb906ecb2bdd9df1f2bb1009b77fbed3ae90",
+      "bytes": 2973,
+      "sha256": "1ceba67e357f6a67ebeb049abcecbf5e2789e2253994831c3ab3402a732efc4d"
+    },
+    {
+      "path": "server/replit_integrations/chat/._storage.ts",
+      "mode": "100644",
+      "blob_oid": "907307187ca2e55497fbbdc7a83bc8c87c4920d1",
+      "bytes": 163,
+      "sha256": "cd987e40e76980ee36188ea4edc18b65d7aaf07239c25339264464e502c5a4b3"
+    },
+    {
+      "path": "server/replit_integrations/chat/index.ts",
+      "mode": "100644",
+      "blob_oid": "822d8f7ad92618ce2dd75be8576361f876c7ccaa",
+      "bytes": 108,
+      "sha256": "79240f004121eadac4d982a4b88efb2a8dbb8a80bc1d3cafe9c624c9ca5759a8"
+    },
+    {
+      "path": "server/replit_integrations/chat/routes.ts",
+      "mode": "100644",
+      "blob_oid": "1281ad2a65df600a06c282d0d535d4d570daa58e",
+      "bytes": 4581,
+      "sha256": "d641acf312e62ccc73fedc8d04b4470c5a8e8a2652474bb0ed4cb86ff908587d"
+    },
+    {
+      "path": "server/replit_integrations/chat/storage.ts",
+      "mode": "100644",
+      "blob_oid": "a5968e7ee09bd978ba85a00b426eed7df58a2e09",
+      "bytes": 3041,
+      "sha256": "a2681f4d6956a5fef4d592df62e1985ab14263cbb562883767836ec2cc77e6f7"
+    },
+    {
+      "path": "server/replit_integrations/image/client.ts",
+      "mode": "100644",
+      "blob_oid": "9ab457235dd398693055fef98ae1f1f51c714b72",
+      "bytes": 936,
+      "sha256": "099c9ddda93d83a691be177ec6d2f161774f4c444c9d2952e019fbe7e5cae0b1"
+    },
+    {
+      "path": "server/replit_integrations/image/index.ts",
+      "mode": "100644",
+      "blob_oid": "3d383f58a6b86daafee4d36387b5a4fdf66950ad",
+      "bytes": 107,
+      "sha256": "3a45744e41fadb66bade4bc0f632cf0977f27be541870cdabdb8cf6f69e7a198"
+    },
+    {
+      "path": "server/replit_integrations/image/routes.ts",
+      "mode": "100644",
+      "blob_oid": "1b5eb1c8156e699665dd9eb8bff8203dbc69840d",
+      "bytes": 1443,
+      "sha256": "d6ed166c0ca3881578d4342545b7634081246c6f7c1732cbcdb2f3d2cb0d3d71"
+    },
+    {
+      "path": "server/revenue-engine-money-readiness-cli.ts",
+      "mode": "100644",
+      "blob_oid": "b5c6d2bfbd5fc7a78c617d15a210ca119b9a6c9f",
+      "bytes": 8692,
+      "sha256": "f1e9755717ad07f85c4cb98aba2ef1128e28494edf5006809d680e980be37666"
+    },
+    {
+      "path": "server/revenue-engine-state-store.ts",
+      "mode": "100644",
+      "blob_oid": "f6a73980216eed836b846e49f74ad1646661dd21",
+      "bytes": 7762,
+      "sha256": "e5319716992e401c750b02eb3776aedb54ce4f3596affd307c143e2b9f7439e7"
+    },
+    {
+      "path": "server/revenue-engine.ts",
+      "mode": "100644",
+      "blob_oid": "b19afa985bcd55cda97856363662aed03b091891",
+      "bytes": 549593,
+      "sha256": "83ddb9a8317656756edc165a7b55d06715e524952e8437b4102f026640ed04f3"
+    },
+    {
+      "path": "server/revenue-stripe-routes.ts",
+      "mode": "100644",
+      "blob_oid": "c84678fc36cec680106ef5d0d29569d0656cd82c",
+      "bytes": 7062,
+      "sha256": "389e66f814d7cce7d99f7fc93018880bb0ad02f295125d064542344e58382c27"
+    },
+    {
+      "path": "server/revenue-stripe.ts",
+      "mode": "100644",
+      "blob_oid": "8e9f74b5a05ae92a27530828d808de67a56278c1",
+      "bytes": 6156,
+      "sha256": "9d868329d9347cf804e67e2e01d12b9c5541237150437a47173d73f2d4cd1d21"
+    },
+    {
+      "path": "server/scheduler-time.ts",
+      "mode": "100644",
+      "blob_oid": "01784efb9641bf8739f1fc3cfc978e74f473986c",
+      "bytes": 1373,
+      "sha256": "80b9f558e0b976a230d9cbfb5d5dba08f3be0f7180f8cb20df93c8825b06159b"
+    },
+    {
+      "path": "server/session-config-core.ts",
+      "mode": "100644",
+      "blob_oid": "add54fc7f9da5a5d5853c70ddbd291289de48dc8",
+      "bytes": 1475,
+      "sha256": "2ef160ca616d2934524e33f26a698fe1e521c517d820c487198884ca44964c8e"
+    },
+    {
+      "path": "server/session-config.ts",
+      "mode": "100644",
+      "blob_oid": "e5ca3b831dfe3ed01ad16b3b071e5a6be4451e31",
+      "bytes": 1184,
+      "sha256": "8596e3245c1abf16852b26af3d862aec18d0f362896499733137b15f136da8a5"
+    },
+    {
+      "path": "server/shopify-oauth.ts",
+      "mode": "100644",
+      "blob_oid": "550c175306dfdddba0ee8fe6d13e6fd60fb559ad",
+      "bytes": 8206,
+      "sha256": "0270f6a331d5d0628378585b995a5d2785574ae949c4f230d60a7a9dcfced0c2"
+    },
+    {
+      "path": "server/shopify-routes.ts",
+      "mode": "100644",
+      "blob_oid": "bb8269c6872507cc90848c799f70ecd9e8fad1fe",
+      "bytes": 5519,
+      "sha256": "8fb61c1bf8989daab0765bc481183497d543f73be884941cd8d5ba394d816fb8"
+    },
+    {
+      "path": "server/single-user-owner.ts",
+      "mode": "100644",
+      "blob_oid": "af7f495b0228006373e835f589f923eb55d56c66",
+      "bytes": 760,
+      "sha256": "d8f72625a998afc9a48740687abf19cb07d73109b55bd540b4704e94ebfae94c"
+    },
+    {
+      "path": "server/static.ts",
+      "mode": "100644",
+      "blob_oid": "a80c42e00670cf854aaacfa4d54ec11ee6be0f95",
+      "bytes": 589,
+      "sha256": "fc66e05813eb04cd7175b288ddd47efbe3d3f6b0e2e5e2133212b8eb715ef67e"
+    },
+    {
+      "path": "server/storage.ts",
+      "mode": "100644",
+      "blob_oid": "300ace41470e724cc2fda09ed140d9c8606e929d",
+      "bytes": 76034,
+      "sha256": "9823f57740b53c1ec694c933ebbc3c9874924a2ab102b5b09dbbd0789a3eaf1e"
+    },
+    {
+      "path": "server/telegram-chat.ts",
+      "mode": "100644",
+      "blob_oid": "22e054c99ef2ddc7cda1c3f3f7089cc5aa7a40c0",
+      "bytes": 62076,
+      "sha256": "86a07897203eedf559b04d1e08a0c34d9e870e11e1ac3b3634d150ebce9a2ff3"
+    },
+    {
+      "path": "server/telegram-command.ts",
+      "mode": "100644",
+      "blob_oid": "aa48e22392cc8dd0aaca1d6ea3ffe0d579502227",
+      "bytes": 1733,
+      "sha256": "6dce012040849dd13b2aeaa7e2e023c54e7ce2788c71fe55df692f0b2c09d183"
+    },
+    {
+      "path": "server/telegram-config-cli.ts",
+      "mode": "100644",
+      "blob_oid": "8e610cb3c32d19f4193825307f4d4e001e3086f1",
+      "bytes": 1579,
+      "sha256": "12c97808780e0da99845c996708ef6b9d9d725807e7203343104ba2a929d1632"
+    },
+    {
+      "path": "server/telegram-readiness.ts",
+      "mode": "100644",
+      "blob_oid": "a15b7232731916bda55e9744526eb4186a41421a",
+      "bytes": 3911,
+      "sha256": "840406df3e60dad38038d428ec8387e736d74c32b834d6312ba37b1aaa791c6b"
+    },
+    {
+      "path": "server/telegram-routes.ts",
+      "mode": "100644",
+      "blob_oid": "463978dfacfc041626423e6c6381e4e88775ac8e",
+      "bytes": 13079,
+      "sha256": "a3c1b493b5af17b890f315adb4bc9a60c55fa485cd183d839205c5d874d3cf9f"
+    },
+    {
+      "path": "server/telegram-webhook-cli.ts",
+      "mode": "100644",
+      "blob_oid": "f745c478eb2a423b8ce4101a67517aee125f6086",
+      "bytes": 759,
+      "sha256": "03260fd1cebe43719e82d889c0bb7ecbe44dcff7349ea6f43bbb93b7aab836aa"
+    },
+    {
+      "path": "server/telegram-webhook-dedupe.ts",
+      "mode": "100644",
+      "blob_oid": "2c426a70448e301e9edb32335e2ce53a0fc9181d",
+      "bytes": 1572,
+      "sha256": "e015ac780ed5fac33dac6c5d3de56cb29feb8918e8d9fba25c042f34b10cbb21"
+    },
+    {
+      "path": "server/telegram.ts",
+      "mode": "100644",
+      "blob_oid": "14c4882078998009d3719e14d86fb1c0b4f0329d",
+      "bytes": 6732,
+      "sha256": "773897d0ef6bd125ba10ea7fd93b3dd562da55c37b929f82785451311af8a2f5"
+    },
+    {
+      "path": "server/trust-executor.ts",
+      "mode": "100644",
+      "blob_oid": "5852820ccd69531948ff0174edca95f895b265e6",
+      "bytes": 10956,
+      "sha256": "f82f8b1e87f770469546e20cd3014a5dd71c78c6c70c2f406cbe0bea76dcaf91"
+    },
+    {
+      "path": "server/trust-policy.ts",
+      "mode": "100644",
+      "blob_oid": "5af4446a5bd83042565759944b53196861edd016",
+      "bytes": 5204,
+      "sha256": "8f5aaa096880dafbcdd90e4a21db5cf8e97cb1347db995e10757a0024cbe5956"
+    },
+    {
+      "path": "server/types.d.ts",
+      "mode": "100644",
+      "blob_oid": "c0b3e334350b9f503e7712d83cbc7d17085be487",
+      "bytes": 27,
+      "sha256": "97d31b66eac60189932702156f94137a4212195b2eff1fadbcb2a7a0aeaa5995"
+    },
+    {
+      "path": "server/user-context.ts",
+      "mode": "100644",
+      "blob_oid": "eeace500886c7556dd870faa513126e460dc5b12",
+      "bytes": 6991,
+      "sha256": "77347333efc17013f126cfb045c8ca00cbafa20332624d5ebb74a0e64f780364"
+    },
+    {
+      "path": "server/user-migration-plan.ts",
+      "mode": "100644",
+      "blob_oid": "26edec08a724b21c6567237ef512ffc58325b5bf",
+      "bytes": 3089,
+      "sha256": "5deeab74b2ecf2cd6fd148e148eddaf978613e2fa884d9fb247e4177fd0d6b41"
+    },
+    {
+      "path": "server/vite.ts",
+      "mode": "100644",
+      "blob_oid": "f2c3a306b75c0c2d82ca07bac5bdca063c707da9",
+      "bytes": 1619,
+      "sha256": "353c8940b3e708b95e80f7c65ba92b617002d90a938f6499fbc16fa92b31899d"
+    },
+    {
+      "path": "server/youtube-downloader.ts",
+      "mode": "100644",
+      "blob_oid": "a778e2d840e39d82dabaf19859558bc2b50a72aa",
+      "bytes": 14807,
+      "sha256": "9ab93a4f1d854a0710ce27d6bd02177592dc1a66ed022abcc7f425c05c04a486"
+    },
+    {
+      "path": "server/zoho-calendar.ts",
+      "mode": "100644",
+      "blob_oid": "d6dd9992fea8decf397c83ae729666b0175fbad8",
+      "bytes": 9950,
+      "sha256": "38d6681dd5226d77beef005c445388e597a239841da26c55d11455150b9deb03"
+    },
+    {
+      "path": "shared/app-qa-missions.ts",
+      "mode": "100644",
+      "blob_oid": "4eee71cbe8f8d5c60764a6e65e7062ceddc187bb",
+      "bytes": 5662,
+      "sha256": "7204e8a0e79a695c560dbb598d4d90c8bc224e1c2e20b6bc0ce45258d1c31950"
+    },
+    {
+      "path": "shared/local-news-source-diagnostics.ts",
+      "mode": "100644",
+      "blob_oid": "d143955ac356c17b4ee2c28ce3758304d743cd82",
+      "bytes": 1408,
+      "sha256": "007cabd2de7a0bcaa2d417c9fa2df691a2f4d58f823df5dec378e5450ee27d8d"
+    },
+    {
+      "path": "shared/models/chat.ts",
+      "mode": "100644",
+      "blob_oid": "54c94f4de66240941f13d568c78c3db2aec136ef",
+      "bytes": 1229,
+      "sha256": "2065341c5abbde97ad6bbcff0bcb998399474884a91d6c3e1b1d931a9b625368"
+    },
+    {
+      "path": "shared/schema.ts",
+      "mode": "100644",
+      "blob_oid": "c1336694f14efa96f6c11baf35f447674ce25db4",
+      "bytes": 43346,
+      "sha256": "0bb3c6df7db34fd37793dab7045ef270561f36b2b875965137fca379861e0ed9"
+    },
+    {
+      "path": "tsconfig.json",
+      "mode": "100644",
+      "blob_oid": "b9eff2b25d097c5cc7d587ca7e5c422e98538ae1",
+      "bytes": 703,
+      "sha256": "d24840b1c2fef44a3e2b074a107471b6356be18e137ce0aa49961d3801cca995"
+    },
+    {
+      "path": "vite.config.ts",
+      "mode": "100644",
+      "blob_oid": "ec02caf7d153f69f672c0314cc311b91359bf77d",
+      "bytes": 3377,
+      "sha256": "dc789f84c56d38a1127101b2e7db0bde68d365e8876c4f0669e98936df239492"
+    }
+  ],
+  "route_wiring_delta": {
+    "file": "server/routes.ts",
+    "added_lines": 2,
+    "removed_lines": 0
+  },
+  "diff": {
+    "bytes": 97021,
+    "sha256": "d9918a14b5d407d38f393f49a4313e21fa1a809fcc853d66bf3d76625e899a68"
+  },
+  "validation": {
+    "unit_tests": 21,
+    "types_exit_code": 0,
+    "ui_checks": 106,
+    "ui_scenarios": 6,
+    "ui_input_sources_unchanged_after_initial_review": true,
+    "all_browser_requests_intercepted": true,
+    "provider_io": 0,
+    "client_build_exit_code": 0,
+    "warning": "Vite safe-script default 500kB chunk warning only; no config changes"
+  },
+  "independent_review": {
+    "reviewed_commit": "b07ea666810dea5a0ecd5540c2c4f02d870ee066",
+    "verdict": "FAIL",
+    "finding": "same platform/alias could attest distinct Facebook native IDs",
+    "fixed_in": "ce93d45fbb33ca13ee932bfd5d5374a34b296bbb",
+    "fix_evidence": "alias consistency veto plus two regression tests; final suite21PASS",
+    "final_candidate_re_reviewed": false,
+    "approval_pending": true
+  },
+  "ownership_blocker": {
+    "runtime_reader": "unavailable; no IO",
+    "reason": "owner_source_binding_unproven",
+    "accounts_released_by_runtime_reader": 0,
+    "positive_test_proofs": "synthetic existing-owner-source fixtures only, not real ownership or stored source certification"
+  },
+  "logs": [
+    {
+      "path": "evidence/client-build-initial.log",
+      "bytes": 13238,
+      "sha256": "b4c2f1dd8a09d2cf322d5b964ee47927f6ce77034f907cf217923a1bb883c0bd"
+    },
+    {
+      "path": "evidence/client-build.log",
+      "bytes": 13237,
+      "sha256": "4cb441bd91d8769486bae8afddddfd651b9aa95d76243cdb2fb6a6e96be66ac9"
+    },
+    {
+      "path": "evidence/independent-review-initial.md",
+      "bytes": 2537,
+      "sha256": "91c868b5cff6afbd6d99fe0988348151cdd94736674dae0ea2aa9be149d6ff78"
+    },
+    {
+      "path": "evidence/types.log",
+      "bytes": 13,
+      "sha256": "ae83a3ae13d7b3bd00ee127bc7bdb3a9fa0a2ca71b3490011b0c284069ed243f"
+    },
+    {
+      "path": "evidence/ui.log",
+      "bytes": 3953,
+      "sha256": "530248b19d54547f86c375679c925ead88105d2a961935a6be5e519d85156fef"
+    },
+    {
+      "path": "evidence/unit-initial.log",
+      "bytes": 4153,
+      "sha256": "7697f695d6bcfd5f768a07c045f40a9a4711adcbbc933628d12fda7117b9848f"
+    },
+    {
+      "path": "evidence/unit.log",
+      "bytes": 4626,
+      "sha256": "e52754b1d0cee0247d2c65fa886a603e22272a8ba871ecc9c82afd2f82b93e8a"
+    }
+  ],
+  "client_artifacts": [
+    {
+      "path": "._opengraph.jpg",
+      "bytes": 163,
+      "sha256": "cd987e40e76980ee36188ea4edc18b65d7aaf07239c25339264464e502c5a4b3"
+    },
+    {
+      "path": "assets/activity-CgXr1Vv8.js",
+      "bytes": 235,
+      "sha256": "138330c9d1d35c4aed23544213e188b261816f4fa980449a418fea5edbafe3ef"
+    },
+    {
+      "path": "assets/agents-office-CBJcw8kd.js",
+      "bytes": 150243,
+      "sha256": "146b06cb41da9e393bb61d21aec2787d5b8ac741347a3db5e73117d1c5012194"
+    },
+    {
+      "path": "assets/agents-office-DJkU8DZw.css",
+      "bytes": 28186,
+      "sha256": "99eb7ea03674309c030f05007c825630a9cb364b2cc61d3f5cd86fe37bc143b0"
+    },
+    {
+      "path": "assets/agents-world-scene-ByQImAxK.js",
+      "bytes": 520557,
+      "sha256": "bbc69930a0ea60b5a9302ef5fd87d1d0336eba635c42f25ce59b0eb8c39d9777"
+    },
+    {
+      "path": "assets/api-DuVMn_-k.js",
+      "bytes": 1434,
+      "sha256": "b5cc9ecfaad41141450d5af51b36216ae5b139016c21a9a0647219416fabc2f5"
+    },
+    {
+      "path": "assets/app-qa-agent-DOwaL2qi.js",
+      "bytes": 18842,
+      "sha256": "e8a498bec684d6f5a8ecbc718b4da3b9fcdbccde2920126cc931acc6538c06ac"
+    },
+    {
+      "path": "assets/arrow-left-BA-XosaT.js",
+      "bytes": 166,
+      "sha256": "25f64293d18d7cd214f32da13421a93e22a78f8dddd8a7d9645d777068b67192"
+    },
+    {
+      "path": "assets/arrow-right-CtifNm6H.js",
+      "bytes": 166,
+      "sha256": "def32c921c72ed7c9ebbdb25eec303fb1ebf9ee842fcdfd4d1b5e0abef090328"
+    },
+    {
+      "path": "assets/assistant-D7UgQ-0c.js",
+      "bytes": 20782,
+      "sha256": "10b2304bb5e3c467e38f8e6404a2996b8aef5c110a80d7567976dc23aa79b004"
+    },
+    {
+      "path": "assets/automation-manager-DZqKGjeY.js",
+      "bytes": 10327,
+      "sha256": "bc5282716f56bdc55729e2542ad6331108da261c4d2ea6fe107376304672f1f9"
+    },
+    {
+      "path": "assets/badge-BIyO42RL.js",
+      "bytes": 737,
+      "sha256": "904a410f4090a473e841e122bda7b7d11052a01473edcf6764d48db68aaa5e16"
+    },
+    {
+      "path": "assets/badge-dollar-sign-LcQn8Gqq.js",
+      "bytes": 387,
+      "sha256": "51da9b3451b87c22a4c14687677a95d6cceb0ea691b06c5d7a8f34cd835d3e1f"
+    },
+    {
+      "path": "assets/bell-ring-Df-kia_V.js",
+      "bytes": 398,
+      "sha256": "e77f9acccf9704417c12bffdc1426daed5a60499646dadbdd4eee1095d3e9d4e"
+    },
+    {
+      "path": "assets/bot-DCHOd5KY.js",
+      "bytes": 329,
+      "sha256": "27069cb3868946da2e3ada351b05b31197e9b22908a91e6a1234d3a0d168d4c1"
+    },
+    {
+      "path": "assets/brain-peTRaOdV.js",
+      "bytes": 578,
+      "sha256": "4b533599cf56d762651ac91ad4d224efdade049b50d0983b7a901cb26103ecc2"
+    },
+    {
+      "path": "assets/briefcase-business-OZ1FVnF-.js",
+      "bytes": 326,
+      "sha256": "50ed5cfd573149dab1be81e4a29252b98bd97d8cdb92ff2dcc5faba94fd12f67"
+    },
+    {
+      "path": "assets/building-2-BECsEsZA.js",
+      "bytes": 384,
+      "sha256": "4d59bbb88e0498a893ad4b7a742319133cdc7542385fb2f018f7e7287e1fa993"
+    },
+    {
+      "path": "assets/calendar-clock-DbH2d0s9.js",
+      "bytes": 374,
+      "sha256": "8f83768b7ab26048e0c187387e7bbe02934de7b593c6c1279a4d331ff76a3dc6"
+    },
+    {
+      "path": "assets/calendar-days-DWTJOoEI.js",
+      "bytes": 495,
+      "sha256": "a1f0ccf7ff0a0e8d19905dda3d7762aeb30f78b255eedbe7dd79cba3d762b15c"
+    },
+    {
+      "path": "assets/ceo-dashboard-BBBXVG-i.js",
+      "bytes": 31259,
+      "sha256": "7974fd34d67fc4a258c6d17a9f028cbc674e9bfbad38b363f4d3e6a96f123af4"
+    },
+    {
+      "path": "assets/chart-column-B-a7yK75.js",
+      "bytes": 252,
+      "sha256": "a8efb407e1650b43bf0a46110e2118e3f268b404fc802087ad60d1b29584df41"
+    },
+    {
+      "path": "assets/chart-line-DQgHKRUE.js",
+      "bytes": 180,
+      "sha256": "7e1e5e7b2b36a17f261db1f7310af9ce6d8ccc796fbff16542660d43fa7907e9"
+    },
+    {
+      "path": "assets/check-bDefhdoo.js",
+      "bytes": 120,
+      "sha256": "347d62e27d7af7adc6d7a2804992c44f026aac2f159e31dc7c04597f58092358"
+    },
+    {
+      "path": "assets/chevron-right-D0Ba3kCG.js",
+      "bytes": 131,
+      "sha256": "67ba44b28dd00a3e0cefd0bfa1dc756402b2cdb94cbc339ae4ed441e2b06e45e"
+    },
+    {
+      "path": "assets/circle-alert-BnnlMkBl.js",
+      "bytes": 251,
+      "sha256": "081ed5ebb740816631b13a8686a33655bc7b16960bcba57ef2cf6c76ea21c52a"
+    },
+    {
+      "path": "assets/circle-check-DGJeIdeV.js",
+      "bytes": 174,
+      "sha256": "e91f6ea30b54dab75e7c678860ae979a250e74188473f8b5cb09fa091d67eb82"
+    },
+    {
+      "path": "assets/circle-dollar-sign-CEW2GImt.js",
+      "bytes": 244,
+      "sha256": "e11ac8b6f2ac638a48ffc60c5aa97fa334dce372361459cb7e57eb97233354b8"
+    },
+    {
+      "path": "assets/circle-x-BiJZFUZ-.js",
+      "bytes": 203,
+      "sha256": "e8eb86f5b3b797985de06477e66930b53a5f9ffc9511b103833e47fc29c72bf0"
+    },
+    {
+      "path": "assets/clapperboard-BuqMX8vi.js",
+      "bytes": 347,
+      "sha256": "19b8093729b479f7d88007fa369095f58646d1ff3824fcda1cf75193be87a490"
+    },
+    {
+      "path": "assets/clippers-CLwlpD24.js",
+      "bytes": 823974,
+      "sha256": "8f77470e9538d9fa08d2dc96a72b16a74a7c0bfa23a3bfcf3b39c48da8bd5057"
+    },
+    {
+      "path": "assets/clock-3-CozaGxYw.js",
+      "bytes": 165,
+      "sha256": "3d8375def56fb0fba5c840f71ff81466375fafd93c817fd55945d5e37e606eb4"
+    },
+    {
+      "path": "assets/clock-DB8aXUfx.js",
+      "bytes": 165,
+      "sha256": "71f78de78a34db3dd337ffc17ee0fc5e9a3af9d83c4a6a7b59b9b259880a610b"
+    },
+    {
+      "path": "assets/cloud-download-CXTWIa6C.js",
+      "bytes": 262,
+      "sha256": "b6d2600fafd3391d0748f9f65e95f68d95330ae2142ba3890f24bcc5361eb21e"
+    },
+    {
+      "path": "assets/code-agent-AMABi4mY.js",
+      "bytes": 14286,
+      "sha256": "2c4336d1754d6f6b415474db3946444031caa66e648737c7b069a95dac12e896"
+    },
+    {
+      "path": "assets/code-xml-JjCMMytb.js",
+      "bytes": 209,
+      "sha256": "f1a4893f2ec39e1988136c6a31eb7d2ed718daf2d3812e2e77b5a9a666dc8b0f"
+    },
+    {
+      "path": "assets/copy-C7oiMPiS.js",
+      "bytes": 232,
+      "sha256": "e469a0553543f78b577901acabf5ce3fdcd40bf44148d001981705cfad0abad5"
+    },
+    {
+      "path": "assets/cybersecurity-agent-dTN7ciFP.js",
+      "bytes": 8990,
+      "sha256": "7aa4c2c3fb022cddaf76ec98e108e447daac4da7ddf290c1ad60bc110c732633"
+    },
+    {
+      "path": "assets/dashboard-l0gNB6Om.js",
+      "bytes": 182212,
+      "sha256": "f539f120c08321bf5e9b430e812b39ad2310bdbbd6b3566ffce9c30617053616"
+    },
+    {
+      "path": "assets/dialog-jPPy3ePz.js",
+      "bytes": 9519,
+      "sha256": "00ef68efa42929d544f61102890f577577c113d2ce63a4188d64c6f9e8032e8a"
+    },
+    {
+      "path": "assets/dollar-sign-CKdQ90uF.js",
+      "bytes": 220,
+      "sha256": "c4cb36fab4f3c0ecf3ff5765f76f213fc0568e91a6fd1a6db16dfb17b4600ee9"
+    },
+    {
+      "path": "assets/dropshipping-ceo-D80gnsG3.js",
+      "bytes": 118739,
+      "sha256": "9ded8772b0c8542e6fd31d855461b1a6d408e5bec57c85f53c3a0a4a7d83b488"
+    },
+    {
+      "path": "assets/external-link-CuTX1o-N.js",
+      "bytes": 252,
+      "sha256": "e3b99e6a4aa9a20ecaa897442112e81bae32212080d7fd42bbda0924fc33f01e"
+    },
+    {
+      "path": "assets/eye-ywwCWCnD.js",
+      "bytes": 252,
+      "sha256": "69d7c625983968d3076345435dde779b1489911b2e7870023ea3cd502023f773"
+    },
+    {
+      "path": "assets/file-check-2-BX7yRJ47.js",
+      "bytes": 258,
+      "sha256": "21099976521c7ff4d40b00065a440d64271f55ad82a77cc78806f58490fb91bc"
+    },
+    {
+      "path": "assets/file-code-DXI5vEUs.js",
+      "bytes": 321,
+      "sha256": "08ba372ba55820a46e9daa6bcb2ca0a3bef2630deab3fcd0ec1830aed4a4c6c9"
+    },
+    {
+      "path": "assets/file-text-CoINODsm.js",
+      "bytes": 334,
+      "sha256": "63d9edba12163e039f57b4888c7da20bb8622e76b5e2c61964bd28d29f94025e"
+    },
+    {
+      "path": "assets/folder-D78TldZJ.js",
+      "bytes": 229,
+      "sha256": "d01a2036e931f8baf52ddc69b7e0b70101f3add8b6c3fc26bbe2bbfe2b97269a"
+    },
+    {
+      "path": "assets/git-pull-request-Bqz11u2w.js",
+      "bytes": 290,
+      "sha256": "a5ca882d0328cf0bb05768f76fdf6d014cae22255b245f391d576010cb918b3f"
+    },
+    {
+      "path": "assets/github-DwbKO5E3.js",
+      "bytes": 403,
+      "sha256": "716f25103bf799d3ab98cdd3de252584f15f970a187748d7b5324a32919cb6ea"
+    },
+    {
+      "path": "assets/github-agent-B-3QN8aL.js",
+      "bytes": 14667,
+      "sha256": "30bf100c5a33c38799d23ca0678f7c621dc75f97ca2dfb453a6e7d3c41e05d47"
+    },
+    {
+      "path": "assets/hard-drive-Drnd3Pn2.js",
+      "bytes": 392,
+      "sha256": "ff77bb633bef4289b1415ec653bd9c82980f98247971bce00a613e343516fd41"
+    },
+    {
+      "path": "assets/history-jnjFbBn1.js",
+      "bytes": 238,
+      "sha256": "d1cd011821f75cc0a8e76d06b75efc6dfa763921368a35865ef16fe3c17d050c"
+    },
+    {
+      "path": "assets/index-BdQq_4o_.js",
+      "bytes": 64,
+      "sha256": "302541c92aa7e2402be57fa8241a0d67e3b17496cdf3645c716ff3b239f03e28"
+    },
+    {
+      "path": "assets/index-BiXMx9iD.js",
+      "bytes": 2533,
+      "sha256": "b9409c0aaa4adaecdb14aa888ebb06a40072c51ae17157dbf9461438494393d6"
+    },
+    {
+      "path": "assets/index-BmxO6p0R.js",
+      "bytes": 16351,
+      "sha256": "f242312313d72a456840fda53e9bdeb1970c9744c2a480af0cbe8e4336bcaee2"
+    },
+    {
+      "path": "assets/index-CnySgDMQ.js",
+      "bytes": 221,
+      "sha256": "52cff29b8676f33a83d4a021f42cd940bb6595a97c4ae290aea85b9508ecba4b"
+    },
+    {
+      "path": "assets/index-D1aDjAzZ.js",
+      "bytes": 232,
+      "sha256": "52205971080de1f05de00d88bb90567849b9d6dcec7562ece591b7b81ebe3bc5"
+    },
+    {
+      "path": "assets/index-DZI2Xq-u.js",
+      "bytes": 348743,
+      "sha256": "d4d7fc86b135ee0be653f36267d5a30bfd630c74af9e835422b4c1549bad6249"
+    },
+    {
+      "path": "assets/index-DauO3eaM.js",
+      "bytes": 143,
+      "sha256": "1c0c0c063ba46c8b4d0328e6e43875e4860f36a9607d5013ea2bf89d56743bf2"
+    },
+    {
+      "path": "assets/index-DkCI6Y49.css",
+      "bytes": 265397,
+      "sha256": "5cb602eb8ed669b2d8ca35c0fe97b24b3c88a399b1afd2b27e758d2d15405e4a"
+    },
+    {
+      "path": "assets/index-pvM1ZpOO.js",
+      "bytes": 3513,
+      "sha256": "8567337bbd9b4f346d3d17c4c56c156fa9572d12bc5b548065c254a0cd0a2f2b"
+    },
+    {
+      "path": "assets/investment-detail-AwXA4Wxl.js",
+      "bytes": 9706,
+      "sha256": "cba51708d272fa176ca187ca3776bf2d7f2513ae3acf4caec8b557cf10ee1f5a"
+    },
+    {
+      "path": "assets/legal-compliance-DIcpBC_I.js",
+      "bytes": 8582,
+      "sha256": "9e3acec60b1245a4a3c6041cd5847975d58980f9033716465f3c512ad48b76b6"
+    },
+    {
+      "path": "assets/loader-circle-2Nm8Pu7w.js",
+      "bytes": 140,
+      "sha256": "131ca1b5149ad16194ffe1ac270b98feef07548c500ac796871a779741da784f"
+    },
+    {
+      "path": "assets/local-news-public-D_t5ZHRb.js",
+      "bytes": 26793,
+      "sha256": "929c4781958e5277eaa7ff2ebd7e4aee0d8b3403e4d9ccc5e621177018e3e345"
+    },
+    {
+      "path": "assets/map-pin-kACvSnYP.js",
+      "bytes": 255,
+      "sha256": "846b39cd8821caf02a72a050514807e42b364008237418c403393210398dc2d3"
+    },
+    {
+      "path": "assets/marketing-command-center-px2deSzl.js",
+      "bytes": 12665,
+      "sha256": "cd9dd9e9fc42efeb00468bc1ec93835c6185a0abb40c74e825ac518102d36a33"
+    },
+    {
+      "path": "assets/megaphone-hmG5HMWC.js",
+      "bytes": 347,
+      "sha256": "27c665c90456ebc0d2dd500108c330ddd404751775f2e839989779ac4c94273d"
+    },
+    {
+      "path": "assets/message-square-text-mrlUbsbF.js",
+      "bytes": 347,
+      "sha256": "f0a3d06744282fb2325467a642583a92e9ae3744f9fe657fbde20b21ad459a92"
+    },
+    {
+      "path": "assets/message-square-twgpeQ8n.js",
+      "bytes": 234,
+      "sha256": "a25244941f601d7cc257feb0c29e179f30a765022ff6276d8084d5b826bd6eae"
+    },
+    {
+      "path": "assets/monitor-BpIOrWnr.js",
+      "bytes": 260,
+      "sha256": "40c72c65be0e4f2b8dcf556b8ba1ece0d99899cf036cbb6ff1691812c04ce39d"
+    },
+    {
+      "path": "assets/mouse-pointer-click-DCGzxqS0.js",
+      "bytes": 415,
+      "sha256": "5ee59ae64ab66355fd74df6e2e0bc36aba3e42fdf98883d09747bbab8440534c"
+    },
+    {
+      "path": "assets/newspaper-lKzX3V2G.js",
+      "bytes": 345,
+      "sha256": "15c786c680a68b69de97db4498123d2fb2844552912a381fb923d2949c925654"
+    },
+    {
+      "path": "assets/not-found-DCFfNysQ.js",
+      "bytes": 634,
+      "sha256": "023bbe0cf6d1a2ab87dcb97baa921bf5e8e37237e04b77a4685e35079d7473e4"
+    },
+    {
+      "path": "assets/owner-office-storage-pGEzOCvU.js",
+      "bytes": 151,
+      "sha256": "b9c758f42ea4ccceeb8e667ce1df45c79f2ba79f86a8ddf893c8eb0c70fd2e45"
+    },
+    {
+      "path": "assets/pause-tOOt5xHV.js",
+      "bytes": 212,
+      "sha256": "ebb75728e00dcc8370adf461357fbdb98a605e27e2a138b968df38426da6e4a0"
+    },
+    {
+      "path": "assets/pencil-DsaYptAB.js",
+      "bytes": 277,
+      "sha256": "16d9711961e092a7d5bfab7d84079508e59f318b47bea790cebe59776b2a2f65"
+    },
+    {
+      "path": "assets/play-hlgGiUPm.js",
+      "bytes": 191,
+      "sha256": "cd9a9f7318e10e8945e2c17bc3c06d8349f5ef790904a88928c30a598c9e579a"
+    },
+    {
+      "path": "assets/plus-rTDKfvxF.js",
+      "bytes": 154,
+      "sha256": "4f95ab4835088736b767aa3d40f03f53f70146e04fe2e97aa5d22bb4907a81db"
+    },
+    {
+      "path": "assets/portfolio-CsyE3oAu.js",
+      "bytes": 33607,
+      "sha256": "43af3ceb771f342d7d386e136b4818e2fd1c98a0a293c62a006ec2aa71bb55f9"
+    },
+    {
+      "path": "assets/progress-D-QVEKZj.js",
+      "bytes": 3362,
+      "sha256": "62deabcb7e0d1b24a0d3b52f0fe75d553d49894c72db28e143abc6fa8d649708"
+    },
+    {
+      "path": "assets/projects-6JnBAV3U.js",
+      "bytes": 27996,
+      "sha256": "0f37df4115cd39a79584a58f62eb065eb9e7380296648efd832610a660f90cc7"
+    },
+    {
+      "path": "assets/promo-video-BeKtSdJ8.js",
+      "bytes": 15281,
+      "sha256": "69a05ffccff1adb904dc526c610c598d7c51f30a633fb6ba2841c816645876d6"
+    },
+    {
+      "path": "assets/proxy-lAJT6Ti_.js",
+      "bytes": 112235,
+      "sha256": "7d669e52dd2a0702f5a51e47beb858fbc1602a09ef625a6d02b11415da0e5f15"
+    },
+    {
+      "path": "assets/radar-CLZqDIj-.js",
+      "bytes": 503,
+      "sha256": "f7d4eeb6da75235b01a62191477ff13214f4d67e4f55b21ad9f62660c6bcb132"
+    },
+    {
+      "path": "assets/radio-CJSOmsqm.js",
+      "bytes": 19849,
+      "sha256": "5b4b43baacbb4280e63343eac1bc93bc81d40aae1660dd96c78149f81b071e5b"
+    },
+    {
+      "path": "assets/radio-DXFGHdKj.js",
+      "bytes": 375,
+      "sha256": "9b566fb46b8997043f17d716032fcf5f267589b8c86150a5c1679afa118768ab"
+    },
+    {
+      "path": "assets/refresh-cw-BrSQxOxE.js",
+      "bytes": 322,
+      "sha256": "de20f5d3000c0c305ad5e969d6125d2a9f12c0e18665a34111273d2c2e850f9e"
+    },
+    {
+      "path": "assets/revenue-engine-BTZaOW7F.js",
+      "bytes": 314059,
+      "sha256": "84969eefa7eedc99b9fc336e422092bd9e3075a0c69185e26d465f8ba85ea202"
+    },
+    {
+      "path": "assets/revenue-engine-simple-BqF_8Zij.js",
+      "bytes": 22609,
+      "sha256": "95c4a3d5c3bf2febae06ba01cbcb6c58a238bd45ed930d736650e7219861eea7"
+    },
+    {
+      "path": "assets/rocket-DYPAxTtR.js",
+      "bytes": 453,
+      "sha256": "693004268ec5b09b283258b4a023f8ffcf6da9eab4468c6aea9e2aab67fed0db"
+    },
+    {
+      "path": "assets/route-DgIwQgPE.js",
+      "bytes": 250,
+      "sha256": "ca5a3d023d8a03a8f5f4ae59390f69df838e6e1686d7dfc7bd335821baffc050"
+    },
+    {
+      "path": "assets/scale-D7UutTVu.js",
+      "bytes": 364,
+      "sha256": "3f8bfd66c74b4ce3bbe841cb61009a925d2db38c4f4e3cb09135b10cc44b2efc"
+    },
+    {
+      "path": "assets/scroll-area-K4zwvdKH.js",
+      "bytes": 12564,
+      "sha256": "556d5b329cdc52a9c3ff3a3b7ca0a3653e8b45e0b4c6825637c87ec168b99816"
+    },
+    {
+      "path": "assets/search-Bc2wlIZJ.js",
+      "bytes": 170,
+      "sha256": "ec35242024e6c385399050f34389f8e1afd97061cb2fc97c00d18b7304d8e199"
+    },
+    {
+      "path": "assets/select-q1g317_X.js",
+      "bytes": 23481,
+      "sha256": "9af24ede41ac754fbe97077d2dd25c671cd2a5de29914f35df8c8f1f899f249f"
+    },
+    {
+      "path": "assets/send-BA3RZ-dQ.js",
+      "bytes": 291,
+      "sha256": "9f433512b99270f75e1b12d48a84de0f819d7e6b9aba254ca2df5a1ff5aebbc3"
+    },
+    {
+      "path": "assets/shield-alert-ziUztwLf.js",
+      "bytes": 354,
+      "sha256": "ad0045dbdfa99dfba7ddc27d671e8dcc29b407a230c96cd52eeb07a42f72baab"
+    },
+    {
+      "path": "assets/shield-check-CjjbhIXZ.js",
+      "bytes": 316,
+      "sha256": "ba348c50cebacd87449070185932584838256ec9d152142ee59f3a488afe460e"
+    },
+    {
+      "path": "assets/sparkles-CcsPBFY3.js",
+      "bytes": 495,
+      "sha256": "15e14ede1c8adb14afe03b2056afd84389ae23a6bbf6a5739679e76bd72b5a71"
+    },
+    {
+      "path": "assets/store-C5X-Ciud.js",
+      "bytes": 499,
+      "sha256": "f84bb9075ce76ae794b795fc9fc6f1e57e6f79cafa6d64fad71ace2a1ecd638e"
+    },
+    {
+      "path": "assets/switch-DyUpsrUM.js",
+      "bytes": 3654,
+      "sha256": "33cab27ac07660e02cb3c2dc6be0a87b76accad478527a25aea19d71653c974e"
+    },
+    {
+      "path": "assets/tabs-DESB1nt2.js",
+      "bytes": 8711,
+      "sha256": "876b5e1a30511449a5167672bedb0b94a2fec280659a1672c19807450518096d"
+    },
+    {
+      "path": "assets/target-JYp-kv10.js",
+      "bytes": 222,
+      "sha256": "852bb2db9ef8bb0d856d0e685facafe78384e100c00cbbc731d460eedb814f76"
+    },
+    {
+      "path": "assets/textarea-DxejQPB_.js",
+      "bytes": 455,
+      "sha256": "ca5dd9c9e6b87fbe4469df9e4e74d81d9629219dc3d6eefe7103e45cac038a87"
+    },
+    {
+      "path": "assets/tools-BO1KZdsj.js",
+      "bytes": 12183,
+      "sha256": "a8ebf379352363af676d818f2955a96286fc984d6263827cce74d0ecaa3442a4"
+    },
+    {
+      "path": "assets/trash-2-CLoEHb2U.js",
+      "bytes": 329,
+      "sha256": "1fe7d05198034a3206e265c6bea650b0b7f46372b2694de49cdd6c6daacbcfbe"
+    },
+    {
+      "path": "assets/trending-down-BarHLF5k.js",
+      "bytes": 470,
+      "sha256": "99099be8bffd75f94cd383d0dd862dbcdf9757d81caefef5bb8b33794cb01d7b"
+    },
+    {
+      "path": "assets/trending-up-CoebxQIa.js",
+      "bytes": 176,
+      "sha256": "a0a5fb51e4d5987868c13db652a51aaed1dd8928ed891ee9f68721ce1f930301"
+    },
+    {
+      "path": "assets/triangle-alert-D3aYSd3K.js",
+      "bytes": 266,
+      "sha256": "065bce37d10a0c3c70aeb80ca6a2c15ea3ce700fe327b4f6483a9c1cdea54c71"
+    },
+    {
+      "path": "assets/users-Dp99Qc0J.js",
+      "bytes": 307,
+      "sha256": "6b5d0f0dbf8b458fb58abb8913ca110bf2606f4b1f8fdf52f1944d8b41044938"
+    },
+    {
+      "path": "assets/wand-sparkles-DfeSOq9v.js",
+      "bytes": 514,
+      "sha256": "4dd4fe9bf51b85a73f5b813b168687de6958bb95d604d01438f6cef9c3837c41"
+    },
+    {
+      "path": "assets/zap-Cmlk3NhK.js",
+      "bytes": 263,
+      "sha256": "b2d20a79b688411e2329dd37020d382c776af5bb834e4bedca59b85200132395"
+    },
+    {
+      "path": "br-radio-template.png",
+      "bytes": 2357325,
+      "sha256": "dfc2a9bf9e9350455ebd5adedd10956b5a528a2d64f3472aaeccb7c34346abbc"
+    },
+    {
+      "path": "br-radio-video-template.png",
+      "bytes": 8846,
+      "sha256": "249598f4eee8146a509811f5eb09886ecc9a90234f4ed91af0798e0708e8aaf3"
+    },
+    {
+      "path": "favicon.png",
+      "bytes": 1145,
+      "sha256": "b6acb73abb0b7e8e808d72c016e81d97860bc7e7e0eb4f06ff76ba1d16a5b04f"
+    },
+    {
+      "path": "icon-192.png",
+      "bytes": 738,
+      "sha256": "77f434a868f6f8d81f88f792aa30e7bfd9029519406146a9a4d5538eda39d2b7"
+    },
+    {
+      "path": "icon-192.svg",
+      "bytes": 276,
+      "sha256": "9e1829bc9630a90bcc9e9bc7ec84ffbc5dc52f6913159c28967941e2a212ee06"
+    },
+    {
+      "path": "icon-512.svg",
+      "bytes": 276,
+      "sha256": "9e1829bc9630a90bcc9e9bc7ec84ffbc5dc52f6913159c28967941e2a212ee06"
+    },
+    {
+      "path": "index.html",
+      "bytes": 1811,
+      "sha256": "4eea76ca246dd1426097d5e5d27213f78b4abf355f3292526f31c5e86e9d0333"
+    },
+    {
+      "path": "local-news/miami-news-profile.png",
+      "bytes": 1180089,
+      "sha256": "f85b55114acb1331178929fb6c9ac60b05fc0487d9c92a2df8def20918ede39c"
+    },
+    {
+      "path": "local-news/ny-news-profile.png",
+      "bytes": 1157180,
+      "sha256": "e31ce57d257c60c680ae388fc2f178edd1aa8e39580f169f567467f196049574"
+    },
+    {
+      "path": "manifest.json",
+      "bytes": 554,
+      "sha256": "fb5920cd675e0b618082a1f47941699964262280fc9fad39bb522cfb2514bb0c"
+    },
+    {
+      "path": "opengraph.jpg",
+      "bytes": 58028,
+      "sha256": "4a35c55744ad0fbaf6bcd13def248ddc29c0735c35811321747e8fd57983560e"
+    },
+    {
+      "path": "sportclipsr-tiktok-icon.png",
+      "bytes": 53537,
+      "sha256": "80d768f3ed5baf9b66c489a46620e0a63a2be8701de0638120a1833893db567f"
+    },
+    {
+      "path": "sportclipsr-tiktok-icon.svg",
+      "bytes": 639,
+      "sha256": "eb010da9a728c36a015ee0284b7cdf08bdac492783547c01668f01dc8e40cd75"
+    },
+    {
+      "path": "sw.js",
+      "bytes": 1827,
+      "sha256": "17d7b1b0f4ebefddf8cbe189e38c5fcb3345b2d72a98a4c71fa3f72af01ff4aa"
+    },
+    {
+      "path": "tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt",
+      "bytes": 69,
+      "sha256": "00842043ef7cb152a8dd632c9b30265df2a9b15f410b8ba31ca90ec09a2447d1"
+    },
+    {
+      "path": "tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt",
+      "bytes": 68,
+      "sha256": "67ca363629f35451d622d1090c93bea846cdbe1f70147b418db67a6e4c543ed6"
+    }
+  ],
+  "concrete_mappings_absent_from_client_bundle": true,
+  "preserved_refs": {
+    "fix/metricool-timeout-containment": "8fdc26a789c65ca2a70eba57166799b3d0a38f7d",
+    "integration/agents-world-3d-local": "7aa4e02756e0ce5dfb56d51bf160f8d3df1decf5",
+    "fix/legacy-publication-containment-isolated": "db7c230576a6a79a72e51a0f0131eb0c5499dd04",
+    "ui/agents-world-departments-isolated": "381ae4da339dc9bc7f3edbdac2c8011bee000693"
+  },
+  "old_directories_snapshot_logs_and_exports_verified_unchanged": true,
+  "not_performed": [
+    "source activation",
+    "main implementation edits",
+    "unsafe GET or live app request",
+    "real DB/provider IO",
+    "DDL/create/default seeding",
+    "emails/leads/contact import",
+    "flags/secrets/grants/approval changes",
+    "startup/restart/workflows",
+    "installs",
+    "push/merge/PR/publish"
+  ],
+  "scope": "isolated candidate, not approved for activation; live source remains reviewed381 tree"
+}

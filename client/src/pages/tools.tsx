@@ -34,6 +34,13 @@ const tools = [
     primary: true,
   },
   {
+    title: "Chats de agentes",
+    description: "Habla con cada agente; las tareas que no son suyas se derivan solas.",
+    href: "/agent-chat",
+    icon: Bot,
+    primary: true,
+  },
+  {
     title: "CEO",
     description: "Prioridades, riesgos, approvals y salud general.",
     href: "/ceo",

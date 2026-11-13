@@ -1,0 +1,2199 @@
+diff --git a/.agents/memory/agents-world-integration-safety.md b/.agents/memory/agents-world-integration-safety.md
+index 8d107e8..a276d3b 100644
+--- a/.agents/memory/agents-world-integration-safety.md
++++ b/.agents/memory/agents-world-integration-safety.md
+@@ -20,3 +20,16 @@ Cada área del mundo es un DEPARTAMENTO, no solo un proyecto. Marca/proyecto es
+ **Why:** aclaración explícita del usuario; la representación visual no debe inventar plantilla, personal, KPIs ni autorizaciones.
+ 
+ **How to apply:** conservar clasificación desconocida cuando no exista correspondencia verificable. Describir revisión, despliegue autorizado y costes sin convertirlos en ejecución o permisos.
++
++Un mapeo de identidad social aportado no prueba ownership. Nunca asignarlo a
++cualquier usuario autenticado, a un owner singleton genérico o por el nombre de
++un proyecto. Sin vínculo owner/source existente verificable, devolver no
++disponible y sin datos. Deduplicar por red e identidad física verificada, no por
++referencias de blog.
++
++**Why:** el usuario reiteró expresamente la separación entre identidad,
++ownership y conexión, y exigió aislamiento multiusuario fail-closed.
++
++**How to apply:** futuros lectores pasivos requieren revisión independiente del
++vínculo persistido; no introducir seeding ni ampliar permisos para llenar el
++registro.
+diff --git a/client/src/components/company-office/agents-world-office.tsx b/client/src/components/company-office/agents-world-office.tsx
+index b3c9783..b29281b 100644
+--- a/client/src/components/company-office/agents-world-office.tsx
++++ b/client/src/components/company-office/agents-world-office.tsx
+@@ -3,6 +3,7 @@ import { Link } from 'wouter';
+ import { departments, buildWorld, filterWorld, readSource, type Entity, type Source } from '@/lib/agents-world';
+ import { readLearning } from '@/lib/agents-world-learning';
+ import { worldOwnerMatches } from '@/lib/agents-world-session';
++import { PostingDepartments } from '@/components/company-office/posting-departments';
+ import './agents-world-office.css';
+ 
+ const AgentsWorldScene = lazy(() => import('@/components/agents-world-scene').then(module => ({ default: module.AgentsWorldScene })));
+@@ -65,6 +66,7 @@ export function AgentsWorldOffice({ ownerId, suspended = false }: { ownerId: str
+     requestAnimationFrame(() => detail.current?.focus({ preventScroll: true }));
+   };
+   return <section className="company-agents-world ops-world" aria-labelledby="agents-world-heading">
++     <PostingDepartments ownerId={ownerId} refresh={refresh} />
+      <header className="world-heading">
+        <div><h2 id="agents-world-heading">Mundo 3D · departamentos y evidencia</h2><p>Solo lectura · catálogo conceptual y registros disponibles. Una figura no demuestra trabajo real.</p></div>
+       <button type="button" onClick={() => setRefresh(value => value + 1)}>Actualizar lecturas</button>
+diff --git a/client/src/components/company-office/posting-departments.css b/client/src/components/company-office/posting-departments.css
+new file mode 100644
+index 0000000..5b270aa
+--- /dev/null
++++ b/client/src/components/company-office/posting-departments.css
+@@ -0,0 +1,102 @@
++.posting-departments {
++  --posting-ink: #20363c;
++  --posting-muted: #587176;
++  --posting-paper: #f5f2e9;
++  --posting-line: #d2d4c7;
++  --posting-teal: #1c6761;
++  --posting-coral: #b75c48;
++  margin: 22px 0 4px;
++  padding: clamp(18px, 3vw, 30px);
++  color: var(--posting-ink);
++  background: var(--posting-paper);
++  border: 1px solid #c8cec1;
++  border-radius: 12px;
++  box-shadow: 0 12px 30px #07152418;
++}
++.posting-departments * { box-sizing: border-box; }
++.posting-departments h2,.posting-departments h3,.posting-departments p { margin-top: 0; }
++.posting-departments h2 {
++  margin-bottom: 8px;
++  font: 600 clamp(22px, 3vw, 30px)/1.12 Georgia, "Times New Roman", serif;
++  letter-spacing: -.035em;
++  color: #203d41;
++}
++.posting-departments h3 { font-size: 18px; margin-bottom: 14px; color: #213e42; }
++.posting-departments p { line-height: 1.55; }
++.posting-departments__heading {
++  display: flex; align-items: flex-start; justify-content: space-between; gap: 18px;
++  padding-bottom: 18px; border-bottom: 1px solid var(--posting-line);
++}
++.posting-departments__heading p { max-width: 680px; margin-bottom: 0; color: var(--posting-muted); font-size: 13px; }
++.posting-departments__stamp,.posting-departments__eyebrow {
++  display: inline-flex; width: fit-content; align-items: center; gap: 8px;
++  color: var(--posting-teal); font-size: 10px; font-weight: 750; letter-spacing: .13em; text-transform: uppercase;
++}
++.posting-departments__stamp { flex-shrink: 0; padding: 8px 10px; border: 1px solid #a6c2b8; border-radius: 3px; }
++.posting-departments__stamp:before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
++.posting-departments__stamp[data-state="loading"]:before { opacity: .45; }
++.posting-departments__notice {
++  display: grid; grid-template-columns: minmax(116px, .32fr) 1fr; gap: 14px;
++  margin: 18px 0; padding: 14px 16px; color: #324c4f;
++  background: #e8ece1; border-left: 3px solid var(--posting-teal); font-size: 12px; line-height: 1.55;
++}
++.posting-departments__notice strong { color: #285650; }
++.posting-departments__notice--warning { background: #f3e9dc; border-color: var(--posting-coral); }
++.posting-departments__skeleton { display: grid; gap: 8px; margin: 14px 0; }
++.posting-departments__skeleton i { display: block; width: 38%; height: 9px; border-radius: 2px; background: #d9ded3; animation: posting-skeleton 1.1s ease-in-out infinite alternate; }
++.posting-departments__skeleton i:nth-child(2) { width: 63%; animation-delay: .12s; }
++.posting-departments__skeleton i:nth-child(3) { width: 47%; animation-delay: .24s; }
++@keyframes posting-skeleton { from { opacity: .45; } to { opacity: .95; } }
++.posting-departments__sections { display: grid; gap: 23px; }
++.posting-departments__section-head {
++  display: flex; align-items: baseline; justify-content: space-between; gap: 14px;
++  padding-bottom: 9px; border-bottom: 2px solid #315c59;
++}
++.posting-departments__section-head h3 { margin: 0; font: 600 21px/1.2 Georgia, "Times New Roman", serif; }
++.posting-departments__section-head span { color: var(--posting-muted); font-size: 10px; letter-spacing: .1em; text-transform: uppercase; }
++.posting-departments__cards { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
++.posting-departments__card {
++  min-width: 0; padding: 18px 18px 14px; background: #fbfaf5;
++  border: 1px solid var(--posting-line); border-radius: 7px;
++}
++.posting-departments__card--proposal { background: #f1eee5; border-style: dashed; }
++.posting-departments__card-head { display: flex; justify-content: space-between; align-items: start; gap: 12px; margin-bottom: 14px; }
++.posting-departments__card h4 { margin: 5px 0 0; color: #213e42; font: 600 21px/1.15 Georgia, "Times New Roman", serif; }
++.posting-departments__badge {
++  padding: 5px 7px; border: 1px solid #c9d1c5; color: #596e6c; border-radius: 2px;
++  font-size: 9px; line-height: 1.2; font-weight: 700; letter-spacing: .08em; text-transform: uppercase;
++}
++.posting-departments__badge--proposal { color: #98513f; border-color: #d7aa99; }
++.posting-departments__fields { display: grid; grid-template-columns: minmax(105px, .32fr) 1fr; margin: 0; }
++.posting-departments__fields dt,.posting-departments__fields dd {
++  min-width: 0; margin: 0; padding: 9px 0; border-top: 1px solid #e4e3da; font-size: 12px; line-height: 1.5;
++}
++.posting-departments__fields dt { padding-right: 12px; color: #607273; font-size: 10px; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
++.posting-departments__fields dd { overflow-wrap: anywhere; color: #2b4244; }
++.posting-departments__account { display: block; }
++.posting-departments__account + .posting-departments__account { margin-top: 5px; }
++.posting-departments__account small { display: block; color: #647b78; font-size: 10px; }
++.posting-departments__none { color: #6d7773; font-style: italic; }
++.posting-departments__account-proof { margin: 13px 0 0; padding: 10px 11px; color: #49635e; background: #eaf0e8; font-size: 10px; line-height: 1.5; }
++.posting-departments__footnote { margin: 16px 0 0; color: var(--posting-muted); font-size: 11px; }
++.posting-departments__retry {
++  margin-top: 9px; padding: 8px 10px; color: #294c49; background: transparent;
++  border: 1px solid #9bb7ac; border-radius: 3px; font: inherit; font-size: 11px; cursor: pointer;
++}
++.posting-departments__retry:hover { background: #e7ece4; }
++.posting-departments :focus-visible { outline: 2px solid var(--posting-coral); outline-offset: 3px; }
++@media (max-width: 700px) {
++  .posting-departments__heading { display: grid; }
++  .posting-departments__stamp { width: fit-content; }
++  .posting-departments__cards { grid-template-columns: 1fr; }
++}
++@media (max-width: 440px) {
++  .posting-departments__notice { grid-template-columns: 1fr; gap: 5px; }
++  .posting-departments__section-head { align-items: start; flex-direction: column; gap: 5px; }
++  .posting-departments__fields { grid-template-columns: 1fr; }
++  .posting-departments__fields dt { padding: 9px 0 0; border-top: 1px solid #e4e3da; }
++  .posting-departments__fields dd { padding: 3px 0 9px; border-top: 0; }
++}
++@media (prefers-reduced-motion: reduce) {
++  .posting-departments *, .posting-departments *:before, .posting-departments *:after { scroll-behavior: auto; transition: none; }
++}
+diff --git a/client/src/components/company-office/posting-departments.tsx b/client/src/components/company-office/posting-departments.tsx
+new file mode 100644
+index 0000000..09fbabc
+--- /dev/null
++++ b/client/src/components/company-office/posting-departments.tsx
+@@ -0,0 +1,188 @@
++import { useEffect, useMemo, useState, type ReactNode } from 'react';
++import { readPostingRegistry, type PostingAccount, type PostingRegistry } from '@/lib/posting-registry';
++import './posting-departments.css';
++
++type Props = { ownerId: string; refresh: number };
++const loadingState = (ownerId: string): PostingRegistry => ({
++  state: 'loading', ownerId, accounts: [], excludedUnverifiable: 0,
++});
++const reasonText: Record<'owner_source_binding_unproven' | 'source_unavailable' | 'invalid_source_records', string> = {
++  owner_source_binding_unproven: 'No se pudo demostrar la vinculación de origen con esta cuenta.',
++  source_unavailable: 'La fuente no está disponible en este momento.',
++  invalid_source_records: 'La fuente devolvió registros que no cumplen el contrato seguro.',
++};
++const platformLabel: Record<PostingAccount['platform'], string> = {
++  tiktok: 'TikTok',
++  youtube: 'YouTube',
++  facebook: 'Facebook',
++};
++const unavailable = 'No disponible';
++const noConnection = 'No conectada / sin verificación';
++const unresolvedAccount = 'Sin cuenta verificada para esta marca.';
++
++function FieldList({ accountContent, responsible, style, material, calendar, metrics }: {
++  accountContent: ReactNode;
++  responsible: string;
++  style: string;
++  material: string;
++  calendar: string;
++  metrics: string;
++}) {
++  return <dl className="posting-departments__fields">
++    <dt>Responsable / roles</dt><dd>{responsible}</dd>
++    <dt>Cuentas</dt><dd>{accountContent}</dd>
++    <dt>Estilo</dt><dd>{style}</dd>
++    <dt>Material</dt><dd>{material}</dd>
++    <dt>Calendario</dt><dd>{calendar}</dd>
++    <dt>Métricas</dt><dd>{metrics}</dd>
++  </dl>;
++}
++
++function AccountList({ accounts, emptyText = unresolvedAccount }: { accounts: PostingAccount[]; emptyText?: string }) {
++  if (!accounts.length) return <span className="posting-departments__none">{emptyText}</span>;
++  return <>{accounts.map(account => <span className="posting-departments__account" key={account.key}>
++    {platformLabel[account.platform]} · {account.displayIdentity}
++    <small>{account.identityEvidence === 'coordinator_mapping' ? 'Mapeo aportado' : 'Metadata de fuente verificada'} · alias mapeados: {account.aliasesCount} · conexión runtime: desconocida</small>
++  </span>)}</>;
++}
++
++/** Proposal and evidence are intentionally presented as separate registers. */
++export function PostingDepartments({ ownerId, refresh }: Props) {
++  const [retry, setRetry] = useState(0);
++  const [registry, setRegistry] = useState<PostingRegistry>(() => loadingState(ownerId));
++
++  useEffect(() => {
++    const controller = new AbortController();
++    setRegistry(loadingState(ownerId));
++    if (!ownerId) {
++      setRegistry({ state: 'denied', ownerId, accounts: [], excludedUnverifiable: 0 });
++      return () => controller.abort();
++    }
++    void readPostingRegistry(ownerId, controller.signal).then(result => {
++      if (!controller.signal.aborted) setRegistry(result);
++    });
++    return () => controller.abort();
++  }, [ownerId, refresh, retry]);
++
++  // Hide all prior-owner data on the first render after an identity switch.
++  const visibleRegistry = registry.ownerId === ownerId ? registry : loadingState(ownerId);
++  const kongAccounts = useMemo(
++    () => visibleRegistry.state === 'ready' ? visibleRegistry.accounts.filter(a => a.brand === 'KONG' && a.platform === 'tiktok') : [],
++    [visibleRegistry],
++  );
++  const blackRoomAccounts = useMemo(
++    () => visibleRegistry.state === 'ready' ? visibleRegistry.accounts.filter(a => a.brand === 'Black Room') : [],
++    [visibleRegistry],
++  );
++  const sourceIsUnavailable = visibleRegistry.state === 'unavailable' || visibleRegistry.state === 'error';
++  const registrySummary = visibleRegistry.state === 'loading'
++    ? 'Consultando registro owner-only'
++    : visibleRegistry.state === 'ready'
++      ? `Registro disponible · ${visibleRegistry.accounts.length} mapeos filtrados`
++      : visibleRegistry.state === 'denied'
++        ? 'Acceso no autorizado'
++        : 'Inventario no confirmado';
++
++  const renderCard = (
++    key: string,
++    title: string,
++    kind: 'evidence' | 'proposal',
++    fields: Parameters<typeof FieldList>[0],
++    note?: string,
++  ) => <article className={`posting-departments__card${kind === 'proposal' ? ' posting-departments__card--proposal' : ''}`} key={key}>
++    <header className="posting-departments__card-head">
++      <div><span className="posting-departments__eyebrow">POSTING · {kind === 'evidence' ? 'Evidencia / alcance' : 'Propuesta'}</span><h4>{title}</h4></div>
++      <span className={`posting-departments__badge${kind === 'proposal' ? ' posting-departments__badge--proposal' : ''}`}>
++        {kind === 'evidence' ? 'Solo evidencia' : 'No conectado'}
++      </span>
++    </header>
++    <FieldList {...fields} />
++    {note && <p className="posting-departments__account-proof">{note}</p>}
++  </article>;
++
++  return <section className="posting-departments" aria-labelledby="posting-departments-heading">
++    <header className="posting-departments__heading">
++      <div>
++        <span className="posting-departments__eyebrow">Oficina online · solo lectura</span>
++        <h2 id="posting-departments-heading">POSTING / Departamentos</h2>
++        <p>La actividad, las identidades operativas y los resultados solo se afirman cuando una fuente los confirma. Las ideas futuras permanecen marcadas como propuestas.</p>
++      </div>
++      <span className="posting-departments__stamp" data-state={visibleRegistry.state} role="status">{registrySummary}</span>
++    </header>
++
++    <aside className={`posting-departments__notice${sourceIsUnavailable ? ' posting-departments__notice--warning' : ''}`}>
++      <strong>Identidad no equivale a conexión</strong>
++       <span>El registro requiere vínculo owner/source comprobado e identidad física verificable. Distingue el mapeo aportado de la metadata de fuente y no demuestra sesión, conexión, publicación ni actividad en runtime; sin prueba, los datos quedan como «{unavailable}».</span>
++    </aside>
++    {visibleRegistry.state === 'loading' && <div className="posting-departments__skeleton" aria-hidden="true"><i /><i /><i /></div>}
++
++    {sourceIsUnavailable && <aside className="posting-departments__notice posting-departments__notice--warning" role="alert">
++      <strong>Inventario sin confirmar</strong>
++      <span>{visibleRegistry.state === 'unavailable' || visibleRegistry.state === 'error'
++        ? reasonText[visibleRegistry.reason]
++        : 'No se confirmó el inventario. Esto no significa que haya cero cuentas.'}
++        {' '}Una fuente no disponible no equivale a cero cuentas.
++        {visibleRegistry.state === 'unavailable' && visibleRegistry.excludedUnverifiable > 0 &&
++          ` Registros excluidos como no verificables: ${visibleRegistry.excludedUnverifiable}.`}
++        <br /><button type="button" className="posting-departments__retry" onClick={() => setRetry(value => value + 1)}>Reintentar lectura segura</button>
++      </span>
++    </aside>}
++    {visibleRegistry.state === 'denied' && <p role="alert" className="posting-departments__footnote">Sesión no confirmada o acceso denegado. Se ocultan los datos del registro.</p>}
++
++    <div className="posting-departments__sections">
++      <section aria-labelledby="posting-evidence-heading">
++        <header className="posting-departments__section-head">
++          <h3 id="posting-evidence-heading">Evidencia recibida</h3><span>Sin inferencia de actividad</span>
++        </header>
++        <div className="posting-departments__cards">
++          {renderCard('kong-tiktok', 'KONG', 'evidence', {
++            responsible: `Roles de marketing y contenido: planificación de videos de fiestas y experiencia. Asignación de personas: ${unavailable}.`,
++            accountContent: <AccountList accounts={kongAccounts} emptyText={visibleRegistry.state === 'ready' ? unresolvedAccount : 'Inventario no confirmado; no se informa un total.'} />,
++            style: 'Videos de fiestas y experiencia. Guía visual aprobada: no disponible.',
++            material: 'Material de fiestas/experiencia y derechos de uso: no disponible.',
++            calendar: 'Calendario de publicaciones y frecuencia real: no disponible.',
++            metrics: 'KPIs, alcance, reproducciones y conversiones: no disponibles.',
++          }, 'KONG: la única plataforma que se mostrará para esta marca es TikTok. El mapeo de identidad no confirma conexión ni publicaciones.') }
++          {renderCard('black-room-dj', 'Black Room', 'evidence', {
++            responsible: `Roles de DJ y contenido: sets y clips. DJ/contact research es un rol de marketing propuesto, no personal asignado. Personas responsables: ${unavailable}.`,
++            accountContent: <AccountList accounts={blackRoomAccounts} emptyText={visibleRegistry.state === 'ready' ? unresolvedAccount : 'Inventario no confirmado; no se informa un total.'} />,
++            style: 'Sets y clips de DJ, con dirección visual propia y separada de KONG. Estilo aprobado: no disponible.',
++            material: 'Sets, clips, masters y permisos: no disponibles.',
++            calendar: 'Calendario editorial y fechas confirmadas: no disponibles.',
++            metrics: 'Reproducciones, retención, interacción y resultados: no disponibles.',
++          }, 'La lista de aproximadamente 15.000 DJs permanece en un Mac offline: no está importada ni accesible aquí. Sin leads, emails ni acciones de contacto.') }
++        </div>
++      </section>
++
++      <section aria-labelledby="posting-proposals-heading">
++        <header className="posting-departments__section-head">
++          <h3 id="posting-proposals-heading">Propuestas · no son actividad</h3><span>Sin llamadas ni ejecución</span>
++        </header>
++        <div className="posting-departments__cards">
++          {renderCard('news-clipping', 'Noticias / Clipping', 'proposal', {
++            responsible: `Research y revisión editorial propuestos. Responsable asignado: ${unavailable}.`,
++            accountContent: <span className="posting-departments__none">{noConnection}; plataformas y cuentas {unavailable.toLowerCase()}.</span>,
++            style: 'Recopilación con fuentes y contexto; guía editorial: no disponible.',
++            material: 'Fuentes/licencias y piezas aprobadas: no disponibles.',
++            calendar: 'Cobertura y cadencia propuesta: no documentadas.',
++            metrics: 'Métricas y objetivos: no documentados.',
++          }, 'Esta ficha expresa un ámbito propuesto, no una integración, publicación o monitoreo en marcha.') }
++          {renderCard('future-brands', 'Marcas futuras', 'proposal', {
++            responsible: `Exploración de marca y contenido propuesta. Equipo y responsable: ${unavailable}.`,
++            accountContent: <span className="posting-departments__none">{noConnection}; marca y cuentas concretas {unavailable.toLowerCase()}.</span>,
++            style: 'Por definir para cada marca; no se reutiliza automáticamente el estilo de KONG o Black Room.',
++            material: 'Brief, material y permisos: no disponibles.',
++            calendar: 'No propuesto ni confirmado.',
++            metrics: 'No definidos; no hay KPIs verificados.',
++          }, 'No se inventan nombres de marca ni se sugieren identidades o perfiles que no figuren en el registro seguro.') }
++        </div>
++      </section>
++    </div>
++
++    <aside className="posting-departments__notice posting-departments__notice--warning">
++      <strong>Outreach y costes</strong>
++      <span>La investigación de DJs, outreach por email, respuestas y seguimiento para impulsar descargas de KONG son propuestas desconectadas: no hay leads importados, emails, envíos ni acciones autorizadas. Growth Scout está pendiente, sin llamada ni ejecución. Costes reales de herramientas, medios, producción y operación no disponibles; no hay promesa de coste cero ni de LLM pagado por lead.</span>
++    </aside>
++    <p className="posting-departments__footnote">Los conteos, si aparecen, corresponden solo a filas válidas del registro filtrado para esta identidad. No se extrapolan aliases a personas, actividad ni resultados.</p>
++  </section>;
++}
+diff --git a/client/src/lib/posting-registry.ts b/client/src/lib/posting-registry.ts
+new file mode 100644
+index 0000000..6daab3d
+--- /dev/null
++++ b/client/src/lib/posting-registry.ts
+@@ -0,0 +1,122 @@
++import { readSource, type Source } from './agents-world';
++import { worldOwnerMatches } from './agents-world-session';
++import type { PostingAccount as PublicPostingAccount } from '@shared/posting-registry';
++
++export type PostingAccount = PublicPostingAccount;
++
++export type PostingRegistry =
++  | { state: 'loading'; ownerId: string; accounts: []; excludedUnverifiable: 0 }
++  | { state: 'denied'; ownerId: string; accounts: []; excludedUnverifiable: 0 }
++  | { state: 'error'; ownerId: string; reason: 'source_unavailable' | 'invalid_source_records'; accounts: []; excludedUnverifiable: 0 }
++  | { state: 'unavailable'; ownerId: string; reason: 'owner_source_binding_unproven' | 'source_unavailable' | 'invalid_source_records'; accounts: []; excludedUnverifiable: number }
++  | { state: 'ready'; ownerId: string; reason: null; accounts: PostingAccount[]; excludedUnverifiable: number };
++
++const REGISTRY_ENDPOINT = '/api/agents-office/posting-registry';
++const MAX_ACCOUNTS = 32;
++const MAX_TEXT = 96;
++const safeRecord = (value: unknown): Record<string, unknown> =>
++  value !== null && typeof value === 'object' && !Array.isArray(value)
++    ? value as Record<string, unknown>
++    : {};
++const cleanText = (value: unknown, limit = MAX_TEXT): string | null => {
++  if (typeof value !== 'string') return null;
++  if (value.length > limit || value.trim() !== value || /[\u0000-\u001f\u007f]/.test(value)) return null;
++  return value || null;
++};
++const countValue = (value: unknown): number | null =>
++  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 && value <= 1_000_000
++    ? value
++    : null;
++const empty = (state: 'loading' | 'denied', ownerId: string): PostingRegistry =>
++  ({ state, ownerId, accounts: [], excludedUnverifiable: 0 });
++
++function unavailable(ownerId: string, reason: 'owner_source_binding_unproven' | 'source_unavailable' | 'invalid_source_records', excludedUnverifiable = 0): PostingRegistry {
++  return { state: 'unavailable', ownerId, reason, accounts: [], excludedUnverifiable };
++}
++
++function validAccount(value: unknown): PostingAccount | null {
++  const item = safeRecord(value);
++  // Preserve the canonical platform/physical-identity key, not blog or display label.
++  const sourceKey = cleanText(item.key, 72);
++  const displayIdentity = cleanText(item.displayIdentity);
++  const platform: PostingAccount['platform'] | null =
++    item.platform === 'tiktok' || item.platform === 'youtube' || item.platform === 'facebook'
++      ? item.platform : null;
++  const brand: PostingAccount['brand'] | null =
++    item.brand === 'KONG' || item.brand === 'Black Room' ? item.brand : null;
++  const aliasesCount = countValue(item.aliasesCount);
++  if (!sourceKey || !displayIdentity || !platform || !brand ||
++      (item.identityEvidence !== 'coordinator_mapping' && item.identityEvidence !== 'verified_source_metadata') ||
++      item.runtimeConnection !== 'unknown' || aliasesCount === null || aliasesCount < 1 || aliasesCount > 128 ||
++      !sourceKey.startsWith(`${platform}:`) || !/^([a-z]+):(id|handle):[A-Za-z0-9_.-]+$/.test(sourceKey)) return null;
++  // KONG's approved channel is TikTok only; do not surface another platform as its account.
++  if (brand === 'KONG' && platform !== 'tiktok') return null;
++  return {
++    key: sourceKey,
++    platform,
++    brand,
++    displayIdentity,
++    identityEvidence: item.identityEvidence,
++    runtimeConnection: 'unknown',
++    aliasesCount,
++  };
++}
++
++/** The sole posting-registry reader: verify the signed-in owner before its allowlisted request. */
++export async function readPostingRegistry(ownerId: string, signal: AbortSignal): Promise<PostingRegistry> {
++  if (!cleanText(ownerId, 128)) return empty('denied', ownerId);
++  const auth: Source = await readSource('/api/auth/me', signal);
++  if (signal.aborted) return empty('denied', ownerId);
++  if (auth.state === 'denied') return empty('denied', ownerId);
++  if (auth.state !== 'ready') return unavailable(ownerId, 'source_unavailable');
++  if (!worldOwnerMatches(ownerId, auth)) return empty('denied', ownerId);
++
++  try {
++    const response = await fetch(REGISTRY_ENDPOINT, {
++      credentials: 'same-origin',
++      cache: 'no-store',
++      signal,
++    });
++    if (signal.aborted) return empty('denied', ownerId);
++    if (response.status === 401 || response.status === 403) return empty('denied', ownerId);
++    if (!response.ok || !response.headers.get('content-type')?.includes('application/json')) {
++      return unavailable(ownerId, 'source_unavailable');
++    }
++    const payload: unknown = await response.json();
++    if (signal.aborted) return empty('denied', ownerId);
++    const data = safeRecord(payload);
++    // Never retain or display records unless the server repeats the exact authenticated owner.
++    if (typeof data.ownerId !== 'string' || data.ownerId !== ownerId) return empty('denied', ownerId);
++    const excludedUnverifiable = countValue(data.excludedUnverifiable);
++    if (excludedUnverifiable === null || !Array.isArray(data.accounts) ||
++        data.accounts.length > MAX_ACCOUNTS ||
++        (data.status !== 'ready' && data.status !== 'unavailable')) {
++      return unavailable(ownerId, 'invalid_source_records');
++    }
++    if (data.status === 'unavailable') {
++      const reason = data.reason;
++      if (data.accounts.length !== 0 ||
++          (reason !== 'owner_source_binding_unproven' &&
++          reason !== 'source_unavailable' && reason !== 'invalid_source_records')) {
++        return unavailable(ownerId, 'invalid_source_records', excludedUnverifiable);
++      }
++      return unavailable(ownerId, reason, excludedUnverifiable);
++    }
++    if (data.reason !== null) {
++      return unavailable(ownerId, 'invalid_source_records', excludedUnverifiable);
++    }
++    const accounts: PostingAccount[] = [];
++    const keys = new Set<string>();
++    for (const raw of data.accounts) {
++      const account = validAccount(raw);
++      if (!account || keys.has(account.key)) {
++        return unavailable(ownerId, 'invalid_source_records', excludedUnverifiable);
++      }
++      keys.add(account.key);
++      accounts.push(account);
++    }
++    return { state: 'ready', ownerId, reason: null, accounts, excludedUnverifiable };
++  } catch {
++    return signal.aborted ? empty('denied', ownerId) : unavailable(ownerId, 'source_unavailable');
++  }
++}
+diff --git a/docs/codebase-map.json b/docs/codebase-map.json
+index c19973c..180aaa0 100644
+--- a/docs/codebase-map.json
++++ b/docs/codebase-map.json
+@@ -1,6 +1,6 @@
+ {
+-  "generatedAt": "2026-10-09T01:39:37.437Z",
+-  "repoRoot": "/home/runner/workspace/.local/worktrees/agents-world-3d",
++  "generatedAt": "2026-10-09T03:46:40.279Z",
++  "repoRoot": "/home/runner/workspace/.local/worktrees/posting-owner-registry-isolated",
+   "packageName": "rest-express",
+   "scripts": {
+     "dev:client": "vite dev --port 5000",
+@@ -122,60 +122,13 @@
+     "db:push": "drizzle-kit push"
+   },
+   "totals": {
+-    "filesVisible": 693,
+-    "filesIndexed": 609,
+-    "imports": 2065,
+-    "routes": 511,
+-    "symbols": 13259
++    "filesVisible": 713,
++    "filesIndexed": 629,
++    "imports": 2118,
++    "routes": 512,
++    "symbols": 13437
+   },
+   "directories": {
+-    ".agents/memory": {
+-      "files": 10,
+-      "indexed": 10,
+-      "kinds": {
+-        "docs": 10
+-      }
+-    },
+-    "client/src": {
+-      "files": 130,
+-      "indexed": 128,
+-      "kinds": {
+-        "client-component": 29,
+-        "client-lib": 13,
+-        "other": 4,
+-        "ui-component": 55,
+-        "client-hook": 3,
+-        "client-page": 26
+-      }
+-    },
+-    "docs": {
+-      "files": 32,
+-      "indexed": 31,
+-      "kinds": {
+-        "docs": 32
+-      }
+-    },
+-    "script": {
+-      "files": 77,
+-      "indexed": 72,
+-      "kinds": {
+-        "script": 77
+-      }
+-    },
+-    "tests": {
+-      "files": 129,
+-      "indexed": 126,
+-      "kinds": {
+-        "test": 129
+-      }
+-    },
+-    "tests/harness": {
+-      "files": 1,
+-      "indexed": 1,
+-      "kinds": {
+-        "test": 1
+-      }
+-    },
+     ".": {
+       "files": 34,
+       "indexed": 18,
+@@ -192,6 +145,13 @@
+         "other": 1
+       }
+     },
++    ".agents/memory": {
++      "files": 11,
++      "indexed": 11,
++      "kinds": {
++        "docs": 11
++      }
++    },
+     ".agents/skills": {
+       "files": 2,
+       "indexed": 1,
+@@ -221,6 +181,18 @@
+         "other": 16
+       }
+     },
++    "client/src": {
++      "files": 133,
++      "indexed": 131,
++      "kinds": {
++        "other": 4,
++        "client-component": 31,
++        "ui-component": 55,
++        "client-hook": 3,
++        "client-lib": 14,
++        "client-page": 26
++      }
++    },
+     "config": {
+       "files": 1,
+       "indexed": 1,
+@@ -228,6 +200,13 @@
+         "other": 1
+       }
+     },
++    "docs": {
++      "files": 35,
++      "indexed": 34,
++      "kinds": {
++        "docs": 35
++      }
++    },
+     "examples/clippers-motivation": {
+       "files": 71,
+       "indexed": 71,
+@@ -236,6 +215,13 @@
+         "other": 70
+       }
+     },
++    "script": {
++      "files": 79,
++      "indexed": 74,
++      "kinds": {
++        "script": 79
++      }
++    },
+     "scripts": {
+       "files": 4,
+       "indexed": 1,
+@@ -244,10 +230,10 @@
+       }
+     },
+     "server": {
+-      "files": 136,
+-      "indexed": 132,
++      "files": 140,
++      "indexed": 136,
+       "kinds": {
+-        "server": 136
++        "server": 140
+       }
+     },
+     "server/replit_integrations": {
+@@ -258,10 +244,10 @@
+       }
+     },
+     "shared": {
+-      "files": 3,
+-      "indexed": 3,
++      "files": 4,
++      "indexed": 4,
+       "kinds": {
+-        "shared": 3
++        "shared": 4
+       }
+     },
+     "shared/models": {
+@@ -271,6 +257,27 @@
+         "shared": 1
+       }
+     },
++    "tests": {
++      "files": 134,
++      "indexed": 131,
++      "kinds": {
++        "test": 134
++      }
++    },
++    "tests/fixtures": {
++      "files": 1,
++      "indexed": 1,
++      "kinds": {
++        "test": 1
++      }
++    },
++    "tests/harness": {
++      "files": 1,
++      "indexed": 1,
++      "kinds": {
++        "test": 1
++      }
++    },
+     "tutorials/dropshipping-ceo-tutorial": {
+       "files": 8,
+       "indexed": 1,
+@@ -297,6 +304,14 @@
+       "symbols": [],
+       "routes": []
+     },
++    {
++      "path": ".agents/memory/legacy-publication-reconciliation.md",
++      "kind": "docs",
++      "imports": [],
++      "exports": [],
++      "symbols": [],
++      "routes": []
++    },
+     {
+       "path": ".agents/memory/local-news-diagnostic-evidence.md",
+       "kind": "docs",
+@@ -658,6 +673,7 @@
+       "kind": "client-component",
+       "imports": [
+         "./agents-world-office.css",
++        "@/components/company-office/posting-departments",
+         "@/lib/agents-world",
+         "@/lib/agents-world-learning",
+         "@/lib/agents-world-session",
+@@ -671,6 +687,7 @@
+         "AgentsWorldOffice",
+         "AgentsWorldScene",
+         "auth",
++        "brandProjects",
+         "controller",
+         "detail",
+         "entities",
+@@ -770,6 +787,44 @@
+       ],
+       "routes": []
+     },
++    {
++      "path": "client/src/components/company-office/posting-departments.css",
++      "kind": "client-component",
++      "imports": [],
++      "exports": [],
++      "symbols": [],
++      "routes": []
++    },
++    {
++      "path": "client/src/components/company-office/posting-departments.tsx",
++      "kind": "client-component",
++      "imports": [
++        "./posting-departments.css",
++        "@/lib/posting-registry",
++        "react"
++      ],
++      "exports": [
++        "PostingDepartments"
++      ],
++      "symbols": [
++        "AccountList",
++        "FieldList",
++        "PostingDepartments",
++        "Props",
++        "blackRoomAccounts",
++        "controller",
++        "kongAccounts",
++        "loadingState",
++        "noConnection",
++        "registrySummary",
++        "renderCard",
++        "sourceIsUnavailable",
++        "unavailable",
++        "unresolvedAccount",
++        "visibleRegistry"
++      ],
++      "routes": []
++    },
+     {
+       "path": "client/src/components/dashboard-assistant-chat.tsx",
+       "kind": "client-component",
+@@ -2832,11 +2887,13 @@
+       "imports": [],
+       "exports": [
+         "Area",
++        "Department",
+         "Entity",
+         "Signal",
+         "Source",
+         "areas",
+         "buildWorld",
++        "departments",
+         "filterWorld",
+         "freshness",
+         "readSource",
+@@ -2845,8 +2902,8 @@
+       "symbols": [
+         "blank",
+         "buildWorld",
+-        "catalog",
+         "data",
++        "departmentValue",
+         "entities",
+         "entity",
+         "event",
+@@ -2856,6 +2913,7 @@
+         "kong",
+         "p",
+         "planner",
++        "proposed",
+         "query",
+         "readSource",
+         "record",
+@@ -2973,6 +3031,43 @@
+       ],
+       "routes": []
+     },
++    {
++      "path": "client/src/lib/posting-registry.ts",
++      "kind": "client-lib",
++      "imports": [
++        "./agents-world",
++        "./agents-world-session",
++        "@shared/posting-registry"
++      ],
++      "exports": [
++        "PostingAccount",
++        "PostingRegistry",
++        "readPostingRegistry"
++      ],
++      "symbols": [
++        "MAX_ACCOUNTS",
++        "MAX_TEXT",
++        "REGISTRY_ENDPOINT",
++        "account",
++        "aliasesCount",
++        "cleanText",
++        "countValue",
++        "data",
++        "displayIdentity",
++        "empty",
++        "excludedUnverifiable",
++        "item",
++        "keys",
++        "readPostingRegistry",
++        "reason",
++        "response",
++        "safeRecord",
++        "sourceKey",
++        "unavailable",
++        "validAccount"
++      ],
++      "routes": []
++    },
+     {
+       "path": "client/src/lib/queryClient.ts",
+       "kind": "client-lib",
+@@ -4360,6 +4455,14 @@
+       "symbols": [],
+       "routes": []
+     },
++    {
++      "path": "docs/agents-world-departments-ui-validation.md",
++      "kind": "docs",
++      "imports": [],
++      "exports": [],
++      "symbols": [],
++      "routes": []
++    },
+     {
+       "path": "docs/agents-world-integration-review.md",
+       "kind": "docs",
+@@ -4576,6 +4679,14 @@
+       "symbols": [],
+       "routes": []
+     },
++    {
++      "path": "docs/legacy-publication-containment-validation.md",
++      "kind": "docs",
++      "imports": [],
++      "exports": [],
++      "symbols": [],
++      "routes": []
++    },
+     {
+       "path": "docs/metricool-tracking-runbook.md",
+       "kind": "docs",
+@@ -4584,6 +4695,14 @@
+       "symbols": [],
+       "routes": []
+     },
++    {
++      "path": "docs/posting-registry-isolated.md",
++      "kind": "docs",
++      "imports": [],
++      "exports": [],
++      "symbols": [],
++      "routes": []
++    },
+     {
+       "path": "docs/revenue-engine-first-lead-review.md",
+       "kind": "docs",
+@@ -5702,6 +5821,28 @@
+       "symbols": [],
+       "routes": []
+     },
++    {
++      "path": "script/build-containment-static.mjs",
++      "kind": "script",
++      "imports": [
++        "esbuild",
++        "node:fs/promises",
++        "node:module",
++        "node:path",
++        "typescript"
++      ],
++      "exports": [],
++      "symbols": [
++        "ast",
++        "externals",
++        "out",
++        "pkg",
++        "require",
++        "source",
++        "visit"
++      ],
++      "routes": []
++    },
+     {
+       "path": "script/build.ts",
+       "kind": "script",
+@@ -9503,6 +9644,53 @@
+       ],
+       "routes": []
+     },
++    {
++      "path": "script/test-legacy-containment.mjs",
++      "kind": "script",
++      "imports": [
++        "esbuild",
++        "node:child_process",
++        "node:fs/promises",
++        "node:path",
++        "typescript"
++      ],
++      "exports": [
++        "cleanupUploads",
++        "getHandlers",
++        "scheduleHandler",
++        "workerFailure",
++        "workerVerifyOnly"
++      ],
++      "symbols": [
++        "bridgeAst",
++        "bridgeSource",
++        "builtins",
++        "cleanup",
++        "cleanupUploads",
++        "failExports",
++        "findSchedule",
++        "fixture",
++        "getHandlers",
++        "handlers",
++        "out",
++        "result",
++        "scheduleHandler",
++        "sf",
++        "source",
++        "targets",
++        "test",
++        "virtual",
++        "walk",
++        "wanted",
++        "worker",
++        "workerAst",
++        "workerFailure",
++        "workerSource",
++        "workerVerifyOnly",
++        "workerVisit"
++      ],
++      "routes": []
++    },
+     {
+       "path": "script/upload-radio-edits-to-drive.ts",
+       "kind": "script",
+@@ -10386,10 +10574,28 @@
+         "/api/assistant/transcribe"
+       ]
+     },
++    {
++      "path": "server/automation-definition-reads.ts",
++      "kind": "server",
++      "imports": [
++        "@shared/schema"
++      ],
++      "exports": [
++        "AutomationDefinitionReader",
++        "activeMetricoolAnalyticsDefinition",
++        "listExistingAutomationDefinitions"
++      ],
++      "symbols": [
++        "activeMetricoolAnalyticsDefinition",
++        "listExistingAutomationDefinitions"
++      ],
++      "routes": []
++    },
+     {
+       "path": "server/automation-registry.ts",
+       "kind": "server",
+       "imports": [
++        "./automation-definition-reads",
+         "./storage",
+         "./trust-policy",
+         "@shared/schema"
+@@ -10399,6 +10605,7 @@
+         "ScheduledAutomationRunOutcome",
+         "buildScheduledAutomationRunInput",
+         "ensureDefaultAutomations",
++        "getExistingAutomations",
+         "getNextRunAt",
+         "recordManualAutomationRun",
+         "recordScheduledAutomationRun"
+@@ -10413,8 +10620,7 @@
+         "data",
+         "daysUntil",
+         "ensureDefaultAutomations",
+-        "existing",
+-        "existingAutomation",
++        "getExistingAutomations",
+         "getNextRunAt",
+         "isRunnable",
+         "now",
+@@ -10636,6 +10842,7 @@
+         "./blackroom-growth-ceo",
+         "./blackroom-learning-panel",
+         "./blackroom-metricool-bridge",
++        "./blackroom-publication-guard",
+         "./blackroom-remote-control",
+         "./blackroom-verified-learning",
+         "./single-user-owner",
+@@ -10678,6 +10885,7 @@
+         "blackRoomPageTemplate",
+         "blackRoomUploadDir",
+         "blackRoomUploads",
++        "blocked",
+         "byId",
+         "bytes",
+         "ceoTimer",
+@@ -11542,6 +11750,7 @@
+         "hasCompleteBlackRoomMetricoolReceipt",
+         "isBlackRoomJobPublishable",
+         "isBlackRoomSourceSegmentRecorded",
++        "markBlackRoomNetworkBlocked",
+         "markBlackRoomNetworkUncertain",
+         "nextBlackRoomPublicationDateTime",
+         "requiredBlackRoomReceiptNetworks",
+@@ -11589,6 +11798,7 @@
+         "isValidBlackRoomPublicationDateTime",
+         "job",
+         "leftDate",
++        "markBlackRoomNetworkBlocked",
+         "markBlackRoomNetworkUncertain",
+         "match",
+         "maxVolumeDb",
+@@ -11628,6 +11838,7 @@
+       "path": "server/blackroom-metricool-bridge.ts",
+       "kind": "server",
+       "imports": [
++        "./blackroom-publication-guard",
+         "node:child_process",
+         "node:fs",
+         "node:os",
+@@ -11674,6 +11885,7 @@
+         "METRICOOL_MCP_URL",
+         "absoluteMinutes",
+         "acceptedCaptions",
++        "assertPublicationAllowed",
+         "blackRoomMetricoolNetworks",
+         "blackRoomYoutubeWatchUrl",
+         "blogId",
+@@ -11770,10 +11982,33 @@
+         "verifyUrl",
+         "videoId",
+         "visit",
++        "wait",
+         "youtubeChannel"
+       ],
+       "routes": []
+     },
++    {
++      "path": "server/blackroom-publication-guard.ts",
++      "kind": "server",
++      "imports": [],
++      "exports": [
++        "BlackRoomPublicationBlockedError",
++        "BlackRoomPublicationControl",
++        "blackRoomPublicationControlVeto",
++        "blackRoomPublicationFlagVeto",
++        "retainBlackRoomAttempt",
++        "strictBlackRoomEnabled"
++      ],
++      "symbols": [
++        "BlackRoomPublicationBlockedError",
++        "blackRoomPublicationControlVeto",
++        "blackRoomPublicationFlagVeto",
++        "job",
++        "retainBlackRoomAttempt",
++        "strictBlackRoomEnabled"
++      ],
++      "routes": []
++    },
+     {
+       "path": "server/blackroom-remote-control.ts",
+       "kind": "server",
+@@ -11781,6 +12016,7 @@
+         "./blackroom-chat",
+         "./blackroom-growth-ceo",
+         "./blackroom-learning-observations",
++        "./blackroom-publication-guard",
+         "./blackroom-verified-learning",
+         "@shared/schema",
+         "drizzle-orm"
+@@ -11800,7 +12036,9 @@
+         "initializeBlackRoomRemoteControlPersistence",
+         "isBlackRoomRemoteDeviceOnline",
+         "mutateBlackRoomRemoteControl",
++        "normalizeRemoteControlState",
+         "readBlackRoomRemoteControl",
++        "readExistingBlackRoomRemoteControl",
+         "reconcileBlackRoomPublishedIdentities",
+         "recordBlackRoomPublicationExperiment",
+         "recordBlackRoomRemoteHeartbeat",
+@@ -11818,6 +12056,7 @@
+         "createBlackRoomRemoteControlState",
+         "createdAt",
+         "current",
++        "data",
+         "database",
+         "db",
+         "durationSeconds",
+@@ -11846,6 +12085,7 @@
+         "rawDuration",
+         "rawPublishedAt",
+         "readBlackRoomRemoteControl",
++        "readExistingBlackRoomRemoteControl",
+         "reconcileBlackRoomPublishedIdentities",
+         "recordBlackRoomPublicationExperiment",
+         "recordBlackRoomRemoteHeartbeat",
+@@ -16001,10 +16241,12 @@
+       "path": "server/metricool-analytics-sync.ts",
+       "kind": "server",
+       "imports": [
++        "./automation-definition-reads",
+         "./automation-registry",
+         "./blackroom-metricool-bridge",
+         "./clippers-local-news-agent",
+         "./user-context",
++        "@shared/schema",
+         "node:crypto",
+         "node:fs/promises",
+         "node:path"
+@@ -16048,6 +16290,7 @@
+         "boundedInt",
+         "canSplit",
+         "cancel",
++        "cancelDeadline",
+         "clicks",
+         "clock",
+         "collect",
+@@ -16061,6 +16304,7 @@
+         "current",
+         "dailyDeadlineReached",
+         "deadline",
++        "deadlineTimer",
+         "dir",
+         "direct",
+         "discoverBrands",
+@@ -16121,6 +16365,7 @@
+         "raw",
+         "reach",
+         "reactions",
++        "readDefinitions",
+         "readLedger",
+         "readStoredState",
+         "record",
+@@ -16336,6 +16581,67 @@
+       ],
+       "routes": []
+     },
++    {
++      "path": "server/posting-registry-routes.ts",
++      "kind": "server",
++      "imports": [
++        "./posting-registry",
++        "express"
++      ],
++      "exports": [
++        "createPostingRegistryHandler",
++        "registerPostingRegistryRoutes"
++      ],
++      "symbols": [
++        "AuthResolver",
++        "Reader",
++        "createPostingRegistryHandler",
++        "registerPostingRegistryRoutes"
++      ],
++      "routes": [
++        "/api/agents-office/posting-registry"
++      ]
++    },
++    {
++      "path": "server/posting-registry.ts",
++      "kind": "server",
++      "imports": [
++        "../shared/posting-registry"
++      ],
++      "exports": [
++        "ExistingOwnedPostingSource",
++        "MAX_POSTING_ACCOUNTS",
++        "MAX_POSTING_SOURCE_RECORDS",
++        "PostingSourceRead",
++        "normalizePostingIdentity",
++        "projectPostingRegistry",
++        "readExistingPostingSources",
++        "unavailablePostingRegistry"
++      ],
++      "symbols": [
++        "MAX_POSTING_ACCOUNTS",
++        "MAX_POSTING_SOURCE_RECORDS",
++        "aliasIdentities",
++        "bounded",
++        "group",
++        "groups",
++        "handleIds",
++        "identities",
++        "identity",
++        "ids",
++        "key",
++        "mapping",
++        "mappings",
++        "native",
++        "normalizePostingIdentity",
++        "physicalKey",
++        "projectPostingRegistry",
++        "readExistingPostingSources",
++        "unavailablePostingRegistry",
++        "value"
++      ],
++      "routes": []
++    },
+     {
+       "path": "server/proactive-insights.ts",
+       "kind": "server",
+@@ -17732,6 +18038,7 @@
+         "./meeting-intelligence",
+         "./metricool-analytics-sync",
+         "./portfolio-agent",
++        "./posting-registry-routes",
+         "./promo-video-agent",
+         "./public-local-news",
+         "./push-notifications",
+@@ -19587,6 +19894,19 @@
+       ],
+       "routes": []
+     },
++    {
++      "path": "shared/posting-registry.ts",
++      "kind": "shared",
++      "imports": [],
++      "exports": [
++        "PostingAccount",
++        "PostingBrand",
++        "PostingPlatform",
++        "PostingRegistrySnapshot"
++      ],
++      "symbols": [],
++      "routes": []
++    },
+     {
+       "path": "shared/schema.ts",
+       "kind": "shared",
+@@ -19966,12 +20286,15 @@
+       ],
+       "exports": [],
+       "symbols": [
++        "brandFilter",
+         "browser",
+         "camera",
+         "canvas",
+         "check",
+         "context",
+         "css",
++        "departmentFilter",
++        "detail",
+         "fixtures",
+         "frames",
+         "html",
+@@ -20015,7 +20338,9 @@
+         "large",
+         "now",
+         "original",
++        "own",
+         "projects",
++        "role",
+         "roles",
+         "room",
+         "signal",
+@@ -22478,6 +22803,26 @@
+       ],
+       "routes": []
+     },
++    {
++      "path": "tests/containment-handlers.d.ts",
++      "kind": "test",
++      "imports": [],
++      "exports": [
++        "cleanupUploads",
++        "getHandlers",
++        "scheduleHandler",
++        "workerFailure",
++        "workerVerifyOnly"
++      ],
++      "symbols": [
++        "cleanupUploads",
++        "getHandlers",
++        "scheduleHandler",
++        "workerFailure",
++        "workerVerifyOnly"
++      ],
++      "routes": []
++    },
+     {
+       "path": "tests/cybersecurity-agent.test.ts",
+       "kind": "test",
+@@ -22712,6 +23057,20 @@
+       ],
+       "routes": []
+     },
++    {
++      "path": "tests/fixtures/containment-storage.ts",
++      "kind": "test",
++      "imports": [
++        "@shared/schema"
++      ],
++      "exports": [
++        "fakeStorage"
++      ],
++      "symbols": [
++        "fakeStorage"
++      ],
++      "routes": []
++    },
+     {
+       "path": "tests/github-client-security.test.ts",
+       "kind": "test",
+@@ -22809,6 +23168,50 @@
+         "/agents-office"
+       ]
+     },
++    {
++      "path": "tests/legacy-publication-containment.test.ts",
++      "kind": "test",
++      "imports": [
++        "../server/automation-registry",
++        "../server/blackroom-local-worker",
++        "../server/blackroom-metricool-bridge",
++        "../server/blackroom-publication-guard",
++        "../server/blackroom-remote-control",
++        "../server/metricool-analytics-sync",
++        "./fixtures/containment-storage",
++        "@shared/schema",
++        "containment-handlers",
++        "node:assert/strict",
++        "node:test"
++      ],
++      "exports": [],
++      "symbols": [
++        "before",
++        "body",
++        "clock",
++        "control",
++        "definition",
++        "entry",
++        "env",
++        "envFixture",
++        "fakeTimer",
++        "fixture",
++        "handler",
++        "handlers",
++        "input",
++        "postReceipt",
++        "receipt",
++        "res",
++        "responseFixture",
++        "result",
++        "runNpm",
++        "scheduler",
++        "succeeded",
++        "upload",
++        "uploads"
++      ],
++      "routes": []
++    },
+     {
+       "path": "tests/legal-compliance-agent.test.ts",
+       "kind": "test",
+@@ -23133,6 +23536,83 @@
+       "symbols": [],
+       "routes": []
+     },
++    {
++      "path": "tests/posting-departments-ui.mjs",
++      "kind": "test",
++      "imports": [
++        "esbuild",
++        "node:assert/strict",
++        "node:fs/promises",
++        "node:path",
++        "playwright"
++      ],
++      "exports": [],
++      "symbols": [
++        "account",
++        "browser",
++        "check",
++        "context",
++        "css",
++        "errors",
++        "html",
++        "js",
++        "origin",
++        "output",
++        "page",
++        "ready",
++        "req",
++        "section",
++        "state",
++        "summaries",
++        "toggle"
++      ],
++      "routes": []
++    },
++    {
++      "path": "tests/posting-registry-client.test.ts",
++      "kind": "test",
++      "imports": [
++        "../client/src/lib/posting-registry",
++        "node:assert/strict",
++        "node:test"
++      ],
++      "exports": [],
++      "symbols": [
++        "account",
++        "invalid",
++        "original",
++        "payload",
++        "withFetch"
++      ],
++      "routes": []
++    },
++    {
++      "path": "tests/posting-registry.test.ts",
++      "kind": "test",
++      "imports": [
++        "../server/posting-registry",
++        "../server/posting-registry-routes",
++        "express",
++        "node:assert/strict",
++        "node:test"
++      ],
++      "exports": [],
++      "symbols": [
++        "denied",
++        "facebookSources",
++        "previous",
++        "project",
++        "realRead",
++        "req",
++        "request",
++        "res",
++        "result",
++        "rows",
++        "source",
++        "unauth"
++      ],
++      "routes": []
++    },
+     {
+       "path": "tests/public-local-news.test.ts",
+       "kind": "test",
+@@ -23831,6 +24311,7 @@
+     "tests/google-connector.test.ts",
+     "tests/google-drive-folder-command.test.ts",
+     "tests/google-drive-oauth.test.ts",
++    "tests/legacy-publication-containment.test.ts",
+     "tests/legal-compliance-agent.test.ts",
+     "tests/local-auth-cli.test.ts",
+     "tests/local-auth.test.ts",
+@@ -23843,6 +24324,8 @@
+     "tests/metricool-analytics-sync.test.ts",
+     "tests/metricool-tracking.test.ts",
+     "tests/owner-office-storage.test.ts",
++    "tests/posting-registry-client.test.ts",
++    "tests/posting-registry.test.ts",
+     "tests/public-local-news.test.ts",
+     "tests/radio-template-agent.test.ts",
+     "tests/radio-video-edit-agent.test.ts",
+diff --git a/docs/codebase-map.md b/docs/codebase-map.md
+index e1eb707..412664e 100644
+--- a/docs/codebase-map.md
++++ b/docs/codebase-map.md
+@@ -1,7 +1,7 @@
+ # Codebase Map
+ 
+-Generated: 2026-10-09T01:39:37.437Z
+-Repo: `/home/runner/workspace/.local/worktrees/agents-world-3d`
++Generated: 2026-10-09T03:46:40.279Z
++Repo: `/home/runner/workspace/.local/worktrees/posting-owner-registry-isolated`
+ Package: `rest-express`
+ 
+ ## Guardrails
+@@ -13,7 +13,7 @@ Package: `rest-express`
+ ## Totals
+ | Git-visible files | Indexed files | Imports | Routes | Symbols |
+ | ---: | ---: | ---: | ---: | ---: |
+-| 693 | 609 | 2065 | 511 | 13259 |
++| 713 | 629 | 2118 | 512 | 13437 |
+ 
+ ## Entrypoints
+ - `client/src/App.tsx`
+@@ -28,22 +28,23 @@ Package: `rest-express`
+ ## Main Directories
+ | Directory | Visible | Indexed | Main kinds |
+ | --- | ---: | ---: | --- |
+-| `server` | 136 | 132 | server:136 |
+-| `client/src` | 130 | 128 | ui-component:55, client-component:29, client-page:26, client-lib:13 |
+-| `tests` | 129 | 126 | test:129 |
+-| `script` | 77 | 72 | script:77 |
++| `server` | 140 | 136 | server:140 |
++| `client/src` | 133 | 131 | ui-component:55, client-component:31, client-page:26, client-lib:14 |
++| `tests` | 134 | 131 | test:134 |
++| `script` | 79 | 74 | script:79 |
+ | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
+-| `docs` | 32 | 31 | docs:32 |
++| `docs` | 35 | 34 | docs:35 |
+ | `.` | 34 | 18 | other:22, docs:11, package:1 |
+-| `.agents/memory` | 10 | 10 | docs:10 |
++| `.agents/memory` | 11 | 11 | docs:11 |
+ | `server/replit_integrations` | 9 | 9 | server:9 |
+-| `shared` | 3 | 3 | shared:3 |
++| `shared` | 4 | 4 | shared:4 |
+ | `client/public` | 16 | 2 | other:16 |
+ | `.agents/skills` | 2 | 1 | docs:1, other:1 |
+ | `client` | 1 | 1 | other:1 |
+ | `config` | 1 | 1 | other:1 |
+ | `scripts` | 4 | 1 | script:4 |
+ | `shared/models` | 1 | 1 | shared:1 |
++| `tests/fixtures` | 1 | 1 | test:1 |
+ | `tests/harness` | 1 | 1 | test:1 |
+ | `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
+ | `.agents` | 1 | 0 | other:1 |
+@@ -55,6 +56,7 @@ Package: `rest-express`
+ - `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
+ - `server/index.ts`: `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
+ - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
++- `server/posting-registry-routes.ts`: `/api/agents-office/posting-registry`
+ - `server/replit_integrations/chat/routes.ts`: `/api/conversations`, `/api/conversations/:id`, `/api/conversations/:id/messages`
+ - `server/replit_integrations/image/routes.ts`: `/api/generate-image`
+ - `server/revenue-stripe-routes.ts`: `/api/stripe/revenue-readiness`, `/api/stripe/revenue-webhook`
+@@ -133,6 +135,7 @@ Package: `rest-express`
+ - `tests/google-connector.test.ts`
+ - `tests/google-drive-folder-command.test.ts`
+ - `tests/google-drive-oauth.test.ts`
++- `tests/legacy-publication-containment.test.ts`
+ - `tests/legal-compliance-agent.test.ts`
+ - `tests/local-auth-cli.test.ts`
+ - `tests/local-auth.test.ts`
+@@ -145,6 +148,8 @@ Package: `rest-express`
+ - `tests/metricool-analytics-sync.test.ts`
+ - `tests/metricool-tracking.test.ts`
+ - `tests/owner-office-storage.test.ts`
++- `tests/posting-registry-client.test.ts`
++- `tests/posting-registry.test.ts`
+ - `tests/public-local-news.test.ts`
+ - `tests/radio-template-agent.test.ts`
+ - `tests/radio-video-edit-agent.test.ts`
+@@ -206,6 +211,7 @@ Package: `rest-express`
+ - `script/blackroom-remote-sync.mjs` (script; 24 symbols)
+ - `script/blackroom-worker-ledger.ts` (script; 29 symbols, 4 imports)
+ - `script/build-agents-world-client.mjs` (script; 4 imports)
++- `script/build-containment-static.mjs` (script; 7 symbols, 5 imports)
+ - `script/build.ts` (script; 12 symbols, 4 imports)
+ - `script/cache-local-news-models.mjs` (script; 1 symbols)
+ - `script/ceo-db-check.ts` (script; 8 symbols, 3 imports)
+@@ -251,7 +257,6 @@ Package: `rest-express`
+ - `script/clippers-youtube-upload-packager.mjs` (script; 135 symbols, 7 imports)
+ - `script/clippers-youtube-uploader.mjs` (script; 107 symbols, 5 imports)
+ - `script/codebase-map.ts` (script; 43 symbols, 3 imports)
+-- `script/compact-local-news-state.ts` (script; 9 symbols, 4 imports)
+ 
+ ## How Agents Should Use This
+ 1. Read this map before broad repo exploration.
+diff --git a/docs/posting-registry-isolated.md b/docs/posting-registry-isolated.md
+new file mode 100644
+index 0000000..9daede5
+--- /dev/null
++++ b/docs/posting-registry-isolated.md
+@@ -0,0 +1,69 @@
++# POSTING: isolated read-only cut
++
++Base: `66047c25fee1f8e9700620e906cb07b0ac82dabe`, with the same tree as
++`381ae4da339dc9bc7f3edbdac2c8011bee000693`. This is not an activated branch.
++
++## Ownership blocker and passive contract
++
++The concrete coordinator mappings exist only in `server/posting-registry.ts`.
++They establish identity assertions, not ownership or runtime connection.
++Existing BlackRoom configuration and its singleton gate do not provide a
++persisted source/physical-account relationship to a proven request owner.
++`server/single-user-owner.ts` accepts configured/local owner IDs or a username;
++this is deliberately NOT used to attach these identities to authenticated users.
++The Clipper/global metadata and growth-scout readers do not supply the missing
++owner/source proof either.
++
++Consequently the production reader performs no IO and returns
++`owner_source_binding_unproven` and no accounts, for every authenticated caller.
++The endpoint requires the existing request identity resolver, denies conflicting
++owner queries before calling the reader, and never reads identity proofs from
++HTTP body/query. No new store, table, default dataset, connection, permission,
++credential, provider request or discovery/refresh is introduced.
++
++The pure adapter contract accepts only proofs of existing owner-bound source
++records supplied by a future separately reviewed passive reader. The current
++adapter cannot produce them. Positive tests use synthetic owner/source proofs,
++not real users, source data or an attestation available to browsers.
++
++## Identity and privacy
++
++Canonical identities are platform + verified native ID, otherwise a verified
++handle with supported platform semantics. Metricool blog references are aliases
++only. TikTok handles case-fold; numeric IDs remain decimal strings. Facebook
++usernames ignore periods/case and numeric IDs take priority. YouTube channel
++IDs are case-sensitive; handle-only Unicode semantics remain unsupported,
++therefore unavailable. Conflicting proofs fail closed rather than merging.
++Platform + Metricool alias resolving to multiple physical identities is also a
++veto, never a replacement for the platform + physical-identity dedup key.
++
++Only owned records contribute to accounts, aliases or excluded counts. Unknown
++owners/sources are unavailable, not a verified empty inventory. Missing Facebook
++identity remains unknown. A physical KONG TikTok identity has one canonical
++record despite its two Metricool references. Supplied identities are never
++advertised as runtime-connected, publishing or learning.
++
++The client verifies auth owner before its sole new passive request, requires an
++exact response owner, strips non-public fields, rejects oversize/malformed data,
++keeps canonical identity keys, and clears prior-owner state on change/denial.
++Concrete mappings are not embedded in the client or shared runtime modules.
++
++## Product scope
++
++Online-only department cards separate roles/responsible parties, accounts,
++style, material, calendar and metrics. KONG is TikTok party/experience content;
++Black Room is DJ sets/clips with a distinct style. News/clipping and future
++brands stay proposals when evidence is absent. Marketing research/outreach,
++responses and follow-up towards KONG downloads are disconnected proposals.
++The claimed DJ list on an offline Mac is not accessed/imported; no leads/emails
++or sends. Growth Scout stays pending because passive ownership is unproven.
++Costs are informative, not zero-cost or paid-LLM-per-lead promises.
++
++## Validation and review
++
++Pure unit/auth/transport tests use fixtures and zero provider IO. The browser
++harness mounts the real Agents Office page and CompanyOffice with every request
++intercepted, using an existing installed Chromium, no HTTP listener or app
++startup. Build checkpoints precede both harness compilation and the safe
++client-only build. Logs retain exit codes. No full deployment build, backend
++startup, real DB, provider, workflow, installation, activation or publication.
+diff --git a/server/posting-registry-routes.ts b/server/posting-registry-routes.ts
+new file mode 100644
+index 0000000..35c6db1
+--- /dev/null
++++ b/server/posting-registry-routes.ts
+@@ -0,0 +1,30 @@
++import type { Express, Request, Response } from "express";
++import { projectPostingRegistry, readExistingPostingSources, type PostingSourceRead } from "./posting-registry";
++
++type AuthResolver = (req: Request) => string;
++type Reader = () => Promise<PostingSourceRead>;
++
++/** Dependency-injected for offline auth/route tests; never accepts proofs from HTTP. */
++export function createPostingRegistryHandler(resolveOwner: AuthResolver, readSources: Reader = readExistingPostingSources) {
++  return async (req: Request, res: Response) => {
++    res.setHeader("Cache-Control", "private, no-store");
++    res.setHeader("Vary", "Cookie, Authorization");
++    let owner: string;
++    try { owner = resolveOwner(req); } catch { res.status(401).json({ error: "Authentication required" }); return; }
++    if (!owner || owner.length > 128 || owner.trim() !== owner || /[\u0000-\u001f\u007f]/.test(owner)) {
++      res.status(401).json({ error: "Authentication required" }); return;
++    }
++    if (req.query?.ownerId !== undefined && req.query.ownerId !== owner) {
++      res.status(403).json({ error: "Owner mismatch" }); return;
++    }
++    try {
++      res.json(projectPostingRegistry(owner, await readSources()));
++    } catch {
++      res.status(503).json({ ownerId: owner, status: "unavailable", reason: "source_unavailable", accounts: [], excludedUnverifiable: 0 });
++    }
++  };
++}
++
++export function registerPostingRegistryRoutes(app: Express, resolveOwner: AuthResolver) {
++  app.get("/api/agents-office/posting-registry", createPostingRegistryHandler(resolveOwner));
++}
+diff --git a/server/posting-registry.ts b/server/posting-registry.ts
+new file mode 100644
+index 0000000..49acdb5
+--- /dev/null
++++ b/server/posting-registry.ts
+@@ -0,0 +1,147 @@
++import type { PostingAccount, PostingBrand, PostingPlatform, PostingRegistrySnapshot } from "../shared/posting-registry";
++
++// Coordinator-supplied mappings, NOT proof of ownership or runtime connectivity.
++// Never imported into the browser. Blog references are aliases, never identities.
++const mappings = [
++  { brand: "KONG", blogs: ["6475033", "6431692"], platform: "tiktok", handle: "kongnightlife" },
++  { brand: "Black Room", blogs: ["6585226"], platform: "tiktok", handle: "blackroom.clipss" },
++  { brand: "Black Room", blogs: ["6585226"], platform: "youtube", nativeId: "UCi__qHBfHLlYg0fu86BUA8g" },
++  { brand: "Black Room", blogs: ["6585226"], platform: "facebook" },
++] as const;
++export const MAX_POSTING_SOURCE_RECORDS = 128;
++export const MAX_POSTING_ACCOUNTS = 32;
++
++/**
++ * Adapter boundary, not a new persistence schema or a client-provided attestation.
++ * Only a separately reviewed reader of EXISTING owner-bound source records may
++ * supply these proofs. No current global BlackRoom/Clipper source proves this.
++ */
++export interface ExistingOwnedPostingSource {
++  ownerId: string;
++  sourceId: string;
++  ownershipEvidence: "existing-owner-source";
++  platform: PostingPlatform;
++  metricoolBlogId: string;
++  nativeId?: string;
++  nativeIdVerified?: boolean;
++  handle?: string;
++  handleVerified?: boolean;
++}
++export type PostingSourceRead =
++  | { state: "unavailable"; reason: "owner_source_binding_unproven" | "source_unavailable" }
++  | { state: "available"; records: readonly ExistingOwnedPostingSource[] };
++
++function bounded(value: unknown, max = 128): value is string {
++  return typeof value === "string" && value.length > 0 && value.length <= max
++    && value.trim() === value && !/[\u0000-\u001f\u007f]/.test(value);
++}
++
++export function normalizePostingIdentity(platform: PostingPlatform, nativeId?: unknown, handle?: unknown) {
++  let native: string | undefined;
++  let username: string | undefined;
++  if ((platform === "tiktok" || platform === "facebook") && bounded(nativeId, 32)
++    && /^[1-9][0-9]{0,31}$/.test(nativeId)) native = nativeId;
++  // Channel IDs are case-sensitive. Never lower-case them or treat a blog as one.
++  if (platform === "youtube" && bounded(nativeId, 24) && /^UC[A-Za-z0-9_-]{22}$/.test(nativeId)) native = nativeId;
++  if (bounded(handle, 64)) {
++    const value = handle.replace(/^@/, "");
++    if (platform === "tiktok" && /^[A-Za-z0-9_][A-Za-z0-9_.]{1,23}$/.test(value) && !value.endsWith(".")) username = value.toLowerCase();
++    // Facebook usernames ignore case and periods; native numeric IDs take priority.
++    if (platform === "facebook" && /^[A-Za-z0-9.]{5,50}$/.test(value)
++      && value.replace(/\./g, "").length >= 5) username = value.replace(/\./g, "").toLowerCase();
++    // YouTube handle-only records are unsupported until its broader Unicode
++    // identity semantics are separately verified. The supplied channel uses ID.
++  }
++  return native || username ? { native, handle: username } : null;
++}
++
++export function unavailablePostingRegistry(ownerId: string, reason: PostingRegistrySnapshot["reason"]): PostingRegistrySnapshot {
++  return { ownerId, status: "unavailable", reason, accounts: [], excludedUnverifiable: 0 };
++}
++
++/**
++ * Explicit fail-closed runtime adapter. Existing sources are global/configured,
++ * with no proven persisted owner/source/physical-account relationship. Do not
++ * use isConfiguredSingleUserOwner, a username, getSystemUserId, an authenticated
++ * user, or a matching project name to assign coordinator identities to someone.
++ * No DB/DDL/seeding/files/provider IO is performed here.
++ */
++export async function readExistingPostingSources(): Promise<PostingSourceRead> {
++  return { state: "unavailable", reason: "owner_source_binding_unproven" };
++}
++
++export function projectPostingRegistry(ownerId: string, source: PostingSourceRead): PostingRegistrySnapshot {
++  if (!bounded(ownerId)) return unavailablePostingRegistry("", "owner_source_binding_unproven");
++  if (source.state !== "available") return unavailablePostingRegistry(ownerId, source.reason);
++  if (!Array.isArray(source.records) || source.records.length > MAX_POSTING_SOURCE_RECORDS) {
++    return unavailablePostingRegistry(ownerId, "invalid_source_records");
++  }
++  const candidates: Array<{ brand: PostingBrand; platform: PostingPlatform; native?: string; handle?: string; alias: string }> = [];
++  let excluded = 0;
++  let ownedSources = 0;
++  for (const row of source.records) {
++    // Never count/expose other owners, even as excluded records.
++    if (!row || row.ownerId !== ownerId) continue;
++    if (!bounded(row.sourceId) || row.ownershipEvidence !== "existing-owner-source") { excluded++; continue; }
++    ownedSources++;
++    const mapping = mappings.find(m => m.platform === row.platform && (m.blogs as readonly string[]).includes(row.metricoolBlogId));
++    const identity = normalizePostingIdentity(row.platform, row.nativeIdVerified === true ? row.nativeId : undefined,
++      row.handleVerified === true ? row.handle : undefined);
++    if (!mapping || !identity
++      || ("handle" in mapping && identity.handle !== mapping.handle)
++      || ("nativeId" in mapping && identity.native !== mapping.nativeId)) { excluded++; continue; }
++    candidates.push({ brand: mapping.brand, platform: row.platform, ...identity, alias: row.metricoolBlogId });
++  }
++  // Link verified handle-only aliases to a verified native ID when unambiguous.
++  // Conflicting native IDs for one handle are not silently merged.
++  const handleIds = new Map<string, Set<string>>();
++  for (const row of candidates) {
++    if (!row.handle || !row.native) continue;
++    const key = `${row.platform}:${row.handle}`;
++    const ids = handleIds.get(key) || new Set<string>(); ids.add(row.native); handleIds.set(key, ids);
++  }
++  const groups = new Map<string, { account: PostingAccount; aliases: Set<string>; conflict: boolean; count: number }>();
++  const physicalKey = (row: typeof candidates[number]) => {
++    const ids = row.handle ? handleIds.get(`${row.platform}:${row.handle}`) : undefined;
++    const native = row.native || (ids?.size === 1 ? [...ids][0] : undefined);
++    return `${row.platform}:${native ? `id:${native}` : `handle:${row.handle}`}`;
++  };
++  // Alias consistency is a veto, NOT the physical-identity dedup key.
++  // A platform/alias cannot attest two different physical accounts.
++  const aliasIdentities = new Map<string, Set<string>>();
++  for (const row of candidates) {
++    const key = `${row.platform}:${row.alias}`;
++    const identities = aliasIdentities.get(key) || new Set<string>();
++    identities.add(physicalKey(row)); aliasIdentities.set(key, identities);
++  }
++  for (const row of candidates) {
++    const ids = row.handle ? handleIds.get(`${row.platform}:${row.handle}`) : undefined;
++    if (ids && ids.size > 1) { excluded++; continue; }
++    if (aliasIdentities.get(`${row.platform}:${row.alias}`)!.size > 1) { excluded++; continue; }
++    const native = row.native || (ids?.size === 1 ? [...ids][0] : undefined);
++    const key = physicalKey(row);
++    const group = groups.get(key);
++    if (group) {
++      group.count++; group.aliases.add(row.alias);
++      if (group.account.brand !== row.brand) group.conflict = true;
++    } else groups.set(key, {
++      account: { key, platform: row.platform, brand: row.brand,
++        displayIdentity: row.handle ? `@${row.handle}` : native!,
++        identityEvidence: row.platform === "facebook" ? "verified_source_metadata" : "coordinator_mapping",
++        runtimeConnection: "unknown", aliasesCount: 0 },
++      aliases: new Set([row.alias]), conflict: false, count: 1,
++    });
++  }
++  const accounts: PostingAccount[] = [];
++  for (const group of groups.values()) {
++    if (group.conflict) { excluded += group.count; continue; }
++    accounts.push({ ...group.account, aliasesCount: group.aliases.size });
++  }
++  if (accounts.length > MAX_POSTING_ACCOUNTS) return unavailablePostingRegistry(ownerId, "invalid_source_records");
++  if (!accounts.length) return {
++    ...unavailablePostingRegistry(ownerId, ownedSources ? "invalid_source_records" : "owner_source_binding_unproven"),
++    excludedUnverifiable: excluded,
++  };
++  accounts.sort((a, b) => a.key.localeCompare(b.key));
++  return { ownerId, status: "ready", reason: null, accounts, excludedUnverifiable: excluded };
++}
+diff --git a/server/routes.ts b/server/routes.ts
+index 5b6fd1e..270604e 100644
+--- a/server/routes.ts
++++ b/server/routes.ts
+@@ -23,6 +23,7 @@ import { readFile, writeFile, listFiles, getChangeHistory, undoLastChange, getTa
+ import { generateCode, generateFromTemplate, MODULE_TEMPLATES } from "./code-generator";
+ import { listRepositories, getRepoContents, getFileContent, updateFile, deleteFile, getAuthenticatedUser, isGitHubConnected, getRepositoryOverview, getGitHubPullRequestReleaseStatus, parseGitHubPullRequestUrl } from "./github-client";
+ import { getCurrentUserId, getSystemUserId, isPublicApiRequest } from "./user-context";
++import { registerPostingRegistryRoutes } from "./posting-registry-routes";
+ import { syncGoogleCalendarToTasks } from "./calendar-sync";
+ import { executeApprovedPendingAction } from "./trust-executor";
+ import { createPendingActionForApproval, writeAuditLog } from "./trust-policy";
+@@ -295,6 +296,7 @@ export async function registerRoutes(
+   httpServer: Server,
+   app: Express
+ ): Promise<Server> {
++  registerPostingRegistryRoutes(app, getCurrentUserId);
+   const CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS = 120_000;
+   const killClipperRouteScriptProcess = (child: ReturnType<typeof spawn>) => {
+     if (child.pid) {
+diff --git a/shared/posting-registry.ts b/shared/posting-registry.ts
+new file mode 100644
+index 0000000..25951fb
+--- /dev/null
++++ b/shared/posting-registry.ts
+@@ -0,0 +1,19 @@
++/** Public projection only. Concrete mappings and ownership proofs stay on server. */
++export type PostingPlatform = "tiktok" | "youtube" | "facebook";
++export type PostingBrand = "KONG" | "Black Room";
++export interface PostingAccount {
++  key: string;
++  platform: PostingPlatform;
++  brand: PostingBrand;
++  displayIdentity: string;
++  identityEvidence: "coordinator_mapping" | "verified_source_metadata";
++  runtimeConnection: "unknown";
++  aliasesCount: number;
++}
++export interface PostingRegistrySnapshot {
++  ownerId: string;
++  status: "ready" | "unavailable";
++  reason: "owner_source_binding_unproven" | "source_unavailable" | "invalid_source_records" | null;
++  accounts: PostingAccount[];
++  excludedUnverifiable: number;
++}
+diff --git a/tests/posting-departments-ui.mjs b/tests/posting-departments-ui.mjs
+new file mode 100644
+index 0000000..a056ebd
+--- /dev/null
++++ b/tests/posting-departments-ui.mjs
+@@ -0,0 +1,99 @@
++// Offline harness: real /agents-office page + CompanyOffice; all requests intercepted.
++import { build } from 'esbuild';
++import { chromium } from 'playwright';
++import assert from 'node:assert/strict';
++import { mkdir, readFile, writeFile } from 'node:fs/promises';
++import path from 'node:path';
++
++if (!process.env.AGENTS_WORLD_BROWSER) throw new Error('Existing Chromium required; no installation/download.');
++const output = path.resolve('.local/posting-harness');
++await mkdir(output, { recursive: true });
++await build({
++  entryPoints: ['tests/harness/agents-world-integrated.tsx'], bundle: true, format: 'esm', platform: 'browser', jsx: 'automatic',
++  outfile: path.join(output, 'harness.js'),
++  alias: { '@': path.resolve('client/src'), '@shared': path.resolve('shared') },
++  define: { 'process.env.NODE_ENV': '"test"', 'import.meta.env.DEV': 'false' },
++});
++const js = await readFile(path.join(output, 'harness.js'), 'utf8');
++const css = await readFile(path.join(output, 'harness.css'), 'utf8');
++const html = '<!doctype html><html lang="es"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="stylesheet" href="/harness.css"><body style="margin:0;background:#080e18;color:#d7e7ef"><div id="root"></div><script type="module" src="/harness.js"></script></body></html>';
++const origin = 'http://posting-harness.invalid';
++const browser = await chromium.launch({ executablePath: process.env.AGENTS_WORLD_BROWSER, headless: true,
++  args: ['--no-sandbox', '--enable-unsafe-swiftshader', '--use-gl=angle', '--use-angle=swiftshader',
++    '--disable-background-networking', '--disable-component-update', '--disable-sync'] });
++let checks = 0;
++const summaries = [];
++function check(value, label) { assert.ok(value, label); checks++; console.log(`PASS ${label}`); }
++try {
++  for (const mode of ['ready', 'unknown', 'denied', 'foreign', 'oversized', 'mobile']) {
++    const context = await browser.newContext({ viewport: mode === 'mobile' ? { width: 390, height: 844 } : { width: 1440, height: 1000 },
++      reducedMotion: 'reduce', serviceWorkers: 'block' });
++    const page = await context.newPage();
++    const errors = [], forbidden = [], requests = [];
++    page.on('pageerror', error => errors.push(error.message));
++    const state = { owner: 'fixture-user', expired: false };
++    await page.route('**/*', async route => {
++      const req = route.request(), url = new URL(req.url()), p = url.pathname;
++      requests.push(p);
++      if (url.origin !== origin || req.method() !== 'GET') { forbidden.push(p); return route.abort(); }
++      if (p === '/agents-office') return route.fulfill({ contentType: 'text/html', body: html });
++      if (p === '/harness.js') return route.fulfill({ contentType: 'text/javascript', body: js });
++      if (p === '/harness.css') return route.fulfill({ contentType: 'text/css', body: css });
++      if (p === '/api/auth/me') return route.fulfill({ contentType: 'application/json',
++        body: JSON.stringify(state.expired ? { authenticated: false } : { authenticated: true, user: { id: state.owner } }) });
++      if (p === '/api/projects' || p === '/api/tasks') return route.fulfill({ contentType: 'application/json', body: '[]' });
++      if (p === '/api/agents-office/posting-registry') {
++        const account = { key: 'tiktok:id:70001', platform: 'tiktok', brand: 'KONG', displayIdentity: '@fixture_kong',
++          identityEvidence: 'coordinator_mapping', runtimeConnection: 'unknown', aliasesCount: 2 };
++        const ready = state.owner === 'fixture-user' && !['unknown', 'denied', 'foreign'].includes(mode);
++        return route.fulfill({ status: mode === 'denied' ? 403 : 200, contentType: 'application/json',
++          body: JSON.stringify({ ownerId: mode === 'foreign' ? 'other-owner' : state.owner,
++            status: ready ? 'ready' : 'unavailable', reason: ready ? null : 'owner_source_binding_unproven',
++            accounts: ready ? (mode === 'oversized' ? Array.from({ length: 33 }, () => account) : [account]) : [],
++            excludedUnverifiable: 0 }) });
++      }
++      if (p.startsWith('/api/blackroom-agent') || /growth-scout|refresh|\/run|\/start|metricool/.test(p)) forbidden.push(p);
++      return route.fulfill({ status: 404, contentType: 'application/json', body: '{"error":"offline fixture not provided"}' });
++    });
++    await page.goto(`${origin}/agents-office`);
++    const toggle = page.getByRole('button', { name: /Vista 3D/i });
++    await toggle.first().click();
++    const section = page.locator('.posting-departments');
++    await section.waitFor();
++    await page.waitForFunction(() => document.querySelector('.posting-departments__stamp')?.getAttribute('data-state') !== 'loading');
++    check(await section.getByRole('heading', { name: 'KONG', exact: true }).count() === 1, `${mode}: unique KONG department`);
++    check(await section.getByRole('heading', { name: 'Black Room', exact: true }).count() === 1, `${mode}: unique Black Room department`);
++    check(await section.getByRole('heading', { name: 'Noticias / Clipping', exact: true }).count() === 1, `${mode}: news department`);
++    check(await section.getByRole('heading', { name: 'Marcas futuras', exact: true }).count() === 1, `${mode}: proposed future brands`);
++    for (const field of ['Responsable / roles', 'Cuentas', 'Estilo', 'Material', 'Calendario', 'Métricas']) {
++      check(await section.locator('dt').filter({ hasText: field }).count() === 4, `${mode}: distinct ${field}`);
++    }
++    check((await section.innerText()).includes('Mac offline'), `${mode}: no imported DJ list`);
++    check((await section.innerText()).includes('Growth Scout está pendiente'), `${mode}: scout not executed`);
++    check((await section.innerText()).includes('no hay promesa de coste cero'), `${mode}: honest costs`);
++    if (mode === 'ready' || mode === 'mobile') {
++      check(await section.locator('.posting-departments__account').count() === 1, `${mode}: one physical account, not two aliases`);
++      check((await section.innerText()).includes('@fixture_kong'), `${mode}: verified owner fixture shown`);
++      check(!(await section.innerText()).includes('conexión runtime: online'), `${mode}: runtime connection not invented`);
++      state.owner = 'fixture-other';
++      await page.evaluate(() => window.setFixtureOwner('fixture-other'));
++      await page.waitForFunction(() => !document.querySelector('.posting-departments')?.textContent?.includes('@fixture_kong'));
++      check(!(await section.innerText()).includes('@fixture_kong'), `${mode}: owner change clears old data`);
++      state.expired = true;
++      await page.evaluate(() => window.setFixtureOwner(''));
++      await page.waitForTimeout(100);
++      check(await page.locator('.posting-departments__account').count() === 0, `${mode}: logout has no private account`);
++    } else {
++      check(await section.locator('.posting-departments__account').count() === 0, `${mode}: unavailable/foreign/denied has no accounts`);
++    }
++    if (mode === 'unknown' || mode === 'oversized') check((await section.innerText()).includes('no equivale a cero cuentas'), `${mode}: unknown not zero`);
++    check(forbidden.length === 0, `${mode}: no unsafe/provider/network request`);
++    check(errors.length === 0, `${mode}: no page errors`);
++    summaries.push({ mode, requests, forbidden, errors });
++    if (mode === 'unknown') await page.screenshot({ path: path.join(output, 'unknown-desktop.png'), fullPage: true });
++    if (mode === 'mobile') await page.screenshot({ path: path.join(output, 'owner-mobile.png'), fullPage: true });
++    await context.close();
++  }
++  await writeFile(path.join(output, 'results.json'), JSON.stringify({ checks, summaries }, null, 2));
++  console.log(`CHECKS=${checks} SCENARIOS=${summaries.length} PROVIDER_IO=0`);
++} finally { await browser.close(); }
+diff --git a/tests/posting-registry-client.test.ts b/tests/posting-registry-client.test.ts
+new file mode 100644
+index 0000000..0df56e7
+--- /dev/null
++++ b/tests/posting-registry-client.test.ts
+@@ -0,0 +1,64 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++import { readPostingRegistry } from "../client/src/lib/posting-registry";
++
++const account = { key: "tiktok:id:70001", platform: "tiktok", brand: "KONG", displayIdentity: "@fixture_kong",
++  identityEvidence: "coordinator_mapping", runtimeConnection: "unknown", aliasesCount: 2 };
++const payload = (overrides: Record<string, unknown> = {}) => ({
++  ownerId: "fixture-owner", status: "ready", reason: null, accounts: [account], excludedUnverifiable: 0, ...overrides,
++});
++async function withFetch(body: unknown, options: { authOwner?: string; authStatus?: number; registryStatus?: number; abort?: boolean } = {}) {
++  const original = globalThis.fetch, requests: string[] = [], controller = new AbortController();
++  globalThis.fetch = async (url) => {
++    requests.push(String(url));
++    if (String(url) === "/api/auth/me") {
++      if (options.abort) controller.abort();
++      return new Response(JSON.stringify({ authenticated: true, user: { id: options.authOwner || "fixture-owner" } }),
++        { status: options.authStatus || 200, headers: { "content-type": "application/json" } });
++    }
++    assert.equal(String(url), "/api/agents-office/posting-registry", "no other endpoint");
++    return new Response(JSON.stringify(body), { status: options.registryStatus || 200, headers: { "content-type": "application/json" } });
++  };
++  try { return { result: await readPostingRegistry("fixture-owner", controller.signal), requests }; }
++  finally { globalThis.fetch = original; }
++}
++test("client preserves native canonical key and receives only sanitised public fields", async () => {
++  const { result, requests } = await withFetch(payload({ accounts: [{ ...account, token: "PRIVATE", sourceId: "SECRET_SOURCE", blogId: "SECRET_ALIAS" }] }));
++  assert.equal(result.state, "ready"); assert.equal(result.accounts[0].key, account.key);
++  assert.deepEqual(requests, ["/api/auth/me", "/api/agents-office/posting-registry"]);
++  for (const privateValue of ["PRIVATE", "SECRET_SOURCE", "SECRET_ALIAS"]) assert.ok(!JSON.stringify(result).includes(privateValue));
++});
++test("unknown auth owner, 401 or aborted auth never fetches the registry", async () => {
++  for (const options of [{ authOwner: "other-owner" }, { authStatus: 401 }, { abort: true }]) {
++    const { result, requests } = await withFetch(payload(), options);
++    assert.equal(result.state, "denied"); assert.deepEqual(result.accounts, []);
++    assert.deepEqual(requests, ["/api/auth/me"]);
++  }
++});
++test("response owner mismatch and endpoint 401/403 never expose accounts", async () => {
++  for (const options of [{ body: payload({ ownerId: "foreign" }) }, { status: 401 }, { status: 403 }]) {
++    const { result } = await withFetch(options.body || payload(), { registryStatus: options.status });
++    assert.equal(result.state, "denied"); assert.deepEqual(result.accounts, []);
++  }
++});
++test("source unknown is not a verified zero-account inventory", async () => {
++  const { result } = await withFetch(payload({ status: "unavailable", reason: "owner_source_binding_unproven", accounts: [] }));
++  assert.equal(result.state, "unavailable"); assert.deepEqual(result.accounts, []);
++});
++test("duplicate canonical ID, limits, invalid evidence and forged inventory fail closed", async () => {
++  const invalid = [
++    payload({ accounts: [account, { ...account, displayIdentity: "@different_display" }] }),
++    payload({ accounts: Array.from({ length: 33 }, () => account) }),
++    payload({ accounts: [{ ...account, key: "tiktok:id:" + "x".repeat(100) }] }),
++    payload({ accounts: [{ ...account, displayIdentity: "x".repeat(97) }] }),
++    payload({ accounts: [{ ...account, displayIdentity: "@fixture\u0000_kong" }] }),
++    payload({ accounts: [{ ...account, runtimeConnection: "online" }] }),
++    payload({ accounts: [{ ...account, platform: "youtube" }] }),
++    payload({ accounts: [{ ...account, aliasesCount: 0 }] }),
++    payload({ status: "unavailable", reason: "owner_source_binding_unproven" }),
++  ];
++  for (const body of invalid) {
++    const { result } = await withFetch(body);
++    assert.equal(result.state, "unavailable"); assert.deepEqual(result.accounts, []);
++  }
++});
+diff --git a/tests/posting-registry.test.ts b/tests/posting-registry.test.ts
+new file mode 100644
+index 0000000..295118b
+--- /dev/null
++++ b/tests/posting-registry.test.ts
+@@ -0,0 +1,145 @@
++import assert from "node:assert/strict";
++import test from "node:test";
++import type { Request, Response } from "express";
++import { createPostingRegistryHandler } from "../server/posting-registry-routes";
++import { MAX_POSTING_SOURCE_RECORDS, normalizePostingIdentity, projectPostingRegistry,
++  readExistingPostingSources, type ExistingOwnedPostingSource } from "../server/posting-registry";
++
++const source = (overrides: Partial<ExistingOwnedPostingSource> = {}): ExistingOwnedPostingSource => ({
++  ownerId: "owner-a", sourceId: "existing-source-a", ownershipEvidence: "existing-owner-source",
++  platform: "tiktok", metricoolBlogId: "6475033", handle: "@KongNightlife", handleVerified: true, ...overrides,
++});
++const project = (rows: ExistingOwnedPostingSource[], owner = "owner-a") => projectPostingRegistry(owner, { state: "available", records: rows });
++async function request(owner: string, query: Record<string, unknown> = {}, reader = async () => ({ state: "available" as const, records: [source()] })) {
++  let code = 200, body: any, calls = 0;
++  const headers: Record<string, unknown> = {};
++  const req = { query } as unknown as Request;
++  const res = { setHeader: (key: string, value: unknown) => { headers[key] = value; },
++    status: (value: number) => { code = value; return res; }, json: (value: unknown) => { body = value; return res; } } as unknown as Response;
++  await createPostingRegistryHandler(() => { if (!owner) throw new Error("no auth"); return owner; },
++    async () => { calls++; return reader(); })(req, res);
++  return { code, body, calls, headers };
++}
++
++test("runtime source remains unavailable for any authenticated user; no owner/source proof is invented", async () => {
++  const realRead = await readExistingPostingSources();
++  for (const owner of ["owner-a", "owner-b", "robert", "mock-user-123", "unknown"]) {
++    const result = projectPostingRegistry(owner, realRead);
++    assert.equal(result.status, "unavailable"); assert.equal(result.reason, "owner_source_binding_unproven");
++    assert.deepEqual(result.accounts, []);
++  }
++});
++test("two Metricool references to one verified TikTok identity count once, never by blog ID", () => {
++  const result = project([source(), source({ sourceId: "existing-source-b", metricoolBlogId: "6431692", handle: "kongnightlife" })]);
++  assert.equal(result.accounts.length, 1); assert.equal(result.accounts[0].aliasesCount, 2);
++  assert.equal(result.accounts[0].key, "tiktok:handle:kongnightlife");
++  assert.equal(result.accounts[0].runtimeConnection, "unknown");
++});
++test("verified native identity links handle-only alias without double counting", () => {
++  const result = project([source({ nativeId: "123456789", nativeIdVerified: true }),
++    source({ metricoolBlogId: "6431692" }), source()]);
++  assert.equal(result.accounts.length, 1); assert.equal(result.accounts[0].key, "tiktok:id:123456789");
++  assert.equal(result.accounts[0].aliasesCount, 2);
++});
++test("multiuser alias overlap cannot assign or disclose another owner's records or counts", () => {
++  const rows = [source(), source({ ownerId: "owner-b", sourceId: "b", metricoolBlogId: "6431692" })];
++  for (const owner of ["owner-a", "owner-b"]) {
++    const result = project(rows, owner);
++    assert.equal(result.accounts.length, 1); assert.equal(result.accounts[0].aliasesCount, 1);
++    assert.equal(result.excludedUnverifiable, 0);
++    assert.ok(!JSON.stringify(result).includes(owner === "owner-a" ? "owner-b" : "owner-a"));
++  }
++  assert.deepEqual(project(rows, "unknown").accounts, []);
++  assert.equal(project(rows, "unknown").status, "unavailable");
++});
++test("missing/mismatched owner/source proof, identity verification, aliases or physical handle yields no data", () => {
++  const rows = [source({ ownerId: "" }), source({ sourceId: "" }),
++    source({ ownershipEvidence: "authenticated" as any }), source({ handleVerified: false }),
++    source({ handle: "@different" }), source({ metricoolBlogId: "unknown" }),
++    source({ platform: "facebook" }), source({ sourceId: "name-is-not-proof", handle: "" })];
++  assert.deepEqual(project(rows).accounts, []);
++});
++test("conflicting native IDs on one verified handle fail closed", () => {
++  const result = project([source({ nativeId: "111", nativeIdVerified: true }),
++    source({ nativeId: "222", nativeIdVerified: true, metricoolBlogId: "6431692" }), source()]);
++  assert.deepEqual(result.accounts, []);
++});
++test("native ID collision across brands is not counted twice or assigned silently", () => {
++  const result = project([source({ nativeId: "111", nativeIdVerified: true }),
++    source({ metricoolBlogId: "6585226", handle: "blackroom.clipss", nativeId: "111", nativeIdVerified: true })]);
++  assert.deepEqual(result.accounts, []);
++});
++test("one platform/alias asserting two Facebook native identities is rejected, not deduplicated by blog", () => {
++  const result = project([
++    source({ platform: "facebook", metricoolBlogId: "6585226", handle: undefined, nativeId: "101", nativeIdVerified: true }),
++    source({ platform: "facebook", metricoolBlogId: "6585226", handle: undefined, nativeId: "202", nativeIdVerified: true, sourceId: "existing-source-b" }),
++  ]);
++  assert.equal(result.status, "unavailable"); assert.deepEqual(result.accounts, []);
++  assert.equal(result.excludedUnverifiable, 2);
++});
++test("a consistent verified Facebook native ID is counted once with folded handle aliases", () => {
++  const result = project([
++    source({ platform: "facebook", metricoolBlogId: "6585226", handle: "Black.Room", nativeId: "101", nativeIdVerified: true }),
++    source({ platform: "facebook", metricoolBlogId: "6585226", handle: "blackroom", sourceId: "existing-source-b" }),
++  ]);
++  assert.equal(result.status, "ready"); assert.equal(result.accounts.length, 1);
++  assert.equal(result.accounts[0].key, "facebook:id:101");
++  assert.equal(result.accounts[0].identityEvidence, "verified_source_metadata");
++});
++test("Black Room only exposes proven identities; Facebook has no fabricated ID", () => {
++  const result = project([source({ metricoolBlogId: "6585226", handle: "BLACKROOM.CLIPSS" }),
++    source({ metricoolBlogId: "6585226", platform: "youtube", handle: undefined, nativeId: "UCi__qHBfHLlYg0fu86BUA8g", nativeIdVerified: true }),
++    source({ metricoolBlogId: "6585226", platform: "facebook", handle: undefined })]);
++  assert.equal(result.accounts.length, 2); assert.ok(result.accounts.every(row => row.brand === "Black Room"));
++  assert.ok(!result.accounts.some(row => row.platform === "facebook"));
++});
++test("platform semantics: TikTok case fold, Facebook period fold, native YouTube case preserved", () => {
++  assert.deepEqual(normalizePostingIdentity("tiktok", undefined, "@KONGNightlife"), { native: undefined, handle: "kongnightlife" });
++  assert.deepEqual(normalizePostingIdentity("facebook", undefined, "Black.Room"), { native: undefined, handle: "blackroom" });
++  assert.equal(normalizePostingIdentity("youtube", "uci__qhbfhllYG0FU86bua8g"), null);
++  assert.equal(normalizePostingIdentity("youtube", undefined, "@SomeHandle"), null);
++  assert.equal(normalizePostingIdentity("tiktok", "0", "https://tiktok.com/@kongnightlife"), null);
++  assert.equal(normalizePostingIdentity("tiktok", undefined, "bad."), null);
++});
++test("row/owner/string limits reject oversized data without truncating ownership evidence", () => {
++  assert.equal(project(Array.from({ length: MAX_POSTING_SOURCE_RECORDS + 1 }, () => source())).status, "unavailable");
++  assert.deepEqual(project([source({ sourceId: "x".repeat(129) }), source({ handle: "x".repeat(1000) })]).accounts, []);
++  assert.equal(project([source()], "x".repeat(129)).status, "unavailable");
++  assert.equal(normalizePostingIdentity("facebook", "9".repeat(33)), null);
++  const facebookSources = Array.from({ length: 33 }, (_, n) => source({ platform: "facebook",
++    metricoolBlogId: "6585226", handle: undefined, nativeId: String(n + 100), nativeIdVerified: true }));
++  assert.equal(project(facebookSources).status, "unavailable");
++});
++test("public projection contains no raw sources/aliases/tokens/extra metadata", () => {
++  const result = project([Object.assign(source(), { token: "fixture-private-token", email: "private@example.invalid", label: "PRIVATE_LABEL" })]);
++  for (const forbidden of ["6475033", "existing-source-a", "fixture-private-token", "private@example.invalid", "PRIVATE_LABEL"]) {
++    assert.ok(!JSON.stringify(result).includes(forbidden));
++  }
++});
++test("route 401/403 gates run before source reader and query/body never grant another owner", async () => {
++  const unauth = await request(""); assert.equal(unauth.code, 401); assert.equal(unauth.calls, 0);
++  const denied = await request("owner-a", { ownerId: "owner-b", metricoolBlogId: "6475033" });
++  assert.equal(denied.code, 403); assert.equal(denied.calls, 0);
++  const result = await request("owner-b", { blogId: "6475033" });
++  assert.equal(result.code, 200); assert.deepEqual(result.body.accounts, []);
++  assert.equal(result.headers["Cache-Control"], "private, no-store");
++});
++test("source missing/error stays unknown and does not seed/refresh/persist", async () => {
++  const result = await request("owner-a", {}, async () => { throw new Error("missing source/table"); });
++  assert.equal(result.code, 503); assert.deepEqual(result.body.accounts, []);
++  assert.equal(result.body.reason, "source_unavailable");
++});
++test("registry and route have zero provider IO, including repeated reads and denied requests", async () => {
++  const previous = globalThis.fetch;
++  let providerCalls = 0;
++  globalThis.fetch = async () => { providerCalls++; throw new Error("provider IO forbidden"); };
++  try {
++    for (let n = 0; n < 3; n++) {
++      const req = await request("owner-a", {}, readExistingPostingSources as any);
++      assert.deepEqual(req.body.accounts, []);
++      await request("");
++      project([source(), source({ metricoolBlogId: "6431692" })]);
++    }
++    assert.equal(providerCalls, 0);
++  } finally { globalThis.fetch = previous; }
++});

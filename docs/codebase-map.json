@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-07T04:45:37.459Z",
-  "repoRoot": "C:\\Users\\FrontDesk\\Documents\\Codex\\2026-11-06\\https-robertwebsites-com-agents-office-https\\work\\office-real-execution",
+  "generatedAt": "2026-11-07T04:53:04.797Z",
+  "repoRoot": "/home/runner/workspace",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,54 +124,41 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1010,
-    "filesIndexed": 912,
+    "filesVisible": 1039,
+    "filesIndexed": 933,
     "imports": 3440,
     "routes": 571,
     "symbols": 18840
   },
   "directories": {
-    "server": {
-      "files": 243,
-      "indexed": 238,
-      "kinds": {
-        "server": 243
-      }
-    },
-    "tests": {
-      "files": 259,
-      "indexed": 255,
-      "kinds": {
-        "test": 259
-      }
-    },
     ".": {
-      "files": 35,
+      "files": 36,
       "indexed": 18,
       "kinds": {
-        "other": 23,
+        "other": 24,
         "docs": 11,
         "package": 1
       }
     },
-    ".agents/memory": {
-      "files": 5,
-      "indexed": 5,
-      "kinds": {
-        "docs": 5
-      }
-    },
-    ".agents/skills/codebase-overview": {
-      "files": 1,
-      "indexed": 1,
-      "kinds": {
-        "docs": 1
-      }
-    },
-    ".agents/skills/codebase-overview/agents": {
+    ".agents": {
       "files": 1,
       "indexed": 0,
       "kinds": {
+        "other": 1
+      }
+    },
+    ".agents/memory": {
+      "files": 14,
+      "indexed": 14,
+      "kinds": {
+        "docs": 14
+      }
+    },
+    ".agents/skills": {
+      "files": 2,
+      "indexed": 1,
+      "kinds": {
+        "docs": 1,
         "other": 1
       }
     },
@@ -180,6 +167,20 @@
       "indexed": 0,
       "kinds": {
         "other": 3
+      }
+    },
+    "agent_council_data": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "other": 1
+      }
+    },
+    "attached_assets": {
+      "files": 5,
+      "indexed": 1,
+      "kinds": {
+        "other": 5
       }
     },
     "bin": {
@@ -197,90 +198,25 @@
       }
     },
     "client/public": {
-      "files": 14,
+      "files": 16,
       "indexed": 2,
       "kinds": {
-        "other": 14
-      }
-    },
-    "client/public/local-news": {
-      "files": 2,
-      "indexed": 0,
-      "kinds": {
-        "other": 2
+        "other": 16
       }
     },
     "client/src": {
-      "files": 3,
-      "indexed": 3,
+      "files": 145,
+      "indexed": 143,
       "kinds": {
-        "other": 3
-      }
-    },
-    "client/src/components": {
-      "files": 30,
-      "indexed": 30,
-      "kinds": {
-        "client-component": 30
-      }
-    },
-    "client/src/components/agents-building": {
-      "files": 1,
-      "indexed": 1,
-      "kinds": {
-        "client-component": 1
-      }
-    },
-    "client/src/components/agents-world-office": {
-      "files": 2,
-      "indexed": 2,
-      "kinds": {
-        "client-component": 2
-      }
-    },
-    "client/src/components/clippers": {
-      "files": 1,
-      "indexed": 1,
-      "kinds": {
-        "client-component": 1
-      }
-    },
-    "client/src/components/company-office": {
-      "files": 5,
-      "indexed": 5,
-      "kinds": {
-        "client-component": 5
-      }
-    },
-    "client/src/components/ui": {
-      "files": 55,
-      "indexed": 55,
-      "kinds": {
-        "ui-component": 55
-      }
-    },
-    "client/src/hooks": {
-      "files": 3,
-      "indexed": 3,
-      "kinds": {
-        "client-hook": 3
-      }
-    },
-    "client/src/lib": {
-      "files": 18,
-      "indexed": 18,
-      "kinds": {
-        "client-lib": 18
-      }
-    },
-    "client/src/pages": {
-      "files": 26,
-      "indexed": 24,
-      "kinds": {
+        "other": 4,
+        "client-component": 39,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 18,
         "client-page": 26
       }
     },
-    "client/src/types": {
+    "config": {
       "files": 1,
       "indexed": 1,
       "kinds": {
@@ -288,10 +224,10 @@
       }
     },
     "docs": {
-      "files": 54,
-      "indexed": 52,
+      "files": 65,
+      "indexed": 61,
       "kinds": {
-        "docs": 54
+        "docs": 65
       }
     },
     "examples/clippers-motivation": {
@@ -316,25 +252,18 @@
         "script": 4
       }
     },
-    "server/replit_integrations/batch": {
-      "files": 2,
-      "indexed": 2,
+    "server": {
+      "files": 243,
+      "indexed": 238,
       "kinds": {
-        "server": 2
+        "server": 243
       }
     },
-    "server/replit_integrations/chat": {
-      "files": 4,
-      "indexed": 4,
+    "server/replit_integrations": {
+      "files": 9,
+      "indexed": 9,
       "kinds": {
-        "server": 4
-      }
-    },
-    "server/replit_integrations/image": {
-      "files": 3,
-      "indexed": 3,
-      "kinds": {
-        "server": 3
+        "server": 9
       }
     },
     "shared": {
@@ -351,18 +280,18 @@
         "shared": 1
       }
     },
-    "tests/fixtures": {
-      "files": 2,
-      "indexed": 2,
+    "tests": {
+      "files": 259,
+      "indexed": 255,
       "kinds": {
-        "test": 2
+        "test": 259
       }
     },
-    "tests/fixtures/factory-exact-source": {
-      "files": 2,
-      "indexed": 0,
+    "tests/fixtures": {
+      "files": 4,
+      "indexed": 2,
       "kinds": {
-        "test": 2
+        "test": 4
       }
     },
     "tests/harness": {
@@ -383,7 +312,55 @@
   },
   "files": [
     {
+      "path": ".agents/memory/agents-world-integration-safety.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/docker-image-verification.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": ".agents/memory/drive-oauth-autoscale.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/github-api-snapshot.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/legacy-publication-reconciliation.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/local-news-diagnostic-evidence.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/local-news-operation-authorization.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -415,6 +392,30 @@
       "routes": []
     },
     {
+      "path": ".agents/memory/production-session-diagnosis.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/qa-toolchain-isolation.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": ".agents/memory/software-factory-budget.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": ".agents/memory/yt-dlp-impersonate.md",
       "kind": "docs",
       "imports": [],
@@ -431,8 +432,24 @@
       "routes": []
     },
     {
+      "path": "agent_council_data/state.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "AGENTS.md",
       "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "attached_assets/posting-owner_66047c25_ce93d45f.manifest.json",
+      "kind": "other",
       "imports": [],
       "exports": [],
       "symbols": [],
@@ -2074,7 +2091,7 @@
         "react"
       ],
       "exports": [
-        "AlertDialog,\r\n  AlertDialogPortal,\r\n  AlertDialogOverlay,\r\n  AlertDialogTrigger,\r\n  AlertDialogContent,\r\n  AlertDialogHeader,\r\n  AlertDialogFooter,\r\n  AlertDialogTitle,\r\n  AlertDialogDescription,\r\n  AlertDialogAction,\r\n  AlertDialogCancel,\r\n"
+        "AlertDialog,\n  AlertDialogPortal,\n  AlertDialogOverlay,\n  AlertDialogTrigger,\n  AlertDialogContent,\n  AlertDialogHeader,\n  AlertDialogFooter,\n  AlertDialogTitle,\n  AlertDialogDescription,\n  AlertDialogAction,\n  AlertDialogCancel,\n"
       ],
       "symbols": [
         "AlertDialog",
@@ -2170,7 +2187,7 @@
         "react"
       ],
       "exports": [
-        "Breadcrumb,\r\n  BreadcrumbList,\r\n  BreadcrumbItem,\r\n  BreadcrumbLink,\r\n  BreadcrumbPage,\r\n  BreadcrumbSeparator,\r\n  BreadcrumbEllipsis,\r\n"
+        "Breadcrumb,\n  BreadcrumbList,\n  BreadcrumbItem,\n  BreadcrumbLink,\n  BreadcrumbPage,\n  BreadcrumbSeparator,\n  BreadcrumbEllipsis,\n"
       ],
       "symbols": [
         "Breadcrumb",
@@ -2194,7 +2211,7 @@
         "class-variance-authority"
       ],
       "exports": [
-        "ButtonGroup,\r\n  ButtonGroupSeparator,\r\n  ButtonGroupText,\r\n  buttonGroupVariants,\r\n"
+        "ButtonGroup,\n  ButtonGroupSeparator,\n  ButtonGroupText,\n  buttonGroupVariants,\n"
       ],
       "symbols": [
         "ButtonGroup",
@@ -2277,7 +2294,7 @@
         "react"
       ],
       "exports": [
-        "type CarouselApi,\r\n  Carousel,\r\n  CarouselContent,\r\n  CarouselItem,\r\n  CarouselPrevious,\r\n  CarouselNext,\r\n"
+        "type CarouselApi,\n  Carousel,\n  CarouselContent,\n  CarouselItem,\n  CarouselPrevious,\n  CarouselNext,\n"
       ],
       "symbols": [
         "Carousel",
@@ -2311,7 +2328,7 @@
       ],
       "exports": [
         "ChartConfig",
-        "ChartContainer,\r\n  ChartTooltip,\r\n  ChartTooltipContent,\r\n  ChartLegend,\r\n  ChartLegendContent,\r\n  ChartStyle,\r\n"
+        "ChartContainer,\n  ChartTooltip,\n  ChartTooltipContent,\n  ChartLegend,\n  ChartLegendContent,\n  ChartStyle,\n"
       ],
       "symbols": [
         "ChartContainer",
@@ -2385,7 +2402,7 @@
         "react"
       ],
       "exports": [
-        "Command,\r\n  CommandDialog,\r\n  CommandInput,\r\n  CommandList,\r\n  CommandEmpty,\r\n  CommandGroup,\r\n  CommandItem,\r\n  CommandShortcut,\r\n  CommandSeparator,\r\n"
+        "Command,\n  CommandDialog,\n  CommandInput,\n  CommandList,\n  CommandEmpty,\n  CommandGroup,\n  CommandItem,\n  CommandShortcut,\n  CommandSeparator,\n"
       ],
       "symbols": [
         "Command",
@@ -2410,7 +2427,7 @@
         "react"
       ],
       "exports": [
-        "ContextMenu,\r\n  ContextMenuTrigger,\r\n  ContextMenuContent,\r\n  ContextMenuItem,\r\n  ContextMenuCheckboxItem,\r\n  ContextMenuRadioItem,\r\n  ContextMenuLabel,\r\n  ContextMenuSeparator,\r\n  ContextMenuShortcut,\r\n  ContextMenuGroup,\r\n  ContextMenuPortal,\r\n  ContextMenuSub,\r\n  ContextMenuSubContent,\r\n  ContextMenuSubTrigger,\r\n  ContextMenuRadioGroup,\r\n"
+        "ContextMenu,\n  ContextMenuTrigger,\n  ContextMenuContent,\n  ContextMenuItem,\n  ContextMenuCheckboxItem,\n  ContextMenuRadioItem,\n  ContextMenuLabel,\n  ContextMenuSeparator,\n  ContextMenuShortcut,\n  ContextMenuGroup,\n  ContextMenuPortal,\n  ContextMenuSub,\n  ContextMenuSubContent,\n  ContextMenuSubTrigger,\n  ContextMenuRadioGroup,\n"
       ],
       "symbols": [
         "ContextMenu",
@@ -2441,7 +2458,7 @@
         "react"
       ],
       "exports": [
-        "Dialog,\r\n  DialogPortal,\r\n  DialogOverlay,\r\n  DialogTrigger,\r\n  DialogClose,\r\n  DialogContent,\r\n  DialogHeader,\r\n  DialogFooter,\r\n  DialogTitle,\r\n  DialogDescription,\r\n"
+        "Dialog,\n  DialogPortal,\n  DialogOverlay,\n  DialogTrigger,\n  DialogClose,\n  DialogContent,\n  DialogHeader,\n  DialogFooter,\n  DialogTitle,\n  DialogDescription,\n"
       ],
       "symbols": [
         "Dialog",
@@ -2466,7 +2483,7 @@
         "vaul"
       ],
       "exports": [
-        "Drawer,\r\n  DrawerPortal,\r\n  DrawerOverlay,\r\n  DrawerTrigger,\r\n  DrawerClose,\r\n  DrawerContent,\r\n  DrawerHeader,\r\n  DrawerFooter,\r\n  DrawerTitle,\r\n  DrawerDescription,\r\n"
+        "Drawer,\n  DrawerPortal,\n  DrawerOverlay,\n  DrawerTrigger,\n  DrawerClose,\n  DrawerContent,\n  DrawerHeader,\n  DrawerFooter,\n  DrawerTitle,\n  DrawerDescription,\n"
       ],
       "symbols": [
         "Drawer",
@@ -2492,7 +2509,7 @@
         "react"
       ],
       "exports": [
-        "DropdownMenu,\r\n  DropdownMenuTrigger,\r\n  DropdownMenuContent,\r\n  DropdownMenuItem,\r\n  DropdownMenuCheckboxItem,\r\n  DropdownMenuRadioItem,\r\n  DropdownMenuLabel,\r\n  DropdownMenuSeparator,\r\n  DropdownMenuShortcut,\r\n  DropdownMenuGroup,\r\n  DropdownMenuPortal,\r\n  DropdownMenuSub,\r\n  DropdownMenuSubContent,\r\n  DropdownMenuSubTrigger,\r\n  DropdownMenuRadioGroup,\r\n"
+        "DropdownMenu,\n  DropdownMenuTrigger,\n  DropdownMenuContent,\n  DropdownMenuItem,\n  DropdownMenuCheckboxItem,\n  DropdownMenuRadioItem,\n  DropdownMenuLabel,\n  DropdownMenuSeparator,\n  DropdownMenuShortcut,\n  DropdownMenuGroup,\n  DropdownMenuPortal,\n  DropdownMenuSub,\n  DropdownMenuSubContent,\n  DropdownMenuSubTrigger,\n  DropdownMenuRadioGroup,\n"
       ],
       "symbols": [
         "DropdownMenu",
@@ -2521,7 +2538,7 @@
         "class-variance-authority"
       ],
       "exports": [
-        "Empty,\r\n  EmptyHeader,\r\n  EmptyTitle,\r\n  EmptyDescription,\r\n  EmptyContent,\r\n  EmptyMedia,\r\n"
+        "Empty,\n  EmptyHeader,\n  EmptyTitle,\n  EmptyDescription,\n  EmptyContent,\n  EmptyMedia,\n"
       ],
       "symbols": [
         "Empty",
@@ -2545,7 +2562,7 @@
         "react"
       ],
       "exports": [
-        "Field,\r\n  FieldLabel,\r\n  FieldDescription,\r\n  FieldError,\r\n  FieldGroup,\r\n  FieldLegend,\r\n  FieldSeparator,\r\n  FieldSet,\r\n  FieldContent,\r\n  FieldTitle,\r\n"
+        "Field,\n  FieldLabel,\n  FieldDescription,\n  FieldError,\n  FieldGroup,\n  FieldLegend,\n  FieldSeparator,\n  FieldSet,\n  FieldContent,\n  FieldTitle,\n"
       ],
       "symbols": [
         "Field",
@@ -2575,7 +2592,7 @@
         "react-hook-form"
       ],
       "exports": [
-        "useFormField,\r\n  Form,\r\n  FormItem,\r\n  FormLabel,\r\n  FormControl,\r\n  FormDescription,\r\n  FormMessage,\r\n  FormField,\r\n"
+        "useFormField,\n  Form,\n  FormItem,\n  FormLabel,\n  FormControl,\n  FormDescription,\n  FormMessage,\n  FormField,\n"
       ],
       "symbols": [
         "Form",
@@ -2627,7 +2644,7 @@
         "react"
       ],
       "exports": [
-        "InputGroup,\r\n  InputGroupAddon,\r\n  InputGroupButton,\r\n  InputGroupText,\r\n  InputGroupInput,\r\n  InputGroupTextarea,\r\n"
+        "InputGroup,\n  InputGroupAddon,\n  InputGroupButton,\n  InputGroupText,\n  InputGroupInput,\n  InputGroupTextarea,\n"
       ],
       "symbols": [
         "InputGroup",
@@ -2688,7 +2705,7 @@
         "react"
       ],
       "exports": [
-        "Item,\r\n  ItemMedia,\r\n  ItemContent,\r\n  ItemActions,\r\n  ItemGroup,\r\n  ItemSeparator,\r\n  ItemTitle,\r\n  ItemDescription,\r\n  ItemHeader,\r\n  ItemFooter,\r\n"
+        "Item,\n  ItemMedia,\n  ItemContent,\n  ItemActions,\n  ItemGroup,\n  ItemSeparator,\n  ItemTitle,\n  ItemDescription,\n  ItemHeader,\n  ItemFooter,\n"
       ],
       "symbols": [
         "Comp",
@@ -2750,7 +2767,7 @@
         "react"
       ],
       "exports": [
-        "Menubar,\r\n  MenubarMenu,\r\n  MenubarTrigger,\r\n  MenubarContent,\r\n  MenubarItem,\r\n  MenubarSeparator,\r\n  MenubarLabel,\r\n  MenubarCheckboxItem,\r\n  MenubarRadioGroup,\r\n  MenubarRadioItem,\r\n  MenubarPortal,\r\n  MenubarSubContent,\r\n  MenubarSubTrigger,\r\n  MenubarGroup,\r\n  MenubarSub,\r\n  MenubarShortcut,\r\n"
+        "Menubar,\n  MenubarMenu,\n  MenubarTrigger,\n  MenubarContent,\n  MenubarItem,\n  MenubarSeparator,\n  MenubarLabel,\n  MenubarCheckboxItem,\n  MenubarRadioGroup,\n  MenubarRadioItem,\n  MenubarPortal,\n  MenubarSubContent,\n  MenubarSubTrigger,\n  MenubarGroup,\n  MenubarSub,\n  MenubarShortcut,\n"
       ],
       "symbols": [
         "Menubar",
@@ -2783,7 +2800,7 @@
         "react"
       ],
       "exports": [
-        "navigationMenuTriggerStyle,\r\n  NavigationMenu,\r\n  NavigationMenuList,\r\n  NavigationMenuItem,\r\n  NavigationMenuContent,\r\n  NavigationMenuTrigger,\r\n  NavigationMenuLink,\r\n  NavigationMenuIndicator,\r\n  NavigationMenuViewport,\r\n"
+        "navigationMenuTriggerStyle,\n  NavigationMenu,\n  NavigationMenuList,\n  NavigationMenuItem,\n  NavigationMenuContent,\n  NavigationMenuTrigger,\n  NavigationMenuLink,\n  NavigationMenuIndicator,\n  NavigationMenuViewport,\n"
       ],
       "symbols": [
         "NavigationMenu",
@@ -2808,7 +2825,7 @@
         "react"
       ],
       "exports": [
-        "Pagination,\r\n  PaginationContent,\r\n  PaginationLink,\r\n  PaginationItem,\r\n  PaginationPrevious,\r\n  PaginationNext,\r\n  PaginationEllipsis,\r\n"
+        "Pagination,\n  PaginationContent,\n  PaginationLink,\n  PaginationItem,\n  PaginationPrevious,\n  PaginationNext,\n  PaginationEllipsis,\n"
       ],
       "symbols": [
         "Pagination",
@@ -2920,7 +2937,7 @@
         "react"
       ],
       "exports": [
-        "Select,\r\n  SelectGroup,\r\n  SelectValue,\r\n  SelectTrigger,\r\n  SelectContent,\r\n  SelectLabel,\r\n  SelectItem,\r\n  SelectSeparator,\r\n  SelectScrollUpButton,\r\n  SelectScrollDownButton,\r\n"
+        "Select,\n  SelectGroup,\n  SelectValue,\n  SelectTrigger,\n  SelectContent,\n  SelectLabel,\n  SelectItem,\n  SelectSeparator,\n  SelectScrollUpButton,\n  SelectScrollDownButton,\n"
       ],
       "symbols": [
         "Select",
@@ -2963,7 +2980,7 @@
         "react"
       ],
       "exports": [
-        "Sheet,\r\n  SheetPortal,\r\n  SheetOverlay,\r\n  SheetTrigger,\r\n  SheetClose,\r\n  SheetContent,\r\n  SheetHeader,\r\n  SheetFooter,\r\n  SheetTitle,\r\n  SheetDescription,\r\n"
+        "Sheet,\n  SheetPortal,\n  SheetOverlay,\n  SheetTrigger,\n  SheetClose,\n  SheetContent,\n  SheetHeader,\n  SheetFooter,\n  SheetTitle,\n  SheetDescription,\n"
       ],
       "symbols": [
         "Sheet",
@@ -2999,7 +3016,7 @@
         "react"
       ],
       "exports": [
-        "Sidebar,\r\n  SidebarContent,\r\n  SidebarFooter,\r\n  SidebarGroup,\r\n  SidebarGroupAction,\r\n  SidebarGroupContent,\r\n  SidebarGroupLabel,\r\n  SidebarHeader,\r\n  SidebarInput,\r\n  SidebarInset,\r\n  SidebarMenu,\r\n  SidebarMenuAction,\r\n  SidebarMenuBadge,\r\n  SidebarMenuButton,\r\n  SidebarMenuItem,\r\n  SidebarMenuSkeleton,\r\n  SidebarMenuSub,\r\n  SidebarMenuSubButton,\r\n  SidebarMenuSubItem,\r\n  SidebarProvider,\r\n  SidebarRail,\r\n  SidebarSeparator,\r\n  SidebarTrigger,\r\n  useSidebar,\r\n"
+        "Sidebar,\n  SidebarContent,\n  SidebarFooter,\n  SidebarGroup,\n  SidebarGroupAction,\n  SidebarGroupContent,\n  SidebarGroupLabel,\n  SidebarHeader,\n  SidebarInput,\n  SidebarInset,\n  SidebarMenu,\n  SidebarMenuAction,\n  SidebarMenuBadge,\n  SidebarMenuButton,\n  SidebarMenuItem,\n  SidebarMenuSkeleton,\n  SidebarMenuSub,\n  SidebarMenuSubButton,\n  SidebarMenuSubItem,\n  SidebarProvider,\n  SidebarRail,\n  SidebarSeparator,\n  SidebarTrigger,\n  useSidebar,\n"
       ],
       "symbols": [
         "Comp",
@@ -3135,7 +3152,7 @@
         "react"
       ],
       "exports": [
-        "Table,\r\n  TableHeader,\r\n  TableBody,\r\n  TableFooter,\r\n  TableHead,\r\n  TableRow,\r\n  TableCell,\r\n  TableCaption,\r\n"
+        "Table,\n  TableHeader,\n  TableBody,\n  TableFooter,\n  TableHead,\n  TableRow,\n  TableCell,\n  TableCaption,\n"
       ],
       "symbols": [
         "Table",
@@ -3194,7 +3211,7 @@
         "react"
       ],
       "exports": [
-        "type ToastProps,\r\n  type ToastActionElement,\r\n  ToastProvider,\r\n  ToastViewport,\r\n  Toast,\r\n  ToastTitle,\r\n  ToastDescription,\r\n  ToastClose,\r\n  ToastAction,\r\n"
+        "type ToastProps,\n  type ToastActionElement,\n  ToastProvider,\n  ToastViewport,\n  Toast,\n  ToastTitle,\n  ToastDescription,\n  ToastClose,\n  ToastAction,\n"
       ],
       "symbols": [
         "Toast",
@@ -5276,6 +5293,14 @@
       "routes": []
     },
     {
+      "path": "config/local-news-delivery-policy.json",
+      "kind": "other",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "design-qa.md",
       "kind": "docs",
       "imports": [],
@@ -5308,6 +5333,22 @@
       "routes": []
     },
     {
+      "path": "docs/agents-world-departments-ui-validation.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/agents-world-integration-review.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/assistant-stabilization-plan.md",
       "kind": "docs",
       "imports": [],
@@ -5317,6 +5358,38 @@
     },
     {
       "path": "docs/blackroom-learning-acceptance.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/blackroom-manual-exploration.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/blackroom-manual-reconciliation.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/blackroom-office-release.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/blackroom-release-integration.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -5484,6 +5557,22 @@
       "routes": []
     },
     {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5567,6 +5656,14 @@
     },
     {
       "path": "docs/factory-reader-deadline-acceptance.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/legacy-publication-containment-validation.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -18143,7 +18240,7 @@
         "zod"
       ],
       "exports": [
-        "hashPassword,\r\n  isLocalAuthEnabled,\r\n  isLocalAuthRegistrationAllowed,\r\n  normalizeUsername,\r\n  sanitizeAuthUser,\r\n  verifyPassword,\r\n",
+        "hashPassword,\n  isLocalAuthEnabled,\n  isLocalAuthRegistrationAllowed,\n  normalizeUsername,\n  sanitizeAuthUser,\n  verifyPassword,\n",
         "registerLocalAuthRoutes"
       ],
       "symbols": [
@@ -21919,7 +22016,7 @@
         "./utils"
       ],
       "exports": [
-        "batchProcess,\r\n  batchProcessWithSSE,\r\n  isRateLimitError,\r\n  type BatchOptions,\r\n"
+        "batchProcess,\n  batchProcessWithSSE,\n  isRateLimitError,\n  type BatchOptions,\n"
       ],
       "symbols": [],
       "routes": []

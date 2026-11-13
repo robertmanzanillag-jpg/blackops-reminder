@@ -25,8 +25,17 @@ export function createOpenAiFactoryTextProvider(config:{
  const pinnedModel=c.model==="gpt-6-astra"||/^[-a-zA-Z0-9.]+-\d{4}-\d{2}-\d{2}$/.test(c.model);
  if((c.reasoningEffort!==undefined&&(c.reasoningEffort!=="low"||c.model!=="gpt-6-astra"))||typeof c.request!=="function"||typeof c.now!=="function"||!pinnedModel||!positive(c.inputNanoUsdPerToken)||!positive(c.outputNanoUsdPerToken)||!positive(c.maxInputTokens)||!Number.isFinite(expiry)||!positive(timeout)||timeout>300000||!positive(byteLimit)||byteLimit>4194304)throw Error("FACTORY_OPENAI_CONFIGURATION_INVALID");
  const cost=(input:number,output:number)=>Number((BigInt(input)*BigInt(c.inputNanoUsdPerToken)+BigInt(output)*BigInt(c.outputNanoUsdPerToken)+9999999n)/10000000n);
- return async function generateText(raw:{instructions:string;text:string;maxOutputTokens:number;maxCostCents:number;signal:AbortSignal}):Promise<FactoryTextResult>{
+ /** responseSchema (optional): strict JSON-schema output format. It only shapes
+  * output; callers must still validate the parsed value in code. */
+ return async function generateText(raw:{instructions:string;text:string;maxOutputTokens:number;maxCostCents:number;signal:AbortSignal;responseSchema?:{name:string;schema:Record<string,unknown>}}):Promise<FactoryTextResult>{
   const input={...raw};
+  let format:unknown;
+  if(input.responseSchema!==undefined){
+   const r=input.responseSchema;let encoded="";
+   try{encoded=JSON.stringify(r?.schema);}catch{encoded="";}
+   if(!r||typeof r.name!=="string"||!/^[a-zA-Z0-9_-]{1,64}$/.test(r.name)||!r.schema||typeof r.schema!=="object"||Array.isArray(r.schema)||!encoded||Buffer.byteLength(encoded)>16384)return {status:"blocked",reason:"FACTORY_OPENAI_INPUT_INVALID",costCents:0};
+   format={format:{type:"json_schema",name:r.name,strict:true,schema:JSON.parse(encoded)}};
+  }
   const blocked=(reason:string):FactoryTextResult=>({status:"blocked",reason,costCents:0});
   if(typeof input.instructions!=="string"||typeof input.text!=="string"||!input.text.trim()||Buffer.byteLength(input.instructions)+Buffer.byteLength(input.text)>262144||!positive(input.maxOutputTokens)||input.maxOutputTokens<16||input.maxOutputTokens>128000||!positive(input.maxCostCents)||input.maxCostCents>10000||!input.signal)return blocked("FACTORY_OPENAI_INPUT_INVALID");
   const fresh=()=>{const now=c.now().getTime();return Number.isFinite(now)&&now<expiry;};
@@ -49,7 +58,7 @@ export function createOpenAiFactoryTextProvider(config:{
   try {
    // Both calls receive the exact same model/instructions/text. No conversation,
    // previous response, tools, remote input or caller-supplied generation fields.
-   const prompt={model:c.model,instructions:input.instructions,input:input.text,...(c.reasoningEffort?{reasoning:{effort:c.reasoningEffort}}:{})};
+   const prompt={model:c.model,instructions:input.instructions,input:input.text,...(c.reasoningEffort?{reasoning:{effort:c.reasoningEffort}}:{}),...(format?{text:format}:{})};
    const counted=await post("/input_tokens",prompt,4096);
    if(counted?.object!=="response.input_tokens"||!nonnegative(counted.input_tokens)||counted.input_tokens>c.maxInputTokens)return blocked("FACTORY_OPENAI_COUNT_INVALID");
    if(cost(counted.input_tokens,input.maxOutputTokens)>input.maxCostCents)return blocked("FACTORY_OPENAI_BUDGET_UNAVAILABLE");

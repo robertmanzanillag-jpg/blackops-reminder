@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-07T04:45:37.459Z
-Repo: `C:\Users\FrontDesk\Documents\Codex\2026-11-06\https-robertwebsites-com-agents-office-https\work\office-real-execution`
+Generated: 2026-11-07T04:53:04.797Z
+Repo: `/home/runner/workspace`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1010 | 912 | 3440 | 571 | 18840 |
+| 1039 | 933 | 3440 | 571 | 18840 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -30,28 +30,28 @@ Package: `rest-express`
 | --- | ---: | ---: | --- |
 | `tests` | 259 | 255 | test:259 |
 | `server` | 243 | 238 | server:243 |
+| `client/src` | 145 | 143 | ui-component:55, client-component:39, client-page:26, client-lib:18 |
 | `script` | 104 | 93 | script:104 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `client/src/components/ui` | 55 | 55 | ui-component:55 |
-| `docs` | 54 | 52 | docs:54 |
-| `client/src/components` | 30 | 30 | client-component:30 |
-| `client/src/pages` | 26 | 24 | client-page:26 |
-| `.` | 35 | 18 | other:23, docs:11, package:1 |
-| `client/src/lib` | 18 | 18 | client-lib:18 |
+| `docs` | 65 | 61 | docs:65 |
+| `.` | 36 | 18 | other:24, docs:11, package:1 |
 | `shared` | 18 | 18 | shared:18 |
-| `.agents/memory` | 5 | 5 | docs:5 |
-| `client/src/components/company-office` | 5 | 5 | client-component:5 |
-| `server/replit_integrations/chat` | 4 | 4 | server:4 |
-| `client/src` | 3 | 3 | other:3 |
-| `client/src/hooks` | 3 | 3 | client-hook:3 |
-| `server/replit_integrations/image` | 3 | 3 | server:3 |
-| `client/public` | 14 | 2 | other:14 |
-| `client/src/components/agents-world-office` | 2 | 2 | client-component:2 |
-| `server/replit_integrations/batch` | 2 | 2 | server:2 |
-| `tests/fixtures` | 2 | 2 | test:2 |
-| `.agents/skills/codebase-overview` | 1 | 1 | docs:1 |
+| `.agents/memory` | 14 | 14 | docs:14 |
+| `server/replit_integrations` | 9 | 9 | server:9 |
+| `client/public` | 16 | 2 | other:16 |
+| `tests/fixtures` | 4 | 2 | test:4 |
+| `.agents/skills` | 2 | 1 | docs:1, other:1 |
+| `agent_council_data` | 1 | 1 | other:1 |
+| `attached_assets` | 5 | 1 | other:5 |
 | `client` | 1 | 1 | other:1 |
-| `client/src/components/agents-building` | 1 | 1 | client-component:1 |
+| `config` | 1 | 1 | other:1 |
+| `scripts` | 4 | 1 | script:4 |
+| `shared/models` | 1 | 1 | shared:1 |
+| `tests/harness` | 1 | 1 | test:1 |
+| `tutorials/dropshipping-ceo-tutorial` | 8 | 1 | other:7, docs:1 |
+| `.agents` | 1 | 0 | other:1 |
+| `.github/workflows` | 3 | 0 | other:3 |
+| `bin` | 1 | 0 | other:1 |
 
 ## Routes Detected
 - `client/src/App.tsx`: `/`, `/agents-office`, `/app-qa-agent`, `/assistant`, `/automations`, `/ceo`, `/clippers`, `/code-agent`, `/cybersecurity-agent`, `/dashboard`, `/dropshipping-ceo`, `/github-agent`, `/legal-compliance`, `/marketing-command-center`, `/news`, `/news/article/:slug`, `/news/miami`, `/news/new-york`, `/portfolio`, `/portfolio/:symbol`, `/projects`, `/promo-video`, `/radio`, `/revenue-engine`, `/revenue-engine/advanced`, `/tools`
