@@ -2,11 +2,13 @@
   "_comment": "Tracked allowlist for the release gate (docs/release-gate.md). knownFailures: pre-existing failing test files, each with the reason and the exact names of the tests expected to fail ('failing'); any OTHER failing test fails the gate, and a listed test that starts passing must be removed. sandboxIntegrationRoutes: exact route + status the sandbox tolerates because it deliberately has no Replit connectors or KONG access. Adding or changing entries requires the PR label gate-justified.",
   "knownFailures": {
     "tests/agents-office-local-qa.test.mjs": {
-      "reason": "Browser office QA fixture times out in headless CI (TimeoutError after ~40 s); pre-existing, also fails locally.",
+      "reason": "Browser office QA fixture times out in headless CI (TimeoutError after ~40 s); pre-existing, also fails locally; it sometimes hangs instead (seen up to 7 min), so <timeout> is listed and the limit is 3 min.",
       "failing": [
+        "<timeout>",
         "office local QA: actual sessions, owner isolation and native scouts with fixture storage"
       ],
-      "flaky": true
+      "flaky": true,
+      "timeoutMs": 180000
     },
     "tests/app-qa-agent.test.ts": {
       "reason": "'mission inventory covers every explicit client route exactly once': the App QA route inventory no longer matches client/src/App.tsx routes (pre-existing).",
@@ -230,11 +232,13 @@
       ]
     },
     "tests/kong-office-browser-qa.test.mjs": {
-      "reason": "KONG unified office browser scouts time out in headless CI (~20 s); pre-existing, also fails locally.",
+      "reason": "KONG unified office browser scouts time out in headless CI (~20 s); pre-existing, also fails locally; it sometimes hangs instead (seen up to 7 min), so <timeout> is listed and the limit is 3 min.",
       "failing": [
+        "<timeout>",
         "KONG unified office: browser route, click, API, error and improvement scouts"
       ],
-      "flaky": true
+      "flaky": true,
+      "timeoutMs": 180000
     },
     "tests/legacy-publication-containment.test.ts": {
       "reason": "Imports the bare package 'containment-handlers' that does not exist (ERR_MODULE_NOT_FOUND); the test cannot load (pre-existing).",
