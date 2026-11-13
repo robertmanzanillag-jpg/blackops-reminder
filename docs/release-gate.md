@@ -108,7 +108,7 @@ rama antes de abrir el PR o para repetir la verificación de producción.
   "flaky": false, "timeoutMs": 120000 }`. `failing` son los nombres exactos (subtests como
   `padre > hijo`; `<timeout>` si se cuelga). `flaky: true` tolera que esos tests a veces pasen,
   pero un nombre nuevo sigue bloqueando; `timeoutMs` acorta el límite de un test que se cuelga.
-  Hoy hay 15 entradas: casi todas son tests del toolchain del Mac del operador (LaunchAgent, zsh,
+  Hoy hay 16 entradas (2 marcadas `flaky`, por eso un run puede mostrar 14-16 fallos conocidos): casi todas son tests del toolchain del Mac del operador (LaunchAgent, zsh,
   ImageMagick, `/private/tmp`) o fallos ya existentes; ver el motivo de cada una. Arreglar un test
   = borrar su nombre (o la entrada) en el mismo PR (no necesita etiqueta). Añadir o cambiar una
   entrada necesita la etiqueta `gate-justified` y una explicación.
