@@ -19,7 +19,7 @@ const onDemand = new Set(["restaurant_secretary", "legacy_ceo", "restaurant_deal
 const labels: Record<string, string> = {
   running: "En ejecución", healthy: "Última actividad verificada",
   attention: "Requiere atención", disabled: "Deshabilitado",
-  stale: "Evidencia vencida", unknown: "Sin evidencia reciente",
+  stale: "Evidencia vencida", unknown: "Sin evidencia reciente", idle: "Disponible bajo demanda",
 };
 const station = "rounded-lg border border-white/20 px-3 py-2 text-sm text-slate-100 hover:bg-white/10 focus-visible:outline focus-visible:outline-cyan-200";
 type Desk = { id: string; name: string; owner: string; responsibility: string; status: string; lastRunAt: string | null; blocker: string | null };
