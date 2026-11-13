@@ -1,0 +1,14 @@
+{
+  "_comment": "Tracked allowlist for the release gate (docs/release-gate.md). knownFailures: pre-existing failing test files, each with the reason; any OTHER failing file fails the gate, and an entry that starts passing must be removed. sandboxIntegrationRoutes: exact route + status the sandbox tolerates because it deliberately has no Replit connectors or KONG access. Adding entries requires the PR label gate-justified.",
+  "knownFailures": {},
+  "sandboxIntegrationRoutes": {
+    "/api/calendar/sync": {
+      "status": [500],
+      "reason": "Google Calendar goes through the Replit connector (X_REPLIT_TOKEN), which only exists on Replit; the handler answers 500 instead of a clear 503 when the connector is absent (pre-existing)."
+    },
+    "/api/agents-office/cities": {
+      "status": [503],
+      "reason": "The KONG city directory needs KONG read access, deliberately absent in the sandbox; the route answers an explicit 503."
+    }
+  }
+}
