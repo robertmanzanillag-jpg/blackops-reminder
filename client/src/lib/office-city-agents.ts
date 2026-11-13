@@ -105,7 +105,8 @@ export function buildOfficeCityRoomsFromSnapshot(directory: OfficeCityDirectoryE
         else if (job.state === "attention") {
           const score = scores.get(city.id)?.find(item => item.category === category.id);
           status = score?.state === "completed_with_warnings"
-            ? { state: "needs-setup", label: "Completado con avisos", detail: job.issues.join(" · ") || score.reason }
+            // Ran on schedule without a recorded error: coverage findings are informational (KONG #306).
+            ? { state: "available", label: "Activo · cobertura con pendientes", detail: job.issues.join(" · ") || score.reason }
             : { state: "error", label: score?.state === "failed" ? "Falló la última ejecución" : "Requiere atención", detail: job.issues.join(" · ") || score?.reason || "KONG registra un bloqueo en este trabajo." };
         }
         else if (job.state === "disabled") status = { state: "needs-setup", label: "Deshabilitado", detail: "Este trabajo esta deshabilitado." };

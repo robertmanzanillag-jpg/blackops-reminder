@@ -41,8 +41,11 @@ test("fresh evidence animates only running jobs; completed jobs are distinct and
   assert.equal(jobs[2].hasDurableEvidence, false);
   assert.equal(jobs[3].status.state, "error");
   assert.equal(jobs[3].blocker, "Falta la fuente");
-  assert.equal(jobs[4].status.label, "Completado con avisos");
-  assert.equal(jobs[4].color, "#fbbf24");
+  // Ran on schedule without a recorded error: coverage findings never paint it as broken.
+  assert.equal(jobs[4].status.label, "Activo · cobertura con pendientes");
+  assert.equal(jobs[4].status.state, "available");
+  assert.equal(jobs[4].status.detail, "La fuente limitó las consultas (HTTP 429).");
+  assert.equal(jobs[4].color, "#94a3b8");
   assert.equal(jobs.filter(agent => agent.hasDurableEvidence).length, 4);
 });
 
@@ -124,4 +127,20 @@ test("fresh category records retain optional interval and explicit failure evide
   assert.equal(rooms[0].agents[0].intervalMs, 60000);
   assert.equal(rooms[0].agents[0].recordedFailure, true);
   assert.equal(rooms[0].agents[1].recordedFailure, undefined);
+});
+
+test("coverage warnings keep the 5-point deduction but only real failures or stale runs render as errors", async () => {
+  const { scoreOfficeKongSnapshot } = await import("../shared/office-kong-supervisor");
+  const snapshot = run([{ ...miami, categories: [
+    job("clubs", "attention", { recordedFailure: false, intervalMs: 600_000, issues: ["Incidencia registrada. Revisa el detalle en KONG."] }),
+    job("vip", "attention", { recordedFailure: true, intervalMs: 600_000, issues: ["El ultimo intento registro un error; revisar la evidencia en KONG."] }),
+    job("restaurants", "attention", { recordedFailure: false, intervalMs: 10_000, lastRunAt: stamp(-90000), lastSuccessAt: stamp(-90000), issues: ["Pendiente"] }),
+  ] }]);
+  const agents = buildOfficeCityRooms([miami], [snapshot], now)[0].agents;
+  assert.deepEqual([agents[0].status.state, agents[0].status.label], ["available", "Activo · cobertura con pendientes"]);
+  assert.equal(agents[0].status.detail, "Incidencia registrada. Revisa el detalle en KONG.");
+  assert.deepEqual([agents[1].status.state, agents[1].status.label], ["error", "Falló la última ejecución"]);
+  assert.equal(agents[2].status.state, "error", "a run older than two intervals is stale, not a coverage notice");
+  const score = scoreOfficeKongSnapshot(snapshot.evidence as never, now).cities[0].categories;
+  assert.deepEqual(score.slice(0, 3).map(item => [item.state, item.deduction]), [["completed_with_warnings", 5], ["failed", 25], ["stale", 20]]);
 });

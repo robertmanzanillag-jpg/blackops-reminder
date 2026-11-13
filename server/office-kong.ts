@@ -19,7 +19,9 @@ const agentSchema = z.object({
   kind: z.enum(["coordinator", "department", "city", "system"]),
   owner: text,
   responsibility: text,
-  state: z.enum(["healthy", "running", "attention", "stale", "unknown", "disabled"]),
+  // "idle" = on-demand service with no recent request (KONG #306). Any future
+  // state degrades to "unknown" for that agent instead of failing the snapshot.
+  state: z.enum(["healthy", "running", "attention", "stale", "unknown", "disabled", "idle"]).catch("unknown"),
   operationMode: z.enum(["on_demand", "scheduled", "event_driven"]).optional(),
   evidencePending: z.boolean().optional(),
   // Aggregate receipt history is not proof of a live reader or completed group read.
@@ -36,6 +38,14 @@ const agentSchema = z.object({
   blocker: text.nullable(),
   nextAction: text,
   issues: z.array(text).max(500),
+  // City agents only: data coverage is informational and never decides execution state.
+  coverage: z.object({
+    percent: z.number().min(0).max(100).nullable(),
+    categoriesComplete: z.number().int().nonnegative(),
+    categoriesTotal: z.number().int().nonnegative(),
+    pendingItems: z.number().int().nonnegative(),
+    configurationNotices: z.array(text).max(100),
+  }).strict().optional().catch(undefined),
 }).strict();
 const briefSchema = z.object({
   id: text,
@@ -101,7 +111,8 @@ const citySchema = z.object({
   countryCode: z.string().regex(/^[A-Z]{2}$/),
   timeZone: z.string().max(100).refine(value => { try { new Intl.DateTimeFormat("en", { timeZone: value }); return true; } catch { return false; } }),
   currency: z.string().regex(/^[A-Z]{3}$/),
-  status: z.enum(["healthy", "needs_attention"]),
+  // Newer KONG reports the execution verdict as "active"; it is recomputed from jobs below.
+  status: z.enum(["healthy", "active", "needs_attention"]).catch("needs_attention"),
   jobs: z.array(jobSchema).max(OFFICE_KONG_CITY_CATEGORIES.length),
   eventLoad: officeKongEventLoadSchema.optional().catch(undefined),
 });
@@ -120,7 +131,7 @@ export type OfficeKongCityDirectoryEntry = z.infer<typeof directorySchema>[numbe
 export type OfficeKongAgent = z.infer<typeof agentSchema>;
 export interface OfficeKongCityCategory {
   category: typeof OFFICE_KONG_CITY_CATEGORIES[number];
-  state: OfficeKongAgent["state"];
+  state: Exclude<OfficeKongAgent["state"], "idle">;
   lastRunAt: string | null;
   lastSuccessAt: string | null;
   lastStartedAt: string | null;
@@ -237,7 +248,7 @@ function cityEvidence(snapshot: z.infer<typeof citiesSchema>, at: Date): OfficeK
       const futureEvidence = [job.last_success_at, job.last_completed_at, job.last_started_at]
         .some(value => value && Date.parse(value) > at.getTime() + MAX_FUTURE_SKEW_MS);
       const liveLease = job.lease_until && Date.parse(job.lease_until) > at.getTime();
-      let state: OfficeKongAgent["state"];
+      let state: OfficeKongCityCategory["state"];
       if (!snapshot.enabled) state = "disabled";
       else if (futureEvidence) { state = "unknown"; issues.push("Las fechas de ejecucion estan en el futuro y no se pueden verificar."); }
       else if (liveLease && job.last_started_at) state = "running";
@@ -251,7 +262,7 @@ function cityEvidence(snapshot: z.infer<typeof citiesSchema>, at: Date): OfficeK
     });
     return { id: city.id, name: city.name, countryCode: city.countryCode, timeZone: city.timeZone, currency: city.currency,
       ...(city.eventLoad ? { eventLoad: city.eventLoad } : {}),
-      status: city.status === "healthy" && categories.every(category => category.state === "healthy") ? "healthy" : "needs_attention", categories };
+      status: city.status !== "needs_attention" && categories.every(category => category.state === "healthy") ? "healthy" : "needs_attention", categories };
   });
 }
 
@@ -345,7 +356,7 @@ export function createOfficeKongConnector(dependencies: {
     const counts = new Map<OfficeKongAgent["state"], number>();
     for (const agent of snapshot.agents) counts.set(agent.state, (counts.get(agent.state) ?? 0) + 1);
     return {
-      text: `Auditoria de operaciones KONG completada con evidencia del ${snapshot.generatedAt}. ${snapshot.agents.length} agentes: ${counts.get("healthy") ?? 0} con evidencia vigente, ${counts.get("running") ?? 0} en ejecucion, ${counts.get("attention") ?? 0} requieren atencion, ${counts.get("stale") ?? 0} con evidencia antigua, ${counts.get("unknown") ?? 0} sin evidencia verificable y ${counts.get("disabled") ?? 0} deshabilitados. Registro consultado: ${cities.length} ciudades, ${categoryCount}/${cities.length * OFFICE_KONG_CITY_CATEGORIES.length} trabajos con evidencia durable.${cityCoverageComplete ? "" : " Faltan trabajos: las categorias sin registro aparecen como desconocidas."} Esta consulta no inicia agentes, no lee WhatsApp y no modifica eventos ni precios.`,
+      text: `Auditoria de operaciones KONG completada con evidencia del ${snapshot.generatedAt}. ${snapshot.agents.length} agentes: ${counts.get("healthy") ?? 0} con evidencia vigente, ${counts.get("running") ?? 0} en ejecucion, ${counts.get("attention") ?? 0} requieren atencion, ${counts.get("stale") ?? 0} con evidencia antigua, ${counts.get("unknown") ?? 0} sin evidencia verificable y ${counts.get("disabled") ?? 0} deshabilitados.${counts.get("idle") ? ` ${counts.get("idle")} bajo demanda sin solicitudes recientes (no es un fallo).` : ""} Registro consultado: ${cities.length} ciudades, ${categoryCount}/${cities.length * OFFICE_KONG_CITY_CATEGORIES.length} trabajos con evidencia durable.${cityCoverageComplete ? "" : " Faltan trabajos: las categorias sin registro aparecen como desconocidas."} Esta consulta no inicia agentes, no lee WhatsApp y no modifica eventos ni precios.`,
       completedAt: now().toISOString(),
       evidence: { generatedAt: snapshot.generatedAt, agents: snapshot.agents, cities, citySnapshotCheckedAt: checkedAt.toISOString(), cityAgentsEnabled: citySnapshot.enabled, cityCoverageComplete, ...(snapshot.whatsappReader ? { whatsappReader: snapshot.whatsappReader } : {}) },
     };
