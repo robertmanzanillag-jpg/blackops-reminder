@@ -18,10 +18,14 @@ import { CITY_NEWS_AGENTS } from "@shared/agent-live-status";
 import { BLACKROOM_DEPARTMENT_ORDER, BLACKROOM_TEAM } from "@shared/blackroom-team";
 import { INTEGRATION_LABEL, effectiveIntegrations, integrationFor, type AgentIntegration } from "@shared/agent-integrations";
 import { buildOfficeKongCentralSignals, OFFICE_KONG_CENTRAL_SEATS, officeCityEvidenceNotice, type OfficeKongCentralSignal } from "@/lib/office-kong-central-agents";
-import { buildKongOfficeWing, createKongRingAssignment, type KongRingAssignment } from "@/lib/kong-office-wing";
+import { buildKongOfficeWing, createKongRingAssignment, kongCentralOnDuty, type KongRingAssignment } from "@/lib/kong-office-wing";
+import { activeSummary, countActive, isActiveStatus, isOnDuty } from "@shared/office-on-duty";
 import type { WhatsAppOfficeView } from "@shared/whatsapp-office-agent";
 import { kongOfficeSnapshotKey, readOwnerKongSnapshot } from "@/lib/whatsapp-office-query";
 import { createOfficeScene, type SceneData, type SceneDepartment } from "./office-scene";
+import { applyRoleWorkActivity, countRoleWorkCompleted, parseRoleWorkActivity } from "@shared/office-role-work-activity";
+import { parseSelfHealView, selfHealLine, selfHealTotals } from "@shared/office-self-heal-view";
+import { FACTORY_AGENTS, FACTORY_DEPARTMENT, factoryAgentStatus, type FactoryAgentView } from "@shared/factory-office-agents";
 import { buildOfficeCityRoomsFromSnapshot, officeCitySnapshotExpiresAt, parseOfficeCityDirectory, type OfficeCityAgent } from "@/lib/office-city-agents";
 import { useWorkspaceRole } from "@/lib/workspace-role";
 import { PartnerInvitePanel } from "@/components/workspace/partner-invite-panel";
@@ -62,6 +66,8 @@ const DEPARTMENTS: Array<{ id: string; name: string; color: string; agentIds: st
   { id: "medios", name: "Marketing y medios", color: "#f472b6", agentIds: ["marketing-cmo", "clippers"] },
   { id: "noticias-ciudad", name: "Noticias por ciudad", color: "#fb923c", agentIds: ["news", ...CITY_NEWS_AGENTS.map((agent) => agent.id)] },
   { id: "ingenieria", name: "Ingenieria y app", color: "#38bdf8", agentIds: ["code", "github", "claude-reviewer", "app-qa"] },
+  // Software Factory engineers: main-company careers, presence read from factory stage leases.
+  { id: "fabrica", name: FACTORY_DEPARTMENT, color: "#0ea5e9", agentIds: FACTORY_AGENTS.map((agent) => agent.id) },
   { id: "seguridad", name: "Seguridad y legal", color: "#a78bfa", agentIds: ["cybersecurity", "legal"] },
   { id: "operaciones", name: "Operaciones", color: "#2dd4bf", agentIds: ["automations"] },
 ];
@@ -71,6 +77,7 @@ const SCREEN_KIND: Record<string, SceneDepartment["agents"][number]["screen"]> =
   radio: "timeline", clippers: "timeline", "blackroom-videos": "timeline", "kong-videos": "timeline", "kong-metrics": "chart", "news:miami-news": "list", "news:ny-news": "list",
   revenue: "chart", portfolio: "chart", "marketing-cmo": "chart", dropshipping: "chart", news: "chart",
   code: "code", github: "code", "claude-reviewer": "code", "app-qa": "code", cybersecurity: "code", mechanic: "code",
+  ...Object.fromEntries(FACTORY_AGENTS.map((agent) => [agent.id, "code" as const])),
 };
 const CITY_COUNTRY_COLORS: Record<string, string> = {
   AR: "#fbbf24", US: "#38bdf8", GB: "#c084fc", ES: "#f472b6", FR: "#2dd4bf", AE: "#a3e635",
@@ -85,6 +92,7 @@ const SOURCE_NAME: Record<string, string> = {
   legal: "Reportes legales", automations: "Automatizaciones", "skills-scout": "Releases de GitHub", "agent-factory": "Consejo de agentes",
   mechanic: "Consejo de agentes", "blackroom-videos": "Publicador Black Room", news: "Noticias locales", "kong-videos": "Publicador externo KONG (Codex)", "kong-metrics": "Metricool (lectura) · registro por UUID",
   "news:miami-news": "Noticias locales", "news:ny-news": "Noticias locales",
+  ...Object.fromEntries(FACTORY_AGENTS.map((agent) => [agent.id, "Fabrica de software (GitHub Actions)"])),
 };
 
 const STATE_TEXT: Record<AgentLiveState, string> = {
@@ -95,8 +103,11 @@ const STATE_BAR: Record<AgentLiveState, string> = {
   available:"bg-slate-400",
   working: "bg-emerald-400", "needs-setup": "bg-amber-300", error: "bg-rose-400", offline: "bg-zinc-600", checking: "bg-sky-300",
 };
+// On duty ("Activo · al día"): fresh verified work, no live lease. Teal, not the animated working emerald.
+const statusText = (status: AgentLiveStatus) => isOnDuty(status) ? "text-teal-300" : STATE_TEXT[status.state];
+const statusBar = (status: AgentLiveStatus) => isOnDuty(status) ? "bg-teal-400 w-3/4" : STATE_BAR[status.state];
 
-type CompanyView = { kongCompany?: CompanyState; kongLeaderboard?: LeaderboardRow[]; kongPersonalities?: Record<string, Personality>; kongCollaboration?: OfficeKongCollaboration; company?: CompanyState; leaderboard?: LeaderboardRow[]; personalities?: Record<string, Personality>; integrations?: Record<string, AgentIntegration> };
+type CompanyView = { factoryAgents?: FactoryAgentView[]; kongCompany?: CompanyState; kongLeaderboard?: LeaderboardRow[]; kongPersonalities?: Record<string, Personality>; kongCollaboration?: OfficeKongCollaboration; company?: CompanyState; leaderboard?: LeaderboardRow[]; personalities?: Record<string, Personality>; integrations?: Record<string, AgentIntegration> };
 export type WorldContact = { id: string; name: string; role: string; department: string; status: AgentLiveStatus; description: string; href?: string; color: string };
 type PanelAgent = { id: string; name: string; role: string; description: string; href?: string; status: AgentLiveStatus; kong?: boolean; color: string; cityAgent?: OfficeCityAgent; kongEvidence?: OfficeKongCentralSignal; whatsappEvidence?: WhatsAppOfficeView };
 
@@ -240,7 +251,7 @@ export function AgentsOfficeWorld({
         ? { state: "available", label: "Actividad reportada; ejecución sin verificar", detail: signal.detail, activity: [signal.detail] }
         : signal.signal === "alert"
           ? { state: "needs-setup", label: signal.label, detail: signal.detail }
-          : { state: "offline", label: signal.label, detail: signal.detail };
+          : (signal.signal === "last-result" && kongCentralOnDuty(signal.agent, clock)) || { state: "offline", label: signal.label, detail: signal.detail };
   }
   // Keep the authenticated KONG Native evidence, but an external publisher is
   // never presented as a worker executing inside this office.
@@ -248,12 +259,33 @@ export function AgentsOfficeWorld({
     if (integration.mode !== "externa" || !statuses[id]) continue;
     statuses[id] = { state: "offline", label: integration.owner === "externo:codex" ? "Externo · lo publica Codex" : "Externo", detail: integration.reason, activity: ["Publicador externo: un solo publicador", ...(statuses[id].activity || [])].slice(0, 4), problems: statuses[id].problems };
   }
+  // Role work the office executor (cloud or PC) recorded today in the shared council state.
+  const roleWorkToday = parseRoleWorkActivity((council.view as unknown as { roleWorkToday?: unknown } | null)?.roleWorkToday);
+  for (const activity of roleWorkToday) {
+    const next = applyRoleWorkActivity(statuses[activity.agentId], activity, clock);
+    if (next) statuses[activity.agentId] = next;
+  }
+  // Office self-heal (detect -> fix -> verify): counts only. Merging a fix stays the owner's decision.
+  const selfHeal = parseSelfHealView((council.view as unknown as { selfHeal?: unknown } | null)?.selfHeal);
+  for (const summary of selfHeal.agents) {
+    const current = statuses[summary.agentId];
+    if (!current || summary.detected + summary.repairing + summary.verified + summary.needsOwner === 0) continue;
+    statuses[summary.agentId] = { ...current, activity: [selfHealLine(summary), ...(current.activity || [])].slice(0, 4),
+      ...(summary.needsOwner ? { problems: [`${summary.needsOwner} ${summary.needsOwner === 1 ? "problema necesita" : "problemas necesitan"} al dueño`, ...(current.problems || [])].slice(0, 4) } : {}) };
+  }
 
   const panelAgents = new Map<string, PanelAgent>();
   for (const agent of agents) panelAgents.set(agent.id, { id: agent.id, name: agent.name, role: agent.role, description: agent.activity || agent.role, href: agent.href, status: statuses[agent.id] ?? { state: "checking", label: "Verificando..." }, color: colorFromGradient(agent.color) });
   for (const agent of EXTRA_AGENTS) panelAgents.set(agent.id, { ...agent, status: statuses[agent.id] ?? { state: "checking", label: "Verificando..." },
     ...(agent.id === "kong-videos" ? { kongEvidence: centralSignalById.get("kong-videos") } : {}) });
   for (const [id, agent] of Object.entries(COUNCIL_AGENTS)) panelAgents.set(id, { id, ...agent, status: statuses[id] });
+  // Factory engineers are working only while a factory stage lease is live; otherwise "last worked at".
+  for (const agent of FACTORY_AGENTS) {
+    const view = companyView.factoryAgents?.find((item) => item.agentId === agent.id);
+    panelAgents.set(agent.id, { id: agent.id, name: agent.name, role: agent.role, color: "#0ea5e9",
+      description: `${agent.role}. Trabaja en la fabrica de software (PR borrador, alcance de escritura, limite diario y creditos sin cambios). Su vida sigue las mismas reglas que el resto: +6 por etapa verificada, -10 por fallo atribuible.`,
+      status: factoryAgentStatus(view, council.error ? "error" : council.view ? "ready" : "loading", clock) });
+  }
   for (const member of centralKongTeam) {
     const seat = OFFICE_KONG_CENTRAL_SEATS.find(item => item.nativeName === member.name);
     if (!seat) continue;
@@ -321,6 +353,7 @@ export function AgentsOfficeWorld({
             name: agent.name,
             label: agent.status.label,
             state: agent.status.state,
+            onDuty: isOnDuty(agent.status),
             color: agent.color,
             screen: SCREEN_KIND[agent.id] || "list",
             activity: agent.status.activity || [agent.status.label, agent.status.detail || ""].filter(Boolean),
@@ -438,26 +471,32 @@ export function AgentsOfficeWorld({
   }
 
   const companyIds = departments.flatMap((department) => department.agentIds);
-  const workingCount = companyIds.filter((id) => panelAgents.get(id)?.status.state === "working").length;
+  const companyActivity = countActive(companyIds.map((id) => panelAgents.get(id)?.status));
+  const verifiedTodayCount = officeWing === "main" ? countRoleWorkCompleted(roleWorkToday, companyIds) : 0;
+  const selfHealTotal = selfHealTotals(selfHeal, companyIds);
   const focused = departments.find((department) => department.id === focusedDepartment) || null;
   const focusedAgents = focused ? focused.agentIds.map((id) => panelAgents.get(id)).filter((agent): agent is PanelAgent => Boolean(agent)) : [];
   const panelAgent = (panelAgentId && focusedAgents.find((agent) => agent.id === panelAgentId)) || focusedAgents[0] || null;
   const focusedIds = new Set(focused?.agentIds || []);
   const proposals = (council.view?.proposals || []).filter((proposal) => ["submitted", "pending_submit", "not_submitted"].includes(proposal.status) && (focusedIds.has(proposal.owner) || (proposal.lesson && focusedIds.has(proposal.lesson.subject)) || [...focusedIds].some((id) => proposal.key.startsWith(`repair:${id}#`))));
   const debates = (council.view?.debates || []).filter((debate) => focusedIds.has(debate.reviewer) || focusedIds.has(debate.subject));
-  const sourceMap = new Map<string, { name: string; state: AgentLiveState; label: string; users: string[] }>();
+  const sourceMap = new Map<string, { name: string; state: AgentLiveState; label: string; users: string[]; activeUsers: number }>();
   const rank: Record<AgentLiveState, number> = { error: 4, "needs-setup": 3, offline: 2, checking: 1, available:1, working: 0 };
   for (const agent of focusedAgents) {
     if (agent.id.startsWith("trainee:")) continue;
     const name = agent.cityAgent ? "Auditoria autenticada KONG" : (agent.kong || agent.id.startsWith("kong:")) ? "Lectura autenticada KONG" : SOURCE_NAME[agent.id] || agent.name;
     const current = sourceMap.get(name);
-    if (!current) sourceMap.set(name, { name, state: agent.status.state, label: agent.status.label, users: [agent.name] });
+    const active = isActiveStatus(agent.status) ? 1 : 0;
+    if (!current) sourceMap.set(name, { name, state: agent.status.state, label: agent.status.label, users: [agent.name], activeUsers: active });
     else {
       current.users.push(agent.name);
+      current.activeUsers += active;
       if (rank[agent.status.state] > rank[current.state]) Object.assign(current, { state: agent.status.state, label: agent.status.label });
     }
   }
   const sources = Array.from(sourceMap.values());
+  // A source counts as live when at least one of its agents has current evidence (working or on duty) and none reports a problem.
+  const sourceLive = (source: (typeof sources)[number]) => source.activeUsers > 0 && source.state !== "error" && source.state !== "needs-setup";
   const orders: CompanyOrder[] = company?.orders || [];
   const nameOf = (id: string) => panelAgents.get(id)?.name || id;
   // KONG city agents are measured by the KONG audit score (their own system), not by council careers.
@@ -499,7 +538,9 @@ export function AgentsOfficeWorld({
           <button type="button" aria-expanded={!mainPanelMinimized} aria-controls="world-office-panel-content" onClick={() => setMainPanelMinimized(v => !v)} className="rounded-full border border-white/20 px-2 py-1 text-xs" data-testid="world-main-panel-toggle">{mainPanelMinimized ? "Abrir" : "Minimizar"}</button>
         </div>
         <div id="world-office-panel-content" hidden={mainPanelMinimized}>
-          <p className="mt-2 text-lg font-black" data-testid="world-working-count">{workingCount} de {companyIds.length} en ejecución actual verificada</p>
+          <p className="mt-2 text-lg font-black" data-testid="world-active-count" title="Activos = ejecutando ahora (reserva viva) + al día (último trabajo verificado dentro de su turno, sin fallos).">{companyActivity.active} de {companyActivity.total} activos · <span data-testid="world-working-count">{companyActivity.working} ejecutando ahora</span></p>
+          {officeWing === "main" && <p className="mt-1 text-sm font-semibold text-emerald-200" data-testid="world-verified-today-count">{verifiedTodayCount} de {companyIds.length} con trabajo verificado hoy (ejecutor de la oficina)</p>}
+          {officeWing === "main" && selfHeal.enabled && <p className="mt-1 text-xs text-zinc-300" data-testid="world-self-heal-summary">Auto-reparación: {selfHealTotal.detected} detectados · {selfHealTotal.repairing} en reparación · {selfHealTotal.verified} reparados y verificados · {selfHealTotal.needsOwner} necesitan al dueño{selfHealTotal.readyToMerge ? ` · ${selfHealTotal.readyToMerge} PR listos para fusionar (decide el dueño)` : ""}</p>}
           {officeWing === "kong" && <p className="mt-1 text-xs text-zinc-300">Todos los puestos centrales y {cityRooms.length} ciudades en la misma oficina. La oficina observa y coordina; abrirla no activa los ejecutores.</p>}
           {officeWing === "kong" && <div className="mt-2 space-y-1 text-[11px] text-zinc-300" data-testid="world-kong-rings-legend">
             <p><span className="text-amber-200">1 · Equipo central</span> · <span className="text-cyan-200">2 · Ciudades prioritarias ({kongRingAssignment?.busyCityIds.length ?? 0})</span> · <span className="text-violet-200">3 · Resto de ciudades</span></p>
@@ -663,7 +704,7 @@ export function AgentsOfficeWorld({
           <div className="flex shrink-0 items-start justify-between gap-2">
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.24em]" style={{ color: focused.color }}>{focused.name}</p>
-              <p className="mt-0.5 text-xs text-zinc-400">{focusedAgents.filter((agent) => agent.status.state === "working").length} de {focusedAgents.length} en ejecución actual verificada</p>
+              <p className="mt-0.5 text-xs text-zinc-400" data-testid="world-room-active-count">{activeSummary(focusedAgents.map((agent) => agent.status))}</p>
               {focused.id === "blackroom" && canChatBlackRoomCeo && <button type="button" onClick={() => setOverlay("blackroom-ceo-chat")} className="mt-1 rounded-full border border-fuchsia-200/40 px-2 py-0.5 text-[11px] text-fuchsia-100 hover:bg-fuchsia-300/10" data-testid="world-blackroom-dept-chat">Hablar con el CEO Black Room</button>}
             </div>
             <div className="flex shrink-0 items-center gap-1">
@@ -678,13 +719,13 @@ export function AgentsOfficeWorld({
             <section className="mt-4">
               <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-[0.18em] text-zinc-400">
                 <span>Fuentes conectadas</span>
-                <span className="text-emerald-300">{sources.filter((source) => source.state === "working").length} live</span>
+                <span className="text-emerald-300" data-testid="world-sources-live">{sources.filter(sourceLive).length} live</span>
               </div>
               <div className="mt-2 grid grid-cols-2 gap-1.5">
                 {sources.map((source) => (
                   <div key={`src-${source.name}`} className="rounded-lg border border-white/[0.06] bg-white/[0.03] px-2 py-1.5" title={source.users.join(", ")}>
                     <p className="truncate text-[11px] font-semibold">{source.name}</p>
-                    <p className={cn("truncate text-[10px]", STATE_TEXT[source.state])}>● {source.state === "working" ? `conectado · ${source.users.length} agente${source.users.length === 1 ? "" : "s"}` : source.label}</p>
+                    <p className={cn("truncate text-[10px]", sourceLive(source) ? (source.state === "working" ? STATE_TEXT.working : "text-teal-300") : STATE_TEXT[source.state])}>● {sourceLive(source) ? `conectado · ${source.activeUsers} de ${source.users.length} agente${source.users.length === 1 ? "" : "s"} activo${source.activeUsers === 1 ? "" : "s"}` : source.label}</p>
                   </div>
                 ))}
               </div>
@@ -700,10 +741,10 @@ export function AgentsOfficeWorld({
                   <button key={`row-${agent.id}`} type="button" onClick={() => setPanelAgentId(agent.id)} className={cn("w-full rounded-lg px-2 py-1.5 text-left hover:bg-white/5", panelAgent?.id === agent.id && "bg-white/[0.06]")} data-testid={`world-agent-row-${agent.id}`}>
                     <div className="flex items-center justify-between gap-2 text-[11px]">
                       <span className="truncate font-mono text-zinc-100">{agent.id === deputyId ? "👑 " : ""}{agent.cityAgent ? agent.role : agent.name}{career ? <span className="text-zinc-500"> · {career.nickname}</span> : null}</span>
-                      <span className={cn("truncate text-[10px]", STATE_TEXT[agent.status.state])}>{agent.status.label}</span>
+                      <span className={cn("truncate text-[10px]", statusText(agent.status))}>{agent.status.label}</span>
                     </div>
                     <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/10">
-                      <div className={cn("h-full rounded-full", STATE_BAR[agent.status.state], agent.status.state === "working" ? "w-1/2 motion-safe:animate-[world-progress_2.4s_ease-in-out_infinite]" : agent.status.state === "error" ? "w-full" : "w-1/4")} />
+                      <div className={cn("h-full rounded-full", statusBar(agent.status), isOnDuty(agent.status) ? "" : agent.status.state === "working" ? "w-1/2 motion-safe:animate-[world-progress_2.4s_ease-in-out_infinite]" : agent.status.state === "error" ? "w-full" : "w-1/4")} />
                     </div>
                   </button>
                 );
@@ -744,7 +785,7 @@ export function AgentsOfficeWorld({
               <p className="mt-2 text-xs leading-5 text-zinc-300">{panelAgent.description}</p>
               {panelAgent.id === "blackroom-ceo" && canChatBlackRoomCeo && <button type="button" onClick={() => setOverlay("blackroom-ceo-chat")} className="mt-2 rounded-full bg-fuchsia-300 px-3 py-1 text-[11px] font-bold text-black hover:bg-fuchsia-200" data-testid="world-blackroom-ceo-open-chat">Abrir chat con el CEO</button>}
               <div className="mt-2 rounded-lg border border-white/[0.06] bg-black/40 p-2">
-                <p className={cn("text-[11px] font-semibold", STATE_TEXT[panelAgent.status.state])}>Ahora: {panelAgent.status.label}</p>
+                <p className={cn("text-[11px] font-semibold", statusText(panelAgent.status))}>Ahora: {panelAgent.status.label}</p>
                 {panelAgent.status.detail && <p className="mt-0.5 text-[11px] text-zinc-400">{panelAgent.status.detail}</p>}
               </div>
               {(panelAgent.status.problems || []).length > 0 && (
@@ -906,7 +947,9 @@ function OfficeAgentStatusChat({ agent }: { agent: PanelAgent }) {
       : "KONG no muestra un resultado reciente verificable.";
     else if (city && /tarea|haces|haciendo|funcion/.test(text)) answer = agent.status.state === "working" && city.hasDurableEvidence
       ? `Tarea en curso verificada: ${OFFICE_KONG_CITY_TASKS[city.category]}.`
-      : `Tarea prevista del puesto: ${OFFICE_KONG_CITY_TASKS[city.category]}. KONG no confirma una ejecución actual.`;
+      : isOnDuty(agent.status)
+        ? `Al día: ${OFFICE_KONG_CITY_TASKS[city.category]}. ${agent.status.detail ?? ""} Entre turnos no está ejecutando.`.trim()
+        : `Tarea prevista del puesto: ${OFFICE_KONG_CITY_TASKS[city.category]}. KONG no confirma una ejecución actual.`;
     else if (agent.kongEvidence && /demanda/.test(text)) answer = "La lectura de KONG Native no identifica ejecuciones bajo demanda por separado.";
     else if (agent.kongEvidence && /proxim|turno|cuando/.test(text)) answer = agent.kongEvidence.nextRunAt
       ? `Próximo turno informado por KONG Native: ${formatCityTime(agent.kongEvidence.nextRunAt)}.` : "KONG Native no informa un próximo turno verificable.";

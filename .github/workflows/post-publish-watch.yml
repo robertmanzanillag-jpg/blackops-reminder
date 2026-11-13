@@ -128,7 +128,7 @@ jobs:
               "La vigilancia post-publicacion detecto una regresion en produccion.", "",
               "| Codigo | Detalle |", "| --- | --- |", ...v.codes.map(c => `| \`${c.code}\` | ${c.detail} |`), "",
               "**Que hacer (proceso completo, docs/release-gate.md):**",
-              "1. Abrir un PR de arreglo hacia `claude/integration-20261111` (nunca directo).",
+              "1. Abrir un PR de arreglo hacia `main` (nunca directo).",
               "2. Esperar el check `release-gate` en verde (sandbox + gate exigente) y la revision independiente.",
               "3. Merge, `script/replit-sync-from-github.sh`, republicar en Replit con aprobacion de Robert.",
               "4. Esta vigilancia vuelve a comprobar cada hora.", "",

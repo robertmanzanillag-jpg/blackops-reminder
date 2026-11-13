@@ -140,7 +140,7 @@ test('KONG unified office: browser route, click, API, error and improvement scou
     });
     console.log('Loading live snapshot');
     await page.reload();await page.getByTestId('office-open-kong').click();console.log('Live office entered');
-    await page.getByTestId('world-working-count').filter({hasText:/^1 de/}).waitFor();console.log('Live work verified');
+    await page.getByTestId('world-working-count').filter({hasText:/^1 ejecutando ahora/}).waitFor();console.log('Live work verified');
     await page.getByTestId('world-kong-collaboration').click();
     await page.getByTestId('world-kong-collaboration-panel').getByText('Hallazgo sintético de QA.',{exact:false}).waitFor();
     await page.getByTestId('world-kong-collaboration-panel').getByText('Propuesta sintética pendiente.',{exact:false}).waitFor();
@@ -152,7 +152,7 @@ test('KONG unified office: browser route, click, API, error and improvement scou
     await page.getByTestId('world-agent-card').getByText('Ejecutando · verificado',{exact:false}).waitFor();
     await page.screenshot({path:path.join(evidenceDir,'desktop-active-agent-fixture.png'),fullPage:true});
     console.log('Live collaboration verified');stale=true;await page.reload();await page.getByTestId('office-open-kong').click();
-    await page.getByTestId('world-working-count').filter({hasText:/^0 de/}).waitFor();
+    await page.getByTestId('world-working-count').filter({hasText:/^0 ejecutando ahora/}).waitFor();
     await page.getByTestId('world-kong-collaboration').click();
     await page.getByTestId('world-kong-collaboration-panel').getByText('Sin intercambios con evidencia vigente.').waitFor();
     assert.equal(await page.getByTestId('world-kong-collaboration-panel').getByText('Hallazgo sintético de QA.',{exact:false}).count(),0);console.log('Stale evidence fails closed');

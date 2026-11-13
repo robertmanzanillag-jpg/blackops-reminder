@@ -28,7 +28,7 @@ test("Asistente exact source to tested draft PR charges shared credit once and n
   await ledger.reserve({ key: "office:review", consumer: "office", requestSha256: "c".repeat(64), maximumMicroUsd: 30_000 });
   await ledger.settle({ key: "office:review", actualMicroUsd: 20_000, evidenceId: "office-response" });
   const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status });
-  const build = createAsistenteFactoryBuild({ ledger, baseBranch, sourcePaths: ["server/agent-search.ts"], maxOutputTokens: 1000, now, maxPolls: 1,
+  const build = createAsistenteFactoryBuild({ ledger, baseBranch, maxFilesPerOrder: 6, maxOutputTokens: 1000, now, maxPolls: 1,
     checks: { workflowId: 7, workflowPath, workflowSha256: createHash("sha256").update(workflow).digest("hex"), jobName: "isolated", testStep: "test", buildStep: "build", browserStep: "browser" },
     model: { model: "gpt-4.1-mini-2025-04-14", inputNanoUsdPerToken: 400, outputNanoUsdPerToken: 1600,
       pricingValidUntil: "2026-11-20T00:00:00.000Z", now, maxInputTokens: 1000, request: async (url, init) => {
@@ -72,7 +72,7 @@ test("Asistente exact source to tested draft PR charges shared credit once and n
     },
   });
   const project = { id: "asistente", repo: repository } as FactoryProject;
-  const state = { version: 1, projectId: project.id, rootJobId: "root-order", repairAttempts: 0, finding: { baseSha: base, request: "Improve agent search" } } as FactoryPipelineState;
+  const state = { version: 1, projectId: project.id, rootJobId: "root-order", repairAttempts: 0, finding: { baseSha: base, request: "Improve agent search", sourcePaths: ["server/agent-search.ts"] } } as FactoryPipelineState;
   const result = await build(project, state, { signal: new AbortController().signal, maxCostCents: 2 });
   assert.ok("candidate" in result, JSON.stringify(result));
   if (!("candidate" in result)) return;

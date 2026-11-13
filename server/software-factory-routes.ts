@@ -11,6 +11,8 @@ import { configuredSoftwareFactoryStore as softwareFactoryStore } from "./softwa
 import { companyOrderJob } from "./software-factory-company";
 import type { CompanyOrder } from "../shared/agent-company";
 import type {FactoryOfficeAdmission} from "./software-factory-office-connection";
+import type { OfficeRun } from "./office-runtime";
+import { linkFactoryOfficeReviews } from "./software-factory-office-review";
 
 function pipelineState(job: FactoryJob): FactoryPipelineState | undefined {
   const result = job.result as { evidence?: { pipelineState?: FactoryPipelineState } } | undefined;
@@ -42,6 +44,8 @@ const budgetSchema = z.object({ fixedCents: z.number().int().min(0).max(10_000) 
 export function registerSoftwareFactoryRoutes(app: Express, options: {
   store?: Pick<typeof softwareFactoryStore, "status" | "list" | "setPaused" | "initializeMonth" | "projects" | "saveProject"> & Partial<Pick<typeof softwareFactoryStore,"getCompletedJob">>;
   getRecoveredBuild?:typeof readFactoryRecoveredBuild;
+  /** Read-only office journal used to link reviewer verdicts to proposals. */
+  readOfficeReviews?: (owner: string) => Promise<OfficeRun[]>;
   now?: () => Date;
   resolveCompanyAdmission?:()=>Promise<FactoryOfficeAdmission|undefined>;
   // Installed by the trusted runtime only after the same ledger, credit guard and
@@ -113,8 +117,11 @@ export function registerSoftwareFactoryRoutes(app: Express, options: {
       }))) proposalBlockers.push("Faltan ejecutores de propuestas (descubrir, construir, simular y revisar).");
       if (!projects.some(project => proposalReadiness(project).allowed)) proposalBlockers.push("Registra una aplicación con repositorio, comandos de pruebas y construcción, y recorridos.");
       const proposalEvidence=store.getCompletedJob ? await readFactoryOrderProposals({owner,jobs,projects,getCompletedJob:(key,id)=>store.getCompletedJob!(key,id),getRecoveredBuild:options.getRecoveredBuild??(options.store?undefined:readFactoryRecoveredBuild),now:now().getTime()}) : {proposals:[],status:"unavailable" as const};
+      let officeRuns: OfficeRun[] | undefined;
+      const readOfficeReviews = options.readOfficeReviews ?? (options.store ? undefined : async (id: string) => (await import("./office-runtime")).officeRuntime.list(id));
+      if (proposalEvidence.proposals.length && readOfficeReviews) { try { officeRuns = await readOfficeReviews(owner); } catch { officeRuns = undefined; } }
       const view: SoftwareFactoryView = {
-        reviewedProposals:proposalEvidence.proposals,proposalEvidenceStatus:proposalEvidence.status,
+        reviewedProposals:readOfficeReviews ? linkFactoryOfficeReviews(owner,proposalEvidence.proposals,officeRuns) : proposalEvidence.proposals,proposalEvidenceStatus:proposalEvidence.status,
         checkedAt: now().toISOString(), paused: state.paused,
         readiness: state.paused ? "paused" : blockers.length ? "blocked" : "available", blockers,
         proposal: { mode: "review-only", readiness: state.paused ? "paused" : proposalBlockers.length ? "blocked" : "available", blockers: proposalBlockers },

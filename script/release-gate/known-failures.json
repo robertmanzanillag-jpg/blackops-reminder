@@ -16,28 +16,6 @@
         "mission inventory covers every explicit client route exactly once"
       ]
     },
-    "tests/blackroom-deterministic-editor.integration.test.ts": {
-      "reason": "Native ledger runner uses a TypeScript parameter property, unsupported by node --experimental-strip-types (ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX); pre-existing code issue.",
-      "failing": [
-        "native BlackRoom ledger runner reserves a clip without tsx or esbuild",
-        "paused local editor performs no media work and removes stale temporary fragments"
-      ]
-    },
-    "tests/blackroom-metricool-bridge.test.ts": {
-      "reason": "Scheduling cases throw BlackRoomPublicationBlockedError bridge_not_authorized: the test fixture does not authorize the bridge (pre-existing).",
-      "failing": [
-        "includes a bounded MCP transport error without leaking auth",
-        "includes a bounded upstream validation message without leaking auth",
-        "recognizes legacy Facebook and YouTube captions without creating duplicates",
-        "refuses to confirm when the verification response does not contain the post",
-        "retries a transient Metricool media-normalization failure before scheduling",
-        "retries only the missing Facebook post after TikTok was already confirmed",
-        "returns an existing exact post before uploading media or creating a duplicate",
-        "schedules and verifies only the explicitly requested network",
-        "schedules through Metricool's official MCP, then verifies before returning a receipt",
-        "verification-only recovery never POSTs a possibly accepted network twice"
-      ]
-    },
     "tests/clippers-agent.test.ts": {
       "reason": "Several cases need DEFAULT_USER_ID in the environment ('DEFAULT_USER_ID is required for system jobs'); the test does not set it (pre-existing).",
       "failing": [

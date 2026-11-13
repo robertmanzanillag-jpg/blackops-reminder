@@ -24,6 +24,7 @@ const CeoDashboardPage = lazy(() => import("@/pages/ceo-dashboard"));
 const AutomationManagerPage = lazy(() => import("@/pages/automation-manager"));
 const ToolsPage = lazy(() => import("@/pages/tools"));
 const AgentsOfficePage = lazy(() => import("@/pages/agents-office"));
+const AgentChatPage = lazy(() => import("@/pages/agent-chat"));
 const RevenueEnginePage = lazy(() => import("@/pages/revenue-engine-simple"));
 const RevenueEngineAdvancedPage = lazy(() => import("@/pages/revenue-engine"));
 const DropshippingCeoPage = lazy(() => import("@/pages/dropshipping-ceo"));
@@ -126,6 +127,7 @@ function AuthenticatedRouter() {
           <Route path="/ceo" component={CeoDashboardPage} />
           <Route path="/tools" component={ToolsPage} />
           <Route path="/agents-office" component={AgentsOfficePage} />
+          <Route path="/agent-chat" component={AgentChatPage} />
           <Route path="/revenue-engine/advanced" component={RevenueEngineAdvancedPage} />
           <Route path="/revenue-engine" component={RevenueEnginePage} />
           <Route path="/dropshipping-ceo" component={DropshippingCeoPage} />

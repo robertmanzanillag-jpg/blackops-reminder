@@ -1,5 +1,6 @@
 import { buildOfficeKongCentralSignals, type OfficeKongCentralSignal } from "./office-kong-central-agents";
 import type { AgentLiveStatus } from "./agent-live-status";
+import { isOnDutyWindow, ON_DUTY_DAY_MS, onDutyStatus } from "@shared/office-on-duty";
 import type { OfficeCityRoom } from "./office-city-agents";
 import type { OfficeKongAuditResult } from "../../../server/office-kong";
 import { WHATSAPP_AGENT_ID, WHATSAPP_CAREER_ID, whatsappOfficeAgent, whatsappOfficeView, type WhatsAppOfficeView } from "@shared/whatsapp-office-agent";
@@ -38,6 +39,37 @@ const centralGroups = [
 ];
 const names: Record<string, string> = { chief_of_staff: "Coordinación KONG", city_operations: "Operaciones de ciudades", legacy_ceo: "CEO bajo demanda", customer_operations: "Atención al cliente", venue_deals: "Venues", promoters_partnerships: "Promotores y mesas", restaurant_secretary: "Secretaría de restaurantes", restaurant_deals: "Acuerdos de restaurantes", growth_analytics: "Crecimiento y analítica", finance_risk: "Finanzas y riesgo", product_reliability: "Producto y fiabilidad", kong_ai_chat: "KONG AI" };
 
+type KongCentralAgent = NonNullable<OfficeKongAuditResult["evidence"]>["agents"][number];
+const WAITING_FIRST_RUN = /esperando (su )?primera ejecuci[oó]n/i;
+
+/** A scheduled central desk KONG reports healthy, with its last run inside one day and no missed turn. */
+export function kongCentralOnDuty(source: Pick<KongCentralAgent, "state" | "operationMode" | "lastRunAt" | "nextRunAt" | "blocker" | "issues" | "nextAction"> | undefined, now: number): AgentLiveStatus | undefined {
+  if (!source || source.state !== "healthy" || source.operationMode === "on_demand" || !source.lastRunAt || source.blocker) return undefined;
+  if (!isOnDutyWindow({ lastWorkAt: source.lastRunAt, nextWorkAt: source.nextRunAt, maxAgeMs: ON_DUTY_DAY_MS, now })) return undefined;
+  return onDutyStatus({ lastWorkAt: source.lastRunAt, nextWorkAt: source.nextRunAt, now });
+}
+
+/** Honest desk state from one current KONG agent record; never infers activity KONG did not report. */
+export function kongDeskStatus(source: KongCentralAgent | undefined, snapshotExpired = false, now = Date.now()): AgentLiveStatus {
+  if (!source) return snapshotExpired
+    ? { state: "offline", label: "Evidencia vencida", detail: "La última lectura de KONG superó cinco minutos; esperando una lectura vigente." }
+    : { state: "offline", label: "Sin evidencia vigente" };
+  const why = [source.blocker, ...source.issues].filter((item): item is string => Boolean(item));
+  switch (source.state) {
+    case "running": return { state: "needs-setup", label: "Ejecución reportada sin verificar", detail: "El registro central no aporta una tarea o arrendamiento verificable en esta lectura." };
+    case "attention": return { state: "error", label: "Requiere atención", detail: [...new Set(why)].join(" · ") || source.nextAction };
+    case "disabled": return { state: "offline", label: "Deshabilitado", detail: source.blocker || source.nextAction };
+    case "idle": return { state: "available", label: "Disponible bajo demanda", detail: source.nextAction };
+    case "healthy": return source.operationMode === "on_demand"
+      ? { state: "available", label: "Disponible bajo demanda", detail: source.nextAction }
+      : kongCentralOnDuty(source, now) ?? { state: "offline", label: "Último trabajo registrado", detail: source.lastRunAt ? `Completado: ${source.lastRunAt}` : "Sin ejecución activa registrada" };
+    case "stale": return { state: "offline", label: "Sin ejecución reciente", detail: [source.blocker, source.nextAction].filter(Boolean).join(" · ") };
+    default: return source.evidencePending && WAITING_FIRST_RUN.test(source.nextAction)
+      ? { state: "offline", label: "Programado · esperando primera ejecución", detail: source.nextAction }
+      : { state: "offline", label: "Sin historial conectado", detail: source.nextAction || source.blocker || undefined };
+  }
+}
+
 /** Shared visual vocabulary with BlackOps; activity comes only from a current KONG snapshot. */
 export function buildKongOfficeWing(evidence: OfficeKongAuditResult["evidence"] | undefined, cities: OfficeCityRoom[], media: Record<string, AgentLiveStatus>, now: number, assignment?: KongRingAssignment, transportCurrent = true) {
   const age = evidence ? now - Date.parse(evidence.generatedAt) : Infinity;
@@ -56,14 +88,8 @@ export function buildKongOfficeWing(evidence: OfficeKongAuditResult["evidence"] 
         status: { state: view.status === "reading" ? "working" : view.status === "recent" ? "available" : view.status === "blocked" ? "needs-setup" : "offline",
           label: view.label, detail: view.detail, lifePenaltyExempt: true } };
     }
-    const state = fresh ? source?.state : undefined;
-    const status: AgentLiveStatus = state === "running"
-      ? { state: "needs-setup", label: "Ejecución reportada sin verificar", detail: "El registro central no aporta una tarea o arrendamiento verificable en esta lectura." }
-      : state === "attention" ? { state: "error", label: "Requiere atención", detail: source?.blocker || source?.nextAction }
-      : state === "disabled" ? { state: "offline", label: "Deshabilitado" }
-      : state === "healthy" ? { state: "offline", label: "Último trabajo registrado", detail: source?.lastRunAt ? `Completado: ${source.lastRunAt}` : "Sin ejecución activa registrada" }
-      : { state: "offline", label: state === "stale" ? "Evidencia vencida" : "Sin evidencia vigente" };
-    if (source && fresh) { status.problems = source.issues; status.activity = [source.responsibility, source.nextAction].filter(Boolean); }
+    const status = kongDeskStatus(fresh ? source : undefined, Boolean(source && evidence && !fresh), now);
+    if (source && fresh) { status.problems = [...new Set([source.state === "attention" ? source.blocker : null, ...source.issues].filter((item): item is string => Boolean(item)))]; status.activity = [source.responsibility, source.nextAction].filter(Boolean); }
     return { id: `kong:${id}`, name: source?.name || names[id] || id, role: source?.owner || "KONG", description: source?.responsibility || "Puesto KONG; esperando evidencia del backend.", color: "#a3e635", status };
   });
   agents.push(
@@ -73,7 +99,8 @@ export function buildKongOfficeWing(evidence: OfficeKongAuditResult["evidence"] 
   const nativeIds: string[] = [];
   for (const signal of nativeSignals) {
     const existing = agents.find(agent => agent.id === (signal.id === "kong-videos" ? "kong-videos" : signal.agent ? `kong:${signal.agent.id}` : signal.id));
-    const status: AgentLiveStatus = signal.signal === "current" ? { state: "available", label: "Actividad reportada; ejecución sin verificar", detail: signal.detail } : { state: signal.signal === "alert" ? "needs-setup" : "offline", label: signal.label, detail: signal.detail };
+    const status: AgentLiveStatus = signal.signal === "current" ? { state: "available", label: "Actividad reportada; ejecución sin verificar", detail: signal.detail }
+      : (signal.signal === "last-result" && kongCentralOnDuty(signal.agent, now)) || { state: signal.signal === "alert" ? "needs-setup" : "offline", label: signal.label, detail: signal.detail };
     if (existing) { if (signal.id !== "kong-videos") existing.status = status; existing.kongEvidence = signal; }
     else { agents.push({id:signal.id,name:signal.name,role:signal.role,description:signal.detail,color:"#a3e635",status,kongEvidence:signal}); nativeIds.push(signal.id); }
   }

@@ -39,3 +39,12 @@ test("discovery re-reads the main order, binds exact source revision and head, a
   await assert.rejects(discover(project, { ...context, source: { companyOrder: { company: "kong", version: 1, orderId: order.id } } }), /SOURCE_REQUIRED/);
   assert.equal(heads, 1);
 });
+
+test("discovery persists the trusted per-order file selection on the finding", async () => {
+  const context = { signal: new AbortController().signal, maxCostCents: 1, source: companyOrderJob(order, project, 1).payload };
+  const make = (sourcePaths: unknown) => createCompanyOrderDiscovery({ readMainOrder: async () => order, resolveHead: async () => "a".repeat(40), inspectOrder: async () => ({ kind: "bug", regressionScenarioId: "agent-search", sourcePaths } as any) });
+  const selected = ["server/agent-search.ts", "tests/agent-search.test.ts"];
+  assert.deepEqual((await make(selected)(project, context)).finding?.sourcePaths, selected);
+  assert.equal("sourcePaths" in (await make(undefined)(project, context)).finding!, false);
+  for (const bad of [[], "server/a.ts", [""], [1]]) await assert.rejects(make(bad)(project, context), /PATHS_UNVERIFIED/);
+});

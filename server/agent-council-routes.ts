@@ -5,6 +5,17 @@ import { agentProbes, summarizeProbe } from "@shared/agent-live-status";
 import { createKongSupervisorConversation } from "./kong-supervisor-conversation";
 import { registerKongSupervisorRoutes } from "./kong-supervisor-routes";
 import {capabilityTrainingSummary,capabilityRunSummary} from "./office-capability-training";
+import { createHash } from "node:crypto";
+import { factoryAgentForStage, type FactoryJobRow } from "@shared/factory-office-agents";
+import { redactChatActivity } from "@shared/agent-chat-routing";
+
+const FACTORY_LIVE_CACHE_MS = 30_000;
+const FACTORY_LIVE_TIMEOUT_MS = 3_000;
+/** Read-only: the same owner-scoped list the factory dashboard already reads. Never claims, completes or writes. */
+async function readFactoryJobsReal(owner: string): Promise<FactoryJobRow[]> {
+  const { configuredSoftwareFactoryStore } = await import("./software-factory-store-provider");
+  return configuredSoftwareFactoryStore.list(owner) as Promise<FactoryJobRow[]>;
+}
 import { isBlackRoomOnlyOrder, redactCouncilViewForPartner } from "@shared/workspace-access";
 
 const MANUAL_RUN_MIN_INTERVAL_MS = 60_000;
@@ -15,6 +26,9 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
   requestUserId?: typeof getCurrentUserId;
   ownerUserId?: typeof getSystemUserId;
   enabled?: typeof isAgentCouncilEnabled;
+  /** Read-only factory stage rows for live presence (owner only). Tests inject a fake. */
+  readFactoryJobs?: (owner: string) => Promise<readonly FactoryJobRow[]>;
+  now?: () => number;
   /** Active partner ("socio") check; defaults to server/workspace-access.ts. */
   isPartner?: (userId: string) => Promise<boolean>;
 } = {}) {
@@ -22,6 +36,22 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
   const requestUserId = dependencies.requestUserId ?? getCurrentUserId;
   const ownerUserId = dependencies.ownerUserId ?? getSystemUserId;
   const enabled = dependencies.enabled ?? isAgentCouncilEnabled;
+  const now = dependencies.now ?? Date.now;
+  const readFactoryJobs = dependencies.readFactoryJobs ?? readFactoryJobsReal;
+  let factoryCache: { at: number; jobs: FactoryJobRow[] | "unavailable" } | undefined;
+  // Minimal projection: stage, status and lease/completion times only. No payloads, results or provider output.
+  const liveFactoryJobs = async (owner: string): Promise<FactoryJobRow[] | "unavailable"> => {
+    if (factoryCache && now() - factoryCache.at < FACTORY_LIVE_CACHE_MS) return factoryCache.jobs;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let jobs: FactoryJobRow[] | "unavailable";
+    try {
+      const rows = await Promise.race([readFactoryJobs(owner), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(Error("timeout")), FACTORY_LIVE_TIMEOUT_MS); })]);
+      jobs = Array.isArray(rows) ? rows.filter(job => job && factoryAgentForStage(job.kind)).slice(0, 100).map(job => ({ id: String(job.id), kind: job.kind, status: job.status, ownerKey: job.ownerKey,
+        ...(job.completedAt ? { completedAt: job.completedAt } : {}), ...(job.leaseExpiresAt ? { leaseExpiresAt: job.leaseExpiresAt } : {}) })) : "unavailable";
+    } catch { jobs = "unavailable"; } finally { clearTimeout(timer); }
+    factoryCache = { at: now(), jobs };
+    return jobs;
+  };
   const isPartner = dependencies.isPartner ?? (async (userId: string) => (await import("./workspace-access")).isActiveWorkspacePartner(userId));
   const partnerRequest = async (req: Parameters<typeof requestUserId>[0]) => {
     const userId = requestUserId(req);
@@ -53,9 +83,12 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
   app.get("/api/agent-council/state", async (req, res) => {
     try {
       res.set("Cache-Control", "no-store");
-      const view = await councilInstance().view();
+      const isOwner = requestUserId(req) === ownerUserId();
+      const owner = isOwner ? ownerUserId() : "";
+      // Owner only: a read-only live lease read (the factory runs in GitHub Actions; this never writes).
+      const view = await councilInstance().view(isOwner ? { factoryLiveJobs: await liveFactoryJobs(owner), factoryOwnerKey: createHash("sha256").update(owner).digest("hex") } : undefined);
       const partner = await partnerRequest(req);
-      if (requestUserId(req) !== ownerUserId()) {
+      if (!isOwner) {
         view.kongCompany = { version: 1, careers: {}, trainees: [], orders: [], events: [] };
         view.kongLeaderboard = [];
         view.kongPersonalities = {};
@@ -64,6 +97,9 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
         view.kongObservedAt = null;
         view.kongRead = null;
         view.kongCollaboration = { verified: false, observedAt: null, totalFindings: 0, exchanges: [] };
+        view.roleWorkToday = [];
+        // Owner-only per-agent chat: orders, hand-off events and hand-off memory never reach other users.
+        view.company = redactChatActivity(view.company);
       }
       // Partners see the office (careers, points, battery) but not Robert's orders, memories or details.
       res.json(partner ? redactCouncilViewForPartner(view as unknown as Record<string, unknown>) : view);

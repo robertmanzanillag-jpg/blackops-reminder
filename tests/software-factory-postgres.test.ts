@@ -67,6 +67,18 @@ test('factory PostgreSQL transactional integration', { timeout: 120000 }, async 
    assert.equal(await store.claim('another'),undefined);await store.setPaused('owner',false);assert.ok(await store.claim('another'));
    await assert.rejects(store.reconcile('owner',job.id,{actualCostCents:30,executionStopped:true,reason:'duplicate'}),/UNKNOWN_JOB_REQUIRED/);
   });
+  await t.test('zero-cost deferral requeues a claimed job until notBefore and keeps its reservation',async()=>{
+   await reset();await setup();await store.enqueue('owner',input('deferred',200));const job=(await store.claim('worker'))!;
+   const soon=new Date(Date.now()+1500).toISOString(),later=new Date(Date.now()+3600000).toISOString();
+   assert.equal(await store.defer({...job,fence:'00000000-0000-4000-8000-000000000000'},{reason:'FACTORY_DAILY_DRAFT_PR_LIMIT',notBefore:later}),false);
+   if(later.slice(0,7)===month){assert.equal(await store.defer(job,{reason:'FACTORY_DAILY_DRAFT_PR_LIMIT',notBefore:soon}),true);
+    assert.equal(await store.complete(job,{status:'completed',costCents:1}),false);
+    const status=await store.status('owner');assert.equal(status.reservedCents,200);assert.equal(status.spentCents,0);
+    assert.equal(await store.claim('worker'),undefined);
+    await new Promise(r=>setTimeout(r,1700));const again=(await store.claim('worker'))!;assert.equal(again.id,job.id);
+    assert.equal(await store.complete(again,{status:'blocked',costCents:0}),true);assert.equal((await store.status('owner')).reservedCents,0);}
+   await assert.rejects(store.defer(job,{reason:'bad reason',notBefore:later}));
+  });
   await t.test('completion and next stage reservation commit together without duplication',async()=>{
    await reset();await setup();await store.enqueue('owner',input('first',200));const job=(await store.claim('worker'))!;
    const next={...input('ignored',150),kind:'simulate' as const};

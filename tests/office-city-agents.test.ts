@@ -33,16 +33,25 @@ test("fresh evidence animates only running jobs; completed jobs are distinct and
   assert.deepEqual(jobs.filter(agent => agent.status.state === "working").map(agent => agent.category), ["clubs"]);
   assert.equal(jobs[0].lastStartedAt, stamp(-100000));
   assert.equal(jobs[0].status.detail, "Comprueba fuentes y fichas de clubes");
-  assert.equal(jobs[1].status.label, "Completado · no ejecutando");
-  assert.equal(jobs[1].status.state, "offline");
+  // Completed on schedule with no failure: on duty ("Activo · al día"), still not "working".
+  assert.equal(jobs[1].status.label, "Activo · al día");
+  assert.equal(jobs[1].status.state, "available");
+  assert.deepEqual(jobs[1].status.onDuty, { lastWorkAt: stamp(-90000), nextWorkAt: stamp(50000) });
+  assert.match(jobs[1].status.detail || "", /^Último trabajo \d{2}:\d{2} · próximo turno \d{2}:\d{2}$/);
+  assert.equal(jobs[1].color, "#2dd4bf");
   assert.equal(jobs[1].lastWorkAt, stamp(-90000));
   assert.equal(jobs[1].nextWorkAt, stamp(50000));
   assert.equal(jobs[2].color, "#94a3b8");
   assert.equal(jobs[2].hasDurableEvidence, false);
   assert.equal(jobs[3].status.state, "error");
   assert.equal(jobs[3].blocker, "Falta la fuente");
-  assert.equal(jobs[4].status.label, "Completado con avisos");
-  assert.equal(jobs[4].color, "#fbbf24");
+  // Ran on schedule without a recorded error: coverage findings never paint it as broken.
+  assert.equal(jobs[4].status.label, "Activo · al día");
+  assert.equal(jobs[4].status.state, "available");
+  assert.ok(jobs[4].status.onDuty);
+  assert.match(jobs[4].status.detail || "", /· Cobertura con pendientes: La fuente limitó las consultas \(HTTP 429\)\.$/);
+  assert.equal(jobs[4].color, "#2dd4bf");
+  assert.equal(jobs[3].status.onDuty, undefined, "a recorded failure is never on duty");
   assert.equal(jobs.filter(agent => agent.hasDurableEvidence).length, 4);
 });
 
@@ -124,4 +133,40 @@ test("fresh category records retain optional interval and explicit failure evide
   assert.equal(rooms[0].agents[0].intervalMs, 60000);
   assert.equal(rooms[0].agents[0].recordedFailure, true);
   assert.equal(rooms[0].agents[1].recordedFailure, undefined);
+});
+
+test("coverage warnings keep the 5-point deduction but only real failures or stale runs render as errors", async () => {
+  const { scoreOfficeKongSnapshot } = await import("../shared/office-kong-supervisor");
+  const snapshot = run([{ ...miami, categories: [
+    job("clubs", "attention", { recordedFailure: false, intervalMs: 600_000, issues: ["Incidencia registrada. Revisa el detalle en KONG."] }),
+    job("vip", "attention", { recordedFailure: true, intervalMs: 600_000, issues: ["El ultimo intento registro un error; revisar la evidencia en KONG."] }),
+    job("restaurants", "attention", { recordedFailure: false, intervalMs: 10_000, lastRunAt: stamp(-90000), lastSuccessAt: stamp(-90000), issues: ["Pendiente"] }),
+  ] }]);
+  const agents = buildOfficeCityRooms([miami], [snapshot], now)[0].agents;
+  assert.deepEqual([agents[0].status.state, agents[0].status.label], ["available", "Activo · al día"]);
+  assert.match(agents[0].status.detail || "", /Cobertura con pendientes: Incidencia registrada\. Revisa el detalle en KONG\.$/);
+  assert.deepEqual([agents[1].status.state, agents[1].status.label], ["error", "Falló la última ejecución"]);
+  assert.equal(agents[2].status.state, "error", "a run older than two intervals is stale, not a coverage notice");
+  const score = scoreOfficeKongSnapshot(snapshot.evidence as never, now).cities[0].categories;
+  assert.deepEqual(score.slice(0, 3).map(item => [item.state, item.deduction]), [["completed_with_warnings", 5], ["failed", 25], ["stale", 20]]);
+});
+
+test("on duty needs a fresh completion inside its window and no missed turn; never upgrades stale or unknown", () => {
+  const day = 86_400_000;
+  const snapshot = run([{ ...miami, categories: [
+    job("clubs", "healthy", { intervalMs: 3_600_000, nextRunAt: stamp(1_800_000) }),
+    // Completed long ago with no interval: older than one day.
+    job("vip", "healthy", { lastRunAt: stamp(-day - 60_000), lastSuccessAt: stamp(-day - 60_000), lastStartedAt: stamp(-day - 70_000), nextRunAt: null }),
+    // Scheduled turn passed 20 minutes ago without a newer run: missed.
+    job("restaurants", "healthy", { intervalMs: 3_600_000, lastRunAt: stamp(-3_000_000), lastSuccessAt: stamp(-3_000_000), lastStartedAt: stamp(-3_010_000), nextRunAt: stamp(-1_200_000) }),
+    job("events", "stale"),
+    job("sports", "unknown"),
+    job("experiences", "running", { leaseUntil: stamp(-1000) }),
+  ] }]);
+  const agents = buildOfficeCityRooms([miami], [snapshot], now)[0].agents;
+  assert.equal(agents[0].status.label, "Activo · al día");
+  for (const agent of agents.slice(1, 6)) assert.equal(agent.status.onDuty, undefined, agent.category);
+  assert.equal(agents[1].status.label, "Completado · no ejecutando");
+  assert.equal(agents[2].status.label, "Completado · no ejecutando");
+  assert.ok(agents.every(agent => agent.status.state !== "working"));
 });

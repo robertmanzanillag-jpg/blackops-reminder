@@ -18,7 +18,8 @@ const completionSchema = z.object({
 export type OfficeCloudCompletion = z.infer<typeof completionSchema>;
 export interface OfficeCloudRun {
   id: string; key: string; kind: OfficeTaskInput["kind"]; message?: string; prUrl?: string;
-  source?: "scheduled";
+  /** scheduled: recurring KONG audit. factory: review of a factory draft PR. */
+  source?: "scheduled" | "factory";
   status: "pending" | "running" | "completed" | "blocked" | "failed" | "unknown";
   createdAt: string; startedAt?: string; completedAt?: string;
   workerId?: string; fence?: string; leaseExpiresAt?: string;
@@ -94,6 +95,7 @@ function decode(row: Record<string, unknown>): OfficeCloudRun {
   if (!input.success || !z.string().uuid().safeParse(row.id).success || !["pending", "running", "completed", "blocked", "failed", "unknown"].includes(String(row.status))) return fail("INVALID_STORED_RESULT", "El registro de la nube no es verificable.");
   const run: OfficeCloudRun = { ...input.data, id: row.id as string, status: row.status as OfficeCloudRun["status"], createdAt: timestamp(row.created_at) };
   if (source === "scheduled" && run.kind === "kong_audit") run.source = source;
+  if (source === "factory" && run.kind === "claude_review") run.source = source;
   if (row.started_at) run.startedAt = timestamp(row.started_at);
   if (row.completed_at) run.completedAt = timestamp(row.completed_at);
   if (row.worker_id) run.workerId = String(row.worker_id);
@@ -257,6 +259,38 @@ SELECT $1::uuid,$2::text,$3::uuid,$4::text,$5::jsonb,clock_timestamp(),clock_tim
         await client.query(`/*office:kong-schedule-retention*/ DELETE FROM agent_office_cloud_jobs
 WHERE owner_key=$1 AND input->>'source'='scheduled' AND input->>'kind'='kong_audit'
   AND status NOT IN ('pending','running') AND created_at < CURRENT_TIMESTAMP - interval '1 day'`, [owner]);
+      });
+    },
+    /** One read-only review of a factory draft PR. The caller derives a
+     * permanent key from (factory job id, head sha), so retries return the
+     * existing record. The owner lock makes the UTC daily cap exact. No
+     * provider call happens here; the review-only worker claims it later. */
+    async enqueueFactoryReview(userId: string, request: { prUrl: string; key: string; maxPerDay: number }): Promise<{ status: "enqueued" | "existing" | "daily_cap"; run?: OfficeCloudRun }> {
+      const owner = ownerKey(userId);
+      const parsed = taskSchema.safeParse({ kind: "claude_review", prUrl: request?.prUrl, key: request?.key });
+      if (!parsed.success || !Number.isSafeInteger(request.maxPerDay) || request.maxPerDay < 1 || request.maxPerDay > 20) return fail("INVALID_TASK", "La revision de la fabrica no es valida.");
+      const task = parsed.data;
+      const requestHash = hash(JSON.stringify({ kind: task.kind, prUrl: task.prUrl }));
+      return transaction(async client => {
+        await client.query("/*office:owner-lock*/ SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [owner]);
+        const find = () => client.query("/*office:find-key*/ SELECT * FROM agent_office_cloud_jobs WHERE owner_key = $1 AND idempotency_key = $2", [owner, task.key]);
+        const verify = (row: Record<string, unknown>) => {
+          if (row.request_hash !== requestHash || (row.input as { source?: unknown } | null)?.source !== "factory") return fail("IDEMPOTENCY_CONFLICT", "Esta clave ya pertenece a una solicitud diferente.");
+          return decode(row);
+        };
+        const existing = (await find()).rows[0];
+        if (existing) return { status: "existing" as const, run: verify(existing) };
+        const counted = (await client.query(`/*office:factory-review-count*/ SELECT count(*)::int AS count FROM agent_office_cloud_jobs
+WHERE owner_key=$1 AND input->>'source'='factory' AND created_at >= (date_trunc('day', CURRENT_TIMESTAMP AT TIME ZONE 'UTC') AT TIME ZONE 'UTC')`, [owner])).rows[0]?.count;
+        const count = Number(counted);
+        if (!Number.isSafeInteger(count) || count < 0) return fail("CLOUD_STORE_NOT_READY", "No se pudo verificar el limite diario de revisiones.");
+        if (count >= request.maxPerDay) return { status: "daily_cap" as const };
+        const inserted = await client.query("/*office:factory-review*/ INSERT INTO agent_office_cloud_jobs (id, owner_key, idempotency_key, request_hash, input) VALUES ($1,$2,$3,$4,$5::jsonb) ON CONFLICT (owner_key,idempotency_key) DO NOTHING RETURNING *",
+          [randomUUID(), owner, task.key, requestHash, JSON.stringify({ ...task, source: "factory" })]);
+        if (inserted.rows[0]) return { status: "enqueued" as const, run: decode(inserted.rows[0]) };
+        const raced = (await find()).rows[0];
+        if (!raced) return fail("CLOUD_STORE_NOT_READY", "No se pudo confirmar la revision de la fabrica.");
+        return { status: "existing" as const, run: verify(raced) };
       });
     },
     async complete(runId: string, workerId: string, fence: string, result: OfficeCloudCompletion): Promise<OfficeCloudRun | undefined> {

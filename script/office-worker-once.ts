@@ -1,7 +1,8 @@
 // Dedicated trusted cloud entrypoint: never loads repository .env files or adapters.
 // Runs the reviewed office executor once, bounded, then exits (see docs/office-worker-cloud.md).
 import { createHash, randomUUID } from "node:crypto";
-import { runOfficeWorkerOnce, OFFICE_ONCE_MAX_DURATION_MS, type OfficeOnceOwnership } from "../server/office-worker-once";
+import { runOfficeWorkerOnce, safeFailureCode, OFFICE_ONCE_MAX_DURATION_MS, type OfficeOnceOwnership } from "../server/office-worker-once";
+export { safeFailureCode };
 // Same validation and fixed review-only flags as the reviewed Windows launcher.
 import { parseWorkerConfig, safeWorkerEnvironment } from "./office-windows-worker.mjs";
 
@@ -79,6 +80,6 @@ async function main() {
     await lockPool.end().catch(() => undefined);
   }
 }
-void main().catch(() => { console.error("Office one-shot unavailable; no automatic replay."); process.exitCode = 1; })
+if (process.argv[1]?.endsWith("office-worker-once.ts")) void main().catch(error => { console.error(`Office one-shot unavailable; no automatic replay. code=${safeFailureCode(error)}`); process.exitCode = 1; })
   // Shared database clients (council, queue) may keep the event loop alive after the bounded run.
   .finally(() => process.exit(process.exitCode ?? 0));
