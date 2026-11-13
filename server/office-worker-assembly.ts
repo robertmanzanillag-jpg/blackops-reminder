@@ -62,6 +62,15 @@ const roleAcademy=roleExecution && academy?(await import("./office-role-academy"
   if(!("provider" in result) || result.provider!=="openai" || !("usage" in result))throw new Error("Role academy requires measured OpenAI execution.");
   return result as import("./office-openai").OfficeOpenAIResult;
 }}):undefined;
+// Black Room area of the academy: same measured, budget-admitted execution as the role academy,
+// its own bounded daily pairs (OFFICE_BLACKROOM_ACADEMY_DAILY_PAIRS, 1..14). Off when unset.
+const blackroomAcademy=roleExecution && academy && process.env.OFFICE_BLACKROOM_ACADEMY_DAILY_PAIRS?(await import("./office-academy-blackroom")).createBlackRoomAcademyRunner({council:academy,dailyPairs:Number(process.env.OFFICE_BLACKROOM_ACADEMY_DAILY_PAIRS),shouldStop,
+  loadLessons:async()=>(await (await import("./blackroom-team/lessons")).syncBlackRoomLessons()).rules,
+  run:async(prompt,call)=>{
+  const result=await roleExecution.run(prompt,call.executionId);
+  if(!("provider" in result) || result.provider!=="openai" || !("usage" in result))throw new Error("Black Room academy requires measured OpenAI execution.");
+  return result as import("./office-openai").OfficeOpenAIResult;
+}}):undefined;
 const capabilityModule=capabilityEnabled?await import("./office-capability-training"):undefined;
 const capabilityCredits=capabilityModule?await (await import("./shared-openai-credit-runtime")).loadSharedCreditRuntime(process.env,()=>new Date()):undefined;
 const capabilityExecution=capabilityCredits && academy?(await import("./office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"768"},Date.now,{sharedCredits:capabilityCredits}):undefined;
@@ -89,6 +98,7 @@ const academyCycle = council ? async () => {
   if(roleWork && !shouldStop()) await roleWork.tick();
   if(selfHeal && !shouldStop()){try{await selfHeal.tick();}catch{console.error("Office self-heal step unconfirmed; it will be reconciled on the next cycle.");}}
   if(roleAcademy && !shouldStop()) await roleAcademy.tick();
+  if(blackroomAcademy && !shouldStop()) await blackroomAcademy.tick();
   // The web scheduler is disabled in this deployment. Preserve the
   // scout's durable daily cadence here; it only reads public releases.
   if (!shouldStop()) await council.runScout();

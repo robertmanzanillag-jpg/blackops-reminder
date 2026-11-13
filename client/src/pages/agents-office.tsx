@@ -36,6 +36,7 @@ import { cn } from "@/lib/utils";
 import type { MonitoredProject } from "@shared/schema";
 import { AgentsBuilding } from "@/components/agents-building/agents-building";
 import { AgentsOfficeWorld } from "@/components/agents-world-office/agents-office-world";
+import { useWorkspaceRole } from "@/lib/workspace-role";
 import { KongSupervisorPanel } from "@/components/kong-supervisor-panel";
 import { KongOperationsPanel } from "@/components/kong-operations-panel";
 import type { AgentLiveStatus } from "@/lib/agent-live-status";
@@ -1624,6 +1625,7 @@ function RoomPresenceDot({ item, label }: { item: RoomPresence; label: string })
 }
 
 function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
+  const workspace = useWorkspaceRole();
   const layoutKey = ownerOfficeStorageKey(OFFICE_LAYOUT_KEY, ownerId);
   const locationsKey = ownerOfficeStorageKey(OFFICE_AGENT_LOCATIONS_KEY, ownerId);
   const offsetsKey = ownerOfficeStorageKey(OFFICE_AGENT_OFFSETS_KEY, ownerId);
@@ -1932,6 +1934,13 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
     const pr = /^(?:consultar pr\s+)?(https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/[1-9]\d*)$/i.exec(text);
     const radio = /^analizar horarios(?: de radio)?[.!]?$/i.test(text);
     const action = pr ? { action: "github_pull_request", prUrl: pr[1] } : radio ? { action: "radio_analysis" } : null;
+    if (workspace.isPartner && (action || !workspace.canInteractWith(contact.id))) {
+      // Partners ("socios") only chat with the Black Room team; owner data queries stay with Robert.
+      const contactId = contact.id;
+      setAgentChats(current => ({ ...current, [contactId]: [...(current[contactId] || []), { role: "user", text }, { role: "agent", text: "Solo Robert. Como socio puedes hablar y dar órdenes al equipo de Black Room." }] }));
+      setDirectMessage("");
+      return;
+    }
     if (action) {
       const specialist = pr ? { id: "github", name: "GitHub" } : { id: "radio", name: "Radio" };
       const contactId = contact.id;
@@ -3208,15 +3217,16 @@ export default function AgentsOfficePage() {
   const queryClient = useQueryClient();
   const ownerId = queryClient.getQueryData<{ user?: { id: string } }>(["auth-me"])?.user?.id;
   const [showWorld, setShowWorld] = useState(false);
+  const workspace = useWorkspaceRole();
   if (!ownerId) return <p role="alert">No se pudo verificar el propietario de la sesión.</p>;
   // Robert asked for the agents building as the main view: live status first, the Company World simulation below.
   return <div className="bg-[#080e18]">
     <MotionConfig reducedMotion="user"><LiveAgentsOffice key={ownerId} ownerId={ownerId} /></MotionConfig>
-    <section className="mx-4 my-8 rounded-xl border border-white/10 bg-slate-900 p-4 text-slate-200">
+    {!workspace.isPartner && <section className="mx-4 my-8 rounded-xl border border-white/10 bg-slate-900 p-4 text-slate-200">
       <button type="button" aria-expanded={showWorld} aria-controls="company-world" onClick={() => setShowWorld(value => !value)} className="w-full rounded-lg px-3 py-2 text-left text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-emerald-200">
         {showWorld ? "Ocultar" : "Abrir"} Company World · simulación de departamentos (sin gasto real)
       </button>
       <div id="company-world" hidden={!showWorld} className="mt-4">{showWorld && <CompanyOffice key={ownerId} ownerId={ownerId} />}</div>
-    </section>
+    </section>}
   </div>;
 }

@@ -246,6 +246,15 @@ export function blackRoomYoutubeWatchUrl(sourceVideoId: string): string {
   return `https://www.youtube.com/watch?v=${videoId}`;
 }
 
+/**
+ * "Label: https://www.youtube.com/watch?v=..." followed by a newline, or "" when the clip has no
+ * full YouTube set (recorded clips without a published set). A malformed, non-empty id still throws.
+ */
+function fullSetLine(label: string, sourceVideoId: string | null | undefined): string {
+  if (!String(sourceVideoId ?? "").trim()) return "";
+  return `${label}: ${blackRoomYoutubeWatchUrl(String(sourceVideoId))}\n`;
+}
+
 export function buildBlackRoomFacebookCaption(
   caption: string,
   sourceVideoId: string,
@@ -256,14 +265,14 @@ export function buildBlackRoomFacebookCaption(
     ? "Sigue la experiencia completa de BlackRoom"
     : "Follow the full BlackRoom experience";
   const youtubeChannel = language === "es" ? "Canal oficial de BlackRoom" : "Official BlackRoom channel";
-  return `${caption.trim()}\n\n${fullVideo}: ${blackRoomYoutubeWatchUrl(sourceVideoId)}\n${youtubeChannel}: ${BLACKROOM_YOUTUBE_CHANNEL_URL}\n${callToAction}: ${BLACKROOM_FACEBOOK_MAIN_URL}`;
+  return `${caption.trim()}\n\n${fullSetLine(fullVideo, sourceVideoId)}${youtubeChannel}: ${BLACKROOM_YOUTUBE_CHANNEL_URL}\n${callToAction}: ${BLACKROOM_FACEBOOK_MAIN_URL}`;
 }
 
 export function buildBlackRoomYouTubeCaption(input: BlackRoomMetricoolScheduleInput): string {
   const fullVideo = input.language === "es" ? "Set completo" : "Full set";
   const channel = input.language === "es" ? "Canal BlackRoom" : "BlackRoom channel";
   const hashtags = isBlackRoomYouTubeShort(input) ? "#Shorts #BlackRoom" : "#BlackRoom #DJSet";
-  return `${input.caption.trim()}\n\n${channel}: ${BLACKROOM_YOUTUBE_CHANNEL_HANDLE}\n${fullVideo}: ${blackRoomYoutubeWatchUrl(input.sourceVideoId)}\n${hashtags}`;
+  return `${input.caption.trim()}\n\n${channel}: ${BLACKROOM_YOUTUBE_CHANNEL_HANDLE}\n${fullSetLine(fullVideo, input.sourceVideoId)}${hashtags}`;
 }
 
 function legacyBlackRoomFacebookCaption(input: BlackRoomMetricoolScheduleInput): string {
@@ -271,13 +280,13 @@ function legacyBlackRoomFacebookCaption(input: BlackRoomMetricoolScheduleInput):
   const callToAction = input.language === "es"
     ? "Sigue la experiencia completa de BlackRoom"
     : "Follow the full BlackRoom experience";
-  return `${input.caption.trim()}\n\n${fullVideo}: ${blackRoomYoutubeWatchUrl(input.sourceVideoId)}\n${callToAction}: ${BLACKROOM_FACEBOOK_MAIN_URL}`;
+  return `${input.caption.trim()}\n\n${fullSetLine(fullVideo, input.sourceVideoId)}${callToAction}: ${BLACKROOM_FACEBOOK_MAIN_URL}`;
 }
 
 function legacyBlackRoomYouTubeCaption(input: BlackRoomMetricoolScheduleInput): string {
   const fullVideo = input.language === "es" ? "Set completo" : "Full set";
   const hashtags = isBlackRoomYouTubeShort(input) ? "#Shorts #BlackRoom" : "#BlackRoom #DJSet";
-  return `${input.caption.trim()}\n\n${fullVideo}: ${blackRoomYoutubeWatchUrl(input.sourceVideoId)}\n${hashtags}`;
+  return `${input.caption.trim()}\n\n${fullSetLine(fullVideo, input.sourceVideoId)}${hashtags}`;
 }
 
 export function isBlackRoomYouTubeShort(input: Pick<BlackRoomMetricoolScheduleInput, "videoFormat" | "durationSeconds">): boolean {
@@ -586,7 +595,7 @@ export async function scheduleBlackRoomMetricoolPost(
         info: JSON.stringify(payload),
         mediaFiles: [{
           download_url: input.mediaUrl,
-          file_id: `blackroom-${input.sourceVideoId}-${network}.mp4`,
+          file_id: `blackroom-${input.sourceVideoId || input.jobId || "clip"}-${network}.mp4`,
         }],
       };
       const normalizationAttempts = 3;

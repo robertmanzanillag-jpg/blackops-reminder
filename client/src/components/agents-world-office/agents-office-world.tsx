@@ -15,6 +15,7 @@ import { OFFICE_KONG_CITY_TASKS, scoreOfficeKongSnapshot } from "@shared/office-
 import type { OfficeKongAuditResult } from "../../../../server/office-kong";
 import type { OfficeKongCollaboration } from "../../../../server/office-kong-collaboration";
 import { CITY_NEWS_AGENTS } from "@shared/agent-live-status";
+import { BLACKROOM_DEPARTMENT_ORDER, BLACKROOM_TEAM } from "@shared/blackroom-team";
 import { INTEGRATION_LABEL, effectiveIntegrations, integrationFor, type AgentIntegration } from "@shared/agent-integrations";
 import { buildOfficeKongCentralSignals, OFFICE_KONG_CENTRAL_SEATS, officeCityEvidenceNotice, type OfficeKongCentralSignal } from "@/lib/office-kong-central-agents";
 import { buildKongOfficeWing, createKongRingAssignment, type KongRingAssignment } from "@/lib/kong-office-wing";
@@ -25,11 +26,16 @@ import { applyRoleWorkActivity, countRoleWorkCompleted, parseRoleWorkActivity } 
 import { parseSelfHealView, selfHealLine, selfHealTotals } from "@shared/office-self-heal-view";
 import { FACTORY_AGENTS, FACTORY_DEPARTMENT, factoryAgentStatus, type FactoryAgentView } from "@shared/factory-office-agents";
 import { buildOfficeCityRoomsFromSnapshot, officeCitySnapshotExpiresAt, parseOfficeCityDirectory, type OfficeCityAgent } from "@/lib/office-city-agents";
+import { useWorkspaceRole } from "@/lib/workspace-role";
+import { PartnerInvitePanel } from "@/components/workspace/partner-invite-panel";
+import { BlackRoomAcademyPanel } from "./blackroom-academy-panel";
+import { BlackRoomCeoChatPanel } from "@/components/blackroom-ceo-chat/blackroom-ceo-chat-panel";
 
 export type WorldAgent = BuildingAgent & { activity?: string; href?: string };
 
 // Real agents that live in the backend but not in the classic office list.
 const EXTRA_AGENTS: Array<{ id: string; name: string; role: string; description: string; color: string; href?: string }> = [
+  ...BLACKROOM_TEAM.map(({ id, name, role, description, color }) => ({ id, name, role, description, color })),
   { id: "blackroom-videos", name: "Videos Black Room", role: "Sube los videos de Black Room", description: "Edita y programa los videos de Black Room con su dispositivo de publicacion.", color: "#e879f9", href: "/clippers" },
   { id: "kong-videos", name: "Videos Kong", role: "Edita los videos de Kong", description: "Edita los videos de Kong y los guarda en Drive (Videos de Kong). Recibe las fichas verificadas de Venues y Promoters en su bandeja.", color: "#a3e635", href: "/promo-video" },
   { id: "kong-metrics", name: "Metricas KONG", role: "Resultados por publicacion", description: "Agente separado: mide cada publicacion confirmada de KONG (vistas, alcance, interacciones) con los datos de Metricool, enlazados por UUID.", color: "#bef264" },
@@ -54,7 +60,7 @@ const DEPARTMENTS: Array<{ id: string; name: string; color: string; agentIds: st
   { id: "consejo", name: "Consejo", color: "#c084fc", agentIds: ["skills-scout", "agent-factory", "mechanic"] },
   { id: "direccion", name: "Direccion", color: "#fbbf24", agentIds: ["ceo", "assistant", "control"] },
   { id: "negocios", name: "Negocios", color: "#34d399", agentIds: ["revenue", "dropshipping", "portfolio"] },
-  { id: "blackroom", name: "Black Room", color: "#e879f9", agentIds: ["blackroom-videos", "radio"] },
+  { id: "blackroom", name: "Black Room", color: "#e879f9", agentIds: [...BLACKROOM_DEPARTMENT_ORDER] },
   { id: "kong", name: "Kong", color: "#a3e635", agentIds: ["kong-videos", "kong-metrics", "kong:KONG AI", "kong:Promoters + Mesas", "kong:Venues", "kong:Kong Legal"] },
   { id: "medios", name: "Marketing y medios", color: "#f472b6", agentIds: ["marketing-cmo", "clippers"] },
   { id: "noticias-ciudad", name: "Noticias por ciudad", color: "#fb923c", agentIds: ["news", ...CITY_NEWS_AGENTS.map((agent) => agent.id)] },
@@ -66,6 +72,7 @@ const DEPARTMENTS: Array<{ id: string; name: string; color: string; agentIds: st
 ];
 
 const SCREEN_KIND: Record<string, SceneDepartment["agents"][number]["screen"]> = {
+  ...Object.fromEntries(BLACKROOM_TEAM.map((agent) => [agent.id, agent.screen])),
   radio: "timeline", clippers: "timeline", "blackroom-videos": "timeline", "kong-videos": "timeline", "kong-metrics": "chart", "news:miami-news": "list", "news:ny-news": "list",
   revenue: "chart", portfolio: "chart", "marketing-cmo": "chart", dropshipping: "chart", news: "chart",
   code: "code", github: "code", "claude-reviewer": "code", "app-qa": "code", cybersecurity: "code", mechanic: "code",
@@ -77,6 +84,7 @@ const CITY_COUNTRY_COLORS: Record<string, string> = {
 const cityRefreshInterval = ({ state }: { state: { error: Error | null } }) => /^(401|403):/.test(state.error?.message ?? "") ? false as const : 60_000;
 
 const SOURCE_NAME: Record<string, string> = {
+  ...Object.fromEntries(BLACKROOM_TEAM.map((agent) => [agent.id, agent.sourceName])),
   assistant: "Google Calendar", ceo: "Telegram + IA", control: "Salud de apps", revenue: "Stripe", dropshipping: "Shopify (pre-cuentas)",
   portfolio: "Mercados", "marketing-cmo": "Clientes de marketing", clippers: "Worker de clips", radio: "Calendario de radio",
   code: "GitHub", github: "GitHub", "claude-reviewer": "GitHub", "app-qa": "Salud de apps", cybersecurity: "Salud de apps",
@@ -143,7 +151,13 @@ export function AgentsOfficeWorld({
   const [failed, setFailed] = useState<string | null>(null);
   const [focusedDepartment, setFocusedDepartment] = useState<string | null>(null);
   const [panelAgentId, setPanelAgentId] = useState<string | null>(null);
-  const [overlay, setOverlay] = useState<"none" | "ranking" | "ceo" | "city-director" | "kong-talk">("none");
+  const [overlay, setOverlay] = useState<"none" | "ranking" | "ceo" | "city-director" | "kong-talk" | "partners" | "blackroom-ceo-chat" | "blackroom-academy">("none");
+  // Partners ("socios") see the whole office but only talk to / order the Black Room team.
+  const workspace = useWorkspaceRole();
+  const ceoOrdersLocked = workspace.isPartner && officeWing === "kong";
+  const orderCompany = workspace.isPartner ? "blackroom" : officeWing;
+  // Chat with the CEO Black Room: owner and partner only.
+  const canChatBlackRoomCeo = workspace.isOwner || workspace.isPartner;
   const [directorCityId, setDirectorCityId] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -379,7 +393,7 @@ export function AgentsOfficeWorld({
                 setPanelAgentId(null);
               }
             },
-            onSelectAgent: (id) => { setPanelAgentId(id); if (id.startsWith("kong-city:")) setCityDetailsOpen(true); },
+            onSelectAgent: (id) => { setPanelAgentId(id); if (id.startsWith("kong-city:")) setCityDetailsOpen(true); if (id === "blackroom-ceo") setOverlay(value => value === "none" ? "blackroom-ceo-chat" : value); },
             onOpenCityDirector: () => { setOfficeWing("kong"); setOverlay(value => value === "city-director" ? "none" : "city-director"); },
           }, { reducedMotion });
           sceneRef.current.update(JSON.parse(latestSceneKey.current));
@@ -418,7 +432,7 @@ export function AgentsOfficeWorld({
     const text = orderText.trim();
     if (!text) return;
     setBusy(true);
-    const result = await post("/api/agent-company/orders", { text, company: officeWing });
+    const result = await post("/api/agent-company/orders", { text, company: orderCompany });
     if (result.ok) {
       setOrderText("");
       setMessage("El CEO recibio la orden y la asigno.");
@@ -431,7 +445,7 @@ export function AgentsOfficeWorld({
 
   const markDone = async (orderId: string, evidenceRunId?: string) => {
     setBusy(true);
-    const result = await post(`/api/agent-company/orders/${encodeURIComponent(orderId)}/done`, { ...(evidenceRunId ? { evidenceRunId } : {}), company: officeWing });
+    const result = await post(`/api/agent-company/orders/${encodeURIComponent(orderId)}/done`, { ...(evidenceRunId && !workspace.isPartner ? { evidenceRunId } : {}), company: orderCompany });
     setMessage(result.ok ? (evidenceRunId ? "Orden cerrada con evidencia: puntos para quien trabajaba." : "Orden cerrada a mano: queda anotada, sin puntos.") : (result.body as { error?: string } | null)?.error || "No se pudo cerrar la orden.");
     await refreshCouncil();
     setEvidenceResetKey((value) => value + 1);
@@ -496,7 +510,9 @@ export function AgentsOfficeWorld({
             : panelAgent.status.state === "checking"
               ? "Todavia no hay lectura de su trabajo; la vida empieza cuando el consejo lo mida."
               : "Se le abre la carrera en la proxima ronda del consejo (cada 15 min).";
-  const evidenceRuns = ((queryClient.getQueryData(["agents-building-probe", "automation-runs"]) as { ok?: boolean; body?: unknown } | undefined)?.body as Array<{ id?: string; status?: string; resultSummary?: string | null; startedAt?: string }> | undefined || [])
+  const evidenceBody = (queryClient.getQueryData(["agents-building-probe", "automation-runs"]) as { ok?: boolean; body?: unknown } | undefined)?.body;
+  // A partner gets a redacted object here, never the run list.
+  const evidenceRuns = (Array.isArray(evidenceBody) ? evidenceBody as Array<{ id?: string; status?: string; resultSummary?: string | null; startedAt?: string }> : [])
     .filter((run) => officeWing !== "kong" && run && typeof run.id === "string" && run.status === "success")
     .slice(0, 10);
   const panelRank = panelAgent ? leaderboardRows.find((row) => row.agentId === panelAgent.id) : undefined;
@@ -530,9 +546,11 @@ export function AgentsOfficeWorld({
           <div className="mt-3 flex flex-wrap gap-2">
             <button type="button" onClick={() => changeWing(officeWing === "kong" ? "main" : "kong")} className="rounded-full bg-violet-500 px-3 py-2 text-xs font-bold" data-testid="world-kong-wing">{officeWing === "kong" ? "Volver a la oficina principal" : "Ver oficina KONG"}</button>
             <button type="button" onClick={() => focusRoom(null)} className="rounded-full border border-white/20 px-3 py-2 text-xs" data-testid="world-overview">Vista general</button>
-            <button type="button" onClick={() => setOverlay(overlay === "ceo" ? "none" : "ceo")} className="rounded-full border border-amber-200/40 px-3 py-2 text-xs text-amber-100" data-testid="world-ceo-channel">Canal con el CEO</button>
+            <button type="button" onClick={() => { const target = canChatBlackRoomCeo && officeWing === "main" ? "blackroom-ceo-chat" : "ceo"; setOverlay(overlay === target ? "none" : target); }} className="rounded-full bg-amber-300 px-3 py-2 text-xs font-bold text-black hover:bg-amber-200" data-testid="world-ceo-channel">💬 {canChatBlackRoomCeo && officeWing === "main" ? "Chat con el CEO" : workspace.isPartner ? "Canal con el CEO Black Room" : "Canal con el CEO"}</button>
             <button type="button" onClick={() => setOverlay(overlay === "ranking" ? "none" : "ranking")} className="rounded-full border border-emerald-200/40 px-3 py-2 text-xs text-emerald-100" data-testid="world-ranking">Tabla de posiciones</button>
-            <button type="button" onClick={runCouncil} disabled={busy || !council.view} className="rounded-full border border-violet-200/40 px-3 py-2 text-xs disabled:opacity-50" data-testid="world-council-run">Reunir consejo</button>
+            {officeWing === "main" && <button type="button" onClick={() => setOverlay(overlay === "blackroom-academy" ? "none" : "blackroom-academy")} className="rounded-full border border-fuchsia-200/40 px-3 py-2 text-xs text-fuchsia-100" data-testid="world-blackroom-academy">Academia Black Room</button>}
+            {!workspace.isPartner && <button type="button" onClick={runCouncil} disabled={busy || !council.view} className="rounded-full border border-violet-200/40 px-3 py-2 text-xs disabled:opacity-50" data-testid="world-council-run">Reunir consejo</button>}
+            {workspace.isOwner && <button type="button" onClick={() => setOverlay(overlay === "partners" ? "none" : "partners")} className="rounded-full border border-fuchsia-200/40 px-3 py-2 text-xs text-fuchsia-100" data-testid="world-partner-invite">Invitar socio</button>}
             {officeWing === "kong" && <>
               <button type="button" onClick={() => setOverlay(overlay === "kong-talk" ? "none" : "kong-talk")} className="rounded-full border border-cyan-200/40 px-3 py-2 text-xs text-cyan-100" data-testid="world-kong-collaboration">Colaboración · {kongCollaboration?.exchanges.length ?? 0}</button>
               <button type="button" onClick={() => setOverlay(overlay === "city-director" ? "none" : "city-director")} className="rounded-full border border-amber-200/40 px-3 py-2 text-xs" data-testid="world-city-director-toggle">Director de ciudades</button>
@@ -541,6 +559,7 @@ export function AgentsOfficeWorld({
           <nav className="mt-3 flex flex-wrap gap-1.5" aria-label="Departamentos" data-testid="world-deptnav">
             {departments.map(department => <button key={department.id} type="button" onClick={() => { focusRoom(department.id); setCityDetailsOpen(true); }} aria-pressed={focusedDepartment === department.id} className="rounded-full border px-2 py-1 text-[11px] hover:bg-white/15" style={{borderColor: department.color}} data-testid={`world-nav-${department.id}`}>{department.name}</button>)}
           </nav>
+          {workspace.isPartner && <p className="mt-2 text-[11px] text-fuchsia-200" data-testid="world-partner-note">Vista de socio: ves toda la oficina; solo puedes hablar, dar órdenes y aprobar con el equipo de Black Room. El resto es solo Robert.</p>}
           {message && <p role="status" className="mt-2 text-xs text-violet-100" data-testid="world-message">{message}</p>}
         </div>
       </section>
@@ -600,14 +619,22 @@ export function AgentsOfficeWorld({
         </section>
       )}
 
+      {overlay === "partners" && workspace.isOwner && <PartnerInvitePanel onClose={() => setOverlay("none")} />}
+      {overlay === "blackroom-academy" && officeWing === "main" && <BlackRoomAcademyPanel company={companyView.company} onClose={() => setOverlay("none")} />}
+      {overlay === "blackroom-ceo-chat" && canChatBlackRoomCeo && <BlackRoomCeoChatPanel onClose={() => setOverlay("none")} onShowTasks={officeWing === "main" ? () => setOverlay("ceo") : undefined} />}
+
       {overlay === "ceo" && (
         <section className="absolute top-[220px] right-3 z-30 sm:top-36 lg:top-24 flex max-h-[45%] w-[min(420px,calc(100vw-1.5rem))] flex-col rounded-2xl border border-amber-200/25 bg-[#120d04]/95 p-4 text-white shadow-2xl [color-scheme:dark]" data-testid="world-ceo-panel">
           <div className="flex items-center justify-between">
-            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200">Canal directo con el CEO</p>
-            <button type="button" onClick={() => setOverlay("none")} className="text-xs text-zinc-400 hover:text-white">✕</button>
+            <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-amber-200">{officeWing === "main" && canChatBlackRoomCeo ? "Tareas de la oficina" : "Canal directo con el CEO"}</p>
+            <div className="flex items-center gap-2">
+              {officeWing === "main" && canChatBlackRoomCeo && <button type="button" onClick={() => setOverlay("blackroom-ceo-chat")} className="rounded-full bg-amber-300 px-2.5 py-1 text-[11px] font-bold text-black" data-testid="world-ceo-back-to-chat">💬 Volver al chat</button>}
+              <button type="button" onClick={() => setOverlay("none")} className="text-xs text-zinc-400 hover:text-white">✕</button>
+            </div>
           </div>
+          {workspace.isPartner && <p className="mt-1 text-[11px] text-fuchsia-200" data-testid="world-ceo-partner-note">{ceoOrdersLocked ? "Solo Robert: las órdenes de KONG no están disponibles para socios." : "Tus órdenes van al CEO de Black Room y solo se asignan a su equipo."}</p>}
           <p className="mt-1 text-[11px] text-zinc-400">{officeWing === "kong" ? "Escribe una orden para coordinar al equipo KONG. Queda asignada, pero no activa ejecutores. Aquí puedes cerrarla a mano con 0 puntos; los resultados de KONG se verifican por separado." : "Escribe lo que necesitas y el CEO lo asigna al departamento correcto. Queda anotado como tarea: los agentes no la ejecutan solos. Para dar puntos, ciérrala con una ejecución exitosa como evidencia; cerrarla a mano solo la anota."}</p>
-          <div className="mt-3 flex gap-2">
+          {!ceoOrdersLocked && <div className="mt-3 flex gap-2">
             <input
               value={orderText}
               onChange={(event) => setOrderText(event.target.value)}
@@ -619,7 +646,7 @@ export function AgentsOfficeWorld({
               data-testid="world-order-input"
             />
             <button type="button" onClick={sendOrder} disabled={busy || !orderText.trim()} className="rounded-full bg-amber-300 px-3 py-2 text-xs font-bold text-black hover:bg-amber-200 disabled:opacity-50" data-testid="world-order-send">Enviar</button>
-          </div>
+          </div>}
           <div className="mt-3 space-y-2 overflow-y-auto">
             {orders.length === 0 && <p className="text-xs text-zinc-500">Todavia no hay ordenes.</p>}
             {orders.slice(0, 8).map((order) => (
@@ -635,9 +662,9 @@ export function AgentsOfficeWorld({
                 {order.doneAt && (
                   <p className="mt-1 text-[10px] text-zinc-500">{order.closedBy === "evidencia" ? `Cerrada con evidencia: ${order.evidence?.summary || ""}` : "Cerrada a mano (sin puntos)"}</p>
                 )}
-                {!order.doneAt && (
+                {!order.doneAt && !ceoOrdersLocked && (
                   <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                    <select
+                    {!workspace.isPartner && <select
                       key={`${order.id}-${evidenceResetKey}`}
                       defaultValue=""
                       disabled={busy || evidenceRuns.length === 0}
@@ -647,7 +674,7 @@ export function AgentsOfficeWorld({
                     >
                       <option value="">{evidenceRuns.length ? "Cerrar con evidencia..." : "Sin ejecuciones exitosas"}</option>
                       {evidenceRuns.map((run) => <option key={run.id} value={run.id}>{(run.resultSummary || "Ejecucion exitosa").slice(0, 40)}</option>)}
-                    </select>
+                    </select>}
                     <button type="button" onClick={() => markDone(order.id)} disabled={busy} className="text-[10px] font-semibold text-zinc-300 hover:underline" data-testid="world-order-done">Cerrar a mano (0 pts)</button>
                   </div>
                 )}
@@ -669,6 +696,7 @@ export function AgentsOfficeWorld({
             <div>
               <p className="text-[10px] font-bold uppercase tracking-[0.24em]" style={{ color: focused.color }}>{focused.name}</p>
               <p className="mt-0.5 text-xs text-zinc-400">{focusedAgents.filter((agent) => agent.status.state === "working").length} de {focusedAgents.length} en ejecución actual verificada</p>
+              {focused.id === "blackroom" && canChatBlackRoomCeo && <button type="button" onClick={() => setOverlay("blackroom-ceo-chat")} className="mt-1 rounded-full border border-fuchsia-200/40 px-2 py-0.5 text-[11px] text-fuchsia-100 hover:bg-fuchsia-300/10" data-testid="world-blackroom-dept-chat">Hablar con el CEO Black Room</button>}
             </div>
             <div className="flex shrink-0 items-center gap-1">
               {selectedCity && <button type="button" aria-expanded={cityDetailsOpen} aria-controls="world-city-details-content" onClick={() => setCityDetailsOpen(open => !open)} className="rounded-full border border-white/20 px-2 py-1 text-[11px] font-semibold text-white hover:bg-white/10" data-testid="world-city-details-toggle">{cityDetailsOpen ? "Minimizar" : "Ver detalles"}</button>}
@@ -746,6 +774,7 @@ export function AgentsOfficeWorld({
                 <p className="mt-2 text-[11px] text-zinc-300">Personalidad: {panelPersonality.traits.join(", ")} · <i>"{panelPersonality.motto}"</i></p>
               )}
               <p className="mt-2 text-xs leading-5 text-zinc-300">{panelAgent.description}</p>
+              {panelAgent.id === "blackroom-ceo" && canChatBlackRoomCeo && <button type="button" onClick={() => setOverlay("blackroom-ceo-chat")} className="mt-2 rounded-full bg-fuchsia-300 px-3 py-1 text-[11px] font-bold text-black hover:bg-fuchsia-200" data-testid="world-blackroom-ceo-open-chat">Abrir chat con el CEO</button>}
               <div className="mt-2 rounded-lg border border-white/[0.06] bg-black/40 p-2">
                 <p className={cn("text-[11px] font-semibold", STATE_TEXT[panelAgent.status.state])}>Ahora: {panelAgent.status.label}</p>
                 {panelAgent.status.detail && <p className="mt-0.5 text-[11px] text-zinc-400">{panelAgent.status.detail}</p>}
@@ -826,11 +855,12 @@ export function AgentsOfficeWorld({
                     else if (pageAgentIds.includes(panelAgent.id)) onSelectAgent(panelAgent.id, panelAgent.status);
                     else onOpenContact?.({ id: panelAgent.id, name: panelAgent.name, role: panelAgent.role, department: focused?.name || "Oficina", status: panelAgent.status, description: panelAgent.description, href: panelAgent.href, color: panelAgent.color });
                   }}
-                  disabled={!panelAgent.kong && !pageAgentIds.includes(panelAgent.id) && !onOpenContact}
+                  disabled={!workspace.canInteractWith(panelAgent.id) || panelAgent.kong && workspace.isPartner || (!panelAgent.kong && !pageAgentIds.includes(panelAgent.id) && !onOpenContact)}
+                  title={workspace.canInteractWith(panelAgent.id) && !(panelAgent.kong && workspace.isPartner) ? undefined : "Solo Robert"}
                   className="flex-1 rounded-full bg-white px-3 py-1.5 text-xs font-semibold text-black hover:bg-zinc-200 disabled:opacity-40"
                   data-testid="world-talk"
                 >
-                  Hablar con el agente
+                  {workspace.canInteractWith(panelAgent.id) && !(panelAgent.kong && workspace.isPartner) ? "Hablar con el agente" : "Solo Robert"}
                 </button>
                 {panelAgent.href && <a href={panelAgent.href} className="rounded-full border border-white/15 px-3 py-1.5 text-xs font-semibold text-white hover:bg-white/10">Abrir</a>}
               </div>}

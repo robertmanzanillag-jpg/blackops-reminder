@@ -16,6 +16,7 @@ async function readFactoryJobsReal(owner: string): Promise<FactoryJobRow[]> {
   const { configuredSoftwareFactoryStore } = await import("./software-factory-store-provider");
   return configuredSoftwareFactoryStore.list(owner) as Promise<FactoryJobRow[]>;
 }
+import { isBlackRoomOnlyOrder, redactCouncilViewForPartner } from "@shared/workspace-access";
 
 const MANUAL_RUN_MIN_INTERVAL_MS = 60_000;
 
@@ -28,6 +29,8 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
   /** Read-only factory stage rows for live presence (owner only). Tests inject a fake. */
   readFactoryJobs?: (owner: string) => Promise<readonly FactoryJobRow[]>;
   now?: () => number;
+  /** Active partner ("socio") check; defaults to server/workspace-access.ts. */
+  isPartner?: (userId: string) => Promise<boolean>;
 } = {}) {
   const councilInstance = () => dependencies.council ?? getAgentCouncil();
   const requestUserId = dependencies.requestUserId ?? getCurrentUserId;
@@ -48,6 +51,11 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
     } catch { jobs = "unavailable"; } finally { clearTimeout(timer); }
     factoryCache = { at: now(), jobs };
     return jobs;
+  };
+  const isPartner = dependencies.isPartner ?? (async (userId: string) => (await import("./workspace-access")).isActiveWorkspacePartner(userId));
+  const partnerRequest = async (req: Parameters<typeof requestUserId>[0]) => {
+    const userId = requestUserId(req);
+    return userId !== ownerUserId() && await isPartner(userId);
   };
   // Supervisor KONG (PR #315): owner-only chat and read-only readiness review.
   // It reads the Kong video status; it never edits, publishes or runs commercial orders.
@@ -79,6 +87,7 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
       const owner = isOwner ? ownerUserId() : "";
       // Owner only: a read-only live lease read (the factory runs in GitHub Actions; this never writes).
       const view = await councilInstance().view(isOwner ? { factoryLiveJobs: await liveFactoryJobs(owner), factoryOwnerKey: createHash("sha256").update(owner).digest("hex") } : undefined);
+      const partner = await partnerRequest(req);
       if (!isOwner) {
         view.kongCompany = { version: 1, careers: {}, trainees: [], orders: [], events: [] };
         view.kongLeaderboard = [];
@@ -92,7 +101,8 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
         // Owner-only per-agent chat: orders, hand-off events and hand-off memory never reach other users.
         view.company = redactChatActivity(view.company);
       }
-      res.json(view);
+      // Partners see the office (careers, points, battery) but not Robert's orders, memories or details.
+      res.json(partner ? redactCouncilViewForPartner(view as unknown as Record<string, unknown>) : view);
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "Failed to read agent council" });
     }
@@ -130,10 +140,12 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
       if (!text) return res.status(400).json({ error: "Escribe la orden para el CEO." });
       if (text.length > 500) return res.status(400).json({ error: "La orden es muy larga (maximo 500 caracteres)." });
       const council = councilInstance();
-      if (req.body?.company !== undefined && !["main", "kong"].includes(req.body.company)) return res.status(400).json({ error: "Empresa no válida." });
-      const scope = req.body?.company === "kong" ? "kong" : "main";
+      if (req.body?.company !== undefined && !["main", "kong", "blackroom"].includes(req.body.company)) return res.status(400).json({ error: "Empresa no válida." });
+      const scope = req.body?.company === "kong" ? "kong" : req.body?.company === "blackroom" ? "blackroom" : "main";
       if (scope === "kong" && requestUserId(req) !== ownerUserId()) return res.status(403).json({ error: "Solo el propietario puede gestionar KONG." });
-      const state = await council.placeOrder(text, scope);
+      const partner = await partnerRequest(req);
+      if (partner && scope !== "blackroom") return res.status(403).json({ error: "Solo Robert. Como socio puedes dar ordenes al CEO de Black Room." });
+      const state = await council.placeOrder(text, scope, { userId: requestUserId(req), role: partner ? "partner" : requestUserId(req) === ownerUserId() ? "owner" : null });
       res.json({ order: (scope === "kong" ? state.kongCompany : state.company).orders[0] });
     } catch (error) {
       res.status(500).json({ error: error instanceof Error ? error.message : "No se pudo crear la orden" });
@@ -145,9 +157,20 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
       const raw = (req.body as { evidenceRunId?: unknown } | undefined)?.evidenceRunId;
       const evidenceRunId = typeof raw === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(raw) ? raw : undefined;
       if (raw !== undefined && raw !== null && raw !== "" && !evidenceRunId) return res.status(400).json({ error: "Evidencia no valida." });
-      if (req.body?.company !== undefined && !["main", "kong"].includes(req.body.company)) return res.status(400).json({ error: "Empresa no válida." });
-      const scope = req.body?.company === "kong" ? "kong" : "main";
-      if (scope === "kong" && requestUserId(req) !== ownerUserId()) return res.status(403).json({ error: "Solo el propietario puede gestionar KONG." });
+      if (req.body?.company !== undefined && !["main", "kong", "blackroom"].includes(req.body.company)) return res.status(400).json({ error: "Empresa no válida." });
+      const requested = req.body?.company === "kong" ? "kong" : req.body?.company === "blackroom" ? "blackroom" : "main";
+      if (requested === "kong" && requestUserId(req) !== ownerUserId()) return res.status(403).json({ error: "Solo el propietario puede gestionar KONG." });
+      const partner = await partnerRequest(req);
+      if (partner && requested !== "blackroom") return res.status(403).json({ error: "Solo Robert. Como socio puedes cerrar ordenes del equipo de Black Room." });
+      if (requested === "blackroom") {
+        const current = await councilInstance().load();
+        const order = current.company.orders.find((item) => item.id === String(req.params.id));
+        if (!order) return res.status(404).json({ error: "Orden no encontrada" });
+        if (!isBlackRoomOnlyOrder(order)) return res.status(403).json({ error: "Solo Robert. Esa orden no es del equipo de Black Room." });
+        // Partners close by hand (record only, no points): evidence runs belong to Robert's account.
+        if (partner && evidenceRunId) return res.status(403).json({ error: "Solo Robert puede cerrar con evidencia." });
+      }
+      const scope = requested === "kong" ? "kong" : "main";
       const state = await councilInstance().finishOrder(String(req.params.id), evidenceRunId, requestUserId(req), scope);
       res.json({ order: (scope === "kong" ? state.kongCompany : state.company).orders.find((order) => order.id === req.params.id) || null });
     } catch (error) {
@@ -157,6 +180,11 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
   });
 
   app.post("/api/agent-council/run", async (req, res) => {
+    try {
+      if (await partnerRequest(req)) return res.status(403).json({ error: "Solo Robert puede reunir al consejo." });
+    } catch {
+      return res.status(503).json({ error: "No se pudo verificar el acceso." });
+    }
     try {
       if (!enabled()) {
         return res.status(409).json({ error: "El consejo esta apagado (AGENT_COUNCIL_ENABLED=false)." });
