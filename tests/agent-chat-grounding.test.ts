@@ -207,3 +207,43 @@ test("socio (no propietario): los chats de agentes siguen bloqueados, también K
   assert.ok(owner.body.agents.some((a: { id: string; group: string }) => a.id === "kong-city:miami:clubs" && a.group === "kong-city"));
   assert.equal((await call("POST /api/agent-chat/:agentId/messages", { user: "owner", params: { agentId: "kong-city:nowhere:clubs" }, body: { text: "hola", requestId: "es-partner-2" } })).status, 400);
 });
+
+test("revisión: el guard compara solo con los datos del agente, no con la pregunta ni la plantilla", async () => {
+  // Robert pone 37 en la pregunta y el modelo lo repite como dato propio: no está en los datos → descartado.
+  const { model } = countingModel("Sí, cerré 37 revisiones.");
+  const echoed = await service(fakeCouncil(), model).send("legal", { text: "¿cerraste 37 revisiones esta semana?", requestId: "es-review-echo" });
+  assert.equal(echoed.model, "unverified");
+  assert.doesNotMatch(echoed.messages[1].text, /37/);
+  // "máximo 120 palabras" de la plantilla tampoco vale como dato.
+  assert.deepEqual(unsupportedNumbers("Te respondo en 120 palabras", "Carrera: 42 puntos"), ["120"]);
+});
+
+test("revisión: los marcadores de lista numerada no cuentan como cifras", async () => {
+  assert.deepEqual(unsupportedNumbers("1. Tengo 42 puntos\n2) Batería 80%\n3. Sin órdenes", "Carrera: 42 puntos, batería 80%"), []);
+  const { model } = countingModel("1. Puntos: 42\n2. Batería: 80%\n3. Órdenes cerradas: 3");
+  const listed = await service(fakeCouncil(), model).send("legal", { text: "¿cómo va tu carrera en la oficina?", requestId: "es-review-list" });
+  assert.equal(listed.model, "used");
+  assert.match(listed.messages[1].text, /Batería: 80%/);
+});
+
+test("revisión: números escritos en palabras que no están en los datos se descartan", async () => {
+  assert.deepEqual(unsupportedNumbers("Hay treinta eventos y two venues", "Carrera: 42 puntos"), ["treinta", "two"]);
+  assert.deepEqual(unsupportedNumbers("Cerré tres órdenes", "Carrera: 3 órdenes cerradas"), []);
+  const { model } = countingModel("Esta semana revisé cincuenta contratos.");
+  const result = await service(fakeCouncil(), model).send("legal", { text: "¿cuántos contratos revisaste esta semana?", requestId: "es-review-words" });
+  assert.equal(result.model, "unverified");
+  assert.doesNotMatch(result.messages[1].text, /cincuenta/);
+});
+
+test("revisión: datos KONG raros no rompen el directorio ni inventan categorías", () => {
+  const s = seededState();
+  s.kongLastStatuses = { ...s.kongLastStatuses, "kong-city:x|y:clubs": { state: "offline", label: "x" }, "kong-city:miami:constructor": { state: "offline", label: "x" },
+    "kong-city:miami:toString": { state: "offline", label: "x" } } as never;
+  s.kongCompany = { ...s.kongCompany, careers: { ...s.kongCompany.careers, "kong-city:roma:clubs": { agentId: "kong-city:roma:clubs", memory: "corrupto" } as never },
+    trainees: [null, { id: 7 }, { id: "ok#1", nickname: "Kiko", role: "Venues", forAgentId: "kong:Venues", startedAt: "2026-11-10T00:00:00Z", modulesDone: [], knowledge: [] }] as never };
+  const entries = buildAgentChatDirectory(s);
+  const ids = entries.map(e => e.id);
+  assert.ok(!ids.some(id => id.includes("|") || id.endsWith(":constructor") || id.endsWith(":toString")));
+  assert.ok(ids.includes("kong-city:roma:clubs"));
+  assert.ok(ids.includes("trainee:ok#1"));
+});

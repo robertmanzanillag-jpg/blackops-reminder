@@ -1632,6 +1632,8 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   const handoffKey = ownerOfficeStorageKey(OFFICE_GITHUB_HANDOFF_KEY, ownerId);
   const officeMapRef = useRef<HTMLDivElement | null>(null);
   const walkingTimersRef = useRef<Partial<Record<AgentId, number>>>({});
+  // Agent-chat thread per popup contact: later messages continue the same conversation.
+  const agentChatThreadsRef = useRef<Record<string, string>>({});
   const [selectedAgent, setSelectedAgent] = useState<Agent>(agents[0]);
   const [selectedContact, setSelectedContact] = useState<OfficeContact | null>(null);
   const [activeChatContact, setActiveChatContact] = useState<OfficeContact | null>(null);
@@ -1989,9 +1991,11 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
       append([{ role: "user", text }]);
       setDirectMessage("");
       const requestId = `ao${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
-      void apiRequest("POST", `/api/agent-chat/${encodeURIComponent(contactId)}/messages`, { text, requestId })
-        .then(response => response.json() as Promise<{ messages: Array<{ role: string; text: string }>; handoff: { name: string } | null }>)
+      const threadId = agentChatThreadsRef.current[contactId];
+      void apiRequest("POST", `/api/agent-chat/${encodeURIComponent(contactId)}/messages`, { text, requestId, ...(threadId ? { threadId } : {}) })
+        .then(response => response.json() as Promise<{ thread?: { id: string }; messages: Array<{ role: string; text: string }>; handoff: { name: string } | null }>)
         .then(result => {
+          if (result.thread?.id) agentChatThreadsRef.current[contactId] = result.thread.id;
           const answer = [...result.messages].reverse().find(message => message.role !== "user");
           append([{ role: "agent", text: `${answer?.text || "Sin respuesta registrada."}${result.handoff ? `\n\nPulsa «Chat completo» y luego «Hablar con ${result.handoff.name}».` : ""}` }]);
         })

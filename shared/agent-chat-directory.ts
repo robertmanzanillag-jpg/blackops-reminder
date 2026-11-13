@@ -40,9 +40,9 @@ const KONG_STATIC = new Set(["kong-videos"]);
 const titleCase = (value: string) => value.replace(/[-_]+/g, " ").replace(/\b\w/g, c => c.toUpperCase());
 /** "Contratado como Miami · clubs." (written by the KONG company when it hires a city desk). */
 function cityNameFromCareer(company: CompanyState, id: string) {
-  const memory = company.careers[id]?.memory || [];
+  const memory = Array.isArray(company?.careers?.[id]?.memory) ? company.careers[id].memory : [];
   for (const entry of [...memory].reverse()) {
-    const match = /^Contratado como (.+?) · [a-z]+\.?$/.exec(entry.text);
+    const match = typeof entry?.text === "string" ? /^Contratado como (.+?) · [a-z]+\.?$/.exec(entry.text) : null;
     if (match) return match[1].trim().slice(0, 80);
   }
   return null;
@@ -62,7 +62,7 @@ export function kongCityEntry(id: string, cityName?: string | null): AgentChatEn
 }
 
 type DirectoryState = { company: CompanyState; kongCompany: CompanyState; kongLastStatuses: Record<string, unknown> };
-const activeTrainees = (company: CompanyState): Trainee[] => (company.trainees || []).filter(trainee => !trainee.graduatedAt && !trainee.evaluationClosedAt);
+const activeTrainees = (company: CompanyState): Trainee[] => (Array.isArray(company?.trainees) ? company.trainees : []).filter(trainee => trainee && typeof trainee.id === "string").filter(trainee => !trainee.graduatedAt && !trainee.evaluationClosedAt);
 
 export function buildAgentChatDirectory(state: DirectoryState): AgentChatEntry[] {
   const entries: AgentChatEntry[] = AGENT_CHAT_PROFILES.map(profile => ({
@@ -76,21 +76,28 @@ export function buildAgentChatDirectory(state: DirectoryState): AgentChatEntry[]
   for (const agent of FACTORY_AGENTS) {
     entries.push({ id: agent.id, name: agent.name, job: `${agent.role} (etapa ${agent.stage} de la fábrica de software).`, aliases: [agent.id.replace(/-/g, " ")], group: "factory", orderable: true });
   }
-  const cityIds = new Set([...Object.keys(state.kongCompany.careers || {}), ...Object.keys(state.kongLastStatuses || {})].filter(id => parseKongCityAgentId(id)));
-  for (const id of [...cityIds].sort()) {
+  // KONG and the academy write these records; odd data skips that entry, it never breaks the directory.
+  const safely = (work: () => void) => { try { work(); } catch { /* skip this entry */ } };
+  const keys = (value: unknown) => value && typeof value === "object" ? Object.keys(value) : [];
+  const cityIds = new Set([...keys(state.kongCompany?.careers), ...keys(state.kongLastStatuses)].filter(id => isAgentChatIdShape(id) && parseKongCityAgentId(id)));
+  for (const id of [...cityIds].sort()) safely(() => {
     const entry = kongCityEntry(id, cityNameFromCareer(state.kongCompany, id));
     if (entry) entries.push(entry);
-  }
+  });
   // Academy specialists ("Especialista en ...") already hired into the main company.
-  for (const id of Object.keys(state.company.careers || {}).filter(isSpecialistId).sort()) {
+  for (const id of keys(state.company?.careers).filter(id => isAgentChatIdShape(id) && isSpecialistId(id)).sort()) safely(() => {
     const topic = specialistTopicLabel(id);
     entries.push({ id, name: `Especialista en ${topic}`, job: `Especialista de la academia para órdenes de ${topic}.`, aliases: [`especialista en ${normalizeChatText(topic)}`], group: "academy", orderable: false });
-  }
+  });
   for (const [company, kong] of [[state.company, false], [state.kongCompany, true]] as const) {
-    for (const trainee of activeTrainees(company)) {
-      entries.push({ id: `trainee:${trainee.id}`, name: `${trainee.nickname} (aprendiz)`, group: "academy", orderable: false,
+    let trainees: Trainee[] = [];
+    safely(() => { trainees = activeTrainees(company); });
+    for (const trainee of trainees) safely(() => {
+      const id = `trainee:${trainee.id}`;
+      if (!isAgentChatIdShape(id) || typeof trainee.nickname !== "string") return;
+      entries.push({ id, name: `${trainee.nickname} (aprendiz)`, group: "academy", orderable: false,
         job: `En formación para ${trainee.role}${kong ? " (KONG)" : ""}.`, aliases: [normalizeChatText(trainee.nickname)] });
-    }
+    });
   }
   const seen = new Set<string>();
   return entries.filter(entry => !seen.has(entry.id) && seen.add(entry.id));

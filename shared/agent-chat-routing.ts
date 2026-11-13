@@ -85,7 +85,7 @@ export const KONG_CITY_CATEGORY_WORDS: Record<string, string[]> = {
 const CITY_AGENT = /^kong-city:([^:]+):([a-z]+)$/;
 export function parseKongCityAgentId(id: string): { cityId: string; category: string } | null {
   const match = CITY_AGENT.exec(id);
-  return match && KONG_CITY_CATEGORY_WORDS[match[2]] ? { cityId: match[1], category: match[2] } : null;
+  return match && Object.hasOwn(KONG_CITY_CATEGORY_WORDS, match[2]) ? { cityId: match[1], category: match[2] } : null;
 }
 const cityPhrase = (cityId: string) => normalizeChatText(cityId.replace(/[-_]+/g, " "));
 

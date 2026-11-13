@@ -156,8 +156,7 @@ export function deterministicAnswer(route: AgentChatRoute, f: Facts) {
   }
 }
 
-function modelPrompt(f: Facts, question: string, history: AgentChatMessage[]) {
-  const facts = factsText(f).slice(0, 3000);
+function modelPrompt(f: Facts, facts: string, question: string, history: AgentChatMessage[]) {
   const recent = history.slice(-6).map(m => `${m.role === "user" ? "Robert" : f.profile.name}: ${m.text.slice(0, 300)}`).join("\n");
   return `Eres ${f.profile.name}, un agente de la oficina BlackOps de Robert. Responde en el idioma de Robert, en markdown, máximo 120 palabras.
 Usa SOLO los datos registrados de abajo. Si la respuesta no está en los datos, responde exactamente "${NO_DATA}" y nada más.
@@ -173,10 +172,30 @@ ${recent}
 PREGUNTA: ${question.slice(0, 800)}`;
 }
 
-/** Digit runs in an answer that do not appear in the context it was built from (dates split into parts). */
-export function unsupportedNumbers(answer: string, context: string) {
-  const known = new Set(context.match(/\d+/g) || []);
-  return [...new Set(answer.match(/\d+/g) || [])].filter(n => !known.has(n) && !known.has(String(Number(n))));
+const NUMBER_WORDS: Record<string, number> = {
+  dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15,
+  dieciseis: 16, diecisiete: 17, dieciocho: 18, diecinueve: 19, veinte: 20, treinta: 30, cuarenta: 40, cincuenta: 50, sesenta: 60, setenta: 70,
+  ochenta: 80, noventa: 90, cien: 100, ciento: 100, cientos: 100, mil: 1000, miles: 1000, millon: 1_000_000, millones: 1_000_000,
+  two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, twenty: 20, thirty: 30, forty: 40,
+  fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100, hundreds: 100, thousand: 1000, thousands: 1000, million: 1_000_000, millions: 1_000_000,
+};
+const plainWords = (text: string) => text.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").split(/[^a-z]+/).filter(Boolean);
+
+/**
+ * Figures in a model answer that the agent's verified facts do not contain: digit runs (dates count by
+ * their parts) and Spanish/English number words ("dos".."cien", "two".."hundred", "mil", "million").
+ * `facts` must be the agent's data only — never the prompt template, the question or the history, or an
+ * echoed figure from Robert's own question would pass as verified. List markers ("1. ") are not figures.
+ * Limit: "uno/una/one" are not checked (they are articles too); compound words beyond the list are not parsed.
+ */
+export function unsupportedNumbers(answer: string, facts: string) {
+  const body = answer.replace(/^\s*\d+[.)]\s+/gm, "");
+  const known = new Set(facts.match(/\d+/g) || []);
+  const factWords = new Set(plainWords(facts));
+  const digits = [...new Set(body.match(/\d+/g) || [])].filter(n => !known.has(n) && !known.has(String(Number(n))));
+  const words = [...new Set(plainWords(body).filter(word => Object.hasOwn(NUMBER_WORDS, word)))]
+    .filter(word => !factWords.has(word) && !known.has(String(NUMBER_WORDS[word])));
+  return [...digits, ...words];
 }
 
 export function createAgentChatService(deps: {
@@ -191,11 +210,13 @@ export function createAgentChatService(deps: {
     const recorded = `Lo que sí está registrado:\n\n${statusLine(f)}${f.extra.length ? `\n\n${f.extra.join("\n")}` : ""}\n\n${ordersBlock(f)}`;
     if (!deps.model) return { text: `${NO_DATA} No tengo una regla para responder eso y el modelo de IA está apagado para este chat (costo $0). ${recorded}`, model: "off" as const, noData: true };
     try {
-      const prompt = modelPrompt(f, text, history);
+      // The verified facts are computed once: the prompt injects them and the guard checks against them only.
+      const facts = factsText(f).slice(0, 3000);
+      const prompt = modelPrompt(f, facts, text, history);
       const answer = (await deps.model.ask(prompt, requestId)).trim();
       if (!answer) throw new AgentChatModelError("unavailable");
       // Grounding guard: a figure the injected data does not contain is a fabrication, never shown.
-      const invented = unsupportedNumbers(answer, prompt);
+      const invented = unsupportedNumbers(answer, facts);
       if (invented.length) return { text: `${NO_DATA} La respuesta del modelo traía cifras que no están en mis datos, así que la descarté. ${recorded}`, model: "unverified" as const, noData: true };
       return { text: answer.slice(0, 4000), model: "used" as const, noData: /no tengo (ese|este|el) dato|no est[aá] en (mis|los) datos/i.test(answer) };
     } catch (error) {
