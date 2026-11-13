@@ -159,7 +159,9 @@ export function selectReplaceable(input: {
   for (const company of ["main", "kong"] as const) {
     for (const career of Object.values(input.careers[company])) {
       if (career.scoreReconciliation || career.inTrainingUntilGeneration || input.isExempt(career.agentId, company)) continue;
-      const failingNow = input.statuses.get(career.agentId)?.state === "error";
+      // Same as the council: only an error with evidence and without a life-penalty exemption costs battery.
+      const s = input.statuses.get(career.agentId);
+      const failingNow = s?.state === "error" && !s.lifePenaltyExempt && Boolean(s.evidenceId?.trim());
       if (career.battery > BATTERY_DANGER && !failingNow) continue;
       const hired = Date.parse(career.hiredAt);
       const until = Number.isFinite(hired) ? hired + REPLACEMENT_MIN_TENURE_MS : NaN;
@@ -249,4 +251,22 @@ export function readPanelParams(search: string): { section: PanelSectionId | "al
   const section = params.get("section");
   const agent = params.get("agent")?.trim() || null;
   return { section: isPanelSectionId(section) ? section : "all", agent: agent && agent.length <= 200 ? agent : null };
+}
+
+export type OfficeDeepLinkStep = { action: "wait" } | { action: "switch-wing" } | { action: "focus"; roomId: string } | { action: "give-up" };
+/**
+ * One step of the office deep link (?agent=<id>): switch to the KONG wing at most once, focus the
+ * agent's room when it exists, and give up (never trap the user) once the data has settled without
+ * that room or the user moved to the other wing.
+ */
+export function officeDeepLinkStep(input: {
+  agentId: string; mainRoomId?: string; kongRoomId?: string; wing: "main" | "kong"; wingSwitched: boolean; settled: boolean;
+}): OfficeDeepLinkStep {
+  const wantsKong = !input.mainRoomId && (Boolean(input.kongRoomId) || /^kong(:|-city:)/.test(input.agentId));
+  const target = wantsKong ? "kong" : "main";
+  if (wantsKong && !input.wingSwitched && input.wing !== "kong") return { action: "switch-wing" };
+  if (input.wing !== target) return { action: "give-up" };
+  const roomId = target === "kong" ? input.kongRoomId : input.mainRoomId;
+  if (roomId) return { action: "focus", roomId };
+  return input.settled ? { action: "give-up" } : { action: "wait" };
 }

@@ -2,15 +2,15 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, useLocation, useSearch } from "wouter";
 import { cn } from "@/lib/utils";
 import type { BuildingTeamAgent } from "@/components/agents-building/agents-building";
-import { isSpecialistId, type AgentCareer, type CompanyState, type LeaderboardRow } from "@shared/agent-company";
-import { integrationFor } from "@shared/agent-integrations";
+import type { AgentCareer, CompanyState, LeaderboardRow } from "@shared/agent-company";
+import { isMainCompanyUnscored } from "@shared/agent-integrations";
 import { selfHealTotals } from "@shared/office-self-heal-view";
 import { useWorkspaceRole } from "@/lib/workspace-role";
 import {
   BATTERY_DANGER, PANEL_SECTIONS, STATUS_KIND_LABEL, buildGlobalRanking, buildPanelRows, buildReportsFeed, filterPanelRows,
   panelCounters, readPanelParams, selectReplaceable, selectReplaced, type PanelAgentInput, type PanelCompany, type PanelRow, type PanelSectionId, type PanelStatusKind,
 } from "@/lib/office-central-panel";
-import { COUNCIL_AGENTS, useOfficeRoster, type WorldAgent } from "./use-office-roster";
+import { useOfficeRoster, type WorldAgent } from "./use-office-roster";
 import { OfficeAgentStatusChat, SOURCE_NAME } from "./agents-office-world";
 
 const KIND_STYLE: Record<PanelStatusKind, { dot: string; text: string; chip: string }> = {
@@ -91,8 +91,8 @@ function OwnerCentralPanel({ agents, kongTeam, legal }: { agents: WorldAgent[]; 
   const counters = panelCounters(rows);
   const live = rows.filter(row => row.kind === "working" || row.kind === "on-duty").sort((a, b) => Number(b.kind === "working") - Number(a.kind === "working") || a.name.localeCompare(b.name));
   const ranking = buildGlobalRanking(leaderboards, nameOf, 10);
-  // Same exemptions the office card applies before showing the rotation rule.
-  const isExempt = (id: string, company: PanelCompany) => company === "main" && (Boolean(COUNCIL_AGENTS[id]) || id === "ceo" || isSpecialistId(id) || integrationFor(id, integrations).mode !== "activa");
+  // Same exemption the council applies before rotating (server/agent-council.ts); KONG has none.
+  const isExempt = (id: string, company: PanelCompany) => company === "main" && isMainCompanyUnscored(id, integrations);
   const replaceable = selectReplaceable({ careers, statuses: new Map(rows.map(row => [row.id, panelAgents.get(row.id)?.status])), isExempt, nameOf, now: clock });
   const replaced = selectReplaced({ companies, nameOf, limit: 20 });
   const events = (["main", "kong"] as const).flatMap(company => (companies[company]?.events || []).slice(0, 10).map(event => ({ company, at: event.at, text: event.text })));

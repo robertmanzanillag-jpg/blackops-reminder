@@ -1,19 +1,42 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type PointerEvent as ReactPointerEvent } from "react";
 
 // Floating office panels the owner can drag (mouse, pen or touch). The panel keeps its
-// default Tailwind position until it is moved; then it is placed with fixed left/top,
-// clamped to the viewport, and the position is remembered per panel in localStorage.
+// default Tailwind position until it is moved; then it is placed with absolute left/top inside
+// its offsetParent (the office map; `position: fixed` would not follow the viewport there because
+// the map has a CSS perspective), clamped to the part of that container that is on screen, and
+// the position is remembered per panel in localStorage.
 // Storage can be unavailable (private mode, blocked site data): every access is guarded.
 
 export type PanelOffset = { x: number; y: number };
-const STORAGE_PREFIX = "agentsOffice.panelPosition.v1:";
+/** v2: offsets are relative to the panel's container (v1 stored viewport offsets). */
+const STORAGE_PREFIX = "agentsOffice.panelPosition.v2:";
 const MARGIN = 8;
 
-/** Keeps at least `MARGIN` px of the panel inside the viewport (pure; tested). */
-export function clampPanelPosition(position: PanelOffset, size: { width: number; height: number }, viewport: { width: number; height: number }): PanelOffset {
-  const maxX = Math.max(MARGIN, viewport.width - size.width - MARGIN);
-  const maxY = Math.max(MARGIN, viewport.height - Math.min(size.height, viewport.height - 2 * MARGIN) - MARGIN);
-  return { x: Math.round(Math.min(Math.max(MARGIN, position.x), maxX)), y: Math.round(Math.min(Math.max(MARGIN, position.y), maxY)) };
+/** Area the panel may occupy, in container coordinates (left/top default to 0). */
+export type PanelArea = { width: number; height: number; left?: number; top?: number };
+
+/** Keeps at least `MARGIN` px of the panel inside the area (pure; tested). */
+export function clampPanelPosition(position: PanelOffset, size: { width: number; height: number }, area: PanelArea): PanelOffset {
+  const left = area.left ?? 0;
+  const top = area.top ?? 0;
+  const minX = left + MARGIN;
+  const minY = top + MARGIN;
+  const maxX = Math.max(minX, left + area.width - size.width - MARGIN);
+  const maxY = Math.max(minY, top + area.height - Math.min(size.height, area.height - 2 * MARGIN) - MARGIN);
+  return { x: Math.round(Math.min(Math.max(minX, position.x), maxX)), y: Math.round(Math.min(Math.max(minY, position.y), maxY)) };
+}
+
+/**
+ * The visible part of the container (its padding box at `origin`, client coordinates) in container
+ * coordinates; the whole container when none of it is on screen (pure; tested).
+ */
+export function visiblePanelArea(origin: { left: number; top: number }, container: { width: number; height: number }, viewport: { width: number; height: number }): Required<PanelArea> {
+  const left = Math.max(0, -origin.left);
+  const top = Math.max(0, -origin.top);
+  const right = Math.min(container.width, viewport.width - origin.left);
+  const bottom = Math.min(container.height, viewport.height - origin.top);
+  if (right - left < 2 * MARGIN || bottom - top < 2 * MARGIN) return { left: 0, top: 0, width: container.width, height: container.height };
+  return { left, top, width: right - left, height: bottom - top };
 }
 
 export function parseStoredPanelPosition(raw: string | null): PanelOffset | null {
@@ -36,26 +59,35 @@ function writeStored(id: string, value: PanelOffset | null) {
   } catch { /* Position stays for this visit only. */ }
 }
 
+/** Client-coordinate origin and size of the element's containing block (its offsetParent's padding box). */
+function containerFrame(element: HTMLElement | null) {
+  const parent = (element?.offsetParent as HTMLElement | null) ?? null;
+  if (!parent) return { origin: { left: 0, top: 0 }, size: { width: window.innerWidth, height: window.innerHeight } };
+  const rect = parent.getBoundingClientRect();
+  return { origin: { left: rect.left + parent.clientLeft, top: rect.top + parent.clientTop }, size: { width: parent.clientWidth, height: parent.clientHeight } };
+}
+
 export function useDraggablePanel(id: string) {
   const ref = useRef<HTMLElement | null>(null);
   const [position, setPosition] = useState<PanelOffset | null>(() => (typeof window === "undefined" ? null : readStored(id)));
   const drag = useRef<{ pointerId: number; dx: number; dy: number } | null>(null);
 
-  const clampToViewport = useCallback((next: PanelOffset) => {
+  const clampToContainer = useCallback((next: PanelOffset) => {
     const box = ref.current?.getBoundingClientRect();
-    return clampPanelPosition(next, { width: box?.width ?? 320, height: box?.height ?? 200 }, { width: window.innerWidth, height: window.innerHeight });
+    const frame = containerFrame(ref.current);
+    return clampPanelPosition(next, { width: box?.width ?? 320, height: box?.height ?? 200 }, visiblePanelArea(frame.origin, frame.size, { width: window.innerWidth, height: window.innerHeight }));
   }, []);
 
   // Re-clamp a remembered position when the window shrinks (rotating a phone, resizing).
   useEffect(() => {
     if (!position) return;
-    const onResize = () => setPosition(current => (current ? clampToViewport(current) : current));
+    const onResize = () => setPosition(current => (current ? clampToContainer(current) : current));
     onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
     // Only (re)subscribe when dragging starts or stops being active.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [Boolean(position), clampToViewport]);
+  }, [Boolean(position), clampToContainer]);
 
   const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0 && event.pointerType === "mouse") return;
@@ -70,7 +102,9 @@ export function useDraggablePanel(id: string) {
   const onPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
     const current = drag.current;
     if (!current || current.pointerId !== event.pointerId) return;
-    setPosition(clampToViewport({ x: event.clientX - current.dx, y: event.clientY - current.dy }));
+    // Read the container every move: the page may have scrolled since the drag started.
+    const { origin } = containerFrame(ref.current);
+    setPosition(clampToContainer({ x: event.clientX - current.dx - origin.left, y: event.clientY - current.dy - origin.top }));
   };
   const endDrag = (event: ReactPointerEvent<HTMLElement>) => {
     const current = drag.current;
@@ -81,7 +115,7 @@ export function useDraggablePanel(id: string) {
   };
   const reset = () => { setPosition(null); writeStored(id, null); };
 
-  const style: CSSProperties | undefined = position ? { position: "fixed", left: position.x, top: position.y, right: "auto", bottom: "auto" } : undefined;
+  const style: CSSProperties | undefined = position ? { position: "absolute", left: position.x, top: position.y, right: "auto", bottom: "auto" } : undefined;
   const handleProps = {
     onPointerDown, onPointerMove, onPointerUp: endDrag, onPointerCancel: endDrag,
     style: { touchAction: "none", cursor: "grab" } as CSSProperties,

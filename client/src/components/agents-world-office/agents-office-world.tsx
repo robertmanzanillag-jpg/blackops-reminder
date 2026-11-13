@@ -15,6 +15,7 @@ import { countRoleWorkCompleted } from "@shared/office-role-work-activity";
 import { selfHealTotals } from "@shared/office-self-heal-view";
 import { FACTORY_AGENTS } from "@shared/factory-office-agents";
 import { useWorkspaceRole } from "@/lib/workspace-role";
+import { officeDeepLinkStep } from "@/lib/office-central-panel";
 import { PartnerInvitePanel } from "@/components/workspace/partner-invite-panel";
 import { BlackRoomAcademyPanel } from "./blackroom-academy-panel";
 import { BlackRoomCeoChatPanel } from "@/components/blackroom-ceo-chat/blackroom-ceo-chat-panel";
@@ -151,16 +152,25 @@ export function AgentsOfficeWorld({
     }
   }, [focusedDepartment, overlay]);
   // Deep link: wait until the agent's room exists (KONG rooms need the owner-only snapshot), then focus it once.
+  // The wing switches to KONG at most once, and the link gives up once the council and the city
+  // directory/snapshot have settled (loaded, failed or disabled) or the user left that wing.
   const deepLinkDone = useRef(false);
+  const deepLinkWingSwitched = useRef(false);
+  const querySettled = (query: { isFetched: boolean; isError: boolean; fetchStatus: string }) => query.isFetched || query.isError || query.fetchStatus === "idle";
   useEffect(() => {
     if (!initialAgentId || deepLinkDone.current) return;
     const inMain = roster.main.departments.find(department => department.agentIds.includes(initialAgentId));
     const inKong = roster.kong.departments.find(department => department.agentIds.includes(initialAgentId));
-    if (!inMain && (inKong || /^kong(:|-city:)/.test(initialAgentId)) && officeWing !== "kong") { setOfficeWing("kong"); return; }
-    const room = officeWing === "kong" ? inKong : inMain;
-    if (!room) return;
+    const councilSettled = Boolean(council.view || council.error);
+    const step = officeDeepLinkStep({
+      agentId: initialAgentId, mainRoomId: inMain?.id, kongRoomId: inKong?.id, wing: officeWing, wingSwitched: deepLinkWingSwitched.current,
+      settled: councilSettled && (inMain ? true : querySettled(cityDirectory) && querySettled(citySnapshot)),
+    });
+    if (step.action === "wait") return;
+    if (step.action === "switch-wing") { deepLinkWingSwitched.current = true; setOfficeWing("kong"); return; }
     deepLinkDone.current = true;
-    setFocusedDepartment(room.id); sceneRef.current?.focusDepartment(room.id);
+    if (step.action === "give-up") return;
+    setFocusedDepartment(step.roomId); sceneRef.current?.focusDepartment(step.roomId);
     setPanelAgentId(initialAgentId); setCityDetailsOpen(true);
   });
 

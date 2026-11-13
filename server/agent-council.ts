@@ -56,6 +56,7 @@ import {
   INTEGRATION_LABEL,
   effectiveIntegrations,
   integrationFor,
+  isAlwaysUnscoredMainAgent,
   parseIntegrationOverrides,
   unscoredAgentIds,
   type AgentIntegration,
@@ -146,9 +147,6 @@ function kongReadCode(error: unknown): string {
 const SKIP = Symbol("skip");
 
 export const KONG_TEAM = ["KONG AI", "Promoters + Mesas", "Venues", "Kong Legal"];
-const KONG_IDS = KONG_TEAM.map((name) => `kong:${name}`);
-// Always unscored, whatever the overrides say: they have no work of their own to measure.
-const EXEMPT_IDS = [...KONG_IDS, "mechanic"];
 // Order routing only trusts live states from a recent council cycle.
 const STATUS_FRESH_MS = 45 * 60_000;
 
@@ -183,6 +181,9 @@ export const AGENT_NAMES: Record<string, string> = {
   ...FACTORY_AGENT_NAMES,
   ...Object.fromEntries(KONG_TEAM.map((name) => [`kong:${name}`, name])),
 };
+// Always unscored, whatever the overrides say: they have no work of their own to measure
+// (the KONG guides and the mechanic). Same predicate the central panel uses.
+export const EXEMPT_IDS = Object.keys(AGENT_NAMES).filter(isAlwaysUnscoredMainAgent);
 
 function statusesFromSignals(signals: CouncilSignals): Record<string, AgentLiveStatus> {
   const statuses: Record<string, AgentLiveStatus> = {};
