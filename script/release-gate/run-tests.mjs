@@ -181,6 +181,8 @@ const summary = {
 for (const failure of newFailures) {
   console.log(`\n::group::NEW FAILURE ${failure.file} (${failure.status})`);
   console.log(failure.tail);
+  // Machine-readable names, to copy into known-failures.json only with an owner-approved reason.
+  console.log(`failing names: ${JSON.stringify({ file: failure.file, failing: failure.failing })}`);
   console.log("::endgroup::");
   for (const name of failure.unexpected) console.log(`::error file=${failure.file}::New failing test${failure.strict ? " (factory list)" : ""}: ${name}`);
 }
