@@ -51,6 +51,11 @@ const businessWork=businessModule && academy && protocolPool ? businessModule.cr
 const editorialWork=businessModule && academy && protocolPool && webSourcesEnabled ? (await import("./office-editorial-work")).createEditorialWorkRunner({pool:protocolPool,owner:getSystemUserId(),configuredOwner:getSystemUserId(),getGeneration:async role=>businessModule.eligibleBusinessGeneration((await academy!.load()).company.careers[role]),shouldStop}):undefined;
 const revenueWork=businessModule && academy && protocolPool ? (await import("./office-revenue-work")).createRevenueWorkRunner({pool:protocolPool,owner:getSystemUserId(),getGeneration:async role=>businessModule.eligibleBusinessGeneration((await academy!.load()).company.careers[role]),shouldStop}):undefined;
 const roleWork=roleWorkEnabled && academy && protocolPool?(await import("./office-role-work")).createRoleWorkRunner({council:academy,owner:getSystemUserId(),read:role=>import("./office-role-snapshots").then(module=>module.readRoleSnapshot(protocolPool,getSystemUserId(),role)),readGithub:role=>import("./office-github-role-source").then(module=>module.readGithubRoleSnapshot({pool:protocolPool,owner:getSystemUserId(),role,token:process.env.GITHUB_TOKEN||null})),...(webSourcesEnabled?{readWeb:(role:import("./office-web-role-sources").WebSourceRole)=>import("./office-web-role-live").then(module=>module.readWorkerWebRoleSource({pool:protocolPool,owner:getSystemUserId(),configuredOwner:getSystemUserId(),role}))}:{}),shouldStop}):undefined;
+// Self-heal (default off): turns allowlisted small code findings into bounded system orders and
+// verifies the fix with the next daily audits. Requires role audits; never merges or deploys.
+const selfHealConfig=(await import("./office-self-heal")).selfHealSettings(process.env);
+if(selfHealConfig.enabled && !roleWorkEnabled)throw new Error("Office self-heal requires real role audits (OFFICE_ROLE_WORK_ENABLED=true).");
+const selfHeal=selfHealConfig.enabled && roleWork && academy?(await import("./office-self-heal")).createSelfHealRunner({council:academy,owner:getSystemUserId(),maxPerDay:selfHealConfig.maxPerDay}):undefined;
 const roleExecution=roleAcademyEnabled && academy?(await import("./office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"1536"}):undefined;
 const roleAcademy=roleExecution && academy?(await import("./office-role-academy")).createRoleAcademyRunner({council:academy,dailyPairs:Number(process.env.OFFICE_ROLE_ACADEMY_DAILY_PAIRS),shouldStop,run:async(prompt,call)=>{
   const result=await roleExecution.run(prompt,call.executionId);
@@ -82,6 +87,7 @@ const academyCycle = council ? async () => {
   if(webSourcesEnabled && !shouldStop()){try{await (await import("./office-web-source-scheduler")).warmOfficeWebSources(process.env.OFFICE_WEB_SOURCE_ORIGIN!);}catch{console.error("Office source host wake unconfirmed; audits will validate stored source freshness independently.");}}
   if(editorialWork && !shouldStop()) await editorialWork.tick();
   if(roleWork && !shouldStop()) await roleWork.tick();
+  if(selfHeal && !shouldStop()){try{await selfHeal.tick();}catch{console.error("Office self-heal step unconfirmed; it will be reconciled on the next cycle.");}}
   if(roleAcademy && !shouldStop()) await roleAcademy.tick();
   // The web scheduler is disabled in this deployment. Preserve the
   // scout's durable daily cadence here; it only reads public releases.

@@ -5,6 +5,7 @@ import {parseCapabilityTraining} from "./office-capability-training";
 import {parseRoleWork} from "./office-role-work";
 import { roleWorkActivityView } from "../shared/office-role-work-activity";
 import { FACTORY_AGENT_NAMES, factoryAgentsView, isFactoryAgentId, parseFactoryCareerLedger } from "../shared/factory-office-agents";
+import { parseSelfHealState, selfHealOfficeView } from "./office-self-heal";
 import { getSystemUserId } from "./user-context";
 import { createChatOrder } from "../shared/agent-chat-routing";
 import type { OfficeKongAuditResult } from "./office-kong";
@@ -314,6 +315,7 @@ function parseDurableCouncilState(raw: string | null, owner: string): CouncilSta
     parseCapabilityTraining(value.officeExecution.capabilityTraining,owner);
     parseRoleWork(value.officeExecution.roleWork,owner);
     parseFactoryCareerLedger(value.officeExecution.factoryCareers);
+    parseSelfHealState(value.officeExecution.selfHeal,owner);
   }
   return parseCouncilState(raw);
 }
@@ -827,6 +829,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
       factoryAgents: factoryAgentsView({ ledger: loaded.officeExecution?.factoryCareers, liveJobs: options.factoryLiveJobs, ownerKey: options.factoryOwnerKey, now: deps.now() }),
       // Public summary of today's recorded role work (role, status, times only; no sources or audits).
       roleWorkToday: roleWorkActivityView(loaded.officeExecution?.roleWork?.jobs, deps.now()),
+      // Public self-heal counts per agent (detected / in repair / verified / needs owner); no ids or audit details.
+      selfHeal: selfHealOfficeView(loaded.officeExecution?.selfHeal, loaded.officeExecution?.roleWork, deps.now(), process.env.OFFICE_SELF_HEAL_ENABLED === "true" || loaded.officeExecution?.selfHeal !== undefined),
       personalities,
       overrides: applyLessons(state.debates, state.lessons),
       nextCycleInMs: state.lastCycleAt ? Math.max(0, Date.parse(state.lastCycleAt) + COUNCIL_CYCLE_MS - deps.now()) : 0,

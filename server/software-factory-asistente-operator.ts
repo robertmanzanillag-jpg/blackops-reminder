@@ -27,6 +27,7 @@ import type { FactoryJob } from "./software-factory-store";
 import { createFactoryOfficeReviewSweep, type FactoryOfficeReviewEnqueue } from "./software-factory-office-review";
 import { readFactoryOrderProposals } from "./software-factory-order-evidence";
 import { COMPANY_ORDER_CHECKS_ID, createFactoryOrderFileSelector, isFactoryTestPath, listFactorySelectablePaths } from "./software-factory-company-auto";
+import { isSelfHealOrder, isValidSelfHealOrder } from "./office-self-heal";
 const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const sha = z.string().regex(/^[a-f0-9]{40}$/), digest = z.string().regex(/^[a-f0-9]{64}$/);
 const cents = z.number().int().min(1).max(100);
@@ -42,7 +43,9 @@ const configSchema = z.object({ owner: z.string().min(1).max(200), projectId: z.
     ui: z.object({ workflowSha256: digest, harnessSha256: digest, workflowId: z.number().int().positive() }).strict(),
     /** Automatic admission of eligible owner orders created at or after since.
      * Absent means disabled. Explicit orders[] mappings take precedence. */
-    autoAdmit: z.object({ enabled: z.boolean(), since: z.string().datetime(), maxPerDay: z.number().int().min(1).max(FACTORY_MAX_DRAFT_PULL_REQUESTS_PER_DAY).optional() }).strict().optional(),
+    autoAdmit: z.object({ enabled: z.boolean(), since: z.string().datetime(), maxPerDay: z.number().int().min(1).max(FACTORY_MAX_DRAFT_PULL_REQUESTS_PER_DAY).optional(),
+        /** Also admit system-authored office self-heal orders (fixed template, integrity-checked). Default false. */
+        systemOrders: z.boolean().optional() }).strict().optional(),
 }).strict().superRefine((config, issue) => {
     if (config.autoAdmit?.maxPerDay !== undefined && config.autoAdmit.maxPerDay > config.maxDraftPullRequestsPerDay) issue.addIssue({ code: "custom", path: ["autoAdmit", "maxPerDay"], message: "FACTORY_AUTO_ADMIT_LIMIT_INVALID" });
     // Code-owned denials apply even when configuration tries to widen scope.
@@ -111,6 +114,8 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     /** Optional office career sweep (operator flag): scores committed stage rows
      * into the factory engineers' main-company careers. No provider call. */
     scoreOfficeCareers?: () => Promise<unknown>;
+    /** Optional office self-heal evidence sync (OFFICE_SELF_HEAL_ENABLED). No provider call. */
+    syncSelfHeal?: () => Promise<unknown>;
     log?: (message: string) => void;
     now: () => Date;
 }) {
@@ -123,10 +128,12 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
         throw Error("FACTORY_OPERATOR_PROJECT_INVALID"); return p; };
     const orders = async () => { const rows = structuredClone(await deps.readOrders(owner)); if (!Array.isArray(rows) || rows.length > 1000 || new Set(rows.map(o => o.id)).size !== rows.length)
         throw Error("FACTORY_OPERATOR_ORDERS_INVALID"); return rows; };
-    const auto = config.autoAdmit?.enabled ? { since: Date.parse(config.autoAdmit.since), maxPerDay: config.autoAdmit.maxPerDay ?? config.maxDraftPullRequestsPerDay } : undefined;
+    const auto = config.autoAdmit?.enabled ? { since: Date.parse(config.autoAdmit.since), maxPerDay: config.autoAdmit.maxPerDay ?? config.maxDraftPullRequestsPerDay, systemOrders: config.autoAdmit.systemOrders === true } : undefined;
     const isMapped = (orderId: string, revision: string) => config.orders.some(m => m.id === orderId && m.revision === revision);
     /** An explicitly mapped id never falls back to automatic admission, even after an edit. */
-    const autoEligible = (order: CompanyOrder) => !!auto && !config.orders.some(m => m.id === order.id) && Date.parse(order.createdAt) >= auto.since;
+    /** System self-heal orders need autoAdmit.systemOrders and an exact template match; owner orders are unchanged. */
+    const autoEligible = (order: CompanyOrder) => !!auto && !config.orders.some(m => m.id === order.id) && Date.parse(order.createdAt) >= auto.since &&
+        (isSelfHealOrder(order) ? auto.systemOrders && isValidSelfHealOrder(order) : true);
     const resolve = async (order: CompanyOrder) => { const p = await project(), input = companyOrderJob(order, p, config.reservations.discover), revision = (input.payload!.companyOrder as {
         revision: string;
     }).revision; const mapping = config.orders.find(m => m.id === order.id && m.revision === revision); if (mapping)
@@ -234,6 +241,8 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
         if (reviewSweep) await reviewSweep().catch(() => { deps.log?.("Factory office review handoff unconfirmed; it will be reconciled on the next sweep."); });
         // Same isolation: a career scoring failure never blocks or quarantines scheduling.
         if (deps.scoreOfficeCareers) await deps.scoreOfficeCareers().catch(() => { deps.log?.("Factory career scoring unconfirmed; it will be reconciled on the next sweep."); });
+        // Same isolation: recording self-heal evidence never blocks scheduling.
+        if (deps.syncSelfHeal) await deps.syncSelfHeal().catch(() => { deps.log?.("Office self-heal evidence unconfirmed; it will be reconciled on the next sweep."); });
         return schedule(requestOwner);
     };
     return { owner, store, reservationCents: config.reservations.discover, readMainOrder, admitWithinCredits, reviewSweep,
@@ -291,7 +300,22 @@ async function installed(store: Store) {
         setAgentCouncilUser(config.owner);
         scoreOfficeCareers = createFactoryCareerSweep({ owner: config.owner, council: getAgentCouncil(), readJobs: () => store.list(config.owner) });
     }
-    return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, download: fetch, readUi, recoveryPrevious, enqueueOfficeReview, scoreOfficeCareers, log: message => console.error(message), now, readOrders: async (owner) => { const raw = await (await getCouncilStore()).read(owner); if (!raw)
+    // Default off. When enabled, the factory records each self-heal attempt's chain
+    // (factory job -> PR -> independent + office review) on the council ledger.
+    let syncSelfHeal: (() => Promise<unknown>) | undefined;
+    if (env.OFFICE_SELF_HEAL_ENABLED === "true") {
+        const [{ createSelfHealFactorySync }, { getAgentCouncil, setAgentCouncilUser }, { createOfficeCloudStore }, { linkFactoryOfficeReviews }] = await Promise.all([import("./office-self-heal-factory"), import("./agent-council"), import("./office-cloud-store"), import("./software-factory-office-review")]);
+        setAgentCouncilUser(config.owner);
+        const office = createOfficeCloudStore();
+        syncSelfHeal = createSelfHealFactorySync({ owner: config.owner, council: getAgentCouncil(), readJobs: () => store.list(config.owner), readProposals: async () => {
+            const [jobs, projects] = await Promise.all([store.list(config.owner), store.projects(config.owner)]);
+            const read = await readFactoryOrderProposals({ owner: config.owner, jobs, projects, getCompletedJob: (key, id) => store.getCompletedJob(key, id), getRecoveredBuild: recoveryPrevious, now: now().getTime() });
+            let runs: Awaited<ReturnType<typeof office.list>> | undefined;
+            try { runs = await office.list(config.owner); } catch { runs = undefined; }
+            return { proposals: linkFactoryOfficeReviews(config.owner, read.proposals, runs as any), status: read.status };
+        } });
+    }
+    return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, download: fetch, readUi, recoveryPrevious, enqueueOfficeReview, scoreOfficeCareers, syncSelfHeal, log: message => console.error(message), now, readOrders: async (owner) => { const raw = await (await getCouncilStore()).read(owner); if (!raw)
             throw Error("FACTORY_OPERATOR_COUNCIL_MISSING"); const state = JSON.parse(raw); if (!Array.isArray(state.company?.orders))
             throw Error("FACTORY_OPERATOR_COUNCIL_INVALID"); return state.company.orders; } });
 }
