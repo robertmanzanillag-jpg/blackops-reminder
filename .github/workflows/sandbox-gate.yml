@@ -3,8 +3,8 @@ name: Sandbox release gate
 # "Super picky" release gate for BlackOps / Daily Planner. Nothing reaches Replit unless the
 # single summary check `release-gate` is green. See docs/release-gate.md.
 #
-# Runs on every PR into the production branch (claude/integration-20261111) or into main, on every
-# push to the production branch (verifies the merged result before the Replit sync), and manually
+# Runs on every PR into the production branch (main), on every push to main (verifies the merged
+# result before the Replit sync), and manually
 # for any ref. It NEVER uses repository secrets, the production database or provider keys:
 #   - sandbox: ephemeral PostgreSQL service container, schema push + the explicit migration scripts
 #     (dry-run, apply, re-apply), seeded sandbox owner, production build, production boot through
@@ -14,24 +14,23 @@ name: Sandbox release gate
 #     are tolerated, and the factory test list (read from the factory workflows) must be 100% green.
 #   - import-check: every changed server/shared/client file still loads.
 #   - hygiene: diff hygiene (secrets, env/key files, pinned workflow, protected files) + actionlint.
-# PRs into main only hold workflows, so there the gate runs hygiene + actionlint only.
 #
-# This file must exist on BOTH main and the production branch: pull_request runs use the copy
-# in the PR's merge result. Keep both copies identical.
+# Since 2026-11-13 main is the single production branch (claude/integration-20261111 was merged into
+# it), so PRs into main get the full application sandbox.
 
 on:
   pull_request:
-    branches: [claude/integration-20261111, main]
+    branches: [main]
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
   push:
-    branches: [claude/integration-20261111]
+    branches: [main]
   workflow_dispatch:
     inputs:
       ref:
         description: "Branch, tag or full SHA to test in the sandbox"
         required: true
         type: string
-        default: claude/integration-20261111
+        default: main
 
 permissions:
   contents: read
@@ -43,7 +42,7 @@ concurrency:
 env:
   NODE_VERSION: '22'
   # Production branch: the base used for change detection on pushes and manual runs.
-  PRODUCTION_BRANCH: claude/integration-20261111
+  PRODUCTION_BRANCH: main
 
 jobs:
   scope:
@@ -58,8 +57,8 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: |
           set -euo pipefail
-          # PRs into main carry workflows only: the application sandbox is not meaningful there.
-          if [ "$EVENT" = "pull_request" ] && [ "$BASE_REF" = "main" ]; then app=false; else app=true; fi
+          # main is the production branch: every PR and push gets the full application sandbox.
+          app=true
           echo "event=$EVENT base=${BASE_REF:-n/a} app=$app"
           echo "app=$app" >> "$GITHUB_OUTPUT"
 

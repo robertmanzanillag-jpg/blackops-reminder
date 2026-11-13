@@ -1,5 +1,5 @@
 # Release machinery: changes need the owner's review (enable "Require review from Code Owners"
-# in the branch protection of claude/integration-20261111 and main). See docs/release-gate.md.
+# in the branch protection of main, the single production branch). See docs/release-gate.md.
 /.github/workflows/ @robertmanzanillag-jpg
 /.github/CODEOWNERS @robertmanzanillag-jpg
 /script/release-gate/ @robertmanzanillag-jpg

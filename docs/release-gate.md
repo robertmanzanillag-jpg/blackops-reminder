@@ -1,3 +1,5 @@
+> **13 nov 2026:** `claude/integration-20261111` se unió a `main`. Desde entonces `main` es la única rama de producción.
+
 # Release gate y sandbox (BlackOps / Daily Planner)
 
 Resumen para Robert: **nada se publica en Replit sin pasar antes por un sandbox y por un control
@@ -16,7 +18,7 @@ cambio (PR) ──> sandbox ──> gate exigente ──> revisión independient
  issue `regression` <── vigilancia post-publicación (cada hora) <── republicar en Replit
 ```
 
-1. **PR**: todo cambio va en una rama y un PR hacia `claude/integration-20261111` (la rama de
+1. **PR**: todo cambio va en una rama y un PR hacia `main` (la rama de
    producción). Nunca directo.
 2. **Sandbox** (automático, workflow `Sandbox release gate`, job `sandbox`): en una máquina limpia
    de GitHub se crea una base PostgreSQL **efímera** (nunca Neon/producción), se aplica el esquema
@@ -118,7 +120,7 @@ rama antes de abrir el PR o para repetir la verificación de producción.
 ## Lo que el dueño debe activar (una vez)
 
 1. Settings → Branches → Add branch ruleset (o "Add classic branch protection rule") para
-   `claude/integration-20261111`:
+   `main`:
    - Require a pull request before merging.
    - Require status checks to pass → buscar y añadir **`release-gate`** (aparece después del
      primer run). Marcar también "Require branches to be up to date before merging".
