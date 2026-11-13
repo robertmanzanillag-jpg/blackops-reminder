@@ -35,6 +35,8 @@ test("post-publish watch: paused features are not reported; missing diagnostic i
   assert.deepEqual(evaluate({ status: silent, runs: [run("failure", 1), run("failure", 2), run("failure", 3)], officeCloudEnabled: false, webSourcesEnabled: false, now: NOW }).codes, []);
   assert.deepEqual(evaluate({ status: silent, runs: [], officeCloudEnabled: true, webSourcesEnabled: false, now: NOW }).codes.map((c) => c.code), ["OFFICE_WORKER_SILENT"]);
   assert.deepEqual(evaluate({ status: undefined, runs: [], officeCloudEnabled: false, webSourcesEnabled: false, now: NOW }).codes.map((c) => c.code), ["OFFICE_STATUS_UNAVAILABLE"]);
+  const noTable = { readOnly: true, tables: { agent_council_state: false, office_agent_workers: true, office_web_role_sources: true } };
+  assert.deepEqual(evaluate({ status: noTable, runs: [], officeCloudEnabled: false, webSourcesEnabled: false, now: NOW }).codes.map((c) => c.code), ["COUNCIL_STATE_MISSING"]);
 });
 
 test("office review enqueue: strict arguments and one deterministic key per PR head", () => {
@@ -78,10 +80,32 @@ test("diff hygiene: blocks secrets, env files and silent allowlist growth, never
     assert.doesNotMatch(leaked.stdout, new RegExp(fakeKey));
     git("rm", "--quiet", "leak.ts", ".env"); git("commit", "--quiet", "-m", "unleak");
 
-    writeFileSync(path.join(dir, "script/release-gate/known-failures.json"), JSON.stringify({ knownFailures: { "tests/x.test.ts": { reason: "fails because of a documented reason" } } }));
-    git("commit", "--quiet", "-am", "grow allowlist");
-    assert.equal(hygiene().status, 1);
+    const entry = { reason: "fails because of a documented reason", failing: ["a", "b"] };
+    const writeAllowlist = (knownFailures, sandboxIntegrationRoutes = {}) => {
+      writeFileSync(path.join(dir, "script/release-gate/known-failures.json"), JSON.stringify({ knownFailures, sandboxIntegrationRoutes }));
+      git("commit", "--quiet", "-am", "allowlist");
+      return git("rev-parse", "HEAD").trim();
+    };
+    writeAllowlist({ "tests/x.test.ts": entry });
+    assert.equal(hygiene().status, 1, "a new entry needs the label");
     assert.equal(hygiene("gate-justified").status, 0);
+
+    // From a base that already has the entry: shrinking "failing" is free, any other change is not.
+    const withEntry = git("rev-parse", "HEAD").trim();
+    const hygieneFrom = (rev, labels = "") => spawnSync(process.execPath, ["script/release-gate/diff-hygiene.mjs", "--base", rev], { cwd: dir, encoding: "utf8", env: { ...process.env, GATE_PR_LABELS: labels } });
+    writeAllowlist({ "tests/x.test.ts": { ...entry, failing: ["a"] } });
+    assert.equal(hygieneFrom(withEntry).status, 0, "removing a fixed test name needs no label");
+    git("reset", "--quiet", "--hard", withEntry);
+    writeAllowlist({ "tests/x.test.ts": { ...entry, flaky: true } });
+    const flaky = hygieneFrom(withEntry);
+    assert.equal(flaky.status, 1, "making an entry flaky needs the label");
+    assert.match(flaky.stdout, /changed allowlist entry/);
+    git("reset", "--quiet", "--hard", withEntry);
+    writeAllowlist({ "tests/x.test.ts": { ...entry, failing: ["a", "b", "c"] } });
+    assert.equal(hygieneFrom(withEntry).status, 1, "adding a failing name needs the label");
+    git("reset", "--quiet", "--hard", withEntry);
+    writeAllowlist({}, {});
+    assert.equal(hygieneFrom(withEntry).status, 0, "removing an entry needs no label");
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -26,7 +26,9 @@ export function evaluate({ status, runs, officeCloudEnabled, webSourcesEnabled, 
     add("OFFICE_STATUS_UNAVAILABLE", "el diagnostico de solo lectura no respondio");
     return { ok: codes.length === 0, codes };
   }
-  if (status.councilStateFound === false) add("COUNCIL_STATE_MISSING", "no existe el estado del consejo para el propietario");
+  // office-status only reports councilStateFound when the table exists; a missing table is worse.
+  if (status.tables?.agent_council_state === false) add("COUNCIL_STATE_MISSING", "no existe la tabla del estado del consejo");
+  else if (status.councilStateFound === false) add("COUNCIL_STATE_MISSING", "no existe el estado del consejo para el propietario");
   if (status.roleWork?.present && status.roleWork.valid === false) add("ROLE_WORK_INVALID", "el diario roleWork no pasa la validacion");
   if (status.capabilityTraining?.present && status.capabilityTraining.valid === false) add("CAPABILITY_TRAINING_INVALID", "el diario de entrenamiento no pasa la validacion");
 

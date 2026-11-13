@@ -1,16 +1,23 @@
 #!/usr/bin/env node
 // Release gate: runs EVERY tests/*.test.ts and tests/*.test.mjs file, each in its own
-// `node --import tsx --test` process with a hard timeout, and compares the outcome with the
-// tracked allowlist script/release-gate/known-failures.json.
+// `node --import tsx --test --test-reporter=tap` process with a hard timeout, collects the names of
+// the failing TESTS (not just files) and compares them with the tracked allowlist
+// script/release-gate/known-failures.json, where each entry lists its expected "failing" names.
 //
-//   - a file that fails and is NOT in the allowlist      -> gate fails (new regression)
-//   - a file in the allowlist that now passes            -> gate fails (stale entry: remove it),
-//                                                           unless the entry is marked "flaky"
-//   - an allowlist entry whose file no longer exists     -> gate fails (stale entry)
-//   - a STRICT file fails                                 -> gate fails even if allowlisted.
-//     Strict files = every tests/*.test.* named in the factory workflows given with --strict-from
+//   - a failing test whose file is NOT in the allowlist          -> gate fails (new regression)
+//   - a failing test NOT listed in its entry's "failing" names   -> gate fails (new regression),
+//     also for "flaky" entries (flaky only tolerates the listed tests passing sometimes)
+//   - a listed test (or the whole file) that now passes           -> gate fails (stale: remove it),
+//     unless the entry is marked "flaky"
+//   - an allowlist entry whose file no longer exists             -> gate fails (stale entry)
+//   - a STRICT file fails                                         -> gate fails even if allowlisted.
+//     Strict files = every tests/* script named in the factory workflows given with --strict-from
 //     (factory-candidate-checks.yml, factory-build-recovery-checks.yml), so the factory list is
-//     always 100% green and stays in sync with those files without copying it.
+//     always 100% green and stays in sync with those files without copying it. Strict scripts that
+//     are not *.test.* files (e.g. tests/marketing-learning-ui.mjs) run as `node --import tsx <file>`.
+//     A --strict-from workflow that is missing or names no tests is an error.
+//
+// Special failing names: "<timeout>" (killed at the time limit), "<exit N without a failing test>".
 //
 // Usage: node script/release-gate/run-tests.mjs [--out report.json] [--only a.test.ts,b.test.ts]
 //                                               [--strict-from wf1.yml,wf2.yml]
@@ -35,15 +42,27 @@ const allowlist = JSON.parse(readFileSync(allowlistPath, "utf8"));
 const known = new Map(Object.entries(allowlist.knownFailures || {}));
 const strict = new Set();
 for (const workflow of (argValue("--strict-from") || "").split(",").map((v) => v.trim()).filter(Boolean)) {
-  if (!existsSync(workflow)) continue;
-  for (const match of readFileSync(workflow, "utf8").matchAll(/tests\/[A-Za-z0-9._-]+\.test\.(?:ts|mjs)/g)) strict.add(match[0]);
+  if (!existsSync(workflow)) {
+    console.log(`::error file=${workflow}::--strict-from workflow is missing; the factory test list cannot be verified`);
+    process.exit(1);
+  }
+  const before = strict.size;
+  for (const match of readFileSync(workflow, "utf8").matchAll(/tests\/[A-Za-z0-9._-]+\.(?:test\.)?(?:ts|mjs)\b/g)) strict.add(match[0]);
+  if (strict.size === before) {
+    console.log(`::error file=${workflow}::--strict-from workflow names no tests; the factory test list cannot be verified`);
+    process.exit(1);
+  }
 }
+const isTestFile = (file) => /\.test\.(ts|mjs)$/.test(file);
 
-const files = (only || readdirSync(path.join(root, "tests"))
-  // "._*" are tracked macOS AppleDouble metadata files, not tests.
-  .filter((name) => /\.test\.(ts|mjs)$/.test(name) && !name.startsWith("._"))
-  .map((name) => `tests/${name}`))
-  .sort();
+const files = [...new Set([
+  ...(only || readdirSync(path.join(root, "tests"))
+    // "._*" are tracked macOS AppleDouble metadata files, not tests.
+    .filter((name) => isTestFile(name) && !name.startsWith("._"))
+    .map((name) => `tests/${name}`)),
+  // Strict scripts that are not *.test.* files are not picked up by the directory scan.
+  ...(only ? [] : [...strict].filter((file) => !isTestFile(file) && existsSync(path.join(root, file)))),
+])].sort();
 
 // Tests must never see real credentials or a real database: the gate passes a scrubbed env.
 const SCRUB = /(^DATABASE_URL$|_DATABASE_URL$|API_KEY|TOKEN|SECRET|PASSWORD|^PG[A-Z]+$|^GH_|^GITHUB_TOKEN$)/;
@@ -60,7 +79,8 @@ function runOne(file) {
   const limit = Math.min(timeoutMs, Number(known.get(file)?.timeoutMs) || timeoutMs);
   return new Promise((resolve) => {
     const started = Date.now();
-    const child = spawn(process.execPath, ["--import", "tsx", "--test", "--test-reporter=dot", file], {
+    const argv = isTestFile(file) ? ["--import", "tsx", "--test", "--test-reporter=tap", file] : ["--import", "tsx", file];
+    const child = spawn(process.execPath, argv, {
       cwd: root,
       env: testEnv(),
       stdio: ["ignore", "pipe", "pipe"],
@@ -71,7 +91,25 @@ function runOne(file) {
       output += chunk.toString();
       if (output.length > 200_000) output = output.slice(-100_000);
     };
-    child.stdout.on("data", append);
+    // TAP is parsed line by line as it arrives so names survive even if the output is truncated.
+    const failing = new Set();
+    const subtests = [];
+    let pending = "";
+    const parse = (chunk) => {
+      pending += chunk.toString();
+      const lines = pending.split("\n");
+      pending = lines.pop();
+      for (const line of lines) {
+        const subtest = /^( *)# Subtest: (.*)$/.exec(line);
+        if (subtest) { const level = Math.floor(subtest[1].length / 4); subtests.length = level; subtests[level] = subtest[2].trim(); continue; }
+        const result = /^( *)not ok \d+ - (.*?)(?: # (?:SKIP|TODO).*)?$/.exec(line);
+        if (!result) continue;
+        const level = Math.floor(result[1].length / 4);
+        const name = result[2].trim();
+        failing.add([...subtests.slice(0, level), name].filter(Boolean).join(" > "));
+      }
+    };
+    child.stdout.on("data", (chunk) => { append(chunk); if (isTestFile(file)) parse(chunk); });
     child.stderr.on("data", append);
     let timedOut = false;
     const timer = setTimeout(() => {
@@ -83,7 +121,9 @@ function runOne(file) {
       // Kill any orphaned grandchildren (servers, browsers) the test left behind.
       try { process.kill(-child.pid, "SIGKILL"); } catch { /* already gone */ }
       const status = timedOut ? "timeout" : code === 0 ? "pass" : "fail";
-      resolve({ file, status, code, signal, durationMs: Date.now() - started, tail: status === "pass" ? "" : output.slice(-4000) });
+      if (timedOut) failing.add("<timeout>");
+      else if (status === "fail" && failing.size === 0) failing.add(`<exit ${code ?? signal} without a failing test>`);
+      resolve({ file, status, code, signal, failing: [...failing].sort(), durationMs: Date.now() - started, tail: status === "pass" ? "" : output.slice(-4000) });
     });
   });
 }
@@ -107,9 +147,18 @@ const knownFailing = [];
 const staleEntries = [];
 for (const result of results) {
   const entry = known.get(result.file);
-  if (result.status !== "pass" && strict.has(result.file)) newFailures.push({ ...result, strict: true });
-  else if (result.status !== "pass") (entry ? knownFailing : newFailures).push(result);
-  else if (entry && !entry.flaky) staleEntries.push({ file: result.file, reason: "now passes; remove it from known-failures.json" });
+  if (result.status !== "pass" && strict.has(result.file)) { newFailures.push({ ...result, strict: true, unexpected: result.failing }); continue; }
+  if (result.status !== "pass" && !entry) { newFailures.push({ ...result, unexpected: result.failing }); continue; }
+  if (!entry) continue;
+  const expected = new Set(Array.isArray(entry.failing) ? entry.failing : []);
+  const unexpected = result.failing.filter((name) => !expected.has(name));
+  if (unexpected.length) newFailures.push({ ...result, unexpected });
+  else if (result.status !== "pass") knownFailing.push(result);
+  if (!entry.flaky) {
+    const nowPassing = [...expected].filter((name) => !result.failing.includes(name));
+    if (result.status === "pass") staleEntries.push({ file: result.file, reason: "now passes; remove it from known-failures.json" });
+    else if (nowPassing.length) staleEntries.push({ file: result.file, reason: `listed tests now pass, remove them from "failing": ${nowPassing.map((n) => JSON.stringify(n)).join(", ")}` });
+  }
 }
 if (!only) {
   for (const file of known.keys()) {
@@ -123,8 +172,8 @@ const summary = {
   passed: results.filter((r) => r.status === "pass").length,
   strictFiles: strict.size,
   strictMissing: [...strict].filter((file) => !results.some((r) => r.file === file)),
-  knownFailing: knownFailing.map((r) => ({ file: r.file, status: r.status, reason: known.get(r.file).reason })),
-  newFailures: newFailures.map((r) => ({ file: r.file, status: r.status, durationMs: r.durationMs, ...(r.strict ? { strict: true } : {}) })),
+  knownFailing: knownFailing.map((r) => ({ file: r.file, status: r.status, failing: r.failing, reason: known.get(r.file).reason })),
+  newFailures: newFailures.map((r) => ({ file: r.file, status: r.status, durationMs: r.durationMs, unexpected: r.unexpected, ...(r.strict ? { strict: true } : {}) })),
   staleEntries,
   slowest: [...results].sort((a, b) => b.durationMs - a.durationMs).slice(0, 10).map((r) => ({ file: r.file, seconds: Math.round(r.durationMs / 1000) })),
 };
@@ -133,7 +182,7 @@ for (const failure of newFailures) {
   console.log(`\n::group::NEW FAILURE ${failure.file} (${failure.status})`);
   console.log(failure.tail);
   console.log("::endgroup::");
-  console.log(`::error file=${failure.file}::New test failure (${failure.status}); not in script/release-gate/known-failures.json`);
+  for (const name of failure.unexpected) console.log(`::error file=${failure.file}::New failing test${failure.strict ? " (factory list)" : ""}: ${name}`);
 }
 for (const stale of staleEntries) console.log(`::error file=script/release-gate/known-failures.json::${stale.file}: ${stale.reason}`);
 

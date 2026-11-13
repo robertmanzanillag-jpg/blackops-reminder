@@ -3,13 +3,18 @@ import { createHash } from "node:crypto";
 import pg from "pg";
 import { createOfficeCloudStore, type OfficeCloudPool } from "../../server/office-cloud-store";
 
-// Second, independent reviewer for a PR: enqueue ONE office `claude_review` job for an exact PR head,
-// through the same store path the web app and the factory use (createOfficeCloudStore().submit).
-// The next office cloud cycle claims it and records a pass/block verdict in the Agents Office.
+// Second, independent reviewer for a PR: enqueue ONE office `claude_review` job for a PR through the
+// same store path the web app and the factory use (createOfficeCloudStore().submit). The next office
+// cloud cycle claims it and records a pass/block verdict in the Agents Office.
+//
+// The queued task carries only the PR URL: the head SHA seen at dispatch time is used solely to
+// derive the idempotency key (one job per PR head). The reviewer fetches whatever head the PR has
+// when it runs, so the verdict's `review.headSha` MUST be compared with the head being merged; a
+// verdict for another SHA does not approve it (dispatch again for the new head).
 //
 //   default   read-only: BEGIN TRANSACTION READ ONLY, checks the queue table, always rolled back
-//   --apply   enqueues (idempotent: the key is derived from PR URL + head SHA, so dispatching the
-//             same head twice returns the existing job instead of creating a second one)
+//   --apply   enqueues (idempotent per PR URL + head SHA: dispatching the same head twice returns
+//             the existing job instead of creating a second one)
 //
 // Public logs: prints only static JSON (applied flag, job status, timestamps, counts), never ids,
 // connection details, owner values or provider output.
