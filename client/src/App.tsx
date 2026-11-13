@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { Switch, Route } from "wouter";
+import { Switch, Route, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider, useMutation, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import AuthPage from "@/pages/auth";
 import { readAuthState } from "@/lib/auth-state";
+import { useWorkspaceRole } from "@/lib/workspace-role";
 
 const NotFound = lazy(() => import("@/pages/not-found"));
 const Dashboard = lazy(() => import("@/pages/dashboard"));
@@ -32,6 +33,20 @@ const CybersecurityAgentPage = lazy(() => import("@/pages/cybersecurity-agent"))
 const AppQaAgentPage = lazy(() => import("@/pages/app-qa-agent"));
 const LegalCompliancePage = lazy(() => import("@/pages/legal-compliance"));
 const LocalNewsPublicPage = lazy(() => import("@/pages/local-news-public"));
+const InvitePage = lazy(() => import("@/pages/invite"));
+
+/** Partners ("socios") only get the office: every other page is owner data. */
+function PartnerRouter() {
+  const [location] = useLocation();
+  return location === "/agents-office" ? <AgentsOfficePage /> : <Redirect to="/agents-office" />;
+}
+
+function useInviteToken(): string | null {
+  const [location] = useLocation();
+  const match = /^\/invite\/([^/?#]+)$/.exec(location);
+  if (!match) return null;
+  try { return decodeURIComponent(match[1]); } catch { return ""; }
+}
 
 type AuthMe = {
   authenticated: boolean;
@@ -50,6 +65,7 @@ function AuthenticatedRouter() {
     retry: false,
   });
 
+  const workspace = useWorkspaceRole(Boolean(auth?.authenticated));
   const logoutMutation = useMutation({
     mutationFn: async () => {
       const response = await fetch("/api/auth/logout", { method: "POST", credentials: "include" });
@@ -69,6 +85,19 @@ function AuthenticatedRouter() {
 
   if (authError || !auth?.authenticated) {
     return <>{authError && <div role="alert" className="fixed inset-x-0 top-0 z-50 bg-amber-950 p-3 text-center text-sm text-amber-100">No se pudo verificar la sesión. <Button variant="ghost" onClick={() => retryAuth()}>Reintentar</Button></div>}<AuthPage /></>;
+  }
+
+  if (workspace.loading) {
+    return <div className="flex min-h-screen items-center justify-center bg-black text-sm text-zinc-400">Cargando BlackOps...</div>;
+  }
+
+  if (workspace.revoked) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 bg-black px-4 text-center text-sm text-zinc-300" role="alert">
+        <p>Tu acceso de socio fue revocado. Si crees que es un error, habla con Robert.</p>
+        <Button type="button" variant="ghost" onClick={() => logoutMutation.mutate()} disabled={logoutMutation.isPending}>Salir</Button>
+      </div>
+    );
   }
 
   return (
@@ -91,7 +120,7 @@ function AuthenticatedRouter() {
       </div>
       {logoutMutation.isError && <div role="alert" className="fixed inset-x-0 top-14 z-50 bg-amber-950 p-3 text-center text-sm text-amber-100">No se pudo cerrar la sesión. Intenta nuevamente.</div>}
       <Suspense fallback={<PageLoading />}>
-        <Switch>
+        {workspace.isPartner ? <PartnerRouter /> : <Switch>
           <Route path="/" component={Dashboard} />
           <Route path="/dashboard" component={Dashboard} />
           <Route path="/assistant" component={AssistantPage} />
@@ -116,7 +145,7 @@ function AuthenticatedRouter() {
           <Route path="/promo-video" component={PromoVideoPage} />
           <Route path="/clippers" component={ClippersPage} />
           <Route component={NotFound} />
-        </Switch>
+        </Switch>}
       </Suspense>
     </>
   );
@@ -124,6 +153,11 @@ function AuthenticatedRouter() {
 
 function Router() {
   const isPublicNewsRoute = typeof window !== "undefined" && window.location.pathname.startsWith("/news");
+  // Partner invitation links (/invite/<token>) are public, outside the app's route catalog.
+  const inviteToken = useInviteToken();
+  if (inviteToken !== null) {
+    return <Suspense fallback={<PageLoading />}><InvitePage token={inviteToken} /></Suspense>;
+  }
   return (
     <Suspense fallback={isPublicNewsRoute ? <PublicPageLoading /> : <PageLoading />}>
       <Switch>

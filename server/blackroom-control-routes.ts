@@ -324,6 +324,15 @@ export async function hasBlackRoomChatAccess(req: Request): Promise<boolean> {
   return isConfiguredSingleUserOwner(getCurrentUserId(req));
 }
 
+/**
+ * Owner or an active partner ("socio"). Only the videos agent status read and its chat use this;
+ * start/pause/work-now/analytics stay owner-only (hasBlackRoomChatAccess).
+ */
+export async function hasBlackRoomPartnerAccess(req: Request): Promise<boolean> {
+  const { resolveOwnerOrPartner } = await import("./workspace-access");
+  return Boolean(await resolveOwnerOrPartner(getCurrentUserId(req)));
+}
+
 const blackRoomPageTemplate = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BlackRoom Content Agent</title><style>
 .agent-progress{margin-top:14px;border:1px solid #10b98144;background:#052e2429;border-radius:14px;padding:15px}.agent-progress-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}.agent-progress-status{display:flex;align-items:center;gap:9px;font-weight:700;color:#a7f3d0}.live-dot{width:10px;height:10px;border-radius:50%;background:#34d399;box-shadow:0 0 0 0 #34d39988;animation:pulse 1.8s infinite}.agent-progress.offline .live-dot,.agent-progress.paused .live-dot{background:#71717a;box-shadow:none;animation:none}.agent-progress.offline .agent-progress-status,.agent-progress.paused .agent-progress-status{color:#a1a1aa}.progress-track{height:14px;overflow:hidden;border-radius:999px;background:#18181b;border:1px solid #ffffff12}.progress-fill{height:100%;width:0;border-radius:inherit;background:linear-gradient(90deg,#06b6d4,#34d399);transition:width .5s ease;position:relative}.agent-progress.processing .progress-fill:after,.agent-progress.waiting .progress-fill:after{content:"";position:absolute;inset:0;background:linear-gradient(110deg,transparent 20%,#ffffff70 45%,transparent 70%);animation:work 1.4s linear infinite}.agent-progress.waiting .progress-fill:after{opacity:.45;animation-duration:2.8s}.progress-detail{margin-top:9px;color:#a1a1aa;font-size:12px}.agent-progress-action{margin-top:12px;width:100%}@keyframes pulse{70%{box-shadow:0 0 0 8px #34d39900}}@keyframes work{from{transform:translateX(-100%)}to{transform:translateX(100%)}}@media(prefers-reduced-motion:reduce){.live-dot,.agent-progress.processing .progress-fill:after,.agent-progress.waiting .progress-fill:after{animation:none}.progress-fill{transition:none}}@media(max-width:720px){.agent-progress-head{align-items:flex-start;flex-direction:column}}
 :root{color-scheme:dark;font-family:Inter,system-ui;background:#020203;color:#fff}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#12313a,#07070a 38%,#000);min-height:100vh}.wrap{max-width:1050px;margin:auto;padding:42px 20px}.eyebrow{color:#67e8f9;font-size:12px;letter-spacing:.18em;text-transform:uppercase}h1{font-size:40px;margin:10px 0}.muted{color:#a1a1aa}.card{border:1px solid #ffffff1c;border-radius:18px;background:#09090be8;padding:24px}.top,.controls{display:flex;gap:16px;align-items:center;justify-content:space-between}.badge{border:1px solid #fbbf2444;background:#fbbf2414;color:#fde68a;border-radius:999px;padding:7px 12px}.badge.on{border-color:#6ee7b744;background:#10b98118;color:#a7f3d0}.controls{justify-content:flex-start;margin-top:22px;flex-wrap:wrap}select,button{height:44px;border-radius:10px;border:1px solid #ffffff24;background:#18181b;color:#fff;padding:0 15px}button{cursor:pointer;font-weight:700}.play{background:#a7f3d0;color:#052e24;border:0}.pause{color:#fde68a}.stats{display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:20px}.progress-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:10px}.stat,.info{border:1px solid #ffffff14;background:#0007;border-radius:12px;padding:15px}.stat small{display:block;color:#71717a;text-transform:uppercase;font-size:10px}.stat strong{font-size:25px}.progress-stats .stat strong{font-size:20px}.info{margin-top:14px;font-size:13px;color:#a1a1aa}.channel{color:#67e8f9}.workspace{margin-top:22px;border-top:1px solid #ffffff14;padding-top:20px}.tabs{display:flex;gap:8px;flex-wrap:wrap}.tab[aria-selected=true]{background:#164e63;border-color:#67e8f966;color:#ecfeff}.panel{padding-top:14px}.panel[hidden]{display:none}.activity{display:flex;flex-direction:column;gap:9px;max-height:360px;overflow:auto;margin-top:12px}.event{border:1px solid #ffffff14;border-radius:12px;background:#111114;padding:11px 12px}.event.success{border-color:#10b98144}.event.error{border-color:#ef444466;background:#450a0a55}.event-head{display:flex;justify-content:space-between;gap:12px;color:#71717a;font-size:11px;text-transform:uppercase}.event p{margin:6px 0 0;color:#d4d4d8;font-size:14px}.messages{display:flex;flex-direction:column;gap:9px;max-height:280px;overflow:auto;margin:12px 0}.msg{max-width:82%;padding:10px 12px;border-radius:12px;background:#18181b;color:#d4d4d8;font-size:14px}.msg.user{align-self:flex-end;background:#164e63;color:#ecfeff}.composer{display:flex;gap:8px}.composer input{flex:1;min-width:0;height:44px;border-radius:10px;border:1px solid #ffffff24;background:#050507;color:#fff;padding:0 13px}@media(max-width:720px){h1{font-size:30px}.top{align-items:flex-start;flex-direction:column}.stats,.progress-stats{grid-template-columns:repeat(2,1fr)}.composer{flex-direction:column}}
@@ -350,7 +359,7 @@ export function registerBlackRoomControlRoutes(app: Express): void {
   });
   app.get("/api/blackroom-agent", async (req, res) => {
     try {
-      if (!await hasBlackRoomChatAccess(req)) return res.status(403).json({ error: "Solo el owner puede ver el agente de BlackRoom." });
+      if (!await hasBlackRoomChatAccess(req) && !await hasBlackRoomPartnerAccess(req)) return res.status(403).json({ error: "Solo Robert y sus socios pueden ver el agente de BlackRoom." });
       const remote = await readBlackRoomRemoteControl();
       const remoteQueue = remote.device?.queue as Record<string, any> | undefined;
       const localQueue = await readBlackRoomPanelQueue(remoteQueue);
@@ -435,8 +444,10 @@ export function registerBlackRoomControlRoutes(app: Express): void {
     try {
       const message = String(req.body?.message || "").trim();
       if (!message || message.length > 1_000) return res.status(400).json({ error: "Escribe un mensaje de hasta 1,000 caracteres." });
-      if (!await hasBlackRoomChatAccess(req)) return res.status(403).json({ error: "Solo el owner puede controlar el agente de BlackRoom." });
-      const result = await executeBlackRoomChatMessage(message);
+      const isOwner = await hasBlackRoomChatAccess(req);
+      if (!isOwner && !await hasBlackRoomPartnerAccess(req)) return res.status(403).json({ error: "Solo Robert y sus socios pueden hablar con el agente de BlackRoom." });
+      // Partners cannot start/pause the agent or add posts from the chat (Publicador approval stays the only path).
+      const result = await executeBlackRoomChatMessage(message, { actorRole: isOwner ? "owner" : "partner" });
       res.json({ reply: result.reply, command: result.command, remote: remoteView(result.remote) });
     } catch (error: any) { res.status(500).json({ error: error.message || "No pude procesar la orden de BlackRoom" }); }
   });
