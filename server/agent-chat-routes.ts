@@ -14,10 +14,11 @@ export function registerAgentChatRoutes(app: Pick<Express, "get" | "post">, deps
   const ownerUserId = deps.ownerUserId ?? getSystemUserId;
   let cached: Promise<Service> | undefined;
   const service = deps.service ?? ((owner: string) => cached ||= (async () => {
-    const [{ getAgentCouncil }, { chatStorage }, { createAgentChatModel }] = await Promise.all([
-      import("./agent-council"), import("./replit_integrations/chat/storage"), import("./agent-chat-model")]);
+    const [{ getAgentCouncil }, { chatStorage }, { createAgentChatModel }, { createKongOfficeOrderClient }] = await Promise.all([
+      import("./agent-council"), import("./replit_integrations/chat/storage"), import("./agent-chat-model"), import("./kong-office-orders")]);
     const council = getAgentCouncil();
-    return createAgentChatService({ store: createChatStorageThreadStore(chatStorage, owner), council, model: createAgentChatModel(council) });
+    // KONG orders read KONG_OFFICE_ORDER_URL / KONG_OFFICE_ORDER_TOKEN at call time; unset token = honest "not enabled" reply.
+    return createAgentChatService({ store: createChatStorageThreadStore(chatStorage, owner), council, model: createAgentChatModel(council), kongOrders: createKongOfficeOrderClient() });
   })());
   const allow = (req: Request, res: Response) => {
     try {

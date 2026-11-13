@@ -928,13 +928,38 @@ function colorFromGradient(gradient: string): string {
   const match = gradient.match(/from-([a-z]+)-/);
   return (match && TAILWIND_HEX[match[1]]) || "#94a3b8";
 }
+// KONG central desks and city desks take Robert's orders through the agent chat (server → KONG office-orders).
+const isKongOrderAgent = (id: string) => /^kong:./.test(id) || /^kong-city:[a-z0-9_-]+(:[a-z_]+)?$/.test(id);
 function OfficeAgentStatusChat({ agent }: { agent: PanelAgent }) {
+  const workspace = useWorkspaceRole();
   const [message, setMessage] = useState("");
   const [reply, setReply] = useState<{ question: string; answer: string }>();
+  const [sending, setSending] = useState(false);
+  const threadRef = useRef<string | undefined>(undefined);
+  // Anything the status rules below do not cover goes to the agent chat, which answers from the
+  // agent's record or, for an order, sends it to KONG and replies with the KONG task number.
+  const askAgentChat = async (question: string) => {
+    setSending(true);
+    setReply({ question, answer: "Enviando…" });
+    try {
+      const requestId = `office-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      const res = await fetch(`/api/agent-chat/${encodeURIComponent(agent.id)}/messages`, {
+        method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: question, requestId, ...(threadRef.current ? { threadId: threadRef.current } : {}) }),
+      });
+      const body = await res.json().catch(() => null) as { error?: string; thread?: { id: string }; messages?: Array<{ role: string; text: string }> } | null;
+      if (!res.ok) throw new Error(body?.error || "No se pudo hablar con el agente.");
+      if (body?.thread?.id) threadRef.current = body.thread.id;
+      const answer = [...(body?.messages || [])].reverse().find(item => item.role === "agent" || item.role === "handoff")?.text;
+      setReply({ question, answer: (answer || "Sin respuesta registrada.").replace(/\*\*/g, "").replace(/`/g, "") });
+    } catch (error) {
+      setReply({ question, answer: error instanceof Error ? error.message : "No se pudo hablar con el agente." });
+    } finally { setSending(false); }
+  };
   return <form className="mt-3 space-y-1 rounded-lg border border-cyan-200/20 p-2 text-[11px]" onSubmit={event => {
     event.preventDefault();
     const question = message.trim();
-    if (!question) return;
+    if (!question || sending) return;
     const city = agent.cityAgent;
     const text = question.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
     const notice = city ? officeCityEvidenceNotice(city) : undefined;
@@ -959,15 +984,19 @@ function OfficeAgentStatusChat({ agent }: { agent: PanelAgent }) {
     else if (agent.kongEvidence && /tarea|haces|haciendo/.test(text)) answer = agent.kongEvidence.signal === "current"
       ? "KONG Native reporta actividad; no hay una tarea en ejecución verificada."
       : "No hay una tarea actual verificada para este puesto.";
-    else if (!/estado|trabaj|bloque|error|problema|hola/.test(text)) answer = "Puedo responder sobre el estado registrado, el último resultado y el próximo turno. Esta consulta no inicia ni cambia trabajos.";
+    else if (!/estado|trabaj|bloque|error|problema|hola/.test(text)) {
+      if (workspace.isOwner && isKongOrderAgent(agent.id)) { setMessage(""); void askAgentChat(question); return; }
+      answer = "Puedo responder sobre el estado registrado, el último resultado y el próximo turno. Esta consulta no inicia ni cambia trabajos.";
+    }
     setReply({ question, answer });
     setMessage("");
   }}>
     <label htmlFor="world-status-chat-input" className="block font-semibold text-cyan-100">Chat de estado</label>
-    {reply && <div role="status" className="space-y-1"><p className="break-words text-slate-400">Tú · {reply.question}</p><p>{agent.role} · {reply.answer}</p></div>}
+    {reply && <div role="status" className="space-y-1"><p className="break-words text-slate-400">Tú · {reply.question}</p><p className="whitespace-pre-line break-words">{agent.role} · {reply.answer}</p>
+      {threadRef.current && <a href={`/agent-chat?agent=${encodeURIComponent(agent.id)}`} className="text-cyan-200 underline" data-testid="world-status-chat-open-thread">Ver la conversación y el estado de la tarea</a>}</div>}
     <div className="flex gap-1">
-      <input id="world-status-chat-input" value={message} onChange={event => setMessage(event.target.value)} maxLength={240} placeholder="¿Qué estás haciendo?" className="min-w-0 flex-1 rounded border border-white/20 bg-black px-2 py-1" />
-      <button type="submit" disabled={!message.trim()} className="rounded bg-cyan-100 px-2 py-1 font-semibold text-slate-950 disabled:opacity-50">Preguntar</button>
+      <input id="world-status-chat-input" value={message} onChange={event => setMessage(event.target.value)} maxLength={240} placeholder={workspace.isOwner && isKongOrderAgent(agent.id) ? "Pregunta o dale una orden…" : "¿Qué estás haciendo?"} className="min-w-0 flex-1 rounded border border-white/20 bg-black px-2 py-1" />
+      <button type="submit" disabled={!message.trim() || sending} className="rounded bg-cyan-100 px-2 py-1 font-semibold text-slate-950 disabled:opacity-50">Preguntar</button>
     </div>
   </form>;
 }

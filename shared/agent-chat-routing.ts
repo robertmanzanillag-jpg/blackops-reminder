@@ -102,6 +102,15 @@ const APPROVAL_PATTERNS = [
   /\b(reembols|refund)/, /\bescr[ií]bele\b/, /\bescribe(le|les)? (a|al)\b/, /(?<!se )\bllam(a|ar)\s+(a|al)\b/, /\bllam(ale|arle|ales|arles)\b/, new RegExp(`\\bcall ${WHO}`), /\btext (him|her|them)\b/,
 ];
 
+// Removing or fixing KONG's own records (duplicate venues/events) is data upkeep KONG does on
+// Robert's direct order; it is not an action that leaves KONG. Everything else in the list still is.
+const DATA_EDIT_PATTERNS = new Set(["\\bborr(a|ar)\\b", "\\bdelete\\b", "\\belimin(a|ar)\\b"]);
+/** An order KONG must not receive from the office chat: publish, pay, contact, deploy, spend… (pure; tested). */
+export function isExternalActionForKong(text: string): boolean {
+  const normalized = normalizeChatText(text);
+  return APPROVAL_PATTERNS.some(pattern => !DATA_EDIT_PATTERNS.has(pattern.source) && pattern.test(normalized));
+}
+
 export type AgentChatIntent = "help" | "status" | "orders" | "last_work" | "handoffs" | "task" | "question";
 export type AgentChatRoute = {
   intent: AgentChatIntent;
