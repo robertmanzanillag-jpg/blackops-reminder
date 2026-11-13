@@ -28,14 +28,14 @@ import {
   Store,
   Zap,
 } from "lucide-react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { OfficeConnectionsPanel } from "@/components/office-connections-panel";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { MonitoredProject } from "@shared/schema";
-import { AgentsBuilding } from "@/components/agents-building/agents-building";
 import { AgentsOfficeWorld } from "@/components/agents-world-office/agents-office-world";
+import { OfficeCentralPanel } from "@/components/agents-world-office/office-central-panel";
 import { useWorkspaceRole } from "@/lib/workspace-role";
 import { KongSupervisorPanel } from "@/components/kong-supervisor-panel";
 import { KongOperationsPanel } from "@/components/kong-operations-panel";
@@ -447,8 +447,6 @@ const OFFICE_GITHUB_HANDOFF_KEY = "office.githubAgentHandoff";
 const OFFICE_LAYOUT_KEY = "agentsOffice.roomLayout.v1";
 const OFFICE_AGENT_LOCATIONS_KEY = "agentsOffice.agentLocations.v1";
 const OFFICE_AGENT_OFFSETS_KEY = "agentsOffice.agentOffsets.v1";
-const OFFICE_VIEW_KEY = "agentsOffice.view.v2";
-type OfficeView = "world" | "building" | "office";
 const AGENT_WALK_MS = 1800;
 const defaultOfficeRooms: OfficeRoom[] = [
   { id: "reception", label: "Recepcion", x: 10, y: 19, w: 18, h: 29 },
@@ -1641,25 +1639,13 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   const [directMessage, setDirectMessage] = useState("");
   const [editRooms, setEditRooms] = useState(false);
   const [kongWingRequest, setKongWingRequest] = useState(0);
-  const openKongOffice = () => { changeOfficeView("world"); setKongWingRequest(value => value + 1); };
-  const [officeView, setOfficeView] = useState<OfficeView>(() => {
-    if (typeof window === "undefined") return "world";
-    try {
-      const stored = window.localStorage.getItem(OFFICE_VIEW_KEY);
-      return stored === "office" || stored === "building" ? stored : "world";
-    } catch {
-      return "world";
-    }
-  });
-  const changeOfficeView = (view: OfficeView) => {
-    setOfficeView(view);
-    if (view !== "office") setEditRooms(false);
-    try {
-      window.localStorage.setItem(OFFICE_VIEW_KEY, view);
-    } catch {
-      // Storage can be unavailable (private mode); the view still switches for this visit.
-    }
-  };
+  const openKongOffice = () => setKongWingRequest(value => value + 1);
+  // Deep link from the central panel: /agents-office?agent=<officeAgentId> opens that agent in the 3D office.
+  const deepLinkAgentId = useMemo(() => {
+    if (typeof window === "undefined") return undefined;
+    const value = new URLSearchParams(window.location.search).get("agent")?.trim();
+    return value && value.length <= 200 ? value : undefined;
+  }, []);
   const [walkingAgents, setWalkingAgents] = useState<Partial<Record<AgentId, boolean>>>({});
   const [closedConversationBubbles, setClosedConversationBubbles] = useState<Record<string, boolean>>({});
   const [officeRooms, setOfficeRooms] = useState<OfficeRoom[]>(() => {
@@ -2206,33 +2192,19 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
             </div>
         </aside>
 
-        <div className="pointer-events-none absolute left-4 right-4 top-12 z-[75] flex items-start justify-start gap-4 sm:left-20 sm:top-5 lg:right-40 lg:items-center lg:justify-between [&_button]:pointer-events-auto [&_a]:pointer-events-auto [&_input]:pointer-events-auto">
+        <div className="pointer-events-none absolute left-4 right-4 top-[112px] z-[75] flex items-start justify-start gap-4 sm:left-20 sm:right-40 sm:top-5 lg:right-40 lg:items-center lg:justify-between [&_button]:pointer-events-auto [&_a]:pointer-events-auto [&_input]:pointer-events-auto">
             {/* Decorative search box: hidden below 1024px so the view toggle and the KONG buttons fit on screen. */}
             <div className="hidden h-12 min-w-[260px] flex-1 items-center gap-3 rounded-2xl border border-white/10 bg-[#0c1018]/90 px-4 text-sm text-slate-400 shadow-xl shadow-black/30 backdrop-blur xl:flex xl:max-w-[620px]">
               <Sparkles className="h-4 w-4 text-cyan-200" />
               <span>Type a command or search...</span>
               <span className="ml-auto rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[11px]">⌘ K</span>
             </div>
-            {/* On phones the row wraps to the left and leaves the top-right corner free for "Trabajo real". */}
+            {/* On phones the row starts under the account and "Trabajo real" controls and wraps to the left. */}
             <div className="flex min-w-0 flex-wrap items-center justify-start gap-2 lg:shrink-0 lg:justify-end">
-              <div className="flex rounded-2xl border border-white/10 bg-[#0c1018]/90 p-1 shadow-xl shadow-black/30" role="group" aria-label="Vista de la oficina">
-                {(["world", "building", "office"] as const).map((view) => (
-                  <button
-                    key={view}
-                    type="button"
-                    onClick={() => changeOfficeView(view)}
-                    aria-pressed={officeView === view}
-                    data-testid={`button-office-view-${view}`}
-                    className={cn(
-                      "rounded-xl px-3 py-1.5 text-xs font-semibold transition",
-                      officeView === view ? "bg-cyan-100 text-slate-950" : "text-slate-300 hover:bg-white/10"
-                    )}
-                  >
-                    {view === "world" ? "Oficina 3D" : view === "building" ? "Edificio" : "Clasica"}
-                  </button>
-                ))}
-              </div>
-              {/* One button for every view (3D, Edificio, Clasica and the no-WebGL fallback). */}
+              {/* Only the 3D office remains (Edificio and Clasica were removed); the full panel lists everyone by section. */}
+              {workspace.isOwner && <Link href="/agents-office/panel" className="rounded-xl bg-cyan-100 px-3 py-2 text-xs font-bold text-slate-950 shadow-xl shadow-black/30 hover:bg-white" data-testid="office-open-central-panel">
+                Panel completo
+              </Link>}
               <div data-testid="office-kong-supervisor-slot">
                 <KongSupervisorPanel />
               </div>
@@ -2242,26 +2214,6 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
               <div data-testid="office-kong-operations-slot">
                 <KongOperationsPanel />
               </div>
-              {officeView === "office" && (
-              <Button
-                type="button"
-                variant={editRooms ? "secondary" : "outline"}
-                className="rounded-2xl border-white/10 bg-[#0c1018]/90 px-4 text-xs font-semibold text-white shadow-xl shadow-black/30"
-                onClick={() => setEditRooms((current) => !current)}
-              >
-                {editRooms ? "Terminar edicion" : "Editar oficina"}
-              </Button>
-              )}
-              {officeView === "office" && editRooms && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  className="rounded-2xl border border-white/10 bg-white/[0.03] px-4 text-xs text-slate-300"
-                  onClick={resetOfficeRooms}
-                >
-                  Reset
-                </Button>
-              )}
             </div>
             <div className="hidden w-[260px] rounded-3xl border border-white/10 bg-[#0c1018]/92 p-4 shadow-2xl shadow-black/40 backdrop-blur">
               <div className="mb-2 flex items-center justify-between">
@@ -2306,8 +2258,8 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
         </div>
 
         <div ref={officeMapRef} className="relative h-full min-h-[620px] w-full [perspective:1400px]">
-          {officeView === "world" && (
-            <AgentsOfficeWorld
+          <AgentsOfficeWorld
+              initialAgentId={deepLinkAgentId}
               onOpenKongOffice={openKongOffice}
               kongWingRequest={kongWingRequest}
               agents={agents}
@@ -2337,159 +2289,6 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
                 })
               }
             />
-          )}
-          {officeView === "building" && (
-            <div className="absolute inset-0 overflow-y-auto px-4 pb-10 pt-24">
-              <AgentsBuilding
-                agents={agents}
-                kongTeam={githubAppTeams.find((team) => team.app === "Kong")?.agents ?? []}
-                legal={{ data: legalCompliance, isError: legalComplianceError }}
-                selectedAgentId={selectedContact?.id}
-                onSelectAgent={(agentId, status) => {
-                  const agent = agentById[agentId as AgentId];
-                  if (agent) handleSelectAgent(agent, status);
-                }}
-                onSelectKongAgent={(name) => {
-                  const team = githubAppTeams.find((item) => item.app === "Kong");
-                  const member = team?.agents.find((item) => item.name === name);
-                  if (team && member) handleSelectTeamAgent(team, member);
-                }}
-              />
-            </div>
-          )}
-          {officeView === "office" && (
-          <>
-          <div className="absolute left-[9%] top-[7%] h-[68%] w-[78%] [transform:rotateX(58deg)_rotateZ(-34deg)] [transform-style:preserve-3d]">
-            <div className="absolute inset-0 rounded-[34px] border border-cyan-100/10 bg-[linear-gradient(145deg,#151f2c_0%,#0b1018_58%,#05070c_100%)] shadow-[0_90px_130px_rgba(0,0,0,0.75),inset_0_1px_0_rgba(255,255,255,0.09)]" />
-            <div className="absolute left-5 right-5 top-5 bottom-5 rounded-[28px] border border-cyan-100/10 bg-[linear-gradient(90deg,rgba(255,255,255,0.045)_1px,transparent_1px),linear-gradient(rgba(255,255,255,0.045)_1px,transparent_1px),radial-gradient(circle_at_35%_25%,rgba(34,211,238,0.16),transparent_32%)] bg-[size:54px_54px,54px_54px,auto]" />
-            <div className="absolute -bottom-8 left-10 right-10 h-8 rounded-b-[28px] bg-[#05070c] shadow-[0_32px_70px_rgba(0,0,0,0.58)] [transform:rotateX(-82deg)] [transform-origin:top]" />
-            <div className="absolute -right-8 bottom-10 top-10 w-8 rounded-r-[28px] bg-[#070b12] [transform:rotateY(82deg)] [transform-origin:left]" />
-          </div>
-
-          <div className="absolute left-[11%] top-[14%] h-[40%] w-[5%] -skew-y-6 rounded-l-3xl border-l border-t border-cyan-100/10 bg-gradient-to-b from-white/14 to-white/4 backdrop-blur" />
-          <div className="absolute left-[13%] top-[12%] h-[7%] w-[68%] -skew-x-12 rounded-t-3xl border-x border-t border-cyan-100/10 bg-gradient-to-r from-white/13 via-white/6 to-white/12 backdrop-blur" />
-          <div className="absolute right-[16%] top-[16%] h-[48%] w-[5%] skew-y-6 rounded-r-3xl border-r border-t border-cyan-100/10 bg-gradient-to-b from-white/12 to-white/4 backdrop-blur" />
-
-          <OfficeConnections rooms={officeRooms} connections={officeRoomConnections} />
-          {officeRooms.map((room) => (
-            <RoomZone
-              key={room.id}
-              label={room.label}
-              editMode={editRooms}
-              style={{
-                left: `${room.x}%`,
-                top: `${room.y}%`,
-                width: `${room.w}%`,
-                height: `${room.h}%`,
-              }}
-              onMoveStart={(event) => startRoomEdit(event, room.id, "move")}
-              onResizeStart={(event) => startRoomEdit(event, room.id, "resize")}
-              onLabelChange={(label) => renameRoom(room.id, label)}
-            />
-          ))}
-          {editRooms && (
-            <div className="absolute left-[12%] top-[12%] z-[95] rounded-2xl border border-cyan-100/20 bg-black/90 px-4 py-3 text-xs text-cyan-50 shadow-2xl shadow-black/70 backdrop-blur">
-              Arrastra cajas o agentes. Edita nombres en las etiquetas. Usa la esquina brillante de cada caja para estirarla.
-            </div>
-          )}
-
-          <div className="absolute left-[13%] top-[25%] z-[5] text-left">
-            <p className="max-w-[180px] text-xl font-black leading-6 tracking-[0.12em] text-white/90">ROBS AGENTIC OFFICE</p>
-            <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-cyan-100/70">Command center</p>
-          </div>
-
-          <div className="absolute left-[31%] top-[35%] z-[3] h-20 w-[17%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
-            <div className="absolute left-6 top-4 h-10 w-20 rounded-xl bg-cyan-200/18" />
-            <div className="absolute right-4 top-5 h-8 w-10 rounded-xl bg-amber-200/16" />
-          </div>
-          <div className="absolute left-[56%] top-[41%] z-[3] h-14 w-[6%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
-            <div className="absolute left-3 top-4 h-10 w-10 rounded-xl bg-emerald-200/18" />
-            <div className="absolute right-3 top-5 h-7 w-7 rounded-xl bg-cyan-200/16" />
-          </div>
-          <div className="absolute left-[68%] top-[35%] z-[3] h-20 w-[18%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
-            <div className="absolute left-5 top-4 h-10 w-16 rounded-xl bg-cyan-200/20" />
-            <div className="absolute right-5 top-4 h-10 w-16 rounded-xl bg-white/10" />
-            <div className="absolute bottom-4 left-8 right-8 h-2 rounded-full bg-white/12" />
-          </div>
-          <div className="absolute left-[12%] top-[66%] z-[3] h-10 w-[14%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
-            <div className="absolute left-4 top-3 h-4 w-12 rounded-full bg-lime-200/25" />
-            <div className="absolute right-4 top-3 h-4 w-9 rounded-full bg-cyan-200/18" />
-          </div>
-          <div className="absolute left-[35%] top-[72%] z-[3] h-10 w-[24%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
-            <div className="absolute left-5 top-4 h-4 w-14 rounded-full bg-indigo-200/20" />
-            <div className="absolute right-5 top-4 h-4 w-10 rounded-full bg-white/12" />
-          </div>
-          <div className="absolute left-[32%] top-[90%] z-[3] h-8 w-[9%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
-            <div className="absolute left-4 top-4 h-4 w-10 rounded-full bg-rose-200/22" />
-            <div className="absolute right-4 top-4 h-4 w-8 rounded-full bg-amber-200/18" />
-          </div>
-          <div className="absolute left-[70%] top-[75%] z-[3] h-10 w-[7%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
-            <div className="absolute left-4 top-4 h-4 w-10 rounded-full bg-amber-200/24" />
-            <div className="absolute right-4 top-4 h-4 w-8 rounded-full bg-rose-200/18" />
-          </div>
-          <div className="absolute left-[84%] top-[90%] z-[3] h-8 w-[6%] rounded-2xl border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
-            <div className="absolute left-3 top-3 h-4 w-9 rounded-full bg-violet-200/24" />
-            <div className="absolute right-3 top-3 h-4 w-7 rounded-full bg-white/14" />
-          </div>
-          <div className="absolute left-[48%] top-[89%] z-[3] h-10 w-[18%] rounded-[22px] border border-white/10 bg-[#101827]/70 shadow-xl shadow-black/35">
-            <div className="absolute left-7 top-5 h-4 w-16 rounded-full bg-white/18" />
-            <div className="absolute left-28 top-5 h-4 w-14 rounded-full bg-lime-200/24" />
-            <div className="absolute right-8 top-4 h-6 w-10 rounded-xl bg-cyan-200/16" />
-          </div>
-          <OfficePlant className="left-[26%] top-[37%] z-[4]" />
-          <OfficePlant className="left-[58%] top-[38%] z-[4]" />
-          <OfficePlant className="right-[8%] top-[66%] z-[4]" />
-
-          {agents.map((agent) => (
-            <AgentPerson
-              key={agent.id}
-              agent={agent}
-              style={getAgentRoomStyle(agent)}
-              editMode={editRooms}
-              selected={agent.id === selectedAgent.id}
-              walking={Boolean(walkingAgents[agent.id])}
-              onMoveStart={(event) => startAgentEdit(event, agent.id)}
-              onSelect={handleSelectAgent}
-            />
-          ))}
-
-          {visibleConversationBubbles.map((bubble) => (
-            <AgentSpeechBubble
-              key={bubble.key}
-              agent={bubble.agent}
-              text={bubble.text}
-              style={bubble.style}
-              active={bubble.active}
-              onClose={() => setClosedConversationBubbles((current) => ({ ...current, [bubble.key]: true }))}
-            />
-          ))}
-
-          {appAgents.map((appAgent, index) => (
-            <AppAgentSprite
-              key={appAgent.key}
-              name={appAgent.name}
-              repo={appAgent.repo}
-              status={appAgent.status}
-              connected={appAgent.connected}
-              position={appAgentPositions[index] || "left-[82%] bottom-[17%]"}
-            />
-          ))}
-
-          {githubAppTeams.flatMap((team) =>
-            team.agents.map((agent) => (
-              <GitHubTeamAgent
-                key={`${team.app}-${agent.name}`}
-                name={agent.name}
-                job={agent.job}
-                repo={team.repo}
-                position={agent.position}
-                tone={agent.tone}
-                onSelect={() => handleSelectTeamAgent(team, agent)}
-              />
-            ))
-          )}
-          </>
-          )}
           {selectedContact && (
             <div className="contents">
               <button
@@ -3235,7 +3034,24 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
   );
 }
 
+/** /agents-office/panel: the owner's central panel, with the same agents and probes as the 3D office. */
+function OfficeCentralPanelRoute() {
+  const { data: legalCompliance, isError: legalComplianceError } = useQuery<LegalComplianceRun>({
+    queryKey: ["legal-compliance-reports"],
+    queryFn: () => fetch("/api/legal-compliance/reports").then((response) => response.json()),
+    retry: false,
+    refetchInterval: 60000,
+  });
+  return <OfficeCentralPanel agents={agents} kongTeam={githubAppTeams.find((team) => team.app === "Kong")?.agents ?? []} legal={{ data: legalCompliance, isError: legalComplianceError }} />;
+}
+
 export default function AgentsOfficePage() {
+  const [location] = useLocation();
+  if (location === "/agents-office/panel") return <OfficeCentralPanelRoute />;
+  return <AgentsOfficeHome />;
+}
+
+function AgentsOfficeHome() {
   const queryClient = useQueryClient();
   const ownerId = queryClient.getQueryData<{ user?: { id: string } }>(["auth-me"])?.user?.id;
   const [showWorld, setShowWorld] = useState(false);
