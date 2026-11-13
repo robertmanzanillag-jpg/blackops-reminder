@@ -92,6 +92,7 @@ jobs:
       - name: Diff hygiene
         env:
           GATE_PR_LABELS: ${{ join(github.event.pull_request.labels.*.name, ',') }}
+          GATE_REQUIRE_LABELS: ${{ github.event_name == 'pull_request' }}
           BASE: ${{ steps.base.outputs.base }}
         run: node script/release-gate/diff-hygiene.mjs --base "$BASE"
       - name: Workflow lint (yaml + actionlint)

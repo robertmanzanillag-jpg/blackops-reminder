@@ -14,14 +14,18 @@
 //   - modifying or deleting existing release-gate files (script/release-gate/**, sandbox-gate.yml)
 //   - NEW entries in script/release-gate/known-failures.json (fixing a test never needs it)
 //
-// Usage: node script/release-gate/diff-hygiene.mjs --base <rev>   Env: GATE_PR_LABELS="a,b"
+// Usage: node script/release-gate/diff-hygiene.mjs --base <rev>
+// Env:   GATE_PR_LABELS="a,b"; GATE_REQUIRE_LABELS=false outside pull requests
 import { execFileSync } from "node:child_process";
 
 const args = process.argv.slice(2);
 const base = args[args.indexOf("--base") + 1];
 if (!base || args.indexOf("--base") < 0) throw new Error("--base <rev> is required");
 const labels = new Set((process.env.GATE_PR_LABELS || "").split(",").map((label) => label.trim()).filter(Boolean));
-const JUSTIFIED = labels.has("gate-justified");
+// Labels exist only on pull requests. On a push to the production branch (already gated as a PR)
+// or a manual run, label-gated changes are reported as notices; hard failures still fail.
+const LABELS_ENFORCED = process.env.GATE_REQUIRE_LABELS !== "false";
+const JUSTIFIED = labels.has("gate-justified") || !LABELS_ENFORCED;
 const git = (...gitArgs) => execFileSync("git", gitArgs, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
 
 const changes = git("diff", "--name-status", "--no-renames", base, "HEAD").split("\n").filter(Boolean).map((line) => {
@@ -113,7 +117,7 @@ if (after) {
 for (const error of errors) console.log(`::error file=${error.file}${error.line ? `,line=${error.line}` : ""}::diff hygiene: ${error.rule}`);
 for (const item of needsLabel) {
   const level = JUSTIFIED ? "notice" : "error";
-  console.log(`::${level} file=${item.file}::diff hygiene: ${item.rule} ${JUSTIFIED ? "(justified by label gate-justified)" : "requires the PR label gate-justified and a justification in the PR body"}`);
+  console.log(`::${level} file=${item.file}::diff hygiene: ${item.rule} ${JUSTIFIED ? (LABELS_ENFORCED ? "(justified by label gate-justified)" : "(not a pull request: enforced on the PR)") : "requires the PR label gate-justified and a justification in the PR body"}`);
 }
 const blocking = errors.length + (JUSTIFIED ? 0 : needsLabel.length);
 console.log(`diff hygiene: ${changes.length} changed files, ${errors.length} hard failures, ${needsLabel.length} label-gated changes (${JUSTIFIED ? "label present" : "no label"})`);
