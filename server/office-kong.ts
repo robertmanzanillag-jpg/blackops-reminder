@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { whatsappReaderEvidenceSchema, whatsappOfficeView, withWhatsAppOfficeAgent, type WhatsAppReaderEvidence } from "../shared/whatsapp-office-agent";
-import { OFFICE_KONG_SUPERVISED_CATEGORIES, officeKongEventLoadSchema } from "../shared/office-kong-supervisor";
+import { OFFICE_KONG_SUPERVISED_CATEGORIES, isOfficeKongSupervisedCategory, officeKongDiscoveryCountsSchema, officeKongEventLoadSchema, type OfficeKongDiscoveryCounts } from "../shared/office-kong-supervisor";
 
 // This is the existing authenticated KONG read contract, not a dispatch route.
 const OPERATIONS_URL = "https://kongnightlife.com/api/admin/ceo/operations";
@@ -45,6 +45,19 @@ const agentSchema = z.object({
     categoriesTotal: z.number().int().nonnegative(),
     pendingItems: z.number().int().nonnegative(),
     configurationNotices: z.array(text).max(100),
+  }).strict().optional().catch(undefined),
+  // City agents only (KONG "Descubrimiento / Novedades"): counts are informational, never the agent state.
+  discovery: z.object({
+    mode: z.enum(["disabled", "deterministic", "deterministic_with_ai", "not_run"]),
+    lastRunAt: nullableTimestamp,
+    found: z.number().int().nonnegative(),
+    added: z.number().int().nonnegative(),
+    queuedForReview: z.number().int().nonnegative(),
+    rejected: z.number().int().nonnegative(),
+    alreadyInKong: z.number().int().nonnegative(),
+    reviewPending: z.number().int().nonnegative(),
+    aiSpentUsd: z.number().nonnegative(),
+    aiCapUsd: z.number().nonnegative(),
   }).strict().optional().catch(undefined),
 }).strict();
 const briefSchema = z.object({
@@ -103,8 +116,15 @@ const jobSchema = z.object({
   last_success_at: nullableTimestamp,
   attempts: z.number().int().nonnegative(),
   last_error: text.nullable(),
-  report: z.object({ status: z.enum(["healthy", "needs_attention"]).optional(), issues: z.array(text).max(500).optional() }),
+  report: z.object({ status: z.enum(["healthy", "needs_attention"]).optional(), issues: z.array(text).max(500).optional(),
+    discovery: officeKongDiscoveryCountsSchema.optional().catch(undefined) }),
 });
+// A category KONG adds before the office knows it is dropped on its own; it must
+// never invalidate the other categories or the whole city read. Known categories
+// stay strictly validated.
+const jobsSchema = z.array(z.unknown()).max(64)
+  .transform(jobs => jobs.filter(job => Boolean(job) && typeof job === "object" && isOfficeKongSupervisedCategory((job as { category?: unknown }).category)))
+  .pipe(z.array(jobSchema).max(OFFICE_KONG_CITY_CATEGORIES.length));
 const citySchema = z.object({
   id: z.string().min(1).max(200),
   name: z.string().min(1).max(200),
@@ -113,7 +133,7 @@ const citySchema = z.object({
   currency: z.string().regex(/^[A-Z]{3}$/),
   // Newer KONG reports the execution verdict as "active"; it is recomputed from jobs below.
   status: z.enum(["healthy", "active", "needs_attention"]).catch("needs_attention"),
-  jobs: z.array(jobSchema).max(OFFICE_KONG_CITY_CATEGORIES.length),
+  jobs: jobsSchema,
   eventLoad: officeKongEventLoadSchema.optional().catch(undefined),
 });
 const citiesSchema = z.object({
@@ -142,6 +162,7 @@ export interface OfficeKongCityCategory {
   recordedFailure?: boolean;
   attemptsSinceSuccess?: number;
   leaseUntil?: string | null;
+  discovery?: OfficeKongDiscoveryCounts;
 }
 export interface OfficeKongCity {
   eventLoad?: z.infer<typeof officeKongEventLoadSchema>;
@@ -258,7 +279,8 @@ function cityEvidence(snapshot: z.infer<typeof citiesSchema>, at: Date): OfficeK
       return { category, state, lastRunAt: job.last_completed_at, lastSuccessAt: job.last_success_at, lastStartedAt: job.last_started_at,
         nextRunAt: job.next_run_at, intervalMs: job.interval_ms, issues, evidence: "persisted", recordedFailure: Boolean(job.last_error),
         attemptsSinceSuccess: job.attempts,
-        leaseUntil: state === "running" ? job.lease_until : null };
+        leaseUntil: state === "running" ? job.lease_until : null,
+        ...(category === "discovery" && job.report.discovery ? { discovery: job.report.discovery } : {}) };
     });
     return { id: city.id, name: city.name, countryCode: city.countryCode, timeZone: city.timeZone, currency: city.currency,
       ...(city.eventLoad ? { eventLoad: city.eventLoad } : {}),

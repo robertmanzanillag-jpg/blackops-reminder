@@ -25,15 +25,16 @@ test("one authenticated snapshot distinguishes completion, idle, live work and f
     job("sports", { state: "running", lastStartedAt: at(-0.5), leaseUntil: at(1) }),
     job("experiences", { evidence: "missing" }),
     job("media", { nextRunAt: null }),
+    job("discovery"),
   ]));
   const result = scoreOfficeKongSnapshot(evidence, NOW);
   assert.equal(result.verified, true);
   assert.deepEqual(result.cities[0].categories.map(({ state, points, deduction }) => [state, points, deduction]), [
-    ["scheduled", 100, 0], ["failed", 75, 25], ["missed", 85, 15], ["stale", 80, 20], ["running", 100, 0], ["unverified", null, 0], ["completed", 100, 0],
+    ["scheduled", 100, 0], ["failed", 75, 25], ["missed", 85, 15], ["stale", 80, 20], ["running", 100, 0], ["unverified", null, 0], ["completed", 100, 0], ["scheduled", 100, 0],
   ]);
-  assert.equal(result.cities[0].points, 90);
-  assert.equal(result.cities[0].scoredCategories, 6);
-  assert.equal(result.cities[0].totalCategories, 7);
+  assert.equal(result.cities[0].points, 91);
+  assert.equal(result.cities[0].scoredCategories, 7);
+  assert.equal(result.cities[0].totalCategories, 8);
   assert.deepEqual(scoreOfficeKongSnapshot(evidence, NOW + 1000), result);
 });
 
@@ -47,7 +48,7 @@ test("unknown, intentionally disabled and ambiguous attention stay unscored", ()
   ]));
   const result = scoreOfficeKongSnapshot(evidence, NOW);
   assert.equal(result.cities[0].points, null);
-  assert.equal(result.cities[0].totalCategories, 7);
+  assert.equal(result.cities[0].totalCategories, 8);
   assert.equal(result.cities[0].categories.find(value => value.category === "sports")?.state, "disabled");
   assert.ok(result.cities[0].categories.every(value => value.points === null && value.deduction === 0));
 });
@@ -63,7 +64,7 @@ test("completed coverage warnings do not hide stale, missed, failed or unverifie
     job("media", { ...warnings, lastStartedAt: at(-1) }),
   ]));
   assert.deepEqual(scoreOfficeKongSnapshot(evidence, NOW).cities[0].categories.map(({ state, points }) => [state, points]), [
-    ["completed_with_warnings", 95], ["failed", 75], ["stale", 80], ["missed", 85], ["unverified", null], ["unverified", null], ["unverified", null],
+    ["completed_with_warnings", 95], ["failed", 75], ["stale", 80], ["missed", 85], ["unverified", null], ["unverified", null], ["unverified", null], ["unverified", null],
   ]);
 });
 
@@ -72,7 +73,7 @@ test("a full registry with completed warnings and one recorded failure keeps tho
     job(category, { state: "attention", recordedFailure: index === 0 && category === "vip" }))));
   const result = scoreOfficeKongSnapshot(snapshot(...cities), NOW);
   const categories = result.cities.flatMap(value => value.categories);
-  assert.equal(categories.filter(value => value.state === "completed_with_warnings").length, 174);
+  assert.equal(categories.filter(value => value.state === "completed_with_warnings").length, 25 * OFFICE_KONG_SUPERVISED_CATEGORIES.length - 1);
   assert.equal(categories.filter(value => value.state === "failed").length, 1);
 });
 
@@ -107,8 +108,8 @@ test("country scores weigh verified categories and keep coverage for the full ci
   );
   const result = scoreOfficeKongSnapshot(evidence, NOW);
   assert.equal(result.cities.length, evidence.cities.length);
-  assert.equal(result.cities.reduce((sum, value) => sum + value.totalCategories, 0), evidence.cities.length * 7);
-  assert.deepEqual(result.countries.find(value => value.countryCode === "US"), { countryCode: "US", cityCount: 2, points: 83, scoredCategories: 3, totalCategories: 14 });
+  assert.equal(result.cities.reduce((sum, value) => sum + value.totalCategories, 0), evidence.cities.length * OFFICE_KONG_SUPERVISED_CATEGORIES.length);
+  assert.deepEqual(result.countries.find(value => value.countryCode === "US"), { countryCode: "US", cityCount: 2, points: 83, scoredCategories: 3, totalCategories: 16 });
   assert.equal(result.countries.find(value => value.countryCode === "AR")?.points, null);
 });
 
@@ -129,4 +130,15 @@ test("a verified overdue first turn is missed even without a prior completed res
   assert.equal(categories.find(value => value.category === "clubs")?.points, 85);
   assert.equal(categories.find(value => value.category === "events")?.points, null);
   assert.equal(categories.find(value => value.category === "sports")?.points, null);
+});
+
+test("discovery is a supervised category with its own task and count summary", async () => {
+  const { OFFICE_KONG_CITY_TASKS, officeKongDiscoverySummary } = await import("../shared/office-kong-supervisor");
+  assert.equal(OFFICE_KONG_SUPERVISED_CATEGORIES.length, 8);
+  assert.ok(OFFICE_KONG_SUPERVISED_CATEGORIES.includes("discovery"));
+  assert.match(OFFICE_KONG_CITY_TASKS.discovery, /novedades/i);
+  assert.equal(officeKongDiscoverySummary({ mode: "deterministic", found: 9, added: 2, queuedForReview: 3, rejected: 4, reviewPendingTotal: 5 }),
+    "Novedades del último turno: 9 encontradas · 2 añadidas · 3 a revisión · 4 rechazadas · 5 pendientes de revisar.");
+  assert.equal(officeKongDiscoverySummary({ mode: "disabled" }), "Descubrimiento desactivado en KONG.");
+  assert.equal(officeKongDiscoverySummary(undefined), null);
 });

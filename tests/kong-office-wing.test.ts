@@ -16,7 +16,7 @@ test("KONG includes every observed central agent and every configured city seat 
   const wing = buildKongOfficeWing(evidence, cities, {}, now);
   const ids = wing.departments.flatMap(group => group.agentIds);
   assert.equal(new Set(ids).size, ids.length);
-  assert.equal(ids.filter(id=>id.startsWith("kong-city:")).length, 175);
+  assert.equal(ids.filter(id=>id.startsWith("kong-city:")).length, 200);
   assert.ok(ids.includes("kong:new_department"));
   assert.ok(ids.includes("kong-videos"));
   assert.ok(ids.includes("kong-metrics"));

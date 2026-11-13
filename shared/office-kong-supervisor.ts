@@ -6,7 +6,31 @@ export const officeKongEventLoadSchema = z.object({
   checkedAt: z.string().datetime({ offset: true }).nullable(),
 }).refine(value => (value.upcomingEvents === null) === (value.checkedAt === null));
 
-export const OFFICE_KONG_SUPERVISED_CATEGORIES = ["clubs", "vip", "restaurants", "events", "sports", "experiences", "media"] as const;
+// "discovery" = KONG's per-city "Descubrimiento / Novedades" agent. Categories KONG adds
+// later and the office does not know yet are dropped per category, never the whole city read.
+export const OFFICE_KONG_SUPERVISED_CATEGORIES = ["clubs", "vip", "restaurants", "events", "sports", "experiences", "media", "discovery"] as const;
+export type OfficeKongSupervisedCategory = typeof OFFICE_KONG_SUPERVISED_CATEGORIES[number];
+export function isOfficeKongSupervisedCategory(value: unknown): value is OfficeKongSupervisedCategory {
+  return typeof value === "string" && (OFFICE_KONG_SUPERVISED_CATEGORIES as readonly string[]).includes(value);
+}
+/** Per-run counts from the discovery agent (counts only; never titles, URLs or raw errors). */
+export const officeKongDiscoveryCountsSchema = z.object({
+  mode: z.enum(["disabled", "deterministic", "deterministic_with_ai"]).optional().catch(undefined),
+  found: z.number().int().nonnegative().max(1_000_000).optional(),
+  added: z.number().int().nonnegative().max(1_000_000).optional(),
+  queuedForReview: z.number().int().nonnegative().max(1_000_000).optional(),
+  rejected: z.number().int().nonnegative().max(1_000_000).optional(),
+  alreadyInKong: z.number().int().nonnegative().max(1_000_000).optional(),
+  pagesChecked: z.number().int().nonnegative().max(1_000_000).optional(),
+  reviewPendingTotal: z.number().int().nonnegative().max(1_000_000).optional(),
+}).strip();
+export type OfficeKongDiscoveryCounts = z.infer<typeof officeKongDiscoveryCountsSchema>;
+export function officeKongDiscoverySummary(counts: OfficeKongDiscoveryCounts | undefined): string | null {
+  if (!counts) return null;
+  if (counts.mode === "disabled") return "Descubrimiento desactivado en KONG.";
+  if (counts.found === undefined) return null;
+  return `Novedades del último turno: ${counts.found} encontradas · ${counts.added ?? 0} añadidas · ${counts.queuedForReview ?? 0} a revisión · ${counts.rejected ?? 0} rechazadas${counts.reviewPendingTotal !== undefined ? ` · ${counts.reviewPendingTotal} pendientes de revisar` : ""}.`;
+}
 export const OFFICE_KONG_CITY_TASKS: Record<typeof OFFICE_KONG_SUPERVISED_CATEGORIES[number], string> = {
   clubs: "Comprueba fuentes y fichas de clubes",
   vip: "Verifica canales oficiales para reservas VIP",
@@ -15,6 +39,7 @@ export const OFFICE_KONG_CITY_TASKS: Record<typeof OFFICE_KONG_SUPERVISED_CATEGO
   sports: "Consulta calendarios de equipos y partidos locales",
   experiences: "Busca y comprueba fichas de experiencias locales",
   media: "Audita imágenes y flyers contra la fuente del evento",
+  discovery: "Busca novedades: eventos próximos, experiencias y aperturas; lo dudoso va a revisión",
 };
 export const OFFICE_KONG_SCORE_DEDUCTIONS = { failed: 25, stale: 20, missed: 15, completed_with_warnings: 5 } as const;
 const MAX_SNAPSHOT_AGE_MS = 5 * 60_000;
