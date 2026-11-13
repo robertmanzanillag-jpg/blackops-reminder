@@ -6,7 +6,7 @@
 //   GATE_BASE_URL     e.g. http://127.0.0.1:5055 (refuses anything but localhost)
 //   SESSION_SECRET    the sandbox-only session secret the app was booted with
 //   GATE_USER_ID      id of the seeded sandbox owner
-//   GATE_REPORT_DIR   where smoke.json and screenshots go (default .release-gate)
+//   GATE_REPORT_DIR   where smoke.json and screenshots go (default gate-report)
 //   PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH  optional browser binary
 import { createHmac } from "node:crypto";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -17,7 +17,7 @@ if (!/^http:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(base)) throw new Error("s
 const secret = process.env.SESSION_SECRET || "";
 const userId = process.env.GATE_USER_ID || "";
 if (!secret || !userId) throw new Error("SESSION_SECRET and GATE_USER_ID are required");
-const reportDir = path.resolve(process.env.GATE_REPORT_DIR || ".release-gate");
+const reportDir = path.resolve(process.env.GATE_REPORT_DIR || "gate-report");
 mkdirSync(path.join(reportDir, "screenshots"), { recursive: true });
 
 // Routes that depend on an integration the sandbox deliberately does not have (Replit connectors,
