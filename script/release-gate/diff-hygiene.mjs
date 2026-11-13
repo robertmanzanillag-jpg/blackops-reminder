@@ -22,7 +22,7 @@ const base = args[args.indexOf("--base") + 1];
 if (!base || args.indexOf("--base") < 0) throw new Error("--base <rev> is required");
 const labels = new Set((process.env.GATE_PR_LABELS || "").split(",").map((label) => label.trim()).filter(Boolean));
 const JUSTIFIED = labels.has("gate-justified");
-const git = (...gitArgs) => execFileSync("git", gitArgs, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
+const git = (...gitArgs) => execFileSync("git", gitArgs, { encoding: "utf8", maxBuffer: 256 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
 
 const changes = git("diff", "--name-status", "--no-renames", base, "HEAD").split("\n").filter(Boolean).map((line) => {
   const [status, ...rest] = line.split("\t");
