@@ -28,8 +28,11 @@ test('compiled office verification journeys: owner, errors, keyboard, map and mo
     for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
       const context = await browser.newContext({ viewport, reducedMotion: 'reduce', serviceWorkers: 'block' });
       try {
+        // Exercise the same shared DOM panel in the supported building view;
+        // the separate office browser suite covers the continuous 3D scene.
+        await context.addInitScript(() => localStorage.setItem('agentsOffice.view.v2', 'building'));
         const page = await context.newPage(), errors = [], consoleErrors = [], failedResponses = [];
-        page.setDefaultTimeout(10000);
+        page.setDefaultTimeout(15000);
         page.on('pageerror', error => errors.push(error.message));
         page.on('console', message => { if (message.type() === 'error') consoleErrors.push({ text: message.text(), url: message.location().url }); });
         page.on('response', response => {

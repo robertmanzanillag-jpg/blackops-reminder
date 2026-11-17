@@ -34,7 +34,8 @@ Después de `npm run build`,
 `node --import tsx --test tests/office-verification-browser.test.mjs` comprueba
 la interfaz compilada en escritorio y móvil: abrir, consultar, error, reintentar,
 cerrar con teclado, restaurar foco y navegar por el mapa. Usa datos sintéticos
-y no permite cambios de negocio. Las capturas quedan en
+y la vista Edificio soportada para aislar el panel del renderizado 3D; no
+permite cambios de negocio. Las capturas quedan en
 `OFFICE_VERIFICATION_QA_DIR` o `/tmp/office-verification-qa`.
 Si se usa Chrome instalado en lugar de Chromium de Playwright, anteponer
 `OFFICE_QA_BROWSER_CHANNEL=chrome`. El mapa abre los paneles correspondientes
