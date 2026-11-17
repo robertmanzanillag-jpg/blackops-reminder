@@ -1,5 +1,6 @@
 import path from "node:path";
 import OpenAI from "openai";
+import { aiRouterConfig, createRoutedOpenAI, type ChatLikeClient } from "./ai-model-router";
 
 export type LocalNewsLanguage = "en" | "es" | "unknown";
 export type LocalNewsTranslationDirection = "en-es" | "es-en";
@@ -63,11 +64,22 @@ function configuredValue(value: string | undefined): string | null {
   return normalized;
 }
 
-function createOpenAiTranslationClient(env: NodeJS.ProcessEnv): OpenAiTranslationClient {
+function createLegacyOpenAiTranslationClient(env: NodeJS.ProcessEnv): OpenAiTranslationClient {
   const apiKey = configuredValue(env.AI_INTEGRATIONS_OPENAI_API_KEY) || configuredValue(env.OPENAI_API_KEY);
   if (!apiKey) throw new Error("openai_translation_not_configured");
   const baseURL = configuredValue(env.AI_INTEGRATIONS_OPENAI_BASE_URL) || undefined;
   return new OpenAI({ apiKey, baseURL, timeout: OPENAI_TRANSLATION_TIMEOUT_MS, maxRetries: 0 });
+}
+
+function createOpenAiTranslationClient(env: NodeJS.ProcessEnv): OpenAiTranslationClient {
+  // Repetitive tier via the model router (DeepSeek first, own OpenAI key second, both capped).
+  // Without OPENAI_API_KEY/DEEPSEEK_API_KEY this is exactly the previous client.
+  if (!aiRouterConfig(env).enabled) return createLegacyOpenAiTranslationClient(env);
+  return createRoutedOpenAI({
+    tier: "repetitive", label: "clippers-local-news-translation", env,
+    makeClient: (provider) => new OpenAI({ apiKey: provider.apiKey, baseURL: provider.baseURL, timeout: OPENAI_TRANSLATION_TIMEOUT_MS, maxRetries: 0 }) as unknown as ChatLikeClient,
+    legacy: () => createLegacyOpenAiTranslationClient(env) as unknown as ChatLikeClient,
+  }) as unknown as OpenAiTranslationClient;
 }
 
 export class OpenAiLocalNewsTranslationAdapter implements LocalNewsTranslationAdapter {
@@ -134,7 +146,7 @@ class UnavailableLocalNewsTranslationAdapter implements LocalNewsTranslationAdap
 }
 
 function defaultTranslationAdapter(env: NodeJS.ProcessEnv = process.env): LocalNewsTranslationAdapter {
-  if (configuredValue(env.AI_INTEGRATIONS_OPENAI_API_KEY) || configuredValue(env.OPENAI_API_KEY)) {
+  if (configuredValue(env.AI_INTEGRATIONS_OPENAI_API_KEY) || configuredValue(env.OPENAI_API_KEY) || aiRouterConfig(env).enabled) {
     return new OpenAiLocalNewsTranslationAdapter({ env });
   }
   if (env.CLIPPERS_LOCAL_NEWS_TRANSLATION_PROVIDER === "opus") return new OpusMtLocalTranslationAdapter();

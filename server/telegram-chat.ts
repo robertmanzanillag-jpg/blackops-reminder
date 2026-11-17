@@ -1414,12 +1414,19 @@ ${conversationHistory}
       parts.push({ text: `${contextPrompt}\n\nUsuario dice: ${userMessage}` });
     }
 
-    const geminiClient = await getGeminiClient();
-    const result = await geminiClient.models.generateContent({
-      model: getGeminiChatModel({ hasImage: !!imageData }),
-      contents: [{ role: "user", parts }],
-    });
-    const responseText = result.text || "";
+    let responseText = "";
+    const { deepSeekRouted, routedText } = await import("./ai-model-router");
+    if (!imageData && deepSeekRouted()) {
+      // AI_ROUTER_ENABLED=true + DeepSeek configured: repetitive tier, DeepSeek first, own OpenAI key as fallback (both capped).
+      responseText = (await routedText({ tier: "repetitive", label: "telegram-chat", prompt: String((parts[0] as { text?: string })?.text || ""), maxTokens: 900 })).text;
+    } else {
+      const geminiClient = await getGeminiClient();
+      const result = await geminiClient.models.generateContent({
+        model: getGeminiChatModel({ hasImage: !!imageData }),
+        contents: [{ role: "user", parts }],
+      });
+      responseText = result.text || "";
+    }
 
     const actions = await processAssistantResponse(userId, responseText);
     const cleanResponse = cleanResponseForTelegram(responseText);
