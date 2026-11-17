@@ -19,7 +19,7 @@ import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
 import { buildAiCostPolicyContext, getAiConversationHistoryLimit, getOpenAiMaxCompletionTokens } from "./ai-cost-policy";
 import { estimateOpenAiAudioCostUsd, estimateTokenApiCostUsd, recordAiApiCostEvent } from "./ai-cost-notifications";
 import { shouldUseCheapScoutForWebChat } from "./ai-router";
-import { aiRouterConfig, createRoutedOpenAI, routedText } from "./ai-model-router";
+import { aiRouterConfig, createRoutedOpenAI, deepSeekRouted, routedText } from "./ai-model-router";
 import { getGeminiChatModel, getGeminiClient } from "./gemini-client";
 import type { PendingAction } from "@shared/schema";
 import { getOpenAIClient, OPENAI_ASSISTANT_MODEL, OPENAI_TRANSCRIPTION_MODEL } from "./openai-client";
@@ -1707,8 +1707,17 @@ export function registerAssistantRoutes(app: Express): void {
             sharedConversationHistory,
             modelRoute,
           });
-          if (modelRoute.provider === "deepseek") {
+          if (modelRoute.provider === "deepseek" && deepSeekRouted()) {
             // Repetitive tier via the model router: DeepSeek first, own OpenAI key as fallback (both capped).
+            const deepSeekModel = aiRouterConfig().deepseek?.model || "deepseek";
+            const deepSeekPreviewUsd = estimateTokenApiCostUsd({ provider: "deepseek", model: deepSeekModel,
+              inputTokens: estimateTokensFromText(cheapPrompt), outputTokens: getOpenAiMaxCompletionTokens() });
+            res.write(`data: ${JSON.stringify({
+              content: `${formatAiApiCostPreview("deepseek", deepSeekModel, "respuesta cheap scout del chat", deepSeekPreviewUsd)}\n\n`,
+              apiCostPreview: true,
+              estimatedApiCostUsd: deepSeekPreviewUsd,
+              modelRoute,
+            })}\n\n`);
             const routed = await routedText({ tier: "repetitive", label: "web-chat-cheap-scout", prompt: cheapPrompt, maxTokens: getOpenAiMaxCompletionTokens() });
             fullResponse = routed.text || "No pude generar una respuesta util esta vez.";
             setCachedCheapScoutResponse(userId, message, fullResponse);
@@ -1772,27 +1781,6 @@ export function registerAssistantRoutes(app: Express): void {
           }
           }
         }
-      } else if (aiRouterConfig().enabled) {
-        // Standard tier via the model router: own OpenAI key until AI_OPENAI_MONTHLY_BUDGET_USD is used,
-        // then DeepSeek. Reserved before the call; answered in one piece (no token streaming).
-        const maxCompletionTokens = getOpenAiMaxCompletionTokens();
-        let routedProvider: "openai" | "deepseek" = "openai";
-        const client = createRoutedOpenAI({ tier: "standard", label: "web-chat-strong",
-          onRoute: (e) => { if (e.outcome === "ok" && e.provider === "deepseek") routedProvider = "deepseek"; } });
-        const completion = await client.chat.completions.create({ model: OPENAI_ASSISTANT_MODEL, messages: openAiMessages, max_completion_tokens: maxCompletionTokens });
-        fullResponse = String(completion?.choices?.[0]?.message?.content || "");
-        res.write(`data: ${JSON.stringify({ content: fullResponse })}\n\n`);
-        const usedModel = String(completion?.model || OPENAI_ASSISTANT_MODEL);
-        const inputTokens = Number(completion?.usage?.prompt_tokens || estimateTokensFromText(JSON.stringify(openAiMessages)));
-        const outputTokens = Number(completion?.usage?.completion_tokens || estimateTokensFromText(fullResponse));
-        const estimatedCostUsd = estimateTokenApiCostUsd({ provider: routedProvider, model: usedModel, inputTokens, outputTokens });
-        const notice = await recordAiApiCostEvent({
-          userId, provider: routedProvider, model: usedModel, operation: "respuesta fuerte del chat", estimatedCostUsd,
-          metadata: { inputTokens, outputTokens, totalTokens: completion?.usage?.total_tokens || null, modelRoute },
-        });
-        if (notice) {
-          res.write(`data: ${JSON.stringify({ content: `\n\n${notice}`, apiCostNotice: true, estimatedApiCostUsd: estimatedCostUsd })}\n\n`);
-        }
       } else {
         const maxCompletionTokens = getOpenAiMaxCompletionTokens();
         const previewCostUsd = estimateTokenApiCostUsd({
@@ -1807,7 +1795,14 @@ export function registerAssistantRoutes(app: Express): void {
           estimatedApiCostUsd: previewCostUsd,
           modelRoute,
         })}\n\n`);
-        const stream = await getOpenAIClient().chat.completions.create({
+        // AI_ROUTER_ENABLED=true: standard tier via the model router (own OpenAI key until its cap,
+        // then DeepSeek), still streamed with the same preview/notice. Off: exactly the previous client.
+        let streamProvider: "openai" | "deepseek" = "openai";
+        const strongClient: { chat: { completions: { create(body: any): Promise<any> } } } = aiRouterConfig().enabled
+          ? createRoutedOpenAI({ tier: "standard", label: "web-chat-strong",
+              onRoute: (e) => { if (e.outcome === "ok") streamProvider = e.provider === "deepseek" ? "deepseek" : "openai"; } })
+          : getOpenAIClient();
+        const stream: AsyncIterable<any> = await strongClient.chat.completions.create({
           model: OPENAI_ASSISTANT_MODEL,
           messages: openAiMessages,
           stream: true as const,
@@ -1816,7 +1811,9 @@ export function registerAssistantRoutes(app: Express): void {
         });
 
         let openAiUsage: any = null;
+        let streamModel = OPENAI_ASSISTANT_MODEL;
         for await (const chunk of stream) {
+          if (typeof (chunk as any).model === "string" && (chunk as any).model) streamModel = (chunk as any).model;
           if ((chunk as any).usage) {
             openAiUsage = (chunk as any).usage;
           }
@@ -1829,15 +1826,15 @@ export function registerAssistantRoutes(app: Express): void {
         const inputTokens = Number(openAiUsage?.prompt_tokens || estimateTokensFromText(JSON.stringify(openAiMessages)));
         const outputTokens = Number(openAiUsage?.completion_tokens || estimateTokensFromText(fullResponse));
         const estimatedCostUsd = estimateTokenApiCostUsd({
-          provider: "openai",
-          model: OPENAI_ASSISTANT_MODEL,
+          provider: streamProvider,
+          model: streamModel,
           inputTokens: Number.isFinite(inputTokens) ? inputTokens : 0,
           outputTokens: Number.isFinite(outputTokens) ? outputTokens : 0,
         });
         const notice = await recordAiApiCostEvent({
           userId,
-          provider: "openai",
-          model: OPENAI_ASSISTANT_MODEL,
+          provider: streamProvider,
+          model: streamModel,
           operation: "respuesta fuerte del chat",
           estimatedCostUsd,
           metadata: {

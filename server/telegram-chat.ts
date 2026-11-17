@@ -1415,9 +1415,9 @@ ${conversationHistory}
     }
 
     let responseText = "";
-    if (!imageData && hasDeepSeekKey()) {
-      // Repetitive tier via the model router: DeepSeek first, own OpenAI key as fallback (both capped).
-      const { routedText } = await import("./ai-model-router");
+    const { deepSeekRouted, routedText } = await import("./ai-model-router");
+    if (!imageData && deepSeekRouted()) {
+      // AI_ROUTER_ENABLED=true + DeepSeek configured: repetitive tier, DeepSeek first, own OpenAI key as fallback (both capped).
       responseText = (await routedText({ tier: "repetitive", label: "telegram-chat", prompt: String((parts[0] as { text?: string })?.text || ""), maxTokens: 900 })).text;
     } else {
       const geminiClient = await getGeminiClient();
@@ -1448,11 +1448,6 @@ ${conversationHistory}
     await deps.sendPlainMessage(botToken, chatId, errorMessage);
     await deps.saveConversationMessage(userId, "assistant", errorMessage);
   }
-}
-
-function hasDeepSeekKey(): boolean {
-  const key = process.env.DEEPSEEK_API_KEY?.trim();
-  return Boolean(key && !/^(changeme|replace[-_ ]?me|todo)$/i.test(key));
 }
 
 export async function handleTelegramMessage(update: TelegramUpdate): Promise<void> {

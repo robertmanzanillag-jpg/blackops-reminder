@@ -1,3 +1,5 @@
+import { deepSeekRouted } from "./ai-model-router";
+
 export type AssistantModelRoute = {
   tier: "cheap_scout" | "strong_supervisor" | "subscription_handoff";
   provider: "gemini" | "deepseek" | "openai" | "membership";
@@ -75,7 +77,8 @@ export function shouldUseCheapScoutForWebChat(input: { message?: string; hasImag
     return { tier: "strong_supervisor", provider: "openai", reason: "cheap scout disabled by env" };
   }
   // DeepSeek (model router, repetitive tier) replaces the Replit Gemini integration as cheap scout when configured.
-  const cheapProvider: "deepseek" | "gemini" = hasRealValue(process.env.DEEPSEEK_API_KEY) ? "deepseek" : "gemini";
+  // Only with AI_ROUTER_ENABLED=true and DEEPSEEK_API_KEY + DEEPSEEK_MODEL; otherwise exactly as before.
+  const cheapProvider: "deepseek" | "gemini" = deepSeekRouted() ? "deepseek" : "gemini";
   if (cheapProvider === "gemini" && !hasRealValue(process.env.AI_INTEGRATIONS_GEMINI_API_KEY)) {
     if (isStrictCostMode() && explicitlyApprovedApiSpend) {
       return { tier: "strong_supervisor", provider: "openai", reason: "Robert explicitly approved API spend despite strict cost mode" };

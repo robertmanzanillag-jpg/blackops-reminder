@@ -6,14 +6,16 @@ import { randomUUID } from "node:crypto";
  *
  *   repetitive -> DeepSeek, then OpenAI (own key)
  *   standard   -> OpenAI (own key) until AI_OPENAI_MONTHLY_BUDGET_USD is used, then DeepSeek
- *   critical   -> same order as standard (DeepSeek strong model when OpenAI is exhausted)
+ *   critical   -> same order as standard (DEEPSEEK_STRONG_MODEL when OpenAI is exhausted)
+ *
+ * DeepSeek counts as configured only when DEEPSEEK_API_KEY AND DEEPSEEK_MODEL are set.
  *
  * Rules:
  * - Every own-key call (OpenAI or DeepSeek) is reserved in blackops_ai_provider_ledger
  *   BEFORE the request and settled with real usage afterwards. No reservation, no call.
  * - A provider error falls through to the next provider. A cap that is reached
- *   is skipped. When a cap blocked any provider, the request never spills over
- *   to Replit AI Integrations (that would bypass Robert's caps).
+ *   is skipped. When a cap blocked any provider, or the ledger could not be read
+ *   (fail closed), the request never spills over to Replit AI Integrations.
  * - Replit AI Integrations (AI_INTEGRATIONS_OPENAI_*) is only the last fallback.
  * - No OPENAI_API_KEY and no DEEPSEEK_API_KEY: the legacy client is used exactly as today.
  *
@@ -21,6 +23,9 @@ import { randomUUID } from "node:crypto";
  * assistant paths. The office/factory keep their own durable guards
  * (OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT, OPENAI_SHARED_CREDIT_CONFIG grant) and the
  * BLACKOPS_AI_* dashboard budget is unchanged.
+ *
+ * BlackOps only: the whole router is OFF unless AI_ROUTER_ENABLED=true, so deploying
+ * this code changes nothing until Robert turns it on.
  */
 
 export type AiTier = "repetitive" | "standard" | "critical";
@@ -31,7 +36,6 @@ export const AI_PROVIDER_BUDGET_LOCK = "blackops_ai_provider_budget_v1";
 export const AI_PROVIDER_TIME_ZONE = "America/New_York";
 export const DEFAULT_OPENAI_MONTHLY_BUDGET_USD = 200;
 export const DEFAULT_DEEPSEEK_MONTHLY_BUDGET_USD = 50;
-export const DEFAULT_DEEPSEEK_MODEL = "deepseek-flash";
 export const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
 
 function real(value: string | undefined): string | null {
@@ -67,11 +71,13 @@ export interface AiRouterConfig {
 
 export function aiRouterConfig(env: Env = process.env): AiRouterConfig {
   const openaiKey = real(env.OPENAI_API_KEY);
-  const deepseekKey = real(env.DEEPSEEK_API_KEY);
+  const deepseekModel = env.DEEPSEEK_MODEL?.trim() || "";
+  // No hardcoded DeepSeek model: without DEEPSEEK_MODEL DeepSeek stays unconfigured.
+  const deepseekKey = deepseekModel ? real(env.DEEPSEEK_API_KEY) : null;
   const integrationKey = real(env.AI_INTEGRATIONS_OPENAI_API_KEY);
-  const deepseekModel = env.DEEPSEEK_MODEL?.trim() || DEFAULT_DEEPSEEK_MODEL;
   return {
-    enabled: Boolean(openaiKey || deepseekKey),
+    // BlackOps: explicit opt-in. Without AI_ROUTER_ENABLED=true every caller keeps today's path.
+    enabled: env.AI_ROUTER_ENABLED === "true" && Boolean(openaiKey || deepseekKey),
     openai: openaiKey ? {
       id: "openai", apiKey: openaiKey,
       baseURL: env.OPENAI_BASE_URL?.trim() || undefined,
@@ -244,15 +250,27 @@ export class PostgresAiProviderLedger implements AiProviderLedger {
   }
 }
 
-/** In-process ledger for tests (same reserve/settle semantics, single month). */
+/**
+ * In-process ledger for tests: same reserve/settle semantics (single month). Reservations are
+ * serialized through a promise chain, like the advisory lock in Postgres, so concurrent
+ * reserve() calls cannot overshoot the cap. `readDelayMs` widens the read-then-write window.
+ */
 export class InMemoryAiProviderLedger implements AiProviderLedger {
   readonly rows: Array<{ id: string; provider: AiProviderId; tier: AiTier; label: string; model: string; status: string; reservedUsd: number; costUsd: number }> = [];
-  async reserve(input: Parameters<AiProviderLedger["reserve"]>[0]) {
-    if (!(input.monthlyCapUsd > 0) || !(input.amountUsd > 0)) return null;
-    if ((await this.monthToDate(input.provider)) + input.amountUsd > input.monthlyCapUsd) return null;
-    const id = randomUUID();
-    this.rows.push({ id, provider: input.provider, tier: input.tier, label: input.label, model: input.model, status: "reserved", reservedUsd: input.amountUsd, costUsd: input.amountUsd });
-    return { id, provider: input.provider, reservedUsd: input.amountUsd };
+  private lock: Promise<unknown> = Promise.resolve();
+  constructor(private readonly readDelayMs = 0) {}
+  reserve(input: Parameters<AiProviderLedger["reserve"]>[0]): Promise<ProviderReservation | null> {
+    const run = this.lock.then(async () => {
+      if (!(input.monthlyCapUsd > 0) || !(input.amountUsd > 0)) return null;
+      const spent = await this.monthToDate(input.provider);
+      if (this.readDelayMs > 0) await new Promise((resolve) => setTimeout(resolve, this.readDelayMs));
+      if (spent + input.amountUsd > input.monthlyCapUsd) return null;
+      const id = randomUUID();
+      this.rows.push({ id, provider: input.provider, tier: input.tier, label: input.label, model: input.model, status: "reserved", reservedUsd: input.amountUsd, costUsd: input.amountUsd });
+      return { id, provider: input.provider, reservedUsd: input.amountUsd };
+    });
+    this.lock = run.catch(() => undefined);
+    return run;
   }
   async settle(reservation: ProviderReservation, outcome: Parameters<AiProviderLedger["settle"]>[1]) {
     const row = this.rows.find((r) => r.id === reservation.id && r.status === "reserved");
@@ -372,13 +390,17 @@ export class AiBudgetUnavailableError extends Error {
   readonly code = "ai_provider_budget_unavailable";
   constructor(readonly tier: AiTier) { super(`AI provider budget unavailable for tier ${tier}`); this.name = "AiBudgetUnavailableError"; }
 }
+export function isAiBudgetUnavailable(error: unknown): boolean {
+  return error instanceof AiBudgetUnavailableError || (error as { code?: string } | null)?.code === "ai_provider_budget_unavailable";
+}
 export class AiNoProviderError extends Error {
   readonly code = "ai_provider_unconfigured";
   constructor() { super("No AI provider configured"); this.name = "AiNoProviderError"; }
 }
 
 export interface RoutedClientOptions {
-  tier: AiTier;
+  /** Fixed tier, or a function of the request body (e.g. owner chat vs scheduled brief). */
+  tier: AiTier | ((body: Record<string, any>) => AiTier);
   label: string;
   env?: Env;
   ledger?: AiProviderLedger;
@@ -428,16 +450,20 @@ export function createRoutedOpenAI(options: RoutedClientOptions): ChatLikeClient
       if (kind === "responses") return legacy.responses!.create(body, requestOptions);
       return legacy.audio!.transcriptions.create(body, requestOptions);
     }
-    const openAiOnly = kind === "transcription" || (kind === "responses" && hostedTools(body) > 0) || Boolean(body?.stream);
-    const plan = planProviders(options.tier, config, { openAiOnly });
+    const tier: AiTier = typeof options.tier === "function" ? options.tier(body ?? {}) : options.tier;
+    // Streams are allowed on both providers; their usage arrives in the stream, so they settle at the reservation (upper bound).
+    const openAiOnly = kind === "transcription" || (kind === "responses" && hostedTools(body) > 0);
+    const plan = planProviders(tier, config, { openAiOnly });
     const ledger = options.ledger ?? await getDefaultLedger();
     let budgetBlocked = false;
+    let ledgerFailed = false;
     let lastError: unknown = null;
     for (const providerId of plan) {
-      if (providerId === "integration" && budgetBlocked) break;
+      // Fail closed: a reached cap or an unreadable ledger never spills to uncapped Replit integrations.
+      if (providerId === "integration" && (budgetBlocked || ledgerFailed)) break;
       const provider = (providerId === "openai" ? config.openai : providerId === "deepseek" ? config.deepseek : config.integration)!;
       const model = providerId === "deepseek"
-        ? (options.tier === "critical" ? provider.strongModel! : provider.model!)
+        ? (tier === "critical" ? provider.strongModel! : provider.model!)
         : String(body?.model ?? "");
       let reservation: ProviderReservation | null = null;
       if (provider.monthlyCapUsd !== null) {
@@ -445,10 +471,10 @@ export function createRoutedOpenAI(options: RoutedClientOptions): ChatLikeClient
           ? nonNegative(env.AI_ROUTER_AUDIO_RESERVATION_USD, 0.05) || 0.05
           : estimateReservationUsd(model, body);
         try {
-          reservation = await ledger.reserve({ provider: providerId, tier: options.tier, label: options.label, model, amountUsd, monthlyCapUsd: provider.monthlyCapUsd });
-        } catch (error) {
+          reservation = await ledger.reserve({ provider: providerId, tier, label: options.label, model, amountUsd, monthlyCapUsd: provider.monthlyCapUsd });
+        } catch {
           options.onRoute?.({ provider: providerId, model, outcome: "ledger_error" });
-          lastError = error;
+          ledgerFailed = true;
           continue; // never call an own-key provider without a reservation
         }
         if (!reservation) { budgetBlocked = true; options.onRoute?.({ provider: providerId, model, outcome: "budget" }); continue; }
@@ -489,9 +515,8 @@ export function createRoutedOpenAI(options: RoutedClientOptions): ChatLikeClient
         lastError = error;
       }
     }
-    if (budgetBlocked && !lastError) throw new AiBudgetUnavailableError(options.tier);
     if (lastError) throw lastError;
-    throw budgetBlocked ? new AiBudgetUnavailableError(options.tier) : new AiNoProviderError();
+    throw budgetBlocked || ledgerFailed ? new AiBudgetUnavailableError(tier) : new AiNoProviderError();
   }
 
   return {
@@ -515,7 +540,7 @@ export async function aiProviderSpendSummary(env: Env = process.env, ledger?: Ai
  * (|| OPENAI_API_KEY), baseURL: AI_INTEGRATIONS_OPENAI_BASE_URL })`. Without own keys the
  * legacy client is exactly that previous client (created lazily on first use).
  */
-export function routedOpenAI(tier: AiTier, label: string, env: Env = process.env): ChatLikeClient & { readonly routed: boolean } {
+export function routedOpenAI(tier: RoutedClientOptions["tier"], label: string, env: Env = process.env): ChatLikeClient & { readonly routed: boolean } {
   let legacyClient: Promise<ChatLikeClient> | null = null;
   return createRoutedOpenAI({
     tier, label, env,
@@ -527,7 +552,7 @@ export function routedOpenAI(tier: AiTier, label: string, env: Env = process.env
 }
 
 /** Same as routedOpenAI, but null when no model access is configured at all. */
-export function routedClientFromEnv(tier: AiTier, label: string, env: Env = process.env): ChatLikeClient | null {
+export function routedClientFromEnv(tier: RoutedClientOptions["tier"], label: string, env: Env = process.env): ChatLikeClient | null {
   return aiModelConfigured(env) ? routedOpenAI(tier, label, env) : null;
 }
 
@@ -559,8 +584,8 @@ export async function routedText(input: {
   };
 }
 
-/** True when the router has an own provider for cheap (repetitive) work. */
-export function cheapRouterAvailable(env: Env = process.env): boolean {
+/** True when AI_ROUTER_ENABLED=true and DeepSeek (key + model) is configured for cheap work. */
+export function deepSeekRouted(env: Env = process.env): boolean {
   const c = aiRouterConfig(env);
-  return Boolean(c.deepseek || c.openai);
+  return c.enabled && Boolean(c.deepseek);
 }

@@ -146,7 +146,7 @@ class UnavailableLocalNewsTranslationAdapter implements LocalNewsTranslationAdap
 }
 
 function defaultTranslationAdapter(env: NodeJS.ProcessEnv = process.env): LocalNewsTranslationAdapter {
-  if (configuredValue(env.AI_INTEGRATIONS_OPENAI_API_KEY) || configuredValue(env.OPENAI_API_KEY) || configuredValue(env.DEEPSEEK_API_KEY)) {
+  if (configuredValue(env.AI_INTEGRATIONS_OPENAI_API_KEY) || configuredValue(env.OPENAI_API_KEY) || aiRouterConfig(env).enabled) {
     return new OpenAiLocalNewsTranslationAdapter({ env });
   }
   if (env.CLIPPERS_LOCAL_NEWS_TRANSLATION_PROVIDER === "opus") return new OpusMtLocalTranslationAdapter();

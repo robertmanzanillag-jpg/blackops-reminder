@@ -17,7 +17,7 @@ import {
   type ProviderConfig,
 } from "../server/ai-model-router";
 
-const KEYS = { OPENAI_API_KEY: "sk-own", DEEPSEEK_API_KEY: "ds-key", AI_INTEGRATIONS_OPENAI_API_KEY: "replit-key", AI_INTEGRATIONS_OPENAI_BASE_URL: "https://replit.example/v1" };
+const KEYS = { AI_ROUTER_ENABLED: "true", OPENAI_API_KEY: "sk-own", DEEPSEEK_API_KEY: "ds-key", DEEPSEEK_MODEL: "deepseek-flash", AI_INTEGRATIONS_OPENAI_API_KEY: "replit-key", AI_INTEGRATIONS_OPENAI_BASE_URL: "https://replit.example/v1" };
 
 type Call = { provider: string; body: any };
 function fakeClients(behaviour: Partial<Record<string, "ok" | "error" | "reject400">> = {}) {
@@ -58,7 +58,14 @@ test("tier plans: repetitive -> deepseek first, standard/critical -> openai firs
   assert.deepEqual(planProviders("standard", aiRouterConfig({ ...KEYS, AI_INTEGRATIONS_FALLBACK_ENABLED: "false" })), ["openai", "deepseek"]);
 });
 
-test("defaults: OpenAI cap $200, DeepSeek cap $50, deepseek-flash, own key preferred over Replit integration", () => {
+test("DeepSeek is unconfigured unless both DEEPSEEK_API_KEY and DEEPSEEK_MODEL are set", () => {
+  assert.equal(aiRouterConfig({ DEEPSEEK_API_KEY: "ds" }).deepseek, null);
+  assert.equal(aiRouterConfig({ DEEPSEEK_API_KEY: "ds" }).enabled, false);
+  assert.equal(aiRouterConfig({ DEEPSEEK_MODEL: "deepseek-flash" }).deepseek, null);
+  assert.equal(aiRouterConfig({ AI_ROUTER_ENABLED: "true", DEEPSEEK_API_KEY: "ds", DEEPSEEK_MODEL: "m" }).deepseek?.strongModel, "m");
+});
+
+test("defaults: OpenAI cap $200, DeepSeek cap $50, own key preferred over Replit integration", () => {
   const c = aiRouterConfig(KEYS);
   assert.equal(c.openai?.monthlyCapUsd, 200);
   assert.equal(c.deepseek?.monthlyCapUsd, 50);
@@ -144,7 +151,7 @@ test("own providers both down -> Replit integration is the last fallback (uncapp
 test("ledger failure: an own-key provider is never called without a reservation", async () => {
   const { calls, make } = fakeClients();
   const broken = { reserve: async () => { throw new Error("db down"); }, settle: async () => undefined, monthToDate: async () => 0 };
-  await createRoutedOpenAI({ tier: "standard", label: "t", env: { OPENAI_API_KEY: "sk-own" }, ledger: broken, makeClient: make })
+  await createRoutedOpenAI({ tier: "standard", label: "t", env: { AI_ROUTER_ENABLED: "true", OPENAI_API_KEY: "sk-own" }, ledger: broken, makeClient: make })
     .chat.completions.create(chatBody).then(() => assert.fail("should not succeed"), () => undefined);
   assert.equal(calls.length, 0);
 });
@@ -227,6 +234,71 @@ test("adapters and estimates", () => {
   assert.equal(routerCostUsd("unknown-model", 1e6, 0), 5);
 });
 
+test("ledger unavailable: fail closed, never falls through to uncapped Replit integration", async () => {
+  const { calls, make } = fakeClients();
+  const broken = { reserve: async () => { throw new Error("db down"); }, settle: async () => undefined, monthToDate: async () => 0 };
+  await assert.rejects(
+    createRoutedOpenAI({ tier: "standard", label: "t", env: KEYS, ledger: broken, makeClient: make }).chat.completions.create(chatBody),
+    AiBudgetUnavailableError,
+  );
+  assert.equal(calls.length, 0);
+});
+
+test("concurrent reservations are serialized and never exceed the cap", async () => {
+  const ledger = new InMemoryAiProviderLedger(5);
+  const results = await Promise.all(Array.from({ length: 10 }, (_, i) =>
+    ledger.reserve({ provider: "openai", tier: "standard", label: `c${i}`, model: "gpt-4o", amountUsd: 0.3, monthlyCapUsd: 1 })));
+  assert.equal(results.filter(Boolean).length, 3);
+  assert.ok((await ledger.monthToDate("openai")) <= 1);
+});
+
+test("concurrent routed calls stop at the OpenAI cap and spill to DeepSeek, not past the cap", async () => {
+  const ledger = new InMemoryAiProviderLedger(2);
+  const { calls, make } = fakeClients();
+  const env = { ...KEYS, AI_OPENAI_MONTHLY_BUDGET_USD: "0.0005" };
+  const client = createRoutedOpenAI({ tier: "standard", label: "t", env, ledger, makeClient: make });
+  // Prompt large enough that the reservation upper-bounds the fake usage (1000 in / 100 out).
+  const big = { model: "gpt-4o-mini", messages: [{ role: "user", content: "x".repeat(4000) }], max_completion_tokens: 200 };
+  await Promise.all(Array.from({ length: 6 }, () => client.chat.completions.create(big)));
+  assert.ok((await ledger.monthToDate("openai")) <= 0.0005);
+  assert.ok(calls.some((c) => c.provider === "deepseek"));
+  assert.ok(!calls.some((c) => c.provider === "integration"));
+});
+
+test("tier can depend on the request (owner chat standard, scheduled brief repetitive)", async () => {
+  const ledger = new InMemoryAiProviderLedger();
+  const { calls, make } = fakeClients();
+  const client = createRoutedOpenAI({ tier: (b) => (b.instructions === "CHAT" ? "standard" : "repetitive"), label: "t", env: KEYS, ledger, makeClient: make });
+  await client.responses!.create({ model: "gpt-5.6-sol", instructions: "CHAT", input: "x" });
+  await client.responses!.create({ model: "gpt-5.6-sol", instructions: "BRIEF", input: "x" });
+  assert.deepEqual(calls.map((c) => c.provider), ["openai", "deepseek"]);
+});
+
+test("BlackOps: router is OFF unless AI_ROUTER_ENABLED=true, even with OPENAI_API_KEY and DeepSeek set", async () => {
+  const { deepSeekRouted } = await import("../server/ai-model-router");
+  const env = { OPENAI_API_KEY: "sk-own", DEEPSEEK_API_KEY: "ds", DEEPSEEK_MODEL: "deepseek-flash" };
+  assert.equal(aiRouterConfig(env).enabled, false);
+  assert.equal(deepSeekRouted(env), false);
+  assert.equal(aiRouterConfig({ ...env, AI_ROUTER_ENABLED: "false" }).enabled, false);
+  assert.equal(deepSeekRouted({ ...env, AI_ROUTER_ENABLED: "true" }), true);
+  const legacyCalls: any[] = [];
+  const client = createRoutedOpenAI({ tier: "standard", label: "t", env, ledger: new InMemoryAiProviderLedger(),
+    legacy: () => ({ chat: { completions: { create: async (b: any) => { legacyCalls.push(b); return { ok: 1 }; } } } }),
+    makeClient: () => { throw new Error("must not build provider clients"); } });
+  await client.chat.completions.create(chatBody);
+  assert.equal(legacyCalls.length, 1);
+});
+
+test("streaming is allowed on DeepSeek too and settles at the reservation (upper bound)", async () => {
+  const ledger = new InMemoryAiProviderLedger();
+  const { calls, make } = fakeClients({ openai: "error" });
+  await createRoutedOpenAI({ tier: "standard", label: "t", env: KEYS, ledger, makeClient: make })
+    .chat.completions.create({ ...chatBody, stream: true, stream_options: { include_usage: true } });
+  assert.deepEqual(calls.map((c) => c.provider), ["openai", "deepseek"]);
+  const row = ledger.rows.find((r) => r.provider === "deepseek")!;
+  assert.equal(row.status, "settled");
+});
+
 test("routedText: repetitive prompt goes to DeepSeek and reports provider, model and cost", async () => {
   const { routedText } = await import("../server/ai-model-router");
   const ledger = new InMemoryAiProviderLedger();
@@ -238,14 +310,16 @@ test("routedText: repetitive prompt goes to DeepSeek and reports provider, model
   assert.equal(out.costUsd, routerCostUsd("deepseek-flash", 1000, 100));
 });
 
-test("web chat cheap scout uses DeepSeek when DEEPSEEK_API_KEY is set, Gemini otherwise", async () => {
+test("web chat cheap scout: DeepSeek only with AI_ROUTER_ENABLED=true + DeepSeek key/model, Gemini otherwise", async () => {
   const { shouldUseCheapScoutForWebChat } = await import("../server/ai-router");
   const saved = { ...process.env };
   try {
     process.env.AI_INTEGRATIONS_GEMINI_API_KEY = "g";
-    delete process.env.DEEPSEEK_API_KEY;
-    assert.equal(shouldUseCheapScoutForWebChat({ message: "dame ideas de captions" }).provider, "gemini");
     process.env.DEEPSEEK_API_KEY = "ds";
+    process.env.DEEPSEEK_MODEL = "deepseek-flash";
+    delete process.env.AI_ROUTER_ENABLED;
+    assert.equal(shouldUseCheapScoutForWebChat({ message: "dame ideas de captions" }).provider, "gemini");
+    process.env.AI_ROUTER_ENABLED = "true";
     assert.equal(shouldUseCheapScoutForWebChat({ message: "dame ideas de captions" }).provider, "deepseek");
     delete process.env.AI_INTEGRATIONS_GEMINI_API_KEY;
     const route = shouldUseCheapScoutForWebChat({ message: "dame ideas de captions" });
