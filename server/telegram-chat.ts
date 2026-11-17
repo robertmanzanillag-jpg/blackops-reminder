@@ -1414,12 +1414,19 @@ ${conversationHistory}
       parts.push({ text: `${contextPrompt}\n\nUsuario dice: ${userMessage}` });
     }
 
-    const geminiClient = await getGeminiClient();
-    const result = await geminiClient.models.generateContent({
-      model: getGeminiChatModel({ hasImage: !!imageData }),
-      contents: [{ role: "user", parts }],
-    });
-    const responseText = result.text || "";
+    let responseText = "";
+    if (!imageData && hasDeepSeekKey()) {
+      // Repetitive tier via the model router: DeepSeek first, own OpenAI key as fallback (both capped).
+      const { routedText } = await import("./ai-model-router");
+      responseText = (await routedText({ tier: "repetitive", label: "telegram-chat", prompt: String((parts[0] as { text?: string })?.text || ""), maxTokens: 900 })).text;
+    } else {
+      const geminiClient = await getGeminiClient();
+      const result = await geminiClient.models.generateContent({
+        model: getGeminiChatModel({ hasImage: !!imageData }),
+        contents: [{ role: "user", parts }],
+      });
+      responseText = result.text || "";
+    }
 
     const actions = await processAssistantResponse(userId, responseText);
     const cleanResponse = cleanResponseForTelegram(responseText);
@@ -1441,6 +1448,11 @@ ${conversationHistory}
     await deps.sendPlainMessage(botToken, chatId, errorMessage);
     await deps.saveConversationMessage(userId, "assistant", errorMessage);
   }
+}
+
+function hasDeepSeekKey(): boolean {
+  const key = process.env.DEEPSEEK_API_KEY?.trim();
+  return Boolean(key && !/^(changeme|replace[-_ ]?me|todo)$/i.test(key));
 }
 
 export async function handleTelegramMessage(update: TelegramUpdate): Promise<void> {

@@ -1,6 +1,6 @@
 export type AssistantModelRoute = {
   tier: "cheap_scout" | "strong_supervisor" | "subscription_handoff";
-  provider: "gemini" | "openai" | "membership";
+  provider: "gemini" | "deepseek" | "openai" | "membership";
   reason: string;
 };
 
@@ -74,7 +74,9 @@ export function shouldUseCheapScoutForWebChat(input: { message?: string; hasImag
   if (process.env.BLACKOPS_WEB_CHEAP_SCOUT_ENABLED === "false") {
     return { tier: "strong_supervisor", provider: "openai", reason: "cheap scout disabled by env" };
   }
-  if (!hasRealValue(process.env.AI_INTEGRATIONS_GEMINI_API_KEY)) {
+  // DeepSeek (model router, repetitive tier) replaces the Replit Gemini integration as cheap scout when configured.
+  const cheapProvider: "deepseek" | "gemini" = hasRealValue(process.env.DEEPSEEK_API_KEY) ? "deepseek" : "gemini";
+  if (cheapProvider === "gemini" && !hasRealValue(process.env.AI_INTEGRATIONS_GEMINI_API_KEY)) {
     if (isStrictCostMode() && explicitlyApprovedApiSpend) {
       return { tier: "strong_supervisor", provider: "openai", reason: "Robert explicitly approved API spend despite strict cost mode" };
     }
@@ -109,12 +111,12 @@ export function shouldUseCheapScoutForWebChat(input: { message?: string; hasImag
     "que tengo", "agenda", "tareas", "recordatorio", "calendario",
   ];
   if (hasAny(text, cheapTerms)) {
-    return { tier: "cheap_scout", provider: "gemini", reason: "low-risk repetitive assistant work" };
+    return { tier: "cheap_scout", provider: cheapProvider, reason: "low-risk repetitive assistant work" };
   }
 
   const maxCheapChars = Number(process.env.BLACKOPS_WEB_CHEAP_SCOUT_MAX_MESSAGE_CHARS || 900);
   if (text.length <= Math.max(200, maxCheapChars)) {
-    return { tier: "cheap_scout", provider: "gemini", reason: "short low-risk chat fallback" };
+    return { tier: "cheap_scout", provider: cheapProvider, reason: "short low-risk chat fallback" };
   }
 
   if (isStrictCostMode() && explicitlyApprovedApiSpend) {

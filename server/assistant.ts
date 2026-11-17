@@ -19,6 +19,7 @@ import { createDeveloperAutopilotHandoff } from "./developer-autopilot";
 import { buildAiCostPolicyContext, getAiConversationHistoryLimit, getOpenAiMaxCompletionTokens } from "./ai-cost-policy";
 import { estimateOpenAiAudioCostUsd, estimateTokenApiCostUsd, recordAiApiCostEvent } from "./ai-cost-notifications";
 import { shouldUseCheapScoutForWebChat } from "./ai-router";
+import { aiRouterConfig, createRoutedOpenAI, routedText } from "./ai-model-router";
 import { getGeminiChatModel, getGeminiClient } from "./gemini-client";
 import type { PendingAction } from "@shared/schema";
 import { getOpenAIClient, OPENAI_ASSISTANT_MODEL, OPENAI_TRANSCRIPTION_MODEL } from "./openai-client";
@@ -1706,6 +1707,22 @@ export function registerAssistantRoutes(app: Express): void {
             sharedConversationHistory,
             modelRoute,
           });
+          if (modelRoute.provider === "deepseek") {
+            // Repetitive tier via the model router: DeepSeek first, own OpenAI key as fallback (both capped).
+            const routed = await routedText({ tier: "repetitive", label: "web-chat-cheap-scout", prompt: cheapPrompt, maxTokens: getOpenAiMaxCompletionTokens() });
+            fullResponse = routed.text || "No pude generar una respuesta util esta vez.";
+            setCachedCheapScoutResponse(userId, message, fullResponse);
+            res.write(`data: ${JSON.stringify({ content: fullResponse, modelRoute, compactContext: true })}\n\n`);
+            const routedProvider = routed.provider === "openai" ? "openai" : "deepseek";
+            const estimatedCostUsd = estimateTokenApiCostUsd({ provider: routedProvider, model: routed.model, inputTokens: routed.inputTokens, outputTokens: routed.outputTokens });
+            const notice = await recordAiApiCostEvent({
+              userId, provider: routedProvider, model: routed.model, operation: "respuesta cheap scout del chat", estimatedCostUsd,
+              metadata: { inputTokens: routed.inputTokens, outputTokens: routed.outputTokens, modelRoute, routerProvider: routed.provider },
+            });
+            if (notice) {
+              res.write(`data: ${JSON.stringify({ content: `\n\n${notice}`, apiCostNotice: true, estimatedApiCostUsd: estimatedCostUsd })}\n\n`);
+            }
+          } else {
           const geminiModel = getGeminiChatModel({ hasImage: false });
           const estimatedPreviewOutputTokens = Number(process.env.BLACKOPS_GEMINI_PREVIEW_OUTPUT_TOKENS || 700);
           const previewCostUsd = estimateTokenApiCostUsd({
@@ -1753,6 +1770,28 @@ export function registerAssistantRoutes(app: Express): void {
           if (notice) {
             res.write(`data: ${JSON.stringify({ content: `\n\n${notice}`, apiCostNotice: true, estimatedApiCostUsd: estimatedCostUsd })}\n\n`);
           }
+          }
+        }
+      } else if (aiRouterConfig().enabled) {
+        // Standard tier via the model router: own OpenAI key until AI_OPENAI_MONTHLY_BUDGET_USD is used,
+        // then DeepSeek. Reserved before the call; answered in one piece (no token streaming).
+        const maxCompletionTokens = getOpenAiMaxCompletionTokens();
+        let routedProvider: "openai" | "deepseek" = "openai";
+        const client = createRoutedOpenAI({ tier: "standard", label: "web-chat-strong",
+          onRoute: (e) => { if (e.outcome === "ok" && e.provider === "deepseek") routedProvider = "deepseek"; } });
+        const completion = await client.chat.completions.create({ model: OPENAI_ASSISTANT_MODEL, messages: openAiMessages, max_completion_tokens: maxCompletionTokens });
+        fullResponse = String(completion?.choices?.[0]?.message?.content || "");
+        res.write(`data: ${JSON.stringify({ content: fullResponse })}\n\n`);
+        const usedModel = String(completion?.model || OPENAI_ASSISTANT_MODEL);
+        const inputTokens = Number(completion?.usage?.prompt_tokens || estimateTokensFromText(JSON.stringify(openAiMessages)));
+        const outputTokens = Number(completion?.usage?.completion_tokens || estimateTokensFromText(fullResponse));
+        const estimatedCostUsd = estimateTokenApiCostUsd({ provider: routedProvider, model: usedModel, inputTokens, outputTokens });
+        const notice = await recordAiApiCostEvent({
+          userId, provider: routedProvider, model: usedModel, operation: "respuesta fuerte del chat", estimatedCostUsd,
+          metadata: { inputTokens, outputTokens, totalTokens: completion?.usage?.total_tokens || null, modelRoute },
+        });
+        if (notice) {
+          res.write(`data: ${JSON.stringify({ content: `\n\n${notice}`, apiCostNotice: true, estimatedApiCostUsd: estimatedCostUsd })}\n\n`);
         }
       } else {
         const maxCompletionTokens = getOpenAiMaxCompletionTokens();
