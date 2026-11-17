@@ -48,11 +48,18 @@ export function createCouncilStore(pool: CouncilPool) {
   };
 }
 
+/** Non-secret label so owner-lock diagnostics (pg_stat_activity) show which host holds the lock. */
+export function councilApplicationName(env: Readonly<Record<string, string | undefined>> = process.env): string {
+  const source = env.GITHUB_ACTIONS === "true" ? `gha-${(env.GITHUB_JOB || "job").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32)}`
+    : env.REPLIT_DEPLOYMENT ? "replit-web" : env.REPL_ID ? "replit-dev" : "local";
+  return `blackops-council:${source}`;
+}
+
 let store: ReturnType<typeof createCouncilStore> | undefined;
 export async function getCouncilStore() {
   if (!store) {
     const [{ Pool }, { resolveDatabaseConnectionString }] = await Promise.all([import("pg"), import("./database-url")]);
-    store = createCouncilStore(new Pool({ connectionString: resolveDatabaseConnectionString(), allowExitOnIdle: true, max: 2, connectionTimeoutMillis: 10000, statement_timeout: 30000 }));
+    store = createCouncilStore(new Pool({ connectionString: resolveDatabaseConnectionString(), allowExitOnIdle: true, max: 2, connectionTimeoutMillis: 10000, statement_timeout: 30000, application_name: councilApplicationName() }));
   }
   return store;
 }

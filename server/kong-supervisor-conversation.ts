@@ -41,12 +41,25 @@ async function limitedRead(work: () => Promise<{ state: string }>) {
   } finally { clearTimeout(timer); }
 }
 export function createKongSupervisorConversation(deps: KongConversationDeps) {
+  // One shared in-flight video read: concurrent requests/retries never start a second one.
+  let inflightVideoRead: Promise<{ state: string }> | undefined;
+  const sharedVideoRead = () => inflightVideoRead ||= limitedRead(deps.readVideoStatus).finally(() => { inflightVideoRead = undefined; });
   async function talk(value: unknown) {
     const input = validateKongConversationInput(value);
     const normalized = input.message.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[.!?¿¡]+$/g, "").trim();
     // The persistence layer may replay a mutation after a revision conflict.
     // Reuse one observed read for this request instead of repeating external IO.
     let observation: Promise<{ state: string }> | undefined;
+    // Do the (up to 10 s) video read BEFORE taking the council owner lock, so the
+    // web never holds that lock across external IO (it made the cloud office's
+    // council writes time out with 55P03). The commit below reuses this result.
+    if (["revisar", "revisar estado", "revisa", "comprobar estado"].includes(normalized) && (input.agentId === KONG_SUPERVISOR_ID || input.agentId === "kong-videos")) {
+      const before = await deps.read().catch(() => undefined);
+      const answered = before?.messages.some(item => item.requestId === input.requestId && item.agentId === input.agentId && item.role === "assistant");
+      const lastVideo = before?.records.find(record => record.agentId === "kong-videos");
+      const age = lastVideo ? deps.now() - Date.parse(lastVideo.checkedAt) : Infinity;
+      if (!answered && !(age >= 0 && age < 60_000)) await (observation = sharedVideoRead());
+    }
     const state = await deps.commit(async previous => {
       // Retrying a completed request does not create duplicate tasks or messages.
       if (previous.messages.some(item => item.requestId === input.requestId && item.agentId === input.agentId && item.role === "assistant")) return previous;
