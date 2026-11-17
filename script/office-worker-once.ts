@@ -2,6 +2,7 @@
 // Runs the reviewed office executor once, bounded, then exits (see docs/office-worker-cloud.md).
 import { createHash, randomUUID } from "node:crypto";
 import { runOfficeWorkerOnce, safeFailureCode, officeOnceBoundsFromEnv, type OfficeOnceOwnership } from "../server/office-worker-once";
+import { describeOwnerLockHolders, skipOnOwnerLockTimeout } from "../server/office-lock-timeout";
 export { safeFailureCode };
 // Same validation and fixed review-only flags as the reviewed Windows launcher.
 import { parseWorkerConfig, safeWorkerEnvironment } from "./office-windows-worker.mjs";
@@ -34,6 +35,8 @@ async function main() {
   const lockPool = new Pool({ connectionString: config.DATABASE_URL, max: 1, connectionTimeoutMillis: 10000, statement_timeout: 15000, query_timeout: 20000 });
   let host: Awaited<ReturnType<typeof import("../server/office-worker-assembly")["assembleOfficeWorker"]>> | undefined;
   let lockClient: import("pg").PoolClient | undefined;
+  // Council rows are keyed by sha256(owner): the same key the council store locks.
+  const diagnoseOwnerLock = async () => lockClient ? describeOwnerLockHolders(lockClient, ownerKey) : [];
   try {
     const result = await runOfficeWorkerOnce({
       paused,
@@ -70,8 +73,9 @@ async function main() {
       maintain: () => host!.worker.maintain(),
       // false = nothing claimed this cycle (idle exit); a busy/quarantined worker also reports false.
       tick: async () => { await host!.worker.tick(); return host!.worker.lastTickClaimed(); },
-      get academyCycle() { return host?.academyCycle; },
-      get capabilityTick() { return host?.capabilityTick; },
+      // Owner-lock contention (55P03) skips this cycle instead of ending the run; logs who holds it.
+      get academyCycle() { const run = host?.academyCycle; return run && skipOnOwnerLockTimeout("academy", run, diagnoseOwnerLock); },
+      get capabilityTick() { const run = host?.capabilityTick; return run && skipOnOwnerLockTimeout("capability", run, diagnoseOwnerLock); },
       requestStop() { stopping = true; },
     }, { signal: shutdown.signal, ...bounds });
     console.log(JSON.stringify(result));
