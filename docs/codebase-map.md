@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-17T23:20:50.636Z
-Repo: `/private/tmp/blackops-agent-trust-20261117`
+Generated: 2026-11-17T23:31:30.268Z
+Repo: `/private/tmp/blackops-worker-recovery-20261117`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1133 | 1033 | 4028 | 604 | 22894 |
+| 1134 | 1034 | 4035 | 604 | 22905 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,7 +28,7 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 294 | 290 | test:294 |
+| `tests` | 295 | 291 | test:295 |
 | `server` | 269 | 263 | server:269 |
 | `client/src` | 153 | 151 | ui-component:55, client-component:44, client-page:28, client-lib:19 |
 | `script` | 114 | 102 | script:114 |

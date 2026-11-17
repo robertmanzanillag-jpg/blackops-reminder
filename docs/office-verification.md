@@ -42,6 +42,16 @@ mediante `officePanel=history` y `officePanel=verification`.
 
 ## Publicación y reversión
 
+El diagnóstico del 17 de noviembre encontró fallos del worker antes de iniciar:
+el instalador de `onnxruntime-node` intentaba descargar CUDA y recibía 404.
+Las dos instalaciones del workflow de oficina/fábrica ahora fijan
+`ONNXRUNTIME_NODE_INSTALL_CUDA=skip` únicamente en runners CPU. Se conservan
+los demás scripts de `npm ci`; no se modifican permisos ni presupuestos.
+`tests/office-cpu-install.test.mjs` reproduce el instalador Linux/x64 en un
+entorno aislado y comprueba que la configuración elimina la descarga GPU.
+La recuperación real requiere integrar el workflow y observar una ejecución
+completada; esta prueba no sustituye ese paso.
+
 Se requiere PR, revisión independiente y QA antes del despliegue. El despliegue
 Replit conserva la aprobación del dueño exigida por `AGENTS.md`. Revertir el PR
 retira el informe y su botón; no hay migraciones ni cambios al historial.

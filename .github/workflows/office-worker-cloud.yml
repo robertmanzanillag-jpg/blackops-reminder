@@ -72,6 +72,9 @@ jobs:
           cache: npm
 
       - name: Install dependencies
+        # Hosted runners use CPU; optional CUDA downloads must not block startup.
+        env:
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
         run: npm ci --no-audit --no-fund
 
       - name: Install private configuration outside the checkout
@@ -186,6 +189,9 @@ jobs:
           cache: npm
 
       - name: Install dependencies
+        # The factory also runs on a CPU-only hosted runner.
+        env:
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
         run: npm ci --no-audit --no-fund
 
       - name: Install private configuration outside the checkout

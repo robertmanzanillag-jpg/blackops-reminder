@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-17T23:20:50.636Z",
-  "repoRoot": "/private/tmp/blackops-agent-trust-20261117",
+  "generatedAt": "2026-11-17T23:31:30.268Z",
+  "repoRoot": "/private/tmp/blackops-worker-recovery-20261117",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,51 +124,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1133,
-    "filesIndexed": 1033,
-    "imports": 4028,
+    "filesVisible": 1134,
+    "filesIndexed": 1034,
+    "imports": 4035,
     "routes": 604,
-    "symbols": 22894
+    "symbols": 22905
   },
   "directories": {
-    "client/src": {
-      "files": 153,
-      "indexed": 151,
-      "kinds": {
-        "client-component": 44,
-        "other": 4,
-        "ui-component": 55,
-        "client-hook": 3,
-        "client-lib": 19,
-        "client-page": 28
-      }
-    },
-    "docs": {
-      "files": 63,
-      "indexed": 61,
-      "kinds": {
-        "docs": 63
-      }
-    },
-    "server": {
-      "files": 269,
-      "indexed": 263,
-      "kinds": {
-        "server": 269
-      }
-    },
-    "shared": {
-      "files": 29,
-      "indexed": 29,
-      "kinds": {
-        "shared": 29
-      }
-    },
     "tests": {
-      "files": 294,
-      "indexed": 290,
+      "files": 295,
+      "indexed": 291,
       "kinds": {
-        "test": 294
+        "test": 295
       }
     },
     ".": {
@@ -230,6 +197,25 @@
         "other": 16
       }
     },
+    "client/src": {
+      "files": 153,
+      "indexed": 151,
+      "kinds": {
+        "other": 4,
+        "client-component": 44,
+        "ui-component": 55,
+        "client-hook": 3,
+        "client-lib": 19,
+        "client-page": 28
+      }
+    },
+    "docs": {
+      "files": 63,
+      "indexed": 61,
+      "kinds": {
+        "docs": 63
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -259,6 +245,13 @@
         "script": 4
       }
     },
+    "server": {
+      "files": 269,
+      "indexed": 263,
+      "kinds": {
+        "server": 269
+      }
+    },
     "server/blackroom-team": {
       "files": 17,
       "indexed": 17,
@@ -271,6 +264,13 @@
       "indexed": 9,
       "kinds": {
         "server": 9
+      }
+    },
+    "shared": {
+      "files": 29,
+      "indexed": 29,
+      "kinds": {
+        "shared": 29
       }
     },
     "shared/models": {
@@ -37576,6 +37576,34 @@
         "data",
         "db",
         "result"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-cpu-install.test.mjs",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:module",
+        "node:path",
+        "node:test",
+        "node:vm",
+        "onnxruntime-node/package.json"
+      ],
+      "exports": [],
+      "symbols": [
+        "baseline",
+        "context",
+        "downloads",
+        "fixed",
+        "install",
+        "installer",
+        "installerPath",
+        "require",
+        "steps",
+        "value",
+        "workflow"
       ],
       "routes": []
     },
