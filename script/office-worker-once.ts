@@ -1,7 +1,7 @@
 // Dedicated trusted cloud entrypoint: never loads repository .env files or adapters.
 // Runs the reviewed office executor once, bounded, then exits (see docs/office-worker-cloud.md).
 import { createHash, randomUUID } from "node:crypto";
-import { runOfficeWorkerOnce, safeFailureCode, OFFICE_ONCE_MAX_DURATION_MS, type OfficeOnceOwnership } from "../server/office-worker-once";
+import { runOfficeWorkerOnce, safeFailureCode, officeOnceBoundsFromEnv, type OfficeOnceOwnership } from "../server/office-worker-once";
 export { safeFailureCode };
 // Same validation and fixed review-only flags as the reviewed Windows launcher.
 import { parseWorkerConfig, safeWorkerEnvironment } from "./office-windows-worker.mjs";
@@ -15,6 +15,8 @@ async function main() {
   if (process.argv.length !== 2) throw Error("OFFICE_ONCE_ARGUMENTS_INVALID");
   const paused = () => process.env.OFFICE_WORKER_CLOUD_ENABLED !== "true";
   if (paused()) { console.log(JSON.stringify({ reason: "paused", cycles: 0 })); return; }
+  // Run bounds (OFFICE_RUN_MAX_MINUTES / OFFICE_RUN_IDLE_EXIT_SECONDS), read before the environment is rebuilt.
+  const bounds = officeOnceBoundsFromEnv(process.env);
   const raw = CONFIG_KEYS.filter(key => process.env[key]).map(key => `${key}=${process.env[key]}`).join("\n");
   const config = parseWorkerConfig(raw);
   for (const key of Object.keys(process.env)) if (/^PG/.test(key)) delete process.env[key];
@@ -66,11 +68,12 @@ async function main() {
       checkProtocol: () => host!.checkProtocol(),
       refreshCapabilities: () => host!.worker.refreshCapabilities(),
       maintain: () => host!.worker.maintain(),
-      tick: () => host!.worker.tick(),
+      // false = nothing claimed this cycle (idle exit); a busy/quarantined worker also reports false.
+      tick: async () => { await host!.worker.tick(); return host!.worker.lastTickClaimed(); },
       get academyCycle() { return host?.academyCycle; },
       get capabilityTick() { return host?.capabilityTick; },
       requestStop() { stopping = true; },
-    }, { signal: shutdown.signal, durationMs: OFFICE_ONCE_MAX_DURATION_MS });
+    }, { signal: shutdown.signal, ...bounds });
     console.log(JSON.stringify(result));
     if (result.reason === "unconfirmed") process.exitCode = 1;
   } finally {
