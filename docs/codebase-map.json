@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T14:13:28.694Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-v6-package-20261118",
+  "generatedAt": "2026-11-18T14:59:56.986Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-execution-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,25 +124,32 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1228,
-    "filesIndexed": 1123,
-    "imports": 4492,
+    "filesVisible": 1233,
+    "filesIndexed": 1128,
+    "imports": 4534,
     "routes": 623,
-    "symbols": 25337
+    "symbols": 25501
   },
   "directories": {
-    "script/office-api-budget-v6": {
-      "files": 10,
-      "indexed": 8,
+    "docs": {
+      "files": 77,
+      "indexed": 75,
       "kinds": {
-        "script": 10
+        "docs": 77
+      }
+    },
+    "script": {
+      "files": 134,
+      "indexed": 121,
+      "kinds": {
+        "script": 134
       }
     },
     "tests": {
-      "files": 323,
-      "indexed": 319,
+      "files": 325,
+      "indexed": 321,
       "kinds": {
-        "test": 323
+        "test": 325
       }
     },
     ".": {
@@ -216,13 +223,6 @@
         "client-page": 28
       }
     },
-    "docs": {
-      "files": 76,
-      "indexed": 74,
-      "kinds": {
-        "docs": 76
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -231,11 +231,11 @@
         "other": 70
       }
     },
-    "script": {
-      "files": 132,
-      "indexed": 119,
+    "script/office-api-budget-v6": {
+      "files": 10,
+      "indexed": 8,
       "kinds": {
-        "script": 132
+        "script": 10
       }
     },
     "script/release-gate": {
@@ -5846,6 +5846,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-weekly-execution.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-weekly-plan.md",
       "kind": "docs",
       "imports": [],
@@ -8229,6 +8237,7 @@
         "./clippers-portfolio-metricool.mjs",
         "./clippers-portfolio-render.mjs",
         "./clippers-selected-env.mjs",
+        "./clippers-weekly-policy.mjs",
         "node:crypto",
         "node:fs",
         "node:fs/promises",
@@ -8236,6 +8245,7 @@
         "node:url"
       ],
       "exports": [
+        "approvedItem as validateApprovedClippersAsset, deliveryCollision as clippersDeliveryCollision ",
         "runClippersDailyLearning"
       ],
       "symbols": [
@@ -8247,6 +8257,7 @@
         "WINDOWS",
         "activation",
         "active",
+        "after",
         "age",
         "applyApprovedActions",
         "approvedItem",
@@ -8256,6 +8267,7 @@
         "bindScheduleReceipt",
         "blockers",
         "byVersion",
+        "bytes",
         "candidate",
         "candidateCompletion",
         "candidateViews",
@@ -8275,6 +8287,7 @@
         "digest",
         "dispatchNow",
         "duplicateAssetKeys",
+        "editorialProof",
         "evaluate",
         "evidence",
         "exact",
@@ -8344,6 +8357,7 @@
         "value",
         "versionKey",
         "views",
+        "weekly",
         "window",
         "withinBudget"
       ],
@@ -8355,6 +8369,8 @@
       "imports": [
         "./clippers-daily-learning.mjs",
         "./clippers-portfolio-discovery.mjs",
+        "./clippers-weekly-policy.mjs",
+        "./clippers-weekly-scheduler.mjs",
         "node:child_process",
         "node:fs/promises",
         "node:path",
@@ -8414,6 +8430,7 @@
         "hasNonNegativeIntegerFields",
         "hasReport",
         "identity",
+        "input",
         "lane",
         "learning",
         "ledger",
@@ -8436,6 +8453,7 @@
         "report",
         "reportDate",
         "reportsRoot",
+        "root",
         "runClippersDailyWatchdog",
         "runPortfolioPrepareChild",
         "scheduled",
@@ -9783,6 +9801,7 @@
         "chunks",
         "codes",
         "comparisonsView",
+        "confirmed",
         "confirmedMedia",
         "control",
         "controlViews",
@@ -9872,6 +9891,9 @@
         "verifiedPosts",
         "verifiedRenderBinding",
         "views",
+        "weeklyAt",
+        "weeklyIsNewer",
+        "weeklyReceipts",
         "yes"
       ],
       "routes": []
@@ -10082,6 +10104,7 @@
         "exactPost",
         "findDestination",
         "localDay",
+        "localHour",
         "providerTimestamp"
       ],
       "symbols": [
@@ -10102,12 +10125,15 @@
         "connectionSettings",
         "createPortfolioMetricool",
         "date",
+        "day",
         "destination",
         "destinationKey",
         "destinationSettings",
         "duplicate",
         "entries",
         "envelope",
+        "evidence",
+        "exact",
         "exactPost",
         "field",
         "findDestination",
@@ -10116,10 +10142,14 @@
         "get",
         "hash",
         "headers",
+        "hours",
+        "id",
         "identity",
+        "key",
         "list",
         "local",
         "localDay",
+        "localHour",
         "match",
         "matches",
         "matchingContent",
@@ -10129,7 +10159,9 @@
         "metrics",
         "metricsFrom",
         "networkOptions",
+        "old",
         "owned",
+        "pending",
         "post",
         "postAnalytics",
         "posts",
@@ -10139,6 +10171,7 @@
         "providerMedia",
         "providerObservedAt",
         "providerTimestamp",
+        "published",
         "publishedAt",
         "raw",
         "reported",
@@ -10167,6 +10200,7 @@
       "kind": "script",
       "imports": [
         "./clippers-portfolio-metricool.mjs",
+        "./clippers-weekly-policy.mjs",
         "node:child_process",
         "node:crypto",
         "node:fs",
@@ -10246,10 +10280,12 @@
         "prepareReadiness",
         "prior",
         "priorAsset",
+        "priorInput",
         "priorTarget",
         "privateStageDirectory",
         "publicDriveUrl",
         "queued",
+        "queuedIds",
         "readiness",
         "reason",
         "receipt",
@@ -10286,7 +10322,9 @@
         "upload",
         "url",
         "validAt",
-        "verifyPublicBytes"
+        "verifyPublicBytes",
+        "weekly",
+        "weeklyCandidate"
       ],
       "routes": []
     },
@@ -11300,6 +11338,147 @@
         "snapshotMap",
         "start",
         "unique"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-weekly-policy.mjs",
+      "kind": "script",
+      "imports": [
+        "../shared/clippers-priority-creators.mjs",
+        "./clippers-portfolio-metricool.mjs",
+        "node:crypto",
+        "node:fs",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "approvedEditorialSourceProof",
+        "approvedWeeklyAuthorization",
+        "newYorkHour",
+        "readWeeklyPrivateJson",
+        "validWeeklyWindow",
+        "validateEvergreenAuthorization",
+        "weeklyDeliveryCollision",
+        "weeklyDigest"
+      ],
+      "symbols": [
+        "HOUR",
+        "ID",
+        "SHA",
+        "after",
+        "approvedEditorialSourceProof",
+        "approvedWeeklyAuthorization",
+        "at",
+        "bytes",
+        "calendarDay",
+        "canonical",
+        "equal",
+        "file",
+        "from",
+        "id",
+        "legacy",
+        "license",
+        "newYorkHour",
+        "parsed",
+        "proof",
+        "r",
+        "readEditorialRender",
+        "readWeeklyPrivateJson",
+        "rendered",
+        "renderedAt",
+        "request",
+        "review",
+        "sha",
+        "sourceProof",
+        "st",
+        "terms",
+        "url",
+        "validWeeklyWindow",
+        "validateEvergreenAuthorization",
+        "weeklyDeliveryCollision",
+        "weeklyDigest",
+        "x"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-weekly-scheduler.mjs",
+      "kind": "script",
+      "imports": [
+        "./clippers-daily-learning.mjs",
+        "./clippers-portfolio-metricool.mjs",
+        "./clippers-selected-env.mjs",
+        "./clippers-weekly-policy.mjs",
+        "node:child_process",
+        "node:crypto",
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "parseWeeklySchedulingArgs",
+        "remainingWeeklyWindow",
+        "runClippersWeeklyScheduling",
+        "runWeeklySchedulingChild"
+      ],
+      "symbols": [
+        "CONFIG",
+        "args",
+        "before",
+        "blocked",
+        "candidates",
+        "check",
+        "child",
+        "childEnv",
+        "configured",
+        "confirmed",
+        "controller",
+        "counts",
+        "current",
+        "currentLock",
+        "currentReceipts",
+        "day",
+        "deadline",
+        "dir",
+        "emptyState",
+        "existing",
+        "file",
+        "finish",
+        "hardStop",
+        "held",
+        "initialReport",
+        "latestInput",
+        "latestRows",
+        "legacy",
+        "lockFile",
+        "name",
+        "operationStarted",
+        "outcome",
+        "parseWeeklySchedulingArgs",
+        "r",
+        "receipt",
+        "receipts",
+        "record",
+        "remainingWeeklyWindow",
+        "report",
+        "reportDir",
+        "root",
+        "runClippersWeeklyScheduling",
+        "runWeeklySchedulingChild",
+        "safe",
+        "save",
+        "selected",
+        "startDate",
+        "state",
+        "stop",
+        "temporary",
+        "terminate",
+        "timer",
+        "window",
+        "windowKey",
+        "within"
       ],
       "routes": []
     },
@@ -12631,6 +12810,7 @@
         "before",
         "client",
         "columns",
+        "connectionString",
         "held",
         "main",
         "pool",
@@ -39119,6 +39299,71 @@
       "routes": []
     },
     {
+      "path": "tests/clippers-weekly-execution.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-orchestra-report.mjs",
+        "../script/clippers-portfolio-metricool.mjs",
+        "../script/clippers-portfolio-prepare.mjs",
+        "../script/clippers-portfolio-render.mjs",
+        "../script/clippers-weekly-policy.mjs",
+        "../script/clippers-weekly-scheduler.mjs",
+        "node:assert/strict",
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test",
+        "node:util"
+      ],
+      "exports": [],
+      "symbols": [
+        "WINDOW",
+        "a",
+        "adapter",
+        "args",
+        "asset",
+        "at",
+        "base",
+        "c",
+        "child",
+        "configured",
+        "evidence",
+        "exec",
+        "f",
+        "fifo",
+        "fixture",
+        "hash",
+        "legacy",
+        "license",
+        "moduleUrl",
+        "next",
+        "old",
+        "p",
+        "packet",
+        "prepared",
+        "pureFixture",
+        "r",
+        "read",
+        "readyFixture",
+        "rendered",
+        "request",
+        "rights",
+        "root",
+        "row",
+        "scoped",
+        "seal",
+        "sourceSha",
+        "state",
+        "timestamp",
+        "tools",
+        "uploader",
+        "write"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/clippers-weekly-plan.test.mjs",
       "kind": "test",
       "imports": [
@@ -39137,6 +39382,31 @@
         "p",
         "post",
         "snapshots"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clippers-weekly-watchdog.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-daily-watchdog.mjs",
+        "../script/clippers-weekly-scheduler.mjs",
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "fixture",
+        "input",
+        "options",
+        "r",
+        "root",
+        "spawnProcess"
       ],
       "routes": []
     },

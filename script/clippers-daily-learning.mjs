@@ -11,6 +11,8 @@ import {
   exactPost, findDestination, localDay, providerTimestamp,
 } from './clippers-portfolio-metricool.mjs';
 
+import { approvedWeeklyAuthorization, approvedEditorialSourceProof, weeklyDeliveryCollision } from './clippers-weekly-policy.mjs';
+
 const HOUR = 3_600_000;
 const WINDOWS = [24, 72, 168];
 const BASELINE = 'baseline-1';
@@ -29,11 +31,15 @@ async function privateJson(file, fallback, prohibitedMode = 0o077) {
   let handle;
   try {
     if (path.dirname(file) !== await realpath(path.dirname(file))) throw new Error('private_parent_symlink');
-    handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const info = await handle.stat();
     if (!info.isFile() || info.nlink !== 1 || (info.mode & prohibitedMode) ||
         (process.getuid && info.uid !== process.getuid()) || info.size > 25_000_000) throw new Error('private_file_required');
-    return JSON.parse(await handle.readFile('utf8'));
+    const bytes=Buffer.alloc(info.size+1);let length=0;
+    while(length<bytes.length){const result=await handle.read(bytes,length,bytes.length-length,null);if(!result.bytesRead)break;length+=result.bytesRead;}
+    const after=await handle.stat();
+    if(length!==info.size||after.size!==info.size||after.mtimeMs!==info.mtimeMs||after.ctimeMs!==info.ctimeMs)throw Error('private_file_changed');
+    return JSON.parse(bytes.subarray(0,length).toString('utf8'));
   } catch (error) {
     if (error.code === 'ENOENT' && fallback !== undefined) return fallback;
     throw error;
@@ -75,9 +81,14 @@ function approvedMedia(item, media) {
     row.campaignId === item.campaignId && row.draftFile === item.draftFile &&
     row.fileId === item.mediaReceiptFileId && row.mediaUrl === item.mediaUrl && row.sha256 === item.mediaSha256);
 }
-async function approvedItem(raw, root, now, receipts, state) {
+async function approvedItem(raw, root, now, receipts, state, weeklyWindow) {
   const destination = findDestination(raw);
   if (!destination) return null;
+  if ((raw.weeklyAuthorizationSha256 || raw.editorialPolicy) && !weeklyWindow) return null;
+  const weekly = !!weeklyWindow && await approvedWeeklyAuthorization(root, raw, now, weeklyWindow);
+  if (weeklyWindow && raw.weeklyAuthorizationSha256 && !weekly) return null;
+  if (weeklyWindow && !raw.weeklyAuthorizationSha256 && raw.editorialPolicy!=='evergreen_streamer_clip') return null;
+  if (raw.editorialPolicy!==undefined && raw.editorialPolicy!=='evergreen_streamer_clip') return null;
   const currentVersion = state.versions[destinationKey(destination)] ?? BASELINE;
   const scheduledAt = providerTimestamp(raw.scheduledAt);
   const rightsObservedAt = providerTimestamp(raw.rightsObservedAt);
@@ -90,9 +101,9 @@ async function approvedItem(raw, root, now, receipts, state) {
   const usesVersion = raw.experiment?.arm === 'candidate' ? raw.experiment.candidateVersion : currentVersion;
   if (!ID.test(raw.id ?? '') || !ID.test(raw.campaignId ?? '') || !ID.test(raw.sourceId ?? '') || !validVariant ||
       raw.policyVersion !== usesVersion || !ID.test(raw.creator ?? '') || !/^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(raw.language ?? '') ||
-      !scheduledAt || Date.parse(scheduledAt) < +now + 5 * 60_000 || localDay(new Date(scheduledAt)) !== localDay(now) ||
+      !scheduledAt || Date.parse(scheduledAt) < +now + 5 * 60_000 || (!weekly && localDay(new Date(scheduledAt)) !== localDay(now)) ||
       !rightsObservedAt || dayAge(rightsObservedAt, now) < 0 || dayAge(rightsObservedAt, now) > 24 ||
-      !publishedAt || dayAge(publishedAt, now) < 0 || dayAge(publishedAt, new Date(scheduledAt)) > 72 ||
+      !publishedAt || dayAge(publishedAt, now) < 0 || (!weekly && dayAge(publishedAt, new Date(scheduledAt)) > 72) ||
       !rightsValidUntil || Date.parse(rightsValidUntil) < Date.parse(scheduledAt) ||
       !safeHttps(raw.sourceUrl) || !SHA.test(raw.mediaSha256 ?? '') || !SHA.test(raw.evidenceSha256 ?? '') ||
       typeof raw.caption !== 'string' || !raw.caption.trim() || raw.caption.length > 2200 ||
@@ -107,6 +118,7 @@ async function approvedItem(raw, root, now, receipts, state) {
       evidence.policyVersion !== raw.policyVersion || evidence.scheduledAt !== raw.scheduledAt ||
       evidence.renderReceiptSha256 !== raw.renderReceiptSha256 ||
       featureDigest(evidence.experiment ?? null) !== featureDigest(raw.experiment ?? null) ||
+      evidence.editorialPolicy !== raw.editorialPolicy || evidence.weeklyAuthorizationSha256 !== raw.weeklyAuthorizationSha256 ||
       evidence.rightsObservedAt !== raw.rightsObservedAt || evidence.rightsValidUntil !== raw.rightsValidUntil ||
       evidence.thirdPartyCommercial !== raw.thirdPartyCommercial || !findDestination(evidence.destination) ||
       destinationKey(evidence.destination) !== destinationKey(destination) ||
@@ -124,15 +136,20 @@ async function approvedItem(raw, root, now, receipts, state) {
     try { renderProof = await confirmedRenderReceipt(root, raw, destination); } catch { return null; }
     if (!renderProof) return null;
   }
+  const editorialProof=raw.editorialPolicy ? await approvedEditorialSourceProof(root,raw) : null;
+  if(raw.editorialPolicy && (!editorialProof || !renderProof || editorialProof.rightsBasis!==evidence.rightsBasis || editorialProof.membership!==evidence.membership || editorialProof.termsUrl!==evidence.termsUrl || editorialProof.ownership!==evidence.ownership))return null;
   const { id, campaignId, sourceUrl, sourceId, creator, language, policyVersion, experiment, caption, mediaUrl,
     mediaSha256, thirdPartyCommercial, evidenceSha256 } = raw;
   return { ...destination, id, campaignId, sourceId, sourceUrl, creator, language, policyVersion, experiment,
     caption, mediaUrl, mediaSha256, thirdPartyCommercial, evidenceSha256, renderProof, scheduledAt,
+    ...(editorialProof ? {editorialPolicy:raw.editorialPolicy,weeklySourceProof:editorialProof} : {}),
+    ...(weekly ? {weeklyAuthorizationSha256: raw.weeklyAuthorizationSha256,weeklySourceProof:weekly} : {}),
     draftFile: raw.draftFile, renderReceiptSha256: raw.renderReceiptSha256,
     rightsEvidence: { reviewedBy: evidence.reviewedBy, termsUrl: evidence.termsUrl, rightsBasis: evidence.rightsBasis,
       membership: evidence.membership, rightsObservedAt, rightsValidUntil, sourcePublishedAt: publishedAt } };
 }
 function deliveryCollision(a, b) {
+  if(a.editorialPolicy==='evergreen_streamer_clip'||b.editorialPolicy==='evergreen_streamer_clip')return weeklyDeliveryCollision(a,b);
   return destinationKey(a) === destinationKey(b) && (
     a.id === b.id || a.mediaSha256 === b.mediaSha256 || a.sourceUrl === b.sourceUrl ||
     a.scheduledAt === b.scheduledAt || a.caption.trim().toLowerCase() === b.caption.trim().toLowerCase()
@@ -464,3 +481,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const report = await runClippersDailyLearning();
   console.log(JSON.stringify(report, null, 2));
 }
+
+// Shared audited validation; weekly executor supplies a bounded explicit window.
+export { approvedItem as validateApprovedClippersAsset, deliveryCollision as clippersDeliveryCollision };

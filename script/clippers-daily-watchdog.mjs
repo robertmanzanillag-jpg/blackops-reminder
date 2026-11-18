@@ -4,6 +4,8 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { runClippersDailyLearning } from "./clippers-daily-learning.mjs";
 import { runPortfolioDiscovery } from "./clippers-portfolio-discovery.mjs";
+import { readWeeklyPrivateJson } from "./clippers-weekly-policy.mjs";
+import { remainingWeeklyWindow, runWeeklySchedulingChild } from "./clippers-weekly-scheduler.mjs";
 
 const DEFAULT_TIME_ZONE = "America/New_York";
 const DEFAULT_CHECK_HOUR = 10;
@@ -483,6 +485,16 @@ export async function runClippersDailyWatchdog(options = {}) {
   }
   if (due && options.dailyLearning === true) {
     try {
+      const root=await realpath(workspaceRoot);
+      const input=await readWeeklyPrivateJson(root,'config/clippers-daily-learning/approved-input.json',{publish:false,assets:[]});
+      if(input.publish===true && Array.isArray(input.assets) && input.assets.some(a=>a?.weeklyAuthorizationSha256||a?.editorialPolicy==='evergreen_streamer_clip')){
+        report.weeklyScheduling=await (options.runWeeklySchedulingChild||runWeeklySchedulingChild)({workspaceRoot:root,window:remainingWeeklyWindow(now),env,now});
+        if(report.weeklyScheduling.status==='blocked'||report.weeklyScheduling.scheduled===null)report.alerts.weeklySchedulingBlocked=true;
+      }
+    }catch{report.weeklyScheduling={status:'blocked',reason:'weekly_scheduling_unavailable',scheduled:null,paidSpendUsd:0};report.alerts.weeklySchedulingBlocked=true;}
+  }
+  if (due && options.dailyLearning === true) {
+    try {
       const learning = await (options.runClippersDailyLearning || runClippersDailyLearning)({ workspaceRoot, now, env });
       report.dailyLearning = {
         status: learning.status, date: learning.date ?? current.date, reason: learning.reason ?? null,
@@ -497,7 +509,7 @@ export async function runClippersDailyWatchdog(options = {}) {
       report.alerts.dailyLearningBlocked = true;
     }
   }
-  if (report.alerts.dailyLearningBlocked || report.alerts.publicDiscoveryBlocked || report.alerts.portfolioPreparationBlocked || report.alerts.accountAnalyticsHeld) {
+  if (report.alerts.dailyLearningBlocked || report.alerts.publicDiscoveryBlocked || report.alerts.portfolioPreparationBlocked || report.alerts.accountAnalyticsHeld || report.alerts.weeklySchedulingBlocked) {
     report.alert = true;
     report.status = "alert";
   }
