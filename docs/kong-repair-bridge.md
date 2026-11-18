@@ -11,8 +11,11 @@ request in the existing `ceo_handoffs` outbox, and polls the exact BlackOps repa
 key. Creative callbacks, source disappearance, admin "done", retention and
 ordinary report-task verification cannot close linked software repairs.
 
-BlackOps verifies the existing canonical HMAC envelope, scope, time window and
-request digest. Its council namespace `kong-software-repairs-v1` stores durable
+The preferred transport is the existing read-only office connection: BlackOps polls
+KONG’s SELECT-only operations projection every 15 minutes with its existing
+KONG_OFFICE_READ_TOKEN. The local KONG report loop persists source linkage
+separately. BlackOps validates exact scope, source freshness, canonical key and
+payload digest. Optional signed delivery verifies the canonical HMAC envelope. Its council namespace `kong-software-repairs-v1` stores durable
 request/replay claims, handoff state, maker fences and verification receipts.
 Identical delivery and fresh signed delivery of the same payload resolve the same
 repair. Ambiguous GitHub issue creation remains `dispatch_unknown`; a delivery
@@ -54,23 +57,38 @@ independent verification; absence leaves closure unconfirmed, never fabricated.
 
 Only after PRs, independent review and QA:
 
-- KONG: `KONG_REPAIR_BRIDGE_ENABLED=true`, the existing
-  `KONG_ASISTENTE_BRIDGE_URL`, `KONG_ASISTENTE_HMAC_SECRET` and HTTPS host allowlist;
-  the existing report-task worker must be running. The repair URL is derived on
-  that already allowlisted host. No new key is provisioned by this change.
-- BlackOps: `KONG_REPAIR_BRIDGE_ENABLED=true` and
-  `KONG_REPAIR_HANDOFF_ENABLED=true`, existing GitHub connector permissions for
-  the private KONG repo, and the same existing HMAC secret installed by the
-  operator. Missing configuration stays blocked. The website release is a
-  reviewed minimal patch on its actual source, not a blind replacement by main.
-- Local maker: install/enable the separately reviewed signed-in subscription
-  worker only after its QA. No OpenAI API key, API request or new provider budget
-  is required. Do not claim pickup until the real durable claim/receipt exists.
-- Optional signed maker RPC: `KONG_REPAIR_MAKER_ENABLED=true` and explicit
-  `KONG_REPAIR_WORKER_IDS`; GitHub-only local operation does not require these.
-- Independent review/App QA actors are explicit nonsecret allowlists
-  `KONG_REPAIR_REVIEW_ACTORS` and `KONG_REPAIR_QA_ACTORS`; missing acceptable
-  evidence reports `awaiting_independent_review`. Do not fabricate approvals.
+- KONG: `KONG_REPAIR_BRIDGE_ENABLED=true` and the existing report-task worker
+  running. Its operations GET projects only persisted repair sources. Existing
+  GitHub authorization, including the ephemeral Replit connector, independently
+  verifies private repository access and closure evidence.
+- BlackOps: `KONG_REPAIR_BRIDGE_ENABLED=true`,
+  `KONG_REPAIR_HANDOFF_ENABLED=true`, `KONG_REPAIR_PULL_ENABLED=true`, existing
+  `KONG_OFFICE_READ_TOKEN` and private KONG GitHub connector access. Both sides
+  pin `KONG_REPAIR_CHECKER_ENGINE_COMMIT` to the reviewed maker engine commit.
+  Preflight reads happen before reserving an issue write; failures remain
+  `blocked_no_github`. An ambiguous actual issue POST remains quarantined.
+- Local maker: install/enable the independently reviewed signed-in subscription
+  worker after QA. Its real atomic claim, PR and parent checker receipt establish
+  pickup and checking. Issue creation alone establishes neither.
+- Optional HMAC delivery uses the existing configured signing capability and
+  host allowlist; pull-only operation needs no new signing secret. Optional
+  signed maker RPC additionally needs `KONG_REPAIR_MAKER_ENABLED=true` and
+  explicit `KONG_REPAIR_WORKER_IDS`.
+
+Owner status separates configuration, actual private GitHub preflight, durable
+source-read timestamps (fresh within two polling intervals), actual maker
+heartbeat (fresh within 30 minutes), checking and deployed verification. A
+recent idle poll means an idle connected worker, not missing execution.
+Independent checking may use the immutable receipt produced by a separate fresh
+checker process outside the maker sandbox, bound to the exact source/head and
+reviewed parent engine. It does not require a different GitHub account. App QA
+remains a separate requirement.
+
+After verified production evidence, BlackOps publishes a source-bound closure
+receipt and closes the private issue, then confirms its actual closed state.
+Lost acknowledgment leaves delivery explicitly unknown; reconciliation reads
+the existing receipt before an idempotent close and never republishes an
+ambiguous comment. The KONG source independently rechecks its own closure.
 
 The actual shared-credit state is reported separately. `blocked_unknown_credit`
 continues to block paid provider work; deterministic ingestion, investigation

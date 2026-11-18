@@ -1,7 +1,7 @@
 import { startConfiguredRepairPull, pullConfiguredRepairSources, configuredRepairPullStatus } from "./kong-repair-pull";
 import type { Express, Request } from "express";
 import { verifyRepairEnvelope, verifyWorkerEnvelope, verifyRepairStatus, signVerifiedRepair, type createKongRepairBridge } from "./kong-repair-bridge";
-import { getKongRepairBridge, readKongRepairMakerHealth } from "./kong-repair-runtime";
+import { getKongRepairBridge, readKongRepairMakerHealth, readKongRepairGithubReadiness } from "./kong-repair-runtime";
 import { getAuthenticatedCurrentUserId, getSystemUserId } from "./user-context";
 import { officeSameOrigin } from "./office-routes";
 export function registerKongRepairRoutes(app: Express, options: {
@@ -60,7 +60,10 @@ export function registerKongRepairRoutes(app: Express, options: {
       handoffConfigured: handoffEnabled(), signingConfigured: (secret()?.length || 0) >= 32,
       enginePinned: /^[a-f0-9]{40}$/.test(process.env.KONG_REPAIR_CHECKER_ENGINE_COMMIT || ""),
       githubConnectionPossible: !!(process.env.GITHUB_TOKEN || process.env.GH_TOKEN || process.env.REPLIT_CONNECTORS_HOSTNAME) };
-    try { const bridge = await resolve(); return bridge ? res.json({ ...await bridge.view(), readiness, maker: await readKongRepairMakerHealth().catch(() => ({ state: "unavailable", workerConnected: false })), pull: await configuredRepairPullStatus().catch(() => ({ code: "REPAIR_PULL_STATUS_UNAVAILABLE" })) }) : res.status(503).json({ code: "REPAIR_BRIDGE_DISABLED", readiness }); }
+    try { const bridge = await resolve(), github = await readKongRepairGithubReadiness();
+      if (!bridge) return res.status(503).json({ code: "REPAIR_BRIDGE_DISABLED", readiness, github });
+      const view = await bridge.view(), maker = await readKongRepairMakerHealth().catch(() => ({ state: "unavailable", workerConnected: false }));
+      return res.json({ ...view, makerConsumer: maker.workerConnected ? `worker_${maker.state}` : view.makerConsumer, readiness, github, maker, pull: await configuredRepairPullStatus().catch(() => ({ code: "REPAIR_PULL_STATUS_UNAVAILABLE" })) }); }
     catch { return res.status(503).json({ code: "REPAIR_STATUS_UNAVAILABLE" }); }
   });
   app.post("/api/kong-repairs/pull", async (req, res) => {

@@ -19,9 +19,9 @@ function fixture() {
     const job = tail.then(async () => { const next = await change(rows.get(key) || null); rows.set(key, next); return next; });
     tail = job.then(() => {}, () => {}); return job;
   } };
-  const create = () => createKongRepairBridge({ owner: "fixture-owner", store, now: () => time,
+  const create = (extra: Partial<Parameters<typeof createKongRepairBridge>[0]> = {}) => createKongRepairBridge({ owner: "fixture-owner", store, now: () => time,
     createHandoff: async () => { handoffs++; if (lost) throw Error("lost acknowledgment"); return { repository: KONG_REPAIR_REPOSITORY, issueUrl: `https://github.com/${KONG_REPAIR_REPOSITORY}/issues/123` }; },
-    readProof: async () => proof, readPaidState: async () => "blocked_unknown_credit" });
+    readProof: async () => proof, readPaidState: async () => "blocked_unknown_credit", ...extra });
   return { create, rows, advance: (ms: number) => { time += ms; }, calls: () => handoffs, lose: () => { lost = true; }, proof: (patch: Partial<RepairProof>) => { proof = { ...proof, ...patch }; } };
 }
 
@@ -204,4 +204,37 @@ test("cached worker health loses its connection at the freshness deadline withou
   assert.equal(freshMakerHealth(value, NOW + 1799000).workerConnected, true);
   assert.equal(freshMakerHealth(value, NOW + 1801000).workerConnected, false);
   assert.equal(freshMakerHealth(value, NOW + 1801000).state, "stale");
+});
+
+test("a failed read-only GitHub preflight stays retryable before any issue write reservation", async () => {
+  const f = fixture(), base = f.create(), request = envelope(); await base.receive(request);
+  let ready = false, posts = 0;
+  const bridge = createKongRepairBridge({ owner: "fixture-owner", store: { read: async key => f.rows.get(key) || null, transact: async (key, change) => { const next = await change(f.rows.get(key) || null); f.rows.set(key, next); return next; } }, now: () => NOW,
+    prepareHandoff: async () => { if (!ready) throw Error("private connector 403"); return async () => { posts++; return { repository: KONG_REPAIR_REPOSITORY, issueUrl: `https://github.com/${KONG_REPAIR_REPOSITORY}/issues/77` }; }; },
+    createHandoff: async () => { throw Error("preflighted path expected"); }, readProof: async () => { throw Error("unused"); }, readPaidState: async () => "unavailable" });
+  const held = await bridge.dispatch(request.idempotencyKey); assert.equal(held.status, "blocked_no_github"); assert.equal(held.handoffStartedAt, undefined); assert.equal(posts, 0);
+  ready = true; assert.equal((await bridge.dispatch(request.idempotencyKey)).status, "handoff_created"); assert.equal(posts, 1);
+});
+
+
+test("verified issue closure quarantines a lost comment acknowledgment and reconciles without duplicate publication", async () => {
+  const f = fixture(), request = envelope(); let prepares = 0, posts = 0, recorded = false, issueClosed = false, readsFail = false;
+  const bridge = f.create({ prepareCloseHandoff: async () => {
+    prepares++; if (readsFail) throw Error("read-only unavailable");
+    return async allowCreate => {
+      if (!recorded && allowCreate) { posts++; recorded = true; throw Error("comment acknowledgment lost"); }
+      if (!recorded) return { closed: false, beforeState: "open" };
+      const beforeState = issueClosed ? "closed" as const : "open" as const; issueClosed = true;
+      return { closed: true, beforeState, proofCommentUrl: `https://github.com/${KONG_REPAIR_REPOSITORY}/issues/123#issuecomment-1` };
+    };
+  } });
+  await bridge.receive(request); await bridge.dispatch(request.idempotencyKey);
+  await bridge.reconcileClosure(request.idempotencyKey); assert.equal(prepares, 0);
+  f.proof({ regressionRunId: 100 }); readsFail = true;
+  assert.equal((await bridge.check(request.idempotencyKey, 99)).githubClosure?.state, "pending"); assert.equal(posts, 0);
+  readsFail = false;
+  const first = await bridge.reconcileClosure(request.idempotencyKey); assert.equal(first?.status, "verified"); assert.equal(first?.githubClosure?.state, "unknown"); assert.equal(posts, 1);
+  const recovered = await bridge.reconcileClosure(request.idempotencyKey); assert.equal(recovered?.githubClosure?.state, "closed"); assert.equal(posts, 1);
+  const verifiedAt = recovered?.verifiedAt; f.advance(1000); f.proof({ observedAt: NOW + 1000 });
+  const rechecked = await bridge.check(request.idempotencyKey, 99); assert.equal(rechecked.githubClosure?.state, "closed"); assert.equal(rechecked.verifiedAt, verifiedAt); assert.equal(posts, 1);
 });

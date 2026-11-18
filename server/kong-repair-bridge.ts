@@ -34,7 +34,7 @@ export function verifyRepairEnvelope(raw: unknown, signature: unknown, secret: s
     envelope.taskId !== envelope.payload.sourceTaskId || envelope.idempotencyKey !== repairKey(envelope.payload) || canonicalRepairJson(envelope) !== raw.toString("utf8")) throw Error("REPAIR_INVALID_ENVELOPE");
   return envelope;
 }
-const status = z.enum(["queued", "blocked_insufficient_evidence", "blocked_operational_condition", "blocked_handoff_capacity", "dispatch_unknown", "handoff_created", "maker_claimed", "maker_running", "maker_unknown", "maker_failed", "held_stale_base", "superseded_unclaimed", "awaiting_checker", "awaiting_independent_review", "awaiting_qareview", "awaiting_deployment", "verified"]);
+const status = z.enum(["queued", "blocked_insufficient_evidence", "blocked_operational_condition", "blocked_handoff_capacity", "blocked_no_github", "dispatch_unknown", "handoff_created", "maker_claimed", "maker_running", "maker_unknown", "maker_failed", "held_stale_base", "superseded_unclaimed", "awaiting_checker", "awaiting_independent_review", "awaiting_qareview", "awaiting_deployment", "verified"]);
 const workerPayload = z.object({ workerId: id, key: z.string().optional(), fence: z.string().uuid().optional(),
   prNumber: z.number().int().positive().optional(), headSha: sha.optional(),
   reasonCode: z.enum(["CLI_UNAVAILABLE", "CLI_FAILED", "VALIDATION_FAILED", "ACK_UNKNOWN", "ABORTED"]).optional() }).strict();
@@ -52,7 +52,7 @@ export function verifyWorkerEnvelope(raw: unknown, signature: unknown, secret: s
 }
 const makerSchema = z.object({ workerId: id, fence: z.string().uuid(), claimedAt: z.string().datetime(), expiresAt: z.string().datetime(), startedAt: z.string().datetime().optional(), headSha: sha.optional() }).strict();
 const entrySchema = z.object({ key: z.string(), payload: kongRepairPayloadSchema, payloadHash: z.string(), eventId: id, nonce: z.string(),
-  status, handoffStartedAt: z.string().datetime().optional(), engineSourceCommit: sha.optional(), approvedBaseSha: sha.optional(), sourceDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(), supersessionRef: z.string().optional(), githubClaimRef: z.string().optional(), verifiedRegressionRunId: z.number().int().positive().optional(), maker: makerSchema.optional(), receivedAt: z.string().datetime(), issueUrl: z.string().optional(), prNumber: z.number().int().positive().optional(),
+  status, githubClosure: z.object({ state: z.enum(["pending", "unknown", "closed"]), beforeState: z.enum(["open", "closed"]).optional(), proofCommentUrl: z.string().optional(), confirmedAt: z.string().datetime().optional() }).strict().optional(), handoffStartedAt: z.string().datetime().optional(), engineSourceCommit: sha.optional(), approvedBaseSha: sha.optional(), sourceDigest: z.string().regex(/^[a-f0-9]{64}$/).optional(), supersessionRef: z.string().optional(), githubClaimRef: z.string().optional(), verifiedRegressionRunId: z.number().int().positive().optional(), maker: makerSchema.optional(), receivedAt: z.string().datetime(), issueUrl: z.string().optional(), prNumber: z.number().int().positive().optional(),
   verifiedHeadSha: sha.optional(), verifiedDeploymentSha: sha.optional(), verifiedAt: z.string().datetime().optional() }).strict();
 const journalSchema = z.object({ version: z.literal(1), ownerKey: z.string().regex(/^[a-f0-9]{64}$/), entries: z.array(entrySchema).max(1000), deliveryReceipts: z.array(z.object({ eventId: id, nonce: z.string(), key: z.string(), payloadHash: z.string() }).strict()).max(5000).default([]), workerReceipts: z.array(z.object({ eventId: id, nonce: z.string(), requestHash: z.string(), idempotencyKey: z.string(), key: z.string().nullable() }).strict()).max(5000).default([]) }).strict();
 export type RepairJournal = z.infer<typeof journalSchema>;
@@ -72,7 +72,9 @@ function parseJournal(raw: string | null, owner: string): RepairJournal {
 /** The subscription handoff has no paid provider dependency. All external actions
  * run outside the transaction. Ambiguous issue creation is permanently fenced. */
 export function createKongRepairBridge(options: { owner: string; store: RepairStore; now: () => number;
+  prepareHandoff?: (entry: RepairEntry) => Promise<() => Promise<{ repository: string; issueUrl: string; approvedBaseSha?: string; sourceDigest?: string; engineSourceCommit?: string }>>;
   createHandoff: (entry: RepairEntry) => Promise<{ repository: string; issueUrl: string; approvedBaseSha?: string; sourceDigest?: string; engineSourceCommit?: string }>;
+  prepareCloseHandoff?: (entry: RepairEntry) => Promise<(allowCommentCreate: boolean) => Promise<{ closed: boolean; beforeState: "open" | "closed"; proofCommentUrl?: string }>>;
   readGithubMaker?: (entry: RepairEntry, allowRefresh?: boolean) => Promise<{ claimed: boolean; ref: string; prNumber?: number; state?: "maker_failed" | "maker_unknown" | "held_stale_base" | "superseded_unclaimed" }>;
   readProof: (entry: RepairEntry, prNumber: number) => Promise<RepairProof>;
   readPaidState: () => Promise<"available" | "blocked_unknown_credit" | "unavailable">;
@@ -104,11 +106,23 @@ export function createKongRepairBridge(options: { owner: string; store: RepairSt
     return parseJournal(raw, owner).entries.find(entry => entry.key === key)!;
   }
   async function dispatch(key: string) {
+    let prepared: (() => Promise<{ repository: string; issueUrl: string; approvedBaseSha?: string; sourceDigest?: string; engineSourceCommit?: string }>) | undefined;
+    if (options.prepareHandoff) {
+      const candidate = parseJournal(await store.read(namespace(owner)), owner).entries.find(entry => entry.key === key);
+      if (!candidate) throw Error("REPAIR_NOT_FOUND");
+      if (["queued", "blocked_handoff_capacity", "blocked_no_github"].includes(candidate.status)) {
+        try { prepared = await options.prepareHandoff(structuredClone(candidate)); }
+        catch {
+          const saved = await mutate(journal => { const entry = journal.entries.find(item => item.key === key)!; if (["queued", "blocked_handoff_capacity", "blocked_no_github"].includes(entry.status)) entry.status = "blocked_no_github"; });
+          return parseJournal(saved, owner).entries.find(item => item.key === key)!;
+        }
+      }
+    }
     let claimed: RepairEntry | undefined;
     const raw = await mutate(journal => {
       claimed = undefined; const entry = journal.entries.find(entry => entry.key === key);
       if (!entry) throw Error("REPAIR_NOT_FOUND");
-      if (!["queued", "blocked_handoff_capacity"].includes(entry.status)) return;
+      if (!["queued", "blocked_handoff_capacity", "blocked_no_github"].includes(entry.status)) return;
       const outstanding = journal.entries.filter(item => item.status === "dispatch_unknown" || (item.issueUrl && !["verified", "superseded_unclaimed"].includes(item.status))).length;
       const day = new Date(now()).toISOString().slice(0, 10);
       const startedToday = journal.entries.filter(item => item.handoffStartedAt?.slice(0, 10) === day).length;
@@ -120,7 +134,7 @@ export function createKongRepairBridge(options: { owner: string; store: RepairSt
       entry.status = "dispatch_unknown"; entry.handoffStartedAt = new Date(now()).toISOString(); claimed = structuredClone(entry);
     });
     if (!claimed) return parseJournal(raw, owner).entries.find(entry => entry.key === key)!;
-    const handoff = await options.createHandoff(claimed);
+    const handoff = prepared ? await prepared() : await options.createHandoff(claimed);
     if (handoff.repository !== KONG_REPAIR_REPOSITORY || !/^https:\/\/github\.com\/robertmanzanillag-jpg\/kong-nightlife\/issues\/[1-9][0-9]*$/.test(handoff.issueUrl)) throw Error("REPAIR_HANDOFF_UNVERIFIED");
     const saved = await mutate(journal => {
       const entry = journal.entries.find(entry => entry.key === key)!;
@@ -131,6 +145,32 @@ export function createKongRepairBridge(options: { owner: string; store: RepairSt
       if (handoff.engineSourceCommit) entry.engineSourceCommit = sha.parse(handoff.engineSourceCommit);
     });
     return parseJournal(saved, owner).entries.find(entry => entry.key === key)!;
+  }
+  async function reconcileClosure(key: string) {
+    let entry = parseJournal(await store.read(namespace(owner)), owner).entries.find(item => item.key === key);
+    if (!entry || entry.status !== "verified" || entry.githubClosure?.state === "closed" || !options.prepareCloseHandoff) return entry;
+    let publish: Awaited<ReturnType<NonNullable<typeof options.prepareCloseHandoff>>>;
+    try { publish = await options.prepareCloseHandoff(structuredClone(entry)); }
+    catch {
+      await mutate(journal => { const current = journal.entries.find(item => item.key === key)!; if (!current.githubClosure) current.githubClosure = { state: "pending" }; });
+      return parseJournal(await store.read(namespace(owner)), owner).entries.find(item => item.key === key);
+    }
+    let mayCreateComment = false;
+    await mutate(journal => {
+      const current = journal.entries.find(item => item.key === key)!;
+      if (current.status !== "verified") throw Error("REPAIR_STATE_CHANGED");
+      mayCreateComment = !current.githubClosure || current.githubClosure.state === "pending";
+      if (mayCreateComment) current.githubClosure = { state: "unknown" };
+    });
+    try {
+      const result = await publish(mayCreateComment);
+      await mutate(journal => {
+        const current = journal.entries.find(item => item.key === key)!;
+        if (current.status !== "verified") throw Error("REPAIR_STATE_CHANGED");
+        current.githubClosure = result.closed ? { state: "closed", beforeState: result.beforeState, proofCommentUrl: result.proofCommentUrl, confirmedAt: new Date(now()).toISOString() } : { state: "unknown", beforeState: result.beforeState };
+      });
+    } catch { /* The code remains verified; delivery is explicitly unconfirmed. */ }
+    return parseJournal(await store.read(namespace(owner)), owner).entries.find(item => item.key === key);
   }
   async function check(key: string, prNumber: number) {
     const entry = parseJournal(await store.read(namespace(owner)), owner).entries.find(entry => entry.key === key);
@@ -146,9 +186,12 @@ export function createKongRepairBridge(options: { owner: string; store: RepairSt
       // A changed head or unavailable evidence revokes readiness; no callback can
       // supply a SHA or create a verified state without a fresh trusted read.
       current.prNumber = prNumber; current.status = verified ? "verified" : !independent ? "awaiting_independent_review" : !proof.checksPassed ? "awaiting_checker" : !proof.appQaPassed ? "awaiting_qareview" : "awaiting_deployment";
+      const priorVerifiedAt = current.verifiedHeadSha === proof.headSha && current.verifiedDeploymentSha === proof.deployedSha && current.verifiedRegressionRunId === proof.regressionRunId ? current.verifiedAt : undefined;
+      if (!verified || !priorVerifiedAt) delete current.githubClosure;
       delete current.verifiedAt; delete current.verifiedHeadSha; delete current.verifiedDeploymentSha; delete current.verifiedRegressionRunId;
-      if (verified) { current.verifiedHeadSha = proof.headSha; current.verifiedDeploymentSha = proof.deployedSha!; current.verifiedAt = new Date(now()).toISOString(); if (proof.regressionRunId) current.verifiedRegressionRunId = proof.regressionRunId; }
+      if (verified) { current.verifiedHeadSha = proof.headSha; current.verifiedDeploymentSha = proof.deployedSha!; current.verifiedAt = priorVerifiedAt || new Date(now()).toISOString(); if (proof.regressionRunId) current.verifiedRegressionRunId = proof.regressionRunId; }
     });
+    if (verified) return (await reconcileClosure(key))!;
     return parseJournal(saved, owner).entries.find(item => item.key === key)!;
   }
   async function worker(request: WorkerEnvelope) {
@@ -202,7 +245,7 @@ export function createKongRepairBridge(options: { owner: string; store: RepairSt
     }
     return parseJournal(await store.read(namespace(owner)), owner).entries.filter(entry => !key || entry.key === key);
   }
-  return { receive, dispatch, check, worker, sync, async view() {
+  return { receive, dispatch, check, worker, sync, reconcileClosure, async view() {
     const journal = parseJournal(await store.read(namespace(owner)), owner);
     return { entries: journal.entries, subscriptionProviderCalls: false,
       makerConsumer: journal.entries.some(entry => entry.maker || entry.githubClaimRef) ? "worker_seen" : "pending_no_maker",

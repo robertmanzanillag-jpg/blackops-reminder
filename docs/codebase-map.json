@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T05:19:38.656Z",
+  "generatedAt": "2026-11-18T05:19:48.872Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-kong-repair",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 1059,
     "imports": 4145,
     "routes": 610,
-    "symbols": 23672
+    "symbols": 23692
   },
   "directories": {
     ".": {
@@ -21634,6 +21634,7 @@
         "KONG_REPAIR_REPOSITORY",
         "already",
         "before",
+        "candidate",
         "canonicalRepairJson",
         "check",
         "checked",
@@ -21668,13 +21669,16 @@
         "parseJournal",
         "payload",
         "prior",
+        "priorVerifiedAt",
         "proof",
         "raw",
         "rawBody",
         "receive",
+        "reconcileClosure",
         "repairKey",
         "request",
         "requestHash",
+        "result",
         "saved",
         "signVerifiedRepair",
         "stableId",
@@ -21831,7 +21835,8 @@
         "registerKongRepairRoutes",
         "request",
         "resolve",
-        "secret"
+        "secret",
+        "view"
       ],
       "routes": [
         "/api/integrations/kong/software-repairs",
@@ -21858,9 +21863,12 @@
       ],
       "exports": [
         "getKongRepairBridge",
+        "readKongRepairGithubReadiness",
         "readKongRepairMakerHealth"
       ],
       "symbols": [
+        "actors",
+        "after",
         "age",
         "allowed",
         "approved",
@@ -21886,6 +21894,7 @@
         "issues",
         "latestReviews",
         "ledger",
+        "marker",
         "match",
         "nextBase",
         "nextEngine",
@@ -21893,13 +21902,18 @@
         "parentChecked",
         "pin",
         "pr",
+        "prepareCloseHandoff",
+        "prepareHandoff",
         "project",
+        "proof",
         "raw",
         "readGithubMaker",
+        "readKongRepairGithubReadiness",
         "readKongRepairMakerHealth",
         "readProof",
         "ready",
         "readyResponse",
+        "recorded",
         "ref",
         "result",
         "reviewActors",
@@ -37643,6 +37657,8 @@
         "NOW",
         "bad",
         "baseline",
+        "beforeState",
+        "bridge",
         "claim",
         "claimRequest",
         "comment",
@@ -37652,9 +37668,11 @@
         "entry",
         "envelope",
         "f",
+        "first",
         "fixture",
         "get",
         "git",
+        "held",
         "input",
         "job",
         "message",
@@ -37663,6 +37681,8 @@
         "payload",
         "protectedGit",
         "receipt",
+        "rechecked",
+        "recovered",
         "replay",
         "request",
         "result",
@@ -37675,6 +37695,7 @@
         "started",
         "store",
         "value",
+        "verifiedAt",
         "workflow"
       ],
       "routes": []

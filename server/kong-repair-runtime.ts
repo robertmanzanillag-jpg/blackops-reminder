@@ -23,7 +23,7 @@ async function paidState(): Promise<"available" | "blocked_unknown_credit" | "un
   return state.uncertain ? "blocked_unknown_credit" : state.expired || state.overrun || state.availableMicroUsd === 0 || Date.parse(config.pricing.validUntil) <= Date.now() ? "unavailable" : "available";
 }
 
-async function createHandoff(entry: RepairEntry) {
+async function prepareHandoff(entry: RepairEntry) {
   const { getGitHubClient } = await import("./github-client");
   const github = await getGitHubClient(), [owner, repo] = KONG_REPAIR_REPOSITORY.split("/");
   const project = (await github.repos.get({ owner, repo })).data;
@@ -34,6 +34,9 @@ async function createHandoff(entry: RepairEntry) {
   if (!/^[a-f0-9]{40}$/.test(engineSourceCommit)) throw Error("REPAIR_ENGINE_NOT_CONFIGURED");
   const baseBranch = "codex/kong-production-recovery-20261117";
   const base = await github.git.getRef({ owner, repo, ref: `heads/${baseBranch}` });
+  if (!/^[a-f0-9]{40}$/.test(base.data.object.sha)) throw Error("REPAIR_BASE_INVALID");
+  const engine = (await github.repos.getContent({ owner, repo: "blackops-reminder", path: "script/kong-repair-subscription-worker.mjs", ref: engineSourceCommit })).data;
+  if (Array.isArray(engine) || engine.type !== "file") throw Error("REPAIR_ENGINE_UNREADABLE");
   const source = { version: 1, company: "kong", repository: KONG_REPAIR_REPOSITORY, repairKey: entry.key,
     sourceTaskId: entry.payload.sourceTaskId, errorId: entry.payload.errorId, fingerprint: entry.payload.fingerprint,
     generation: entry.payload.generation, evidence: entry.payload.evidence, regressionScenario: entry.payload.regressionScenario || "unsupported", summary: entry.payload.summary, reportedAt: entry.payload.reportedAt,
@@ -46,9 +49,12 @@ async function createHandoff(entry: RepairEntry) {
     "Include this repair key and Fixes #<this issue number> in the PR body. Never mark the source resolved from a passing PR alone.",
     "Production deployment requires Robert's explicit approval. After deployment, observe /api/ready sourceSha and run the affected regression against that exact deployment; retain its successful production QA workflow receipt.",
     "Do not call paid model APIs, release uncertain credits, replay unknown work, change credentials or deploy automatically."].join("\n");
+  return async () => {
   const issue = await github.issues.create({ owner, repo, title: `[KONG repair] CEO task ${entry.payload.sourceTaskId}`, body });
   return { repository: KONG_REPAIR_REPOSITORY, issueUrl: issue.data.html_url, sourceDigest, approvedBaseSha: base.data.object.sha, engineSourceCommit };
+  };
 }
+async function createHandoff(entry: RepairEntry) { return (await prepareHandoff(entry))(); }
 
 async function readProof(entry: RepairEntry, prNumber: number): Promise<RepairProof> {
   const { getGitHubClient } = await import("./github-client");
@@ -162,10 +168,31 @@ async function readGithubMaker(entry: RepairEntry, allowRefresh = false) {
   }
   return { claimed, ref };
 }
+async function prepareCloseHandoff(entry: RepairEntry) {
+  if (!entry.issueUrl || !entry.verifiedHeadSha || !entry.verifiedDeploymentSha || !entry.verifiedRegressionRunId) throw Error("REPAIR_CLOSURE_PROOF_REQUIRED");
+  const { getGitHubClient } = await import("./github-client"), github = await getGitHubClient(), [owner, repo] = KONG_REPAIR_REPOSITORY.split("/");
+  const issueNumber = Number(entry.issueUrl.split("/").at(-1)), issue = (await github.issues.get({ owner, repo, issue_number: issueNumber })).data;
+  if (!issue.body?.includes(`<!-- kong-repair-source-sha256:${entry.sourceDigest} -->`)) throw Error("REPAIR_ISSUE_SOURCE_CHANGED");
+  const proof = { key: entry.key, sourceTaskId: entry.payload.sourceTaskId, prNumber: entry.prNumber, headSha: entry.verifiedHeadSha,
+    deploymentSha: entry.verifiedDeploymentSha, regressionRunId: entry.verifiedRegressionRunId, verifiedAt: entry.verifiedAt };
+  const marker = `<!-- kong-repair-closure:${createHash("sha256").update(canonicalRepairJson(proof)).digest("hex")} -->`;
+  const comments = await github.paginate(github.issues.listComments, { owner, repo, issue_number: issueNumber, per_page: 100 });
+  const actors = new Set((process.env.KONG_REPAIR_SOURCE_ACTORS || "robertmanzanillag-jpg").split(",").map(value => value.trim()));
+  const recorded = comments.find(comment => actors.has(comment.user?.login || "") && comment.body?.includes(marker));
+  return async (allowCommentCreate: boolean) => {
+    let proofCommentUrl = recorded?.html_url;
+    if (!proofCommentUrl && !allowCommentCreate) return { closed: false, beforeState: issue.state as "open" | "closed" };
+    if (!proofCommentUrl) proofCommentUrl = (await github.issues.createComment({ owner, repo, issue_number: issueNumber,
+      body: `${marker}\nProduction verification receipt (the PR alone did not close this repair):\n\n${canonicalRepairJson(proof)}\n\nhttps://github.com/${KONG_REPAIR_REPOSITORY}/actions/runs/${entry.verifiedRegressionRunId}` })).data.html_url;
+    if (issue.state !== "closed") await github.issues.update({ owner, repo, issue_number: issueNumber, state: "closed", state_reason: "completed" });
+    const after = (await github.issues.get({ owner, repo, issue_number: issueNumber })).data;
+    return { closed: after.state === "closed", beforeState: issue.state as "open" | "closed", proofCommentUrl };
+  };
+}
 let bridge: ReturnType<typeof createKongRepairBridge> | undefined;
 export async function getKongRepairBridge() {
   if (process.env.KONG_REPAIR_BRIDGE_ENABLED !== "true") return undefined;
-  return bridge ||= createKongRepairBridge({ owner: getSystemUserId(), store: await getCouncilStore(), now: Date.now, createHandoff, readProof, readGithubMaker, readPaidState: paidState });
+  return bridge ||= createKongRepairBridge({ owner: getSystemUserId(), store: await getCouncilStore(), now: Date.now, createHandoff, prepareHandoff, prepareCloseHandoff, readProof, readGithubMaker, readPaidState: paidState });
 }
 
 let makerHealthCache: { key: string; at: number; value: Record<string, unknown> } | undefined;
@@ -197,4 +224,22 @@ export async function readKongRepairMakerHealth() {
     makerHealthCache = { key: pin, at: now, value }; return value;
   }
   return { state: "unavailable", workerConnected: false, enginePinned: true };
+}
+
+let githubReadinessCache: { at: number; enginePin: string; value: Record<string, unknown> } | undefined;
+export async function readKongRepairGithubReadiness() {
+  const pin = process.env.KONG_REPAIR_CHECKER_ENGINE_COMMIT || "", now = Date.now();
+  if (githubReadinessCache?.enginePin === pin && now - githubReadinessCache.at < 300000) return githubReadinessCache.value;
+  try {
+    const { getGitHubClient } = await import("./github-client"), github = await getGitHubClient(), [owner, repo] = KONG_REPAIR_REPOSITORY.split("/");
+    const [repository, branch] = await Promise.all([github.repos.get({ owner, repo }), github.git.getRef({ owner, repo, ref: "heads/codex/kong-production-recovery-20261117" })]);
+    let engineReadable = false;
+    if (/^[a-f0-9]{40}$/.test(pin)) {
+      const engine = (await github.repos.getContent({ owner, repo: "blackops-reminder", path: "script/kong-repair-subscription-worker.mjs", ref: pin })).data;
+      engineReadable = !Array.isArray(engine) && engine.type === "file";
+    }
+    const value = { code: "REPAIR_GITHUB_PREFLIGHT_CHECKED", repositoryReadable: repository.data.full_name === KONG_REPAIR_REPOSITORY && repository.data.private === true,
+      releaseBranchReadable: /^[a-f0-9]{40}$/.test(branch.data.object.sha), engineReadable, observedAt: new Date(now).toISOString() };
+    githubReadinessCache = { at: now, enginePin: pin, value }; return value;
+  } catch { return { code: "REPAIR_GITHUB_PREFLIGHT_UNAVAILABLE", repositoryReadable: false, releaseBranchReadable: false, engineReadable: false, observedAt: new Date(now).toISOString() }; }
 }

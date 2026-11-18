@@ -54,13 +54,15 @@ export async function pullRepairSources(options: { bridge: ReturnType<typeof cre
         taskId: request.payload.sourceTaskId, issuedAt: at, expiresAt: new Date(options.now() + 300000).toISOString(), nonce: randomUUID(), idempotencyKey: request.key, payload: request.payload });
       state.newlyQueued++;
     }
-    if (options.handoffEnabled) for (const entry of (await options.bridge.view()).entries.filter(entry => ["queued", "blocked_handoff_capacity"].includes(entry.status)).slice(0, 10)) await options.bridge.dispatch(entry.key).catch(() => undefined);
+    if (options.handoffEnabled) for (const entry of (await options.bridge.view()).entries.filter(entry => ["queued", "blocked_handoff_capacity", "blocked_no_github"].includes(entry.status)).slice(0, 10)) await options.bridge.dispatch(entry.key).catch(() => undefined);
     // GET-only mode must still observe the real maker and verification chain.
     // Refresh is limited to an exact, currently reported source and only after
     // the GitHub exclusion fence proves the old attempt was never claimed.
     const current = (await options.bridge.view()).entries;
     for (const request of source.requests.filter(request => current.some(entry => entry.key === request.key && entry.issueUrl)).slice(0, 3))
       await options.bridge.sync(request.key, options.handoffEnabled).catch(() => undefined);
+    for (const entry of (await options.bridge.view()).entries.filter(entry => entry.status === "verified" && entry.githubClosure?.state !== "closed").slice(0, 3))
+      await options.bridge.reconcileClosure(entry.key).catch(() => undefined);
     await persist(); return state;
   } catch {
     state.errorCode = sourceValidated ? "PERSISTENCE_UNCONFIRMED" : "SOURCE_INVALID";
