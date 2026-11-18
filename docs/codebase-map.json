@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T08:19:18.454Z",
+  "generatedAt": "2026-11-18T08:26:52.615Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-orchestra-runtime-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -126,7 +126,7 @@
   "totals": {
     "filesVisible": 1181,
     "filesIndexed": 1081,
-    "imports": 4287,
+    "imports": 4288,
     "routes": 616,
     "symbols": 24444
   },
@@ -14042,6 +14042,7 @@
       "kind": "server",
       "imports": [
         "../shared/agent-chat-routing",
+        "../shared/clippers-office-agents",
         "../shared/factory-office-agents",
         "../shared/office-role-lifecycle",
         "../shared/office-role-work-activity",
