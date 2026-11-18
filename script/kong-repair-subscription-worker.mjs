@@ -174,10 +174,13 @@ export async function consumeOne({ root, workerId, secret, send = e => rpc(e, se
   } finally { await lock.close(); await fs.unlink(path.join(root, 'worker.lock')); }
 }
 
-export async function assertCurrentBase(claim, gh='/opt/homebrew/bin/gh') {
+export async function assertCurrentBase(claim, gh='/opt/homebrew/bin/gh', fetcher=fetch) {
   if (!SHA.test(claim.baseSha || '')) throw code('HELD_STALE_BASE');
   const current=JSON.parse(await mustRun(gh,['api',`repos/${REPOSITORY}/git/ref/heads/${BASE_BRANCH}`],{env:cleanEnvironment(),timeoutMs:30_000}));
   if(current.object?.sha!==claim.baseSha)throw code('HELD_STALE_BASE');
+  const response=await fetcher('https://kongnightlife.com/api/ready',{redirect:'error',headers:{'Cache-Control':'no-cache'},signal:AbortSignal.timeout(15_000)});
+  if(!response.ok)throw code('HELD_STALE_BASE');const live=await response.json();
+  if(live.status!=='ready'||live.sourceSha!==claim.baseSha)throw code('HELD_STALE_BASE');
 }
 export function registryLock(lock) {
   if (!lock || typeof lock.packages !== 'object' || !lock.packages || !lock.lockfileVersion) throw code('UNTRUSTED_DEPENDENCY_LOCK');
