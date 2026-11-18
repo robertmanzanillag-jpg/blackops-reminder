@@ -1,4 +1,5 @@
 import { ALL_DISCOVERY_CREATORS, LEGACY_DISCOVERY_CREATORS, KNOWN_CREATOR_GROUPS } from './clippers-priority-creators.mjs';
+import { parseViralScout, type ViralScoutView } from './clippers-viral-scout.mjs';
 /** Sanitized wire contract for the owner-only Clippers orchestra. No rights grants or credentials. */
 export type ClippersRoleStage = 'supervisor' | 'analytics' | 'trends' | 'streamers' | 'editor' | 'checker' | 'publisher' | 'learning' | 'health';
 export type ClippersRoleState = 'working' | 'completed' | 'held' | 'idle' | 'stale' | 'disconnected';
@@ -41,7 +42,7 @@ export type ClippersOrchestraStatus = {
   transport: { state: 'connected' | 'stale' | 'disconnected' | 'invalid'; lastIngestAt: string | null; maxAgeMs: number };
   disconnectedDestinations: { brandId: string; label: string; reason: string }[];
   accounts: ClippersAccountView[]; roles: ClippersRoleEvidence[];
-  discovery: { sources: ClippersSourceView[]; observations: number | null; eligibleAssets: number | null; rotationSize: number; rotationDays: number; catalogVersion?:2; signals: ClippersTrendSignal[]; rightsPolicy: 'owner_review_required' };
+  discovery: { sources: ClippersSourceView[]; observations: number | null; eligibleAssets: number | null; rotationSize: number; rotationDays: number; catalogVersion?:2; signals: ClippersTrendSignal[]; scout?: ViralScoutView; rightsPolicy: 'owner_review_required' };
   learning: { comparisons: ClippersComparisonView[]; eligibleComparisons: number | null; promotions: number | null; requiredComparisons: 3; minimumPerArm: 5; improvementThreshold: 0.2; automaticPromotion: false; heldReasons: string[] };
   safety: { paidSpendUsd: 0; deniedBrandIds: string[]; metadataDoesNotGrantRights: true; publicUploadRequiresReviewedPacket: true; publicationClaimsRequireProviderReceipt: true };
 };
@@ -108,7 +109,7 @@ export function parseClippersOrchestraStatus(value: unknown, now=Date.now()): Cl
   }
   const d=v.discovery;
   const sourceCatalog=d?.catalogVersion===2?ALL_DISCOVERY_CREATORS:LEGACY_DISCOVERY_CREATORS;
-  if(!keys(d,['sources','observations','eligibleAssets','rotationSize','rotationDays','signals','rightsPolicy',...(d.catalogVersion===undefined?[]:['catalogVersion'])]) || !nullableCount(d.observations)||!nullableCount(d.eligibleAssets)||
+  if(!keys(d,['sources','observations','eligibleAssets','rotationSize','rotationDays','signals','rightsPolicy',...(d.catalogVersion===undefined?[]:['catalogVersion']),...(d.scout===undefined?[]:['scout'])]) || !nullableCount(d.observations)||!nullableCount(d.eligibleAssets)||
     (d.catalogVersion===2?(d.rotationSize!==14||d.rotationDays!==1):(d.catalogVersion!==undefined||d.rotationSize!==4||d.rotationDays!==2))||d.rightsPolicy!=='owner_review_required'||
     !Array.isArray(d.sources)||d.sources.length!==sourceCatalog.length||new Set(d.sources.map((s:any)=>s?.creatorId)).size!==sourceCatalog.length||!sourceCatalog.every(c=>d.sources.some((s:any)=>s.creatorId===c.id&&s.channelId===c.channelId))||!Array.isArray(d.signals)||d.signals.length>200)return null;
   for(const s of d.sources)if(!keys(s,['creatorId','channelId','observedAt','status','heldReasons','observations'])||!sourceCatalog.some(c=>c.id===s.creatorId)||sourceChannels[s.creatorId]!==s.channelId||!nullableTime(s.observedAt,now)||!['observed','unavailable','not_observed'].includes(s.status)||!codes(s.heldReasons)||!count(s.observations))return null;
@@ -117,6 +118,7 @@ export function parseClippersOrchestraStatus(value: unknown, now=Date.now()): Cl
       !nullableCount(s.views)||!nullableTime(s.previousObservedAt,now)||!nullableCount(s.previousViews)||!nullableFinite(s.growthViews)||!nullableFinite(s.growthPerHour)||!['initial_baseline','paired_growth_observed','insufficient_metrics','stale_reference'].includes(s.label)||s.rights!=='unknown')return null;
     if(s.label==='paired_growth_observed'&&(!s.previousObservedAt||Date.parse(s.previousObservedAt)>=Date.parse(s.observedAt)||s.growthViews<=0||s.growthPerHour<=0||now-Date.parse(s.observedAt)>72*3600000||now-Date.parse(s.previousObservedAt)>72*3600000))return null;
   }
+  if(d.scout!==undefined&&!parseViralScout(d.scout,now))return null;
   const l=v.learning;
   if(!keys(l,['comparisons','eligibleComparisons','promotions','requiredComparisons','minimumPerArm','improvementThreshold','automaticPromotion','heldReasons']) || !Array.isArray(l.comparisons)||l.comparisons.length>100||!nullableCount(l.eligibleComparisons)||!nullableCount(l.promotions)||l.requiredComparisons!==3||l.minimumPerArm!==5||l.improvementThreshold!==0.2||l.automaticPromotion!==false||!codes(l.heldReasons))return null;
   for(const c of l.comparisons)if(!keys(c,['id','destination','variable','baselineVersion','candidateVersion','controlSamples','candidateSamples','improvementRatio','current','renderReceiptVerified','eligible','heldReasons'])||!code(c.id)||!targetKeys.includes(c.destination)||!['hook','duration','caption_layout','crop','posting_slot'].includes(c.variable)||!code(c.baselineVersion)||!code(c.candidateVersion)||![c.controlSamples,c.candidateSamples].every(count)||!nullableFinite(c.improvementRatio)||![c.current,c.renderReceiptVerified,c.eligible].every(x=>typeof x==='boolean')||!codes(c.heldReasons)||(c.eligible&&(!c.current||!c.renderReceiptVerified||c.controlSamples<5||c.candidateSamples<5||c.improvementRatio===null||c.improvementRatio+Number.EPSILON<0.2)))return null;
