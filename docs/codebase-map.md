@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T13:25:49.636Z
+Generated: 2026-11-18T13:33:23.614Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-plan-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1205 | 1102 | 4401 | 623 | 25007 |
+| 1213 | 1108 | 4420 | 623 | 25075 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,11 +28,11 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 317 | 313 | test:317 |
-| `server` | 280 | 274 | server:280 |
+| `tests` | 319 | 315 | test:319 |
+| `server` | 281 | 275 | server:281 |
 | `client/src` | 155 | 153 | ui-component:55, client-component:46, client-page:28, client-lib:19 |
 | `script` | 132 | 119 | script:132 |
-| `docs` | 74 | 72 | docs:74 |
+| `docs` | 79 | 75 | docs:79 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 35 | 33 | shared:35 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
@@ -287,6 +287,8 @@ Package: `rest-express`
 - `tests/shared-openai-credit-store.test.ts`
 - `tests/shopify-oauth.test.ts`
 - `tests/software-factory-actions.test.ts`
+- `tests/software-factory-api-budget.test.ts`
+- `tests/software-factory-api-postgres.test.ts`
 - `tests/software-factory-asistente-build.test.ts`
 - `tests/software-factory-asistente-operator.test.ts`
 - `tests/software-factory-asistente-review.test.ts`
