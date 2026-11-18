@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T07:16:36.527Z",
+  "generatedAt": "2026-11-18T07:20:08.303Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-worker-supervisor",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 1068,
     "imports": 4217,
     "routes": 615,
-    "symbols": 24152
+    "symbols": 24153
   },
   "directories": {
     ".": {
@@ -11433,6 +11433,7 @@
         "sourceRoot",
         "supervisor",
         "temporary",
+        "trustedLegacy",
         "upgradeReviewedInstallation",
         "upgrading",
         "xml"

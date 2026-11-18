@@ -41,3 +41,11 @@ test('running worker, existing lock and changed installed identity stop before a
   assert.deepEqual(await fs.readFile(f.plan.script),kind==='identity'?Buffer.concat([before,Buffer.from('unexpected')]):before);assert.equal(f.calls.some(c=>c.args[0]==='bootout'),false);
  }
 });
+
+test('automatic startup overrides and changed cadence are refused before bootout or code writes',async t=>{
+ for(const mutate of [text=>text.replace('<key>RunAtLoad</key><false/>','<key>RunAtLoad</key><true/>'),text=>text.replace('<key>RunAtLoad</key><false/>','<key>RunAtLoad</key><false/><key>KeepAlive</key><true/>'),text=>text.replace('<key>StartInterval</key><integer>1800</integer>','<key>StartInterval</key><integer>1</integer>')]){
+  const f=await upgradeFixture(t),old=await fs.readFile(f.plan.script);await fs.writeFile(f.plan.plist,mutate(await fs.readFile(f.plan.plist,'utf8')));
+  await assert.rejects(upgradeReviewedInstallation({...f,workerBytes:Buffer.from('new'),supervisorBytes:Buffer.from('new supervisor'),reviewedSha:'b'.repeat(40),fromReviewedSha:'a'.repeat(40)}),/trusted schedule/);
+  assert.equal(f.calls.some(c=>c.args[0]==='bootout'),false);assert.deepEqual(await fs.readFile(f.plan.script),old);
+ }
+});

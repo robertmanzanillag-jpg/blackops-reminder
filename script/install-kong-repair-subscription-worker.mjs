@@ -46,6 +46,8 @@ export async function upgradeReviewedInstallation({plan,workerBytes,supervisorBy
   await inactive();
   const argumentLine=script=>`<key>ProgramArguments</key><array><string>${xml(plan.node)}</string><string>${xml(script)}</string><string>--once</string></array>`;
   const beforeLine=argumentLine(plan.script),afterLine=argumentLine(plan.supervisor),text=oldPlist.toString();let content;
+  const trustedLegacy=plan.content.replace(afterLine,beforeLine);
+  if(text!==trustedLegacy&&text!==plan.content)throw Error('LaunchAgent differs from the trusted schedule and activation plan.');
   if(text.split(beforeLine).length===2&&!text.includes(afterLine))content=text.replace(beforeLine,afterLine);
   else if(text.split(afterLine).length===2&&!text.includes(beforeLine))content=text;
   else throw Error('LaunchAgent arguments differ from the reviewed plan.');
