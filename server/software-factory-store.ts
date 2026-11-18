@@ -1,4 +1,4 @@
-import { assertFactoryApiJobAdmission, assertFactoryApiParentSettlement, emptyFactoryApiState, parseFactoryApiState, factoryApiBudgetStatus, checkpointFactoryApiMonth, reserveFactoryApi, settleFactoryApi, unknownFactoryApi, type FactoryApiCheckpoint, type FactoryApiReservation, type FactoryApiExposure, type FactoryApiState } from "./software-factory-api-budget";
+import { factoryApiExecutionWindow, assertFactoryApiJobAdmission, assertFactoryApiParentSettlement, emptyFactoryApiState, parseFactoryApiState, factoryApiBudgetStatus, checkpointFactoryApiMonth, reserveFactoryApi, settleFactoryApi, unknownFactoryApi, type FactoryApiCheckpoint, type FactoryApiReservation, type FactoryApiExposure, type FactoryApiState } from "./software-factory-api-budget";
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import type { FactoryProject } from "./software-factory";
@@ -67,6 +67,7 @@ export function createSoftwareFactoryStore(providedPool?: OfficeCloudPool) {
       const rows=present.rows[0]?.relation?await c.query("SELECT state FROM software_factory_api_authority WHERE owner_key=$1",[key]):{rows:[]};
       return factoryApiBudgetStatus(rows.rows[0]?parseFactoryApiState(rows.rows[0].state):emptyFactoryApiState(),exposure,now);
     });},
+    async executionWindowApi(owner:string,key:string) {return transaction(async c=>{const now=new Date().toISOString(),ownerHash=ownerKey(owner),state=await readApiState(c,ownerHash);if(!state)throw Error("FACTORY_API_RECONCILIATION_REQUIRED");return factoryApiExecutionWindow(state,await apiExposure(c,ownerHash,now),key,now);});},
     async checkpointApiMonth(owner:string,input:FactoryApiCheckpoint) {return apiChange(owner,(state,exposure,now)=>checkpointFactoryApiMonth(state,exposure,input,now));},
     async reserveApi(owner:string,input:FactoryApiReservation) {return apiChange(owner,(state,exposure,now)=>reserveFactoryApi(state,exposure,input,now));},
     async settleApi(owner:string,key:string,input:{actualMicroUsd:number;evidenceSha256:string}) {return apiChange(owner,(state,_exposure,now)=>settleFactoryApi(state,key,input,now));},
