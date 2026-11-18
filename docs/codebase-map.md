@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T14:59:56.986Z
+Generated: 2026-11-18T15:15:23.049Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-execution-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1233 | 1128 | 4534 | 623 | 25501 |
+| 1233 | 1128 | 4535 | 623 | 25504 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -425,10 +425,10 @@ Package: `rest-express`
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-orchestra-analytics.mjs` (script; 23 symbols, 6 imports)
 - `script/clippers-orchestra-relay.mjs` (script; 6 symbols, 2 imports)
-- `script/clippers-orchestra-report.mjs` (script; 120 symbols, 8 imports)
+- `script/clippers-orchestra-report.mjs` (script; 122 symbols, 8 imports)
 - `script/clippers-orchestra-sender.mjs` (script; 41 symbols, 7 imports)
 - `script/clippers-portfolio-discovery.mjs` (script; 94 symbols, 7 imports)
-- `script/clippers-portfolio-metricool.mjs` (script; 84 symbols, 1 imports)
+- `script/clippers-portfolio-metricool.mjs` (script; 85 symbols, 1 imports)
 - `script/clippers-portfolio-prepare.mjs` (script; 107 symbols, 8 imports)
 - `script/clippers-portfolio-render.mjs` (script; 77 symbols, 8 imports)
 - `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)

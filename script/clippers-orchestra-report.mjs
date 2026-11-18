@@ -220,9 +220,27 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   const weeklyIsNewer=weeklyAt&&(!reportAt||weeklyAt>reportAt);
   const accounts=DESTINATIONS.map(d=>{
     const key=destinationKey(d);let r=validLearning?.destinations.find(r=>findDestination(r)&&destinationKey(r)===key);
-    if(weeklyIsNewer){
-      const confirmed=new Set((state?.deliveries??[]).filter(v=>findDestination(v)&&destinationKey(v)===key&&['scheduled','published'].includes(v.status)&&ID.test(v.metricoolId??'')&&time(v.scheduledAt,Infinity)&&localDay(new Date(v.scheduledAt))===localDay(now)&&(!v.weeklyWindow||weeklyReceipts.includes(v))).map(v=>v.metricoolId)).size;
-      r={...r,confirmedScheduledOrPublished:confirmed,shortfall:Math.max(0,5-confirmed),blockers:confirmed>5?['daily_queue_exceeds_cap']:confirmed===5?[]:r?.blockers??['weekly_queue_partial']};
+    const own=weeklyReceipts.filter(v=>destinationKey(v)===key&&localDay(new Date(v.scheduledAt))===localDay(now)).sort((a,b)=>a.scheduleEvidence.confirmedAt.localeCompare(b.scheduleEvidence.confirmedAt));
+    const latestOwn=own.at(-1);
+    if(latestOwn&&(!reportAt||latestOwn.scheduleEvidence.confirmedAt>reportAt)){
+      let confirmed=new Set(own.map(v=>v.metricoolId)).size,shortfall=null,blockers=['weekly_day_coverage_unverified'];
+      const proof=latestOwn.preflightEvidence;
+      if(objectRow(proof)){
+        const {sha256,...p}=proof;
+        const valid=typeof sha256==='string'&&SHA.test(sha256)&&digest(p)===sha256&&p.source==='fresh_rest_calendar_and_account_analytics'&&
+          findDestination(p.destination)&&destinationKey(p.destination)===key&&p.day===localDay(now)&&time(p.observedAt,at)&&p.observedAt<=latestOwn.scheduleEvidence.confirmedAt&&
+          Array.isArray(p.scheduled)&&p.scheduled.length<=5&&Array.isArray(p.published)&&p.published.length<=5&&
+          p.scheduled.every(v=>objectRow(v)&&typeof v.id==='string'&&ID.test(v.id)&&time(v.scheduledAt,Infinity)&&localDay(new Date(v.scheduledAt))===p.day&&['pending','scheduled'].includes(v.status))&&
+          p.published.every(v=>objectRow(v)&&typeof v.id==='string'&&/^\d+$/.test(v.id)&&time(v.publishedAt,Date.parse(p.observedAt))&&localDay(new Date(v.publishedAt))===p.day);
+        if(valid){
+          const pending=new Set(p.scheduled.map(v=>v.id)),published=new Set(p.published.map(v=>v.id));
+          for(const v of (state?.deliveries??[]).filter(v=>findDestination(v)&&destinationKey(v)===key&&['scheduled','published'].includes(v.status)&&ID.test(v.metricoolId??'')&&time(v.scheduledAt,Infinity)&&localDay(new Date(v.scheduledAt))===p.day&&(!v.weeklyWindow||weeklyReceipts.includes(v)))){
+            if(v.status==='published'&&exactPost(v.post?.url,v)?.id===v.post?.id&&time(v.post?.publishedAt,at)){pending.delete(v.metricoolId);published.add(v.post.id);}else pending.add(v.metricoolId);
+          }
+          confirmed=pending.size+published.size;shortfall=Math.max(0,5-confirmed);blockers=confirmed>5?['daily_queue_exceeds_cap']:confirmed===5?[]:r?.blockers??['weekly_queue_partial'];
+        }
+      }
+      r={...r,confirmedScheduledOrPublished:confirmed,shortfall,blockers};
     }
     const buckets=ageBuckets(metrics,key),observedAt=buckets.map(b=>b.latestObservedAt).filter(Boolean).sort().at(-1)??null;
     const v=validLearning?.versions?.find(v=>v.destination===key);

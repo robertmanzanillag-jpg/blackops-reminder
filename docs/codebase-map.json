@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T14:59:56.986Z",
+  "generatedAt": "2026-11-18T15:15:23.049Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-execution-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -126,32 +126,11 @@
   "totals": {
     "filesVisible": 1233,
     "filesIndexed": 1128,
-    "imports": 4534,
+    "imports": 4535,
     "routes": 623,
-    "symbols": 25501
+    "symbols": 25504
   },
   "directories": {
-    "docs": {
-      "files": 77,
-      "indexed": 75,
-      "kinds": {
-        "docs": 77
-      }
-    },
-    "script": {
-      "files": 134,
-      "indexed": 121,
-      "kinds": {
-        "script": 134
-      }
-    },
-    "tests": {
-      "files": 325,
-      "indexed": 321,
-      "kinds": {
-        "test": 325
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -223,12 +202,26 @@
         "client-page": 28
       }
     },
+    "docs": {
+      "files": 77,
+      "indexed": 75,
+      "kinds": {
+        "docs": 77
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 134,
+      "indexed": 121,
+      "kinds": {
+        "script": 134
       }
     },
     "script/office-api-budget-v6": {
@@ -285,6 +278,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 325,
+      "indexed": 321,
+      "kinds": {
+        "test": 325
       }
     },
     "tests/fixtures": {
@@ -9801,7 +9801,6 @@
         "chunks",
         "codes",
         "comparisonsView",
-        "confirmed",
         "confirmedMedia",
         "control",
         "controlViews",
@@ -9834,6 +9833,7 @@
         "improvement",
         "k",
         "key",
+        "latestOwn",
         "legacy",
         "match",
         "measured",
@@ -9852,6 +9852,7 @@
         "own",
         "paired",
         "parts",
+        "pending",
         "posts",
         "preferences",
         "privateOrchestraJson",
@@ -9887,6 +9888,7 @@
         "total",
         "unique",
         "v",
+        "valid",
         "validLearning",
         "verifiedPosts",
         "verifiedRenderBinding",
@@ -10159,6 +10161,7 @@
         "metrics",
         "metricsFrom",
         "networkOptions",
+        "networks",
         "old",
         "owned",
         "pending",
@@ -11406,6 +11409,7 @@
       "path": "script/clippers-weekly-scheduler.mjs",
       "kind": "script",
       "imports": [
+        "../shared/clippers-priority-creators.mjs",
         "./clippers-daily-learning.mjs",
         "./clippers-portfolio-metricool.mjs",
         "./clippers-selected-env.mjs",

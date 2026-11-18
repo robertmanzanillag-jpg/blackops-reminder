@@ -184,12 +184,21 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
     return { canPublish: profile.isWhiteLabelOnlyRead !== true && profile.canPublish !== false &&
       (profile.canPublish === true || owned) };
   }
-  async function schedule(destination, day) {
+  async function schedule(destination, day, strict=false) {
     await destinationSettings(destination);
-    return list(await get('/api/v2/scheduler/posts', {
+    const rows=list(await get('/api/v2/scheduler/posts', {
       blogId: destination.brandId, integrationSource: 'MCP',
       start: day + 'T00:00:00', end: day + 'T23:59:59', timezone: TIME_ZONE, extendedRange: false,
-    })).filter(row => provider(row, destination) && row.draft !== true && !['deleted', 'cancelled', 'canceled', 'failed'].includes(String(statusOf(row, destination)).toLowerCase()));
+    }));
+    if(strict){
+      const networks=new Set(['tiktok','facebook','instagram','youtube','twitter','linkedin','pinterest','gmb','threads','bluesky','twitch']);
+      if(rows.length>500)throw Error('weekly_provider_schedule_unverified');
+      for(const row of rows)if(!row||typeof row!=='object'||Array.isArray(row)||
+          (row.blogId!=null&&String(row.blogId)!==String(destination.brandId))||!Array.isArray(row.providers)||!row.providers.length||row.providers.length>20||
+          row.providers.some(p=>!p||typeof p!=='object'||Array.isArray(p)||typeof p.network!=='string'||!networks.has(p.network))||
+          new Set(row.providers.map(p=>p.network)).size!==row.providers.length)throw Error('weekly_provider_schedule_unverified');
+    }
+    return rows.filter(row=>provider(row,destination)&&row.draft!==true&&!['deleted','cancelled','canceled','failed'].includes(String(statusOf(row,destination)).toLowerCase()));
   }
   async function postAnalytics(destination, from, now) {
     await destinationSettings(destination);
@@ -236,7 +245,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
       if (Date.parse(item.scheduledAt) < +now + 300000) throw Error('weekly_schedule_expired');
       profiles = settings = undefined;
       if (!(await destinationSettings(destination)).canPublish) throw Error('destination_publish_permission_missing');
-      const rows = await schedule(destination, day);
+      const rows = await schedule(destination, day, true);
       const pending = new Map();
       const published = new Map();
       if (day === localDay(now)) {

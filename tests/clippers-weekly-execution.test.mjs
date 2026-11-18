@@ -71,7 +71,7 @@ async function readyFixture(t,{sameDay=false}={}){
  assert.equal(prepared.prepared,1);assert.equal(calls.upload,1);
  const configured=await f.read(`${CONFIG}/approved-input.json`);configured.publish=true;await f.write(`${CONFIG}/approved-input.json`,configured);
  let scheduledId=null;
- const adapter={weeklyPreflight:async(d,item)=>{calls.preflight++;const evidence={day:item.scheduledAt.slice(0,10),observedAt:NOW.toISOString(),source:'synthetic-test'};return{day:evidence.day,confirmedCount:scheduledId?1:0,scheduledIds:scheduledId?[scheduledId]:[],publishedIds:[],evidence,evidenceSha256:digest(evidence)};},schedule:async(d,item)=>{calls.schedule++;scheduledId='actual-fake-get-receipt';return{id:scheduledId,mediaUrl:item.mediaUrl};},confirmSchedule:async(d,item)=>({id:scheduledId,mediaUrl:item.mediaUrl})};
+ const adapter={weeklyPreflight:async(d,item)=>{calls.preflight++;const evidence={destination:d,day:item.scheduledAt.slice(0,10),observedAt:NOW.toISOString(),source:'fresh_rest_calendar_and_account_analytics',scheduled:[],published:[]};return{day:evidence.day,confirmedCount:scheduledId?1:0,scheduledIds:scheduledId?[scheduledId]:[],publishedIds:[],evidence,evidenceSha256:digest(evidence)};},schedule:async(d,item)=>{calls.schedule++;scheduledId='actual-fake-get-receipt';return{id:scheduledId,mediaUrl:item.mediaUrl};},confirmSchedule:async(d,item)=>({id:scheduledId,mediaUrl:item.mediaUrl})};
  return{...f,calls,adapter,p,packet};
 }
 test('actual FFmpeg preparation binds future exact-slot evergreen and weekly receipt replay is idempotent', {skip:!tools},async t=>{
@@ -172,7 +172,29 @@ test('owner publishing revocation during preflight prevents POST even for a prev
 test('Office projection consumes actual weekly GET evidence without renewing receipt time or inventing daily report',{skip:!tools},async t=>{
  const f=await readyFixture(t,{sameDay:true});await runClippersWeeklyScheduling({workspaceRoot:f.root,window:WINDOW,now:NOW,apply:true,adapter:f.adapter});
  const at=new Date(+NOW+60000);let report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:at});
- assert.equal(report.accounts[0].confirmedScheduledOrPublished,1);assert.equal(report.accounts[0].shortfall,4);let role=report.roles.find(r=>r.stage==='publisher');assert.equal(role.outputs.confirmed,1);assert.equal(role.state,'completed');assert.equal(role.heartbeatAt,null);
+ assert.equal(report.accounts[0].confirmedScheduledOrPublished,1);assert.equal(report.accounts[0].shortfall,4);assert.equal(report.accounts[1].confirmedScheduledOrPublished,null);assert.equal(report.accounts[1].shortfall,null);let role=report.roles.find(r=>r.stage==='publisher');assert.equal(role.outputs.confirmed,1);assert.equal(role.state,'completed');assert.equal(role.heartbeatAt,null);
  const timestamp=role.evidenceAt;report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:new Date(+at+60000)});assert.equal(report.roles.find(r=>r.stage==='publisher').evidenceAt,timestamp);
  const state=await f.read(`${REPORT}/state.json`);state.deliveries[0].scheduleEvidenceSha256=SHA;await f.write(`${REPORT}/state.json`,state);report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:at});role=report.roles.find(r=>r.stage==='publisher');assert.equal(role.outcomes.length,0);assert.equal(report.accounts[0].confirmedScheduledOrPublished,null);
+});
+test('legacy URL aliases without immutable intervals hold before any POST',{skip:!tools},async t=>{
+ const f=await readyFixture(t,{sameDay:true});await f.write('reports/metricool-autopilot-ledger.json',[{metricoolBlogId:target.brandId,account:target.account,sourceUrl:'https://youtu.be/aaaaaaaaaaa',sha256:'different'}]);
+ const r=await runClippersWeeklyScheduling({workspaceRoot:f.root,window:WINDOW,now:NOW,apply:true,adapter:f.adapter});assert.equal(r.scheduled,0);assert.equal(f.calls.schedule,0);assert.equal(f.calls.preflight,0);assert.equal(r.outcomes[0].reason,'duplicate_or_overlapping_delivery');
+});
+test('calendar rows with unknown provider/brand identity cannot disappear into zero coverage',async()=>{
+ let rows=[];const fetcher=async resource=>{const u=new URL(resource);return Response.json(u.pathname==='/api/admin/simpleProfiles'?[{id:target.brandId,canPublish:true,tiktokUsername:target.account}]:u.pathname.includes('/analytics/')?[]:rows);};
+ const adapter=createPortfolioMetricool({token:'synthetic-fixture-token',userId:12,fetcher}),item={scheduledAt:'2026-11-18T17:00:00.000Z',caption:'new',mediaUrl:'https://drive.google.com/uc?id=new'};
+ for(const providers of [undefined,[],[null],[{network:'tiktok'},{network:'tiktok'}],[{network:'TIKTOK'}]]){rows=[{id:'existing',publicationDate:'2026-11-18T18:00:00Z',text:'existing',...(providers===undefined?{}:{providers})}];await assert.rejects(adapter.weeklyPreflight(target,item,{now:NOW}),/schedule_unverified/);}
+ rows=[{id:'existing',blogId:6431692,providers:[{network:'tiktok',status:'PENDING'}],publicationDate:'2026-11-18T18:00:00Z',text:'existing'}];await assert.rejects(adapter.weeklyPreflight(target,item,{now:NOW}),/schedule_unverified/);
+ rows=[{id:'explicit-other-network',providers:[{network:'facebook',status:'PENDING'}],publicationDate:'2026-11-18T18:00:00Z'}];assert.equal((await adapter.weeklyPreflight(target,item,{now:NOW})).confirmedCount,0);
+});
+test('changing CLI subwindow does not reset stable-week attempt quota',{skip:!tools},async t=>{
+ const f=await readyFixture(t);const state={schemaVersion:1,day:null,deliveries:[],observations:[],history:[],versions:{}};
+ for(let i=0;i<100;i++){const destination=DESTINATIONS[Math.floor(i/5)%4],day=16+Math.floor(i/20),hour=11+2*(i%5);state.deliveries.push({...destination,id:'prior-'+i,caption:'Prior '+i,sourceUrl:'https://example.com/prior/'+i,mediaSha256:hash(String(i)),scheduledAt:`2026-11-${day}T${String(hour+5).padStart(2,'0')}:00:00.000Z`.replace('T24:','T23:'),status:'scheduled',metricoolId:'prior-provider-'+i,weeklyWindow:'2026-11-16:2026-11-20'});}
+ await f.write(`${REPORT}/state.json`,state);const r=await runClippersWeeklyScheduling({workspaceRoot:f.root,window:WINDOW,now:NOW,apply:true,adapter:f.adapter});assert.equal(r.attempts,0);assert.equal(f.calls.schedule,0);assert.equal(r.outcomes[0].reason,'weekly_attempt_budget');
+ await assert.rejects(runClippersWeeklyScheduling({workspaceRoot:f.root,window:{startDate:'2026-11-18',endDate:'2026-11-24'},now:NOW}),/weekly_window_invalid/);
+});
+
+test('Office daily coverage is account-local and retains outside pending/published rows from actual preflight',{skip:!tools},async t=>{
+ const f=await readyFixture(t,{sameDay:true}),preflight=f.adapter.weeklyPreflight;f.adapter.weeklyPreflight=async(...args)=>{const r=await preflight(...args);r.evidence.scheduled=[{id:'outside-pending',scheduledAt:'2026-11-18T18:00:00.000Z',status:'pending'}];r.evidence.published=[{id:'4444',publishedAt:'2026-11-18T14:00:00.000Z'}];r.confirmedCount=2;r.scheduledIds=['outside-pending'];r.publishedIds=['4444'];r.evidenceSha256=digest(r.evidence);return r;};
+ await runClippersWeeklyScheduling({workspaceRoot:f.root,window:WINDOW,now:NOW,apply:true,adapter:f.adapter});const report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:new Date(+NOW+60000)});assert.equal(report.accounts[0].confirmedScheduledOrPublished,3);assert.equal(report.accounts[0].shortfall,2);assert.equal(report.accounts[1].confirmedScheduledOrPublished,null);
 });

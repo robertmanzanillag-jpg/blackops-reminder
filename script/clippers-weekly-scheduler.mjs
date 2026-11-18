@@ -1,3 +1,4 @@
+import { canonicalSourceIdentity } from '../shared/clippers-priority-creators.mjs';
 import { constants } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { mkdir, open, realpath, rename, unlink, writeFile, lstat } from 'node:fs/promises';
@@ -24,7 +25,7 @@ const initialReport=(now,window,apply)=>({schemaVersion:1,mode:'weekly',generate
  * Shares the daily learner lock/state but never marks the metrics day complete or promotes render policies.
  */
 export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new Date(),env=process.env,adapter,apply=false,maxCycleMs=480000}={}) {
-  if(!(now instanceof Date)||!Number.isFinite(+now)||!validWeeklyWindow(window,now))throw Error('weekly_window_invalid');
+  if(!(now instanceof Date)||!Number.isFinite(+now)||!validWeeklyWindow(window,now)||window.endDate>remainingWeeklyWindow(now).endDate)throw Error('weekly_window_invalid');
   if(typeof apply!=='boolean'||!Number.isFinite(maxCycleMs)||maxCycleMs<=0)throw Error('weekly_cycle_invalid');
   const root=await realpath(path.resolve(workspaceRoot||env.CLIPPERS_WORKSPACE_ROOT||'clippers_workspace'));
   const reportDir=path.join(root,REPORT);await mkdir(reportDir,{recursive:true,mode:0o700});
@@ -50,8 +51,8 @@ export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new 
     const candidates=configured.assets.filter(a=>findDestination(a)&&(a.weeklyAuthorizationSha256||a.editorialPolicy==='evergreen_streamer_clip')&&providerTimestamp(a.scheduledAt)&&
       localDay(new Date(a.scheduledAt))>=window.startDate&&localDay(new Date(a.scheduledAt))<=window.endDate);
     const counts=new Map();for(const a of candidates){const key=destinationKey(a)+':'+a.id;counts.set(key,(counts.get(key)||0)+1);}
-    const windowKey=window.startDate+':'+window.endDate;
-    let attempts=state.deliveries.filter(row=>row.weeklyWindow===windowKey).length;
+    const windowKey=window.startDate+':'+window.endDate,budgetWeek=remainingWeeklyWindow(now).endDate;
+    let attempts=state.deliveries.filter(row=>row.weeklyWindow&&remainingWeeklyWindow(new Date(row.scheduledAt)).endDate===budgetWeek).length;
     for(const raw of [...candidates].sort((a,b)=>a.scheduledAt.localeCompare(b.scheduledAt)||destinationKey(a).localeCompare(destinationKey(b))||String(a.id).localeCompare(String(b.id)))) {
       const outcome={destination:destinationKey(raw),assetId:typeof raw.id==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,99}$/.test(raw.id)?raw.id:'unverified_asset',scheduledAt:raw.scheduledAt,status:'held',reason:null};report.outcomes.push(outcome);
       if(!within()){outcome.reason='weekly_cycle_deadline';break;}
@@ -59,7 +60,7 @@ export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new 
       let item=await validateApprovedClippersAsset(raw,root,current(),receipts,state,window);
       if(!item){outcome.reason='weekly_asset_rights_media_or_render_unverified';continue;}
       if(state.deliveries.some(row=>weeklyDeliveryCollision(row,item)) || legacy.some(row=>Number(row.metricoolBlogId)===item.brandId&&String(row.account??'').replace(/^@/,'').toLowerCase()===item.account&&
-          (row.sha256===item.mediaSha256||row.mediaSha256===item.mediaSha256||row.mediaUrl===item.mediaUrl||row.sourceUrl===item.sourceUrl))){outcome.reason='duplicate_or_overlapping_delivery';continue;}
+          (row.sha256===item.mediaSha256||row.mediaSha256===item.mediaSha256||row.mediaUrl===item.mediaUrl||row.sourceUrl===item.sourceUrl||(canonicalSourceIdentity(row.sourceUrl)&&canonicalSourceIdentity(row.sourceUrl)===canonicalSourceIdentity(item.sourceUrl))))){outcome.reason='duplicate_or_overlapping_delivery';continue;}
       const day=localDay(new Date(item.scheduledAt));
       const existing=state.deliveries.filter(row=>findDestination(row)&&destinationKey(row)===destinationKey(item)&&localDay(new Date(row.scheduledAt))===day);
       if(existing.some(row=>!['scheduled','published'].includes(row.status))){outcome.reason='prior_schedule_outcome_unreconciled';continue;}
@@ -93,7 +94,7 @@ export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new 
       item=await validateApprovedClippersAsset(latestRows[0],root,current(),currentReceipts,state,window);
       if(!item){outcome.reason='weekly_review_expired_during_preflight';continue;}
 
-      const record={...item,createdAt:current().toISOString(),status:'verification_pending',costUsd:0,weeklyWindow:windowKey,preflightEvidence};
+      const record={...item,createdAt:current().toISOString(),status:'verification_pending',costUsd:0,weeklyWindow:windowKey,weeklyBudgetWeek:budgetWeek,preflightEvidence};
       state.deliveries.push(record);
       try{await save(root,`${REPORT}/state.json`,state);}catch(error){state.deliveries.pop();throw error;}
       report.attempts++;attempts++;
