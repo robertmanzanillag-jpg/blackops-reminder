@@ -7034,6 +7034,29 @@ function buildRevenueMoneyActivationPlan(input: {
   };
 }
 
+/** Effective read-only guidance; persisted records and top-level metrics are unchanged. */
+function heldRevenueGuidance<T>(value: T, key = ""): T {
+  const reason = "Pausado por el dueño. Cola e historial conservados; foco en fábrica, academia y Clippers.";
+  const facts = /^(?:id|.*Id|.*At|name|label|role|owner|ownerAgent|mainAgent|ceoAgent|agent|source|area|niche|productName|moneyLine|current|currency|provider|model|evidence)$/;
+  const factLists = /^(?:sources|verifiedSources|requiredEnv|missingEnv|policyRoutes|requiredAccounts|requiredFields|requiredSummaryFields|requiredEvidenceFields|evidence|warnings)$/;
+  const constraints = /^(?:requiresHumanApproval|requiresRobertApproval|requiresApproval|approvalRequiredBefore|blockedActions|blockedAlways|blockedNow|blockedUntilApproved|doNotDoYet|hardBlocks)$/;
+  const actionLists = /^(?:steps|tasks|nextOperatingOrders|approvalRequests|stageRoadmap|campaignPortfolio|campaignScaleLadder|weeklyOperatingCadence|thirtyDayPlan|launchSequence|workstreams|revenuePath)$/;
+  if (Array.isArray(value)) {
+    if (actionLists.test(key)) return [] as T;
+    if (value.every(item => typeof item === "string")) return (factLists.test(key) ? [...value] : constraints.test(key) ? [...value, reason] : []) as T;
+    return value.map(item => heldRevenueGuidance(item, key)) as T;
+  }
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, heldRevenueGuidance(item, name)])) as T;
+  if (typeof value === "boolean" && /^(?:can|sends|spends|deploys|publishes|creates|writes|persists|researches|readyFor|readyTo)|Allowed$|^(?:testOrderReady|sampleRecommended)$/.test(key)) return false as T;
+  if (typeof value === "number" && /^(?:canSpendUsd|canRiskNowUsd|maxSpendUsd|maxPaidSpendUsd|dailyContactLimit|maxLeads|dailyResearchTarget|targetRows|researchTarget|maxQualifiedRowsToImport|maxMockups|maxManualContacts|maxRecommendedBudgetUsd|spendCapUsd)$/.test(key)) return 0 as T;
+  if (typeof value === "string") {
+    if (facts.test(key)) return value;
+    if (/^(?:status|mode|stage|decision|vote)$/.test(key)) return "held" as T;
+    return (/apiAction|nextApiAction|actionType|copyable|(?:url|href|link)$|^(?:input|query|dbPushCommand|batchHeader)$/i.test(key) ? "" : reason) as T;
+  }
+  return value;
+}
+
 export function getRevenueEngineSnapshot() {
   loadRevenueLedger();
   loadRevenueLeads();
@@ -7216,8 +7239,10 @@ export function getRevenueEngineSnapshot() {
     releaseEvidence: buildRevenueProductionReleaseEvidence(revenueDeliveryWorkspaces),
   });
 
+  const operatingPause = ceoDomainStatus("websites");
+  const held = <T>(guidance: T): T => operatingPause.paused ? heldRevenueGuidance(guidance) : guidance;
   return {
-    operatingPause: ceoDomainStatus("websites"),
+    operatingPause,
     metrics: {
       appsSold,
       automationsSold,
@@ -7228,34 +7253,34 @@ export function getRevenueEngineSnapshot() {
       profitUsd,
       approvalQueue,
     },
-    executiveSummary,
-    operatorConsole,
-    dailyMoneyCommand,
-    moneyActivationPlan,
-    systemReadiness,
-    launchReadiness,
-    agentOperatingContract,
-    businessScoutQueue,
+    executiveSummary: held(executiveSummary),
+    operatorConsole: held(operatorConsole),
+    dailyMoneyCommand: held(dailyMoneyCommand),
+    moneyActivationPlan: held(moneyActivationPlan),
+    systemReadiness: held(systemReadiness),
+    launchReadiness: held(launchReadiness),
+    agentOperatingContract: held(agentOperatingContract),
+    businessScoutQueue: held(businessScoutQueue),
     latestDailyScoutSprint: revenueDailyScoutSprints.at(-1) || null,
     recentDailyScoutSprints: revenueDailyScoutSprints.slice(-5).reverse(),
-    websiteSalesPacketQueue,
-    manualOutreachQueue,
-    publicLeadImportQueue,
-    websiteClosureQueue,
-    websiteDeliveryHandoffQueue,
-    websiteBuildHandoffQueue,
-    profitGuard,
-    nextBatchPlan,
-    approvalQueueItems,
-    costPolicy: {
+    websiteSalesPacketQueue: held(websiteSalesPacketQueue),
+    manualOutreachQueue: held(manualOutreachQueue),
+    publicLeadImportQueue: held(publicLeadImportQueue),
+    websiteClosureQueue: held(websiteClosureQueue),
+    websiteDeliveryHandoffQueue: held(websiteDeliveryHandoffQueue),
+    websiteBuildHandoffQueue: held(websiteBuildHandoffQueue),
+    profitGuard: held(profitGuard),
+    nextBatchPlan: held(nextBatchPlan),
+    approvalQueueItems: held(approvalQueueItems),
+    costPolicy: held({
       monthlyCapUsd: 100,
       stopRule: "Pausar outreach pagado si gasto mensual > ingresos cobrados o si llega a $100.",
       defaultMode: "draft_only",
       allowedWithoutApproval: ["research_plan", "mockup_brief", "qa_checklist", "proposal_draft"],
       requiresApproval: ["contact_business", "buy_data", "send_email", "send_sms", "publish_mockup", "charge_client"],
-    },
+    }),
     emailProvider: getRevenueEmailProviderStatus(),
-    agents: agentRoster,
+    agents: held(agentRoster),
     pipelineStages: buildPipelineStages(revenueLedger, revenueLeads),
     packages,
     recentLedger: revenueLedger.slice(-8).reverse(),

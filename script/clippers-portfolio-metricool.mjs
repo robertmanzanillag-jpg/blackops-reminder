@@ -136,8 +136,12 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
     const url = new URL(endpoint, API);
     for (const [key, value] of Object.entries({ ...params, userId })) url.searchParams.set(key, String(value));
     const response = await fetcher(url, { headers, redirect: 'error', signal: AbortSignal.timeout(15_000) });
-    if (!response.ok) throw new Error('metricool_read_failed');
-    return response.json();
+    if (!response.ok) throw new Error(endpoint.startsWith('/api/v2/analytics/') ? `analytics_http_${response.status}` : 'metricool_read_failed');
+    if (endpoint.startsWith('/api/v2/analytics/') && !/^application\/(?:[a-z0-9.+-]+\+)?json(?:;|$)/i.test(response.headers?.get('content-type') ?? '')) {
+      throw new Error('analytics_json_response_required');
+    }
+    try { return await response.json(); }
+    catch { throw new Error(endpoint.startsWith('/api/v2/analytics/') ? 'analytics_json_invalid' : 'metricool_read_failed'); }
   }
   async function mcp(name, args, id = randomUUID()) {
     const response = await fetcher(MCP, {
@@ -189,7 +193,10 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
   async function postAnalytics(destination, from, now) {
     await destinationSettings(destination);
     return list(await get('/api/v2/analytics/posts/' + destination.network, {
-      blogId: destination.brandId, integrationSource: 'MCP', from, to: now.toISOString(),
+      blogId: destination.brandId, integrationSource: 'MCP',
+      // Official Swagger uses local date-time plus an explicit IANA timezone.
+      // Preserve UTC boundaries while avoiding the rejected fractional/Z form.
+      from: new Date(from).toISOString().slice(0, 19), to: now.toISOString().slice(0, 19), timezone: 'UTC',
     }));
   }
   return {

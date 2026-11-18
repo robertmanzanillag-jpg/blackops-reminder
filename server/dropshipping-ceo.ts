@@ -2415,7 +2415,7 @@ export function getDropshippingLiveSignalReadiness() {
       "DROPSHIPPING_LIVE_PRODUCT_SIGNALS_JSON",
       "or DROPSHIPPING_LIVE_PRODUCT_SIGNALS_PATH",
     ],
-    recommendedSources: ["tiktok_search", "aliexpress_search", "google_trends", "competitor_scan"],
+    recommendedSources: ceoDomainStatus("dropshipping").paused ? [] : ["tiktok_search", "aliexpress_search", "google_trends", "competitor_scan"],
   };
 }
 
@@ -6255,6 +6255,29 @@ export function buildDropshippingCapitalPlan(input: Partial<DropshippingCapitalP
   return { capitalPlan: plan, snapshot: getDropshippingCeoSnapshot() };
 }
 
+/** Effective read-only guidance; persisted records and top-level metrics are unchanged. */
+function heldDropshippingGuidance<T>(value: T, key = ""): T {
+  const reason = "Pausado por el dueño. Cola e historial conservados; foco en fábrica, academia y Clippers.";
+  const facts = /^(?:id|.*Id|.*At|name|label|role|owner|ownerAgent|mainAgent|ceoAgent|agent|source|area|niche|productName|moneyLine|current|currency|provider|model|evidence)$/;
+  const factLists = /^(?:sources|verifiedSources|requiredEnv|missingEnv|policyRoutes|requiredAccounts|requiredFields|requiredSummaryFields|requiredEvidenceFields|evidence|warnings)$/;
+  const constraints = /^(?:requiresHumanApproval|requiresRobertApproval|requiresApproval|approvalRequiredBefore|blockedActions|blockedAlways|blockedNow|blockedUntilApproved|doNotDoYet|hardBlocks)$/;
+  const actionLists = /^(?:steps|tasks|nextOperatingOrders|approvalRequests|stageRoadmap|campaignPortfolio|campaignScaleLadder|weeklyOperatingCadence|thirtyDayPlan|launchSequence|workstreams|revenuePath)$/;
+  if (Array.isArray(value)) {
+    if (actionLists.test(key)) return [] as T;
+    if (value.every(item => typeof item === "string")) return (factLists.test(key) ? [...value] : constraints.test(key) ? [...value, reason] : []) as T;
+    return value.map(item => heldDropshippingGuidance(item, key)) as T;
+  }
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value).map(([name, item]) => [name, heldDropshippingGuidance(item, name)])) as T;
+  if (typeof value === "boolean" && /^(?:can|sends|spends|deploys|publishes|creates|writes|persists|researches|readyFor|readyTo)|Allowed$|^(?:testOrderReady|sampleRecommended)$/.test(key)) return false as T;
+  if (typeof value === "number" && /^(?:canSpendUsd|canRiskNowUsd|maxSpendUsd|maxPaidSpendUsd|dailyContactLimit|maxLeads|dailyResearchTarget|targetRows|researchTarget|maxQualifiedRowsToImport|maxMockups|maxManualContacts|maxRecommendedBudgetUsd|spendCapUsd)$/.test(key)) return 0 as T;
+  if (typeof value === "string") {
+    if (facts.test(key)) return value;
+    if (/^(?:status|mode|stage|decision|vote)$/.test(key)) return "held" as T;
+    return (/apiAction|nextApiAction|actionType|copyable|(?:url|href|link)$|^(?:input|query|dbPushCommand|batchHeader)$/i.test(key) ? "" : reason) as T;
+  }
+  return value;
+}
+
 export function getDropshippingCeoSnapshot() {
   loadAll();
   const approvalQueue = approvalQueueCount(products, launchPlans, marketingCampaigns, socialPosts, orderRecords, fulfillmentActions);
@@ -6338,17 +6361,19 @@ export function getDropshippingCeoSnapshot() {
     approvalQueue,
   });
 
+  const operatingPause = ceoDomainStatus("dropshipping");
+  const held = <T>(guidance: T): T => operatingPause.paused ? heldDropshippingGuidance(guidance) : guidance;
   return {
-    operatingPause: ceoDomainStatus("dropshipping"),
+    operatingPause,
     generatedAt: new Date().toISOString(),
-    strategy: {
+    strategy: held({
       model: "dropshipping_sin_inventario",
       storeChannel: "Shopify + social organico primero",
       firstNiche: "productos virales",
       startingBudgetUsd: STARTING_MONTHLY_BUDGET_USD,
       targetMonthlyRevenueUsd: TARGET_MONTHLY_REVENUE_USD,
       inventoryPolicy: "No comprar stock. Solo sample de 1 unidad si Robert aprueba y el producto pasa Profit Guard.",
-    },
+    }),
     metrics: {
       productsResearched: products.length,
       productScoutCandidates: productScoutCandidates.length,
@@ -6384,7 +6409,7 @@ export function getDropshippingCeoSnapshot() {
       approvalQueue,
       progressToTargetPercent: Math.min(100, Math.round((profitGuard.totalRevenueUsd / TARGET_MONTHLY_REVENUE_USD) * 100)),
     },
-    executiveSummary: {
+    executiveSummary: held({
       status,
       headline:
         status === "blocked"
@@ -6395,16 +6420,16 @@ export function getDropshippingCeoSnapshot() {
               ? "Hay productos o lanzamientos esperando aprobacion de Robert."
               : "Sistema listo para siguiente batch controlado.",
       nextCommand,
-    },
-    profitGuard,
-    budgetPolicy: profitGuard.budgetPolicy,
-    ceoOperatingPlan,
-    growthBoard,
-    marketingDepartment,
-    executionSetup,
+    }),
+    profitGuard: held(profitGuard),
+    budgetPolicy: held(profitGuard.budgetPolicy),
+    ceoOperatingPlan: held(ceoOperatingPlan),
+    growthBoard: held(growthBoard),
+    marketingDepartment: held(marketingDepartment),
+    executionSetup: held(executionSetup),
     liveSignalReadiness,
-    launchReadiness,
-    operatingContract: {
+    launchReadiness: held(launchReadiness),
+    operatingContract: held({
       ceoAgent: "Dropshipping CEO",
       canRunAutonomously: [
         "investigar productos y tendencias",
@@ -6424,7 +6449,7 @@ export function getDropshippingCeoSnapshot() {
         "activar ads",
       ],
       blockedAlways: ["comprar inventario al por mayor", "prometer tiempos de envio no verificados", "usar marcas/copyright sin permiso"],
-    },
+    }),
     readiness: [
       {
         id: "shopify_connection",
@@ -6480,8 +6505,8 @@ export function getDropshippingCeoSnapshot() {
         status: unfulfilledOrders > 0 ? "needs_setup" as const : "ready" as const,
         detail: unfulfilledOrders > 0 ? `${unfulfilledOrders} orden(es) requieren fulfillment/approval.` : "Ordenes pagadas se registran sin stock y fulfillment queda gated.",
       },
-    ],
-    agents: [
+    ].map(item => operatingPause.paused ? { ...item, detail: held({ detail: item.detail }).detail } : item),
+    agents: held([
       { id: "dropshipping-ceo", name: "Dropshipping CEO", role: "Dirige producto, margen, tienda, redes y aprendizaje", status: "active" },
       { id: "product-scout", name: "Product Scout", role: "Busca tendencias virales y demanda", status: "active" },
       { id: "supplier-analyst", name: "Supplier Analyst", role: "Evalua AliExpress/DSers/CJ/Zendrop/Spocket", status: "active" },
@@ -6492,7 +6517,7 @@ export function getDropshippingCeoSnapshot() {
       { id: "order-ops", name: "Order Ops", role: "Registra ventas y prepara fulfillment sin inventario", status: "active" },
       { id: "legal-security", name: "Legal + Security", role: "Bloquea claims, copyright, politicas y riesgos", status: "active" },
       { id: "learning-analyst", name: "Learning Analyst", role: "Mejora playbook con datos diarios", status: "active" },
-    ],
+    ]),
     recentProducts: products.slice(0, 8),
     recentProductScoutCandidates: productScoutCandidates.slice(0, 8),
     recentSuppliers: suppliers.slice(0, 8),
@@ -6521,7 +6546,7 @@ export function getDropshippingCeoSnapshot() {
     latestCycle,
     latestLearning,
     latestSocialAnalysis,
-    growthLoop: {
+    growthLoop: held({
       stage:
         qualifiedProducts.length === 0
           ? "research"
@@ -6537,14 +6562,15 @@ export function getDropshippingCeoSnapshot() {
       ],
       scalingRule: profitGuard.budgetPolicy.scalingRule,
       currentExperiment: latestSocialAnalysis?.summary || latestCampaign?.campaignName || "sin campana activa",
-    },
+    }),
   };
 }
 
 export function getDropshippingExecutionSetup() {
   loadAll();
+  const setup = buildDropshippingExecutionSetupCenter();
   return {
-    executionSetup: buildDropshippingExecutionSetupCenter(),
+    executionSetup: ceoDomainStatus("dropshipping").paused ? heldDropshippingGuidance(setup) : setup,
     snapshot: getDropshippingCeoSnapshot(),
   };
 }

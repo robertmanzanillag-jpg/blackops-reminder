@@ -204,4 +204,32 @@ test('creator preference expires in local projection and durable owner view; no 
  let at=NOW;const store=memory(),state=createClippersOrchestraState({owner:()=> 'owner',store:async()=>store,now:()=>at});await state.ingest(envelope(r));at+=2*3600000;const view=await state.read();assert.equal(view!.creatorSelection!.preferences[0].status,'baseline');assert.equal(view!.creatorSelection!.preferences[0].preferredCreatorGroupId,'mrbeast');assert.ok(parseClippersOrchestraStatus(view,at));
  const later=await buildClippersOrchestraReport({workspaceRoot:root,now:new Date(at)});assert.equal(later.creatorSelection.preferences[0].status,'baseline');assert.equal(later.creatorSelection.evaluatedAt,r.creatorSelection.evaluatedAt);
  const denied=structuredClone(r);denied.creatorSelection.preferences[0].destination.brandId=6431692;assert.equal(parseClippersOrchestraStatus(denied,NOW),null);
+// Contract from the official /api/swagger.json, verified 2026-11-18.
+test('analytics date boundaries use second-precision UTC local time and explicit timezone on TT and FB',async()=>{
+ for(const d of [DESTINATIONS[0],DESTINATIONS[3]]){
+  let requests=0;const adapter=createPortfolioMetricool({token:'synthetic-token-valid',userId:'123',fetcher:async(input:any)=>{
+   const u=new URL(input);requests++;if(u.pathname.endsWith('simpleProfiles'))return Response.json([{blogId:d.brandId,ownerUserId:'123',isShared:false,[d.network==='tiktok'?'tiktokUsername':'facebook']:d.account}]);
+   assert.equal(u.pathname,'/api/v2/analytics/posts/'+d.network);assert.equal(u.searchParams.get('from'),'2026-11-11T18:00:00');assert.equal(u.searchParams.get('to'),'2026-11-18T18:00:00');assert.equal(u.searchParams.get('timezone'),'UTC');
+   assert.equal(u.searchParams.get('blogId'),String(d.brandId));return Response.json({data:[]});
+  }});const r=await adapter.accountAnalytics(d,now());assert.equal(requests,2);assert.deepEqual(r,{posts:[],receivedRows:0,rejectedRows:0});
+ }
+});
+test('analytics non-JSON, invalid JSON, unknown shape and HTTP errors stay held with bounded codes',async()=>fixture(async root=>{
+ for(const [response,code]of [
+  [()=>new Response('private csv body',{headers:{'content-type':'text/csv'}}),'analytics_json_response_required'],
+  [()=>new Response('private invalid body',{headers:{'content-type':'application/json'}}),'analytics_json_invalid'],
+  [()=>Response.json({private:'not a list'}),'metricool_list_unrecognized'],
+  [()=>new Response('private denial',{status:403}),'analytics_http_403'],
+ ]as const){
+  const adapter=createPortfolioMetricool({token:'synthetic-token-valid',userId:'123',fetcher:async(input:any)=>{const u=new URL(input);if(u.pathname.endsWith('simpleProfiles'))return Response.json(DESTINATIONS.map(d=>({blogId:d.brandId,ownerUserId:'123',isShared:false,tiktokUsername:DESTINATIONS.find(x=>x.brandId===d.brandId&&x.network==='tiktok')?.account,facebook:d.brandId===6591612?'1193011863901514':undefined})).filter((d,i,a)=>a.findIndex(x=>x.blogId===d.blogId)===i));return response();}});
+  const receipt=await collectClippersAccountAnalytics({workspaceRoot:root,now:new Date(NOW+3600000*8),env:{},adapter});assert.ok(receipt.accounts.every((a:any)=>a.status==='held'&&a.observedAt===null&&a.reason===code));
+  assert.ok(!JSON.stringify(receipt).includes('private'));await rm(path.join(root,'reports/clippers-account-analytics/latest.json'));
+ }
+}));
+
+test('a receipt from the rejected date contract is refreshed once, then the corrected contract reuses its cache',async()=>fixture(async root=>{
+ await save(root,'reports/clippers-account-analytics/latest.json',{schemaVersion:1,date:'2026-11-18',generatedAt:now().toISOString(),readOnly:true,paidSpendUsd:0,accounts:DESTINATIONS.map(d=>({...d,status:'held',reason:'analytics_provider_read_unavailable',posts:[]}))});
+ let calls=0;const adapter={async accountAnalytics(){calls++;return {posts:[],receivedRows:0,rejectedRows:0};}};
+ const r=await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter});assert.equal(r.reused,false);assert.equal(r.adapterContract,'utc-local-v1');assert.equal(calls,4);
+ assert.equal((await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter})).reused,true);assert.equal(calls,4);
 }));
