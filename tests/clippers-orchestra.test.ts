@@ -42,7 +42,7 @@ test('actual daily report distinguishes recorded zero supply from missing metric
 async function discovery(root:string,observedAt:string,views:number,file:string){const c=DISCOVERY_CREATORS[0];await save(root,`portfolio-discovery/${file}`,{schemaVersion:1,day:observedAt.slice(0,10),observedAt,paidSpendUsd:0,mayPublish:false,permission:'unknown',feeds:[{creatorId:c.id,channelId:c.channelId,status:'observed',feedSha256:'a'.repeat(64)}],observations:[{creatorId:c.id,channelId:c.channelId,videoId:'abcdefghijk',publishedAt:'2026-11-17T12:00:00.000Z',observedAt,views,metricEvidence:'direct_public_feed'}]});}
 test('single public observation is initial baseline; fresh paired actual growth is labeled only observed growth',async()=>fixture(async root=>{
  await discovery(root,'2026-11-18T15:00:00.000Z',100,'2026-11-18-aaaaaaaaaaaaaaaa.json');let r=await base(root);assert.equal(r.discovery.signals[0].label,'initial_baseline');assert.equal(r.discovery.eligibleAssets,0);
- await discovery(root,'2026-11-18T17:00:00.000Z',140,'2026-11-18-bbbbbbbbbbbbbbbb.json');r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.equal(r.discovery.signals[0].label,'paired_growth_observed');assert.equal(r.discovery.signals[0].growthPerHour,20);assert.equal(r.discovery.signals[0].rights,'unknown');assert.equal(r.discovery.sources.length,8);assert.equal(r.discovery.eligibleAssets,0);
+ await discovery(root,'2026-11-18T17:00:00.000Z',140,'2026-11-18-bbbbbbbbbbbbbbbb.json');r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.equal(r.discovery.signals[0].label,'paired_growth_observed');assert.equal(r.discovery.signals[0].growthPerHour,20);assert.equal(r.discovery.signals[0].rights,'unknown');assert.equal(r.discovery.sources.length,20);assert.equal(r.discovery.eligibleAssets,0);
  assert.equal(r.roles.find((r:any)=>r.stage==='trends').outcomes.length,1);
 }));
 test('whole-account collector reads every exact target, never NY/KONG/BlackRoom, then reuses same-day receipt',async()=>fixture(async root=>{
@@ -192,3 +192,16 @@ test('optional telemetry bounds legacy heartbeat latency and refuses parallel wr
  finish({accepted:true});await new Promise(resolve=>setImmediate(resolve));
  const pending=ingest({});await new Promise(resolve=>setImmediate(resolve));finish({accepted:true});assert.equal((await pending as any).accepted,true);assert.equal(calls,2);
 });
+
+test('new exact priority catalog accepts historical eight-source receipts without widening the source allowlist',async()=>fixture(async root=>{
+ const {LEGACY_DISCOVERY_CREATORS,ALL_DISCOVERY_CREATORS}=await import('../shared/clippers-priority-creators.mjs');const r=await base(root);assert.equal(r.discovery.catalogVersion,2);assert.equal(r.discovery.sources.length,ALL_DISCOVERY_CREATORS.length);assert.equal(r.discovery.rotationSize,14);assert.ok(parseClippersOrchestraStatus(r,NOW));
+ const legacy=structuredClone(r);delete legacy.creatorSelection;delete legacy.discovery.catalogVersion;legacy.discovery.rotationSize=4;legacy.discovery.rotationDays=2;legacy.discovery.sources=legacy.discovery.sources.filter((s:any)=>LEGACY_DISCOVERY_CREATORS.some(c=>c.id===s.creatorId));assert.ok(parseClippersOrchestraStatus(legacy,NOW));
+ legacy.discovery.sources[0].channelId=ALL_DISCOVERY_CREATORS[0].channelId;assert.equal(parseClippersOrchestraStatus(legacy,NOW),null);
+}));
+test('creator preference expires in local projection and durable owner view; no heartbeat can renew it',async()=>fixture(async root=>{
+ const pref={scopeKey:'a'.repeat(64),destination:DESTINATIONS[0],language:'en',format:'vertical_clip',context:'streamer_clip',postingBand:'10:00',timezone:'America/New_York',windowHours:24,baselineCreatorGroupId:'mrbeast',preferredCreatorGroupId:'thegrefg',status:'preferred',reason:'three_disjoint_batches_qualified',eligibleSamples:30,expiresAt:new Date(NOW+3600000).toISOString(),evidenceSha256:'b'.repeat(64)};
+ await save(root,'reports/clippers-creator-selection/latest.json',{schemaVersion:1,evaluatedAt:now().toISOString(),paidSpendUsd:0,allowedUse:'ready_asset_order_only',assigned:30,heldReasons:[],preferences:[pref]});const r=await base(root);assert.equal(r.creatorSelection.preferences[0].status,'preferred');assert.ok(parseClippersOrchestraStatus(r,NOW));
+ let at=NOW;const store=memory(),state=createClippersOrchestraState({owner:()=> 'owner',store:async()=>store,now:()=>at});await state.ingest(envelope(r));at+=2*3600000;const view=await state.read();assert.equal(view!.creatorSelection!.preferences[0].status,'baseline');assert.equal(view!.creatorSelection!.preferences[0].preferredCreatorGroupId,'mrbeast');assert.ok(parseClippersOrchestraStatus(view,at));
+ const later=await buildClippersOrchestraReport({workspaceRoot:root,now:new Date(at)});assert.equal(later.creatorSelection.preferences[0].status,'baseline');assert.equal(later.creatorSelection.evaluatedAt,r.creatorSelection.evaluatedAt);
+ const denied=structuredClone(r);denied.creatorSelection.preferences[0].destination.brandId=6431692;assert.equal(parseClippersOrchestraStatus(denied,NOW),null);
+}));

@@ -5,7 +5,7 @@ import { open, realpath, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { DESTINATIONS, destinationKey, findDestination, exactPost, localDay } from './clippers-portfolio-metricool.mjs';
 import { readPortfolioRenderManifest } from './clippers-portfolio-render.mjs';
-import { DISCOVERY_CREATORS } from './clippers-portfolio-discovery.mjs';
+import { ALL_DISCOVERY_CREATORS, KNOWN_CREATOR_GROUPS } from '../shared/clippers-priority-creators.mjs';
 const HOUR=3600000, SHA=/^[a-f0-9]{64}$/, ID=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/;
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const digest=value=>hash(JSON.stringify(value));
@@ -56,15 +56,15 @@ function ageBuckets(metrics,key){
   });
 }
 function discoveryView(receipts,now){
-  const safe=receipts.filter(r=>r?.schemaVersion===1&&r.paidSpendUsd===0&&r.mayPublish===false&&r.permission==='unknown'&&time(r.observedAt,now)&&Array.isArray(r.feeds)&&r.feeds.length<=4&&Array.isArray(r.observations)&&r.observations.length<=100);
-  const observations=safe.flatMap(r=>r.observations).filter(o=>DISCOVERY_CREATORS.some(c=>c.id===o.creatorId&&c.channelId===o.channelId)&&/^[A-Za-z0-9_-]{11}$/.test(o.videoId??'')&&time(o.observedAt,now)&&time(o.publishedAt,now)&&Date.parse(o.publishedAt)<=Date.parse(o.observedAt));
-  const sources=DISCOVERY_CREATORS.map(c=>{
-    const receipt=safe.filter(r=>r.feeds.some(f=>f.creatorId===c.id&&f.channelId===c.channelId)).sort((a,b)=>a.observedAt.localeCompare(b.observedAt)).at(-1);
-    const feed=receipt?.feeds.find(f=>f.creatorId===c.id&&f.channelId===c.channelId);
-    return {creatorId:c.id,channelId:c.channelId,observedAt:receipt?.observedAt??null,status:feed?.status==='observed'?'observed':feed?'unavailable':'not_observed',heldReasons:feed?.status==='observed'?[]:[feed&&/^[a-z][a-z0-9_]{1,80}$/.test(feed.reason??'')?feed.reason:'source_not_observed'],observations:observations.filter(o=>o.creatorId===c.id).length};
+  const safe=receipts.filter(r=>[1,2].includes(r?.schemaVersion)&&r.paidSpendUsd===0&&r.mayPublish===false&&r.permission==='unknown'&&time(r.observedAt,now)&&Array.isArray(r.feeds)&&r.feeds.length<=(r.schemaVersion===2?14:4)&&Array.isArray(r.observations)&&r.observations.length<=(r.schemaVersion===2?350:100));
+  const observations=safe.flatMap(r=>r.observations).filter(o=>ALL_DISCOVERY_CREATORS.some(c=>c.id===o.creatorId&&c.channelId===o.channelId)&&/^[A-Za-z0-9_-]{11}$/.test(o.videoId??'')&&time(o.observedAt,now)&&time(o.publishedAt,now)&&Date.parse(o.publishedAt)<=Date.parse(o.observedAt));
+  const sources=ALL_DISCOVERY_CREATORS.map(c=>{
+    const candidate=safe.flatMap(r=>r.feeds.filter(f=>f.creatorId===c.id&&f.channelId===c.channelId).map(feed=>({feed,observedAt:time(feed.observedAt,now)??r.observedAt}))).sort((a,b)=>a.observedAt.localeCompare(b.observedAt)).at(-1);
+    const feed=candidate?.feed;
+    return {creatorId:c.id,channelId:c.channelId,observedAt:candidate?.observedAt??null,status:feed?.status==='observed'?'observed':feed?'unavailable':'not_observed',heldReasons:feed?.status==='observed'?[]:[feed&&/^[a-z][a-z0-9_]{1,80}$/.test(feed.reason??'')?feed.reason:'source_not_observed'],observations:observations.filter(o=>o.creatorId===c.id).length};
   });
   const byVideo=new Map();
-  for(const o of observations){const k=`${o.creatorId}:${o.videoId}`,rows=byVideo.get(k)??[];if(!rows.some(r=>r.observedAt===o.observedAt))rows.push(o);byVideo.set(k,rows);}
+  for(const o of observations){const k=`youtube:${o.videoId}`,rows=byVideo.get(k)??[];if(!rows.some(r=>r.observedAt===o.observedAt))rows.push(o);byVideo.set(k,rows);}
   const signals=[...byVideo.values()].map(rows=>{
     rows.sort((a,b)=>a.observedAt.localeCompare(b.observedAt));const latest=rows.at(-1),prior=rows.slice(0,-1).filter(o=>o.metricEvidence==='direct_public_feed'&&n(o.views)!==null).at(-1);
     const views=latest.metricEvidence==='direct_public_feed'?n(latest.views):null,previousViews=prior?n(prior.views):null;
@@ -72,7 +72,20 @@ function discoveryView(receipts,now){
     const growth=paired?views-previousViews:null;
     return {creatorId:latest.creatorId,videoId:latest.videoId,publishedAt:latest.publishedAt,observedAt:latest.observedAt,views,previousObservedAt:prior?.observedAt??null,previousViews,growthViews:growth,growthPerHour:paired?growth/((Date.parse(latest.observedAt)-Date.parse(prior.observedAt))/HOUR):null,label:now-Date.parse(latest.publishedAt)>72*HOUR?'stale_reference':paired&&growth>0?'paired_growth_observed':views===null?'insufficient_metrics':'initial_baseline',rights:'unknown'};
   }).sort((a,b)=>b.observedAt.localeCompare(a.observedAt)).slice(0,200);
-  return {sources,observations:safe.length?observations.length:null,eligibleAssets:safe.length?0:null,rotationSize:4,rotationDays:2,signals,rightsPolicy:'owner_review_required'};
+  return {sources,observations:safe.length?observations.length:null,eligibleAssets:safe.length?0:null,rotationSize:14,rotationDays:1,catalogVersion:2,signals,rightsPolicy:'owner_review_required'};
+}
+function creatorSelectionView(raw,now){
+ const missing={evaluatedAt:null,contexts:0,assigned:null,heldReasons:['creator_selection_report_unavailable'],preferences:[]};
+ if(raw?.schemaVersion!==1||raw.paidSpendUsd!==0||raw.allowedUse!=='ready_asset_order_only'||!time(raw.evaluatedAt,now)||!Array.isArray(raw.preferences)||raw.preferences.length>32||n(raw.assigned)===null)return missing;
+ const groups=new Set(KNOWN_CREATOR_GROUPS.map(g=>g.id));
+ const preferences=[];
+ for(const p of raw.preferences){
+  if(!SHA.test(p.scopeKey??'')||!SHA.test(p.evidenceSha256??'')||!findDestination(p.destination)||!groups.has(p.baselineCreatorGroupId)||!groups.has(p.preferredCreatorGroupId)||!['preferred','baseline','unmeasured'].includes(p.status)||!ID.test(p.reason??'')||!ID.test(p.format??'')||!ID.test(p.context??'')||!ID.test(p.language??'')||p.timezone!=='America/New_York'||!/^(?:[01]\d|2[0-3]):00$/.test(p.postingBand??'')||![24,72,168].includes(p.windowHours)||n(p.eligibleSamples)===null)return missing;
+  let status=p.status,reason=p.reason,preferredCreatorGroupId=p.preferredCreatorGroupId;
+  if(status==='preferred'&&(!time(p.expiresAt,now+24*HOUR)||Date.parse(p.expiresAt)<=now||p.eligibleSamples<30)){status='baseline';reason='creator_preference_expired';preferredCreatorGroupId=p.baselineCreatorGroupId;}
+  preferences.push({scopeKey:p.scopeKey,destination:findDestination(p.destination),language:p.language,format:p.format,context:p.context,postingBand:p.postingBand,timezone:p.timezone,windowHours:p.windowHours,baselineCreatorGroupId:p.baselineCreatorGroupId,preferredCreatorGroupId,status,reason,eligibleSamples:p.eligibleSamples,expiresAt:time(p.expiresAt,now+24*HOUR)??null,evidenceSha256:p.evidenceSha256});
+ }
+ return {evaluatedAt:raw.evaluatedAt,contexts:preferences.length,assigned:raw.assigned,heldReasons:codes(raw.heldReasons),preferences};
 }
 async function verifiedRenderBinding(root,delivery,cache,media=[],at=Date.now()){
   if(!findDestination(delivery)||!ID.test(delivery.id??'')||!ID.test(delivery.policyVersion??'')||!SHA.test(delivery.mediaSha256??''))return {verified:false};
@@ -161,14 +174,14 @@ async function comparisonsView(root,state,metrics,now,media){
 export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()}={}){
   const at=+now;if(!Number.isFinite(at)||!workspaceRoot||!path.isAbsolute(workspaceRoot))throw Error('orchestra_configuration_invalid');
   const root=await realpath(workspaceRoot);
-  const files={watchdog:'reports/clippers-daily-watchdog/latest.json',learning:'reports/clippers-daily-learning/latest.json',state:'reports/clippers-daily-learning/state.json',prepare:'reports/clippers-daily-learning/prepare-latest.json',media:'reports/clippers-daily-learning/portfolio-media-receipts.json',input:'config/clippers-daily-learning/approved-input.json',accountAnalytics:'reports/clippers-account-analytics/latest.json'};
-  const caps={watchdog:1048576,learning:2097152,state:25000000,prepare:262144,media:5242880,input:2097152,accountAnalytics:524288};
+  const files={watchdog:'reports/clippers-daily-watchdog/latest.json',learning:'reports/clippers-daily-learning/latest.json',state:'reports/clippers-daily-learning/state.json',prepare:'reports/clippers-daily-learning/prepare-latest.json',media:'reports/clippers-daily-learning/portfolio-media-receipts.json',input:'config/clippers-daily-learning/approved-input.json',accountAnalytics:'reports/clippers-account-analytics/latest.json',creatorSelection:'reports/clippers-creator-selection/latest.json'};
+  const caps={watchdog:1048576,learning:2097152,state:25000000,prepare:262144,media:5242880,input:2097152,accountAnalytics:524288,creatorSelection:262144};
   const entries=await Promise.all(Object.entries(files).map(async([k,file])=>[k,await privateOrchestraJson(root,file,caps[k])]));
   const artifacts=Object.fromEntries(entries),wd=artifacts.watchdog.value,report=artifacts.learning.value,prep=artifacts.prepare.value;
   const rawState=artifacts.state.value,state=rawState?.schemaVersion===1&&Array.isArray(rawState.deliveries)&&rawState.deliveries.length<=2000&&Array.isArray(rawState.observations)&&rawState.observations.length<=20000&&Array.isArray(rawState.history)&&rawState.history.length<=1000&&rawState.versions&&typeof rawState.versions==='object'?rawState:null;
   let discoveryFiles=[];
-  try{const directory=path.join(root,'portfolio-discovery');if(await realpath(directory)!==directory)throw Error();discoveryFiles=(await readdir(directory)).filter(v=>/^\d{4}-\d\d-\d\d-[a-f0-9]{16}\.json$/.test(v)&&Date.parse(v.slice(0,10)+'T00:00:00Z')>=at-14*24*HOUR&&Date.parse(v.slice(0,10)+'T00:00:00Z')<=at).sort().slice(-32);}catch{}
-  const discoveryReceipts=await Promise.all(discoveryFiles.map(file=>privateOrchestraJson(root,`portfolio-discovery/${file}`,524288)));
+  try{const directory=path.join(root,'portfolio-discovery');if(await realpath(directory)!==directory)throw Error();discoveryFiles=(await readdir(directory)).filter(v=>/^\d{4}-\d\d-\d\d-(?:v2-)?[a-f0-9]{16}\.json$/.test(v)&&Date.parse(v.slice(0,10)+'T00:00:00Z')>=at-14*24*HOUR&&Date.parse(v.slice(0,10)+'T00:00:00Z')<=at).sort().slice(-32);}catch{}
+  const discoveryReceipts=await Promise.all(discoveryFiles.map(file=>privateOrchestraJson(root,`portfolio-discovery/${file}`,2097152)));
   const discovery=discoveryView(discoveryReceipts.map(r=>r.value),at),metrics=metricRows(state,at);
   const media=Array.isArray(artifacts.media.value)?artifacts.media.value:[];
   const {comparisons,qualifications}=await comparisonsView(root,state,metrics,at,media);
@@ -221,7 +234,7 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   const outcome=(stage,proof,completedAt,reason)=>{const sha=digest(proof);return {evidenceId:`clippers:${sha}:${stage}`,completedAt,outcome:'verified_deliverable',reason,artifactSha256:sha};};
   outcomes('analytics',[...metrics.map(m=>outcome('analytics',[m.destination,m.key,m.observedAt,m.views,m.completionRate],m.capturedAt,'verified_metric_snapshot')),...accounts.filter(a=>a.analytics.status==='observed'&&a.analytics.posts>0).map(a=>outcome('analytics',[a.key,a.analytics.observedAt,a.analytics.posts,a.analytics.totalViews],a.analytics.observedAt,'verified_metric_snapshot'))]);
   outcomes('publisher',(state?.deliveries??[]).filter(d=>findDestination(d)&&ID.test(d.metricoolId??'')&&['scheduled','published'].includes(d.status)).map(d=>outcome('publisher',[destinationKey(d),d.metricoolId,d.mediaSha256,d.scheduledAt],d.status==='published'?d.post?.verifiedAt:d.createdAt,'provider_schedule_or_publication_receipt')));
-  outcomes('streamers',discoveryReceipts.flatMap(({value:r})=>r?.schemaVersion===1&&time(r.observedAt,at)&&r.paidSpendUsd===0&&Array.isArray(r.feeds)&&Array.isArray(r.observations)?r.feeds.filter(f=>f.status==='observed'&&SHA.test(f.feedSha256??'')&&DISCOVERY_CREATORS.some(c=>c.id===f.creatorId&&c.channelId===f.channelId)&&r.observations.some(o=>o.creatorId===f.creatorId&&time(o.publishedAt,at)&&at-Date.parse(o.publishedAt)<=72*HOUR)).map(f=>outcome('streamers',[f.creatorId,f.feedSha256,r.observedAt],r.observedAt,'public_metadata_receipt')):[]));
+  outcomes('streamers',discoveryReceipts.flatMap(({value:r})=>r?.schemaVersion===1&&time(r.observedAt,at)&&r.paidSpendUsd===0&&Array.isArray(r.feeds)&&Array.isArray(r.observations)?r.feeds.filter(f=>f.status==='observed'&&SHA.test(f.feedSha256??'')&&ALL_DISCOVERY_CREATORS.some(c=>c.id===f.creatorId&&c.channelId===f.channelId)&&r.observations.some(o=>o.creatorId===f.creatorId&&time(o.publishedAt,at)&&at-Date.parse(o.publishedAt)<=72*HOUR)).map(f=>outcome('streamers',[f.creatorId,f.feedSha256,time(f.observedAt,at)??r.observedAt],time(f.observedAt,at)??r.observedAt,'public_metadata_receipt')):[]));
   outcomes('trends',discovery.signals.filter(s=>s.label==='paired_growth_observed').map(s=>outcome('trends',s,s.observedAt,'paired_public_growth_observation')));
   outcomes('learning',qualifications.map(q=>outcome('learning',q,reportAt,'three_current_verified_comparisons')));
   const renderCache=new Map(),editor=[],checker=[];
@@ -234,5 +247,6 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
     checker.push(outcome('checker',[destinationKey(asset),proof.receiptSha256],prepareAt,'reviewed_scoped_media_receipt'));
   }
   outcomes('editor',editor);outcomes('checker',checker);
-  return {version:1,generatedAt:new Date(at).toISOString(),evidenceAt,sourceFreshness:{state:sourceState,transport:evidenceAt?'local_reports':'unavailable',receivedAt:null,reportedAt:evidenceAt,ageMinutes:age,staleAfterMinutes:26*60,heldReasons:evidenceAt?sourceState==='stale'?['runtime_evidence_stale']:[]:['runtime_reports_unavailable']},transport:{state:'disconnected',lastIngestAt:null,maxAgeMs:90000},disconnectedDestinations:[{brandId:'6595747',label:'New York',reason:'destination_not_connected'}],accounts,roles,discovery,learning:{comparisons,eligibleComparisons,promotions,requiredComparisons:3,minimumPerArm:5,improvementThreshold:0.2,automaticPromotion:false,heldReasons:qualifications.length?['manual_queue_review_required']:['three_current_independent_comparisons_required']},safety:{paidSpendUsd:0,deniedBrandIds:['6431692','6475033','6585226'],metadataDoesNotGrantRights:true,publicUploadRequiresReviewedPacket:true,publicationClaimsRequireProviderReceipt:true}};
+  const creatorSelection=creatorSelectionView(artifacts.creatorSelection.value,at);
+  return {version:1,creatorSelection,generatedAt:new Date(at).toISOString(),evidenceAt,sourceFreshness:{state:sourceState,transport:evidenceAt?'local_reports':'unavailable',receivedAt:null,reportedAt:evidenceAt,ageMinutes:age,staleAfterMinutes:26*60,heldReasons:evidenceAt?sourceState==='stale'?['runtime_evidence_stale']:[]:['runtime_reports_unavailable']},transport:{state:'disconnected',lastIngestAt:null,maxAgeMs:90000},disconnectedDestinations:[{brandId:'6595747',label:'New York',reason:'destination_not_connected'}],accounts,roles,discovery,learning:{comparisons,eligibleComparisons,promotions,requiredComparisons:3,minimumPerArm:5,improvementThreshold:0.2,automaticPromotion:false,heldReasons:qualifications.length?['manual_queue_review_required']:['three_current_independent_comparisons_required']},safety:{paidSpendUsd:0,deniedBrandIds:['6431692','6475033','6585226'],metadataDoesNotGrantRights:true,publicUploadRequiresReviewedPacket:true,publicationClaimsRequireProviderReceipt:true}};
 }

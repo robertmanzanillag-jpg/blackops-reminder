@@ -98,7 +98,7 @@ test("Clippers own area uses real evidence gates, expires activity, and protects
     await page.getByRole("tab", { name: "Aprendizaje", exact: true }).click();
     assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true);
     await page.getByTestId("clippers-no-improvements").waitFor();
-    assert.match(await dialog.innerText(), /No hay promoción automática/);
+    assert.match(await dialog.innerText(), /promoción de parámetros de edición requiere revisión manual/);
     payload.learning.comparisons = [{ id: "fixture-comparison", destination: payload.accounts[0].key, variable: "hook", baselineVersion: "baseline-1", candidateVersion: "candidate-2", controlSamples: 5, candidateSamples: 5, improvementRatio: 0.25, current: true, renderReceiptVerified: true, eligible: true, heldReasons: [] }];
     payload.learning.eligibleComparisons = 1;
     await page.getByTestId("clippers-refresh").click();
