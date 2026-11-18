@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T11:32:48.141Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-viral-scout-20261118",
+  "generatedAt": "2026-11-18T12:32:32.067Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-authority-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1202,
-    "filesIndexed": 1099,
-    "imports": 4395,
+    "filesVisible": 1210,
+    "filesIndexed": 1105,
+    "imports": 4414,
     "routes": 623,
-    "symbols": 24964
+    "symbols": 25035
   },
   "directories": {
     ".": {
@@ -203,10 +203,10 @@
       }
     },
     "docs": {
-      "files": 73,
-      "indexed": 71,
+      "files": 78,
+      "indexed": 74,
       "kinds": {
-        "docs": 73
+        "docs": 78
       }
     },
     "examples/clippers-motivation": {
@@ -239,10 +239,10 @@
       }
     },
     "server": {
-      "files": 280,
-      "indexed": 274,
+      "files": 281,
+      "indexed": 275,
       "kinds": {
-        "server": 280
+        "server": 281
       }
     },
     "server/blackroom-team": {
@@ -274,10 +274,10 @@
       }
     },
     "tests": {
-      "files": 316,
-      "indexed": 312,
+      "files": 318,
+      "indexed": 314,
       "kinds": {
-        "test": 316
+        "test": 318
       }
     },
     "tests/fixtures": {
@@ -5895,6 +5895,22 @@
       "routes": []
     },
     {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5920,6 +5936,14 @@
     },
     {
       "path": "docs/dropshipping-checkout-trust-center-runbook.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-api-budget-authority.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -29363,6 +29387,71 @@
       "routes": []
     },
     {
+      "path": "server/software-factory-api-budget.ts",
+      "kind": "server",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "FACTORY_API_LIMIT_MICRO_USD",
+        "FactoryApiCheckpoint",
+        "FactoryApiExposure",
+        "FactoryApiReservation",
+        "FactoryApiState",
+        "assertFactoryApiJobAdmission",
+        "assertFactoryApiParentSettlement",
+        "checkpointFactoryApiMonth",
+        "emptyFactoryApiState",
+        "factoryApiBudgetStatus",
+        "factoryApiReservationSchema",
+        "factoryApiStateSchema",
+        "parseFactoryApiState",
+        "reserveFactoryApi",
+        "settleFactoryApi",
+        "unknownFactoryApi"
+      ],
+      "symbols": [
+        "FACTORY_API_LIMIT_MICRO_USD",
+        "actual",
+        "allocated",
+        "amount",
+        "assertFactoryApiJobAdmission",
+        "assertFactoryApiParentSettlement",
+        "checkpointFactoryApiMonth",
+        "checkpointSchema",
+        "children",
+        "configured",
+        "emptyFactoryApiState",
+        "factoryApiBudgetStatus",
+        "factoryApiReservationSchema",
+        "factoryApiStateSchema",
+        "fixedMicroUsd",
+        "input",
+        "instant",
+        "month",
+        "own",
+        "p",
+        "parentSchema",
+        "parseFactoryApiState",
+        "period",
+        "prior",
+        "reserveFactoryApi",
+        "reservedMicroUsd",
+        "row",
+        "rowSchema",
+        "safeSum",
+        "settleFactoryApi",
+        "sha",
+        "spentMicroUsd",
+        "state",
+        "status",
+        "unknown",
+        "unknownFactoryApi",
+        "used"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/software-factory-artifact-host.ts",
       "kind": "server",
       "imports": [],
@@ -30196,6 +30285,7 @@
       "kind": "server",
       "imports": [
         "./software-factory",
+        "./software-factory-api-budget",
         "./software-factory-store",
         "node:crypto",
         "zod"
@@ -30210,6 +30300,9 @@
         "LIMIT",
         "Ledger",
         "addJob",
+        "api",
+        "apiExposure",
+        "apiState",
         "assertKey",
         "b",
         "budget",
@@ -30219,6 +30312,7 @@
         "control",
         "cost",
         "createSoftwareFactoryObjectStore",
+        "effective",
         "effectiveBudget",
         "exposed",
         "fit",
@@ -30237,7 +30331,6 @@
         "ownerKey",
         "projectSchema",
         "proof",
-        "protectedTransfer",
         "rank",
         "read",
         "state",
@@ -30894,6 +30987,7 @@
       "symbols": [
         "activeWorkers",
         "age",
+        "apiBudget",
         "blocker",
         "budgetSchema",
         "capabilities",
@@ -31060,6 +31154,7 @@
       "imports": [
         "./office-cloud-store",
         "./software-factory",
+        "./software-factory-api-budget",
         "node:crypto",
         "zod"
       ],
@@ -31074,24 +31169,38 @@
       ],
       "symbols": [
         "active",
+        "admitted",
+        "api",
+        "apiChange",
+        "apiExposure",
+        "carried",
         "config",
         "createSoftwareFactorySchemaSql",
         "createSoftwareFactoryStore",
+        "current",
         "date",
         "decode",
         "factoryJobKinds",
         "input",
         "inputSchema",
         "job",
+        "jobs",
+        "key",
         "month",
         "monthNow",
+        "now",
         "ownerKey",
         "pool",
+        "present",
         "previous",
+        "priorLiabilities",
         "protectedTransfer",
         "raw",
+        "readApiState",
+        "reservedCents",
         "result",
         "row",
+        "rows",
         "run",
         "selected",
         "softwareFactoryStore",
@@ -38002,11 +38111,14 @@
       ],
       "exports": [],
       "symbols": [
+        "core",
+        "entry",
         "exec",
         "output",
         "result",
         "setup",
         "source",
+        "store",
         "temporary",
         "text"
       ],
@@ -42935,6 +43047,55 @@
       "routes": []
     },
     {
+      "path": "tests/software-factory-api-budget.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-api-budget",
+        "../server/software-factory-object-store",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "checkpoint",
+        "exposure",
+        "fixture",
+        "now",
+        "objectFixture",
+        "reservation",
+        "store"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-api-postgres.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/office-cloud-store",
+        "../server/software-factory-store",
+        "node:assert/strict",
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test",
+        "node:util",
+        "pg"
+      ],
+      "exports": [],
+      "symbols": [
+        "checkpoint",
+        "exec",
+        "input",
+        "reset",
+        "root",
+        "store"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/software-factory-asistente-build.test.ts",
       "kind": "test",
       "imports": [
@@ -44977,6 +45138,8 @@
     "tests/shared-openai-credit-store.test.ts",
     "tests/shopify-oauth.test.ts",
     "tests/software-factory-actions.test.ts",
+    "tests/software-factory-api-budget.test.ts",
+    "tests/software-factory-api-postgres.test.ts",
     "tests/software-factory-asistente-build.test.ts",
     "tests/software-factory-asistente-operator.test.ts",
     "tests/software-factory-asistente-review.test.ts",
