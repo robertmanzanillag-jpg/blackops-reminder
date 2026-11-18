@@ -1,3 +1,4 @@
+import {guardFactoryOpenAiClient} from "./factory-api-sdk";
 import path from "node:path";
 import OpenAI from "openai";
 
@@ -64,10 +65,11 @@ function configuredValue(value: string | undefined): string | null {
 }
 
 function createOpenAiTranslationClient(env: NodeJS.ProcessEnv): OpenAiTranslationClient {
-  const apiKey = configuredValue(env.AI_INTEGRATIONS_OPENAI_API_KEY) || configuredValue(env.OPENAI_API_KEY);
+  const integrationKey=configuredValue(env.AI_INTEGRATIONS_OPENAI_API_KEY);
+  const apiKey = integrationKey || configuredValue(env.OPENAI_API_KEY);
   if (!apiKey) throw new Error("openai_translation_not_configured");
-  const baseURL = configuredValue(env.AI_INTEGRATIONS_OPENAI_BASE_URL) || undefined;
-  return new OpenAI({ apiKey, baseURL, timeout: OPENAI_TRANSLATION_TIMEOUT_MS, maxRetries: 0 });
+  const baseURL = configuredValue(integrationKey?env.AI_INTEGRATIONS_OPENAI_BASE_URL:env.OPENAI_BASE_URL) || undefined;
+  return guardFactoryOpenAiClient(new OpenAI({ apiKey, baseURL, timeout: OPENAI_TRANSLATION_TIMEOUT_MS, maxRetries: 0 }),{provider:integrationKey?"integration":"openai",consumer:"clippers",env});
 }
 
 export class OpenAiLocalNewsTranslationAdapter implements LocalNewsTranslationAdapter {
