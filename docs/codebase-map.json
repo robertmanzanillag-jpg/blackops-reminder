@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T13:19:26.561Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-transports-20261118",
+  "generatedAt": "2026-11-18T13:42:55.596Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-plan-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1213,
-    "filesIndexed": 1110,
-    "imports": 4463,
+    "filesVisible": 1220,
+    "filesIndexed": 1115,
+    "imports": 4469,
     "routes": 623,
-    "symbols": 25156
+    "symbols": 25196
   },
   "directories": {
     ".": {
@@ -203,10 +203,10 @@
       }
     },
     "docs": {
-      "files": 75,
-      "indexed": 73,
+      "files": 80,
+      "indexed": 76,
       "kinds": {
-        "docs": 75
+        "docs": 80
       }
     },
     "examples/clippers-motivation": {
@@ -218,10 +218,10 @@
       }
     },
     "script": {
-      "files": 131,
-      "indexed": 118,
+      "files": 132,
+      "indexed": 119,
       "kinds": {
-        "script": 131
+        "script": 132
       }
     },
     "script/release-gate": {
@@ -274,10 +274,10 @@
       }
     },
     "tests": {
-      "files": 320,
-      "indexed": 316,
+      "files": 321,
+      "indexed": 317,
       "kinds": {
-        "test": 320
+        "test": 321
       }
     },
     "tests/fixtures": {
@@ -5839,6 +5839,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-weekly-plan.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-youtube-api-audit-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5880,6 +5888,22 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -11238,6 +11262,53 @@
         "verifyPublicMetricoolMediaUrl",
         "workspaceRoot",
         "writeJsonAtomic"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-weekly-plan.mjs",
+      "kind": "script",
+      "imports": [
+        "./clippers-portfolio-metricool.mjs",
+        "node:crypto"
+      ],
+      "exports": [
+        "newYorkSlot",
+        "planClippersWeek"
+      ],
+      "symbols": [
+        "HOUR",
+        "SHA",
+        "at",
+        "available",
+        "candidates",
+        "cells",
+        "checked",
+        "d",
+        "date",
+        "days",
+        "deficit",
+        "digest",
+        "holds",
+        "identityCells",
+        "isSha",
+        "iso",
+        "key",
+        "match",
+        "newYorkSlot",
+        "nextDay",
+        "normalized",
+        "normalizedSnapshot",
+        "parsed",
+        "parts",
+        "planClippersWeek",
+        "posts",
+        "prior",
+        "proposals",
+        "report",
+        "snapshotMap",
+        "start",
+        "unique"
       ],
       "routes": []
     },
@@ -38779,6 +38850,28 @@
         "sourceDir",
         "sourceName",
         "vyroSubmissionProofPath"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clippers-weekly-plan.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-portfolio-metricool.mjs",
+        "../script/clippers-weekly-plan.mjs",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "b",
+        "base",
+        "days",
+        "input",
+        "now",
+        "p",
+        "post",
+        "snapshots"
       ],
       "routes": []
     },
