@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T15:15:23.049Z
+Generated: 2026-11-18T15:32:36.558Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-execution-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1233 | 1128 | 4535 | 623 | 25504 |
+| 1234 | 1129 | 4535 | 623 | 25506 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -41,7 +41,7 @@ Package: `rest-express`
 | `script/office-api-budget-v6` | 10 | 8 | script:10 |
 | `script/release-gate` | 7 | 7 | script:7 |
 | `.agents/memory` | 5 | 5 | docs:5 |
-| `tests/fixtures` | 6 | 4 | test:6 |
+| `tests/fixtures` | 7 | 5 | test:7 |
 | `client/public` | 16 | 2 | other:16 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `client` | 1 | 1 | other:1 |

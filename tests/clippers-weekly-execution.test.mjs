@@ -198,3 +198,17 @@ test('Office daily coverage is account-local and retains outside pending/publish
  const f=await readyFixture(t,{sameDay:true}),preflight=f.adapter.weeklyPreflight;f.adapter.weeklyPreflight=async(...args)=>{const r=await preflight(...args);r.evidence.scheduled=[{id:'outside-pending',scheduledAt:'2026-11-18T18:00:00.000Z',status:'pending'}];r.evidence.published=[{id:'4444',publishedAt:'2026-11-18T14:00:00.000Z'}];r.confirmedCount=2;r.scheduledIds=['outside-pending'];r.publishedIds=['4444'];r.evidenceSha256=digest(r.evidence);return r;};
  await runClippersWeeklyScheduling({workspaceRoot:f.root,window:WINDOW,now:NOW,apply:true,adapter:f.adapter});const report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:new Date(+NOW+60000)});assert.equal(report.accounts[0].confirmedScheduledOrPublished,3);assert.equal(report.accounts[0].shortfall,2);assert.equal(report.accounts[1].confirmedScheduledOrPublished,null);
 });
+test('raw MCP scheduling follows authenticated native schema and sends public media in info, not picker attachments',async()=>{
+ const fixture=JSON.parse(await readFile(new URL('./fixtures/metricool-create-post-schema-20261118.json',import.meta.url),'utf8'));
+ assert.equal(fixture.inputSchemaSha256,'e8a8454f6d4de833250f35597c86086d37b685d9de75c8b9a895284e6a2c7cec');let posts=[],writes=0;
+ const item={id:'actual-schema-fixture',scheduledAt:'2026-11-18T17:00:00.000Z',caption:'Approved source #TJR',mediaUrl:'https://drive.google.com/uc?export=download&id=fixture',thirdPartyCommercial:false};
+ const fetcher=async(resource,options)=>{const url=new URL(resource);if(url.pathname==='/api/admin/simpleProfiles')return Response.json([{id:target.brandId,canPublish:true,tiktokUsername:target.account}]);
+  if(url.hostname==='ai.metricool.com'){
+   const request=JSON.parse(options.body),args=request.params.arguments,s=fixture.inputSchemaWithoutDescriptions;
+   for(const required of s.required)assert.ok(Object.hasOwn(args,required));for(const[k,v]of Object.entries(args)){assert.ok(Object.hasOwn(s.properties,k));assert.equal(typeof v,s.properties[k].type);}
+   assert.equal(args.mediaFiles,undefined);const info=JSON.parse(args.info);assert.deepEqual(info.media,[item.mediaUrl]);assert.deepEqual(info.providers,[{network:'tiktok'}]);assert.equal(info.tiktokData.commercialContentThirdParty,false);
+   writes++;posts=[{id:'native-schema-receipt',autoPublish:true,draft:false,providers:[{network:'tiktok',status:'PENDING'}],text:info.text,media:info.media,publicationDate:info.publicationDate}];return Response.json({result:{content:[]}});
+  }return Response.json(posts);
+ };
+ const adapter=createPortfolioMetricool({token:'synthetic-schema-token',userId:12,fetcher});const receipt=await adapter.schedule(target,item);assert.equal(writes,1);assert.equal(receipt.id,'native-schema-receipt');assert.equal(receipt.mediaUrl,item.mediaUrl);
+});

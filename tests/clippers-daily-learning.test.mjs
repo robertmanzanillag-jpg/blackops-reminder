@@ -222,6 +222,8 @@ test('real request adapter binds the exact account, sends a single network, veri
       assert.equal(request.params.arguments.blogId, String(fb.brandId));
       assert.deepEqual(JSON.parse(request.params.arguments.info).providers, [{ network: 'facebook' }]);
       assert.equal(JSON.parse(request.params.arguments.info).facebookData.type, 'REEL');
+      assert.deepEqual(JSON.parse(request.params.arguments.info).media,[item.mediaUrl]);
+      assert.equal(request.params.arguments.mediaFiles,undefined);
       calls++;
       posts = [{
         id: 'mc-receipt', autoPublish: true, draft: false, providers: [{ network: 'facebook', status: 'scheduled' }],

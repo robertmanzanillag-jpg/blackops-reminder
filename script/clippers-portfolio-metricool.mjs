@@ -298,12 +298,11 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
       const post = {
         autoPublish: true, draft: false, providers: [{ network: destination.network }],
         publicationDate: { dateTime: item.scheduledAt.slice(0, 19), timezone: 'UTC' },
-        text: item.caption, ...networkOptions,
+        text: item.caption, media: [item.mediaUrl], ...networkOptions,
       };
       await mcp('createScheduledPost', {
         blogId: String(destination.brandId), date: item.scheduledAt,
         info: JSON.stringify(post),
-        mediaFiles: [{ download_url: item.mediaUrl, file_id: 'clippers-' + item.id + '.mp4' }],
       }, item.id);
       return this.confirmSchedule(destination, item);
     },

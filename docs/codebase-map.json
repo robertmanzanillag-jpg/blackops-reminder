@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T15:15:23.049Z",
+  "generatedAt": "2026-11-18T15:32:36.558Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-execution-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -124,13 +124,20 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1233,
-    "filesIndexed": 1128,
+    "filesVisible": 1234,
+    "filesIndexed": 1129,
     "imports": 4535,
     "routes": 623,
-    "symbols": 25504
+    "symbols": 25506
   },
   "directories": {
+    "tests/fixtures": {
+      "files": 7,
+      "indexed": 5,
+      "kinds": {
+        "test": 7
+      }
+    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -285,13 +292,6 @@
       "indexed": 321,
       "kinds": {
         "test": 325
-      }
-    },
-    "tests/fixtures": {
-      "files": 6,
-      "indexed": 4,
-      "kinds": {
-        "test": 6
       }
     },
     "tests/harness": {
@@ -39336,9 +39336,11 @@
         "evidence",
         "exec",
         "f",
+        "fetcher",
         "fifo",
         "fixture",
         "hash",
+        "item",
         "legacy",
         "license",
         "moduleUrl",
@@ -40186,6 +40188,14 @@
         "now",
         "state"
       ],
+      "routes": []
+    },
+    {
+      "path": "tests/fixtures/metricool-create-post-schema-20261118.json",
+      "kind": "test",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {
