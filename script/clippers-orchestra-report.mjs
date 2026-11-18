@@ -76,7 +76,7 @@ function discoveryView(receipts,now){
 }
 function creatorSelectionView(raw,now){
  const missing={evaluatedAt:null,contexts:0,assigned:null,heldReasons:['creator_selection_report_unavailable'],preferences:[]};
- if(raw?.schemaVersion!==1||raw.paidSpendUsd!==0||raw.allowedUse!=='ready_asset_order_only'||!time(raw.evaluatedAt,now)||!Array.isArray(raw.preferences)||raw.preferences.length>32||n(raw.assigned)===null)return missing;
+ if(raw?.schemaVersion!==1||raw.paidSpendUsd!==0||raw.allowedUse!=='ready_asset_order_only'||!time(raw.evaluatedAt,now)||!Array.isArray(raw.preferences)||raw.preferences.length>32||(raw.assigned!==null&&n(raw.assigned)===null))return missing;
  const groups=new Set(KNOWN_CREATOR_GROUPS.map(g=>g.id));
  const preferences=[];
  for(const p of raw.preferences){
@@ -259,6 +259,8 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
     checker.push(outcome('checker',[destinationKey(asset),proof.receiptSha256],prepareAt,'reviewed_scoped_media_receipt'));
   }
   outcomes('editor',editor);outcomes('checker',checker);
-  const creatorSelection=creatorSelectionView(artifacts.creatorSelection.value,at);
+  const routingAt=time(artifacts.creatorSelection.value?.evaluatedAt,at);
+  const rawCreatorSelection=report?.creatorSelection&&reportAt&&(!routingAt||Date.parse(reportAt)>=Date.parse(routingAt))?report.creatorSelection:artifacts.creatorSelection.value;
+  const creatorSelection=creatorSelectionView(rawCreatorSelection,at);
   return {version:1,creatorSelection,generatedAt:new Date(at).toISOString(),evidenceAt,sourceFreshness:{state:sourceState,transport:evidenceAt?'local_reports':'unavailable',receivedAt:null,reportedAt:evidenceAt,ageMinutes:age,staleAfterMinutes:26*60,heldReasons:evidenceAt?sourceState==='stale'?['runtime_evidence_stale']:[]:['runtime_reports_unavailable']},transport:{state:'disconnected',lastIngestAt:null,maxAgeMs:90000},disconnectedDestinations:[{brandId:'6595747',label:'New York',reason:'destination_not_connected'}],accounts,roles,discovery,learning:{comparisons,eligibleComparisons,promotions,requiredComparisons:3,minimumPerArm:5,improvementThreshold:0.2,automaticPromotion:false,heldReasons:qualifications.length?['manual_queue_review_required']:['three_current_independent_comparisons_required']},safety:{paidSpendUsd:0,deniedBrandIds:['6431692','6475033','6585226'],metadataDoesNotGrantRights:true,publicUploadRequiresReviewedPacket:true,publicationClaimsRequireProviderReceipt:true}};
 }

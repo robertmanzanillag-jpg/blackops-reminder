@@ -255,3 +255,9 @@ test('public growth needs identical channel/video/publication anchor and at leas
  await receipt('2026-11-17','2026-11-17T23:45:00.000Z',100);await receipt('2026-11-18','2026-11-18T00:15:00.000Z',120);assert.ok((await base(root)).discovery.signals.every((s:any)=>s.label!=='paired_growth_observed'));
  await receipt('2026-11-18','2026-11-18T01:15:00.000Z',120,'2026-11-17T13:00:00.000Z');const changed=await base(root);assert.equal(changed.discovery.signals.length,1);assert.ok(changed.discovery.signals.every((s:any)=>s.label!=='paired_growth_observed'));
 }));
+
+test('a newer failed routing cycle supersedes a still-dated old preference rather than presenting it as active',async()=>fixture(async root=>{
+ await save(root,'reports/clippers-creator-selection/latest.json',{schemaVersion:1,evaluatedAt:new Date(NOW-60000).toISOString(),paidSpendUsd:0,allowedUse:'ready_asset_order_only',assigned:30,heldReasons:[],preferences:[{scopeKey:'a'.repeat(64),destination:DESTINATIONS[0],language:'en',format:'vertical_clip',context:'streamer_clip',postingBand:'10:00',timezone:'America/New_York',windowHours:24,baselineCreatorGroupId:'mrbeast',preferredCreatorGroupId:'thegrefg',status:'preferred',reason:'three_disjoint_batches_qualified',eligibleSamples:30,expiresAt:new Date(NOW+3600000).toISOString(),evidenceSha256:'b'.repeat(64)}]});
+ await save(root,'reports/clippers-daily-learning/latest.json',{schemaVersion:1,generatedAt:now().toISOString(),paidSpendUsd:0,creatorSelection:{schemaVersion:1,evaluatedAt:now().toISOString(),paidSpendUsd:0,allowedUse:'ready_asset_order_only',contexts:0,assigned:null,heldReasons:['creator_routing_unavailable'],preferences:[]}});
+ const report=await base(root);assert.equal(report.creatorSelection.preferences.length,0);assert.equal(report.creatorSelection.assigned,null);assert.ok(report.creatorSelection.heldReasons.includes('creator_routing_unavailable'));assert.ok(parseClippersOrchestraStatus(report,NOW));
+}));

@@ -378,7 +378,7 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
       checked.set(raw,item);
     }
     let creatorRouting;
-    let creatorSelection = { schemaVersion: 1, evaluatedAt: now.toISOString(), contexts: 0, assigned: 0,
+    let creatorSelection = { schemaVersion: 1, evaluatedAt: now.toISOString(), contexts: 0, assigned: null,
       paidSpendUsd: 0, allowedUse: 'ready_asset_order_only', preferences: [], heldReasons: ['creator_routing_unavailable'] };
     try {
       creatorRouting = await createClippersCreatorRouting({workspaceRoot,state,readyAssets:[...checked.values()].filter(Boolean),now});

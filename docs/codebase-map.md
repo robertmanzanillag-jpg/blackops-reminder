@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T09:58:07.308Z
+Generated: 2026-11-18T10:03:38.260Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-creator-adaptation-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1195 | 1094 | 4376 | 623 | 24873 |
+| 1195 | 1094 | 4377 | 623 | 24876 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -420,7 +420,7 @@ Package: `rest-express`
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-orchestra-analytics.mjs` (script; 23 symbols, 6 imports)
 - `script/clippers-orchestra-relay.mjs` (script; 6 symbols, 2 imports)
-- `script/clippers-orchestra-report.mjs` (script; 113 symbols, 7 imports)
+- `script/clippers-orchestra-report.mjs` (script; 115 symbols, 7 imports)
 - `script/clippers-orchestra-sender.mjs` (script; 30 symbols, 7 imports)
 - `script/clippers-portfolio-discovery.mjs` (script; 94 symbols, 7 imports)
 - `script/clippers-portfolio-metricool.mjs` (script; 74 symbols, 1 imports)

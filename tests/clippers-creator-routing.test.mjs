@@ -9,7 +9,7 @@ import { DESTINATIONS,destinationKey } from '../script/clippers-portfolio-metric
 import { PRIORITY_CREATORS } from '../shared/clippers-priority-creators.mjs';
 const H=3600000,DAY=24*H,START=Date.parse('2026-11-01T14:00:00.000Z');
 const hash=x=>createHash('sha256').update(x).digest('hex'),digest=x=>hash(JSON.stringify(x)),iso=x=>new Date(x).toISOString();
-const ENGINE_SHA256=hash(await readFile(new URL('../script/clippers-portfolio-render.mjs',import.meta.url))); 
+const ENGINE_SHA256=hash(await readFile(new URL('../script/clippers-portfolio-render.mjs',import.meta.url)));
 const target=DESTINATIONS[0],scope=`${target.brandId}__${target.network}__${target.account}`;
 const groups=[PRIORITY_CREATORS.find(x=>x.creatorGroupId==='mrbeast'),PRIORITY_CREATORS.find(x=>x.creatorGroupId==='thegrefg'),PRIORITY_CREATORS.find(x=>x.creatorGroupId==='ishowspeed')];
 async function save(root,relative,v){const p=path.join(root,relative);await mkdir(path.dirname(p),{recursive:true,mode:0o700});await writeFile(p,typeof v==='string'?v:JSON.stringify(v),{mode:0o600});}

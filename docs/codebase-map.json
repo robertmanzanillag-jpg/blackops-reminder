@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T09:58:07.308Z",
+  "generatedAt": "2026-11-18T10:03:38.260Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-creator-adaptation-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -126,9 +126,9 @@
   "totals": {
     "filesVisible": 1195,
     "filesIndexed": 1094,
-    "imports": 4376,
+    "imports": 4377,
     "routes": 623,
-    "symbols": 24873
+    "symbols": 24876
   },
   "directories": {
     ".": {
@@ -9791,6 +9791,7 @@
         "r",
         "raw",
         "rawAnalytics",
+        "rawCreatorSelection",
         "rawState",
         "reasons",
         "recentMetrics",
@@ -9803,6 +9804,7 @@
         "role",
         "roles",
         "root",
+        "routingAt",
         "rows",
         "safe",
         "seen",
@@ -37520,6 +37522,7 @@
       "kind": "test",
       "imports": [
         "../script/software-factory-office-ui-fixture.mjs",
+        "../shared/clippers-priority-creators.mjs",
         "./client/src/components/clippers-office-area",
         "./client/src/lib/queryClient",
         "./fixtures/clippers-orchestra.mjs",
@@ -37551,6 +37554,7 @@
         "fixtureOrigin",
         "measuredBucket",
         "now",
+        "oldSources",
         "origin",
         "page",
         "previousTmp",
