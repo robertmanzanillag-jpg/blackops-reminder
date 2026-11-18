@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T04:36:51.970Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-daily-learning-20261118",
+  "generatedAt": "2026-11-18T04:52:20.200Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-portfolio-prepare-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,13 +124,34 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1145,
-    "filesIndexed": 1045,
-    "imports": 4097,
+    "filesVisible": 1148,
+    "filesIndexed": 1048,
+    "imports": 4116,
     "routes": 604,
-    "symbols": 23353
+    "symbols": 23471
   },
   "directories": {
+    "docs": {
+      "files": 65,
+      "indexed": 63,
+      "kinds": {
+        "docs": 65
+      }
+    },
+    "script": {
+      "files": 120,
+      "indexed": 108,
+      "kinds": {
+        "script": 120
+      }
+    },
+    "tests": {
+      "files": 300,
+      "indexed": 296,
+      "kinds": {
+        "test": 300
+      }
+    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -202,26 +223,12 @@
         "client-page": 28
       }
     },
-    "docs": {
-      "files": 64,
-      "indexed": 62,
-      "kinds": {
-        "docs": 64
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
-      }
-    },
-    "script": {
-      "files": 119,
-      "indexed": 107,
-      "kinds": {
-        "script": 119
       }
     },
     "script/release-gate": {
@@ -271,13 +278,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 299,
-      "indexed": 295,
-      "kinds": {
-        "test": 299
       }
     },
     "tests/fixtures": {
@@ -5659,6 +5659,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-portfolio-prepare.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-sleep-video-pipeline.md",
       "kind": "docs",
       "imports": [],
@@ -9367,6 +9375,113 @@
         "wallClock",
         "when",
         "withOffset"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-portfolio-prepare.mjs",
+      "kind": "script",
+      "imports": [
+        "./clippers-portfolio-metricool.mjs",
+        "node:child_process",
+        "node:crypto",
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "createExistingDriveAdapter",
+        "prepareReadiness",
+        "publicDriveUrl",
+        "runClippersPortfolioPrepare",
+        "verifyPublicBytes"
+      ],
+      "symbols": [
+        "CONFIG",
+        "DRIVE_ID",
+        "ID",
+        "MAX_BYTES",
+        "REPORT",
+        "SHA",
+        "adapter",
+        "appendSchedulerInput",
+        "approved",
+        "asset",
+        "bounded",
+        "boundedHelper",
+        "bytes",
+        "call",
+        "child",
+        "childEnv",
+        "contentHash",
+        "contentLength",
+        "controller",
+        "createExistingDriveAdapter",
+        "destination",
+        "digest",
+        "drive",
+        "evidence",
+        "exactDriveUrl",
+        "existing",
+        "fd",
+        "file",
+        "folderId",
+        "has",
+        "hash",
+        "https",
+        "ids",
+        "info",
+        "input",
+        "key",
+        "ledger",
+        "ledgerFile",
+        "lockFile",
+        "media",
+        "ownerJson",
+        "packet",
+        "parsed",
+        "prepareReadiness",
+        "prior",
+        "priorTarget",
+        "publicDriveUrl",
+        "queued",
+        "readiness",
+        "reason",
+        "receipt",
+        "receiptFile",
+        "receipts",
+        "remaining",
+        "renderAndApprove",
+        "renderApi",
+        "rendered",
+        "report",
+        "reportLock",
+        "reportRoot",
+        "request",
+        "reservations",
+        "response",
+        "result",
+        "rights",
+        "root",
+        "runClippersPortfolioPrepare",
+        "same",
+        "save",
+        "scheduledAt",
+        "selected",
+        "sha",
+        "stageDir",
+        "staged",
+        "stagedFd",
+        "state",
+        "stop",
+        "stopAt",
+        "targetKey",
+        "temporary",
+        "timer",
+        "url",
+        "validAt",
+        "verifyPublicBytes"
       ],
       "routes": []
     },
@@ -35738,6 +35853,62 @@
         "/api/clippers/run-intake-refresh-sweep",
         "/api/clippers/run-post-connect-activation-sweep"
       ]
+    },
+    {
+      "path": "tests/clippers-portfolio-prepare.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-daily-learning.mjs",
+        "../script/clippers-portfolio-metricool.mjs",
+        "../script/clippers-portfolio-prepare.mjs",
+        "../script/clippers-portfolio-render.mjs",
+        "node:assert/strict",
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test",
+        "node:util"
+      ],
+      "exports": [],
+      "symbols": [
+        "CONFIG",
+        "REPORT",
+        "adapter",
+        "again",
+        "bytes",
+        "calls",
+        "digest",
+        "engineSha256",
+        "env",
+        "exec",
+        "f",
+        "fixture",
+        "good",
+        "hasTools",
+        "hash",
+        "id",
+        "input",
+        "learning",
+        "mutations",
+        "now",
+        "p",
+        "packet",
+        "packets",
+        "r",
+        "receipts",
+        "rendered",
+        "renderer",
+        "request",
+        "result",
+        "root",
+        "run",
+        "sourceSha256",
+        "started",
+        "write"
+      ],
+      "routes": []
     },
     {
       "path": "tests/clippers-portfolio-render.test.mjs",
