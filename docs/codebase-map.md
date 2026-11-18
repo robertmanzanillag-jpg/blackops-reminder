@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-18T08:08:14.117Z
-Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-area-20261118`
+Generated: 2026-11-18T08:49:09.394Z
+Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-orchestra-runtime-20261118`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1177 | 1077 | 4272 | 619 | 24279 |
+| 1189 | 1087 | 4317 | 620 | 24502 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 308 | 304 | test:308 |
-| `server` | 277 | 271 | server:277 |
+| `tests` | 309 | 305 | test:309 |
+| `server` | 280 | 274 | server:280 |
 | `client/src` | 155 | 153 | ui-component:55, client-component:46, client-page:28, client-lib:19 |
-| `script` | 124 | 112 | script:124 |
+| `script` | 127 | 115 | script:127 |
+| `docs` | 75 | 71 | docs:75 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 70 | 68 | docs:70 |
 | `shared` | 31 | 31 | shared:31 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
@@ -61,6 +61,7 @@ Package: `rest-express`
 - `server/blackroom-ceo-chat-routes.ts`: `/api/blackroom-ceo-chat`, `/api/blackroom-ceo-chat/approvals/:id/:decision`, `/api/blackroom-ceo-chat/messages`
 - `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
 - `server/blackroom-team-routes.ts`: `/api/blackroom-team`, `/api/blackroom-team/:id/action/:action`, `/api/blackroom-team/:id/run`, `/api/blackroom-team/:id/status`
+- `server/clippers-orchestra-routes.ts`: `/api/clippers/orchestra/status`
 - `server/index.ts`: `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
 - `server/kong-operations-routes.ts`: `/api/kong-ops/cards`, `/api/kong-ops/lease`, `/api/kong-ops/metrics`, `/api/kong-ops/publications`, `/api/kong-ops/reconcile`, `/api/kong-ops/state`
 - `server/kong-repair-routes.ts`: `/api/integrations/kong/software-repairs`, `/api/integrations/kong/software-repairs/status`, `/api/integrations/kong/software-repairs/worker`, `/api/kong-repairs`, `/api/kong-repairs/:key/:action`, `/api/kong-repairs/pull`
@@ -167,6 +168,7 @@ Package: `rest-express`
 - `tests/clippers-local-news-scheduler.test.ts`
 - `tests/clippers-local-news-state-retention.test.ts`
 - `tests/clippers-local-news-translation.test.ts`
+- `tests/clippers-orchestra.test.ts`
 - `tests/clippers-owned-source-scripts.test.ts`
 - `tests/clippers-runtime-status.test.ts`
 - `tests/clippers-upload-metricool-media.test.ts`
@@ -371,7 +373,7 @@ Package: `rest-express`
 - `client/src/pages/revenue-engine-simple.tsx` (client-page; 33 symbols, 7 imports)
 - `client/src/pages/tools.tsx` (client-page; 2 symbols, 6 imports)
 - `package.json` (package)
-- `script/blackroom-control-server.mjs` (script; 82 symbols, 11 imports)
+- `script/blackroom-control-server.mjs` (script; 87 symbols, 12 imports)
 - `script/blackroom-daily-agent.ts` (script; 16 symbols, 2 imports)
 - `script/blackroom-deterministic-editor.ts` (script; 60 symbols, 8 imports)
 - `script/blackroom-local-evidence.ts` (script; 30 symbols, 10 imports)
@@ -398,7 +400,7 @@ Package: `rest-express`
 - `script/clippers-content-learning-ceo.mjs` (script; 85 symbols, 3 imports)
 - `script/clippers-content-local-worker.mjs` (script; 112 symbols, 10 imports)
 - `script/clippers-daily-learning.mjs` (script; 103 symbols, 8 imports)
-- `script/clippers-daily-watchdog.mjs` (script; 99 symbols, 6 imports)
+- `script/clippers-daily-watchdog.mjs` (script; 100 symbols, 6 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
 - `script/clippers-free-local-worker.mjs` (script; 45 symbols, 6 imports)
 - `script/clippers-generate-owned-gap-sources.mjs` (script; 30 symbols, 3 imports)
@@ -412,8 +414,11 @@ Package: `rest-express`
 - `script/clippers-metricool-autopilot.mjs` (script; 116 symbols, 4 imports)
 - `script/clippers-motivation-shorts.mjs` (script; 157 symbols, 6 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
+- `script/clippers-orchestra-analytics.mjs` (script; 22 symbols, 6 imports)
+- `script/clippers-orchestra-relay.mjs` (script; 6 symbols, 2 imports)
+- `script/clippers-orchestra-report.mjs` (script; 104 symbols, 7 imports)
 - `script/clippers-portfolio-discovery.mjs` (script; 68 symbols, 6 imports)
-- `script/clippers-portfolio-metricool.mjs` (script; 70 symbols, 1 imports)
+- `script/clippers-portfolio-metricool.mjs` (script; 74 symbols, 1 imports)
 - `script/clippers-portfolio-prepare.mjs` (script; 102 symbols, 7 imports)
 - `script/clippers-portfolio-render.mjs` (script; 77 symbols, 8 imports)
 - `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)
@@ -421,9 +426,6 @@ Package: `rest-express`
 - `script/clippers-record-owned-meme-rights.ts` (script; 10 symbols, 1 imports)
 - `script/clippers-record-owned-source-rights.mjs` (script; 88 symbols, 3 imports)
 - `script/clippers-render-campaign-drafts.mjs` (script; 118 symbols, 6 imports)
-- `script/clippers-selected-env.mjs` (script; 11 symbols, 2 imports)
-- `script/clippers-sleep-video-generator.mjs` (script; 93 symbols, 6 imports)
-- `script/clippers-streamer-growth-ceo.mjs` (script; 170 symbols, 5 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

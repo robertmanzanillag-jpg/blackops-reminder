@@ -60,6 +60,7 @@ import { runLegalComplianceReports } from "./legal-compliance-agent";
 import { runAppQaScan } from "./app-qa-agent";
 import { createDeveloperAutopilotHandoff, createDeveloperAutopilotHandoffFromRequest, evaluateDeveloperReleaseGate } from "./developer-autopilot";
 import { buildMonthlyAiSpendReport } from "./ai-cost-policy";
+import { registerClippersOrchestraRoutes } from "./clippers-orchestra-routes";
 import { getClipperWorkerRuntimeStatus } from "./clippers-runtime-status";
 import { registerOfficeRoutes } from "./office-routes";
 import { registerOfficeBusinessRoutes } from "./office-business-routes";
@@ -2211,6 +2212,8 @@ export async function registerRoutes(
       res.status(500).json({ error: error.message || "Failed to inspect clippers status" });
     }
   });
+
+  registerClippersOrchestraRoutes(app);
 
   app.get("/api/clippers/runtime-status", async (_req, res) => {
     try {

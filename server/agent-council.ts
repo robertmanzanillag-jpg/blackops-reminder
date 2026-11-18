@@ -6,6 +6,7 @@ import {parseCapabilityTraining} from "./office-capability-training";
 import {parseRoleWork} from "./office-role-work";
 import { roleWorkActivityView } from "../shared/office-role-work-activity";
 import { FACTORY_AGENT_NAMES, factoryAgentsView, isFactoryAgentId, parseFactoryCareerLedger } from "../shared/factory-office-agents";
+import { CLIPPERS_AGENT_NAMES } from "../shared/clippers-office-agents";
 import { parseSelfHealState, selfHealOfficeView } from "./office-self-heal";
 import { getSystemUserId } from "./user-context";
 import { createChatOrder } from "../shared/agent-chat-routing";
@@ -182,6 +183,7 @@ export const AGENT_NAMES: Record<string, string> = {
   mechanic: "Mecanico",
   // Software Factory engineers: main-company careers scored only from real factory stage rows.
   ...FACTORY_AGENT_NAMES,
+  ...CLIPPERS_AGENT_NAMES,
   ...Object.fromEntries(KONG_TEAM.map((name) => [`kong:${name}`, name])),
 };
 

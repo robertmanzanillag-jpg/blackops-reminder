@@ -194,6 +194,24 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
   }
   return {
     destinationSettings,
+    // Read-only whole-account analysis. These observations never become controlled experiments.
+    async accountAnalytics(destination, now = new Date()) {
+      if (!findDestination(destination)) throw new Error('destination_not_allowlisted');
+      const rows = await postAnalytics(destination, new Date(+now - 7 * 86400000).toISOString(), now);
+      const posts = rows.slice(0, 200).flatMap(row => {
+        const post = exactPost(row.publicUrl ?? row.permalink ?? row.shareUrl ?? row.url, destination);
+        const publishedAt = analyticsPublicationTime(row);
+        const metric = metricsFrom(row, destination);
+        const reported = row.observedAt ?? row.updatedAt;
+        const providerAt = providerTimestamp(reported);
+        if (!post || !publishedAt || !metric || Date.parse(publishedAt) > +now ||
+            +now - Date.parse(publishedAt) > 7 * 86400000 || (reported != null && !providerAt) || (providerAt && Date.parse(providerAt) > +now)) return [];
+        return [{ ...post, publishedAt, ...metric, observedAt: providerAt ?? now.toISOString(),
+          timing: providerAt ? 'provider_observation_time' : 'retrieved_at_only',
+          actualAgeHours: ((providerAt ? Date.parse(providerAt) : +now) - Date.parse(publishedAt)) / 3600000 }];
+      }).filter(row => row.actualAgeHours >= 0);
+      return { posts, receivedRows: rows.length, rejectedRows: rows.length-posts.length };
+    },
     async preflight(destination, item) {
       if (!(await destinationSettings(destination)).canPublish) throw new Error('destination_publish_permission_missing');
       const rows = await schedule(destination, localDay(new Date(item.scheduledAt)));
