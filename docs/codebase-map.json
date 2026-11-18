@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T08:15:05.012Z",
+  "generatedAt": "2026-11-18T08:19:18.454Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-orchestra-runtime-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 1081,
     "imports": 4287,
     "routes": 616,
-    "symbols": 24440
+    "symbols": 24444
   },
   "directories": {
     ".": {
@@ -20341,6 +20341,8 @@
         "CLIPPERS_ORCHESTRA_MAX_BYTES",
         "clippersOrchestraState",
         "createClippersOrchestraState",
+        "createOptionalClippersTelemetryIngest",
+        "ingestOptionalClippersTelemetry",
         "parseClippersEnvelope"
       ],
       "symbols": [
@@ -20354,10 +20356,12 @@
         "clippersOrchestraState",
         "council",
         "createClippersOrchestraState",
+        "createOptionalClippersTelemetryIngest",
         "digest",
         "evidenceAge",
         "hash",
         "ingest",
+        "ingestOptionalClippersTelemetry",
         "namespace",
         "now",
         "old",
@@ -37061,6 +37065,7 @@
         "good",
         "handler",
         "id",
+        "ingest",
         "manifest",
         "memory",
         "next",
@@ -37068,6 +37073,7 @@
         "order",
         "p",
         "params",
+        "pending",
         "post",
         "r",
         "receipt",
