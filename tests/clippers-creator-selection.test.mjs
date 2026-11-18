@@ -25,7 +25,7 @@ function fixture() {
           evidence: { status: 'ready', publicationReceiptSha256: hash('pub-' + id), renderReceiptSha256: hash('render-' + id),
             rightsEvidenceSha256: hash('rights-' + id), assignmentSha256: hash('assignment-' + batch),
             rightsObservedAt: time(-26), rightsValidUntil: time(12), sourcePublishedAt: time(-26) },
-          selectionExperiment: { id: 'batch-' + batch, registeredAt: time(-30 + batch),
+          selectionExperiment: { id: 'batch-' + batch, registeredAt: time(-30 + batch), expiresAt: time(5),
             controlCreatorGroupId: 'jordi-wild', challengerCreatorGroupId: 'thegrefg', arm } });
       }
     }
@@ -40,7 +40,7 @@ test('three real disjoint 5+5 lots with exactly 20% lift promote only a bounded 
   assert.equal(result.preferredCreatorGroupId, 'thegrefg');
   assert.equal(result.candidates[0].batches.length, 3);
   assert.ok(result.candidates[0].batches.every(batch => batch.passed));
-  assert.equal(result.expiresAt, time(10));
+  assert.equal(result.expiresAt, time(5));
   assert.equal(result.allowedUse, 'ready_asset_order_only');
   assert.equal(result.mayAuthorizePublication, false);
   assert.equal(result.mayIncreaseDailyLimit, false);
@@ -215,4 +215,46 @@ test('three lots are reachable with one control+challenger per day across 15 rea
   assert.ok(input.samples.every(row => input.samples.filter(other => other.publishedAt === row.publishedAt).length === 2));
   assert.equal(preference(input).status, 'preferred');
   assert.equal(preference({ ...input, policy: { maxObservationAgeHours: 24 } }).status, 'unmeasured');
+});
+
+
+test('shared controls cannot support different challenger lots even if a single winner is chosen', () => {
+  const input = fixture();
+  input.samples.push(...input.samples.map(row => ({ ...structuredClone(row), creatorGroupId: row.selectionExperiment.arm === 'challenger' ? 'rubius' : row.creatorGroupId,
+    selectionExperiment: { ...row.selectionExperiment, id: 'other-' + row.selectionExperiment.id, challengerCreatorGroupId: 'rubius' },
+  })));
+  assert.equal(preference(input).status, 'baseline');
+  assert.ok(preference(input).candidates.every(row => row.reason === 'duplicate_post_or_source'));
+});
+
+test('expired immutable whole cohorts retire without erasing history and valid newer cohorts can qualify', () => {
+  const input = fixture();
+  const old = input.samples.map((row, i) => ({ ...structuredClone(row), deliveryId: 'old-' + row.deliveryId, postId: String(1000 + i),
+    sourceVideoId: String(1000 + i).padStart(11, '0'), sourceSha256: hash('old-' + i),
+    publishedAt: time(-1000), observedAt: time(-976), completionRate: null,
+    evidence: { ...row.evidence, assignmentSha256: hash('old-plan-' + row.selectionExperiment.id), publicationReceiptSha256: hash('oldpub-' + i), renderReceiptSha256: hash('oldrender-' + i) },
+    selectionExperiment: { ...row.selectionExperiment, id: 'old-' + row.selectionExperiment.id, registeredAt: time(-1002), expiresAt: time(-500) } }));
+  input.samples.push(...old);
+  const result = preference(input);
+  assert.equal(result.status, 'preferred');
+  assert.equal(result.retiredBatches.length, 3);
+  assert.equal(result.expiresAt, time(5));
+  assert.equal(input.samples.length, 60);
+  for (const patch of [{ expiresAt: undefined }, { expiresAt: time(6) }]) {
+    const invalid = structuredClone(input); Object.assign(invalid.samples[30].selectionExperiment, patch);
+    assert.notEqual(preference(invalid).status, 'preferred');
+    assert.equal(preference(invalid).retiredBatches.length, 2);
+  }
+});
+
+test('expiry is predeclared bounded, source-linked and never extends preferred scope life', () => {
+  for (const expiresAt of [undefined, 'bad', time(-20), time(800)]) {
+    const input = fixture(); input.samples.forEach(row => row.selectionExperiment.expiresAt = expiresAt);
+    assert.notEqual(preference(input).status, 'preferred');
+  }
+  const expired = fixture(); expired.samples.forEach(row => row.selectionExperiment.expiresAt = time(0));
+  assert.equal(preference(expired).status, 'unmeasured');
+  assert.equal(preference(expired).retiredBatches.length, 3);
+  const conflict = fixture(); conflict.samples[0].selectionExperiment.expiresAt = time(4);
+  assert.equal(preference(conflict).candidates[0].reason, 'assignment_binding_conflict');
 });

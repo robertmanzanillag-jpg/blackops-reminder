@@ -3,6 +3,9 @@ import { createHash } from 'node:crypto';
 // Pure evaluator. The caller must join the real delivery/analytics ledgers and verify
 // the referenced receipt files. Digests here bind that evidence; they do not attest it.
 // Legacy rows without the added pre-publication assignment remain unmeasured.
+// assignmentSha256 binds a shared immutable batch manifest (including expiresAt);
+// the integration retains separate individual asset-assignment entries.
+// readyUntil is derived by that adapter from the current scope's verified proofs.
 const HOUR = 3_600_000;
 const SHA = /^[a-f0-9]{64}$/;
 const ID = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,159}$/;
@@ -68,7 +71,10 @@ function sampleReason(row, context, now, policy) {
       experiment.controlCreatorGroupId === experiment.challengerCreatorGroupId ||
       !['control', 'challenger'].includes(experiment.arm) ||
       row.creatorGroupId !== (experiment.arm === 'control' ? experiment.controlCreatorGroupId : experiment.challengerCreatorGroupId) ||
-      !Number.isFinite(timestamp(experiment.registeredAt)) || timestamp(experiment.registeredAt) >= published) return 'prepublication_assignment_required';
+      !Number.isFinite(timestamp(experiment.registeredAt)) || timestamp(experiment.registeredAt) >= published ||
+      !Number.isFinite(timestamp(experiment.expiresAt)) || timestamp(experiment.expiresAt) <= timestamp(experiment.registeredAt) + context.windowHours * HOUR ||
+      timestamp(experiment.expiresAt) > timestamp(experiment.registeredAt) + 720 * HOUR || observed >= timestamp(experiment.expiresAt)) return 'prepublication_assignment_required';
+  if (timestamp(experiment.expiresAt) <= now) return 'assignment_expired';
   return null;
 }
 function collision(a, b) {
@@ -78,6 +84,15 @@ function collision(a, b) {
     (a.sourceVideoId && a.sourceVideoId === b.sourceVideoId) ||
     (a.sourceEpisodeId && a.sourceEpisodeId === b.sourceEpisodeId) ||
     a.sourceSha256 === b.sourceSha256;
+}
+function expiredCohort(rows, context, now) {
+  if (!rows.length) return false;
+  const bindings = rows.map(row => ({ id: row.selectionExperiment.id, controlCreatorGroupId: row.selectionExperiment.controlCreatorGroupId, challengerCreatorGroupId: row.selectionExperiment.challengerCreatorGroupId, registeredAt: row.selectionExperiment.registeredAt, expiresAt: row.selectionExperiment.expiresAt, assignmentSha256: row.evidence?.assignmentSha256 }));
+  return new Set(bindings.map(canonical)).size === 1 && rows.every(row => {
+    const e = row.selectionExperiment, registered = timestamp(e.registeredAt), expires = timestamp(e.expiresAt);
+    return SHA.test(row.evidence?.assignmentSha256 ?? '') && Number.isFinite(registered) && registered < timestamp(row.publishedAt) &&
+      Number.isFinite(expires) && expires > registered + context.windowHours * HOUR && expires <= registered + 720 * HOUR && expires <= now;
+  });
 }
 function batchReceipt(id, rows) {
   const controls = rows.filter(row => row.selectionExperiment.arm === 'control');
@@ -119,11 +134,17 @@ export function selectCreatorPreferences({ samples = [], contexts = [], previous
       else eligible.push(row);
     }
     eligible.sort((a, b) => timestamp(a.selectionExperiment.registeredAt) - timestamp(b.selectionExperiment.registeredAt) || compare(digest(a), digest(b)));
-    const assigned = normalizedSamples.filter(row => row && digest(scope(row)) === scopeKey &&
+    const allAssigned = normalizedSamples.filter(row => row && digest(scope(row)) === scopeKey &&
       id(row.selectionExperiment?.id) && row.selectionExperiment.controlCreatorGroupId === context.baselineCreatorGroupId &&
-      id(row.selectionExperiment.challengerCreatorGroupId) && row.selectionExperiment.challengerCreatorGroupId !== context.baselineCreatorGroupId &&
-      Number.isFinite(timestamp(row.selectionExperiment.registeredAt)))
-      .sort((a, b) => timestamp(a.selectionExperiment.registeredAt) - timestamp(b.selectionExperiment.registeredAt) || compare(a.selectionExperiment.id, b.selectionExperiment.id));
+      id(row.selectionExperiment.challengerCreatorGroupId) && row.selectionExperiment.challengerCreatorGroupId !== context.baselineCreatorGroupId)
+      .sort((a, b) => (Number.isFinite(timestamp(a.selectionExperiment.registeredAt)) ? timestamp(a.selectionExperiment.registeredAt) : -Infinity) -
+        (Number.isFinite(timestamp(b.selectionExperiment.registeredAt)) ? timestamp(b.selectionExperiment.registeredAt) : -Infinity) || compare(a.selectionExperiment.id, b.selectionExperiment.id));
+    const retiredBatches = [];
+    for (const batchId of [...new Set(allAssigned.map(row => row.selectionExperiment.id))].sort()) {
+      const members = normalizedSamples.filter(row => row && digest(scope(row)) === scopeKey && row.selectionExperiment?.id === batchId);
+      if (expiredCohort(members, context, now)) retiredBatches.push({ id: batchId, expiresAt: members[0].selectionExperiment.expiresAt, assignmentSha256: members[0].evidence.assignmentSha256 });
+    }
+    const assigned = allAssigned.filter(row => !retiredBatches.some(batch => batch.id === row.selectionExperiment.id));
     const challengers = [...new Set(assigned.map(row => row.selectionExperiment.challengerCreatorGroupId))].sort();
     const candidates = [];
     const contextReady = SHA.test(context.readinessReceiptSha256 ?? '') && timestamp(context.readyUntil) > now;
@@ -134,16 +155,19 @@ export function selectCreatorPreferences({ samples = [], contexts = [], previous
         const batchId = row.selectionExperiment.id;
         if (!batches.has(batchId)) batches.set(batchId, rows.filter(item => item.selectionExperiment.id === batchId));
       }
+      // Retired lots stay in the input digest/history. Active malformed lots cannot
+      // disappear just because an invalid observation was excluded.
       // Use the first three registered lots, not the best-performing lots.
       const chosen = [...batches.entries()].slice(0, 3);
       const used = chosen.flatMap(([, items]) => items);
-      const duplicate = used.length === 30 && used.some((a, index) => used.slice(index + 1).some(b => collision(a, b)));
-      const consistentAssignment = new Set(chosen.map(([, items]) => items[0]?.evidence.assignmentSha256)).size === chosen.length && chosen.every(([, items]) => new Set(items.map(row => canonical(row.selectionExperiment.registeredAt))).size === 1 &&
+      const duplicate = used.length === 30 && (used.some((a, index) => used.slice(index + 1).some(b => collision(a, b))) ||
+        used.some(a => allAssigned.some(b => a !== b && (a.selectionExperiment.id !== b.selectionExperiment.id || a.selectionExperiment.challengerCreatorGroupId !== b.selectionExperiment.challengerCreatorGroupId) && (collision(a, b) || a.evidence.assignmentSha256 === b.evidence?.assignmentSha256))));
+      const consistentAssignment = new Set(chosen.map(([, items]) => items[0]?.evidence.assignmentSha256)).size === chosen.length && chosen.every(([, items]) => new Set(items.map(row => canonical([row.selectionExperiment.registeredAt, row.selectionExperiment.expiresAt]))).size === 1 &&
         new Set(items.map(row => row.evidence.assignmentSha256)).size === 1);
       const batchReceipts = chosen.map(([id, items]) => batchReceipt(id, items));
       const conflictingBatch = chosen.some(([batchId, items]) => rejectedBatchIds.has(batchId) || normalizedSamples.some(row => row && digest(scope(row)) === scopeKey && row.selectionExperiment?.id === batchId && row.selectionExperiment.challengerCreatorGroupId !== creatorGroupId));
       const reason = !contextReady ? 'current_readiness_required' : chosen.length !== 3 ? 'three_disjoint_batches_required' : conflictingBatch ? 'assigned_sample_invalid_or_conflicting' : duplicate ? 'duplicate_post_or_source' : !consistentAssignment ? 'assignment_binding_conflict' : batchReceipts.find(row => !row.passed)?.reason ?? 'qualified';
-      const expires = Math.min(now + limits.preferenceTtlHours * HOUR, timestamp(context.readyUntil), ...used.map(row => timestamp(row.observedAt) + limits.maxObservationAgeHours * HOUR));
+      const expires = Math.min(now + limits.preferenceTtlHours * HOUR, timestamp(context.readyUntil), ...used.map(row => Math.min(timestamp(row.observedAt) + limits.maxObservationAgeHours * HOUR, timestamp(row.selectionExperiment.expiresAt))));
       candidates.push({ creatorGroupId, qualified: reason === 'qualified', reason, batches: batchReceipts,
         expiresAt: Number.isFinite(expires) ? new Date(expires).toISOString() : null });
     }
@@ -158,7 +182,7 @@ export function selectCreatorPreferences({ samples = [], contexts = [], previous
       maxPriorityBoost: winner ? 1 : 0, mayIncreaseDailyLimit: false, mayAuthorizePublication: false, paidSpendUsd: 0,
       inputSha256: digest({ samples: normalizedSamples.map(digest).sort(), context, policy: limits }),
       previousPreferenceHashes: prior.map(digest).sort(), readinessReceiptSha256: context.readinessReceiptSha256 ?? null,
-      eligibleSamples: eligible.length, excluded, candidates };
+      eligibleSamples: eligible.length, excluded, retiredBatches, candidates };
     results.push({ ...receipt, receiptSha256: digest(receipt) });
   }
   return { schemaVersion: 1, evaluatedAt: new Date(now).toISOString(), policy: { ...limits, batches: 3, samplesPerArm: 5, minimumMedianViewLift: 0.2, qualityMetric: 'completion_rate' }, preferences: results, paidSpendUsd: 0 };
