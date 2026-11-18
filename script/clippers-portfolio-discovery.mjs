@@ -160,8 +160,8 @@ export function selectCreators(now = new Date(), ids) {
     return selected.sort((a,b)=>ALL_DISCOVERY_CREATORS.indexOf(a)-ALL_DISCOVERY_CREATORS.indexOf(b));
   }
   // Every priority feed is due daily. The one reserved exploration slot rotates
-  // all seven reviewed legacy/candidate sources; no popularity/title inference.
-  const challenger=CHALLENGER_CREATORS[Math.floor(+now/(24*HOUR))%CHALLENGER_CREATORS.length];
+  // all seven reviewed sources in paired UTC days (a14-day cycle); no popularity/title inference.
+  const challenger=CHALLENGER_CREATORS[Math.floor(+now/(2*24*HOUR))%CHALLENGER_CREATORS.length];
   return [...PRIORITY_CREATORS,challenger];
 }
 
@@ -183,7 +183,7 @@ export function classifyDiscovery(observation, history) {
     Date.parse(row.observedAt) >= Date.parse(observation.publishedAt) &&
     Date.parse(row.observedAt) <= observedAt - HOUR)
     .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0];
-  if (prior && prior.views <= observation.views) { result.viewsPerHour = (observation.views - prior.views) / ((observedAt - Date.parse(prior.observedAt)) / HOUR); result.growthStatus = 'public_growth_observed'; }
+  if (prior && prior.views <= observation.views) { result.viewsPerHour = (observation.views - prior.views) / ((observedAt - Date.parse(prior.observedAt)) / HOUR); result.growthStatus = prior.views < observation.views ? 'public_growth_observed' : 'public_counter_unchanged'; }
   else if (prior) result.growthStatus = 'public_counter_decreased';
   if (!observation.language || observation.format === 'unknown') return { ...result, status: 'comparison_context_unknown' };
   const baselines = new Map();
@@ -200,18 +200,19 @@ export function classifyDiscovery(observation, history) {
   return { ...result, status: 'research_comparison_only', baselineSamples: baselines.size, outlierRatio: observation.views / reference };
 }
 
-async function privateRead(file, fallback) {
+async function privateRead(file, fallback, maxBytes=2_097_152) {
   let handle;
   try {
-    handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
-    const info = await handle.stat();
-    if (!info.isFile() || info.nlink !== 1 || info.size > 2_097_152 || (info.mode & 0o077) ||
-        (process.getuid && info.uid !== process.getuid())) throw new Error('private_discovery_file_required');
-    return JSON.parse(await handle.readFile('utf8'));
-  } catch (error) {
-    if (error.code === 'ENOENT') return fallback;
-    throw error;
-  } finally { await handle?.close(); }
+    handle = await open(file,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);
+    const info=await handle.stat();
+    if(!info.isFile()||info.nlink!==1||info.size>maxBytes||(info.mode&0o077)||(process.getuid&&info.uid!==process.getuid()))throw new Error('private_discovery_file_required');
+    const chunks=[];let bytes=0;
+    while(bytes<=maxBytes){const chunk=Buffer.alloc(Math.min(65536,maxBytes+1-bytes));const result=await handle.read(chunk,0,chunk.length,null);if(!result.bytesRead)break;bytes+=result.bytesRead;if(bytes>maxBytes)throw new Error('private_discovery_file_required');chunks.push(chunk.subarray(0,result.bytesRead));}
+    const after=await handle.stat();
+    if(after.size!==info.size||after.mtimeMs!==info.mtimeMs||after.ctimeMs!==info.ctimeMs||bytes!==info.size)throw new Error('private_discovery_file_changed');
+    return JSON.parse(Buffer.concat(chunks).toString('utf8'));
+  } catch(error){if(error.code==='ENOENT')return fallback;throw error;}
+  finally{await handle?.close();}
 }
 
 async function privateCreate(file, value) {
@@ -257,13 +258,13 @@ const cachedResult = (receipt,creator) => ({feed:receipt.feeds.find(row=>row.cha
 export async function runPortfolioDiscovery({ stateDir=DEFAULT_DISCOVERY_STATE_DIR, now=new Date(), creatorIds, fetchImpl=fetch, clock=Date.now }={}) {
   if(!stateDir||!path.isAbsolute(stateDir))throw new Error('absolute_discovery_directory_required');
   const creators=selectCreators(now,creatorIds),day=now.toISOString().slice(0,10),started=clock();
+  if(fetchImpl===globalThis.fetch && stateDir!==DEFAULT_DISCOVERY_STATE_DIR)throw new Error('canonical_operational_discovery_directory_required');
   await mkdir(stateDir,{recursive:true,mode:0o700});
   if(await realpath(stateDir)!==stateDir)throw new Error('discovery_directory_symlink_rejected');
   const info=await stat(stateDir);
   if((info.mode&0o077)||(process.getuid&&info.uid!==process.getuid()))throw new Error('private_discovery_directory_required');
   // Production cannot reset its global budget by changing a workspace/cache flag.
   // Tests may inject a fake transport and use temporary isolated directories.
-  if(fetchImpl===globalThis.fetch && stateDir!==DEFAULT_DISCOVERY_STATE_DIR)throw new Error('canonical_operational_discovery_directory_required');
   const receiptFile=path.join(stateDir,`${day}-v2-${hash(creators.map(row=>row.id).sort().join(',')).slice(0,16)}.json`);
   const lockFile=path.join(stateDir,'.discovery.lock');await privateCreate(lockFile,{createdAt:now.toISOString()});
   const abort=new AbortController(),timer=setTimeout(()=>abort.abort(),DISCOVERY_DEADLINE_MS);
@@ -274,19 +275,37 @@ export async function runPortfolioDiscovery({ stateDir=DEFAULT_DISCOVERY_STATE_D
     if(!budget&&names.some(name=>name.startsWith(day+'-v2-')||name.startsWith(day+'-channel-')))throw new Error('missing_discovery_budget_with_v2_evidence');
     budget=budget?validateBudget(budget,day):{schemaVersion:2,day,cap:DAILY_RSS_CAP,importedRequests:0,imports:{},reservations:[],used:0};
     const cache=new Map(),history=[],todayReceipts=[];
-    for(const name of names.filter(name=>receiptPattern.test(name)).sort()) {
-      const fileDay=name.slice(0,10);if(fileDay>day||Date.parse(fileDay+'T00:00:00Z')<+now-8*24*HOUR)continue;
-      const value=validateReceipt(await privateRead(path.join(stateDir,name),null),fileDay);
-      if(fileDay===day){todayReceipts.push(value);if(value.schemaVersion===1){const sha=hash(JSON.stringify(value));if(Object.hasOwn(budget.imports,name)&&(budget.imports[name].sha256!==sha||budget.imports[name].networkRequests!==value.networkRequests))throw new Error('legacy_discovery_receipt_changed');if(!Object.hasOwn(budget.imports,name)){budget.importedRequests+=value.networkRequests;budget.imports[name]={sha256:sha,networkRequests:value.networkRequests};}}}
+    const legacyNames=names.filter(name=>/^\d{4}-\d\d-\d\d-[a-f0-9]{16}\.json$/.test(name));
+    const legacyToday=legacyNames.filter(name=>name.startsWith(day+'-')).sort();
+    // v1 accepted1..4 unique feeds from8 channels: at most162 real sets.
+    // Fail closed on an impossible directory instead of unbounded accounting IO.
+    if(legacyToday.length>162)throw new Error('too_many_legacy_discovery_receipts');
+    const legacyHistory=legacyNames.filter(name=>name.slice(0,10)<day&&Date.parse(name.slice(0,10)+'T00:00:00Z')>=+now-8*24*HOUR).sort().slice(-32);
+    for(const name of [...legacyToday,...legacyHistory]){
+      const fileDay=name.slice(0,10),value=validateReceipt(await privateRead(path.join(stateDir,name),null,524288),fileDay);
+      if(value.schemaVersion!==1)throw new Error('invalid_legacy_discovery_receipt');
+      if(fileDay===day){todayReceipts.push(value);const sha=hash(JSON.stringify(value));
+        if(Object.hasOwn(budget.imports,name)&&(budget.imports[name].sha256!==sha||budget.imports[name].networkRequests!==value.networkRequests))throw new Error('legacy_discovery_receipt_changed');
+        if(!Object.hasOwn(budget.imports,name)){budget.importedRequests+=value.networkRequests;budget.imports[name]={sha256:sha,networkRequests:value.networkRequests};}}
       history.push(...value.observations);
     }
     budget.used=budget.importedRequests+budget.reservations.length;
     await atomicPrivateWrite(budgetFile,budget);
     for(const receipt of todayReceipts)for(const creator of creators){const result=cachedResult(receipt,creator);if(result.feed&&!cache.has(creator.channelId))cache.set(creator.channelId,result);}
-    for(const creator of creators){
-      const stored=await privateRead(path.join(stateDir,`${day}-channel-${creator.channelId}.json`),null);
-      if(stored){validateReceipt(stored,day,[creator]);if(!budget.reservations.some(row=>row.channelId===creator.channelId))throw new Error('cache_without_discovery_reservation');cache.set(creator.channelId,cachedResult(stored,creator));}
+    const channelNames=names.filter(name=>/^\d{4}-\d\d-\d\d-channel-UC[A-Za-z0-9_-]{22}\.json$/.test(name)&&name.slice(0,10)<=day&&Date.parse(name.slice(0,10)+'T00:00:00Z')>=Date.parse(day+'T00:00:00Z')-2*24*HOUR);
+    if(channelNames.length>ALL_DISCOVERY_CREATORS.length*3)throw new Error('too_many_channel_history_files');
+    for(const name of channelNames){
+      const fileDay=name.slice(0,10),channelId=name.slice(19,-5),creator=resolveCreatorChannel(channelId);if(!creator)throw new Error('unknown_channel_history');
+      const stored=validateReceipt(await privateRead(path.join(stateDir,name),null,131072),fileDay,[creator]);
+      if(stored.observations.length>25)throw new Error('invalid_channel_history');history.push(...stored.observations);
+      if(fileDay===day){if(!budget.reservations.some(row=>row.channelId===channelId))throw new Error('cache_without_discovery_reservation');cache.set(channelId,cachedResult(stored,creator));}
     }
+    // Summary variants never multiply baseline samples or CPU work. Keep only
+    // actual channel/video/time snapshots, then cap the indexed channel window.
+    const indexed=new Map();
+    for(const row of history){const key=row.channelId+':'+row.videoId+':'+row.observedAt;if(!indexed.has(key))indexed.set(key,row);}
+    const historyByChannel=new Map();
+    for(const row of [...indexed.values()].sort((a,b)=>Date.parse(b.observedAt)-Date.parse(a.observedAt))){const rows=historyByChannel.get(row.channelId)??[];if(rows.length<512)rows.push(row);historyByChannel.set(row.channelId,rows);}
     const existing=await privateRead(receiptFile,null);
     if(existing)return {...validateReceipt(existing,day,creators),receiptFile,reused:true,networkRequestsThisInvocation:0,budget:{cap:DAILY_RSS_CAP,used:budget.used,remaining:Math.max(0,DAILY_RSS_CAP-budget.used)}};
     const queue=[],results=new Map(cache),unknown=channel=>budget.reservations.some(row=>row.channelId===channel);
@@ -317,8 +336,8 @@ export async function runPortfolioDiscovery({ stateDir=DEFAULT_DISCOVERY_STATE_D
     for(const creator of creators){const result=results.get(creator.channelId);rejected.push(...result.rejected.map(row=>({creatorId:creator.id,...row})));for(const row of result.observations){const key=canonicalSourceIdentity(row.videoId);if(!unique.has(key))unique.set(key,{...row,creatorGroupId:creator.creatorGroupId,sourceIdentity:key,originalEpisodeId:null,independentExperiment:false});}}
     const observations=[...unique.values()].sort((a,b)=>(a.freshness==='stale')-(b.freshness==='stale')||b.publishedAt.localeCompare(a.publishedAt));
     const observedFeeds=feeds.filter(row=>row.status==='observed').length;
-    const receipt={schemaVersion:2,day,observedAt:new Date(+now+clock()-started).toISOString(),paidSpendUsd:0,mayPublish:false,status:observedFeeds===0?'blocked_no_feed_observations':observedFeeds===feeds.length?'observed':'partial',permission:'unknown',networkRequests:requests,feeds,rejected,observations:observations.map(row=>({...row,research:classifyDiscovery(row,history)})),eligibleAssets:0,
-      budget:{cap:DAILY_RSS_CAP,used:budget.used,remaining:Math.max(0,DAILY_RSS_CAP-budget.used)},priorityChannels:PRIORITY_CREATORS.length,challengerSlots:1,notice:'Public metadata is not rights approval, an independent source experiment, or proof of our account improvement.'};
+    const receipt={schemaVersion:2,day,observedAt:new Date(+now+clock()-started).toISOString(),paidSpendUsd:0,mayPublish:false,status:observedFeeds===0?'blocked_no_feed_observations':observedFeeds===feeds.length?'observed':'partial',permission:'unknown',networkRequests:requests,feeds,rejected,observations:observations.map(row=>({...row,research:classifyDiscovery(row,historyByChannel.get(row.channelId)??[])})),eligibleAssets:0,
+      budget:{cap:DAILY_RSS_CAP,used:budget.used,remaining:Math.max(0,DAILY_RSS_CAP-budget.used)},priorityChannels:PRIORITY_CREATORS.length,challengerSlots:1,challengerPairDays:2,challengerRotationDays:14,notice:'Public metadata is not rights approval, an independent source experiment, or proof of our account improvement.'};
     await privateCreate(receiptFile,receipt);
     return {...receipt,receiptFile,reused:requests===0&&cache.size>0,networkRequestsThisInvocation:requests};
   }finally{clearTimeout(timer);await unlink(lockFile);}

@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+import vm from 'node:vm';
+import {constants} from 'node:fs';
 import { ALL_DISCOVERY_CREATORS } from '../shared/clippers-priority-creators.mjs';
 import { mkdtemp, readFile, readdir, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -23,7 +26,9 @@ test('fixed catalogue covers requested creators and languages without caller URL
   assert.deepEqual([...new Set(DISCOVERY_CREATORS.map(row => row.language))].sort(), ['de', 'en', 'es', 'fr', 'ja', 'pt-BR']);
   const day1=selectCreators(NOW);assert.equal(day1.length,14);
   assert.deepEqual(day1.slice(0,13),PRIORITY_CREATORS);
-  const challengers=Array.from({length:7},(_,i)=>selectCreators(new Date(+NOW+i*86400000))[13].id);
+  const aligned=Math.floor(+NOW/(2*86400000))*2*86400000;
+  const challengers=Array.from({length:14},(_,i)=>selectCreators(new Date(aligned+i*86400000))[13].id);
+  for(let i=0;i<14;i+=2)assert.equal(challengers[i],challengers[i+1]);
   assert.equal(new Set(challengers).size,CHALLENGER_CREATORS.length);
   assert.deepEqual(selectCreators(NOW,['lacy','thegrefg']).map(row=>row.id),['thegrefg','lacy']);
   assert.throws(()=>selectCreators(NOW,['lacy','lacy']),/unique/);
@@ -161,7 +166,7 @@ test('symlink storage roots cannot redirect receipts into another workspace', as
   try {
     await mkdirSafe(path.join(dir, 'actual'));
     await symlink(path.join(dir, 'actual'), path.join(dir, 'link'));
-    await assert.rejects(runPortfolioDiscovery({ stateDir: path.join(dir, 'link'), now: NOW, creatorIds: [creator.id] }), /symlink/);
+    await assert.rejects(runPortfolioDiscovery({ stateDir: path.join(dir, 'link'), now: NOW, fetchImpl:publicFake(), creatorIds: [creator.id] }), /symlink/);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
@@ -225,4 +230,34 @@ test('deadline/day boundary stops undispatched reserved requests and transport t
 });
 test('native production transport cannot select an alternate state root to reset the daily cap',async()=>{
  const dir=await newDir();try{assert.notEqual(dir,DEFAULT_DISCOVERY_STATE_DIR);await assert.rejects(runPortfolioDiscovery({stateDir:dir,now:NOW}),/canonical_operational/);}finally{await rm(dir,{recursive:true,force:true});}
+});
+
+test('unchanged public counter retains measured zero without a positive-growth claim',()=>{
+ const row=parseYouTubeFeed(feed(),creator,NOW.toISOString()).observations[0];const prior={...row,observedAt:'2026-11-18T09:00:00Z'};
+ const result=classifyDiscovery(row,[prior]);assert.equal(result.viewsPerHour,0);assert.equal(result.growthStatus,'public_counter_unchanged');assert.equal(result.causalClaim,false);
+});
+test('private reader rejects FIFO and oversized input without hanging or requesting a feed',async()=>{
+ const dir=await newDir();try{
+ const budget=path.join(dir,'.rss-budget-2026-11-18.json');const made=spawnSync('mkfifo',['-m','600',budget]);assert.equal(made.status,0);
+ const url=new URL('../script/clippers-portfolio-discovery.mjs',import.meta.url).href;
+ const code=`import {runPortfolioDiscovery} from ${JSON.stringify(url)};try{await runPortfolioDiscovery({stateDir:${JSON.stringify(dir)},now:new Date('2026-11-18T10:00:00Z'),fetchImpl:async()=>{throw Error('NO_NETWORK')}});process.exit(2)}catch(error){console.log(error.message)}`;
+ const child=spawnSync(process.execPath,['--input-type=module','-e',code],{timeout:2000,encoding:'utf8',env:{PATH:process.env.PATH,HOME:dir}});assert.equal(child.status,0,child.error?.message);assert.match(child.stdout,/private_discovery_file_required/);
+ await rm(budget);await writeFile(budget,Buffer.alloc(2097153),{mode:0o600});let calls=0;await assert.rejects(runPortfolioDiscovery({stateDir:dir,now:NOW,fetchImpl:publicFake(()=>calls++)}),/private_discovery_file_required/);assert.equal(calls,0);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('actual private-read function bounds bytes if a regular file grows after initial stat',async()=>{
+ const source=await readFile(new URL('../script/clippers-portfolio-discovery.mjs',import.meta.url),'utf8');const block=source.slice(source.indexOf('async function privateRead('),source.indexOf('async function privateCreate('));let readFileCalled=false,closed=false,requested=0,flags;
+ const info={isFile:()=>true,nlink:1,size:1,mode:0o600,uid:process.getuid?.(),mtimeMs:1,ctimeMs:1};
+ const handle={stat:async()=>info,read:async(buffer,_offset,length)=>{requested+=length;buffer.fill(32);return{bytesRead:length}},readFile:async()=>{readFileCalled=true;return JSON.stringify({unbounded:'x'.repeat(1000)})},close:async()=>closed=true};
+ const read=vm.runInNewContext(block+';privateRead',{open:async(_file,options)=>{flags=options;return handle},constants,process,Buffer});
+ await assert.rejects(read('synthetic',null,16),/private_discovery_file_required/);assert.equal(requested,17);assert.equal(readFileCalled,false);assert.equal(closed,true);assert.ok(flags&constants.O_NONBLOCK);
+});
+test('derived summary variants neither multiply trend history nor block cached sources',async()=>{
+ const dir=await newDir();let calls=0;try{const fetchImpl=publicFake(()=>calls++);await runPortfolioDiscovery({stateDir:dir,now:NOW,fetchImpl});
+ await Promise.all(Array.from({length:200},(_,i)=>writeFile(path.join(dir,`2026-11-18-v2-${i.toString(16).padStart(16,'0')}.json`),'DERIVED_NOT_A_HISTORY_SOURCE',{mode:0o600})));
+ const result=await runPortfolioDiscovery({stateDir:dir,now:NOW,creatorIds:[PRIORITY_CREATORS[0].id],fetchImpl});assert.equal(calls,14);assert.equal(result.networkRequestsThisInvocation,0);assert.equal(result.feeds[0].status,'observed');
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('native refusal does not create an alternate directory before reporting canonical-root policy',async()=>{
+ const dir=await newDir();try{const absent=path.join(dir,'must-stay-absent');await assert.rejects(runPortfolioDiscovery({stateDir:absent,now:NOW}),/canonical_operational/);await assert.rejects(stat(absent),{code:'ENOENT'});}finally{await rm(dir,{recursive:true,force:true});}
 });
