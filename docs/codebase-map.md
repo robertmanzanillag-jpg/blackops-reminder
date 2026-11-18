@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T06:14:00.522Z
+Generated: 2026-11-18T06:20:24.425Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-office-factory-connected-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1166 | 1066 | 4206 | 615 | 24092 |
+| 1166 | 1066 | 4207 | 615 | 24098 |
 
 ## Entrypoints
 - `client/src/App.tsx`

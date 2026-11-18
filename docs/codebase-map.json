@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T06:14:00.522Z",
+  "generatedAt": "2026-11-18T06:20:24.425Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-office-factory-connected-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -126,9 +126,9 @@
   "totals": {
     "filesVisible": 1166,
     "filesIndexed": 1066,
-    "imports": 4206,
+    "imports": 4207,
     "routes": 615,
-    "symbols": 24092
+    "symbols": 24098
   },
   "directories": {
     ".": {
@@ -35894,6 +35894,7 @@
         "node:assert/strict",
         "node:child_process",
         "node:events",
+        "node:fs",
         "node:fs/promises",
         "node:os",
         "node:path",
@@ -35912,16 +35913,22 @@
         "fixture",
         "freshContent",
         "freshDelivery",
+        "grandchild",
         "invalid",
         "latest",
         "markdown",
+        "parent",
+        "pid",
+        "pidFile",
         "prepareEnabled",
         "report",
         "reports",
+        "result",
         "runClippersDailyLearning",
         "runPortfolioDiscovery",
         "runPortfolioPrepare",
         "started",
+        "state",
         "timeout",
         "workspaceRoot"
       ],

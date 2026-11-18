@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -79,6 +79,29 @@ test("prepare subprocess ignores provider stderr, refuses paid reports and is ki
     } });
   assert.equal(timeout.reason, "portfolio_prepare_deadline_exceeded");
   assert.ok(Date.now() - started < 2000); await closed;
+});
+
+test("timed-out or failed preparation cannot leave a TERM-resistant descendant after its parent closes", {
+  timeout: 6000, skip: process.platform === "win32" && "POSIX process-group cleanup",
+}, async t => {
+  const workspaceRoot = await fixture(), groups = [];
+  t.after(async () => {
+    for (const pid of groups) { try { process.kill(-pid, "SIGKILL"); } catch {} }
+    await rm(workspaceRoot, { recursive: true, force: true });
+  });
+  for (const mode of ["timeout", "failed"]) {
+    const pidFile = path.join(workspaceRoot, "descendant-" + mode + ".pid");
+    const grandchild = 'process.on("SIGTERM",()=>{});require("node:fs").writeFileSync(' + JSON.stringify(pidFile) + ',String(process.pid));setInterval(()=>{},1000)';
+    const parent = 'const fs=require("node:fs");require("node:child_process").spawn(process.execPath,["-e",' + JSON.stringify(grandchild) + '],{stdio:"ignore"});' +
+      (mode === "failed" ? 'setInterval(()=>{if(fs.existsSync(' + JSON.stringify(pidFile) + '))process.exit(1)},5)' : 'setInterval(()=>{},1000)');
+    const result = await runPortfolioPrepareChild({ workspaceRoot, env: prepareEnabled, timeoutMs: 450,
+      spawnProcess(binary, _args, options) { const child = spawn(binary, ["-e", parent], options); groups.push(child.pid); return child; } });
+    assert.equal(result.reason, mode === "timeout" ? "portfolio_prepare_deadline_exceeded" : "portfolio_prepare_child_failed");
+    const pid = Number(await readFile(pidFile, "utf8"));
+    await new Promise(resolve => setTimeout(resolve, 50));
+    const state = spawnSync("ps", ["-o", "stat=", "-p", String(pid)], { encoding: "utf8" }).stdout.trim();
+    assert.ok(!state || state.startsWith("Z"), "a descendant must be gone or exited, not active: " + state);
+  }
 });
 
 test("daily discovery runs only when due and preserves research-only evidence", async () => {

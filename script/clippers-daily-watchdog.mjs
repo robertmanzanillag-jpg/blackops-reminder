@@ -27,7 +27,13 @@ export async function runPortfolioPrepareChild({ workspaceRoot, env = process.en
       try { if (process.platform === "win32") child.kill(signal); else process.kill(-child.pid, signal); } catch {}
     };
     const blocked = reason => ({ status: "blocked", reason, prepared: 0, uploaded: 0, paidSpendUsd: 0 });
-    const finish = value => { if (settled) return; settled = true; clearTimeout(timer); clearTimeout(killTimer); resolve(value); };
+    const finish = value => {
+      if (settled) return;
+      // A closing parent does not prove its process-group descendants exited.
+      // Finish escalation before clearing timers on every unconfirmed outcome.
+      if (failure || value.status === "blocked") stop("SIGKILL");
+      settled = true; clearTimeout(timer); clearTimeout(killTimer); resolve(value);
+    };
     const terminate = reason => {
       failure ||= reason; stop("SIGTERM");
       killTimer ||= setTimeout(() => { stop("SIGKILL"); finish(blocked(failure)); }, 250);
