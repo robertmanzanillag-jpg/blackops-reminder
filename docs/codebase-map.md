@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T05:19:30.248Z
+Generated: 2026-11-18T05:19:38.656Z
 Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-kong-repair`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1161 | 1059 | 4145 | 610 | 23665 |
+| 1161 | 1059 | 4145 | 610 | 23672 |
 
 ## Entrypoints
 - `client/src/App.tsx`

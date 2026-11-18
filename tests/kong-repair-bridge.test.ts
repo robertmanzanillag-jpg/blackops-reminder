@@ -190,3 +190,18 @@ test("unclaimed refresh is fenced against maker races and reconciles a lost fenc
     assert.equal(touched, false);
   }
 });
+
+test("a newer passing status supersedes its failed attempt without hiding another failing context", async () => {
+  const { effectiveCommitStatusesPass } = await import("../server/kong-repair-proof");
+  assert.equal(effectiveCommitStatusesPass([{ context: "ci", state: "success" }, { context: "ci", state: "failure" }]), true);
+  assert.equal(effectiveCommitStatusesPass([{ context: "ci", state: "failure" }, { context: "ci", state: "success" }]), false);
+  assert.equal(effectiveCommitStatusesPass([{ context: "ci", state: "success" }, { context: "security", state: "pending" }]), false);
+});
+
+test("cached worker health loses its connection at the freshness deadline without another network read", async () => {
+  const { freshMakerHealth } = await import("../server/kong-repair-proof");
+  const value = { state: "idle", workerConnected: true, lastSuccessfulPollAt: new Date(NOW).toISOString(), sourceCount: 0 };
+  assert.equal(freshMakerHealth(value, NOW + 1799000).workerConnected, true);
+  assert.equal(freshMakerHealth(value, NOW + 1801000).workerConnected, false);
+  assert.equal(freshMakerHealth(value, NOW + 1801000).state, "stale");
+});

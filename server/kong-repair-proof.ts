@@ -58,3 +58,20 @@ export async function parentCheckerReceipt(input: { key: string; sourceDigest?: 
     return engine.type === "file" && engine.encoding === "base64" && digest(Buffer.from(engine.content, "base64").toString("utf8")) === receipt.engine.sha256;
   } catch { return false; }
 }
+
+/** GitHub lists commit statuses newest first; old attempts do not revoke the
+ * effective result of a newer status in the same context. */
+export function effectiveCommitStatusesPass(statuses: Array<{ context?: string; state?: string }>) {
+  const latest = new Map<string, string>();
+  for (const status of statuses) {
+    if (!status.context || !status.state) return false;
+    if (!latest.has(status.context)) latest.set(status.context, status.state);
+  }
+  return [...latest.values()].every(state => state === "success");
+}
+
+export function freshMakerHealth(value: Record<string, unknown>, now: number) {
+  const poll = value.lastSuccessfulPollAt, age = typeof poll === "string" ? now - Date.parse(poll) : Infinity;
+  const connected = Number.isFinite(age) && age >= 0 && age <= 1800000;
+  return { ...value, workerConnected: connected, state: connected ? value.state : "stale" };
+}

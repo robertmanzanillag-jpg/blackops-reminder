@@ -57,3 +57,17 @@ test("outstanding and daily private issue caps retain additional repairs durably
   }
   assert.equal(f.calls(), 3); assert.equal((await f.bridge.view()).entries.length, 4);
 });
+
+test("pull-only mode synchronizes at most three exact currently reported repair keys without HMAC", async () => {
+  const f = fixture(), calls: Array<[string, boolean | undefined]> = [];
+  const entries = [] as Awaited<ReturnType<typeof f.bridge.view>>["entries"];
+  for (let index = 0; index < 4; index++) {
+    const payload = { ...structuredClone(f.source.requests[0].payload), sourceTaskId: randomUUID(), errorId: randomUUID() };
+    entries.push({ key: repairKey(payload), payload, payloadHash: createHash("sha256").update(canonicalRepairJson(payload)).digest("hex"), eventId: randomUUID(), nonce: randomUUID(), status: "handoff_created", receivedAt: new Date(now).toISOString(), issueUrl: `https://github.com/${KONG_REPAIR_REPOSITORY}/issues/${index + 1}` });
+  }
+  f.source.requests = entries.slice(0, 3).map(entry => ({ key: entry.key, payloadSha256: entry.payloadHash, payload: entry.payload as typeof f.source.requests[0]["payload"] })); f.source.total = 3;
+  const bridge = { ...f.bridge, view: async () => ({ entries, paidExecution: "blocked_unknown_credit" as const, subscriptionProviderCalls: false, makerConsumer: "pending_no_maker" }),
+    sync: async (key?: string, refresh?: boolean) => { calls.push([key!, refresh]); return []; } };
+  await pullRepairSources({ bridge, store: f.store, owner, token, handoffEnabled: false, now: () => now, fetch: (async () => Response.json({ softwareRepairs: f.source })) as typeof fetch });
+  assert.deepEqual(calls, entries.slice(0, 3).map(entry => [entry.key, false]));
+});

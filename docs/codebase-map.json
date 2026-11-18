@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T05:19:30.248Z",
+  "generatedAt": "2026-11-18T05:19:38.656Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-kong-repair",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 1059,
     "imports": 4145,
     "routes": 610,
-    "symbols": 23665
+    "symbols": 23672
   },
   "directories": {
     ".": {
@@ -21699,6 +21699,8 @@
         "node:crypto"
       ],
       "exports": [
+        "effectiveCommitStatusesPass",
+        "freshMakerHealth",
         "independentAppQa",
         "parentCheckerReceipt",
         "trustedProductionQaSources"
@@ -21709,11 +21711,16 @@
         "blob",
         "canonical",
         "commit",
+        "connected",
         "digest",
+        "effectiveCommitStatusesPass",
         "engine",
+        "freshMakerHealth",
         "imports",
         "independentAppQa",
+        "latest",
         "parentCheckerReceipt",
+        "poll",
         "raw",
         "receipt",
         "ref",
@@ -21753,6 +21760,7 @@
         "bridge",
         "configuredRepairPullStatus",
         "createRepairPullLoop",
+        "current",
         "empty",
         "existing",
         "namespace",
@@ -37685,6 +37693,7 @@
       "symbols": [
         "bridge",
         "data",
+        "entries",
         "entry",
         "f",
         "fixture",

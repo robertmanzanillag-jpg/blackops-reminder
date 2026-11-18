@@ -5,7 +5,7 @@ import { getCouncilStore } from "./agent-council-store";
 import { getSystemUserId } from "./user-context";
 import { z } from "zod";
 import { fenceUnclaimedRepair } from "./kong-repair-refresh";
-import { trustedProductionQaSources, parentCheckerReceipt } from "./kong-repair-proof";
+import { trustedProductionQaSources, parentCheckerReceipt, effectiveCommitStatusesPass, freshMakerHealth } from "./kong-repair-proof";
 import { createSharedOpenAiCreditLedger, type SharedCreditState } from "./shared-openai-credit-ledger";
 
 async function paidState(): Promise<"available" | "blocked_unknown_credit" | "unavailable"> {
@@ -60,7 +60,7 @@ async function readProof(entry: RepairEntry, prNumber: number): Promise<RepairPr
   const [reviews, comments, checks, statuses] = await Promise.all([
     github.paginate(github.pulls.listReviews, { owner, repo, pull_number: prNumber, per_page: 100 }),
     github.paginate(github.issues.listComments, { owner, repo, issue_number: prNumber, per_page: 100 }),
-    github.paginate(github.checks.listForRef, { owner, repo, ref: pr.head.sha, per_page: 100 }),
+    github.paginate(github.checks.listForRef, { owner, repo, ref: pr.head.sha, filter: "latest", per_page: 100 }),
     github.paginate(github.repos.listCommitStatusesForRef, { owner, repo, ref: pr.head.sha, per_page: 100 }),
   ]);
   const latestReviews = new Map<string, typeof reviews[number]>();
@@ -105,7 +105,7 @@ async function readProof(entry: RepairEntry, prNumber: number): Promise<RepairPr
   return { repository: KONG_REPAIR_REPOSITORY, headSha: pr.head.sha, mergeSha: pr.merge_commit_sha, merged: !!pr.merged,
     maker: pr.user?.login || "", checker: parentChecked ? "trusted-parent-independent-checker" : approved?.user?.login || null, checkerHeadSha: parentChecked || approved ? pr.head.sha : null,
     checksPassed: checks.length > 0 && checks.every(check => check.head_sha === pr.head.sha && check.status === "completed" && check.conclusion === "success") &&
-      !effectiveReviews.some(review => review.state === "CHANGES_REQUESTED") && statuses.every(status => status.state === "success"),
+      !effectiveReviews.some(review => review.state === "CHANGES_REQUESTED") && effectiveCommitStatusesPass(statuses),
     appQaPassed: regressionPassed, deployedSha: typeof ready?.sourceSha === "string" ? ready.sourceSha : null,
     deploymentReady: ready?.status === "ready", regressionPassed, regressionRunId, observedAt: Date.now() };
 }
@@ -173,7 +173,9 @@ let makerHealthCache: { key: string; at: number; value: Record<string, unknown> 
 export async function readKongRepairMakerHealth() {
   const pin = process.env.KONG_REPAIR_CHECKER_ENGINE_COMMIT || "", now = Date.now();
   if (!/^[a-f0-9]{40}$/.test(pin)) return { state: "unavailable", workerConnected: false, enginePinned: false };
-  if (makerHealthCache?.key === pin && now - makerHealthCache.at < 300000) return makerHealthCache.value;
+  if (makerHealthCache?.key === pin && now - makerHealthCache.at < 300000) {
+    return freshMakerHealth(makerHealthCache.value, now);
+  }
   const { getGitHubClient } = await import("./github-client");
   const github = await getGitHubClient(), [owner, repo] = KONG_REPAIR_REPOSITORY.split("/");
   const allowed = new Set((process.env.KONG_REPAIR_SOURCE_ACTORS || "robertmanzanillag-jpg").split(",").map(value => value.trim()));
