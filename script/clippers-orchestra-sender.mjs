@@ -3,41 +3,35 @@ import { open, realpath, lstat } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createClippersOrchestraRelay, clippersOrchestraRemoteEligibility } from './clippers-orchestra-relay.mjs';
 
 export const CLIPPERS_TELEMETRY_CREDENTIAL_PLIST = path.join(os.homedir(), 'Library/LaunchAgents/com.blackroom.content-agent.plist');
 export const CLIPPERS_PLATFORM_KEYCHAIN_SERVICE = 'com.blackops.clippers-orchestra.replit-production';
 export const CLIPPERS_PLATFORM_KEYCHAIN_ACCOUNT = 'clippers-telemetry';
+export const CLIPPERS_PLATFORM_KEYCHAIN_HELPER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'clippers-platform-keychain');
 const MAX_BYTES = 262144;
 const MAX_ACK_BYTES = 8192;
 const ACK_CODES = new Set(['CLIPPERS_ORCHESTRA_ACCEPTED', 'CLIPPERS_ORCHESTRA_DUPLICATE', 'CLIPPERS_ORCHESTRA_CAREERS_PENDING']);
 const fail = code => Object.assign(new Error(code), { code });
 
-const platformTokenValid = value => typeof value === 'string' && value.length >= 16 && value.length <= MAX_ACK_BYTES && /^[A-Za-z0-9._~+/-]+=*$/.test(value);
-// Fixed Keychain lookup only, with UI disabled inside this short-lived process.
-// No lookup is performed by imports/tests. The OS child returns only to a private
-// pipe; no value is put in arguments, environment, files, logs or a URL.
-export const CLIPPERS_PLATFORM_KEYCHAIN_READER = `function run() {
-  ObjC.import('Foundation'); ObjC.import('Security');
-  if ($.SecKeychainSetUserInteractionAllowed(false) !== 0) return JSON.stringify({status:'unavailable'});
-  const query = $.NSMutableDictionary.alloc.init;
-  query.setObjectForKey($.kSecClassGenericPassword, $.kSecClass);
-  query.setObjectForKey($('${CLIPPERS_PLATFORM_KEYCHAIN_SERVICE}'), $.kSecAttrService);
-  query.setObjectForKey($('${CLIPPERS_PLATFORM_KEYCHAIN_ACCOUNT}'), $.kSecAttrAccount);
-  query.setObjectForKey($.NSNumber.numberWithBool(true), $.kSecReturnData);
-  query.setObjectForKey($.kSecMatchLimitOne, $.kSecMatchLimit);
-  query.setObjectForKey($.kSecUseAuthenticationUIFail, $.kSecUseAuthenticationUI);
-  const result = Ref();
-  const status = $.SecItemCopyMatching(query, result);
-  if (status !== 0) return JSON.stringify({status:status === -25300 ? 'missing' : 'unavailable'});
-  const token = ObjC.unwrap($.NSString.alloc.initWithDataEncoding(ObjC.castRefToObject(result[0]), $.NSUTF8StringEncoding));
-  return JSON.stringify({status:'found',token:token});
-}`;
-export async function readClippersPlatformToken({ spawnImpl = spawn } = {}) {
+const platformTokenValid = value => typeof value === 'string' && value.length >= 16 && value.length <= MAX_ACK_BYTES && /^[A-Za-z0-9._~+/-]+=*$/.test(value) && !/[\s,]/.test(value);
+// The separately reviewed native Security.framework executable performs one fixed
+// noninteractive lookup. Its stdout is a bounded private pipe, never a terminal,
+// log, URL, argument value, environment value or new credential file.
+export async function validateClippersPlatformHelper() {
+  try {
+    if (await realpath(CLIPPERS_PLATFORM_KEYCHAIN_HELPER) !== CLIPPERS_PLATFORM_KEYCHAIN_HELPER) throw fail('PLATFORM_ACCESS_HELPER_UNSAFE');
+    const info = await lstat(CLIPPERS_PLATFORM_KEYCHAIN_HELPER);
+    if (!info.isFile() || info.nlink !== 1 || info.uid !== process.getuid?.() || (info.mode & 0o777) !== 0o700 || info.size > 25_000_000) throw fail('PLATFORM_ACCESS_HELPER_UNSAFE');
+    return CLIPPERS_PLATFORM_KEYCHAIN_HELPER;
+  } catch (error) { throw fail(error?.code === 'PLATFORM_ACCESS_HELPER_UNSAFE' ? error.code : 'PLATFORM_ACCESS_HELPER_REQUIRED'); }
+}
+export async function readClippersPlatformToken({ spawnImpl = spawn, validateHelper = validateClippersPlatformHelper } = {}) {
+  const executable = await validateHelper();
   return new Promise((resolve, reject) => {
     let child;
-    try { child = spawnImpl('/usr/bin/osascript', ['-l', 'JavaScript', '-e', CLIPPERS_PLATFORM_KEYCHAIN_READER], {
+    try { child = spawnImpl(executable, [], {
       stdio: ['ignore', 'pipe', 'ignore'], env: { PATH: '/usr/bin:/bin' },
     }); } catch { reject(fail('PLATFORM_ACCESS_TOKEN_UNAVAILABLE')); return; }
     const chunks = []; let bytes = 0, settled = false;
@@ -152,7 +146,7 @@ export async function runClippersOrchestraSender({ workspaceRoot = path.join(os.
     } finally { clearTimeout(timer); }
   } catch (error) {
     const code = error?.code;
-    const heldCodes = ['CREDENTIAL_SOURCE_UNSAFE', 'CREDENTIAL_SOURCE_CHANGED', 'CREDENTIAL_SOURCE_TOO_LARGE', 'CREDENTIAL_PARSE_UNAVAILABLE', 'CREDENTIAL_SOURCE_UNAVAILABLE', 'EXISTING_DEVICE_AUTH_UNAVAILABLE', 'OFFICE_ORIGIN_UNVERIFIED', 'PLATFORM_ACCESS_TOKEN_REQUIRED', 'PLATFORM_ACCESS_TOKEN_UNAVAILABLE', 'PLATFORM_ACCESS_TOKEN_INVALID', 'PLATFORM_ACCESS_REDIRECT', 'CREDENTIAL_ROLES_CONFLICT'];
+    const heldCodes = ['CREDENTIAL_SOURCE_UNSAFE', 'CREDENTIAL_SOURCE_CHANGED', 'CREDENTIAL_SOURCE_TOO_LARGE', 'CREDENTIAL_PARSE_UNAVAILABLE', 'CREDENTIAL_SOURCE_UNAVAILABLE', 'EXISTING_DEVICE_AUTH_UNAVAILABLE', 'OFFICE_ORIGIN_UNVERIFIED', 'PLATFORM_ACCESS_TOKEN_REQUIRED', 'PLATFORM_ACCESS_TOKEN_UNAVAILABLE', 'PLATFORM_ACCESS_TOKEN_INVALID', 'PLATFORM_ACCESS_REDIRECT', 'CREDENTIAL_ROLES_CONFLICT', 'PLATFORM_ACCESS_HELPER_REQUIRED', 'PLATFORM_ACCESS_HELPER_UNSAFE'];
     return { state: heldCodes.includes(code) ? 'held' : 'unconfirmed', reasonCode: heldCodes.includes(code) ? code : 'TELEMETRY_ACK_UNCONFIRMED', httpStatus, paidSpendUsd: 0 };
   } finally { relay?.stop(); }
 }

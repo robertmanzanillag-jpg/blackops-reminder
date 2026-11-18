@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T10:34:01.643Z
+Generated: 2026-11-18T10:44:05.476Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-private-replit-transport-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1189 | 1089 | 4346 | 623 | 24623 |
+| 1191 | 1090 | 4353 | 623 | 24630 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,10 +28,10 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 311 | 307 | test:311 |
+| `tests` | 312 | 308 | test:312 |
 | `server` | 280 | 274 | server:280 |
 | `client/src` | 155 | 153 | ui-component:55, client-component:46, client-page:28, client-lib:19 |
-| `script` | 128 | 116 | script:128 |
+| `script` | 129 | 116 | script:129 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `docs` | 72 | 70 | docs:72 |
 | `shared` | 31 | 31 | shared:31 |
@@ -419,7 +419,7 @@ Package: `rest-express`
 - `script/clippers-orchestra-analytics.mjs` (script; 23 symbols, 6 imports)
 - `script/clippers-orchestra-relay.mjs` (script; 6 symbols, 2 imports)
 - `script/clippers-orchestra-report.mjs` (script; 104 symbols, 7 imports)
-- `script/clippers-orchestra-sender.mjs` (script; 40 symbols, 7 imports)
+- `script/clippers-orchestra-sender.mjs` (script; 41 symbols, 7 imports)
 - `script/clippers-portfolio-discovery.mjs` (script; 68 symbols, 6 imports)
 - `script/clippers-portfolio-metricool.mjs` (script; 74 symbols, 1 imports)
 - `script/clippers-portfolio-prepare.mjs` (script; 102 symbols, 7 imports)
