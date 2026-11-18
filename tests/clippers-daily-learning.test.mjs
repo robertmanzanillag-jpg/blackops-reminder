@@ -1,3 +1,4 @@
+import { nativeReceiptDigest, externalScheduleCollision } from '../script/clippers-native-media-receipts.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { mkdir, mkdtemp, readFile, writeFile, rm, symlink } from 'node:fs/promises';
@@ -395,4 +396,12 @@ test('schedule rereads the destination and holds when its connection changes aft
   await assert.rejects(adapter.schedule(target, item), /destination_identity_unverified/);
   assert.equal(profileReads, 2);
   assert.equal(writes, 0);
+});
+
+test('external owner-UI no-replay survives empty provider lists and new asset bytes without creating learner ACK',async t=>{
+ const f=await setup(t),item=await approved(f),external={schemaVersion:1,origin:'external_owner_ui',kind:'external_schedule_observation',assetId:'old-ui-asset',destination:target,sourceUrl:item.sourceUrl,caption:'Earlier owner caption',metricoolId:'777',scheduledAt:'2026-11-18T14:00:00.000Z',mediaUrl:'https://static.metricool.com/video/123/202611/owner.mp4',sha256:'a'.repeat(64),sizeBytes:100,renderReceiptSha256:'b'.repeat(64),observedAt:NOW.toISOString(),confirmation:'exact_scheduler_get_and_native_bytes',publicationState:'not_evaluated',paidSpendUsd:0};
+ await f.configure([item]);await f.write('reports/metricool-public-media-receipts.json',[receipt(item)]);await f.write('reports/clippers-daily-learning/external-schedules.json',[{...external,proofSha256:digest(external)}]);
+ const result=await runClippersDailyLearning({workspaceRoot:f.root,now:NOW,adapter:{preflight:forbidden,schedule:forbidden}});assert.equal(result.scheduled,0);assert.equal((await f.state()).deliveries.length,0);assert.ok(result.destinations[0].blockers.includes('duplicate_delivery'));
+ const proof={sourceIdentity:'youtube:aaaaaaaaaaa',sourceSha256:'c'.repeat(64),originalSourceSha256:'d'.repeat(64),startSeconds:10,endSeconds:20};external.weeklySourceProof=proof;
+ const overlap={...item,caption:'New caption',sourceUrl:'https://youtu.be/aaaaaaaaaaa',weeklySourceProof:{...proof,sourceSha256:'e'.repeat(64),startSeconds:15,endSeconds:25}};assert.equal(externalScheduleCollision(external,overlap),true);overlap.weeklySourceProof.startSeconds=20;overlap.weeklySourceProof.endSeconds=25;assert.equal(externalScheduleCollision(external,overlap),false);
 });

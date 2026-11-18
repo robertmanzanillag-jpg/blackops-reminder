@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T15:32:36.558Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-execution-20261118",
+  "generatedAt": "2026-11-18T17:02:25.181Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-native-media-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,18 +124,25 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1234,
-    "filesIndexed": 1129,
-    "imports": 4535,
+    "filesVisible": 1236,
+    "filesIndexed": 1131,
+    "imports": 4551,
     "routes": 623,
-    "symbols": 25506
+    "symbols": 25562
   },
   "directories": {
-    "tests/fixtures": {
-      "files": 7,
-      "indexed": 5,
+    "docs": {
+      "files": 78,
+      "indexed": 76,
       "kinds": {
-        "test": 7
+        "docs": 78
+      }
+    },
+    "script": {
+      "files": 135,
+      "indexed": 122,
+      "kinds": {
+        "script": 135
       }
     },
     ".": {
@@ -209,26 +216,12 @@
         "client-page": 28
       }
     },
-    "docs": {
-      "files": 77,
-      "indexed": 75,
-      "kinds": {
-        "docs": 77
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
-      }
-    },
-    "script": {
-      "files": 134,
-      "indexed": 121,
-      "kinds": {
-        "script": 134
       }
     },
     "script/office-api-budget-v6": {
@@ -292,6 +285,13 @@
       "indexed": 321,
       "kinds": {
         "test": 325
+      }
+    },
+    "tests/fixtures": {
+      "files": 7,
+      "indexed": 5,
+      "kinds": {
+        "test": 7
       }
     },
     "tests/harness": {
@@ -5782,6 +5782,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-native-media-receipts.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-office-area.md",
       "kind": "docs",
       "imports": [],
@@ -8234,6 +8242,7 @@
       "kind": "script",
       "imports": [
         "./clippers-creator-routing.mjs",
+        "./clippers-native-media-receipts.mjs",
         "./clippers-portfolio-metricool.mjs",
         "./clippers-portfolio-render.mjs",
         "./clippers-selected-env.mjs",
@@ -8293,6 +8302,7 @@
         "exact",
         "existingMedia",
         "exportedVersionState",
+        "external",
         "featureDigest",
         "file",
         "group",
@@ -9630,6 +9640,71 @@
       "routes": []
     },
     {
+      "path": "script/clippers-native-media-receipts.mjs",
+      "kind": "script",
+      "imports": [
+        "./clippers-portfolio-metricool.mjs",
+        "./clippers-portfolio-render.mjs",
+        "./clippers-selected-env.mjs",
+        "./clippers-weekly-policy.mjs",
+        "node:crypto",
+        "node:fs",
+        "node:fs/promises",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "approvedNativeMedia",
+        "externalScheduleCollision",
+        "metricoolNativeUrl",
+        "nativeAssetMediaFields",
+        "nativeReceiptDigest",
+        "nativeReceiptMatches",
+        "reconcileExternalMetricoolSchedule",
+        "resolveNativeMediaReceipt",
+        "validNativeResource",
+        "verifiedExternalSchedules",
+        "verifyMetricoolNativeBytes"
+      ],
+      "symbols": [
+        "REPORT",
+        "SHA",
+        "actualAt",
+        "approvedNativeMedia",
+        "confirmed",
+        "externalScheduleCollision",
+        "file",
+        "h",
+        "hash",
+        "ids",
+        "invalid",
+        "item",
+        "length",
+        "lockPath",
+        "manifest",
+        "media",
+        "metricoolNativeUrl",
+        "nativeAssetMediaFields",
+        "nativeReceiptDigest",
+        "nativeReceiptMatches",
+        "observation",
+        "packet",
+        "receipt",
+        "reconcileExternalMetricoolSchedule",
+        "resolveNativeMediaReceipt",
+        "root",
+        "save",
+        "sha",
+        "sourceAsset",
+        "sourceProof",
+        "valid",
+        "validNativeResource",
+        "verifiedExternalSchedules",
+        "verifyMetricoolNativeBytes"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/clippers-operational-readiness.mjs",
       "kind": "script",
       "imports": [
@@ -9763,6 +9838,7 @@
       "imports": [
         "../shared/clippers-priority-creators.mjs",
         "../shared/clippers-viral-scout.mjs",
+        "./clippers-native-media-receipts.mjs",
         "./clippers-portfolio-metricool.mjs",
         "./clippers-portfolio-render.mjs",
         "node:crypto",
@@ -9822,6 +9898,9 @@
         "emptyCareer",
         "entries",
         "evidenceAt",
+        "external",
+        "externalAt",
+        "externalOwn",
         "feed",
         "file",
         "files",
@@ -9833,6 +9912,7 @@
         "improvement",
         "k",
         "key",
+        "known",
         "latestOwn",
         "legacy",
         "match",
@@ -9850,6 +9930,7 @@
         "outcome",
         "outcomes",
         "own",
+        "ownIds",
         "paired",
         "parts",
         "pending",
@@ -10121,6 +10202,7 @@
         "analyticsPost",
         "analyticsPublicationTime",
         "brands",
+        "calendarIds",
         "canonicalPath",
         "completionRate",
         "connection",
@@ -10202,6 +10284,7 @@
       "path": "script/clippers-portfolio-prepare.mjs",
       "kind": "script",
       "imports": [
+        "./clippers-native-media-receipts.mjs",
         "./clippers-portfolio-metricool.mjs",
         "./clippers-weekly-policy.mjs",
         "node:child_process",
@@ -10264,6 +10347,7 @@
         "hash",
         "https",
         "ids",
+        "imported",
         "info",
         "input",
         "key",
@@ -11411,6 +11495,7 @@
       "imports": [
         "../shared/clippers-priority-creators.mjs",
         "./clippers-daily-learning.mjs",
+        "./clippers-native-media-receipts.mjs",
         "./clippers-portfolio-metricool.mjs",
         "./clippers-selected-env.mjs",
         "./clippers-weekly-policy.mjs",
@@ -11448,6 +11533,7 @@
         "dir",
         "emptyState",
         "existing",
+        "external",
         "file",
         "finish",
         "hardStop",
@@ -37728,6 +37814,7 @@
       "kind": "test",
       "imports": [
         "../script/clippers-daily-learning.mjs",
+        "../script/clippers-native-media-receipts.mjs",
         "../script/clippers-portfolio-metricool.mjs",
         "node:assert/strict",
         "node:crypto",
@@ -37769,11 +37856,13 @@
         "media",
         "now",
         "observed",
+        "overlap",
         "persisted",
         "post",
         "postId",
         "postUrl",
         "profile",
+        "proof",
         "publishedAt",
         "read",
         "receipt",
@@ -38614,12 +38703,14 @@
         "pending",
         "post",
         "pref",
+        "publisher",
         "r",
         "receipt",
         "relay",
         "report",
         "request",
         "role",
+        "rows",
         "save",
         "snapshot",
         "start",
@@ -38868,6 +38959,8 @@
       "kind": "test",
       "imports": [
         "../script/clippers-daily-learning.mjs",
+        "../script/clippers-native-media-receipts.mjs",
+        "../script/clippers-orchestra-report.mjs",
         "../script/clippers-portfolio-metricool.mjs",
         "../script/clippers-portfolio-prepare.mjs",
         "../script/clippers-portfolio-render.mjs",
@@ -38883,6 +38976,7 @@
       "exports": [],
       "symbols": [
         "CONFIG",
+        "NATIVE_URL",
         "REPORT",
         "active",
         "adapter",
@@ -38895,6 +38989,7 @@
         "engineSha256",
         "env",
         "exec",
+        "external",
         "f",
         "fixture",
         "good",
@@ -38906,21 +39001,28 @@
         "learning",
         "m",
         "mutations",
+        "nativeFixture",
         "now",
+        "observationTime",
+        "options",
         "p",
         "packet",
         "packets",
         "prepared",
         "r",
+        "receipt",
         "receipts",
         "rendered",
         "renderer",
+        "report",
         "request",
         "result",
         "root",
+        "rows",
         "run",
         "sourceSha256",
         "started",
+        "state",
         "upload",
         "write"
       ],

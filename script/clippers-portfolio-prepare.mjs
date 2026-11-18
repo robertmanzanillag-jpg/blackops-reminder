@@ -1,3 +1,4 @@
+import { resolveNativeMediaReceipt, nativeAssetMediaFields } from './clippers-native-media-receipts.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -276,10 +277,11 @@ async function renderAndApprove(root, id, now, renderer) {
 
 async function appendSchedulerInput(root, approved, uploaded) {
   const { asset, packet, request, destination } = approved;
-  const result = { ...asset, mediaReceiptFileId: uploaded.fileId, mediaUrl: uploaded.mediaUrl };
+  const result = { ...asset, ...(uploaded.provider==='metricool' ? nativeAssetMediaFields(uploaded) : {mediaReceiptFileId: uploaded.fileId,mediaUrl:uploaded.mediaUrl}) };
   const evidence = { assetId: result.id, destination, sourceUrl: result.sourceUrl, sourceId: result.sourceId,
     campaignId: result.campaignId, creator: result.creator, language: result.language,
     sourcePublishedAt: result.sourcePublishedAt, mediaSha256: result.mediaSha256, mediaUrl: result.mediaUrl,
+    ...(uploaded.provider==='metricool' ? nativeAssetMediaFields(uploaded) : {}),
     caption: result.caption, policyVersion: result.policyVersion, scheduledAt: result.scheduledAt,
     ...(result.editorialPolicy ? {editorialPolicy:result.editorialPolicy} : {}),
     ...(result.weeklyAuthorizationSha256 ? { weeklyAuthorizationSha256: result.weeklyAuthorizationSha256 } : {}),
@@ -303,7 +305,7 @@ async function appendSchedulerInput(root, approved, uploaded) {
     if (!prior && input.assets.length >= 250) throw Error('approved_queue_capacity');
     const receipts = await ownerJson(root, `${REPORT}/portfolio-media-receipts.json`, []);
     if (!Array.isArray(receipts) || receipts.length > 5000) throw Error('portfolio_media_ledger_invalid');
-    const receipt = { ...destination, status: 'ready', fileId: uploaded.fileId, campaignId: result.campaignId,
+    const receipt = { ...destination, status: 'ready', ...(uploaded.provider==='metricool' ? {provider:'metricool',resource:uploaded.resource,nativeReceiptSha256:uploaded.nativeReceiptSha256} : {fileId: uploaded.fileId}), campaignId: result.campaignId,
       draftFile: result.draftFile, mediaUrl: result.mediaUrl, sha256: result.mediaSha256,
       renderReceiptSha256: result.renderReceiptSha256, paidSpendAllowed: false };
     const existing = receipts.find(row => destinationKey(row) === destinationKey(destination) && row.draftFile === result.draftFile);
@@ -388,6 +390,12 @@ export async function runClippersPortfolioPrepare({ workspaceRoot, now = new Dat
         }
         if (!priorTarget) { state.targets.push({ destination: targetKey, day, id, scheduledAt: approved.asset.scheduledAt,
           mediaSha256: approved.asset.mediaSha256, captionDigest: digest(approved.asset.caption), renderReceiptSha256: approved.asset.renderReceiptSha256 }); await save(root, ledgerFile, state); }
+        if(approved.packet.mediaProvider!==undefined&&!['metricool','google_drive'].includes(approved.packet.mediaProvider))throw Error('native_media_provider_invalid');
+        if(approved.packet.mediaProvider==='metricool'){
+          const imported=await bounded(()=>resolveNativeMediaReceipt(root,approved.asset,approved.bytes.length,{now,packet:approved.packet,fetcher:dependencies?.nativeFetch??fetch,timeoutMs:Math.min(15000,remaining())}));
+          await appendSchedulerInput(root,approved,imported);prepared++;
+          outcomes.push({id,destination:approved.destination,status:'prepared',mediaProvider:'metricool',providerWrites:0,renderReceiptSha256:approved.asset.renderReceiptSha256});continue;
+        }
         const sha = approved.asset.mediaSha256; let entry = state.uploads[sha];
         if (priorAsset && (entry?.status !== 'ready' || priorAsset.mediaReceiptFileId !== entry.fileId || priorAsset.mediaUrl !== entry.mediaUrl)) {
           outcomes.push({ id, status: 'held', reason: 'approved_asset_needs_reconciliation' }); continue;
@@ -442,7 +450,7 @@ export async function runClippersPortfolioPrepare({ workspaceRoot, now = new Dat
         const reason = ['reviewed_prepare_packet_required', 'prepare_schedule_outside_rights', 'reviewed_render_output_changed', 'render_receipt_unconfirmed',
           'portfolio_media_changed', 'owner_private_file_required', 'scheduler_worker_busy', 'approved_asset_conflict', 'portfolio_media_receipt_conflict', 'prepare_time_budget_reached',
           'approved_queue_capacity', 'portfolio_receipt_capacity', 'approved_scheduler_input_invalid', 'portfolio_media_ledger_invalid',
-          'private_stage_directory_required', 'staged_media_changed'].includes(error.message)
+          'private_stage_directory_required', 'staged_media_changed', 'native_media_provider_invalid', 'native_media_receipt_unverified', 'native_public_bytes_unverified'].includes(error.message)
           ? error.message : 'prepare_validation_or_provider_unconfirmed';
         outcomes.push({ id, status: 'held', reason });
       }

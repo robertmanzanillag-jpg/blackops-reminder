@@ -1,3 +1,4 @@
+import { approvedNativeMedia, verifiedExternalSchedules, externalScheduleCollision } from './clippers-native-media-receipts.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { mkdir, open, realpath, rename, unlink, writeFile } from 'node:fs/promises';
@@ -71,6 +72,9 @@ function safeHttps(value) {
   } catch { return false; }
 }
 function approvedMedia(item, media) {
+  if(item.mediaProvider==='metricool')return approvedNativeMedia(item,media);
+  if(item.mediaProvider!==undefined&&item.mediaProvider!=='google_drive')return false;
+  if(['mediaReceiptNativeUrl','mediaReceiptResource','mediaReceiptSha256'].some(k=>Object.hasOwn(item,k)))return false;
   if (!safeHttps(item.mediaUrl)) return false;
   const url = new URL(item.mediaUrl);
   if (!['drive.google.com', 'drive.usercontent.google.com'].includes(url.hostname) ||
@@ -79,7 +83,7 @@ function approvedMedia(item, media) {
     (item.renderReceiptSha256 ? findDestination(row) && destinationKey(row) === destinationKey(item) &&
       row.renderReceiptSha256 === item.renderReceiptSha256 : row.renderReceiptSha256 == null) &&
     row.campaignId === item.campaignId && row.draftFile === item.draftFile &&
-    row.fileId === item.mediaReceiptFileId && row.mediaUrl === item.mediaUrl && row.sha256 === item.mediaSha256);
+    (row.provider===undefined||row.provider==='google_drive') && row.fileId === item.mediaReceiptFileId && row.mediaUrl === item.mediaUrl && row.sha256 === item.mediaSha256);
 }
 async function approvedItem(raw, root, now, receipts, state, weeklyWindow) {
   const destination = findDestination(raw);
@@ -115,6 +119,7 @@ async function approvedItem(raw, root, now, receipts, state, weeklyWindow) {
       evidence.campaignId !== raw.campaignId || evidence.creator !== raw.creator || evidence.language !== raw.language ||
       evidence.sourcePublishedAt !== raw.sourcePublishedAt || evidence.mediaSha256 !== raw.mediaSha256 ||
       evidence.mediaUrl !== raw.mediaUrl || evidence.caption !== raw.caption ||
+      (raw.mediaProvider==='metricool' && ['mediaProvider','mediaReceiptNativeUrl','mediaReceiptResource','mediaReceiptSha256'].some(k=>featureDigest(evidence[k]??null)!==featureDigest(raw[k]??null))) ||
       evidence.policyVersion !== raw.policyVersion || evidence.scheduledAt !== raw.scheduledAt ||
       evidence.renderReceiptSha256 !== raw.renderReceiptSha256 ||
       featureDigest(evidence.experiment ?? null) !== featureDigest(raw.experiment ?? null) ||
@@ -384,6 +389,7 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
     if (!Array.isArray(scopedMedia)) throw Error('portfolio_media_receipt_ledger_invalid');
     const authorized = [...existingMedia.map(row => ({ ...row, renderReceiptSha256: undefined })),
       ...scopedMedia.filter(row => findDestination(row) && SHA.test(row.renderReceiptSha256 ?? ''))];
+    const external=verifiedExternalSchedules(await privateJson(path.join(reportDir,'external-schedules.json'),[]),now);
     const legacy = await optionalArray(path.join(workspaceRoot, 'reports', 'metricool-autopilot-ledger.json'));
     const outcomes = [];
     const checked = new Map();
@@ -422,7 +428,7 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
             dispatchNow - Date.parse(item.rightsEvidence.rightsObservedAt) > 24*HOUR) {
           blockers.add('asset_review_or_schedule_expired_during_cycle'); continue;
         }
-        if (state.deliveries.some(row => deliveryCollision(row, item)) ||
+        if (external.some(row=>externalScheduleCollision(row,item)) || state.deliveries.some(row => deliveryCollision(row, item)) ||
             legacy.some(row => Number(row.metricoolBlogId) === item.brandId &&
               String(row.account ?? '').replace(/^@/, '').toLowerCase() === item.account &&
               (row.mediaSha256 === item.mediaSha256 || row.sha256 === item.mediaSha256 || row.mediaUrl === item.mediaUrl || row.sourceUrl === item.sourceUrl))) {

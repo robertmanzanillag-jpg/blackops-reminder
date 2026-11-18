@@ -1,3 +1,4 @@
+import { verifiedExternalSchedules, externalScheduleCollision } from './clippers-native-media-receipts.mjs';
 import { canonicalSourceIdentity } from '../shared/clippers-priority-creators.mjs';
 import { constants } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -48,6 +49,7 @@ export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new 
     const receipts=await readWeeklyPrivateJson(root,`${REPORT}/portfolio-media-receipts.json`,[]);
     const legacy=await readWeeklyPrivateJson(root,'reports/metricool-autopilot-ledger.json',[],0o022);
     if(!Array.isArray(receipts)||!Array.isArray(legacy))throw Error('weekly_receipt_ledger_invalid');
+    const external=verifiedExternalSchedules(await readWeeklyPrivateJson(root,`${REPORT}/external-schedules.json`,[]),now);
     const candidates=configured.assets.filter(a=>findDestination(a)&&(a.weeklyAuthorizationSha256||a.editorialPolicy==='evergreen_streamer_clip')&&providerTimestamp(a.scheduledAt)&&
       localDay(new Date(a.scheduledAt))>=window.startDate&&localDay(new Date(a.scheduledAt))<=window.endDate);
     const counts=new Map();for(const a of candidates){const key=destinationKey(a)+':'+a.id;counts.set(key,(counts.get(key)||0)+1);}
@@ -57,9 +59,10 @@ export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new 
       const outcome={destination:destinationKey(raw),assetId:typeof raw.id==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,99}$/.test(raw.id)?raw.id:'unverified_asset',scheduledAt:raw.scheduledAt,status:'held',reason:null};report.outcomes.push(outcome);
       if(!within()){outcome.reason='weekly_cycle_deadline';break;}
       if(counts.get(destinationKey(raw)+':'+raw.id)!==1){outcome.reason='duplicate_asset_identity';continue;}
+      if(external.some(r=>destinationKey(r.destination)===destinationKey(raw)&&(r.assetId===raw.id||r.sha256===raw.mediaSha256||r.mediaUrl===raw.mediaUrl))){outcome.reason='external_owner_ui_schedule_observed_no_replay';continue;}
       let item=await validateApprovedClippersAsset(raw,root,current(),receipts,state,window);
       if(!item){outcome.reason='weekly_asset_rights_media_or_render_unverified';continue;}
-      if(state.deliveries.some(row=>weeklyDeliveryCollision(row,item)) || legacy.some(row=>Number(row.metricoolBlogId)===item.brandId&&String(row.account??'').replace(/^@/,'').toLowerCase()===item.account&&
+      if(external.some(row=>externalScheduleCollision(row,item))||state.deliveries.some(row=>weeklyDeliveryCollision(row,item)) || legacy.some(row=>Number(row.metricoolBlogId)===item.brandId&&String(row.account??'').replace(/^@/,'').toLowerCase()===item.account&&
           (row.sha256===item.mediaSha256||row.mediaSha256===item.mediaSha256||row.mediaUrl===item.mediaUrl||row.sourceUrl===item.sourceUrl||(canonicalSourceIdentity(row.sourceUrl)&&canonicalSourceIdentity(row.sourceUrl)===canonicalSourceIdentity(item.sourceUrl))))){outcome.reason='duplicate_or_overlapping_delivery';continue;}
       const day=localDay(new Date(item.scheduledAt));
       const existing=state.deliveries.filter(row=>findDestination(row)&&destinationKey(row)===destinationKey(item)&&localDay(new Date(row.scheduledAt))===day);
@@ -82,7 +85,7 @@ export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new 
         if(!check||check.day!==day||!Number.isInteger(check.confirmedCount)||check.confirmedCount<0||check.confirmedCount>=5||
             !Array.isArray(check.scheduledIds)||!Array.isArray(check.publishedIds)||!check.evidence||check.evidenceSha256!==weeklyDigest(check.evidence))throw Error('weekly_preflight_unverified');
         // A previously acknowledged local delivery missing from fresh provider coverage is unknown, never a free slot.
-        if(existing.some(row=>row.status==='scheduled'?!check.scheduledIds.includes(row.metricoolId):!check.publishedIds.includes(row.post?.id)))throw Error('existing_delivery_needs_provider_reconciliation');
+        if(existing.some(row=>row.status==='scheduled'?!(check.calendarIds??check.scheduledIds).includes(row.metricoolId):!check.publishedIds.includes(row.post?.id)))throw Error('existing_delivery_needs_provider_reconciliation');
         preflightEvidence={...check.evidence,sha256:check.evidenceSha256};
       }catch(error){outcome.reason=['today_publication_coverage_unverified','past_schedule_requires_publication_confirmation','existing_delivery_needs_provider_reconciliation','metricool_slot_duplicate_or_daily_cap'].includes(error.message)?error.message:'weekly_live_preflight_blocked';continue;}
       if(!within()){outcome.reason='weekly_cycle_deadline';break;}

@@ -248,6 +248,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
       const rows = await schedule(destination, day, true);
       const pending = new Map();
       const published = new Map();
+      const calendarIds=new Set(),calendarPublished=new Map(),untimedPublished=new Map();
       if (day === localDay(now)) {
         // Fresh published-post read, not the connector's pending-only list or a fabricated completeness flag.
         let start = new Date(day+'T05:00:00Z');
@@ -268,14 +269,20 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
       }
       for (const row of rows) {
         const when = scheduledTime(row), status = String(statusOf(row,destination)).toLowerCase();
-        if (!when || localDay(new Date(when))!==day || !schedulerId(row) || !['scheduled','pending','published','posted'].includes(status)) throw Error('weekly_provider_schedule_unverified');
+        if (!when || localDay(new Date(when))!==day || !schedulerId(row) || !['scheduled','pending','publishing','published','posted'].includes(status)) throw Error('weekly_provider_schedule_unverified');
+        calendarIds.add(schedulerId(row));
         if (['published','posted'].includes(status)) {
           const target = row.providers.find(p=>p.network===destination.network);
           const exact = exactPost(target.publicUrl ?? row.publicUrl ?? row.publishedPostUrl,destination);
-          if (day!==localDay(now) || !exact || !published.has(exact.id)) throw Error('weekly_published_row_unreconciled');
-          continue;
+          if (day!==localDay(now) || !exact) throw Error('weekly_published_row_unreconciled');
+          if(calendarPublished.has(exact.id)&&calendarPublished.get(exact.id)!==schedulerId(row))throw Error('weekly_provider_identity_conflict');
+          calendarPublished.set(exact.id,schedulerId(row));
+          if(published.has(exact.id))continue;
+          // Provider PUBLISHED is authoritative existence, even while analytics has not supplied a timestamp.
+          // Reserve its original calendar slot; never invent publishedAt or metric completeness.
+          untimedPublished.set(schedulerId(row),exact.id);
         }
-        if (Date.parse(when)<=+now) throw Error('past_schedule_requires_publication_confirmation');
+        if (['scheduled','pending'].includes(status)&&Date.parse(when)<=+now) throw Error('past_schedule_requires_publication_confirmation');
         const key = String(row.uuid ?? schedulerId(row));
         if (pending.has(key) && JSON.stringify(pending.get(key))!==JSON.stringify(row)) throw Error('weekly_provider_identity_conflict');
         pending.set(key,row);
@@ -284,8 +291,8 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
       if (hours.length>=DAILY_LIMIT || new Set(hours).size!==hours.length || hours.includes(localHour(item.scheduledAt)) ||
           [...pending.values()].some(row=>row.text===item.caption || providerMedia(row)===item.mediaUrl)) throw Error('metricool_slot_duplicate_or_daily_cap');
       const evidence={destination,day,observedAt:now.toISOString(),source:'fresh_rest_calendar_and_account_analytics',
-        scheduled:[...pending.values()].map(row=>({id:schedulerId(row),scheduledAt:scheduledTime(row),status:String(statusOf(row,destination)).toLowerCase()})),published:[...published.values()]};
-      return { day, observedAt:evidence.observedAt, coverageSource:evidence.source, confirmedCount:hours.length, scheduledIds:evidence.scheduled.map(row=>row.id), publishedIds:evidence.published.map(row=>row.id),evidence,
+        scheduled:[...pending.values()].map(row=>({id:schedulerId(row),scheduledAt:scheduledTime(row),status:String(statusOf(row,destination)).toLowerCase(),...(untimedPublished.has(schedulerId(row))?{platformPostId:untimedPublished.get(schedulerId(row)),publicationTimeVerified:false}:{})})),published:[...published.values()]};
+      return { day, observedAt:evidence.observedAt, coverageSource:evidence.source, confirmedCount:hours.length, scheduledIds:evidence.scheduled.map(row=>row.id), publishedIds:[...new Set([...evidence.published.map(row=>row.id),...calendarPublished.keys()])],calendarIds:[...calendarIds],reservedPublishing:[...pending.values()].filter(row=>String(statusOf(row,destination)).toLowerCase()==='publishing').length,publicationTimesUnverified:untimedPublished.size,evidence,
         evidenceSha256:createHash('sha256').update(JSON.stringify(evidence)).digest('hex') };
     },
     async schedule(destination, item) {

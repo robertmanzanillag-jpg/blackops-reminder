@@ -1,3 +1,5 @@
+import { nativeReceiptDigest, nativeAssetMediaFields, approvedNativeMedia, verifyMetricoolNativeBytes, metricoolNativeUrl, reconcileExternalMetricoolSchedule, verifiedExternalSchedules } from '../script/clippers-native-media-receipts.mjs';
+import { buildClippersOrchestraReport } from '../script/clippers-orchestra-report.mjs';
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawnSync } from 'node:child_process';
@@ -8,7 +10,7 @@ import { promisify } from 'node:util';
 import test from 'node:test';
 import { runClippersPortfolioPrepare, verifyPublicBytes, publicDriveUrl, driveHelperEnvironment, claimDriveOperation } from '../script/clippers-portfolio-prepare.mjs';
 import { renderClippersPortfolio, confirmedRenderReceipt } from '../script/clippers-portfolio-render.mjs';
-import { runClippersDailyLearning } from '../script/clippers-daily-learning.mjs';
+import { runClippersDailyLearning, validateApprovedClippersAsset } from '../script/clippers-daily-learning.mjs';
 import { DESTINATIONS, destinationKey } from '../script/clippers-portfolio-metricool.mjs';
 
 const exec = promisify(execFile);
@@ -265,4 +267,47 @@ test('malformed optional creator context remains unmeasured and preserves otherw
 
 test('changing optional creator metadata after rendering cannot relabel a reviewed cached render', { skip: !hasTools }, async t => {
  const m={format:'vertical_clip',context:'streamer_clip',channelId:'UCX6OQ3DkcsbYNE6H8uQQuVA',sourceVideoId:'aaaaaaaaaaa',postingBand:'12:00',timezone:'America/New_York',windowHours:24};const f=await fixture(t,[DESTINATIONS[0]],m),p=f.packets[0];p.request.creatorSelection.context='different_context';p.packet.renderRequestSha256=digest(p.request);await f.write(`${CONFIG}/render-requests/${p.packet.id}.json`,p.request);await f.write(`${CONFIG}/prepare-requests/${p.packet.id}.json`,p.packet);const r=await f.run();assert.equal(r.prepared,0);assert.equal(f.calls.upload,0);assert.equal(f.calls.public,0);
+});
+
+const NATIVE_URL='https://static.metricool.com/video/123/202611/synthetic-original.mp4';
+async function nativeFixture(t){
+ const f=await fixture(t),{packet,rendered}=f.packets[0];packet.mediaProvider='metricool';await f.write(`${CONFIG}/prepare-requests/${packet.id}.json`,packet);
+ const bytes=await readFile(path.join(f.root,rendered.draftFile));
+ const receipt={schemaVersion:1,provider:'metricool',kind:'metricool_native_media_receipt',status:'ready',assetId:packet.id,destination:packet.destination,renderReceiptSha256:packet.renderReceiptSha256,renderRequestSha256:packet.renderRequestSha256,sha256:packet.outputSha256,sizeBytes:bytes.length,mediaUrl:NATIVE_URL,resource:{kind:'metricool_cdn_url',url:NATIVE_URL},verifiedAt:now.toISOString(),verification:'anonymous_exact_bytes_sha256',paidSpendAllowed:false,paidSpendUsd:0,authorizedManifestSha256:digest(packet)};
+ await f.write(`${REPORT}/native-media-imports/${packet.id}.json`,receipt);
+ f.adapter.nativeFetch=async(url,options)=>{assert.equal(url,NATIVE_URL);assert.equal(options.redirect,'error');assert.equal(Object.keys(options.headers).some(k=>/auth|token/i.test(k)),false);return new Response(bytes,{headers:{'content-type':'video/mp4','content-length':String(bytes.length)}});};
+ return {...f,receipt,bytes};
+}
+test('typed native exact bytes prepare without Drive IDs, uploads or provider scheduling; replay stays immutable',{skip:!hasTools},async t=>{
+ const f=await nativeFixture(t);const first=await f.run();assert.equal(first.prepared,1);assert.equal(first.uploaded,0);assert.equal(f.calls.upload,0);assert.equal(f.calls.folder,0);
+ const input=JSON.parse(await readFile(path.join(f.root,CONFIG,'approved-input.json')));const asset=input.assets[0];assert.equal(asset.mediaProvider,'metricool');assert.equal(Object.hasOwn(asset,'mediaReceiptFileId'),false);assert.equal(asset.mediaReceiptSha256,digest(f.receipt));assert.equal(input.publish,false);
+ const rows=JSON.parse(await readFile(path.join(f.root,REPORT,'portfolio-media-receipts.json')));assert.equal(approvedNativeMedia(asset,rows),true);assert.equal(Object.hasOwn(rows[0],'fileId'),false);
+ assert.equal((await f.run()).prepared,1);assert.equal(f.calls.upload,0);
+ const state={deliveries:[],observations:[],history:[],versions:{}};assert.ok(await validateApprovedClippersAsset(asset,f.root,now,rows,state));assert.equal(await validateApprovedClippersAsset({...asset,mediaReceiptFileId:'forged-drive-id'},f.root,now,rows,state),null);assert.equal(await validateApprovedClippersAsset({...asset,mediaReceiptSha256:'0'.repeat(64)},f.root,now,rows,state),null);
+ for(const mutate of [x=>x.assetId='other',x=>x.destination=DESTINATIONS[1],x=>x.sha256='a'.repeat(64),x=>x.authorizedManifestSha256='b'.repeat(64),x=>x.renderRequestSha256='c'.repeat(64)]){const bad=structuredClone(f.receipt);mutate(bad);await f.write(`${REPORT}/native-media-imports/${asset.id}.json`,bad);const r=await f.run();assert.equal(r.prepared,0);assert.equal(f.calls.upload,0);}
+});
+test('native remote media refuses redirects, query credentials, response shape and mismatching exact bytes',async()=>{
+ const bytes=Buffer.from('original synthetic bytes'),h=hash(bytes);
+ assert.equal(await verifyMetricoolNativeBytes(NATIVE_URL,h,bytes.length,{fetcher:async()=>new Response(bytes,{headers:{'content-type':'video/mp4'}})}),true);
+ for(const u of [NATIVE_URL+'?token=no',NATIVE_URL+'#x',NATIVE_URL.replace('static.metricool.com','evil.example'),NATIVE_URL.replace('https://','https://user:pass@'),[NATIVE_URL]])assert.equal(metricoolNativeUrl(u),null);
+ for(const fetcher of [async()=>Response.redirect(NATIVE_URL),async()=>new Response(bytes,{headers:{'content-type':'text/html'}}),async()=>new Response(Buffer.concat([bytes,bytes]),{headers:{'content-type':'video/mp4'}}),async()=>new Response(Buffer.alloc(bytes.length),{headers:{'content-type':'video/mp4'}})])assert.equal(await verifyMetricoolNativeBytes(NATIVE_URL,h,bytes.length,{fetcher}),false);
+});
+test('external owner UI exact GET and bytes are observed separately, even after scheduled time; never make pipeline deliveries',{skip:!hasTools},async t=>{
+ const f=await nativeFixture(t),{packet}=f.packets[0];let reads=0;
+ const external={destination:packet.destination,metricoolId:'123456',scheduledAt:packet.scheduledAt,caption:packet.caption,mediaUrl:NATIVE_URL,sha256:packet.outputSha256,sizeBytes:f.bytes.length};
+ const observationTime=new Date('2026-11-18T18:00:00Z');
+ const adapter={confirmSchedule:async(d,item)=>{reads++;assert.equal(item.caption,packet.caption);return{id:'123456',mediaUrl:NATIVE_URL};},schedule(){throw Error('no schedule');}};
+ const options={workspaceRoot:f.root,assetId:packet.id,external,now:observationTime,adapter,fetcher:f.adapter.nativeFetch};
+ assert.equal((await reconcileExternalMetricoolSchedule(options)).learnerStateChanged,false);const old=await readFile(path.join(f.root,REPORT,'native-media-imports',packet.id+'.json'),'utf8');
+ assert.equal((await reconcileExternalMetricoolSchedule({...options,now:new Date(+observationTime+1000)})).providerWrites,0);assert.equal(await readFile(path.join(f.root,REPORT,'native-media-imports',packet.id+'.json'),'utf8'),old);
+ const rows=JSON.parse(await readFile(path.join(f.root,REPORT,'external-schedules.json')));assert.equal(rows.length,1);assert.equal(verifiedExternalSchedules(rows,new Date(+observationTime+1000)).length,1);await assert.rejects(readFile(path.join(f.root,REPORT,'state.json')),/ENOENT/);
+ const report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:new Date(+observationTime+1000)});assert.equal(report.accounts[0].confirmedScheduledOrPublished,1);assert.equal(report.accounts[0].shortfall,null);assert.equal(report.accounts[1].confirmedScheduledOrPublished,null);assert.equal(report.roles.find(r=>r.stage==='publisher').outcomes.length,0);
+ await assert.rejects(reconcileExternalMetricoolSchedule({...options,external:{...external,caption:'different'}}),/binding/);assert.equal(reads,2);
+});
+
+test('external observation is durable before failed native import publication, and repeat repairs import only',{skip:!hasTools},async t=>{
+ const f=await nativeFixture(t),{packet}=f.packets[0],relative=`${REPORT}/native-media-imports/${packet.id}.json`;await rm(path.join(f.root,relative));await mkdir(path.join(f.root,relative),{mode:0o700});
+ const options={workspaceRoot:f.root,assetId:packet.id,external:{destination:packet.destination,metricoolId:'999',scheduledAt:packet.scheduledAt,caption:packet.caption,mediaUrl:NATIVE_URL,sha256:packet.outputSha256,sizeBytes:f.bytes.length},now,fetcher:f.adapter.nativeFetch,adapter:{confirmSchedule:async()=>({id:'999',mediaUrl:NATIVE_URL})}};
+ await assert.rejects(reconcileExternalMetricoolSchedule(options));const rows=JSON.parse(await readFile(path.join(f.root,REPORT,'external-schedules.json')));assert.equal(verifiedExternalSchedules(rows,now).length,1);assert.equal(Object.hasOwn(rows[0],'weeklySourceProof'),true);
+ await rm(path.join(f.root,relative),{recursive:true});assert.equal((await reconcileExternalMetricoolSchedule(options)).providerWrites,0);assert.equal((await f.run()).prepared,1);
 });

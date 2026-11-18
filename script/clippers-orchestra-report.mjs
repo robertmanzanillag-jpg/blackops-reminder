@@ -1,3 +1,4 @@
+import { verifiedExternalSchedules } from './clippers-native-media-receipts.mjs';
 // Read-only projection of the installed pipeline's private receipts. No provider, rights or publishing API.
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -176,8 +177,8 @@ async function comparisonsView(root,state,metrics,now,media){
 export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()}={}){
   const at=+now;if(!Number.isFinite(at)||!workspaceRoot||!path.isAbsolute(workspaceRoot))throw Error('orchestra_configuration_invalid');
   const root=await realpath(workspaceRoot);
-  const files={watchdog:'reports/clippers-daily-watchdog/latest.json',learning:'reports/clippers-daily-learning/latest.json',state:'reports/clippers-daily-learning/state.json',prepare:'reports/clippers-daily-learning/prepare-latest.json',media:'reports/clippers-daily-learning/portfolio-media-receipts.json',input:'config/clippers-daily-learning/approved-input.json',accountAnalytics:'reports/clippers-account-analytics/latest.json',creatorSelection:'reports/clippers-creator-selection/latest.json'};
-  const caps={watchdog:1048576,learning:2097152,state:25000000,prepare:262144,media:5242880,input:2097152,accountAnalytics:524288,creatorSelection:262144};
+  const files={external:'reports/clippers-daily-learning/external-schedules.json',watchdog:'reports/clippers-daily-watchdog/latest.json',learning:'reports/clippers-daily-learning/latest.json',state:'reports/clippers-daily-learning/state.json',prepare:'reports/clippers-daily-learning/prepare-latest.json',media:'reports/clippers-daily-learning/portfolio-media-receipts.json',input:'config/clippers-daily-learning/approved-input.json',accountAnalytics:'reports/clippers-account-analytics/latest.json',creatorSelection:'reports/clippers-creator-selection/latest.json'};
+  const caps={external:2097152,watchdog:1048576,learning:2097152,state:25000000,prepare:262144,media:5242880,input:2097152,accountAnalytics:524288,creatorSelection:262144};
   const entries=await Promise.all(Object.entries(files).map(async([k,file])=>[k,await privateOrchestraJson(root,file,caps[k])]));
   const artifacts=Object.fromEntries(entries),wd=artifacts.watchdog.value,report=artifacts.learning.value,prep=artifacts.prepare.value;
   const rawState=artifacts.state.value,state=rawState?.schemaVersion===1&&Array.isArray(rawState.deliveries)&&rawState.deliveries.length<=2000&&Array.isArray(rawState.observations)&&rawState.observations.length<=20000&&Array.isArray(rawState.history)&&rawState.history.length<=1000&&rawState.versions&&typeof rawState.versions==='object'?rawState:null;
@@ -205,6 +206,8 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
     objectRow(d.scheduleEvidence)&&typeof d.scheduleEvidence.mediaUrl==='string'&&SHA.test(d.scheduleEvidenceSha256??'')&&digest(d.scheduleEvidence)===d.scheduleEvidenceSha256&&d.scheduleEvidence.id===d.metricoolId&&
     findDestination(d.scheduleEvidence.destination)&&destinationKey(d.scheduleEvidence.destination)===destinationKey(d)&&d.scheduleEvidence.scheduledAt===d.scheduledAt&&
     d.scheduleEvidence.mediaUrl===d.verifiedSchedulerMediaUrl&&time(d.scheduleEvidence.confirmedAt,at));
+  const external=verifiedExternalSchedules(artifacts.external.value,now,{strict:false});
+  const externalAt=external.map(r=>r.observedAt).sort().at(-1)??null;
   const weeklyAt=weeklyReceipts.map(d=>time(d.scheduleEvidence.confirmedAt,at)).sort().at(-1)??null;
   const media=Array.isArray(artifacts.media.value)?artifacts.media.value:[];
   const {comparisons,qualifications}=await comparisonsView(root,state,metrics,at,media);
@@ -213,7 +216,7 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   const analytics=time(rawAnalytics?.generatedAt,at)&&rawAnalytics?.schemaVersion===1&&rawAnalytics.paidSpendUsd===0&&rawAnalytics.readOnly===true&&Array.isArray(rawAnalytics.accounts)&&rawAnalytics.accounts.length===4&&new Set(rawAnalytics.accounts.filter(findDestination).map(destinationKey)).size===4?rawAnalytics:null;
   const analyticsAt=analytics?.generatedAt??null;
   const discoveryAt=discovery.sources.map(s=>s.observedAt).filter(Boolean).sort().at(-1)??null;
-  const evidenceAt=[reportAt,watchdogAt,prepareAt,discoveryAt,analyticsAt,weeklyAt].filter(Boolean).sort().at(-1)??null;
+  const evidenceAt=[reportAt,watchdogAt,prepareAt,discoveryAt,analyticsAt,weeklyAt,externalAt].filter(Boolean).sort().at(-1)??null;
   const age=evidenceAt?(at-Date.parse(evidenceAt))/60000:null,sourceState=evidenceAt?(age<=26*60?'connected':'stale'):'disconnected';
   const validLearning=report?.schemaVersion===1&&report.paidSpendUsd===0&&reportAt&&report.date===localDay(now)&&Array.isArray(report.destinations)&&report.destinations.length===4&&new Set(report.destinations.filter(d=>findDestination(d)).map(destinationKey)).size===4?report:null;
   const nextDue=watchdogAt?nextDaily(at,wd.checkHour):null;
@@ -230,10 +233,10 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
         const valid=typeof sha256==='string'&&SHA.test(sha256)&&digest(p)===sha256&&p.source==='fresh_rest_calendar_and_account_analytics'&&
           findDestination(p.destination)&&destinationKey(p.destination)===key&&p.day===localDay(now)&&time(p.observedAt,at)&&p.observedAt<=latestOwn.scheduleEvidence.confirmedAt&&
           Array.isArray(p.scheduled)&&p.scheduled.length<=5&&Array.isArray(p.published)&&p.published.length<=5&&
-          p.scheduled.every(v=>objectRow(v)&&typeof v.id==='string'&&ID.test(v.id)&&time(v.scheduledAt,Infinity)&&localDay(new Date(v.scheduledAt))===p.day&&['pending','scheduled'].includes(v.status))&&
+          p.scheduled.every(v=>objectRow(v)&&typeof v.id==='string'&&ID.test(v.id)&&time(v.scheduledAt,Infinity)&&localDay(new Date(v.scheduledAt))===p.day&&(['pending','scheduled','publishing'].includes(v.status)||(['published','posted'].includes(v.status)&&typeof v.platformPostId==='string'&&/^\d+$/.test(v.platformPostId)&&v.publicationTimeVerified===false)))&&
           p.published.every(v=>objectRow(v)&&typeof v.id==='string'&&/^\d+$/.test(v.id)&&time(v.publishedAt,Date.parse(p.observedAt))&&localDay(new Date(v.publishedAt))===p.day);
         if(valid){
-          const pending=new Set(p.scheduled.map(v=>v.id)),published=new Set(p.published.map(v=>v.id));
+          const pending=new Set(p.scheduled.filter(v=>!v.platformPostId).map(v=>v.id)),published=new Set([...p.published.map(v=>v.id),...p.scheduled.filter(v=>v.platformPostId).map(v=>v.platformPostId)]);
           for(const v of (state?.deliveries??[]).filter(v=>findDestination(v)&&destinationKey(v)===key&&['scheduled','published'].includes(v.status)&&ID.test(v.metricoolId??'')&&time(v.scheduledAt,Infinity)&&localDay(new Date(v.scheduledAt))===p.day&&(!v.weeklyWindow||weeklyReceipts.includes(v)))){
             if(v.status==='published'&&exactPost(v.post?.url,v)?.id===v.post?.id&&time(v.post?.publishedAt,at)){pending.delete(v.metricoolId);published.add(v.post.id);}else pending.add(v.metricoolId);
           }
@@ -241,6 +244,12 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
         }
       }
       r={...r,confirmedScheduledOrPublished:confirmed,shortfall,blockers};
+    }
+    const externalOwn=external.filter(v=>destinationKey(v.destination)===key&&localDay(new Date(v.scheduledAt))===localDay(now));
+    if(externalOwn.length){
+      const ownIds=new Set([...own.map(v=>v.metricoolId),...externalOwn.map(v=>v.metricoolId)]);
+      const known=Math.max(r?.confirmedScheduledOrPublished??0,ownIds.size);
+      r={...r,confirmedScheduledOrPublished:known,shortfall:known>=5?0:null,blockers:known>5?['daily_queue_exceeds_cap']:known===5?[]:['external_observations_partial_coverage_unverified']};
     }
     const buckets=ageBuckets(metrics,key),observedAt=buckets.map(b=>b.latestObservedAt).filter(Boolean).sort().at(-1)??null;
     const v=validLearning?.versions?.find(v=>v.destination===key);
@@ -272,6 +281,7 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
     role('learning',reportAt,artifacts.learning,state?{eligibleComparisons:eligibleComparisons,qualifiedCandidates:qualifications.length,promotions}:{},qualifications.length?[]:['three_current_independent_comparisons_required']),
     role('health',watchdogAt,artifacts.watchdog,{},sourceState==='connected'?[]:['runtime_evidence_unavailable_or_stale']),
   ];
+  if(externalAt&&(!reportAt||externalAt>reportAt)&&(!weeklyAt||externalAt>weeklyAt)){const p=roles.find(r=>r.stage==='publisher');p.evidenceAt=externalAt;p.lastRunAt=externalAt;p.runId=artifacts.external.sha;p.evidenceIds=[`clippers:${artifacts.external.sha}:publisher`];p.heartbeatAt=null;p.state=at-Date.parse(externalAt)>26*HOUR?'stale':'completed';p.heldReasons=[];p.outputs={confirmed:accounts.reduce((n,a)=>n+(a.confirmedScheduledOrPublished??0),0),externalOwnerUiObservations:external.length};}
   if(weeklyIsNewer&&weeklyReceipts.length)roles.find(r=>r.stage==='publisher').state='completed';
   const outcomes=(stage,items)=>{
     const target=roles.find(r=>r.stage===stage);
