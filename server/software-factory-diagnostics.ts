@@ -18,8 +18,12 @@ export function factoryOnceFailure(error: unknown, phase: FactoryOncePhase) {
   // arbitrary message, SQL detail, URL or identifier into Actions logs.
   let code = "FACTORY_ONCE_UNAVAILABLE";
   try {
-    if (error instanceof Error && failureCodes.has(error.message)) code = error.message;
-    else if (error && typeof error === "object" && "code" in error && error.code === "55P03") code = "FACTORY_DATABASE_LOCK_UNAVAILABLE";
+    if (error && typeof error === "object") {
+      const message = Object.getOwnPropertyDescriptor(error, "message")?.value;
+      const databaseCode = Object.getOwnPropertyDescriptor(error, "code")?.value;
+      if (error instanceof Error && typeof message === "string" && failureCodes.has(message)) code = message;
+      else if (databaseCode === "55P03") code = "FACTORY_DATABASE_LOCK_UNAVAILABLE";
+    }
   } catch { /* A hostile getter is still an unclassified failure. */ }
   return { event: "factory_once_failure", phase, code, automaticReplay: false };
 }

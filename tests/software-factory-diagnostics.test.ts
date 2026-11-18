@@ -50,6 +50,12 @@ test("Actions diagnostics never expose arbitrary errors, SQL details, identifier
   assert.deepEqual(factoryOnceFailure(new Error("FACTORY_OPERATOR_CREDIT_UNCERTAIN"), "operator"), {
     event: "factory_once_failure", phase: "operator", code: "FACTORY_OPERATOR_CREDIT_UNCERTAIN", automaticReplay: false,
   });
+  let reads = 0;
+  const changingMessage = Object.defineProperty(new Error(), "message", {
+    get() { return ++reads === 1 ? "FACTORY_OPERATOR_CREDIT_UNCERTAIN" : secret; },
+  });
+  assert.equal(factoryOnceFailure(changingMessage, "operator").code, "FACTORY_ONCE_UNAVAILABLE");
+  assert.equal(reads, 0);
 });
 
 test("the real launcher reports a rejected configuration without credentials or adapter loading", () => {
