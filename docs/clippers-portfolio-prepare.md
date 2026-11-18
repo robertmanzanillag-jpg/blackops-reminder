@@ -20,6 +20,9 @@ destination. KONG and Black Room are never admitted.
    output SHA-256 and exact destination. It also supplies campaign/source IDs,
    source URL, creator/language, caption, scheduled time, commercial disclosure
    and explicit public-upload/asset approval.
+   The render receipt also binds the complete render-request JSON digest,
+   source byte SHA, actual seek offset and caption-text digest. Changing a
+   request never rewrites its old receipt; use a new request ID when needed.
 3. The render request's rights must include `permittedNetworks` and
    `thirdPartyCommercial`. Its commercial permission, exact-asset scope,
    source SHA, current observation, permission expiry and campaign membership
@@ -54,17 +57,26 @@ Metricool and YouTube keys and inherited Node hooks are excluded.
 existing credential configuration loader. No credential values are printed.
 
 Only already reviewed render receipts are consumed. The command does not
-rerender those videos. A cycle is capped at 120 seconds and 20 packets, with
+rerender those videos. A cycle is capped at 120 seconds and 20 usable packets, with
 five slots per exact destination/day, unique slots and no repeated media or
 caption within that destination. Calls to the existing Drive helper run in
 separate processes capped at 30 seconds or the remaining cycle budget.
 Each helper also has its own 30-second deadline if the parent disappears.
+The scan considers the 500 most recently modified packets; stale or invalid
+packets do not consume the usable-packet allowance. Keep the active request
+directory below 5,000 entries by retaining expired packets in an owner archive;
+an oversized directory reports an explicit retention blocker.
 
 Each upload is durably reserved before any remote write. Lost upload
 acknowledgements remain `upload_unknown`; the worker does not try another
 upload. A known file whose sharing acknowledgement was lost can only be
 reconciled by an unauthenticated exact-byte public read. It is never blindly
 shared again. All Google download redirects are host-restricted and bounded.
+Mutating Drive helpers additionally claim a per-hash/per-operation file with
+exclusive creation. They require the live parent's PID and nonce, expected
+upload state and folder/file ID. Calling a helper twice cannot repeat a write,
+even when an acknowledgement was lost. Known scheduler conflicts are rejected
+before creating folders or exposing media.
 
 One content-addressed Drive file can serve several separately approved
 destinations. Each receives its own private, render-bound receipt in

@@ -58,6 +58,17 @@ test('local portfolio renderer applies reviewed parameters, binds actual bytes a
   const run = requestId => renderClippersPortfolio({ workspaceRoot: root, requestId, now });
   const baseline = await run('control');
   assert.equal((await run('control')).draftFile, baseline.draftFile, 'an identical retry returns the existing receipt');
+  assert.equal(baseline.renderRequestSha256, engineSha(JSON.stringify(baseRequest)));
+  assert.equal(baseline.captionTextSha256, engineSha(''));
+  const oldControl = { ...target, id: 'control', policyVersion: 'baseline-1', experiment: baseRequest.experiment,
+    draftFile: baseline.draftFile, mediaSha256: baseline.outputSha256, renderReceiptSha256: baseline.receiptSha256,
+    scheduledAt: '2026-11-18T17:00:00.000Z' };
+  const revisedRights = { ...baseRequest, rights: { ...baseRequest.rights, observedAt: '2026-11-18T14:01:00Z' } };
+  await write(requests + '/control.json', revisedRights);
+  assert.equal(await confirmedRenderReceipt(root, oldControl, target), null, 'a current request cannot relabel an old receipt');
+  await assert.rejects(run('control'), /render_receipt_conflict/, 'same bytes do not overwrite an older request receipt');
+  await write(requests + '/control.json', baseRequest);
+  assert.ok(await confirmedRenderReceipt(root, oldControl, target), 'the original immutable receipt remains usable with its original request');
   const other = DESTINATIONS[3];
   const otherPolicyDir = config + '/render-policies/' + destinationKey(other).replaceAll(':', '__');
   await mkdir(path.join(root, otherPolicyDir), { recursive: true });
@@ -158,10 +169,19 @@ test('local portfolio renderer applies reviewed parameters, binds actual bytes a
     await write(policyDir + '/captioned.json', captioned);
     await write('reports/clippers-daily-learning/state.json', { schemaVersion: 1, versions: { [key]: 'captioned' },
       history: [{ destination: key, toManifestSha: engineSha(JSON.stringify(captioned)) }] });
-    await write(requests + '/captioned.json', request('captioned', 'captioned', null, { captionText: 'Verified edit' }));
+    const captionRequest = request('captioned', 'captioned', null, { captionText: 'Verified edit' });
+    await write(requests + '/captioned.json', captionRequest);
     const overlay = await run('captioned');
     assert.equal(overlay.actualParams.caption_layout, 'upper');
     assert.notEqual(overlay.outputSha256, result.outputSha256);
+    assert.equal(overlay.captionTextSha256, engineSha('Verified edit'));
+    const captionAsset = { ...target, id: 'captioned', policyVersion: 'captioned',
+      draftFile: overlay.draftFile, mediaSha256: overlay.outputSha256, renderReceiptSha256: overlay.receiptSha256,
+      scheduledAt: '2026-11-18T17:00:00.000Z' };
+    assert.ok(await confirmedRenderReceipt(root, captionAsset, target));
+    await write(requests + '/captioned.json', { ...captionRequest, captionText: 'Another reviewed caption' });
+    assert.equal(await confirmedRenderReceipt(root, captionAsset, target), null, 'changing a caption cannot approve the old video');
+    await write(requests + '/captioned.json', captionRequest);
     await write('reports/clippers-daily-learning/state.json', { schemaVersion: 1, versions: { [key]: 'active' },
       history: [{ destination: key, toManifestSha: activeDigest }] });
   });

@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { mkdir, open, readFile, realpath, rename, unlink, writeFile, readdir } from 'node:fs/promises';
+import { mkdir, open, readFile, realpath, rename, unlink, writeFile, readdir, lstat } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findDestination, destinationKey, providerTimestamp, localDay } from './clippers-portfolio-metricool.mjs';
@@ -136,6 +136,32 @@ async function boundedHelper(operation, input, timeoutMs, loader) {
     child.stdin.on('error', () => {}); child.stdin.end(JSON.stringify(input));
   });
 }
+async function livePreparation(root, auth) {
+  const active = await ownerJson(root, `${REPORT}/portfolio-prepare.lock`);
+  const age = Date.now() - Date.parse(active.startedAt);
+  if (!Number.isSafeInteger(active.pid) || active.pid < 1 || active.pid !== auth.parentPid || active.pid !== process.ppid ||
+      active.nonce !== auth.operationNonce || !/^[a-f0-9-]{36}$/.test(active.nonce ?? '') ||
+      !Number.isFinite(age) || age < 0 || age > 120_000) throw Error('prepare_parent_unconfirmed');
+  try { process.kill(active.pid, 0); } catch { throw Error('prepare_parent_unconfirmed'); }
+}
+export async function claimDriveOperation(root, auth, operation, input = {}) {
+  await livePreparation(root, auth);
+  if (!['folder', 'upload', 'public'].includes(operation) || !SHA.test(auth.outputSha256 ?? '')) throw Error('drive_operation_invalid');
+  const state = await ownerJson(root, `${REPORT}/portfolio-upload-state.json`);
+  const upload = state.uploads?.[auth.outputSha256];
+  if (!upload || upload.sha256 !== auth.outputSha256 ||
+      upload.status !== (operation === 'public' ? 'sharing_unknown' : 'upload_unknown') ||
+      (operation === 'upload' && upload.folderId !== input.folderId) ||
+      (operation === 'public' && upload.fileId !== input.fileId)) throw Error('drive_operation_state_invalid');
+  const directory = path.join(root, REPORT, 'drive-operation-claims', auth.outputSha256);
+  await mkdir(directory, { recursive: true, mode: 0o700 });
+  if (await realpath(directory) !== directory) throw Error('private_parent_required');
+  const claim = await open(path.join(directory, operation + '.json'), 'wx', 0o600);
+  try { await claim.writeFile(JSON.stringify({ operation, packetSha256: auth.packetSha256,
+    outputSha256: auth.outputSha256, parentPid: auth.parentPid, operationNonce: auth.operationNonce,
+    startedAt: new Date().toISOString() }) + '\n'); }
+  finally { await claim.close(); }
+}
 export async function createExistingDriveAdapter({ remaining = () => 30_000, authorization } = {}) {
   // Existing OAuth helpers run in a bounded process. Killing an ambiguous upload
   // leaves the durable reservation unknown, rather than repeating its write.
@@ -203,7 +229,12 @@ async function renderAndApprove(root, id, now, renderer) {
   const rendered = await ownerJson(root, receiptFile, null);
   if (!rendered || digest(rendered) !== packet.renderReceiptSha256 || rendered.outputSha256 !== packet.outputSha256 ||
       !findDestination(rendered.destination) || destinationKey(rendered.destination) !== destinationKey(destination) ||
-      rendered.requestId !== id || rendered.version !== request.policyVersion || rendered.costUsd !== 0) throw Error('reviewed_render_output_changed');
+      rendered.requestId !== id || rendered.version !== request.policyVersion || rendered.costUsd !== 0 ||
+      rendered.sourceSha256 !== request.sourceSha256 ||
+      !Number.isFinite(request.sourceStartSeconds) || !Number.isFinite(rendered.actualParams?.hook) ||
+      rendered.startSeconds !== request.sourceStartSeconds + rendered.actualParams.hook ||
+      rendered.renderRequestSha256 !== digest(request) ||
+      rendered.captionTextSha256 !== hash(typeof request.captionText === 'string' ? request.captionText : '')) throw Error('reviewed_render_output_changed');
   const asset = { ...destination, id, campaignId: packet.campaignId, sourceId: packet.sourceId, sourceUrl: packet.sourceUrl,
     creator: packet.creator, language: packet.language, caption: packet.caption, scheduledAt,
     policyVersion: rendered.version, experiment: request.experiment ?? undefined,
@@ -238,6 +269,7 @@ async function appendSchedulerInput(root, approved, uploaded) {
     if (input.schemaVersion !== 1 || !Array.isArray(input.assets) || !Array.isArray(input.reviews) || input.assets.length > 250) throw Error('approved_scheduler_input_invalid');
     const prior = input.assets.find(item => item.id === result.id && destinationKey(item) === destinationKey(destination));
     if (prior && !same(prior, result)) throw Error('approved_asset_conflict');
+    if (!prior && input.assets.length >= 250) throw Error('approved_queue_capacity');
     const receipts = await ownerJson(root, `${REPORT}/portfolio-media-receipts.json`, []);
     if (!Array.isArray(receipts) || receipts.length > 5000) throw Error('portfolio_media_ledger_invalid');
     const receipt = { ...destination, status: 'ready', fileId: uploaded.fileId, campaignId: result.campaignId,
@@ -245,6 +277,7 @@ async function appendSchedulerInput(root, approved, uploaded) {
       renderReceiptSha256: result.renderReceiptSha256, paidSpendAllowed: false };
     const existing = receipts.find(row => destinationKey(row) === destinationKey(destination) && row.draftFile === result.draftFile);
     if (existing && !same(existing, receipt)) throw Error('portfolio_media_receipt_conflict');
+    if (!existing && receipts.length >= 5000) throw Error('portfolio_receipt_capacity');
     if (!existing) receipts.push(receipt);
     await save(root, `${REPORT}/portfolio-media-receipts.json`, receipts);
     await save(root, `${CONFIG}/evidence/${result.evidenceSha256}.json`, evidence);
@@ -259,6 +292,7 @@ export async function runClippersPortfolioPrepare({ workspaceRoot, now = new Dat
   if (!Number.isFinite(maxCycleMs) || maxCycleMs <= 0) throw Error('invalid_prepare_budget');
   const readiness = prepareReadiness(env);
   if (!readiness.enabled || !readiness.publicUploadEnabled) return { status: 'disabled', readiness, prepared: 0, uploaded: 0, paidSpendUsd: 0 };
+  const cycleStopAt = performance.now() + Math.min(120_000, maxCycleMs);
   const root = await realpath(path.resolve(workspaceRoot || env.CLIPPERS_WORKSPACE_ROOT || 'clippers_workspace'));
   const reportRoot = path.join(root, REPORT);
   await mkdir(reportRoot, { recursive: true, mode: 0o700 });
@@ -266,28 +300,36 @@ export async function runClippersPortfolioPrepare({ workspaceRoot, now = new Dat
   let files;
   try { files = await readdir(path.join(root, CONFIG, 'prepare-requests')); }
   catch (error) { if (error.code !== 'ENOENT') throw error; files = []; }
-  const ids = files.filter(file => file.endsWith('.json') && ID.test(file.slice(0, -5))).sort().slice(0, 20).map(file => file.slice(0, -5));
+  const names = files.filter(file => file.endsWith('.json') && ID.test(file.slice(0, -5)));
+  if (names.length > 5000) return { status: 'held', reason: 'prepare_request_retention_required', prepared: 0, uploaded: 0, paidSpendUsd: 0 };
+  const metadata = await Promise.all(names.map(async name => ({ name, time: (await lstat(path.join(root, CONFIG, 'prepare-requests', name))).mtimeMs })));
+  // Stale/bad packets do not consume the twenty usable-packet allowance. Prefer
+  // recently reviewed inputs, rather than repeatedly taking the oldest names.
+  const ids = metadata.sort((a, b) => b.time - a.time || a.name.localeCompare(b.name)).slice(0, 500).map(row => row.name.slice(0, -5));
   if (!ids.length) return { status: 'held', reason: 'no_reviewed_prepare_packets', readiness, prepared: 0, uploaded: 0, paidSpendUsd: 0 };
   const lockFile = path.join(reportRoot, 'portfolio-prepare.lock'); let lock;
   try { lock = await open(lockFile, 'wx', 0o600); }
   catch (error) { if (error.code === 'EEXIST') return { status: 'held', reason: 'portfolio_prepare_busy', prepared: 0, uploaded: 0, paidSpendUsd: 0 }; throw error; }
   try {
-    await lock.writeFile(JSON.stringify({ pid: process.pid, startedAt: now.toISOString() }) + '\n');
+    const operationNonce = randomUUID();
+    await lock.writeFile(JSON.stringify({ pid: process.pid, nonce: operationNonce, startedAt: now.toISOString() }) + '\n');
     const ledgerFile = `${REPORT}/portfolio-upload-state.json`;
     const state = await ownerJson(root, ledgerFile, { schemaVersion: 1, uploads: {}, targets: [] });
     if (state.schemaVersion !== 1 || !state.uploads || typeof state.uploads !== 'object' || Array.isArray(state.uploads) || !Array.isArray(state.targets)) throw Error('portfolio_upload_state_invalid');
-    const stopAt = performance.now() + Math.max(1, Math.min(120_000, maxCycleMs));
+    const stopAt = cycleStopAt;
     const remaining = () => Math.max(0, stopAt - performance.now());
     const bounded = (operation) => new Promise((resolve, reject) => {
       const timer = setTimeout(() => reject(Error('prepare_time_budget_reached')), Math.max(1, remaining()));
       Promise.resolve().then(operation).then(resolve, reject).finally(() => clearTimeout(timer));
     });
-    let renderApi = renderer; const outcomes = []; let uploaded = 0, prepared = 0;
+    let renderApi = renderer; const outcomes = []; let uploaded = 0, prepared = 0, usablePackets = 0;
     for (const id of ids) {
       if (!remaining()) { outcomes.push({ id, status: 'held', reason: 'prepare_time_budget_reached' }); break; }
       try {
         renderApi ||= await import('./clippers-portfolio-render.mjs');
         const approved = await renderAndApprove(root, id, now, renderApi);
+        if (usablePackets >= 20) { outcomes.push({ id, status: 'held', reason: 'prepare_packet_budget_reached' }); break; }
+        usablePackets++;
         const targetKey = destinationKey(approved.destination), day = localDay(now);
         const reservations = state.targets.filter(row => row.destination === targetKey && row.day === day);
         const priorTarget = reservations.find(row => row.id === id);
@@ -297,6 +339,13 @@ export async function runClippersPortfolioPrepare({ workspaceRoot, now = new Dat
           outcomes.push({ id, status: 'held', reason: 'destination_daily_cap_or_slot_conflict' }); continue;
         }
         const input = await ownerJson(root, `${CONFIG}/approved-input.json`, { assets: [] });
+        if (!Array.isArray(input.assets) || (input.schemaVersion !== undefined && input.schemaVersion !== 1) ||
+            (input.reviews !== undefined && !Array.isArray(input.reviews))) throw Error('approved_scheduler_input_invalid');
+        const priorAsset = input.assets.find(row => row.id === id && findDestination(row) && destinationKey(row) === targetKey);
+        if (priorAsset && Object.entries(approved.asset).some(([field, value]) => !same(priorAsset[field], value))) throw Error('approved_asset_conflict');
+        if (input.assets.length >= 250 && !input.assets.some(row => row.id === id && findDestination(row) && destinationKey(row) === targetKey)) {
+          outcomes.push({ id, status: 'held', reason: 'approved_queue_capacity' }); continue;
+        }
         const queued = input.assets.filter(row => findDestination(row) && destinationKey(row) === targetKey && localDay(new Date(row.scheduledAt)) === day);
         if (!queued.some(row => row.id === id) && (queued.length >= 5 || queued.some(row => row.scheduledAt === approved.asset.scheduledAt ||
             row.mediaSha256 === approved.asset.mediaSha256 || row.caption === approved.asset.caption))) {
@@ -305,12 +354,21 @@ export async function runClippersPortfolioPrepare({ workspaceRoot, now = new Dat
         if (!priorTarget) { state.targets.push({ destination: targetKey, day, id, scheduledAt: approved.asset.scheduledAt,
           mediaSha256: approved.asset.mediaSha256, captionDigest: digest(approved.asset.caption), renderReceiptSha256: approved.asset.renderReceiptSha256 }); await save(root, ledgerFile, state); }
         const sha = approved.asset.mediaSha256; let entry = state.uploads[sha];
+        if (priorAsset && (entry?.status !== 'ready' || priorAsset.mediaReceiptFileId !== entry.fileId || priorAsset.mediaUrl !== entry.mediaUrl)) {
+          outcomes.push({ id, status: 'held', reason: 'approved_asset_needs_reconciliation' }); continue;
+        }
+        const existingReceipts = await ownerJson(root, `${REPORT}/portfolio-media-receipts.json`, []);
+        if (!Array.isArray(existingReceipts) || existingReceipts.length > 5000) throw Error('portfolio_media_ledger_invalid');
+        const existingReceipt = existingReceipts.find(row => findDestination(row) && destinationKey(row) === targetKey && row.draftFile === approved.asset.draftFile);
+        if (!existingReceipt && existingReceipts.length >= 5000) throw Error('portfolio_receipt_capacity');
+        if (existingReceipt && (existingReceipt.sha256 !== sha || existingReceipt.renderReceiptSha256 !== approved.asset.renderReceiptSha256 ||
+            existingReceipt.campaignId !== approved.asset.campaignId || existingReceipt.paidSpendAllowed !== false)) throw Error('portfolio_media_receipt_conflict');
         if (entry && (entry.sha256 !== sha || !['upload_unknown', 'sharing_unknown', 'ready'].includes(entry.status))) throw Error('portfolio_upload_state_invalid');
         if (entry?.status === 'upload_unknown') { outcomes.push({ id, status: 'held', reason: 'upload_outcome_unknown_no_replay' }); continue; }
         const adapter = dependencies || (entry?.status === 'ready' || entry?.status === 'sharing_unknown'
           ? { verifyPublic: (url, value, size) => verifyPublicBytes(url, value, size, fetch, Math.max(1, Math.min(30_000, remaining()))) }
           : await createExistingDriveAdapter({ remaining, authorization: { workspaceRoot: root, requestId: id,
-            packetSha256: digest(approved.packet), outputSha256: sha } }));
+            packetSha256: digest(approved.packet), outputSha256: sha, parentPid: process.pid, operationNonce } }));
         if (!entry) {
           if (adapter.readiness) await bounded(() => adapter.readiness());
           const stageDir = path.join(reportRoot, 'upload-stage'); await mkdir(stageDir, { recursive: true, mode: 0o700 });
@@ -345,7 +403,8 @@ export async function runClippersPortfolioPrepare({ workspaceRoot, now = new Dat
         outcomes.push({ id, destination: approved.destination, status: 'prepared', renderReceiptSha256: approved.asset.renderReceiptSha256 });
       } catch (error) {
         const reason = ['reviewed_prepare_packet_required', 'prepare_schedule_outside_rights', 'reviewed_render_output_changed', 'render_receipt_unconfirmed',
-          'portfolio_media_changed', 'owner_private_file_required', 'scheduler_worker_busy', 'approved_asset_conflict', 'portfolio_media_receipt_conflict', 'prepare_time_budget_reached'].includes(error.message)
+          'portfolio_media_changed', 'owner_private_file_required', 'scheduler_worker_busy', 'approved_asset_conflict', 'portfolio_media_receipt_conflict', 'prepare_time_budget_reached',
+          'approved_queue_capacity', 'portfolio_receipt_capacity', 'approved_scheduler_input_invalid', 'portfolio_media_ledger_invalid'].includes(error.message)
           ? error.message : 'prepare_validation_or_provider_unconfirmed';
         outcomes.push({ id, status: 'held', reason });
       }
@@ -372,10 +431,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       const input = JSON.parse(raw), auth = input.authorization;
       if (!auth || !ID.test(auth.requestId ?? '') || !SHA.test(auth.packetSha256 ?? '') || !SHA.test(auth.outputSha256 ?? '')) throw Error();
       const root = await realpath(path.resolve(auth.workspaceRoot));
+      await livePreparation(root, auth);
       const packet = await ownerJson(root, `${CONFIG}/prepare-requests/${auth.requestId}.json`);
       if (digest(packet) !== auth.packetSha256 || packet.outputSha256 !== auth.outputSha256) throw Error();
       const renderApi = await import('./clippers-portfolio-render.mjs');
       await renderAndApprove(root, auth.requestId, new Date(), renderApi);
+      if (process.argv[3] !== 'readiness') await claimDriveOperation(root, auth, process.argv[3], input);
       const drive = await import('../server/google-drive.ts'); let result;
       if (process.argv[3] === 'readiness') result = { connected: true, existingFolderId: await drive.findDriveFolderPath([drive.DRIVE_APP_ROOT_FOLDER, drive.DRIVE_CLIPPERS_MEDIA_FOLDER, 'Portfolio reviewed media']) };
       else if (process.argv[3] === 'folder') result = { folderId: await drive.ensureAppDriveFolderPath([drive.DRIVE_CLIPPERS_MEDIA_FOLDER, 'Portfolio reviewed media']) };
@@ -394,5 +455,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       else throw Error();
       process.stdout.write(JSON.stringify(result)); process.exit(0);
     } catch { process.exit(1); }
-  } else console.log(JSON.stringify(await runClippersPortfolioPrepare(), null, 2));
+  } else {
+    // Schedulers can invoke this CLI as a bounded child even if local I/O stalls.
+    setTimeout(() => process.exit(124), 120_000).unref();
+    console.log(JSON.stringify(await runClippersPortfolioPrepare(), null, 2));
+  }
 }

@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawnSync } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, realpath, rm, writeFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { promisify } from 'node:util';
 import test from 'node:test';
-import { runClippersPortfolioPrepare, verifyPublicBytes, publicDriveUrl, driveHelperEnvironment } from '../script/clippers-portfolio-prepare.mjs';
+import { runClippersPortfolioPrepare, verifyPublicBytes, publicDriveUrl, driveHelperEnvironment, claimDriveOperation } from '../script/clippers-portfolio-prepare.mjs';
 import { renderClippersPortfolio, confirmedRenderReceipt } from '../script/clippers-portfolio-render.mjs';
 import { runClippersDailyLearning } from '../script/clippers-daily-learning.mjs';
 import { DESTINATIONS, destinationKey } from '../script/clippers-portfolio-metricool.mjs';
@@ -129,6 +129,53 @@ test('protected, wrong-network, changed render or unreviewed packets hold before
   assert.equal(f.calls.upload, 0);
 });
 
+test('cached media cannot be relabeled with another approved source or cut', { skip: !hasTools }, async t => {
+  const f = await fixture(t), original = f.packets[0];
+  for (const change of [request => { request.sourceSha256 = 'b'.repeat(64); request.rights.sourceSha256 = request.sourceSha256; },
+    request => { request.sourceStartSeconds = 1; }]) {
+    const request = structuredClone(original.request); change(request);
+    await f.write(`${CONFIG}/render-requests/${request.id}.json`, request);
+    await f.write(`${CONFIG}/prepare-requests/${request.id}.json`, { ...original.packet, renderRequestSha256: digest(request) });
+    const result = await f.run();
+    assert.equal(result.prepared, 0); assert.equal(result.outcomes[0].reason, 'reviewed_render_output_changed');
+    assert.equal(f.calls.upload, 0); assert.equal(f.calls.public, 0);
+  }
+});
+
+test('obvious same-id queue conflicts and stale packets cannot trigger needless public writes or starve a valid packet', { skip: !hasTools }, async t => {
+  const f = await fixture(t), original = f.packets[0];
+  await f.write(`${CONFIG}/approved-input.json`, { schemaVersion: 1, publish: false, collect: false, reviews: [],
+    assets: [{ ...DESTINATIONS[0], id: original.packet.id, caption: 'Known conflicting text', scheduledAt: original.packet.scheduledAt }] });
+  const held = await f.run(); assert.equal(held.prepared, 0); assert.equal(held.outcomes[0].reason, 'approved_asset_conflict');
+  assert.equal(f.calls.upload, 0); assert.equal(f.calls.public, 0);
+  await f.write(`${CONFIG}/approved-input.json`, { schemaVersion: 1, publish: false, collect: false, reviews: [], assets: [] });
+  for (let index = 0; index < 20; index++) await f.write(`${CONFIG}/prepare-requests/aaa-stale-${index}.json`,
+    { ...original.packet, id: 'aaa-stale-' + index, scheduledAt: '2026-11-17T17:00:00.000Z' });
+  const prepared = await f.run(); assert.equal(prepared.prepared, 1);
+  assert.equal(f.calls.upload, 1, 'twenty invalid earlier names do not consume the usable-packet budget');
+});
+
+test('Drive mutations have one-time durable claims tied to a live preparation and expected ledger state', { skip: !hasTools }, async t => {
+  const f = await fixture(t), item = f.packets[0], sha = item.rendered.outputSha256;
+  const active = { pid: process.ppid, nonce: randomUUID(), startedAt: new Date().toISOString() };
+  await f.write(`${REPORT}/portfolio-prepare.lock`, active);
+  const upload = { sha256: sha, status: 'upload_unknown', folderId: 'private-folder-0001' };
+  await f.write(`${REPORT}/portfolio-upload-state.json`, { schemaVersion: 1, uploads: { [sha]: upload }, targets: [] });
+  const auth = { outputSha256: sha, packetSha256: digest(item.packet), parentPid: active.pid, operationNonce: active.nonce };
+  await assert.rejects(claimDriveOperation(f.root, auth, 'upload', { folderId: 'wrong-folder-0001' }), /drive_operation_state_invalid/);
+  await claimDriveOperation(f.root, auth, 'upload', { folderId: upload.folderId });
+  await assert.rejects(claimDriveOperation(f.root, auth, 'upload', { folderId: upload.folderId }), /EEXIST/);
+  upload.status = 'sharing_unknown'; upload.fileId = 'fixture-drive-file-1';
+  await f.write(`${REPORT}/portfolio-upload-state.json`, { schemaVersion: 1, uploads: { [sha]: upload }, targets: [] });
+  await claimDriveOperation(f.root, auth, 'public', { fileId: upload.fileId });
+  await assert.rejects(claimDriveOperation(f.root, auth, 'public', { fileId: upload.fileId }), /EEXIST/);
+  upload.status = 'ready';
+  await f.write(`${REPORT}/portfolio-upload-state.json`, { schemaVersion: 1, uploads: { [sha]: upload }, targets: [] });
+  await assert.rejects(claimDriveOperation(f.root, auth, 'upload', { folderId: upload.folderId }), /drive_operation_state_invalid/);
+  await f.write(`${REPORT}/portfolio-prepare.lock`, { ...active, nonce: randomUUID() });
+  await assert.rejects(claimDriveOperation(f.root, auth, 'public', { fileId: upload.fileId }), /prepare_parent_unconfirmed/);
+});
+
 test('an uncertain upload is persisted before the call and never repeated', { skip: !hasTools }, async t => {
   const f = await fixture(t); let uploads = 0;
   f.adapter.uploadFile = async () => { uploads++; const state = JSON.parse(await readFile(path.join(f.root, REPORT, 'portfolio-upload-state.json')));
@@ -154,13 +201,16 @@ test('an occupied scheduler slot prevents new public upload', { skip: !hasTools 
   assert.equal(result.outcomes[0].reason, 'destination_daily_cap_or_slot_conflict'); assert.equal(f.calls.upload, 0);
 });
 
-test('five existing destination slots and changed approved bytes hold before upload', { skip: !hasTools }, async t => {
+test('five existing slots, full queue and changed approved bytes hold before upload', { skip: !hasTools }, async t => {
   const f = await fixture(t); const destination = DESTINATIONS[0];
   await f.write(`${CONFIG}/approved-input.json`, { schemaVersion: 1, publish: false, collect: false, reviews: [],
     assets: ['17', '19', '21', '23'].map((hour, i) => ({ ...destination, id: 'old-' + i,
       scheduledAt: `2026-11-18T${hour}:00:00.000Z` })).concat([{ ...destination, id: 'old-4', scheduledAt: '2026-11-19T01:00:00.000Z' }]) });
   assert.equal((await f.run()).outcomes[0].reason, 'destination_daily_cap_or_slot_conflict');
   assert.equal(f.calls.upload, 0);
+  await f.write(`${CONFIG}/approved-input.json`, { schemaVersion: 1, publish: false, collect: false, reviews: [],
+    assets: Array.from({ length: 250 }, (_, i) => ({ ...destination, id: 'historic-' + i, scheduledAt: '2026-01-01T17:00:00.000Z' })) });
+  assert.equal((await f.run()).outcomes[0].reason, 'approved_queue_capacity'); assert.equal(f.calls.upload, 0);
   await f.write(`${CONFIG}/approved-input.json`, { schemaVersion: 1, publish: false, collect: false, reviews: [], assets: [] });
   await writeFile(path.join(f.root, f.packets[0].rendered.draftFile), 'changed after review');
   assert.equal((await f.run()).prepared, 0); assert.equal(f.calls.upload, 0);
