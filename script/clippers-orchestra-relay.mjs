@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { buildClippersOrchestraReport } from './clippers-orchestra-report.mjs';
-/** Only the proven Office origin may receive Clippers telemetry; no token is accepted by this function. */
+/** Only the two owner-verified connected domains of the same Office project may receive Clippers telemetry; no token is accepted by this function. */
 export function clippersOrchestraRemoteEligibility(value,tokenConfigured){
-  try{const u=new URL(value),allowed=u.origin==='https://robertwebsites.com'&&!u.username&&!u.password&&!u.search&&!u.hash&&(u.pathname==='/'||u.pathname==='');
+  try{const u=new URL(value),allowed=['https://robertwebsites.com','https://robplanner.replit.app'].includes(u.origin)&&!u.username&&!u.password&&!u.search&&!u.hash&&(u.pathname==='/'||u.pathname==='');
     return {allowed:allowed&&tokenConfigured===true,host:u.hostname,tokenConfigured:tokenConfigured===true,reason:!allowed?'office_origin_unverified':tokenConfigured!==true?'existing_device_auth_unavailable':null};
   }catch{return {allowed:false,host:null,tokenConfigured:tokenConfigured===true,reason:'office_origin_unverified'};}
 }

@@ -171,7 +171,8 @@ test('owner GET route denies other identities and scope changes, sanitizes error
 test('telemetry requires proven Office HTTPS origin and only reports safe origin/auth booleans',async()=>{
  const {clippersOrchestraRemoteEligibility}=await import('../script/clippers-orchestra-relay.mjs');
  assert.equal(clippersOrchestraRemoteEligibility('https://robertwebsites.com',true).allowed,true);
- for(const url of ['https://wrong.example','http://robertwebsites.com','https://robertwebsites.com.evil.test','https://robertwebsites.com/?token=private','https://ROBPLANNER.replit.app'])assert.equal(clippersOrchestraRemoteEligibility(url,true).allowed,false);
+ assert.equal(clippersOrchestraRemoteEligibility('https://ROBPLANNER.replit.app',true).allowed,true);
+ for(const url of ['https://wrong.example','http://robertwebsites.com','https://robertwebsites.com.evil.test','https://robertwebsites.com/?token=private','https://other.replit.app','https://robplanner.replit.app.evil.test'])assert.equal(clippersOrchestraRemoteEligibility(url,true).allowed,false);
  assert.equal(clippersOrchestraRemoteEligibility('https://robertwebsites.com',false).allowed,false);
  assert.ok(!JSON.stringify(clippersOrchestraRemoteEligibility('https://robertwebsites.com/?token=private',true)).includes('private'));
 });
