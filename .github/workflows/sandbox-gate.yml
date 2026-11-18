@@ -158,7 +158,8 @@ jobs:
           set -euo pipefail
           # The regional EC2 mirror can download media packages extremely slowly.
           # Use Ubuntu's primary archive; suites, components and signing keys stay intact.
-          for source in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources; do
+          # Hosted images may route these sources through a file-based mirror list.
+          for source in /etc/apt/sources.list /etc/apt/sources.list.d/ubuntu.sources /etc/apt/apt-mirrors.txt; do
             if [ -f "$source" ]; then
               sudo sed -i -E 's#https?://([[:alnum:].-]+\.)?archive\.ubuntu\.com/ubuntu#https://archive.ubuntu.com/ubuntu#g' "$source"
             fi
