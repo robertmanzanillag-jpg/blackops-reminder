@@ -545,6 +545,7 @@ export const ALL_DISCOVERY_CREATORS = freeze([...PRIORITY_CREATORS,...CHALLENGER
 const aliasKey = value => typeof value === 'string' ? value.normalize('NFKC').toLowerCase().replace(/^@/,'').replace(/[\s_-]+/g,'') : '';
 export function resolveCreatorGroup(value) {
   if (typeof value !== 'string') return null;
+  value=value.normalize('NFKC');
   if (value.startsWith('@')) {
     const channel=ALL_DISCOVERY_CREATORS.find(row=>row.handle.toLowerCase()===value.slice(1).toLowerCase());
     return channel?KNOWN_CREATOR_GROUPS.find(group=>group.id===channel.creatorGroupId)??null:null;

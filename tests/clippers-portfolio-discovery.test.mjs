@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { ALL_DISCOVERY_CREATORS } from '../shared/clippers-priority-creators.mjs';
 import { mkdtemp, readFile, readdir, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
-  DISCOVERY_CREATORS, feedUrl, assertFeedUrl, parseYouTubeFeed, fetchYouTubeFeed,
+  DISCOVERY_CREATORS, PRIORITY_CREATORS, CHALLENGER_CREATORS, DEFAULT_DISCOVERY_STATE_DIR, feedUrl, assertFeedUrl, parseYouTubeFeed, fetchYouTubeFeed,
   selectCreators, classifyDiscovery, runPortfolioDiscovery,
 } from '../script/clippers-portfolio-discovery.mjs';
 
@@ -20,13 +21,14 @@ test('fixed catalogue covers requested creators and languages without caller URL
   assert.equal(DISCOVERY_CREATORS.length, 8);
   for (const id of ['thegrefg', 'vegetta777', 'rubius', 'lacy']) assert.ok(DISCOVERY_CREATORS.some(row => row.id === id));
   assert.deepEqual([...new Set(DISCOVERY_CREATORS.map(row => row.language))].sort(), ['de', 'en', 'es', 'fr', 'ja', 'pt-BR']);
-  const day1 = selectCreators(NOW), day2 = selectCreators(new Date(+NOW + 86_400_000));
-  assert.equal(day1.length, 4); assert.equal(day2.length, 4);
-  assert.equal(new Set([...day1, ...day2].map(row => row.id)).size, 8);
-  assert.deepEqual(selectCreators(NOW, ['lacy', 'thegrefg']).map(row => row.id), ['thegrefg', 'lacy']);
-  assert.throws(() => selectCreators(NOW, ['lacy', 'lacy']), /unique/);
-  assert.throws(() => selectCreators(NOW, ['unknown']), /catalogue/);
-  assert.throws(() => selectCreators(NOW, DISCOVERY_CREATORS.slice(0, 5).map(row => row.id)), /four/);
+  const day1=selectCreators(NOW);assert.equal(day1.length,14);
+  assert.deepEqual(day1.slice(0,13),PRIORITY_CREATORS);
+  const challengers=Array.from({length:7},(_,i)=>selectCreators(new Date(+NOW+i*86400000))[13].id);
+  assert.equal(new Set(challengers).size,CHALLENGER_CREATORS.length);
+  assert.deepEqual(selectCreators(NOW,['lacy','thegrefg']).map(row=>row.id),['thegrefg','lacy']);
+  assert.throws(()=>selectCreators(NOW,['lacy','lacy']),/unique/);
+  assert.throws(()=>selectCreators(NOW,['unknown']),/catalogue/);
+  assert.throws(()=>selectCreators(NOW,[...PRIORITY_CREATORS,...CHALLENGER_CREATORS].slice(0,15).map(row=>row.id)),/fourteen/);
 });
 
 test('feed transport rejects SSRF, credentials, ports, encoded paths, query pollution and aliases', () => {
@@ -149,7 +151,8 @@ test('daily receipt is private, durable and idempotent; incomplete feeds persist
       fetchImpl: async () => response('', { status: 429 }) });
     assert.equal(next.feeds[0].status, 'unavailable'); assert.equal(next.feeds[0].reason, 'feed_throttled');
     assert.equal(next.observations.length, 0); assert.equal(next.eligibleAssets, 0);
-    assert.equal((await readdir(dir)).filter(name => name.endsWith('.json')).length, 2);
+    assert.equal((await readdir(dir)).filter(name => /^\d{4}-\d\d-\d\d-v2-[a-f0-9]{16}\.json$/.test(name)).length, 2);
+    for(const day of [NOW.toISOString().slice(0,10),new Date(+NOW+86400000).toISOString().slice(0,10)]){const budget=JSON.parse(await readFile(path.join(dir,`.rss-budget-${day}.json`),'utf8'));assert.equal(budget.used,1);assert.equal(budget.cap,14);}
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
@@ -163,3 +166,63 @@ test('symlink storage roots cannot redirect receipts into another workspace', as
 });
 
 async function mkdirSafe(dir) { const { mkdir } = await import('node:fs/promises'); await mkdir(dir, { mode: 0o700 }); }
+
+const newDir=async()=>await realpath(await mkdtemp(path.join(os.tmpdir(),'discovery-budget-')));
+const publicFake=(onCall=()=>{})=>async(url,options)=>{
+  const channelId=new URL(url).searchParams.get('channel_id');onCall(channelId,options);
+  return response(feed(entry({channelId,id:channelId.slice(2,13)}),channelId));
+};
+test('daily default reserves14 durable slots, concurrency2 and all13 priorities; variants/cache cannot spend again',async()=>{
+ const dir=await newDir();let calls=0,active=0,max=0;
+ const fetchImpl=async(url,opt)=>{calls++;active++;max=Math.max(max,active);await new Promise(r=>setTimeout(r,2));active--;return publicFake()(url,opt);};
+ try{
+  const first=await runPortfolioDiscovery({stateDir:dir,now:NOW,fetchImpl});assert.equal(calls,14);assert.equal(max,2);assert.equal(first.schemaVersion,2);assert.equal(first.feeds.length,14);assert.equal(first.priorityChannels,13);assert.equal(first.budget.used,14);assert.equal(first.budget.remaining,0);
+  assert.deepEqual(first.feeds.slice(0,13).map(r=>r.channelId),PRIORITY_CREATORS.map(r=>r.channelId));
+  assert.ok(first.observations.every(r=>r.originalEpisodeId===null&&r.independentExperiment===false&&r.language===null&&r.format==='unknown'&&r.research.growthStatus==='first_snapshot_baseline'));
+  const replay=await runPortfolioDiscovery({stateDir:dir,now:NOW,fetchImpl});assert.equal(replay.networkRequestsThisInvocation,0);assert.equal(replay.reused,true);
+  for(const row of ALL_DISCOVERY_CREATORS)await runPortfolioDiscovery({stateDir:dir,now:NOW,creatorIds:[row.id],fetchImpl});assert.equal(calls,14);
+  const budget=JSON.parse(await readFile(path.join(dir,'.rss-budget-2026-11-18.json'),'utf8'));assert.equal(budget.used,14);assert.equal(budget.reservations.length,14);assert.equal((await stat(path.join(dir,'.rss-budget-2026-11-18.json'))).mode&0o777,0o600);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('manual configuration churn cannot consume more than one challenger slot or starve priority budget',async()=>{
+ const dir=await newDir();let calls=0;
+ try{const fetchImpl=publicFake(()=>calls++);const due=selectCreators(NOW)[13];
+  for(const c of CHALLENGER_CREATORS){const result=await runPortfolioDiscovery({stateDir:dir,now:NOW,creatorIds:[c.id],fetchImpl});assert.equal(result.networkRequestsThisInvocation,c.id===due.id?1:0);if(c.id!==due.id)assert.equal(result.feeds[0].reason,'challenger_not_due_today');}
+  const full=await runPortfolioDiscovery({stateDir:dir,now:NOW,fetchImpl});assert.equal(calls,14);assert.equal(full.feeds.filter(f=>f.status==='observed').length,14);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('legacy receipts today consume global budget and remain byte intact; first upgrade is honestly partial',async()=>{
+ const dir=await newDir();let calls=0;
+ try{const old=DISCOVERY_CREATORS.slice(0,4);const legacy={schemaVersion:1,day:'2026-11-18',observedAt:NOW.toISOString(),paidSpendUsd:0,mayPublish:false,permission:'unknown',eligibleAssets:0,networkRequests:4,feeds:old.map(c=>({creatorId:c.id,channelId:c.channelId,sourceUrl:feedUrl(c.channelId),status:'observed',feedSha256:'a'.repeat(64)})),observations:old.flatMap(c=>parseYouTubeFeed(feed(entry({channelId:c.channelId,id:c.channelId.slice(2,13)}),c.channelId),c,NOW.toISOString()).observations)};
+ const file=path.join(dir,'2026-11-18-0000000000000000.json'),raw=JSON.stringify(legacy);await writeFile(file,raw,{mode:0o600});
+ const result=await runPortfolioDiscovery({stateDir:dir,now:NOW,fetchImpl:publicFake(()=>calls++)});assert.equal(calls,10);assert.equal(result.budget.used,14);assert.equal(await readFile(file,'utf8'),raw);
+ const budget=JSON.parse(await readFile(path.join(dir,'.rss-budget-2026-11-18.json'),'utf8'));assert.equal(budget.importedRequests,4);assert.equal(budget.reservations.length,10);
+ await runPortfolioDiscovery({stateDir:dir,now:NOW,creatorIds:[PRIORITY_CREATORS[0].id],fetchImpl:publicFake(()=>calls++)});assert.equal(calls,10);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('two concurrent invocations share exclusive journal and cannot exceed14 requests',async()=>{
+ const dir=await newDir();let calls=0;
+ try{const fetchImpl=async(url,opts)=>{calls++;await new Promise(r=>setTimeout(r,3));return publicFake()(url,opts);};const results=await Promise.allSettled([runPortfolioDiscovery({stateDir:dir,now:NOW,fetchImpl}),runPortfolioDiscovery({stateDir:dir,now:NOW,fetchImpl})]);assert.equal(results.filter(r=>r.status==='fulfilled').length,1);assert.equal(results.filter(r=>r.status==='rejected'&&r.reason.code==='EEXIST').length,1);assert.equal(calls,14);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('lost outcome stays reserved with no automatic replay, even after changing manual creator set',async()=>{
+ const dir=await newDir();let calls=0;
+ try{const c=PRIORITY_CREATORS[0],fetchImpl=publicFake(()=>calls++);await runPortfolioDiscovery({stateDir:dir,now:NOW,creatorIds:[c.id],fetchImpl});
+ for(const name of await readdir(dir))if(name.startsWith('2026-11-18-v2-')||name.startsWith('2026-11-18-channel-'))await rm(path.join(dir,name));
+ const held=await runPortfolioDiscovery({stateDir:dir,now:NOW,creatorIds:[c.id,PRIORITY_CREATORS[1].id],fetchImpl});assert.equal(calls,2);assert.equal(held.feeds[0].reason,'reserved_request_outcome_unknown');assert.equal(held.budget.used,2);
+ const replay=await runPortfolioDiscovery({stateDir:dir,now:NOW,creatorIds:[c.id],fetchImpl});assert.equal(replay.networkRequestsThisInvocation,0);assert.equal(calls,2);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('missing or corrupted journal with existing v2 evidence fails closed rather than resetting spend',async()=>{
+ const dir=await newDir();let calls=0;
+ try{const fetchImpl=publicFake(()=>calls++);await runPortfolioDiscovery({stateDir:dir,now:NOW,creatorIds:[PRIORITY_CREATORS[0].id],fetchImpl});await rm(path.join(dir,'.rss-budget-2026-11-18.json'));
+ await assert.rejects(runPortfolioDiscovery({stateDir:dir,now:NOW,creatorIds:[PRIORITY_CREATORS[1].id],fetchImpl}),/missing_discovery_budget/);assert.equal(calls,1);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});
+test('deadline/day boundary stops undispatched reserved requests and transport timeout bounds a stalled fake',async()=>{
+ for(const [date,elapsed]of[[NOW,90001],[new Date('2026-11-18T23:59:59.900Z'),500]]){const dir=await newDir();let ticks=0,calls=0;try{const result=await runPortfolioDiscovery({stateDir:dir,now:date,clock:()=>ticks++===0?0:elapsed,fetchImpl:publicFake(()=>calls++)});assert.equal(calls,0);assert.equal(result.budget.used,14);assert.ok(result.feeds.every(f=>f.reason==='discovery_deadline_or_day_changed'));}finally{await rm(dir,{recursive:true,force:true});}}
+ const start=Date.now();await assert.rejects(fetchYouTubeFeed(creator,{now:NOW,timeoutMs:10,fetchImpl:()=>new Promise(()=>{})}),/feed_timeout/);assert.ok(Date.now()-start<1000);
+});
+test('native production transport cannot select an alternate state root to reset the daily cap',async()=>{
+ const dir=await newDir();try{assert.notEqual(dir,DEFAULT_DISCOVERY_STATE_DIR);await assert.rejects(runPortfolioDiscovery({stateDir:dir,now:NOW}),/canonical_operational/);}finally{await rm(dir,{recursive:true,force:true});}
+});

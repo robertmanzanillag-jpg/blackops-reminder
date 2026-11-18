@@ -10,7 +10,7 @@ test('13 primary reviewed channels represent10 requested creator groups without 
 });
 test('Jordi/show, Rubius and German channels retain distinct sources but one canonical creator group',()=>{
  for(const aliases of [['JordiWild','The Wild Project','@TheWildProject','UCDZsyOkn-WTiTwgAvZSQ_cg'],['rubuios','Rubius','@elrubius','UCcjIvuxmWlS5IEQ0JdPV4Ng'],['SoyGerman','HolaSoyGerman','JuegaGerman']])assert.equal(new Set(aliases.map(a=>resolveCreatorGroup(a)?.id)).size,1);
- assert.equal(resolveCreatorGroup('TJR')?.id,'tjr-trading');assert.equal(resolveCreatorGroup('@TJRofficial'),null);assert.equal(resolveCreatorGroup('@TRichesTrades'),null);assert.equal(resolveCreatorGroup('@RubiusZ'),null);assert.equal(resolveCreatorGroup('@ibai'),null);assert.equal(resolveCreatorGroup('unknown'),null);
+ assert.equal(resolveCreatorGroup('TJR')?.id,'tjr-trading');assert.equal(resolveCreatorGroup('@TJRofficial'),null);assert.equal(resolveCreatorGroup('@TRichesTrades'),null);assert.equal(resolveCreatorGroup('@RubiusZ'),null);assert.equal(resolveCreatorGroup('＠RubiusZ'),null);assert.equal(resolveCreatorGroup('@ibai'),null);assert.equal(resolveCreatorGroup('unknown'),null);
  const show=resolveCreatorChannel('UCBYyJBCtCvgqA4NwtoPMwpQ'),personal=resolveCreatorChannel('UCDZsyOkn-WTiTwgAvZSQ_cg');assert.notEqual(show.id,personal.id);assert.equal(show.creatorGroupId,personal.creatorGroupId);
  assert.equal(resolveCreatorChannel('TheWildProject'),null);assert.equal(resolveCreatorChannel('UCzExIqRGZ6EXRBJ_CYIC5LQ'),null);
 });
