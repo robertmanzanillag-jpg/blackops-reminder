@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T11:04:03.472Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-private-replit-transport-20261118",
+  "generatedAt": "2026-11-18T11:32:48.141Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-viral-scout-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -125,10 +125,10 @@
   },
   "totals": {
     "filesVisible": 1202,
-    "filesIndexed": 1098,
-    "imports": 4386,
+    "filesIndexed": 1099,
+    "imports": 4395,
     "routes": 623,
-    "symbols": 24910
+    "symbols": 24964
   },
   "directories": {
     ".": {
@@ -203,10 +203,10 @@
       }
     },
     "docs": {
-      "files": 76,
-      "indexed": 72,
+      "files": 73,
+      "indexed": 71,
       "kinds": {
-        "docs": 76
+        "docs": 73
       }
     },
     "examples/clippers-motivation": {
@@ -260,10 +260,10 @@
       }
     },
     "shared": {
-      "files": 33,
-      "indexed": 32,
+      "files": 35,
+      "indexed": 33,
       "kinds": {
-        "shared": 33
+        "shared": 35
       }
     },
     "shared/models": {
@@ -274,10 +274,10 @@
       }
     },
     "tests": {
-      "files": 315,
-      "indexed": 311,
+      "files": 316,
+      "indexed": 312,
       "kinds": {
-        "test": 315
+        "test": 316
       }
     },
     "tests/fixtures": {
@@ -1174,6 +1174,7 @@
         "@/lib/queryClient",
         "@shared/clippers-office-agents",
         "@shared/clippers-orchestra",
+        "@shared/clippers-viral-scout.mjs",
         "@tanstack/react-query",
         "lucide-react",
         "react",
@@ -1183,6 +1184,7 @@
         "CLIPPERS_ORCHESTRA_ENDPOINT",
         "ClippersOfficeArea",
         "ClippersOfficeReport",
+        "ClippersViralScout",
         "clippersEvidenceFresh",
         "clippersVisibleRoleState"
       ],
@@ -1191,6 +1193,7 @@
         "CLIPPERS_ORCHESTRA_ENDPOINT",
         "ClippersOfficeArea",
         "ClippersOfficeReport",
+        "ClippersViralScout",
         "OrchestraData",
         "Reasons",
         "Time",
@@ -1198,6 +1201,7 @@
         "career",
         "clippersEvidenceFresh",
         "clippersVisibleRoleState",
+        "current",
         "data",
         "dateFormat",
         "deadlines",
@@ -5827,6 +5831,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-viral-scout.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-youtube-api-audit-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -5868,22 +5880,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -9717,6 +9713,7 @@
       "kind": "script",
       "imports": [
         "../shared/clippers-priority-creators.mjs",
+        "../shared/clippers-viral-scout.mjs",
         "./clippers-portfolio-metricool.mjs",
         "./clippers-portfolio-render.mjs",
         "node:crypto",
@@ -9798,6 +9795,7 @@
         "names",
         "nextDaily",
         "nextDue",
+        "objectRow",
         "observations",
         "outcome",
         "outcomes",
@@ -33082,7 +33080,8 @@
       "path": "shared/clippers-orchestra.ts",
       "kind": "shared",
       "imports": [
-        "./clippers-priority-creators.mjs"
+        "./clippers-priority-creators.mjs",
+        "./clippers-viral-scout.mjs"
       ],
       "exports": [
         "ClippersAccountView",
@@ -33166,6 +33165,50 @@
         "resolveCreatorChannel",
         "resolveCreatorGroup",
         "url"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/clippers-viral-scout.mjs",
+      "kind": "shared",
+      "imports": [
+        "./clippers-priority-creators.mjs"
+      ],
+      "exports": [
+        "buildViralScout",
+        "parseViralScout"
+      ],
+      "symbols": [
+        "HOUR",
+        "MAX_CANDIDATES",
+        "SHA",
+        "VIDEO",
+        "at",
+        "buildViralScout",
+        "c",
+        "compareCandidates",
+        "count",
+        "creators",
+        "current",
+        "feedProof",
+        "feedUrl",
+        "growthViews",
+        "iso",
+        "key",
+        "keys",
+        "object",
+        "observation",
+        "owner",
+        "parseViralScout",
+        "previous",
+        "result",
+        "row",
+        "rows",
+        "same",
+        "sampleSpanHours",
+        "snapshots",
+        "videos",
+        "watchUrl"
       ],
       "routes": []
     },
@@ -37571,6 +37614,7 @@
       "imports": [
         "../script/software-factory-office-ui-fixture.mjs",
         "../shared/clippers-priority-creators.mjs",
+        "../shared/clippers-viral-scout.mjs",
         "./client/src/components/clippers-office-area",
         "./client/src/lib/queryClient",
         "./fixtures/clippers-orchestra.mjs",
@@ -37594,6 +37638,7 @@
         "assets",
         "browser",
         "context",
+        "creator",
         "css",
         "cssFiles",
         "dialog",
@@ -37605,14 +37650,20 @@
         "oldSources",
         "origin",
         "page",
+        "previousAt",
         "previousTmp",
         "privateReads",
+        "publicReceipt",
+        "publicRow",
         "reads",
         "requests",
+        "scout",
         "server",
+        "sourceUrl",
         "temp",
         "tempRoot",
-        "trigger"
+        "trigger",
+        "video"
       ],
       "routes": [
         "/",
@@ -38393,6 +38444,34 @@
         "root",
         "skipped",
         "sourceUrl"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clippers-viral-scout.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../shared/clippers-priority-creators.mjs",
+        "../shared/clippers-viral-scout.mjs",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "at",
+        "bad",
+        "big",
+        "c",
+        "good",
+        "input",
+        "other",
+        "prior",
+        "r",
+        "receipt",
+        "row",
+        "rows",
+        "run"
       ],
       "routes": []
     },

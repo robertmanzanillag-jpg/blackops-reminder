@@ -27,6 +27,16 @@ test('empty workspace is disconnected, not four fake zero accounts or nine runni
  assert.ok(r.accounts.every((a:any)=>a.eligibleAssets===null&&a.confirmedScheduledOrPublished===null&&a.analytics.status==='unavailable'));
  assert.ok(r.roles.every((a:any)=>a.state==='disconnected'&&a.heartbeatAt===null&&a.activeUntil===null&&!a.career.registered&&a.career.battery===null&&a.outcomes.length===0));
  assert.equal(r.discovery.eligibleAssets,null);assert.equal(r.learning.promotions,null);assert.equal(r.safety.paidSpendUsd,0);
+ assert.equal(r.discovery.scout.status,'no_data');assert.equal(Object.hasOwn(r.roles.find((r:any)=>r.stage==='trends').outputs,'researchCandidates'),false);
+}));
+test('malformed optional feed rows preserve the report and valid source candidates',async()=>fixture(async root=>{
+ const {PRIORITY_CREATORS}=await import('../shared/clippers-priority-creators.mjs');const c=PRIORITY_CREATORS[0],sourceUrl=`https://www.youtube.com/feeds/videos.xml?channel_id=${c.channelId}`;
+ const receipt={schemaVersion:2,day:'2026-11-18',observedAt:now().toISOString(),paidSpendUsd:0,permission:'unknown',mayPublish:false,
+  feeds:[null,{creatorId:c.id,channelId:c.channelId,status:'observed',sourceUrl,feedSha256:'a'.repeat(64)}],
+  observations:[null,[],{}, {creatorId:c.id,channelId:c.channelId,network:'youtube',videoId:'abcdefghijk',title:'Original public source',url:'https://www.youtube.com/watch?v=abcdefghijk',sourceUrl,publishedAt:'2026-11-18T12:00:00.000Z',observedAt:now().toISOString(),views:100,metricEvidence:'direct_public_feed',permission:'unknown',mayPublish:false}]};
+ await save(root,`portfolio-discovery/2026-11-18-channel-${c.channelId}.json`,receipt);
+ let r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.equal(r.discovery.scout.candidates.length,1);assert.equal(r.discovery.sources.find((s:any)=>s.creatorId===c.id).status,'observed');
+ receipt.observations=[null,[]];await save(root,`portfolio-discovery/2026-11-18-channel-${c.channelId}.json`,receipt);r=await base(root);assert.equal(r.discovery.scout.status,'no_recent_candidates');assert.equal(r.roles.find((r:any)=>r.stage==='trends').outputs.researchCandidates,0);assert.ok(parseClippersOrchestraStatus(r,NOW));
 }));
 test('private files reject world-readable or symlinked evidence',async()=>fixture(async root=>{
  await save(root,'reports/clippers-daily-watchdog/latest.json',{generatedAt:now().toISOString(),checkHour:10});await chmod(path.join(root,'reports/clippers-daily-watchdog/latest.json'),0o644);
@@ -244,9 +254,13 @@ test('real discovery producer receipts project empty success, stable replay fres
  };
  await runPortfolioDiscovery({stateDir:dir,now:now(),fetchImpl});const first=await buildClippersOrchestraReport({workspaceRoot:root,now:new Date(NOW+10000)});assert.equal(calls,14);assert.ok(parseClippersOrchestraStatus(first,NOW+10000));
  const empty=first.discovery.sources.find((s:any)=>s.channelId===PRIORITY_CREATORS[0].channelId)!;assert.equal(empty.status,'observed');assert.equal(empty.observations,0);assert.ok(empty.observedAt);
+ assert.equal(first.discovery.scout.requestsAdded,0);assert.equal(first.discovery.scout.candidates.length,13);assert.equal(first.discovery.scout.candidates[0].evidence,'popularity_observed');assert.ok(first.discovery.scout.candidates.every((c:any)=>c.url===`https://www.youtube.com/watch?v=${c.videoId}`&&c.rights==='unknown'&&c.mayPublish===false));
  const creator=PRIORITY_CREATORS[1],before=first.discovery.sources.find((s:any)=>s.channelId===creator.channelId)!;
  await runPortfolioDiscovery({stateDir:dir,now:new Date(NOW+2*3600000),creatorIds:[creator.id],fetchImpl});const replay=await buildClippersOrchestraReport({workspaceRoot:root,now:new Date(NOW+2*3600000+10000)});assert.equal(calls,14);assert.equal(replay.discovery.sources.find((s:any)=>s.channelId===creator.channelId)!.observedAt,before.observedAt);assert.equal(replay.discovery.observations,first.discovery.observations);
  views=130;await runPortfolioDiscovery({stateDir:dir,now:new Date(NOW+24*3600000),fetchImpl});const second=await buildClippersOrchestraReport({workspaceRoot:root,now:new Date(NOW+24*3600000+10000)});assert.equal(calls,28);assert.ok(parseClippersOrchestraStatus(second,NOW+24*3600000+10000));const signal=second.discovery.signals.find((s:any)=>s.creatorId===creator.id)!;assert.equal(signal.label,'paired_growth_observed');assert.equal(signal.growthViews,30);
+ const candidate=second.discovery.scout.candidates.find((c:any)=>c.creatorId===creator.id)!;assert.equal(candidate.evidence,'growth_observed');assert.equal(candidate.growthViews,30);assert.ok(candidate.sampleSpanHours>=23.99);assert.equal(candidate.likes,null);
+ const legacy=structuredClone(second);delete legacy.discovery.scout;assert.ok(parseClippersOrchestraStatus(legacy,NOW+24*3600000+10000));
+ const forged=structuredClone(second);forged.discovery.scout.candidates[0].url='https://evil.example/';assert.equal(parseClippersOrchestraStatus(forged,NOW+24*3600000+10000),null);
 }));
 
 test('public growth needs identical channel/video/publication anchor and at least one hour',async()=>fixture(async root=>{
