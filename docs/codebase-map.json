@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T08:09:41.103Z",
+  "generatedAt": "2026-11-18T08:12:43.658Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-orchestra-runtime-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 1081,
     "imports": 4288,
     "routes": 616,
-    "symbols": 24434
+    "symbols": 24439
   },
   "directories": {
     ".": {
@@ -9476,12 +9476,14 @@
         "HOUR",
         "NY_CLOCK",
         "accountAnalysis",
+        "accountObservedAt",
         "accounts",
         "age",
         "ageBuckets",
         "ages",
         "analytics",
         "analyticsAt",
+        "analyticsEvidenceAt",
         "analyticsStale",
         "artifacts",
         "asset",
@@ -9544,11 +9546,13 @@
         "proof",
         "qualifications",
         "qualityImproved",
+        "queueMetricAt",
         "raw",
         "rawAnalytics",
         "rawState",
         "reasons",
         "receipt",
+        "recentMetrics",
         "relative",
         "relevant",
         "renderCache",
@@ -37053,6 +37057,7 @@
         "first",
         "fixture",
         "forged",
+        "fresh",
         "good",
         "handler",
         "id",
