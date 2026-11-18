@@ -1,10 +1,18 @@
-import { canonicalRepairJson } from './kong-repair-bridge';
 import { getSystemUserId } from './user-context';
 import { createHash } from 'node:crypto';
 import { parseClippersOrchestraStatus, type ClippersOrchestraStatus } from '../shared/clippers-orchestra';
 import { applyClippersReceiptOutcomes, clippersCareerView } from './clippers-orchestra-life';
 import type { CompanyState } from '../shared/agent-company';
-const hash=(v:unknown)=>createHash('sha256').update(canonicalRepairJson(v)).digest('hex');
+// Key order is not preserved by PostgreSQL JSONB. Keep telemetry checksums canonical
+// without importing any KONG workflow into the independently deployed Clippers slice.
+function canonicalOrchestraJson(value:unknown):string {
+  if(value===null)return 'null';
+  if(typeof value==='string'||typeof value==='boolean'||(typeof value==='number'&&Number.isFinite(value)))return JSON.stringify(value);
+  if(Array.isArray(value))return '['+value.map(canonicalOrchestraJson).join(',')+']';
+  if(value&&typeof value==='object')return '{'+Object.keys(value).sort().map(key=>JSON.stringify(key)+':'+canonicalOrchestraJson((value as Record<string,unknown>)[key])).join(',')+'}';
+  throw Error('CLIPPERS_ORCHESTRA_INVALID_JSON');
+}
+const hash=(v:unknown)=>createHash('sha256').update(canonicalOrchestraJson(v)).digest('hex');
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/;
 export const CLIPPERS_ORCHESTRA_MAX_BYTES=262144;
 interface Store {read(owner:string):Promise<string|null>;transact(owner:string,update:(raw:string|null)=>Promise<string>):Promise<string>}
