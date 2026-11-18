@@ -458,6 +458,16 @@ export async function runClippersDailyWatchdog(options = {}) {
       report.alerts.publicDiscoveryBlocked = true;
     }
   }
+  if (due && options.dailyOrchestraAnalytics === true) {
+    try {
+      const { collectClippersAccountAnalytics } = await import('./clippers-orchestra-analytics.mjs');
+      const analytics=await collectClippersAccountAnalytics({workspaceRoot,now,env});
+      report.accountAnalytics={generatedAt:analytics.generatedAt,paidSpendUsd:0,
+        status:analytics.accounts.every(row=>row.status==='observed')?'observed':'held_or_partial',
+        accounts:analytics.accounts.map(({brandId,network,account,status,reason,posts})=>({brandId,network,account,status,reason,samples:posts.length}))};
+      if(report.accountAnalytics.status!=='observed')report.alerts.accountAnalyticsHeld=true;
+    } catch { report.accountAnalytics={status:'held',reason:'account_analytics_unavailable',paidSpendUsd:0};report.alerts.accountAnalyticsHeld=true; }
+  }
   if (due && options.dailyPrepare === true) {
     if (env.CLIPPERS_PORTFOLIO_PREPARE_ENABLED !== "true" || env.CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED !== "true") {
       report.portfolioPreparation = { status: "disabled", prepared: 0, uploaded: 0, paidSpendUsd: 0 };
@@ -487,7 +497,7 @@ export async function runClippersDailyWatchdog(options = {}) {
       report.alerts.dailyLearningBlocked = true;
     }
   }
-  if (report.alerts.dailyLearningBlocked || report.alerts.publicDiscoveryBlocked || report.alerts.portfolioPreparationBlocked) {
+  if (report.alerts.dailyLearningBlocked || report.alerts.publicDiscoveryBlocked || report.alerts.portfolioPreparationBlocked || report.alerts.accountAnalyticsHeld) {
     report.alert = true;
     report.status = "alert";
   }
@@ -502,7 +512,7 @@ export async function runClippersDailyWatchdog(options = {}) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const report = await runClippersDailyWatchdog({ dailyLearning: true, dailyDiscovery: true, dailyPrepare: true });
+  const report = await runClippersDailyWatchdog({ dailyLearning: true, dailyDiscovery: true, dailyPrepare: true, dailyOrchestraAnalytics: true });
   console.log(JSON.stringify(report, null, 2));
   if (report.alert) process.exitCode = 2;
 }
