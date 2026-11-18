@@ -147,3 +147,17 @@ test("a measured partial pair cannot be zero-call cancelled or discounted",async
  const f=fixture();await f.trainer.tick();f.setTime(NOW+86400000);await f.trainer.tick();const partial=structuredClone(f.state()),run=partial.runs.at(-1)!;run.status="unknown";delete run.trained;delete run.artifactId;f.seed(partial);let verified=false;
  await assert.rejects(()=>prepareCapabilityCancellation({raw:partial,owner,runId:run.id,fence:run.fence,operatorAuditId:"not-zero",now:NOW+86400100,verify:async()=>{verified=true;throw Error("must not verify a paid phase as absent");}}));assert.equal(verified,false);f.addJob(NOW+86400000);await f.trainer.tick();assert.equal(f.calls(),3);assert.equal(f.state().runs.length,2);
 });
+
+test("paused commercial source and candidate queues reserve no model calls and survive resumption",async()=>{
+ const previous=process.env.CEO_PAUSED_DOMAINS;delete process.env.CEO_PAUSED_DOMAINS;
+ try{
+  const f=fixture();f.generations.revenue=1;f.generations.dropshipping=1;
+  const job=(role:PendingOfficeRole):RoleWorkJob=>{const audit=auditSavedRole(role,undefined,owner,NOW),value:RoleWorkJob={id:randomUUID(),fence:randomUUID(),role,generation:1,slot:new Date(NOW).toISOString().slice(0,10),startedAt:new Date(NOW).toISOString(),expiresAt:new Date(NOW+60000).toISOString(),completedAt:new Date(NOW).toISOString(),status:"blocked",audit};value.artifactId=digest({id:value.id,role,generation:1,fence:value.fence,audit});return value;};
+  f.seedWork({version:1,ownerKey:digest(owner),jobs:[job("revenue"),job("dropshipping")]});
+  await f.trainer.tick();assert.equal(f.calls(),1);const firstRole=f.state().runs[0].role;assert.ok(f.state().policies.some(p=>p.role===firstRole&&p.status==="candidate"));
+  const history=structuredClone(f.state());process.env.CEO_PAUSED_DOMAINS="websites,dropshipping";f.setTime(NOW+86400000);
+  await f.trainer.tick();await f.trainer.tick();assert.equal(f.calls(),1);assert.deepEqual(f.state(),history);
+  process.env.CEO_PAUSED_DOMAINS="";await f.trainer.tick();assert.equal(f.calls(),2);assert.notEqual(f.state().runs.at(-1)!.role,firstRole);
+  assert.deepEqual(f.state().runs.slice(0,1),history.runs);
+ }finally{if(previous===undefined)delete process.env.CEO_PAUSED_DOMAINS;else process.env.CEO_PAUSED_DOMAINS=previous;}
+});

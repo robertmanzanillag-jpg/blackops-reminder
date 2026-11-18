@@ -1,3 +1,4 @@
+import { ceoRolePaused } from "./ceo-domain-policy";
 import {randomUUID} from "node:crypto";
 import {z} from "zod";
 import {sourceDigest as digest,PENDING_OFFICE_ROLES,type PendingOfficeRole} from "./office-role-snapshots";
@@ -112,14 +113,14 @@ export function createCapabilityTrainer(options:{owner:string;transact:(change:(
    const used=state.runs.filter(r=>start-Date.parse(r.startedAt)<86400000).reduce((n,r)=>n+(r.status==="cancelled"?0:r.kind==="holdout"?2:1),0);
    // Give each current holder one real audit before spending paired calls on
    // already-observed holders. Historical runs and generation fences stay intact.
-   const productionJobs=[...work.jobs].sort((a,b)=>Date.parse(a.startedAt)-Date.parse(b.startedAt)||a.id.localeCompare(b.id)).filter(j=>generations[j.role]===j.generation && ["completed","blocked"].includes(j.status) && !state.runs.some(r=>r.kind==="production" && r.task.id===j.id && r.promptVersion===CAPABILITY_PROMPT_VERSION)).filter(j=>{
+   const productionJobs=work.jobs.filter(j=>!ceoRolePaused(j.role)).sort((a,b)=>Date.parse(a.startedAt)-Date.parse(b.startedAt)||a.id.localeCompare(b.id)).filter(j=>generations[j.role]===j.generation && ["completed","blocked"].includes(j.status) && !state.runs.some(r=>r.kind==="production" && r.task.id===j.id && r.promptVersion===CAPABILITY_PROMPT_VERSION)).filter(j=>{
     const policies=state.policies.filter(p=>p.role===j.role&&p.generation===j.generation&&p.promptVersion===CAPABILITY_PROMPT_VERSION);
     // Never silently respawn a retired baseline. Its candidate may still train;
     // unconsumed audits remain in roleWork for a strictly qualified successor.
     return !policies.length||policies.some(p=>["active","probation"].includes(p.status)&&!capabilityPolicyLife(state,p,CAPABILITY_PROMPT_VERSION,gradeCapabilityTriage).retiredAt);
    });
    const firstProduction=productionJobs.find(j=>!state.runs.some(r=>r.kind==="production" && r.role===j.role && r.generation===j.generation && r.promptVersion===CAPABILITY_PROMPT_VERSION));
-   const candidates=state.policies.filter(p=>p.status==="candidate" && p.promptVersion===CAPABILITY_PROMPT_VERSION && generations[p.role]===p.generation && work.jobs.some(j=>j.role===p.role && j.generation===p.generation));
+   const candidates=state.policies.filter(p=>!ceoRolePaused(p.role) && p.status==="candidate" && p.promptVersion===CAPABILITY_PROMPT_VERSION && generations[p.role]===p.generation && work.jobs.some(j=>j.role===p.role && j.generation===p.generation));
    const candidate=candidates.find(p=>!state.runs.some(r=>r.kind==="holdout" && r.role===p.role && start-Date.parse(r.startedAt)<86400000) && state.runs.filter(r=>r.kind==="holdout"&&r.policyVersion===p.version).length<3);
    if(!firstProduction && candidate && used+2<=options.maxCallsPerDay){const index=[0,1,2].find(i=>!state.runs.some(r=>r.kind==="holdout"&&r.policyVersion===candidate.version&&r.fixtureIndex===i))!;assignment={id,promptVersion:CAPABILITY_PROMPT_VERSION,fence,role:candidate.role,generation:candidate.generation,kind:"holdout",policyVersion:candidate.version,baselineVersion:candidate.parentVersion!,fixtureIndex:index,task:capabilityHoldout(candidate.role,index),startedAt:new Date(start).toISOString(),expiresAt:new Date(start+ttl).toISOString(),status:"running"};}
    else if(used+1<=options.maxCallsPerDay){

@@ -1,3 +1,4 @@
+import { ceoFocusIntegrations } from "./ceo-domain-policy";
 import { advanceKongCompany, isKongCompanyAgent } from "./kong-company";
 import { parseInternalWork } from "./office-internal-work";
 import {parseRoleAcademy} from "./office-role-academy";
@@ -378,7 +379,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
   let running: Promise<CouncilState> | null = null;
   let runningSince = 0;
   let scouting: Promise<void> | null = null;
-  const integrationsNow = () => (deps.integrations ? deps.integrations() : effectiveIntegrations(parseIntegrationOverrides(process.env.AGENT_INTEGRATION_OVERRIDES)));
+  const integrationsNow = () => ceoFocusIntegrations(deps.integrations ? deps.integrations() : effectiveIntegrations(parseIntegrationOverrides(process.env.AGENT_INTEGRATION_OVERRIDES)));
 
   async function load(): Promise<CouncilState> {
     if (deps.transactState) return parseDurableCouncilState(await deps.readState(),deps.userId());

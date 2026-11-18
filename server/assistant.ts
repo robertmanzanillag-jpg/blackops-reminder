@@ -1,3 +1,4 @@
+import { ceoFocusContext } from "./ceo-domain-policy";
 import type { Express, Request, Response } from "express";
 import { storage } from "./storage";
 import { format, startOfWeek, endOfWeek, addWeeks, startOfMonth, endOfMonth, addMonths, differenceInHours } from "date-fns";
@@ -1568,7 +1569,7 @@ export function registerAssistantRoutes(app: Express): void {
       }
 
       const historyLimit = getAiConversationHistoryLimit();
-      const aiCostPolicyContext = buildAiCostPolicyContext("web");
+      const aiCostPolicyContext = buildAiCostPolicyContext("web") + ceoFocusContext();
       const [calendarContext, userProfileContext, portfolioContext, ceoContext, sharedConversationHistory, claudeSkillContext] = await Promise.all([
         getCalendarContext(userId),
         getUserProfileContext(userId),

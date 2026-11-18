@@ -1,3 +1,4 @@
+import { assertCeoActionActive } from "./ceo-domain-policy";
 import { storage } from "./storage";
 import type {
   AuditLog,
@@ -104,6 +105,7 @@ export async function writeAuditLog(log: InsertAuditLog): Promise<AuditLog> {
 }
 
 export async function createPendingActionForApproval(request: TrustActionRequest): Promise<PendingAction> {
+  assertCeoActionActive(request);
   const scope = request.scope || getActionScope(request.actionType);
   const riskLevel = getActionRisk(request.actionType);
   const permissionLevelRequired = await getEffectivePermission(request.userId, scope);
