@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T12:34:07.887Z",
+  "generatedAt": "2026-11-18T12:42:27.405Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-transports-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1216,
-    "filesIndexed": 1111,
+    "filesVisible": 1212,
+    "filesIndexed": 1109,
     "imports": 4456,
     "routes": 623,
-    "symbols": 25126
+    "symbols": 25128
   },
   "directories": {
     ".": {
@@ -203,10 +203,10 @@
       }
     },
     "docs": {
-      "files": 79,
-      "indexed": 75,
+      "files": 75,
+      "indexed": 73,
       "kinds": {
-        "docs": 79
+        "docs": 75
       }
     },
     "examples/clippers-motivation": {
@@ -5880,22 +5880,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -22097,6 +22081,7 @@
         "deadline",
         "defaultFactoryApiInvocation",
         "descriptor",
+        "elapsed",
         "executionWindow",
         "factoryApiAdmissionError",
         "factoryApiPriceSchema",
@@ -22114,7 +22099,8 @@
         "settled",
         "sha",
         "timeout",
-        "usage"
+        "usage",
+        "windowStartedAt"
       ],
       "routes": []
     },

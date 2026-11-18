@@ -12,17 +12,17 @@ const response=()=>({id:'resp_synthetic',model,usage:{prompt_tokens:10,completio
 function fixture(input:{fixedCents?:number;checkpoint?:boolean;unknown?:boolean}={}){
  let time=Date.parse(NOW),calls=0;const state=emptyFactoryApiState(),base={configured:true,fixedCents:input.fixedCents??0,spentCents:0,reservedCents:0,unknown:!!input.unknown,parents:[] as any[]};
  if(input.checkpoint!==false)checkpointFactoryApiMonth(state,{...base,unknown:false},{month:'2026-11',evidenceSha256:sha,reconciledAt:NOW,externalSpentMicroUsd:0,externalReservedMicroUsd:0,externalUnknownReservations:0,complete:true},NOW);
- let beforeWindow=()=>{};
+ let beforeWindow=()=>{},afterWindow=()=>{};
  const invoke=createFactoryApiInvocation({owner:()=>owner,now:()=>new Date(time),store:{
   async apiBudgetStatus(){return factoryApiBudgetStatus(state,base,new Date(time).toISOString());},
   async reserveApi(_owner,input){return reserveFactoryApi(state,base,input,new Date(time).toISOString());},
   async settleApi(_owner,key,input){return settleFactoryApi(state,key,input,new Date(time).toISOString());},
   async unknownApi(_owner,key){unknownFactoryApi(state,key);},
-  async executionWindowApi(_owner,key){beforeWindow();return factoryApiExecutionWindow(state,base,key,new Date(time).toISOString());},
+  async executionWindowApi(_owner,key){beforeWindow();const remaining=factoryApiExecutionWindow(state,base,key,new Date(time).toISOString());afterWindow();return remaining;},
  }});
  const run=(overrides:any={})=>invoke({consumer:'office',executionId:'stable-assignment',requestSha256:sha,price,promptBytes:100,maxOutputTokens:32,
   call:async limits=>{calls++;assert.equal(limits.maxRetries,0);assert.ok(limits.timeout<=120000);return {model,responseId:'resp',inputTokens:10,outputTokens:5,cachedInputTokens:0};},usage:value=>value,...overrides});
- return {state,base,invoke,run,calls:()=>calls,setTime:(value:number)=>{time=value;},beforeWindow:(fn:()=>void)=>{beforeWindow=fn;}};
+ return {state,base,invoke,run,calls:()=>calls,setTime:(value:number)=>{time=value;},beforeWindow:(fn:()=>void)=>{beforeWindow=fn;},afterWindow:(fn:()=>void)=>{afterWindow=fn;}};
 }
 const body=()=>({model,messages:[{role:'user',content:'synthetic requirements'}],max_completion_tokens:32});
 const catalog=(providers=['openai'])=>JSON.stringify({version:1,prices:providers.map(provider=>({provider,...price}))});
@@ -54,3 +54,5 @@ test('monetary gate never extends a tighter client or per-request timeout',async
 test('active Responses and unfinished chat cannot settle partial usage or free reserve',async()=>{for(const kind of ['responses','chat']){const f=fixture();const active={id:'resp_active',model,status:'in_progress',usage:{input_tokens:10,output_tokens:5,input_tokens_details:{cached_tokens:0},prompt_tokens:10,completion_tokens:5,prompt_tokens_details:{cached_tokens:0}},choices:[{finish_reason:null,message:{content:'partial'}}]};const client=guardFactoryOpenAiClient({responses:{create:async()=>active},chat:{completions:{create:async()=>active}}},{provider:'openai',invoke:f.invoke,env:{FACTORY_API_PRICING_CONFIG:catalog()}});await assert.rejects(kind==='responses'?client.responses.create({model,input:'text',max_output_tokens:32}):client.chat.completions.create(body()),/EXECUTION_UNCONFIRMED/);assert.equal(f.state.reservations[0].status,'unknown');assert.equal(f.state.reservations[0].actualMicroUsd,undefined);}});
 
 test('preflight permits valid full existing parent escrow but never creates additional global allowance',async()=>{const f=fixture(),jobId=randomUUID(),fence=randomUUID(),ownerKey=createHash('sha256').update(owner).digest('hex');f.base.reservedCents=10000;f.base.parents=[{jobId,fence,status:'running',maximumCents:10000,leaseExpiresAt:'2026-11-18T12:05:00.000Z'}];await assert.rejects(f.invoke.preflight(),/BUDGET_EXHAUSTED/);await withFactoryApiParent({id:jobId,fence,ownerKey,status:'running'} as any,()=>f.invoke.preflight());assert.equal(f.state.reservations.length,0);});
+
+test('a slow window read cannot extend its stale returned permit beyond original expiry',async()=>{const f=fixture();f.afterWindow(()=>f.setTime(Date.parse(NOW)+120001));await assert.rejects(f.run(),/UNCONFIRMED/);assert.equal(f.calls(),0);assert.equal(f.state.reservations[0].status,'unknown');});

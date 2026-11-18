@@ -53,8 +53,11 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
   if(!reservation.admitted)throw new FactoryApiBudgetError('FACTORY_API_DISPATCH_ALREADY_RESERVED');
   let dispatched=false;
   try{
+   const windowStartedAt=now().getTime();
    const executionWindow=await options.store.executionWindowApi(owner,key);
-   const deadline=Math.min(executionWindow,Date.parse(price.validUntil)-now().getTime());
+   const elapsed=now().getTime()-windowStartedAt;
+   if(!Number.isFinite(elapsed)||elapsed<0)throw Error("clock unverified");
+   const deadline=Math.min(executionWindow-elapsed,Date.parse(price.validUntil)-now().getTime());
    if(!Number.isFinite(deadline)||deadline<1)throw Error('expired');
    const timeout=Math.floor(Math.min(120000,deadline)),signal=input.signal?AbortSignal.any([input.signal,AbortSignal.timeout(timeout)]):AbortSignal.timeout(timeout);
    signal.throwIfAborted();
