@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
-import { open, readFile, mkdir, realpath, rename, rm, writeFile } from 'node:fs/promises';
+import { open, readFile, mkdir, realpath, rename, rm, writeFile, link } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
@@ -25,14 +25,25 @@ const clock = when => new Intl.DateTimeFormat('en-GB', {
   timeZone: TIME_ZONE, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
 }).format(new Date(when));
 
-async function ownerJson(root, relative, fallback) {
+function receiptFile(destination, requestId, version, outputSha) {
+  return path.join(RECEIPT_ROOT, scopedKey(destination), requestId, version, outputSha + '.json');
+}
+function sameRender(a, b) {
+  const comparable = row => [
+    row.requestId, destinationKey(row.destination), row.version, row.manifestSha, row.engineSha256, row.experiment,
+    row.comparison, row.actualParams, row.sourceSha256, row.startSeconds, row.outputSha256, row.costUsd,
+  ];
+  return fingerprint(comparable(a)) === fingerprint(comparable(b));
+}
+
+async function ownerJson(root, relative, fallback, maxLinks = 1) {
   const file = path.join(root, relative);
   let handle;
   try {
     if (path.dirname(file) !== await realpath(path.dirname(file))) throw Error('owner_path_symlink');
     handle = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
     const info = await handle.stat();
-    if (!info.isFile() || (info.mode & 0o077) || info.nlink !== 1 || (process.getuid && info.uid !== process.getuid())) throw Error('owner_file_required');
+    if (!info.isFile() || (info.mode & 0o077) || info.nlink > maxLinks || (process.getuid && info.uid !== process.getuid())) throw Error('owner_file_required');
     return JSON.parse(await handle.readFile('utf8'));
   } catch (error) {
     if (error.code === 'ENOENT' && fallback !== undefined) return fallback;
@@ -162,8 +173,21 @@ export async function renderClippersPortfolio({ workspaceRoot, requestId, now = 
     const receipt = { schemaVersion: 1, requestId, destination, version: manifest.version, manifestSha: manifest.sha,
       engineSha256: manifest.engineSha256, experiment: request.experiment ?? null, comparison, actualParams: params,
       sourceSha256: source.sha, startSeconds: start, draftFile, outputSha256, renderedAt: now.toISOString(), costUsd: 0 };
-    const receiptPath = path.join(receiptRoot, outputSha256 + '.json');
-    await writeFile(receiptPath, JSON.stringify(receipt) + '\n', { mode: 0o600, flag: 'wx' });
+    const relativeReceipt = receiptFile(destination, requestId, manifest.version, outputSha256);
+    const receiptPath = path.join(root, relativeReceipt);
+    await mkdir(path.dirname(receiptPath), { recursive: true, mode: 0o700 });
+    if (await realpath(path.dirname(receiptPath)) !== path.dirname(receiptPath)) throw Error('render_receipt_path_symlink');
+    const stagedReceipt = receiptPath + '.' + runId + '.tmp';
+    try {
+      await writeFile(stagedReceipt, JSON.stringify(receipt) + '\n', { mode: 0o600, flag: 'wx' });
+      await link(stagedReceipt, receiptPath);
+    } catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      const prior = await ownerJson(root, relativeReceipt, undefined, 2);
+      if (!sameRender(prior, receipt) || (await mediaBytes(root, prior.draftFile)).sha !== outputSha256) throw Error('render_receipt_conflict');
+      await rm(draft, { force: true });
+      return { ...prior, receiptSha256: fingerprint(prior) };
+    } finally { await rm(stagedReceipt, { force: true }); }
     return { ...receipt, receiptSha256: fingerprint(receipt) };
   } catch (error) {
     await rm(draft, { force: true });
@@ -173,8 +197,9 @@ export async function renderClippersPortfolio({ workspaceRoot, requestId, now = 
   }
 }
 export async function confirmedRenderReceipt(root, asset, destination) {
-  if (!SHA.test(asset.renderReceiptSha256 ?? '') || !SHA.test(asset.mediaSha256 ?? '')) return null;
-  const receipt = await ownerJson(root, path.join(RECEIPT_ROOT, asset.mediaSha256 + '.json'), null);
+  if (!findDestination(destination) || !ID.test(asset.id ?? '') || !ID.test(asset.policyVersion ?? '') ||
+      !SHA.test(asset.renderReceiptSha256 ?? '') || !SHA.test(asset.mediaSha256 ?? '')) return null;
+  const receipt = await ownerJson(root, receiptFile(destination, asset.id, asset.policyVersion, asset.mediaSha256), null, 2);
   if (!receipt || fingerprint(receipt) !== asset.renderReceiptSha256 || receipt.requestId !== asset.id ||
       receipt.outputSha256 !== asset.mediaSha256 || receipt.draftFile !== asset.draftFile ||
       !findDestination(receipt.destination) || destinationKey(receipt.destination) !== destinationKey(destination) ||

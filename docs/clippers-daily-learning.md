@@ -45,7 +45,7 @@ To roll back a destination, add an independently reviewed and owner-authorized `
 
 ## Destination-aware rendering
 
-The existing 07:00 TikTok renderer and the YouTube, motivation and sleep workers are unchanged. Portfolio rendering is explicit for an approved local source and exact destination. Experiments and non-baseline portfolio assets require real render receipts. A manually edited baseline can still pass the existing approved-media and rights checks.
+The existing 07:00 TikTok renderer and the YouTube, motivation and sleep workers are unchanged. Portfolio rendering is explicit for an approved local source and exact destination. Experiments and non-baseline portfolio assets require real render receipts. A manually edited baseline can pass the existing checks before a renderer manifest is pinned. A reviewed rollback to the baseline reinstates the pinned manifest and requires its render receipt.
 
 Use \`node script/clippers-portfolio-render.mjs --engine-sha\` to print the exact renderer source digest. Store each reviewed manifest in \`$CLIPPERS_WORKSPACE_ROOT/config/clippers-daily-learning/render-policies/<brandId>__<network>__<account>/<version>.json\` in an owner-only file. A manifest has \`schemaVersion: 1\`, exact \`destination\`, \`version\`, \`engineSha256\`, \`reviewedBy\`, and these \`params\`:
 

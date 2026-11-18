@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T04:30:10.185Z",
+  "generatedAt": "2026-11-18T04:33:53.427Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-daily-learning-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -128,23 +128,9 @@
     "filesIndexed": 1045,
     "imports": 4097,
     "routes": 604,
-    "symbols": 23320
+    "symbols": 23338
   },
   "directories": {
-    "script": {
-      "files": 119,
-      "indexed": 107,
-      "kinds": {
-        "script": 119
-      }
-    },
-    "tests": {
-      "files": 299,
-      "indexed": 295,
-      "kinds": {
-        "test": 299
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -231,6 +217,13 @@
         "other": 70
       }
     },
+    "script": {
+      "files": 119,
+      "indexed": 107,
+      "kinds": {
+        "script": 119
+      }
+    },
     "script/release-gate": {
       "files": 7,
       "indexed": 7,
@@ -278,6 +271,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 299,
+      "indexed": 295,
+      "kinds": {
+        "test": 299
       }
     },
     "tests/fixtures": {
@@ -7921,6 +7921,7 @@
         "optionalArray",
         "outcomes",
         "pairs",
+        "pinnedManifest",
         "post",
         "posts",
         "privateJson",
@@ -9405,6 +9406,7 @@
         "candidate",
         "changed",
         "clock",
+        "comparable",
         "confirmedRenderReceipt",
         "crop",
         "data",
@@ -9428,22 +9430,27 @@
         "ownerJson",
         "p",
         "pinned",
+        "prior",
         "probe",
         "readPortfolioRenderManifest",
         "receipt",
+        "receiptFile",
         "receiptPath",
         "receiptRoot",
+        "relativeReceipt",
         "renderClippersPortfolio",
         "request",
         "rights",
         "rightsValid",
         "root",
         "runId",
+        "sameRender",
         "scopedKey",
         "selecting",
         "source",
         "sourceCopy",
         "sourceTime",
+        "stagedReceipt",
         "start",
         "state",
         "temporary",
@@ -34984,6 +34991,7 @@
         "result",
         "review",
         "rollback",
+        "rollbackDate",
         "root",
         "rootKey",
         "row",
@@ -34994,6 +35002,7 @@
         "target",
         "token",
         "u",
+        "unrendered",
         "url",
         "write",
         "wrongBrand"
@@ -35746,7 +35755,11 @@
         "baseline",
         "candidate",
         "candidateRequest",
+        "captioned",
         "config",
+        "crossAccount",
+        "crossRequest",
+        "draftPath",
         "engineSha",
         "engineSha256",
         "evidence",
@@ -35754,10 +35767,15 @@
         "exec",
         "fixture",
         "hasLocalRenderTools",
+        "hasMagick",
         "key",
         "manifest",
         "middlePixel",
         "now",
+        "originalBytes",
+        "other",
+        "otherPolicyDir",
+        "overlay",
         "policyDir",
         "publishable",
         "report",

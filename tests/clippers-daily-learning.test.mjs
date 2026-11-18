@@ -192,10 +192,20 @@ test('activation requires three independent version-bound proposals and rollback
   assert.equal(activation.versions[0].status, 'queue_policy_active_outcome_pending');
   assert.equal(activation.versions[0].scope, 'approved_media_queue');
   assert.equal(activation.rendererPolicyBinding, 'required_for_experiments_and_candidate_versions');
-  await f.configure([], { collect: false, publish: false, reviews: [{ ...review, id: 'rollback-1', action: 'rollback', from: 'candidate-1', to: 'baseline-1' }] });
-  const rollback = await runClippersDailyLearning({ workspaceRoot: f.root, now: days(3) });
+  const rollbackDate = days(3);
+  const unrendered = await approved(f, 'unrendered-baseline', {
+    sourcePublishedAt: new Date(+rollbackDate - 3_600_000).toISOString(),
+    rightsObservedAt: iso(rollbackDate), rightsValidUntil: iso(days(4)),
+    scheduledAt: new Date(+rollbackDate + 600_000).toISOString(),
+  });
+  await f.write('reports/metricool-public-media-receipts.json', [receipt(unrendered)]);
+  await f.configure([unrendered], { collect: false, publish: true,
+    reviews: [{ ...review, id: 'rollback-1', action: 'rollback', from: 'candidate-1', to: 'baseline-1' }] });
+  const rollback = await runClippersDailyLearning({ workspaceRoot: f.root, now: rollbackDate, adapter: new Proxy({}, { get: forbidden }) });
   assert.equal(rollback.versions[0].active, 'baseline-1');
   assert.equal(rollback.versions[0].status, 'queue_policy_rolled_back');
+  assert.equal(rollback.destinations[0].eligible, 0, 'reinstated renderer baseline requires a verified render receipt');
+  assert.equal(rollback.scheduled, 0);
   assert.deepEqual((await f.state()).history.map(row => row.action), ['activate', 'rollback']);
 });
 

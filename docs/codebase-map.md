@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T04:30:10.185Z
+Generated: 2026-11-18T04:33:53.427Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-daily-learning-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1145 | 1045 | 4097 | 604 | 23320 |
+| 1145 | 1045 | 4097 | 604 | 23338 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -391,7 +391,7 @@ Package: `rest-express`
 - `script/clippers-cleanup-published-vyro-media.mjs` (script; 47 symbols, 4 imports)
 - `script/clippers-content-learning-ceo.mjs` (script; 85 symbols, 3 imports)
 - `script/clippers-content-local-worker.mjs` (script; 112 symbols, 10 imports)
-- `script/clippers-daily-learning.mjs` (script; 100 symbols, 8 imports)
+- `script/clippers-daily-learning.mjs` (script; 101 symbols, 8 imports)
 - `script/clippers-daily-watchdog.mjs` (script; 87 symbols, 4 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
 - `script/clippers-free-local-worker.mjs` (script; 45 symbols, 6 imports)
@@ -407,7 +407,7 @@ Package: `rest-express`
 - `script/clippers-motivation-shorts.mjs` (script; 157 symbols, 6 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-portfolio-metricool.mjs` (script; 70 symbols, 1 imports)
-- `script/clippers-portfolio-render.mjs` (script; 64 symbols, 8 imports)
+- `script/clippers-portfolio-render.mjs` (script; 70 symbols, 8 imports)
 - `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)
 - `script/clippers-reconcile-publications.mjs` (script; 74 symbols, 3 imports)
 - `script/clippers-record-owned-meme-rights.ts` (script; 10 symbols, 1 imports)

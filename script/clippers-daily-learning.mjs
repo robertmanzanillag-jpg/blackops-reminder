@@ -115,8 +115,9 @@ async function approvedItem(raw, root, now, receipts, state) {
       evidence.quality !== 'passed' || evidence.originalEdit !== 'verified' ||
       evidence.disclosure !== 'verified' || !ID.test(evidence.reviewedBy ?? '') ||
       evidence.authorizedSpendUsd !== 0 || evidence.providerIncrementalCostUsd !== 0) return null;
+  const pinnedManifest = state.history.filter(row => row.destination === destinationKey(destination)).at(-1)?.toManifestSha;
   let renderProof = null;
-  if (raw.experiment || usesVersion !== BASELINE || raw.renderReceiptSha256) {
+  if (raw.experiment || usesVersion !== BASELINE || pinnedManifest || raw.renderReceiptSha256) {
     try { renderProof = await confirmedRenderReceipt(root, raw, destination); } catch { return null; }
     if (!renderProof) return null;
   }
@@ -300,8 +301,9 @@ function exportedVersionState(state) {
     const key = destinationKey(destination);
     const active = state.versions[key] ?? BASELINE;
     const activation = state.history.filter(e => e.destination === key).at(-1);
-    const observedPost = activation?.action === 'activate' && state.deliveries.find(row => destinationKey(row) === key &&
-      row.policyVersion === active && row.post && Date.parse(row.post.publishedAt) > Date.parse(activation.at) &&
+    const observedPost = activation?.action === 'activate' && SHA.test(activation.toManifestSha ?? '') && state.deliveries.find(row => destinationKey(row) === key &&
+      row.policyVersion === active && row.renderProof?.manifestSha === activation.toManifestSha &&
+      row.post && Date.parse(row.post.publishedAt) > Date.parse(activation.at) &&
       Date.parse(row.createdAt) >= Date.parse(activation.at) && !row.experiment &&
       state.observations.some(metric => metric.deliveryId === row.id && metric.destination === key));
     return {
