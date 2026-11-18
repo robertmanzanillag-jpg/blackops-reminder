@@ -38,6 +38,7 @@ function sameRender(a, b) {
   const comparable = row => [
     row.requestId, destinationKey(row.destination), row.version, row.manifestSha, row.engineSha256, row.experiment,
     row.comparison, row.actualParams, row.sourceSha256, row.startSeconds, row.outputSha256, row.costUsd,
+    row.renderRequestSha256, row.captionTextSha256,
   ];
   return fingerprint(comparable(a)) === fingerprint(comparable(b));
 }
@@ -186,7 +187,9 @@ export async function renderClippersPortfolio({ workspaceRoot, requestId, now = 
     await rename(temporary, draft);
     const receipt = { schemaVersion: 1, requestId, destination, version: manifest.version, manifestSha: manifest.sha,
       engineSha256: manifest.engineSha256, experiment: request.experiment ?? null, comparison, actualParams: params,
-      sourceSha256: source.sha, startSeconds: start, draftFile, outputSha256, renderedAt: now.toISOString(), costUsd: 0 };
+      sourceSha256: source.sha, startSeconds: start,
+      renderRequestSha256: fingerprint(request), captionTextSha256: hash(typeof text === 'string' ? text : ''),
+      draftFile, outputSha256, renderedAt: now.toISOString(), costUsd: 0 };
     const relativeReceipt = receiptFile(destination, requestId, manifest.version, outputSha256);
     const receiptPath = path.join(root, relativeReceipt);
     await mkdir(path.dirname(receiptPath), { recursive: true, mode: 0o700 });
@@ -219,6 +222,12 @@ export async function confirmedRenderReceipt(root, asset, destination) {
       !findDestination(receipt.destination) || destinationKey(receipt.destination) !== destinationKey(destination) ||
       receipt.version !== asset.policyVersion || receipt.costUsd !== 0 ||
       fingerprint(receipt.experiment) !== fingerprint(asset.experiment ?? null)) return null;
+  const request = await ownerJson(root, path.join(CONFIG_ROOT, 'render-requests', asset.id + '.json'), null);
+  if (!request || request.id !== asset.id || !findDestination(request) || destinationKey(request) !== destinationKey(destination) ||
+      request.policyVersion !== asset.policyVersion || receipt.renderRequestSha256 !== fingerprint(request) ||
+      receipt.sourceSha256 !== request.sourceSha256 || !Number.isFinite(request.sourceStartSeconds) ||
+      receipt.startSeconds !== request.sourceStartSeconds + receipt.actualParams?.hook ||
+      receipt.captionTextSha256 !== hash(typeof request.captionText === 'string' ? request.captionText : '')) return null;
   const { manifest, comparison, allowedSlots } = await selecting(root, destination, asset);
   if (receipt.engineSha256 !== manifest.engineSha256 || receipt.manifestSha !== manifest.sha ||
       fingerprint(receipt.actualParams) !== fingerprint(manifest.params) ||

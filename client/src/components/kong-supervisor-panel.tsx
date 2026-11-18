@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { Button } from "@/components/ui/button";
 import { KONG_SUPERVISOR_ID, KONG_WORKERS, type KongChatAgentId, type KongSupervision } from "@shared/kong-supervisor";
 import { kongSupervisorSessionScope, type SupervisorAuth } from "./kong-supervisor-session";
+import { KongRepairStatusPanel } from "./kong-repair-status-panel";
 
 const AGENTS: Array<{ id: KongChatAgentId; name: string }> = [
   { id: KONG_SUPERVISOR_ID, name: "Supervisor KONG" },
@@ -70,6 +71,7 @@ export function KongSupervisorPanel() {
         <DialogTitle>Equipo KONG</DialogTitle>
         <DialogDescription>Consulta el estado del equipo o encarga una revision interna de disponibilidad. Las tareas externas requieren su integracion y aprobaciones.</DialogDescription>
       </DialogHeader>
+      {open && sessionScope && <KongRepairStatusPanel key={sessionScope} sessionScope={sessionScope} />}
       <label htmlFor={`${fieldId}-agent`}>Hablar con</label>
       <select id={`${fieldId}-agent`} className="rounded border bg-background p-2" value={agentId} disabled={busy} onChange={event => { setAgentId(event.target.value as KongChatAgentId); setFailure(null); }}>
         {AGENTS.map(agent => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
