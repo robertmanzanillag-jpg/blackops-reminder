@@ -183,3 +183,11 @@ test('bounded private reader rejects FIFO without waiting for a writer and enfor
  const started=performance.now();assert.equal((await privateOrchestraJson(root,'fifo.json',100)).error,'report_unreadable');assert.ok(performance.now()-started<1000);
  await save(root,'large.json',{value:'x'.repeat(1000)});assert.equal((await privateOrchestraJson(root,'large.json',100)).error,'report_unreadable');
 }));
+
+test('optional telemetry bounds legacy heartbeat latency and refuses parallel writes while acknowledgement is unknown',async()=>{
+ const {createOptionalClippersTelemetryIngest}=await import('../server/clippers-orchestra-state');let calls=0,finish:any;
+ const ingest=createOptionalClippersTelemetryIngest(()=>{calls++;return new Promise(resolve=>{finish=resolve;});},20);
+ const first:any=await ingest({});assert.equal(first.code,'CLIPPERS_ORCHESTRA_INGEST_UNCONFIRMED');assert.equal((await ingest({}) as any).code,'CLIPPERS_ORCHESTRA_INGEST_BUSY');assert.equal(calls,1);
+ finish({accepted:true});await new Promise(resolve=>setImmediate(resolve));
+ const pending=ingest({});await new Promise(resolve=>setImmediate(resolve));finish({accepted:true});assert.equal((await pending as any).accepted,true);assert.equal(calls,2);
+});

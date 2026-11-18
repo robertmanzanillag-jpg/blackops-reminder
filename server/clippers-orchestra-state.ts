@@ -92,3 +92,17 @@ export function clippersOrchestraState(){
     },
   });
 }
+
+/** Optional telemetry must not hold the original device heartbeat behind a slow KV/career sweep. */
+export function createOptionalClippersTelemetryIngest(ingest:(value:unknown)=>Promise<unknown>,timeoutMs=1500){
+  let active:Promise<unknown>|null=null;
+  return async(value:unknown)=>{
+    if(active)return {accepted:false,code:'CLIPPERS_ORCHESTRA_INGEST_BUSY'};
+    active=Promise.resolve().then(()=>ingest(value)).catch(()=>({accepted:false,code:'CLIPPERS_ORCHESTRA_INGEST_UNAVAILABLE'})).finally(()=>{active=null;});
+    let timer:ReturnType<typeof setTimeout>|undefined;
+    try{return await Promise.race([active,new Promise(resolve=>{timer=setTimeout(()=>resolve({accepted:false,code:'CLIPPERS_ORCHESTRA_INGEST_UNCONFIRMED'}),timeoutMs);})]);}
+    finally{if(timer)clearTimeout(timer);}
+  };
+}
+let optionalIngest:ReturnType<typeof createOptionalClippersTelemetryIngest>|undefined;
+export function ingestOptionalClippersTelemetry(value:unknown){return (optionalIngest??=createOptionalClippersTelemetryIngest(v=>clippersOrchestraState().ingest(v)))(value);}

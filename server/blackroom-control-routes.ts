@@ -476,7 +476,7 @@ export function registerBlackRoomControlRoutes(app: Express): void {
       // but has its own strict schema/store and never enters BlackRoom analytics.
       let clippersOrchestra:unknown;
       if(req.body?.clippersOrchestra!==undefined){
-        try{clippersOrchestra=await (await import('./clippers-orchestra-state')).clippersOrchestraState().ingest(req.body.clippersOrchestra);}
+        try{clippersOrchestra=await (await import('./clippers-orchestra-state')).ingestOptionalClippersTelemetry(req.body.clippersOrchestra);}
         catch{clippersOrchestra={accepted:false,code:'CLIPPERS_ORCHESTRA_INGEST_UNAVAILABLE'};}
       }
       res.json({ control: remoteView(remote), ...(clippersOrchestra?{clippersOrchestra}:{}) });
