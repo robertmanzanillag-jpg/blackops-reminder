@@ -144,6 +144,8 @@ test('missing render receipt, changed current version or reused public post supp
  const {state}=await controlled(root,1.3);state.versions[destinationKey(DESTINATIONS[0])]='new-active-version';await save(root,'reports/clippers-daily-learning/state.json',state);
  let r=await base(root);assert.equal(r.learning.eligibleComparisons,0);assert.equal(r.roles.find((r:any)=>r.stage==='learning').outcomes.length,0);
  state.versions={};state.deliveries[0].mediaSha256='0'.repeat(64);await save(root,'reports/clippers-daily-learning/state.json',state);r=await base(root);assert.ok(r.learning.comparisons.some((c:any)=>!c.renderReceiptVerified));assert.equal(r.roles.find((r:any)=>r.stage==='learning').outcomes.length,0);
+ const fresh=await controlled(root,1.3);fresh.state.deliveries[10].post={...fresh.state.deliveries[0].post};fresh.state.observations[10].postId=fresh.state.deliveries[0].post.id;
+ await save(root,'reports/clippers-daily-learning/state.json',fresh.state);r=await base(root);assert.ok(r.learning.eligibleComparisons<3);assert.equal(r.roles.find((r:any)=>r.stage==='learning').outcomes.length,0);
 }));
 
 test('JSONB object-key reordering preserves receipt checksum, read and next ingest; replay has zero extra writes',async()=>fixture(async root=>{
