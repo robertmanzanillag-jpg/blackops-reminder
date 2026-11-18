@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {installPlan} from '../script/install-kong-repair-subscription-worker.mjs';
-import { REPOSITORY, BASE_BRANCH, ENDPOINT, allowedFile, allowedChange, cleanEnvironment, permissionArgs, modelArgs, selectModel, validateClaim, makeEnvelope, signedBody, rpc, changedFiles, consumeOne, runProcess, makerPrompt, canonicalJson, sourceFromIssue, consumeGitHubOnce, registryLock,checkedReview,materializePatch,publishWorkerHealth } from '../script/kong-repair-subscription-worker.mjs';
+import { REPOSITORY, BASE_BRANCH, ENDPOINT, allowedFile, allowedChange, cleanEnvironment, permissionArgs, modelArgs, selectModel, validateClaim, makeEnvelope, signedBody, rpc, changedFiles, consumeOne, runProcess, makerPrompt, canonicalJson, sourceFromIssue, consumeGitHubOnce, registryLock,checkedReview,materializePatch,publishWorkerHealth,sourceSnapshot } from '../script/kong-repair-subscription-worker.mjs';
 
 const claim = (extra = {}) => ({ key: 'repair-key-1', fence: 'fence-1', leaseExpiresAt: new Date(Date.now()+60*60_000).toISOString(), repository: REPOSITORY, baseBranch: BASE_BRANCH, issueUrl: `https://github.com/${REPOSITORY}/issues/123`, sourceTaskId: 'task-1', errorId: 'error-1', summary: 'The event title does not display correctly', ...extra });
 async function fixture(t) { const root=await fs.mkdtemp(path.join(os.tmpdir(),'repair-worker-test-')); t.after(()=>fs.rm(root,{recursive:true,force:true})); return root; }
@@ -181,4 +181,10 @@ test('tests run against the exact publishable artifact, so omitted maker temp he
   const published=path.join(root,'published');await materializePatch(before,changes,published);const verified=await runProcess(process.execPath,['--test','tests/regression.test.mjs'],{cwd:published,env:cleanEnvironment()});assert.notEqual(verified.exitCode,0);
   await fs.writeFile(path.join(maker,'tests/helper.mjs'),'export const value=42;');await fs.writeFile(path.join(maker,'tests/regression.test.mjs'),testBody.replace('../.worker-tmp/helper.mjs','./helper.mjs'));
   const exact=path.join(root,'exact');await materializePatch(before,await changedFiles(before,maker),exact);assert.equal((await runProcess(process.execPath,['--test','tests/regression.test.mjs'],{cwd:exact,env:cleanEnvironment()})).exitCode,0);
+});
+test('oversized baseline data is omitted and protected instead of blocking every repair or deleting the original',async t=>{
+  const root=await fixture(t);await fs.mkdir(path.join(root,'server'));await fs.writeFile(path.join(root,'server/large.json'),'x'.repeat(2000001));await fs.writeFile(path.join(root,'server/a.ts'),'original');
+  const omitted=new Set(),before=await sourceSnapshot(root,'',omitted);assert.equal(before.has('server/large.json'),false);assert.ok(omitted.has('server/large.json'));assert.equal(before.get('server/a.ts').toString(),'original');
+  const edited=path.join(root,'edited');await materializePatch(before,[],edited);await fs.writeFile(path.join(edited,'server/large.json'),'replacement');await fs.writeFile(path.join(edited,'server/a.test.mjs'),'import test from"node:test";test("case",()=>{});');
+  await assert.rejects(changedFiles(before,edited,omitted),/FORBIDDEN_CHANGE/);assert.equal((await fs.stat(path.join(root,'server/large.json'))).size,2000001);
 });

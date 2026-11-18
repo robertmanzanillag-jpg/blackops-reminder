@@ -5,7 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { createHash, createHmac, randomUUID } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath,pathToFileURL } from 'node:url';
 
 export const REPOSITORY = 'robertmanzanillag-jpg/kong-nightlife';
 export const BASE_BRANCH = 'codex/kong-production-recovery-20261117';
@@ -40,9 +40,9 @@ export function cleanEnvironment(env = process.env, workspace) {
   result.CI = '1'; result.NODE_ENV = 'test'; result.OPENSSL_CONF = '/dev/null';
   return result;
 }
-export function permissionArgs({ install = false, readOnly = false, dependencies } = {}) {
+export function permissionArgs({ install = false, readOnly = false, dependencies,readFile,writeDirectory } = {}) {
   return ['-c', 'default_permissions="kong-repair"', '-c', 'permissions.kong-repair.extends=":workspace"',
-    '-c', `permissions.kong-repair.filesystem= { ":root"="deny", ":minimal"="read", ":tmpdir"="write", ":slash_tmp"="deny", ${JSON.stringify(path.dirname(NODE22))}="read", ${dependencies?`${JSON.stringify(dependencies)}="read",`:''} ":workspace_roots"={ "."="${readOnly?'read':'write'}", ".git"="deny", ".codex"="deny", ".agents"="deny", ".aws"="deny", "node_modules"="${install?'write':'read'}", "**/.env*"="deny", "**/credentials"="deny", "**/secrets"="deny" } }`,
+    '-c', `permissions.kong-repair.filesystem= { ":root"="deny", ":minimal"="read", ":tmpdir"="write", ":slash_tmp"="deny", ${JSON.stringify(path.dirname(NODE22))}="read", ${dependencies?`${JSON.stringify(dependencies)}="read",`:''}${readFile?`${JSON.stringify(readFile)}="read",`:''}${writeDirectory?`${JSON.stringify(writeDirectory)}="write",`:''} ":workspace_roots"={ "."="${readOnly?'read':'write'}", ".git"="deny", ".codex"="deny", ".agents"="deny", ".aws"="deny", "node_modules"="${install?'write':'read'}", "**/.env*"="deny", "**/credentials"="deny", "**/secrets"="deny" } }`,
     '-c', `permissions.kong-repair.network.enabled=${install?'true':'false'}`,
     ...(install?['-c','features.network_proxy=true','-c','permissions.kong-repair.network.domains={ "registry.npmjs.org"="allow" }']:[])];
 }
@@ -104,15 +104,23 @@ export async function rpc(envelope, secret, fetcher = fetch) {
   if (result.accepted !== true || result.eventId !== envelope.eventId || result.idempotencyKey !== envelope.idempotencyKey) throw code('ACK_UNKNOWN');
   return result;
 }
-async function snapshot(directory, prefix = '') {
+async function snapshot(directory, prefix = '', omitted=new Set()) {
   const files = new Map();
   for (const entry of await fs.readdir(path.join(directory, prefix), { withFileTypes: true })) {
     const relative = prefix ? `${prefix}/${entry.name}` : entry.name;
     if (entry.isSymbolicLink()) { if (!DENIED.test(relative)) throw code('SYMLINK_REJECTED'); continue; }
-    if (entry.isDirectory()) { if (DENIED.test(relative) || (prefix === '' && !ROOTS.has(entry.name))) continue; for (const pair of await snapshot(directory, relative)) files.set(...pair); }
-    else if (entry.isFile() && allowedFile(relative)) { const bytes = await fs.readFile(path.join(directory, relative)); if (bytes.length > 2_000_000) throw code('SOURCE_TOO_LARGE'); files.set(relative, bytes); }
+    if (entry.isDirectory()) { if (DENIED.test(relative) || (prefix === '' && !ROOTS.has(entry.name))) continue; for (const pair of await snapshot(directory, relative,omitted)) files.set(...pair); }
+    else if (entry.isFile() && allowedFile(relative)) { const filename=path.join(directory,relative);if((await fs.stat(filename)).size>2_000_000){omitted.add(relative);continue;}const bytes = await fs.readFile(filename); if (bytes.length > 2_000_000){omitted.add(relative);continue;}files.set(relative, bytes); }
   }
   return files;
+}
+export {snapshot as sourceSnapshot};
+/** Model-owned source is copied under the OS sandbox; the unsandboxed parent only reads the resulting isolated regular-file snapshot. */
+export async function freezeMakerSource(source,destination,{codex=DEFAULT_CODEX,node=NODE22}={}) {
+  await fs.mkdir(destination,{mode:0o700});await fs.mkdir(path.join(destination,'.worker-tmp'),{mode:0o700});
+  const engine=fileURLToPath(import.meta.url),program=`import fs from 'node:fs/promises';import path from 'node:path';const{sourceSnapshot}=await import(process.argv[4]);const omitted=new Set(),files=await sourceSnapshot(process.argv[2],'',omitted);for(const[name,bytes]of files){const target=path.join(process.argv[3],name);await fs.mkdir(path.dirname(target),{recursive:true});await fs.writeFile(target,bytes,{flag:'wx',mode:0o600});}await fs.writeFile(path.join(process.argv[3],'.worker-omitted.json'),JSON.stringify([...omitted]),{flag:'wx',mode:0o600});`;
+  await mustRun(codex,['sandbox',...permissionArgs({readOnly:true,readFile:engine,writeDirectory:destination}),'-P','kong-repair','-C',source,'--',node,'--input-type=module','-',source,destination,pathToFileURL(engine).href],{cwd:source,env:cleanEnvironment(process.env,destination),input:program,timeoutMs:60_000});
+  return destination;
 }
 export async function changedFiles(before, directory, blockedSources=new Set()) {
   const after = await snapshot(directory); const changes = [];
@@ -267,7 +275,7 @@ export async function executeMaker(claim, stage, { runtimeRoot, codex = DEFAULT_
     await mustRun('git', ['checkout', '--detach', claim.baseSha], { cwd: checkout, env });
   }
   const baseSha = await mustRun('git', ['rev-parse', 'HEAD'], { cwd: checkout, env }); if (!SHA.test(baseSha)) throw code('VALIDATION_FAILED');
-  const before = await snapshot(checkout), blockedSources=new Set();
+  const blockedSources=new Set(),before = await snapshot(checkout,'',blockedSources);
   for(const [name,bytes] of before)if(FORBIDDEN_CONTENT.test(bytes.toString('utf8'))){before.delete(name);blockedSources.add(name);}
   await fs.mkdir(workspace, { mode: 0o700 });
   for (const [name, bytes] of before) { await fs.mkdir(path.dirname(path.join(workspace, name)), { recursive: true }); await fs.writeFile(path.join(workspace,name),bytes); }
@@ -280,14 +288,17 @@ export async function executeMaker(claim, stage, { runtimeRoot, codex = DEFAULT_
   await assertCurrentBase(claim,gh);await stage('model_running');
   const made = await runProcess(codex, modelArgs(workspace, selectModel(claim.summary,claim.evidence?.locations?.map(l=>l.filePath)||[],claim.evidence?.route||'')), { cwd: workspace, env: childEnv, input: makerPrompt(claim), timeoutMs: 15 * 60_000, maxOutputBytes: 512*1024 });
   if (made.exitCode !== 0 || made.timedOut || made.overflow) throw code('CLI_FAILED');
-  await stage('validating'); const changes = await changedFiles(before, workspace,blockedSources);
+  await stage('validating');const frozen=await freezeMakerSource(workspace,path.join(attempt,'frozen-maker-source'),{codex,node});
+  const oversized=JSON.parse(await fs.readFile(path.join(frozen,'.worker-omitted.json'),'utf8'));if(oversized.some(name=>before.has(name)))throw code('SOURCE_TOO_LARGE');
+  const changes = await changedFiles(before, frozen,blockedSources);
   const tests = changes.filter(x => x.bytes && /(?:\.test\.|\.spec\.)[cm]?[jt]sx?$/.test(x.name)).map(x => x.name);
   if (!tests.length) throw code('VALIDATION_FAILED');
   const validationWorkspace=path.join(attempt,'validated-artifact'),artifact=await materializePatch(before,changes,validationWorkspace),dependencies=path.join(workspace,'node_modules');
   await fs.symlink(dependencies,path.join(validationWorkspace,'node_modules'));const validationEnv=cleanEnvironment(process.env,validationWorkspace);validationEnv.PATH=`${path.dirname(node)}:${validationEnv.PATH||'/usr/bin:/bin'}`;
   const testOutput = await mustRun(codex, ['sandbox', ...permissionArgs({dependencies}), '-P', 'kong-repair', '-C', validationWorkspace, '--', node, '--import','tsx', '--test','--test-reporter=tap', ...tests], { cwd: validationWorkspace, env: validationEnv, timeoutMs: 10*60_000 });
   if (!/^# tests [1-9]\d*$/m.test(testOutput) || !/^# fail 0$/m.test(testOutput)) throw code('VALIDATION_FAILED');
-  const afterTests=await snapshot(validationWorkspace);if(treeDigest(afterTests)!==artifact.sourceTreeDigest)throw code('VALIDATION_SOURCE_MISMATCH');
+  const testedFrozen=await freezeMakerSource(validationWorkspace,path.join(attempt,'frozen-tested-source'),{codex,node});
+  const afterTests=await snapshot(testedFrozen);if(treeDigest(afterTests)!==artifact.sourceTreeDigest)throw code('VALIDATION_SOURCE_MISMATCH');
   for (const change of changes) { const destination = path.join(checkout, change.name); await fs.mkdir(path.dirname(destination), { recursive: true }); if (change.bytes) await fs.writeFile(destination,change.bytes); else await fs.unlink(destination); }
   await mustRun('git', ['switch', '-c', branch], { cwd: checkout, env });
   await mustRun('git', ['add', '--', ...changes.map(c => c.name)], { cwd: checkout, env });

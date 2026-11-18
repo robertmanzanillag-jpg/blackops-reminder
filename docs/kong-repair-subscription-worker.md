@@ -31,7 +31,10 @@ journal requires reconciliation; do not delete either to force a replay.
 The model receives a filtered source copy, without Git history, environment
 files, credentials, nested worktrees or deployment configuration. Source files
 containing recognizable credential patterns are omitted and cannot be replaced
-by the maker. A named Codex
+by the maker. Oversized baseline data exports are likewise omitted and protected,
+so a large unrelated JSON manifest does not block every repair or become a
+deletion. Repairs requiring an omitted input stay outside this bounded scope.
+A named Codex
 permission profile denies filesystem reads outside the workspace (except minimal
 runtime paths), denies command network access, and keeps dependencies read-only.
 A live OS sandbox probe must successfully write in the workspace and fail to
@@ -67,6 +70,11 @@ with one or more passing test cases and zero failures. Maker temp helpers cannot
 enter this copy. Its source digest must remain unchanged after testing and match
 the actual committed candidate presented to the checker. This is
 a maker check, not an independent acceptance gate.
+
+Model- and test-owned files are first frozen by a trusted deterministic copier
+inside the OS sandbox. The parent reads that isolated regular-file copy rather
+than following paths that an untrusted background process could replace with
+symlinks. The copier has no network access or model invocation.
 
 The host then opens a draft PR and re-reads its actual remote branch and head.
 The issue's maker receipt references the exact repair key, PR and head. The
