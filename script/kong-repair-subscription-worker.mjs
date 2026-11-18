@@ -386,7 +386,7 @@ export async function publishWorkerHealth({root,engine,sourceCount,workerId='cod
   const file=path.join(root,'health-pointer.json');let pointer={};
   try{pointer=JSON.parse(await fs.readFile(file,'utf8'));}catch(error){if(error.code!=='ENOENT')throw code('HEALTH_UNCONFIRMED');}
   if(pointer.pending)throw code('HEALTH_UNCONFIRMED');
-  const age=+now-Date.parse(pointer.writtenAt||'');if(Number.isFinite(age)&&age>=0&&age<30*60_000)return {state:'cadence_held'};
+  const age=+now-Date.parse(pointer.writtenAt||'');if(Number.isFinite(age)&&age>=0&&age<25*60_000)return {state:'cadence_held'};
   const send=request|| (async(args,input)=>JSON.parse(await mustRun('/opt/homebrew/bin/gh',args,{env:cleanEnvironment(),input:input?JSON.stringify(input):undefined,timeoutMs:30_000,maxOutputBytes:512*1024})));
   const title='[BlackOps] KONG repair worker health',kind='KONG repair worker health metadata only; no model or repair dispatch.';
   if(!pointer.issueNumber){
@@ -449,10 +449,15 @@ export async function consumeGitHubOnce({root,list=githubSources,claim=githubCla
 async function main() {
   const args = process.argv.slice(2); if (args.length !== 1 || !['--readiness', '--once'].includes(args[0])) throw code('USE_READINESS_OR_ONCE');
   const root = path.join(os.homedir(), '.local/share/blackops/kong-repair-runtime');
+  const authStarted=performance.now();
   const auth = await runProcess(DEFAULT_CODEX, ['login', 'status'], { cwd: os.tmpdir(), env: cleanEnvironment(), timeoutMs: 15_000 });
+  const authElapsedMs=Math.round(performance.now()-authStarted),githubStarted=performance.now();
   const github=await runProcess('/opt/homebrew/bin/gh',['auth','status'],{cwd:os.tmpdir(),env:cleanEnvironment(),timeoutMs:15_000});
   const readiness = { subscriptionSignedIn: auth.exitCode === 0 && /Logged in using ChatGPT/.test(auth.output), githubSignedIn:github.exitCode===0, transport:'github_existing_membership', workerEnabled: process.env.KONG_REPAIR_LOCAL_WORKER_ENABLED === 'true', paidApiSpendUsd: 0 };
   if (args[0] === '--readiness') { console.log(JSON.stringify(readiness)); return; }
+  await writePrivate(path.join(root,'startup-readiness.json'),{observedAt:new Date().toISOString(),workerEnabled:readiness.workerEnabled,
+    subscription:{signedIn:readiness.subscriptionSignedIn,exitCode:auth.exitCode,timedOut:auth.timedOut,overflow:auth.overflow,elapsedMs:authElapsedMs},
+    github:{signedIn:readiness.githubSignedIn,exitCode:github.exitCode,timedOut:github.timedOut,overflow:github.overflow,elapsedMs:Math.round(performance.now()-githubStarted)}});
   if (!readiness.subscriptionSignedIn || !readiness.githubSignedIn || !readiness.workerEnabled) throw code('WORKER_NOT_READY');
   console.log(JSON.stringify(await consumeGitHubOnce({ root, execute: (claim, stage) => executeMaker(claim, stage, { runtimeRoot: root }),heartbeat:async({sourceCount,now})=>publishWorkerHealth({root,engine:await engineIdentity(),sourceCount,now}) })));
 }

@@ -5,7 +5,8 @@ import { apiRequest } from "@/lib/queryClient";
 
 const ENDPOINT = "/api/kong-repairs";
 const REFRESH_INTERVAL_MS = 60_000;
-const MAX_SIGNAL_AGE_MS = 30 * 60_000;
+const SOURCE_MAX_AGE_MS = 30 * 60_000;
+const MAKER_MAX_AGE_MS = 45 * 60_000;
 
 type RepairResponse = {
   entries?: Array<{ status?: string } | null>;
@@ -19,9 +20,9 @@ function parseSignalTime(at: unknown) {
   return Number.isFinite(timestamp) && timestamp <= Date.now() ? new Date(timestamp).toISOString() : undefined;
 }
 
-function isFresh(at: string | undefined, now: number) {
+function isFresh(at: string | undefined, now: number, maxAgeMs: number) {
   const age = typeof at === "string" ? now - Date.parse(at) : NaN;
-  return age >= 0 && age <= MAX_SIGNAL_AGE_MS;
+  return age >= 0 && age <= maxAgeMs;
 }
 
 function isDisabledError(message: string) {
@@ -95,17 +96,18 @@ export function KongRepairStatusPanel({ sessionScope }: { sessionScope: string }
   const sourceReadAt = data?.sourceReadAt;
   const makerPollAt = data?.makerPollAt;
   useEffect(() => {
-    const timers = [sourceReadAt, makerPollAt].flatMap(at => {
+    const timers = [[sourceReadAt, SOURCE_MAX_AGE_MS], [makerPollAt, MAKER_MAX_AGE_MS]] as const;
+    const handles = timers.flatMap(([at, maxAgeMs]) => {
       if (!at) return [];
-      const delay = Math.max(Date.parse(at) + MAX_SIGNAL_AGE_MS + 1 - Date.now(), 0);
+      const delay = Math.max(Date.parse(at) + maxAgeMs + 1 - Date.now(), 0);
       return [window.setTimeout(() => setClock(tick => tick + 1), delay)];
     });
-    return () => timers.forEach(timer => window.clearTimeout(timer));
+    return () => handles.forEach(timer => window.clearTimeout(timer));
   }, [sourceReadAt, makerPollAt]);
 
   const currentTime = Date.now();
-  const sourceFresh = isFresh(sourceReadAt, currentTime);
-  const makerFresh = data?.makerConnected && isFresh(makerPollAt, currentTime);
+  const sourceFresh = isFresh(sourceReadAt, currentTime, SOURCE_MAX_AGE_MS);
+  const makerFresh = data?.makerConnected && isFresh(makerPollAt, currentTime, MAKER_MAX_AGE_MS);
   const errorMessage = repair.error?.message === "access" ? "Solo el propietario puede consultar las reparaciones."
     : repair.error?.message === "disabled" ? "Sin activar"
     : "No se pudo consultar el estado de las reparaciones.";

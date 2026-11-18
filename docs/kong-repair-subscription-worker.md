@@ -131,3 +131,46 @@ An existing installation is not silently replaced by this installer.
 
 Official permission profile reference:
 https://learn.chatgpt.com/docs/permissions
+
+## Readiness supervision and recurring health
+
+The startup supervisor retries only the reviewed engine's exact
+`WORKER_NOT_READY` exit before it reads the queue or creates a claim. It permits
+at most two retries, five seconds apart. Exit signals, output overflow, extra
+output, other errors and all post-claim/model outcomes never permit a retry.
+Both installed files are bound to the same reviewed commit and their hashes in
+private installation metadata. Startup diagnostics record only boolean sign-in
+results, exit/timeout/overflow codes and durations, never credential bodies.
+The direct worker `--readiness` command remains read-only.
+
+The LaunchAgent still polls every 30 minutes. Health publication has a minimum
+25-minute interval, so a healthy poll arriving at 29:59 cannot suppress the next
+remote heartbeat for another full cycle. An unconfirmed issue/comment write
+remains quarantined; no pointer or timestamp is reset to manufacture freshness.
+Maker evidence expires after 45 minutes in both server and UI, including cached
+responses: the budget covers a 30-minute schedule, at most 100 seconds for three
+bounded auth attempts and delays, up to five minutes for a bounded paginated
+GitHub read, an engine read/publication and a five-minute cache. The actual poll
+timestamp remains visible and expires; a missed later cycle does not stay green.
+CEO source evidence retains its separate 30-minute limit.
+
+For an existing installation, use a clean checkout of the exact newly reviewed
+**merged** commit (never a guessed future SHA):
+
+```
+node script/install-kong-repair-subscription-worker.mjs --upgrade --reviewed-sha NEW_REVIEWED_MERGED_SHA --from-reviewed-sha EXACT_INSTALLED_SHA
+```
+
+The upgrader refuses a running worker, an existing worker lock, changed installed
+hashes or unexpected LaunchAgent arguments. It privately backs up old engine,
+installation metadata and LaunchAgent, unloads only this inactive service, copies
+the reviewed engine/supervisor, binds the new source commit and reloads without
+kickstart. Unknown journals, model reservations, pending health receipts and
+GitHub claim refs are preserved. Office and KONG engine configuration must then
+pin the same reviewed merged revision. No installed worker, key, environment or
+production configuration is changed merely by merging this code.
+
+Rollback requires the matching private backup and a reviewed, inactive-service
+operation; restore engine, installation metadata and LaunchAgent together. Keep
+all journals and health/claim evidence. Never delete a lock or reset an uncertain
+claim to force another model attempt.

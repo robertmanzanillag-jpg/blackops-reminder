@@ -105,3 +105,10 @@ Rollback: disable bridge/handoff flags, stop the local consumer, then revert the
 reviewed source changes. Preserve council/outbox/claim/receipt history; never
 clear unknown work to obtain a green status. No new database table is required.
 The bounded journal stops at capacity and has no automatic history pruning.
+
+Maker heartbeat evidence has a distinct 45-minute budget for its 30-minute
+scheduled worker and bounded auth/GitHub/cache delays. The worker publishes at a
+25-minute minimum to avoid skipping a nearly 30-minute healthy tick. Server and
+UI use the same maker expiry and recalculate cached age; CEO source evidence
+still expires after 30 minutes. These windows describe dated observed evidence,
+not proof that every intervening attempt or model run succeeded.
