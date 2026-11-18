@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T10:47:28.544Z
+Generated: 2026-11-18T10:57:42.301Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-private-replit-transport-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1191 | 1090 | 4353 | 623 | 24630 |
+| 1191 | 1090 | 4353 | 623 | 24631 |
 
 ## Entrypoints
 - `client/src/App.tsx`

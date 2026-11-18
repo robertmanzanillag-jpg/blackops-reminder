@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T10:47:28.544Z",
+  "generatedAt": "2026-11-18T10:57:42.301Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-private-replit-transport-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 1090,
     "imports": 4353,
     "routes": 623,
-    "symbols": 24630
+    "symbols": 24631
   },
   "directories": {
     ".": {
@@ -37580,6 +37580,7 @@
         "exec",
         "output",
         "result",
+        "setup",
         "source",
         "temporary",
         "text"

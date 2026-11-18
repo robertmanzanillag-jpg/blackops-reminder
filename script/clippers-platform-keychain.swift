@@ -1,8 +1,13 @@
 import Foundation
 import Security
 import Darwin
+#if !CLIPPERS_KEYCHAIN_TEST
+import AppKit
+import CryptoKit
+#endif
 
-// One fixed per-consumer item. No writes, unlocks, ACL edits, arguments or UI.
+// Default reader: one fixed item, no writes, unlocks, ACL edits or UI.
+// Only explicit user --setup can create one new item with one-app access.
 let platformService = "com.blackops.clippers-orchestra.replit-production"
 let platformAccount = "clippers-telemetry"
 let maximumTokenBytes = 8192
@@ -51,6 +56,117 @@ func platformCredential(
     return ["status": "found", "token": token]
 }
 
+// Setup is an explicit user-only action. It never reads an existing item and
+// SecItemAdd cannot overwrite one. The injectable core is tested without Security.
+func createPlatformCredential(
+    token: String,
+    validatedReader: () -> String?,
+    exactAccess: (String) -> CFTypeRef?,
+    addItem: (CFDictionary) -> OSStatus
+) -> String {
+    let bytes = Data(token.utf8)
+    guard bytes.count >= 16 && bytes.count <= maximumTokenBytes,
+          token.range(of: "^[A-Za-z0-9._~+/-]+=*$", options: .regularExpression) != nil,
+          !token.contains("\n"), !token.contains("\r") else { return "invalid" }
+    guard let reader = validatedReader(), let access = exactAccess(reader) else { return "unsafe_reader" }
+    let attributes: [CFString: Any] = [
+        kSecClass: kSecClassGenericPassword, kSecAttrService: platformService,
+        kSecAttrAccount: platformAccount, kSecAttrLabel: "Clippers private Replit telemetry",
+        kSecValueData: bytes, kSecAttrAccess: access,
+    ]
+    let status = addItem(attributes as CFDictionary)
+    if status == errSecSuccess { return "stored" }
+    if status == errSecDuplicateItem { return "already_exists" }
+    return "unavailable"
+}
+
+#if !CLIPPERS_KEYCHAIN_TEST
+func setupReaderIdentity() -> (String, String)? {
+    let expected = FileManager.default.homeDirectoryForCurrentUser
+        .appendingPathComponent(".local/share/blackops/clippers-runtime/script/clippers-platform-keychain").path
+    var size: UInt32 = 0
+    _ = _NSGetExecutablePath(nil, &size)
+    var buffer = [CChar](repeating: 0, count: Int(size))
+    guard _NSGetExecutablePath(&buffer, &size) == 0 else { return nil }
+    let running = URL(fileURLWithPath: String(cString: buffer)).resolvingSymlinksInPath().path
+    let file = URL(fileURLWithPath: expected)
+    var info = stat()
+    guard running == expected, file.resolvingSymlinksInPath().path == expected,
+          lstat(expected, &info) == 0, info.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
+          info.st_mode & 0o777 == 0o700, info.st_uid == getuid(), info.st_nlink == 1,
+          let bytes = try? Data(contentsOf: file, options: .mappedIfSafe) else { return nil }
+    return (expected, SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
+}
+
+func exactReaderAccess(_ path: String) -> CFTypeRef? {
+    var trusted: SecTrustedApplication?
+    guard path.withCString({ SecTrustedApplicationCreateFromPath($0, &trusted) }) == errSecSuccess,
+          let application = trusted else { return nil }
+    var access: SecAccess?
+    // Explicit single application; never nil/all-apps or an interpreter.
+    guard SecAccessCreate("Clippers private Replit telemetry" as CFString, [application] as CFArray, &access) == errSecSuccess,
+          let result = access else { return nil }
+    return result
+}
+
+final class PlatformSetup: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    let secure = NSSecureTextField(frame: NSRect(x: 24, y: 130, width: 552, height: 28))
+    let status = NSTextField(wrappingLabelWithString: "")
+    let save = NSButton(title: "Guardar", target: nil, action: nil)
+    var window: NSWindow?
+    let identity = setupReaderIdentity()
+    var saved = false
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        let panel = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 600, height: 300),
+            styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        window = panel; panel.delegate = self; panel.title = "Acceso privado de Replit para Clippers"
+        let label = NSTextField(wrappingLabelWithString:
+            "Pega solo el token Production que aprobaste crear. Se guarda en Keychain para este lector; no cambia Replit ni reemplaza un token existente.")
+        label.frame = NSRect(x: 24, y: 232, width: 552, height: 48)
+        let reader = NSTextField(wrappingLabelWithString: identity.map { "Lector: \($0.0)\nSHA256: \($0.1)" } ?? "Lector no instalado o no verificado. No se puede guardar.")
+        reader.frame = NSRect(x: 24, y: 170, width: 552, height: 54)
+        reader.font = .monospacedSystemFont(ofSize: 10, weight: .regular)
+        secure.placeholderString = "Token de acceso Production"
+        secure.setAccessibilityLabel("Token de acceso de producción de Replit")
+        status.frame = NSRect(x: 24, y: 72, width: 552, height: 48)
+        status.stringValue = "Solo el usuario debe pegar el valor. Cancelar no guarda nada."
+        save.frame = NSRect(x: 464, y: 20, width: 112, height: 32); save.target = self; save.action = #selector(PlatformSetup.store)
+        save.isEnabled = identity != nil
+        let cancel = NSButton(title: "Cancelar", target: self, action: #selector(PlatformSetup.cancel))
+        cancel.frame = NSRect(x: 340, y: 20, width: 112, height: 32)
+        for view in [label, reader, secure, status, save, cancel] { panel.contentView?.addSubview(view) }
+        panel.center(); panel.makeKeyAndOrderFront(nil); panel.makeFirstResponder(secure)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    @objc func store() {
+        guard !saved, let expected = identity else { return }
+        let value = secure.stringValue; secure.stringValue = ""
+        let result = createPlatformCredential(token: value, validatedReader: {
+            guard let current = setupReaderIdentity(), current.0 == expected.0, current.1 == expected.1 else { return nil }
+            return current.0
+        }, exactAccess: exactReaderAccess, addItem: { SecItemAdd($0, nil) })
+        let messages = ["stored": "Guardado. Solo el lector mostrado puede acceder sin confirmación. Ya puedes cerrar.",
+            "already_exists": "Ya existe este elemento. No se sobrescribió ni modificó nada.",
+            "unsafe_reader": "El lector cambió o no está verificado. No se guardó.",
+            "invalid": "El valor no tiene el formato esperado. No se guardó.",
+            "unavailable": "Keychain no confirmó el guardado. No se reintentó ni se cambió otro elemento."]
+        status.stringValue = messages[result] ?? "No se confirmó el guardado."
+        saved = result == "stored"; save.isEnabled = !saved
+    }
+    @objc func cancel() { secure.stringValue = ""; NSApp.terminate(nil) }
+    func windowWillClose(_ notification: Notification) { secure.stringValue = ""; NSApp.terminate(nil) }
+}
+
+func userSetup() {
+    let application = NSApplication.shared
+    application.setActivationPolicy(.regular)
+    let controller = PlatformSetup()
+    application.delegate = controller
+    withExtendedLifetime(controller) { application.run() }
+}
+#endif
+
 #if CLIPPERS_KEYCHAIN_TEST
 // This separately compiled binary cannot query the real Keychain. Both OS
 // operations are injected fakes, and the production entry point is compiled out.
@@ -91,21 +207,38 @@ func runSyntheticTests() {
         precondition(reply == ["status": "invalid"])
     }
     precondition(platformCredential(disableInteraction: { errSecSuccess }, copyMatching: { _, _ in errSecSuccess }) == ["status": "invalid"])
-    print("{\"syntheticTestsPassed\":16,\"realKeychainQueries\":0}")
+    var additions = 0
+    let stored = createPlatformCredential(token: synthetic, validatedReader: { "/synthetic/reviewed-reader" }, exactAccess: { path in
+        precondition(path == "/synthetic/reviewed-reader"); return "single-exact-application" as CFString
+    }, addItem: { query in
+        additions += 1; let q = query as NSDictionary
+        precondition(q[kSecAttrService] as? String == platformService && q[kSecAttrAccount] as? String == platformAccount)
+        precondition(q[kSecClass] as? String == kSecClassGenericPassword as String)
+        precondition(q[kSecAttrAccess] as? String == "single-exact-application")
+        precondition(q[kSecValueData] as? Data == Data(synthetic.utf8))
+        return errSecSuccess
+    })
+    precondition(stored == "stored" && additions == 1)
+    let duplicate = createPlatformCredential(token: synthetic, validatedReader: { "/synthetic/reviewed-reader" }, exactAccess: { _ in "one-app" as CFString }, addItem: { _ in additions += 1; return errSecDuplicateItem })
+    precondition(duplicate == "already_exists" && additions == 2)
+    precondition(createPlatformCredential(token: "bad", validatedReader: { preconditionFailure("invalid input must not authorize access") }, exactAccess: { _ in nil }, addItem: { _ in preconditionFailure("invalid input must not write") }) == "invalid")
+    precondition(createPlatformCredential(token: synthetic, validatedReader: { nil }, exactAccess: { _ in nil }, addItem: { _ in preconditionFailure("unsafe reader must not write") }) == "unsafe_reader")
+    precondition(createPlatformCredential(token: synthetic, validatedReader: { "/synthetic/reviewed-reader" }, exactAccess: { _ in nil }, addItem: { _ in preconditionFailure("missing exact ACL must not write") }) == "unsafe_reader")
+    print("{\"syntheticTestsPassed\":24,\"realKeychainQueries\":0,\"realKeychainWrites\":0}")
 }
 runSyntheticTests()
 #else
-let reply: [String: String]
-if CommandLine.arguments.count != 1 {
-    reply = ["status": "invalid"]
+if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--setup" {
+    // Explicit user-only UI. No agent or scheduled sender invokes this mode.
+    userSetup()
 } else {
-    reply = platformCredential(
+    let reply = CommandLine.arguments.count == 1 ? platformCredential(
         disableInteraction: { SecKeychainSetUserInteractionAllowed(false) },
         copyMatching: { query, result in SecItemCopyMatching(query, result) }
-    )
-}
-if let encoded = try? JSONSerialization.data(withJSONObject: reply, options: [.sortedKeys]) {
-    FileHandle.standardOutput.write(encoded)
-    FileHandle.standardOutput.write(Data([10]))
+    ) : ["status": "invalid"]
+    if let encoded = try? JSONSerialization.data(withJSONObject: reply, options: [.sortedKeys]) {
+        FileHandle.standardOutput.write(encoded)
+        FileHandle.standardOutput.write(Data([10]))
+    }
 }
 #endif
