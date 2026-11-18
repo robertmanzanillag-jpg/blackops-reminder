@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T13:25:21.049Z",
+  "generatedAt": "2026-11-18T13:25:49.636Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-plan-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 1102,
     "imports": 4401,
     "routes": 623,
-    "symbols": 25005
+    "symbols": 25007
   },
   "directories": {
     ".": {
@@ -11262,10 +11262,12 @@
         "isSha",
         "iso",
         "key",
+        "match",
         "newYorkSlot",
         "nextDay",
         "normalized",
         "normalizedSnapshot",
+        "parsed",
         "parts",
         "planClippersWeek",
         "posts",

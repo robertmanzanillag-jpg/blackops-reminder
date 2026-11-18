@@ -66,3 +66,9 @@ test('evidence digests must be strings, not coercible arrays',()=>{
  b.snapshots[0].evidenceSha256=sha;b.snapshots[0].posts=[{...post(12),confirmationSha256:[sha]}];assert.equal(planClippersWeek(b).cells[0].reason,'provider_snapshot_row_invalid');
  assert.equal(planClippersWeek({now}).coverageComplete,false);
 });
+test('published effective timestamps cannot follow their snapshot and invalid calendar timestamps are rejected',()=>{
+ const b=base();b.snapshots[0].observedAt='2026-11-18T13:50:00Z';b.snapshots[0].posts=[{...post(8),status:'published',scheduledAt:'2026-11-18T13:55:00Z'}];
+ assert.equal(planClippersWeek(b).cells[0].reason,'provider_snapshot_row_invalid');
+ for(const now of ['2026-02-30T14:00:00Z','2026-11-18T24:00:00Z'])assert.throws(()=>planClippersWeek({now}),/invalid_now/);
+ b.snapshots[0].observedAt='2026-11-18T24:00:00Z';assert.equal(planClippersWeek(b).cells[0].reason,'provider_snapshot_unverified_or_stale');
+});

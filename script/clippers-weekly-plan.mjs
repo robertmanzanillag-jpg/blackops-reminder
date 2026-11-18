@@ -4,7 +4,13 @@ import { DESTINATIONS, DAILY_LIMIT, TIME_ZONE, destinationKey, findDestination, 
 const HOUR = 3600000;
 const SHA = /^[a-f0-9]{64}$/;
 const isSha = value => typeof value === 'string' && SHA.test(value);
-const iso = value => providerTimestamp(value);
+function iso(value) {
+  const parsed = providerTimestamp(value);
+  if (!parsed) return null;
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})/.exec(value);
+  if (!match || +match[2] > 23 || +match[3] > 59 || +match[4] > 59 || new Date(match[1] + 'T00:00:00Z').toISOString().slice(0, 10) !== match[1]) return null;
+  return parsed;
+}
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const parts = time => Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
   timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
@@ -36,7 +42,7 @@ function normalizedSnapshot(snapshot, destination, day, now, maxAgeMs) {
         !iso(row.scheduledAt) || localDay(new Date(row.scheduledAt)) !== day ||
         !['scheduled', 'published'].includes(row.status) || !isSha(row.confirmationSha256)) return { reason: 'provider_snapshot_row_invalid' };
     if (row.status === 'scheduled' && +new Date(row.scheduledAt) <= now) return { reason: 'past_schedule_requires_publication_confirmation' };
-    if (row.status === 'published' && +new Date(row.scheduledAt) > now) return { reason: 'provider_snapshot_row_invalid' };
+    if (row.status === 'published' && +new Date(row.scheduledAt) > +new Date(snapshot.observedAt)) return { reason: 'provider_snapshot_row_invalid' };
     const normalized = { providerPostId: row.providerPostId, scheduledAt: iso(row.scheduledAt), status: row.status, confirmationSha256: row.confirmationSha256 };
     const prior = unique.get(row.providerPostId);
     if (prior && digest(prior) !== digest(normalized)) return { reason: 'provider_post_identity_conflict' };
