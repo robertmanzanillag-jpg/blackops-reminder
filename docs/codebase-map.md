@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T08:26:52.615Z
+Generated: 2026-11-18T08:44:31.297Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-orchestra-runtime-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1181 | 1081 | 4288 | 616 | 24444 |
+| 1181 | 1081 | 4289 | 616 | 24444 |
 
 ## Entrypoints
 - `client/src/App.tsx`

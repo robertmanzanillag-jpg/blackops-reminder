@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T08:26:52.615Z",
+  "generatedAt": "2026-11-18T08:44:31.297Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-orchestra-runtime-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -126,7 +126,7 @@
   "totals": {
     "filesVisible": 1181,
     "filesIndexed": 1081,
-    "imports": 4288,
+    "imports": 4289,
     "routes": 616,
     "symbols": 24444
   },
@@ -35332,6 +35332,7 @@
       "kind": "test",
       "imports": [
         "../script/blackroom-metricool-exporter.mjs",
+        "../script/clippers-orchestra-relay.mjs",
         "node:assert/strict",
         "node:fs/promises",
         "node:path",
