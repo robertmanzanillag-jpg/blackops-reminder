@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T07:09:10.426Z",
+  "generatedAt": "2026-11-18T07:16:36.527Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-worker-supervisor",
   "packageName": "rest-express",
   "scripts": {
@@ -131,20 +131,6 @@
     "symbols": 24152
   },
   "directories": {
-    "script": {
-      "files": 124,
-      "indexed": 112,
-      "kinds": {
-        "script": 124
-      }
-    },
-    "tests": {
-      "files": 306,
-      "indexed": 302,
-      "kinds": {
-        "test": 306
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -231,6 +217,13 @@
         "other": 70
       }
     },
+    "script": {
+      "files": 124,
+      "indexed": 112,
+      "kinds": {
+        "script": 124
+      }
+    },
     "script/release-gate": {
       "files": 7,
       "indexed": 7,
@@ -278,6 +271,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 306,
+      "indexed": 302,
+      "kinds": {
+        "test": 306
       }
     },
     "tests/fixtures": {

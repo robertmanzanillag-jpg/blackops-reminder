@@ -144,7 +144,7 @@ results, exit/timeout/overflow codes and durations, never credential bodies.
 The direct worker `--readiness` command remains read-only.
 
 The LaunchAgent still polls every 30 minutes. Health publication has a minimum
-25-minute interval, so a healthy poll arriving at 29:59 cannot suppress the next
+20-minute interval, so a healthy poll arriving at 23:20 (the bounded scan/auth variation case) cannot suppress the next
 remote heartbeat for another full cycle. An unconfirmed issue/comment write
 remains quarantined; no pointer or timestamp is reset to manufacture freshness.
 Maker evidence expires after 45 minutes in both server and UI, including cached

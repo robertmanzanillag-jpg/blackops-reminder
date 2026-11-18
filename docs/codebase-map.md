@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T07:09:10.426Z
+Generated: 2026-11-18T07:16:36.527Z
 Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-worker-supervisor`
 Package: `rest-express`
 

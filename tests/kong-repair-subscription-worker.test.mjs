@@ -161,12 +161,12 @@ test('maker and fresh checker reserve separate invocations inside the same three
 test('a successful zero-source poll records liveness without invoking a model or claiming completed work',async t=>{
   const root=await fixture(t);let beats=0;const result=await consumeGitHubOnce({root,list:async()=>[],heartbeat:async p=>{beats++;assert.equal(p.sourceCount,0)},execute:async()=>assert.fail('no model')});assert.equal(result.state,'idle');assert.equal(beats,1);const poll=JSON.parse(await fs.readFile(path.join(root,'last-successful-poll.json'),'utf8'));assert.equal(poll.sourceCount,0);assert.ok(poll.observedAt);
 });
-test('health publisher reuses one private metadata comment with a twenty-five-minute minimum cadence without branch pushes or dispatch',async t=>{
+test('health publisher reuses one private metadata comment with a twenty-minute minimum cadence without branch pushes or dispatch',async t=>{
   const root=await fixture(t),engine={sourceCommit:'a'.repeat(40),sha256:'b'.repeat(64)},calls=[];
   const request=async(args,input)=>{calls.push({args,input});if(args[0]==='issue')return [];if(args[1].endsWith('/issues'))return {number:8};if(args[1].endsWith('comments?per_page=100'))return [];return {id:9,body:input.body,user:{login:'robertmanzanillag-jpg'}};};
   const opts={root,engine,sourceCount:0,request,now:new Date('2026-11-18T04:00:00Z')};assert.equal((await publishWorkerHealth(opts)).state,'published');assert.equal(calls.length,4);
   assert.equal((await publishWorkerHealth({...opts,now:new Date('2026-11-18T04:10:00Z')})).state,'cadence_held');assert.equal(calls.length,4);
-  assert.equal((await publishWorkerHealth({...opts,now:new Date('2026-11-18T04:29:59Z')})).state,'published');assert.ok(calls.at(-1).args.includes('PATCH'));assert.ok(calls.at(-1).args[1].endsWith('/comments/9'));
+  assert.equal((await publishWorkerHealth({...opts,now:new Date('2026-11-18T04:23:20Z')})).state,'published');assert.ok(calls.at(-1).args.includes('PATCH'));assert.ok(calls.at(-1).args[1].endsWith('/comments/9'));
   assert.ok(calls.every(c=>!c.args.join(' ').includes('git/refs')&&!JSON.stringify(c.input||{}).includes('@codex')));assert.ok(calls.at(-1).input.body.includes('"state":"idle"'));
 });
 test('a lost health issue-creation acknowledgement never creates another issue automatically',async t=>{

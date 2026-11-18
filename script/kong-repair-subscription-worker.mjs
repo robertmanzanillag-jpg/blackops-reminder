@@ -386,7 +386,7 @@ export async function publishWorkerHealth({root,engine,sourceCount,workerId='cod
   const file=path.join(root,'health-pointer.json');let pointer={};
   try{pointer=JSON.parse(await fs.readFile(file,'utf8'));}catch(error){if(error.code!=='ENOENT')throw code('HEALTH_UNCONFIRMED');}
   if(pointer.pending)throw code('HEALTH_UNCONFIRMED');
-  const age=+now-Date.parse(pointer.writtenAt||'');if(Number.isFinite(age)&&age>=0&&age<25*60_000)return {state:'cadence_held'};
+  const age=+now-Date.parse(pointer.writtenAt||'');if(Number.isFinite(age)&&age>=0&&age<20*60_000)return {state:'cadence_held'};
   const send=request|| (async(args,input)=>JSON.parse(await mustRun('/opt/homebrew/bin/gh',args,{env:cleanEnvironment(),input:input?JSON.stringify(input):undefined,timeoutMs:30_000,maxOutputBytes:512*1024})));
   const title='[BlackOps] KONG repair worker health',kind='KONG repair worker health metadata only; no model or repair dispatch.';
   if(!pointer.issueNumber){
