@@ -2,7 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { canonicalRepairJson, createKongRepairBridge, repairKey, KONG_REPAIR_REPOSITORY } from "../server/kong-repair-bridge";
-import { pullRepairSources, readRepairPullStatus, createRepairPullLoop, KONG_REPAIR_PULL_INTERVAL_MS } from "../server/kong-repair-pull";
+import { pullRepairSources, readRepairPullStatus, createRepairPullLoop, KONG_REPAIR_PULL_INTERVAL_MS, RepairPullInitializationError, KONG_REPAIR_PULL_STARTUP_RETRY_MS } from "../server/kong-repair-pull";
 const now = Date.parse("2026-11-18T00:00:00Z"), owner = "fixture-owner", token = "fixture-read-token-only-12345678901234567890";
 function fixture() {
   const data = new Map<string, string>(); let tail = Promise.resolve(), issues = 0;
@@ -70,4 +70,60 @@ test("pull-only mode synchronizes at most three exact currently reported repair 
     sync: async (key?: string, refresh?: boolean) => { calls.push([key!, refresh]); return []; } };
   await pullRepairSources({ bridge, store: f.store, owner, token, handoffEnabled: false, now: () => now, fetch: (async () => Response.json({ softwareRepairs: f.source })) as typeof fetch });
   assert.deepEqual(calls, entries.slice(0, 3).map(entry => [entry.key, false]));
+});
+
+const settle = () => new Promise<void>(resolve => setImmediate(resolve));
+test("a cold initial store read retries before the first HTTP read instead of waiting fifteen minutes", async () => {
+  const f = fixture(); let cold = true, calls = 0, fetches = 0; const waits: number[] = [];
+  const store = { ...f.store, read: async (key: string) => { if (cold) { cold = false; throw Error("fixture database starting"); } return f.store.read(key); } };
+  const stop = createRepairPullLoop({ enabled: true, setInterval: () => 1, clearInterval() {}, waitBeforeRetry: async ms => { waits.push(ms); },
+    run: () => { calls++; return pullRepairSources({ bridge: f.bridge, store, owner, token, handoffEnabled: false, now: () => now,
+      fetch: (async () => { fetches++; return Response.json({ softwareRepairs: f.source }); }) as typeof fetch }); } });
+  await settle(); stop();
+  assert.equal(calls, 2); assert.deepEqual(waits, [1000]); assert.equal(fetches, 1); assert.equal(f.calls(), 0);
+  assert.equal((await readRepairPullStatus(store, owner, now)).sourceConnected, true);
+  assert.equal((await f.bridge.view()).entries.length, 1); assert.equal((await f.bridge.view()).paidExecution, "blocked_unknown_credit");
+});
+test("failure of the initial metadata transaction is retryable before HTTP and creates one source entry", async () => {
+  const f = fixture(); let cold = true, fetches = 0; const waits: number[] = [];
+  const store = { ...f.store, transact: async (key: string, change: (raw: string | null) => Promise<string>) => {
+    if (cold) { cold = false; throw Error("fixture first metadata transaction unavailable"); } return f.store.transact(key, change);
+  } };
+  const stop = createRepairPullLoop({ enabled: true, setInterval: () => 1, clearInterval() {}, waitBeforeRetry: async ms => { waits.push(ms); },
+    run: () => pullRepairSources({ bridge: f.bridge, store, owner, token, handoffEnabled: false, now: () => now,
+      fetch: (async () => { fetches++; return Response.json({ softwareRepairs: f.source }); }) as typeof fetch }) });
+  await settle(); stop(); assert.deepEqual(waits, [1000]); assert.equal(fetches, 1); assert.equal((await f.bridge.view()).entries.length, 1);
+});
+test("persistent initialization failure has exactly two bounded delays, normal cadence and no HTTP request", async () => {
+  let calls = 0, fetches = 0, interval!: () => void; const waits: number[] = [];
+  const f = fixture(), store = { ...f.store, read: async () => { throw Error("fixture unavailable"); } };
+  const stop = createRepairPullLoop({ enabled: true, setInterval: (callback, ms) => { assert.equal(ms, 900000); interval = callback; return 1; }, clearInterval() {},
+    waitBeforeRetry: async ms => { waits.push(ms); }, run: () => { calls++; return pullRepairSources({ bridge: f.bridge, store, owner, token, handoffEnabled: true, now: () => now,
+      fetch: (async () => { fetches++; throw Error("must not fetch"); }) as typeof fetch }); } });
+  await settle(); assert.equal(calls, 3); assert.deepEqual(waits, [...KONG_REPAIR_PULL_STARTUP_RETRY_MS]); assert.equal(fetches, 0); assert.equal(f.calls(), 0);
+  stop(); interval(); await settle(); assert.equal(calls, 3);
+});
+test("a failure after HTTP and GitHub handoff is never fast-retried or re-dispatched", async () => {
+  const f = fixture(); let calls = 0, fetches = 0, metadataWrites = 0; const waits: number[] = [];
+  const store = { ...f.store, transact: async (key: string, change: (raw: string | null) => Promise<string>) => {
+    if (key.includes("kong-repair-pull-v1") && ++metadataWrites >= 3) throw Error("fixture post-handoff persistence unconfirmed");
+    return f.store.transact(key, change);
+  } };
+  const stop = createRepairPullLoop({ enabled: true, setInterval: () => 1, clearInterval() {}, waitBeforeRetry: async ms => { waits.push(ms); },
+    run: () => { calls++; return pullRepairSources({ bridge: f.bridge, store, owner, token, handoffEnabled: true, now: () => now,
+      fetch: (async () => { fetches++; return Response.json({ softwareRepairs: f.source }); }) as typeof fetch }); } });
+  await settle(); stop(); assert.equal(calls, 1); assert.equal(fetches, 1); assert.equal(f.calls(), 1); assert.deepEqual(waits, []);
+  assert.equal((await f.bridge.view()).entries.length, 1);
+});
+test("an ordinary error with the initialization code cannot grant retry authority", async () => {
+  let calls = 0; const waits: number[] = [];
+  const stop = createRepairPullLoop({ enabled: true, setInterval: () => 1, clearInterval() {}, waitBeforeRetry: async ms => { waits.push(ms); },
+    run: async () => { calls++; throw Error("REPAIR_PULL_INITIALIZATION_UNCONFIRMED"); } });
+  await settle(); stop(); assert.equal(calls, 1); assert.deepEqual(waits, []);
+});
+test("stop during initialization backoff prevents retries and concurrent interval ticks", async () => {
+  let calls = 0, interval!: () => void, release!: () => void;
+  const stop = createRepairPullLoop({ enabled: true, setInterval: callback => { interval = callback; return 1; }, clearInterval() {},
+    waitBeforeRetry: () => new Promise<void>(resolve => { release = resolve; }), run: async () => { calls++; throw new RepairPullInitializationError(); } });
+  await settle(); interval(); assert.equal(calls, 1); stop(); release(); await settle(); assert.equal(calls, 1);
 });

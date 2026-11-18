@@ -5,6 +5,11 @@ import { getSystemUserId } from "./user-context";
 import { canonicalRepairJson, kongRepairPayloadSchema, repairKey, KONG_REPAIR_REPOSITORY, type createKongRepairBridge, type RepairStore } from "./kong-repair-bridge";
 import { getKongRepairBridge } from "./kong-repair-runtime";
 export const KONG_REPAIR_PULL_INTERVAL_MS = 15 * 60000;
+export const KONG_REPAIR_PULL_STARTUP_RETRY_MS = [1000, 5000] as const;
+/** Only failures before any source HTTP read/repair dispatch are retryable. */
+export class RepairPullInitializationError extends Error {
+  constructor() { super("REPAIR_PULL_INITIALIZATION_UNCONFIRMED"); this.name = "RepairPullInitializationError"; }
+}
 const sourceSchema = z.object({ version: z.literal(1), company: z.literal("kong"), repository: z.literal(KONG_REPAIR_REPOSITORY), observedAt: z.string().datetime(), total: z.number().int().nonnegative(),
   requests: z.array(z.object({ key: z.string(), payloadSha256: z.string().regex(/^[a-f0-9]{64}$/), payload: kongRepairPayloadSchema }).strict()).max(100) }).strict();
 const stateSchema = z.object({ version: z.literal(1), lastStartedAt: z.string().datetime().nullable(), lastSuccessfulSourceReadAt: z.string().datetime().nullable(),
@@ -22,11 +27,13 @@ export async function readRepairPullStatus(store: RepairStore, owner: string, no
 export async function pullRepairSources(options: { bridge: ReturnType<typeof createKongRepairBridge>; store: RepairStore; owner: string; token?: string;
   handoffEnabled: boolean; now: () => number; fetch?: typeof fetch }) {
   let state: z.infer<typeof stateSchema> = { ...empty(), lastStartedAt: new Date(options.now()).toISOString() };
-  const previous = await options.store.read(namespace(options.owner));
-  if (previous) state = { ...stateSchema.parse(JSON.parse(previous)), lastStartedAt: state.lastStartedAt };
   const persist = () => options.store.transact(namespace(options.owner), async () => JSON.stringify(stateSchema.parse(state)));
-  state.lastHttpStatus = null;
-  await persist();
+  try {
+    const previous = await options.store.read(namespace(options.owner));
+    if (previous) state = { ...stateSchema.parse(JSON.parse(previous)), lastStartedAt: state.lastStartedAt };
+    state.lastHttpStatus = null;
+    await persist();
+  } catch { throw new RepairPullInitializationError(); }
   let sourceValidated = false;
   try {
     if (!options.token || options.token.length < 32 || /[\x00-\x20\x7f]/.test(options.token)) { state.errorCode = "NOT_CONFIGURED"; await persist(); return state; }
@@ -70,18 +77,41 @@ export async function pullRepairSources(options: { bridge: ReturnType<typeof cre
   }
 }
 let inFlight: Promise<unknown> | undefined;
+let lastInitializationFailureAt: string | undefined;
 export async function pullConfiguredRepairSources() {
   if (process.env.KONG_REPAIR_PULL_ENABLED !== "true") return { code: "REPAIR_PULL_DISABLED" };
   return inFlight ||= (async () => {
-    const bridge = await getKongRepairBridge(); if (!bridge) return { code: "REPAIR_BRIDGE_DISABLED" };
-    return pullRepairSources({ bridge, store: await getCouncilStore(), owner: getSystemUserId(), token: process.env.KONG_OFFICE_READ_TOKEN,
-      handoffEnabled: process.env.KONG_REPAIR_HANDOFF_ENABLED === "true" && /^[a-f0-9]{40}$/.test(process.env.KONG_REPAIR_CHECKER_ENGINE_COMMIT || ""), now: Date.now });
+    try {
+      let bridge: Awaited<ReturnType<typeof getKongRepairBridge>>, store: Awaited<ReturnType<typeof getCouncilStore>>, owner: string;
+      try {
+        bridge = await getKongRepairBridge();
+        if (!bridge) return { code: "REPAIR_BRIDGE_DISABLED" };
+        store = await getCouncilStore(); owner = getSystemUserId();
+      }
+      catch { throw new RepairPullInitializationError(); }
+      const result = await pullRepairSources({ bridge, store, owner, token: process.env.KONG_OFFICE_READ_TOKEN,
+        handoffEnabled: process.env.KONG_REPAIR_HANDOFF_ENABLED === "true" && /^[a-f0-9]{40}$/.test(process.env.KONG_REPAIR_CHECKER_ENGINE_COMMIT || ""), now: Date.now });
+      lastInitializationFailureAt = undefined;
+      return result;
+    } catch (error) {
+      if (error instanceof RepairPullInitializationError) lastInitializationFailureAt = new Date().toISOString();
+      throw error;
+    }
   })().finally(() => { inFlight = undefined; });
 }
-export function createRepairPullLoop(options: { enabled: boolean; run: () => Promise<unknown>; setInterval: (run: () => void, ms: number) => unknown; clearInterval: (id: unknown) => void }) {
+export function createRepairPullLoop(options: { enabled: boolean; run: () => Promise<unknown>; setInterval: (run: () => void, ms: number) => unknown; clearInterval: (id: unknown) => void; waitBeforeRetry?: (ms: number) => Promise<void> }) {
   if (!options.enabled) return () => {};
   let active = false, stopped = false;
-  const tick = () => { if (active || stopped) return; active = true; void options.run().catch(() => undefined).finally(() => { active = false; }); };
+  const run = async () => {
+    for (let attempt = 0; !stopped; attempt++) {
+      try { await options.run(); return; }
+      catch (error) {
+        if (!(error instanceof RepairPullInitializationError) || attempt >= KONG_REPAIR_PULL_STARTUP_RETRY_MS.length || stopped) return;
+        await (options.waitBeforeRetry || (ms => new Promise<void>(resolve => setTimeout(resolve, ms))))(KONG_REPAIR_PULL_STARTUP_RETRY_MS[attempt]);
+      }
+    }
+  };
+  const tick = () => { if (active || stopped) return; active = true; void run().catch(() => undefined).finally(() => { active = false; }); };
   const timer = options.setInterval(tick, KONG_REPAIR_PULL_INTERVAL_MS); tick();
   return () => { stopped = true; options.clearInterval(timer); };
 }
@@ -93,6 +123,7 @@ export function startConfiguredRepairPull() {
   process.once("SIGTERM", stopLoop); process.once("SIGINT", stopLoop);
 }
 export async function configuredRepairPullStatus() {
-  return { ...await readRepairPullStatus(await getCouncilStore(), getSystemUserId(), Date.now()), enabled: process.env.KONG_REPAIR_PULL_ENABLED === "true",
+  const state = await readRepairPullStatus(await getCouncilStore(), getSystemUserId(), Date.now());
+  return { ...state, ...(lastInitializationFailureAt ? { sourceConnected: false, errorCode: "PERSISTENCE_UNCONFIRMED" as const, lastInitializationFailureAt } : {}), enabled: process.env.KONG_REPAIR_PULL_ENABLED === "true",
     readCredentialConfigured: (process.env.KONG_OFFICE_READ_TOKEN?.length || 0) >= 32 };
 }
