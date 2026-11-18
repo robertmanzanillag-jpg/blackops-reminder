@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T11:32:48.141Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-viral-scout-20261118",
+  "generatedAt": "2026-11-18T13:19:56.612Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-plan-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,13 +124,34 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1202,
-    "filesIndexed": 1099,
-    "imports": 4395,
+    "filesVisible": 1205,
+    "filesIndexed": 1102,
+    "imports": 4401,
     "routes": 623,
-    "symbols": 24964
+    "symbols": 25003
   },
   "directories": {
+    "docs": {
+      "files": 74,
+      "indexed": 72,
+      "kinds": {
+        "docs": 74
+      }
+    },
+    "script": {
+      "files": 132,
+      "indexed": 119,
+      "kinds": {
+        "script": 132
+      }
+    },
+    "tests": {
+      "files": 317,
+      "indexed": 313,
+      "kinds": {
+        "test": 317
+      }
+    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -202,26 +223,12 @@
         "client-page": 28
       }
     },
-    "docs": {
-      "files": 73,
-      "indexed": 71,
-      "kinds": {
-        "docs": 73
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
-      }
-    },
-    "script": {
-      "files": 131,
-      "indexed": 118,
-      "kinds": {
-        "script": 131
       }
     },
     "script/release-gate": {
@@ -271,13 +278,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 316,
-      "indexed": 312,
-      "kinds": {
-        "test": 316
       }
     },
     "tests/fixtures": {
@@ -5839,6 +5839,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-weekly-plan.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-youtube-api-audit-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -11222,6 +11230,49 @@
         "verifyPublicMetricoolMediaUrl",
         "workspaceRoot",
         "writeJsonAtomic"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-weekly-plan.mjs",
+      "kind": "script",
+      "imports": [
+        "./clippers-portfolio-metricool.mjs",
+        "node:crypto"
+      ],
+      "exports": [
+        "newYorkSlot",
+        "planClippersWeek"
+      ],
+      "symbols": [
+        "HOUR",
+        "SHA",
+        "at",
+        "available",
+        "candidates",
+        "cells",
+        "checked",
+        "d",
+        "date",
+        "days",
+        "deficit",
+        "digest",
+        "holds",
+        "iso",
+        "key",
+        "newYorkSlot",
+        "nextDay",
+        "normalized",
+        "normalizedSnapshot",
+        "parts",
+        "planClippersWeek",
+        "posts",
+        "prior",
+        "proposals",
+        "report",
+        "snapshotMap",
+        "start",
+        "unique"
       ],
       "routes": []
     },
@@ -38002,11 +38053,14 @@
       ],
       "exports": [],
       "symbols": [
+        "core",
+        "entry",
         "exec",
         "output",
         "result",
         "setup",
         "source",
+        "store",
         "temporary",
         "text"
       ],
@@ -38506,6 +38560,28 @@
         "sourceDir",
         "sourceName",
         "vyroSubmissionProofPath"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clippers-weekly-plan.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-portfolio-metricool.mjs",
+        "../script/clippers-weekly-plan.mjs",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "b",
+        "base",
+        "days",
+        "input",
+        "now",
+        "p",
+        "post",
+        "snapshots"
       ],
       "routes": []
     },

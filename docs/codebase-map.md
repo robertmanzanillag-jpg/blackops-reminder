@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-18T11:32:48.141Z
-Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-viral-scout-20261118`
+Generated: 2026-11-18T13:19:56.612Z
+Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-plan-20261118`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1202 | 1099 | 4395 | 623 | 24964 |
+| 1205 | 1102 | 4401 | 623 | 25003 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,11 +28,11 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 316 | 312 | test:316 |
+| `tests` | 317 | 313 | test:317 |
 | `server` | 280 | 274 | server:280 |
 | `client/src` | 155 | 153 | ui-component:55, client-component:46, client-page:28, client-lib:19 |
-| `script` | 131 | 118 | script:131 |
-| `docs` | 73 | 71 | docs:73 |
+| `script` | 132 | 119 | script:132 |
+| `docs` | 74 | 72 | docs:74 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 35 | 33 | shared:35 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
