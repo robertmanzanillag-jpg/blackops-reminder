@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-18T08:49:09.394Z
-Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-orchestra-runtime-20261118`
+Generated: 2026-11-18T09:30:11.328Z
+Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-telemetry-isolated-sender-20261118`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1189 | 1087 | 4317 | 620 | 24502 |
+| 1188 | 1088 | 4340 | 623 | 24573 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 309 | 305 | test:309 |
+| `tests` | 311 | 307 | test:311 |
 | `server` | 280 | 274 | server:280 |
 | `client/src` | 155 | 153 | ui-component:55, client-component:46, client-page:28, client-lib:19 |
-| `script` | 127 | 115 | script:127 |
-| `docs` | 75 | 71 | docs:75 |
+| `script` | 128 | 116 | script:128 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
+| `docs` | 71 | 69 | docs:71 |
 | `shared` | 31 | 31 | shared:31 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
@@ -59,7 +59,7 @@ Package: `rest-express`
 - `server/agent-council-routes.ts`: `/api/agent-company/orders`, `/api/agent-company/orders/:id/done`, `/api/agent-council/internal-work`, `/api/agent-council/run`, `/api/agent-council/state`
 - `server/assistant.ts`: `/api/assistant/chat`, `/api/assistant/context`, `/api/assistant/transcribe`
 - `server/blackroom-ceo-chat-routes.ts`: `/api/blackroom-ceo-chat`, `/api/blackroom-ceo-chat/approvals/:id/:decision`, `/api/blackroom-ceo-chat/messages`
-- `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
+- `server/blackroom-control-routes.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/analytics/refresh`, `/api/blackroom-agent/chat`, `/api/blackroom-agent/clippers-orchestra`, `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/media/chunked`, `/api/blackroom-agent/media/chunked/:uploadId/:index`, `/api/blackroom-agent/media/chunked/:uploadId/complete`, `/api/blackroom-agent/metricool/schedule`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/remote`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
 - `server/blackroom-team-routes.ts`: `/api/blackroom-team`, `/api/blackroom-team/:id/action/:action`, `/api/blackroom-team/:id/run`, `/api/blackroom-team/:id/status`
 - `server/clippers-orchestra-routes.ts`: `/api/clippers/orchestra/status`
 - `server/index.ts`: `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
@@ -84,6 +84,7 @@ Package: `rest-express`
 - `tests/app-qa-status-readonly.test.mjs`: `/api/app-qa-agent/scan`, `/api/app-qa-agent/status`
 - `tests/blackroom-remote-control.test.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
 - `tests/clippers-office-area.test.mjs`: `/`, `/api/auth/me`, `/area.css`, `/area.js`
+- `tests/clippers-orchestra-endpoint.test.ts`: `/api/blackroom-agent/media/:reservationId`, `/api/blackroom-agent/remote`
 - `tests/clippers-owned-source-scripts.test.ts`: `/api/clippers/external-closeout-next-action`, `/api/clippers/external-closeout-operator-queue`, `/api/clippers/external-closeout-pack`, `/api/clippers/external-closeout-proof-todo`, `/api/clippers/external-closeout-repair-work-packet`, `/api/clippers/operational-readiness`, `/api/clippers/prepare-external-closeout-pack`, `/api/clippers/prepare-operational-readiness`, `/api/clippers/run-intake-refresh-sweep`, `/api/clippers/run-post-connect-activation-sweep`
 - `tests/developer-autopilot-wiring.test.ts`: `/api/revenue-engine/delivery-workspaces/app-qa-gate`, `/api/revenue-engine/delivery-workspaces/github-handoff`, `/api/revenue-engine/delivery-workspaces/pr-status`, `/api/revenue-engine/delivery-workspaces/release-gate`
 - `tests/harness/agents-world-integrated.tsx`: `/agents-office`
@@ -168,6 +169,7 @@ Package: `rest-express`
 - `tests/clippers-local-news-scheduler.test.ts`
 - `tests/clippers-local-news-state-retention.test.ts`
 - `tests/clippers-local-news-translation.test.ts`
+- `tests/clippers-orchestra-endpoint.test.ts`
 - `tests/clippers-orchestra.test.ts`
 - `tests/clippers-owned-source-scripts.test.ts`
 - `tests/clippers-runtime-status.test.ts`
@@ -417,6 +419,7 @@ Package: `rest-express`
 - `script/clippers-orchestra-analytics.mjs` (script; 22 symbols, 6 imports)
 - `script/clippers-orchestra-relay.mjs` (script; 6 symbols, 2 imports)
 - `script/clippers-orchestra-report.mjs` (script; 104 symbols, 7 imports)
+- `script/clippers-orchestra-sender.mjs` (script; 30 symbols, 7 imports)
 - `script/clippers-portfolio-discovery.mjs` (script; 68 symbols, 6 imports)
 - `script/clippers-portfolio-metricool.mjs` (script; 74 symbols, 1 imports)
 - `script/clippers-portfolio-prepare.mjs` (script; 102 symbols, 7 imports)
@@ -425,7 +428,6 @@ Package: `rest-express`
 - `script/clippers-reconcile-publications.mjs` (script; 74 symbols, 3 imports)
 - `script/clippers-record-owned-meme-rights.ts` (script; 10 symbols, 1 imports)
 - `script/clippers-record-owned-source-rights.mjs` (script; 88 symbols, 3 imports)
-- `script/clippers-render-campaign-drafts.mjs` (script; 118 symbols, 6 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
