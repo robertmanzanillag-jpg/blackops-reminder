@@ -2,12 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, chmod, rm, realpath, symlink, link, rename, open } from 'node:fs/promises';
 import os from 'node:os';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
+import { EventEmitter } from 'node:events';
+import { PassThrough } from 'node:stream';
 import { constants } from 'node:fs';
 import path from 'node:path';
-import { readClippersTelemetryCredential, runClippersOrchestraSender } from '../script/clippers-orchestra-sender.mjs';
+import { readClippersTelemetryCredential, runClippersOrchestraSender as runSender, readClippersPlatformToken, CLIPPERS_PLATFORM_KEYCHAIN_READER, CLIPPERS_PLATFORM_KEYCHAIN_SERVICE, CLIPPERS_PLATFORM_KEYCHAIN_ACCOUNT } from '../script/clippers-orchestra-sender.mjs';
 
 const TOKEN = 'synthetic-safe-only-'.repeat(3);
+const PLATFORM_TOKEN = 'synthetic-platform-only-'.repeat(3);
+// Every test injects a synthetic platform reader. No test may consult Keychain.
+const runClippersOrchestraSender = options => runSender({ readPlatformToken: async () => PLATFORM_TOKEN, ...options });
 const credential = { token: TOKEN, origin: 'https://robplanner.replit.app' };
 const parsed = (patch = {}) => ({ EnvironmentVariables: { BLACKROOM_REMOTE_CONTROL_TOKEN: TOKEN, BLACKROOM_REMOTE_CONTROL_URL: credential.origin, ...patch } });
 async function fixture(t) {
@@ -71,10 +76,12 @@ test('one telemetry POST uses exact reserved endpoint/body and never consumes co
   const r = relay(); let posts = 0;
   const result = await runClippersOrchestraSender({ relayFactory: r.factory, readCredential: async () => credential, fetchImpl: async (url, options) => {
     posts++; assert.equal(url, credential.origin + '/api/blackroom-agent/clippers-orchestra');
-    assert.equal(options.method, 'POST'); assert.equal(options.redirect, 'error'); assert.equal(options.cache, 'no-store');
+    assert.equal(options.method, 'POST'); assert.equal(options.redirect, 'manual'); assert.equal(options.cache, 'no-store');
     assert.deepEqual(Object.keys(JSON.parse(options.body)).sort(), ['clippersOrchestra', 'kind']);
     assert.equal(JSON.parse(options.body).kind, 'clippers-orchestra');
-    assert.equal(options.headers.authorization, 'Bearer ' + TOKEN);
+    assert.equal(options.headers.authorization, 'Bearer ' + PLATFORM_TOKEN);
+    assert.equal(options.headers['x-clippers-device-token'], TOKEN);
+    assert.equal(url.includes(TOKEN) || url.includes(PLATFORM_TOKEN) || options.body.includes(TOKEN) || options.body.includes(PLATFORM_TOKEN), false);
     return accepted();
   } });
   assert.equal(result.state, 'acknowledged'); assert.equal(result.paidSpendUsd, 0); assert.equal(posts, 1);
@@ -130,4 +137,81 @@ test('a private FIFO credential path rejects promptly without waiting for any wr
     ]), { code: 'CREDENTIAL_SOURCE_UNSAFE' });
     assert.equal(parserCalls, 0);
   } finally { clearTimeout(timeout); }
+});
+
+
+function fakeKeychainProcess(output, exitCode = 0, inspect = () => {}) {
+  return (command, args, options) => {
+    inspect(command, args, options);
+    const child = new EventEmitter(); child.stdout = new PassThrough(); child.kill = () => {};
+    queueMicrotask(() => { child.stdout.end(output); child.emit('close', exitCode); });
+    return child;
+  };
+}
+
+test('Keychain reader pins identity and OS argv, accepts only a bounded private synthetic result', async () => {
+  const token = await readClippersPlatformToken({ spawnImpl: fakeKeychainProcess(JSON.stringify({ status: 'found', token: PLATFORM_TOKEN }), 0, (command, args, options) => {
+    assert.equal(command, '/usr/bin/osascript');
+    assert.deepEqual(args.slice(0, 3), ['-l', 'JavaScript', '-e']);
+    assert.equal(args[3], CLIPPERS_PLATFORM_KEYCHAIN_READER);
+    assert.ok(args[3].includes(CLIPPERS_PLATFORM_KEYCHAIN_SERVICE));
+    assert.ok(args[3].includes(CLIPPERS_PLATFORM_KEYCHAIN_ACCOUNT));
+    assert.ok(args[3].includes('SecKeychainSetUserInteractionAllowed(false)'));
+    assert.ok(args[3].includes('kSecUseAuthenticationUIFail'));
+    assert.deepEqual(options.stdio, ['ignore', 'pipe', 'ignore']);
+    assert.deepEqual(options.env, { PATH: '/usr/bin:/bin' });
+    assert.equal(JSON.stringify({ args, options }).includes(PLATFORM_TOKEN), false);
+  }) });
+  assert.equal(token, PLATFORM_TOKEN);
+  for (const [record, code] of [[{status:'missing'}, 'PLATFORM_ACCESS_TOKEN_REQUIRED'], [{status:'unavailable'}, 'PLATFORM_ACCESS_TOKEN_UNAVAILABLE'], [{status:'found',token:'bad\nheader'}, 'PLATFORM_ACCESS_TOKEN_INVALID'], [{status:'found',token:'x'.repeat(9000)}, 'PLATFORM_ACCESS_TOKEN_INVALID']]) {
+    await assert.rejects(readClippersPlatformToken({spawnImpl:fakeKeychainProcess(JSON.stringify(record))}), {code});
+  }
+});
+
+test('missing or inaccessible platform token is held before any device read, report or POST', async () => {
+  for (const code of ['PLATFORM_ACCESS_TOKEN_REQUIRED','PLATFORM_ACCESS_TOKEN_UNAVAILABLE','PLATFORM_ACCESS_TOKEN_INVALID']) {
+    const result=await runClippersOrchestraSender({readPlatformToken:async()=>{throw Object.assign(new Error(PLATFORM_TOKEN),{code});},
+      readCredential:()=>assert.fail('device credential read forbidden'), relayFactory:()=>assert.fail('report forbidden'), fetchImpl:()=>assert.fail('network forbidden')});
+    assert.equal(result.state,'held'); assert.equal(result.reasonCode,code); assert.equal(result.httpStatus,null);
+    assert.equal(JSON.stringify(result).includes(PLATFORM_TOKEN),false);
+  }
+});
+
+test('manual Shield307 is classified with status only, no redirect or body/Location read, no retry', async () => {
+  let posts=0, bodyRead=0, headersRead=0; const r=relay();
+  const result=await runClippersOrchestraSender({relayFactory:r.factory,readCredential:async()=>credential,fetchImpl:async(url,options)=>{
+    posts++;assert.equal(options.redirect,'manual');assert.equal(url,credential.origin+'/api/blackroom-agent/clippers-orchestra');
+    return {status:307,headers:{get(){headersRead++;throw Error(PLATFORM_TOKEN);}},body:{cancel:async()=>{},getReader(){bodyRead++;throw Error(TOKEN);}}};
+  }});
+  assert.equal(result.state,'held');assert.equal(result.reasonCode,'PLATFORM_ACCESS_REDIRECT');assert.equal(result.httpStatus,307);
+  assert.equal(posts,1);assert.equal(bodyRead,0);assert.equal(headersRead,0);assert.equal(r.calls.ack,0);
+  assert.equal(JSON.stringify(result).includes(TOKEN)||JSON.stringify(result).includes(PLATFORM_TOKEN),false);
+});
+
+test('device and platform tokens cannot be interchangeable and transport failures reveal no credential', async () => {
+  const conflict=await runClippersOrchestraSender({readPlatformToken:async()=>TOKEN,relayFactory:relay().factory,readCredential:async()=>credential,fetchImpl:()=>assert.fail('network forbidden')});
+  assert.equal(conflict.state,'held');assert.equal(conflict.reasonCode,'CREDENTIAL_ROLES_CONFLICT');
+  const failed=await runClippersOrchestraSender({relayFactory:relay().factory,readCredential:async()=>credential,fetchImpl:async()=>{throw new Error(TOKEN+PLATFORM_TOKEN);}});
+  assert.equal(failed.state,'unconfirmed');assert.equal(failed.httpStatus,null);assert.equal(JSON.stringify(failed).includes(TOKEN)||JSON.stringify(failed).includes(PLATFORM_TOKEN),false);
+});
+
+test('macOS JXA builds the fixed query and decodes synthetic NSData with both Keychain operations removed', {skip:process.platform!=='darwin'}, async () => {
+  const token=await readClippersPlatformToken({spawnImpl:(command,args,options)=>{
+    const script=args[3].replace("if ($.SecKeychainSetUserInteractionAllowed(false) !== 0) return JSON.stringify({status:'unavailable'});",'')
+      .replace('const status = $.SecItemCopyMatching(query, result);','const status = 0;')
+      .replace('ObjC.castRefToObject(result[0])',`$('${PLATFORM_TOKEN}').dataUsingEncoding($.NSUTF8StringEncoding)`);
+    assert.equal(script.includes('SecItemCopyMatching')||script.includes('SecKeychainSetUserInteractionAllowed'),false);
+    return spawn(command,[...args.slice(0,3),script],options);
+  }});
+  assert.equal(token,PLATFORM_TOKEN);
+});
+
+
+test('Keychain process failures and a hung synthetic child fail closed with no plaintext errors', async () => {
+  await assert.rejects(readClippersPlatformToken({spawnImpl:()=>{throw new Error(PLATFORM_TOKEN);}}),{code:'PLATFORM_ACCESS_TOKEN_UNAVAILABLE'});
+  let killed=0;
+  await assert.rejects(readClippersPlatformToken({spawnImpl:()=>{
+    const child=new EventEmitter();child.stdout=new PassThrough();child.kill=signal=>{assert.equal(signal,'SIGKILL');killed++;};return child;
+  }}),{code:'PLATFORM_ACCESS_TOKEN_UNAVAILABLE'});
+  assert.equal(killed,1);
 });

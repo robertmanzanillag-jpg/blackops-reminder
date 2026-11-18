@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T09:30:11.328Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-telemetry-isolated-sender-20261118",
+  "generatedAt": "2026-11-18T10:34:01.643Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-private-replit-transport-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,25 +124,18 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1188,
-    "filesIndexed": 1088,
-    "imports": 4340,
+    "filesVisible": 1189,
+    "filesIndexed": 1089,
+    "imports": 4346,
     "routes": 623,
-    "symbols": 24573
+    "symbols": 24623
   },
   "directories": {
-    "script": {
-      "files": 128,
-      "indexed": 116,
+    "docs": {
+      "files": 72,
+      "indexed": 70,
       "kinds": {
-        "script": 128
-      }
-    },
-    "tests": {
-      "files": 311,
-      "indexed": 307,
-      "kinds": {
-        "test": 311
+        "docs": 72
       }
     },
     ".": {
@@ -216,19 +209,19 @@
         "client-page": 28
       }
     },
-    "docs": {
-      "files": 71,
-      "indexed": 69,
-      "kinds": {
-        "docs": 71
-      }
-    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 128,
+      "indexed": 116,
+      "kinds": {
+        "script": 128
       }
     },
     "script/release-gate": {
@@ -278,6 +271,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 311,
+      "indexed": 307,
+      "kinds": {
+        "test": 311
       }
     },
     "tests/fixtures": {
@@ -5803,6 +5803,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-private-replit-telemetry.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-sleep-video-pipeline.md",
       "kind": "docs",
       "imports": [],
@@ -9483,6 +9491,7 @@
         "chunks",
         "collectClippersAccountAnalytics",
         "controller",
+        "detail",
         "directory",
         "get",
         "info",
@@ -9659,12 +9668,19 @@
         "node:url"
       ],
       "exports": [
+        "CLIPPERS_PLATFORM_KEYCHAIN_ACCOUNT",
+        "CLIPPERS_PLATFORM_KEYCHAIN_READER",
+        "CLIPPERS_PLATFORM_KEYCHAIN_SERVICE",
         "CLIPPERS_TELEMETRY_CREDENTIAL_PLIST",
+        "readClippersPlatformToken",
         "readClippersTelemetryCredential",
         "runClippersOrchestraSender"
       ],
       "symbols": [
         "ACK_CODES",
+        "CLIPPERS_PLATFORM_KEYCHAIN_ACCOUNT",
+        "CLIPPERS_PLATFORM_KEYCHAIN_READER",
+        "CLIPPERS_PLATFORM_KEYCHAIN_SERVICE",
         "CLIPPERS_TELEMETRY_CREDENTIAL_PLIST",
         "MAX_ACK_BYTES",
         "MAX_BYTES",
@@ -9684,14 +9700,21 @@
         "fail",
         "fields",
         "finish",
+        "heldCodes",
         "parsePlistDescriptor",
         "parsed",
+        "platformToken",
+        "platformTokenValid",
+        "query",
+        "readClippersPlatformToken",
         "readClippersTelemetryCredential",
         "reader",
+        "record",
         "remoteUrl",
         "response",
         "result",
         "runClippersOrchestraSender",
+        "status",
         "timer",
         "token"
       ],
@@ -15808,6 +15831,7 @@
         "hasBlackRoomChatAccess",
         "hasBlackRoomPartnerAccess",
         "hasValidBlackRoomRemoteToken",
+        "hasValidClippersDeviceToken",
         "parseBlackRoomMediaRange",
         "readBlackRoomPanelQueue",
         "registerBlackRoomControlRoutes",
@@ -15824,6 +15848,7 @@
         "addUtcDays",
         "analytics",
         "analyticsImports",
+        "authorization",
         "blackRoomCounter",
         "blackRoomLocalDate",
         "blackRoomMediaHeaders",
@@ -15838,9 +15863,11 @@
         "ceoTimer",
         "cleanupExpiredBlackRoomUploads",
         "completed",
+        "count",
         "current",
         "currentTarget",
         "declaredSize",
+        "device",
         "end",
         "error",
         "expectedBuffer",
@@ -15849,6 +15876,8 @@
         "hasBlackRoomChatAccess",
         "hasBlackRoomPartnerAccess",
         "hasValidBlackRoomRemoteToken",
+        "hasValidClippersDeviceToken",
+        "headers",
         "id",
         "imports",
         "index",
@@ -15866,9 +15895,11 @@
         "partPath",
         "pendingBatches",
         "postsByDate",
+        "present",
         "previous",
         "publicOrigin",
         "range",
+        "raw",
         "readBlackRoomPanelQueue",
         "receipt",
         "receiptId",
@@ -21137,6 +21168,7 @@
         "STARTING_MONTHLY_BUDGET_USD",
         "TARGET_MONTHLY_REVENUE_USD",
         "TELEGRAM_BOT_TOKEN",
+        "actionLists",
         "activeBudgetUsd",
         "activeStage",
         "addToCartRatePercent",
@@ -21231,6 +21263,7 @@
         "confidenceBonus",
         "config",
         "connectedSources",
+        "constraints",
         "contentCalendar",
         "contentScore",
         "conversionRatePercent",
@@ -21306,6 +21339,8 @@
         "existingToday",
         "explicit",
         "externallyValidated",
+        "factLists",
+        "facts",
         "feed",
         "filePath",
         "findCampaignById",
@@ -21354,6 +21389,8 @@
         "hasAccountBlock",
         "hasAnyRevenue",
         "hasProductOrSupplierBlock",
+        "held",
+        "heldDropshippingGuidance",
         "hook",
         "hooks",
         "hydratedEvidence",
@@ -21443,6 +21480,7 @@
         "noProduct",
         "now",
         "offer",
+        "operatingPause",
         "order",
         "orderDiff",
         "orderProfitUsd",
@@ -21530,6 +21568,7 @@
         "readLiveProductSignalFeed",
         "readinessPercent",
         "ready",
+        "reason",
         "reasons",
         "recommendations",
         "recommendedSpendUsd",
@@ -21602,6 +21641,7 @@
         "setDropshippingSocialMetricsPathForTests",
         "setDropshippingSocialPostsPathForTests",
         "setDropshippingSuppliersPathForTests",
+        "setup",
         "shippingPenalty",
         "shippingScore",
         "shopDomain",
@@ -36089,22 +36129,39 @@
         "express",
         "node:assert/strict",
         "node:events",
-        "node:test"
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test",
+        "node:url"
       ],
       "exports": [],
       "symbols": [
+        "React",
         "address",
         "app",
         "base",
         "before",
+        "beforeRevenue",
         "body",
+        "client",
         "commercial",
+        "directory",
         "discovery",
+        "heldRevenue",
+        "html",
+        "modulePath",
+        "originalLeadsPath",
         "previous",
         "project",
         "queued",
+        "render",
         "response",
-        "server"
+        "resumed",
+        "resumedCopy",
+        "server",
+        "source",
+        "tag"
       ],
       "routes": []
     },
@@ -37219,7 +37276,7 @@
         "envelope",
         "f",
         "good",
-        "hasValidToken",
+        "headers",
         "noBlackRoom",
         "req",
         "request",
@@ -37229,7 +37286,8 @@
         "source",
         "start",
         "value",
-        "verifier"
+        "verifier",
+        "verifiers"
       ],
       "routes": [
         "/api/blackroom-agent/media/:reservationId",
@@ -37243,22 +37301,29 @@
         "../script/clippers-orchestra-sender.mjs",
         "node:assert/strict",
         "node:child_process",
+        "node:events",
         "node:fs",
         "node:fs/promises",
         "node:os",
         "node:path",
+        "node:stream",
         "node:test"
       ],
       "exports": [],
       "symbols": [
+        "PLATFORM_TOKEN",
         "TOKEN",
         "accepted",
         "alias",
         "auth",
         "calls",
+        "child",
+        "conflict",
         "credential",
         "dirAlias",
         "f",
+        "failed",
+        "fakeKeychainProcess",
         "file",
         "fixture",
         "origin",
@@ -37269,7 +37334,10 @@
         "replacement",
         "result",
         "root",
-        "second"
+        "runClippersOrchestraSender",
+        "script",
+        "second",
+        "token"
       ],
       "routes": []
     },
@@ -37341,7 +37409,8 @@
         "started",
         "state",
         "store",
-        "target"
+        "target",
+        "u"
       ],
       "routes": []
     },

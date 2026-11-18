@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-18T09:30:11.328Z
-Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-telemetry-isolated-sender-20261118`
+Generated: 2026-11-18T10:34:01.643Z
+Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-private-replit-transport-20261118`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1188 | 1088 | 4340 | 623 | 24573 |
+| 1189 | 1089 | 4346 | 623 | 24623 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -33,7 +33,7 @@ Package: `rest-express`
 | `client/src` | 155 | 153 | ui-component:55, client-component:46, client-page:28, client-lib:19 |
 | `script` | 128 | 116 | script:128 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 71 | 69 | docs:71 |
+| `docs` | 72 | 70 | docs:72 |
 | `shared` | 31 | 31 | shared:31 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
@@ -416,10 +416,10 @@ Package: `rest-express`
 - `script/clippers-metricool-autopilot.mjs` (script; 116 symbols, 4 imports)
 - `script/clippers-motivation-shorts.mjs` (script; 157 symbols, 6 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
-- `script/clippers-orchestra-analytics.mjs` (script; 22 symbols, 6 imports)
+- `script/clippers-orchestra-analytics.mjs` (script; 23 symbols, 6 imports)
 - `script/clippers-orchestra-relay.mjs` (script; 6 symbols, 2 imports)
 - `script/clippers-orchestra-report.mjs` (script; 104 symbols, 7 imports)
-- `script/clippers-orchestra-sender.mjs` (script; 30 symbols, 7 imports)
+- `script/clippers-orchestra-sender.mjs` (script; 40 symbols, 7 imports)
 - `script/clippers-portfolio-discovery.mjs` (script; 68 symbols, 6 imports)
 - `script/clippers-portfolio-metricool.mjs` (script; 74 symbols, 1 imports)
 - `script/clippers-portfolio-prepare.mjs` (script; 102 symbols, 7 imports)
