@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T05:18:36.449Z
+Generated: 2026-11-18T06:02:53.675Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-portfolio-prepare-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1148 | 1048 | 4116 | 604 | 23499 |
+| 1170 | 1068 | 4202 | 615 | 24067 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 300 | 296 | test:300 |
-| `server` | 270 | 264 | server:270 |
-| `client/src` | 153 | 151 | ui-component:55, client-component:44, client-page:28, client-lib:19 |
-| `script` | 120 | 108 | script:120 |
+| `tests` | 305 | 301 | test:305 |
+| `server` | 276 | 270 | server:276 |
+| `client/src` | 154 | 152 | ui-component:55, client-component:45, client-page:28, client-lib:19 |
+| `script` | 123 | 111 | script:123 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 65 | 63 | docs:65 |
+| `docs` | 72 | 68 | docs:72 |
 | `shared` | 29 | 29 | shared:29 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
@@ -63,6 +63,7 @@ Package: `rest-express`
 - `server/blackroom-team-routes.ts`: `/api/blackroom-team`, `/api/blackroom-team/:id/action/:action`, `/api/blackroom-team/:id/run`, `/api/blackroom-team/:id/status`
 - `server/index.ts`: `/clippers/legal/privacy`, `/clippers/legal/terms`, `/clippers/review-demo`, `/dropshipping/legal/checkout-readiness`, `/dropshipping/legal/privacy`, `/dropshipping/legal/refund-policy`, `/dropshipping/legal/shipping-policy`, `/dropshipping/legal/terms`, `/tiktokxXFfBZAFcOIGUKNMLUhs8E9M66NBKXCP.txt`, `/tiktokzjohuZmzXSsUwXRmI6fqM3JDKo7jsLUN.txt`
 - `server/kong-operations-routes.ts`: `/api/kong-ops/cards`, `/api/kong-ops/lease`, `/api/kong-ops/metrics`, `/api/kong-ops/publications`, `/api/kong-ops/reconcile`, `/api/kong-ops/state`
+- `server/kong-repair-routes.ts`: `/api/integrations/kong/software-repairs`, `/api/integrations/kong/software-repairs/status`, `/api/integrations/kong/software-repairs/worker`, `/api/kong-repairs`, `/api/kong-repairs/:key/:action`, `/api/kong-repairs/pull`
 - `server/kong-supervisor-routes.ts`: `/api/kong-supervisor/chat`, `/api/kong-supervisor/state`
 - `server/local-auth.ts`: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`, `/api/auth/register`
 - `server/marketing-learning-routes.ts`: `/api/marketing-command-center`, `/api/marketing-command-center/run-day`
@@ -85,6 +86,7 @@ Package: `rest-express`
 - `tests/developer-autopilot-wiring.test.ts`: `/api/revenue-engine/delivery-workspaces/app-qa-gate`, `/api/revenue-engine/delivery-workspaces/github-handoff`, `/api/revenue-engine/delivery-workspaces/pr-status`, `/api/revenue-engine/delivery-workspaces/release-gate`
 - `tests/harness/agents-world-integrated.tsx`: `/agents-office`
 - `tests/kong-office-browser-qa.test.mjs`: `/api/agent-council/state`, `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/kong-snapshot`, `/api/app-qa-agent/status`, `/api/ceo/conversation-history`, `/api/ceo/go-live`, `/api/ceo/readiness`, `/api/fixture-owner-boundary`, `/api/github/repos`, `/api/github/repos/fixture/office-fixture/contents`, `/api/github/status`, `/api/legal-compliance/reports`, `/api/monthly-goals`, `/api/projects`, `/health`
+- `tests/kong-repair-status-panel.test.mjs`: `/`, `/api/agent-council/state`, `/api/auth/me`, `/api/kong-supervisor/state`, `/panel.js`
 - `tests/software-factory-panel.test.mjs`: `/`, `/api/software-factory`, `/api/software-factory/:action`, `/panel.js`
 - `tests/user-context.test.ts`: `/api/auth/login`, `/api/github/status`
 - `tests/workspace-access.test.ts`: `/api/agent-company/orders`, `/api/blackroom-team`, `/api/github/repos/:owner/:repo/file`, `/api/investments`, `/api/portfolio/summary`, `/api/radio/slots`, `/api/workspace/me`, `/api/x`, `/blackroom`, `/owner`
@@ -186,6 +188,8 @@ Package: `rest-express`
 - `tests/kong-office-wing.test.ts`
 - `tests/kong-operations-routes.test.ts`
 - `tests/kong-operations.test.ts`
+- `tests/kong-repair-bridge.test.ts`
+- `tests/kong-repair-pull.test.ts`
 - `tests/legacy-publication-containment.test.ts`
 - `tests/legal-compliance-agent.test.ts`
 - `tests/local-auth-cli.test.ts`
@@ -406,6 +410,7 @@ Package: `rest-express`
 - `script/clippers-metricool-autopilot.mjs` (script; 116 symbols, 4 imports)
 - `script/clippers-motivation-shorts.mjs` (script; 157 symbols, 6 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
+- `script/clippers-portfolio-discovery.mjs` (script; 68 symbols, 6 imports)
 - `script/clippers-portfolio-metricool.mjs` (script; 70 symbols, 1 imports)
 - `script/clippers-portfolio-prepare.mjs` (script; 102 symbols, 7 imports)
 - `script/clippers-portfolio-render.mjs` (script; 77 symbols, 8 imports)
@@ -417,7 +422,6 @@ Package: `rest-express`
 - `script/clippers-selected-env.mjs` (script; 11 symbols, 2 imports)
 - `script/clippers-sleep-video-generator.mjs` (script; 93 symbols, 6 imports)
 - `script/clippers-streamer-growth-ceo.mjs` (script; 170 symbols, 5 imports)
-- `script/clippers-sync-metricool-source-readiness.mjs` (script; 28 symbols, 3 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
