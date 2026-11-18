@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T11:28:06.581Z",
+  "generatedAt": "2026-11-18T11:32:48.141Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-viral-scout-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -128,30 +128,9 @@
     "filesIndexed": 1099,
     "imports": 4395,
     "routes": 623,
-    "symbols": 24961
+    "symbols": 24964
   },
   "directories": {
-    "docs": {
-      "files": 73,
-      "indexed": 71,
-      "kinds": {
-        "docs": 73
-      }
-    },
-    "shared": {
-      "files": 35,
-      "indexed": 33,
-      "kinds": {
-        "shared": 35
-      }
-    },
-    "tests": {
-      "files": 316,
-      "indexed": 312,
-      "kinds": {
-        "test": 316
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -223,6 +202,13 @@
         "client-page": 28
       }
     },
+    "docs": {
+      "files": 73,
+      "indexed": 71,
+      "kinds": {
+        "docs": 73
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -273,11 +259,25 @@
         "server": 9
       }
     },
+    "shared": {
+      "files": 35,
+      "indexed": 33,
+      "kinds": {
+        "shared": 35
+      }
+    },
     "shared/models": {
       "files": 1,
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 316,
+      "indexed": 312,
+      "kinds": {
+        "test": 316
       }
     },
     "tests/fixtures": {
@@ -9795,6 +9795,7 @@
         "names",
         "nextDaily",
         "nextDue",
+        "objectRow",
         "observations",
         "outcome",
         "outcomes",
@@ -33189,11 +33190,13 @@
         "count",
         "creators",
         "current",
+        "feedProof",
         "feedUrl",
         "growthViews",
         "iso",
         "key",
         "keys",
+        "object",
         "observation",
         "owner",
         "parseViralScout",

@@ -13,16 +13,22 @@ const keys = (value, names) => !!value && typeof value === 'object' && !Array.is
 const feedUrl = channel => `https://www.youtube.com/feeds/videos.xml?channel_id=${channel}`;
 const watchUrl = video => `https://www.youtube.com/watch?v=${video}`;
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+const object = value => !!value && typeof value === 'object' && !Array.isArray(value);
+function feedProof(feed, creator) {
+  return object(feed) && !!creator && feed.creatorId === creator.id && feed.channelId === creator.channelId &&
+    feed.sourceUrl === feedUrl(creator.channelId) && feed.status === 'observed' && typeof feed.feedSha256 === 'string' && SHA.test(feed.feedSha256);
+}
 
 function observation(raw, receipt, now) {
+  if (!object(raw)) return null;
   const c = creators.get(raw?.channelId);
-  if (!c || c.id !== raw.creatorId || !VIDEO.test(raw.videoId ?? '') || raw.network !== 'youtube' ||
+  if (!c || c.id !== raw.creatorId || typeof raw.videoId !== 'string' || !VIDEO.test(raw.videoId) || raw.network !== 'youtube' ||
       raw.url !== watchUrl(raw.videoId) || raw.sourceUrl !== feedUrl(c.channelId) ||
       raw.permission !== 'unknown' || raw.mayPublish !== false ||
       typeof raw.title !== 'string' || !raw.title.trim() || raw.title.length > 500 || /[\x00-\x1f\x7f]/.test(raw.title) ||
       !iso(raw.publishedAt) || !iso(raw.observedAt) || Date.parse(raw.publishedAt) > Date.parse(raw.observedAt) || Date.parse(raw.observedAt) > now || Date.parse(raw.observedAt) > Date.parse(receipt.observedAt) ||
       (raw.metricEvidence === 'direct_public_feed' ? !count(raw.views) : raw.metricEvidence !== 'not_provided' || raw.views !== null) ||
-      !receipt.feeds.some(f => f.creatorId === c.id && f.channelId === c.channelId && f.status === 'observed' && SHA.test(f.feedSha256 ?? ''))) return null;
+      !receipt.feeds.some(f => feedProof(f, c))) return null;
   return { creatorId: c.id, channelId: c.channelId, creatorName: c.name ?? c.handle, videoId: raw.videoId,
     title: raw.title, url: raw.url, sourceUrl: raw.sourceUrl, publishedAt: raw.publishedAt, observedAt: raw.observedAt, views: raw.views };
 }
@@ -41,7 +47,7 @@ export function buildViralScout(receipts, now = new Date()) {
         !iso(receipt.observedAt) || Date.parse(receipt.observedAt) > at || !Array.isArray(receipt.feeds) || receipt.feeds.length > 14 ||
         !Array.isArray(receipt.observations) || receipt.observations.length > 350) continue;
     if ((seen += receipt.observations.length) > 10_000) return result;
-    if (receipt.feeds.some(f => creators.get(f?.channelId)?.id === f.creatorId && f.status === 'observed' && SHA.test(f.feedSha256 ?? '')) && at - Date.parse(receipt.observedAt) <= 26 * HOUR) readable = true;
+    if (receipt.feeds.some(f => feedProof(f, object(f) ? creators.get(f.channelId) : null)) && at - Date.parse(receipt.observedAt) <= 26 * HOUR) readable = true;
     for (const raw of receipt.observations) {
       const row = observation(raw, receipt, at);
       if (!row) continue;
@@ -96,7 +102,7 @@ export function parseViralScout(value, now = Date.now()) {
   for (const row of value.candidates) {
     const c = creators.get(row?.channelId);
     if (!keys(row, ['creatorId','channelId','creatorName','videoId','title','url','sourceUrl','publishedAt','observedAt','views','likes','ageHoursWhenObserved','previousObservedAt','previousViews','sampleSpanHours','growthViews','growthPerHour','evidence','rights','mayPublish']) || !c || c.id !== row.creatorId || row.creatorName !== (c.name ?? c.handle) ||
-        !VIDEO.test(row.videoId ?? '') || row.url !== watchUrl(row.videoId) || row.sourceUrl !== feedUrl(c.channelId) ||
+        typeof row.videoId !== 'string' || !VIDEO.test(row.videoId) || row.url !== watchUrl(row.videoId) || row.sourceUrl !== feedUrl(c.channelId) ||
         typeof row.title !== 'string' || !row.title.trim() || row.title.length > 500 || /[\x00-\x1f\x7f]/.test(row.title) ||
         !iso(row.publishedAt) || !iso(row.observedAt) || Date.parse(row.observedAt) > at || Date.parse(row.publishedAt) > Date.parse(row.observedAt) ||
         at - Date.parse(row.publishedAt) > 72 * HOUR || at - Date.parse(row.observedAt) > 26 * HOUR ||

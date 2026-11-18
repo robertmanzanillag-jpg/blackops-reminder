@@ -100,7 +100,7 @@ test("Clippers own area uses real evidence gates, expires activity, and protects
     const creator = ALL_DISCOVERY_CREATORS[0], observedAt = new Date(now).toISOString(), publishedAt = new Date(now-12*3600000).toISOString();
     const sourceUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${creator.channelId}`;
     const publicRow = { creatorId: creator.id, channelId: creator.channelId, network:'youtube', videoId:'abcdefghijk', title:'Video de investigación '+ 'título largo '.repeat(20), url:'https://www.youtube.com/watch?v=abcdefghijk', sourceUrl,publishedAt,observedAt,views:100,metricEvidence:'direct_public_feed',permission:'unknown',mayPublish:false };
-    const publicReceipt = (observations, at) => ({schemaVersion:2,observedAt:at,paidSpendUsd:0,permission:'unknown',mayPublish:false,feeds:[{creatorId:creator.id,channelId:creator.channelId,status:'observed',feedSha256:'a'.repeat(64)}],observations});
+    const publicReceipt = (observations, at) => ({schemaVersion:2,observedAt:at,paidSpendUsd:0,permission:'unknown',mayPublish:false,feeds:[{creatorId:creator.id,channelId:creator.channelId,sourceUrl,status:'observed',feedSha256:'a'.repeat(64)}],observations});
     const previousAt = new Date(now-2*3600000).toISOString();
     payload.discovery.scout = buildViralScout([publicReceipt([{...publicRow,observedAt:previousAt,views:40}],previousAt),publicReceipt([publicRow],observedAt)],new Date(now));
     await page.getByTestId('clippers-refresh').click();

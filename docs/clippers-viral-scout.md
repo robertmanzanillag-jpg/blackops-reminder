@@ -10,4 +10,6 @@ The optional `discovery.scout` wire extension accepts older reports without a sh
 
 Scouting does not download, edit, upload, schedule, or publish media, grant reuse rights, change the ready queue, award agent outcomes, or change creator preferences based on public popularity. Candidates remain research items with unknown reuse permission. The existing four approved destinations, posting limits, renderer and permission checks are unchanged.
 
-Validation: pure adversarial ranking/parser tests, real discovery producer → report → strict wire integration, and desktop/mobile Office tests with synthetic metadata and no external network. Rollback: revert this PR; the previously optional wire extension can be omitted without changing legacy reports or publisher state.
+Rollout order: publish the Office contract and UI extension before installing the new Mac reporter and pure scout module. The previous strict server parser rejects a new `discovery.scout` key. Existing reporters without the optional key remain valid on the new server. For rollback, restore the previous reporter (or omit the field) first, then revert the Office extension; do not leave a new reporter sending to an old parser.
+
+Validation: pure adversarial ranking/parser tests, real discovery producer → report → strict wire integration, and desktop/mobile Office tests with synthetic metadata and no external network. Publisher state is not changed by rollout or rollback.

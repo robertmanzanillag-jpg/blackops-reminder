@@ -13,7 +13,7 @@ function row(overrides = {}) {
 }
 function receipt(rows = [row()], overrides = {}) {
   return { schemaVersion: 2, observedAt: at(0), paidSpendUsd: 0, permission: 'unknown', mayPublish: false,
-    feeds: ALL_DISCOVERY_CREATORS.map(c => ({ creatorId: c.id, channelId: c.channelId, status: 'observed', feedSha256: 'a'.repeat(64) })).slice(0, 14), observations: rows, ...overrides };
+    feeds: ALL_DISCOVERY_CREATORS.map(c => ({ creatorId: c.id, channelId: c.channelId, sourceUrl:`https://www.youtube.com/feeds/videos.xml?channel_id=${c.channelId}`, status: 'observed', feedSha256: 'a'.repeat(64) })).slice(0, 14), observations: rows, ...overrides };
 }
 const run = (receipts, now = NOW) => buildViralScout(receipts, new Date(now));
 
@@ -74,6 +74,20 @@ test('unsafe links, channel mismatches, rights injection and unsupported counter
 });
 test('a receipt cannot assert an observation after its own authoritative time', () => {
   assert.equal(run([receipt([row()], { observedAt: at(-1) })]).candidates.length, 0);
+});
+test('malformed JSON rows are ignored without losing valid candidates or crashing', () => {
+  const r = receipt();r.feeds.unshift(null, [], 1);r.observations.unshift(null, [], {}, 1);
+  // Stay within the per-receipt feed cap while exercising malformed rows.
+  r.feeds = r.feeds.slice(0, 14);
+  assert.equal(run([r]).candidates.length,1);
+  assert.equal(run([receipt([], {feeds:[null]})]).status,'no_data');
+});
+test('identity arrays and forged/coerced feed proofs are rejected', () => {
+  assert.equal(run([receipt([row({videoId:['abcdefghijk']})])]).candidates.length,0);
+  for(const change of [{sourceUrl:'https://evil.example/feed'}, {sourceUrl:row().sourceUrl+'&extra=1'}, {feedSha256:['a'.repeat(64)]}]){
+    const r=receipt();r.feeds=[{...r.feeds[0],...change}];assert.equal(run([r]).status,'no_data');
+  }
+  const r=run([receipt()]);r.candidates[0].videoId=['abcdefghijk'];assert.equal(parseViralScout(r,NOW),null);
 });
 test('foreign/malformed/paid/publishing envelopes do not create candidates', () => {
   for (const change of [{ paidSpendUsd: 1 }, { mayPublish: true }, { permission: 'approved' }, { schemaVersion: 9 }, { observedAt: at(1) }, { feeds: [] }])

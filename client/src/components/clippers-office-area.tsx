@@ -102,6 +102,7 @@ const reasonLabels: Record<string, string> = {
   account_analytics_unavailable: "Todavía no hay una lectura verificable de la analítica de esta cuenta.",
 };
 const outputLabels: Record<string, string> = {
+  researchCandidates: "Candidatos de investigación",
   verified_publications: "Publicaciones verificadas", observations: "Observaciones", prepared: "Preparados",
   uploaded: "Subidos", eligible_assets: "Activos aptos", comparisons: "Comparaciones", promotions: "Promociones",
   snapshots: "Muestras de métricas", pairedGrowthSignals: "Señales de crecimiento pareado", scopedMediaReceipts: "Recibos del destino",

@@ -27,6 +27,16 @@ test('empty workspace is disconnected, not four fake zero accounts or nine runni
  assert.ok(r.accounts.every((a:any)=>a.eligibleAssets===null&&a.confirmedScheduledOrPublished===null&&a.analytics.status==='unavailable'));
  assert.ok(r.roles.every((a:any)=>a.state==='disconnected'&&a.heartbeatAt===null&&a.activeUntil===null&&!a.career.registered&&a.career.battery===null&&a.outcomes.length===0));
  assert.equal(r.discovery.eligibleAssets,null);assert.equal(r.learning.promotions,null);assert.equal(r.safety.paidSpendUsd,0);
+ assert.equal(r.discovery.scout.status,'no_data');assert.equal(Object.hasOwn(r.roles.find((r:any)=>r.stage==='trends').outputs,'researchCandidates'),false);
+}));
+test('malformed optional feed rows preserve the report and valid source candidates',async()=>fixture(async root=>{
+ const {PRIORITY_CREATORS}=await import('../shared/clippers-priority-creators.mjs');const c=PRIORITY_CREATORS[0],sourceUrl=`https://www.youtube.com/feeds/videos.xml?channel_id=${c.channelId}`;
+ const receipt={schemaVersion:2,day:'2026-11-18',observedAt:now().toISOString(),paidSpendUsd:0,permission:'unknown',mayPublish:false,
+  feeds:[null,{creatorId:c.id,channelId:c.channelId,status:'observed',sourceUrl,feedSha256:'a'.repeat(64)}],
+  observations:[null,[],{}, {creatorId:c.id,channelId:c.channelId,network:'youtube',videoId:'abcdefghijk',title:'Original public source',url:'https://www.youtube.com/watch?v=abcdefghijk',sourceUrl,publishedAt:'2026-11-18T12:00:00.000Z',observedAt:now().toISOString(),views:100,metricEvidence:'direct_public_feed',permission:'unknown',mayPublish:false}]};
+ await save(root,`portfolio-discovery/2026-11-18-channel-${c.channelId}.json`,receipt);
+ let r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.equal(r.discovery.scout.candidates.length,1);assert.equal(r.discovery.sources.find((s:any)=>s.creatorId===c.id).status,'observed');
+ receipt.observations=[null,[]];await save(root,`portfolio-discovery/2026-11-18-channel-${c.channelId}.json`,receipt);r=await base(root);assert.equal(r.discovery.scout.status,'no_recent_candidates');assert.equal(r.roles.find((r:any)=>r.stage==='trends').outputs.researchCandidates,0);assert.ok(parseClippersOrchestraStatus(r,NOW));
 }));
 test('private files reject world-readable or symlinked evidence',async()=>fixture(async root=>{
  await save(root,'reports/clippers-daily-watchdog/latest.json',{generatedAt:now().toISOString(),checkHour:10});await chmod(path.join(root,'reports/clippers-daily-watchdog/latest.json'),0o644);
