@@ -36,7 +36,7 @@ test('local portfolio renderer applies reviewed parameters, binds actual bytes a
     '-shortest', path.join(root, 'source.mp4')]);
   const sourceSha256 = engineSha(await readFile(path.join(root, 'source.mp4')));
   const engineSha256 = engineSha(await readFile(new URL('../script/clippers-portfolio-render.mjs', import.meta.url)));
-  const standard = { hook: 0, duration: 5, crop: 'left', caption_layout: 'off', posting_slot: '12:00' };
+  const standard = { hook: 0, duration: 5, crop: 'left', caption_layout: 'off', posting_slot: ['12:00', '14:00', '16:00', '18:00', '20:00'] };
   const manifest = (version, overrides = {}) => ({
     schemaVersion: 1, destination: target, version, engineSha256, reviewedBy: 'qa',
     params: { ...standard, ...overrides },
@@ -81,6 +81,7 @@ test('local portfolio renderer applies reviewed parameters, binds actual bytes a
     draftFile: candidate.draftFile, mediaSha256: candidate.outputSha256, renderReceiptSha256: candidate.receiptSha256,
     scheduledAt: '2026-11-18T17:00:00.000Z' };
   assert.ok(await confirmedRenderReceipt(root, asset, target));
+  assert.ok(await confirmedRenderReceipt(root, { ...asset, scheduledAt: '2026-11-18T19:00:00.000Z' }, target));
   assert.equal(await confirmedRenderReceipt(root, { ...asset, scheduledAt: '2026-11-18T17:10:00.000Z' }, target), null);
   assert.equal(await confirmedRenderReceipt(root, asset, DESTINATIONS[1]), null);
   const draftPath = path.join(root, asset.draftFile);
@@ -131,6 +132,15 @@ test('local portfolio renderer applies reviewed parameters, binds actual bytes a
   await write(policyDir + '/candidate.json', manifest('candidate', { crop: 'right', hook: 1 }));
   await assert.rejects(run('candidate'), /must_change_one_variable/);
 
+  await write(policyDir + '/slot-candidate.json', manifest('slot-candidate', { posting_slot: ['12:00', '21:00'] }));
+  const slotExperiment = { ...trial, variable: 'posting_slot', arm: 'candidate', candidateVersion: 'slot-candidate' };
+  await write(requests + '/slot-test.json', request('slot-test', 'slot-candidate', slotExperiment));
+  const slotResult = await run('slot-test');
+  const slotAsset = { ...target, id: 'slot-test', policyVersion: 'slot-candidate', experiment: slotExperiment,
+    draftFile: slotResult.draftFile, mediaSha256: slotResult.outputSha256, renderReceiptSha256: slotResult.receiptSha256 };
+  assert.equal(await confirmedRenderReceipt(root, { ...slotAsset, scheduledAt: '2026-11-18T17:00:00.000Z' }, target), null,
+    'a shared slot does not prove a posting-slot experiment');
+  assert.ok(await confirmedRenderReceipt(root, { ...slotAsset, scheduledAt: '2026-11-19T02:00:00.000Z' }, target));
   const active = manifest('active', { hook: 1, duration: 6, crop: 'right' });
   const activeDigest = engineSha(JSON.stringify(active));
   await write(policyDir + '/active.json', active);

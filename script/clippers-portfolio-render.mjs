@@ -25,6 +25,12 @@ const clock = when => new Intl.DateTimeFormat('en-GB', {
   timeZone: TIME_ZONE, hour: '2-digit', minute: '2-digit', hourCycle: 'h23',
 }).format(new Date(when));
 
+function slots(value) {
+  const values = typeof value === 'string' ? [value] : value;
+  if (!Array.isArray(values) || values.length < 1 || values.length > 5 || new Set(values).size !== values.length ||
+      values.some(slot => typeof slot !== 'string' || !/^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/.test(slot))) return null;
+  return [...values].sort();
+}
 function receiptFile(destination, requestId, version, outputSha) {
   return path.join(RECEIPT_ROOT, scopedKey(destination), requestId, version, outputSha + '.json');
 }
@@ -73,7 +79,7 @@ export async function readPortfolioRenderManifest(root, destination, version) {
       !Number.isFinite(p.hook) || p.hook < 0 || p.hook > 20 ||
       !Number.isFinite(p.duration) || p.duration < 5 || p.duration > 90 ||
       !['left', 'center', 'right'].includes(p.crop) || !['off', 'upper', 'lower'].includes(p.caption_layout) ||
-      !/^(?:[01]?[0-9]|2[0-3]):[0-5][0-9]$/.test(p.posting_slot) || p.posting_slot.length !== 5) throw Error('render_manifest_invalid');
+      !slots(p.posting_slot)) throw Error('render_manifest_invalid');
   return { ...data, sha: fingerprint(data) };
 }
 async function selecting(root, destination, request) {
@@ -86,16 +92,24 @@ async function selecting(root, destination, request) {
   if (pinned && pinned !== baseline.sha) throw Error('active_render_manifest_changed');
   if (!request.experiment) {
     if (request.policyVersion !== active) throw Error('render_version_not_active');
-    return { manifest: baseline, comparison: null };
+    return { manifest: baseline, comparison: null, allowedSlots: slots(baseline.params.posting_slot) };
   }
   const e = request.experiment;
   if (!['control', 'candidate'].includes(e.arm) || e.baselineVersion !== active ||
       request.policyVersion !== (e.arm === 'control' ? active : e.candidateVersion)) throw Error('render_experiment_version_invalid');
   const candidate = await readPortfolioRenderManifest(root, destination, e.candidateVersion);
-  const changed = FEATURES.filter(feature => baseline.params[feature] !== candidate.params[feature]);
+  const baseSlots = slots(baseline.params.posting_slot);
+  const candidateSlots = slots(candidate.params.posting_slot);
+  const changed = FEATURES.filter(feature => feature === 'posting_slot'
+    ? fingerprint(baseSlots) !== fingerprint(candidateSlots)
+    : baseline.params[feature] !== candidate.params[feature]);
   if (changed.length !== 1 || changed[0] !== e.variable) throw Error('render_experiment_must_change_one_variable');
+  const armSlots = e.arm === 'control' ? baseSlots : candidateSlots;
+  const otherSlots = e.arm === 'control' ? candidateSlots : baseSlots;
+  const allowedSlots = e.variable === 'posting_slot' ? armSlots.filter(slot => !otherSlots.includes(slot)) : armSlots;
+  if (!allowedSlots.length) throw Error('render_posting_slot_experiment_needs_distinct_slots');
   return {
-    manifest: e.arm === 'control' ? baseline : candidate,
+    manifest: e.arm === 'control' ? baseline : candidate, allowedSlots,
     comparison: { baselineManifestSha: baseline.sha, candidateManifestSha: candidate.sha, variable: e.variable },
   };
 }
@@ -205,11 +219,11 @@ export async function confirmedRenderReceipt(root, asset, destination) {
       !findDestination(receipt.destination) || destinationKey(receipt.destination) !== destinationKey(destination) ||
       receipt.version !== asset.policyVersion || receipt.costUsd !== 0 ||
       fingerprint(receipt.experiment) !== fingerprint(asset.experiment ?? null)) return null;
-  const { manifest, comparison } = await selecting(root, destination, asset);
+  const { manifest, comparison, allowedSlots } = await selecting(root, destination, asset);
   if (receipt.engineSha256 !== manifest.engineSha256 || receipt.manifestSha !== manifest.sha ||
       fingerprint(receipt.actualParams) !== fingerprint(manifest.params) ||
       fingerprint(receipt.comparison) !== fingerprint(comparison) ||
-      clock(asset.scheduledAt) !== manifest.params.posting_slot ||
+      !allowedSlots.includes(clock(asset.scheduledAt)) ||
       (await mediaBytes(root, asset.draftFile)).sha !== receipt.outputSha256) return null;
   return { manifestSha: receipt.manifestSha, engineSha256: receipt.engineSha256, comparison };
 }
