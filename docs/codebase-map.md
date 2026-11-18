@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T05:19:48.872Z
+Generated: 2026-11-18T05:24:05.157Z
 Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-kong-repair`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1161 | 1059 | 4145 | 610 | 23692 |
+| 1157 | 1057 | 4145 | 610 | 23692 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -33,7 +33,7 @@ Package: `rest-express`
 | `client/src` | 153 | 151 | ui-component:55, client-component:44, client-page:28, client-lib:19 |
 | `script` | 120 | 108 | script:120 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 70 | 66 | docs:70 |
+| `docs` | 66 | 64 | docs:66 |
 | `shared` | 29 | 29 | shared:29 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |

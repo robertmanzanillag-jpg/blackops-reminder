@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T05:19:48.872Z",
+  "generatedAt": "2026-11-18T05:24:05.157Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-kong-repair",
   "packageName": "rest-express",
   "scripts": {
@@ -124,8 +124,8 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1161,
-    "filesIndexed": 1059,
+    "filesVisible": 1157,
+    "filesIndexed": 1057,
     "imports": 4145,
     "routes": 610,
     "symbols": 23692
@@ -203,10 +203,10 @@
       }
     },
     "docs": {
-      "files": 70,
-      "indexed": 66,
+      "files": 66,
+      "indexed": 64,
       "kinds": {
-        "docs": 70
+        "docs": 66
       }
     },
     "examples/clippers-motivation": {
@@ -5724,22 +5724,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],

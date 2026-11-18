@@ -52,6 +52,7 @@ export async function parentCheckerReceipt(input: { key: string; sourceDigest?: 
       !/^[a-f0-9]{64}$/.test(receipt.engine?.sha256 || "") || receipt.validation?.exitCode !== 0 || receipt.validation?.failures !== 0 || !Number.isSafeInteger(receipt.validation?.tests) || receipt.validation.tests < 1 ||
       !Array.isArray(receipt.validation.command) || !receipt.validation.command.length || !/^[a-f0-9]{64}$/.test(receipt.validation.tapSha256 || "") ||
       !/^[a-f0-9]{64}$/.test(receipt.validation.sandboxProfileHash || "") || !/^[a-f0-9]{64}$/.test(receipt.validation.sourceTreeDigest || "") ||
+      !((receipt.review?.model === "gpt-6-luna" && receipt.review?.effort === "low") || (receipt.review?.model === "gpt-6.1-sol" && receipt.review?.effort === "medium")) ||
       receipt.review?.decision !== "approve" || receipt.review?.cliExitCode !== 0 || !Array.isArray(receipt.review?.findings) || receipt.review.findings.length !== 0 || !/^[a-f0-9]{64}$/.test(receipt.review?.outputSha256 || "")) return false;
     const age = input.now - Date.parse(receipt.createdAt); if (!Number.isFinite(age) || age < 0 || age > 86400000) return false;
     const engine = await get("robertmanzanillag-jpg/blackops-reminder", `contents/script/kong-repair-subscription-worker.mjs?ref=${input.engineSourceCommit}`);

@@ -157,7 +157,9 @@ test("trusted parent checker receipts require exact source/head, distinct invoca
     return { type: "file", encoding: "base64", content: Buffer.from(engine).toString("base64") };
   };
   assert.equal(await parentCheckerReceipt(input, get), true);
+  current.review.model = "gpt-6-luna"; current.review.effort = "low"; assert.equal(await parentCheckerReceipt(input, get), true); current = structuredClone(receipt);
   for (const change of [(r: typeof receipt) => { r.checkerInvocationId = r.makerInvocationId; }, (r: typeof receipt) => { r.headSha = "9".repeat(40); },
+    (r: typeof receipt) => { r.review.model = "gpt-6-luna"; }, (r: typeof receipt) => { r.review.effort = "low"; },
     (r: typeof receipt) => { r.engine.sha256 = "0".repeat(64); }, (r: typeof receipt) => { r.validation.tests = 0; }, (r: typeof receipt) => { r.review.decision = "changes_requested"; }]) {
     current = structuredClone(receipt); change(current); assert.equal(await parentCheckerReceipt(input, get), false);
   }
