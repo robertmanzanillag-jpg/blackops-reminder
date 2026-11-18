@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-18T14:13:28.694Z
-Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-v6-package-20261118`
+Generated: 2026-11-18T15:32:36.558Z
+Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-execution-20261118`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1228 | 1123 | 4492 | 623 | 25337 |
+| 1234 | 1129 | 4535 | 623 | 25506 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,11 +28,11 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 323 | 319 | test:323 |
+| `tests` | 325 | 321 | test:325 |
 | `server` | 284 | 278 | server:284 |
 | `client/src` | 155 | 153 | ui-component:55, client-component:46, client-page:28, client-lib:19 |
-| `script` | 132 | 119 | script:132 |
-| `docs` | 76 | 74 | docs:76 |
+| `script` | 134 | 121 | script:134 |
+| `docs` | 77 | 75 | docs:77 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 35 | 33 | shared:35 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
@@ -41,7 +41,7 @@ Package: `rest-express`
 | `script/office-api-budget-v6` | 10 | 8 | script:10 |
 | `script/release-gate` | 7 | 7 | script:7 |
 | `.agents/memory` | 5 | 5 | docs:5 |
-| `tests/fixtures` | 6 | 4 | test:6 |
+| `tests/fixtures` | 7 | 5 | test:7 |
 | `client/public` | 16 | 2 | other:16 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `client` | 1 | 1 | other:1 |
@@ -408,8 +408,8 @@ Package: `rest-express`
 - `script/clippers-content-local-worker.mjs` (script; 112 symbols, 10 imports)
 - `script/clippers-creator-routing.mjs` (script; 53 symbols, 8 imports)
 - `script/clippers-creator-selection.mjs` (script; 73 symbols, 1 imports)
-- `script/clippers-daily-learning.mjs` (script; 107 symbols, 9 imports)
-- `script/clippers-daily-watchdog.mjs` (script; 100 symbols, 6 imports)
+- `script/clippers-daily-learning.mjs` (script; 111 symbols, 10 imports)
+- `script/clippers-daily-watchdog.mjs` (script; 102 symbols, 8 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
 - `script/clippers-free-local-worker.mjs` (script; 45 symbols, 6 imports)
 - `script/clippers-generate-owned-gap-sources.mjs` (script; 30 symbols, 3 imports)
@@ -425,11 +425,11 @@ Package: `rest-express`
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-orchestra-analytics.mjs` (script; 23 symbols, 6 imports)
 - `script/clippers-orchestra-relay.mjs` (script; 6 symbols, 2 imports)
-- `script/clippers-orchestra-report.mjs` (script; 116 symbols, 8 imports)
+- `script/clippers-orchestra-report.mjs` (script; 122 symbols, 8 imports)
 - `script/clippers-orchestra-sender.mjs` (script; 41 symbols, 7 imports)
 - `script/clippers-portfolio-discovery.mjs` (script; 94 symbols, 7 imports)
-- `script/clippers-portfolio-metricool.mjs` (script; 74 symbols, 1 imports)
-- `script/clippers-portfolio-prepare.mjs` (script; 103 symbols, 7 imports)
+- `script/clippers-portfolio-metricool.mjs` (script; 85 symbols, 1 imports)
+- `script/clippers-portfolio-prepare.mjs` (script; 107 symbols, 8 imports)
 - `script/clippers-portfolio-render.mjs` (script; 77 symbols, 8 imports)
 - `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)
 - `script/clippers-reconcile-publications.mjs` (script; 74 symbols, 3 imports)

@@ -11,6 +11,7 @@ export const DESTINATIONS = Object.freeze([
   Object.freeze({ brandId: 6591612, network: 'facebook', account: '1193011863901514' }),
 ]);
 export const DISCONNECTED_BRAND = 6595747;
+export const localHour = time => new Intl.DateTimeFormat('en-US', {timeZone: TIME_ZONE, hour:'2-digit', hourCycle:'h23'}).format(new Date(time));
 export const destinationKey = ({ brandId, network, account }) => [brandId, network, account].join(':');
 export function findDestination(value) {
   return DESTINATIONS.find(d => d.brandId === value?.brandId && d.network === value.network && d.account === value.account);
@@ -40,7 +41,7 @@ export function providerTimestamp(value) {
   return Number.isFinite(+date) ? date.toISOString() : null;
 }
 function list(value) {
-  if (value?.hasMore || value?.next || value?.pagination?.next || value?.meta?.next || value?.paging?.next ||
+  if (value?.hasMore || value?.next || value?.page?.next || value?.metadata?.next || value?.metadata?.hasMore || value?.pagination?.next || value?.meta?.next || value?.paging?.next ||
       (Number.isInteger(value?.total) && value.total > (value.data?.length ?? -1))) throw new Error('metricool_pagination_unverified');
   if (Array.isArray(value)) return value;
   if (Array.isArray(value?.data)) return value.data;
@@ -183,12 +184,21 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
     return { canPublish: profile.isWhiteLabelOnlyRead !== true && profile.canPublish !== false &&
       (profile.canPublish === true || owned) };
   }
-  async function schedule(destination, day) {
+  async function schedule(destination, day, strict=false) {
     await destinationSettings(destination);
-    return list(await get('/api/v2/scheduler/posts', {
+    const rows=list(await get('/api/v2/scheduler/posts', {
       blogId: destination.brandId, integrationSource: 'MCP',
       start: day + 'T00:00:00', end: day + 'T23:59:59', timezone: TIME_ZONE, extendedRange: false,
-    })).filter(row => provider(row, destination) && row.draft !== true && !['deleted', 'cancelled', 'canceled', 'failed'].includes(String(statusOf(row, destination)).toLowerCase()));
+    }));
+    if(strict){
+      const networks=new Set(['tiktok','facebook','instagram','youtube','twitter','linkedin','pinterest','gmb','threads','bluesky','twitch']);
+      if(rows.length>500)throw Error('weekly_provider_schedule_unverified');
+      for(const row of rows)if(!row||typeof row!=='object'||Array.isArray(row)||
+          (row.blogId!=null&&String(row.blogId)!==String(destination.brandId))||!Array.isArray(row.providers)||!row.providers.length||row.providers.length>20||
+          row.providers.some(p=>!p||typeof p!=='object'||Array.isArray(p)||typeof p.network!=='string'||!networks.has(p.network))||
+          new Set(row.providers.map(p=>p.network)).size!==row.providers.length)throw Error('weekly_provider_schedule_unverified');
+    }
+    return rows.filter(row=>provider(row,destination)&&row.draft!==true&&!['deleted','cancelled','canceled','failed'].includes(String(statusOf(row,destination)).toLowerCase()));
   }
   async function postAnalytics(destination, from, now) {
     await destinationSettings(destination);
@@ -222,11 +232,61 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
     async preflight(destination, item) {
       if (!(await destinationSettings(destination)).canPublish) throw new Error('destination_publish_permission_missing');
       const rows = await schedule(destination, localDay(new Date(item.scheduledAt)));
+      if (rows.some(row => !scheduledTime(row))) throw Error('metricool_schedule_time_unverified');
       const duplicate = rows.some(row => {
-        return scheduledTime(row) === item.scheduledAt || row.text === item.caption ||
+        return localHour(scheduledTime(row)) === localHour(item.scheduledAt) || row.text === item.caption ||
           providerMedia(row) === item.mediaUrl;
       });
       if (duplicate || rows.length >= DAILY_LIMIT) throw new Error('metricool_slot_duplicate_or_daily_cap');
+    },
+    async weeklyPreflight(destination, item, { now } = {}) {
+      if (!(now instanceof Date) || !Number.isFinite(+now)) throw Error('weekly_now_required');
+      const day = localDay(new Date(item.scheduledAt));
+      if (Date.parse(item.scheduledAt) < +now + 300000) throw Error('weekly_schedule_expired');
+      profiles = settings = undefined;
+      if (!(await destinationSettings(destination)).canPublish) throw Error('destination_publish_permission_missing');
+      const rows = await schedule(destination, day, true);
+      const pending = new Map();
+      const published = new Map();
+      if (day === localDay(now)) {
+        // Fresh published-post read, not the connector's pending-only list or a fabricated completeness flag.
+        let start = new Date(day+'T05:00:00Z');
+        if (localHour(start)==='01') start=new Date(day+'T04:00:00Z');
+        const analytics = await postAnalytics(destination,start.toISOString(),now);
+        for (const post of analytics) {
+          const when=analyticsPublicationTime(post);
+          if(!when || Date.parse(when)>+now || (post.blogId!=null && String(post.blogId)!==String(destination.brandId)))throw Error('today_publication_coverage_unverified');
+          if(localDay(new Date(when))!==day)continue;
+          const url=post.publicUrl??post.permalink??post.shareUrl??post.url;
+          const exact=url?exactPost(url,destination):null;
+          const id=exact?.id??(!url?String(post.postId??post.videoId??''):null);
+          if(!id || !/^\d+$/.test(id))throw Error('today_publication_coverage_unverified');
+          const old=published.get(id);
+          if(old && old.publishedAt!==when)throw Error('today_publication_identity_conflict');
+          published.set(id,{id,publishedAt:when});
+        }
+      }
+      for (const row of rows) {
+        const when = scheduledTime(row), status = String(statusOf(row,destination)).toLowerCase();
+        if (!when || localDay(new Date(when))!==day || !schedulerId(row) || !['scheduled','pending','published','posted'].includes(status)) throw Error('weekly_provider_schedule_unverified');
+        if (['published','posted'].includes(status)) {
+          const target = row.providers.find(p=>p.network===destination.network);
+          const exact = exactPost(target.publicUrl ?? row.publicUrl ?? row.publishedPostUrl,destination);
+          if (day!==localDay(now) || !exact || !published.has(exact.id)) throw Error('weekly_published_row_unreconciled');
+          continue;
+        }
+        if (Date.parse(when)<=+now) throw Error('past_schedule_requires_publication_confirmation');
+        const key = String(row.uuid ?? schedulerId(row));
+        if (pending.has(key) && JSON.stringify(pending.get(key))!==JSON.stringify(row)) throw Error('weekly_provider_identity_conflict');
+        pending.set(key,row);
+      }
+      const hours = [...pending.values()].map(row=>localHour(scheduledTime(row))).concat([...published.values()].map(post=>localHour(post.publishedAt)));
+      if (hours.length>=DAILY_LIMIT || new Set(hours).size!==hours.length || hours.includes(localHour(item.scheduledAt)) ||
+          [...pending.values()].some(row=>row.text===item.caption || providerMedia(row)===item.mediaUrl)) throw Error('metricool_slot_duplicate_or_daily_cap');
+      const evidence={destination,day,observedAt:now.toISOString(),source:'fresh_rest_calendar_and_account_analytics',
+        scheduled:[...pending.values()].map(row=>({id:schedulerId(row),scheduledAt:scheduledTime(row),status:String(statusOf(row,destination)).toLowerCase()})),published:[...published.values()]};
+      return { day, observedAt:evidence.observedAt, coverageSource:evidence.source, confirmedCount:hours.length, scheduledIds:evidence.scheduled.map(row=>row.id), publishedIds:evidence.published.map(row=>row.id),evidence,
+        evidenceSha256:createHash('sha256').update(JSON.stringify(evidence)).digest('hex') };
     },
     async schedule(destination, item) {
       profiles = settings = undefined;
@@ -238,12 +298,11 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
       const post = {
         autoPublish: true, draft: false, providers: [{ network: destination.network }],
         publicationDate: { dateTime: item.scheduledAt.slice(0, 19), timezone: 'UTC' },
-        text: item.caption, ...networkOptions,
+        text: item.caption, media: [item.mediaUrl], ...networkOptions,
       };
       await mcp('createScheduledPost', {
         blogId: String(destination.brandId), date: item.scheduledAt,
         info: JSON.stringify(post),
-        mediaFiles: [{ download_url: item.mediaUrl, file_id: 'clippers-' + item.id + '.mp4' }],
       }, item.id);
       return this.confirmSchedule(destination, item);
     },

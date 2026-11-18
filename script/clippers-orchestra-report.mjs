@@ -201,6 +201,11 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
     return r;
   }));
   const discovery=discoveryView(discoveryReceipts.map(r=>r.value),at),metrics=metricRows(state,at);
+  const weeklyReceipts=(state?.deliveries??[]).filter(d=>objectRow(d)&&typeof d.weeklyWindow==='string'&&findDestination(d)&&['scheduled','published'].includes(d.status)&&typeof d.metricoolId==='string'&&ID.test(d.metricoolId)&&time(d.scheduledAt,Infinity)&&
+    objectRow(d.scheduleEvidence)&&typeof d.scheduleEvidence.mediaUrl==='string'&&SHA.test(d.scheduleEvidenceSha256??'')&&digest(d.scheduleEvidence)===d.scheduleEvidenceSha256&&d.scheduleEvidence.id===d.metricoolId&&
+    findDestination(d.scheduleEvidence.destination)&&destinationKey(d.scheduleEvidence.destination)===destinationKey(d)&&d.scheduleEvidence.scheduledAt===d.scheduledAt&&
+    d.scheduleEvidence.mediaUrl===d.verifiedSchedulerMediaUrl&&time(d.scheduleEvidence.confirmedAt,at));
+  const weeklyAt=weeklyReceipts.map(d=>time(d.scheduleEvidence.confirmedAt,at)).sort().at(-1)??null;
   const media=Array.isArray(artifacts.media.value)?artifacts.media.value:[];
   const {comparisons,qualifications}=await comparisonsView(root,state,metrics,at,media);
   const reportAt=time(report?.generatedAt,at),watchdogAt=time(wd?.generatedAt,at),prepareAt=time(prep?.generatedAt,at);
@@ -208,12 +213,35 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   const analytics=time(rawAnalytics?.generatedAt,at)&&rawAnalytics?.schemaVersion===1&&rawAnalytics.paidSpendUsd===0&&rawAnalytics.readOnly===true&&Array.isArray(rawAnalytics.accounts)&&rawAnalytics.accounts.length===4&&new Set(rawAnalytics.accounts.filter(findDestination).map(destinationKey)).size===4?rawAnalytics:null;
   const analyticsAt=analytics?.generatedAt??null;
   const discoveryAt=discovery.sources.map(s=>s.observedAt).filter(Boolean).sort().at(-1)??null;
-  const evidenceAt=[reportAt,watchdogAt,prepareAt,discoveryAt,analyticsAt].filter(Boolean).sort().at(-1)??null;
+  const evidenceAt=[reportAt,watchdogAt,prepareAt,discoveryAt,analyticsAt,weeklyAt].filter(Boolean).sort().at(-1)??null;
   const age=evidenceAt?(at-Date.parse(evidenceAt))/60000:null,sourceState=evidenceAt?(age<=26*60?'connected':'stale'):'disconnected';
   const validLearning=report?.schemaVersion===1&&report.paidSpendUsd===0&&reportAt&&report.date===localDay(now)&&Array.isArray(report.destinations)&&report.destinations.length===4&&new Set(report.destinations.filter(d=>findDestination(d)).map(destinationKey)).size===4?report:null;
   const nextDue=watchdogAt?nextDaily(at,wd.checkHour):null;
+  const weeklyIsNewer=weeklyAt&&(!reportAt||weeklyAt>reportAt);
   const accounts=DESTINATIONS.map(d=>{
-    const key=destinationKey(d),r=validLearning?.destinations.find(r=>findDestination(r)&&destinationKey(r)===key);
+    const key=destinationKey(d);let r=validLearning?.destinations.find(r=>findDestination(r)&&destinationKey(r)===key);
+    const own=weeklyReceipts.filter(v=>destinationKey(v)===key&&localDay(new Date(v.scheduledAt))===localDay(now)).sort((a,b)=>a.scheduleEvidence.confirmedAt.localeCompare(b.scheduleEvidence.confirmedAt));
+    const latestOwn=own.at(-1);
+    if(latestOwn&&(!reportAt||latestOwn.scheduleEvidence.confirmedAt>reportAt)){
+      let confirmed=new Set(own.map(v=>v.metricoolId)).size,shortfall=null,blockers=['weekly_day_coverage_unverified'];
+      const proof=latestOwn.preflightEvidence;
+      if(objectRow(proof)){
+        const {sha256,...p}=proof;
+        const valid=typeof sha256==='string'&&SHA.test(sha256)&&digest(p)===sha256&&p.source==='fresh_rest_calendar_and_account_analytics'&&
+          findDestination(p.destination)&&destinationKey(p.destination)===key&&p.day===localDay(now)&&time(p.observedAt,at)&&p.observedAt<=latestOwn.scheduleEvidence.confirmedAt&&
+          Array.isArray(p.scheduled)&&p.scheduled.length<=5&&Array.isArray(p.published)&&p.published.length<=5&&
+          p.scheduled.every(v=>objectRow(v)&&typeof v.id==='string'&&ID.test(v.id)&&time(v.scheduledAt,Infinity)&&localDay(new Date(v.scheduledAt))===p.day&&['pending','scheduled'].includes(v.status))&&
+          p.published.every(v=>objectRow(v)&&typeof v.id==='string'&&/^\d+$/.test(v.id)&&time(v.publishedAt,Date.parse(p.observedAt))&&localDay(new Date(v.publishedAt))===p.day);
+        if(valid){
+          const pending=new Set(p.scheduled.map(v=>v.id)),published=new Set(p.published.map(v=>v.id));
+          for(const v of (state?.deliveries??[]).filter(v=>findDestination(v)&&destinationKey(v)===key&&['scheduled','published'].includes(v.status)&&ID.test(v.metricoolId??'')&&time(v.scheduledAt,Infinity)&&localDay(new Date(v.scheduledAt))===p.day&&(!v.weeklyWindow||weeklyReceipts.includes(v)))){
+            if(v.status==='published'&&exactPost(v.post?.url,v)?.id===v.post?.id&&time(v.post?.publishedAt,at)){pending.delete(v.metricoolId);published.add(v.post.id);}else pending.add(v.metricoolId);
+          }
+          confirmed=pending.size+published.size;shortfall=Math.max(0,5-confirmed);blockers=confirmed>5?['daily_queue_exceeds_cap']:confirmed===5?[]:r?.blockers??['weekly_queue_partial'];
+        }
+      }
+      r={...r,confirmedScheduledOrPublished:confirmed,shortfall,blockers};
+    }
     const buckets=ageBuckets(metrics,key),observedAt=buckets.map(b=>b.latestObservedAt).filter(Boolean).sort().at(-1)??null;
     const v=validLearning?.versions?.find(v=>v.destination===key);
     const measured=analytics?.accounts.find(row=>findDestination(row)&&destinationKey(row)===key);
@@ -240,10 +268,11 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
     role('streamers',discoveryAt,discoveryArtifact,discovery.observations===null?{}:{observations:discovery.observations},discovery.sources.some(s=>s.status==='observed')?[]:['public_feed_observations_unavailable']),
     role('editor',prepareAt,artifacts.prepare,prepareAt?{prepared:n(prep.prepared)??0,scopedMediaReceipts:confirmedMedia.length}:{},confirmedMedia.length?[]:[prep?.status==='disabled'?'preparation_disabled':'no_reviewed_ready_media']),
     role('checker',prepareAt,artifacts.prepare,prepareAt?{verifiedScopedMedia:confirmedMedia.length}:{},confirmedMedia.length?[]:['rights_or_render_review_required']),
-    role('publisher',reportAt,artifacts.learning,validLearning?{confirmed:accounts.reduce((s,a)=>s+(a.confirmedScheduledOrPublished??0),0),verifiedPublications:n(validLearning.verifiedPublications)??0}:{},validLearning&&accounts.some(a=>a.confirmedScheduledOrPublished>0)?[]:['no_provider_confirmed_publication_or_schedule']),
+    role('publisher',weeklyIsNewer?weeklyAt:reportAt,weeklyIsNewer?artifacts.state:artifacts.learning,(validLearning||weeklyIsNewer)?{confirmed:accounts.reduce((s,a)=>s+(a.confirmedScheduledOrPublished??0),0),verifiedPublications:weeklyIsNewer?weeklyReceipts.filter(d=>d.status==='published'&&exactPost(d.post?.url,d)?.id===d.post?.id&&time(d.post?.verifiedAt,at)).length:n(validLearning.verifiedPublications)??0}:{},((validLearning||weeklyIsNewer)&&accounts.some(a=>a.confirmedScheduledOrPublished>0))||(weeklyIsNewer&&weeklyReceipts.length)?[]:['no_provider_confirmed_publication_or_schedule']),
     role('learning',reportAt,artifacts.learning,state?{eligibleComparisons:eligibleComparisons,qualifiedCandidates:qualifications.length,promotions}:{},qualifications.length?[]:['three_current_independent_comparisons_required']),
     role('health',watchdogAt,artifacts.watchdog,{},sourceState==='connected'?[]:['runtime_evidence_unavailable_or_stale']),
   ];
+  if(weeklyIsNewer&&weeklyReceipts.length)roles.find(r=>r.stage==='publisher').state='completed';
   const outcomes=(stage,items)=>{
     const target=roles.find(r=>r.stage===stage);
     target.outcomes=items.filter(o=>time(o.completedAt,at)).slice(-100);
@@ -251,7 +280,7 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   };
   const outcome=(stage,proof,completedAt,reason)=>{const sha=digest(proof);return {evidenceId:`clippers:${sha}:${stage}`,completedAt,outcome:'verified_deliverable',reason,artifactSha256:sha};};
   outcomes('analytics',[...metrics.map(m=>outcome('analytics',[m.destination,m.key,m.observedAt,m.views,m.completionRate],m.capturedAt,'verified_metric_snapshot')),...accounts.filter(a=>a.analytics.status==='observed'&&a.analytics.posts>0).map(a=>outcome('analytics',[a.key,a.analytics.observedAt,a.analytics.posts,a.analytics.totalViews],a.analytics.observedAt,'verified_metric_snapshot'))]);
-  outcomes('publisher',(state?.deliveries??[]).filter(d=>findDestination(d)&&ID.test(d.metricoolId??'')&&['scheduled','published'].includes(d.status)).map(d=>outcome('publisher',[destinationKey(d),d.metricoolId,d.mediaSha256,d.scheduledAt],d.status==='published'?d.post?.verifiedAt:d.createdAt,'provider_schedule_or_publication_receipt')));
+  outcomes('publisher',(state?.deliveries??[]).filter(d=>findDestination(d)&&ID.test(d.metricoolId??'')&&['scheduled','published'].includes(d.status)&&(!d.weeklyWindow||weeklyReceipts.includes(d))).map(d=>outcome('publisher',[destinationKey(d),d.metricoolId,d.mediaSha256,d.scheduledAt],d.status==='published'?d.post?.verifiedAt:d.weeklyWindow?d.scheduleEvidence.confirmedAt:d.createdAt,'provider_schedule_or_publication_receipt')));
   outcomes('streamers',discoveryReceipts.flatMap(({value:r})=>r?.schemaVersion===1&&time(r.observedAt,at)&&r.paidSpendUsd===0&&Array.isArray(r.feeds)&&Array.isArray(r.observations)?r.feeds.filter(f=>f.status==='observed'&&(r.schemaVersion===1||time(f.observedAt,at))&&SHA.test(f.feedSha256??'')&&ALL_DISCOVERY_CREATORS.some(c=>c.id===f.creatorId&&c.channelId===f.channelId)&&r.observations.some(o=>o.creatorId===f.creatorId&&time(o.publishedAt,at)&&at-Date.parse(o.publishedAt)<=72*HOUR)).map(f=>outcome('streamers',[f.creatorId,f.feedSha256,time(f.observedAt,at)??(r.schemaVersion===1?r.observedAt:null)],time(f.observedAt,at)??(r.schemaVersion===1?r.observedAt:null),'public_metadata_receipt')):[]));
   outcomes('trends',discovery.signals.filter(s=>s.label==='paired_growth_observed').map(s=>outcome('trends',s,s.observedAt,'paired_public_growth_observation')));
   outcomes('learning',qualifications.map(q=>outcome('learning',q,reportAt,'three_current_verified_comparisons')));

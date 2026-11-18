@@ -5,6 +5,7 @@ import { mkdir, open, readFile, realpath, rename, unlink, writeFile, readdir, ls
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { findDestination, destinationKey, providerTimestamp, localDay } from './clippers-portfolio-metricool.mjs';
+import { approvedWeeklyAuthorization, approvedEditorialSourceProof, newYorkHour } from './clippers-weekly-policy.mjs';
 
 const CONFIG = 'config/clippers-daily-learning';
 const REPORT = 'reports/clippers-daily-learning';
@@ -218,7 +219,12 @@ async function renderAndApprove(root, id, now, renderer) {
   const scheduledAt = providerTimestamp(packet.scheduledAt);
   const rights = request.rights;
   const validAt = value => !!providerTimestamp(value);
-  if (!scheduledAt || localDay(new Date(scheduledAt)) !== localDay(now) || Date.parse(scheduledAt) < +now + 300_000 ||
+  const weeklyCandidate = request.weeklyAuthorization ? { ...destination, id, policyVersion: request.policyVersion, scheduledAt, sourceUrl: packet.sourceUrl,
+    sourcePublishedAt: rights?.sourcePublishedAt, rightsObservedAt: rights?.observedAt, rightsValidUntil: rights?.validUntil,
+    thirdPartyCommercial:packet.thirdPartyCommercial, mediaSha256: packet.outputSha256, renderReceiptSha256: packet.renderReceiptSha256, weeklyAuthorizationSha256: digest(request.weeklyAuthorization) } : null;
+  const weekly = weeklyCandidate && await approvedWeeklyAuthorization(root, weeklyCandidate, now, { startDate: request.weeklyAuthorization.windowStart, endDate: request.weeklyAuthorization.windowEnd });
+  if (request.weeklyAuthorization && !weekly) throw Error('weekly_authorization_not_verified');
+  if (!scheduledAt || (!weekly && localDay(new Date(scheduledAt)) !== localDay(now)) || Date.parse(scheduledAt) < +now + 300_000 ||
       !rights || !findDestination(rights.destination) || destinationKey(rights.destination) !== destinationKey(destination) ||
       !Array.isArray(rights.permittedNetworks) || !rights.permittedNetworks.includes(destination.network) ||
       rights.thirdPartyCommercial !== packet.thirdPartyCommercial || rights.commercialPermission !== 'approved' ||
@@ -231,7 +237,7 @@ async function renderAndApprove(root, id, now, renderer) {
       Date.parse(rights.observedAt) > +now || +now - Date.parse(rights.observedAt) > 24 * 3_600_000 ||
       Date.parse(rights.sourcePublishedAt) > +now ||
       Date.parse(rights?.validUntil) < Date.parse(scheduledAt) ||
-      Date.parse(scheduledAt) - Date.parse(rights?.sourcePublishedAt) > 72 * 3_600_000) throw Error('prepare_schedule_outside_rights');
+      (!weekly && Date.parse(scheduledAt) - Date.parse(rights?.sourcePublishedAt) > 72 * 3_600_000)) throw Error('prepare_schedule_outside_rights');
   // Rendering and media review happen before public upload. Never rerender an
   // approved clip merely because another destination uses the same bytes.
   const receiptFile = `${REPORT}/render-receipts/${key(destination)}/${id}/${request.policyVersion}/${packet.outputSha256}.json`;
@@ -245,13 +251,17 @@ async function renderAndApprove(root, id, now, renderer) {
       rendered.startSeconds !== request.sourceStartSeconds + rendered.actualParams.hook ||
       rendered.renderRequestSha256 !== digest(request) ||
       rendered.captionTextSha256 !== hash(typeof request.captionText === 'string' ? request.captionText : '')) throw Error('reviewed_render_output_changed');
+  if (packet.editorialPolicy!==undefined && packet.editorialPolicy!=='evergreen_streamer_clip') throw Error('editorial_policy_unrecognized');
   const asset = { ...destination, id, campaignId: packet.campaignId, sourceId: packet.sourceId, sourceUrl: packet.sourceUrl,
     creator: packet.creator, language: packet.language, caption: packet.caption, scheduledAt,
     policyVersion: rendered.version, experiment: request.experiment ?? undefined,
     renderReceiptSha256: packet.renderReceiptSha256, mediaSha256: rendered.outputSha256, draftFile: rendered.draftFile,
     thirdPartyCommercial: packet.thirdPartyCommercial,
+    ...(packet.editorialPolicy ? {editorialPolicy:packet.editorialPolicy} : {}),
+    ...(weekly ? { weeklyAuthorizationSha256: weeklyCandidate.weeklyAuthorizationSha256 } : {}),
     sourcePublishedAt: rights.sourcePublishedAt, rightsObservedAt: rights.observedAt, rightsValidUntil: rights.validUntil };
   if (!(await renderer.confirmedRenderReceipt(root, asset, destination))) throw Error('render_receipt_unconfirmed');
+  if (asset.editorialPolicy && !(await approvedEditorialSourceProof(root,asset))) throw Error('editorial_source_proof_unverified');
   let creatorSelectionHeld;
   if (request.creatorSelection !== undefined) {
     const { normalizeCreatorContext } = await import('./clippers-creator-routing.mjs');
@@ -271,6 +281,8 @@ async function appendSchedulerInput(root, approved, uploaded) {
     campaignId: result.campaignId, creator: result.creator, language: result.language,
     sourcePublishedAt: result.sourcePublishedAt, mediaSha256: result.mediaSha256, mediaUrl: result.mediaUrl,
     caption: result.caption, policyVersion: result.policyVersion, scheduledAt: result.scheduledAt,
+    ...(result.editorialPolicy ? {editorialPolicy:result.editorialPolicy} : {}),
+    ...(result.weeklyAuthorizationSha256 ? { weeklyAuthorizationSha256: result.weeklyAuthorizationSha256 } : {}),
     renderReceiptSha256: result.renderReceiptSha256, experiment: result.experiment ?? null,
     ...(asset.creatorSelection ? { creatorSelection: asset.creatorSelection } : {}),
     rightsObservedAt: result.rightsObservedAt, rightsValidUntil: result.rightsValidUntil,
@@ -324,7 +336,11 @@ export async function runClippersPortfolioPrepare({ workspaceRoot, now = new Dat
   const metadata = await Promise.all(names.map(async name => ({ name, time: (await lstat(path.join(root, CONFIG, 'prepare-requests', name))).mtimeMs })));
   // Stale/bad packets do not consume the twenty usable-packet allowance. Prefer
   // recently reviewed inputs, rather than repeatedly taking the oldest names.
-  const ids = metadata.sort((a, b) => b.time - a.time || a.name.localeCompare(b.name)).slice(0, 500).map(row => row.name.slice(0, -5));
+  const priorInput = await ownerJson(root, `${CONFIG}/approved-input.json`, {assets:[]});
+  if (!Array.isArray(priorInput.assets) || priorInput.assets.length>250) throw Error('approved_scheduler_input_invalid');
+  const queuedIds = new Set(priorInput.assets.map(row=>row.id));
+  // New packets lead the bounded scan: twenty already-prepared recent IDs must not starve later weekly batches.
+  const ids = metadata.sort((a,b)=>Number(queuedIds.has(a.name.slice(0,-5)))-Number(queuedIds.has(b.name.slice(0,-5))) || b.time-a.time || a.name.localeCompare(b.name)).slice(0,500).map(row=>row.name.slice(0,-5));
   if (!ids.length) return { status: 'held', reason: 'no_reviewed_prepare_packets', readiness, prepared: 0, uploaded: 0, paidSpendUsd: 0 };
   const lockFile = path.join(reportRoot, 'portfolio-prepare.lock'); let lock;
   try { lock = await open(lockFile, 'wx', 0o600); }
@@ -349,11 +365,11 @@ export async function runClippersPortfolioPrepare({ workspaceRoot, now = new Dat
         const approved = await renderAndApprove(root, id, now, renderApi);
         if (usablePackets >= 20) { outcomes.push({ id, status: 'held', reason: 'prepare_packet_budget_reached' }); break; }
         usablePackets++;
-        const targetKey = destinationKey(approved.destination), day = localDay(now);
+        const targetKey = destinationKey(approved.destination), day = localDay(new Date(approved.asset.scheduledAt));
         const reservations = state.targets.filter(row => row.destination === targetKey && row.day === day);
         const priorTarget = reservations.find(row => row.id === id);
         if ((priorTarget && (priorTarget.renderReceiptSha256 !== approved.asset.renderReceiptSha256 || priorTarget.scheduledAt !== approved.asset.scheduledAt)) ||
-            (!priorTarget && (reservations.length >= 5 || reservations.some(row => row.scheduledAt === approved.asset.scheduledAt ||
+            (!priorTarget && (reservations.length >= 5 || reservations.some(row => newYorkHour(row.scheduledAt) === newYorkHour(approved.asset.scheduledAt) ||
               row.mediaSha256 === approved.asset.mediaSha256 || row.captionDigest === digest(approved.asset.caption))))) {
           outcomes.push({ id, status: 'held', reason: 'destination_daily_cap_or_slot_conflict' }); continue;
         }
@@ -366,7 +382,7 @@ export async function runClippersPortfolioPrepare({ workspaceRoot, now = new Dat
           outcomes.push({ id, status: 'held', reason: 'approved_queue_capacity' }); continue;
         }
         const queued = input.assets.filter(row => findDestination(row) && destinationKey(row) === targetKey && localDay(new Date(row.scheduledAt)) === day);
-        if (!queued.some(row => row.id === id) && (queued.length >= 5 || queued.some(row => row.scheduledAt === approved.asset.scheduledAt ||
+        if (!queued.some(row => row.id === id) && (queued.length >= 5 || queued.some(row => newYorkHour(row.scheduledAt) === newYorkHour(approved.asset.scheduledAt) ||
             row.mediaSha256 === approved.asset.mediaSha256 || row.caption === approved.asset.caption))) {
           outcomes.push({ id, status: 'held', reason: 'destination_daily_cap_or_slot_conflict' }); continue;
         }
