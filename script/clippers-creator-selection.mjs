@@ -43,7 +43,6 @@ const contextValid = row => destinationValid(row?.destination) && LANGUAGE.test(
 const clone = value => JSON.parse(JSON.stringify(value));
 
 function sampleReason(row, context, now, policy) {
-  if (!row || digest(scope(row)) !== digest(scope(context))) return 'scope_mismatch';
   if (![row.deliveryId, row.postId, row.creatorGroupId].every(value => id(value)) ||
       !/^UC[A-Za-z0-9_-]{22}$/.test(row.channelId ?? '')) return 'identity_unverified';
   if (row.timing !== 'provider_observation_time') return 'provider_timing_required';
@@ -85,6 +84,14 @@ function collision(a, b) {
     (a.sourceEpisodeId && a.sourceEpisodeId === b.sourceEpisodeId) ||
     a.sourceSha256 === b.sourceSha256;
 }
+function identityKeys(row) {
+  return [ ['post', row.postId], ['delivery', row.deliveryId], ['publication', row.evidence?.publicationReceiptSha256],
+    ['render', row.evidence?.renderReceiptSha256], ['video', row.sourceVideoId], ['episode', row.sourceEpisodeId],
+    ['source', row.sourceSha256], ['assignment', row.evidence?.assignmentSha256] ]
+    .filter(([, value]) => typeof value === 'string' && value.length > 0).map(([kind, value]) => kind + ':' + value);
+}
+const cohortKey = row => canonical([row.selectionExperiment.id, row.selectionExperiment.challengerCreatorGroupId]);
+const append = (map, key, row) => { if (!map.has(key)) map.set(key, []); map.get(key).push(row); };
 function expiredCohort(rows, context, now) {
   if (!rows.length) return false;
   const bindings = rows.map(row => ({ id: row.selectionExperiment.id, controlCreatorGroupId: row.selectionExperiment.controlCreatorGroupId, challengerCreatorGroupId: row.selectionExperiment.challengerCreatorGroupId, registeredAt: row.selectionExperiment.registeredAt, expiresAt: row.selectionExperiment.expiresAt, assignmentSha256: row.evidence?.assignmentSha256 }));
@@ -94,15 +101,15 @@ function expiredCohort(rows, context, now) {
       Number.isFinite(expires) && expires > registered + context.windowHours * HOUR && expires <= registered + 720 * HOUR && expires <= now;
   });
 }
-function batchReceipt(id, rows) {
+function batchReceipt(id, rows, hashes) {
   const controls = rows.filter(row => row.selectionExperiment.arm === 'control');
   const challengers = rows.filter(row => row.selectionExperiment.arm === 'challenger');
-  if (controls.length !== 5 || challengers.length !== 5) return { id, passed: false, reason: 'exact_five_per_arm_required', evidenceHashes: rows.map(digest).sort() };
+  if (controls.length !== 5 || challengers.length !== 5) return { id, passed: false, reason: 'exact_five_per_arm_required', evidenceHashes: rows.map(row => hashes.get(row)).sort() };
   const control = { views: median(controls.map(row => row.views)), completionRate: median(controls.map(row => row.completionRate)), costUsd: median(controls.map(row => row.costUsd)), elapsedMs: median(controls.map(row => row.elapsedMs)) };
   const challenger = { views: median(challengers.map(row => row.views)), completionRate: median(challengers.map(row => row.completionRate)), costUsd: median(challengers.map(row => row.costUsd)), elapsedMs: median(challengers.map(row => row.elapsedMs)) };
   const lift = control.views > 0 ? challenger.views / control.views - 1 : null;
-  const reason = lift === null ? 'positive_control_median_required' : challenger.views + Number.EPSILON * Math.max(challenger.views, 1) < control.views * 1.2 ? 'median_lift_below_twenty_percent' : challenger.completionRate < control.completionRate ? 'quality_regression' : challenger.costUsd > control.costUsd || challenger.elapsedMs > control.elapsedMs ? 'cost_or_elapsed_regression' : 'batch_passed';
-  return { id, passed: reason === 'batch_passed', reason, control, challenger, viewLift: lift, evidenceHashes: rows.map(digest).sort() };
+  const reason = lift === null ? 'positive_control_median_required' : BigInt(challenger.views) * 5n < BigInt(control.views) * 6n ? 'median_lift_below_twenty_percent' : challenger.completionRate < control.completionRate ? 'quality_regression' : challenger.costUsd > control.costUsd || challenger.elapsedMs > control.elapsedMs ? 'cost_or_elapsed_regression' : 'batch_passed';
+  return { id, passed: reason === 'batch_passed', reason, control, challenger, viewLift: lift, evidenceHashes: rows.map(row => hashes.get(row)).sort() };
 }
 
 /** preferences only order already-ready assets in this exact scope; never alter
@@ -118,54 +125,80 @@ export function selectCreatorPreferences({ samples = [], contexts = [], previous
   // JSON normalization rejects cycles, accessors/non-data values are outside this API.
   const normalizedSamples = clone(samples);
   const normalizedContexts = clone(contexts);
+  const scopedSamples = new Map(), rowHashes = new Map(), registeredTimes = new Map();
+  for (const row of normalizedSamples) {
+    rowHashes.set(row, digest(row));
+    if (!row || typeof row !== 'object') continue;
+    append(scopedSamples, digest(scope(row)), row);
+    const registered = timestamp(row.selectionExperiment?.registeredAt);
+    registeredTimes.set(row, Number.isFinite(registered) ? registered : -Infinity);
+  }
+  const sampleHashes = normalizedSamples.map(row => rowHashes.get(row)).sort();
   const results = [], seenScopes = new Set();
   for (const context of normalizedContexts.sort((a, b) => compare(canonical(a), canonical(b)))) {
     if (!contextValid(context)) throw Error('creator_selection_context_invalid');
     const scopeValue = scope(context), scopeKey = digest(scopeValue);
     if (seenScopes.has(scopeKey)) throw Error('creator_selection_duplicate_scope');
     seenScopes.add(scopeKey);
-    const excluded = {}, eligible = [], rejectedBatchIds = new Set();
-    for (const row of normalizedSamples) {
+    const scoped = scopedSamples.get(scopeKey) ?? [];
+    const excluded = {}, eligible = [], rejectedBatchIds = new Set(), allBatches = new Map(), eligibleBatches = new Map();
+    if (scoped.length !== normalizedSamples.length) excluded.scope_mismatch = normalizedSamples.length - scoped.length;
+    for (const row of scoped) {
+      if (id(row.selectionExperiment?.id)) append(allBatches, row.selectionExperiment.id, row);
       const reason = sampleReason(row, context, now, limits);
       if (reason) {
         excluded[reason] = (excluded[reason] ?? 0) + 1;
-        if (row && digest(scope(row)) === scopeKey && id(row.selectionExperiment?.id)) rejectedBatchIds.add(row.selectionExperiment.id);
+        if (id(row.selectionExperiment?.id)) rejectedBatchIds.add(row.selectionExperiment.id);
+      } else {
+        eligible.push(row);
+        append(eligibleBatches, cohortKey(row), row);
       }
-      else eligible.push(row);
     }
-    eligible.sort((a, b) => timestamp(a.selectionExperiment.registeredAt) - timestamp(b.selectionExperiment.registeredAt) || compare(digest(a), digest(b)));
-    const allAssigned = normalizedSamples.filter(row => row && digest(scope(row)) === scopeKey &&
-      id(row.selectionExperiment?.id) && row.selectionExperiment.controlCreatorGroupId === context.baselineCreatorGroupId &&
+    for (const rows of eligibleBatches.values()) rows.sort((a, b) => compare(rowHashes.get(a), rowHashes.get(b)));
+    const allAssigned = scoped.filter(row => id(row.selectionExperiment?.id) &&
+      row.selectionExperiment.controlCreatorGroupId === context.baselineCreatorGroupId &&
       id(row.selectionExperiment.challengerCreatorGroupId) && row.selectionExperiment.challengerCreatorGroupId !== context.baselineCreatorGroupId)
-      .sort((a, b) => (Number.isFinite(timestamp(a.selectionExperiment.registeredAt)) ? timestamp(a.selectionExperiment.registeredAt) : -Infinity) -
-        (Number.isFinite(timestamp(b.selectionExperiment.registeredAt)) ? timestamp(b.selectionExperiment.registeredAt) : -Infinity) || compare(a.selectionExperiment.id, b.selectionExperiment.id));
-    const retiredBatches = [];
-    for (const batchId of [...new Set(allAssigned.map(row => row.selectionExperiment.id))].sort()) {
-      const members = normalizedSamples.filter(row => row && digest(scope(row)) === scopeKey && row.selectionExperiment?.id === batchId);
-      if (expiredCohort(members, context, now)) retiredBatches.push({ id: batchId, expiresAt: members[0].selectionExperiment.expiresAt, assignmentSha256: members[0].evidence.assignmentSha256 });
+      .sort((a, b) => registeredTimes.get(a) - registeredTimes.get(b) || compare(a.selectionExperiment.id, b.selectionExperiment.id));
+    const retiredBatches = [], retiredIds = new Set();
+    for (const batchId of [...allBatches.keys()].sort()) {
+      const members = allBatches.get(batchId);
+      if (expiredCohort(members, context, now)) {
+        retiredIds.add(batchId);
+        retiredBatches.push({ id: batchId, expiresAt: members[0].selectionExperiment.expiresAt, assignmentSha256: members[0].evidence.assignmentSha256 });
+      }
     }
-    const assigned = allAssigned.filter(row => !retiredBatches.some(batch => batch.id === row.selectionExperiment.id));
-    const challengers = [...new Set(assigned.map(row => row.selectionExperiment.challengerCreatorGroupId))].sort();
+    const identityCohorts = new Map(), challengerBatches = new Map();
+    for (const row of allAssigned) {
+      const cohort = cohortKey(row);
+      for (const key of identityKeys(row)) {
+        if (!identityCohorts.has(key)) identityCohorts.set(key, new Set());
+        identityCohorts.get(key).add(cohort);
+      }
+      if (!retiredIds.has(row.selectionExperiment.id)) {
+        const creator = row.selectionExperiment.challengerCreatorGroupId;
+        if (!challengerBatches.has(creator)) challengerBatches.set(creator, new Map());
+        const batches = challengerBatches.get(creator);
+        if (!batches.has(row.selectionExperiment.id)) batches.set(row.selectionExperiment.id, eligibleBatches.get(cohort) ?? []);
+      }
+    }
+    const conflictingIds = new Set(rejectedBatchIds);
+    for (const [batchId, members] of allBatches) {
+      if (new Set(members.map(row => row.selectionExperiment.challengerCreatorGroupId)).size !== 1) conflictingIds.add(batchId);
+    }
     const candidates = [];
     const contextReady = SHA.test(context.readinessReceiptSha256 ?? '') && timestamp(context.readyUntil) > now;
-    for (const creatorGroupId of challengers) {
-      const rows = eligible.filter(row => row.selectionExperiment.challengerCreatorGroupId === creatorGroupId);
-      const batches = new Map();
-      for (const row of assigned.filter(item => item.selectionExperiment.challengerCreatorGroupId === creatorGroupId)) {
-        const batchId = row.selectionExperiment.id;
-        if (!batches.has(batchId)) batches.set(batchId, rows.filter(item => item.selectionExperiment.id === batchId));
-      }
+    for (const creatorGroupId of [...challengerBatches.keys()].sort()) {
       // Retired lots stay in the input digest/history. Active malformed lots cannot
       // disappear just because an invalid observation was excluded.
       // Use the first three registered lots, not the best-performing lots.
-      const chosen = [...batches.entries()].slice(0, 3);
+      const chosen = [...challengerBatches.get(creatorGroupId)].slice(0, 3);
       const used = chosen.flatMap(([, items]) => items);
       const duplicate = used.length === 30 && (used.some((a, index) => used.slice(index + 1).some(b => collision(a, b))) ||
-        used.some(a => allAssigned.some(b => a !== b && (a.selectionExperiment.id !== b.selectionExperiment.id || a.selectionExperiment.challengerCreatorGroupId !== b.selectionExperiment.challengerCreatorGroupId) && (collision(a, b) || a.evidence.assignmentSha256 === b.evidence?.assignmentSha256))));
+        used.some(row => identityKeys(row).some(key => identityCohorts.get(key).size > 1)));
       const consistentAssignment = new Set(chosen.map(([, items]) => items[0]?.evidence.assignmentSha256)).size === chosen.length && chosen.every(([, items]) => new Set(items.map(row => canonical([row.selectionExperiment.registeredAt, row.selectionExperiment.expiresAt]))).size === 1 &&
         new Set(items.map(row => row.evidence.assignmentSha256)).size === 1);
-      const batchReceipts = chosen.map(([id, items]) => batchReceipt(id, items));
-      const conflictingBatch = chosen.some(([batchId, items]) => rejectedBatchIds.has(batchId) || normalizedSamples.some(row => row && digest(scope(row)) === scopeKey && row.selectionExperiment?.id === batchId && row.selectionExperiment.challengerCreatorGroupId !== creatorGroupId));
+      const batchReceipts = chosen.map(([id, items]) => batchReceipt(id, items, rowHashes));
+      const conflictingBatch = chosen.some(([batchId]) => conflictingIds.has(batchId));
       const reason = !contextReady ? 'current_readiness_required' : chosen.length !== 3 ? 'three_disjoint_batches_required' : conflictingBatch ? 'assigned_sample_invalid_or_conflicting' : duplicate ? 'duplicate_post_or_source' : !consistentAssignment ? 'assignment_binding_conflict' : batchReceipts.find(row => !row.passed)?.reason ?? 'qualified';
       const expires = Math.min(now + limits.preferenceTtlHours * HOUR, timestamp(context.readyUntil), ...used.map(row => Math.min(timestamp(row.observedAt) + limits.maxObservationAgeHours * HOUR, timestamp(row.selectionExperiment.expiresAt))));
       candidates.push({ creatorGroupId, qualified: reason === 'qualified', reason, batches: batchReceipts,
@@ -180,7 +213,7 @@ export function selectCreatorPreferences({ samples = [], contexts = [], previous
       reason: winner ? 'three_disjoint_batches_qualified' : !contextReady ? 'current_readiness_required' : candidates[0]?.reason ?? 'comparable_evidence_insufficient',
       evaluatedAt: new Date(now).toISOString(), expiresAt: winner?.expiresAt ?? null, allowedUse: 'ready_asset_order_only',
       maxPriorityBoost: winner ? 1 : 0, mayIncreaseDailyLimit: false, mayAuthorizePublication: false, paidSpendUsd: 0,
-      inputSha256: digest({ samples: normalizedSamples.map(digest).sort(), context, policy: limits }),
+      inputSha256: digest({ samples: sampleHashes, context, policy: limits }),
       previousPreferenceHashes: prior.map(digest).sort(), readinessReceiptSha256: context.readinessReceiptSha256 ?? null,
       eligibleSamples: eligible.length, excluded, retiredBatches, candidates };
     results.push({ ...receipt, receiptSha256: digest(receipt) });

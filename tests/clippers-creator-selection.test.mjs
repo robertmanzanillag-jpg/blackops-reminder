@@ -269,3 +269,32 @@ test('malformed evidence in another assigned lot cannot crash otherwise valid co
   input.samples.push(extra);
   assert.equal(preference(input).status, 'preferred');
 });
+
+
+test('ten thousand incomplete assigned lots are evaluated with bounded indexed work', () => {
+  const input = fixture();
+  input.samples = Array.from({ length: 10_000 }, (_, index) => {
+    const row = structuredClone(input.samples[0]);
+    row.deliveryId = 'many-' + index; row.postId = String(index + 1); row.sourceVideoId = String(index + 1).padStart(11, '0');
+    row.sourceSha256 = hash('many-source-' + index);
+    row.selectionExperiment.id = 'many-' + String(index).padStart(5, '0');
+    row.evidence.assignmentSha256 = hash('many-assignment-' + index);
+    row.evidence.publicationReceiptSha256 = hash('many-pub-' + index);
+    row.evidence.renderReceiptSha256 = hash('many-render-' + index);
+    return row;
+  });
+  const result = preference(input);
+  assert.equal(result.eligibleSamples, 10_000);
+  assert.equal(result.status, 'baseline');
+  assert.equal(result.candidates[0].batches.length, 3);
+  assert.equal(result.reason, 'exact_five_per_arm_required');
+});
+
+
+test('twenty percent threshold is exact even for large real integer counts', () => {
+  const input = fixture();
+  input.samples.forEach(row => row.views = row.selectionExperiment.arm === 'control' ? 4_000_000_000_000_000 : 4_799_999_999_999_999);
+  assert.equal(preference(input).candidates[0].reason, 'median_lift_below_twenty_percent');
+  input.samples.filter(row => row.selectionExperiment.arm === 'challenger').forEach(row => row.views = 4_800_000_000_000_000);
+  assert.equal(preference(input).status, 'preferred');
+});
