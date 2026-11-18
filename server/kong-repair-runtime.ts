@@ -5,7 +5,7 @@ import { getCouncilStore } from "./agent-council-store";
 import { getSystemUserId } from "./user-context";
 import { z } from "zod";
 import { fenceUnclaimedRepair } from "./kong-repair-refresh";
-import { trustedProductionQaSources, parentCheckerReceipt, effectiveCommitStatusesPass, freshMakerHealth } from "./kong-repair-proof";
+import { trustedProductionQaSources, parentCheckerReceipt, effectiveCommitStatusesPass, freshMakerHealth, MAKER_HEALTH_MAX_AGE_MS } from "./kong-repair-proof";
 import { createSharedOpenAiCreditLedger, type SharedCreditState } from "./shared-openai-credit-ledger";
 
 async function paidState(): Promise<"available" | "blocked_unknown_credit" | "unavailable"> {
@@ -218,7 +218,7 @@ export async function readKongRepairMakerHealth() {
     if (!health.success) continue;
     const engine = (await github.repos.getContent({ owner: "robertmanzanillag-jpg", repo: "blackops-reminder", path: "script/kong-repair-subscription-worker.mjs", ref: pin })).data;
     if (Array.isArray(engine) || engine.type !== "file" || !("content" in engine) || engine.encoding !== "base64" || createHash("sha256").update(Buffer.from(engine.content, "base64")).digest("hex") !== health.data.engineSha256) continue;
-    const age = now - Date.parse(health.data.lastSuccessfulPollAt), connected = age >= 0 && age <= 1800000;
+    const age = now - Date.parse(health.data.lastSuccessfulPollAt), connected = age >= 0 && age <= MAKER_HEALTH_MAX_AGE_MS;
     const value = { state: connected ? health.data.state : "stale", workerConnected: connected, enginePinned: true,
       lastSuccessfulPollAt: health.data.lastSuccessfulPollAt, sourceCount: health.data.sourceCount };
     makerHealthCache = { key: pin, at: now, value }; return value;

@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T06:20:24.425Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-office-factory-connected-20261118",
+  "generatedAt": "2026-11-18T07:20:08.303Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-worker-supervisor",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1166,
-    "filesIndexed": 1066,
-    "imports": 4207,
+    "filesVisible": 1168,
+    "filesIndexed": 1068,
+    "imports": 4217,
     "routes": 615,
-    "symbols": 24098
+    "symbols": 24153
   },
   "directories": {
     ".": {
@@ -218,10 +218,10 @@
       }
     },
     "script": {
-      "files": 123,
-      "indexed": 111,
+      "files": 124,
+      "indexed": 112,
       "kinds": {
-        "script": 123
+        "script": 124
       }
     },
     "script/release-gate": {
@@ -274,10 +274,10 @@
       }
     },
     "tests": {
-      "files": 305,
-      "indexed": 301,
+      "files": 306,
+      "indexed": 302,
       "kinds": {
-        "test": 305
+        "test": 306
       }
     },
     "tests/fixtures": {
@@ -1521,9 +1521,10 @@
       "symbols": [
         "ENDPOINT",
         "KongRepairStatusPanel",
-        "MAX_SIGNAL_AGE_MS",
+        "MAKER_MAX_AGE_MS",
         "REFRESH_INTERVAL_MS",
         "RepairResponse",
+        "SOURCE_MAX_AGE_MS",
         "SignalTime",
         "age",
         "counts",
@@ -1532,6 +1533,7 @@
         "dateFormat",
         "delay",
         "errorMessage",
+        "handles",
         "headingId",
         "isDisabledError",
         "isFresh",
@@ -11389,6 +11391,7 @@
       "path": "script/install-kong-repair-subscription-worker.mjs",
       "kind": "script",
       "imports": [
+        "./kong-repair-startup-supervisor.mjs",
         "./kong-repair-subscription-worker.mjs",
         "node:crypto",
         "node:fs/promises",
@@ -11397,26 +11400,83 @@
         "node:url"
       ],
       "exports": [
-        "installPlan"
+        "installPlan",
+        "upgradeReviewedInstallation"
       ],
       "symbols": [
         "LABEL",
         "SHA",
         "args",
+        "argumentLine",
+        "atomicPrivate",
+        "backup",
+        "beforeIdentity",
+        "beforeLine",
         "content",
+        "digest",
         "git",
         "identity",
+        "inactive",
+        "info",
         "installPlan",
-        "lint",
-        "loaded",
+        "journals",
         "main",
+        "names",
+        "next",
+        "noWorkerLock",
         "node",
+        "ownedPrivate",
         "plist",
+        "receipt",
         "root",
         "script",
         "sourceRoot",
-        "status",
+        "supervisor",
+        "temporary",
+        "trustedLegacy",
+        "upgradeReviewedInstallation",
+        "upgrading",
         "xml"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/kong-repair-startup-supervisor.mjs",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "STARTUP_RETRY_CONTRACT",
+        "launchWorker",
+        "retryableReadinessFailure",
+        "superviseStartup",
+        "verifySupervisorInstallation"
+      ],
+      "symbols": [
+        "STARTUP_RETRY_CONTRACT",
+        "child",
+        "collect",
+        "file",
+        "hash",
+        "identity",
+        "info",
+        "launchWorker",
+        "main",
+        "privateBytes",
+        "report",
+        "result",
+        "retryableReadinessFailure",
+        "root",
+        "selected",
+        "superviseStartup",
+        "verifySupervisorInstallation",
+        "worker"
       ],
       "routes": []
     },
@@ -11492,6 +11552,8 @@
         "assertCurrentBase",
         "attempt",
         "auth",
+        "authElapsedMs",
+        "authStarted",
         "baseSha",
         "blob",
         "blockedSources",
@@ -22120,6 +22182,7 @@
         "node:crypto"
       ],
       "exports": [
+        "MAKER_HEALTH_MAX_AGE_MS",
         "effectiveCommitStatusesPass",
         "freshMakerHealth",
         "independentAppQa",
@@ -22127,6 +22190,7 @@
         "trustedProductionQaSources"
       ],
       "symbols": [
+        "MAKER_HEALTH_MAX_AGE_MS",
         "actor",
         "age",
         "blob",
@@ -22167,6 +22231,8 @@
       ],
       "exports": [
         "KONG_REPAIR_PULL_INTERVAL_MS",
+        "KONG_REPAIR_PULL_STARTUP_RETRY_MS",
+        "RepairPullInitializationError",
         "configuredRepairPullStatus",
         "createRepairPullLoop",
         "pullConfiguredRepairSources",
@@ -22176,9 +22242,10 @@
       ],
       "symbols": [
         "KONG_REPAIR_PULL_INTERVAL_MS",
+        "KONG_REPAIR_PULL_STARTUP_RETRY_MS",
+        "RepairPullInitializationError",
         "age",
         "at",
-        "bridge",
         "configuredRepairPullStatus",
         "createRepairPullLoop",
         "current",
@@ -22194,9 +22261,12 @@
         "readRepairPullStatus",
         "reader",
         "response",
+        "result",
+        "run",
         "source",
         "sourceSchema",
         "startConfiguredRepairPull",
+        "state",
         "stateSchema",
         "tick",
         "timer"
@@ -38229,9 +38299,34 @@
         "options",
         "payload",
         "request",
+        "settle",
         "source",
         "stop",
         "store"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/kong-repair-startup-supervisor.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/install-kong-repair-subscription-worker.mjs",
+        "../script/kong-repair-startup-supervisor.mjs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "blocked",
+        "calls",
+        "f",
+        "hash",
+        "home",
+        "identity",
+        "idle",
+        "journal",
+        "result",
+        "root",
+        "upgradeFixture"
       ],
       "routes": []
     },

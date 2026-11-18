@@ -203,9 +203,9 @@ test("a newer passing status supersedes its failed attempt without hiding anothe
 test("cached worker health loses its connection at the freshness deadline without another network read", async () => {
   const { freshMakerHealth } = await import("../server/kong-repair-proof");
   const value = { state: "idle", workerConnected: true, lastSuccessfulPollAt: new Date(NOW).toISOString(), sourceCount: 0 };
-  assert.equal(freshMakerHealth(value, NOW + 1799000).workerConnected, true);
-  assert.equal(freshMakerHealth(value, NOW + 1801000).workerConnected, false);
-  assert.equal(freshMakerHealth(value, NOW + 1801000).state, "stale");
+  assert.equal(freshMakerHealth(value, NOW + 2699000).workerConnected, true);
+  assert.equal(freshMakerHealth(value, NOW + 2701000).workerConnected, false);
+  assert.equal(freshMakerHealth(value, NOW + 2701000).state, "stale");
 });
 
 test("a failed read-only GitHub preflight stays retryable before any issue write reservation", async () => {

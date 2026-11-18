@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-18T06:20:24.425Z
-Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-office-factory-connected-20261118`
+Generated: 2026-11-18T07:20:08.303Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-worker-supervisor`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1166 | 1066 | 4207 | 615 | 24098 |
+| 1168 | 1068 | 4217 | 615 | 24153 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,10 +28,10 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 305 | 301 | test:305 |
+| `tests` | 306 | 302 | test:306 |
 | `server` | 276 | 270 | server:276 |
 | `client/src` | 154 | 152 | ui-component:55, client-component:45, client-page:28, client-lib:19 |
-| `script` | 123 | 111 | script:123 |
+| `script` | 124 | 112 | script:124 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `docs` | 68 | 66 | docs:68 |
 | `shared` | 29 | 29 | shared:29 |
