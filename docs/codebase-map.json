@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T12:32:32.067Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-authority-20261118",
+  "generatedAt": "2026-11-18T12:34:07.887Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-transports-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1210,
-    "filesIndexed": 1105,
-    "imports": 4414,
+    "filesVisible": 1216,
+    "filesIndexed": 1111,
+    "imports": 4456,
     "routes": 623,
-    "symbols": 25035
+    "symbols": 25126
   },
   "directories": {
     ".": {
@@ -203,10 +203,10 @@
       }
     },
     "docs": {
-      "files": 78,
-      "indexed": 74,
+      "files": 79,
+      "indexed": 75,
       "kinds": {
-        "docs": 78
+        "docs": 79
       }
     },
     "examples/clippers-motivation": {
@@ -239,10 +239,10 @@
       }
     },
     "server": {
-      "files": 281,
-      "indexed": 275,
+      "files": 284,
+      "indexed": 278,
       "kinds": {
-        "server": 281
+        "server": 284
       }
     },
     "server/blackroom-team": {
@@ -274,17 +274,17 @@
       }
     },
     "tests": {
-      "files": 318,
-      "indexed": 314,
+      "files": 319,
+      "indexed": 315,
       "kinds": {
-        "test": 318
+        "test": 319
       }
     },
     "tests/fixtures": {
-      "files": 5,
-      "indexed": 3,
+      "files": 6,
+      "indexed": 4,
       "kinds": {
-        "test": 5
+        "test": 6
       }
     },
     "tests/harness": {
@@ -5944,6 +5944,14 @@
     },
     {
       "path": "docs/factory-api-budget-authority.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/factory-api-budget-transports.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -13621,6 +13629,7 @@
         "../server/software-factory-github-state",
         "../server/software-factory-object-store",
         "../server/software-factory-openai",
+        "../server/software-factory-openai-transport",
         "../server/software-factory-pilot-review",
         "../server/software-factory-responses-runtime",
         "../server/software-factory-runtime"
@@ -13629,14 +13638,16 @@
         "createFactoryPilotGitHubClient, createFactoryPilotGitHubSourceExporter ",
         "createGitHubFactoryChecks ",
         "createGitHubFactoryStateTransport ",
-        "createOpenAiFactoryTextProvider ",
+        "createOpenAiFactoryTextProvider",
         "createPilotIndependentReview, classifyPilotTextChange ",
         "createResponsesFactoryWorker ",
         "createSoftwareFactoryObjectStore ",
         "currentFactoryProductionDeployment ",
         "releaseGate, rehearsalGate "
       ],
-      "symbols": [],
+      "symbols": [
+        "createOpenAiFactoryTextProvider"
+      ],
       "routes": []
     },
     {
@@ -14792,6 +14803,8 @@
       "path": "server/ai-model-router.ts",
       "kind": "server",
       "imports": [
+        "./factory-api-invocation",
+        "./factory-api-sdk",
         "node:crypto"
       ],
       "exports": [
@@ -20610,6 +20623,7 @@
       "kind": "server",
       "imports": [
         "./ai-model-router",
+        "./factory-api-sdk",
         "node:path",
         "openai"
       ],
@@ -22030,6 +22044,126 @@
       "routes": []
     },
     {
+      "path": "server/factory-api-context.ts",
+      "kind": "server",
+      "imports": [
+        "./software-factory-store",
+        "node:async_hooks"
+      ],
+      "exports": [
+        "currentFactoryApiParent",
+        "withFactoryApiParent"
+      ],
+      "symbols": [
+        "currentFactoryApiParent",
+        "storage",
+        "withFactoryApiParent"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/factory-api-invocation.ts",
+      "kind": "server",
+      "imports": [
+        "./factory-api-context",
+        "./software-factory-api-budget",
+        "./software-factory-store",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "FactoryApiBudgetError",
+        "FactoryApiPrice",
+        "FactoryApiUsage",
+        "apiEvidenceHash",
+        "configuredFactoryApiPrice",
+        "createFactoryApiInvocation",
+        "defaultFactoryApiInvocation",
+        "factoryApiAdmissionError",
+        "factoryApiPriceSchema"
+      ],
+      "symbols": [
+        "FactoryApiBudgetError",
+        "Store",
+        "actualMicroUsd",
+        "admissionCodes",
+        "apiEvidenceHash",
+        "catalogSchema",
+        "code",
+        "configuredFactoryApiPrice",
+        "context",
+        "cost",
+        "createFactoryApiInvocation",
+        "deadline",
+        "defaultFactoryApiInvocation",
+        "descriptor",
+        "executionWindow",
+        "factoryApiAdmissionError",
+        "factoryApiPriceSchema",
+        "invoke",
+        "key",
+        "matches",
+        "microCost",
+        "now",
+        "parent",
+        "price",
+        "remaining",
+        "requestSha256",
+        "reservation",
+        "result",
+        "settled",
+        "sha",
+        "timeout",
+        "usage"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/factory-api-sdk.ts",
+      "kind": "server",
+      "imports": [
+        "./factory-api-context",
+        "./factory-api-invocation"
+      ],
+      "exports": [
+        "guardFactoryOpenAiClient",
+        "guardFactoryOpenAiFetch",
+        "holdUnpricedGeminiClient"
+      ],
+      "symbols": [
+        "ALLOWED",
+        "Env",
+        "Invocation",
+        "bounded",
+        "boundedRequest",
+        "cache",
+        "candidates",
+        "clone",
+        "configuredTimeout",
+        "containsMedia",
+        "count",
+        "encoded",
+        "entries",
+        "guardFactoryOpenAiClient",
+        "guardFactoryOpenAiFetch",
+        "guarded",
+        "guardedClients",
+        "guardedFetches",
+        "holdUnpricedGeminiClient",
+        "invoke",
+        "maxOutputTokens",
+        "output",
+        "price",
+        "proxy",
+        "response",
+        "timeout",
+        "usage",
+        "values",
+        "wrap"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/finance.ts",
       "kind": "server",
       "imports": [
@@ -22121,6 +22255,7 @@
       "kind": "server",
       "imports": [
         "./ceo-doctor-cli",
+        "./factory-api-sdk",
         "@google/genai"
       ],
       "exports": [
@@ -25029,6 +25164,8 @@
         "../shared/agent-company",
         "../shared/office-role-lifecycle",
         "./agent-council",
+        "./factory-api-invocation",
+        "./factory-api-sdk",
         "./office-claude",
         "./office-cloud-store",
         "./office-openai",
@@ -25050,6 +25187,8 @@
         "budget",
         "completion",
         "createOfficeExecution",
+        "factoryPrice",
+        "monetary",
         "openai",
         "provider",
         "result",
@@ -26257,6 +26396,8 @@
       "path": "server/office-shared-credits.ts",
       "kind": "server",
       "imports": [
+        "./factory-api-invocation",
+        "./factory-api-sdk",
         "./office-openai",
         "./shared-openai-credit-ledger",
         "node:crypto"
@@ -26764,6 +26905,7 @@
       "kind": "server",
       "imports": [
         "./ceo-doctor-cli",
+        "./factory-api-sdk",
         "openai"
       ],
       "exports": [
@@ -29403,6 +29545,7 @@
         "checkpointFactoryApiMonth",
         "emptyFactoryApiState",
         "factoryApiBudgetStatus",
+        "factoryApiExecutionWindow",
         "factoryApiReservationSchema",
         "factoryApiStateSchema",
         "parseFactoryApiState",
@@ -29413,6 +29556,7 @@
       "symbols": [
         "FACTORY_API_LIMIT_MICRO_USD",
         "actual",
+        "age",
         "allocated",
         "amount",
         "assertFactoryApiJobAdmission",
@@ -29423,6 +29567,7 @@
         "configured",
         "emptyFactoryApiState",
         "factoryApiBudgetStatus",
+        "factoryApiExecutionWindow",
         "factoryApiReservationSchema",
         "factoryApiStateSchema",
         "fixedMicroUsd",
@@ -30588,12 +30733,20 @@
     {
       "path": "server/software-factory-openai-transport.ts",
       "kind": "server",
-      "imports": [],
+      "imports": [
+        "./factory-api-invocation",
+        "./factory-api-sdk"
+      ],
       "exports": [
-        "createFactoryOpenAiTransport"
+        "createFactoryOpenAiTransport",
+        "isFactoryAuthorityTransport"
       ],
       "symbols": [
-        "createFactoryOpenAiTransport"
+        "authorityTransports",
+        "createFactoryOpenAiTransport",
+        "guarded",
+        "isFactoryAuthorityTransport",
+        "request"
       ],
       "routes": []
     },
@@ -30818,8 +30971,10 @@
       "path": "server/software-factory-responses-runtime.ts",
       "kind": "server",
       "imports": [
+        "./factory-api-sdk",
         "./software-factory-openai",
         "./software-factory-openai-builder",
+        "./software-factory-openai-transport",
         "./software-factory-remote-builder",
         "./software-factory-runtime",
         "./software-factory-worker"
@@ -31215,6 +31370,7 @@
       "path": "server/software-factory-worker.ts",
       "kind": "server",
       "imports": [
+        "./factory-api-context",
         "./software-factory",
         "./software-factory-store",
         "./software-factory-store-provider",
@@ -34962,6 +35118,7 @@
       "kind": "test",
       "imports": [
         "../server/ai-model-router",
+        "./fixtures/factory-api-budget",
         "node:assert/strict",
         "node:test"
       ],
@@ -34977,7 +35134,7 @@
         "client",
         "ds",
         "env",
-        "failed",
+        "factoryPricing",
         "fakeClients",
         "ledger",
         "make",
@@ -34993,7 +35150,6 @@
         "result",
         "results",
         "route",
-        "row",
         "saved"
       ],
       "routes": []
@@ -39225,6 +39381,36 @@
       "routes": []
     },
     {
+      "path": "tests/factory-api-invocation.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ai-model-router",
+        "../server/factory-api-context",
+        "../server/factory-api-invocation",
+        "../server/factory-api-sdk",
+        "../server/software-factory-api-budget",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "body",
+        "catalog",
+        "fixture",
+        "invoke",
+        "ledger",
+        "legacy",
+        "makeClient",
+        "price",
+        "response",
+        "routed",
+        "run"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/factory-office-agents.test.ts",
       "kind": "test",
       "imports": [
@@ -39315,6 +39501,25 @@
       ],
       "symbols": [
         "fakeStorage"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/fixtures/factory-api-budget.ts",
+      "kind": "test",
+      "imports": [
+        "../../server/factory-api-invocation",
+        "../../server/software-factory-api-budget"
+      ],
+      "exports": [
+        "fixtureFactoryInvocation",
+        "fixtureFactoryPricing"
+      ],
+      "symbols": [
+        "fixtureFactoryInvocation",
+        "fixtureFactoryPricing",
+        "now",
+        "state"
       ],
       "routes": []
     },
@@ -40474,6 +40679,7 @@
         "../server/office-execution",
         "../shared/agent-company",
         "../shared/agent-council",
+        "./fixtures/factory-api-budget",
         "node:assert/strict",
         "node:crypto",
         "node:test"
@@ -41064,6 +41270,7 @@
         "../server/office-execution",
         "../shared/agent-company",
         "../shared/agent-council",
+        "./fixtures/factory-api-budget",
         "node:assert/strict",
         "node:crypto",
         "node:test"
@@ -41941,6 +42148,7 @@
         "../server/office-shared-credits",
         "../server/office-token-budget",
         "../server/shared-openai-credit-ledger",
+        "./fixtures/factory-api-budget",
         "node:assert/strict",
         "node:test"
       ],
@@ -43773,6 +43981,7 @@
         "../server/software-factory-order-evidence",
         "../shared/agent-company",
         "../shared/agent-council",
+        "./fixtures/factory-api-budget",
         "node:assert/strict",
         "node:crypto",
         "node:test"
@@ -43950,14 +44159,20 @@
       "path": "tests/software-factory-openai-transport.test.ts",
       "kind": "test",
       "imports": [
+        "../server/factory-api-context",
         "../server/software-factory-openai-transport",
+        "./fixtures/factory-api-budget",
         "node:assert/strict",
+        "node:crypto",
         "node:test"
       ],
       "exports": [],
       "symbols": [
-        "headers",
-        "key",
+        "body",
+        "job",
+        "model",
+        "output",
+        "parent",
         "request"
       ],
       "routes": []
@@ -45035,6 +45250,7 @@
     "tests/developer-health-inventory.test.ts",
     "tests/dropshipping-ceo.test.ts",
     "tests/env-loader-core.test.ts",
+    "tests/factory-api-invocation.test.ts",
     "tests/factory-office-agents.test.ts",
     "tests/github-client-security.test.ts",
     "tests/google-connector.test.ts",

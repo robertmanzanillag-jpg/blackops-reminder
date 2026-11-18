@@ -1,3 +1,6 @@
+import {fixtureFactoryInvocation} from './fixtures/factory-api-budget';
+const factoryPricing=(_provider:unknown,model:string)=>({model,inputNanoUsdPerToken:400,outputNanoUsdPerToken:1600,validUntil:'2027-01-01T00:00:00.000Z',evidenceSha256:'a'.repeat(64)});
+const createRoutedOpenAI:typeof actualCreateRoutedOpenAI=options=>actualCreateRoutedOpenAI({...options,factoryInvocation:fixtureFactoryInvocation(),factoryPricing});
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
@@ -6,7 +9,7 @@ import {
   InMemoryAiProviderLedger,
   aiRouterConfig,
   chatCompletionToResponse,
-  createRoutedOpenAI,
+  createRoutedOpenAI as actualCreateRoutedOpenAI,
   estimateReservationUsd,
   openAiClientOptions,
   planProviders,
@@ -31,7 +34,7 @@ function fakeClients(behaviour: Partial<Record<string, "ok" | "error" | "reject4
       return Promise.resolve({
         id: "c1", model: body.model,
         choices: [{ message: { content: `{"from":"${provider.id}"}` }, finish_reason: "stop" }],
-        usage: { prompt_tokens: 1000, completion_tokens: 100 },
+        usage: { prompt_tokens: 1000, completion_tokens: Math.min(100,body.max_completion_tokens??body.max_tokens??100),prompt_tokens_details:{cached_tokens:0},prompt_cache_hit_tokens:0 },
       });
     };
     return {
@@ -39,7 +42,7 @@ function fakeClients(behaviour: Partial<Record<string, "ok" | "error" | "reject4
       responses: { create: async (body: any) => {
         calls.push({ provider: provider.id, body });
         if ((behaviour[provider.id] ?? "ok") === "error") throw Object.assign(new Error("down"), { status: 500 });
-        return { model: body.model, output_text: "hola", output: [{ type: "web_search_call" }], usage: { input_tokens: 2000, output_tokens: 200 } };
+        return { id:"r1",status:"completed",model: body.model, output_text: "hola", output: [{ type: "message" }], usage: { input_tokens: 2000, output_tokens: 200,input_tokens_details:{cached_tokens:0} } };
       } },
       audio: { transcriptions: { create: async (body: any) => { calls.push({ provider: provider.id, body }); return { text: "audio" }; } } },
     };
@@ -121,31 +124,22 @@ test("both caps exhausted -> AiBudgetUnavailableError and never spills to Replit
   assert.equal(ledger.rows.length, 0);
 });
 
-test("provider error falls back to the other provider; unknown outcome keeps the reservation charged", async () => {
-  const ledger = new InMemoryAiProviderLedger();
-  const { calls, make } = fakeClients({ openai: "error" });
-  const result = await createRoutedOpenAI({ tier: "standard", label: "t", env: KEYS, ledger, makeClient: make }).chat.completions.create(chatBody);
-  assert.deepEqual(calls.map((c) => c.provider), ["openai", "deepseek"]);
-  assert.equal(result.model, "deepseek-flash");
-  const failed = ledger.rows.find((r) => r.provider === "openai")!;
-  assert.equal(failed.status, "failed");
-  assert.equal(failed.costUsd, failed.reservedUsd);
+test("unconfirmed provider error retains its hold and never falls through to another paid provider",async()=>{
+ const ledger=new InMemoryAiProviderLedger(),{calls,make}=fakeClients({openai:"error"});
+ await assert.rejects(createRoutedOpenAI({tier:"standard",label:"t",env:KEYS,ledger,makeClient:make}).chat.completions.create(chatBody),/FACTORY_API_EXECUTION_UNCONFIRMED/);
+ assert.deepEqual(calls.map(c=>c.provider),["openai"]);assert.equal(ledger.rows[0].status,"failed");assert.equal(ledger.rows[0].costUsd,ledger.rows[0].reservedUsd);
 });
 
-test("a 400 rejection is released (not billed) and the next provider is tried", async () => {
-  const ledger = new InMemoryAiProviderLedger();
-  const { calls, make } = fakeClients({ deepseek: "reject400" });
-  await createRoutedOpenAI({ tier: "repetitive", label: "t", env: KEYS, ledger, makeClient: make }).chat.completions.create(chatBody);
-  assert.deepEqual(calls.map((c) => c.provider), ["deepseek", "openai"]);
-  assert.equal(ledger.rows.find((r) => r.provider === "deepseek")!.costUsd, 0);
+test("HTTP400 alone is not a billing receipt and cannot release or retry an uncertain call",async()=>{
+ const ledger=new InMemoryAiProviderLedger(),{calls,make}=fakeClients({deepseek:"reject400"});
+ await assert.rejects(createRoutedOpenAI({tier:"repetitive",label:"t",env:KEYS,ledger,makeClient:make}).chat.completions.create(chatBody),/FACTORY_API_EXECUTION_UNCONFIRMED/);
+ assert.deepEqual(calls.map(c=>c.provider),["deepseek"]);assert.equal(ledger.rows[0].costUsd,ledger.rows[0].reservedUsd);
 });
 
-test("own providers both down -> Replit integration is the last fallback (uncapped legacy path)", async () => {
-  const ledger = new InMemoryAiProviderLedger();
-  const { calls, make } = fakeClients({ openai: "error", deepseek: "error" });
-  await createRoutedOpenAI({ tier: "standard", label: "t", env: KEYS, ledger, makeClient: make }).chat.completions.create(chatBody);
-  assert.deepEqual(calls.map((c) => c.provider), ["openai", "deepseek", "integration"]);
-  assert.equal(calls[2].body.model, "gpt-4o");
+test("integration cannot become an uncapped retry after uncertain own-provider execution",async()=>{
+ const ledger=new InMemoryAiProviderLedger(),{calls,make}=fakeClients({openai:"error",deepseek:"error"});
+ await assert.rejects(createRoutedOpenAI({tier:"standard",label:"t",env:KEYS,ledger,makeClient:make}).chat.completions.create(chatBody),/FACTORY_API_EXECUTION_UNCONFIRMED/);
+ assert.deepEqual(calls.map(c=>c.provider),["openai"]);
 });
 
 test("ledger failure: an own-key provider is never called without a reservation", async () => {
@@ -156,27 +150,24 @@ test("ledger failure: an own-key provider is never called without a reservation"
   assert.equal(calls.length, 0);
 });
 
-test("no own key configured: legacy client is used verbatim and the ledger is untouched", async () => {
+test("no own key configured: legacy client is monetary guarded without secondary provider ledger", async () => {
   const ledger = new InMemoryAiProviderLedger();
   const legacyCalls: any[] = [];
-  const legacy: ChatLikeClient = { chat: { completions: { create: async (body: any, opts: any) => { legacyCalls.push({ body, opts }); return { ok: true }; } } } };
+  const legacy: ChatLikeClient = { chat: { completions: { create: async (body: any, opts: any) => { legacyCalls.push({ body, opts }); return {ok:true,id:"legacy",model:body.model,choices:[{finish_reason:"stop"}],usage:{prompt_tokens:10,completion_tokens:5,prompt_tokens_details:{cached_tokens:0}}}; } } } };
   const client = createRoutedOpenAI({ tier: "repetitive", label: "t", env: { AI_INTEGRATIONS_OPENAI_API_KEY: "replit-key" }, ledger, legacy: () => legacy,
     makeClient: () => { throw new Error("must not build provider clients"); } });
   assert.equal(client.routed, false);
   const opts = { timeout: 1 };
-  assert.deepEqual(await client.chat.completions.create(chatBody, opts), { ok: true });
+  assert.equal((await client.chat.completions.create(chatBody, opts)).ok,true);
   assert.equal(legacyCalls[0].body, chatBody);
-  assert.equal(legacyCalls[0].opts, opts);
+  assert.equal(legacyCalls[0].opts.maxRetries,0);assert.ok(legacyCalls[0].opts.signal instanceof AbortSignal);
   assert.equal(ledger.rows.length, 0);
 });
 
-test("responses API: hosted web_search stays on OpenAI even for repetitive tier; web search calls are charged", async () => {
-  const ledger = new InMemoryAiProviderLedger();
-  const { calls, make } = fakeClients();
-  const body = { model: "gpt-4o-mini", input: "find events", tools: [{ type: "web_search" }], max_output_tokens: 500 };
-  await createRoutedOpenAI({ tier: "repetitive", label: "t", env: KEYS, ledger, makeClient: make }).responses!.create(body);
-  assert.deepEqual(calls.map((c) => c.provider), ["openai"]);
-  assert.equal(ledger.rows[0].costUsd, routerCostUsd("gpt-4o-mini", 2000, 200, 1));
+test("hosted web search without a verified maximum is held before provider dispatch",async()=>{
+ const ledger=new InMemoryAiProviderLedger(),{calls,make}=fakeClients();
+ await assert.rejects(createRoutedOpenAI({tier:"repetitive",label:"t",env:KEYS,ledger,makeClient:make}).responses!.create({model:"gpt-4o-mini",input:"find events",tools:[{type:"web_search"}],max_output_tokens:500}),/FACTORY_API_OPERATION_UNPRICED/);
+ assert.equal(calls.length,0);assert.equal(ledger.rows[0].costUsd,0);
 });
 
 test("responses API without hosted tools is translated for DeepSeek and returned in Responses shape", async () => {
@@ -198,12 +189,10 @@ test("responses API without hosted tools is translated for DeepSeek and returned
   assert.equal(res.status, "completed");
 });
 
-test("audio transcription is OpenAI-only and reserved", async () => {
-  const ledger = new InMemoryAiProviderLedger();
-  const { calls, make } = fakeClients();
-  await createRoutedOpenAI({ tier: "standard", label: "t", env: KEYS, ledger, makeClient: make }).audio!.transcriptions.create({ model: "whisper-1", file: "x" });
-  assert.deepEqual(calls.map((c) => c.provider), ["openai"]);
-  assert.equal(ledger.rows[0].costUsd, 0.05);
+test("audio without verified usage pricing is held before provider dispatch",async()=>{
+ const ledger=new InMemoryAiProviderLedger(),{calls,make}=fakeClients();
+ await assert.rejects(createRoutedOpenAI({tier:"standard",label:"t",env:KEYS,ledger,makeClient:make}).audio!.transcriptions.create({model:"whisper-1",file:"x"}),/FACTORY_API_OPERATION_UNPRICED/);
+ assert.equal(calls.length,0);assert.equal(ledger.rows[0].costUsd,0);
 });
 
 test("ledger accounting: month-to-date sums settled + reserved rows per provider and enforces the cap", async () => {
@@ -269,8 +258,8 @@ test("tier can depend on the request (owner chat standard, scheduled brief repet
   const ledger = new InMemoryAiProviderLedger();
   const { calls, make } = fakeClients();
   const client = createRoutedOpenAI({ tier: (b) => (b.instructions === "CHAT" ? "standard" : "repetitive"), label: "t", env: KEYS, ledger, makeClient: make });
-  await client.responses!.create({ model: "gpt-5.6-sol", instructions: "CHAT", input: "x" });
-  await client.responses!.create({ model: "gpt-5.6-sol", instructions: "BRIEF", input: "x" });
+  await client.responses!.create({ model: "gpt-5.6-sol", instructions: "CHAT", input: "x".repeat(2000),max_output_tokens:300 });
+  await client.responses!.create({ model: "gpt-5.6-sol", instructions: "BRIEF", input: "x".repeat(2000),max_output_tokens:300 });
   assert.deepEqual(calls.map((c) => c.provider), ["openai", "deepseek"]);
 });
 
@@ -283,31 +272,27 @@ test("BlackOps: router is OFF unless AI_ROUTER_ENABLED=true, even with OPENAI_AP
   assert.equal(deepSeekRouted({ ...env, AI_ROUTER_ENABLED: "true" }), true);
   const legacyCalls: any[] = [];
   const client = createRoutedOpenAI({ tier: "standard", label: "t", env, ledger: new InMemoryAiProviderLedger(),
-    legacy: () => ({ chat: { completions: { create: async (b: any) => { legacyCalls.push(b); return { ok: 1 }; } } } }),
+    legacy: () => ({ chat: { completions: { create: async (b: any) => { legacyCalls.push(b); return {ok:1,id:"legacy",model:b.model,choices:[{finish_reason:"stop"}],usage:{prompt_tokens:10,completion_tokens:5,prompt_tokens_details:{cached_tokens:0}}}; } } } }),
     makeClient: () => { throw new Error("must not build provider clients"); } });
   await client.chat.completions.create(chatBody);
   assert.equal(legacyCalls.length, 1);
 });
 
-test("streaming is allowed on DeepSeek too and settles at the reservation (upper bound)", async () => {
-  const ledger = new InMemoryAiProviderLedger();
-  const { calls, make } = fakeClients({ openai: "error" });
-  await createRoutedOpenAI({ tier: "standard", label: "t", env: KEYS, ledger, makeClient: make })
-    .chat.completions.create({ ...chatBody, stream: true, stream_options: { include_usage: true } });
-  assert.deepEqual(calls.map((c) => c.provider), ["openai", "deepseek"]);
-  const row = ledger.rows.find((r) => r.provider === "deepseek")!;
-  assert.equal(row.status, "settled");
+test("streaming without complete verified final usage is held and cannot trigger fallback",async()=>{
+ const ledger=new InMemoryAiProviderLedger(),{calls,make}=fakeClients({openai:"error"});
+ await assert.rejects(createRoutedOpenAI({tier:"standard",label:"t",env:KEYS,ledger,makeClient:make}).chat.completions.create({...chatBody,stream:true,stream_options:{include_usage:true}}),/FACTORY_API_OPERATION_UNPRICED/);
+ assert.equal(calls.length,0);assert.equal(ledger.rows[0].costUsd,0);
 });
 
 test("routedText: repetitive prompt goes to DeepSeek and reports provider, model and cost", async () => {
   const { routedText } = await import("../server/ai-model-router");
   const ledger = new InMemoryAiProviderLedger();
   const { calls, make } = fakeClients();
-  const out = await routedText({ tier: "repetitive", label: "telegram-chat", prompt: "hola", maxTokens: 50, env: KEYS, ledger, makeClient: make });
+  const out = await routedText({ tier: "repetitive", label: "telegram-chat", prompt: "hola", maxTokens: 50, env: KEYS, ledger, makeClient: make,factoryInvocation:fixtureFactoryInvocation(),factoryPricing });
   assert.equal(out.provider, "deepseek");
   assert.equal(out.model, "deepseek-flash");
   assert.equal(calls[0].body.max_tokens, 50);
-  assert.equal(out.costUsd, routerCostUsd("deepseek-flash", 1000, 100));
+  assert.equal(out.costUsd, routerCostUsd("deepseek-flash", 1000, 50));
 });
 
 test("web chat cheap scout: DeepSeek only with AI_ROUTER_ENABLED=true + DeepSeek key/model, Gemini otherwise", async () => {

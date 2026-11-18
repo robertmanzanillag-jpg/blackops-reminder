@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-18T12:32:32.067Z
-Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-authority-20261118`
+Generated: 2026-11-18T12:34:07.887Z
+Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-transports-20261118`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1210 | 1105 | 4414 | 623 | 25035 |
+| 1216 | 1111 | 4456 | 623 | 25126 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,11 +28,11 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 318 | 314 | test:318 |
-| `server` | 281 | 275 | server:281 |
+| `tests` | 319 | 315 | test:319 |
+| `server` | 284 | 278 | server:284 |
 | `client/src` | 155 | 153 | ui-component:55, client-component:46, client-page:28, client-lib:19 |
 | `script` | 131 | 118 | script:131 |
-| `docs` | 78 | 74 | docs:78 |
+| `docs` | 79 | 75 | docs:79 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 35 | 33 | shared:35 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
@@ -40,7 +40,7 @@ Package: `rest-express`
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `script/release-gate` | 7 | 7 | script:7 |
 | `.agents/memory` | 5 | 5 | docs:5 |
-| `tests/fixtures` | 5 | 3 | test:5 |
+| `tests/fixtures` | 6 | 4 | test:6 |
 | `client/public` | 16 | 2 | other:16 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `client` | 1 | 1 | other:1 |
@@ -184,6 +184,7 @@ Package: `rest-express`
 - `tests/developer-health-inventory.test.ts`
 - `tests/dropshipping-ceo.test.ts`
 - `tests/env-loader-core.test.ts`
+- `tests/factory-api-invocation.test.ts`
 - `tests/factory-office-agents.test.ts`
 - `tests/github-client-security.test.ts`
 - `tests/google-connector.test.ts`

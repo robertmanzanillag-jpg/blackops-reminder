@@ -1,32 +1,13 @@
+import {FactoryApiBudgetError} from "./factory-api-invocation";
+import {guardFactoryOpenAiClient} from "./factory-api-sdk";
 import { randomUUID } from "node:crypto";
 
-/**
- * BlackOps model router (same design as KONG server/ai/modelRouter.ts): picks the provider for every model call by task tier and
- * monthly USD caps.
- *
- *   repetitive -> DeepSeek, then OpenAI (own key)
- *   standard   -> OpenAI (own key) until AI_OPENAI_MONTHLY_BUDGET_USD is used, then DeepSeek
- *   critical   -> same order as standard (DEEPSEEK_STRONG_MODEL when OpenAI is exhausted)
- *
- * DeepSeek counts as configured only when DEEPSEEK_API_KEY AND DEEPSEEK_MODEL are set.
- *
- * Rules:
- * - Every own-key call (OpenAI or DeepSeek) is reserved in blackops_ai_provider_ledger
- *   BEFORE the request and settled with real usage afterwards. No reservation, no call.
- * - A provider error falls through to the next provider. A cap that is reached
- *   is skipped. When a cap blocked any provider, or the ledger could not be read
- *   (fail closed), the request never spills over to Replit AI Integrations.
- * - Replit AI Integrations (AI_INTEGRATIONS_OPENAI_*) is only the last fallback.
- * - No OPENAI_API_KEY and no DEEPSEEK_API_KEY: the legacy client is used exactly as today.
- *
- * These caps are per provider (what the provider bills) for the web/Telegram
- * assistant paths. The office/factory keep their own durable guards
- * (OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT, OPENAI_SHARED_CREDIT_CONFIG grant) and the
- * BLACKOPS_AI_* dashboard budget is unchanged.
- *
- * BlackOps only: the whole router is OFF unless AI_ROUTER_ENABLED=true, so deploying
- * this code changes nothing until Robert turns it on.
- */
+/** Provider order and per-provider ledgers remain secondary constraints. Every
+ * production SDK client (including router-disabled/integration fallback) also
+ * requires the single reconciled Factory API monetary authority. Provider caps
+ * do not add funds or bypass it. Unsupported usage dimensions remain held.
+ * Factory API errors never trigger another provider attempt after uncertainty.
+ * Model selection is unchanged; no prices are inferred by this authority. */
 
 export type AiTier = "repetitive" | "standard" | "critical";
 export type AiProviderId = "openai" | "deepseek" | "integration";
@@ -408,6 +389,8 @@ export interface RoutedClientOptions {
   makeClient?: (provider: ProviderConfig) => ChatLikeClient | Promise<ChatLikeClient>;
   /** Today's client, used verbatim when no own key is configured. */
   legacy?: () => ChatLikeClient | Promise<ChatLikeClient>;
+  factoryInvocation?: ReturnType<typeof import("./factory-api-invocation").createFactoryApiInvocation>;
+  factoryPricing?: (provider:AiProviderId,model:string)=>import("./factory-api-invocation").FactoryApiPrice;
   onRoute?: (event: { provider: AiProviderId; model: string; outcome: "ok" | "error" | "budget" | "ledger_error"; costUsd?: number }) => void;
 }
 
@@ -415,7 +398,7 @@ const clientCache = new Map<string, Promise<ChatLikeClient>>();
 async function defaultMakeClient(provider: ProviderConfig): Promise<ChatLikeClient> {
   const key = `${provider.id}|${provider.baseURL ?? ""}|${provider.apiKey.slice(-6)}`;
   if (!clientCache.has(key)) {
-    clientCache.set(key, import("openai").then(({ default: OpenAI }) => new OpenAI({ apiKey: provider.apiKey, baseURL: provider.baseURL }) as unknown as ChatLikeClient));
+    clientCache.set(key, import("openai").then(({ default: OpenAI }) => new OpenAI({ apiKey: provider.apiKey, baseURL: provider.baseURL, maxRetries:0 }) as unknown as ChatLikeClient));
   }
   return clientCache.get(key)!;
 }
@@ -445,7 +428,7 @@ export function createRoutedOpenAI(options: RoutedClientOptions): ChatLikeClient
   async function run(kind: CallKind, body: Record<string, any>, requestOptions?: any): Promise<any> {
     const config = aiRouterConfig(env);
     if (!config.enabled) {
-      const legacy = await legacyClient();
+      const legacy = guardFactoryOpenAiClient(await legacyClient(),{provider:config.integration?"integration":"openai",env,invoke:options.factoryInvocation,price:options.factoryPricing?(model)=>options.factoryPricing!(config.integration?"integration":"openai",model):undefined});
       if (kind === "chat") return legacy.chat.completions.create(body, requestOptions);
       if (kind === "responses") return legacy.responses!.create(body, requestOptions);
       return legacy.audio!.transcriptions.create(body, requestOptions);
@@ -480,7 +463,7 @@ export function createRoutedOpenAI(options: RoutedClientOptions): ChatLikeClient
         if (!reservation) { budgetBlocked = true; options.onRoute?.({ provider: providerId, model, outcome: "budget" }); continue; }
       }
       try {
-        const client = await makeClient(provider);
+        const client = guardFactoryOpenAiClient(await makeClient(provider),{provider:providerId,env,invoke:options.factoryInvocation,price:options.factoryPricing?(model)=>options.factoryPricing!(providerId,model):undefined});
         let result: any;
         let usage = { input: 0, output: 0, searches: 0 };
         if (kind === "chat") {
@@ -508,10 +491,10 @@ export function createRoutedOpenAI(options: RoutedClientOptions): ChatLikeClient
       } catch (error) {
         if (reservation) {
           // Rejected before billing -> release; otherwise the outcome is unknown and stays charged.
-          await ledger.settle(reservation, { ok: false, costUsd: rejectedBeforeBilling(error) ? 0 : null }).catch(() => undefined);
+          await ledger.settle(reservation, { ok: false, costUsd: error instanceof FactoryApiBudgetError&&!error.dispatched ? 0 : rejectedBeforeBilling(error) ? 0 : null }).catch(() => undefined);
         }
         options.onRoute?.({ provider: providerId, model, outcome: "error" });
-        if (isAbort(error)) throw error;
+        if (error instanceof FactoryApiBudgetError || isAbort(error)) throw error;
         lastError = error;
       }
     }
@@ -546,6 +529,7 @@ export function routedOpenAI(tier: RoutedClientOptions["tier"], label: string, e
     tier, label, env,
     legacy: () => (legacyClient ??= import("openai").then(({ default: OpenAI }) => new OpenAI({
       apiKey: env.AI_INTEGRATIONS_OPENAI_API_KEY || env.OPENAI_API_KEY,
+      maxRetries:0,
       baseURL: env.AI_INTEGRATIONS_OPENAI_BASE_URL || undefined,
     }) as unknown as ChatLikeClient)),
   });
@@ -559,12 +543,12 @@ export function routedClientFromEnv(tier: RoutedClientOptions["tier"], label: st
 /** Plain text completion through the router (system + user prompt). */
 export async function routedText(input: {
   tier: AiTier; label: string; prompt: string; system?: string; model?: string; maxTokens?: number;
-  json?: boolean; env?: Env; ledger?: AiProviderLedger; makeClient?: RoutedClientOptions["makeClient"]; legacy?: RoutedClientOptions["legacy"];
+  json?: boolean; env?: Env; ledger?: AiProviderLedger; factoryInvocation?:RoutedClientOptions["factoryInvocation"];factoryPricing?:RoutedClientOptions["factoryPricing"]; makeClient?: RoutedClientOptions["makeClient"]; legacy?: RoutedClientOptions["legacy"];
 }): Promise<{ text: string; model: string; inputTokens: number; outputTokens: number; costUsd: number; provider: AiProviderId | "legacy" }> {
   let provider: AiProviderId | "legacy" = "legacy";
   let costUsd = 0;
   const client = createRoutedOpenAI({
-    tier: input.tier, label: input.label, env: input.env, ledger: input.ledger, makeClient: input.makeClient, legacy: input.legacy,
+    tier: input.tier, label: input.label, env: input.env, ledger: input.ledger,factoryInvocation:input.factoryInvocation,factoryPricing:input.factoryPricing, makeClient: input.makeClient, legacy: input.legacy,
     onRoute: (e) => { if (e.outcome === "ok") { provider = e.provider; costUsd = e.costUsd ?? 0; } },
   });
   const env = input.env ?? process.env;

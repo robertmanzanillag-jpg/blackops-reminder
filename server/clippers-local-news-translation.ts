@@ -1,3 +1,4 @@
+import {guardFactoryOpenAiClient} from "./factory-api-sdk";
 import path from "node:path";
 import OpenAI from "openai";
 import { aiRouterConfig, createRoutedOpenAI, type ChatLikeClient } from "./ai-model-router";
@@ -68,7 +69,7 @@ function createLegacyOpenAiTranslationClient(env: NodeJS.ProcessEnv): OpenAiTran
   const apiKey = configuredValue(env.AI_INTEGRATIONS_OPENAI_API_KEY) || configuredValue(env.OPENAI_API_KEY);
   if (!apiKey) throw new Error("openai_translation_not_configured");
   const baseURL = configuredValue(env.AI_INTEGRATIONS_OPENAI_BASE_URL) || undefined;
-  return new OpenAI({ apiKey, baseURL, timeout: OPENAI_TRANSLATION_TIMEOUT_MS, maxRetries: 0 });
+  return guardFactoryOpenAiClient(new OpenAI({ apiKey, baseURL, timeout: OPENAI_TRANSLATION_TIMEOUT_MS, maxRetries: 0 }),{provider:env.AI_INTEGRATIONS_OPENAI_API_KEY?"integration":"openai",consumer:"clippers",env});
 }
 
 function createOpenAiTranslationClient(env: NodeJS.ProcessEnv): OpenAiTranslationClient {
@@ -77,7 +78,7 @@ function createOpenAiTranslationClient(env: NodeJS.ProcessEnv): OpenAiTranslatio
   if (!aiRouterConfig(env).enabled) return createLegacyOpenAiTranslationClient(env);
   return createRoutedOpenAI({
     tier: "repetitive", label: "clippers-local-news-translation", env,
-    makeClient: (provider) => new OpenAI({ apiKey: provider.apiKey, baseURL: provider.baseURL, timeout: OPENAI_TRANSLATION_TIMEOUT_MS, maxRetries: 0 }) as unknown as ChatLikeClient,
+    makeClient: (provider) => guardFactoryOpenAiClient(new OpenAI({ apiKey: provider.apiKey, baseURL: provider.baseURL, timeout: OPENAI_TRANSLATION_TIMEOUT_MS, maxRetries: 0 }),{provider:provider.id,consumer:"clippers",env}) as unknown as ChatLikeClient,
     legacy: () => createLegacyOpenAiTranslationClient(env) as unknown as ChatLikeClient,
   }) as unknown as OpenAiTranslationClient;
 }
