@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T02:32:33.294Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-runtime",
+  "generatedAt": "2026-11-18T02:48:31.110Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-credit-audit",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,13 +124,27 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1136,
-    "filesIndexed": 1036,
-    "imports": 4042,
+    "filesVisible": 1139,
+    "filesIndexed": 1039,
+    "imports": 4059,
     "routes": 604,
-    "symbols": 22922
+    "symbols": 22986
   },
   "directories": {
+    "script": {
+      "files": 116,
+      "indexed": 104,
+      "kinds": {
+        "script": 116
+      }
+    },
+    "tests": {
+      "files": 297,
+      "indexed": 293,
+      "kinds": {
+        "test": 297
+      }
+    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -217,13 +231,6 @@
         "other": 70
       }
     },
-    "script": {
-      "files": 114,
-      "indexed": 102,
-      "kinds": {
-        "script": 114
-      }
-    },
     "script/release-gate": {
       "files": 7,
       "indexed": 7,
@@ -271,13 +278,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 296,
-      "indexed": 292,
-      "kinds": {
-        "test": 296
       }
     },
     "tests/fixtures": {
@@ -10859,6 +10859,76 @@
         "pool",
         "result",
         "revisionArg"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/office-credit-audit-core.ts",
+      "kind": "script",
+      "imports": [
+        "../server/office-capability-training",
+        "../server/shared-openai-credit-ledger",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "AuditClient",
+        "AuditConfig",
+        "auditFailure",
+        "parseAuditInput",
+        "runCreditAudit",
+        "shapeCreditAudit"
+      ],
+      "symbols": [
+        "accounted",
+        "allowed",
+        "amount",
+        "auditFailure",
+        "configSchema",
+        "digest",
+        "equalUsage",
+        "execution",
+        "identifier",
+        "ids",
+        "ledger",
+        "measured",
+        "metadata",
+        "micro",
+        "ownerKey",
+        "parseAuditInput",
+        "phaseKey",
+        "price",
+        "receipt",
+        "result",
+        "rows",
+        "runCreditAudit",
+        "settled",
+        "shapeCreditAudit",
+        "snapshot",
+        "stamp",
+        "state",
+        "token",
+        "tokens",
+        "tokensSchema",
+        "training",
+        "unknown",
+        "usage",
+        "value"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/office-credit-audit.ts",
+      "kind": "script",
+      "imports": [
+        "./office-credit-audit-core"
+      ],
+      "exports": [],
+      "symbols": [
+        "client",
+        "input",
+        "main",
+        "pool"
       ],
       "routes": []
     },
@@ -37629,6 +37699,54 @@
       "routes": []
     },
     {
+      "path": "tests/office-credit-audit.test.ts",
+      "kind": "test",
+      "imports": [
+        "../script/office-credit-audit-core",
+        "../server/office-capability-training",
+        "../server/office-role-audits",
+        "../server/office-role-snapshots",
+        "../server/office-role-work",
+        "../server/shared-openai-credit-ledger",
+        "node:assert/strict",
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:test",
+        "node:url"
+      ],
+      "exports": [],
+      "symbols": [
+        "assertPublic",
+        "body",
+        "broken",
+        "client",
+        "council",
+        "databaseFixture",
+        "differentPricing",
+        "error",
+        "f",
+        "fixture",
+        "hash",
+        "key",
+        "ledger",
+        "original",
+        "other",
+        "output",
+        "owner",
+        "privateText",
+        "rejected",
+        "report",
+        "result",
+        "source",
+        "step",
+        "tokens",
+        "walk",
+        "workflow"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/office-editorial-scheduler.test.ts",
       "kind": "test",
       "imports": [
@@ -41647,6 +41765,7 @@
     "tests/office-cloud-runtime.test.ts",
     "tests/office-cloud-store.test.ts",
     "tests/office-council-migration.test.ts",
+    "tests/office-credit-audit.test.ts",
     "tests/office-editorial-scheduler.test.ts",
     "tests/office-editorial-work.test.ts",
     "tests/office-execution.test.ts",
