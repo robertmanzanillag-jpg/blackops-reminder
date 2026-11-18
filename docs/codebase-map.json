@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T02:30:36.387Z",
+  "generatedAt": "2026-11-18T02:32:33.294Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 1036,
     "imports": 4042,
     "routes": 604,
-    "symbols": 22919
+    "symbols": 22922
   },
   "directories": {
     ".": {
@@ -27796,9 +27796,11 @@
       ],
       "symbols": [
         "assertFactoryCreditReady",
+        "databaseCode",
         "expires",
         "factoryOnceFailure",
-        "failureCodes"
+        "failureCodes",
+        "message"
       ],
       "routes": []
     },
@@ -40039,6 +40041,7 @@
       "exports": [],
       "symbols": [
         "budget",
+        "changingMessage",
         "errors",
         "now",
         "original",

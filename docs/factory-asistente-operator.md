@@ -253,7 +253,7 @@ An expired capability run with status `unknown` retains its original generation,
 fence, execution IDs and shared reservation. Provider CSV totals or aggregate
 absence are insufficient to attribute an execution or establish no charge. Do
 not release or settle a hold at zero based on those totals, create a fresh
-execution ID, or replay the task. The existing cancellation API accepts only
+execution ID, or replay the task. The existing cancellation helper accepts only
 eligible holdout runs with its locked verification evidence; it cannot cancel a
 production run. Production recovery requires a separately reviewed procedure
 with attributable provider and durable execution evidence. Until that evidence
