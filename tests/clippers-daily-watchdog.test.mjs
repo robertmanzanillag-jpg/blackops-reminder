@@ -1,10 +1,59 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { runClippersDailyWatchdog } from "../script/clippers-daily-watchdog.mjs";
+
+test("daily discovery runs only when due and preserves research-only evidence", async () => {
+  const workspaceRoot = await fixture();
+  const aliasDirectory = await mkdtemp(path.join(os.tmpdir(), "clippers-discovery-alias-"));
+  const alias = path.join(aliasDirectory, "workspace");
+  await symlink(workspaceRoot, alias, "dir");
+  let calls = 0;
+  const runPortfolioDiscovery = async ({ stateDir, now }) => {
+    calls++;
+    assert.equal(stateDir, path.join(await realpath(workspaceRoot), "portfolio-discovery"));
+    assert.equal(now.toISOString(), "2026-08-12T14:00:00.000Z");
+    return { status: "observed", observedAt: "2026-08-12T13:00:00.000Z", reused: true,
+      feeds: [{ status: "observed" }], observations: [
+        { publishedAt: "2026-08-12T12:00:00.000Z" },
+        { publishedAt: "2026-08-09T13:30:00.000Z" },
+        { publishedAt: "2026-08-12T15:00:00.000Z" },
+      ] };
+  };
+  try {
+    const early = await runClippersDailyWatchdog({ workspaceRoot, now: new Date("2026-08-12T13:59:00Z"), dailyDiscovery: true, runPortfolioDiscovery });
+    assert.equal(calls, 0);
+    assert.equal(early.publicDiscovery, undefined);
+    const due = await runClippersDailyWatchdog({ workspaceRoot: alias, now: new Date("2026-08-12T14:00:00Z"), dailyDiscovery: true, runPortfolioDiscovery });
+    assert.equal(calls, 1);
+    assert.equal(due.publicDiscovery.recentUnder72Hours, 1);
+    assert.equal(due.publicDiscovery.observedAt, "2026-08-12T13:00:00.000Z");
+    assert.equal(due.publicDiscovery.eligibleAssets, 0);
+    assert.equal(due.publicDiscovery.mayPublish, false);
+    assert.equal(due.counts.published, 0);
+  } finally {
+    await rm(aliasDirectory, { recursive: true, force: true });
+    await rm(workspaceRoot, { recursive: true, force: true });
+  }
+});
+
+test("discovery failure alerts while the separate daily learning cycle still runs", async () => {
+  const workspaceRoot = await fixture();
+  try {
+    const report = await runClippersDailyWatchdog({ workspaceRoot, now: new Date("2026-08-12T14:00:00Z"),
+      dailyDiscovery: true, dailyLearning: true,
+      runPortfolioDiscovery: async () => { throw new Error("simulated feed failure"); },
+    });
+    assert.equal(report.publicDiscovery.reason, "public_discovery_failed");
+    assert.equal(report.dailyLearning.status, "held_or_partial");
+    assert.equal(report.alerts.publicDiscoveryBlocked, true);
+    assert.equal(report.alert, true);
+    assert.equal(report.costUsd, 0);
+  } finally { await rm(workspaceRoot, { recursive: true, force: true }); }
+});
 
 async function fixture({ ledger = [], worker = null, supply = null, content = null, delivery = freshDelivery() } = {}) {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-watchdog-"));

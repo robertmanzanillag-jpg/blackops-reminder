@@ -1,7 +1,8 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { runClippersDailyLearning } from "./clippers-daily-learning.mjs";
+import { runPortfolioDiscovery } from "./clippers-portfolio-discovery.mjs";
 
 const DEFAULT_TIME_ZONE = "America/New_York";
 const DEFAULT_CHECK_HOUR = 10;
@@ -375,6 +376,28 @@ export async function runClippersDailyWatchdog(options = {}) {
     paidSpendAllowed: false,
     costUsd: 0,
   };
+  if (due && options.dailyDiscovery === true) {
+    try {
+      const discovery = await (options.runPortfolioDiscovery || runPortfolioDiscovery)({
+        stateDir: path.join(await realpath(workspaceRoot), "portfolio-discovery"), now,
+      });
+      report.publicDiscovery = {
+        status: discovery.status, observedAt: discovery.observedAt,
+        feedsObserved: discovery.feeds.filter(feed => feed.status === "observed").length,
+        observations: discovery.observations.length,
+        recentUnder72Hours: discovery.observations.filter(row => {
+          const age = now.getTime() - Date.parse(row.publishedAt);
+          return Number.isFinite(age) && age >= 0 && age <= 72 * 3_600_000;
+        }).length,
+        eligibleAssets: 0, mayPublish: false, paidSpendUsd: 0,
+        reused: discovery.reused === true,
+      };
+      if (discovery.status !== "observed") report.alerts.publicDiscoveryBlocked = true;
+    } catch {
+      report.publicDiscovery = { status: "blocked", reason: "public_discovery_failed", eligibleAssets: 0, mayPublish: false, paidSpendUsd: 0 };
+      report.alerts.publicDiscoveryBlocked = true;
+    }
+  }
   if (due && options.dailyLearning === true) {
     try {
       const learning = await runClippersDailyLearning({ workspaceRoot, now, env });
@@ -391,7 +414,7 @@ export async function runClippersDailyWatchdog(options = {}) {
       report.alerts.dailyLearningBlocked = true;
     }
   }
-  if (report.alerts.dailyLearningBlocked) {
+  if (report.alerts.dailyLearningBlocked || report.alerts.publicDiscoveryBlocked) {
     report.alert = true;
     report.status = "alert";
   }
@@ -406,7 +429,7 @@ export async function runClippersDailyWatchdog(options = {}) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const report = await runClippersDailyWatchdog({ dailyLearning: true });
+  const report = await runClippersDailyWatchdog({ dailyLearning: true, dailyDiscovery: true });
   console.log(JSON.stringify(report, null, 2));
   if (report.alert) process.exitCode = 2;
 }
