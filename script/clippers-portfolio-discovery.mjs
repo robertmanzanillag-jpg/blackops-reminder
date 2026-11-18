@@ -169,7 +169,7 @@ export function selectCreators(now = new Date(), ids) {
       const creator = DISCOVERY_CREATORS.find(row => row.id === id);
       if (!creator) throw new Error('creator_not_in_verified_catalogue');
       return creator;
-    });
+    }).sort((a, b) => DISCOVERY_CREATORS.indexOf(a) - DISCOVERY_CREATORS.indexOf(b));
   }
   // Eight verified feeds, four requests per day; all markets observed at least every 48h.
   const start = (Math.floor(+now / (24 * HOUR)) % 2) * 4;

@@ -23,6 +23,7 @@ test('fixed catalogue covers requested creators and languages without caller URL
   const day1 = selectCreators(NOW), day2 = selectCreators(new Date(+NOW + 86_400_000));
   assert.equal(day1.length, 4); assert.equal(day2.length, 4);
   assert.equal(new Set([...day1, ...day2].map(row => row.id)).size, 8);
+  assert.deepEqual(selectCreators(NOW, ['lacy', 'thegrefg']).map(row => row.id), ['thegrefg', 'lacy']);
   assert.throws(() => selectCreators(NOW, ['lacy', 'lacy']), /unique/);
   assert.throws(() => selectCreators(NOW, ['unknown']), /catalogue/);
   assert.throws(() => selectCreators(NOW, DISCOVERY_CREATORS.slice(0, 5).map(row => row.id)), /four/);
