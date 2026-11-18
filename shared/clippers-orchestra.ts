@@ -8,7 +8,7 @@ export type ClippersRoleEvidence = {
   runId: string | null; evidenceIds: string[]; outputs: Record<string, number>;
   heldReasons: string[]; lifePenaltyExempt: boolean; career: ClippersCareerView;
 };
-export type ClippersMetricAgeBucket = { windowHours: 24 | 72 | 168; samples: number; actualAgeHoursMin: number | null; actualAgeHoursMax: number | null; latestObservedAt: string | null; views: number; likes: number; comments: number; shares: number };
+export type ClippersMetricAgeBucket = { windowHours: 24 | 72 | 168; samples: number; actualAgeHoursMin: number | null; actualAgeHoursMax: number | null; latestObservedAt: string | null; views: number; likes: number | null; comments: number | null; shares: number | null };
 export type ClippersAccountView = {
   key: string; brandId: string; network: 'tiktok' | 'facebook'; account: string; label: string;
   connection: 'observed' | 'unverified' | 'disconnected'; observedAt: string | null;
@@ -79,7 +79,7 @@ export function parseClippersOrchestraStatus(value: unknown, now=Date.now()): Cl
     const seen=new Set();
     for(const b of a.metricAgeBuckets){
       if(!keys(b,['windowHours','samples','actualAgeHoursMin','actualAgeHoursMax','latestObservedAt','views','likes','comments','shares']) ||
-        ![24,72,168].includes(b.windowHours) || seen.has(b.windowHours) || ![b.samples,b.views,b.likes,b.comments,b.shares].every(count) ||
+        ![24,72,168].includes(b.windowHours) || seen.has(b.windowHours) || ![b.samples,b.views].every(count) || ![b.likes,b.comments,b.shares].every(nullableCount) ||
         ![b.actualAgeHoursMin,b.actualAgeHoursMax].every(nullableFinite) || !nullableTime(b.latestObservedAt,now) ||
         (b.actualAgeHoursMin!==null&&(b.actualAgeHoursMin<b.windowHours||b.actualAgeHoursMax<b.actualAgeHoursMin||b.actualAgeHoursMax>=b.windowHours+24)))return null;
       seen.add(b.windowHours);
