@@ -19,7 +19,7 @@ Subscription CLI work, deterministic work and local models are unchanged.
   secondary reservations are created. A final atomic reserve/window check still
   happens before the provider operation; preflight is not an execution permit.
 - Factory's authenticated raw transport requires a live parent scope installed
-  by the worker from the actual claimed row. The owner hash, job, fence, lease
+  by the worker from the actual claimed row and cancellation signal. The owner hash, job, fence, lease
   and remaining protected escrow are checked in storage. No task/model payload
   can install that context. API child usage is included in the existing parent
   escrow, not charged again globally. Alternative Responses composition guards

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T12:42:27.405Z",
+  "generatedAt": "2026-11-18T12:44:39.582Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-transports-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 1109,
     "imports": 4456,
     "routes": 623,
-    "symbols": 25128
+    "symbols": 25129
   },
   "directories": {
     ".": {
@@ -22098,6 +22098,7 @@
         "result",
         "settled",
         "sha",
+        "sourceSignal",
         "timeout",
         "usage",
         "windowStartedAt"

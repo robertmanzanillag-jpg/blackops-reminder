@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T12:42:27.405Z
+Generated: 2026-11-18T12:44:39.582Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-transports-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1212 | 1109 | 4456 | 623 | 25128 |
+| 1212 | 1109 | 4456 | 623 | 25129 |
 
 ## Entrypoints
 - `client/src/App.tsx`

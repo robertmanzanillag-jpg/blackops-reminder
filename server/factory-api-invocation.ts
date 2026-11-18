@@ -6,7 +6,7 @@ import type {softwareFactoryStore} from './software-factory-store';
 export class FactoryApiBudgetError extends Error {
  constructor(code:string,readonly dispatched=false){super(code);}
 }
-const admissionCodes=new Set(["FACTORY_API_RECONCILIATION_REQUIRED","FACTORY_API_UNKNOWN_HOLD","FACTORY_API_BUDGET_EXHAUSTED","FACTORY_API_IDEMPOTENCY_CONFLICT","FACTORY_API_PARENT_FENCE_REQUIRED","FACTORY_API_PARENT_ESCROW_EXHAUSTED","FACTORY_API_DISPATCH_WINDOW_EXPIRED","FACTORY_API_EXECUTION_NOT_RESERVED","FACTORY_API_AUTHORITY_UNAVAILABLE","FACTORY_MONTH_UNINITIALIZED"]);
+const admissionCodes=new Set(["FACTORY_API_RECONCILIATION_REQUIRED","FACTORY_API_UNKNOWN_HOLD","FACTORY_API_BUDGET_EXHAUSTED","FACTORY_API_IDEMPOTENCY_CONFLICT","FACTORY_API_PARENT_FENCE_REQUIRED","FACTORY_API_PARENT_ESCROW_EXHAUSTED","FACTORY_API_DISPATCH_WINDOW_EXPIRED","FACTORY_API_EXECUTION_NOT_RESERVED","FACTORY_API_AUTHORITY_UNAVAILABLE","FACTORY_MONTH_UNINITIALIZED","FACTORY_API_EXECUTION_CANCELLED","FACTORY_API_PARENT_OWNER_MISMATCH"]);
 export function factoryApiAdmissionError(error:unknown){
  const descriptor=error instanceof Error?Object.getOwnPropertyDescriptor(error,"message"):undefined;
  const code=descriptor&&"value" in descriptor?descriptor.value:undefined;
@@ -40,11 +40,13 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
      !Number.isSafeInteger(input.maxOutputTokens)||input.maxOutputTokens<=0||input.maxOutputTokens>128000)throw new FactoryApiBudgetError('FACTORY_API_REQUEST_UNBOUNDED');
   const remaining=Date.parse(price.validUntil)-now().getTime();
   if(!Number.isFinite(remaining)||remaining<1)throw new FactoryApiBudgetError('FACTORY_API_PRICING_EXPIRED');
-  input.signal?.throwIfAborted();
+  if(input.signal?.aborted)throw new FactoryApiBudgetError("FACTORY_API_EXECUTION_CANCELLED");
   let owner:string;try{owner=options.owner();}catch(error){throw factoryApiAdmissionError(error);}
   const context=currentFactoryApiParent();
   if(context&&createHash("sha256").update(owner).digest("hex")!==context.ownerKey)throw new FactoryApiBudgetError("FACTORY_API_PARENT_OWNER_MISMATCH");
   if(context&&input.parent&&(context.jobId!==input.parent.jobId||context.fence!==input.parent.fence))throw new FactoryApiBudgetError("FACTORY_API_PARENT_CONTEXT_MISMATCH");
+  const sourceSignal=context?.signal?(input.signal?AbortSignal.any([input.signal,context.signal]):context.signal):input.signal;
+  if(sourceSignal?.aborted)throw new FactoryApiBudgetError("FACTORY_API_EXECUTION_CANCELLED");
   const parent=input.parent??(context?{jobId:context.jobId,fence:context.fence}:undefined);
   const key='api:'+apiEvidenceHash([input.consumer,input.executionId??randomUUID()]);
   const requestSha256=apiEvidenceHash([input.requestSha256,price,input.promptBytes,input.maxOutputTokens,parent??null]);
@@ -59,7 +61,7 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
    if(!Number.isFinite(elapsed)||elapsed<0)throw Error("clock unverified");
    const deadline=Math.min(executionWindow-elapsed,Date.parse(price.validUntil)-now().getTime());
    if(!Number.isFinite(deadline)||deadline<1)throw Error('expired');
-   const timeout=Math.floor(Math.min(120000,deadline)),signal=input.signal?AbortSignal.any([input.signal,AbortSignal.timeout(timeout)]):AbortSignal.timeout(timeout);
+   const timeout=Math.floor(Math.min(120000,deadline)),signal=sourceSignal?AbortSignal.any([sourceSignal,AbortSignal.timeout(timeout)]):AbortSignal.timeout(timeout);
    signal.throwIfAborted();
    dispatched=true;
    const result=await input.call({signal,maxRetries:0,timeout});
@@ -75,7 +77,7 @@ export function createFactoryApiInvocation(options:{store:Store;owner:()=>string
    throw new FactoryApiBudgetError('FACTORY_API_EXECUTION_UNCONFIRMED',dispatched);
   }
  };
- return Object.assign(invoke,{async preflight(){try{const owner=options.owner(),context=currentFactoryApiParent();if(context&&createHash("sha256").update(owner).digest("hex")!==context.ownerKey)throw new FactoryApiBudgetError("FACTORY_API_PARENT_OWNER_MISMATCH");const status=await options.store.apiBudgetStatus(owner);const withinParent=context&&status.configured&&!status.unknown&&status.fixedMicroUsd+status.spentMicroUsd+status.reservedMicroUsd<=status.limitMicroUsd;if(!status.paidAdmissionReady&&!withinParent)throw new FactoryApiBudgetError(status.reason);}catch(error){throw factoryApiAdmissionError(error);}}});
+ return Object.assign(invoke,{async preflight(){try{const owner=options.owner(),context=currentFactoryApiParent();if(context?.signal?.aborted)throw new FactoryApiBudgetError("FACTORY_API_EXECUTION_CANCELLED");if(context&&createHash("sha256").update(owner).digest("hex")!==context.ownerKey)throw new FactoryApiBudgetError("FACTORY_API_PARENT_OWNER_MISMATCH");const status=await options.store.apiBudgetStatus(owner);const withinParent=context&&status.configured&&!status.unknown&&status.fixedMicroUsd+status.spentMicroUsd+status.reservedMicroUsd<=status.limitMicroUsd;if(!status.paidAdmissionReady&&!withinParent)throw new FactoryApiBudgetError(status.reason);}catch(error){throw factoryApiAdmissionError(error);}}});
 }
 const catalogSchema=z.object({version:z.literal(1),prices:z.array(factoryApiPriceSchema.extend({provider:z.enum(['openai','deepseek','gemini','integration'])})).max(100)}).strict();
 export function configuredFactoryApiPrice(provider:string,model:string,configuration:string|undefined){
