@@ -16,6 +16,15 @@ const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const digest = value => hash(JSON.stringify(value));
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 const key = destination => destinationKey(destination).replaceAll(':', '__');
+const HELPER_ENV_KEYS = new Set(['HOME', 'PATH', 'NODE_ENV', 'DEFAULT_USER_ID', 'DATABASE_URL',
+  'REPLIT_CONNECTORS_HOSTNAME', 'REPL_IDENTITY', 'WEB_REPL_RENEWAL',
+  'CLIPPERS_CONFIG_ROOT', 'CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED', 'CLIPPERS_DRIVE_ROOT_FOLDER_ID',
+  'GOOGLE_DRIVE_CLIENT_ID', 'GOOGLE_DRIVE_OAUTH_CLIENT_ID', 'GOOGLE_CLIENT_ID', 'GOOGLE_OAUTH_CLIENT_ID',
+  'GOOGLE_DRIVE_CLIENT_SECRET', 'GOOGLE_DRIVE_OAUTH_CLIENT_SECRET', 'GOOGLE_CLIENT_SECRET', 'GOOGLE_OAUTH_CLIENT_SECRET',
+  'GOOGLE_DRIVE_REFRESH_TOKEN', 'GOOGLE_REFRESH_TOKEN', 'GOOGLE_OAUTH_REFRESH_TOKEN', 'GOOGLE_DRIVE_CLIPPERS_ROOT_FOLDER_ID']);
+export function driveHelperEnvironment(env = process.env) {
+  return Object.fromEntries(Object.entries(env).filter(([name, value]) => HELPER_ENV_KEYS.has(name) && typeof value === 'string'));
+}
 
 async function ownerJson(root, relative, fallback) {
   const file = path.join(root, relative);
@@ -67,6 +76,7 @@ export function prepareReadiness(env = process.env) {
       has(['GOOGLE_DRIVE_REFRESH_TOKEN', 'GOOGLE_REFRESH_TOKEN', 'GOOGLE_OAUTH_REFRESH_TOKEN']),
     replitDriveConnectorPossible: !!env.REPLIT_CONNECTORS_HOSTNAME && !!(env.REPL_IDENTITY || env.WEB_REPL_RENEWAL),
     storedOAuthPossible: !!env.DATABASE_URL,
+    systemOwnerConfigured: !!env.DEFAULT_USER_ID,
     driveLoaderAvailable,
     credentialValidityVerified: false, paidSpendUsd: 0,
   };
@@ -107,10 +117,7 @@ export async function verifyPublicBytes(url, expectedSha, sizeBytes, fetcher = f
 }
 
 async function boundedHelper(operation, input, timeoutMs, loader) {
-  const childEnv = {};
-  for (const [name, value] of Object.entries(process.env)) {
-    if (/^(?:GOOGLE_|REPLIT_|WEB_REPL_RENEWAL$|DATABASE_URL$|USER_ID$|SYSTEM_USER_ID$|HOME$|PATH$|NODE_ENV$|CLIPPERS_CONFIG_ROOT$|CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED$)/.test(name)) childEnv[name] = value;
-  }
+  const childEnv = driveHelperEnvironment();
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, ['--import', loader, fileURLToPath(import.meta.url), '--drive-operation', operation],
       { env: childEnv, stdio: ['pipe', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
@@ -133,6 +140,7 @@ export async function createExistingDriveAdapter({ remaining = () => 30_000, aut
   // Existing OAuth helpers run in a bounded process. Killing an ambiguous upload
   // leaves the durable reservation unknown, rather than repeating its write.
   if (process.env.CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED !== 'true') throw Error('drive_upload_process_not_authorized');
+  if (!process.env.DEFAULT_USER_ID?.trim()) throw Error('drive_owner_not_configured');
   let loader; try { loader = import.meta.resolve('tsx'); } catch { throw Error('drive_loader_unavailable'); }
   if (!authorization) throw Error('drive_asset_authorization_required');
   const call = (operation, data) => boundedHelper(operation, { ...data, authorization }, Math.max(1, Math.min(30_000, remaining())), loader);

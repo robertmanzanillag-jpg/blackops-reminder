@@ -46,6 +46,10 @@ credential files or calling a provider. Operation requires both
 `CLIPPERS_PORTFOLIO_PREPARE_ENABLED=true` and the existing
 `CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED=true`, plus the reviewed packets.
 The existing Google OAuth/connector path is reused; no key is provisioned.
+The existing system owner (`DEFAULT_USER_ID`) and a usable installed `tsx`
+loader are required before an upload is reserved. The helper receives only
+Drive OAuth/connector, database and owner configuration; paid model, Maps,
+Metricool and YouTube keys and inherited Node hooks are excluded.
 `CLIPPERS_CONFIG_ROOT`, when provided to the actual Drive helper, selects the
 existing credential configuration loader. No credential values are printed.
 
@@ -54,6 +58,7 @@ rerender those videos. A cycle is capped at 120 seconds and 20 packets, with
 five slots per exact destination/day, unique slots and no repeated media or
 caption within that destination. Calls to the existing Drive helper run in
 separate processes capped at 30 seconds or the remaining cycle budget.
+Each helper also has its own 30-second deadline if the parent disappears.
 
 Each upload is durably reserved before any remote write. Lost upload
 acknowledgements remain `upload_unknown`; the worker does not try another
@@ -84,3 +89,6 @@ is made. FFmpeg/ffprobe are required for the real-render cases.
 Disable the optional prepare flag to stop new work. Reverting this PR removes
 only the adapter; existing Drive files, receipts and scheduled posts remain.
 There is no automatic public-file deletion or duplicate retry during rollback.
+If the process dies while holding `portfolio-prepare.lock`, inspect its recorded
+PID and the per-hash journal before an operator removes that mutex. Removing a
+stale mutex does not clear an unknown upload reservation or authorize a replay.

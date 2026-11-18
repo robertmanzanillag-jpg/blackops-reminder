@@ -6,7 +6,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { promisify } from 'node:util';
 import test from 'node:test';
-import { runClippersPortfolioPrepare, verifyPublicBytes, publicDriveUrl } from '../script/clippers-portfolio-prepare.mjs';
+import { runClippersPortfolioPrepare, verifyPublicBytes, publicDriveUrl, driveHelperEnvironment } from '../script/clippers-portfolio-prepare.mjs';
 import { renderClippersPortfolio, confirmedRenderReceipt } from '../script/clippers-portfolio-render.mjs';
 import { runClippersDailyLearning } from '../script/clippers-daily-learning.mjs';
 import { DESTINATIONS, destinationKey } from '../script/clippers-portfolio-metricool.mjs';
@@ -77,6 +77,15 @@ test('disabled and empty default paths never import an uploader or contact a pro
     dependencies: new Proxy({}, { get() { throw Error('no provider activity expected'); } }) });
   assert.equal(r.reason, 'no_reviewed_prepare_packets');
   assert.equal(r.prepared, 0);
+});
+
+test('Drive helper receives the configured owner and only its existing credential scope', () => {
+  const cleaned = driveHelperEnvironment({ DEFAULT_USER_ID: 'owner-fixture', GOOGLE_DRIVE_CLIENT_ID: 'drive-client',
+    GOOGLE_DRIVE_CLIENT_SECRET: 'synthetic-drive-secret', REPL_IDENTITY: 'synthetic-existing-identity',
+    OPENAI_API_KEY: 'synthetic-unused-key', GOOGLE_MAPS_API_KEY: 'synthetic-unused-key',
+    METRICOOL_USER_TOKEN: 'synthetic-unused-token', YOUTUBE_REFRESH_TOKEN: 'synthetic-unused-token',
+    NODE_OPTIONS: '--require unsafe-hook' });
+  assert.deepEqual(Object.keys(cleaned).sort(), ['DEFAULT_USER_ID', 'GOOGLE_DRIVE_CLIENT_ID', 'GOOGLE_DRIVE_CLIENT_SECRET', 'REPL_IDENTITY']);
 });
 
 test('real original renders prepare all four exact destinations with one upload and preserve publisher switches', { skip: !hasTools }, async t => {

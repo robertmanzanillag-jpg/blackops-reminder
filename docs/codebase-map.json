@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T04:52:20.200Z",
+  "generatedAt": "2026-11-18T04:58:25.006Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-portfolio-prepare-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -128,30 +128,9 @@
     "filesIndexed": 1048,
     "imports": 4116,
     "routes": 604,
-    "symbols": 23471
+    "symbols": 23474
   },
   "directories": {
-    "docs": {
-      "files": 65,
-      "indexed": 63,
-      "kinds": {
-        "docs": 65
-      }
-    },
-    "script": {
-      "files": 120,
-      "indexed": 108,
-      "kinds": {
-        "script": 120
-      }
-    },
-    "tests": {
-      "files": 300,
-      "indexed": 296,
-      "kinds": {
-        "test": 300
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -223,12 +202,26 @@
         "client-page": 28
       }
     },
+    "docs": {
+      "files": 65,
+      "indexed": 63,
+      "kinds": {
+        "docs": 65
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 120,
+      "indexed": 108,
+      "kinds": {
+        "script": 120
       }
     },
     "script/release-gate": {
@@ -278,6 +271,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 300,
+      "indexed": 296,
+      "kinds": {
+        "test": 300
       }
     },
     "tests/fixtures": {
@@ -9392,6 +9392,7 @@
       ],
       "exports": [
         "createExistingDriveAdapter",
+        "driveHelperEnvironment",
         "prepareReadiness",
         "publicDriveUrl",
         "runClippersPortfolioPrepare",
@@ -9400,6 +9401,7 @@
       "symbols": [
         "CONFIG",
         "DRIVE_ID",
+        "HELPER_ENV_KEYS",
         "ID",
         "MAX_BYTES",
         "REPORT",
@@ -9421,6 +9423,7 @@
         "destination",
         "digest",
         "drive",
+        "driveHelperEnvironment",
         "evidence",
         "exactDriveUrl",
         "existing",
@@ -35879,6 +35882,7 @@
         "again",
         "bytes",
         "calls",
+        "cleaned",
         "digest",
         "engineSha256",
         "env",
