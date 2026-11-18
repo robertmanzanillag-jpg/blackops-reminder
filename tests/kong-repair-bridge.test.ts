@@ -166,10 +166,23 @@ test("trusted parent checker receipts require exact source/head, distinct invoca
 });
 
 test("known operational outages and ordinary startup 503 stay unresolved without consuming a model handoff", async () => {
-  for (const patch of [{ errorCode: "ECONNRESET" }, { errorClass: "Error", errorCode: undefined }]) {
+  for (const patch of [{ errorCode: "ECONNRESET" }, { errorCode: "42P01" }, { errorCode: "42703" }, { errorCode: "55P03" }, { errorClass: "Error", errorCode: undefined }]) {
     const f = fixture(), bridge = f.create(), request = envelope(); Object.assign(request.payload.evidence!, patch); if (request.payload.evidence!.errorCode === undefined) delete request.payload.evidence!.errorCode;
+    const send = signed(request); assert.deepEqual(verifyRepairEnvelope(send.raw, send.signature, secret, NOW), request);
     await bridge.receive(request); assert.equal((await bridge.dispatch(request.idempotencyKey)).status, "blocked_operational_condition"); assert.equal(f.calls(), 0);
+    assert.equal((await bridge.view()).entries[0].status, "blocked_operational_condition");
   }
+});
+
+test("SQLSTATE format compatibility rejects malformed codes without expanding operational classification", async () => {
+  for (const errorCode of ["42p01", "42P0", "42P010", "4P001", "42_P1", "42703\n", "42P01 extra", "_ERR", "A"]) {
+    const request = envelope(); request.payload.evidence!.errorCode = errorCode; const send = signed(request);
+    assert.throws(() => verifyRepairEnvelope(send.raw, send.signature, secret, NOW), /INVALID_ENVELOPE/);
+  }
+  const f = fixture(), bridge = f.create(), request = envelope(); request.payload.evidence!.errorCode = "22003";
+  const send = signed(request); verifyRepairEnvelope(send.raw, send.signature, secret, NOW);
+  await bridge.receive(request); assert.equal((await bridge.dispatch(request.idempotencyKey)).status, "handoff_created");
+  assert.equal(f.calls(), 1, "another valid SQLSTATE is not silently added to the operational block set");
 });
 
 test("unclaimed refresh is fenced against maker races and reconciles a lost fence acknowledgment", async () => {
