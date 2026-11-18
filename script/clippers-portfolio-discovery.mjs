@@ -39,7 +39,8 @@ export function assertFeedUrl(value) {
   if (url.protocol !== 'https:' || url.hostname !== 'www.youtube.com' || url.username || url.password ||
       url.port || url.hash || url.pathname !== '/feeds/videos.xml' ||
       [...url.searchParams.keys()].join(',') !== 'channel_id' ||
-      !CHANNEL.test(url.searchParams.get('channel_id') ?? '')) throw new Error('unsafe_feed_url');
+      !CHANNEL.test(url.searchParams.get('channel_id') ?? '') ||
+      url.href !== feedUrl(url.searchParams.get('channel_id'))) throw new Error('unsafe_feed_url');
   return url.href;
 }
 
@@ -182,21 +183,26 @@ const median = values => {
 
 export function classifyDiscovery(observation, history) {
   const result = { mayPublish: false, causalClaim: false, statisticalSignificanceClaim: false, viewsPerHour: null, outlierRatio: null };
-  if (observation.views === null || observation.metricEvidence !== 'direct_public_feed') return { ...result, status: 'views_unknown' };
+  if (!Number.isSafeInteger(observation.views) || observation.views < 0 || observation.metricEvidence !== 'direct_public_feed') return { ...result, status: 'views_unknown' };
+  const observedAt = Date.parse(observation.observedAt), publishedAt = Date.parse(observation.publishedAt);
+  const measuredAge = (observedAt - publishedAt) / HOUR;
+  if (!Number.isFinite(measuredAge) || measuredAge < 0) return { ...result, status: 'invalid_observation_time' };
+  if (measuredAge > 72) return { ...result, status: 'stale_reference' };
   const prior = history.filter(row => row.channelId === observation.channelId && row.videoId === observation.videoId &&
     row.metricEvidence === 'direct_public_feed' && row.publishedAt === observation.publishedAt &&
     Number.isSafeInteger(row.views) && row.views >= 0 &&
     Date.parse(row.observedAt) >= Date.parse(observation.publishedAt) &&
-    Date.parse(row.observedAt) <= Date.parse(observation.observedAt) - HOUR && row.views <= observation.views)
+    Date.parse(row.observedAt) <= observedAt - HOUR)
     .sort((a, b) => Date.parse(b.observedAt) - Date.parse(a.observedAt))[0];
-  if (prior) result.viewsPerHour = (observation.views - prior.views) / ((Date.parse(observation.observedAt) - Date.parse(prior.observedAt)) / HOUR);
+  if (prior && prior.views <= observation.views) result.viewsPerHour = (observation.views - prior.views) / ((observedAt - Date.parse(prior.observedAt)) / HOUR);
   if (!observation.language || observation.format === 'unknown') return { ...result, status: 'comparison_context_unknown' };
   const baselines = new Map();
   for (const row of history) {
     if (row.channelId === observation.channelId && row.videoId !== observation.videoId && row.network === observation.network &&
         row.language === observation.language && row.format === observation.format && row.metricEvidence === 'direct_public_feed' &&
-        Number.isSafeInteger(row.views) && row.views >= 0 && Math.abs(row.ageHours - observation.ageHours) <= 1 &&
-        Date.parse(row.observedAt) <= Date.parse(observation.observedAt)) baselines.set(row.videoId, row.views);
+        Number.isSafeInteger(row.views) && row.views >= 0 && Date.parse(row.publishedAt) <= Date.parse(row.observedAt) &&
+        Math.abs((Date.parse(row.observedAt) - Date.parse(row.publishedAt)) / HOUR - measuredAge) <= 1 &&
+        Date.parse(row.observedAt) <= observedAt) baselines.set(row.videoId, row.views);
   }
   if (baselines.size < 5) return { ...result, status: 'five_same_context_baselines_required' };
   const reference = median([...baselines.values()]);

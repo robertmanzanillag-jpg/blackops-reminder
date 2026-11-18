@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, readdir, realpath, rm, stat, symlink } from 'node:fs/promises';
+import { mkdtemp, readFile, readdir, realpath, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import {
@@ -39,6 +39,7 @@ test('feed transport rejects SSRF, credentials, ports, encoded paths, query poll
     'https://www.youtube.com/%66eeds/videos.xml?channel_id=' + creator.channelId,
     feedUrl(creator.channelId) + '&url=http://localhost', feedUrl(creator.channelId) + '&channel_id=' + creator.channelId,
     feedUrl(creator.channelId) + '#x',
+    feedUrl(creator.channelId) + '#',
   ]) assert.throws(() => assertFeedUrl(url));
 });
 
@@ -105,6 +106,11 @@ test('velocity requires two actual same-video snapshots at least one hour apart 
   assert.equal(classifyDiscovery(row, [{ ...earlier, observedAt: '2026-11-18T09:30:00Z' }]).viewsPerHour, null);
   assert.equal(classifyDiscovery(row, [{ ...earlier, observedAt: '2026-11-19T09:00:00Z' }]).viewsPerHour, null);
   assert.equal(classifyDiscovery(row, [{ ...earlier, views: 41 }]).viewsPerHour, null);
+  const resetRow = { ...row, publishedAt: '2026-11-18T07:00:00Z' };
+  assert.equal(classifyDiscovery(resetRow, [
+    { ...earlier, publishedAt: resetRow.publishedAt, observedAt: '2026-11-18T08:00:00Z', views: 5 },
+    { ...earlier, publishedAt: resetRow.publishedAt, views: 41 },
+  ]).viewsPerHour, null);
   assert.equal(classifyDiscovery(row, [{ ...earlier, metricEvidence: 'reported_only' }]).viewsPerHour, null);
   assert.equal(classifyDiscovery(row, [{ ...earlier, publishedAt: '2026-11-17T09:00:00Z' }]).viewsPerHour, null);
 });
@@ -114,10 +120,11 @@ test('comparison requires five unique videos from same channel, language, format
   const baseline = Array.from({ length: 5 }, (_, i) => ({ ...row, videoId: `baseline00${i}`, views: 10 }));
   assert.equal(classifyDiscovery(row, baseline).outlierRatio, 4);
   assert.equal(classifyDiscovery(row, [...baseline.slice(0, 4), baseline[0]]).outlierRatio, null);
-  for (const delta of [{ channelId: 'other' }, { language: 'en' }, { format: 'short' }, { ageHours: row.ageHours + 2 }]) {
+  for (const delta of [{ channelId: 'other' }, { language: 'en' }, { format: 'short' }, { publishedAt: '2026-11-18T06:00:00Z' }]) {
     assert.equal(classifyDiscovery(row, baseline.map(item => ({ ...item, ...delta }))).outlierRatio, null);
   }
   assert.equal(classifyDiscovery({ ...row, format: 'unknown' }, baseline).status, 'comparison_context_unknown');
+  assert.equal(classifyDiscovery(row, baseline.map(item => ({ ...item, publishedAt: '2026-11-19T09:00:00Z' }))).outlierRatio, null);
 });
 
 test('daily receipt is private, durable and idempotent; incomplete feeds persist truthful status with zero eligible assets', async () => {
@@ -132,6 +139,11 @@ test('daily receipt is private, durable and idempotent; incomplete feeds persist
     assert.equal(JSON.parse(await readFile(first.receiptFile, 'utf8')).observations[0].views, 40);
     const replay = await runPortfolioDiscovery({ stateDir: dir, now: NOW, creatorIds: [creator.id], fetchImpl });
     assert.equal(replay.reused, true); assert.equal(replay.networkRequestsThisInvocation, 0); assert.equal(calls, 1);
+    const original = await readFile(first.receiptFile, 'utf8');
+    await writeFile(first.receiptFile, JSON.stringify({ ...JSON.parse(original), permission: 'approved', mayPublish: true }));
+    await assert.rejects(runPortfolioDiscovery({ stateDir: dir, now: NOW, creatorIds: [creator.id], fetchImpl }), /invalid_discovery_receipt/);
+    assert.equal(calls, 1);
+    await writeFile(first.receiptFile, original);
     const next = await runPortfolioDiscovery({ stateDir: dir, now: new Date(+NOW + 86_400_000), creatorIds: [creator.id],
       fetchImpl: async () => response('', { status: 429 }) });
     assert.equal(next.feeds[0].status, 'unavailable'); assert.equal(next.feeds[0].reason, 'feed_throttled');
