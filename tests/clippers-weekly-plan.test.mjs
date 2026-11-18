@@ -55,3 +55,14 @@ test('past scheduled rows require reconciliation; confirmed publications count t
  assert.equal(planClippersWeek(b).cells[0].reason,'past_schedule_requires_publication_confirmation');
  b.snapshots[0].posts[0].status='published';const c=planClippersWeek(b).cells[0];assert.equal(c.providerConfirmedCount,1);assert.equal(c.deficit,4);assert.equal(c.proposedSlots.length,4);
 });
+test('stable provider ID moved across days holds both cells, but separate destinations may share IDs',()=>{
+ const b=base();b.snapshots[0].posts=[post(12,'stable')];b.snapshots[1].posts=[{...post(12,'stable'),scheduledAt:newYorkSlot(days[1],12)}];
+ let p=planClippersWeek(b);for(const c of p.cells.slice(0,2)){assert.equal(c.reason,'provider_post_cross_day_identity_conflict');assert.equal(c.deficit,null);assert.equal(c.providerConfirmedCount,null);assert.equal(c.proposedSlots.length,0);}
+ assert.equal(p.coverageComplete,false);assert.equal(p.unknownCells,2);assert.equal(p.providerConfirmedCount,0);
+ b.snapshots[1].posts=[];b.snapshots[5].posts=[post(12,'stable',DESTINATIONS[1])];p=planClippersWeek(b);assert.equal(p.coverageComplete,true);assert.equal(p.providerConfirmedCount,2);
+});
+test('evidence digests must be strings, not coercible arrays',()=>{
+ const b=base();b.snapshots[0].evidenceSha256=[sha];assert.equal(planClippersWeek(b).cells[0].reason,'provider_snapshot_unverified_or_stale');
+ b.snapshots[0].evidenceSha256=sha;b.snapshots[0].posts=[{...post(12),confirmationSha256:[sha]}];assert.equal(planClippersWeek(b).cells[0].reason,'provider_snapshot_row_invalid');
+ assert.equal(planClippersWeek({now}).coverageComplete,false);
+});

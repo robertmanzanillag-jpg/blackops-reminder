@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T13:19:56.612Z
+Generated: 2026-11-18T13:25:21.049Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-plan-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1205 | 1102 | 4401 | 623 | 25003 |
+| 1205 | 1102 | 4401 | 623 | 25005 |
 
 ## Entrypoints
 - `client/src/App.tsx`

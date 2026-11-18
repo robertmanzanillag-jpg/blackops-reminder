@@ -3,6 +3,7 @@ import { DESTINATIONS, DAILY_LIMIT, TIME_ZONE, destinationKey, findDestination, 
 
 const HOUR = 3600000;
 const SHA = /^[a-f0-9]{64}$/;
+const isSha = value => typeof value === 'string' && SHA.test(value);
 const iso = value => providerTimestamp(value);
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const parts = time => Object.fromEntries(new Intl.DateTimeFormat('en-CA', {
@@ -25,7 +26,7 @@ export function newYorkSlot(day, hour) {
 }
 function normalizedSnapshot(snapshot, destination, day, now, maxAgeMs) {
   if (!snapshot) return { reason: 'provider_snapshot_missing' };
-  if (snapshot.status !== 'verified' || snapshot.complete !== true || !SHA.test(snapshot.evidenceSha256 ?? '') ||
+  if (snapshot.status !== 'verified' || snapshot.complete !== true || !isSha(snapshot.evidenceSha256) ||
       !iso(snapshot.observedAt) || +new Date(snapshot.observedAt) > now || now - +new Date(snapshot.observedAt) > maxAgeMs ||
       !Array.isArray(snapshot.posts) || snapshot.posts.length > 100) return { reason: 'provider_snapshot_unverified_or_stale' };
   const unique = new Map();
@@ -33,7 +34,7 @@ function normalizedSnapshot(snapshot, destination, day, now, maxAgeMs) {
     if (!row || !findDestination(row.destination) || destinationKey(row.destination) !== destinationKey(destination) ||
         typeof row.providerPostId !== 'string' || !/^[A-Za-z0-9_-]{1,160}$/.test(row.providerPostId) ||
         !iso(row.scheduledAt) || localDay(new Date(row.scheduledAt)) !== day ||
-        !['scheduled', 'published'].includes(row.status) || !SHA.test(row.confirmationSha256 ?? '')) return { reason: 'provider_snapshot_row_invalid' };
+        !['scheduled', 'published'].includes(row.status) || !isSha(row.confirmationSha256)) return { reason: 'provider_snapshot_row_invalid' };
     if (row.status === 'scheduled' && +new Date(row.scheduledAt) <= now) return { reason: 'past_schedule_requires_publication_confirmation' };
     if (row.status === 'published' && +new Date(row.scheduledAt) > now) return { reason: 'provider_snapshot_row_invalid' };
     const normalized = { providerPostId: row.providerPostId, scheduledAt: iso(row.scheduledAt), status: row.status, confirmationSha256: row.confirmationSha256 };
@@ -90,8 +91,17 @@ export function planClippersWeek({ now, startDate, endDate, snapshots = [], rese
       proposedSlots: proposals.map(scheduledAt => ({ scheduledAt, status: 'proposal_only', requires: ['exact_slot_owner_reviewed_asset', 'current_render_and_media_receipts', 'rights_valid_through_publication', 'source_fresh_at_publication', 'live_provider_preflight'] })),
       readyAssetsVerified: null, schedulingWritesPerformed: 0 });
   }
+  // A stable provider ID cannot cover two calendar days in one exact destination.
+  const identityCells = new Map();
+  for (const cell of cells) for (const id of cell.providerPostIds) {
+    const key = destinationKey(cell.destination) + ':' + id;
+    const prior = identityCells.get(key);
+    if (prior && prior !== cell) {
+      for (const affected of [prior, cell]) Object.assign(affected, { status: 'held', reason: 'provider_post_cross_day_identity_conflict', providerConfirmedCount: null, distinctLocalHours: null, deficit: null, proposedSlots: [] });
+    } else identityCells.set(key, cell);
+  }
   const report = { schema: 1, generatedAt: iso(now), timeZone: TIME_ZONE, startDate: start, endDate: end, dailyLimitPerDestination: DAILY_LIMIT,
-    targetPosts: cells.length * DAILY_LIMIT, providerConfirmedCount: cells.reduce((n, c) => n + (c.providerConfirmedCount ?? 0), 0),
+    targetPosts: cells.length * DAILY_LIMIT, coverageComplete: cells.every(c => c.deficit !== null), providerConfirmedCount: cells.reduce((n, c) => n + (c.providerConfirmedCount ?? 0), 0),
     knownDeficit: cells.reduce((n, c) => n + (c.deficit ?? 0), 0), unknownCells: cells.filter(c => c.deficit === null).length,
     proposedCount: cells.reduce((n, c) => n + c.proposedSlots.length, 0), disconnectedDestinations: [{ brandId: 6595747, reason: 'network_not_verified' }],
     modelCostUsd: 0, providerWrites: 0, mayPublish: false, cells };

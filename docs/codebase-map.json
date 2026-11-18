@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T13:19:56.612Z",
+  "generatedAt": "2026-11-18T13:25:21.049Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-plan-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -128,30 +128,9 @@
     "filesIndexed": 1102,
     "imports": 4401,
     "routes": 623,
-    "symbols": 25003
+    "symbols": 25005
   },
   "directories": {
-    "docs": {
-      "files": 74,
-      "indexed": 72,
-      "kinds": {
-        "docs": 74
-      }
-    },
-    "script": {
-      "files": 132,
-      "indexed": 119,
-      "kinds": {
-        "script": 132
-      }
-    },
-    "tests": {
-      "files": 317,
-      "indexed": 313,
-      "kinds": {
-        "test": 317
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -223,12 +202,26 @@
         "client-page": 28
       }
     },
+    "docs": {
+      "files": 74,
+      "indexed": 72,
+      "kinds": {
+        "docs": 74
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 132,
+      "indexed": 119,
+      "kinds": {
+        "script": 132
       }
     },
     "script/release-gate": {
@@ -278,6 +271,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 317,
+      "indexed": 313,
+      "kinds": {
+        "test": 317
       }
     },
     "tests/fixtures": {
@@ -11258,6 +11258,8 @@
         "deficit",
         "digest",
         "holds",
+        "identityCells",
+        "isSha",
         "iso",
         "key",
         "newYorkSlot",
