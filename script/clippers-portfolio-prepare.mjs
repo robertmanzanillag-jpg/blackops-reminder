@@ -252,8 +252,16 @@ async function renderAndApprove(root, id, now, renderer) {
     thirdPartyCommercial: packet.thirdPartyCommercial,
     sourcePublishedAt: rights.sourcePublishedAt, rightsObservedAt: rights.observedAt, rightsValidUntil: rights.validUntil };
   if (!(await renderer.confirmedRenderReceipt(root, asset, destination))) throw Error('render_receipt_unconfirmed');
+  let creatorSelectionHeld;
+  if (request.creatorSelection !== undefined) {
+    const { normalizeCreatorContext } = await import('./clippers-creator-routing.mjs');
+    const { resolveCreatorChannel } = await import('../shared/clippers-priority-creators.mjs');
+    const normalized = normalizeCreatorContext(request.creatorSelection, asset, resolveCreatorChannel);
+    if (normalized) asset.creatorSelection = normalized;
+    else creatorSelectionHeld = 'creator_context_not_reviewed';
+  }
   const bytes = await media(root, asset.draftFile, asset.mediaSha256);
-  return { packet, request, asset, bytes, destination };
+  return { packet, request, asset, bytes, destination, creatorSelectionHeld };
 }
 
 async function appendSchedulerInput(root, approved, uploaded) {
@@ -264,6 +272,7 @@ async function appendSchedulerInput(root, approved, uploaded) {
     sourcePublishedAt: result.sourcePublishedAt, mediaSha256: result.mediaSha256, mediaUrl: result.mediaUrl,
     caption: result.caption, policyVersion: result.policyVersion, scheduledAt: result.scheduledAt,
     renderReceiptSha256: result.renderReceiptSha256, experiment: result.experiment ?? null,
+    ...(asset.creatorSelection ? { creatorSelection: asset.creatorSelection } : {}),
     rightsObservedAt: result.rightsObservedAt, rightsValidUntil: result.rightsValidUntil,
     thirdPartyCommercial: result.thirdPartyCommercial, commercialPermission: request.rights.commercialPermission,
     termsUrl: request.rights.termsUrl, sourceScope: request.rights.sourceScope, rightsBasis: request.rights.basis,
@@ -412,7 +421,7 @@ export async function runClippersPortfolioPrepare({ workspaceRoot, now = new Dat
         entry.mediaUrl = url; entry.status = 'ready'; entry.verifiedAt = now.toISOString();
         await save(root, ledgerFile, state);
         await appendSchedulerInput(root, approved, entry); prepared++;
-        outcomes.push({ id, destination: approved.destination, status: 'prepared', renderReceiptSha256: approved.asset.renderReceiptSha256 });
+        outcomes.push({ id, destination: approved.destination, status: 'prepared', renderReceiptSha256: approved.asset.renderReceiptSha256, ...(approved.creatorSelectionHeld ? { creatorSelectionHeld: approved.creatorSelectionHeld } : {}) });
       } catch (error) {
         const reason = ['reviewed_prepare_packet_required', 'prepare_schedule_outside_rights', 'reviewed_render_output_changed', 'render_receipt_unconfirmed',
           'portfolio_media_changed', 'owner_private_file_required', 'scheduler_worker_busy', 'approved_asset_conflict', 'portfolio_media_receipt_conflict', 'prepare_time_budget_reached',

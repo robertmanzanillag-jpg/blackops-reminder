@@ -110,6 +110,9 @@ REQUIRED_RUNTIME_FILES=(
   script/run-clippers-youtube-delivery-worker.sh
   script/clippers-daily-watchdog.mjs
   script/clippers-daily-learning.mjs
+  script/clippers-creator-selection.mjs
+  script/clippers-creator-routing.mjs
+  shared/clippers-priority-creators.mjs
   script/clippers-portfolio-metricool.mjs
   script/clippers-portfolio-render.mjs
   script/clippers-portfolio-discovery.mjs

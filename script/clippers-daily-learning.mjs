@@ -5,6 +5,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadClipperSelectedEnv } from './clippers-selected-env.mjs';
 import { confirmedRenderReceipt, readPortfolioRenderManifest } from './clippers-portfolio-render.mjs';
+import { createClippersCreatorRouting } from './clippers-creator-routing.mjs';
 import {
   createPortfolioMetricool, DAILY_LIMIT, DESTINATIONS, DISCONNECTED_BRAND, destinationKey,
   exactPost, findDestination, localDay, providerTimestamp,
@@ -127,6 +128,7 @@ async function approvedItem(raw, root, now, receipts, state) {
     mediaSha256, thirdPartyCommercial, evidenceSha256 } = raw;
   return { ...destination, id, campaignId, sourceId, sourceUrl, creator, language, policyVersion, experiment,
     caption, mediaUrl, mediaSha256, thirdPartyCommercial, evidenceSha256, renderProof, scheduledAt,
+    draftFile: raw.draftFile, renderReceiptSha256: raw.renderReceiptSha256,
     rightsEvidence: { reviewedBy: evidence.reviewedBy, termsUrl: evidence.termsUrl, rightsBasis: evidence.rightsBasis,
       membership: evidence.membership, rightsObservedAt, rightsValidUntil, sourcePublishedAt: publishedAt } };
 }
@@ -367,6 +369,21 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
       ...scopedMedia.filter(row => findDestination(row) && SHA.test(row.renderReceiptSha256 ?? ''))];
     const legacy = await optionalArray(path.join(workspaceRoot, 'reports', 'metricool-autopilot-ledger.json'));
     const outcomes = [];
+    const checked = new Map();
+    const duplicateAssetKeys = new Set(configured.assets.filter((a,i)=>findDestination(a)&&configured.assets.some((b,j)=>i!==j&&findDestination(b)&&destinationKey(a)===destinationKey(b)&&a.id===b.id)).map(a=>destinationKey(a)+':'+a.id));
+    for (const raw of configured.assets) {
+      if (!withinBudget()) { counts.timeBudgetReached = true; break; }
+      if (!findDestination(raw) || duplicateAssetKeys.has(destinationKey(raw)+':'+raw.id)) continue;
+      const item = await approvedItem(raw, workspaceRoot, new Date(+now + performance.now() - startedAt), authorized, state);
+      checked.set(raw,item);
+    }
+    let creatorRouting;
+    let creatorSelection = { schemaVersion: 1, evaluatedAt: now.toISOString(), contexts: 0, assigned: null,
+      paidSpendUsd: 0, allowedUse: 'ready_asset_order_only', preferences: [], heldReasons: ['creator_routing_unavailable'] };
+    try {
+      creatorRouting = await createClippersCreatorRouting({workspaceRoot,state,readyAssets:[...checked.values()].filter(Boolean),now});
+      creatorSelection = creatorRouting.report;
+    } catch { /* Missing/invalid creator evidence never changes legacy publication authorization. */ }
     for (const destination of DESTINATIONS) {
       const key = destinationKey(destination);
       let eligible = 0;
@@ -375,9 +392,19 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
       const blockers = new Set();
       const scopedAssets = configured.assets.filter(item => findDestination(item) && destinationKey(item) === key)
         .sort((a, b) => (Date.parse(b.sourcePublishedAt) || 0) - (Date.parse(a.sourcePublishedAt) || 0));
-      for (const raw of scopedAssets) {
-        const item = await approvedItem(raw, workspaceRoot, new Date(+now + performance.now() - startedAt), authorized, state);
+      const orderedAssets = creatorRouting ? creatorRouting.order(scopedAssets) : scopedAssets;
+      for (const raw of orderedAssets) {
+        let item = checked.get(raw);
+        if (item && configured.publish === true && adapter) {
+          if (!withinBudget()) { counts.timeBudgetReached = true; break; }
+          item = await approvedItem(raw, workspaceRoot, new Date(+now + performance.now() - startedAt), authorized, state);
+        }
         if (!item) { blockers.add('asset_rights_media_or_scope_unverified'); continue; }
+        const dispatchNow = +now + performance.now() - startedAt;
+        if (Date.parse(item.scheduledAt) < dispatchNow + 5*60_000 ||
+            dispatchNow - Date.parse(item.rightsEvidence.rightsObservedAt) > 24*HOUR) {
+          blockers.add('asset_review_or_schedule_expired_during_cycle'); continue;
+        }
         if (state.deliveries.some(row => deliveryCollision(row, item)) ||
             legacy.some(row => Number(row.metricoolBlogId) === item.brandId &&
               String(row.account ?? '').replace(/^@/, '').toLowerCase() === item.account &&
@@ -393,7 +420,10 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
         }
         try { await adapter.preflight(destination, item); }
         catch { blockers.add('metricool_preflight_blocked'); continue; }
-        const record = { ...item, createdAt: now.toISOString(), status: 'verification_pending', costUsd: 0 };
+        let creatorAssignmentSha256;
+        try { creatorAssignmentSha256 = await creatorRouting?.assign(item); }
+        catch { blockers.add('creator_assignment_unavailable'); }
+        const record = { ...item, ...(creatorAssignmentSha256 ? {creatorAssignmentSha256} : {}), createdAt: now.toISOString(), status: 'verification_pending', costUsd: 0 };
         state.deliveries.push(record);
         await save(statePath, state);
         try {
@@ -410,11 +440,12 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
       outcomes.push({ ...destination, target: DAILY_LIMIT, eligible, confirmedScheduledOrPublished: confirmed,
         shortfall: Math.max(0, DAILY_LIMIT - confirmed), blockers: [...blockers] });
     }
+    try { if (creatorRouting) creatorSelection = await creatorRouting.flush(); } catch { creatorSelection.heldReasons.push('creator_report_write_unavailable'); }
     const report = {
       schemaVersion: 1, date, generatedAt: now.toISOString(), paidSpendUsd: 0, ...counts,
       status: outcomes.some(row => row.shortfall > 0) ? 'held_or_partial' : 'completed',
       destinations: outcomes, disconnected: [{ brandId: DISCONNECTED_BRAND, reason: 'destination_not_connected' }],
-      observations: state.observations.length, missedSnapshots: missedSnapshots(state, now),
+      creatorSelection, observations: state.observations.length, missedSnapshots: missedSnapshots(state, now),
       proposalCount: proposals.length, proposals, qualifiedCandidates: qualifiedCandidates(state, proposals), versions: exportedVersionState(state),
       automaticPromotion: false, rendererPolicyBinding: 'required_for_experiments_and_candidate_versions',
     };

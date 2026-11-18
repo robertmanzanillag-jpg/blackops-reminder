@@ -20,7 +20,7 @@ const CONFIG = 'config/clippers-daily-learning';
 const REPORT = 'reports/clippers-daily-learning';
 const hasTools = ['ffmpeg', 'ffprobe'].every(cmd => spawnSync(cmd, ['-version']).status === 0);
 
-async function fixture(t, targets = [DESTINATIONS[0]]) {
+async function fixture(t, targets = [DESTINATIONS[0]], creatorSelection) {
   const root = await realpath(await mkdtemp(path.join(os.tmpdir(), 'portfolio-prepare-')));
   t.after(() => rm(root, { recursive: true, force: true }));
   const write = async (relative, data) => {
@@ -43,13 +43,14 @@ async function fixture(t, targets = [DESTINATIONS[0]]) {
         membership: 'not_required', ownership: 'verified', sourcePublishedAt: '2026-11-18T13:00:00.000Z',
         observedAt: '2026-11-18T14:00:00.000Z', validUntil: '2026-11-19T15:00:00.000Z',
         permittedNetworks: [destination.network], thirdPartyCommercial: false } };
+    if (creatorSelection !== undefined) request.creatorSelection = creatorSelection;
     await write(`${CONFIG}/render-requests/${id}.json`, request);
     const rendered = await renderClippersPortfolio({ workspaceRoot: root, requestId: id, now });
     const packet = { schemaVersion: 1, id, destination, renderRequestSha256: digest(request),
       renderReceiptSha256: rendered.receiptSha256, outputSha256: rendered.outputSha256,
       publicUploadAuthorized: true, schedulerAssetAuthorized: true, reviewedBy: 'media-reviewer',
-      campaignId: 'owned-fixture', sourceId: 'source-' + index, sourceUrl: 'https://example.com/original/' + index,
-      creator: 'original-owner', language: 'en', caption: 'Original fixture ' + index,
+      campaignId: 'owned-fixture', sourceId: 'source-' + index, sourceUrl: creatorSelection ? 'https://www.youtube.com/watch?v=aaaaaaaaaaa' : 'https://example.com/original/' + index,
+      creator: creatorSelection ? 'mrbeast' : 'original-owner', language: 'en', caption: 'Original fixture ' + index,
       scheduledAt: '2026-11-18T17:00:00.000Z', thirdPartyCommercial: false, quality: 'passed',
       originalEdit: 'verified', disclosure: 'verified', authorizedSpendUsd: 0, providerIncrementalCostUsd: 0 };
     await write(`${CONFIG}/prepare-requests/${id}.json`, packet);
@@ -252,4 +253,16 @@ test('public verification rejects wrong bytes, HTML and redirects outside Google
     calls++; return new Response(null, { status: 302, headers: { location: 'https://evil.example/content.mp4' } });
   }), false);
   assert.equal(calls, 1);
+});
+
+test('reviewed render-request creator context reaches hash-bound evidence without granting publication', { skip: !hasTools }, async t => {
+ const m={format:'vertical_clip',context:'streamer_clip',channelId:'UCX6OQ3DkcsbYNE6H8uQQuVA',sourceVideoId:'aaaaaaaaaaa',postingBand:'12:00',timezone:'America/New_York',windowHours:24};const f=await fixture(t,[DESTINATIONS[0]],m);const r=await f.run();assert.equal(r.prepared,1);
+ const input=JSON.parse(await readFile(path.join(f.root,CONFIG,'approved-input.json')));const evidence=JSON.parse(await readFile(path.join(f.root,CONFIG,'evidence',input.assets[0].evidenceSha256+'.json')));assert.deepEqual(evidence.creatorSelection,m);assert.equal(digest(evidence),input.assets[0].evidenceSha256);assert.equal(input.publish,false);assert.equal(input.collect,false);
+});
+test('malformed optional creator context remains unmeasured and preserves otherwise authorized legacy preparation', { skip: !hasTools }, async t => {
+ const m={format:'vertical_clip',context:'streamer_clip',channelId:'UCX6OQ3DkcsbYNE6H8uQQuVA',sourceVideoId:'aaaaaaaaaaa',postingBand:'13:00',timezone:'America/New_York',windowHours:24};const f=await fixture(t,[DESTINATIONS[0]],m);const r=await f.run();assert.equal(r.prepared,1);assert.equal(r.outcomes[0].creatorSelectionHeld,'creator_context_not_reviewed');const input=JSON.parse(await readFile(path.join(f.root,CONFIG,'approved-input.json')));const evidence=JSON.parse(await readFile(path.join(f.root,CONFIG,'evidence',input.assets[0].evidenceSha256+'.json')));assert.equal(evidence.creatorSelection,undefined);assert.equal(input.publish,false);
+});
+
+test('changing optional creator metadata after rendering cannot relabel a reviewed cached render', { skip: !hasTools }, async t => {
+ const m={format:'vertical_clip',context:'streamer_clip',channelId:'UCX6OQ3DkcsbYNE6H8uQQuVA',sourceVideoId:'aaaaaaaaaaa',postingBand:'12:00',timezone:'America/New_York',windowHours:24};const f=await fixture(t,[DESTINATIONS[0]],m),p=f.packets[0];p.request.creatorSelection.context='different_context';p.packet.renderRequestSha256=digest(p.request);await f.write(`${CONFIG}/render-requests/${p.packet.id}.json`,p.request);await f.write(`${CONFIG}/prepare-requests/${p.packet.id}.json`,p.packet);const r=await f.run();assert.equal(r.prepared,0);assert.equal(f.calls.upload,0);assert.equal(f.calls.public,0);
 });

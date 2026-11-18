@@ -7,6 +7,7 @@ import { build } from "esbuild";
 import express from "express";
 import { chromium } from "playwright";
 import { orchestraFixture } from "./fixtures/clippers-orchestra.mjs";
+import { ALL_DISCOVERY_CREATORS } from "../shared/clippers-priority-creators.mjs";
 import { launchOfficeUiFixture } from "../script/software-factory-office-ui-fixture.mjs";
 
 test("Clippers own area uses real evidence gates, expires activity, and protects the owner session", async t => {
@@ -46,6 +47,7 @@ test("Clippers own area uses real evidence gates, expires activity, and protects
   t.after(() => browser.close());
   for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
     payload = orchestraFixture(now); replyStatus = 200; verifiedId = "fixture-owner";
+    const oldSources=payload.discovery.sources;payload.discovery={...payload.discovery,catalogVersion:2,rotationSize:14,rotationDays:1,sources:ALL_DISCOVERY_CREATORS.map(c=>oldSources.find(row=>row.creatorId===c.id)??{creatorId:c.id,channelId:c.channelId,observedAt:null,status:'not_observed',heldReasons:['source_not_observed'],observations:0})};
     payload.roles[0].heldReasons = ["PRIVATE_REASON_CANARY_1234567890", "__proto__", "constructor"];
     payload.roles[0].outputs = JSON.parse('{"__proto__":0,"constructor":0}');
     payload.accounts[0].analytics = { status: "observed", observedAt: new Date(now).toISOString(), posts: 7, totalViews: 900, actualAgeHoursMin: 24, actualAgeHoursMax: 50, heldReasons: [] };
@@ -92,17 +94,26 @@ test("Clippers own area uses real evidence gates, expires activity, and protects
     assert.equal((await measuredBucket.getByRole("cell").allTextContents()).filter(text => text === "0").length, 4, "measured zero engagement is retained");
     await page.screenshot({ path: path.join(artifacts, `clippers-fixture-accounts-${viewport.width}.png`), fullPage: true });
     await page.getByRole("tab", { name: "Fuentes y tendencias", exact: true }).click();
+    await page.getByText(/13 canales prioritarios y una exploración rotativa/).waitFor();
+    assert.equal(await page.getByText('Identidad del canal de origen',{exact:true}).count(),20);
     assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true);
     await page.getByText("Primera observación; crecimiento aún sin medir", { exact: true }).waitFor();
     await page.getByText("Derechos pendientes de revisión del propietario", { exact: true }).waitFor();
     await page.getByRole("tab", { name: "Aprendizaje", exact: true }).click();
     assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true);
     await page.getByTestId("clippers-no-improvements").waitFor();
-    assert.match(await dialog.innerText(), /No hay promoción automática/);
+    assert.match(await dialog.innerText(), /promoción de parámetros de edición requiere revisión manual/);
     payload.learning.comparisons = [{ id: "fixture-comparison", destination: payload.accounts[0].key, variable: "hook", baselineVersion: "baseline-1", candidateVersion: "candidate-2", controlSamples: 5, candidateSamples: 5, improvementRatio: 0.25, current: true, renderReceiptVerified: true, eligible: true, heldReasons: [] }];
     payload.learning.eligibleComparisons = 1;
+    payload.creatorSelection={evaluatedAt:new Date(now).toISOString(),contexts:1,assigned:30,heldReasons:[],preferences:[{scopeKey:'a'.repeat(64),destination:{brandId:6431685,network:'tiktok',account:'streamersclips'},language:'en',format:'vertical_clip',context:'streamer_clip',postingBand:'10:00',timezone:'America/New_York',windowHours:24,baselineCreatorGroupId:'mrbeast',preferredCreatorGroupId:'thegrefg',status:'preferred',reason:'three_disjoint_batches_qualified',eligibleSamples:30,expiresAt:new Date(now+45000).toISOString(),evidenceSha256:'b'.repeat(64)}]};
     await page.getByTestId("clippers-refresh").click();
     await page.getByText(/Comparación vigente · Elegible para revisión/).waitFor();
+    await page.getByText('Preferencia con evidencia: thegrefg',{exact:true}).waitFor();
+    await page.getByText('Tres cohortes independientes superaron los controles de rendimiento.',{exact:true}).waitFor();
+    await page.clock.fastForward(15000);
+    await page.getByText('Referencia sin preferencia vigente: mrbeast',{exact:true}).waitFor();
+    assert.equal(await page.getByText('Preferencia con evidencia: thegrefg',{exact:true}).count(),0,'clock expiry cannot leave a preference live');
+    payload.creatorSelection.preferences[0].status='baseline';payload.creatorSelection.preferences[0].reason='creator_preference_expired';payload.creatorSelection.preferences[0].preferredCreatorGroupId='mrbeast';
     await page.screenshot({ path: path.join(artifacts, `clippers-fixture-learning-${viewport.width}.png`), fullPage: true });
     await page.clock.fastForward(60_000);
     await page.getByText("Sin señal reciente verificada", { exact: true }).waitFor();
