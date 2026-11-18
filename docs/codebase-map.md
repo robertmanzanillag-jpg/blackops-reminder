@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T11:01:22.021Z
+Generated: 2026-11-18T11:04:03.472Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-private-replit-transport-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1191 | 1090 | 4353 | 623 | 24631 |
+| 1202 | 1098 | 4386 | 623 | 24910 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,13 +28,13 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 312 | 308 | test:312 |
+| `tests` | 315 | 311 | test:315 |
 | `server` | 280 | 274 | server:280 |
 | `client/src` | 155 | 153 | ui-component:55, client-component:46, client-page:28, client-lib:19 |
-| `script` | 129 | 116 | script:129 |
+| `script` | 131 | 118 | script:131 |
+| `docs` | 76 | 72 | docs:76 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 72 | 70 | docs:72 |
-| `shared` | 31 | 31 | shared:31 |
+| `shared` | 33 | 32 | shared:33 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
@@ -401,7 +401,9 @@ Package: `rest-express`
 - `script/clippers-cleanup-published-vyro-media.mjs` (script; 47 symbols, 4 imports)
 - `script/clippers-content-learning-ceo.mjs` (script; 85 symbols, 3 imports)
 - `script/clippers-content-local-worker.mjs` (script; 112 symbols, 10 imports)
-- `script/clippers-daily-learning.mjs` (script; 103 symbols, 8 imports)
+- `script/clippers-creator-routing.mjs` (script; 53 symbols, 8 imports)
+- `script/clippers-creator-selection.mjs` (script; 73 symbols, 1 imports)
+- `script/clippers-daily-learning.mjs` (script; 107 symbols, 9 imports)
 - `script/clippers-daily-watchdog.mjs` (script; 100 symbols, 6 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
 - `script/clippers-free-local-worker.mjs` (script; 45 symbols, 6 imports)
@@ -418,16 +420,14 @@ Package: `rest-express`
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-orchestra-analytics.mjs` (script; 23 symbols, 6 imports)
 - `script/clippers-orchestra-relay.mjs` (script; 6 symbols, 2 imports)
-- `script/clippers-orchestra-report.mjs` (script; 104 symbols, 7 imports)
+- `script/clippers-orchestra-report.mjs` (script; 115 symbols, 7 imports)
 - `script/clippers-orchestra-sender.mjs` (script; 41 symbols, 7 imports)
-- `script/clippers-portfolio-discovery.mjs` (script; 68 symbols, 6 imports)
+- `script/clippers-portfolio-discovery.mjs` (script; 94 symbols, 7 imports)
 - `script/clippers-portfolio-metricool.mjs` (script; 74 symbols, 1 imports)
-- `script/clippers-portfolio-prepare.mjs` (script; 102 symbols, 7 imports)
+- `script/clippers-portfolio-prepare.mjs` (script; 103 symbols, 7 imports)
 - `script/clippers-portfolio-render.mjs` (script; 77 symbols, 8 imports)
 - `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)
 - `script/clippers-reconcile-publications.mjs` (script; 74 symbols, 3 imports)
-- `script/clippers-record-owned-meme-rights.ts` (script; 10 symbols, 1 imports)
-- `script/clippers-record-owned-source-rights.mjs` (script; 88 symbols, 3 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

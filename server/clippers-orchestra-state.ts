@@ -67,6 +67,11 @@ export function createClippersOrchestraState(options:{owner:()=>string;store:()=
     for(const signal of report.discovery.signals){
       if(signal.label==='paired_growth_observed'&&(at-Date.parse(signal.observedAt)>72*3600000||!signal.previousObservedAt||at-Date.parse(signal.previousObservedAt)>72*3600000||at-Date.parse(signal.publishedAt)>72*3600000))signal.label='stale_reference';
     }
+    for(const preference of report.creatorSelection?.preferences??[]){
+      if(preference.status==='preferred'&&(!preference.expiresAt||Date.parse(preference.expiresAt)<=at)){
+        preference.status='baseline';preference.reason='creator_preference_expired';preference.preferredCreatorGroupId=preference.baselineCreatorGroupId;
+      }
+    }
     let company:CompanyState|undefined;try{company=await options.readCompany?.();}catch{}
     for(const role of report.roles){
       role.career=clippersCareerView(company,role.id);
