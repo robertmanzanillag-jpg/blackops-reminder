@@ -29,7 +29,7 @@ test('native macOS helper compiles and runs only its synthetic dependency-inject
     const output = path.join(temporary, 'synthetic-reader');
     await exec('/usr/bin/xcrun', ['swiftc', '-D', 'CLIPPERS_KEYCHAIN_TEST', '-framework', 'Security', source.pathname, '-o', output], {timeout:30_000, maxBuffer:1_000_000});
     const result = await exec(output, [], {timeout:3000, maxBuffer:8192, env:{PATH:'/usr/bin:/bin'}});
-    assert.deepEqual(JSON.parse(result.stdout), {syntheticTestsPassed:24,realKeychainQueries:0,realKeychainWrites:0});
+    assert.deepEqual(JSON.parse(result.stdout), {syntheticTestsPassed:30,realKeychainQueries:0,realKeychainWrites:0});
     assert.equal(result.stderr, '');
   } finally {await rm(temporary,{recursive:true,force:true});}
 });
@@ -39,7 +39,9 @@ test('setup is explicit user-only secure input with one exact-app ACL, add-only 
   const text=await readFile(source,'utf8');
   assert.ok(text.includes('CommandLine.arguments[1] == "--setup"'));
   assert.ok(text.includes('NSSecureTextField'));
-  assert.ok(text.includes('SecTrustedApplicationCreateFromPath'));
+  assert.ok(text.includes('SecTrustedApplicationCreateFromPath(nil, &trusted)'));
+  assert.ok(text.includes('O_RDONLY | O_NOFOLLOW | O_NONBLOCK'));
+  assert.ok(text.includes('sameBinaryFile(before, current)'));
   assert.ok(text.includes('[application] as CFArray'));
   assert.ok(text.includes('errSecDuplicateItem'));
   assert.ok(text.includes('current.1 == expected.1'));

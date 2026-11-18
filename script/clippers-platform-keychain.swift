@@ -1,9 +1,9 @@
 import Foundation
 import Security
 import Darwin
+import CryptoKit
 #if !CLIPPERS_KEYCHAIN_TEST
 import AppKit
-import CryptoKit
 #endif
 
 // Default reader: one fixed item, no writes, unlocks, ACL edits or UI.
@@ -80,6 +80,37 @@ func createPlatformCredential(
     return "unavailable"
 }
 
+func sameBinaryFile(_ a: stat, _ b: stat) -> Bool {
+    a.st_dev == b.st_dev && a.st_ino == b.st_ino && a.st_uid == b.st_uid &&
+    a.st_mode == b.st_mode && a.st_nlink == b.st_nlink && a.st_size == b.st_size &&
+    a.st_mtimespec.tv_sec == b.st_mtimespec.tv_sec && a.st_mtimespec.tv_nsec == b.st_mtimespec.tv_nsec &&
+    a.st_ctimespec.tv_sec == b.st_ctimespec.tv_sec && a.st_ctimespec.tv_nsec == b.st_ctimespec.tv_nsec
+}
+
+func privateBinaryDigest(_ path: String) -> String? {
+    guard URL(fileURLWithPath: path).resolvingSymlinksInPath().path == path else { return nil }
+    let descriptor = open(path, O_RDONLY | O_NOFOLLOW | O_NONBLOCK)
+    guard descriptor >= 0 else { return nil }
+    defer { close(descriptor) }
+    var before = stat()
+    let maximum = 25 * 1024 * 1024
+    guard fstat(descriptor, &before) == 0, before.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
+          before.st_mode & 0o777 == 0o700, before.st_uid == getuid(), before.st_nlink == 1,
+          before.st_size >= 0, before.st_size <= maximum else { return nil }
+    var bytes = Data(), buffer = [UInt8](repeating: 0, count: 65536)
+    while bytes.count <= maximum {
+        let count = read(descriptor, &buffer, min(buffer.count, maximum + 1 - bytes.count))
+        if count < 0 { return nil }
+        if count == 0 { break }
+        bytes.append(contentsOf: buffer.prefix(count))
+    }
+    guard bytes.count <= maximum else { return nil }
+    var after = stat(), current = stat()
+    guard fstat(descriptor, &after) == 0, lstat(path, &current) == 0,
+          sameBinaryFile(before, after), sameBinaryFile(before, current) else { return nil }
+    return SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+}
+
 #if !CLIPPERS_KEYCHAIN_TEST
 func setupReaderIdentity() -> (String, String)? {
     let expected = FileManager.default.homeDirectoryForCurrentUser
@@ -90,17 +121,15 @@ func setupReaderIdentity() -> (String, String)? {
     guard _NSGetExecutablePath(&buffer, &size) == 0 else { return nil }
     let running = URL(fileURLWithPath: String(cString: buffer)).resolvingSymlinksInPath().path
     let file = URL(fileURLWithPath: expected)
-    var info = stat()
     guard running == expected, file.resolvingSymlinksInPath().path == expected,
-          lstat(expected, &info) == 0, info.st_mode & mode_t(S_IFMT) == mode_t(S_IFREG),
-          info.st_mode & 0o777 == 0o700, info.st_uid == getuid(), info.st_nlink == 1,
-          let bytes = try? Data(contentsOf: file, options: .mappedIfSafe) else { return nil }
-    return (expected, SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined())
+          let digest = privateBinaryDigest(expected) else { return nil }
+    return (expected, digest)
 }
 
 func exactReaderAccess(_ path: String) -> CFTypeRef? {
     var trusted: SecTrustedApplication?
-    guard path.withCString({ SecTrustedApplicationCreateFromPath($0, &trusted) }) == errSecSuccess,
+    guard setupReaderIdentity()?.0 == path,
+          SecTrustedApplicationCreateFromPath(nil, &trusted) == errSecSuccess,
           let application = trusted else { return nil }
     var access: SecAccess?
     // Explicit single application; never nil/all-apps or an interpreter.
@@ -146,7 +175,7 @@ final class PlatformSetup: NSObject, NSApplicationDelegate, NSWindowDelegate {
             guard let current = setupReaderIdentity(), current.0 == expected.0, current.1 == expected.1 else { return nil }
             return current.0
         }, exactAccess: exactReaderAccess, addItem: { SecItemAdd($0, nil) })
-        let messages = ["stored": "Guardado. Solo el lector mostrado puede acceder sin confirmación. Ya puedes cerrar.",
+        let messages = ["stored": "Guardado para el lector mostrado. macOS puede pedir aprobación normal. Ya puedes cerrar.",
             "already_exists": "Ya existe este elemento. No se sobrescribió ni modificó nada.",
             "unsafe_reader": "El lector cambió o no está verificado. No se guardó.",
             "invalid": "El valor no tiene el formato esperado. No se guardó.",
@@ -224,7 +253,23 @@ func runSyntheticTests() {
     precondition(createPlatformCredential(token: "bad", validatedReader: { preconditionFailure("invalid input must not authorize access") }, exactAccess: { _ in nil }, addItem: { _ in preconditionFailure("invalid input must not write") }) == "invalid")
     precondition(createPlatformCredential(token: synthetic, validatedReader: { nil }, exactAccess: { _ in nil }, addItem: { _ in preconditionFailure("unsafe reader must not write") }) == "unsafe_reader")
     precondition(createPlatformCredential(token: synthetic, validatedReader: { "/synthetic/reviewed-reader" }, exactAccess: { _ in nil }, addItem: { _ in preconditionFailure("missing exact ACL must not write") }) == "unsafe_reader")
-    print("{\"syntheticTestsPassed\":24,\"realKeychainQueries\":0,\"realKeychainWrites\":0}")
+    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
+    try! FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    let file = temporary.appendingPathComponent("synthetic-reader").path
+    FileManager.default.createFile(atPath: file, contents: Data("public-code-only".utf8), attributes: [.posixPermissions: 0o700])
+    precondition(privateBinaryDigest(file) != nil)
+    chmod(file, 0o644); precondition(privateBinaryDigest(file) == nil); chmod(file, 0o700)
+    let alias = temporary.appendingPathComponent("alias").path
+    precondition(symlink(file, alias) == 0 && privateBinaryDigest(alias) == nil)
+    let fifo = temporary.appendingPathComponent("fifo").path
+    precondition(mkfifo(fifo, 0o700) == 0 && privateBinaryDigest(fifo) == nil)
+    let linked = temporary.appendingPathComponent("linked").path
+    precondition(link(file, linked) == 0 && privateBinaryDigest(file) == nil); unlink(linked)
+    let descriptor = open(file, O_WRONLY)
+    precondition(descriptor >= 0 && ftruncate(descriptor, 25 * 1024 * 1024 + 1) == 0); close(descriptor)
+    precondition(privateBinaryDigest(file) == nil)
+    print("{\"syntheticTestsPassed\":30,\"realKeychainQueries\":0,\"realKeychainWrites\":0}")
 }
 runSyntheticTests()
 #else
