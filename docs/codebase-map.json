@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T13:42:55.596Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-plan-20261118",
+  "generatedAt": "2026-11-18T14:13:28.694Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-v6-package-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,13 +124,27 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1220,
-    "filesIndexed": 1115,
-    "imports": 4469,
+    "filesVisible": 1228,
+    "filesIndexed": 1123,
+    "imports": 4492,
     "routes": 623,
-    "symbols": 25196
+    "symbols": 25337
   },
   "directories": {
+    "script/office-api-budget-v6": {
+      "files": 10,
+      "indexed": 8,
+      "kinds": {
+        "script": 10
+      }
+    },
+    "tests": {
+      "files": 323,
+      "indexed": 319,
+      "kinds": {
+        "test": 323
+      }
+    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -203,10 +217,10 @@
       }
     },
     "docs": {
-      "files": 80,
-      "indexed": 76,
+      "files": 76,
+      "indexed": 74,
       "kinds": {
-        "docs": 80
+        "docs": 76
       }
     },
     "examples/clippers-motivation": {
@@ -271,13 +285,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 321,
-      "indexed": 317,
-      "kinds": {
-        "test": 321
       }
     },
     "tests/fixtures": {
@@ -5888,22 +5895,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -12396,6 +12387,280 @@
         "hasExtension",
         "relative",
         "resolve"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/office-api-budget-v6/files/server/factory-api-context.ts",
+      "kind": "script",
+      "imports": [
+        "./software-factory-store",
+        "node:async_hooks"
+      ],
+      "exports": [
+        "currentFactoryApiParent",
+        "withFactoryApiParent"
+      ],
+      "symbols": [
+        "currentFactoryApiParent",
+        "storage",
+        "withFactoryApiParent"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/office-api-budget-v6/files/server/factory-api-invocation.ts",
+      "kind": "script",
+      "imports": [
+        "./factory-api-context",
+        "./software-factory-api-budget",
+        "./software-factory-store",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "FactoryApiBudgetError",
+        "FactoryApiPrice",
+        "FactoryApiUsage",
+        "apiEvidenceHash",
+        "configuredFactoryApiPrice",
+        "createFactoryApiInvocation",
+        "defaultFactoryApiInvocation",
+        "factoryApiAdmissionError",
+        "factoryApiPriceSchema"
+      ],
+      "symbols": [
+        "FactoryApiBudgetError",
+        "Store",
+        "actualMicroUsd",
+        "admissionCodes",
+        "apiEvidenceHash",
+        "catalogSchema",
+        "code",
+        "configuredFactoryApiPrice",
+        "context",
+        "cost",
+        "createFactoryApiInvocation",
+        "deadline",
+        "defaultFactoryApiInvocation",
+        "descriptor",
+        "elapsed",
+        "executionWindow",
+        "factoryApiAdmissionError",
+        "factoryApiPriceSchema",
+        "invoke",
+        "key",
+        "matches",
+        "microCost",
+        "now",
+        "parent",
+        "price",
+        "remaining",
+        "requestSha256",
+        "reservation",
+        "result",
+        "settled",
+        "sha",
+        "sourceSignal",
+        "timeout",
+        "usage",
+        "windowStartedAt"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/office-api-budget-v6/files/server/factory-api-sdk.ts",
+      "kind": "script",
+      "imports": [
+        "./factory-api-context",
+        "./factory-api-invocation"
+      ],
+      "exports": [
+        "guardFactoryOpenAiClient",
+        "guardFactoryOpenAiFetch",
+        "holdUnpricedGeminiClient",
+        "snapshotFactoryApiRequest",
+        "snapshotFactoryApiRequestOptions"
+      ],
+      "symbols": [
+        "ALLOWED",
+        "Env",
+        "Invocation",
+        "body",
+        "bounded",
+        "boundedRequest",
+        "cache",
+        "candidates",
+        "chatFields",
+        "clone",
+        "commonFields",
+        "configuredTimeout",
+        "containsMedia",
+        "count",
+        "descriptor",
+        "descriptors",
+        "encoded",
+        "entries",
+        "field",
+        "fields",
+        "freeze",
+        "guardFactoryOpenAiClient",
+        "guardFactoryOpenAiFetch",
+        "guarded",
+        "guardedClients",
+        "guardedFetches",
+        "holdUnpricedGeminiClient",
+        "invoke",
+        "maxOutputTokens",
+        "output",
+        "price",
+        "proxy",
+        "request",
+        "response",
+        "responseFields",
+        "snapshot",
+        "snapshotBody",
+        "snapshotFactoryApiRequest",
+        "snapshotFactoryApiRequestOptions",
+        "snapshotPrice",
+        "timeout",
+        "usage",
+        "values",
+        "wrap"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/office-api-budget-v6/files/server/software-factory-api-budget.ts",
+      "kind": "script",
+      "imports": [
+        "zod"
+      ],
+      "exports": [
+        "FACTORY_API_LIMIT_MICRO_USD",
+        "FactoryApiCheckpoint",
+        "FactoryApiExposure",
+        "FactoryApiReservation",
+        "FactoryApiState",
+        "assertFactoryApiJobAdmission",
+        "assertFactoryApiParentSettlement",
+        "checkpointFactoryApiMonth",
+        "emptyFactoryApiState",
+        "factoryApiBudgetStatus",
+        "factoryApiExecutionWindow",
+        "factoryApiReservationSchema",
+        "factoryApiStateSchema",
+        "parseFactoryApiState",
+        "reserveFactoryApi",
+        "settleFactoryApi",
+        "unknownFactoryApi"
+      ],
+      "symbols": [
+        "FACTORY_API_LIMIT_MICRO_USD",
+        "actual",
+        "age",
+        "allocated",
+        "amount",
+        "assertFactoryApiJobAdmission",
+        "assertFactoryApiParentSettlement",
+        "checkpointFactoryApiMonth",
+        "checkpointSchema",
+        "children",
+        "configured",
+        "emptyFactoryApiState",
+        "factoryApiBudgetStatus",
+        "factoryApiExecutionWindow",
+        "factoryApiReservationSchema",
+        "factoryApiStateSchema",
+        "fixedMicroUsd",
+        "input",
+        "instant",
+        "month",
+        "own",
+        "p",
+        "parentSchema",
+        "parseFactoryApiState",
+        "period",
+        "prior",
+        "reserveFactoryApi",
+        "reservedMicroUsd",
+        "row",
+        "rowSchema",
+        "safeSum",
+        "settleFactoryApi",
+        "sha",
+        "spentMicroUsd",
+        "state",
+        "status",
+        "unknown",
+        "unknownFactoryApi",
+        "used"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/office-api-budget-v6/manifest.json",
+      "kind": "script",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "script/office-api-budget-v6/provision-table.mjs",
+      "kind": "script",
+      "imports": [
+        "node:fs",
+        "node:module",
+        "node:path",
+        "node:url",
+        "pg"
+      ],
+      "exports": [
+        "TABLE_SQL",
+        "provisionApiAuthorityTable"
+      ],
+      "symbols": [
+        "COLUMNS",
+        "PRIMARY",
+        "SchemaHeld",
+        "TABLE_SQL",
+        "after",
+        "argv",
+        "backend",
+        "before",
+        "client",
+        "columns",
+        "held",
+        "main",
+        "pool",
+        "primary",
+        "provisionApiAuthorityTable",
+        "root",
+        "scope",
+        "wasPresent"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/office-api-budget-v6/README.md",
+      "kind": "script",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "script/office-api-budget-v6/test_provision.mjs",
+      "kind": "script",
+      "imports": [
+        "./provision-table.mjs",
+        "node:assert/strict",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "fixture"
       ],
       "routes": []
     },
@@ -40862,6 +41127,31 @@
         "state",
         "tampered"
       ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-api-budget-v6-package.test.mjs",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:child_process",
+        "node:test",
+        "node:url"
+      ],
+      "exports": [],
+      "symbols": [
+        "run"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/office-api-budget-v6-provision.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/office-api-budget-v6/test_provision.mjs"
+      ],
+      "exports": [],
+      "symbols": [],
       "routes": []
     },
     {
