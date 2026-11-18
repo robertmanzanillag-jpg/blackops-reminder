@@ -80,6 +80,7 @@ export function reserveFactoryApi(state: FactoryApiState, exposure: FactoryApiEx
   const status = factoryApiBudgetStatus(state,exposure,now);
   if (!status.configured || status.unknown || (!input.parent && !status.paidAdmissionReady)) throw Error(status.reason);
   if (input.parent) {
+    if(safeSum([status.fixedMicroUsd,status.spentMicroUsd,status.reservedMicroUsd])>status.limitMicroUsd) throw Error("FACTORY_API_BUDGET_EXHAUSTED");
     const p=exposure.parents.find(p=>p.jobId===input.parent!.jobId && p.fence===input.parent!.fence);
     if (!p || p.status!=="running" || !p.leaseExpiresAt || p.leaseExpiresAt<=now) throw Error("FACTORY_API_PARENT_FENCE_REQUIRED");
     const allocated=safeSum(state.reservations.filter(r=>r.parent?.jobId===p.jobId).map(r=>r.status==="settled"?r.actualMicroUsd!:r.maximumMicroUsd));
