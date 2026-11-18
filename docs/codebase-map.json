@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T06:20:24.425Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-office-factory-connected-20261118",
+  "generatedAt": "2026-11-18T07:38:36.222Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-ceo-domain-pause-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1166,
-    "filesIndexed": 1066,
-    "imports": 4207,
+    "filesVisible": 1175,
+    "filesIndexed": 1073,
+    "imports": 4244,
     "routes": 615,
-    "symbols": 24098
+    "symbols": 24194
   },
   "directories": {
     ".": {
@@ -203,10 +203,10 @@
       }
     },
     "docs": {
-      "files": 68,
-      "indexed": 66,
+      "files": 73,
+      "indexed": 69,
       "kinds": {
-        "docs": 68
+        "docs": 73
       }
     },
     "examples/clippers-motivation": {
@@ -218,10 +218,10 @@
       }
     },
     "script": {
-      "files": 123,
-      "indexed": 111,
+      "files": 124,
+      "indexed": 112,
       "kinds": {
-        "script": 123
+        "script": 124
       }
     },
     "script/release-gate": {
@@ -239,10 +239,10 @@
       }
     },
     "server": {
-      "files": 276,
-      "indexed": 270,
+      "files": 277,
+      "indexed": 271,
       "kinds": {
-        "server": 276
+        "server": 277
       }
     },
     "server/blackroom-team": {
@@ -274,10 +274,10 @@
       }
     },
     "tests": {
-      "files": 305,
-      "indexed": 301,
+      "files": 307,
+      "indexed": 303,
       "kinds": {
-        "test": 305
+        "test": 307
       }
     },
     "tests/fixtures": {
@@ -1521,9 +1521,10 @@
       "symbols": [
         "ENDPOINT",
         "KongRepairStatusPanel",
-        "MAX_SIGNAL_AGE_MS",
+        "MAKER_MAX_AGE_MS",
         "REFRESH_INTERVAL_MS",
         "RepairResponse",
+        "SOURCE_MAX_AGE_MS",
         "SignalTime",
         "age",
         "counts",
@@ -1532,6 +1533,7 @@
         "dateFormat",
         "delay",
         "errorMessage",
+        "handles",
         "headingId",
         "isDisabledError",
         "isFresh",
@@ -5615,6 +5617,14 @@
       "routes": []
     },
     {
+      "path": "docs/ceo-domain-pause.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-ceo-runtime.md",
       "kind": "docs",
       "imports": [],
@@ -5776,6 +5786,22 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -11389,6 +11415,7 @@
       "path": "script/install-kong-repair-subscription-worker.mjs",
       "kind": "script",
       "imports": [
+        "./kong-repair-startup-supervisor.mjs",
         "./kong-repair-subscription-worker.mjs",
         "node:crypto",
         "node:fs/promises",
@@ -11397,26 +11424,83 @@
         "node:url"
       ],
       "exports": [
-        "installPlan"
+        "installPlan",
+        "upgradeReviewedInstallation"
       ],
       "symbols": [
         "LABEL",
         "SHA",
         "args",
+        "argumentLine",
+        "atomicPrivate",
+        "backup",
+        "beforeIdentity",
+        "beforeLine",
         "content",
+        "digest",
         "git",
         "identity",
+        "inactive",
+        "info",
         "installPlan",
-        "lint",
-        "loaded",
+        "journals",
         "main",
+        "names",
+        "next",
+        "noWorkerLock",
         "node",
+        "ownedPrivate",
         "plist",
+        "receipt",
         "root",
         "script",
         "sourceRoot",
-        "status",
+        "supervisor",
+        "temporary",
+        "trustedLegacy",
+        "upgradeReviewedInstallation",
+        "upgrading",
         "xml"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/kong-repair-startup-supervisor.mjs",
+      "kind": "script",
+      "imports": [
+        "node:child_process",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "STARTUP_RETRY_CONTRACT",
+        "launchWorker",
+        "retryableReadinessFailure",
+        "superviseStartup",
+        "verifySupervisorInstallation"
+      ],
+      "symbols": [
+        "STARTUP_RETRY_CONTRACT",
+        "child",
+        "collect",
+        "file",
+        "hash",
+        "identity",
+        "info",
+        "launchWorker",
+        "main",
+        "privateBytes",
+        "report",
+        "result",
+        "retryableReadinessFailure",
+        "root",
+        "selected",
+        "superviseStartup",
+        "verifySupervisorInstallation",
+        "worker"
       ],
       "routes": []
     },
@@ -11492,6 +11576,8 @@
         "assertCurrentBase",
         "attempt",
         "auth",
+        "authElapsedMs",
+        "authStarted",
         "baseSha",
         "blob",
         "blockedSources",
@@ -13508,6 +13594,7 @@
       "path": "server/agent-chat.ts",
       "kind": "server",
       "imports": [
+        "./ceo-domain-policy",
         "@shared/agent-chat-directory",
         "@shared/agent-chat-routing",
         "@shared/agent-company",
@@ -13770,6 +13857,7 @@
         "../shared/office-role-lifecycle",
         "../shared/office-role-work-activity",
         "./blackroom-office-operations",
+        "./ceo-domain-policy",
         "./database-url",
         "./kong-company",
         "./office-capability-training",
@@ -14546,6 +14634,7 @@
         "./blackroom-links",
         "./ceo-briefing",
         "./ceo-conversation-history",
+        "./ceo-domain-policy",
         "./claude-skill-bridge",
         "./developer-autopilot",
         "./gemini-client",
@@ -14887,6 +14976,7 @@
       "kind": "server",
       "imports": [
         "./automation-definition-reads",
+        "./ceo-domain-policy",
         "./storage",
         "./trust-policy",
         "@shared/schema"
@@ -18734,6 +18824,52 @@
       "routes": []
     },
     {
+      "path": "server/ceo-domain-policy.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "../shared/agent-integrations",
+        "express"
+      ],
+      "exports": [
+        "CeoDomain",
+        "CeoDomainPausedError",
+        "assertCeoActionActive",
+        "assertCeoDomainActive",
+        "assertCeoOrderActive",
+        "ceoDomainRouteGuard",
+        "ceoDomainStatus",
+        "ceoFocusContext",
+        "ceoFocusIntegrations",
+        "ceoRolePaused",
+        "ceoTrainingRolePaused",
+        "ceoWorkDomain",
+        "pausedCeoDomains"
+      ],
+      "symbols": [
+        "CeoDomainPausedError",
+        "assertCeoActionActive",
+        "assertCeoDomainActive",
+        "assertCeoOrderActive",
+        "ceoDomainStatus",
+        "ceoFocusContext",
+        "ceoFocusIntegrations",
+        "ceoRolePaused",
+        "ceoTrainingRolePaused",
+        "ceoWorkDomain",
+        "configured",
+        "domain",
+        "normalized",
+        "path",
+        "paused",
+        "pausedCeoDomains",
+        "record",
+        "result",
+        "values"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ceo-go-live-cli.ts",
       "kind": "server",
       "imports": [
@@ -20450,6 +20586,7 @@
       "path": "server/dropshipping-ceo.ts",
       "kind": "server",
       "imports": [
+        "./ceo-domain-policy",
         "./metricool-tracking",
         "./office-source-document-sync",
         "./storage",
@@ -22120,6 +22257,7 @@
         "node:crypto"
       ],
       "exports": [
+        "MAKER_HEALTH_MAX_AGE_MS",
         "effectiveCommitStatusesPass",
         "freshMakerHealth",
         "independentAppQa",
@@ -22127,6 +22265,7 @@
         "trustedProductionQaSources"
       ],
       "symbols": [
+        "MAKER_HEALTH_MAX_AGE_MS",
         "actor",
         "age",
         "blob",
@@ -22167,6 +22306,8 @@
       ],
       "exports": [
         "KONG_REPAIR_PULL_INTERVAL_MS",
+        "KONG_REPAIR_PULL_STARTUP_RETRY_MS",
+        "RepairPullInitializationError",
         "configuredRepairPullStatus",
         "createRepairPullLoop",
         "pullConfiguredRepairSources",
@@ -22176,9 +22317,10 @@
       ],
       "symbols": [
         "KONG_REPAIR_PULL_INTERVAL_MS",
+        "KONG_REPAIR_PULL_STARTUP_RETRY_MS",
+        "RepairPullInitializationError",
         "age",
         "at",
-        "bridge",
         "configuredRepairPullStatus",
         "createRepairPullLoop",
         "current",
@@ -22194,9 +22336,12 @@
         "readRepairPullStatus",
         "reader",
         "response",
+        "result",
+        "run",
         "source",
         "sourceSchema",
         "startConfiguredRepairPull",
+        "state",
         "stateSchema",
         "tick",
         "timer"
@@ -23451,6 +23596,7 @@
         "../shared/agent-company",
         "../shared/blackroom-academy",
         "../shared/blackroom-team",
+        "./ceo-domain-policy",
         "./office-academy-runner",
         "./office-openai",
         "./office-role-blackroom-curricula",
@@ -23726,6 +23872,7 @@
       "path": "server/office-capability-training.ts",
       "kind": "server",
       "imports": [
+        "./ceo-domain-policy",
         "./office-capability-lifecycle",
         "./office-openai",
         "./office-role-snapshots",
@@ -24845,6 +24992,7 @@
       "kind": "server",
       "imports": [
         "./agent-council",
+        "./ceo-domain-policy",
         "./evidence-json",
         "./office-openai",
         "./office-role-curricula",
@@ -26943,6 +27091,7 @@
         "./automation-registry",
         "./ceo-briefing",
         "./ceo-doctor-cli",
+        "./ceo-domain-policy",
         "./dropshipping-ceo",
         "./finance",
         "./proactive-insights",
@@ -27436,6 +27585,7 @@
         "./blackroom-team-routes",
         "./calendar-sync",
         "./canva-oauth",
+        "./ceo-domain-policy",
         "./ceo-operational-health",
         "./clippers-agent",
         "./clippers-local-news-agent",
@@ -29026,6 +29176,7 @@
       "kind": "server",
       "imports": [
         "../shared/agent-company",
+        "./ceo-domain-policy",
         "./software-factory",
         "./software-factory-pipeline",
         "./software-factory-store",
@@ -30505,6 +30656,7 @@
         "./ceo-briefing",
         "./ceo-conversation-history",
         "./ceo-doctor-cli",
+        "./ceo-domain-policy",
         "./ceo-readiness",
         "./claude-skill-bridge",
         "./developer-autopilot",
@@ -30933,6 +31085,7 @@
       "kind": "server",
       "imports": [
         "./blackroom-links",
+        "./ceo-domain-policy",
         "./google-calendar",
         "./google-drive-folder-command",
         "./metricool-chat-actions",
@@ -30947,6 +31100,8 @@
       "symbols": [
         "JsonRecord",
         "actionInput",
+        "automation",
+        "automationId",
         "errorMessage",
         "eventId",
         "executeApprovedPendingAction",
@@ -30966,6 +31121,7 @@
       "path": "server/trust-policy.ts",
       "kind": "server",
       "imports": [
+        "./ceo-domain-policy",
         "./storage",
         "@shared/schema"
       ],
@@ -34153,12 +34309,15 @@
         "good",
         "h",
         "harness",
+        "history",
+        "initial",
         "iso",
         "lessonCases",
         "lessons",
         "modules",
         "parsed",
         "pass",
+        "previous",
         "prompt",
         "replacement",
         "role",
@@ -35445,6 +35604,38 @@
         "commands",
         "output",
         "report"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ceo-domain-policy.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ceo-domain-policy",
+        "../server/dropshipping-ceo",
+        "../server/revenue-engine",
+        "../server/software-factory",
+        "../server/software-factory-company",
+        "../shared/agent-company",
+        "express",
+        "node:assert/strict",
+        "node:events",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "base",
+        "before",
+        "body",
+        "commercial",
+        "discovery",
+        "previous",
+        "project",
+        "queued",
+        "response",
+        "server"
       ],
       "routes": []
     },
@@ -38229,9 +38420,34 @@
         "options",
         "payload",
         "request",
+        "settle",
         "source",
         "stop",
         "store"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/kong-repair-startup-supervisor.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/install-kong-repair-subscription-worker.mjs",
+        "../script/kong-repair-startup-supervisor.mjs",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "blocked",
+        "calls",
+        "f",
+        "hash",
+        "home",
+        "identity",
+        "idle",
+        "journal",
+        "result",
+        "root",
+        "upgradeFixture"
       ],
       "routes": []
     },
@@ -39082,6 +39298,7 @@
         "fixture",
         "forged",
         "future",
+        "history",
         "job",
         "legacyState",
         "lessons",
@@ -39093,6 +39310,7 @@
         "options",
         "paid",
         "pending",
+        "previous",
         "realJob",
         "reorder",
         "report",
@@ -40009,8 +40227,11 @@
       "symbols": [
         "NOW",
         "h",
+        "history",
+        "previous",
         "reorder",
         "run",
+        "runner",
         "setup"
       ],
       "routes": []
@@ -43347,6 +43568,7 @@
     "tests/ceo-conversation-history.test.ts",
     "tests/ceo-db-check-cli.test.ts",
     "tests/ceo-doctor-cli.test.ts",
+    "tests/ceo-domain-policy.test.ts",
     "tests/ceo-go-live-cli.test.ts",
     "tests/ceo-operability.test.ts",
     "tests/ceo-operational-health.test.ts",
