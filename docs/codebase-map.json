@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T07:26:13.203Z",
+  "generatedAt": "2026-11-18T07:30:54.306Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-ceo-domain-pause-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -128,30 +128,9 @@
     "filesIndexed": 1069,
     "imports": 4234,
     "routes": 615,
-    "symbols": 24143
+    "symbols": 24144
   },
   "directories": {
-    "docs": {
-      "files": 69,
-      "indexed": 67,
-      "kinds": {
-        "docs": 69
-      }
-    },
-    "server": {
-      "files": 277,
-      "indexed": 271,
-      "kinds": {
-        "server": 277
-      }
-    },
-    "tests": {
-      "files": 306,
-      "indexed": 302,
-      "kinds": {
-        "test": 306
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -223,6 +202,13 @@
         "client-page": 28
       }
     },
+    "docs": {
+      "files": 69,
+      "indexed": 67,
+      "kinds": {
+        "docs": 69
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
@@ -252,6 +238,13 @@
         "script": 4
       }
     },
+    "server": {
+      "files": 277,
+      "indexed": 271,
+      "kinds": {
+        "server": 277
+      }
+    },
     "server/blackroom-team": {
       "files": 17,
       "indexed": 17,
@@ -278,6 +271,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 306,
+      "indexed": 302,
+      "kinds": {
+        "test": 306
       }
     },
     "tests/fixtures": {
@@ -18782,6 +18782,7 @@
         "configured",
         "domain",
         "normalized",
+        "path",
         "paused",
         "pausedCeoDomains",
         "record",

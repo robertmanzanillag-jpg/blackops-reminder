@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T07:26:13.203Z
+Generated: 2026-11-18T07:30:54.306Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-ceo-domain-pause-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1169 | 1069 | 4234 | 615 | 24143 |
+| 1169 | 1069 | 4234 | 615 | 24144 |
 
 ## Entrypoints
 - `client/src/App.tsx`
