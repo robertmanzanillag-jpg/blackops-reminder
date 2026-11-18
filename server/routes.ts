@@ -62,6 +62,7 @@ import { createDeveloperAutopilotHandoff, createDeveloperAutopilotHandoffFromReq
 import { buildMonthlyAiSpendReport } from "./ai-cost-policy";
 import { getClipperWorkerRuntimeStatus } from "./clippers-runtime-status";
 import { registerOfficeRoutes } from "./office-routes";
+import { registerKongRepairRoutes } from "./kong-repair-routes";
 import { registerOfficeBusinessRoutes } from "./office-business-routes";
 import { registerSoftwareFactoryRoutes } from "./software-factory-routes";
 import { getFactoryOfficeAdmission } from "./software-factory-office-connection";
@@ -310,6 +311,7 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   registerOfficeRoutes(app);
+  registerKongRepairRoutes(app);
   registerOfficeBusinessRoutes(app);
   registerSoftwareFactoryRoutes(app, {resolveCompanyAdmission:getFactoryOfficeAdmission});
   const CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS = 120_000;
