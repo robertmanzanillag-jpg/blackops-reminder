@@ -42,7 +42,9 @@ async function main(){
  const root=fs.realpathSync(process.cwd()),require=createRequire(path.join(root,'package.json'));
  const {Pool}=require('pg');
  const {resolveDatabaseConnectionString}=await import(pathToFileURL(path.join(root,'server/database-url.ts')).href);
- const pool=new Pool({connectionString:resolveDatabaseConnectionString(),connectionTimeoutMillis:10000,statement_timeout:15000,max:1,allowExitOnIdle:true});
+ const connectionString=resolveDatabaseConnectionString();
+ if(typeof connectionString!=='string'||!connectionString.trim())throw held('SCHEMA_CONNECTION_REQUIRED');
+ const pool=new Pool({connectionString,connectionTimeoutMillis:10000,statement_timeout:15000,max:1,allowExitOnIdle:true});
  pool.on('error',()=>{});
  try{console.log(JSON.stringify(await provisionApiAuthorityTable(pool,{apply:argv.includes('--apply')})));}
  finally{await pool.end();}
