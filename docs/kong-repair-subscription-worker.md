@@ -16,6 +16,10 @@ The worker does not use GitHub `main`: its history is not the current production
 release lineage. It checks the live release head against the approved immutable
 source SHA before preparing, before invoking the model and before publication.
 Changed release heads hold the generation instead of silently rebasing it.
+Source admission also requires sanitized typed error evidence (concrete class,
+message and source location), a reviewed parent engine commit, and an explicit
+regression scenario. Preflight checks these live prerequisites before creating
+any journal or irreversible claim; stale unclaimed generations remain held.
 
 An atomic create-only `codex/repair-claim/<repair-key-digest>` Git ref prevents
 multiple makers from taking the same generation. The ref is never force-pushed
@@ -42,8 +46,12 @@ model agents, hooks and plugins are disabled for this bounded maker process.
 
 Simple work uses explicitly selected `gpt-6-luna` with low reasoning. A bounded
 security/auth/payment/concurrency repair uses `gpt-6.1-sol` with medium reasoning.
-There is one model attempt per generation, a 15-minute model deadline, and at
-most three reserved model runs per America/New_York calendar day. No stronger
+The checker chooses its tier from actual changed paths and diff as well as error
+evidence, so an innocuous summary cannot hide a payment or authentication edit.
+There is one maker attempt per generation, a 15-minute maker deadline, a
+10-minute fresh checker deadline, and at most three reserved model invocations
+(both roles counted) per America/New_York calendar day. Two free reservations
+are required to admit a new generation. No stronger
 model retry, API fallback, credit purchase or automatic budget increase exists.
 The installed CLI catalog and sign-in were checked without making a model call;
 catalog presence does not prove remaining subscription quota. CLI quota failures
@@ -59,8 +67,17 @@ a maker check, not an independent acceptance gate.
 
 The host then opens a draft PR and re-reads its actual remote branch and head.
 The issue's maker receipt references the exact repair key, PR and head. The
-server independently validates these references. The resulting status is
-`awaiting_checker`, never resolved or deployed. A separate reviewer, App QA,
+server independently validates these references. A second standalone Codex CLI
+invocation reviews the actual committed patch in a newly materialized read-only
+workspace. Its structured result is parsed by the parent, which alone writes a
+create-only private GitHub receipt bound to source/head, distinct invocation IDs,
+reviewed engine code and actual test digests. The candidate cannot access the
+parent journal or GitHub credential. This is a trusted-parent checker attestation,
+not a fabricated GitHub `APPROVED` review or an App QA receipt. Findings or an
+unconfirmed checker leave the PR pending.
+
+The resulting maker status is `awaiting_checker`, never resolved or deployed.
+The bridge's independent review admission, actual App QA,
 approved deployment and observed production regression evidence are required by
 the bridge before verified closure. This worker never merges or deploys.
 
