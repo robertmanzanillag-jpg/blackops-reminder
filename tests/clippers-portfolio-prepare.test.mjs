@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { execFile, spawnSync } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile, stat } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, realpath, rm, writeFile, stat, chmod } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { promisify } from 'node:util';
@@ -174,6 +174,14 @@ test('Drive mutations have one-time durable claims tied to a live preparation an
   await assert.rejects(claimDriveOperation(f.root, auth, 'upload', { folderId: upload.folderId }), /drive_operation_state_invalid/);
   await f.write(`${REPORT}/portfolio-prepare.lock`, { ...active, nonce: randomUUID() });
   await assert.rejects(claimDriveOperation(f.root, auth, 'public', { fileId: upload.fileId }), /prepare_parent_unconfirmed/);
+});
+
+test('a pre-existing nonprivate staging directory holds before provider writes', { skip: !hasTools }, async t => {
+  const f = await fixture(t), stage = path.join(f.root, REPORT, 'upload-stage');
+  await mkdir(stage, { recursive: true }); await chmod(stage, 0o777);
+  const result = await f.run();
+  assert.equal(result.prepared, 0); assert.equal(result.outcomes[0].reason, 'private_stage_directory_required');
+  assert.equal(f.calls.folder, 0); assert.equal(f.calls.upload, 0); assert.equal(f.calls.public, 0);
 });
 
 test('an uncertain upload is persisted before the call and never repeated', { skip: !hasTools }, async t => {

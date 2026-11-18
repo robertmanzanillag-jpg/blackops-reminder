@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T05:13:58.560Z
+Generated: 2026-11-18T05:18:36.449Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-portfolio-prepare-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1148 | 1048 | 4116 | 604 | 23497 |
+| 1148 | 1048 | 4116 | 604 | 23499 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -407,7 +407,7 @@ Package: `rest-express`
 - `script/clippers-motivation-shorts.mjs` (script; 157 symbols, 6 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-portfolio-metricool.mjs` (script; 70 symbols, 1 imports)
-- `script/clippers-portfolio-prepare.mjs` (script; 100 symbols, 7 imports)
+- `script/clippers-portfolio-prepare.mjs` (script; 102 symbols, 7 imports)
 - `script/clippers-portfolio-render.mjs` (script; 77 symbols, 8 imports)
 - `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)
 - `script/clippers-reconcile-publications.mjs` (script; 74 symbols, 3 imports)

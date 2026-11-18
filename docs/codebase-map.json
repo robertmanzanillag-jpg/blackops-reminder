@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T05:13:58.560Z",
+  "generatedAt": "2026-11-18T05:18:36.449Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-portfolio-prepare-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 1048,
     "imports": 4116,
     "routes": 604,
-    "symbols": 23497
+    "symbols": 23499
   },
   "directories": {
     ".": {
@@ -9457,10 +9457,12 @@
         "ownerJson",
         "packet",
         "parsed",
+        "parts",
         "prepareReadiness",
         "prior",
         "priorAsset",
         "priorTarget",
+        "privateStageDirectory",
         "publicDriveUrl",
         "queued",
         "readiness",

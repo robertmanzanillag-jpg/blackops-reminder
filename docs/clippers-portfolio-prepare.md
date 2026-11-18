@@ -62,6 +62,10 @@ five slots per exact destination/day, unique slots and no repeated media or
 caption within that destination. Calls to the existing Drive helper run in
 separate processes capped at 30 seconds or the remaining cycle budget.
 Each helper also has its own 30-second deadline if the parent disappears.
+Existing staging directories are checked as owner-private and their parent
+chain must be owner-controlled and not writable by other users. Staged files
+must be owner-only, single-link regular files with the reviewed hash. Unsafe
+pre-existing permissions block before upload; the worker does not change them.
 The scan considers the 500 most recently modified packets; stale or invalid
 packets do not consume the usable-packet allowance. Keep the active request
 directory below 5,000 entries by retaining expired packets in an owner archive;

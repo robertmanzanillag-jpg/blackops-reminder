@@ -191,6 +191,16 @@ async function media(root, relative, expectedSha) {
     return bytes;
   } finally { await fd.close(); }
 }
+async function privateStageDirectory(root) {
+  const parts = [root, 'reports', 'clippers-daily-learning', 'upload-stage'];
+  let directory = parts[0];
+  for (let index = 0; index < parts.length; index++) {
+    if (index) directory = path.join(directory, parts[index]);
+    const info = await lstat(directory);
+    if (!info.isDirectory() || info.isSymbolicLink() || (process.getuid && info.uid !== process.getuid()) ||
+        (info.mode & (index === parts.length - 1 ? 0o077 : 0o022)) || await realpath(directory) !== directory) throw Error('private_stage_directory_required');
+  }
+}
 async function renderAndApprove(root, id, now, renderer) {
   const packet = await ownerJson(root, `${CONFIG}/prepare-requests/${id}.json`);
   const request = await ownerJson(root, `${CONFIG}/render-requests/${id}.json`);
@@ -370,14 +380,16 @@ export async function runClippersPortfolioPrepare({ workspaceRoot, now = new Dat
           : await createExistingDriveAdapter({ remaining, authorization: { workspaceRoot: root, requestId: id,
             packetSha256: digest(approved.packet), outputSha256: sha, parentPid: process.pid, operationNonce } }));
         if (!entry) {
-          if (adapter.readiness) await bounded(() => adapter.readiness());
           const stageDir = path.join(reportRoot, 'upload-stage'); await mkdir(stageDir, { recursive: true, mode: 0o700 });
-          if (await realpath(stageDir) !== stageDir) throw Error('private_stage_directory_required');
+          await privateStageDirectory(root);
+          if (adapter.readiness) await bounded(() => adapter.readiness());
           const staged = path.join(stageDir, sha + '.mp4');
           try { await writeFile(staged, approved.bytes, { flag: 'wx', mode: 0o600 }); }
           catch (error) { if (error.code !== 'EEXIST') throw error; }
           const stagedFd = await open(staged, constants.O_RDONLY | constants.O_NOFOLLOW);
-          try { if (hash(await stagedFd.readFile()) !== sha) throw Error('staged_media_changed'); }
+          try { const info = await stagedFd.stat();
+            if (!info.isFile() || info.nlink !== 1 || (info.mode & 0o077) || (process.getuid && info.uid !== process.getuid()) ||
+                hash(await stagedFd.readFile()) !== sha) throw Error('staged_media_changed'); }
           finally { await stagedFd.close(); }
           entry = state.uploads[sha] = { sha256: sha, status: 'upload_unknown', reservedAt: now.toISOString(), sizeBytes: approved.bytes.length };
           await save(root, ledgerFile, state);
@@ -404,7 +416,8 @@ export async function runClippersPortfolioPrepare({ workspaceRoot, now = new Dat
       } catch (error) {
         const reason = ['reviewed_prepare_packet_required', 'prepare_schedule_outside_rights', 'reviewed_render_output_changed', 'render_receipt_unconfirmed',
           'portfolio_media_changed', 'owner_private_file_required', 'scheduler_worker_busy', 'approved_asset_conflict', 'portfolio_media_receipt_conflict', 'prepare_time_budget_reached',
-          'approved_queue_capacity', 'portfolio_receipt_capacity', 'approved_scheduler_input_invalid', 'portfolio_media_ledger_invalid'].includes(error.message)
+          'approved_queue_capacity', 'portfolio_receipt_capacity', 'approved_scheduler_input_invalid', 'portfolio_media_ledger_invalid',
+          'private_stage_directory_required', 'staged_media_changed'].includes(error.message)
           ? error.message : 'prepare_validation_or_provider_unconfirmed';
         outcomes.push({ id, status: 'held', reason });
       }
@@ -441,10 +454,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       if (process.argv[3] === 'readiness') result = { connected: true, existingFolderId: await drive.findDriveFolderPath([drive.DRIVE_APP_ROOT_FOLDER, drive.DRIVE_CLIPPERS_MEDIA_FOLDER, 'Portfolio reviewed media']) };
       else if (process.argv[3] === 'folder') result = { folderId: await drive.ensureAppDriveFolderPath([drive.DRIVE_CLIPPERS_MEDIA_FOLDER, 'Portfolio reviewed media']) };
       else if (process.argv[3] === 'upload' && input.filePath === path.join(root, REPORT, 'upload-stage', auth.outputSha256 + '.mp4') && DRIVE_ID.test(input.folderId)) {
+        await privateStageDirectory(root);
         const ledger = await ownerJson(root, `${REPORT}/portfolio-upload-state.json`);
         if (ledger.uploads?.[auth.outputSha256]?.folderId !== input.folderId) throw Error();
         const fd = await open(input.filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
-        try { if (hash(await fd.readFile()) !== auth.outputSha256) throw Error(); } finally { await fd.close(); }
+        try { const info = await fd.stat();
+          if (!info.isFile() || info.nlink !== 1 || (info.mode & 0o077) || (process.getuid && info.uid !== process.getuid()) ||
+              hash(await fd.readFile()) !== auth.outputSha256) throw Error(); } finally { await fd.close(); }
         result = await drive.uploadLocalFileToDriveFolder({ filePath: input.filePath, folderId: input.folderId, mimeType: 'video/mp4' });
       }
       else if (process.argv[3] === 'public' && DRIVE_ID.test(input.fileId)) {
