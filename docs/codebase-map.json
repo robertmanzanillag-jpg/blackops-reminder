@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T06:02:53.675Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-portfolio-prepare-20261118",
+  "generatedAt": "2026-11-18T06:14:00.522Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-office-factory-connected-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1170,
-    "filesIndexed": 1068,
-    "imports": 4202,
+    "filesVisible": 1166,
+    "filesIndexed": 1066,
+    "imports": 4206,
     "routes": 615,
-    "symbols": 24067
+    "symbols": 24092
   },
   "directories": {
     ".": {
@@ -203,10 +203,10 @@
       }
     },
     "docs": {
-      "files": 72,
-      "indexed": 68,
+      "files": 68,
+      "indexed": 66,
       "kinds": {
-        "docs": 72
+        "docs": 68
       }
     },
     "examples/clippers-motivation": {
@@ -5791,22 +5791,6 @@
       "routes": []
     },
     {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
       "path": "docs/developer-autopilot-codex-runbook.md",
       "kind": "docs",
       "imports": [],
@@ -8064,27 +8048,35 @@
       "kind": "script",
       "imports": [
         "./clippers-daily-learning.mjs",
+        "./clippers-portfolio-discovery.mjs",
+        "node:child_process",
         "node:fs/promises",
         "node:path",
         "node:url"
       ],
       "exports": [
-        "runClippersDailyWatchdog"
+        "runClippersDailyWatchdog",
+        "runPortfolioPrepareChild"
       ],
       "symbols": [
         "DEFAULT_ACCOUNT",
         "DEFAULT_CHECK_HOUR",
         "DEFAULT_TIME_ZONE",
         "account",
+        "age",
         "ageMinutes",
         "alert",
         "alerts",
         "allowedStatuses",
         "apiCostUsd",
         "atomicWrite",
+        "blocked",
         "blockers",
+        "body",
         "candidates",
         "checkHour",
+        "child",
+        "childEnv",
         "clean",
         "collectEvidence",
         "contentLaneState",
@@ -8095,6 +8087,7 @@
         "current",
         "date",
         "dateParts",
+        "discovery",
         "due",
         "en",
         "env",
@@ -8105,6 +8098,7 @@
         "evidenceStatus",
         "exactPublicUrl",
         "exactYouTubeUrl",
+        "finish",
         "finishedAt",
         "finishedMs",
         "freshForToday",
@@ -8130,11 +8124,13 @@
         "publicUrl",
         "published",
         "readJson",
+        "reasons",
         "rendered",
         "report",
         "reportDate",
         "reportsRoot",
         "runClippersDailyWatchdog",
+        "runPortfolioPrepareChild",
         "scheduled",
         "schemaValid",
         "seen",
@@ -8142,10 +8138,13 @@
         "sleepValue",
         "stage",
         "status",
+        "stop",
         "supply",
         "supplyPath",
         "temporary",
+        "terminate",
         "timeZone",
+        "timer",
         "title",
         "urls",
         "validMotivationLane",
@@ -35893,6 +35892,8 @@
       "imports": [
         "../script/clippers-daily-watchdog.mjs",
         "node:assert/strict",
+        "node:child_process",
+        "node:events",
         "node:fs/promises",
         "node:os",
         "node:path",
@@ -35902,13 +35903,26 @@
       "symbols": [
         "alertJson",
         "alertMarkdown",
+        "alias",
+        "aliasDirectory",
+        "disabled",
+        "due",
+        "early",
+        "enabled",
         "fixture",
         "freshContent",
         "freshDelivery",
+        "invalid",
         "latest",
         "markdown",
+        "prepareEnabled",
         "report",
         "reports",
+        "runClippersDailyLearning",
+        "runPortfolioDiscovery",
+        "runPortfolioPrepare",
+        "started",
+        "timeout",
         "workspaceRoot"
       ],
       "routes": []

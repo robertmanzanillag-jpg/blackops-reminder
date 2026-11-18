@@ -1,12 +1,62 @@
 import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import path from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { runClippersDailyLearning } from "./clippers-daily-learning.mjs";
 import { runPortfolioDiscovery } from "./clippers-portfolio-discovery.mjs";
 
 const DEFAULT_TIME_ZONE = "America/New_York";
 const DEFAULT_CHECK_HOUR = 10;
 const DEFAULT_ACCOUNT = "streamersclipusa";
+
+export async function runPortfolioPrepareChild({ workspaceRoot, env = process.env, timeoutMs = 120_000, spawnProcess = spawn } = {}) {
+  if (env.CLIPPERS_PORTFOLIO_PREPARE_ENABLED !== "true" || env.CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED !== "true") {
+    return { status: "disabled", prepared: 0, uploaded: 0, paidSpendUsd: 0 };
+  }
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) throw Error("invalid_prepare_child_timeout");
+  const { driveHelperEnvironment } = await import("./clippers-portfolio-prepare.mjs");
+  const childEnv = { ...driveHelperEnvironment(env),
+    CLIPPERS_PORTFOLIO_PREPARE_ENABLED: "true", CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED: "true",
+    CLIPPERS_WORKSPACE_ROOT: await realpath(workspaceRoot),
+  };
+  return new Promise(resolve => {
+    let output = "", outputBytes = 0, failure, settled = false, killTimer;
+    const child = spawnProcess(process.execPath, [fileURLToPath(new URL("./clippers-portfolio-prepare.mjs", import.meta.url))],
+      { cwd: fileURLToPath(new URL("..", import.meta.url)), env: childEnv, detached: process.platform !== "win32", stdio: ["ignore", "pipe", "pipe"] });
+    const stop = signal => {
+      try { if (process.platform === "win32") child.kill(signal); else process.kill(-child.pid, signal); } catch {}
+    };
+    const blocked = reason => ({ status: "blocked", reason, prepared: 0, uploaded: 0, paidSpendUsd: 0 });
+    const finish = value => { if (settled) return; settled = true; clearTimeout(timer); clearTimeout(killTimer); resolve(value); };
+    const terminate = reason => {
+      failure ||= reason; stop("SIGTERM");
+      killTimer ||= setTimeout(() => { stop("SIGKILL"); finish(blocked(failure)); }, 250);
+    };
+    const timer = setTimeout(() => terminate("portfolio_prepare_deadline_exceeded"), Math.min(120_000, timeoutMs));
+    child.stdout.on("data", chunk => {
+      if (settled || failure) return;
+      outputBytes += chunk.length;
+      if (outputBytes > 256 * 1024) { terminate("portfolio_prepare_output_limit"); return; }
+      output += chunk.toString();
+    });
+    // Provider stderr is intentionally not included in reports or error text.
+    child.stderr.on("data", () => {});
+    child.on("error", () => finish(blocked("portfolio_prepare_child_unavailable")));
+    child.on("close", exitCode => {
+      if (failure) return finish(blocked(failure));
+      if (exitCode !== 0) return finish(blocked("portfolio_prepare_child_failed"));
+      try {
+        const body = JSON.parse(output);
+        if (!["disabled", "held", "prepared", "held_or_partial"].includes(body.status) || body.paidSpendUsd !== 0 ||
+            !Number.isSafeInteger(body.prepared) || body.prepared < 0 || body.prepared > 20 ||
+            !Number.isSafeInteger(body.uploaded) || body.uploaded < 0 || body.uploaded > 20 || body.publisherEnabledChanged === true) throw Error();
+        const reasons = new Set(["no_reviewed_prepare_packets", "prepare_request_retention_required", "portfolio_prepare_busy"]);
+        finish({ status: body.status, prepared: body.prepared, uploaded: body.uploaded, paidSpendUsd: 0,
+          ...(reasons.has(body.reason) ? { reason: body.reason } : {}) });
+      } catch { finish(blocked("portfolio_prepare_report_unconfirmed")); }
+    });
+  });
+}
 
 function clean(value) {
   return typeof value === "string" ? value.trim() : value == null ? "" : String(value).trim();
@@ -283,6 +333,10 @@ function markdown(report) {
     `- Confirmed YouTube uploads: ${report.youtubeDelivery.published}`,
     `- YouTube URLs: ${report.youtubeDelivery.publicUrls.length ? report.youtubeDelivery.publicUrls.map((row) => row.youtubeUrl).join(", ") : "none"}`,
     `- YouTube delivery blockers: ${report.youtubeDelivery.blockers.length ? report.youtubeDelivery.blockers.join(", ") : "none"}`,
+    ...(report.portfolioPreparation ? [
+      `- Portfolio preparation: ${report.portfolioPreparation.status}; prepared ${report.portfolioPreparation.prepared}, confirmed uploads ${report.portfolioPreparation.uploaded}${report.portfolioPreparation.reason ? ` (${report.portfolioPreparation.reason})` : ""}`,
+      "- Preparation is not social publication evidence; existing publisher switches are preserved.",
+    ] : []),
     `- Cost: USD ${report.costUsd}`,
     "",
     report.alert
@@ -398,9 +452,22 @@ export async function runClippersDailyWatchdog(options = {}) {
       report.alerts.publicDiscoveryBlocked = true;
     }
   }
+  if (due && options.dailyPrepare === true) {
+    if (env.CLIPPERS_PORTFOLIO_PREPARE_ENABLED !== "true" || env.CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED !== "true") {
+      report.portfolioPreparation = { status: "disabled", prepared: 0, uploaded: 0, paidSpendUsd: 0 };
+    } else {
+      try {
+        report.portfolioPreparation = await (options.runPortfolioPrepare || runPortfolioPrepareChild)({ workspaceRoot, env });
+        if (["blocked", "held", "held_or_partial"].includes(report.portfolioPreparation.status)) report.alerts.portfolioPreparationBlocked = true;
+      } catch {
+        report.portfolioPreparation = { status: "blocked", reason: "portfolio_prepare_failed", prepared: 0, uploaded: 0, paidSpendUsd: 0 };
+        report.alerts.portfolioPreparationBlocked = true;
+      }
+    }
+  }
   if (due && options.dailyLearning === true) {
     try {
-      const learning = await runClippersDailyLearning({ workspaceRoot, now, env });
+      const learning = await (options.runClippersDailyLearning || runClippersDailyLearning)({ workspaceRoot, now, env });
       report.dailyLearning = {
         status: learning.status, date: learning.date ?? current.date, reason: learning.reason ?? null,
         scheduled: learning.scheduled ?? null, observations: learning.observations ?? null,
@@ -414,7 +481,7 @@ export async function runClippersDailyWatchdog(options = {}) {
       report.alerts.dailyLearningBlocked = true;
     }
   }
-  if (report.alerts.dailyLearningBlocked || report.alerts.publicDiscoveryBlocked) {
+  if (report.alerts.dailyLearningBlocked || report.alerts.publicDiscoveryBlocked || report.alerts.portfolioPreparationBlocked) {
     report.alert = true;
     report.status = "alert";
   }
@@ -429,7 +496,7 @@ export async function runClippersDailyWatchdog(options = {}) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const report = await runClippersDailyWatchdog({ dailyLearning: true, dailyDiscovery: true });
+  const report = await runClippersDailyWatchdog({ dailyLearning: true, dailyDiscovery: true, dailyPrepare: true });
   console.log(JSON.stringify(report, null, 2));
   if (report.alert) process.exitCode = 2;
 }

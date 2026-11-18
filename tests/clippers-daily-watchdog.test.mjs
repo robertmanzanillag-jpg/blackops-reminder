@@ -1,10 +1,85 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 
-import { runClippersDailyWatchdog } from "../script/clippers-daily-watchdog.mjs";
+import { runClippersDailyWatchdog, runPortfolioPrepareChild } from "../script/clippers-daily-watchdog.mjs";
+
+const prepareEnabled = { CLIPPERS_PORTFOLIO_PREPARE_ENABLED: "true", CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED: "true" };
+
+test("optional preparation stays disabled unless due and explicitly enabled, and precedes learner without its lock", async () => {
+  const workspaceRoot = await fixture(); const order = [];
+  const runPortfolioPrepare = async () => {
+    order.push("prepare");
+    await assert.rejects(readFile(path.join(workspaceRoot, "reports/metricool-autopilot.lock")), { code: "ENOENT" });
+    return { status: "prepared", prepared: 1, uploaded: 1, paidSpendUsd: 0 };
+  };
+  const runClippersDailyLearning = async () => { order.push("learn"); return { status: "held_or_partial", scheduled: 0, observations: 0 }; };
+  try {
+    const early = await runClippersDailyWatchdog({ workspaceRoot, now: new Date("2026-08-12T13:59:00Z"), env: prepareEnabled,
+      dailyPrepare: true, dailyLearning: true, runPortfolioPrepare, runClippersDailyLearning });
+    assert.equal(early.portfolioPreparation, undefined); assert.deepEqual(order, []);
+    const disabled = await runClippersDailyWatchdog({ workspaceRoot, now: new Date("2026-08-12T14:00:00Z"), env: {},
+      dailyPrepare: true, dailyLearning: true, runPortfolioPrepare, runClippersDailyLearning });
+    assert.equal(disabled.portfolioPreparation.status, "disabled"); assert.deepEqual(order, ["learn"]);
+    order.length = 0;
+    const enabled = await runClippersDailyWatchdog({ workspaceRoot, now: new Date("2026-08-12T14:00:00Z"), env: prepareEnabled,
+      dailyPrepare: true, dailyLearning: true, runPortfolioPrepare, runClippersDailyLearning });
+    assert.deepEqual(order, ["prepare", "learn"]); assert.equal(enabled.portfolioPreparation.prepared, 1);
+    assert.equal(enabled.costUsd, 0);
+  } finally { await rm(workspaceRoot, { recursive: true, force: true }); }
+});
+
+test("a failed preparation alerts without leaking provider text or skipping the learner", async () => {
+  const workspaceRoot = await fixture(); let learning = 0;
+  try {
+    const report = await runClippersDailyWatchdog({ workspaceRoot, now: new Date("2026-08-12T14:00:00Z"), env: prepareEnabled,
+      dailyPrepare: true, dailyLearning: true, runPortfolioPrepare: async () => { throw Error("synthetic-private-provider-error"); },
+      runClippersDailyLearning: async () => { learning++; return { status: "already_completed" }; } });
+    assert.equal(report.portfolioPreparation.reason, "portfolio_prepare_failed");
+    assert.equal(report.alerts.portfolioPreparationBlocked, true); assert.equal(learning, 1);
+    assert.equal(JSON.stringify(report).includes("synthetic-private-provider-error"), false);
+  } finally { await rm(workspaceRoot, { recursive: true, force: true }); }
+});
+
+test("actual prepare child is read-only with no packets and receives only the existing delivery credential scope", async () => {
+  const workspaceRoot = await fixture(); let calls = 0;
+  try {
+    const report = await runPortfolioPrepareChild({ workspaceRoot,
+      env: { ...prepareEnabled, PATH: process.env.PATH, DEFAULT_USER_ID: "test-owner", GOOGLE_DRIVE_CLIENT_ID: "synthetic-drive-client",
+        OPENAI_API_KEY: "synthetic-unused-model-key", METRICOOL_USER_TOKEN: "synthetic-unused-token", NODE_OPTIONS: "--require unsafe-hook" },
+      spawnProcess(binary, args, options) {
+        calls++; assert.equal(binary, process.execPath); assert.equal(args.length, 1);
+        assert.ok(args[0].endsWith("/script/clippers-portfolio-prepare.mjs"));
+        assert.equal(options.env.DEFAULT_USER_ID, "test-owner"); assert.equal(options.env.OPENAI_API_KEY, undefined);
+        assert.equal(options.env.METRICOOL_USER_TOKEN, undefined); assert.equal(options.env.NODE_OPTIONS, undefined);
+        return spawn(binary, args, options);
+      } });
+    assert.equal(calls, 1); assert.equal(report.status, "held"); assert.equal(report.reason, "no_reviewed_prepare_packets");
+    assert.equal(report.prepared, 0); assert.equal(report.uploaded, 0); assert.equal(report.paidSpendUsd, 0);
+  } finally { await rm(workspaceRoot, { recursive: true, force: true }); }
+});
+
+test("prepare subprocess ignores provider stderr, refuses paid reports and is killed on a hard deadline", { timeout: 5000 }, async t => {
+  const workspaceRoot = await fixture(); let child, closed;
+  t.after(async () => { try { if (child?.pid) process.kill(-child.pid, "SIGKILL"); } catch {} await rm(workspaceRoot, { recursive: true, force: true }); });
+  const invalid = await runPortfolioPrepareChild({ workspaceRoot, env: prepareEnabled, spawnProcess(binary, _args, options) {
+    return spawn(binary, ["-e", 'process.stderr.write("synthetic-private-provider-error");console.log(JSON.stringify({status:"prepared",prepared:1,uploaded:1,paidSpendUsd:2}))'], options);
+  } });
+  assert.equal(invalid.reason, "portfolio_prepare_report_unconfirmed");
+  assert.equal(JSON.stringify(invalid).includes("synthetic-private-provider-error"), false);
+  const started = Date.now();
+  const timeout = await runPortfolioPrepareChild({ workspaceRoot, env: prepareEnabled, timeoutMs: 150,
+    spawnProcess(binary, _args, options) {
+      child = spawn(binary, ["-e", 'process.on("SIGTERM",()=>{});setInterval(()=>{},1000)'], options);
+      closed = once(child, "close"); return child;
+    } });
+  assert.equal(timeout.reason, "portfolio_prepare_deadline_exceeded");
+  assert.ok(Date.now() - started < 2000); await closed;
+});
 
 test("daily discovery runs only when due and preserves research-only evidence", async () => {
   const workspaceRoot = await fixture();
