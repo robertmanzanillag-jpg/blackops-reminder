@@ -802,6 +802,14 @@ async function discoverProfiles(
   }
 }
 
+// These brands are assigned to the gaming portfolio. Neither a matching news
+// alias nor an old explicit environment override may route news to them.
+const GAMING_PORTFOLIO_BRAND_IDS = new Set(["6431685", "6431687", "6591612", "6595747"]);
+
+function newsProfiles(profiles: ProfileCandidate[]): ProfileCandidate[] {
+  return profiles.filter(profile => !GAMING_PORTFOLIO_BRAND_IDS.has(profile.blogId));
+}
+
 const NEWS_LANE_CONFIG: Record<ClipperLocalNewsLane, { label: string; aliases: string[]; overrideKey: "METRICOOL_MIAMI_NEWS_BLOG_ID" | "METRICOOL_NY_NEWS_BLOG_ID" }> = {
   "miami-news": {
     label: "Miami News",
@@ -848,8 +856,8 @@ export async function getClipperLocalNewsMetricoolReadiness(
     const config = NEWS_LANE_CONFIG[lane];
     const override = env[config.overrideKey];
     const profile = hasRealValue(override)
-      ? profiles.find((candidate) => candidate.blogId === override.trim() && config.aliases.includes(candidate.label))
-      : profiles.find((candidate) => config.aliases.includes(candidate.label));
+      ? newsProfiles(profiles).find((candidate) => candidate.blogId === override.trim() && config.aliases.includes(candidate.label))
+      : newsProfiles(profiles).find((candidate) => config.aliases.includes(candidate.label));
     return (["facebook", "x"] as ClipperLocalNewsPlatform[]).map((platform) => ({
       lane,
       platform,
@@ -1005,13 +1013,13 @@ export async function deliverClipperLocalNewsToMetricool(
     for (const lane of Object.keys(laneConfig) as ClipperLocalNewsLane[]) {
       const config = laneConfig[lane];
       if (hasRealValue(config.override)) {
-        const match = profiles?.find(profile => profile.blogId === config.override!.trim()
+        const match = newsProfiles(profiles ?? []).find(profile => profile.blogId === config.override!.trim()
           && config.aliases.includes(profile.label));
         if (match) laneProfiles.set(lane, match);
         else if (safeItems.some(item => item.lane === lane)) result.blockedLanes.push(lane);
         continue;
       }
-      const match = profiles?.find((profile) => config.aliases.includes(profile.label));
+      const match = newsProfiles(profiles ?? []).find((profile) => config.aliases.includes(profile.label));
       if (match) laneProfiles.set(lane, match);
       else if (safeItems.some((item) => item.lane === lane)) result.blockedLanes.push(lane);
     }

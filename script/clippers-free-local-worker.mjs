@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { CLIPPERS_ALLOWED_ENV_KEYS, loadClipperSelectedEnv } from "./clippers-selected-env.mjs";
 
@@ -47,11 +48,37 @@ async function writeReport(reportPath, report) {
   await rename(temporaryPath, reportPath);
 }
 
+function isTransientConfigRead(error) {
+  return ["EAGAIN", "EWOULDBLOCK", "ETIMEDOUT"].includes(error?.code) ||
+    (error?.errno === -11 && error?.syscall === "read");
+}
+
+async function loadEnvironment(root, env, loader) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const loadedEnv = { ...env };
+      const files = loader(root, loadedEnv);
+      Object.assign(env, loadedEnv);
+      return files;
+    } catch (error) {
+      if (attempt >= 2 || !isTransientConfigRead(error)) throw error;
+      await sleep(100 * (attempt + 1));
+    }
+  }
+}
+
 export async function runClipperFreeLocalWorker(options = {}) {
   const projectRoot = path.resolve(options.projectRoot || DEFAULT_PROJECT_ROOT);
   const workerEnv = { ...process.env, ...(options.env || {}) };
   const configRoot = path.resolve(options.configRoot || workerEnv.CLIPPERS_CONFIG_ROOT || projectRoot);
-  const loadedConfigurationFiles = loadClipperSelectedEnv(configRoot, workerEnv);
+  const startedAt = new Date().toISOString();
+  let loadedConfigurationFiles;
+  let environmentError;
+  try {
+    loadedConfigurationFiles = await loadEnvironment(configRoot, workerEnv, options.loadEnvironment || loadClipperSelectedEnv);
+  } catch (error) {
+    environmentError = error;
+  }
   const workspaceRoot = path.resolve(
     options.workspaceRoot || workerEnv.CLIPPERS_WORKSPACE_ROOT || path.join(projectRoot, "clippers_workspace"),
   );
@@ -91,7 +118,21 @@ export async function runClipperFreeLocalWorker(options = {}) {
   }
   await lock.writeFile(`${JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() })}\n`);
 
-  const startedAt = new Date().toISOString();
+  if (environmentError) {
+    const blocker = isTransientConfigRead(environmentError)
+      ? "selected_environment_temporarily_unreadable" : "selected_environment_unreadable";
+    const report = {
+      status: "blocked", failedStage: "configuration", configurationBlockers: [blocker],
+      startedAt, finishedAt: new Date().toISOString(), paidAiUsed: false, paidSpendAllowed: false,
+    };
+    try {
+      await writeReport(reportPath, report);
+      return { ...report, reportPath };
+    } finally {
+      await lock.close();
+      await unlink(lockPath).catch(() => {});
+    }
+  }
   const publishingAuthorized = workerEnv.CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED === "true";
   const publicMediaUploadAuthorized = workerEnv.CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED === "true";
   await writeReport(reportPath, {

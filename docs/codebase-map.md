@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-18T02:48:31.110Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-credit-audit`
+Generated: 2026-11-18T04:16:31.136Z
+Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-daily-learning-20261118`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1139 | 1039 | 4059 | 604 | 22986 |
+| 1143 | 1043 | 4077 | 604 | 23217 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 297 | 293 | test:297 |
+| `tests` | 298 | 294 | test:298 |
 | `server` | 270 | 264 | server:270 |
 | `client/src` | 153 | 151 | ui-component:55, client-component:44, client-page:28, client-lib:19 |
-| `script` | 116 | 104 | script:116 |
+| `script` | 118 | 106 | script:118 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 63 | 61 | docs:63 |
+| `docs` | 64 | 62 | docs:64 |
 | `shared` | 29 | 29 | shared:29 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
@@ -391,9 +391,10 @@ Package: `rest-express`
 - `script/clippers-cleanup-published-vyro-media.mjs` (script; 47 symbols, 4 imports)
 - `script/clippers-content-learning-ceo.mjs` (script; 85 symbols, 3 imports)
 - `script/clippers-content-local-worker.mjs` (script; 112 symbols, 10 imports)
-- `script/clippers-daily-watchdog.mjs` (script; 86 symbols, 3 imports)
+- `script/clippers-daily-learning.mjs` (script; 98 symbols, 7 imports)
+- `script/clippers-daily-watchdog.mjs` (script; 87 symbols, 4 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
-- `script/clippers-free-local-worker.mjs` (script; 41 symbols, 5 imports)
+- `script/clippers-free-local-worker.mjs` (script; 45 symbols, 6 imports)
 - `script/clippers-generate-owned-gap-sources.mjs` (script; 30 symbols, 3 imports)
 - `script/clippers-generate-owned-meme-sources.ts` (script; 23 symbols, 3 imports)
 - `script/clippers-generate-owned-sports-streamer-sources.ts` (script; 26 symbols, 3 imports)
@@ -405,6 +406,7 @@ Package: `rest-express`
 - `script/clippers-metricool-autopilot.mjs` (script; 116 symbols, 4 imports)
 - `script/clippers-motivation-shorts.mjs` (script; 157 symbols, 6 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
+- `script/clippers-portfolio-metricool.mjs` (script; 70 symbols, 1 imports)
 - `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)
 - `script/clippers-reconcile-publications.mjs` (script; 74 symbols, 3 imports)
 - `script/clippers-record-owned-meme-rights.ts` (script; 10 symbols, 1 imports)
@@ -416,8 +418,6 @@ Package: `rest-express`
 - `script/clippers-sync-metricool-source-readiness.mjs` (script; 28 symbols, 3 imports)
 - `script/clippers-tiktok-preflight.ts` (script; 15 symbols, 1 imports)
 - `script/clippers-upload-metricool-media.ts` (script; 51 symbols, 7 imports)
-- `script/clippers-youtube-delivery-worker.mjs` (script; 30 symbols, 6 imports)
-- `script/clippers-youtube-oauth-bootstrap.mjs` (script; 75 symbols, 6 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.

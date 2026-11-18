@@ -109,6 +109,9 @@ REQUIRED_RUNTIME_FILES=(
   script/clippers-youtube-delivery-worker.mjs
   script/run-clippers-youtube-delivery-worker.sh
   script/clippers-daily-watchdog.mjs
+  script/clippers-daily-learning.mjs
+  script/clippers-portfolio-metricool.mjs
+  script/clippers-selected-env.mjs
 )
 for relative in "${REQUIRED_RUNTIME_FILES[@]}"; do
   [[ -f "$RUNTIME_ROOT/$relative" && -r "$RUNTIME_ROOT/$relative" ]] || {
