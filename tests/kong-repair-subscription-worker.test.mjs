@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import {createHash} from 'node:crypto';
 import {installPlan} from '../script/install-kong-repair-subscription-worker.mjs';
-import { REPOSITORY, BASE_BRANCH, ENDPOINT, allowedFile, allowedChange, cleanEnvironment, permissionArgs, modelArgs, selectModel, validateClaim, makeEnvelope, signedBody, rpc, changedFiles, consumeOne, runProcess, makerPrompt, canonicalJson, sourceFromIssue, consumeGitHubOnce, registryLock,checkedReview } from '../script/kong-repair-subscription-worker.mjs';
+import { REPOSITORY, BASE_BRANCH, ENDPOINT, allowedFile, allowedChange, cleanEnvironment, permissionArgs, modelArgs, selectModel, validateClaim, makeEnvelope, signedBody, rpc, changedFiles, consumeOne, runProcess, makerPrompt, canonicalJson, sourceFromIssue, consumeGitHubOnce, registryLock,checkedReview,materializePatch,publishWorkerHealth } from '../script/kong-repair-subscription-worker.mjs';
 
 const claim = (extra = {}) => ({ key: 'repair-key-1', fence: 'fence-1', leaseExpiresAt: new Date(Date.now()+60*60_000).toISOString(), repository: REPOSITORY, baseBranch: BASE_BRANCH, issueUrl: `https://github.com/${REPOSITORY}/issues/123`, sourceTaskId: 'task-1', errorId: 'error-1', summary: 'The event title does not display correctly', ...extra });
 async function fixture(t) { const root=await fs.mkdtemp(path.join(os.tmpdir(),'repair-worker-test-')); t.after(()=>fs.rm(root,{recursive:true,force:true})); return root; }
@@ -100,7 +100,7 @@ test('the process runner uses argv without shell expansion and terminates bounde
 
 const digest=value=>createHash('sha256').update(value).digest('hex');
 function sourceIssue(changed={}) {
-  const source={version:1,company:'kong',repository:REPOSITORY,sourceTaskId:'task-1',errorId:'error-1',fingerprint:'fingerprint-1',generation:1,summary:'Fix the event title',reportedAt:'2026-11-18T03:00:00.000Z',baseBranch:BASE_BRANCH,baseSha:'a'.repeat(40),regressionScenario:'unsupported',engineSourceCommit:'d'.repeat(40),evidence:{errorClass:'TypeError',message:'Cannot read properties of undefined',route:'/api/events',httpMethod:'GET',httpStatus:500,locations:[{filePath:'server/events.ts',lineNumber:42}]},...changed};
+  const source={version:1,company:'kong',repository:REPOSITORY,sourceTaskId:'task-1',errorId:'error-1',fingerprint:'f'.repeat(64),generation:1,summary:'Fix the event title',reportedAt:'2026-11-18T03:00:00.000Z',baseBranch:BASE_BRANCH,baseSha:'a'.repeat(40),regressionScenario:'unsupported',engineSourceCommit:'d'.repeat(40),evidence:{errorClass:'TypeError',message:'Cannot read properties of undefined',route:'/api/events',httpMethod:'GET',httpStatus:500,locations:[{filePath:'server/events.ts',lineNumber:42}]},...changed};
   source.repairKey=source.repairKey||`kong-repair:${digest(canonicalJson([source.repository,source.company,source.sourceTaskId,source.errorId,source.fingerprint,source.generation]))}`;
   const raw=canonicalJson(source);
   return {number:123,url:`https://github.com/${REPOSITORY}/issues/123`,author:{login:'robertmanzanillag-jpg'},lastEditedAt:null,state:'OPEN',body:`<!-- kong-repair-source:${Buffer.from(raw).toString('base64')} -->\n<!-- kong-repair-source-sha256:${digest(raw)} -->`};
@@ -138,8 +138,8 @@ test('daily subscription reservations cap model work without consuming another s
   const root=await fixture(t);const now=new Date('2026-11-18T04:00:00Z');
   for(let i=0;i<3;i++)await fs.writeFile(path.join(root,`${String(i).repeat(64)}.json`),JSON.stringify({modelReservedAt:now.toISOString()}));
   let scans=0;const opts={root,now:()=>now,list:async()=>{scans++;return []},execute:async()=>assert.fail('no model')};
-  assert.equal((await consumeGitHubOnce(opts)).state,'daily_subscription_limit');assert.equal(scans,0);
-  assert.equal((await consumeGitHubOnce({...opts,now:()=>new Date('2026-11-18T05:01:00Z')})).state,'idle');assert.equal(scans,1);
+  assert.equal((await consumeGitHubOnce(opts)).state,'daily_subscription_limit');assert.equal(scans,1);
+  assert.equal((await consumeGitHubOnce({...opts,now:()=>new Date('2026-11-18T05:01:00Z')})).state,'idle');assert.equal(scans,2);
 });
 test('installer plan is scoped, escaped, cadence-bounded and does not embed credentials or execute at load',()=>{
   const plan=installPlan('/Users/Name & Name');assert.equal(plan.startIntervalSeconds,1800);assert.equal(plan.maxModelReservationsPerNewYorkDay,3);assert.equal(plan.runAtLoad,false);
@@ -155,6 +155,30 @@ test('stale or unapproved preflight holds without creating a journal or atomic c
 test('maker and fresh checker reserve separate invocations inside the same three-call daily cap',async t=>{
   const root=await fixture(t),source=sourceFromIssue(sourceIssue());let scans=0;
   const opts={root,list:async()=>{scans++;return [source]},preflight:async()=>{},claim:async()=>({}),execute:async(task,stage)=>{assert.notEqual(task.makerInvocationId,task.checkerInvocationId);await stage('model_running');await stage('checker_running');return {prNumber:1,headSha:'e'.repeat(40)}},report:async()=>({commentId:1})};
-  assert.equal((await consumeGitHubOnce(opts)).state,'awaiting_checker');assert.equal((await consumeGitHubOnce(opts)).state,'daily_subscription_limit');assert.equal(scans,1);
+  assert.equal((await consumeGitHubOnce(opts)).state,'awaiting_checker');assert.equal((await consumeGitHubOnce(opts)).state,'daily_subscription_limit');assert.equal(scans,2);
   const journal=JSON.parse(await fs.readFile(path.join(root,source.repairKey.split(':')[1]+'.json'),'utf8'));assert.equal(journal.modelReservations.length,2);assert.notEqual(journal.modelReservations[0].invocationId,journal.modelReservations[1].invocationId);
+});
+test('a successful zero-source poll records liveness without invoking a model or claiming completed work',async t=>{
+  const root=await fixture(t);let beats=0;const result=await consumeGitHubOnce({root,list:async()=>[],heartbeat:async p=>{beats++;assert.equal(p.sourceCount,0)},execute:async()=>assert.fail('no model')});assert.equal(result.state,'idle');assert.equal(beats,1);const poll=JSON.parse(await fs.readFile(path.join(root,'last-successful-poll.json'),'utf8'));assert.equal(poll.sourceCount,0);assert.ok(poll.observedAt);
+});
+test('health publisher reuses one private metadata comment at thirty-minute cadence without branch pushes or dispatch',async t=>{
+  const root=await fixture(t),engine={sourceCommit:'a'.repeat(40),sha256:'b'.repeat(64)},calls=[];
+  const request=async(args,input)=>{calls.push({args,input});if(args[0]==='issue')return [];if(args[1].endsWith('/issues'))return {number:8};if(args[1].endsWith('comments?per_page=100'))return [];return {id:9,body:input.body,user:{login:'robertmanzanillag-jpg'}};};
+  const opts={root,engine,sourceCount:0,request,now:new Date('2026-11-18T04:00:00Z')};assert.equal((await publishWorkerHealth(opts)).state,'published');assert.equal(calls.length,4);
+  assert.equal((await publishWorkerHealth({...opts,now:new Date('2026-11-18T04:10:00Z')})).state,'cadence_held');assert.equal(calls.length,4);
+  assert.equal((await publishWorkerHealth({...opts,now:new Date('2026-11-18T04:31:00Z')})).state,'published');assert.ok(calls.at(-1).args.includes('PATCH'));assert.ok(calls.at(-1).args[1].endsWith('/comments/9'));
+  assert.ok(calls.every(c=>!c.args.join(' ').includes('git/refs')&&!JSON.stringify(c.input||{}).includes('@codex')));assert.ok(calls.at(-1).input.body.includes('"state":"idle"'));
+});
+test('a lost health issue-creation acknowledgement never creates another issue automatically',async t=>{
+  const root=await fixture(t);let creations=0;const opts={root,engine:{sourceCommit:'a'.repeat(40),sha256:'b'.repeat(64)},sourceCount:0,request:async args=>{if(args[0]==='issue')return [];creations++;throw Error('lost create ack')}};
+  await assert.rejects(publishWorkerHealth(opts),/lost create ack/);await assert.rejects(publishWorkerHealth(opts),/HEALTH_UNCONFIRMED/);assert.equal(creations,1);
+});
+test('tests run against the exact publishable artifact, so omitted maker temp helpers cannot produce a passing receipt',async t=>{
+  const root=await fixture(t),maker=path.join(root,'maker');await fs.mkdir(path.join(maker,'tests'),{recursive:true});await fs.mkdir(path.join(maker,'.worker-tmp'));await fs.writeFile(path.join(maker,'.worker-tmp/helper.mjs'),'export const value=42;');
+  const testBody='import test from "node:test";import assert from "node:assert/strict";import{value}from"../.worker-tmp/helper.mjs";test("regression",()=>assert.equal(value,42));';
+  await fs.writeFile(path.join(maker,'tests/regression.test.mjs'),testBody);const before=new Map(),changes=await changedFiles(before,maker);
+  assert.deepEqual(changes.map(x=>x.name),['tests/regression.test.mjs']);const original=await runProcess(process.execPath,['--test','tests/regression.test.mjs'],{cwd:maker,env:cleanEnvironment()});assert.equal(original.exitCode,0);
+  const published=path.join(root,'published');await materializePatch(before,changes,published);const verified=await runProcess(process.execPath,['--test','tests/regression.test.mjs'],{cwd:published,env:cleanEnvironment()});assert.notEqual(verified.exitCode,0);
+  await fs.writeFile(path.join(maker,'tests/helper.mjs'),'export const value=42;');await fs.writeFile(path.join(maker,'tests/regression.test.mjs'),testBody.replace('../.worker-tmp/helper.mjs','./helper.mjs'));
+  const exact=path.join(root,'exact');await materializePatch(before,await changedFiles(before,maker),exact);assert.equal((await runProcess(process.execPath,['--test','tests/regression.test.mjs'],{cwd:exact,env:cleanEnvironment()})).exitCode,0);
 });

@@ -62,7 +62,10 @@ remain failed work. No savings or productive improvement is inferred from them.
 Only bounded code, test and documentation changes can be copied to the checkout.
 Package/config/policy/credential changes, symlinks and secret-like added content
 are rejected. At least one changed regression test must run with Node 22 through
-the same sandbox, with one or more passing test cases and zero failures. This is
+the same sandbox on a newly materialized copy of exactly the publishable files,
+with one or more passing test cases and zero failures. Maker temp helpers cannot
+enter this copy. Its source digest must remain unchanged after testing and match
+the actual committed candidate presented to the checker. This is
 a maker check, not an independent acceptance gate.
 
 The host then opens a draft PR and re-reads its actual remote branch and head.
@@ -80,6 +83,15 @@ The resulting maker status is `awaiting_checker`, never resolved or deployed.
 The bridge's independent review admission, actual App QA,
 approved deployment and observed production regression evidence are required by
 the bridge before verified closure. This worker never merges or deploys.
+
+After a successful source poll, the parent writes a local timestamp/count receipt.
+When activated, it also maintains one metadata comment in a private worker-health
+issue, at a thirty-minute cadence. This distinguishes an authenticated, connected
+worker with zero jobs from a missing worker. The health comment carries the
+reviewed engine revision and hash, actual poll time, source count and sign-in
+booleans, never credentials or a claim that work was completed. A lost creation
+acknowledgement is quarantined rather than creating duplicate health issues.
+Read-only polling can continue while the daily model reservation limit is held.
 
 ## Review and activation
 
