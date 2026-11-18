@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-18T05:24:05.157Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-kong-repair`
+Generated: 2026-11-18T06:02:53.675Z
+Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-portfolio-prepare-20261118`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1157 | 1057 | 4145 | 610 | 23692 |
+| 1170 | 1068 | 4202 | 615 | 24067 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 302 | 298 | test:302 |
+| `tests` | 305 | 301 | test:305 |
 | `server` | 276 | 270 | server:276 |
-| `client/src` | 153 | 151 | ui-component:55, client-component:44, client-page:28, client-lib:19 |
-| `script` | 120 | 108 | script:120 |
+| `client/src` | 154 | 152 | ui-component:55, client-component:45, client-page:28, client-lib:19 |
+| `script` | 123 | 111 | script:123 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 66 | 64 | docs:66 |
+| `docs` | 72 | 68 | docs:72 |
 | `shared` | 29 | 29 | shared:29 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
@@ -86,6 +86,7 @@ Package: `rest-express`
 - `tests/developer-autopilot-wiring.test.ts`: `/api/revenue-engine/delivery-workspaces/app-qa-gate`, `/api/revenue-engine/delivery-workspaces/github-handoff`, `/api/revenue-engine/delivery-workspaces/pr-status`, `/api/revenue-engine/delivery-workspaces/release-gate`
 - `tests/harness/agents-world-integrated.tsx`: `/agents-office`
 - `tests/kong-office-browser-qa.test.mjs`: `/api/agent-council/state`, `/api/agents-office/cities`, `/api/agents-office/connections`, `/api/agents-office/kong-snapshot`, `/api/app-qa-agent/status`, `/api/ceo/conversation-history`, `/api/ceo/go-live`, `/api/ceo/readiness`, `/api/fixture-owner-boundary`, `/api/github/repos`, `/api/github/repos/fixture/office-fixture/contents`, `/api/github/status`, `/api/legal-compliance/reports`, `/api/monthly-goals`, `/api/projects`, `/health`
+- `tests/kong-repair-status-panel.test.mjs`: `/`, `/api/agent-council/state`, `/api/auth/me`, `/api/kong-supervisor/state`, `/panel.js`
 - `tests/software-factory-panel.test.mjs`: `/`, `/api/software-factory`, `/api/software-factory/:action`, `/panel.js`
 - `tests/user-context.test.ts`: `/api/auth/login`, `/api/github/status`
 - `tests/workspace-access.test.ts`: `/api/agent-company/orders`, `/api/blackroom-team`, `/api/github/repos/:owner/:repo/file`, `/api/investments`, `/api/portfolio/summary`, `/api/radio/slots`, `/api/workspace/me`, `/api/x`, `/blackroom`, `/owner`
@@ -411,6 +412,7 @@ Package: `rest-express`
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-portfolio-discovery.mjs` (script; 68 symbols, 6 imports)
 - `script/clippers-portfolio-metricool.mjs` (script; 70 symbols, 1 imports)
+- `script/clippers-portfolio-prepare.mjs` (script; 102 symbols, 7 imports)
 - `script/clippers-portfolio-render.mjs` (script; 77 symbols, 8 imports)
 - `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)
 - `script/clippers-reconcile-publications.mjs` (script; 74 symbols, 3 imports)
@@ -420,7 +422,6 @@ Package: `rest-express`
 - `script/clippers-selected-env.mjs` (script; 11 symbols, 2 imports)
 - `script/clippers-sleep-video-generator.mjs` (script; 93 symbols, 6 imports)
 - `script/clippers-streamer-growth-ceo.mjs` (script; 170 symbols, 5 imports)
-- `script/clippers-sync-metricool-source-readiness.mjs` (script; 28 symbols, 3 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
