@@ -19,6 +19,7 @@ localPort = 5012
 externalPort = 3000
 
 [env]
+CEO_PAUSED_DOMAINS = "websites,dropshipping"
 PORT = "5000"
 PUBLIC_BASE_URL = "https://robplanner.replit.app"
 OFFICE_WORKER_ENABLED = "false"
@@ -27,7 +28,7 @@ OFFICE_KONG_AUDIT_SCHEDULE_ENABLED = "false"
 KONG_REPAIR_BRIDGE_ENABLED = "true"
 KONG_REPAIR_PULL_ENABLED = "true"
 KONG_REPAIR_HANDOFF_ENABLED = "true"
-KONG_REPAIR_CHECKER_ENGINE_COMMIT = "5fa78c14d866b9f5c2a235f3ff9fe42d665d6fe4"
+KONG_REPAIR_CHECKER_ENGINE_COMMIT = "2cd06ec20c0479cdf2d8765bdf231e22831e5293"
 [workflows]
 runButton = "Project"
 

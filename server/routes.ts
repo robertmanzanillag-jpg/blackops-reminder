@@ -306,10 +306,13 @@ export function buildClipperExternalCloseoutBatchCopyPacket(rows: unknown): stri
 
 let revenueEngineRouteQueue = Promise.resolve();
 
+import { ceoDomainRouteGuard, CeoDomainPausedError } from "./ceo-domain-policy";
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  app.use(ceoDomainRouteGuard);
   registerOfficeRoutes(app);
   registerKongRepairRoutes(app);
   registerOfficeBusinessRoutes(app);
@@ -4368,6 +4371,7 @@ export async function registerRoutes(
       const run = await recordManualAutomationRun(automation, userId);
       res.status(201).json(run);
     } catch (error) {
+      if (error instanceof CeoDomainPausedError) return res.status(423).json({ error: error.code, domain: error.domain, queueDisposition: "held_not_deleted" });
       res.status(500).json({ error: "Failed to trigger automation" });
     }
   });

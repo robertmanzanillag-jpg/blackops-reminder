@@ -1,3 +1,4 @@
+import { assertCeoDomainActive, ceoDomainStatus } from "./ceo-domain-policy";
 import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
@@ -2536,6 +2537,7 @@ function buildScoutCandidateStatus(input: DropshippingProductScoutCandidateInput
 }
 
 export function createDropshippingProductScoutCandidate(input: DropshippingProductScoutCandidateInput) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingProductScoutCandidateSchema.parse(input);
   const rawLiveValidation = buildScoutLiveValidation(parsed);
@@ -2576,6 +2578,7 @@ export function createDropshippingProductScoutCandidate(input: DropshippingProdu
 }
 
 export function runDropshippingProductScoutBatch(input: Partial<DropshippingProductScoutBatchInput> = {}) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingProductScoutBatchSchema.parse(input);
   const selected = productScoutLibrary
@@ -2607,6 +2610,7 @@ export function runDropshippingProductScoutBatch(input: Partial<DropshippingProd
 }
 
 export function promoteDropshippingScoutCandidate(input: DropshippingProductScoutPromotionInput) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingProductScoutPromotionSchema.parse(input);
   const candidate = productScoutCandidates.find((item) => item.id === parsed.candidateId);
@@ -2669,6 +2673,7 @@ function candidateMatchesAutopilotFocus(candidate: DropshippingProductScoutCandi
 }
 
 export function runDropshippingAutopilotProductHunter(input: Partial<DropshippingAutopilotProductHunterInput> = {}) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingAutopilotProductHunterSchema.parse(input);
   const batch = runDropshippingProductScoutBatch({
@@ -2882,6 +2887,7 @@ function productApprovals(input: DropshippingProductResearchInput, status: Drops
 }
 
 export function researchDropshippingProduct(input: DropshippingProductResearchInput) {
+  assertCeoDomainActive("dropshipping");
   loadProducts();
   const parsed = dropshippingProductResearchSchema.parse(input);
   const economics = calculateProductEconomics(parsed);
@@ -2913,6 +2919,7 @@ export function researchDropshippingProduct(input: DropshippingProductResearchIn
 }
 
 export function reviewDropshippingSupplier(input: DropshippingSupplierReviewInput) {
+  assertCeoDomainActive("dropshipping");
   loadSuppliers();
   const parsed = dropshippingSupplierReviewSchema.parse(input);
   const riskFlags = [
@@ -2956,6 +2963,7 @@ export function reviewDropshippingSupplier(input: DropshippingSupplierReviewInpu
 }
 
 export function buildDropshippingLaunchPlan(input: DropshippingLaunchPlanInput) {
+  assertCeoDomainActive("dropshipping");
   loadProducts();
   loadLaunchPlans();
   const parsed = dropshippingLaunchPlanSchema.parse(input);
@@ -3008,6 +3016,7 @@ export function buildDropshippingLaunchPlan(input: DropshippingLaunchPlanInput) 
 }
 
 export function recordDropshippingLedgerEntry(input: DropshippingLedgerEntryInput) {
+  assertCeoDomainActive("dropshipping");
   loadLedger();
   const parsed = dropshippingLedgerEntrySchema.parse(input);
   const entry: DropshippingLedgerEntry = {
@@ -3037,6 +3046,7 @@ function deriveOrderStatus(input: DropshippingOrderInput, economics: ReturnType<
 }
 
 export function recordDropshippingOrder(input: DropshippingOrderInput) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingOrderSchema.parse(input);
   const product = products.find((item) => item.id === parsed.productId) || null;
@@ -3177,6 +3187,7 @@ function applyApprovalDecisionToTargets(decision: DropshippingApprovalDecision) 
 }
 
 export function recordDropshippingApprovalDecision(input: DropshippingApprovalDecisionInput) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingApprovalDecisionSchema.parse(input);
   const snapshot = getDropshippingCeoSnapshot();
@@ -3200,6 +3211,7 @@ export function recordDropshippingApprovalDecision(input: DropshippingApprovalDe
 }
 
 export function recordDropshippingLearningReview(input: DropshippingLearningReviewInput) {
+  assertCeoDomainActive("dropshipping");
   loadLearningReviews();
   const parsed = dropshippingLearningReviewSchema.parse(input);
   const profitUsd = Number((parsed.revenueUsd - parsed.spendUsd - parsed.refundsUsd).toFixed(2));
@@ -3274,6 +3286,7 @@ function buildCampaignDrafts(input: DropshippingMarketingCampaignInput, product:
 }
 
 export function buildDropshippingMarketingCampaign(input: DropshippingMarketingCampaignInput) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingMarketingCampaignSchema.parse(input);
   const product = products.find((item) => item.id === parsed.productId) || null;
@@ -3352,6 +3365,7 @@ export function buildDropshippingMarketingCampaign(input: DropshippingMarketingC
 }
 
 export function runDropshippingCeoCycle(input: Partial<DropshippingCeoCycleInput> = {}) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingCeoCycleSchema.parse(input);
   const before = getDropshippingCeoSnapshot();
@@ -3469,6 +3483,7 @@ export function runDropshippingCeoCycle(input: Partial<DropshippingCeoCycleInput
 }
 
 export function runDropshippingDailyOperatingCycle(input: Partial<DropshippingCeoCycleInput> = {}) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const before = getDropshippingCeoSnapshot();
   const today = new Date().toISOString().slice(0, 10);
@@ -3598,6 +3613,7 @@ function buildLaunchPackApprovals(input: {
 }
 
 export function buildDropshippingLaunchPack(input: Partial<DropshippingLaunchPackInput> = {}) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingLaunchPackSchema.parse(input);
   const product = parsed.productId
@@ -3731,6 +3747,7 @@ export function buildDropshippingLaunchPack(input: Partial<DropshippingLaunchPac
 }
 
 export function prepareDropshippingLaunchPackApprovalQueue(input: Partial<DropshippingLaunchPackApprovalQueueInput> = {}) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingLaunchPackApprovalQueueSchema.parse(input);
   const launchPack = parsed.launchPackId
@@ -3802,6 +3819,7 @@ export function recordDropshippingApprovalOutboxRequests(
   requests: DropshippingPreparedApprovalRequest[],
   failureReason = "Trust Center DB unavailable; saved locally for manual review.",
 ) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const now = new Date().toISOString();
   const queued: DropshippingApprovalOutboxItem[] = [];
@@ -3854,6 +3872,7 @@ export function recordDropshippingApprovalOutboxRequests(
 }
 
 export function prepareDropshippingApprovalOutboxMigration(input: Partial<DropshippingApprovalOutboxMigrationInput> = {}) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingApprovalOutboxMigrationSchema.parse(input);
   const itemIdSet = new Set(parsed.itemIds);
@@ -3880,6 +3899,7 @@ export function prepareDropshippingApprovalOutboxMigration(input: Partial<Dropsh
 }
 
 export function markDropshippingApprovalOutboxQueued(items: Array<{ id: string; pendingActionId?: string }>) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const now = new Date().toISOString();
   const marked: DropshippingApprovalOutboxItem[] = [];
@@ -4038,6 +4058,7 @@ function makeShopifyDraftRecord(
 }
 
 export function preflightDropshippingShopifyDraft(input: DropshippingShopifyDraftInput) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingShopifyDraftSchema.parse(input);
   const product = products.find((item) => item.id === parsed.productId) || null;
@@ -4068,6 +4089,7 @@ export async function createDropshippingShopifyDraft(
   input: DropshippingShopifyDraftInput,
   fetchImpl: typeof fetch = fetch,
 ) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingShopifyDraftSchema.parse(input);
   const product = products.find((item) => item.id === parsed.productId) || null;
@@ -4131,6 +4153,7 @@ function buildFulfillmentGuardrail(order: DropshippingOrder | null, input: Drops
 }
 
 export function prepareDropshippingFulfillment(input: DropshippingFulfillmentInput) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingFulfillmentSchema.parse(input);
   const order = orderRecords.find((item) => item.id === parsed.orderId) || null;
@@ -4663,6 +4686,7 @@ function buildSocialPostPayload(
 }
 
 export function createDropshippingSocialPostBatch(input: DropshippingSocialPostBatchInput) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingSocialPostBatchSchema.parse(input);
   const campaign = findCampaignById(parsed.campaignId);
@@ -4762,6 +4786,7 @@ export async function publishDropshippingSocialPost(
   input: DropshippingSocialPublishInput,
   fetchImpl: typeof fetch = fetch,
 ) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingSocialPublishSchema.parse(input);
   const post = socialPosts.find((item) => item.id === parsed.postId) || null;
@@ -4838,6 +4863,7 @@ export async function publishDropshippingSocialPost(
 }
 
 export function recordDropshippingSocialMetrics(input: DropshippingSocialMetricsInput) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingSocialMetricsSchema.parse(input);
   const post = socialPosts.find((item) => item.id === parsed.postId) || null;
@@ -4886,6 +4912,7 @@ export function recordDropshippingSocialMetrics(input: DropshippingSocialMetrics
 }
 
 export function analyzeDropshippingSocialPerformance(input: Partial<DropshippingSocialAnalysisInput> = {}) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingSocialAnalysisSchema.parse(input);
   const scopedMetrics = parsed.campaignId
@@ -5168,6 +5195,7 @@ function buildGrowthSprintBoardApprovals(input: {
 }
 
 export function buildDropshippingGrowthSprint(input: Partial<DropshippingGrowthSprintInput> = {}) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingGrowthSprintSchema.parse(input);
   const approvalQueue = approvalQueueCount(products, launchPlans, marketingCampaigns, socialPosts, orderRecords, fulfillmentActions);
@@ -6097,6 +6125,7 @@ function approvalQueueCount(
 }
 
 export function buildDropshippingCapitalPlan(input: Partial<DropshippingCapitalPlanInput> = {}) {
+  assertCeoDomainActive("dropshipping");
   loadAll();
   const parsed = dropshippingCapitalPlanSchema.parse(input);
   const approvalQueue = approvalQueueCount(products, launchPlans, marketingCampaigns, socialPosts, orderRecords, fulfillmentActions);
@@ -6310,6 +6339,7 @@ export function getDropshippingCeoSnapshot() {
   });
 
   return {
+    operatingPause: ceoDomainStatus("dropshipping"),
     generatedAt: new Date().toISOString(),
     strategy: {
       model: "dropshipping_sin_inventario",
@@ -6635,6 +6665,7 @@ export function buildDropshippingDailyReport(cadence: "morning" | "evening" = "m
 }
 
 export async function sendDropshippingDailyReport(userId: string, cadence: "morning" | "evening" = "morning") {
+  assertCeoDomainActive("dropshipping");
   const telegramConfig = await storage.getTelegramConfig(userId);
   const message = buildDropshippingDailyReport(cadence);
 

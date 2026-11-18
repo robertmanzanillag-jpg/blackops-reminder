@@ -1,3 +1,4 @@
+import { assertCeoActionActive, CeoDomainPausedError } from "./ceo-domain-policy";
 import type { PendingAction } from "@shared/schema";
 import { storage } from "./storage";
 import { createCalendarEvent, updateCalendarEvent, updateCalendarEventDescription } from "./google-calendar";
@@ -21,6 +22,20 @@ export async function executeApprovedPendingAction(
     return { success: false, error: "Action must be approved before execution" };
   }
 
+  // An old approval does not authorize work while its business domain is paused.
+  try {
+    assertCeoActionActive(action);
+    if (action.actionType === "automation.manual_run") {
+      const automationId = actionInput(action).automationId;
+      if (typeof automationId === "string") {
+        const automation = await storage.getAutomationDefinition(automationId);
+        if (automation && automation.ownerUserId === action.userId) assertCeoActionActive({ actionType: automation.assignedAgentId || "", metadata: automation.metadata });
+      }
+    }
+  } catch (error) {
+    if (error instanceof CeoDomainPausedError) return { success: false, error: error.message };
+    throw error;
+  }
   await storage.updatePendingAction(action.id, { status: "executing" });
   await storage.createPendingActionEvent({
     pendingActionId: action.id,
