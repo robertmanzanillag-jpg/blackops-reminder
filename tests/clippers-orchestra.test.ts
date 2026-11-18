@@ -244,9 +244,13 @@ test('real discovery producer receipts project empty success, stable replay fres
  };
  await runPortfolioDiscovery({stateDir:dir,now:now(),fetchImpl});const first=await buildClippersOrchestraReport({workspaceRoot:root,now:new Date(NOW+10000)});assert.equal(calls,14);assert.ok(parseClippersOrchestraStatus(first,NOW+10000));
  const empty=first.discovery.sources.find((s:any)=>s.channelId===PRIORITY_CREATORS[0].channelId)!;assert.equal(empty.status,'observed');assert.equal(empty.observations,0);assert.ok(empty.observedAt);
+ assert.equal(first.discovery.scout.requestsAdded,0);assert.equal(first.discovery.scout.candidates.length,13);assert.equal(first.discovery.scout.candidates[0].evidence,'popularity_observed');assert.ok(first.discovery.scout.candidates.every((c:any)=>c.url===`https://www.youtube.com/watch?v=${c.videoId}`&&c.rights==='unknown'&&c.mayPublish===false));
  const creator=PRIORITY_CREATORS[1],before=first.discovery.sources.find((s:any)=>s.channelId===creator.channelId)!;
  await runPortfolioDiscovery({stateDir:dir,now:new Date(NOW+2*3600000),creatorIds:[creator.id],fetchImpl});const replay=await buildClippersOrchestraReport({workspaceRoot:root,now:new Date(NOW+2*3600000+10000)});assert.equal(calls,14);assert.equal(replay.discovery.sources.find((s:any)=>s.channelId===creator.channelId)!.observedAt,before.observedAt);assert.equal(replay.discovery.observations,first.discovery.observations);
  views=130;await runPortfolioDiscovery({stateDir:dir,now:new Date(NOW+24*3600000),fetchImpl});const second=await buildClippersOrchestraReport({workspaceRoot:root,now:new Date(NOW+24*3600000+10000)});assert.equal(calls,28);assert.ok(parseClippersOrchestraStatus(second,NOW+24*3600000+10000));const signal=second.discovery.signals.find((s:any)=>s.creatorId===creator.id)!;assert.equal(signal.label,'paired_growth_observed');assert.equal(signal.growthViews,30);
+ const candidate=second.discovery.scout.candidates.find((c:any)=>c.creatorId===creator.id)!;assert.equal(candidate.evidence,'growth_observed');assert.equal(candidate.growthViews,30);assert.ok(candidate.sampleSpanHours>=23.99);assert.equal(candidate.likes,null);
+ const legacy=structuredClone(second);delete legacy.discovery.scout;assert.ok(parseClippersOrchestraStatus(legacy,NOW+24*3600000+10000));
+ const forged=structuredClone(second);forged.discovery.scout.candidates[0].url='https://evil.example/';assert.equal(parseClippersOrchestraStatus(forged,NOW+24*3600000+10000),null);
 }));
 
 test('public growth needs identical channel/video/publication anchor and at least one hour',async()=>fixture(async root=>{

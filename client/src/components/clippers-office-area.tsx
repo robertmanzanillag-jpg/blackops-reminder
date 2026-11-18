@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { apiRequest } from "@/lib/queryClient";
 import { CLIPPERS_AGENTS } from "@shared/clippers-office-agents";
 import { parseClippersOrchestraStatus, type ClippersOrchestraStatus, type ClippersRoleEvidence } from "@shared/clippers-orchestra";
+import type { ViralScoutView } from "@shared/clippers-viral-scout.mjs";
 import { kongSupervisorSessionScope, type SupervisorAuth } from "./kong-supervisor-session";
 
 export const CLIPPERS_ORCHESTRA_ENDPOINT = "/api/clippers/orchestra/status";
@@ -148,6 +149,29 @@ function AgentCard({ agent, role, fresh, now }: { agent: typeof CLIPPERS_AGENTS[
   </article>;
 }
 
+export function ClippersViralScout({ scout, now, fresh }: { scout?: ViralScoutView; now: number; fresh: boolean }) {
+  return <section className="rounded-2xl border border-amber-200/15 p-4" aria-label="Agente de búsqueda viral" data-testid="clippers-viral-scout">
+    <h3 className="font-semibold text-white">Agente de búsqueda viral · candidatos</h3>
+    <p className="mt-2 text-xs leading-relaxed text-slate-400">Busca en los canales oficiales del catálogo y ordena videos recientes. Prioriza crecimiento medido; después, views observadas. La popularidad de una muestra no confirma viralidad ni rendimiento en nuestras cuentas.</p>
+    <p className="mt-2 text-[11px] text-slate-500">Evaluación: {at(scout?.evaluatedAt ?? null)} · reutiliza las lecturas RSS; sin llamadas pagadas de IA.</p>
+    {!scout?.candidates.length && <p className="mt-3 text-sm text-amber-100">{scout?.status === "no_recent_candidates" ? "La última lectura no contiene candidatos recientes con evidencia suficiente." : "Sin datos recientes para proponer videos. La búsqueda necesita una lectura verificable de las fuentes."}</p>}
+    {!!scout?.candidates.length && <ol className="mt-4 space-y-3">{scout.candidates.map(candidate => {
+      const current = fresh && now - Date.parse(candidate.observedAt) <= 26 * 3600000 && now - Date.parse(candidate.publishedAt) <= 72 * 3600000;
+      return <li key={candidate.videoId} className="min-w-0 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+        <p className="text-[11px] text-slate-400">{candidate.creatorName} · YouTube</p>
+        <a href={candidate.url} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block break-words text-sm font-medium text-amber-100 underline underline-offset-4">{candidate.title}</a>
+        {!current && <p className="mt-2 text-xs text-amber-200">Lectura anterior; prioridad actual sin confirmar.</p>}
+        <p className="mt-2 text-xs text-slate-300">Views observadas: {number(candidate.views)} · likes: sin datos</p>
+        <p className="mt-1 text-xs text-slate-400">{candidate.evidence === "growth_observed" ? `Dos muestras: +${number(candidate.growthViews)} views · ${number(candidate.growthPerHour)} por hora` : candidate.evidence === "counter_unchanged" ? "Dos muestras sin aumento del contador." : candidate.evidence === "counter_decreased" ? "El contador descendió; no se afirma crecimiento." : candidate.evidence === "metrics_unknown" ? "Sin contador público verificable; crecimiento sin medir." : "Una muestra de popularidad; crecimiento todavía sin medir."}</p>
+        <p className="mt-1 text-[11px] text-slate-500">Publicado: {at(candidate.publishedAt)} · observado: {at(candidate.observedAt)} · edad al observar: {candidate.ageHoursWhenObserved.toFixed(1)} h</p>
+        {candidate.previousObservedAt && <p className="mt-1 text-[11px] text-slate-500">Muestra anterior: {number(candidate.previousViews)} views · {at(candidate.previousObservedAt)}</p>}
+        <a href={candidate.sourceUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-block text-[11px] text-slate-400 underline underline-offset-4">Fuente pública de los datos</a>
+        <p className="mt-2 text-[11px] text-amber-100">Candidato para revisión · permiso de uso pendiente · sin recortar ni publicar</p>
+      </li>;
+    })}</ol>}
+  </section>;
+}
+
 export function ClippersOfficeReport({ data, now }: { data: ClippersOrchestraStatus; now: number }) {
   const fresh = clippersEvidenceFresh(data, now);
   const sum = (key: "eligibleAssets" | "confirmedScheduledOrPublished") => data.accounts.some(account => account[key] === null) ? null : data.accounts.reduce((total, account) => total + (account[key] ?? 0), 0);
@@ -189,6 +213,7 @@ export function ClippersOfficeReport({ data, now }: { data: ClippersOrchestraSta
         {data.disconnectedDestinations.map(destination => <article key={destination.brandId} className="rounded-xl border border-amber-200/15 p-4 text-sm"><h3 className="font-semibold text-amber-100">{destination.label} · sin redes conectadas</h3><p className="mt-1 text-xs text-slate-400">Marca {destination.brandId}. No se inventa una cuenta o red para este destino.</p><Reasons reasons={[destination.reason]} /></article>)}
       </TabsContent>
       <TabsContent value="sources" className="mt-4 space-y-4">
+        <ClippersViralScout scout={data.discovery.scout} now={now} fresh={fresh} />
         <div className="rounded-2xl border border-amber-200/15 p-4"><h3 className="font-semibold text-white">Descubrimiento de varios streamers</h3><p className="mt-2 text-sm text-slate-400">{number(data.discovery.observations)} observaciones · {number(data.discovery.eligibleAssets)} activos con autorización verificada. {data.discovery.catalogVersion === 2 ? "Presupuesto configurado: hasta 14 lecturas RSS oficiales al día, con 13 canales prioritarios y una exploración rotativa. Son metadatos públicos; los derechos siguen pendientes." : `La rotación configurada es de ${data.discovery.rotationSize} fuentes cada ${data.discovery.rotationDays} días.`} Los horarios configurados no demuestran una ejecución.</p></div>
         <div className="grid gap-3 sm:grid-cols-2">{data.discovery.sources.map(source => <article key={source.creatorId} className="min-w-0 rounded-xl border border-white/10 p-4"><h3 className="break-all text-sm font-semibold text-white">{source.creatorId}</h3><a href={`https://www.youtube.com/channel/${source.channelId}`} target="_blank" rel="noopener noreferrer" className="mt-1 inline-block text-xs text-amber-200 underline underline-offset-4">Identidad del canal de origen</a><p className="mt-2 text-xs text-slate-300">{source.status === "observed" ? "Fuente observada" : source.status === "unavailable" ? "Fuente no disponible" : "Aún no observada"} · {number(source.observations)} observaciones</p><p className="mt-1 text-xs text-slate-500">{at(source.observedAt)}</p><Reasons reasons={source.heldReasons} /></article>)}</div>
         <section className="rounded-2xl border border-white/10 p-4" aria-label="Tendencias medidas"><h3 className="font-semibold text-white">Tendencias con procedencia</h3><p className="mt-1 text-xs text-slate-400">Una primera muestra crea una referencia; solo observaciones pareadas permiten calcular crecimiento. Ninguna señal concede derechos de uso.</p><div className="mt-3 space-y-3">{data.discovery.signals.map(signal => <article key={`${signal.creatorId}:${signal.videoId}`} className="rounded-xl bg-white/[0.03] p-3"><p className="break-all text-sm text-slate-200">{signal.creatorId} · {signal.videoId}</p><p className="mt-1 text-xs text-slate-400">Views observadas: {number(signal.views)}{signal.previousObservedAt ? ` · muestra anterior: ${number(signal.previousViews)} (${at(signal.previousObservedAt)})` : ""}</p><p className="mt-1 text-xs text-slate-400">{signal.label === "paired_growth_observed" ? `Crecimiento observado: ${number(signal.growthViews)} views · ${number(signal.growthPerHour)} por hora` : signal.label === "initial_baseline" ? "Primera observación; crecimiento aún sin medir" : signal.label === "stale_reference" ? "Referencia anterior obsoleta; crecimiento sin confirmar" : "Métricas insuficientes para medir crecimiento"}</p><p className="mt-1 text-[11px] text-slate-500">Publicación de origen: {at(signal.publishedAt)} · observada: {at(signal.observedAt)}</p><p className="mt-2 text-[11px] text-amber-100">Derechos pendientes de revisión del propietario</p></article>)}{data.discovery.signals.length === 0 && <p className="text-sm text-slate-500">Todavía no hay señales de tendencia verificadas.</p>}</div></section>
