@@ -2,15 +2,18 @@ import Foundation
 import Security
 import Darwin
 import CryptoKit
+import Dispatch
 #if !CLIPPERS_KEYCHAIN_TEST
 import AppKit
 #endif
 
 // Default reader: one fixed item, no writes, unlocks, ACL edits or UI.
-// Only explicit user --setup can create one new item with one-app access.
+// Explicit setup or specifically operator-approved private stdin may add one
+// fixed item with one-app access. Neither mode reads or replaces an existing item.
 let platformService = "com.blackops.clippers-orchestra.replit-production"
 let platformAccount = "clippers-telemetry"
 let maximumTokenBytes = 8192
+let approvedInputDeadlineSeconds = 10.0
 
 func privateOutputMode(_ mode: mode_t, family: sa_family_t?) -> Bool {
     let kind = mode & mode_t(S_IFMT)
@@ -28,6 +31,126 @@ func privateStandardOutput() -> Bool {
         pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(STDOUT_FILENO, $0, &length) }
     }
     return status == 0 && privateOutputMode(info.st_mode, family: address.ss_family)
+}
+
+func privateInputDescriptor(_ descriptor: Int32) -> Bool {
+    var info = stat()
+    guard fstat(descriptor, &info) == 0, info.st_uid == getuid() else { return false }
+    let kind = info.st_mode & mode_t(S_IFMT)
+    if kind == mode_t(S_IFIFO) {
+        // Anonymous pipes have no filesystem permissions to grant. Named pipes
+        // must be owner-only; the operator also uses an owner-only parent dir.
+        return info.st_nlink == 0 || info.st_mode & 0o077 == 0
+    }
+    guard kind == mode_t(S_IFSOCK) else { return false }
+    var address = sockaddr_storage(), length = socklen_t(MemoryLayout<sockaddr_storage>.size)
+    let status = withUnsafeMutablePointer(to: &address) { pointer in
+        pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { getsockname(descriptor, $0, &length) }
+    }
+    guard status == 0, address.ss_family == sa_family_t(AF_UNIX) else { return false }
+    var peerUser: uid_t = 0, peerGroup: gid_t = 0
+    return getpeereid(descriptor, &peerUser, &peerGroup) == 0 && peerUser == getuid()
+}
+
+enum ApprovedInputResult { case value(String), failure(String) }
+enum ApprovedInputStep { case bytes(Data), end, again, timeout, failed }
+
+// Fixed static validation messages/statuses only. Never trim or normalize a
+// secret: these are the same RFC6750 b64token characters used by the reader.
+func tokenValidationStatus(_ token: String) -> String {
+    let count = token.utf8.count
+    if count == 0 { return "empty" }
+    if count < 16 { return "too_short" }
+    if count > maximumTokenBytes { return "too_large" }
+    if token.range(of: "^[A-Za-z0-9._~+/-]+=*$", options: .regularExpression) == nil || token.contains("\n") || token.contains("\r") { return "invalid_characters" }
+    return "valid"
+}
+
+func boundedApprovedInput(
+    inputSafe: () -> Bool,
+    clock: () -> Double,
+    readChunk: (Int, Int32) -> ApprovedInputStep
+) -> ApprovedInputResult {
+    guard inputSafe() else { return .failure("unsafe_input") }
+    let started = clock()
+    guard started.isFinite, started >= 0 else { return .failure("unavailable") }
+    var bytes = Data()
+    while true {
+        let elapsed = clock() - started
+        guard elapsed.isFinite, elapsed >= 0 else { return .failure("unavailable") }
+        let remaining = approvedInputDeadlineSeconds - elapsed
+        guard remaining > 0 else { return .failure("input_timeout") }
+        let step = readChunk(min(4096, maximumTokenBytes + 1 - bytes.count), Int32(ceil(remaining * 1000)))
+        let after = clock() - started
+        guard after.isFinite, after >= 0, after < approvedInputDeadlineSeconds else { return .failure("input_timeout") }
+        switch step {
+        case .bytes(let chunk):
+            guard !chunk.isEmpty, chunk.count <= maximumTokenBytes + 1 - bytes.count else { return .failure("too_large") }
+            bytes.append(chunk)
+            guard bytes.count <= maximumTokenBytes else { return .failure("too_large") }
+        case .end:
+            guard let token = String(data: bytes, encoding: .utf8) else { return .failure("invalid_encoding") }
+            let status = tokenValidationStatus(token)
+            return status == "valid" ? .value(token) : .failure(status)
+        case .again: continue
+        case .timeout: return .failure("input_timeout")
+        case .failed: return .failure("unavailable")
+        }
+    }
+}
+
+func approvedDescriptorInput(_ descriptor: Int32) -> ApprovedInputResult {
+    guard privateInputDescriptor(descriptor) else { return .failure("unsafe_input") }
+    let flags = fcntl(descriptor, F_GETFL)
+    guard flags >= 0, fcntl(descriptor, F_SETFL, flags | O_NONBLOCK) == 0 else { return .failure("unavailable") }
+    defer { _ = fcntl(descriptor, F_SETFL, flags) }
+    return boundedApprovedInput(inputSafe: { privateInputDescriptor(descriptor) }, clock: {
+        Double(DispatchTime.now().uptimeNanoseconds) / 1_000_000_000
+    }, readChunk: { maximum, timeout in
+        var descriptorInfo = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+        let ready = poll(&descriptorInfo, 1, timeout)
+        if ready == 0 { return .timeout }
+        if ready < 0 { return errno == EINTR ? .again : .failed }
+        if descriptorInfo.revents & Int16(POLLNVAL | POLLERR) != 0 { return .failed }
+        guard descriptorInfo.revents & Int16(POLLIN | POLLHUP) != 0 else { return .again }
+        var buffer = [UInt8](repeating: 0, count: maximum)
+        let count = read(descriptor, &buffer, maximum)
+        if count == 0 { return .end }
+        if count < 0 { return [EINTR, EAGAIN, EWOULDBLOCK].contains(errno) ? .again : .failed }
+        return .bytes(Data(buffer.prefix(count)))
+    })
+}
+
+func storeApprovedInput(readInput: () -> ApprovedInputResult, create: (String) -> String) -> String {
+    switch readInput() {
+    case .failure(let status): return status
+    case .value(let token): return create(token)
+    }
+}
+
+func approvedStoreReply(_ status: String) -> [String: String] {
+    let allowed: Set<String> = ["stored", "already_exists", "unsafe_input", "input_timeout", "empty", "too_short", "too_large", "invalid_characters", "invalid_encoding", "invalid", "unsafe_reader", "unavailable"]
+    return ["status": allowed.contains(status) ? status : "unavailable"]
+}
+
+func storeApprovedCredential(
+    readerIdentity: () -> (String, String)?,
+    readInput: () -> ApprovedInputResult,
+    disableInteraction: () -> OSStatus,
+    exactAccess: (String) -> CFTypeRef?,
+    addItem: (CFDictionary) -> OSStatus
+) -> [String: String] {
+    guard let expected = readerIdentity() else { return approvedStoreReply("unsafe_reader") }
+    let status = storeApprovedInput(readInput: readInput, create: { token in
+        createPlatformCredential(token: token, validatedReader: {
+            guard let current = readerIdentity(), current.0 == expected.0, current.1 == expected.1 else { return nil }
+            return current.0
+        }, exactAccess: exactAccess, addItem: { attributes in
+            guard disableInteraction() == errSecSuccess else { return errSecInteractionNotAllowed }
+            return addItem(attributes)
+        })
+    })
+    return approvedStoreReply(status)
 }
 
 func platformCredential(
@@ -138,6 +261,26 @@ func exactReaderAccess(_ path: String) -> CFTypeRef? {
     return result
 }
 
+func approvedStdinSetup() -> [String: String] {
+    storeApprovedCredential(readerIdentity: setupReaderIdentity,
+        readInput: { approvedDescriptorInput(STDIN_FILENO) },
+        disableInteraction: { SecKeychainSetUserInteractionAllowed(false) },
+        exactAccess: exactReaderAccess, addItem: { SecItemAdd($0, nil) })
+}
+
+func installSetupMenu(_ application: NSApplication) {
+    let main = NSMenu()
+    let appItem = NSMenuItem(); main.addItem(appItem)
+    let appMenu = NSMenu(); appItem.submenu = appMenu
+    appMenu.addItem(withTitle: "Salir", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+    let editItem = NSMenuItem(title: "Edición", action: nil, keyEquivalent: ""); main.addItem(editItem)
+    let edit = NSMenu(title: "Edición"); editItem.submenu = edit
+    let paste = edit.addItem(withTitle: "Pegar", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+    paste.keyEquivalentModifierMask = .command
+    edit.addItem(withTitle: "Seleccionar todo", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+    application.mainMenu = main
+}
+
 final class PlatformSetup: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let secure = NSSecureTextField(frame: NSRect(x: 24, y: 130, width: 552, height: 28))
     let status = NSTextField(wrappingLabelWithString: "")
@@ -171,6 +314,15 @@ final class PlatformSetup: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func store() {
         guard !saved, let expected = identity else { return }
         let value = secure.stringValue; secure.stringValue = ""
+        let validation = tokenValidationStatus(value)
+        guard validation == "valid" else {
+            let messages = ["empty": "No llegó ningún valor. Usa Edición > Pegar (Cmd+V) dentro del campo.",
+                "too_short": "El valor está incompleto. Copia el token completo y usa Edición > Pegar (Cmd+V).",
+                "too_large": "El valor supera el límite permitido. Pega solo el token de acceso Production.",
+                "invalid_characters": "Formato no válido. Pega solo el token, sin espacios, saltos de línea ni prefijo Bearer."]
+            status.stringValue = messages[validation] ?? "Formato no válido. No se guardó."
+            return
+        }
         let result = createPlatformCredential(token: value, validatedReader: {
             guard let current = setupReaderIdentity(), current.0 == expected.0, current.1 == expected.1 else { return nil }
             return current.0
@@ -190,6 +342,7 @@ final class PlatformSetup: NSObject, NSApplicationDelegate, NSWindowDelegate {
 func userSetup() {
     let application = NSApplication.shared
     application.setActivationPolicy(.regular)
+    installSetupMenu(application)
     let controller = PlatformSetup()
     application.delegate = controller
     withExtendedLifetime(controller) { application.run() }
@@ -199,6 +352,100 @@ func userSetup() {
 #if CLIPPERS_KEYCHAIN_TEST
 // This separately compiled binary cannot query the real Keychain. Both OS
 // operations are injected fakes, and the production entry point is compiled out.
+func runApprovedInputTests() -> Int {
+    var checks = 0
+    func expect(_ condition: @autoclosure () -> Bool) { precondition(condition()); checks += 1 }
+    let synthetic = "synthetic-approved-input-only-123456789"
+    func simulated(_ steps: [ApprovedInputStep], times: [Double] = []) -> ApprovedInputResult {
+        var position = 0, tick = 0
+        return boundedApprovedInput(inputSafe: { true }, clock: {
+            defer { tick += 1 }
+            return times.isEmpty ? 1 : times[min(tick, times.count - 1)]
+        }, readChunk: { maximum, timeout in
+            precondition(maximum >= 1 && maximum <= 4096 && timeout > 0 && timeout <= 10_000)
+            guard position < steps.count else { return .failed }
+            defer { position += 1 }; return steps[position]
+        })
+    }
+    func status(_ result: ApprovedInputResult) -> String {
+        switch result { case .failure(let value): return value; case .value: return "value" }
+    }
+    let unsafe = boundedApprovedInput(inputSafe: { false }, clock: { preconditionFailure("unsafe stdin must not start reading") }, readChunk: { _, _ in preconditionFailure("unsafe stdin must not read") })
+    expect(status(unsafe) == "unsafe_input")
+    expect(status(simulated([.bytes(Data(synthetic.utf8)), .end])) == "value")
+    expect(status(simulated([.end])) == "empty")
+    expect(status(simulated([.bytes(Data("short".utf8)), .end])) == "too_short")
+    expect(status(simulated([.bytes(Data([0xff, 0xfe])), .end])) == "invalid_encoding")
+    for value in [synthetic + "\n", synthetic + "\r", synthetic + " ", "Bearer " + synthetic, synthetic + "\t", "invalid=internal=value"] {
+        expect(status(simulated([.bytes(Data(value.utf8)), .end])) == "invalid_characters")
+    }
+    expect(tokenValidationStatus("synthetic_AZaz09-._~+/===") == "valid")
+    let half = Data(repeating: 97, count: 4096)
+    expect(status(simulated([.bytes(half), .bytes(half), .end])) == "value")
+    expect(status(simulated([.bytes(half), .bytes(half), .bytes(Data([97])), .end])) == "too_large")
+    expect(status(simulated([.timeout])) == "input_timeout")
+    expect(status(simulated([.failed])) == "unavailable")
+    expect(status(simulated([.end], times: [1, 1, 11])) == "input_timeout")
+    expect(status(simulated([.again, .end], times: [1, 1, 2, 12])) == "input_timeout")
+    expect(status(simulated([.end], times: [1, 0])) == "unavailable")
+    let early = storeApprovedInput(readInput: { .failure("input_timeout") }, create: { _ in preconditionFailure("incomplete stdin must not write") })
+    expect(early == "input_timeout")
+    var additions = 0
+    let duplicate = storeApprovedInput(readInput: { .value(synthetic) }, create: { token in
+        createPlatformCredential(token: token, validatedReader: { "/synthetic/reviewed-reader" }, exactAccess: { _ in "one-app" as CFString }, addItem: { query in
+            additions += 1
+            let q = query as NSDictionary
+            precondition(q[kSecAttrService] as? String == platformService && q[kSecAttrAccount] as? String == platformAccount)
+            precondition(q[kSecValueData] as? Data == Data(synthetic.utf8))
+            return errSecDuplicateItem
+        })
+    })
+    expect(duplicate == "already_exists" && additions == 1)
+    expect(approvedStoreReply(synthetic) == ["status": "unavailable"])
+    let encoded = try! JSONSerialization.data(withJSONObject: approvedStoreReply(duplicate))
+    expect(!String(data: encoded, encoding: .utf8)!.contains(synthetic))
+    let noncanonical = storeApprovedCredential(readerIdentity: { nil }, readInput: { preconditionFailure("noncanonical reader must not consume stdin") }, disableInteraction: { preconditionFailure("unsafe identity must not reach Security") }, exactAccess: { _ in nil }, addItem: { _ in preconditionFailure("unsafe identity must not write") })
+    expect(noncanonical == ["status": "unsafe_reader"])
+    let noInteraction = storeApprovedCredential(readerIdentity: { ("/synthetic/reader", "pinned-sha") }, readInput: { .value(synthetic) }, disableInteraction: { errSecInteractionNotAllowed }, exactAccess: { _ in "one-app" as CFString }, addItem: { _ in preconditionFailure("UIoff failure must not add") })
+    expect(noInteraction == ["status": "unavailable"])
+    var identities = 0
+    let replaced = storeApprovedCredential(readerIdentity: {
+        identities += 1; return ("/synthetic/reader", identities == 1 ? "original-sha" : "changed-sha")
+    }, readInput: { .value(synthetic) }, disableInteraction: { preconditionFailure("changed identity must not reach Security") }, exactAccess: { _ in preconditionFailure("changed identity must not authorize ACL") }, addItem: { _ in preconditionFailure("changed identity must not add") })
+    expect(replaced == ["status": "unsafe_reader"])
+
+    var descriptors: [Int32] = [0, 0]
+    expect(pipe(&descriptors) == 0)
+    let readEnd = descriptors[0], writeEnd = descriptors[1]
+    expect(privateInputDescriptor(readEnd))
+    let flags = fcntl(readEnd, F_GETFL)
+    let bytes = Data(synthetic.utf8)
+    expect(bytes.withUnsafeBytes { write(writeEnd, $0.baseAddress, bytes.count) } == bytes.count)
+    close(writeEnd)
+    expect(status(approvedDescriptorInput(readEnd)) == "value")
+    expect(fcntl(readEnd, F_GETFL) == flags); close(readEnd)
+
+    expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
+    expect(privateInputDescriptor(descriptors[0]))
+    close(descriptors[0]); close(descriptors[1])
+    let network = socket(AF_INET, SOCK_STREAM, 0)
+    expect(network >= 0 && !privateInputDescriptor(network)); close(network)
+    let character = open("/dev/null", O_RDONLY)
+    expect(character >= 0 && !privateInputDescriptor(character)); close(character)
+    let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString).resolvingSymlinksInPath()
+    try! FileManager.default.createDirectory(at: temporary, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    defer { try? FileManager.default.removeItem(at: temporary) }
+    let ordinary = temporary.appendingPathComponent("public-fixture").path
+    FileManager.default.createFile(atPath: ordinary, contents: Data("public-only".utf8), attributes: [.posixPermissions: 0o600])
+    let file = open(ordinary, O_RDONLY); expect(file >= 0 && !privateInputDescriptor(file)); close(file)
+    let fifo = temporary.appendingPathComponent("private-fifo").path
+    expect(mkfifo(fifo, 0o600) == 0)
+    let named = open(fifo, O_RDWR | O_NONBLOCK)
+    expect(named >= 0 && privateInputDescriptor(named))
+    chmod(fifo, 0o660); expect(!privateInputDescriptor(named)); close(named)
+    return checks
+}
+
 func runSyntheticTests() {
     let synthetic = "synthetic-platform-token-only-123456789"
     var queryCalls = 0
@@ -269,13 +516,21 @@ func runSyntheticTests() {
     let descriptor = open(file, O_WRONLY)
     precondition(descriptor >= 0 && ftruncate(descriptor, 25 * 1024 * 1024 + 1) == 0); close(descriptor)
     precondition(privateBinaryDigest(file) == nil)
-    print("{\"syntheticTestsPassed\":30,\"realKeychainQueries\":0,\"realKeychainWrites\":0}")
+    let approvedChecks = runApprovedInputTests()
+    print("{\"syntheticTestsPassed\":30,\"approvedInputTestsPassed\":\(approvedChecks),\"realKeychainQueries\":0,\"realKeychainWrites\":0}")
 }
 runSyntheticTests()
 #else
 if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--setup" {
     // Explicit user-only UI. No agent or scheduled sender invokes this mode.
     userSetup()
+} else if CommandLine.arguments.count == 2 && CommandLine.arguments[1] == "--store-approved-from-stdin" {
+    // Only after explicit operator approval to store this existing credential.
+    // Input must be a bounded private pipe; output is a whitelisted status only.
+    if let encoded = try? JSONSerialization.data(withJSONObject: approvedStdinSetup(), options: [.sortedKeys]) {
+        FileHandle.standardOutput.write(encoded)
+        FileHandle.standardOutput.write(Data([10]))
+    }
 } else {
     let reply = CommandLine.arguments.count == 1 ? platformCredential(
         disableInteraction: { SecKeychainSetUserInteractionAllowed(false) },
