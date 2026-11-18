@@ -472,7 +472,14 @@ export function registerBlackRoomControlRoutes(app: Express): void {
             .forEach((experiment: any) => recordBlackRoomPublicationExperiment(current, experiment));
         }
       });
-      res.json({ control: remoteView(remote) });
+      // Scoped Clippers telemetry shares this already-authorized device heartbeat,
+      // but has its own strict schema/store and never enters BlackRoom analytics.
+      let clippersOrchestra:unknown;
+      if(req.body?.clippersOrchestra!==undefined){
+        try{clippersOrchestra=await (await import('./clippers-orchestra-state')).ingestOptionalClippersTelemetry(req.body.clippersOrchestra);}
+        catch{clippersOrchestra={accepted:false,code:'CLIPPERS_ORCHESTRA_INGEST_UNAVAILABLE'};}
+      }
+      res.json({ control: remoteView(remote), ...(clippersOrchestra?{clippersOrchestra}:{}) });
     } catch (error: any) { res.status(500).json({ error: error.message || "Failed to record device heartbeat" }); }
   });
   app.put("/api/blackroom-agent/media/:reservationId", async (req, res) => {
