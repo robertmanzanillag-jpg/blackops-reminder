@@ -76,8 +76,10 @@ export function ceoFocusContext(): string {
 /** Read/status routes stay available. Business mutations stop before handlers or queue admission. */
 export const ceoDomainRouteGuard: RequestHandler = (req, res, next) => {
   if (["GET", "HEAD", "OPTIONS"].includes(req.method)) return next();
-  const domain = req.path.startsWith("/api/dropshipping-ceo") ? "dropshipping"
-    : req.path.startsWith("/api/revenue-engine") ? "websites" : undefined;
+  // Express literal routes are case-insensitive unless the app opts out.
+  const path = req.path.toLowerCase();
+  const domain = path.startsWith("/api/dropshipping-ceo") ? "dropshipping"
+    : path.startsWith("/api/revenue-engine") ? "websites" : undefined;
   if (domain && ceoDomainStatus(domain).paused) { res.status(423).json({ error: "CEO_DOMAIN_PAUSED", ...ceoDomainStatus(domain) }); return; }
   next();
 };

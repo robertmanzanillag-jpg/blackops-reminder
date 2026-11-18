@@ -29,8 +29,11 @@ test("owner focus pause holds API and direct commercial work while maintenance s
     try {
       const address = server.address(); assert.ok(address && typeof address !== "string");
       const base = `http://127.0.0.1:${address.port}`;
-      for (const route of ["/api/revenue-engine", "/api/dropshipping-ceo/status"]) assert.equal((await fetch(base + route)).status, 200);
-      for (const route of ["/api/revenue-engine/scout-dispatch", "/api/dropshipping-ceo/operating-cycle"]) {
+      for (const route of ["/api/revenue-engine", "/api/dropshipping-ceo/status", "/API/REVENUE-ENGINE"]) {
+        assert.equal((await fetch(base + route)).status, 200);
+        assert.equal((await fetch(base + route, { method: "HEAD" })).status, 200);
+      }
+      for (const route of ["/api/revenue-engine/scout-dispatch", "/api/dropshipping-ceo/operating-cycle", "/API/REVENUE-ENGINE/scout-dispatch", "/API/DROPSHIPPING-CEO/operating-cycle"]) {
         const response = await fetch(base + route, { method: "POST" }); assert.equal(response.status, 423);
         const body = await response.json(); assert.equal(body.error, "CEO_DOMAIN_PAUSED"); assert.equal(body.queueDisposition, "held_not_deleted");
       }
