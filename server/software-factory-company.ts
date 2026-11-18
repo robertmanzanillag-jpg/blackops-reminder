@@ -1,3 +1,4 @@
+import { assertCeoOrderActive } from "./ceo-domain-policy";
 import { createHash } from "node:crypto";
 import type { CompanyOrder } from "../shared/agent-company";
 import { isKongCompanyAgent } from "../shared/agent-company";
@@ -12,6 +13,7 @@ const engineering = new Set(["code", "github", "app-qa", "mechanic", "agent-fact
 /** Admission is invoked only after owner authentication. Never reads Kong's company,
  * publishes an issue, marks an order done, or treats keywords as spending authority. */
 export function companyOrderJob(order: CompanyOrder, project: FactoryProject, reservationCents: number): FactoryJobInput {
+  assertCeoOrderActive(order);
   if (project.repo !== ASISTENTE_REPOSITORY) throw Error("FACTORY_COMPANY_REPOSITORY_MISMATCH");
   if (!order.id || order.doneAt || !order.text.trim() || order.text.length > 500
     || !Number.isFinite(Date.parse(order.createdAt))

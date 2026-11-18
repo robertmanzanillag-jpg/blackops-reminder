@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T07:20:08.303Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-worker-supervisor",
+  "generatedAt": "2026-11-18T07:38:36.222Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-ceo-domain-pause-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1168,
-    "filesIndexed": 1068,
-    "imports": 4217,
+    "filesVisible": 1175,
+    "filesIndexed": 1073,
+    "imports": 4244,
     "routes": 615,
-    "symbols": 24153
+    "symbols": 24194
   },
   "directories": {
     ".": {
@@ -203,10 +203,10 @@
       }
     },
     "docs": {
-      "files": 68,
-      "indexed": 66,
+      "files": 73,
+      "indexed": 69,
       "kinds": {
-        "docs": 68
+        "docs": 73
       }
     },
     "examples/clippers-motivation": {
@@ -239,10 +239,10 @@
       }
     },
     "server": {
-      "files": 276,
-      "indexed": 270,
+      "files": 277,
+      "indexed": 271,
       "kinds": {
-        "server": 276
+        "server": 277
       }
     },
     "server/blackroom-team": {
@@ -274,10 +274,10 @@
       }
     },
     "tests": {
-      "files": 306,
-      "indexed": 302,
+      "files": 307,
+      "indexed": 303,
       "kinds": {
-        "test": 306
+        "test": 307
       }
     },
     "tests/fixtures": {
@@ -5617,6 +5617,14 @@
       "routes": []
     },
     {
+      "path": "docs/ceo-domain-pause.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-ceo-runtime.md",
       "kind": "docs",
       "imports": [],
@@ -5778,6 +5786,22 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -13570,6 +13594,7 @@
       "path": "server/agent-chat.ts",
       "kind": "server",
       "imports": [
+        "./ceo-domain-policy",
         "@shared/agent-chat-directory",
         "@shared/agent-chat-routing",
         "@shared/agent-company",
@@ -13832,6 +13857,7 @@
         "../shared/office-role-lifecycle",
         "../shared/office-role-work-activity",
         "./blackroom-office-operations",
+        "./ceo-domain-policy",
         "./database-url",
         "./kong-company",
         "./office-capability-training",
@@ -14608,6 +14634,7 @@
         "./blackroom-links",
         "./ceo-briefing",
         "./ceo-conversation-history",
+        "./ceo-domain-policy",
         "./claude-skill-bridge",
         "./developer-autopilot",
         "./gemini-client",
@@ -14949,6 +14976,7 @@
       "kind": "server",
       "imports": [
         "./automation-definition-reads",
+        "./ceo-domain-policy",
         "./storage",
         "./trust-policy",
         "@shared/schema"
@@ -18796,6 +18824,52 @@
       "routes": []
     },
     {
+      "path": "server/ceo-domain-policy.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "../shared/agent-integrations",
+        "express"
+      ],
+      "exports": [
+        "CeoDomain",
+        "CeoDomainPausedError",
+        "assertCeoActionActive",
+        "assertCeoDomainActive",
+        "assertCeoOrderActive",
+        "ceoDomainRouteGuard",
+        "ceoDomainStatus",
+        "ceoFocusContext",
+        "ceoFocusIntegrations",
+        "ceoRolePaused",
+        "ceoTrainingRolePaused",
+        "ceoWorkDomain",
+        "pausedCeoDomains"
+      ],
+      "symbols": [
+        "CeoDomainPausedError",
+        "assertCeoActionActive",
+        "assertCeoDomainActive",
+        "assertCeoOrderActive",
+        "ceoDomainStatus",
+        "ceoFocusContext",
+        "ceoFocusIntegrations",
+        "ceoRolePaused",
+        "ceoTrainingRolePaused",
+        "ceoWorkDomain",
+        "configured",
+        "domain",
+        "normalized",
+        "path",
+        "paused",
+        "pausedCeoDomains",
+        "record",
+        "result",
+        "values"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/ceo-go-live-cli.ts",
       "kind": "server",
       "imports": [
@@ -20512,6 +20586,7 @@
       "path": "server/dropshipping-ceo.ts",
       "kind": "server",
       "imports": [
+        "./ceo-domain-policy",
         "./metricool-tracking",
         "./office-source-document-sync",
         "./storage",
@@ -23521,6 +23596,7 @@
         "../shared/agent-company",
         "../shared/blackroom-academy",
         "../shared/blackroom-team",
+        "./ceo-domain-policy",
         "./office-academy-runner",
         "./office-openai",
         "./office-role-blackroom-curricula",
@@ -23796,6 +23872,7 @@
       "path": "server/office-capability-training.ts",
       "kind": "server",
       "imports": [
+        "./ceo-domain-policy",
         "./office-capability-lifecycle",
         "./office-openai",
         "./office-role-snapshots",
@@ -24915,6 +24992,7 @@
       "kind": "server",
       "imports": [
         "./agent-council",
+        "./ceo-domain-policy",
         "./evidence-json",
         "./office-openai",
         "./office-role-curricula",
@@ -27013,6 +27091,7 @@
         "./automation-registry",
         "./ceo-briefing",
         "./ceo-doctor-cli",
+        "./ceo-domain-policy",
         "./dropshipping-ceo",
         "./finance",
         "./proactive-insights",
@@ -27506,6 +27585,7 @@
         "./blackroom-team-routes",
         "./calendar-sync",
         "./canva-oauth",
+        "./ceo-domain-policy",
         "./ceo-operational-health",
         "./clippers-agent",
         "./clippers-local-news-agent",
@@ -29096,6 +29176,7 @@
       "kind": "server",
       "imports": [
         "../shared/agent-company",
+        "./ceo-domain-policy",
         "./software-factory",
         "./software-factory-pipeline",
         "./software-factory-store",
@@ -30575,6 +30656,7 @@
         "./ceo-briefing",
         "./ceo-conversation-history",
         "./ceo-doctor-cli",
+        "./ceo-domain-policy",
         "./ceo-readiness",
         "./claude-skill-bridge",
         "./developer-autopilot",
@@ -31003,6 +31085,7 @@
       "kind": "server",
       "imports": [
         "./blackroom-links",
+        "./ceo-domain-policy",
         "./google-calendar",
         "./google-drive-folder-command",
         "./metricool-chat-actions",
@@ -31017,6 +31100,8 @@
       "symbols": [
         "JsonRecord",
         "actionInput",
+        "automation",
+        "automationId",
         "errorMessage",
         "eventId",
         "executeApprovedPendingAction",
@@ -31036,6 +31121,7 @@
       "path": "server/trust-policy.ts",
       "kind": "server",
       "imports": [
+        "./ceo-domain-policy",
         "./storage",
         "@shared/schema"
       ],
@@ -34223,12 +34309,15 @@
         "good",
         "h",
         "harness",
+        "history",
+        "initial",
         "iso",
         "lessonCases",
         "lessons",
         "modules",
         "parsed",
         "pass",
+        "previous",
         "prompt",
         "replacement",
         "role",
@@ -35515,6 +35604,38 @@
         "commands",
         "output",
         "report"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/ceo-domain-policy.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/ceo-domain-policy",
+        "../server/dropshipping-ceo",
+        "../server/revenue-engine",
+        "../server/software-factory",
+        "../server/software-factory-company",
+        "../shared/agent-company",
+        "express",
+        "node:assert/strict",
+        "node:events",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "address",
+        "app",
+        "base",
+        "before",
+        "body",
+        "commercial",
+        "discovery",
+        "previous",
+        "project",
+        "queued",
+        "response",
+        "server"
       ],
       "routes": []
     },
@@ -39177,6 +39298,7 @@
         "fixture",
         "forged",
         "future",
+        "history",
         "job",
         "legacyState",
         "lessons",
@@ -39188,6 +39310,7 @@
         "options",
         "paid",
         "pending",
+        "previous",
         "realJob",
         "reorder",
         "report",
@@ -40104,8 +40227,11 @@
       "symbols": [
         "NOW",
         "h",
+        "history",
+        "previous",
         "reorder",
         "run",
+        "runner",
         "setup"
       ],
       "routes": []
@@ -43442,6 +43568,7 @@
     "tests/ceo-conversation-history.test.ts",
     "tests/ceo-db-check-cli.test.ts",
     "tests/ceo-doctor-cli.test.ts",
+    "tests/ceo-domain-policy.test.ts",
     "tests/ceo-go-live-cli.test.ts",
     "tests/ceo-operability.test.ts",
     "tests/ceo-operational-health.test.ts",

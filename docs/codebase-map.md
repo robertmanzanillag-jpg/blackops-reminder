@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-18T07:20:08.303Z
-Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-worker-supervisor`
+Generated: 2026-11-18T07:38:36.222Z
+Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-ceo-domain-pause-20261118`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1168 | 1068 | 4217 | 615 | 24153 |
+| 1175 | 1073 | 4244 | 615 | 24194 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 306 | 302 | test:306 |
-| `server` | 276 | 270 | server:276 |
+| `tests` | 307 | 303 | test:307 |
+| `server` | 277 | 271 | server:277 |
 | `client/src` | 154 | 152 | ui-component:55, client-component:45, client-page:28, client-lib:19 |
 | `script` | 124 | 112 | script:124 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 68 | 66 | docs:68 |
+| `docs` | 73 | 69 | docs:73 |
 | `shared` | 29 | 29 | shared:29 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
@@ -148,6 +148,7 @@ Package: `rest-express`
 - `tests/ceo-conversation-history.test.ts`
 - `tests/ceo-db-check-cli.test.ts`
 - `tests/ceo-doctor-cli.test.ts`
+- `tests/ceo-domain-policy.test.ts`
 - `tests/ceo-go-live-cli.test.ts`
 - `tests/ceo-operability.test.ts`
 - `tests/ceo-operational-health.test.ts`

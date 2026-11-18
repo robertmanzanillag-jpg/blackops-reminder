@@ -1,3 +1,4 @@
+import { ceoFocusContext } from "./ceo-domain-policy";
 import type { Content, Part } from "@google/genai";
 import { storage } from "./storage";
 import { sendTelegramMessage, sendTelegramPlainMessage, sendTelegramPlainMessageChunks, TelegramUpdate, setTelegramWebhook, getWebhookInfo } from "./telegram";
@@ -1356,7 +1357,7 @@ export async function handleTelegramMessageWithDeps(
     }
 
     const historyLimit = getAiConversationHistoryLimit();
-    const aiCostPolicyContext = buildAiCostPolicyContext("telegram");
+    const aiCostPolicyContext = buildAiCostPolicyContext("telegram") + ceoFocusContext();
     const [calendarContext, userProfile, portfolioContext, tasksContext, ceoContext, conversationHistory, claudeSkillContext] = await Promise.all([
       getCalendarContext(),
       getUserProfileContext(userId),
