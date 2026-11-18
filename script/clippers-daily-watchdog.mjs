@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { runClippersDailyLearning } from "./clippers-daily-learning.mjs";
 
 const DEFAULT_TIME_ZONE = "America/New_York";
 const DEFAULT_CHECK_HOUR = 10;
@@ -374,10 +375,30 @@ export async function runClippersDailyWatchdog(options = {}) {
     paidSpendAllowed: false,
     costUsd: 0,
   };
+  if (due && options.dailyLearning === true) {
+    try {
+      const learning = await runClippersDailyLearning({ workspaceRoot, now, env });
+      report.dailyLearning = {
+        status: learning.status, date: learning.date ?? current.date, reason: learning.reason ?? null,
+        scheduled: learning.scheduled ?? null, observations: learning.observations ?? null,
+        missedSnapshots: learning.missedSnapshots ?? null,
+      };
+      if (learning.status === "blocked" || learning.providerReadFailures > 0 || learning.timeBudgetReached) {
+        report.alerts.dailyLearningBlocked = true;
+      }
+    } catch {
+      report.dailyLearning = { status: "blocked", reason: "daily_learning_failed", date: current.date };
+      report.alerts.dailyLearningBlocked = true;
+    }
+  }
+  if (report.alerts.dailyLearningBlocked) {
+    report.alert = true;
+    report.status = "alert";
+  }
   const outputDirectory = path.resolve(options.outputDirectory || path.join(reportsRoot, "clippers-daily-watchdog"));
   await atomicWrite(path.join(outputDirectory, "latest.json"), `${JSON.stringify(report, null, 2)}\n`);
   await atomicWrite(path.join(outputDirectory, "latest.md"), markdown(report));
-  if (alert) {
+  if (report.alert) {
     await atomicWrite(path.join(outputDirectory, "alerts", `${current.date}.json`), `${JSON.stringify(report, null, 2)}\n`);
     await atomicWrite(path.join(outputDirectory, "alerts", `${current.date}.md`), markdown(report));
   }
@@ -385,7 +406,7 @@ export async function runClippersDailyWatchdog(options = {}) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const report = await runClippersDailyWatchdog();
+  const report = await runClippersDailyWatchdog({ dailyLearning: true });
   console.log(JSON.stringify(report, null, 2));
   if (report.alert) process.exitCode = 2;
 }
