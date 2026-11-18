@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T07:38:36.222Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-ceo-domain-pause-20261118",
+  "generatedAt": "2026-11-18T08:08:14.117Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-area-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1175,
-    "filesIndexed": 1073,
-    "imports": 4244,
-    "routes": 615,
-    "symbols": 24194
+    "filesVisible": 1177,
+    "filesIndexed": 1077,
+    "imports": 4272,
+    "routes": 619,
+    "symbols": 24279
   },
   "directories": {
     ".": {
@@ -191,11 +191,11 @@
       }
     },
     "client/src": {
-      "files": 154,
-      "indexed": 152,
+      "files": 155,
+      "indexed": 153,
       "kinds": {
         "other": 4,
-        "client-component": 45,
+        "client-component": 46,
         "ui-component": 55,
         "client-hook": 3,
         "client-lib": 19,
@@ -203,10 +203,10 @@
       }
     },
     "docs": {
-      "files": 73,
-      "indexed": 69,
+      "files": 70,
+      "indexed": 68,
       "kinds": {
-        "docs": 73
+        "docs": 70
       }
     },
     "examples/clippers-motivation": {
@@ -260,10 +260,10 @@
       }
     },
     "shared": {
-      "files": 29,
-      "indexed": 29,
+      "files": 31,
+      "indexed": 31,
       "kinds": {
-        "shared": 29
+        "shared": 31
       }
     },
     "shared/models": {
@@ -274,17 +274,17 @@
       }
     },
     "tests": {
-      "files": 307,
-      "indexed": 303,
+      "files": 308,
+      "indexed": 304,
       "kinds": {
-        "test": 307
+        "test": 308
       }
     },
     "tests/fixtures": {
-      "files": 4,
-      "indexed": 2,
+      "files": 5,
+      "indexed": 3,
       "kinds": {
-        "test": 4
+        "test": 5
       }
     },
     "tests/harness": {
@@ -1160,6 +1160,63 @@
         "readJson",
         "send",
         "time"
+      ],
+      "routes": []
+    },
+    {
+      "path": "client/src/components/clippers-office-area.tsx",
+      "kind": "client-component",
+      "imports": [
+        "./kong-supervisor-session",
+        "@/components/ui/button",
+        "@/components/ui/dialog",
+        "@/components/ui/tabs",
+        "@/lib/queryClient",
+        "@shared/clippers-office-agents",
+        "@shared/clippers-orchestra",
+        "@tanstack/react-query",
+        "lucide-react",
+        "react",
+        "wouter"
+      ],
+      "exports": [
+        "CLIPPERS_ORCHESTRA_ENDPOINT",
+        "ClippersOfficeArea",
+        "ClippersOfficeReport",
+        "clippersEvidenceFresh",
+        "clippersVisibleRoleState"
+      ],
+      "symbols": [
+        "AgentCard",
+        "CLIPPERS_ORCHESTRA_ENDPOINT",
+        "ClippersOfficeArea",
+        "ClippersOfficeReport",
+        "OrchestraData",
+        "Reasons",
+        "Time",
+        "at",
+        "career",
+        "clippersEvidenceFresh",
+        "clippersVisibleRoleState",
+        "data",
+        "dateFormat",
+        "deadlines",
+        "fresh",
+        "ingest",
+        "number",
+        "query",
+        "report",
+        "response",
+        "router",
+        "session",
+        "state",
+        "stateLabels",
+        "stateTone",
+        "sum",
+        "timers",
+        "title",
+        "until",
+        "verified"
       ],
       "routes": []
     },
@@ -4246,6 +4303,7 @@
       "imports": [
         "@/components/agents-building/agents-building",
         "@/components/agents-world-office/agents-office-world",
+        "@/components/clippers-office-area",
         "@/components/company-office/company-office",
         "@/components/kong-operations-panel",
         "@/components/kong-supervisor-panel",
@@ -5713,6 +5771,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-office-area.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-portfolio-discovery.md",
       "kind": "docs",
       "imports": [],
@@ -5786,22 +5852,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -32391,6 +32441,74 @@
       "routes": []
     },
     {
+      "path": "shared/clippers-office-agents.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "CLIPPERS_AGENTS",
+        "CLIPPERS_AGENT_IDS",
+        "CLIPPERS_AGENT_NAMES",
+        "CLIPPERS_DEPARTMENT",
+        "ClippersAgentId",
+        "ClippersStage",
+        "clippersAgentForStage",
+        "isClippersAgentId"
+      ],
+      "symbols": [
+        "CLIPPERS_AGENTS",
+        "CLIPPERS_AGENT_NAMES",
+        "CLIPPERS_DEPARTMENT",
+        "clippersAgentForStage",
+        "isClippersAgentId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/clippers-orchestra.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "ClippersAccountView",
+        "ClippersCareerView",
+        "ClippersComparisonView",
+        "ClippersMetricAgeBucket",
+        "ClippersOrchestraStatus",
+        "ClippersRoleEvidence",
+        "ClippersRoleStage",
+        "ClippersRoleState",
+        "ClippersSourceView",
+        "ClippersTrendSignal",
+        "ClippersVerifiedOutcome",
+        "parseClippersOrchestraStatus"
+      ],
+      "symbols": [
+        "c",
+        "code",
+        "codes",
+        "count",
+        "d",
+        "denied",
+        "finite",
+        "keys",
+        "l",
+        "nullableCount",
+        "nullableFinite",
+        "nullableTime",
+        "parseClippersOrchestraStatus",
+        "record",
+        "roleStages",
+        "s",
+        "seen",
+        "sf",
+        "states",
+        "targetKeys",
+        "text",
+        "time",
+        "v"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/factory-office-agents.ts",
       "kind": "shared",
       "imports": [
@@ -36674,6 +36792,60 @@
       "routes": []
     },
     {
+      "path": "tests/clippers-office-area.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/software-factory-office-ui-fixture.mjs",
+        "./client/src/components/clippers-office-area",
+        "./client/src/lib/queryClient",
+        "./fixtures/clippers-orchestra.mjs",
+        "@tanstack/react-query",
+        "esbuild",
+        "express",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test",
+        "playwright",
+        "react-dom/client"
+      ],
+      "exports": [],
+      "symbols": [
+        "account",
+        "analytics",
+        "app",
+        "artifacts",
+        "assets",
+        "browser",
+        "context",
+        "css",
+        "cssFiles",
+        "dialog",
+        "emptyBucket",
+        "errors",
+        "fixtureOrigin",
+        "measuredBucket",
+        "now",
+        "origin",
+        "page",
+        "previousTmp",
+        "privateReads",
+        "reads",
+        "requests",
+        "server",
+        "temp",
+        "tempRoot",
+        "trigger"
+      ],
+      "routes": [
+        "/",
+        "/api/auth/me",
+        "/area.css",
+        "/area.js"
+      ]
+    },
+    {
       "path": "tests/clippers-owned-source-scripts.test.ts",
       "kind": "test",
       "imports": [
@@ -37917,6 +38089,22 @@
         "sweep",
         "trainee",
         "view"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/fixtures/clippers-orchestra.mjs",
+      "kind": "test",
+      "imports": [
+        "../../script/clippers-portfolio-discovery.mjs",
+        "../../script/clippers-portfolio-metricool.mjs"
+      ],
+      "exports": [
+        "orchestraFixture"
+      ],
+      "symbols": [
+        "at",
+        "orchestraFixture"
       ],
       "routes": []
     },
