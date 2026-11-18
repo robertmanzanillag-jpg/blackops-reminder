@@ -29,7 +29,7 @@ test('native macOS helper compiles and runs only its synthetic dependency-inject
     const output = path.join(temporary, 'synthetic-reader');
     await exec('/usr/bin/xcrun', ['swiftc', '-D', 'CLIPPERS_KEYCHAIN_TEST', '-framework', 'Security', source.pathname, '-o', output], {timeout:30_000, maxBuffer:1_000_000});
     const result = await exec(output, [], {timeout:3000, maxBuffer:8192, env:{PATH:'/usr/bin:/bin'}});
-    assert.deepEqual(JSON.parse(result.stdout), {syntheticTestsPassed:30,approvedInputTestsPassed:36,realKeychainQueries:0,realKeychainWrites:0});
+    assert.deepEqual(JSON.parse(result.stdout), {syntheticTestsPassed:30,approvedInputTestsPassed:39,realKeychainQueries:0,realKeychainWrites:0});
     assert.equal(result.stderr, '');
     // Compile the AppKit/real-Security entry points, but never execute them.
     await exec('/usr/bin/xcrun', ['swiftc', '-typecheck', '-framework', 'Security', '-framework', 'AppKit', source.pathname], {timeout:30_000, maxBuffer:1_000_000});
@@ -83,8 +83,12 @@ test('only explicit setup installs the native paste menu and reports useful stat
   assert.ok(text.includes('No llegó ningún valor. Usa Edición > Pegar (Cmd+V)'));
   assert.ok(text.includes('sin espacios, saltos de línea ni prefijo Bearer'));
   const store=text.slice(text.indexOf('func approvedStdinSetup()'),text.indexOf('func installSetupMenu'));
-  assert.ok(store.includes('createPlatformCredential(token: token'));
-  assert.ok(store.includes('current.1 == expected.1'));
+  assert.ok(store.includes('storeApprovedCredential(readerIdentity: setupReaderIdentity'));
+  assert.ok(store.includes('disableInteraction: { SecKeychainSetUserInteractionAllowed(false) }'));
+  const core=text.slice(text.indexOf('func storeApprovedCredential('),text.indexOf('func platformCredential('));
+  assert.ok(core.indexOf('guard let expected = readerIdentity()') < core.indexOf('storeApprovedInput(readInput: readInput'));
+  assert.ok(core.includes('current.1 == expected.1'));
+  assert.ok(core.includes('guard disableInteraction() == errSecSuccess'));
   assert.equal(store.includes('SecItemCopyMatching'),false);
   assert.equal(store.includes('FileHandle.standardOutput'),false);
 });

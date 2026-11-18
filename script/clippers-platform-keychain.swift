@@ -133,6 +133,26 @@ func approvedStoreReply(_ status: String) -> [String: String] {
     return ["status": allowed.contains(status) ? status : "unavailable"]
 }
 
+func storeApprovedCredential(
+    readerIdentity: () -> (String, String)?,
+    readInput: () -> ApprovedInputResult,
+    disableInteraction: () -> OSStatus,
+    exactAccess: (String) -> CFTypeRef?,
+    addItem: (CFDictionary) -> OSStatus
+) -> [String: String] {
+    guard let expected = readerIdentity() else { return approvedStoreReply("unsafe_reader") }
+    let status = storeApprovedInput(readInput: readInput, create: { token in
+        createPlatformCredential(token: token, validatedReader: {
+            guard let current = readerIdentity(), current.0 == expected.0, current.1 == expected.1 else { return nil }
+            return current.0
+        }, exactAccess: exactAccess, addItem: { attributes in
+            guard disableInteraction() == errSecSuccess else { return errSecInteractionNotAllowed }
+            return addItem(attributes)
+        })
+    })
+    return approvedStoreReply(status)
+}
+
 func platformCredential(
     outputSafe: () -> Bool = privateStandardOutput,
     disableInteraction: () -> OSStatus,
@@ -242,14 +262,10 @@ func exactReaderAccess(_ path: String) -> CFTypeRef? {
 }
 
 func approvedStdinSetup() -> [String: String] {
-    let status = storeApprovedInput(readInput: { approvedDescriptorInput(STDIN_FILENO) }, create: { token in
-        guard let expected = setupReaderIdentity() else { return "unsafe_reader" }
-        return createPlatformCredential(token: token, validatedReader: {
-            guard let current = setupReaderIdentity(), current.0 == expected.0, current.1 == expected.1 else { return nil }
-            return current.0
-        }, exactAccess: exactReaderAccess, addItem: { SecItemAdd($0, nil) })
-    })
-    return approvedStoreReply(status)
+    storeApprovedCredential(readerIdentity: setupReaderIdentity,
+        readInput: { approvedDescriptorInput(STDIN_FILENO) },
+        disableInteraction: { SecKeychainSetUserInteractionAllowed(false) },
+        exactAccess: exactReaderAccess, addItem: { SecItemAdd($0, nil) })
 }
 
 func installSetupMenu(_ application: NSApplication) {
@@ -388,6 +404,15 @@ func runApprovedInputTests() -> Int {
     expect(approvedStoreReply(synthetic) == ["status": "unavailable"])
     let encoded = try! JSONSerialization.data(withJSONObject: approvedStoreReply(duplicate))
     expect(!String(data: encoded, encoding: .utf8)!.contains(synthetic))
+    let noncanonical = storeApprovedCredential(readerIdentity: { nil }, readInput: { preconditionFailure("noncanonical reader must not consume stdin") }, disableInteraction: { preconditionFailure("unsafe identity must not reach Security") }, exactAccess: { _ in nil }, addItem: { _ in preconditionFailure("unsafe identity must not write") })
+    expect(noncanonical == ["status": "unsafe_reader"])
+    let noInteraction = storeApprovedCredential(readerIdentity: { ("/synthetic/reader", "pinned-sha") }, readInput: { .value(synthetic) }, disableInteraction: { errSecInteractionNotAllowed }, exactAccess: { _ in "one-app" as CFString }, addItem: { _ in preconditionFailure("UIoff failure must not add") })
+    expect(noInteraction == ["status": "unavailable"])
+    var identities = 0
+    let replaced = storeApprovedCredential(readerIdentity: {
+        identities += 1; return ("/synthetic/reader", identities == 1 ? "original-sha" : "changed-sha")
+    }, readInput: { .value(synthetic) }, disableInteraction: { preconditionFailure("changed identity must not reach Security") }, exactAccess: { _ in preconditionFailure("changed identity must not authorize ACL") }, addItem: { _ in preconditionFailure("changed identity must not add") })
+    expect(replaced == ["status": "unsafe_reader"])
 
     var descriptors: [Int32] = [0, 0]
     expect(pipe(&descriptors) == 0)
