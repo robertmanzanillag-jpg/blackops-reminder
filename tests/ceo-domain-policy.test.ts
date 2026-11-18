@@ -8,6 +8,9 @@ import * as dropshipping from "../server/dropshipping-ceo";
 import * as revenue from "../server/revenue-engine";
 import type { CompanyOrder } from "../shared/agent-company";
 import type { FactoryProject } from "../server/software-factory";
+import { mkdtemp, rm } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 
 test("owner focus pause holds API and direct commercial work while maintenance stays available", async () => {
   const previous = process.env.CEO_PAUSED_DOMAINS;
@@ -86,6 +89,55 @@ test("owner focus pause holds API and direct commercial work while maintenance s
     assert.doesNotThrow(() => assertCeoActionActive(queued));
     assert.doesNotThrow(() => companyOrderJob(commercial, project, 1));
   } finally {
+    if (previous === undefined) delete process.env.CEO_PAUSED_DOMAINS; else process.env.CEO_PAUSED_DOMAINS = previous;
+  }
+});
+
+test("paused commercial summaries hold guidance without changing records or facts, and resume their original guidance", async () => {
+  const previous = process.env.CEO_PAUSED_DOMAINS;
+  const directory = await mkdtemp(path.join(os.tmpdir(), "ceo-guidance-fixture-"));
+  const originalLeadsPath = revenue.getRevenueEngineSnapshot().persistence.leadsPath;
+  try {
+    process.env.CEO_PAUSED_DOMAINS = "";
+    revenue.setRevenueLeadsPathForTests(path.join(directory, "leads.json"));
+    dropshipping.setDropshippingProductsPathForTests(path.join(directory, "products.json"));
+    revenue.recordRevenueLead(revenue.revenueLeadSchema.parse({ businessName: "Fixture Business", area: "Fixture City", niche: "fixture service", websiteStatus: "no_website", contactChannel: "email", contactValue: "fixture@example.test", evidence: "Local synthetic public-evidence fixture", painPoint: "Fixture conversion problem", estimatedOfferUsd: 1500 }));
+    dropshipping.researchDropshippingProduct(dropshipping.dropshippingProductResearchSchema.parse({ productName: "Fixture product", productCostUsd: 4, targetSellPriceUsd: 20, evidence: "Local synthetic product evidence" }));
+    const beforeRevenue = revenue.getRevenueEngineSnapshot(), beforeDrop = dropshipping.getDropshippingCeoSnapshot();
+    assert.ok(beforeRevenue.recentLeads.length > 0); assert.ok(beforeDrop.recentProducts.length > 0);
+    process.env.CEO_PAUSED_DOMAINS = "websites,dropshipping";
+    const heldRevenue = revenue.getRevenueEngineSnapshot(), heldDrop = dropshipping.getDropshippingCeoSnapshot();
+    assert.deepEqual(heldRevenue.metrics, beforeRevenue.metrics); assert.deepEqual(heldDrop.metrics, beforeDrop.metrics);
+    assert.deepEqual(heldRevenue.recentLeads, beforeRevenue.recentLeads); assert.deepEqual(heldDrop.recentProducts, beforeDrop.recentProducts);
+    assert.deepEqual(heldRevenue.operatorConsole.scoreboard, beforeRevenue.operatorConsole.scoreboard);
+    assert.deepEqual(heldRevenue.systemReadiness.items.map(item => item.evidence), beforeRevenue.systemReadiness.items.map(item => item.evidence));
+    assert.deepEqual(heldDrop.executionSetup.connectors.map(item => item.evidence), beforeDrop.executionSetup.connectors.map(item => item.evidence));
+    assert.deepEqual(heldRevenue.operatorConsole.allowedNow, []); assert.match(heldRevenue.operatorConsole.nextCommand, /^Pausado/);
+    assert.equal(heldRevenue.operatorConsole.canSpendNow, false); assert.equal(heldRevenue.dailyMoneyCommand.status, "held");
+    assert.deepEqual(heldRevenue.dailyMoneyCommand.steps, []); assert.equal(heldRevenue.dailyMoneyCommand.runPacket.apiAction, "");
+    assert.equal(heldRevenue.dailyMoneyCommand.runPacket.copyableApiRequest, ""); assert.equal(heldRevenue.dailyMoneyCommand.copyableOperatorBrief, "");
+    assert.deepEqual(heldRevenue.businessScoutQueue.tasks, []); assert.equal(heldRevenue.businessScoutQueue.safety.researchesPublicSources, false);
+    assert.equal(heldRevenue.moneyActivationPlan.canContactBusinesses, false); assert.equal(heldRevenue.moneyActivationPlan.canCollectMoney, false);
+    assert.equal(heldRevenue.moneyActivationPlan.firstSprintPlan.nextApiAction, ""); assert.deepEqual(heldRevenue.costPolicy.allowedWithoutApproval, []);
+    assert.equal(heldRevenue.websiteSalesPacketQueue.readyCount, beforeRevenue.websiteSalesPacketQueue.readyCount);
+    assert.equal(heldDrop.executiveSummary.status, "held"); assert.match(heldDrop.executiveSummary.nextCommand, /^Pausado/);
+    assert.deepEqual(heldDrop.operatingContract.canRunAutonomously, []); assert.deepEqual(heldDrop.growthLoop.dailyOperatingRhythm, []);
+    assert.deepEqual(heldDrop.growthBoard.nextOperatingOrders, []); assert.equal(heldDrop.profitGuard.canSpendUsd, 0);
+    assert.deepEqual(heldDrop.marketingDepartment.operatingModel.canRunAutonomously, []);
+    assert.equal(heldDrop.launchReadiness.checkout.paymentProcessorConfigured, beforeDrop.launchReadiness.checkout.paymentProcessorConfigured);
+    assert.equal(heldDrop.liveSignalReadiness.configured, beforeDrop.liveSignalReadiness.configured);
+    assert.deepEqual(heldDrop.liveSignalReadiness.recommendedSources, []);
+    assert.deepEqual(heldDrop.readiness.map(item => item.status), beforeDrop.readiness.map(item => item.status));
+    assert.ok(heldDrop.readiness.every(item => item.detail.startsWith("Pausado")));
+    assert.equal(dropshipping.getDropshippingExecutionSetup().executionSetup.nextApprovalRequest.actionType, "");
+    assert.ok(heldRevenue.agents.every(agent => agent.status === "held")); assert.ok(heldDrop.agents.every(agent => agent.status === "held"));
+    assert.throws(() => revenue.runRevenueScoutDispatch(), /CEO_DOMAIN_PAUSED/); assert.throws(() => dropshipping.runDropshippingDailyOperatingCycle(), /CEO_DOMAIN_PAUSED/);
+    process.env.CEO_PAUSED_DOMAINS = "";
+    assert.deepEqual(revenue.getRevenueEngineSnapshot().operatorConsole, beforeRevenue.operatorConsole);
+    assert.deepEqual(dropshipping.getDropshippingCeoSnapshot().executiveSummary, beforeDrop.executiveSummary);
+  } finally {
+    revenue.setRevenueLeadsPathForTests(originalLeadsPath); dropshipping.setDropshippingProductsPathForTests(null);
+    await rm(directory, { recursive: true, force: true });
     if (previous === undefined) delete process.env.CEO_PAUSED_DOMAINS; else process.env.CEO_PAUSED_DOMAINS = previous;
   }
 });
