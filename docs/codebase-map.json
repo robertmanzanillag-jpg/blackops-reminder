@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T04:10:48.913Z",
+  "generatedAt": "2026-11-18T04:14:23.748Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-daily-learning-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -95,7 +95,6 @@
     "clippers:marketplace-intake": "node script/clippers-marketplace-intake.mjs",
     "clippers:marketplace-refresh": "node script/clippers-marketplace-refresh.mjs",
     "clippers:render-campaign-drafts": "node script/clippers-render-campaign-drafts.mjs",
-    "clippers:daily-learning": "node script/clippers-daily-learning.mjs",
     "clippers:daily-watchdog": "node script/clippers-daily-watchdog.mjs",
     "clippers:upload-metricool-media": "node --import tsx script/clippers-upload-metricool-media.ts",
     "clippers:metricool-autopilot": "node script/clippers-metricool-autopilot.mjs",
@@ -129,30 +128,9 @@
     "filesIndexed": 1043,
     "imports": 4077,
     "routes": 604,
-    "symbols": 23212
+    "symbols": 23217
   },
   "directories": {
-    "docs": {
-      "files": 64,
-      "indexed": 62,
-      "kinds": {
-        "docs": 64
-      }
-    },
-    "script": {
-      "files": 118,
-      "indexed": 106,
-      "kinds": {
-        "script": 118
-      }
-    },
-    "tests": {
-      "files": 298,
-      "indexed": 294,
-      "kinds": {
-        "test": 298
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -224,12 +202,26 @@
         "client-page": 28
       }
     },
+    "docs": {
+      "files": 64,
+      "indexed": 62,
+      "kinds": {
+        "docs": 64
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 118,
+      "indexed": 106,
+      "kinds": {
+        "script": 118
       }
     },
     "script/release-gate": {
@@ -279,6 +271,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 298,
+      "indexed": 294,
+      "kinds": {
+        "test": 298
       }
     },
     "tests/fixtures": {
@@ -7937,6 +7936,7 @@
         "safeHttps",
         "save",
         "scheduledAt",
+        "scopedAssets",
         "selected",
         "snapshotKey",
         "snapshotWindow",
@@ -34853,7 +34853,10 @@
         "activation",
         "adapter",
         "approved",
+        "assets",
         "base",
+        "bytes",
+        "calls",
         "changed",
         "comparisons",
         "configDir",
@@ -34872,6 +34875,7 @@
         "item",
         "liveShape",
         "lookalike",
+        "media",
         "now",
         "observed",
         "persisted",

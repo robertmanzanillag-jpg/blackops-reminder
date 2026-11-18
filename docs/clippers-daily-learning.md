@@ -31,7 +31,7 @@ Each asset references `evidenceSha256`, the lowercase SHA-256 of `JSON.stringify
 | `reviewedBy` | Operator-recorded reviewer |
 | `authorizedSpendUsd`, `providerIncrementalCostUsd` | `0`, `0` |
 
-The operator records these facts after verifying the asset, campaign membership, current terms, exact commercial scope for the destination, media and disclosure. The account connection or a public campaign listing alone is insufficient. There is no authority derivation from external market research. Use `npm run clippers:daily-learning` only against a dedicated fixture workspace until QA authorizes activation.
+The operator records these facts after verifying the asset, campaign membership, current terms, exact commercial scope for the destination, media and disclosure. The account connection or a public campaign listing alone is insufficient. There is no authority derivation from external market research. Use `node script/clippers-daily-learning.mjs` only against a dedicated fixture workspace until QA authorizes activation.
 
 ## Metrics, decisions and rollback
 

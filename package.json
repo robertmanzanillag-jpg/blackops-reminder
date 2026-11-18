@@ -96,7 +96,6 @@
     "clippers:marketplace-intake": "node script/clippers-marketplace-intake.mjs",
     "clippers:marketplace-refresh": "node script/clippers-marketplace-refresh.mjs",
     "clippers:render-campaign-drafts": "node script/clippers-render-campaign-drafts.mjs",
-    "clippers:daily-learning": "node script/clippers-daily-learning.mjs",
     "clippers:daily-watchdog": "node script/clippers-daily-watchdog.mjs",
     "clippers:upload-metricool-media": "node --import tsx script/clippers-upload-metricool-media.ts",
     "clippers:metricool-autopilot": "node script/clippers-metricool-autopilot.mjs",

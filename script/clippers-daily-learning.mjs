@@ -336,7 +336,9 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
       let confirmed = state.deliveries.filter(r => destinationKey(r) === key && localDay(new Date(r.scheduledAt)) === date &&
         ['scheduled', 'published'].includes(r.status)).length;
       const blockers = new Set();
-      for (const raw of configured.assets.filter(item => findDestination(item) && destinationKey(item) === key)) {
+      const scopedAssets = configured.assets.filter(item => findDestination(item) && destinationKey(item) === key)
+        .sort((a, b) => (Date.parse(b.sourcePublishedAt) || 0) - (Date.parse(a.sourcePublishedAt) || 0));
+      for (const raw of scopedAssets) {
         const item = await approvedItem(raw, workspaceRoot, new Date(+now + performance.now() - startedAt), authorized, state);
         if (!item) { blockers.add('asset_rights_media_or_scope_unverified'); continue; }
         if (state.deliveries.some(row => deliveryCollision(row, item)) ||

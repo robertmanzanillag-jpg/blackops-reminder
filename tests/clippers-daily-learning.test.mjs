@@ -304,3 +304,46 @@ test('age 25 and 47 hours never form comparable arms of the same nominal window'
   assert.equal(report.proposalCount, 0);
   assert.deepEqual(report.qualifiedCandidates, []);
 });
+
+test('a destination schedules at most five distinct, freshest eligible items', async t => {
+  const f = await setup(t);
+  const assets = [];
+  for (let index = 0; index < 6; index++) assets.push(await approved(f, 'item-' + index, {
+    sourcePublishedAt: new Date(+NOW - (6 - index) * 3_600_000).toISOString(),
+    scheduledAt: new Date(+NOW + (index + 2) * 600_000).toISOString(),
+  }));
+  await f.configure(assets);
+  await f.write('reports/metricool-public-media-receipts.json', assets.map(receipt));
+  const calls = [];
+  const report = await runClippersDailyLearning({ workspaceRoot: f.root, now: NOW, adapter: {
+    preflight: async () => {},
+    schedule: async (destination, item) => { assert.deepEqual(destination, target); calls.push(item.id); return item.id; },
+  } });
+  assert.deepEqual(calls, ['item-5', 'item-4', 'item-3', 'item-2', 'item-1']);
+  assert.equal(report.destinations[0].shortfall, 0);
+  assert.deepEqual(report.destinations.slice(1).map(row => row.shortfall), [5, 5, 5]);
+});
+
+test('a normalized provider video must match the approved hash and never receives the account credential', async () => {
+  const bytes = Buffer.from('reviewed fixture bytes');
+  const media = 'https://static.metricool.com/normalized.mp4';
+  const item = { id: 'known', scheduledAt: '2026-11-18T16:30:00.000Z', caption: 'Proof',
+    mediaUrl: 'https://drive.google.com/uc?id=proof', mediaSha256: createHash('sha256').update(bytes).digest('hex') };
+  let currentBytes = bytes;
+  const adapter = createPortfolioMetricool({ token, userId: 12, fetcher: async (resource, options) => {
+    const u = new URL(resource);
+    if (u.hostname === 'static.metricool.com') {
+      assert.equal(options.headers['X-Mc-Auth'], undefined);
+      return new Response(currentBytes);
+    }
+    if (u.pathname.endsWith('/simpleProfiles')) {
+      return Response.json([{ id: target.brandId, ownerUserId: 12, isShared: false, tiktok: target.account }]);
+    }
+    return Response.json({ data: [{ id: 'receipt-id', media: [media], text: item.caption,
+      autoPublish: true, draft: false, publicationDate: item.scheduledAt,
+      providers: [{ network: 'tiktok', status: 'pending' }] }] });
+  } });
+  assert.deepEqual(await adapter.confirmSchedule(target, item), { id: 'receipt-id', mediaUrl: media });
+  currentBytes = Buffer.from('changed');
+  assert.equal(await adapter.confirmSchedule(target, item), null);
+});
