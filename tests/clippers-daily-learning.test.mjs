@@ -259,7 +259,7 @@ test('actual TikTok response can prove owner and published time without fabricat
 });
 
 test('brand settings fallback is only for omitted identities; conflicts never become authorized', async () => {
-  for (const connected of [undefined, false, { username: target.account, connected: false }, 'other-account']) {
+  for (const connected of [undefined, null, false, { username: target.account, connected: false }, 'other-account']) {
     let mcpReads = 0;
     const adapter = createPortfolioMetricool({ token, userId: 12, fetcher: async (resource) => {
       const u = new URL(resource);
@@ -346,4 +346,23 @@ test('a normalized provider video must match the approved hash and never receive
   assert.deepEqual(await adapter.confirmSchedule(target, item), { id: 'receipt-id', mediaUrl: media });
   currentBytes = Buffer.from('changed');
   assert.equal(await adapter.confirmSchedule(target, item), null);
+});
+
+test('schedule rereads the destination and holds when its connection changes after preflight', async () => {
+  let profileReads = 0, writes = 0;
+  const item = { id: 'scope-race', scheduledAt: '2026-11-18T16:30:00.000Z', caption: 'Approved edit',
+    mediaUrl: 'https://drive.google.com/uc?id=scope-race' };
+  const adapter = createPortfolioMetricool({ token, userId: 12, fetcher: async (resource, options) => {
+    const u = new URL(resource);
+    if (options.method === 'POST') { writes++; assert.fail('a changed account must never reach Metricool create'); }
+    if (u.pathname.endsWith('/simpleProfiles')) {
+      return Response.json([{ id: target.brandId, ownerUserId: 12, isShared: false,
+        tiktok: ++profileReads === 1 ? target.account : 'reconnected-account' }]);
+    }
+    return Response.json({ data: [] });
+  } });
+  await adapter.preflight(target, item);
+  await assert.rejects(adapter.schedule(target, item), /destination_identity_unverified/);
+  assert.equal(profileReads, 2);
+  assert.equal(writes, 0);
 });
