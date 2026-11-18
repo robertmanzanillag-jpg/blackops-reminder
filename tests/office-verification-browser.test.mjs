@@ -62,6 +62,9 @@ test('compiled office verification journeys: owner, errors, keyboard, map and mo
         await page.screenshot({ path: path.join(artifacts, `verification-${viewport.width}.png`), fullPage: true });
         await page.keyboard.press('Escape');
         await dialog.waitFor({ state: 'hidden' });
+        // Radix restores focus asynchronously after the content unmounts.
+        // Observe that restoration rather than racing it or focusing the trigger.
+        await page.waitForFunction(() => document.activeElement?.getAttribute('data-testid') === 'open-office-verification');
         assert.equal(await open.evaluate(element => element === document.activeElement), true);
         await open.click();
         await page.getByTestId('office-verification-evals').waitFor();
