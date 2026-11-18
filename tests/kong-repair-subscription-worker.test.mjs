@@ -90,7 +90,7 @@ test('diff validation rejects package changes, symlinks, secrets and a missing r
   await assert.rejects(changedFiles(before,root),/REGRESSION_TEST_REQUIRED/);
   await fs.writeFile(path.join(root,'server/a.test.mjs'),'import test from "node:test";test("regression",()=>{});');assert.equal((await changedFiles(before,root)).length,2);
   await fs.writeFile(path.join(root,'package.json'),'{"scripts":{"test":"danger"}}');await assert.rejects(changedFiles(before,root),/FORBIDDEN_CHANGE/);await fs.writeFile(path.join(root,'package.json'),'{}');
-  await fs.writeFile(path.join(root,'server/a.ts'),'-----BEGIN PRIVATE KEY-----');await assert.rejects(changedFiles(before,root),/SECRET_LIKE_CHANGE/);await fs.writeFile(path.join(root,'server/a.ts'),'new');
+  await fs.writeFile(path.join(root,'server/a.ts'),['-----BEGIN','PRIVATE KEY-----'].join(' '));await assert.rejects(changedFiles(before,root),/SECRET_LIKE_CHANGE/);await fs.writeFile(path.join(root,'server/a.ts'),'new');
   await fs.symlink('/outside',path.join(root,'server','out.ts'));await assert.rejects(changedFiles(before,root),/SYMLINK_REJECTED/);
 });
 test('the process runner uses argv without shell expansion and terminates bounded work',async()=>{
