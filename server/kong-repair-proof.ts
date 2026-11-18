@@ -71,8 +71,9 @@ export function effectiveCommitStatusesPass(statuses: Array<{ context?: string; 
   return [...latest.values()].every(state => state === "success");
 }
 
+export const MAKER_HEALTH_MAX_AGE_MS = 45 * 60000;
 export function freshMakerHealth(value: Record<string, unknown>, now: number) {
   const poll = value.lastSuccessfulPollAt, age = typeof poll === "string" ? now - Date.parse(poll) : Infinity;
-  const connected = Number.isFinite(age) && age >= 0 && age <= 1800000;
+  const connected = Number.isFinite(age) && age >= 0 && age <= MAKER_HEALTH_MAX_AGE_MS;
   return { ...value, workerConnected: connected, state: connected ? value.state : "stale" };
 }
