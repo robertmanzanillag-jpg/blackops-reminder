@@ -37,19 +37,21 @@ function install(env) {
   return { code, downloads };
 }
 
-test('default Linux installer attempts a GPU download; both CPU worker jobs exit without it', async () => {
+test('default Linux installer attempts a GPU download; CPU workers and operator diagnostics exit without it', async () => {
   const baseline = install({});
   assert.equal(baseline.downloads.length, 1);
   assert.match(baseline.downloads[0], /onnxruntime-linux-x64-gpu-/);
-  const workflow = await readFile(new URL('../.github/workflows/office-worker-cloud.yml', import.meta.url), 'utf8');
-  const steps = workflow.split(/^      - /m).filter(step => step.startsWith('name: Install dependencies\n'));
-  assert.equal(steps.length, 2, 'office and factory each retain their install step');
-  for (const step of steps) {
-    const value = step.match(/^          ONNXRUNTIME_NODE_INSTALL_CUDA: (\S+)$/m)?.[1];
-    const fixed = install({ ONNXRUNTIME_NODE_INSTALL_CUDA: value });
-    assert.equal(fixed.code, 0);
-    assert.deepEqual(fixed.downloads, []);
-    assert.match(step, /run: npm ci --no-audit --no-fund/);
-    assert.doesNotMatch(step, /--ignore-scripts/, 'keep unrelated dependency installation checks');
+  for (const [file, count] of [['office-worker-cloud.yml', 2], ['factory-ops.yml', 1]]) {
+    const workflow = await readFile(new URL(`../.github/workflows/${file}`, import.meta.url), 'utf8');
+    const steps = workflow.split(/^      - /m).filter(step => step.startsWith('name: Install dependencies\n'));
+    assert.equal(steps.length, count, `${file} retains its install steps`);
+    for (const step of steps) {
+      const value = step.match(/^          ONNXRUNTIME_NODE_INSTALL_CUDA: (\S+)$/m)?.[1];
+      const fixed = install({ ONNXRUNTIME_NODE_INSTALL_CUDA: value });
+      assert.equal(fixed.code, 0);
+      assert.deepEqual(fixed.downloads, []);
+      assert.match(step, /run: npm ci --no-audit --no-fund/);
+      assert.doesNotMatch(step, /--ignore-scripts/, 'keep unrelated dependency installation checks');
+    }
   }
 });

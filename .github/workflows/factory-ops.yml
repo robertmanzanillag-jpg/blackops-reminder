@@ -80,6 +80,9 @@ jobs:
           cache: npm
 
       - name: Install dependencies
+        # Diagnostics run on CPU; optional CUDA downloads must not block them.
+        env:
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
         run: npm ci --no-audit --no-fund
 
       - name: Run ${{ inputs.action }}

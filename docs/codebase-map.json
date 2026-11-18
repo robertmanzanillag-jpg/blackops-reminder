@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-17T23:31:30.268Z",
-  "repoRoot": "/private/tmp/blackops-worker-recovery-20261117",
+  "generatedAt": "2026-11-18T02:32:33.294Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-runtime",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,20 +124,13 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1134,
-    "filesIndexed": 1034,
-    "imports": 4035,
+    "filesVisible": 1136,
+    "filesIndexed": 1036,
+    "imports": 4042,
     "routes": 604,
-    "symbols": 22905
+    "symbols": 22922
   },
   "directories": {
-    "tests": {
-      "files": 295,
-      "indexed": 291,
-      "kinds": {
-        "test": 295
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -246,10 +239,10 @@
       }
     },
     "server": {
-      "files": 269,
-      "indexed": 263,
+      "files": 270,
+      "indexed": 264,
       "kinds": {
-        "server": 269
+        "server": 270
       }
     },
     "server/blackroom-team": {
@@ -278,6 +271,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 296,
+      "indexed": 292,
+      "kinds": {
+        "test": 296
       }
     },
     "tests/fixtures": {
@@ -11928,6 +11928,7 @@
       "path": "script/software-factory-once.ts",
       "kind": "script",
       "imports": [
+        "../server/software-factory-diagnostics",
         "../server/software-factory-once"
       ],
       "exports": [],
@@ -27356,6 +27357,7 @@
         "./software-factory-company",
         "./software-factory-company-auto",
         "./software-factory-company-scheduler",
+        "./software-factory-diagnostics",
         "./software-factory-github-client",
         "./software-factory-github-transport",
         "./software-factory-office-review",
@@ -27780,6 +27782,25 @@
         "revision",
         "source",
         "sourcePaths"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/software-factory-diagnostics.ts",
+      "kind": "server",
+      "imports": [],
+      "exports": [
+        "FactoryOncePhase",
+        "assertFactoryCreditReady",
+        "factoryOnceFailure"
+      ],
+      "symbols": [
+        "assertFactoryCreditReady",
+        "databaseCode",
+        "expires",
+        "factoryOnceFailure",
+        "failureCodes",
+        "message"
       ],
       "routes": []
     },
@@ -38554,6 +38575,7 @@
       "symbols": [
         "f",
         "fixture",
+        "id",
         "ledger",
         "model",
         "response",
@@ -40003,6 +40025,31 @@
         "row",
         "state",
         "summary"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/software-factory-diagnostics.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/software-factory-diagnostics",
+        "node:assert/strict",
+        "node:child_process",
+        "node:test",
+        "node:url"
+      ],
+      "exports": [],
+      "symbols": [
+        "budget",
+        "changingMessage",
+        "errors",
+        "now",
+        "original",
+        "ready",
+        "report",
+        "result",
+        "secret",
+        "validUntil"
       ],
       "routes": []
     },
@@ -41673,6 +41720,7 @@
     "tests/software-factory-company-scheduler.test.ts",
     "tests/software-factory-company.test.ts",
     "tests/software-factory-db-cli.test.ts",
+    "tests/software-factory-diagnostics.test.ts",
     "tests/software-factory-encrypted-state.test.ts",
     "tests/software-factory-gcs.test.ts",
     "tests/software-factory-github-client.test.ts",
