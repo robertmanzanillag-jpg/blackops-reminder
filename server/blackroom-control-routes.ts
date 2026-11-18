@@ -456,6 +456,28 @@ export function registerBlackRoomControlRoutes(app: Express): void {
     try { res.json({ control: remoteView(await readBlackRoomRemoteControl()) }); }
     catch (error: any) { res.status(500).json({ error: error.message || "Failed to read remote command" }); }
   });
+  app.post("/api/blackroom-agent/clippers-orchestra", async (req, res) => {
+    if (!hasValidBlackRoomRemoteToken(req.get("authorization"))) return res.status(401).set("Cache-Control", "private, no-store").json({ error: "Invalid BlackRoom device token" });
+    // A separate exact route is safe against rollback: old servers reject it,
+    // whereas sending a new discriminator to the legacy heartbeat could mutate it.
+    const body = req.body;
+    res.set("Cache-Control", "private, no-store");
+    if (!req.is("application/json") || !body || typeof body !== "object" || req.originalUrl !== "/api/blackroom-agent/clippers-orchestra" || Object.keys(req.query || {}).length ||
+        Array.isArray(body) || Object.keys(body).sort().join(",") !== "clippersOrchestra,kind" || body.kind !== "clippers-orchestra") {
+      return res.status(400).json({ clippersOrchestra: { accepted: false, code: "CLIPPERS_ORCHESTRA_PROTOCOL_INVALID" } });
+    }
+    let bytes: number;
+    try { bytes = Buffer.isBuffer(req.rawBody) ? req.rawBody.length : Buffer.byteLength(JSON.stringify(body)); }
+    catch { return res.status(400).json({ clippersOrchestra: { accepted: false, code: "CLIPPERS_ORCHESTRA_PROTOCOL_INVALID" } }); }
+    if (bytes > 262144) return res.status(413).json({ clippersOrchestra: { accepted: false, code: "CLIPPERS_ORCHESTRA_TOO_LARGE" } });
+    try {
+      const telemetry = await import("./clippers-orchestra-state");
+      if (!telemetry.parseClippersEnvelope(body.clippersOrchestra)) return res.status(400).json({ clippersOrchestra: { accepted: false, code: "CLIPPERS_ORCHESTRA_INVALID" } });
+      return res.json({ clippersOrchestra: await telemetry.ingestOptionalClippersTelemetry(body.clippersOrchestra) });
+    } catch {
+      return res.status(503).json({ clippersOrchestra: { accepted: false, code: "CLIPPERS_ORCHESTRA_INGEST_UNAVAILABLE" } });
+    }
+  });
   app.post("/api/blackroom-agent/remote", async (req, res) => {
     if (!hasValidBlackRoomRemoteToken(req.get("authorization"))) return res.status(401).json({ error: "Invalid BlackRoom device token" });
     try {
