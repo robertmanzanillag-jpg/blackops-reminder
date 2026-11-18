@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T07:49:31.507Z",
+  "generatedAt": "2026-11-18T07:56:36.433Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-area-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -124,8 +124,8 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1181,
-    "filesIndexed": 1079,
+    "filesVisible": 1177,
+    "filesIndexed": 1077,
     "imports": 4272,
     "routes": 619,
     "symbols": 24279
@@ -203,10 +203,10 @@
       }
     },
     "docs": {
-      "files": 74,
-      "indexed": 70,
+      "files": 70,
+      "indexed": 68,
       "kinds": {
-        "docs": 74
+        "docs": 70
       }
     },
     "examples/clippers-motivation": {
@@ -5852,22 +5852,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],

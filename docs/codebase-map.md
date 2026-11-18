@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T07:49:31.507Z
+Generated: 2026-11-18T07:56:36.433Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-area-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1181 | 1079 | 4272 | 619 | 24279 |
+| 1177 | 1077 | 4272 | 619 | 24279 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -33,7 +33,7 @@ Package: `rest-express`
 | `client/src` | 155 | 153 | ui-component:55, client-component:46, client-page:28, client-lib:19 |
 | `script` | 124 | 112 | script:124 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 74 | 70 | docs:74 |
+| `docs` | 70 | 68 | docs:70 |
 | `shared` | 31 | 31 | shared:31 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
