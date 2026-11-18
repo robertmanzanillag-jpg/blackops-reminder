@@ -46,7 +46,8 @@ test("Clippers own area uses real evidence gates, expires activity, and protects
   t.after(() => browser.close());
   for (const viewport of [{ width: 1440, height: 1000 }, { width: 390, height: 844 }]) {
     payload = orchestraFixture(now); replyStatus = 200; verifiedId = "fixture-owner";
-    payload.roles[0].heldReasons = ["PRIVATE_REASON_CANARY_1234567890"];
+    payload.roles[0].heldReasons = ["PRIVATE_REASON_CANARY_1234567890", "__proto__", "constructor"];
+    payload.roles[0].outputs = JSON.parse('{"__proto__":0,"constructor":0}');
     payload.accounts[0].analytics = { status: "observed", observedAt: new Date(now).toISOString(), posts: 7, totalViews: 900, actualAgeHoursMin: 24, actualAgeHoursMax: 50, heldReasons: [] };
     payload.accounts[0].metricAgeBuckets = [
       { windowHours: 24, samples: 0, actualAgeHoursMin: null, actualAgeHoursMax: null, latestObservedAt: null, views: 0, likes: 0, comments: 0, shares: 0 },
@@ -69,7 +70,8 @@ test("Clippers own area uses real evidence gates, expires activity, and protects
     assert.match(await page.getByTestId("clippers-career-editor").innerText(), /vida inicial no prueba rendimiento/);
     const dialog = page.getByTestId("clippers-office-dialog");
     assert.ok(!(await dialog.innerText()).includes("PRIVATE_REASON_CANARY"));
-    await page.getByText("Motivo pendiente de verificación.", { exact: true }).waitFor();
+    await page.getByText("Motivo pendiente de verificación.", { exact: true }).first().waitFor();
+    assert.equal(await page.getByText("Motivo pendiente de verificación.", { exact: true }).count(), 3);
     assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true);
     await page.screenshot({ path: path.join(artifacts, `clippers-fixture-team-${viewport.width}.png`), fullPage: true });
     await page.clock.fastForward(30_001);

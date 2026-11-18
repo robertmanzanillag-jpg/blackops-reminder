@@ -82,7 +82,7 @@ const outputLabels: Record<string, string> = {
 
 function Reasons({ reasons }: { reasons: string[] }) {
   return reasons.length > 0 ? <ul className="mt-2 space-y-1 text-xs leading-relaxed text-amber-100/90">
-    {reasons.map((reason, index) => <li key={`${index}:${reason}`} className="break-words">{reasonLabels[reason] ?? "Motivo pendiente de verificación."}</li>)}
+    {reasons.map((reason, index) => <li key={`${index}:${reason}`} className="break-words">{Object.hasOwn(reasonLabels, reason) ? reasonLabels[reason] : "Motivo pendiente de verificación."}</li>)}
   </ul> : null;
 }
 
@@ -114,7 +114,7 @@ function AgentCard({ agent, role, fresh, now }: { agent: typeof CLIPPERS_AGENTS[
         <Time label="Última ejecución" value={role.lastRunAt} /><Time label="Próximo turno" value={role.nextDueAt} />
         <Time label="Latido observado" value={role.heartbeatAt} /><Time label="Evidencia" value={role.evidenceAt} />
       </dl>
-      {Object.keys(role.outputs).length > 0 && <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">{Object.entries(role.outputs).map(([key, value]) => <div key={key}><dt className="inline text-slate-500">{outputLabels[key] ?? "Resultado registrado"}: </dt><dd className="inline text-slate-200">{number(value)}</dd></div>)}</dl>}
+      {Object.keys(role.outputs).length > 0 && <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">{Object.entries(role.outputs).map(([key, value]) => <div key={key}><dt className="inline text-slate-500">{Object.hasOwn(outputLabels, key) ? outputLabels[key] : "Resultado registrado"}: </dt><dd className="inline text-slate-200">{number(value)}</dd></div>)}</dl>}
       <Reasons reasons={role.heldReasons} />
       {role.lifePenaltyExempt && role.heldReasons.length > 0 && <p className="mt-2 text-[10px] text-slate-500">Esta espera no penaliza la vida del agente.</p>}
     </>}
