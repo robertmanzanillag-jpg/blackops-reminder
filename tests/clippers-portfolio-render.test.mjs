@@ -106,10 +106,19 @@ test('local portfolio renderer applies reviewed parameters, binds actual bytes a
   await write(config + '/evidence/' + evidenceSha256 + '.json', evidence);
   await write(config + '/approved-input.json', { schemaVersion: 1, assets: [{ ...publishable, evidenceSha256 }],
     reviews: [], publish: true, collect: false });
-  await write('reports/metricool-public-media-receipts.json', [{
+  const publicReceipt = { ...target, renderReceiptSha256: publishable.renderReceiptSha256,
     fileId: publishable.mediaReceiptFileId, campaignId: publishable.campaignId, status: 'ready', draftFile: publishable.draftFile,
-    mediaUrl: publishable.mediaUrl, sha256: publishable.mediaSha256, paidSpendAllowed: false,
-  }]);
+    mediaUrl: publishable.mediaUrl, sha256: publishable.mediaSha256, paidSpendAllowed: false };
+  const scopedMediaLedger = 'reports/clippers-daily-learning/portfolio-media-receipts.json';
+  await write(scopedMediaLedger, [{ ...publicReceipt, brandId: DESTINATIONS[1].brandId, account: DESTINATIONS[1].account }]);
+  await write('reports/metricool-public-media-receipts.json', [publicReceipt]);
+  const mismatch = await runClippersDailyLearning({ workspaceRoot: root, now, adapter: {
+    preflight() { throw new Error('cross-account upload receipt must never reach the provider'); },
+  } });
+  assert.equal(mismatch.destinations[0].eligible, 0, 'a render is not approved by a different destination or legacy upload receipt');
+  await write('reports/clippers-daily-learning/state.json', { schemaVersion: 1, day: null,
+    deliveries: [], observations: [], history: [], versions: {} });
+  await write(scopedMediaLedger, [publicReceipt]);
   const report = await runClippersDailyLearning({ workspaceRoot: root, now, adapter: {
     preflight: async () => {},
     schedule: async (_destination, verified) => {

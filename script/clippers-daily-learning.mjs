@@ -69,6 +69,8 @@ function approvedMedia(item, media) {
   if (!['drive.google.com', 'drive.usercontent.google.com'].includes(url.hostname) ||
       !['/uc', '/download'].includes(url.pathname) || url.searchParams.get('id') !== item.mediaReceiptFileId) return false;
   return media.some(row => row.status === 'ready' && row.paidSpendAllowed === false && typeof row.fileId === 'string' && ID.test(row.fileId) &&
+    (item.renderReceiptSha256 ? findDestination(row) && destinationKey(row) === destinationKey(item) &&
+      row.renderReceiptSha256 === item.renderReceiptSha256 : row.renderReceiptSha256 == null) &&
     row.campaignId === item.campaignId && row.draftFile === item.draftFile &&
     row.fileId === item.mediaReceiptFileId && row.mediaUrl === item.mediaUrl && row.sha256 === item.mediaSha256);
 }
@@ -358,7 +360,11 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
     const decisions = state.history.length;
     await applyApprovedActions(workspaceRoot, state, configured.reviews, proposals, now);
     if (state.history.length !== decisions) await save(statePath, state);
-    const authorized = await optionalArray(path.join(workspaceRoot, 'reports', 'metricool-public-media-receipts.json'));
+    const existingMedia = await optionalArray(path.join(workspaceRoot, 'reports', 'metricool-public-media-receipts.json'));
+    const scopedMedia = await privateJson(path.join(reportDir, 'portfolio-media-receipts.json'), []);
+    if (!Array.isArray(scopedMedia)) throw Error('portfolio_media_receipt_ledger_invalid');
+    const authorized = [...existingMedia.map(row => ({ ...row, renderReceiptSha256: undefined })),
+      ...scopedMedia.filter(row => findDestination(row) && SHA.test(row.renderReceiptSha256 ?? ''))];
     const legacy = await optionalArray(path.join(workspaceRoot, 'reports', 'metricool-autopilot-ledger.json'));
     const outcomes = [];
     for (const destination of DESTINATIONS) {

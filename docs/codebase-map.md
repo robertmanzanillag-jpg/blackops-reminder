@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T04:33:53.427Z
+Generated: 2026-11-18T04:35:19.707Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-daily-learning-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1145 | 1045 | 4097 | 604 | 23338 |
+| 1145 | 1045 | 4097 | 604 | 23343 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -391,7 +391,7 @@ Package: `rest-express`
 - `script/clippers-cleanup-published-vyro-media.mjs` (script; 47 symbols, 4 imports)
 - `script/clippers-content-learning-ceo.mjs` (script; 85 symbols, 3 imports)
 - `script/clippers-content-local-worker.mjs` (script; 112 symbols, 10 imports)
-- `script/clippers-daily-learning.mjs` (script; 101 symbols, 8 imports)
+- `script/clippers-daily-learning.mjs` (script; 103 symbols, 8 imports)
 - `script/clippers-daily-watchdog.mjs` (script; 87 symbols, 4 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
 - `script/clippers-free-local-worker.mjs` (script; 45 symbols, 6 imports)

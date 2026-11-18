@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T04:33:53.427Z",
+  "generatedAt": "2026-11-18T04:35:19.707Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-daily-learning-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 1045,
     "imports": 4097,
     "routes": 604,
-    "symbols": 23338
+    "symbols": 23343
   },
   "directories": {
     ".": {
@@ -7897,6 +7897,7 @@
         "evaluate",
         "evidence",
         "exact",
+        "existingMedia",
         "exportedVersionState",
         "featureDigest",
         "file",
@@ -7942,6 +7943,7 @@
         "save",
         "scheduledAt",
         "scopedAssets",
+        "scopedMedia",
         "selected",
         "snapshotKey",
         "snapshotWindow",
@@ -35771,12 +35773,14 @@
         "key",
         "manifest",
         "middlePixel",
+        "mismatch",
         "now",
         "originalBytes",
         "other",
         "otherPolicyDir",
         "overlay",
         "policyDir",
+        "publicReceipt",
         "publishable",
         "report",
         "request",
@@ -35785,6 +35789,7 @@
         "root",
         "run",
         "scoped",
+        "scopedMediaLedger",
         "sourceSha256",
         "standard",
         "target",
