@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T02:29:36.696Z",
+  "generatedAt": "2026-11-18T02:30:36.387Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-runtime",
   "packageName": "rest-express",
   "scripts": {
@@ -128,23 +128,9 @@
     "filesIndexed": 1036,
     "imports": 4042,
     "routes": 604,
-    "symbols": 22918
+    "symbols": 22919
   },
   "directories": {
-    "server": {
-      "files": 270,
-      "indexed": 264,
-      "kinds": {
-        "server": 270
-      }
-    },
-    "tests": {
-      "files": 296,
-      "indexed": 292,
-      "kinds": {
-        "test": 296
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -252,6 +238,13 @@
         "script": 4
       }
     },
+    "server": {
+      "files": 270,
+      "indexed": 264,
+      "kinds": {
+        "server": 270
+      }
+    },
     "server/blackroom-team": {
       "files": 17,
       "indexed": 17,
@@ -278,6 +271,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 296,
+      "indexed": 292,
+      "kinds": {
+        "test": 296
       }
     },
     "tests/fixtures": {
@@ -38573,6 +38573,7 @@
       "symbols": [
         "f",
         "fixture",
+        "id",
         "ledger",
         "model",
         "response",

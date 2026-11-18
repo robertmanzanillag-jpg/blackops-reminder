@@ -264,3 +264,33 @@ For a database lock refusal, inspect the owner-lock holder through the existing
 read-only diagnostics. A lock timeout identifies contention, not its holder or a
 safe transaction to terminate. Do not kill sessions, clear ledgers or enable
 `OFFICE_SELF_HEAL_ENABLED` as a recovery shortcut.
+
+### Follow-up design: attributable admission journal
+
+This is a review proposal, not an installed recovery path. Future execution
+admission should durably bind owner, run ID, fence, generation, phase execution
+ID, shared reservation key, token reservation ID, request digest and code
+revision. Store an append-only transition journal with compare-and-swap fences:
+`assigned` → `shared_reserved` → `tokens_reserved` → `provider_start_intent` →
+`response_received` → `settled`. The provider start intent must commit before
+transport and must make uncertain/restarted executions ineligible for replay.
+Record the attributable response ID and independently measured usage when known.
+Do not store prompts, keys or provider payloads in public diagnostics.
+
+A failed token admission can gain a durable `never_dispatched` transition only
+before any provider start intent, after the original executor has drained, with
+the exact immutable assignment and both ledgers locked in a consistent order.
+An absent marker alone is not a receipt. A lost journal acknowledgment, unknown
+fence, ambiguous token commit or possible live executor must preserve uncertainty.
+Any future production void must retain the original run and hold history, carry
+an operator audit proof, and grant neither training credit nor independent
+success. It cannot retroactively supply missing evidence for older runs.
+
+Before implementing that protocol, fake-only validation must cover process death
+between every transition, lost acknowledgments on each ledger, concurrent
+executors and recovery, changed generations/fences, provider timeout after start,
+duplicate response receipts, invalid prices and late settlement. Prove that no
+fault invokes the provider twice and that `never_dispatched` cannot coexist with
+a provider start intent or response receipt. Current tests separately demonstrate
+that token refusal (including a lost commit acknowledgment) occurs before fetch
+and still retains the shared unknown hold under today's protocol.
