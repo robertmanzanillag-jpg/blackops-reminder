@@ -16,6 +16,7 @@ export type ClippersAccountView = {
   dailyTarget: number; eligibleAssets: number | null; confirmedScheduledOrPublished: number | null;
   shortfall: number | null; heldReasons: string[]; activeVersion: string | null;
   policyStatus: string; metricAgeBuckets: ClippersMetricAgeBucket[];
+  analytics?: { status: 'observed' | 'held' | 'unavailable'; observedAt: string | null; posts: number | null; totalViews: number | null; actualAgeHoursMin: number | null; actualAgeHoursMax: number | null; heldReasons: string[] };
 };
 export type ClippersTrendSignal = {
   creatorId: string; videoId: string; publishedAt: string; observedAt: string;
@@ -47,7 +48,7 @@ const denied = ['6431692','6475033','6585226'];
 const sourceChannels:Record<string,string>={thegrefg:'UCCEmjNPpJYhGDgaEqeeA4HA',vegetta777:'UCam8T03EOFBsNdR0thrFHdQ',rubius:'UCXazgXDIYyWH-yXLAkcrFxw',lacy:'UCeoZXkaJDtdTHafgoZeDcAA',alanzoka:'UCIwspRtKNszHhIhl36gREjQ',gotaga:'UCCFqUJYKT97UerMmb6DM0bw',papaplatte:'UCDmbhGe7-wC1a55l5ZYAZJw',k4sen:'UChUjERVG8eKEAJSCef-tTmg'};
 const record = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
 const keys = (v: unknown, names: string[]) => record(v) && Object.keys(v).length === names.length && Object.keys(v).every(k=>names.includes(k));
-const count = (v: unknown) => Number.isSafeInteger(v) && Number(v)>=0 && Number(v)<=1_000_000_000;
+const count = (v: unknown) => Number.isSafeInteger(v) && Number(v)>=0 && Number(v)<=Number.MAX_SAFE_INTEGER;
 const nullableCount = (v: unknown) => v===null || count(v);
 const text = (v: unknown, max=200) => typeof v==='string' && v.length>0 && v.length<=max && !/[\r\n\x00-\x1f]/.test(v);
 const code = (v: unknown) => typeof v==='string' && /^[a-zA-Z0-9_.:-]{1,200}$/.test(v);
@@ -72,11 +73,12 @@ export function parseClippersOrchestraStatus(value: unknown, now=Date.now()): Cl
     v.disconnectedDestinations[0].brandId!=='6595747' || !text(v.disconnectedDestinations[0].label) || v.disconnectedDestinations[0].reason!=='destination_not_connected')return null;
   if(!Array.isArray(v.accounts) || v.accounts.length!==4 || new Set(v.accounts.map((a:any)=>a?.key)).size!==4)return null;
   for(const a of v.accounts){
-    if(!keys(a,['key','brandId','network','account','label','connection','observedAt','dailyTarget','eligibleAssets','confirmedScheduledOrPublished','shortfall','heldReasons','activeVersion','policyStatus','metricAgeBuckets']) ||
+    if(!keys(a,['key','brandId','network','account','label','connection','observedAt','dailyTarget','eligibleAssets','confirmedScheduledOrPublished','shortfall','heldReasons','activeVersion','policyStatus','metricAgeBuckets',...(a.analytics===undefined?[]:['analytics'])]) ||
       !targetKeys.includes(a.key) || a.key!==[a.brandId,a.network,a.account].join(':') || !text(a.label) ||
       !['observed','unverified','disconnected'].includes(a.connection) || !nullableTime(a.observedAt,now) || a.dailyTarget!==5 ||
       ![a.eligibleAssets,a.confirmedScheduledOrPublished,a.shortfall].every(nullableCount) || !codes(a.heldReasons) ||
       !(a.activeVersion===null||code(a.activeVersion)) || !code(a.policyStatus) || !Array.isArray(a.metricAgeBuckets) || a.metricAgeBuckets.length>3)return null;
+    if(a.analytics!==undefined){const x=a.analytics;if(!keys(x,['status','observedAt','posts','totalViews','actualAgeHoursMin','actualAgeHoursMax','heldReasons'])||!['observed','held','unavailable'].includes(x.status)||!nullableTime(x.observedAt,now)||![x.posts,x.totalViews].every(nullableCount)||![x.actualAgeHoursMin,x.actualAgeHoursMax].every(nullableFinite)||!codes(x.heldReasons)||(x.actualAgeHoursMin!==null&&(x.actualAgeHoursMin<0||x.actualAgeHoursMax<x.actualAgeHoursMin)))return null;}
     const seen=new Set();
     for(const b of a.metricAgeBuckets){
       if(!keys(b,['windowHours','samples','actualAgeHoursMin','actualAgeHoursMax','latestObservedAt','views','likes','comments','shares']) ||
