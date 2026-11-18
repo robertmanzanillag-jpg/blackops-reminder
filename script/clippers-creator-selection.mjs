@@ -79,8 +79,8 @@ function sampleReason(row, context, now, policy) {
 }
 function collision(a, b) {
   return a.postId === b.postId || a.deliveryId === b.deliveryId ||
-    a.evidence.publicationReceiptSha256 === b.evidence.publicationReceiptSha256 ||
-    a.evidence.renderReceiptSha256 === b.evidence.renderReceiptSha256 ||
+    a.evidence.publicationReceiptSha256 === b.evidence?.publicationReceiptSha256 ||
+    a.evidence.renderReceiptSha256 === b.evidence?.renderReceiptSha256 ||
     (a.sourceVideoId && a.sourceVideoId === b.sourceVideoId) ||
     (a.sourceEpisodeId && a.sourceEpisodeId === b.sourceEpisodeId) ||
     a.sourceSha256 === b.sourceSha256;

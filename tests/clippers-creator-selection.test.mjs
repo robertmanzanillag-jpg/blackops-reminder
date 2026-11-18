@@ -258,3 +258,14 @@ test('expiry is predeclared bounded, source-linked and never extends preferred s
   const conflict = fixture(); conflict.samples[0].selectionExperiment.expiresAt = time(4);
   assert.equal(preference(conflict).candidates[0].reason, 'assignment_binding_conflict');
 });
+
+
+test('malformed evidence in another assigned lot cannot crash otherwise valid cohort evaluation', () => {
+  const input = fixture();
+  const extra = structuredClone(input.samples[0]);
+  extra.deliveryId = 'later-malformed'; extra.postId = '999'; extra.sourceVideoId = '99999999999'; extra.sourceSha256 = hash('later-malformed');
+  extra.selectionExperiment.id = 'later-malformed'; extra.selectionExperiment.registeredAt = time(-26);
+  delete extra.evidence;
+  input.samples.push(extra);
+  assert.equal(preference(input).status, 'preferred');
+});
