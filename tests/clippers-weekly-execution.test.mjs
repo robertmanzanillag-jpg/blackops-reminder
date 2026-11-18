@@ -223,3 +223,10 @@ test('known publishing reserves capacity; calendar published joins analytics exa
  analytics=[];rows=[{...row,providers:[{network:'tiktok',status:'PUBLISHED',publicUrl:'https://www.tiktok.com/@another/video/111'}]}];await assert.rejects(adapter.weeklyPreflight(target,item,{now:NOW}),/unreconciled/);
  rows=[row,{...row,id:'456'}];await assert.rejects(adapter.weeklyPreflight(target,item,{now:NOW}),/identity_conflict/);
 });
+
+test('Office never double counts a local scheduled ACK after the same calendar ID becomes published',{skip:!tools},async t=>{
+ const f=await readyFixture(t,{sameDay:true});await runClippersWeeklyScheduling({workspaceRoot:f.root,window:WINDOW,now:NOW,apply:true,adapter:f.adapter});
+ const state=await f.read(`${REPORT}/state.json`),delivery=state.deliveries[0],proof=delivery.preflightEvidence;proof.scheduled=[{id:delivery.metricoolId,scheduledAt:delivery.scheduledAt,status:'published',platformPostId:'111',publicationTimeVerified:false}];proof.published=[];proof.calendarPublished=[{id:delivery.metricoolId,platformPostId:'111'}];const {sha256,...p}=proof;proof.sha256=digest(p);await f.write(`${REPORT}/state.json`,state);
+ let report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:new Date(+NOW+3*3600000)});assert.equal(report.accounts[0].confirmedScheduledOrPublished,1);assert.equal(report.accounts[0].shortfall,4);
+ proof.scheduled=[];proof.published=[{id:'111',publishedAt:'2026-11-18T14:00:00.000Z'}];const {sha256:old,...updated}=proof;proof.sha256=digest(updated);await f.write(`${REPORT}/state.json`,state);report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:new Date(+NOW+3*3600000)});assert.equal(report.accounts[0].confirmedScheduledOrPublished,1);
+});

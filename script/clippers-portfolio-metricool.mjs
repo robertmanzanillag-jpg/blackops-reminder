@@ -290,7 +290,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
       const hours = [...pending.values()].map(row=>localHour(scheduledTime(row))).concat([...published.values()].map(post=>localHour(post.publishedAt)));
       if (hours.length>=DAILY_LIMIT || new Set(hours).size!==hours.length || hours.includes(localHour(item.scheduledAt)) ||
           [...pending.values()].some(row=>row.text===item.caption || providerMedia(row)===item.mediaUrl)) throw Error('metricool_slot_duplicate_or_daily_cap');
-      const evidence={destination,day,observedAt:now.toISOString(),source:'fresh_rest_calendar_and_account_analytics',
+      const evidence={destination,day,observedAt:now.toISOString(),source:'fresh_rest_calendar_and_account_analytics',calendarPublished:[...calendarPublished].map(([platformPostId,id])=>({id,platformPostId})),
         scheduled:[...pending.values()].map(row=>({id:schedulerId(row),scheduledAt:scheduledTime(row),status:String(statusOf(row,destination)).toLowerCase(),...(untimedPublished.has(schedulerId(row))?{platformPostId:untimedPublished.get(schedulerId(row)),publicationTimeVerified:false}:{})})),published:[...published.values()]};
       return { day, observedAt:evidence.observedAt, coverageSource:evidence.source, confirmedCount:hours.length, scheduledIds:evidence.scheduled.map(row=>row.id), publishedIds:[...new Set([...evidence.published.map(row=>row.id),...calendarPublished.keys()])],calendarIds:[...calendarIds],reservedPublishing:[...pending.values()].filter(row=>String(statusOf(row,destination)).toLowerCase()==='publishing').length,publicationTimesUnverified:untimedPublished.size,evidence,
         evidenceSha256:createHash('sha256').update(JSON.stringify(evidence)).digest('hex') };

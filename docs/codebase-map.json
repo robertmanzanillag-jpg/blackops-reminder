@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T17:02:25.181Z",
+  "generatedAt": "2026-11-18T17:04:24.208Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-native-media-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -128,23 +128,9 @@
     "filesIndexed": 1131,
     "imports": 4551,
     "routes": 623,
-    "symbols": 25562
+    "symbols": 25563
   },
   "directories": {
-    "docs": {
-      "files": 78,
-      "indexed": 76,
-      "kinds": {
-        "docs": 78
-      }
-    },
-    "script": {
-      "files": 135,
-      "indexed": 122,
-      "kinds": {
-        "script": 135
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -216,12 +202,26 @@
         "client-page": 28
       }
     },
+    "docs": {
+      "files": 78,
+      "indexed": 76,
+      "kinds": {
+        "docs": 78
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 135,
+      "indexed": 122,
+      "kinds": {
+        "script": 135
       }
     },
     "script/office-api-budget-v6": {
@@ -9871,6 +9871,7 @@
         "byAge",
         "byExperiment",
         "byVideo",
+        "calendarPublished",
         "candidate",
         "caps",
         "channel",

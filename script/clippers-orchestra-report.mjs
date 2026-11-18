@@ -234,11 +234,13 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
           findDestination(p.destination)&&destinationKey(p.destination)===key&&p.day===localDay(now)&&time(p.observedAt,at)&&p.observedAt<=latestOwn.scheduleEvidence.confirmedAt&&
           Array.isArray(p.scheduled)&&p.scheduled.length<=5&&Array.isArray(p.published)&&p.published.length<=5&&
           p.scheduled.every(v=>objectRow(v)&&typeof v.id==='string'&&ID.test(v.id)&&time(v.scheduledAt,Infinity)&&localDay(new Date(v.scheduledAt))===p.day&&(['pending','scheduled','publishing'].includes(v.status)||(['published','posted'].includes(v.status)&&typeof v.platformPostId==='string'&&/^\d+$/.test(v.platformPostId)&&v.publicationTimeVerified===false)))&&
+          (p.calendarPublished===undefined||(Array.isArray(p.calendarPublished)&&p.calendarPublished.length<=5&&p.calendarPublished.every(v=>objectRow(v)&&typeof v.id==='string'&&ID.test(v.id)&&typeof v.platformPostId==='string'&&/^\d+$/.test(v.platformPostId))&&new Set(p.calendarPublished.map(v=>v.id)).size===p.calendarPublished.length&&new Set(p.calendarPublished.map(v=>v.platformPostId)).size===p.calendarPublished.length))&&
           p.published.every(v=>objectRow(v)&&typeof v.id==='string'&&/^\d+$/.test(v.id)&&time(v.publishedAt,Date.parse(p.observedAt))&&localDay(new Date(v.publishedAt))===p.day);
         if(valid){
           const pending=new Set(p.scheduled.filter(v=>!v.platformPostId).map(v=>v.id)),published=new Set([...p.published.map(v=>v.id),...p.scheduled.filter(v=>v.platformPostId).map(v=>v.platformPostId)]);
+          const calendarPublished=new Map([...(p.calendarPublished??[]),...p.scheduled.filter(v=>v.platformPostId)].map(v=>[v.id,v.platformPostId]));
           for(const v of (state?.deliveries??[]).filter(v=>findDestination(v)&&destinationKey(v)===key&&['scheduled','published'].includes(v.status)&&ID.test(v.metricoolId??'')&&time(v.scheduledAt,Infinity)&&localDay(new Date(v.scheduledAt))===p.day&&(!v.weeklyWindow||weeklyReceipts.includes(v)))){
-            if(v.status==='published'&&exactPost(v.post?.url,v)?.id===v.post?.id&&time(v.post?.publishedAt,at)){pending.delete(v.metricoolId);published.add(v.post.id);}else pending.add(v.metricoolId);
+            if(calendarPublished.has(v.metricoolId)){pending.delete(v.metricoolId);published.add(calendarPublished.get(v.metricoolId));}else if(v.status==='published'&&exactPost(v.post?.url,v)?.id===v.post?.id&&time(v.post?.publishedAt,at)){pending.delete(v.metricoolId);published.add(v.post.id);}else pending.add(v.metricoolId);
           }
           confirmed=pending.size+published.size;shortfall=Math.max(0,5-confirmed);blockers=confirmed>5?['daily_queue_exceeds_cap']:confirmed===5?[]:r?.blockers??['weekly_queue_partial'];
         }
