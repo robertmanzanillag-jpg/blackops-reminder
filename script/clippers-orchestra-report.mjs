@@ -19,9 +19,11 @@ export async function privateOrchestraJson(root,relative,maxBytes=25_000_000){
   const file=path.join(root,relative);let fd;
   try{
     if(await realpath(path.dirname(file))!==path.dirname(file))throw Error('private_parent_required');
-    fd=await open(file,constants.O_RDONLY|constants.O_NOFOLLOW);const stat=await fd.stat();
+    fd=await open(file,constants.O_RDONLY|constants.O_NOFOLLOW|(constants.O_NONBLOCK??0));const stat=await fd.stat();
     if(!stat.isFile()||stat.nlink!==1||(stat.mode&0o077)||(process.getuid&&stat.uid!==process.getuid())||stat.size>maxBytes)throw Error('private_file_required');
-    const raw=await fd.readFile('utf8');return {value:JSON.parse(raw),sha:hash(raw),error:null};
+    const chunks=[];let bytes=0;const buffer=Buffer.alloc(Math.min(65536,maxBytes+1));
+    for(;;){const length=Math.min(buffer.length,maxBytes+1-bytes);if(length<1)throw Error('private_file_too_large');const read=await fd.read(buffer,0,length,null);if(!read.bytesRead)break;bytes+=read.bytesRead;if(bytes>maxBytes)throw Error('private_file_too_large');chunks.push(Buffer.from(buffer.subarray(0,read.bytesRead)));}
+    const raw=Buffer.concat(chunks,bytes).toString('utf8');return {value:JSON.parse(raw),sha:hash(raw),error:null};
   }catch(error){return {value:null,sha:null,error:error.code==='ENOENT'?'report_missing':'report_unreadable'};}
   finally{await fd?.close();}
 }
@@ -160,7 +162,8 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   const at=+now;if(!Number.isFinite(at)||!workspaceRoot||!path.isAbsolute(workspaceRoot))throw Error('orchestra_configuration_invalid');
   const root=await realpath(workspaceRoot);
   const files={watchdog:'reports/clippers-daily-watchdog/latest.json',learning:'reports/clippers-daily-learning/latest.json',state:'reports/clippers-daily-learning/state.json',prepare:'reports/clippers-daily-learning/prepare-latest.json',media:'reports/clippers-daily-learning/portfolio-media-receipts.json',input:'config/clippers-daily-learning/approved-input.json',accountAnalytics:'reports/clippers-account-analytics/latest.json'};
-  const entries=await Promise.all(Object.entries(files).map(async([k,file])=>[k,await privateOrchestraJson(root,file)]));
+  const caps={watchdog:1048576,learning:2097152,state:25000000,prepare:262144,media:5242880,input:2097152,accountAnalytics:524288};
+  const entries=await Promise.all(Object.entries(files).map(async([k,file])=>[k,await privateOrchestraJson(root,file,caps[k])]));
   const artifacts=Object.fromEntries(entries),wd=artifacts.watchdog.value,report=artifacts.learning.value,prep=artifacts.prepare.value;
   const rawState=artifacts.state.value,state=rawState?.schemaVersion===1&&Array.isArray(rawState.deliveries)&&rawState.deliveries.length<=2000&&Array.isArray(rawState.observations)&&rawState.observations.length<=20000&&Array.isArray(rawState.history)&&rawState.history.length<=1000&&rawState.versions&&typeof rawState.versions==='object'?rawState:null;
   let discoveryFiles=[];
@@ -185,7 +188,8 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
     const measured=analytics?.accounts.find(row=>findDestination(row)&&destinationKey(row)===key);
     const verifiedPosts=(Array.isArray(measured?.posts)?measured.posts:[]).filter(p=>exactPost(p.url,d)?.id===p.id&&time(p.publishedAt,at)&&time(p.observedAt,at)&&Date.parse(p.observedAt)>=Date.parse(p.publishedAt)&&n(p.views)!==null);
     const ages=verifiedPosts.map(p=>(Date.parse(p.observedAt)-Date.parse(p.publishedAt))/HOUR);
-    const accountAnalysis={status:measured?.status==='observed'?'observed':measured?'held':'unavailable',observedAt:time(measured?.observedAt,at),posts:measured?.status==='observed'?verifiedPosts.length:null,totalViews:measured?.status==='observed'?verifiedPosts.reduce((sum,p)=>sum+p.views,0):null,actualAgeHoursMin:ages.length?Math.min(...ages):null,actualAgeHoursMax:ages.length?Math.max(...ages):null,heldReasons:measured?.reason?codes([measured.reason]):measured?[]:['account_analytics_unavailable']};
+    const analyticsStale=measured?.observedAt&&at-Date.parse(measured.observedAt)>26*HOUR;
+    const accountAnalysis={status:analyticsStale?'held':measured?.status==='observed'?'observed':measured?'held':'unavailable',observedAt:time(measured?.observedAt,at),posts:measured?.status==='observed'?verifiedPosts.length:null,totalViews:measured?.status==='observed'?verifiedPosts.reduce((sum,p)=>sum+p.views,0):null,actualAgeHoursMin:ages.length?Math.min(...ages):null,actualAgeHoursMax:ages.length?Math.max(...ages):null,heldReasons:[...(analyticsStale?['account_analytics_stale']:[]),...(measured?.reason?codes([measured.reason]):measured?[]:['account_analytics_unavailable'])]};
     return {key,brandId:String(d.brandId),network:d.network,account:d.account,label:d.network==='facebook'?'Streamers · Facebook':`@${d.account}`,connection:(accountAnalysis.observedAt??observedAt)&&at-Date.parse(accountAnalysis.observedAt??observedAt)<=26*HOUR?'observed':'unverified',observedAt:accountAnalysis.observedAt??observedAt,dailyTarget:5,eligibleAssets:r?n(r.eligible):null,confirmedScheduledOrPublished:r?n(r.confirmedScheduledOrPublished):null,shortfall:r?n(r.shortfall):null,heldReasons:r?codes(r.blockers):['learning_report_unavailable'],activeVersion:state?String(state.versions[key]??'baseline-1'):null,policyStatus:typeof v?.status==='string'&&/^[a-z_]+$/.test(v.status)?v.status:'policy_unobserved',metricAgeBuckets:buckets,analytics:accountAnalysis};
   });
   const confirmedMedia=Array.isArray(artifacts.media.value)?artifacts.media.value.filter(r=>findDestination(r)&&r.status==='ready'&&r.paidSpendAllowed===false&&SHA.test(r.sha256??'')&&SHA.test(r.renderReceiptSha256??'')):[];

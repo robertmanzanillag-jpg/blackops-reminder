@@ -173,3 +173,11 @@ test('telemetry requires proven Office HTTPS origin and only reports safe origin
  assert.equal(clippersOrchestraRemoteEligibility('https://robertwebsites.com',false).allowed,false);
  assert.ok(!JSON.stringify(clippersOrchestraRemoteEligibility('https://robertwebsites.com/?token=private',true)).includes('private'));
 });
+
+test('bounded private reader rejects FIFO without waiting for a writer and enforces byte cap',async()=>fixture(async root=>{
+ const {privateOrchestraJson}=await import('../script/clippers-orchestra-report.mjs');
+ const {execFileSync}=await import('node:child_process');
+ const file=path.join(root,'fifo.json');execFileSync('mkfifo',[file]);await chmod(file,0o600);
+ const started=performance.now();assert.equal((await privateOrchestraJson(root,'fifo.json',100)).error,'report_unreadable');assert.ok(performance.now()-started<1000);
+ await save(root,'large.json',{value:'x'.repeat(1000)});assert.equal((await privateOrchestraJson(root,'large.json',100)).error,'report_unreadable');
+}));
