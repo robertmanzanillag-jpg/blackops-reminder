@@ -86,7 +86,7 @@ test('the process runner uses argv without shell expansion and terminates bounde
 
 const digest=value=>createHash('sha256').update(value).digest('hex');
 function sourceIssue(changed={}) {
-  const source={version:1,company:'kong',repository:REPOSITORY,sourceTaskId:'task-1',errorId:'error-1',fingerprint:'fingerprint-1',generation:1,summary:'Fix the event title',reportedAt:'2026-11-18T03:00:00.000Z',baseBranch:BASE_BRANCH,baseSha:'a'.repeat(40),...changed};
+  const source={version:1,company:'kong',repository:REPOSITORY,sourceTaskId:'task-1',errorId:'error-1',fingerprint:'fingerprint-1',generation:1,summary:'Fix the event title',reportedAt:'2026-11-18T03:00:00.000Z',baseBranch:BASE_BRANCH,baseSha:'a'.repeat(40),regressionScenario:'unsupported',...changed};
   source.repairKey=source.repairKey||`kong-repair:${digest(canonicalJson([source.repository,source.company,source.sourceTaskId,source.errorId,source.fingerprint,source.generation]))}`;
   const raw=canonicalJson(source);
   return {number:123,url:`https://github.com/${REPOSITORY}/issues/123`,author:{login:'robertmanzanillag-jpg'},lastEditedAt:null,state:'OPEN',body:`<!-- kong-repair-source:${Buffer.from(raw).toString('base64')} -->\n<!-- kong-repair-source-sha256:${digest(raw)} -->`};

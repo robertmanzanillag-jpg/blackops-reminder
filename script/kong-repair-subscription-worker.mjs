@@ -27,7 +27,7 @@ export function canonicalJson(value) {
 }
 
 export function allowedFile(relative) {
-  if (typeof relative !== 'string' || relative.includes('\\') || relative.includes('\0') || relative.split('/').some(p => !p || p === '.' || p === '..') || DENIED.test(relative)) return false;
+  if (typeof relative !== 'string' || relative.includes('\\') || /[\x00-\x1f\x7f]/.test(relative) || relative.split('/').some(p => !p || p === '.' || p === '..') || DENIED.test(relative)) return false;
   return (ROOTS.has(relative.split('/')[0]) && EXTENSIONS.has(path.posix.extname(relative))) || ['AGENTS.md', 'package.json', 'package-lock.json', 'tsconfig.json'].includes(relative);
 }
 export function allowedChange(relative) {
@@ -80,7 +80,7 @@ export async function runProcess(binary, args, { cwd, env, input, timeoutMs = 60
     const collect = chunk => { if (Buffer.byteLength(output) + chunk.length > maxOutputBytes) { overflow = true; kill(); } else output += chunk; };
     child.stdout.on('data', collect); child.stderr.on('data', collect);
     child.on('error', () => { clearTimeout(timer); reject(code('PROCESS_UNAVAILABLE')); });
-    child.on('close', exitCode => { clearTimeout(timer); resolve({ exitCode, output, timedOut, overflow }); });
+    child.on('close', exitCode => { clearTimeout(timer); kill(); resolve({ exitCode, output, timedOut, overflow }); });
     child.stdin.on('error', () => {}); child.stdin.end(input || '');
   });
 }
@@ -221,6 +221,8 @@ export async function executeMaker(claim, stage, { runtimeRoot, codex = DEFAULT_
   if (!tests.length) throw code('VALIDATION_FAILED');
   const testOutput = await mustRun(codex, ['sandbox', ...permissionArgs(), '-P', 'kong-repair', '-C', workspace, '--', node, '--import','tsx', '--test','--test-reporter=tap', ...tests], { cwd: workspace, env: childEnv, timeoutMs: 10*60_000 });
   if (!/^# tests [1-9]\d*$/m.test(testOutput) || !/^# fail 0$/m.test(testOutput)) throw code('VALIDATION_FAILED');
+  const afterTests=await changedFiles(before,workspace,blockedSources);
+  if(changes.length!==afterTests.length||changes.some((c,i)=>c.name!==afterTests[i].name||Boolean(c.bytes)!==Boolean(afterTests[i].bytes)||(c.bytes&&!c.bytes.equals(afterTests[i].bytes))))throw code('VALIDATION_FAILED');
   for (const change of changes) { const destination = path.join(checkout, change.name); await fs.mkdir(path.dirname(destination), { recursive: true }); if (change.bytes) await fs.writeFile(destination,change.bytes); else await fs.unlink(destination); }
   await mustRun('git', ['switch', '-c', branch], { cwd: checkout, env });
   await mustRun('git', ['add', '--', ...changes.map(c => c.name)], { cwd: checkout, env });
@@ -249,11 +251,11 @@ export function sourceFromIssue(issue, trustedActor = 'robertmanzanillag-jpg') {
   if (encoded.length !== 1 || digests.length !== 1 || encoded[0][1].length > 16000) throw code('UNTRUSTED_SOURCE');
   let source; const raw = Buffer.from(encoded[0][1], 'base64').toString('utf8');
   try { source = JSON.parse(raw); } catch { throw code('UNTRUSTED_SOURCE'); }
-  const fields = ['version','company','repository','repairKey','sourceTaskId','errorId','fingerprint','generation','summary','reportedAt','baseBranch','baseSha'];
+  const fields = ['version','company','repository','repairKey','sourceTaskId','errorId','fingerprint','generation','summary','reportedAt','baseBranch','baseSha','regressionScenario'];
   if (Object.keys(source).sort().join('|') !== fields.sort().join('|') || canonicalJson(source) !== raw || hash(raw) !== digests[0][1]
     || source.version !== 1 || source.company !== 'kong' || source.repository !== REPOSITORY || source.baseBranch !== BASE_BRANCH || !SHA.test(source.baseSha)
     || !/^kong-repair:[a-f0-9]{64}$/.test(source.repairKey) || !ID.test(source.sourceTaskId) || !ID.test(source.errorId) || !ID.test(source.fingerprint)
-    || !Number.isSafeInteger(source.generation) || source.generation < 1 || typeof source.summary !== 'string' || !source.summary.trim() || source.summary.length > 8000 || !Number.isFinite(Date.parse(source.reportedAt))) throw code('UNTRUSTED_SOURCE');
+    || !Number.isSafeInteger(source.generation) || source.generation < 1 || typeof source.summary !== 'string' || !source.summary.trim() || source.summary.length > 8000 || !Number.isFinite(Date.parse(source.reportedAt))||!['api_ready_contract','unsupported'].includes(source.regressionScenario)) throw code('UNTRUSTED_SOURCE');
   const expectedKey = `kong-repair:${hash(canonicalJson([source.repository,source.company,source.sourceTaskId,source.errorId,source.fingerprint,source.generation]))}`;
   if (source.repairKey !== expectedKey) throw code('UNTRUSTED_SOURCE');
   return {...source, issueUrl:issue.url, issueNumber:issue.number, sourceDigest:digests[0][1]};
@@ -263,7 +265,7 @@ export async function githubSources(gh='/opt/homebrew/bin/gh', trustedActor='rob
   let cursor;const sources=[];
   for(let page=0;page<10;page++) {
     const args=['api','graphql','-f',`query=${query}`];if(cursor)args.push('-f',`cursor=${cursor}`);
-    const result=JSON.parse(await mustRun(gh,args,{env:cleanEnvironment(),timeoutMs:30_000}));
+    const result=JSON.parse(await mustRun(gh,args,{env:cleanEnvironment(),timeoutMs:30_000,maxOutputBytes:3_000_000}));
     const connection=result.data?.repository?.issues,rows=connection?.nodes;if(!Array.isArray(rows)||!connection.pageInfo)throw code('GITHUB_SOURCE_UNAVAILABLE');
     for(const issue of rows){if(!issue.body?.includes('<!-- kong-repair-source:'))continue;try{sources.push(sourceFromIssue(issue,trustedActor));}catch{}}
     if(!connection.pageInfo.hasNextPage)return sources;cursor=connection.pageInfo.endCursor;if(!cursor)throw code('GITHUB_SOURCE_UNAVAILABLE');
