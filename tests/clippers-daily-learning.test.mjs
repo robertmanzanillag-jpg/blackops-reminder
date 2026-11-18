@@ -22,6 +22,7 @@ async function setup(t) {
   const reportDir = path.join(root, 'reports', 'clippers-daily-learning');
   await mkdir(path.join(configDir, 'evidence'), { recursive: true, mode: 0o700 });
   await mkdir(reportDir, { recursive: true, mode: 0o700 });
+  await mkdir(path.join(configDir, 'render-policies', rootKey.replaceAll(':', '__')), { recursive: true, mode: 0o700 });
   const read = async file => JSON.parse(await readFile(path.join(root, file), 'utf8'));
   const write = (file, body) => writeFile(path.join(root, file), JSON.stringify(body), { mode: 0o600 });
   const configure = (assets = [], options = {}) => write('config/clippers-daily-learning/approved-input.json',
@@ -62,6 +63,8 @@ test('empty workspace reports four honest shortages and disconnected brand witho
   assert.deepEqual(result.destinations.map(d => d.shortfall), [5, 5, 5, 5]);
   assert.deepEqual(result.disconnected.map(d => d.brandId), [6595747]);
   assert.equal(result.observations, 0);
+  assert.equal(result.rendererPolicyBinding, 'required_for_experiments_and_candidate_versions');
+  assert.equal(result.versions[0].scope, 'approved_media_queue');
   assert.equal(result.paidSpendUsd, 0);
   assert.equal((await runClippersDailyLearning({ workspaceRoot: f.root, now: NOW })).status, 'already_completed');
 });
@@ -148,6 +151,15 @@ test('only timely matching snapshots persist at 24, 72 and 168 hours', async t =
 
 test('activation requires three independent version-bound proposals and rollback selects the prior version', async t => {
   const f = await setup(t);
+  const engineSha256 = createHash('sha256').update(await readFile(new URL('../script/clippers-portfolio-render.mjs', import.meta.url))).digest('hex');
+  const manifests = ['baseline-1', 'candidate-1'].map((version, index) => ({
+    schemaVersion: 1, destination: target, version, engineSha256, reviewedBy: 'qa',
+    params: { hook: index, duration: 7, crop: 'center', caption_layout: 'off', posting_slot: '10:00' },
+  }));
+  for (const manifest of manifests) {
+    await f.write('config/clippers-daily-learning/render-policies/' + rootKey.replaceAll(':', '__') + '/' + manifest.version + '.json', manifest);
+  }
+  const renderProof = { comparison: { baselineManifestSha: digest(manifests[0]), candidateManifestSha: digest(manifests[1]), variable: 'hook' } };
   const deliveries = [], observations = [];
   for (const experiment of [0, 1, 2]) {
     for (const arm of ['control', 'candidate']) {
@@ -155,7 +167,7 @@ test('activation requires three independent version-bound proposals and rollback
         const id = [experiment, arm, sample].join('-');
         const postId = String(deliveries.length + 1);
         deliveries.push({ ...target, id, post: { id: postId, publishedAt: iso(days(-1)) },
-          status: 'published', scheduledAt: iso(days(-1)), elapsedMs: 10, costUsd: 0,
+          status: 'published', scheduledAt: iso(days(-1)), elapsedMs: 10, costUsd: 0, renderProof,
           policyVersion: arm === 'control' ? 'baseline-1' : 'candidate-1',
           experiment: { id: 'trial-' + experiment, context: 'control', variable: 'hook', arm, baselineVersion: 'baseline-1', candidateVersion: 'candidate-1' } });
         observations.push({ key: id, deliveryId: id, postId, destination: rootKey,
@@ -169,7 +181,7 @@ test('activation requires three independent version-bound proposals and rollback
   const { proposals, qualifiedCandidates } = await runClippersDailyLearning({ workspaceRoot: f.root, now: NOW });
   const comparisons = proposals.map(proposal => proposal.id);
   assert.equal(comparisons.length, 3);
-  assert.equal(qualifiedCandidates[0].status, 'qualified_not_activated');
+  assert.equal(qualifiedCandidates[0].status, 'qualified_for_queue_review');
   const review = { id: 'approve-candidate', destination: target, reviewer: 'qa', authorizedBy: 'owner', action: 'activate',
     from: 'baseline-1', to: 'candidate-1', comparisons, evidenceDigest: digest([...comparisons].sort()) };
   await f.configure([], { collect: false, publish: false, reviews: [{ ...review, to: 'wrong-version' }] });
@@ -177,9 +189,13 @@ test('activation requires three independent version-bound proposals and rollback
   await f.configure([], { collect: false, publish: false, reviews: [review] });
   const activation = await runClippersDailyLearning({ workspaceRoot: f.root, now: days(2) });
   assert.equal(activation.versions[0].active, 'candidate-1');
-  assert.equal(activation.versions[0].status, 'first_verified_production_pending');
+  assert.equal(activation.versions[0].status, 'queue_policy_active_outcome_pending');
+  assert.equal(activation.versions[0].scope, 'approved_media_queue');
+  assert.equal(activation.rendererPolicyBinding, 'required_for_experiments_and_candidate_versions');
   await f.configure([], { collect: false, publish: false, reviews: [{ ...review, id: 'rollback-1', action: 'rollback', from: 'candidate-1', to: 'baseline-1' }] });
-  assert.equal((await runClippersDailyLearning({ workspaceRoot: f.root, now: days(3) })).versions[0].active, 'baseline-1');
+  const rollback = await runClippersDailyLearning({ workspaceRoot: f.root, now: days(3) });
+  assert.equal(rollback.versions[0].active, 'baseline-1');
+  assert.equal(rollback.versions[0].status, 'queue_policy_rolled_back');
   assert.deepEqual((await f.state()).history.map(row => row.action), ['activate', 'rollback']);
 });
 
@@ -291,7 +307,9 @@ test('age 25 and 47 hours never form comparable arms of the same nominal window'
     const id = arm + '-' + index;
     const postId = String(deliveries.length + 1);
     deliveries.push({ ...target, id, post: { id: postId, publishedAt }, status: 'published',
-      scheduledAt: publishedAt, elapsedMs: 3, costUsd: 0, experiment: {
+      scheduledAt: publishedAt, elapsedMs: 3, costUsd: 0,
+      renderProof: { comparison: { baselineManifestSha: 'a'.repeat(64), candidateManifestSha: 'b'.repeat(64), variable: 'hook' } },
+      experiment: {
         id: 'test', context: 'test', variable: 'hook', arm, baselineVersion: 'baseline-1', candidateVersion: 'candidate',
       } });
     observations.push({ key: id, deliveryId: id, postId, destination: rootKey, publishedAt,

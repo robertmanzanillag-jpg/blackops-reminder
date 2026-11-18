@@ -111,6 +111,7 @@ REQUIRED_RUNTIME_FILES=(
   script/clippers-daily-watchdog.mjs
   script/clippers-daily-learning.mjs
   script/clippers-portfolio-metricool.mjs
+  script/clippers-portfolio-render.mjs
   script/clippers-selected-env.mjs
 )
 for relative in "${REQUIRED_RUNTIME_FILES[@]}"; do

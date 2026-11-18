@@ -4,6 +4,7 @@ import { mkdir, open, realpath, rename, unlink, writeFile } from 'node:fs/promis
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { loadClipperSelectedEnv } from './clippers-selected-env.mjs';
+import { confirmedRenderReceipt, readPortfolioRenderManifest } from './clippers-portfolio-render.mjs';
 import {
   createPortfolioMetricool, DAILY_LIMIT, DESTINATIONS, DISCONNECTED_BRAND, destinationKey,
   exactPost, findDestination, localDay, providerTimestamp,
@@ -101,6 +102,7 @@ async function approvedItem(raw, root, now, receipts, state) {
       evidence.sourcePublishedAt !== raw.sourcePublishedAt || evidence.mediaSha256 !== raw.mediaSha256 ||
       evidence.mediaUrl !== raw.mediaUrl || evidence.caption !== raw.caption ||
       evidence.policyVersion !== raw.policyVersion || evidence.scheduledAt !== raw.scheduledAt ||
+      evidence.renderReceiptSha256 !== raw.renderReceiptSha256 ||
       featureDigest(evidence.experiment ?? null) !== featureDigest(raw.experiment ?? null) ||
       evidence.rightsObservedAt !== raw.rightsObservedAt || evidence.rightsValidUntil !== raw.rightsValidUntil ||
       evidence.thirdPartyCommercial !== raw.thirdPartyCommercial || !findDestination(evidence.destination) ||
@@ -113,10 +115,15 @@ async function approvedItem(raw, root, now, receipts, state) {
       evidence.quality !== 'passed' || evidence.originalEdit !== 'verified' ||
       evidence.disclosure !== 'verified' || !ID.test(evidence.reviewedBy ?? '') ||
       evidence.authorizedSpendUsd !== 0 || evidence.providerIncrementalCostUsd !== 0) return null;
+  let renderProof = null;
+  if (raw.experiment || usesVersion !== BASELINE || raw.renderReceiptSha256) {
+    try { renderProof = await confirmedRenderReceipt(root, raw, destination); } catch { return null; }
+    if (!renderProof) return null;
+  }
   const { id, campaignId, sourceUrl, sourceId, creator, language, policyVersion, experiment, caption, mediaUrl,
     mediaSha256, thirdPartyCommercial, evidenceSha256 } = raw;
   return { ...destination, id, campaignId, sourceId, sourceUrl, creator, language, policyVersion, experiment,
-    caption, mediaUrl, mediaSha256, thirdPartyCommercial, evidenceSha256, scheduledAt,
+    caption, mediaUrl, mediaSha256, thirdPartyCommercial, evidenceSha256, renderProof, scheduledAt,
     rightsEvidence: { reviewedBy: evidence.reviewedBy, termsUrl: evidence.termsUrl, rightsBasis: evidence.rightsBasis,
       membership: evidence.membership, rightsObservedAt, rightsValidUntil, sourcePublishedAt: publishedAt } };
 }
@@ -184,11 +191,12 @@ function evaluate(state) {
   const groups = new Map();
   for (const metric of state.observations) {
     const delivery = state.deliveries.find(d => d.id === metric.deliveryId && destinationKey(d) === metric.destination && d.post?.id === metric.postId);
-    if (!delivery?.experiment || !Number.isFinite(delivery.elapsedMs) || !Number.isFinite(metric.completionRate) || metric.timing !== 'provider_observation_time') continue;
+    if (!delivery?.experiment || !delivery.renderProof?.comparison || !Number.isFinite(delivery.elapsedMs) || !Number.isFinite(metric.completionRate) || metric.timing !== 'provider_observation_time') continue;
     const { experiment: e } = delivery;
     const age = dayAge(metric.publishedAt, new Date(metric.observedAt));
     const key = JSON.stringify([metric.destination, delivery.language, delivery.creator, e.id, e.context,
-      e.baselineVersion, e.candidateVersion, metric.window, Math.floor(age)]);
+      e.baselineVersion, e.candidateVersion, metric.window, Math.floor(age),
+      delivery.renderProof.comparison.baselineManifestSha, delivery.renderProof.comparison.candidateManifestSha]);
     const items = groups.get(key) ?? [];
     items.push({ ...metric, ...e, elapsedMs: delivery.elapsedMs, costUsd: delivery.costUsd });
     groups.set(key, items);
@@ -203,11 +211,11 @@ function evaluate(state) {
     const completion = median(baseline.map(row => row.completionRate));
     const candidateCompletion = median(candidate.map(row => row.completionRate));
     if (!views || candidateViews / views - 1 + Number.EPSILON < 0.2 || candidateCompletion < completion * 0.9) return [];
-    const [destination, , , experimentId, , baselineVersion, candidateVersion] = JSON.parse(key);
+    const [destination, , , experimentId, , baselineVersion, candidateVersion, , , baselineManifestSha, candidateManifestSha] = JSON.parse(key);
     const evidence = rows.map(row => row.key).sort();
     return [{
       id: featureDigest([key, evidence, views, candidateViews, completion, candidateCompletion]), destination, experimentId,
-      baselineVersion, candidateVersion, evidence, posts: rows.map(r => r.postId),
+      baselineVersion, candidateVersion, baselineManifestSha, candidateManifestSha, evidence, posts: rows.map(r => r.postId),
       qualityImproved: candidateCompletion > completion,
       regressed: rows.some(row => row.costUsd !== 0) || candidateCompletion < completion ||
         median(candidate.map(row => row.elapsedMs)) > median(baseline.map(row => row.elapsedMs)),
@@ -218,6 +226,8 @@ function evaluate(state) {
 function qualifiedPairs(pairs, key, active, candidateVersion) {
   if (pairs.length !== 3 || pairs.some(p => !p || p.destination !== key || p.baselineVersion !== active ||
       p.candidateVersion !== candidateVersion || p.regressed) || new Set(pairs.map(p => p.experimentId)).size !== 3) return false;
+  if (new Set(pairs.map(p => p.baselineManifestSha)).size !== 1 ||
+      new Set(pairs.map(p => p.candidateManifestSha)).size !== 1) return false;
   const posts = pairs.flatMap(p => p.posts);
   return new Set(posts).size === posts.length && pairs.filter(p => p.qualityImproved).length >= 2;
 }
@@ -238,7 +248,8 @@ function qualifiedCandidates(state, proposals) {
     if (!qualifiedPairs(pairs, destination, baselineVersion, candidateVersion)) return [];
     const comparisons = pairs.map(p => p.id).sort();
     return [{ destination, baselineVersion, candidateVersion, comparisons, evidenceDigest: featureDigest(comparisons),
-      status: 'qualified_not_activated' }];
+      baselineManifestSha: pairs[0].baselineManifestSha, candidateManifestSha: pairs[0].candidateManifestSha,
+      status: 'qualified_for_queue_review' }];
   });
 }
 
@@ -248,7 +259,7 @@ function missedSnapshots(state, now) {
     !state.observations.some(row => row.key === snapshotKey(delivery, delivery.post, window))).length : 0), 0);
 }
 
-function applyApprovedActions(state, reviews, proposals, now) {
+async function applyApprovedActions(root, state, reviews, proposals, now) {
   for (const review of reviews) {
     if (!ID.test(review.id ?? '') || !ID.test(review.reviewer ?? '') || !ID.test(review.authorizedBy ?? '') ||
         review.reviewer === review.authorizedBy || state.history.some(event => event.id === review.id)) continue;
@@ -257,17 +268,28 @@ function applyApprovedActions(state, reviews, proposals, now) {
     const key = destinationKey(target);
     const active = state.versions[key] ?? BASELINE;
     if (review.from !== active) continue;
+    let fromManifestSha, toManifestSha;
     if (review.action === 'rollback') {
       const last = state.history.filter(item => item.destination === key).at(-1);
       if (!last || last.action !== 'activate' || review.to !== last.from || review.evidenceDigest !== last.evidenceDigest) continue;
+      fromManifestSha = last.toManifestSha;
+      toManifestSha = last.fromManifestSha;
     } else if (review.action === 'activate') {
       const pairs = Array.isArray(review.comparisons) && review.comparisons.map(id => proposals.find(p => p.id === id));
       if (!pairs || !qualifiedPairs(pairs, key, active, review.to) ||
           review.evidenceDigest !== featureDigest(pairs.map(p => p.id).sort())) continue;
+      fromManifestSha = pairs[0].baselineManifestSha;
+      toManifestSha = pairs[0].candidateManifestSha;
     } else continue;
+    if (!SHA.test(fromManifestSha ?? '') || !SHA.test(toManifestSha ?? '')) continue;
+    try {
+      const next = await readPortfolioRenderManifest(root, target, review.to);
+      if (next.sha !== toManifestSha) continue;
+      if (review.action === 'activate' && (await readPortfolioRenderManifest(root, target, active)).sha !== fromManifestSha) continue;
+    } catch { continue; }
     state.history.push({
-      id: review.id, action: review.action, destination: key, from: active, to: review.to,
-      evidenceDigest: review.evidenceDigest, reviewer: review.reviewer, authorizedBy: review.authorizedBy,
+      id: review.id, action: review.action, scope: 'approved_media_queue', destination: key, from: active, to: review.to,
+      evidenceDigest: review.evidenceDigest, fromManifestSha, toManifestSha, reviewer: review.reviewer, authorizedBy: review.authorizedBy,
       at: now.toISOString(),
     });
     state.versions[key] = review.to;
@@ -278,12 +300,17 @@ function exportedVersionState(state) {
     const key = destinationKey(destination);
     const active = state.versions[key] ?? BASELINE;
     const activation = state.history.filter(e => e.destination === key).at(-1);
-    const verifiedPost = activation?.action === 'activate' && state.deliveries.find(row => destinationKey(row) === key &&
+    const observedPost = activation?.action === 'activate' && state.deliveries.find(row => destinationKey(row) === key &&
       row.policyVersion === active && row.post && Date.parse(row.post.publishedAt) > Date.parse(activation.at) &&
       Date.parse(row.createdAt) >= Date.parse(activation.at) && !row.experiment &&
       state.observations.some(metric => metric.deliveryId === row.id && metric.destination === key));
-    return { destination: key, active, status: verifiedPost ? 'first_production_outcome_verified'
-      : activation?.action === 'activate' ? 'first_verified_production_pending' : activation?.action === 'rollback' ? 'rolled_back' : 'baseline', activation: activation ?? null };
+    return {
+      destination: key, active, scope: 'approved_media_queue',
+      status: observedPost ? 'queue_policy_active_outcome_observed'
+        : activation?.action === 'activate' ? 'queue_policy_active_outcome_pending'
+          : activation?.action === 'rollback' ? 'queue_policy_rolled_back' : 'queue_policy_baseline',
+      activation: activation ?? null,
+    };
   });
 }
 export async function runClippersDailyLearning({ workspaceRoot, now = new Date(), env = process.env, adapter } = {}) {
@@ -326,7 +353,9 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
       await save(statePath, state);
     }
     const proposals = evaluate(state);
-    applyApprovedActions(state, configured.reviews, proposals, now);
+    const decisions = state.history.length;
+    await applyApprovedActions(workspaceRoot, state, configured.reviews, proposals, now);
+    if (state.history.length !== decisions) await save(statePath, state);
     const authorized = await optionalArray(path.join(workspaceRoot, 'reports', 'metricool-public-media-receipts.json'));
     const legacy = await optionalArray(path.join(workspaceRoot, 'reports', 'metricool-autopilot-ledger.json'));
     const outcomes = [];
@@ -379,7 +408,7 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
       destinations: outcomes, disconnected: [{ brandId: DISCONNECTED_BRAND, reason: 'destination_not_connected' }],
       observations: state.observations.length, missedSnapshots: missedSnapshots(state, now),
       proposalCount: proposals.length, proposals, qualifiedCandidates: qualifiedCandidates(state, proposals), versions: exportedVersionState(state),
-      automaticPromotion: false,
+      automaticPromotion: false, rendererPolicyBinding: 'required_for_experiments_and_candidate_versions',
     };
     // Publish the report before claiming the day so a failed write can be retried.
     await save(path.join(reportDir, 'latest.json'), report);
