@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T04:36:51.970Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-daily-learning-20261118",
+  "generatedAt": "2026-11-18T05:24:05.157Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-kong-repair",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1145,
-    "filesIndexed": 1045,
-    "imports": 4097,
-    "routes": 604,
-    "symbols": 23353
+    "filesVisible": 1157,
+    "filesIndexed": 1057,
+    "imports": 4145,
+    "routes": 610,
+    "symbols": 23692
   },
   "directories": {
     ".": {
@@ -203,10 +203,10 @@
       }
     },
     "docs": {
-      "files": 64,
-      "indexed": 62,
+      "files": 66,
+      "indexed": 64,
       "kinds": {
-        "docs": 64
+        "docs": 66
       }
     },
     "examples/clippers-motivation": {
@@ -218,10 +218,10 @@
       }
     },
     "script": {
-      "files": 119,
-      "indexed": 107,
+      "files": 120,
+      "indexed": 108,
       "kinds": {
-        "script": 119
+        "script": 120
       }
     },
     "script/release-gate": {
@@ -239,10 +239,10 @@
       }
     },
     "server": {
-      "files": 270,
-      "indexed": 264,
+      "files": 276,
+      "indexed": 270,
       "kinds": {
-        "server": 270
+        "server": 276
       }
     },
     "server/blackroom-team": {
@@ -274,10 +274,10 @@
       }
     },
     "tests": {
-      "files": 299,
-      "indexed": 295,
+      "files": 302,
+      "indexed": 298,
       "kinds": {
-        "test": 299
+        "test": 302
       }
     },
     "tests/fixtures": {
@@ -5659,6 +5659,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-portfolio-discovery.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-sleep-video-pipeline.md",
       "kind": "docs",
       "imports": [],
@@ -5838,6 +5846,14 @@
     },
     {
       "path": "docs/factory-readiness.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/kong-repair-bridge.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -9275,6 +9291,99 @@
         "summary",
         "timeout",
         "unique"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-portfolio-discovery.mjs",
+      "kind": "script",
+      "imports": [
+        "node:crypto",
+        "node:fs",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:url"
+      ],
+      "exports": [
+        "DISCOVERY_CREATORS",
+        "assertFeedUrl",
+        "classifyDiscovery",
+        "feedUrl",
+        "fetchYouTubeFeed",
+        "parseYouTubeFeed",
+        "runPortfolioDiscovery",
+        "selectCreators"
+      ],
+      "symbols": [
+        "CHANNEL",
+        "DISCOVERY_CREATORS",
+        "HOUR",
+        "MAX_BYTES",
+        "MAX_ENTRIES",
+        "VIDEO",
+        "afterLock",
+        "ageHours",
+        "assertFeedUrl",
+        "baselines",
+        "chunks",
+        "classifyDiscovery",
+        "code",
+        "count",
+        "creator",
+        "creators",
+        "day",
+        "entries",
+        "existing",
+        "feedUrl",
+        "feeds",
+        "fetchYouTubeFeed",
+        "handle",
+        "hash",
+        "header",
+        "history",
+        "historyFiles",
+        "info",
+        "lockFile",
+        "main",
+        "matches",
+        "measuredAge",
+        "median",
+        "message",
+        "named",
+        "observations",
+        "observed",
+        "observedAt",
+        "observedFeeds",
+        "offset",
+        "offsetMinutes",
+        "parseYouTubeFeed",
+        "part",
+        "prior",
+        "privateCreate",
+        "privateRead",
+        "publishedAt",
+        "reader",
+        "receipt",
+        "receiptFile",
+        "reference",
+        "rejected",
+        "response",
+        "result",
+        "runPortfolioDiscovery",
+        "seen",
+        "selectCreators",
+        "sorted",
+        "start",
+        "statistics",
+        "tag",
+        "time",
+        "timestamp",
+        "url",
+        "validReceipt",
+        "videoId",
+        "xml",
+        "xmlText"
       ],
       "routes": []
     },
@@ -21481,6 +21590,331 @@
       "routes": []
     },
     {
+      "path": "server/kong-repair-bridge.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "KONG_REPAIR_REPOSITORY",
+        "KongRepairPayload",
+        "RepairEntry",
+        "RepairEnvelope",
+        "RepairJournal",
+        "RepairProof",
+        "RepairStore",
+        "WorkerEnvelope",
+        "canonicalRepairJson",
+        "createKongRepairBridge",
+        "kongRepairPayloadSchema",
+        "repairKey",
+        "signVerifiedRepair",
+        "verifyRepairEnvelope",
+        "verifyRepairStatus",
+        "verifyWorkerEnvelope"
+      ],
+      "symbols": [
+        "KONG_REPAIR_REPOSITORY",
+        "already",
+        "before",
+        "candidate",
+        "canonicalRepairJson",
+        "check",
+        "checked",
+        "createKongRepairBridge",
+        "current",
+        "day",
+        "delivery",
+        "dispatch",
+        "entries",
+        "entry",
+        "entrySchema",
+        "envelope",
+        "envelopeSchema",
+        "evidence",
+        "evidenceSchema",
+        "expected",
+        "handoff",
+        "hash",
+        "id",
+        "independent",
+        "issued",
+        "journal",
+        "journalSchema",
+        "key",
+        "kongRepairPayloadSchema",
+        "makerSchema",
+        "mutate",
+        "namespace",
+        "observed",
+        "operationalCodes",
+        "outstanding",
+        "parseJournal",
+        "payload",
+        "prior",
+        "priorVerifiedAt",
+        "proof",
+        "raw",
+        "rawBody",
+        "receive",
+        "reconcileClosure",
+        "repairKey",
+        "request",
+        "requestHash",
+        "result",
+        "saved",
+        "signVerifiedRepair",
+        "stableId",
+        "startedToday",
+        "status",
+        "statusEnvelopeSchema",
+        "sync",
+        "verified",
+        "verifyRepairEnvelope",
+        "verifyRepairStatus",
+        "verifyWorkerEnvelope",
+        "worker",
+        "workerEnvelopeSchema",
+        "workerPayload"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/kong-repair-proof.ts",
+      "kind": "server",
+      "imports": [
+        "node:crypto"
+      ],
+      "exports": [
+        "effectiveCommitStatusesPass",
+        "freshMakerHealth",
+        "independentAppQa",
+        "parentCheckerReceipt",
+        "trustedProductionQaSources"
+      ],
+      "symbols": [
+        "actor",
+        "age",
+        "blob",
+        "canonical",
+        "commit",
+        "connected",
+        "digest",
+        "effectiveCommitStatusesPass",
+        "engine",
+        "freshMakerHealth",
+        "imports",
+        "independentAppQa",
+        "latest",
+        "parentCheckerReceipt",
+        "poll",
+        "raw",
+        "receipt",
+        "ref",
+        "refName",
+        "repo",
+        "runs",
+        "tree",
+        "trustedProductionQaSources",
+        "uses"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/kong-repair-pull.ts",
+      "kind": "server",
+      "imports": [
+        "./agent-council-store",
+        "./kong-repair-bridge",
+        "./kong-repair-runtime",
+        "./user-context",
+        "node:crypto",
+        "zod"
+      ],
+      "exports": [
+        "KONG_REPAIR_PULL_INTERVAL_MS",
+        "configuredRepairPullStatus",
+        "createRepairPullLoop",
+        "pullConfiguredRepairSources",
+        "pullRepairSources",
+        "readRepairPullStatus",
+        "startConfiguredRepairPull"
+      ],
+      "symbols": [
+        "KONG_REPAIR_PULL_INTERVAL_MS",
+        "age",
+        "at",
+        "bridge",
+        "configuredRepairPullStatus",
+        "createRepairPullLoop",
+        "current",
+        "empty",
+        "existing",
+        "namespace",
+        "persist",
+        "previous",
+        "prior",
+        "pullConfiguredRepairSources",
+        "pullRepairSources",
+        "raw",
+        "readRepairPullStatus",
+        "reader",
+        "response",
+        "source",
+        "sourceSchema",
+        "startConfiguredRepairPull",
+        "stateSchema",
+        "tick",
+        "timer"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/kong-repair-refresh.ts",
+      "kind": "server",
+      "imports": [
+        "./kong-repair-bridge",
+        "node:crypto"
+      ],
+      "exports": [
+        "SupersessionGit",
+        "fenceUnclaimedRepair"
+      ],
+      "symbols": [
+        "canonical",
+        "evidence",
+        "existing",
+        "fenceSha",
+        "fenceUnclaimedRepair",
+        "payload",
+        "ref",
+        "winner"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/kong-repair-routes.ts",
+      "kind": "server",
+      "imports": [
+        "./kong-repair-bridge",
+        "./kong-repair-pull",
+        "./kong-repair-runtime",
+        "./office-routes",
+        "./user-context",
+        "express"
+      ],
+      "exports": [
+        "registerKongRepairRoutes"
+      ],
+      "symbols": [
+        "allowed",
+        "bridge",
+        "entry",
+        "envelope",
+        "handoffEnabled",
+        "owner",
+        "prior",
+        "readiness",
+        "registerKongRepairRoutes",
+        "request",
+        "resolve",
+        "secret",
+        "view"
+      ],
+      "routes": [
+        "/api/integrations/kong/software-repairs",
+        "/api/integrations/kong/software-repairs/status",
+        "/api/integrations/kong/software-repairs/worker",
+        "/api/kong-repairs",
+        "/api/kong-repairs/:key/:action",
+        "/api/kong-repairs/pull"
+      ]
+    },
+    {
+      "path": "server/kong-repair-runtime.ts",
+      "kind": "server",
+      "imports": [
+        "./agent-council-store",
+        "./kong-repair-bridge",
+        "./kong-repair-proof",
+        "./kong-repair-refresh",
+        "./shared-openai-credit-ledger",
+        "./user-context",
+        "node:crypto",
+        "node:fs/promises",
+        "zod"
+      ],
+      "exports": [
+        "getKongRepairBridge",
+        "readKongRepairGithubReadiness",
+        "readKongRepairMakerHealth"
+      ],
+      "symbols": [
+        "actors",
+        "after",
+        "age",
+        "allowed",
+        "approved",
+        "base",
+        "baseBranch",
+        "blob",
+        "body",
+        "comments",
+        "commit",
+        "config",
+        "content",
+        "createHandoff",
+        "effectiveReviews",
+        "engine",
+        "engineSourceCommit",
+        "fenced",
+        "getKongRepairBridge",
+        "github",
+        "health",
+        "hit",
+        "issue",
+        "issueNumber",
+        "issues",
+        "latestReviews",
+        "ledger",
+        "marker",
+        "match",
+        "nextBase",
+        "nextEngine",
+        "paidState",
+        "parentChecked",
+        "pin",
+        "pr",
+        "prepareCloseHandoff",
+        "prepareHandoff",
+        "project",
+        "proof",
+        "raw",
+        "readGithubMaker",
+        "readKongRepairGithubReadiness",
+        "readKongRepairMakerHealth",
+        "readProof",
+        "ready",
+        "readyResponse",
+        "recorded",
+        "ref",
+        "result",
+        "reviewActors",
+        "run",
+        "saved",
+        "snapshot",
+        "source",
+        "sourceJson",
+        "state",
+        "statusHit",
+        "tree",
+        "value",
+        "verified"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/kong-supervisor-conversation.ts",
       "kind": "server",
       "imports": [
@@ -26588,6 +27022,7 @@
         "./health-check",
         "./kong-operations",
         "./kong-operations-routes",
+        "./kong-repair-routes",
         "./legal-compliance-agent",
         "./local-news-delivery-safety",
         "./local-news-growth-scout",
@@ -35740,6 +36175,43 @@
       ]
     },
     {
+      "path": "tests/clippers-portfolio-discovery.test.mjs",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-portfolio-discovery.mjs",
+        "node:assert/strict",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "bad",
+        "baseline",
+        "creator",
+        "day1",
+        "dir",
+        "earlier",
+        "entry",
+        "feed",
+        "fetchImpl",
+        "first",
+        "future",
+        "mkdirSafe",
+        "next",
+        "old",
+        "original",
+        "replay",
+        "resetRow",
+        "response",
+        "result",
+        "row"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/clippers-portfolio-render.test.mjs",
       "kind": "test",
       "imports": [
@@ -37152,6 +37624,93 @@
         "venueBrief",
         "view",
         "withInbox"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/kong-repair-bridge.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/kong-repair-bridge",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "bad",
+        "baseline",
+        "beforeState",
+        "bridge",
+        "claim",
+        "claimRequest",
+        "comment",
+        "completed",
+        "create",
+        "digest",
+        "entry",
+        "envelope",
+        "f",
+        "first",
+        "fixture",
+        "get",
+        "git",
+        "held",
+        "input",
+        "job",
+        "message",
+        "next",
+        "old",
+        "payload",
+        "protectedGit",
+        "receipt",
+        "rechecked",
+        "recovered",
+        "replay",
+        "request",
+        "result",
+        "rows",
+        "rpc",
+        "rpcClaim",
+        "script",
+        "second",
+        "signed",
+        "started",
+        "store",
+        "value",
+        "verifiedAt",
+        "workflow"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/kong-repair-pull.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/kong-repair-bridge",
+        "../server/kong-repair-pull",
+        "node:assert/strict",
+        "node:crypto",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "bridge",
+        "data",
+        "entries",
+        "entry",
+        "f",
+        "fixture",
+        "job",
+        "key",
+        "now",
+        "options",
+        "payload",
+        "request",
+        "source",
+        "stop",
+        "store"
       ],
       "routes": []
     },
@@ -42218,6 +42777,8 @@
     "tests/kong-office-wing.test.ts",
     "tests/kong-operations-routes.test.ts",
     "tests/kong-operations.test.ts",
+    "tests/kong-repair-bridge.test.ts",
+    "tests/kong-repair-pull.test.ts",
     "tests/legacy-publication-containment.test.ts",
     "tests/legal-compliance-agent.test.ts",
     "tests/local-auth-cli.test.ts",
