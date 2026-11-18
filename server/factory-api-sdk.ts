@@ -1,12 +1,42 @@
 import {currentFactoryApiParent} from "./factory-api-context";
-import {FactoryApiBudgetError,apiEvidenceHash,configuredFactoryApiPrice,defaultFactoryApiInvocation,type createFactoryApiInvocation,type FactoryApiUsage} from './factory-api-invocation';
+import {FactoryApiBudgetError,factoryApiPriceSchema,apiEvidenceHash,configuredFactoryApiPrice,defaultFactoryApiInvocation,type createFactoryApiInvocation,type FactoryApiUsage} from './factory-api-invocation';
 type Invocation=ReturnType<typeof createFactoryApiInvocation>;
 type Env=Readonly<Record<string,string|undefined>>;
 const ALLOWED=new Set(['chat.completions.create','responses.create']);
+const commonFields=["model","temperature","top_p","store","metadata","user","safety_identifier","service_tier","tools","stream"];
+const chatFields=new Set([...commonFields,"messages","max_completion_tokens","max_tokens","n","stop","seed","frequency_penalty","presence_penalty","reasoning_effort","response_format","verbosity","thinking","modalities"]);
+const responseFields=new Set([...commonFields,"input","instructions","max_output_tokens","reasoning","text"]);
+function snapshotBody(value:unknown):any{
+ try{
+  const encoded=JSON.stringify(value);if(!encoded||Buffer.byteLength(encoded)>1_048_576)throw Error("size");
+  const snapshot=JSON.parse(encoded);
+  const freeze=(item:any,depth=0):any=>{if(depth>64)throw Error("depth");if(item&&typeof item==="object"){for(const child of Object.values(item))freeze(child,depth+1);Object.freeze(item);}return item;};
+  return freeze(snapshot);
+ }catch{throw new FactoryApiBudgetError("FACTORY_API_REQUEST_UNBOUNDED");}
+}
+function snapshotRequestOptions(value:unknown):Readonly<{signal?:AbortSignal;timeout?:number}>{
+ try{
+  if(value===undefined)return Object.freeze({});
+  if(!value||typeof value!=="object"||![null,Object.prototype].includes(Object.getPrototypeOf(value)))throw Error("shape");
+  const descriptors=Object.getOwnPropertyDescriptors(value),result:{signal?:AbortSignal;timeout?:number}={};
+  for(const key of Reflect.ownKeys(descriptors)){
+   if(typeof key!=="string"||!["signal","timeout"].includes(key))throw Error("override");
+   const descriptor=descriptors[key];if(!("value" in descriptor))throw Error("getter");
+   const field=descriptor.value;
+   if(key==="signal"){if(field!==undefined&&!(field instanceof AbortSignal))throw Error("signal");result.signal=field;}
+   else{if(field!==undefined&&(!Number.isSafeInteger(field)||field<=0))throw Error("timeout");result.timeout=field;}
+  }
+  return Object.freeze(result);
+ }catch{throw new FactoryApiBudgetError("FACTORY_API_REQUEST_OPTIONS_UNSUPPORTED");}
+}
+function snapshotPrice(value:unknown){try{return Object.freeze(factoryApiPriceSchema.parse(value));}catch{throw new FactoryApiBudgetError("FACTORY_API_PRICING_UNVERIFIED");}}
 /** Only bounded text requests are currently priced. Missing evidence,
  * streaming/audio/images/hosted tools remain held before any SDK operation. */
 function boundedRequest(path:string,body:any){
  if(!ALLOWED.has(path)||!body||typeof body!=='object'||Array.isArray(body)||body.stream||body.background||body.previous_response_id||body.conversation||body.tools?.length||body.web_search_options||body.modalities?.some((m:unknown)=>m!=='text')||body.audio||body.service_tier&&body.service_tier!=="default")throw new FactoryApiBudgetError('FACTORY_API_OPERATION_UNPRICED');
+ const fields=path==="responses.create"?responseFields:chatFields;
+ if(Object.keys(body).some(key=>!fields.has(key)))throw new FactoryApiBudgetError("FACTORY_API_OPERATION_UNPRICED");
+ if(body.max_tokens!==undefined&&body.max_completion_tokens!==undefined)throw new FactoryApiBudgetError("FACTORY_API_REQUEST_UNBOUNDED");
  const containsMedia=(value:any):boolean=>{
   if(!value||typeof value!=='object')return false;
   if(Array.isArray(value))return value.some(containsMedia);
@@ -31,6 +61,7 @@ function usage(path:string,result:any,provider="openai"):FactoryApiUsage{
  * The actual SDK receives retries=0; tests inject this SAME authority boundary. */
 const guardedClients=new WeakSet<object>();
 export function guardFactoryOpenAiClient<T extends object>(client:T,options:{provider:'openai'|'deepseek'|'integration';consumer?:'router'|'clippers'|'other';env?:Env;invoke?:Invocation;price?:(model:string)=>import('./factory-api-invocation').FactoryApiPrice}):T{
+ options={...options};
  if(guardedClients.has(client))return client;
  const configuredTimeout=Object.getOwnPropertyDescriptor(client,"timeout")?.value;
  const cache=new WeakMap<object,Map<string,object>>();
@@ -39,8 +70,9 @@ export function guardFactoryOpenAiClient<T extends object>(client:T,options:{pro
   const entries=cache.get(target)??new Map();cache.set(target,entries);if(entries.has(path))return entries.get(path);
   const proxy=new Proxy(target,{get(object,key){const value=Reflect.get(object,key,object);if(typeof key!=='string')return value;const next=path?path+'.'+key:key;
    if(typeof value==='function')return async(body:any,requestOptions?:any)=>{
+    body=snapshotBody(body);requestOptions=snapshotRequestOptions(requestOptions);
     const bounded=boundedRequest(next,body),env=options.env??process.env;
-    const price=options.price?.(bounded.model)??configuredFactoryApiPrice(options.provider,bounded.model,env.FACTORY_API_PRICING_CONFIG);
+    const price=snapshotPrice(options.price?.(bounded.model)??configuredFactoryApiPrice(options.provider,bounded.model,env.FACTORY_API_PRICING_CONFIG));
     if(price.model!==bounded.model)throw new FactoryApiBudgetError("FACTORY_API_PRICING_UNVERIFIED");
     const invoke=options.invoke??await defaultFactoryApiInvocation();
     return invoke({consumer:options.consumer??'router',requestSha256:apiEvidenceHash([options.provider,next,body]),price,...bounded,
@@ -70,18 +102,22 @@ export function holdUnpricedGeminiClient<T extends object>(client:T):T{
 const guardedFetches=new WeakSet<Function>();
 export function guardFactoryOpenAiFetch(transport:typeof fetch,options:{price?:import('./factory-api-invocation').FactoryApiPrice;
  requireParent?:boolean;consumer?:'office'|'academy'|'other';executionId?:string;env?:Env;invoke?:Invocation}={}):typeof fetch{
+ options={...options};
  if(guardedFetches.has(transport))return transport;
  const guarded=(async(url,init)=>{
   if(options.requireParent&&!currentFactoryApiParent())throw new FactoryApiBudgetError("FACTORY_API_PARENT_CONTEXT_UNAVAILABLE");
-  if(url!=='https://api.openai.com/v1/responses'||init?.method!=='POST'||typeof init.body!=='string'||Buffer.byteLength(init.body)>1_048_576)throw new FactoryApiBudgetError('FACTORY_API_OPERATION_UNPRICED');
-  let body:any;try{body=JSON.parse(init.body);}catch{throw new FactoryApiBudgetError('FACTORY_API_REQUEST_UNBOUNDED');}
+  let method:unknown,encoded:unknown,signal:AbortSignal|undefined,headers:Headers;
+  try{method=init?.method;encoded=init?.body;signal=init?.signal??undefined;headers=new Headers(init?.headers);}catch{throw new FactoryApiBudgetError("FACTORY_API_REQUEST_UNBOUNDED");}
+  if(url!=="https://api.openai.com/v1/responses"||method!=="POST"||typeof encoded!=="string"||Buffer.byteLength(encoded)>1_048_576)throw new FactoryApiBudgetError("FACTORY_API_OPERATION_UNPRICED");
+  let body:any;try{body=snapshotBody(JSON.parse(encoded));}catch{throw new FactoryApiBudgetError("FACTORY_API_REQUEST_UNBOUNDED");}
+  const request=Object.freeze({method:"POST",body:JSON.stringify(body),headers,credentials:"omit" as const});
   const bounded=boundedRequest('responses.create',body),env=options.env??process.env;
-  const price=options.price??configuredFactoryApiPrice('openai',bounded.model,env.FACTORY_API_PRICING_CONFIG);
+  const price=snapshotPrice(options.price??configuredFactoryApiPrice('openai',bounded.model,env.FACTORY_API_PRICING_CONFIG));
   if(price.model!==bounded.model)throw new FactoryApiBudgetError('FACTORY_API_PRICING_UNVERIFIED');
   const invoke=options.invoke??await defaultFactoryApiInvocation();
-  const output=await invoke({executionId:options.executionId,consumer:options.consumer??'office',requestSha256:apiEvidenceHash(body),price,...bounded,signal:init.signal??undefined,
+  const output=await invoke({executionId:options.executionId,consumer:options.consumer??'office',requestSha256:apiEvidenceHash(body),price,...bounded,signal,
    call:async limits=>{
-    const response=await transport(url,{...init,redirect:'error',signal:limits.signal});
+    const response=await transport(url,{...request,redirect:'error',signal:limits.signal});
     if(!response.ok){await response.body?.cancel();throw Error('http');}
     const clone=response.clone(),reader=clone.body?.getReader();if(!reader)throw Error('empty');
     const chunks:Uint8Array[]=[];let bytes=0;

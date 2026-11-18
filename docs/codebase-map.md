@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T12:44:39.582Z
+Generated: 2026-11-18T13:03:03.810Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-transports-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1212 | 1109 | 4456 | 623 | 25129 |
+| 1213 | 1110 | 4462 | 623 | 25154 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,7 +28,7 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 319 | 315 | test:319 |
+| `tests` | 320 | 316 | test:320 |
 | `server` | 284 | 278 | server:284 |
 | `client/src` | 155 | 153 | ui-component:55, client-component:46, client-page:28, client-lib:19 |
 | `script` | 131 | 118 | script:131 |
@@ -185,6 +185,7 @@ Package: `rest-express`
 - `tests/dropshipping-ceo.test.ts`
 - `tests/env-loader-core.test.ts`
 - `tests/factory-api-invocation.test.ts`
+- `tests/factory-api-request-binding.test.ts`
 - `tests/factory-office-agents.test.ts`
 - `tests/github-client-security.test.ts`
 - `tests/google-connector.test.ts`

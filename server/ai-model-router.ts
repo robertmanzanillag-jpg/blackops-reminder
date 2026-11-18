@@ -527,11 +527,14 @@ export function routedOpenAI(tier: RoutedClientOptions["tier"], label: string, e
   let legacyClient: Promise<ChatLikeClient> | null = null;
   return createRoutedOpenAI({
     tier, label, env,
-    legacy: () => (legacyClient ??= import("openai").then(({ default: OpenAI }) => new OpenAI({
-      apiKey: env.AI_INTEGRATIONS_OPENAI_API_KEY || env.OPENAI_API_KEY,
-      maxRetries:0,
-      baseURL: env.AI_INTEGRATIONS_OPENAI_BASE_URL || undefined,
-    }) as unknown as ChatLikeClient)),
+    legacy: () => {
+      if(!legacyClient){
+        const config=aiRouterConfig(env),provider=config.integration??config.openai;
+        if(!provider)throw new AiNoProviderError();
+        legacyClient=import("openai").then(({default:OpenAI})=>new OpenAI({apiKey:provider.apiKey,baseURL:provider.baseURL,maxRetries:0}) as unknown as ChatLikeClient);
+      }
+      return legacyClient;
+    },
   });
 }
 

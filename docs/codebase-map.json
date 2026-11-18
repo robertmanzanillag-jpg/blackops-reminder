@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T12:44:39.582Z",
+  "generatedAt": "2026-11-18T13:03:03.810Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-transports-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -124,13 +124,20 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1212,
-    "filesIndexed": 1109,
-    "imports": 4456,
+    "filesVisible": 1213,
+    "filesIndexed": 1110,
+    "imports": 4462,
     "routes": 623,
-    "symbols": 25129
+    "symbols": 25154
   },
   "directories": {
+    "tests": {
+      "files": 320,
+      "indexed": 316,
+      "kinds": {
+        "test": 320
+      }
+    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -271,13 +278,6 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
-      }
-    },
-    "tests": {
-      "files": 319,
-      "indexed": 315,
-      "kinds": {
-        "test": 319
       }
     },
     "tests/fixtures": {
@@ -20656,6 +20656,7 @@
         "dynamicImport",
         "first",
         "getDefaultLocalNewsTranslator",
+        "integrationKey",
         "matches",
         "maxRequests",
         "message",
@@ -22125,12 +22126,19 @@
         "boundedRequest",
         "cache",
         "candidates",
+        "chatFields",
         "clone",
+        "commonFields",
         "configuredTimeout",
         "containsMedia",
         "count",
+        "descriptor",
+        "descriptors",
         "encoded",
         "entries",
+        "field",
+        "fields",
+        "freeze",
         "guardFactoryOpenAiClient",
         "guardFactoryOpenAiFetch",
         "guarded",
@@ -22142,7 +22150,13 @@
         "output",
         "price",
         "proxy",
+        "request",
         "response",
+        "responseFields",
+        "snapshot",
+        "snapshotBody",
+        "snapshotPrice",
+        "snapshotRequestOptions",
         "timeout",
         "usage",
         "values",
@@ -39398,6 +39412,33 @@
       "routes": []
     },
     {
+      "path": "tests/factory-api-request-binding.test.ts",
+      "kind": "test",
+      "imports": [
+        "../server/clippers-local-news-translation",
+        "../server/factory-api-sdk",
+        "./fixtures/factory-api-budget",
+        "node:assert/strict",
+        "node:test",
+        "openai"
+      ],
+      "exports": [],
+      "symbols": [
+        "adapter",
+        "body",
+        "client",
+        "completion",
+        "f",
+        "fixture",
+        "guarded",
+        "invoke",
+        "model",
+        "pending",
+        "sdk"
+      ],
+      "routes": []
+    },
+    {
       "path": "tests/factory-office-agents.test.ts",
       "kind": "test",
       "imports": [
@@ -45238,6 +45279,7 @@
     "tests/dropshipping-ceo.test.ts",
     "tests/env-loader-core.test.ts",
     "tests/factory-api-invocation.test.ts",
+    "tests/factory-api-request-binding.test.ts",
     "tests/factory-office-agents.test.ts",
     "tests/github-client-security.test.ts",
     "tests/google-connector.test.ts",

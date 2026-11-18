@@ -159,7 +159,7 @@ test("no own key configured: legacy client is monetary guarded without secondary
   assert.equal(client.routed, false);
   const opts = { timeout: 1 };
   assert.equal((await client.chat.completions.create(chatBody, opts)).ok,true);
-  assert.equal(legacyCalls[0].body, chatBody);
+  assert.deepEqual(legacyCalls[0].body, chatBody);assert.notEqual(legacyCalls[0].body,chatBody);
   assert.equal(legacyCalls[0].opts.maxRetries,0);assert.ok(legacyCalls[0].opts.signal instanceof AbortSignal);
   assert.equal(ledger.rows.length, 0);
 });

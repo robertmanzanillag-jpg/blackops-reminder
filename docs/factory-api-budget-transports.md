@@ -55,7 +55,13 @@ alone is not a claim this has been reviewed or provider billing reconciled.
 
 Office can reuse its existing operator-verified price/expiry evidence for uncached
 Responses. Positive cached usage still needs an approved cached rate; otherwise
-it stays unknown. No absence of cache/usage metadata is converted into zero.
+it stays unknown. No absence of cache/usage metadata is converted into zero. Request bodies and
+allowed options are privately snapshotted before the first await; the same frozen
+JSON values are validated, hashed and sent. Only signal/timeout request options
+are accepted, so SDK body/query/path/method/header/stream overrides cannot change
+the priced request. Reusable remote prompts/context and ambiguous simultaneous
+max-token fields are held. Credential/provider/base-URL selection uses the same
+normalized configuration source, including placeholder integration values.
 OpenAI cache usage comes from direct prompt/input token details, DeepSeek cache
 usage from its [direct cache-hit count](https://api-docs.deepseek.com/guides/kv_cache/). The returned exact model, response ID and
 measured token counters are hashed with the request/pricing evidence in settlement.
