@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T04:16:31.136Z
+Generated: 2026-11-18T04:36:51.970Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-daily-learning-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1143 | 1043 | 4077 | 604 | 23217 |
+| 1145 | 1045 | 4097 | 604 | 23353 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,10 +28,10 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 298 | 294 | test:298 |
+| `tests` | 299 | 295 | test:299 |
 | `server` | 270 | 264 | server:270 |
 | `client/src` | 153 | 151 | ui-component:55, client-component:44, client-page:28, client-lib:19 |
-| `script` | 118 | 106 | script:118 |
+| `script` | 119 | 107 | script:119 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `docs` | 64 | 62 | docs:64 |
 | `shared` | 29 | 29 | shared:29 |
@@ -391,7 +391,7 @@ Package: `rest-express`
 - `script/clippers-cleanup-published-vyro-media.mjs` (script; 47 symbols, 4 imports)
 - `script/clippers-content-learning-ceo.mjs` (script; 85 symbols, 3 imports)
 - `script/clippers-content-local-worker.mjs` (script; 112 symbols, 10 imports)
-- `script/clippers-daily-learning.mjs` (script; 98 symbols, 7 imports)
+- `script/clippers-daily-learning.mjs` (script; 103 symbols, 8 imports)
 - `script/clippers-daily-watchdog.mjs` (script; 87 symbols, 4 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
 - `script/clippers-free-local-worker.mjs` (script; 45 symbols, 6 imports)
@@ -407,6 +407,7 @@ Package: `rest-express`
 - `script/clippers-motivation-shorts.mjs` (script; 157 symbols, 6 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-portfolio-metricool.mjs` (script; 70 symbols, 1 imports)
+- `script/clippers-portfolio-render.mjs` (script; 77 symbols, 8 imports)
 - `script/clippers-prepare-vyro-campaign-drafts.mjs` (script; 23 symbols, 4 imports)
 - `script/clippers-reconcile-publications.mjs` (script; 74 symbols, 3 imports)
 - `script/clippers-record-owned-meme-rights.ts` (script; 10 symbols, 1 imports)
@@ -417,7 +418,6 @@ Package: `rest-express`
 - `script/clippers-streamer-growth-ceo.mjs` (script; 170 symbols, 5 imports)
 - `script/clippers-sync-metricool-source-readiness.mjs` (script; 28 symbols, 3 imports)
 - `script/clippers-tiktok-preflight.ts` (script; 15 symbols, 1 imports)
-- `script/clippers-upload-metricool-media.ts` (script; 51 symbols, 7 imports)
 
 ## How Agents Should Use This
 1. Read this map before broad repo exploration.
