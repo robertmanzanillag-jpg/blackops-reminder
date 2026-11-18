@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T07:30:54.306Z
+Generated: 2026-11-18T07:38:36.222Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-ceo-domain-pause-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1169 | 1069 | 4234 | 615 | 24144 |
+| 1175 | 1073 | 4244 | 615 | 24194 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 306 | 302 | test:306 |
+| `tests` | 307 | 303 | test:307 |
 | `server` | 277 | 271 | server:277 |
 | `client/src` | 154 | 152 | ui-component:55, client-component:45, client-page:28, client-lib:19 |
-| `script` | 123 | 111 | script:123 |
+| `script` | 124 | 112 | script:124 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 69 | 67 | docs:69 |
+| `docs` | 73 | 69 | docs:73 |
 | `shared` | 29 | 29 | shared:29 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |

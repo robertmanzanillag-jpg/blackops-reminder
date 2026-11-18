@@ -38,7 +38,7 @@ test("KONG supervisor shows owner repair evidence and refreshes only with GET", 
   const payload = {
     readiness: { bridgeEnabled: true, enginePinned: true, signingConfigured: true },
     pull: { lastSuccessfulSourceReadAt: signalAt, lastHttpStatus: 200, errorCode: "NONE" },
-    maker: { lastSuccessfulPollAt: signalAt, workerConnected: true, state: "idle" },
+    maker: { lastSuccessfulPollAt: new Date(now - 44.5 * minute).toISOString(), workerConnected: true, state: "idle" },
     entries: [
       ...["queued", "awaiting_checker", "awaiting_independent_review", "awaiting_qareview",
         "awaiting_deployment", "verified", "maker_running", "blocked_no_github"]
@@ -118,6 +118,14 @@ test("KONG supervisor shows owner repair evidence and refreshes only with GET", 
     maker: { ...payload.maker, lastSuccessfulPollAt: newSignal },
   } };
   await refresh.click();
+  await panel.getByText("Conexión verificada · En espera", { exact: false }).waitFor();
+  // Source contact still expires at 30m, while a maker's 30m schedule has a
+  // separately bounded 45m evidence window. Neither can extend cached time.
+  reply = { status: 200, data: { ...payload,
+    pull: { ...payload.pull, lastSuccessfulSourceReadAt: new Date(now - 31 * minute).toISOString() },
+    maker: { ...payload.maker, lastSuccessfulPollAt: new Date(now - 31 * minute).toISOString() },
+  } };
+  await refresh.click();await panel.getByText("Sin lectura reciente verificada", { exact: true }).waitFor();
   await panel.getByText("Conexión verificada · En espera", { exact: false }).waitFor();
   reply = { status: 403, data: { code: "REPAIR_OWNER_REQUIRED", internal: "secret-error-url" } };
   await refresh.click();
