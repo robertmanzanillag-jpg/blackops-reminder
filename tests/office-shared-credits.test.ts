@@ -1,3 +1,4 @@
+import {fixtureFactoryInvocation} from "./fixtures/factory-api-budget";
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createCreditLimitedOfficeRun } from "../server/office-shared-credits";
@@ -5,9 +6,9 @@ import { createSharedOpenAiCreditLedger, type SharedCreditState } from "../serve
 import { createOfficeTokenBudget, type OfficeTokenBudgetState } from "../server/office-token-budget";
 
 const model = "gpt-4.1-mini-2025-04-14", initialTime = "2026-11-06T12:00:00.000Z", expiry = "2026-11-20T00:00:00.000Z";
-const response = () => ({ id: "resp_fixture", model, status: "completed", usage: { input_tokens: 100, output_tokens: 10, total_tokens: 110 },
+const response = () => ({ id: "resp_fixture", model, status: "completed", usage: { input_tokens_details:{cached_tokens:0}, input_tokens: 100, output_tokens: 10, total_tokens: 110 },
   output: [{ type: "message", role: "assistant", status: "completed", content: [{ type: "output_text", text: "Verified fixture" }] }] });
-async function fixture() {
+async function fixture(fixedCents=0) {
   let time = new Date(initialTime), credit: SharedCreditState = { version: 1, grant: null, lastObservedAt: null, reservations: [] };
   let tokens: OfficeTokenBudgetState = { reservations: [] }, calls = 0, fail = false, expireBeforeRequest = false, loseSettlementAck = false;
   let body: any = response();
@@ -21,7 +22,7 @@ async function fixture() {
   await ledger.initialize();
   const tokenBudget = createOfficeTokenBudget({ limit: 100_000, now: () => time,
     transact: async mutate => { const copy = structuredClone(tokens); mutate(copy); tokens = copy; } });
-  const run = createCreditLimitedOfficeRun({ ledger, now: () => time,
+  const run = createCreditLimitedOfficeRun({ factoryInvocation:fixtureFactoryInvocation(()=>time,undefined,fixedCents), ledger, now: () => time,
     env: { OFFICE_REVIEW_PROVIDER: "openai", OFFICE_OPENAI_MODEL: model, OFFICE_OPENAI_MAX_OUTPUT_TOKENS: "32", OPENAI_API_KEY: "synthetic-test-key" },
     pricing: { model, inputNanoUsdPerToken: 400, outputNanoUsdPerToken: 1600, validUntil: "2026-12-20T00:00:00.000Z" },
     authorizeTokens: async limits => {
@@ -105,3 +106,5 @@ test("active provider execution with partial usage must retain money and token h
     assert.equal((await f.ledger.status()).spentMicroUsd, 0); assert.ok((await f.ledger.status()).reservedMicroUsd > 0);
   }
 });
+
+test("Factory zero balance holds before shared/token reservations and provider dispatch",async()=>{const f=await fixture(10000);await assert.rejects(f.run("Review synthetic work","zero-factory"),/OFFICE_CREDIT_EXECUTION_UNCONFIRMED/);assert.equal(f.calls(),0);assert.equal(f.credit().reservations.length,0);assert.equal(f.tokens().reservations.length,0);});

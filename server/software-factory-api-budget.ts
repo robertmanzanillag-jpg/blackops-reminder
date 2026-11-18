@@ -126,3 +126,19 @@ export function assertFactoryApiParentSettlement(state:FactoryApiState,jobId:str
   const actual=safeSum(children.map(r=>r.actualMicroUsd!));
   if(costCents*10000<actual)throw Error("FACTORY_API_PARENT_COST_UNDERSTATED");
 }
+
+/** A dispatch permit is short lived and must be rechecked immediately before
+ * the single provider operation. A reserved row is not a reusable bearer token. */
+export function factoryApiExecutionWindow(state:FactoryApiState,exposure:FactoryApiExposure,key:string,now:string){
+ const status=factoryApiBudgetStatus(state,exposure,now),row=state.reservations.find(r=>r.key===key);
+ if(!row||row.status!=="reserved")throw Error("FACTORY_API_EXECUTION_NOT_RESERVED");
+ if(!status.configured||status.unknown)throw Error(status.reason);
+ if(safeSum([status.fixedMicroUsd,status.spentMicroUsd,status.reservedMicroUsd])>status.limitMicroUsd)throw Error("FACTORY_API_BUDGET_EXHAUSTED");
+ const age=Date.parse(now)-Date.parse(row.createdAt);if(!Number.isFinite(age)||age<0||age>=120000)throw Error("FACTORY_API_DISPATCH_WINDOW_EXPIRED");
+ let remaining=120000-age;
+ if(row.parent){const p=exposure.parents.find(p=>p.jobId===row.parent!.jobId&&p.fence===row.parent!.fence);
+  if(!p||p.status!=="running"||!p.leaseExpiresAt)throw Error("FACTORY_API_PARENT_FENCE_REQUIRED");
+  remaining=Math.min(remaining,Date.parse(p.leaseExpiresAt)-Date.parse(now));
+ }
+ if(!Number.isFinite(remaining)||remaining<1)throw Error("FACTORY_API_DISPATCH_WINDOW_EXPIRED");return Math.floor(remaining);
+}
