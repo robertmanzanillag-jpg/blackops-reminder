@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T08:12:43.658Z",
+  "generatedAt": "2026-11-18T08:15:05.012Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-orchestra-runtime-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -126,9 +126,9 @@
   "totals": {
     "filesVisible": 1181,
     "filesIndexed": 1081,
-    "imports": 4288,
+    "imports": 4287,
     "routes": 616,
-    "symbols": 24439
+    "symbols": 24440
   },
   "directories": {
     ".": {
@@ -20334,7 +20334,6 @@
         "../shared/agent-company",
         "../shared/clippers-orchestra",
         "./clippers-orchestra-life",
-        "./kong-repair-bridge",
         "./user-context",
         "node:crypto"
       ],
@@ -20351,6 +20350,7 @@
         "Store",
         "UUID",
         "at",
+        "canonicalOrchestraJson",
         "clippersOrchestraState",
         "council",
         "createClippersOrchestraState",
