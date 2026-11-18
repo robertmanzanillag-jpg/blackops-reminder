@@ -50,7 +50,7 @@ function sampleReason(row, context, now, policy) {
   const age = (observed - published) / HOUR;
   if (!Number.isFinite(published) || !Number.isFinite(observed) || published > observed || observed > now ||
       now - observed >= policy.maxObservationAgeHours * HOUR || !finite(row.actualAgeHours) ||
-      Math.abs(row.actualAgeHours - age) > 0.000001 || age < context.windowHours || age >= context.windowHours + 1) return 'observation_age_or_freshness_unverified';
+      Math.abs(row.actualAgeHours - age) > 0.000001 || age < context.windowHours || age >= context.windowHours + 24) return 'observation_age_or_freshness_unverified';
   if (!Number.isSafeInteger(row.views) || row.views < 0) return 'views_missing_or_invalid';
   if (row.qualityDefinition !== 'completion_rate' || !finite(row.completionRate) || row.completionRate < 0 || row.completionRate > 1) return 'direct_quality_metric_required';
   if (row.costUsd !== 0 || !finite(row.elapsedMs) || row.elapsedMs <= 0) return 'cost_or_elapsed_unverified';
@@ -105,11 +105,13 @@ function batchReceipt(id, rows, hashes) {
   const controls = rows.filter(row => row.selectionExperiment.arm === 'control');
   const challengers = rows.filter(row => row.selectionExperiment.arm === 'challenger');
   if (controls.length !== 5 || challengers.length !== 5) return { id, passed: false, reason: 'exact_five_per_arm_required', evidenceHashes: rows.map(row => hashes.get(row)).sort() };
+  const ageBins=[...new Set(rows.map(row=>Math.floor(row.actualAgeHours)))];
+  if(ageBins.length!==1)return {id,passed:false,reason:'actual_age_bin_mismatch',evidenceHashes:rows.map(row=>hashes.get(row)).sort()};
   const control = { views: median(controls.map(row => row.views)), completionRate: median(controls.map(row => row.completionRate)), costUsd: median(controls.map(row => row.costUsd)), elapsedMs: median(controls.map(row => row.elapsedMs)) };
   const challenger = { views: median(challengers.map(row => row.views)), completionRate: median(challengers.map(row => row.completionRate)), costUsd: median(challengers.map(row => row.costUsd)), elapsedMs: median(challengers.map(row => row.elapsedMs)) };
   const lift = control.views > 0 ? challenger.views / control.views - 1 : null;
   const reason = lift === null ? 'positive_control_median_required' : BigInt(challenger.views) * 5n < BigInt(control.views) * 6n ? 'median_lift_below_twenty_percent' : challenger.completionRate < control.completionRate ? 'quality_regression' : challenger.costUsd > control.costUsd || challenger.elapsedMs > control.elapsedMs ? 'cost_or_elapsed_regression' : 'batch_passed';
-  return { id, passed: reason === 'batch_passed', reason, control, challenger, viewLift: lift, evidenceHashes: rows.map(row => hashes.get(row)).sort() };
+  return { id, passed: reason === 'batch_passed', reason, actualAgeBinHours:ageBins[0], control, challenger, viewLift: lift, evidenceHashes: rows.map(row => hashes.get(row)).sort() };
 }
 
 /** preferences only order already-ready assets in this exact scope; never alter

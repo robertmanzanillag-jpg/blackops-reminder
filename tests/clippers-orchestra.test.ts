@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp,mkdir,writeFile,readFile,rm,chmod } from 'node:fs/promises';
+import { mkdtemp,mkdir,writeFile,readFile,rm,chmod,realpath } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { randomUUID,createHash } from 'node:crypto';
@@ -204,6 +204,8 @@ test('creator preference expires in local projection and durable owner view; no 
  let at=NOW;const store=memory(),state=createClippersOrchestraState({owner:()=> 'owner',store:async()=>store,now:()=>at});await state.ingest(envelope(r));at+=2*3600000;const view=await state.read();assert.equal(view!.creatorSelection!.preferences[0].status,'baseline');assert.equal(view!.creatorSelection!.preferences[0].preferredCreatorGroupId,'mrbeast');assert.ok(parseClippersOrchestraStatus(view,at));
  const later=await buildClippersOrchestraReport({workspaceRoot:root,now:new Date(at)});assert.equal(later.creatorSelection.preferences[0].status,'baseline');assert.equal(later.creatorSelection.evaluatedAt,r.creatorSelection.evaluatedAt);
  const denied=structuredClone(r);denied.creatorSelection.preferences[0].destination.brandId=6431692;assert.equal(parseClippersOrchestraStatus(denied,NOW),null);
+}));
+
 // Contract from the official /api/swagger.json, verified 2026-11-18.
 test('analytics date boundaries use second-precision UTC local time and explicit timezone on TT and FB',async()=>{
  for(const d of [DESTINATIONS[0],DESTINATIONS[3]]){
@@ -232,4 +234,24 @@ test('a receipt from the rejected date contract is refreshed once, then the corr
  let calls=0;const adapter={async accountAnalytics(){calls++;return {posts:[],receivedRows:0,rejectedRows:0};}};
  const r=await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter});assert.equal(r.reused,false);assert.equal(r.adapterContract,'utc-local-v1');assert.equal(calls,4);
  assert.equal((await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter})).reused,true);assert.equal(calls,4);
+}));
+
+test('real discovery producer receipts project empty success, stable replay freshness and same-channel paired growth',async()=>fixture(async root=>{
+ const {runPortfolioDiscovery,PRIORITY_CREATORS}=await import('../script/clippers-portfolio-discovery.mjs');
+ const dir=path.join(await realpath(root),'portfolio-discovery');let calls=0,views=100;
+ const fetchImpl=async(input:any)=>{calls++;const channel=new URL(input).searchParams.get('channel_id')!;const empty=channel===PRIORITY_CREATORS[0].channelId;const video=channel.slice(2,13);
+  return new Response(`<feed xmlns="http://www.w3.org/2005/Atom" xmlns:yt="http://www.youtube.com/xml/schemas/2015" xmlns:media="http://search.yahoo.com/mrss/"><yt:channelId>${channel.slice(2)}</yt:channelId><title>Original synthetic public fixture</title><author><uri>https://www.youtube.com/channel/${channel}</uri></author>${empty?'':`<entry><yt:videoId>${video}</yt:videoId><yt:channelId>${channel}</yt:channelId><title>Original synthetic entry</title><published>2026-11-17T12:00:00Z</published><media:group><media:community><media:statistics views="${views}"/></media:community></media:group></entry>`}</feed>`,{headers:{'content-type':'application/atom+xml'}});
+ };
+ await runPortfolioDiscovery({stateDir:dir,now:now(),fetchImpl});const first=await buildClippersOrchestraReport({workspaceRoot:root,now:new Date(NOW+10000)});assert.equal(calls,14);assert.ok(parseClippersOrchestraStatus(first,NOW+10000));
+ const empty=first.discovery.sources.find((s:any)=>s.channelId===PRIORITY_CREATORS[0].channelId)!;assert.equal(empty.status,'observed');assert.equal(empty.observations,0);assert.ok(empty.observedAt);
+ const creator=PRIORITY_CREATORS[1],before=first.discovery.sources.find((s:any)=>s.channelId===creator.channelId)!;
+ await runPortfolioDiscovery({stateDir:dir,now:new Date(NOW+2*3600000),creatorIds:[creator.id],fetchImpl});const replay=await buildClippersOrchestraReport({workspaceRoot:root,now:new Date(NOW+2*3600000+10000)});assert.equal(calls,14);assert.equal(replay.discovery.sources.find((s:any)=>s.channelId===creator.channelId)!.observedAt,before.observedAt);assert.equal(replay.discovery.observations,first.discovery.observations);
+ views=130;await runPortfolioDiscovery({stateDir:dir,now:new Date(NOW+24*3600000),fetchImpl});const second=await buildClippersOrchestraReport({workspaceRoot:root,now:new Date(NOW+24*3600000+10000)});assert.equal(calls,28);assert.ok(parseClippersOrchestraStatus(second,NOW+24*3600000+10000));const signal=second.discovery.signals.find((s:any)=>s.creatorId===creator.id)!;assert.equal(signal.label,'paired_growth_observed');assert.equal(signal.growthViews,30);
+}));
+
+test('public growth needs identical channel/video/publication anchor and at least one hour',async()=>fixture(async root=>{
+ const {PRIORITY_CREATORS}=await import('../shared/clippers-priority-creators.mjs');const c=PRIORITY_CREATORS[1],publishedAt='2026-11-17T12:00:00.000Z';
+ async function receipt(day:string,at:string,views:number,published=publishedAt){await save(root,`portfolio-discovery/${day}-channel-${c.channelId}.json`,{schemaVersion:2,day,observedAt:at,paidSpendUsd:0,mayPublish:false,permission:'unknown',feeds:[{creatorId:c.id,channelId:c.channelId,status:'observed',feedSha256:'a'.repeat(64)}],observations:[{creatorId:c.id,channelId:c.channelId,videoId:'abcdefghijk',publishedAt:published,observedAt:at,views,metricEvidence:'direct_public_feed'}]});}
+ await receipt('2026-11-17','2026-11-17T23:45:00.000Z',100);await receipt('2026-11-18','2026-11-18T00:15:00.000Z',120);assert.ok((await base(root)).discovery.signals.every((s:any)=>s.label!=='paired_growth_observed'));
+ await receipt('2026-11-18','2026-11-18T01:15:00.000Z',120,'2026-11-17T13:00:00.000Z');const changed=await base(root);assert.equal(changed.discovery.signals.length,1);assert.ok(changed.discovery.signals.every((s:any)=>s.label!=='paired_growth_observed'));
 }));

@@ -101,8 +101,14 @@ test("Clippers own area uses real evidence gates, expires activity, and protects
     assert.match(await dialog.innerText(), /promoción de parámetros de edición requiere revisión manual/);
     payload.learning.comparisons = [{ id: "fixture-comparison", destination: payload.accounts[0].key, variable: "hook", baselineVersion: "baseline-1", candidateVersion: "candidate-2", controlSamples: 5, candidateSamples: 5, improvementRatio: 0.25, current: true, renderReceiptVerified: true, eligible: true, heldReasons: [] }];
     payload.learning.eligibleComparisons = 1;
+    payload.creatorSelection={evaluatedAt:new Date(now).toISOString(),contexts:1,assigned:30,heldReasons:[],preferences:[{scopeKey:'a'.repeat(64),destination:{brandId:6431685,network:'tiktok',account:'streamersclips'},language:'en',format:'vertical_clip',context:'streamer_clip',postingBand:'10:00',timezone:'America/New_York',windowHours:24,baselineCreatorGroupId:'mrbeast',preferredCreatorGroupId:'thegrefg',status:'preferred',reason:'three_disjoint_batches_qualified',eligibleSamples:30,expiresAt:new Date(now+45000).toISOString(),evidenceSha256:'b'.repeat(64)}]};
     await page.getByTestId("clippers-refresh").click();
     await page.getByText(/Comparación vigente · Elegible para revisión/).waitFor();
+    await page.getByText('Preferencia con evidencia: thegrefg',{exact:true}).waitFor();
+    await page.clock.fastForward(15000);
+    await page.getByText('Referencia sin preferencia vigente: mrbeast',{exact:true}).waitFor();
+    assert.equal(await page.getByText('Preferencia con evidencia: thegrefg',{exact:true}).count(),0,'clock expiry cannot leave a preference live');
+    payload.creatorSelection.preferences[0].status='baseline';payload.creatorSelection.preferences[0].reason='creator_preference_expired';payload.creatorSelection.preferences[0].preferredCreatorGroupId='mrbeast';
     await page.screenshot({ path: path.join(artifacts, `clippers-fixture-learning-${viewport.width}.png`), fullPage: true });
     await page.clock.fastForward(60_000);
     await page.getByText("Sin señal reciente verificada", { exact: true }).waitFor();

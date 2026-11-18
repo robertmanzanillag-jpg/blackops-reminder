@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { mkdtemp,mkdir,writeFile,readFile,rm,chmod } from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
-import { createClippersCreatorRouting } from '../script/clippers-creator-routing.mjs';
+import { createClippersCreatorRouting, normalizeCreatorContext } from '../script/clippers-creator-routing.mjs';
 import { DESTINATIONS,destinationKey } from '../script/clippers-portfolio-metricool.mjs';
 import { PRIORITY_CREATORS } from '../shared/clippers-priority-creators.mjs';
 const H=3600000,DAY=24*H,START=Date.parse('2026-11-01T14:00:00.000Z');
@@ -14,8 +14,8 @@ const target=DESTINATIONS[0],scope=`${target.brandId}__${target.network}__${targ
 const groups=[PRIORITY_CREATORS.find(x=>x.creatorGroupId==='mrbeast'),PRIORITY_CREATORS.find(x=>x.creatorGroupId==='thegrefg'),PRIORITY_CREATORS.find(x=>x.creatorGroupId==='ishowspeed')];
 async function save(root,relative,v){const p=path.join(root,relative);await mkdir(path.dirname(p),{recursive:true,mode:0o700});await writeFile(p,typeof v==='string'?v:JSON.stringify(v),{mode:0o600});}
 async function fixture(fn){const root=await mkdtemp(path.join(os.tmpdir(),'creator-routing-'));try{await fn(root);}finally{await rm(root,{recursive:true,force:true});}}
-async function asset(root,id,creator,at=START,slot='10:30'){
- const params={hook:0,duration:30,crop:'center',caption_layout:'off',posting_slot:['10:00','10:30']};
+async function asset(root,id,creator,at=START,slot='10:30',postingSlots=['10:00','10:30']){
+ const params={hook:0,duration:30,crop:'center',caption_layout:'off',posting_slot:postingSlots};
  const manifest={schemaVersion:1,version:'baseline-1',destination:target,engineSha256:ENGINE_SHA256,reviewedBy:'synthetic-owner',params};
  await save(root,`config/clippers-daily-learning/render-policies/${scope}/baseline-1.json`,manifest);
  const video=id.replace(/[^a-zA-Z0-9]/g,'').padStart(11,'0').slice(-11),draftFile=`drafts/portfolio/${id}.mp4`,bytes='original synthetic render '+id;
@@ -69,3 +69,22 @@ test('a preference cannot reorder another context and leaves a ready challenger 
 test('duplicate exact asset identities cannot alias routing metadata or emit a prospective assignment',async()=>fixture(async root=>{
  const state=empty(),a=await asset(root,'same',groups[0]);const b={...a,scheduledAt:iso(START+2*H)};const s=await session(root,state,[a,b]);assert.equal(s.report.contexts,0);assert.ok(s.report.heldReasons.includes('duplicate_reviewed_asset_id'));assert.equal(await s.assign(a),null);assert.equal(await s.assign(b),null);
 }));
+
+test('total persisted scope capacity holds a new context without corrupting old scopes or the next cycle',async()=>fixture(async root=>{
+ const state=empty(),assets=[];for(let i=0;i<33;i++){const a=await asset(root,'context'+i,groups[0]);const e=JSON.parse(await readFile(path.join(root,`config/clippers-daily-learning/evidence/${a.evidenceSha256}.json`),'utf8'));e.creatorSelection.context='context'+i;a.evidenceSha256=digest(e);await save(root,`config/clippers-daily-learning/evidence/${a.evidenceSha256}.json`,e);assets.push(a);}
+ assert.equal((await session(root,state,assets.slice(0,32))).report.contexts,32);const extra=await session(root,state,[assets[32]]);assert.ok(extra.report.heldReasons.includes('scope_capacity_reached'));assert.equal(extra.report.contexts,0);const stored=JSON.parse(await readFile(path.join(root,'reports/clippers-creator-selection/state.json'),'utf8'));assert.equal(stored.preferences.length,32);await session(root,state,[]);
+}));
+test('size capacity is checked before replacing a valid ledger and failed assignment does not poison memory',async()=>fixture(async root=>{
+ const state=empty(),a=await asset(root,'sizeone',groups[0]),b=await asset(root,'sizetwo',groups[1]);await session(root,state,[a,b]);const file=path.join(root,'reports/clippers-creator-selection/state.json'),before=await readFile(file,'utf8');
+ const s=await createClippersCreatorRouting({workspaceRoot:root,state,readyAssets:[a,b],now:new Date(START),maxLedgerBytes:Buffer.byteLength(before)+100});const stable=await readFile(file,'utf8');
+ await assert.rejects(s.assign(a),/creator_ledger_size_capacity/);assert.equal(await readFile(file,'utf8'),stable);await assert.rejects(s.assign(a),/creator_ledger_size_capacity/);assert.equal(await readFile(file,'utf8'),stable);assert.equal(JSON.parse(stable).assignments.length,0);await session(root,state,[]);
+}));
+
+test('one approved slot in the declared hour band stays unmeasured instead of registering an impossible trial',async()=>fixture(async root=>{
+ const state=empty(),a=await asset(root,'singleone',groups[0],START,'10:30',['10:30']),b=await asset(root,'singletwo',groups[1],START,'10:30',['10:30']);const s=await session(root,state,[a,b]);assert.ok(s.report.heldReasons.includes('creator_band_capacity_insufficient'));assert.equal(s.report.preferences[0].status,'unmeasured');assert.equal(await s.assign(a),null);const ledger=JSON.parse(await readFile(path.join(root,'reports/clippers-creator-selection/state.json'),'utf8'));assert.equal(ledger.plans.length,0);
+}));
+
+test('source context uses the exact canonical source and creator identity, not an ambiguous URL or a different creator',()=>{
+ const asset={...target,id:'normalization',creator:'mrbeast',sourceUrl:'https://www.youtube.com/watch?v=abcdefghijk',scheduledAt:iso(START+1.5*H)},m={format:'vertical_clip',context:'streamer_clip',channelId:groups[0].channelId,sourceVideoId:'abcdefghijk',postingBand:'10:00',timezone:'America/New_York',windowHours:24},resolve=id=>groups.find(g=>g.channelId===id);
+ assert.ok(normalizeCreatorContext(m,asset,resolve));assert.ok(normalizeCreatorContext(m,{...asset,sourceUrl:'https://www.youtube.com/shorts/abcdefghijk'},resolve));assert.equal(normalizeCreatorContext(m,{...asset,sourceUrl:'https://www.youtube.com:444/watch?v=abcdefghijk'},resolve),null);assert.equal(normalizeCreatorContext(m,{...asset,sourceUrl:'https://www.youtube.com/watch?v=abcdefghijk&v=abcdefghijk'},resolve),null);assert.equal(normalizeCreatorContext(m,{...asset,creator:'thegrefg'},resolve),null);
+});

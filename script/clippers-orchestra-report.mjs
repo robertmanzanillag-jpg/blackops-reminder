@@ -57,16 +57,16 @@ function ageBuckets(metrics,key){
 }
 function discoveryView(receipts,now){
   const safe=receipts.filter(r=>[1,2].includes(r?.schemaVersion)&&r.paidSpendUsd===0&&r.mayPublish===false&&r.permission==='unknown'&&time(r.observedAt,now)&&Array.isArray(r.feeds)&&r.feeds.length<=(r.schemaVersion===2?14:4)&&Array.isArray(r.observations)&&r.observations.length<=(r.schemaVersion===2?350:100));
-  const observations=safe.flatMap(r=>r.observations).filter(o=>ALL_DISCOVERY_CREATORS.some(c=>c.id===o.creatorId&&c.channelId===o.channelId)&&/^[A-Za-z0-9_-]{11}$/.test(o.videoId??'')&&time(o.observedAt,now)&&time(o.publishedAt,now)&&Date.parse(o.publishedAt)<=Date.parse(o.observedAt));
+  const observations=[...new Map(safe.flatMap(r=>r.observations).filter(o=>ALL_DISCOVERY_CREATORS.some(c=>c.id===o.creatorId&&c.channelId===o.channelId)&&/^[A-Za-z0-9_-]{11}$/.test(o.videoId??'')&&time(o.observedAt,now)&&time(o.publishedAt,now)&&Date.parse(o.publishedAt)<=Date.parse(o.observedAt)).map(o=>[`${o.channelId}:${o.videoId}:${o.observedAt}`,o])).values()];
   const sources=ALL_DISCOVERY_CREATORS.map(c=>{
-    const candidate=safe.flatMap(r=>r.feeds.filter(f=>f.creatorId===c.id&&f.channelId===c.channelId).map(feed=>({feed,observedAt:time(feed.observedAt,now)??r.observedAt}))).sort((a,b)=>a.observedAt.localeCompare(b.observedAt)).at(-1);
+    const candidate=safe.flatMap(r=>r.feeds.filter(f=>f.creatorId===c.id&&f.channelId===c.channelId).map(feed=>({feed,observedAt:time(feed.observedAt,now)??(r.schemaVersion===1?r.observedAt:null)}))).sort((a,b)=>(a.observedAt??'').localeCompare(b.observedAt??'')).at(-1);
     const feed=candidate?.feed;
-    return {creatorId:c.id,channelId:c.channelId,observedAt:candidate?.observedAt??null,status:feed?.status==='observed'?'observed':feed?'unavailable':'not_observed',heldReasons:feed?.status==='observed'?[]:[feed&&/^[a-z][a-z0-9_]{1,80}$/.test(feed.reason??'')?feed.reason:'source_not_observed'],observations:observations.filter(o=>o.creatorId===c.id).length};
+    return {creatorId:c.id,channelId:c.channelId,observedAt:candidate?.observedAt??null,status:feed?.status==='observed'&&candidate.observedAt?'observed':feed?'unavailable':'not_observed',heldReasons:feed?.status==='observed'&&candidate.observedAt?[]:[feed&&/^[a-z][a-z0-9_]{1,80}$/.test(feed.reason??'')?feed.reason:'source_not_observed'],observations:observations.filter(o=>o.creatorId===c.id).length};
   });
   const byVideo=new Map();
-  for(const o of observations){const k=`youtube:${o.videoId}`,rows=byVideo.get(k)??[];if(!rows.some(r=>r.observedAt===o.observedAt))rows.push(o);byVideo.set(k,rows);}
+  for(const o of observations){const k=`${o.channelId}:${o.videoId}`,rows=byVideo.get(k)??[];if(!rows.some(r=>r.observedAt===o.observedAt))rows.push(o);byVideo.set(k,rows);}
   const signals=[...byVideo.values()].map(rows=>{
-    rows.sort((a,b)=>a.observedAt.localeCompare(b.observedAt));const latest=rows.at(-1),prior=rows.slice(0,-1).filter(o=>o.metricEvidence==='direct_public_feed'&&n(o.views)!==null).at(-1);
+    rows.sort((a,b)=>a.observedAt.localeCompare(b.observedAt));const latest=rows.at(-1),prior=rows.slice(0,-1).filter(o=>o.metricEvidence==='direct_public_feed'&&n(o.views)!==null&&o.publishedAt===latest.publishedAt&&Date.parse(o.observedAt)<=Date.parse(latest.observedAt)-HOUR).at(-1);
     const views=latest.metricEvidence==='direct_public_feed'?n(latest.views):null,previousViews=prior?n(prior.views):null;
     const paired=views!==null&&previousViews!==null&&Date.parse(latest.observedAt)>Date.parse(prior.observedAt)&&now-Date.parse(latest.observedAt)<=72*HOUR&&now-Date.parse(prior.observedAt)<=72*HOUR;
     const growth=paired?views-previousViews:null;
@@ -180,8 +180,20 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   const artifacts=Object.fromEntries(entries),wd=artifacts.watchdog.value,report=artifacts.learning.value,prep=artifacts.prepare.value;
   const rawState=artifacts.state.value,state=rawState?.schemaVersion===1&&Array.isArray(rawState.deliveries)&&rawState.deliveries.length<=2000&&Array.isArray(rawState.observations)&&rawState.observations.length<=20000&&Array.isArray(rawState.history)&&rawState.history.length<=1000&&rawState.versions&&typeof rawState.versions==='object'?rawState:null;
   let discoveryFiles=[];
-  try{const directory=path.join(root,'portfolio-discovery');if(await realpath(directory)!==directory)throw Error();discoveryFiles=(await readdir(directory)).filter(v=>/^\d{4}-\d\d-\d\d-(?:v2-)?[a-f0-9]{16}\.json$/.test(v)&&Date.parse(v.slice(0,10)+'T00:00:00Z')>=at-14*24*HOUR&&Date.parse(v.slice(0,10)+'T00:00:00Z')<=at).sort().slice(-32);}catch{}
-  const discoveryReceipts=await Promise.all(discoveryFiles.map(file=>privateOrchestraJson(root,`portfolio-discovery/${file}`,2097152)));
+  try{
+    const directory=path.join(root,'portfolio-discovery');if(await realpath(directory)!==directory)throw Error();
+    const names=await readdir(directory),today=new Date(at).toISOString().slice(0,10);
+    const legacy=names.filter(v=>/^\d{4}-\d\d-\d\d-[a-f0-9]{16}\.json$/.test(v)&&Date.parse(v.slice(0,10)+'T00:00:00Z')>=at-14*24*HOUR&&v.slice(0,10)<=today).sort().slice(-32);
+    const channel=names.filter(v=>/^\d{4}-\d\d-\d\d-channel-UC[A-Za-z0-9_-]{22}\.json$/.test(v)&&v.slice(0,10)<=today&&Date.parse(v.slice(0,10)+'T00:00:00Z')>=Date.parse(today+'T00:00:00Z')-2*24*HOUR&&ALL_DISCOVERY_CREATORS.some(c=>v.endsWith('-'+c.channelId+'.json'))).sort().slice(-ALL_DISCOVERY_CREATORS.length*3);
+    discoveryFiles=[...legacy.map(file=>({file,channel:false})),...channel.map(file=>({file,channel:true}))];
+  }catch{}
+  const discoveryReceipts=await Promise.all(discoveryFiles.map(async({file,channel})=>{
+    const r=await privateOrchestraJson(root,`portfolio-discovery/${file}`,channel?131072:524288);
+    if(channel&&r.value?.schemaVersion===2&&time(r.value.observedAt,at)&&Array.isArray(r.value.feeds)&&r.value.feeds.length===1){
+      r.value={...r.value,feeds:r.value.feeds.map(f=>({...f,observedAt:f.status==='observed'?r.value.observedAt:null}))};
+    }
+    return r;
+  }));
   const discovery=discoveryView(discoveryReceipts.map(r=>r.value),at),metrics=metricRows(state,at);
   const media=Array.isArray(artifacts.media.value)?artifacts.media.value:[];
   const {comparisons,qualifications}=await comparisonsView(root,state,metrics,at,media);
@@ -234,7 +246,7 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   const outcome=(stage,proof,completedAt,reason)=>{const sha=digest(proof);return {evidenceId:`clippers:${sha}:${stage}`,completedAt,outcome:'verified_deliverable',reason,artifactSha256:sha};};
   outcomes('analytics',[...metrics.map(m=>outcome('analytics',[m.destination,m.key,m.observedAt,m.views,m.completionRate],m.capturedAt,'verified_metric_snapshot')),...accounts.filter(a=>a.analytics.status==='observed'&&a.analytics.posts>0).map(a=>outcome('analytics',[a.key,a.analytics.observedAt,a.analytics.posts,a.analytics.totalViews],a.analytics.observedAt,'verified_metric_snapshot'))]);
   outcomes('publisher',(state?.deliveries??[]).filter(d=>findDestination(d)&&ID.test(d.metricoolId??'')&&['scheduled','published'].includes(d.status)).map(d=>outcome('publisher',[destinationKey(d),d.metricoolId,d.mediaSha256,d.scheduledAt],d.status==='published'?d.post?.verifiedAt:d.createdAt,'provider_schedule_or_publication_receipt')));
-  outcomes('streamers',discoveryReceipts.flatMap(({value:r})=>r?.schemaVersion===1&&time(r.observedAt,at)&&r.paidSpendUsd===0&&Array.isArray(r.feeds)&&Array.isArray(r.observations)?r.feeds.filter(f=>f.status==='observed'&&SHA.test(f.feedSha256??'')&&ALL_DISCOVERY_CREATORS.some(c=>c.id===f.creatorId&&c.channelId===f.channelId)&&r.observations.some(o=>o.creatorId===f.creatorId&&time(o.publishedAt,at)&&at-Date.parse(o.publishedAt)<=72*HOUR)).map(f=>outcome('streamers',[f.creatorId,f.feedSha256,time(f.observedAt,at)??r.observedAt],time(f.observedAt,at)??r.observedAt,'public_metadata_receipt')):[]));
+  outcomes('streamers',discoveryReceipts.flatMap(({value:r})=>r?.schemaVersion===1&&time(r.observedAt,at)&&r.paidSpendUsd===0&&Array.isArray(r.feeds)&&Array.isArray(r.observations)?r.feeds.filter(f=>f.status==='observed'&&(r.schemaVersion===1||time(f.observedAt,at))&&SHA.test(f.feedSha256??'')&&ALL_DISCOVERY_CREATORS.some(c=>c.id===f.creatorId&&c.channelId===f.channelId)&&r.observations.some(o=>o.creatorId===f.creatorId&&time(o.publishedAt,at)&&at-Date.parse(o.publishedAt)<=72*HOUR)).map(f=>outcome('streamers',[f.creatorId,f.feedSha256,time(f.observedAt,at)??(r.schemaVersion===1?r.observedAt:null)],time(f.observedAt,at)??(r.schemaVersion===1?r.observedAt:null),'public_metadata_receipt')):[]));
   outcomes('trends',discovery.signals.filter(s=>s.label==='paired_growth_observed').map(s=>outcome('trends',s,s.observedAt,'paired_public_growth_observation')));
   outcomes('learning',qualifications.map(q=>outcome('learning',q,reportAt,'three_current_verified_comparisons')));
   const renderCache=new Map(),editor=[],checker=[];

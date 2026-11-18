@@ -75,7 +75,7 @@ test('observation time and actual age must be real, recent and within same one-h
     { observedAt: time(1), actualAgeHours: 26 },
     { observedAt: time(-721), publishedAt: time(-745) },
     { actualAgeHours: 24.1 },
-    { publishedAt: time(-26), actualAgeHours: 25 },
+    { publishedAt: time(-49), actualAgeHours: 48 },
     { timing: 'feed_view_count' },
   ]) {
     const input = fixture(); input.samples.forEach(row => Object.assign(row, patch));
@@ -297,4 +297,18 @@ test('twenty percent threshold is exact even for large real integer counts', () 
   assert.equal(preference(input).candidates[0].reason, 'median_lift_below_twenty_percent');
   input.samples.filter(row => row.selectionExperiment.arm === 'challenger').forEach(row => row.views = 4_800_000_000_000_000);
   assert.equal(preference(input).status, 'preferred');
+});
+
+test('real daily10am collection can compare47-hour actual bins without mixing25-hour controls',()=>{
+ const input=fixture(),start=Date.parse('2026-11-01T14:00:00.000Z');
+ input.evaluatedAt='2026-11-18T16:00:00.000Z';input.contexts[0].readyUntil='2026-11-18T20:00:00.000Z';
+ for(let i=0;i<input.samples.length;i++){
+  const row=input.samples[i],day=Math.floor(i/2),offset=row.selectionExperiment.arm==='control'?1.5:1.75;
+  const published=start+day*24*3600000+offset*3600000,age=row.selectionExperiment.arm==='control'?47.5:47.25;
+  row.publishedAt=new Date(published).toISOString();row.observedAt=new Date(published+age*3600000).toISOString();row.actualAgeHours=age;
+  row.evidence.sourcePublishedAt=new Date(published-3600000).toISOString();row.evidence.rightsObservedAt=new Date(published-1800000).toISOString();row.evidence.rightsValidUntil=new Date(published+7200000).toISOString();
+  row.selectionExperiment.registeredAt=new Date(start+Number(row.selectionExperiment.id.slice(-1))*60000).toISOString();row.selectionExperiment.expiresAt='2026-11-30T14:00:00.000Z';
+ }
+ const result=preference(input);assert.equal(result.status,'preferred');assert.ok(result.candidates[0].batches.every(b=>b.actualAgeBinHours===47));
+ const mixed=structuredClone(input),row=mixed.samples[0];row.actualAgeHours=25;row.observedAt=new Date(Date.parse(row.publishedAt)+25*3600000).toISOString();const held=preference(mixed);assert.notEqual(held.status,'preferred');assert.equal(held.candidates[0].reason,'actual_age_bin_mismatch');
 });
