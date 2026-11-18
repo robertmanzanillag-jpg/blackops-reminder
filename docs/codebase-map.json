@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T10:03:38.260Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-creator-adaptation-20261118",
+  "generatedAt": "2026-11-18T11:04:03.472Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-private-replit-transport-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1195,
-    "filesIndexed": 1094,
-    "imports": 4377,
+    "filesVisible": 1202,
+    "filesIndexed": 1098,
+    "imports": 4386,
     "routes": 623,
-    "symbols": 24876
+    "symbols": 24910
   },
   "directories": {
     ".": {
@@ -203,10 +203,10 @@
       }
     },
     "docs": {
-      "files": 71,
-      "indexed": 69,
+      "files": 76,
+      "indexed": 72,
       "kinds": {
-        "docs": 71
+        "docs": 76
       }
     },
     "examples/clippers-motivation": {
@@ -218,10 +218,10 @@
       }
     },
     "script": {
-      "files": 130,
+      "files": 131,
       "indexed": 118,
       "kinds": {
-        "script": 130
+        "script": 131
       }
     },
     "script/release-gate": {
@@ -274,10 +274,10 @@
       }
     },
     "tests": {
-      "files": 314,
-      "indexed": 310,
+      "files": 315,
+      "indexed": 311,
       "kinds": {
-        "test": 314
+        "test": 315
       }
     },
     "tests/fixtures": {
@@ -5803,6 +5803,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-private-replit-telemetry.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-sleep-video-pipeline.md",
       "kind": "docs",
       "imports": [],
@@ -5860,6 +5868,22 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
+      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -9836,12 +9860,20 @@
         "node:url"
       ],
       "exports": [
+        "CLIPPERS_PLATFORM_KEYCHAIN_ACCOUNT",
+        "CLIPPERS_PLATFORM_KEYCHAIN_HELPER",
+        "CLIPPERS_PLATFORM_KEYCHAIN_SERVICE",
         "CLIPPERS_TELEMETRY_CREDENTIAL_PLIST",
+        "readClippersPlatformToken",
         "readClippersTelemetryCredential",
-        "runClippersOrchestraSender"
+        "runClippersOrchestraSender",
+        "validateClippersPlatformHelper"
       ],
       "symbols": [
         "ACK_CODES",
+        "CLIPPERS_PLATFORM_KEYCHAIN_ACCOUNT",
+        "CLIPPERS_PLATFORM_KEYCHAIN_HELPER",
+        "CLIPPERS_PLATFORM_KEYCHAIN_SERVICE",
         "CLIPPERS_TELEMETRY_CREDENTIAL_PLIST",
         "MAX_ACK_BYTES",
         "MAX_BYTES",
@@ -9858,19 +9890,27 @@
         "eligibility",
         "env",
         "envelope",
+        "executable",
         "fail",
         "fields",
         "finish",
+        "heldCodes",
+        "info",
         "parsePlistDescriptor",
         "parsed",
+        "platformToken",
+        "platformTokenValid",
+        "readClippersPlatformToken",
         "readClippersTelemetryCredential",
         "reader",
+        "record",
         "remoteUrl",
         "response",
         "result",
         "runClippersOrchestraSender",
         "timer",
-        "token"
+        "token",
+        "validateClippersPlatformHelper"
       ],
       "routes": []
     },
@@ -16016,6 +16056,7 @@
         "hasBlackRoomChatAccess",
         "hasBlackRoomPartnerAccess",
         "hasValidBlackRoomRemoteToken",
+        "hasValidClippersDeviceToken",
         "parseBlackRoomMediaRange",
         "readBlackRoomPanelQueue",
         "registerBlackRoomControlRoutes",
@@ -16032,6 +16073,7 @@
         "addUtcDays",
         "analytics",
         "analyticsImports",
+        "authorization",
         "blackRoomCounter",
         "blackRoomLocalDate",
         "blackRoomMediaHeaders",
@@ -16046,9 +16088,11 @@
         "ceoTimer",
         "cleanupExpiredBlackRoomUploads",
         "completed",
+        "count",
         "current",
         "currentTarget",
         "declaredSize",
+        "device",
         "end",
         "error",
         "expectedBuffer",
@@ -16057,6 +16101,8 @@
         "hasBlackRoomChatAccess",
         "hasBlackRoomPartnerAccess",
         "hasValidBlackRoomRemoteToken",
+        "hasValidClippersDeviceToken",
+        "headers",
         "id",
         "imports",
         "index",
@@ -16074,9 +16120,11 @@
         "partPath",
         "pendingBatches",
         "postsByDate",
+        "present",
         "previous",
         "publicOrigin",
         "range",
+        "raw",
         "readBlackRoomPanelQueue",
         "receipt",
         "receiptId",
@@ -37596,7 +37644,7 @@
         "envelope",
         "f",
         "good",
-        "hasValidToken",
+        "headers",
         "noBlackRoom",
         "req",
         "request",
@@ -37606,7 +37654,8 @@
         "source",
         "start",
         "value",
-        "verifier"
+        "verifier",
+        "verifiers"
       ],
       "routes": [
         "/api/blackroom-agent/media/:reservationId",
@@ -37620,33 +37669,43 @@
         "../script/clippers-orchestra-sender.mjs",
         "node:assert/strict",
         "node:child_process",
+        "node:events",
         "node:fs",
         "node:fs/promises",
         "node:os",
         "node:path",
+        "node:stream",
         "node:test"
       ],
       "exports": [],
       "symbols": [
+        "PLATFORM_TOKEN",
         "TOKEN",
         "accepted",
         "alias",
         "auth",
         "calls",
+        "child",
+        "conflict",
         "credential",
         "dirAlias",
         "f",
+        "failed",
+        "fakeKeychainProcess",
         "file",
         "fixture",
         "origin",
         "parsed",
         "r",
+        "readClippersPlatformToken",
         "relay",
         "release",
         "replacement",
         "result",
         "root",
-        "second"
+        "runClippersOrchestraSender",
+        "second",
+        "token"
       ],
       "routes": []
     },
@@ -37877,6 +37936,30 @@
         "/api/clippers/run-intake-refresh-sweep",
         "/api/clippers/run-post-connect-activation-sweep"
       ]
+    },
+    {
+      "path": "tests/clippers-platform-keychain-native.test.mjs",
+      "kind": "test",
+      "imports": [
+        "node:assert/strict",
+        "node:child_process",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test",
+        "node:util"
+      ],
+      "exports": [],
+      "symbols": [
+        "exec",
+        "output",
+        "result",
+        "setup",
+        "source",
+        "temporary",
+        "text"
+      ],
+      "routes": []
     },
     {
       "path": "tests/clippers-portfolio-discovery.test.mjs",

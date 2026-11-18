@@ -239,6 +239,24 @@ export function hasValidBlackRoomRemoteToken(authorization: string | undefined, 
   return suppliedBuffer.length === expectedBuffer.length && timingSafeEqual(suppliedBuffer, expectedBuffer);
 }
 
+// The platform bearer is consumed by Replit's private-deployment shield. Only
+// this dedicated endpoint accepts the same existing device token in its own header.
+export function hasValidClippersDeviceToken(req: Request, configuredToken = process.env.BLACKROOM_REMOTE_CONTROL_TOKEN): boolean {
+  const headers = req.headers || {};
+  const raw = req.rawHeaders || [];
+  const count = (name: string) => raw.filter((_value, index) => index % 2 === 0 && String(raw[index]).toLowerCase() === name).length;
+  const authorization = headers.authorization;
+  if (count("authorization") > 1 || (authorization !== undefined &&
+      (typeof authorization !== "string" || !authorization || /[,\r\n]/.test(authorization)))) return false;
+  const present = Object.hasOwn(headers, "x-clippers-device-token") || count("x-clippers-device-token") > 0;
+  if (!present) return hasValidBlackRoomRemoteToken(req.get("authorization"), configuredToken);
+  const device = headers["x-clippers-device-token"];
+  if (count("x-clippers-device-token") > 1 || typeof device !== "string" ||
+      device.length < 32 || device.length > 8192 || /[\s,]/.test(device)) return false;
+  // An invalid explicit device header must never fall back to a valid app bearer.
+  return hasValidBlackRoomRemoteToken(device, configuredToken);
+}
+
 export function summarizeBlackRoomAnalyticsImports(state: BlackRoomRemoteControlState) {
   return Object.fromEntries(Object.entries(state.analyticsImports || {}).map(([network, imported]) => [
     network,
@@ -457,7 +475,7 @@ export function registerBlackRoomControlRoutes(app: Express): void {
     catch (error: any) { res.status(500).json({ error: error.message || "Failed to read remote command" }); }
   });
   app.post("/api/blackroom-agent/clippers-orchestra", async (req, res) => {
-    if (!hasValidBlackRoomRemoteToken(req.get("authorization"))) return res.status(401).set("Cache-Control", "private, no-store").json({ error: "Invalid BlackRoom device token" });
+    if (!hasValidClippersDeviceToken(req)) return res.status(401).set("Cache-Control", "private, no-store").json({ error: "Invalid BlackRoom device token" });
     // A separate exact route is safe against rollback: old servers reject it,
     // whereas sending a new discriminator to the legacy heartbeat could mutate it.
     const body = req.body;

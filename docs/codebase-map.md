@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-18T10:03:38.260Z
-Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-creator-adaptation-20261118`
+Generated: 2026-11-18T11:04:03.472Z
+Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-private-replit-transport-20261118`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1195 | 1094 | 4377 | 623 | 24876 |
+| 1202 | 1098 | 4386 | 623 | 24910 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,12 +28,12 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 314 | 310 | test:314 |
+| `tests` | 315 | 311 | test:315 |
 | `server` | 280 | 274 | server:280 |
 | `client/src` | 155 | 153 | ui-component:55, client-component:46, client-page:28, client-lib:19 |
-| `script` | 130 | 118 | script:130 |
+| `script` | 131 | 118 | script:131 |
+| `docs` | 76 | 72 | docs:76 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 71 | 69 | docs:71 |
 | `shared` | 33 | 32 | shared:33 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
@@ -421,7 +421,7 @@ Package: `rest-express`
 - `script/clippers-orchestra-analytics.mjs` (script; 23 symbols, 6 imports)
 - `script/clippers-orchestra-relay.mjs` (script; 6 symbols, 2 imports)
 - `script/clippers-orchestra-report.mjs` (script; 115 symbols, 7 imports)
-- `script/clippers-orchestra-sender.mjs` (script; 30 symbols, 7 imports)
+- `script/clippers-orchestra-sender.mjs` (script; 41 symbols, 7 imports)
 - `script/clippers-portfolio-discovery.mjs` (script; 94 symbols, 7 imports)
 - `script/clippers-portfolio-metricool.mjs` (script; 74 symbols, 1 imports)
 - `script/clippers-portfolio-prepare.mjs` (script; 103 symbols, 7 imports)
