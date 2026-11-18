@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-18T13:42:55.596Z
-Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-weekly-plan-20261118`
+Generated: 2026-11-18T14:13:28.694Z
+Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-v6-package-20261118`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1220 | 1115 | 4469 | 623 | 25196 |
+| 1228 | 1123 | 4492 | 623 | 25337 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,16 +28,17 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 321 | 317 | test:321 |
+| `tests` | 323 | 319 | test:323 |
 | `server` | 284 | 278 | server:284 |
 | `client/src` | 155 | 153 | ui-component:55, client-component:46, client-page:28, client-lib:19 |
 | `script` | 132 | 119 | script:132 |
-| `docs` | 80 | 76 | docs:80 |
+| `docs` | 76 | 74 | docs:76 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 35 | 33 | shared:35 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
+| `script/office-api-budget-v6` | 10 | 8 | script:10 |
 | `script/release-gate` | 7 | 7 | script:7 |
 | `.agents/memory` | 5 | 5 | docs:5 |
 | `tests/fixtures` | 6 | 4 | test:6 |
