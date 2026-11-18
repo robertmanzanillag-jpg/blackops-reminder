@@ -1,6 +1,6 @@
 {
-  "generatedAt": "2026-11-18T07:38:36.222Z",
-  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-ceo-domain-pause-20261118",
+  "generatedAt": "2026-11-18T08:09:41.103Z",
+  "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-orchestra-runtime-20261118",
   "packageName": "rest-express",
   "scripts": {
     "dev:client": "vite dev --port 5000",
@@ -124,11 +124,11 @@
     "db:push": "drizzle-kit push"
   },
   "totals": {
-    "filesVisible": 1175,
-    "filesIndexed": 1073,
-    "imports": 4244,
-    "routes": 615,
-    "symbols": 24194
+    "filesVisible": 1181,
+    "filesIndexed": 1081,
+    "imports": 4288,
+    "routes": 616,
+    "symbols": 24434
   },
   "directories": {
     ".": {
@@ -203,10 +203,10 @@
       }
     },
     "docs": {
-      "files": 73,
-      "indexed": 69,
+      "files": 70,
+      "indexed": 68,
       "kinds": {
-        "docs": 73
+        "docs": 70
       }
     },
     "examples/clippers-motivation": {
@@ -218,10 +218,10 @@
       }
     },
     "script": {
-      "files": 124,
-      "indexed": 112,
+      "files": 127,
+      "indexed": 115,
       "kinds": {
-        "script": 124
+        "script": 127
       }
     },
     "script/release-gate": {
@@ -239,10 +239,10 @@
       }
     },
     "server": {
-      "files": 277,
-      "indexed": 271,
+      "files": 280,
+      "indexed": 274,
       "kinds": {
-        "server": 277
+        "server": 280
       }
     },
     "server/blackroom-team": {
@@ -260,10 +260,10 @@
       }
     },
     "shared": {
-      "files": 29,
-      "indexed": 29,
+      "files": 31,
+      "indexed": 31,
       "kinds": {
-        "shared": 29
+        "shared": 31
       }
     },
     "shared/models": {
@@ -274,10 +274,10 @@
       }
     },
     "tests": {
-      "files": 307,
-      "indexed": 303,
+      "files": 308,
+      "indexed": 304,
       "kinds": {
-        "test": 307
+        "test": 308
       }
     },
     "tests/fixtures": {
@@ -5713,6 +5713,14 @@
       "routes": []
     },
     {
+      "path": "docs/clippers-orchestra.md",
+      "kind": "docs",
+      "imports": [],
+      "exports": [],
+      "symbols": [],
+      "routes": []
+    },
+    {
       "path": "docs/clippers-portfolio-discovery.md",
       "kind": "docs",
       "imports": [],
@@ -5786,22 +5794,6 @@
     },
     {
       "path": "docs/clippers-youtube-uploader.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
-      "kind": "docs",
-      "imports": [],
-      "exports": [],
-      "symbols": [],
-      "routes": []
-    },
-    {
-      "path": "docs/codebase-map.md",
       "kind": "docs",
       "imports": [],
       "exports": [],
@@ -6724,6 +6716,7 @@
         "./blackroom-metricool-csv-bridge.mjs",
         "./blackroom-metricool-exporter.mjs",
         "./blackroom-remote-sync.mjs",
+        "./clippers-orchestra-relay.mjs",
         "./organic-peer-scout.mjs",
         "node:child_process",
         "node:crypto",
@@ -6744,6 +6737,10 @@
         "changed",
         "checkedAt",
         "child",
+        "clippersEnvelope",
+        "clippersOrchestraRelay",
+        "clippersOrchestraRemoteAllowed",
+        "clippersOrchestraRemoteStatus",
         "collectionStarted",
         "command",
         "content",
@@ -6767,6 +6764,7 @@
         "fingerprint",
         "group",
         "grouped",
+        "heartbeatReceipt",
         "host",
         "importedSamples",
         "imports",
@@ -8094,6 +8092,7 @@
         "alert",
         "alerts",
         "allowedStatuses",
+        "analytics",
         "apiCostUsd",
         "atomicWrite",
         "blocked",
@@ -9396,6 +9395,188 @@
       "routes": []
     },
     {
+      "path": "script/clippers-orchestra-analytics.mjs",
+      "kind": "script",
+      "imports": [
+        "./clippers-orchestra-report.mjs",
+        "./clippers-portfolio-metricool.mjs",
+        "./clippers-selected-env.mjs",
+        "node:crypto",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "collectClippersAccountAnalytics",
+        "readOnlyAnalyticsFetch"
+      ],
+      "symbols": [
+        "abort",
+        "accounts",
+        "body",
+        "boundedBody",
+        "chunks",
+        "collectClippersAccountAnalytics",
+        "controller",
+        "directory",
+        "get",
+        "info",
+        "post",
+        "posts",
+        "prior",
+        "readOnlyAnalyticsFetch",
+        "receipt",
+        "report",
+        "response",
+        "root",
+        "rows",
+        "started",
+        "temporary",
+        "url"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-orchestra-relay.mjs",
+      "kind": "script",
+      "imports": [
+        "./clippers-orchestra-report.mjs",
+        "node:crypto"
+      ],
+      "exports": [
+        "clippersOrchestraRemoteEligibility",
+        "createClippersOrchestraRelay"
+      ],
+      "symbols": [
+        "clippersOrchestraRemoteEligibility",
+        "createClippersOrchestraRelay",
+        "envelope",
+        "refresh",
+        "report",
+        "start"
+      ],
+      "routes": []
+    },
+    {
+      "path": "script/clippers-orchestra-report.mjs",
+      "kind": "script",
+      "imports": [
+        "./clippers-portfolio-discovery.mjs",
+        "./clippers-portfolio-metricool.mjs",
+        "./clippers-portfolio-render.mjs",
+        "node:crypto",
+        "node:fs",
+        "node:fs/promises",
+        "node:path"
+      ],
+      "exports": [
+        "buildClippersOrchestraReport",
+        "privateOrchestraJson"
+      ],
+      "symbols": [
+        "HOUR",
+        "NY_CLOCK",
+        "accountAnalysis",
+        "accounts",
+        "age",
+        "ageBuckets",
+        "ages",
+        "analytics",
+        "analyticsAt",
+        "analyticsStale",
+        "artifacts",
+        "asset",
+        "at",
+        "buckets",
+        "buildClippersOrchestraReport",
+        "byAge",
+        "byExperiment",
+        "byVideo",
+        "caps",
+        "chunks",
+        "codes",
+        "comparisonsView",
+        "confirmedMedia",
+        "control",
+        "controlViews",
+        "d",
+        "date",
+        "deliveries",
+        "differences",
+        "digest",
+        "discovery",
+        "discoveryArtifact",
+        "discoveryAt",
+        "discoveryReceipts",
+        "discoveryView",
+        "e",
+        "eligibleComparisons",
+        "emptyCareer",
+        "entries",
+        "evidenceAt",
+        "feed",
+        "file",
+        "files",
+        "group",
+        "groups",
+        "growth",
+        "guard",
+        "hash",
+        "improvement",
+        "k",
+        "key",
+        "match",
+        "measured",
+        "media",
+        "median",
+        "metricRows",
+        "n",
+        "nextDaily",
+        "nextDue",
+        "observations",
+        "outcome",
+        "outcomes",
+        "own",
+        "paired",
+        "parts",
+        "posts",
+        "privateOrchestraJson",
+        "promotions",
+        "proof",
+        "qualifications",
+        "qualityImproved",
+        "raw",
+        "rawAnalytics",
+        "rawState",
+        "reasons",
+        "receipt",
+        "relative",
+        "relevant",
+        "renderCache",
+        "renderVerified",
+        "reportAt",
+        "result",
+        "role",
+        "roles",
+        "root",
+        "rows",
+        "safe",
+        "seen",
+        "signals",
+        "sources",
+        "target",
+        "time",
+        "total",
+        "unique",
+        "v",
+        "validLearning",
+        "verifiedPosts",
+        "verifiedRenderBinding",
+        "views",
+        "yes"
+      ],
+      "routes": []
+    },
+    {
       "path": "script/clippers-portfolio-discovery.mjs",
       "kind": "script",
       "imports": [
@@ -9554,12 +9735,16 @@
         "owned",
         "post",
         "postAnalytics",
+        "posts",
         "profile",
         "provider",
+        "providerAt",
         "providerMedia",
         "providerObservedAt",
         "providerTimestamp",
+        "publishedAt",
         "raw",
+        "reported",
         "reportedAt",
         "response",
         "result",
@@ -20098,6 +20283,90 @@
       "routes": []
     },
     {
+      "path": "server/clippers-orchestra-life.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "../shared/clippers-office-agents",
+        "../shared/clippers-orchestra"
+      ],
+      "exports": [
+        "applyClippersReceiptOutcomes",
+        "clippersCareerView"
+      ],
+      "symbols": [
+        "applyClippersReceiptOutcomes",
+        "c",
+        "career",
+        "clippersCareerView",
+        "statuses"
+      ],
+      "routes": []
+    },
+    {
+      "path": "server/clippers-orchestra-routes.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/clippers-orchestra",
+        "./user-context",
+        "express"
+      ],
+      "exports": [
+        "registerClippersOrchestraRoutes"
+      ],
+      "symbols": [
+        "isOwner",
+        "read",
+        "registerClippersOrchestraRoutes"
+      ],
+      "routes": [
+        "/api/clippers/orchestra/status"
+      ]
+    },
+    {
+      "path": "server/clippers-orchestra-state.ts",
+      "kind": "server",
+      "imports": [
+        "../shared/agent-company",
+        "../shared/clippers-orchestra",
+        "./clippers-orchestra-life",
+        "./kong-repair-bridge",
+        "./user-context",
+        "node:crypto"
+      ],
+      "exports": [
+        "CLIPPERS_ORCHESTRA_MAX_BYTES",
+        "clippersOrchestraState",
+        "createClippersOrchestraState",
+        "parseClippersEnvelope"
+      ],
+      "symbols": [
+        "CLIPPERS_ORCHESTRA_MAX_BYTES",
+        "Envelope",
+        "Saved",
+        "Store",
+        "UUID",
+        "at",
+        "clippersOrchestraState",
+        "council",
+        "createClippersOrchestraState",
+        "digest",
+        "evidenceAge",
+        "hash",
+        "ingest",
+        "namespace",
+        "now",
+        "old",
+        "parseClippersEnvelope",
+        "read",
+        "report",
+        "saved",
+        "store",
+        "v"
+      ],
+      "routes": []
+    },
+    {
       "path": "server/clippers-runtime-status.ts",
       "kind": "server",
       "imports": [
@@ -27591,6 +27860,7 @@
         "./clippers-local-news-agent",
         "./clippers-local-news-metricool",
         "./clippers-local-news-scheduler",
+        "./clippers-orchestra-routes",
         "./clippers-runtime-status",
         "./code-agent",
         "./code-generator",
@@ -32391,6 +32661,74 @@
       "routes": []
     },
     {
+      "path": "shared/clippers-office-agents.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "CLIPPERS_AGENTS",
+        "CLIPPERS_AGENT_IDS",
+        "CLIPPERS_AGENT_NAMES",
+        "CLIPPERS_DEPARTMENT",
+        "ClippersAgentId",
+        "ClippersStage",
+        "clippersAgentForStage",
+        "isClippersAgentId"
+      ],
+      "symbols": [
+        "CLIPPERS_AGENTS",
+        "CLIPPERS_AGENT_NAMES",
+        "CLIPPERS_DEPARTMENT",
+        "clippersAgentForStage",
+        "isClippersAgentId"
+      ],
+      "routes": []
+    },
+    {
+      "path": "shared/clippers-orchestra.ts",
+      "kind": "shared",
+      "imports": [],
+      "exports": [
+        "ClippersAccountView",
+        "ClippersCareerView",
+        "ClippersComparisonView",
+        "ClippersMetricAgeBucket",
+        "ClippersOrchestraStatus",
+        "ClippersRoleEvidence",
+        "ClippersRoleStage",
+        "ClippersRoleState",
+        "ClippersSourceView",
+        "ClippersTrendSignal",
+        "ClippersVerifiedOutcome",
+        "parseClippersOrchestraStatus"
+      ],
+      "symbols": [
+        "c",
+        "code",
+        "codes",
+        "count",
+        "d",
+        "denied",
+        "finite",
+        "keys",
+        "l",
+        "nullableCount",
+        "nullableFinite",
+        "nullableTime",
+        "parseClippersOrchestraStatus",
+        "record",
+        "roleStages",
+        "s",
+        "seen",
+        "sf",
+        "states",
+        "targetKeys",
+        "text",
+        "time",
+        "v"
+      ],
+      "routes": []
+    },
+    {
       "path": "shared/factory-office-agents.ts",
       "kind": "shared",
       "imports": [
@@ -36670,6 +37008,75 @@
         "wrapped",
         "wrappedLongToken",
         "writeAuthorizedManifest"
+      ],
+      "routes": []
+    },
+    {
+      "path": "tests/clippers-orchestra.test.ts",
+      "kind": "test",
+      "imports": [
+        "../script/clippers-orchestra-analytics.mjs",
+        "../script/clippers-orchestra-relay.mjs",
+        "../script/clippers-orchestra-report.mjs",
+        "../script/clippers-portfolio-discovery.mjs",
+        "../script/clippers-portfolio-metricool.mjs",
+        "../server/clippers-orchestra-life",
+        "../server/clippers-orchestra-state",
+        "../shared/agent-company",
+        "../shared/clippers-orchestra",
+        "node:assert/strict",
+        "node:crypto",
+        "node:fs/promises",
+        "node:os",
+        "node:path",
+        "node:test"
+      ],
+      "exports": [],
+      "symbols": [
+        "NOW",
+        "adapter",
+        "bad",
+        "base",
+        "baseline",
+        "before",
+        "candidate",
+        "conflict",
+        "controlled",
+        "d",
+        "digest",
+        "discovery",
+        "e",
+        "engine",
+        "envelope",
+        "experiment",
+        "file",
+        "first",
+        "fixture",
+        "forged",
+        "good",
+        "handler",
+        "id",
+        "manifest",
+        "memory",
+        "next",
+        "old",
+        "order",
+        "p",
+        "params",
+        "post",
+        "r",
+        "receipt",
+        "relay",
+        "report",
+        "request",
+        "role",
+        "save",
+        "snapshot",
+        "start",
+        "started",
+        "state",
+        "store",
+        "target"
       ],
       "routes": []
     },
@@ -43586,6 +43993,7 @@
     "tests/clippers-local-news-scheduler.test.ts",
     "tests/clippers-local-news-state-retention.test.ts",
     "tests/clippers-local-news-translation.test.ts",
+    "tests/clippers-orchestra.test.ts",
     "tests/clippers-owned-source-scripts.test.ts",
     "tests/clippers-runtime-status.test.ts",
     "tests/clippers-upload-metricool-media.test.ts",
