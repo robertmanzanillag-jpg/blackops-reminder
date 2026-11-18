@@ -1,4 +1,5 @@
 import {ROLE_WORK_DEADLINE_ID} from "./software-factory-role-deadline";
+import { assertFactoryCreditReady } from "./software-factory-diagnostics";
 import { createHash } from "node:crypto";
 import { readFile, lstat, realpath } from "node:fs/promises";
 import path from "node:path";
@@ -272,8 +273,7 @@ async function installed(store: Store) {
         throw Error("FACTORY_OPERATOR_OWNER_MISMATCH");
     const credits = await loadSharedCreditRuntime(env, now);
     const budget = await credits.ledger.status();
-    if (budget.expired || budget.uncertain || budget.overrun || budget.availableMicroUsd < (config.reservations.build + config.reservations.review) * 10000 || Date.parse(credits.pricing.validUntil) <= now().getTime())
-        throw Error("FACTORY_OPERATOR_CREDIT_UNAVAILABLE");
+    assertFactoryCreditReady(budget, (config.reservations.build + config.reservations.review) * 10000, credits.pricing.validUntil, now().getTime());
     const githubRequest = createAsistenteGitHubTransport(env.SOFTWARE_FACTORY_GITHUB_TOKEN || "");
     const modelRequest = createFactoryOpenAiTransport(env.OPENAI_API_KEY || "");
     const readUi = createOfficeUiArtifactReader({ apiRequest: githubRequest, download: fetch, archiveHosts: config.archiveHosts, allowGitHubResultsAzureHosts: config.allowGitHubResultsAzureHosts, ...config.ui, now });

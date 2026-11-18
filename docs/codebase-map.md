@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-17T23:31:30.268Z
-Repo: `/private/tmp/blackops-worker-recovery-20261117`
+Generated: 2026-11-18T02:29:36.696Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/office-runtime`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1134 | 1034 | 4035 | 604 | 22905 |
+| 1136 | 1036 | 4042 | 604 | 22918 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,8 +28,8 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 295 | 291 | test:295 |
-| `server` | 269 | 263 | server:269 |
+| `tests` | 296 | 292 | test:296 |
+| `server` | 270 | 264 | server:270 |
 | `client/src` | 153 | 151 | ui-component:55, client-component:44, client-page:28, client-lib:19 |
 | `script` | 114 | 102 | script:114 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
@@ -286,6 +286,7 @@ Package: `rest-express`
 - `tests/software-factory-company-scheduler.test.ts`
 - `tests/software-factory-company.test.ts`
 - `tests/software-factory-db-cli.test.ts`
+- `tests/software-factory-diagnostics.test.ts`
 - `tests/software-factory-encrypted-state.test.ts`
 - `tests/software-factory-gcs.test.ts`
 - `tests/software-factory-github-client.test.ts`
