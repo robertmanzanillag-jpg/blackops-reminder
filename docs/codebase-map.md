@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-18T08:44:31.297Z
+Generated: 2026-11-18T08:49:09.394Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-orchestra-runtime-20261118`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1181 | 1081 | 4289 | 616 | 24444 |
+| 1189 | 1087 | 4317 | 620 | 24502 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,20 +28,20 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 308 | 304 | test:308 |
+| `tests` | 309 | 305 | test:309 |
 | `server` | 280 | 274 | server:280 |
-| `client/src` | 154 | 152 | ui-component:55, client-component:45, client-page:28, client-lib:19 |
+| `client/src` | 155 | 153 | ui-component:55, client-component:46, client-page:28, client-lib:19 |
 | `script` | 127 | 115 | script:127 |
+| `docs` | 75 | 71 | docs:75 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 70 | 68 | docs:70 |
 | `shared` | 31 | 31 | shared:31 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
 | `server/replit_integrations` | 9 | 9 | server:9 |
 | `script/release-gate` | 7 | 7 | script:7 |
 | `.agents/memory` | 5 | 5 | docs:5 |
+| `tests/fixtures` | 5 | 3 | test:5 |
 | `client/public` | 16 | 2 | other:16 |
-| `tests/fixtures` | 4 | 2 | test:4 |
 | `.agents/skills` | 2 | 1 | docs:1, other:1 |
 | `client` | 1 | 1 | other:1 |
 | `scripts` | 4 | 1 | script:4 |
@@ -83,6 +83,7 @@ Package: `rest-express`
 - `tests/app-qa-agent.test.ts`: `([^`
 - `tests/app-qa-status-readonly.test.mjs`: `/api/app-qa-agent/scan`, `/api/app-qa-agent/status`
 - `tests/blackroom-remote-control.test.ts`: `/api/blackroom-agent`, `/api/blackroom-agent/analytics/import`, `/api/blackroom-agent/pause`, `/api/blackroom-agent/start`, `/api/blackroom-agent/work-now`, `/blackroom`
+- `tests/clippers-office-area.test.mjs`: `/`, `/api/auth/me`, `/area.css`, `/area.js`
 - `tests/clippers-owned-source-scripts.test.ts`: `/api/clippers/external-closeout-next-action`, `/api/clippers/external-closeout-operator-queue`, `/api/clippers/external-closeout-pack`, `/api/clippers/external-closeout-proof-todo`, `/api/clippers/external-closeout-repair-work-packet`, `/api/clippers/operational-readiness`, `/api/clippers/prepare-external-closeout-pack`, `/api/clippers/prepare-operational-readiness`, `/api/clippers/run-intake-refresh-sweep`, `/api/clippers/run-post-connect-activation-sweep`
 - `tests/developer-autopilot-wiring.test.ts`: `/api/revenue-engine/delivery-workspaces/app-qa-gate`, `/api/revenue-engine/delivery-workspaces/github-handoff`, `/api/revenue-engine/delivery-workspaces/pr-status`, `/api/revenue-engine/delivery-workspaces/release-gate`
 - `tests/harness/agents-world-integrated.tsx`: `/agents-office`
@@ -348,7 +349,7 @@ Package: `rest-express`
 - `client/src/pages/._assistant.tsx` (client-page)
 - `client/src/pages/._dropshipping-ceo.tsx` (client-page)
 - `client/src/pages/agent-chat.tsx` (client-page; 29 symbols, 6 imports)
-- `client/src/pages/agents-office.tsx` (client-page; 173 symbols, 20 imports)
+- `client/src/pages/agents-office.tsx` (client-page; 173 symbols, 21 imports)
 - `client/src/pages/app-qa-agent.tsx` (client-page; 12 symbols, 9 imports)
 - `client/src/pages/assistant.tsx` (client-page; 49 symbols, 7 imports)
 - `client/src/pages/auth.tsx` (client-page; 6 symbols, 8 imports)

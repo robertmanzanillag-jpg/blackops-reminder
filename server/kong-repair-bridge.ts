@@ -4,7 +4,9 @@ import { z } from "zod";
 export const KONG_REPAIR_REPOSITORY = "robertmanzanillag-jpg/kong-nightlife" as const;
 const id = z.string().regex(/^[A-Za-z0-9_.:-]{1,200}$/), sha = z.string().regex(/^[a-f0-9]{40}$/);
 const evidenceSchema = z.object({ route: z.string().max(200).optional(), httpMethod: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]).optional(),
-  httpStatus: z.number().int().min(100).max(599).optional(), errorClass: z.string().max(40), errorCode: z.string().regex(/^[A-Z][A-Z0-9_]{1,39}$/).optional(), message: z.string().max(600),
+  httpStatus: z.number().int().min(100).max(599).optional(), errorClass: z.string().max(40), errorCode: z.union([
+    z.string().regex(/^[A-Z][A-Z0-9_]{1,39}$/), z.string().length(5).regex(/^[0-9]{2}[A-Z0-9]{3}$/),
+  ]).optional(), message: z.string().max(600),
   locations: z.array(z.object({ filePath: z.string().regex(/^(?:server|client|shared)\/[A-Za-z0-9_./-]+\.(?:tsx?|jsx?|mjs|cjs)$/).refine(value => !value.includes("..") && !/(?:node_modules|credentials|secrets|\.env)/i.test(value)), lineNumber: z.number().int().min(1).max(100000), columnNumber: z.number().int().min(1).max(100000).optional() }).strict()).max(3) }).strict();
 export const kongRepairPayloadSchema = z.object({ company: z.literal("kong"), repository: z.literal(KONG_REPAIR_REPOSITORY),
   sourceTaskId: id, errorId: id, fingerprint: z.string().regex(/^[a-f0-9]{64}$/), generation: z.number().int().positive(),
