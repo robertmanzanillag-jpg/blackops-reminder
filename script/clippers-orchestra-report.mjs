@@ -6,9 +6,11 @@ import path from 'node:path';
 import { DESTINATIONS, destinationKey, findDestination, exactPost, localDay } from './clippers-portfolio-metricool.mjs';
 import { readPortfolioRenderManifest } from './clippers-portfolio-render.mjs';
 import { ALL_DISCOVERY_CREATORS, KNOWN_CREATOR_GROUPS } from '../shared/clippers-priority-creators.mjs';
+import { buildViralScout } from '../shared/clippers-viral-scout.mjs';
 const HOUR=3600000, SHA=/^[a-f0-9]{64}$/, ID=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/;
 const hash=value=>createHash('sha256').update(value).digest('hex');
 const digest=value=>hash(JSON.stringify(value));
+const objectRow=value=>!!value&&typeof value==='object'&&!Array.isArray(value);
 const n=value=>Number.isSafeInteger(value)&&value>=0&&value<=Number.MAX_SAFE_INTEGER?value:null;
 const time=(v,now)=>typeof v==='string'&&Number.isFinite(Date.parse(v))&&new Date(v).toISOString()===v&&Date.parse(v)<=now?v:null;
 const codes=value=>Array.isArray(value)?[...new Set(value.filter(v=>typeof v==='string'&&/^[a-zA-Z0-9_.:-]{1,200}$/.test(v)))].slice(0,100):[];
@@ -72,7 +74,7 @@ function discoveryView(receipts,now){
     const growth=paired?views-previousViews:null;
     return {creatorId:latest.creatorId,videoId:latest.videoId,publishedAt:latest.publishedAt,observedAt:latest.observedAt,views,previousObservedAt:prior?.observedAt??null,previousViews,growthViews:growth,growthPerHour:paired?growth/((Date.parse(latest.observedAt)-Date.parse(prior.observedAt))/HOUR):null,label:now-Date.parse(latest.publishedAt)>72*HOUR?'stale_reference':paired&&growth>0?'paired_growth_observed':views===null?'insufficient_metrics':'initial_baseline',rights:'unknown'};
   }).sort((a,b)=>b.observedAt.localeCompare(a.observedAt)).slice(0,200);
-  return {sources,observations:safe.length?observations.length:null,eligibleAssets:safe.length?0:null,rotationSize:14,rotationDays:1,catalogVersion:2,signals,rightsPolicy:'owner_review_required'};
+  return {sources,observations:safe.length?observations.length:null,eligibleAssets:safe.length?0:null,rotationSize:14,rotationDays:1,catalogVersion:2,signals,scout:buildViralScout(safe,new Date(now)),rightsPolicy:'owner_review_required'};
 }
 function creatorSelectionView(raw,now){
  const missing={evaluatedAt:null,contexts:0,assigned:null,heldReasons:['creator_selection_report_unavailable'],preferences:[]};
@@ -189,6 +191,10 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   }catch{}
   const discoveryReceipts=await Promise.all(discoveryFiles.map(async({file,channel})=>{
     const r=await privateOrchestraJson(root,`portfolio-discovery/${file}`,channel?131072:524288);
+    // A malformed optional source row cannot suppress the entire telemetry report.
+    if(objectRow(r.value)&&Array.isArray(r.value.feeds)&&Array.isArray(r.value.observations)){
+      r.value={...r.value,feeds:r.value.feeds.filter(objectRow),observations:r.value.observations.filter(objectRow)};
+    }
     if(channel&&r.value?.schemaVersion===2&&time(r.value.observedAt,at)&&Array.isArray(r.value.feeds)&&r.value.feeds.length===1){
       r.value={...r.value,feeds:r.value.feeds.map(f=>({...f,observedAt:f.status==='observed'?r.value.observedAt:null}))};
     }
@@ -230,7 +236,7 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   const roles=[
     role('supervisor',watchdogAt,artifacts.watchdog,{},watchdogAt?[]:['watchdog_report_unavailable']),
     role('analytics',analyticsEvidenceAt,analyticsEvidenceAt===analyticsAt?artifacts.accountAnalytics:artifacts.state,{storedSnapshots:metrics.length,recentSnapshots:recentMetrics.length,accountsObserved:accounts.filter(a=>a.analytics.status==='observed').length},recentMetrics.length||accounts.some(a=>a.analytics.status==='observed')?[]:['no_verified_metric_observations']),
-    role('trends',discoveryAt,discoveryArtifact,{pairedGrowthSignals:paired},paired?[]:['initial_baseline_or_insufficient_metrics']),
+    role('trends',discoveryAt,discoveryArtifact,{pairedGrowthSignals:paired,...(discovery.scout.status==='no_data'?{}:{researchCandidates:discovery.scout.candidates.length})},paired?[]:['initial_baseline_or_insufficient_metrics']),
     role('streamers',discoveryAt,discoveryArtifact,discovery.observations===null?{}:{observations:discovery.observations},discovery.sources.some(s=>s.status==='observed')?[]:['public_feed_observations_unavailable']),
     role('editor',prepareAt,artifacts.prepare,prepareAt?{prepared:n(prep.prepared)??0,scopedMediaReceipts:confirmedMedia.length}:{},confirmedMedia.length?[]:[prep?.status==='disabled'?'preparation_disabled':'no_reviewed_ready_media']),
     role('checker',prepareAt,artifacts.prepare,prepareAt?{verifiedScopedMedia:confirmedMedia.length}:{},confirmedMedia.length?[]:['rights_or_render_review_required']),

@@ -8,6 +8,7 @@ import express from "express";
 import { chromium } from "playwright";
 import { orchestraFixture } from "./fixtures/clippers-orchestra.mjs";
 import { ALL_DISCOVERY_CREATORS } from "../shared/clippers-priority-creators.mjs";
+import { buildViralScout } from "../shared/clippers-viral-scout.mjs";
 import { launchOfficeUiFixture } from "../script/software-factory-office-ui-fixture.mjs";
 
 test("Clippers own area uses real evidence gates, expires activity, and protects the owner session", async t => {
@@ -94,6 +95,23 @@ test("Clippers own area uses real evidence gates, expires activity, and protects
     assert.equal((await measuredBucket.getByRole("cell").allTextContents()).filter(text => text === "0").length, 4, "measured zero engagement is retained");
     await page.screenshot({ path: path.join(artifacts, `clippers-fixture-accounts-${viewport.width}.png`), fullPage: true });
     await page.getByRole("tab", { name: "Fuentes y tendencias", exact: true }).click();
+    const scout = page.getByTestId('clippers-viral-scout');
+    await scout.getByText('Sin datos recientes para proponer videos. La búsqueda necesita una lectura verificable de las fuentes.', { exact: true }).waitFor();
+    const creator = ALL_DISCOVERY_CREATORS[0], observedAt = new Date(now).toISOString(), publishedAt = new Date(now-12*3600000).toISOString();
+    const sourceUrl = `https://www.youtube.com/feeds/videos.xml?channel_id=${creator.channelId}`;
+    const publicRow = { creatorId: creator.id, channelId: creator.channelId, network:'youtube', videoId:'abcdefghijk', title:'Video de investigación '+ 'título largo '.repeat(20), url:'https://www.youtube.com/watch?v=abcdefghijk', sourceUrl,publishedAt,observedAt,views:100,metricEvidence:'direct_public_feed',permission:'unknown',mayPublish:false };
+    const publicReceipt = (observations, at) => ({schemaVersion:2,observedAt:at,paidSpendUsd:0,permission:'unknown',mayPublish:false,feeds:[{creatorId:creator.id,channelId:creator.channelId,sourceUrl,status:'observed',feedSha256:'a'.repeat(64)}],observations});
+    const previousAt = new Date(now-2*3600000).toISOString();
+    payload.discovery.scout = buildViralScout([publicReceipt([{...publicRow,observedAt:previousAt,views:40}],previousAt),publicReceipt([publicRow],observedAt)],new Date(now));
+    await page.getByTestId('clippers-refresh').click();
+    const video = scout.getByRole('link',{name:publicRow.title,exact:true});
+    await video.waitFor();assert.equal(await video.getAttribute('href'),publicRow.url);assert.equal(await video.getAttribute('target'),'_blank');assert.equal(await video.getAttribute('rel'),'noopener noreferrer');
+    await scout.getByText('Dos muestras: +60 views · 30 por hora',{exact:true}).waitFor();
+    await scout.getByText('Candidato para revisión · permiso de uso pendiente · sin recortar ni publicar',{exact:true}).waitFor();
+    assert.equal(await scout.getByRole('link',{name:'Fuente pública de los datos',exact:true}).getAttribute('href'),sourceUrl);
+    assert.equal(await scout.evaluate(element=>element.scrollWidth<=element.clientWidth+1),true,'long candidate titles wrap inside the source area');
+    await video.scrollIntoViewIfNeeded();
+    await page.screenshot({path:path.join(artifacts,`clippers-fixture-viral-scout-${viewport.width}.png`),fullPage:true});
     await page.getByText(/13 canales prioritarios y una exploración rotativa/).waitFor();
     assert.equal(await page.getByText('Identidad del canal de origen',{exact:true}).count(),20);
     assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true);
@@ -117,6 +135,9 @@ test("Clippers own area uses real evidence gates, expires activity, and protects
     await page.screenshot({ path: path.join(artifacts, `clippers-fixture-learning-${viewport.width}.png`), fullPage: true });
     await page.clock.fastForward(60_000);
     await page.getByText("Sin señal reciente verificada", { exact: true }).waitFor();
+    await page.getByRole('tab',{name:'Fuentes y tendencias',exact:true}).click();
+    await page.getByTestId('clippers-viral-scout').getByText('Lectura anterior; prioridad actual sin confirmar.',{exact:true}).waitFor();
+    await page.getByRole('tab',{name:'Aprendizaje',exact:true}).click();
     assert.equal(await page.getByText(/Comparación vigente · Elegible para revisión/).count(), 0);
     await page.getByText(/Comparación histórica · Elegibilidad sin verificar/).waitFor();
     replyStatus = 503;
