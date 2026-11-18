@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-18T06:02:53.675Z
-Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-portfolio-prepare-20261118`
+Generated: 2026-11-18T06:20:24.425Z
+Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-office-factory-connected-20261118`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1170 | 1068 | 4202 | 615 | 24067 |
+| 1166 | 1066 | 4207 | 615 | 24098 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -33,7 +33,7 @@ Package: `rest-express`
 | `client/src` | 154 | 152 | ui-component:55, client-component:45, client-page:28, client-lib:19 |
 | `script` | 123 | 111 | script:123 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
-| `docs` | 72 | 68 | docs:72 |
+| `docs` | 68 | 66 | docs:68 |
 | `shared` | 29 | 29 | shared:29 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
 | `server/blackroom-team` | 17 | 17 | server:17 |
@@ -396,7 +396,7 @@ Package: `rest-express`
 - `script/clippers-content-learning-ceo.mjs` (script; 85 symbols, 3 imports)
 - `script/clippers-content-local-worker.mjs` (script; 112 symbols, 10 imports)
 - `script/clippers-daily-learning.mjs` (script; 103 symbols, 8 imports)
-- `script/clippers-daily-watchdog.mjs` (script; 87 symbols, 4 imports)
+- `script/clippers-daily-watchdog.mjs` (script; 99 symbols, 6 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
 - `script/clippers-free-local-worker.mjs` (script; 45 symbols, 6 imports)
 - `script/clippers-generate-owned-gap-sources.mjs` (script; 30 symbols, 3 imports)
