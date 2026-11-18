@@ -1,5 +1,5 @@
 import {FactoryApiBudgetError} from "./factory-api-invocation";
-import {guardFactoryOpenAiClient} from "./factory-api-sdk";
+import {snapshotFactoryApiRequest,snapshotFactoryApiRequestOptions,guardFactoryOpenAiClient} from "./factory-api-sdk";
 import { randomUUID } from "node:crypto";
 
 /** Provider order and per-provider ledgers remain secondary constraints. Every
@@ -426,6 +426,8 @@ export function createRoutedOpenAI(options: RoutedClientOptions): ChatLikeClient
   }
 
   async function run(kind: CallKind, body: Record<string, any>, requestOptions?: any): Promise<any> {
+    body=snapshotFactoryApiRequest(kind==="chat"?"chat.completions.create":kind==="responses"?"responses.create":"audio.transcriptions.create",body).body;
+    requestOptions=snapshotFactoryApiRequestOptions(requestOptions);
     const config = aiRouterConfig(env);
     if (!config.enabled) {
       const legacy = guardFactoryOpenAiClient(await legacyClient(),{provider:config.integration?"integration":"openai",env,invoke:options.factoryInvocation,price:options.factoryPricing?(model)=>options.factoryPricing!(config.integration?"integration":"openai",model):undefined});

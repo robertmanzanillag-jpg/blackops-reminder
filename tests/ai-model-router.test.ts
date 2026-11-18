@@ -167,7 +167,7 @@ test("no own key configured: legacy client is monetary guarded without secondary
 test("hosted web search without a verified maximum is held before provider dispatch",async()=>{
  const ledger=new InMemoryAiProviderLedger(),{calls,make}=fakeClients();
  await assert.rejects(createRoutedOpenAI({tier:"repetitive",label:"t",env:KEYS,ledger,makeClient:make}).responses!.create({model:"gpt-4o-mini",input:"find events",tools:[{type:"web_search"}],max_output_tokens:500}),/FACTORY_API_OPERATION_UNPRICED/);
- assert.equal(calls.length,0);assert.equal(ledger.rows[0].costUsd,0);
+ assert.equal(calls.length,0);assert.equal(ledger.rows.length,0);
 });
 
 test("responses API without hosted tools is translated for DeepSeek and returned in Responses shape", async () => {
@@ -192,7 +192,7 @@ test("responses API without hosted tools is translated for DeepSeek and returned
 test("audio without verified usage pricing is held before provider dispatch",async()=>{
  const ledger=new InMemoryAiProviderLedger(),{calls,make}=fakeClients();
  await assert.rejects(createRoutedOpenAI({tier:"standard",label:"t",env:KEYS,ledger,makeClient:make}).audio!.transcriptions.create({model:"whisper-1",file:"x"}),/FACTORY_API_OPERATION_UNPRICED/);
- assert.equal(calls.length,0);assert.equal(ledger.rows[0].costUsd,0);
+ assert.equal(calls.length,0);assert.equal(ledger.rows.length,0);
 });
 
 test("ledger accounting: month-to-date sums settled + reserved rows per provider and enforces the cap", async () => {
@@ -281,7 +281,7 @@ test("BlackOps: router is OFF unless AI_ROUTER_ENABLED=true, even with OPENAI_AP
 test("streaming without complete verified final usage is held and cannot trigger fallback",async()=>{
  const ledger=new InMemoryAiProviderLedger(),{calls,make}=fakeClients({openai:"error"});
  await assert.rejects(createRoutedOpenAI({tier:"standard",label:"t",env:KEYS,ledger,makeClient:make}).chat.completions.create({...chatBody,stream:true,stream_options:{include_usage:true}}),/FACTORY_API_OPERATION_UNPRICED/);
- assert.equal(calls.length,0);assert.equal(ledger.rows[0].costUsd,0);
+ assert.equal(calls.length,0);assert.equal(ledger.rows.length,0);
 });
 
 test("routedText: repetitive prompt goes to DeepSeek and reports provider, model and cost", async () => {

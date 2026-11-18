@@ -14,7 +14,7 @@ function snapshotBody(value:unknown):any{
   return freeze(snapshot);
  }catch{throw new FactoryApiBudgetError("FACTORY_API_REQUEST_UNBOUNDED");}
 }
-function snapshotRequestOptions(value:unknown):Readonly<{signal?:AbortSignal;timeout?:number}>{
+export function snapshotFactoryApiRequestOptions(value:unknown):Readonly<{signal?:AbortSignal;timeout?:number}>{
  try{
   if(value===undefined)return Object.freeze({});
   if(!value||typeof value!=="object"||![null,Object.prototype].includes(Object.getPrototypeOf(value)))throw Error("shape");
@@ -41,13 +41,17 @@ function boundedRequest(path:string,body:any){
   if(!value||typeof value!=='object')return false;
   if(Array.isArray(value))return value.some(containsMedia);
   if(value.type&& !['text','input_text','output_text','message'].includes(value.type))return true;
-  return Object.entries(value).some(([key,value])=>['image_url','file_id','input_audio','file_data','attachments'].includes(key)||containsMedia(value));
+  return Object.entries(value).some(([key,value])=>['image_url','file_id','input_audio','file_data','attachments','id','call_id','tool_call_id','reference_id'].includes(key)||containsMedia(value));
  };
  if(containsMedia(body.messages)||containsMedia(body.input))throw new FactoryApiBudgetError('FACTORY_API_OPERATION_UNPRICED');
  const count=body.n??1;if(count!==1)throw new FactoryApiBudgetError('FACTORY_API_REQUEST_UNBOUNDED');
  const maxOutputTokens=path==="responses.create"?body.max_output_tokens:(body.max_completion_tokens??body.max_tokens);
  const encoded=JSON.stringify(body);if(!encoded)throw new FactoryApiBudgetError('FACTORY_API_REQUEST_UNBOUNDED');
  return {model:String(body.model??''),promptBytes:Buffer.byteLength(encoded),maxOutputTokens};
+}
+export function snapshotFactoryApiRequest(path:string,value:unknown){
+ if(!ALLOWED.has(path))throw new FactoryApiBudgetError("FACTORY_API_OPERATION_UNPRICED");
+ const body=snapshotBody(value);return {body,bounds:boundedRequest(path,body)};
 }
 function usage(path:string,result:any,provider="openai"):FactoryApiUsage{
  if(path==="responses.create"){
@@ -70,8 +74,8 @@ export function guardFactoryOpenAiClient<T extends object>(client:T,options:{pro
   const entries=cache.get(target)??new Map();cache.set(target,entries);if(entries.has(path))return entries.get(path);
   const proxy=new Proxy(target,{get(object,key){const value=Reflect.get(object,key,object);if(typeof key!=='string')return value;const next=path?path+'.'+key:key;
    if(typeof value==='function')return async(body:any,requestOptions?:any)=>{
-    body=snapshotBody(body);requestOptions=snapshotRequestOptions(requestOptions);
-    const bounded=boundedRequest(next,body),env=options.env??process.env;
+    const snapshot=snapshotFactoryApiRequest(next,body);body=snapshot.body;requestOptions=snapshotFactoryApiRequestOptions(requestOptions);
+    const bounded=snapshot.bounds,env=options.env??process.env;
     const price=snapshotPrice(options.price?.(bounded.model)??configuredFactoryApiPrice(options.provider,bounded.model,env.FACTORY_API_PRICING_CONFIG));
     if(price.model!==bounded.model)throw new FactoryApiBudgetError("FACTORY_API_PRICING_UNVERIFIED");
     const invoke=options.invoke??await defaultFactoryApiInvocation();

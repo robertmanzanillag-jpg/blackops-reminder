@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-18T13:03:03.810Z",
+  "generatedAt": "2026-11-18T13:19:26.561Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-office-api-budget-transports-20261118",
   "packageName": "rest-express",
   "scripts": {
@@ -126,18 +126,11 @@
   "totals": {
     "filesVisible": 1213,
     "filesIndexed": 1110,
-    "imports": 4462,
+    "imports": 4463,
     "routes": 623,
-    "symbols": 25154
+    "symbols": 25156
   },
   "directories": {
-    "tests": {
-      "files": 320,
-      "indexed": 316,
-      "kinds": {
-        "test": 320
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -278,6 +271,13 @@
       "indexed": 1,
       "kinds": {
         "shared": 1
+      }
+    },
+    "tests": {
+      "files": 320,
+      "indexed": 316,
+      "kinds": {
+        "test": 320
       }
     },
     "tests/fixtures": {
@@ -22116,12 +22116,15 @@
       "exports": [
         "guardFactoryOpenAiClient",
         "guardFactoryOpenAiFetch",
-        "holdUnpricedGeminiClient"
+        "holdUnpricedGeminiClient",
+        "snapshotFactoryApiRequest",
+        "snapshotFactoryApiRequestOptions"
       ],
       "symbols": [
         "ALLOWED",
         "Env",
         "Invocation",
+        "body",
         "bounded",
         "boundedRequest",
         "cache",
@@ -22155,8 +22158,9 @@
         "responseFields",
         "snapshot",
         "snapshotBody",
+        "snapshotFactoryApiRequest",
+        "snapshotFactoryApiRequestOptions",
         "snapshotPrice",
-        "snapshotRequestOptions",
         "timeout",
         "usage",
         "values",
@@ -39415,6 +39419,7 @@
       "path": "tests/factory-api-request-binding.test.ts",
       "kind": "test",
       "imports": [
+        "../server/ai-model-router",
         "../server/clippers-local-news-translation",
         "../server/factory-api-sdk",
         "./fixtures/factory-api-budget",
