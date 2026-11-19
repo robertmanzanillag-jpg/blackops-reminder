@@ -82,6 +82,9 @@ test('Mac off: orchestra view falls back to the cloud streamer state (valid cont
   assert.equal(s.state, 'held'); assert.ok(s.heldReasons.includes('missing_secret:TWITCH_CLIENT_ID')); assert.ok(!s.heldReasons.includes('mac_worker_offline'));
   assert.equal(fb.roles.find(r => r.stage === 'editor')!.state, 'disconnected');
   assert.ok(fb.accounts.some(a => a.label.startsWith('Miami Streamers')));
+  assert.equal(fb.accounts.length, 5);
+  assert.equal(fb.accounts.find(a => a.key === '6595747:facebook:1198281286708321')?.connection, 'unverified');
+  assert.equal(fb.disconnectedDestinations[0].label, 'New York · TikTok');
   // Through the real read(): no Mac envelope stored -> cloud fallback instead of null.
   const data = new Map<string, string>([['clippers-streamers:o', raw]]);
   const orchestra = createClippersOrchestraState({ owner: () => 'o', now: () => AT, store: async () => ({ read: async (k: string) => data.get(k) ?? null, transact: async () => '' }) });

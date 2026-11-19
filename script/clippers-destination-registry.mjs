@@ -53,3 +53,21 @@ export const publicationDestinationKey = value=>{
   const current=currentDestinationForHistory(value);
   return current?destinationKey(current):null;
 };
+
+/** Read-only grouping for stored cloud and learner keys. Exact receipt paths keep destinationKey. */
+export function canonicalDestinationKey(key) {
+  const parsed = /^(\d+):([a-z]+):(.+)$/.exec(String(key ?? ''));
+  if (!parsed) return key;
+  return publicationDestinationKey({ brandId: Number(parsed[1]), network: parsed[2], account: parsed[3] }) ?? key;
+}
+export function canonicalAccount(brandId, network, account) {
+  const value = String(account ?? '').replace(/^@/, '').toLowerCase();
+  return currentDestinationForHistory({ brandId: Number(brandId), network, account: value })?.account ?? value;
+}
+export function valueForDestination(map, key) {
+  if (!map || typeof map !== 'object') return undefined;
+  const canonical = canonicalDestinationKey(key);
+  if (Object.hasOwn(map, canonical)) return map[canonical];
+  const legacy = Object.keys(map).find(candidate => canonicalDestinationKey(candidate) === canonical);
+  return legacy === undefined ? undefined : map[legacy];
+}

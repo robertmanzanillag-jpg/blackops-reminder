@@ -1,5 +1,5 @@
-import { publicationDestinationKey } from './clippers-destination-registry.mjs';
-import { verifiedExternalSchedules } from './clippers-native-media-receipts.mjs';
+import { publicationDestinationKey, canonicalDestinationKey } from './clippers-destination-registry.mjs';
+import { METRICOOL_API_ORIGIN, verifiedExternalSchedules } from './clippers-native-media-receipts.mjs';
 // Read-only projection of the installed pipeline's private receipts. No provider, rights or publishing API.
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -7,6 +7,7 @@ import { open, realpath, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { DESTINATIONS, destinationKey, findDestination, findPublishDestination, exactPost, localDay } from './clippers-portfolio-metricool.mjs';
 import { readPortfolioRenderManifest } from './clippers-portfolio-render.mjs';
+import { readConfirmedReviewedEditorial, REVIEWED_EDITORIAL } from './clippers-reviewed-editorial.mjs';
 import { ALL_DISCOVERY_CREATORS, KNOWN_CREATOR_GROUPS } from '../shared/clippers-priority-creators.mjs';
 import { buildViralScout } from '../shared/clippers-viral-scout.mjs';
 const HOUR=3600000, SHA=/^[a-f0-9]{64}$/, ID=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/;
@@ -92,6 +93,16 @@ function creatorSelectionView(raw,now){
  return {evaluatedAt:raw.evaluatedAt,contexts:preferences.length,assigned:raw.assigned,heldReasons:codes(raw.heldReasons),preferences};
 }
 async function verifiedRenderBinding(root,delivery,cache,media=[],at=Date.now()){
+  if (delivery.renderClass !== undefined) {
+    if (delivery.renderClass !== REVIEWED_EDITORIAL) return {verified:false};
+    try {
+      const {receipt, asset}=await readConfirmedReviewedEditorial(root,delivery,{now:new Date(at),historical:true});
+      const mediaReady=media.some(row=>findDestination(row)&&destinationKey(row)===destinationKey(asset)&&
+        row.status==='ready'&&row.paidSpendAllowed===false&&row.campaignId===asset.campaignId&&row.sha256===asset.mediaSha256&&
+        row.draftFile===asset.draftFile&&row.renderReceiptSha256===asset.renderReceiptSha256);
+      return {verified:mediaReady,receiptSha256:asset.renderReceiptSha256,renderedAt:receipt.renderedAt};
+    } catch { return {verified:false}; }
+  }
   if(!findDestination(delivery)||!ID.test(delivery.id??'')||!ID.test(delivery.policyVersion??'')||!SHA.test(delivery.mediaSha256??''))return {verified:false};
   const key=destinationKey(delivery),cacheKey=`${key}:${delivery.id}:${delivery.policyVersion}:${delivery.mediaSha256}`;
   if(cache.has(cacheKey))return cache.get(cacheKey);
@@ -266,7 +277,7 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   });
   const confirmedMedia=Array.isArray(artifacts.media.value)?artifacts.media.value.filter(r=>findDestination(r)&&r.status==='ready'&&r.paidSpendAllowed===false&&SHA.test(r.sha256??'')&&SHA.test(r.renderReceiptSha256??'')):[];
   const eligibleComparisons=state?comparisons.filter(c=>c.eligible&&DESTINATIONS.some(d=>destinationKey(d)===c.destination)).length:null;
-  const promotions=state?state.history.filter(h=>h.action==='activate'&&DESTINATIONS.some(d=>destinationKey(d)===h.destination)&&SHA.test(h.fromManifestSha??'')&&SHA.test(h.toManifestSha??'')&&time(h.at,at)).length:null;
+  const promotions=state?state.history.filter(h=>h.action==='activate'&&DESTINATIONS.some(d=>destinationKey(d)===canonicalDestinationKey(h.destination))&&SHA.test(h.fromManifestSha??'')&&SHA.test(h.toManifestSha??'')&&time(h.at,at)).length:null;
   const role=(stage,when,artifact,outputs={},held=[])=>({id:`clippers-${stage}`,stage,state:!when?'disconnected':at-Date.parse(when)>26*HOUR?'stale':held.length?'held':Object.values(outputs).some(n=>n>0)?'completed':'idle',evidenceAt:when,activeUntil:null,lastRunAt:when,heartbeatAt:null,nextDueAt:stage==='health'?null:nextDue,runId:artifact?.sha??null,evidenceIds:when&&artifact?.sha?[`clippers:${artifact.sha}:${stage}`]:[],outputs,heldReasons:held,lifePenaltyExempt:true,career:emptyCareer(),outcomes:[]});
   const discoveryArtifact=discoveryReceipts.filter(r=>r.value?.observedAt===discoveryAt).at(-1);
   const queueMetricAt=metrics.map(m=>time(m.capturedAt,at)).filter(Boolean).sort().at(-1)??null;
@@ -284,7 +295,16 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
     role('learning',reportAt,artifacts.learning,state?{eligibleComparisons:eligibleComparisons,qualifiedCandidates:qualifications.length,promotions}:{},qualifications.length?[]:['three_current_independent_comparisons_required']),
     role('health',watchdogAt,artifacts.watchdog,{},sourceState==='connected'?[]:['runtime_evidence_unavailable_or_stale']),
   ];
-  if(externalAt&&(!reportAt||externalAt>reportAt)&&(!weeklyAt||externalAt>weeklyAt)){const p=roles.find(r=>r.stage==='publisher');p.evidenceAt=externalAt;p.lastRunAt=externalAt;p.runId=artifacts.external.sha;p.evidenceIds=[`clippers:${artifacts.external.sha}:publisher`];p.heartbeatAt=null;p.state=at-Date.parse(externalAt)>26*HOUR?'stale':'completed';p.heldReasons=[];p.outputs={confirmed:accounts.reduce((n,a)=>n+(a.confirmedScheduledOrPublished??0),0),externalOwnerUiObservations:external.length};}
+  if(externalAt&&(!reportAt||externalAt>reportAt)&&(!weeklyAt||externalAt>weeklyAt)){
+    const p=roles.find(r=>r.stage==='publisher');
+    const externalMetricoolApiObservations=external.filter(row=>row.origin===METRICOOL_API_ORIGIN).length;
+    p.evidenceAt=externalAt;p.lastRunAt=externalAt;p.runId=artifacts.external.sha;
+    p.evidenceIds=[`clippers:${artifacts.external.sha}:publisher`];p.heartbeatAt=null;
+    p.state=at-Date.parse(externalAt)>26*HOUR?'stale':'completed';p.heldReasons=[];
+    p.outputs={confirmed:accounts.reduce((n,a)=>n+(a.confirmedScheduledOrPublished??0),0),
+      externalOwnerUiObservations:external.length-externalMetricoolApiObservations,
+      ...(externalMetricoolApiObservations ? {externalMetricoolApiObservations} : {})};
+  }
   if(weeklyIsNewer&&weeklyReceipts.length)roles.find(r=>r.stage==='publisher').state='completed';
   const outcomes=(stage,items)=>{
     const target=roles.find(r=>r.stage===stage);

@@ -60,11 +60,24 @@ export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new 
       const outcome={destination:destinationKey(raw),assetId:typeof raw.id==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,99}$/.test(raw.id)?raw.id:'unverified_asset',scheduledAt:raw.scheduledAt,status:'held',reason:null};report.outcomes.push(outcome);
       if(!within()){outcome.reason='weekly_cycle_deadline';break;}
       if(counts.get(destinationKey(raw)+':'+raw.id)!==1){outcome.reason='duplicate_asset_identity';continue;}
-      if(external.some(r=>publicationDestinationKey(r.destination)===destinationKey(raw)&&(r.assetId===raw.id||r.sha256===raw.mediaSha256||r.mediaUrl===raw.mediaUrl))){outcome.reason='external_owner_ui_schedule_observed_no_replay';continue;}
+      const observed=external.find(r=>publicationDestinationKey(r.destination)===destinationKey(raw)&&
+        (r.assetId===raw.id||r.sha256===raw.mediaSha256||r.mediaUrl===raw.mediaUrl));
+      if(observed){outcome.reason=`${observed.origin}_schedule_observed_no_replay`;continue;}
       let item=await validateApprovedClippersAsset(raw,root,current(),receipts,state,window);
       if(!item){outcome.reason='weekly_asset_rights_media_or_render_unverified';continue;}
-      if(external.some(row=>externalScheduleCollision({...row,destination:currentDestinationForHistory(row.destination)},item))||state.deliveries.some(row=>weeklyDeliveryCollision({...row,...currentDestinationForHistory(row)},item)) || legacy.some(row=>Number(row.metricoolBlogId)===item.brandId&&publicationDestinationKey({brandId:Number(row.metricoolBlogId),network:item.network,account:String(row.account??'').replace(/^@/,'').toLowerCase()})===destinationKey(item)&&
-          (row.sha256===item.mediaSha256||row.mediaSha256===item.mediaSha256||row.mediaUrl===item.mediaUrl||row.sourceUrl===item.sourceUrl||(canonicalSourceIdentity(row.sourceUrl)&&canonicalSourceIdentity(row.sourceUrl)===canonicalSourceIdentity(item.sourceUrl))))){outcome.reason='duplicate_or_overlapping_delivery';continue;}
+      const sourceIdentity=canonicalSourceIdentity(item.sourceUrl);
+      const exactDestinationOnly=item.weeklySourceProof?.reuseScope==='exact_destination_only';
+      const legacyCollision=legacy.some(row=>{
+        const scoped=Number(row.metricoolBlogId)===item.brandId&&publicationDestinationKey({
+          brandId:Number(row.metricoolBlogId),network:item.network,account:String(row.account??'').replace(/^@/,'').toLowerCase(),
+        })===destinationKey(item);
+        return (scoped||exactDestinationOnly)&&(row.sha256===item.mediaSha256||row.mediaSha256===item.mediaSha256||
+          row.mediaUrl===item.mediaUrl||row.sourceUrl===item.sourceUrl||(sourceIdentity&&canonicalSourceIdentity(row.sourceUrl)===sourceIdentity));
+      });
+      if(external.some(row=>externalScheduleCollision({...row,destination:currentDestinationForHistory(row.destination)},item))||
+          state.deliveries.some(row=>weeklyDeliveryCollision({...row,...currentDestinationForHistory(row)},item))||legacyCollision){
+        outcome.reason='duplicate_or_overlapping_delivery';continue;
+      }
       const day=localDay(new Date(item.scheduledAt));
       const existing=state.deliveries.filter(row=>findDestination(row)&&publicationDestinationKey(row)===destinationKey(item)&&localDay(new Date(row.scheduledAt))===day);
       if(existing.some(row=>!['scheduled','published'].includes(row.status))){outcome.reason='prior_schedule_outcome_unreconciled';continue;}

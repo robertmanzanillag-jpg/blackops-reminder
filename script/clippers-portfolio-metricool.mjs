@@ -4,7 +4,8 @@ const API = 'https://app.metricool.com';
 const MCP = 'https://ai.metricool.com/mcp';
 export const TIME_ZONE = 'America/New_York';
 export const DAILY_LIMIT = 5;
-export { DESTINATIONS, DISCONNECTED_BRAND, findDestination, findPublishDestination, destinationKey } from './clippers-destination-registry.mjs';
+export { DESTINATIONS, DISCONNECTED_BRAND, findDestination, findPublishDestination, destinationKey,
+  canonicalDestinationKey, canonicalAccount, valueForDestination } from './clippers-destination-registry.mjs';
 import { DESTINATIONS, findDestination, findPublishDestination, destinationKey, verifyCurrentIdentity } from './clippers-destination-registry.mjs';
 export const localHour = time => new Intl.DateTimeFormat('en-US', {timeZone: TIME_ZONE, hour:'2-digit', hourCycle:'h23'}).format(new Date(time));
 export function localDay(time) {
@@ -26,6 +27,13 @@ export function exactPost(value, destination) {
     return { id: match[1], url: 'https://www.' + (network === 'tiktok' ? 'tiktok.com' : 'facebook.com') + canonicalPath };
   } catch { return null; }
 }
+function tiktokTitle(caption) {
+  const firstLine = typeof caption === 'string' ? caption.trim().split(/[\r\n\u2028\u2029]/, 1)[0].trim() : '';
+  const title = [...firstLine].slice(0, 80).join('').trimEnd();
+  if (!title) throw new Error('metricool_tiktok_title_required');
+  return title;
+}
+
 export function providerTimestamp(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/.test(value)) return null;
   const date = new Date(value);
@@ -280,7 +288,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
       if (!(await destinationSettings(destination)).canPublish) throw new Error('destination_publish_permission_missing');
       const networkOptions = destination.network === 'facebook'
         ? { facebookData: { type: 'REEL' } }
-        : { tiktokData: { privacyOption: 'PUBLIC_TO_EVERYONE', autoAddMusic: false,
+        : { tiktokData: { title: tiktokTitle(item.caption), privacyOption: 'PUBLIC_TO_EVERYONE', autoAddMusic: false,
           commercialContentThirdParty: item.thirdPartyCommercial === true } };
       const post = {
         autoPublish: true, draft: false, providers: [{ network: destination.network }],
