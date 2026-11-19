@@ -62,7 +62,7 @@ export async function collectClippersAccountAnalytics({workspaceRoot,now=new Dat
     }
   }finally{clearTimeout(timer);}
   const report={schemaVersion:1,adapterContract:'utc-local-v1',date:localDay(now),generatedAt:now.toISOString(),readOnly:true,paidSpendUsd:0,accounts,
-    deniedBrandIds:[6431692,6475033,6585226],disconnected:[{brandId:6595747,reason:'destination_not_connected'}],
+    deniedBrandIds:[6431692,6475033,6585226],disconnected:[{brandId:6595747,network:'tiktok',reason:'destination_not_connected'}],
     notice:'Whole-account seven-day source analytics retain actual observation age; not controlled queue experiments, rights approval or publication proof.'};
   const directory=path.join(root,'reports/clippers-account-analytics');await mkdir(directory,{recursive:true,mode:0o700});
   const info=await lstat(directory);if(!info.isDirectory()||info.isSymbolicLink()||(info.mode&0o077)||(process.getuid&&info.uid!==process.getuid())||await realpath(directory)!==directory)throw Error('analytics_private_directory_required');

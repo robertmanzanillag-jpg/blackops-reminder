@@ -8,13 +8,14 @@ export const CURRENT_IDENTITY_PINS = Object.freeze([
   ['6431687', 'tiktok', 'streamersclipusa', 'de49eae7e4a6ecd29890db666526c020ced776e79440d4edcb23f5258e428e42'],
   ['6591612', 'tiktok', 'news305miami', 'b194c23510dc6214323567d35af20232c1273b502205cec9ec2e43afe5c6b237'],
   ['6591612', 'facebook', '1193011863901514', '476b008ebd56453fa0d9ff9ee2a76bbc5f5d61e9bcbd0f27b8ab54766c3a9147'],
+  ['6595747', 'facebook', '1198281286708321', 'f5111cde9a7f630dd46ca96282a832e6d06cd948d8e4447d84db131a122afced'],
 ].map(([brandId,network,account,providerIdSha256]) => Object.freeze({brandId:Number(brandId),network,account,providerIdSha256,ownerSha256})));
 export const DESTINATIONS = Object.freeze(CURRENT_IDENTITY_PINS.map(({brandId,network,account})=>Object.freeze({brandId,network,account})));
 export const HISTORICAL_DESTINATIONS = Object.freeze([
   Object.freeze({brandId:6431685,network:'tiktok',account:'streamersclips'}),
   Object.freeze({brandId:6591612,network:'tiktok',account:'ynb4b6r6'}),
 ]);
-// NY has a stored Facebook ID, but no confirmed current connection. Never admit it.
+// NY TikTok remains disconnected. Facebook was positively confirmed on 2026-11-19.
 export const DISCONNECTED_BRAND = 6595747;
 export const destinationKey = ({brandId,network,account}) => [brandId,network,account].join(':');
 const matches = (d,value)=>d.brandId===value?.brandId&&d.network===value?.network&&d.account===value?.account;

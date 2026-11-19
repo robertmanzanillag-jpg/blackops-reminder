@@ -59,10 +59,10 @@ const receipt = item => ({
 });
 const forbidden = () => assert.fail('unexpected provider request');
 
-test('empty workspace reports four honest shortages and disconnected brand without calling provider', async t => {
+test('empty workspace reports exact current shortages and disconnected TikTok NY without calling provider', async t => {
   const f = await setup(t);
   const result = await runClippersDailyLearning({ workspaceRoot: f.root, now: NOW, adapter: new Proxy({}, { get: forbidden }) });
-  assert.deepEqual(result.destinations.map(d => d.shortfall), [5, 5, 5, 5]);
+  assert.deepEqual(result.destinations.map(d => d.shortfall), DESTINATIONS.map(()=>5));
   assert.deepEqual(result.disconnected.map(d => d.brandId), [6595747]);
   assert.equal(result.observations, 0);
   assert.equal(result.rendererPolicyBinding, 'required_for_experiments_and_candidate_versions');
@@ -348,7 +348,7 @@ test('a destination schedules at most five distinct, freshest eligible items', a
   } });
   assert.deepEqual(calls, ['item-5', 'item-4', 'item-3', 'item-2', 'item-1']);
   assert.equal(report.destinations[0].shortfall, 0);
-  assert.deepEqual(report.destinations.slice(1).map(row => row.shortfall), [5, 5, 5]);
+  assert.deepEqual(report.destinations.slice(1).map(row => row.shortfall), DESTINATIONS.slice(1).map(()=>5));
 });
 
 test('a normalized provider video must match the approved hash and never receives the account credential', async () => {

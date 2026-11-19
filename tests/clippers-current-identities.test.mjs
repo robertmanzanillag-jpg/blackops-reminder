@@ -9,10 +9,11 @@ const sha=v=>createHash('sha256').update(String(v)).digest('hex');
 const destination=DESTINATIONS[0];
 const pin={...destination,ownerSha256:sha('12'),providerIdSha256:sha('synthetic-account-id')};
 const detail=()=>({id:destination.brandId,ownerUserId:'12',networksData:{tiktokData:{username:destination.account,providerUserId:'synthetic-account-id'}}});
-test('exact four current tuples; historical aliases validate receipts but create no destinations or slots',()=>{
- assert.equal(DESTINATIONS.length,4);assert.equal(new Set(DESTINATIONS.map(d=>d.brandId+':'+d.network)).size,4);
+test('exact five current tuples; historical aliases validate receipts but create no destinations or slots',()=>{
+ assert.equal(DESTINATIONS.length,5);assert.equal(new Set(DESTINATIONS.map(d=>d.brandId+':'+d.network)).size,5);
  for(const old of HISTORICAL_DESTINATIONS){assert.deepEqual(findDestination(old),old);assert.equal(findPublishDestination(old),undefined);assert.equal(publicationDestinationKey(old),publicationDestinationKey(DESTINATIONS.find(d=>d.brandId===old.brandId&&d.network===old.network)));}
- assert.equal(findDestination({brandId:6595747,network:'facebook',account:'1198281286708321'}),undefined);
+ assert.ok(findPublishDestination({brandId:6595747,network:'facebook',account:'1198281286708321'}));
+ assert.equal(findPublishDestination({brandId:6595747,network:'tiktok',account:'newyorknews'}),undefined);
  assert.equal(findPublishDestination({...destination,brandId:String(destination.brandId)}),undefined);
 });
 test('reviewed provider and owner hashes bind scoped response; handle alone never authorizes',()=>{

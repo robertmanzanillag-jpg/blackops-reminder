@@ -48,7 +48,7 @@ export type ClippersOrchestraStatus = {
 };
 
 const roleStages = ['supervisor','analytics','trends','streamers','editor','checker','publisher','learning','health'] as const;
-const currentTargetKeys = ['6431685:tiktok:streamersus','6431687:tiktok:streamersclipusa','6591612:tiktok:news305miami','6591612:facebook:1193011863901514'];
+const currentTargetKeys = ['6431685:tiktok:streamersus','6431687:tiktok:streamersclipusa','6591612:tiktok:news305miami','6591612:facebook:1193011863901514','6595747:facebook:1198281286708321'];
 // Retained authenticated snapshots remain parseable; mixed old/new sets are invalid.
 const historicalTargetKeys = ['6431685:tiktok:streamersclips','6431687:tiktok:streamersclipusa','6591612:tiktok:ynb4b6r6','6591612:facebook:1193011863901514'];
 const denied = ['6431692','6475033','6585226'];
@@ -79,8 +79,8 @@ export function parseClippersOrchestraStatus(value: unknown, now=Date.now()): Cl
   if(!keys(tr,['state','lastIngestAt','maxAgeMs']) || !states.includes(tr.state) || !nullableTime(tr.lastIngestAt,now) || tr.maxAgeMs!==90_000)return null;
   if(!Array.isArray(v.disconnectedDestinations) || v.disconnectedDestinations.length!==1 || !keys(v.disconnectedDestinations[0],['brandId','label','reason']) ||
     v.disconnectedDestinations[0].brandId!=='6595747' || !text(v.disconnectedDestinations[0].label) || v.disconnectedDestinations[0].reason!=='destination_not_connected')return null;
-  if(!Array.isArray(v.accounts) || v.accounts.length!==4 || new Set(v.accounts.map((a:any)=>a?.key)).size!==4)return null;
-  const targetKeys=[currentTargetKeys,historicalTargetKeys].find(set=>set.every(k=>v.accounts.some((a:any)=>a?.key===k)));
+  if(!Array.isArray(v.accounts) || ![4,5].includes(v.accounts.length) || new Set(v.accounts.map((a:any)=>a?.key)).size!==v.accounts.length)return null;
+  const targetKeys=[currentTargetKeys,historicalTargetKeys].find(set=>set.length===v.accounts.length&&set.every(k=>v.accounts.some((a:any)=>a?.key===k)));
   if(!targetKeys)return null;
   for(const a of v.accounts){
     if(!keys(a,['key','brandId','network','account','label','connection','observedAt','dailyTarget','eligibleAssets','confirmedScheduledOrPublished','shortfall','heldReasons','activeVersion','policyStatus','metricAgeBuckets',...(a.analytics===undefined?[]:['analytics'])]) ||
