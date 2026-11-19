@@ -132,3 +132,11 @@ test('auto-publish flag pre-approves rows but is off by default', async () => {
   await runStreamerDiscovery({ env: { ...ENV, CLIPPERS_STREAMER_AUTO_PUBLISH: 'true' }, now: NOW, fetch: mockFetch().fn, store: memoryStore(), queue, owner: 'o' });
   assert.ok([...queue.rows.values()].every(r => r.status === 'approved' && r.input.approvalMode === 'auto_publish_flag'));
 });
+
+test('failure streak counts code failures only, not missing secrets', async () => {
+  const store = memoryStore();
+  const broken = async () => ({ ok: false, status: 500, json: async () => ({}) });
+  const env = { TWITCH_CLIENT_ID: 'a', TWITCH_CLIENT_SECRET: 'b' };
+  for (let i = 1; i <= 3; i++) assert.equal((await runStreamerDiscovery({ env, now: NOW + i, fetch: broken, store, queue: memoryQueue(), owner: 'o' })).state.failureStreak, i);
+  assert.equal((await runStreamerDiscovery({ env: {}, now: NOW + 9, fetch: broken, store, queue: memoryQueue(), owner: 'o' })).state.failureStreak, 0);
+});

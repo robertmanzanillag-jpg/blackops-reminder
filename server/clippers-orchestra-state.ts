@@ -55,7 +55,15 @@ export function createClippersOrchestraState(options:{owner:()=>string;store:()=
   }
   async function read(){
     const at=now(),stored=saved(await (await options.store()).read(namespace(options.owner())),at);
-    if(!stored)return null;
+    if(!stored){
+      // Mac off / never reported: fall back to the cloud streamer job state stored in PostgreSQL.
+      try{const {cloudFallbackReport}=await import('./clippers-streamers-status');const {STREAMER_STATE_NAMESPACE}=await import('../script/clippers-streamer-discovery.mjs');
+        const fallback=cloudFallbackReport(await (await options.store()).read(STREAMER_STATE_NAMESPACE(options.owner())),at);
+        if(!fallback)return null;
+        let company:CompanyState|undefined;try{company=await options.readCompany?.();}catch{}
+        for(const role of fallback.roles)role.career=clippersCareerView(company,role.id);
+        return fallback;}catch{return null;}
+    }
     const report=structuredClone(stored.report),age=(at-Date.parse(stored.receivedAt));
     report.generatedAt=new Date(at).toISOString();
     report.transport={state:age>=0&&age<=90000?'connected':'stale',lastIngestAt:stored.receivedAt,maxAgeMs:90000};

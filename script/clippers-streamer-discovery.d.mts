@@ -1,4 +1,4 @@
-export interface StreamerState { version: 1; updatedAt: string | null; lastRun: any; creators: Record<string, any>; takedowns: any[]; candidates: any[]; signals: any[]; cityPages?: any[] }
+export interface StreamerState { version: 1; failureStreak?: number; updatedAt: string | null; lastRun: any; creators: Record<string, any>; takedowns: any[]; candidates: any[]; signals: any[]; cityPages?: any[] }
 export declare const STREAMER_SECRET_NAMES: readonly string[];
 export declare const STREAMER_APPROVAL_ACTION: string;
 export declare function STREAMER_STATE_NAMESPACE(owner: string): string;

@@ -326,6 +326,9 @@ export async function runStreamerDiscovery({ env = process.env, now = Date.now()
       needsLocalDownload: state.candidates.filter(c => c.download?.mode === 'needs_local_download' && c.approval?.status === 'approved').length,
       takedownsOpen: state.takedowns.filter(t => !t.removedAt).length };
     report.heldReasons = [...new Set(heldReasons)];
+    // Code failures only (API/parse errors). Missing secrets are an owner action, never a code failure.
+    state.failureStreak = report.errors.length && report.status !== 'skipped_missing_secrets' ? (state.failureStreak ?? 0) + 1 : 0;
+    report.failureStreak = state.failureStreak;
     state.lastRun = report;
     return JSON.stringify(state);
   });

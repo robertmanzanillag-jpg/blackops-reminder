@@ -62,6 +62,8 @@ const ROLE = /^[a-z][a-z0-9:-]{1,63}$/;
 export const SELF_HEAL_ALLOWLIST = {
   "github:FAILING_DEFAULT_BRANCH": { assignee: "github" },
   "code:PR_FAILING_CHECKS": { assignee: "code" },
+  // Cloud streamer discovery failing on code (3+ consecutive runs). Missing keys are data absence, never an order.
+  "clippers-streamers:STREAMER_DISCOVERY_FAILING": { assignee: "code" },
 } as const;
 type AllowKey = keyof typeof SELF_HEAL_ALLOWLIST;
 
@@ -74,7 +76,7 @@ export const SELF_HEAL_DATA_ABSENCE_CODES = new Set([
 
 const SEVERITY: Record<string, number> = {
   HIGH_RISK_AUTONOMY: 4,
-  FAILING_DEFAULT_BRANCH: 3, PR_FAILING_CHECKS: 3, PR_CONFLICTED: 3, RECORDED_FAILURE: 3, COLLECTION_EXCEEDS_BOOKED: 3, REPOSITORIES_UNREADABLE: 3, INVALID_SOURCE_VALUES: 3,
+  FAILING_DEFAULT_BRANCH: 3, PR_FAILING_CHECKS: 3, STREAMER_DISCOVERY_FAILING: 3, PR_CONFLICTED: 3, RECORDED_FAILURE: 3, COLLECTION_EXCEEDS_BOOKED: 3, REPOSITORIES_UNREADABLE: 3, INVALID_SOURCE_VALUES: 3,
   PR_NEEDS_REVIEW: 2, CHECKS_UNREADABLE: 2, WORKFLOW_UNREADABLE: 2, REPOSITORY_UNREADABLE: 2, REPOSITORY_ARCHIVED: 2, SCHEDULE_UNVERIFIED: 2, SAVED_RUN_TIME_PASSED: 2, DUPLICATE_SCOPE: 2,
 };
 export const selfHealSeverity = (code: string) => SELF_HEAL_DATA_ABSENCE_CODES.has(code) ? 0 : SEVERITY[code] ?? 1;
@@ -122,6 +124,14 @@ export function observeRoleAudits(journal: unknown): SelfHealObservedAudit[] {
     out.push({ role: job.role, jobId: job.id, completedAt: job.completedAt, status: job.status, completeCoverage, artifactId: typeof job.artifactId === "string" ? job.artifactId : "", findings, records });
   }
   return out.sort((a, b) => Date.parse(a.completedAt) - Date.parse(b.completedAt) || a.jobId.localeCompare(b.jobId));
+}
+
+/** Only the cloud streamer role may be injected, with well-formed codes/records; sorted like the journal. */
+const EXTRA_ROLES = new Set(["clippers-streamers"]);
+function mergeAudits(base: SelfHealObservedAudit[], extra: readonly SelfHealObservedAudit[] = []): SelfHealObservedAudit[] {
+  const ok = extra.filter(a => a && EXTRA_ROLES.has(a.role) && (a.status === "completed" || a.status === "blocked") && typeof a.jobId === "string" && Number.isFinite(Date.parse(a.completedAt)) &&
+    Array.isArray(a.findings) && a.findings.every(f => CODE.test(f.code) && (f.recordId === null || RECORD.test(f.recordId))));
+  return [...base.filter(a => !EXTRA_ROLES.has(a.role)), ...ok].sort((a, b) => Date.parse(a.completedAt) - Date.parse(b.completedAt) || a.jobId.localeCompare(b.jobId));
 }
 
 const latestByRole = (audits: readonly SelfHealObservedAudit[]) => {
@@ -188,6 +198,8 @@ export function selfHealOrderText(marker: Pick<SelfHealOrderMarker, "role" | "co
   const head = `[Auto-reparación de la oficina · intento ${marker.attempt}/${SELF_HEAL_MAX_ATTEMPTS}] Hallazgo ${marker.role}:${marker.code} (registro ${marker.recordId.slice(0, 16)}).`;
   const what = marker.code === "FAILING_DEFAULT_BRANCH"
     ? ` La última ejecución de Actions en la rama por defecto de ${SELF_HEAL_REPOSITORY} terminó en fallo.`
+    : marker.code === "STREAMER_DISCOVERY_FAILING"
+    ? ` Falla script/clippers-streamer-discovery.mjs (3+ ejecuciones).`
     : ` Checks fallidos en el PR borrador #${marker.prNumber} de ${SELF_HEAL_REPOSITORY}.`;
   return `${head}${what} Reproduce el fallo con las pruebas existentes, corrige la causa mínima dentro del alcance de escritura y añade una prueba de regresión. No cambies workflows, dependencias, secretos, permisos ni presupuestos. Termina en PR borrador; fusionar es decisión del dueño.`;
 }
@@ -326,7 +338,9 @@ function mirror(company: CompanyState, state: SelfHealState): CompanyOrder[] {
  * when the credit pacer is present, at most `fundableOrders` minus the orders that
  * are still waiting for the factory (their cost is not spent yet), then mirrors the evidence.
  */
-export function planSelfHeal(input: { state: unknown; company: CompanyState; journal: unknown; owner: string; now: number; maxPerDay: number; fundableOrders?: number; maxOpenOrders?: number }): { state: SelfHealState; company: CompanyState; created: CompanyOrder[] } {
+export function planSelfHeal(input: { state: unknown; company: CompanyState; journal: unknown; owner: string; now: number; maxPerDay: number; fundableOrders?: number; maxOpenOrders?: number;
+  /** Already-normalized audits from outside the role-work journal (cloud Clippers streamer job). */
+  extraAudits?: readonly SelfHealObservedAudit[] }): { state: SelfHealState; company: CompanyState; created: CompanyOrder[] } {
   const { owner, now } = input;
   const maxOpen = input.maxOpenOrders ?? SELF_HEAL_MAX_OPEN_ORDERS;
   if (!validCap(input.maxPerDay) || (input.fundableOrders !== undefined && !(Number.isSafeInteger(input.fundableOrders) && input.fundableOrders >= 0)) ||
@@ -334,7 +348,7 @@ export function planSelfHeal(input: { state: unknown; company: CompanyState; jou
   if (!Number.isFinite(now)) throw Error("SELF_HEAL_CLOCK_INVALID");
   const iso = new Date(now).toISOString(), today = day(now);
   const state = parseSelfHealState(input.state, owner);
-  const audits = observeRoleAudits(input.journal), latest = latestByRole(audits);
+  const audits = mergeAudits(observeRoleAudits(input.journal), input.extraAudits), latest = latestByRole(audits);
   // 1. Advance open entries; escalated ones clear when the owner fixed the problem.
   let entries = state.entries.map(entry => {
     if (entry.status === "escalated") {
@@ -495,6 +509,8 @@ function keepOpenOrders(created: CompanyOrder[], existing: CompanyOrder[]): Comp
 /** Office worker tick, run after the daily role audits. One durable council
  * transaction; the callback is pure so a CAS replay is harmless. */
 export function createSelfHealRunner(options: { council: OfficeCouncil; owner: string; maxPerDay: number; now?: () => number; maxOpenOrders?: number;
+  /** Extra normalized audits read before the transaction (cloud streamer job). A read failure adds none. */
+  extraAudits?: () => Promise<SelfHealObservedAudit[]>;
   /** Credit pacer: how many orders today's allowance can still fund (read before the transaction). */
   fundableOrders?: () => Promise<number> }) {
   if (typeof options.owner !== "string" || !options.owner.trim() || typeof options.council?.updateOfficeExecution !== "function") throw Error("SELF_HEAL_CONFIGURATION_INVALID");
@@ -506,8 +522,9 @@ export function createSelfHealRunner(options: { council: OfficeCouncil; owner: s
     const at = now();
     // A pacer read failure opens no new orders (open entries still advance).
     const fundableOrders = options.fundableOrders ? await options.fundableOrders().then(n => Math.max(0, Math.floor(n)), () => 0) : undefined;
+    const extraAudits = options.extraAudits ? await options.extraAudits().catch(() => []) : [];
     await options.council.updateOfficeExecution((execution, company) => {
-      const result = planSelfHeal({ state: execution.selfHeal, company, journal: execution.roleWork, owner: options.owner, now: at, maxPerDay: options.maxPerDay, ...(options.maxOpenOrders !== undefined ? { maxOpenOrders: options.maxOpenOrders } : {}), ...(fundableOrders !== undefined ? { fundableOrders } : {}) });
+      const result = planSelfHeal({ state: execution.selfHeal, company, journal: execution.roleWork, owner: options.owner, now: at, maxPerDay: options.maxPerDay, extraAudits, ...(options.maxOpenOrders !== undefined ? { maxOpenOrders: options.maxOpenOrders } : {}), ...(fundableOrders !== undefined ? { fundableOrders } : {}) });
       created = result.created.length;
       // Same established pattern as the factory career sweep: company changes
       // are committed in the same transaction as the office execution ledger.

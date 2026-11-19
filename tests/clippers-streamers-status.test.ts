@@ -48,3 +48,44 @@ test('local-news sender is retired for the repurposed brands unless explicitly r
     fetch: async () => { throw new Error('no network'); } } as any);
   assert.equal(r.status, 'paused'); assert.equal(r.reason, LOCAL_NEWS_SENDER_RETIRED_REASON);
 });
+
+import { cloudFallbackReport, streamerSelfHealAudits, STREAMER_SELF_HEAL_RECORD } from '../server/clippers-streamers-status';
+import { parseClippersOrchestraStatus } from '../shared/clippers-orchestra';
+import { planSelfHeal, isValidSelfHealOrder } from '../server/office-self-heal';
+import { emptyCompanyState } from '../shared/agent-company';
+import { createClippersOrchestraState } from '../server/clippers-orchestra-state';
+
+test('Mac off: orchestra view falls back to the cloud streamer state (valid contract, real reason)', async () => {
+  assert.equal(cloudFallbackReport(null, AT), null);
+  const raw = stateWith({ at: '2026-11-19T14:30:00.000Z', status: 'skipped_missing_secrets', heldReasons: ['missing_secret:TWITCH_CLIENT_ID'], errors: [], counts: { candidates: 0 } },
+    { cityPages: [{ brandId: '6591612', city: 'miami', name: 'Miami Streamers', status: 'named' }] });
+  const fb = cloudFallbackReport(raw, AT)!;
+  assert.ok(fb && parseClippersOrchestraStatus(fb, AT));
+  const s = fb.roles.find(r => r.stage === 'streamers')!;
+  assert.equal(s.state, 'held'); assert.ok(s.heldReasons.includes('missing_secret:TWITCH_CLIENT_ID')); assert.ok(!s.heldReasons.includes('mac_worker_offline'));
+  assert.equal(fb.roles.find(r => r.stage === 'editor')!.state, 'disconnected');
+  assert.ok(fb.accounts.some(a => a.label.startsWith('Miami Streamers')));
+  // Through the real read(): no Mac envelope stored -> cloud fallback instead of null.
+  const data = new Map<string, string>([['clippers-streamers:o', raw]]);
+  const orchestra = createClippersOrchestraState({ owner: () => 'o', now: () => AT, store: async () => ({ read: async (k: string) => data.get(k) ?? null, transact: async () => '' }) });
+  const view = await orchestra.read();
+  assert.ok(view); assert.equal(view!.roles.find(r => r.stage === 'streamers')!.state, 'held');
+});
+
+test('self-heal: 3+ consecutive code failures open a factory order; missing secrets never do', () => {
+  const failing = stateWith({ at: '2026-11-19T14:30:00.000Z', status: 'failed', heldReasons: [], errors: ['TWITCH_HELIX_FAILED'], counts: {} }, { failureStreak: 3 });
+  const audits = streamerSelfHealAudits(failing);
+  assert.deepEqual(audits[0].findings, [{ code: 'STREAMER_DISCOVERY_FAILING', recordId: STREAMER_SELF_HEAL_RECORD }]);
+  const out = planSelfHeal({ state: undefined, company: emptyCompanyState(), journal: { jobs: [] }, owner: 'o', now: AT, maxPerDay: 2, extraAudits: audits });
+  assert.equal(out.created.length, 1);
+  assert.equal(out.created[0].selfHeal!.code, 'STREAMER_DISCOVERY_FAILING'); assert.equal(out.created[0].assignees[0].agentId, 'code');
+  assert.ok(isValidSelfHealOrder(out.created[0])); assert.match(out.created[0].text, /clippers-streamer-discovery/);
+  // Two failures: not yet. Missing secrets: data-absence note only.
+  assert.equal(streamerSelfHealAudits(stateWith({ at: '2026-11-19T14:30:00.000Z', status: 'failed', heldReasons: [], errors: ['X'], counts: {} }, { failureStreak: 2 }))[0].findings.length, 0);
+  const secrets = streamerSelfHealAudits(stateWith({ at: '2026-11-19T14:30:00.000Z', status: 'skipped_missing_secrets', heldReasons: ['missing_secret:YOUTUBE_API_KEY'], errors: [], counts: {} }, { failureStreak: 0 }));
+  const noOrder = planSelfHeal({ state: undefined, company: emptyCompanyState(), journal: { jobs: [] }, owner: 'o', now: AT, maxPerDay: 2, extraAudits: secrets });
+  assert.equal(noOrder.created.length, 0); assert.ok(noOrder.state.notes.some(n => n.code === 'CAPABILITY_UNAVAILABLE'));
+  // Injection is limited to the streamer role.
+  const forged = planSelfHeal({ state: undefined, company: emptyCompanyState(), journal: { jobs: [] }, owner: 'o', now: AT, maxPerDay: 2, extraAudits: [{ ...audits[0], role: 'github' }] });
+  assert.equal(forged.created.length, 0);
+});
