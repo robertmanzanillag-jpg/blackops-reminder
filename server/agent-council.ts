@@ -8,6 +8,7 @@ import { roleWorkActivityView } from "../shared/office-role-work-activity";
 import { FACTORY_AGENT_NAMES, factoryAgentsView, isFactoryAgentId, parseFactoryCareerLedger } from "../shared/factory-office-agents";
 import { CLIPPERS_AGENT_NAMES } from "../shared/clippers-office-agents";
 import { parseSelfHealState, selfHealOfficeView } from "./office-self-heal";
+import { creditPacerView, parseCreditPacerState } from "./credit-pacer";
 import { getSystemUserId } from "./user-context";
 import { createChatOrder } from "../shared/agent-chat-routing";
 import type { OfficeKongAuditResult } from "./office-kong";
@@ -344,6 +345,7 @@ function parseDurableCouncilState(raw: string | null, owner: string): CouncilSta
     parseRoleWork(value.officeExecution.roleWork,owner);
     parseFactoryCareerLedger(value.officeExecution.factoryCareers);
     parseSelfHealState(value.officeExecution.selfHeal,owner);
+    parseCreditPacerState(value.officeExecution.creditPacer);
   }
   return parseCouncilState(raw);
 }
@@ -880,6 +882,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
       // Public summary of today's recorded role work (role, status, times only; no sources or audits).
       roleWorkToday: roleWorkActivityView(loaded.officeExecution?.roleWork?.jobs, deps.now()),
       // Public self-heal counts per agent (detected / in repair / verified / needs owner); no ids or audit details.
+      // Daily credit pacer: today's allowance, spend, mode and overspend streak (numbers only).
+      creditPacer: creditPacerView(loaded.officeExecution?.creditPacer, deps.now()),
       selfHeal: selfHealOfficeView(loaded.officeExecution?.selfHeal, loaded.officeExecution?.roleWork, deps.now(), process.env.OFFICE_SELF_HEAL_ENABLED === "true" || loaded.officeExecution?.selfHeal !== undefined),
       personalities,
       overrides: applyLessons(state.debates, state.lessons),

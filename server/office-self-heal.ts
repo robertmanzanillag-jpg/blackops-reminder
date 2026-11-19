@@ -35,8 +35,19 @@ import type { SelfHealAgentSummary, SelfHealOfficeView } from "../shared/office-
 export const SELF_HEAL_ORIGIN = "office-self-heal" as const;
 export const SELF_HEAL_REPOSITORY = "robertmanzanillag-jpg/blackops-reminder";
 export const SELF_HEAL_MAX_ATTEMPTS = 2;
-/** Hard ceiling, deliberately below the factory's daily draft PR cap (5). */
-export const SELF_HEAL_MAX_ORDERS_PER_DAY = 2;
+/** Optional owner cap ceiling (OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY). Without a cap the
+ * number of orders per day is governed by the daily credit pacer (server/credit-pacer.ts):
+ * orders open while today's allowance can fund their estimated factory cost. Safety does not
+ * depend on this number: one open order per finding, dedupe, the allowlist, and the factory's
+ * own daily draft PR cap (maxDraftPullRequestsPerDay, 5) and auto admission cap still apply. */
+export const SELF_HEAL_MAX_ORDERS_PER_DAY = 100;
+/** Used when no credit pacer is available (no shared credit ledger): the previous safe default. */
+export const SELF_HEAL_UNPACED_ORDERS_PER_DAY = 1;
+/** Concurrency bound (not a daily cap): system orders still open (ordered or in the factory).
+ * A new order opens only when fewer than this many are open. OFFICE_SELF_HEAL_MAX_OPEN_ORDERS 1..20. */
+export const SELF_HEAL_MAX_OPEN_ORDERS = 5;
+const OPEN_SYSTEM: readonly string[] = ["ordered", "in_factory"];
+const validCap = (value: number) => value === Number.POSITIVE_INFINITY || (Number.isSafeInteger(value) && value >= 0 && value <= SELF_HEAL_MAX_ORDERS_PER_DAY);
 export const SELF_HEAL_FACTORY_ADMISSION_WAIT_MS = 72 * 3600_000;
 const MAX_ENTRIES = 100, MAX_NOTES = 60, MAX_BASELINE = 200, MAX_ORDERS = 60, MAX_EVENTS = 40;
 
@@ -311,11 +322,15 @@ function mirror(company: CompanyState, state: SelfHealState): CompanyOrder[] {
 /**
  * Office worker step (pure; run inside the council transaction after the daily
  * role audits). Advances every open entry, records data-absence notes, opens at
- * most `maxPerDay` new or retry orders per UTC day and mirrors the evidence.
+ * most `maxPerDay` new or retry orders per UTC day (Infinity = no fixed cap) and,
+ * when the credit pacer is present, at most `fundableOrders` minus the orders that
+ * are still waiting for the factory (their cost is not spent yet), then mirrors the evidence.
  */
-export function planSelfHeal(input: { state: unknown; company: CompanyState; journal: unknown; owner: string; now: number; maxPerDay: number }): { state: SelfHealState; company: CompanyState; created: CompanyOrder[] } {
+export function planSelfHeal(input: { state: unknown; company: CompanyState; journal: unknown; owner: string; now: number; maxPerDay: number; fundableOrders?: number; maxOpenOrders?: number }): { state: SelfHealState; company: CompanyState; created: CompanyOrder[] } {
   const { owner, now } = input;
-  if (!Number.isSafeInteger(input.maxPerDay) || input.maxPerDay < 1 || input.maxPerDay > SELF_HEAL_MAX_ORDERS_PER_DAY) throw Error("SELF_HEAL_DAILY_CAP_INVALID");
+  const maxOpen = input.maxOpenOrders ?? SELF_HEAL_MAX_OPEN_ORDERS;
+  if (!validCap(input.maxPerDay) || (input.fundableOrders !== undefined && !(Number.isSafeInteger(input.fundableOrders) && input.fundableOrders >= 0)) ||
+    !Number.isSafeInteger(maxOpen) || maxOpen < 1 || maxOpen > 20) throw Error("SELF_HEAL_DAILY_CAP_INVALID");
   if (!Number.isFinite(now)) throw Error("SELF_HEAL_CLOCK_INVALID");
   const iso = new Date(now).toISOString(), today = day(now);
   const state = parseSelfHealState(input.state, owner);
@@ -336,8 +351,15 @@ export function planSelfHeal(input: { state: unknown; company: CompanyState; jou
     for (const code of present) { const key = `${role}:${code}`, old = notes.get(key); notes.set(key, { key, role, code, firstSeenAt: old?.firstSeenAt ?? iso, lastSeenAt: iso }); }
     for (const [key, note] of notes) if (note.role === role && !present.has(note.code)) notes.delete(key);
   }
-  // 3. New orders and retries, at most maxPerDay per UTC day (counted from the durable ledger).
+  // 3. New orders and retries, at most maxPerDay per UTC day (counted from the durable ledger)
+  // and at most what today's credit allowance can still fund (orders not yet in the factory count).
   let budget = input.maxPerDay - entries.reduce((n, e) => n + e.attempts.filter(a => day(a.createdAt) === today).length, 0);
+  // Orders whose cost is not spent yet (ordered, or in the factory without a built PR) use up room.
+  if (input.fundableOrders !== undefined) budget = Math.min(budget, input.fundableOrders - entries.filter(e => e.status === "ordered" || (e.status === "in_factory" && !e.attempts.at(-1)?.factory?.prUrl)).length);
+  // Concurrency bound: at most maxOpen system orders open at once.
+  budget = Math.min(budget, maxOpen - entries.filter(e => OPEN_SYSTEM.includes(e.status)).length);
+  // Never evict an open company order: create only as many as fit beside every open order.
+  budget = Math.min(budget, MAX_ORDERS - input.company.orders.filter(o => !o.doneAt).length);
   const created: CompanyOrder[] = [];
   const fixPrs = new Set(entries.flatMap(e => e.attempts.map(a => a.factory?.prUrl ? pullRecordId(a.factory.prUrl) : undefined)).filter(Boolean));
   entries = entries.map(entry => {
@@ -383,7 +405,7 @@ export function planSelfHeal(input: { state: unknown; company: CompanyState; jou
   let company: CompanyState = input.company;
   if (created.length) {
     company = { ...company,
-      orders: [...created, ...company.orders].slice(0, MAX_ORDERS),
+      orders: keepOpenOrders(created, company.orders),
       events: [...created.map(o => ({ at: iso, text: `Auto-reparación: orden del sistema ${o.selfHeal!.role}:${o.selfHeal!.code} (intento ${o.selfHeal!.attempt}/${SELF_HEAL_MAX_ATTEMPTS}).` })), ...company.events].slice(0, MAX_EVENTS) };
   }
   return { state: next, company: { ...company, orders: mirror(company, next) }, created };
@@ -446,26 +468,46 @@ export function selfHealOfficeView(selfHeal: unknown, roleWork: unknown, now: nu
 
 type OfficeCouncil = { updateOfficeExecution(change: (execution: any, company: CompanyState) => any): Promise<unknown> };
 
-/** Reads OFFICE_SELF_HEAL_* settings. Disabled unless OFFICE_SELF_HEAL_ENABLED=true. */
-export function selfHealSettings(env: Record<string, string | undefined>): { enabled: false } | { enabled: true; maxPerDay: number } {
+/** Reads OFFICE_SELF_HEAL_* settings. Disabled unless OFFICE_SELF_HEAL_ENABLED=true.
+ * OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY is optional: unset/empty = no fixed cap (paced by credits). */
+export function selfHealSettings(env: Record<string, string | undefined>): { enabled: false } | { enabled: true; maxPerDay: number; maxOpenOrders: number } {
   if (env.OFFICE_SELF_HEAL_ENABLED !== "true") return { enabled: false };
-  const raw = env.OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY ?? "1", maxPerDay = Number(raw);
-  if (!/^[0-9]+$/.test(raw) || !Number.isSafeInteger(maxPerDay) || maxPerDay < 1 || maxPerDay > SELF_HEAL_MAX_ORDERS_PER_DAY) throw Error("OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY must be 1 or 2.");
-  return { enabled: true, maxPerDay };
+  const rawOpen = env.OFFICE_SELF_HEAL_MAX_OPEN_ORDERS?.trim();
+  const maxOpenOrders = rawOpen ? Number(rawOpen) : SELF_HEAL_MAX_OPEN_ORDERS;
+  if (rawOpen && (!/^[0-9]+$/.test(rawOpen) || maxOpenOrders < 1 || maxOpenOrders > 20)) throw Error("OFFICE_SELF_HEAL_MAX_OPEN_ORDERS must be empty or an integer from 1 to 20.");
+  const raw = env.OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY?.trim();
+  if (!raw) return { enabled: true, maxPerDay: Number.POSITIVE_INFINITY, maxOpenOrders };
+  const maxPerDay = Number(raw);
+  if (!/^[0-9]+$/.test(raw) || !Number.isSafeInteger(maxPerDay) || maxPerDay < 1 || maxPerDay > SELF_HEAL_MAX_ORDERS_PER_DAY) throw Error(`OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY must be empty or an integer from 1 to ${SELF_HEAL_MAX_ORDERS_PER_DAY}.`);
+  return { enabled: true, maxPerDay, maxOpenOrders };
+}
+
+/** New orders first, then every open order (owner or system) in its original order, then as many
+ * closed orders as still fit. Open orders are never evicted; the planner creates fewer instead. */
+function keepOpenOrders(created: CompanyOrder[], existing: CompanyOrder[]): CompanyOrder[] {
+  const open = existing.filter(o => !o.doneAt).length;
+  let closedRoom = Math.max(0, MAX_ORDERS - created.length - open);
+  const kept = existing.filter(o => !o.doneAt || closedRoom-- > 0);
+  if (created.length + kept.filter(o => !o.doneAt).length > MAX_ORDERS) throw Error("SELF_HEAL_ORDER_CAPACITY");
+  return [...created, ...kept];
 }
 
 /** Office worker tick, run after the daily role audits. One durable council
  * transaction; the callback is pure so a CAS replay is harmless. */
-export function createSelfHealRunner(options: { council: OfficeCouncil; owner: string; maxPerDay: number; now?: () => number }) {
+export function createSelfHealRunner(options: { council: OfficeCouncil; owner: string; maxPerDay: number; now?: () => number; maxOpenOrders?: number;
+  /** Credit pacer: how many orders today's allowance can still fund (read before the transaction). */
+  fundableOrders?: () => Promise<number> }) {
   if (typeof options.owner !== "string" || !options.owner.trim() || typeof options.council?.updateOfficeExecution !== "function") throw Error("SELF_HEAL_CONFIGURATION_INVALID");
-  if (!Number.isSafeInteger(options.maxPerDay) || options.maxPerDay < 1 || options.maxPerDay > SELF_HEAL_MAX_ORDERS_PER_DAY) throw Error("SELF_HEAL_DAILY_CAP_INVALID");
+  if (!validCap(options.maxPerDay) || options.maxPerDay < 1) throw Error("SELF_HEAL_DAILY_CAP_INVALID");
   const now = options.now || Date.now;
   let active: Promise<{ created: number }> | undefined;
   const tick = async () => {
     let created = 0;
     const at = now();
+    // A pacer read failure opens no new orders (open entries still advance).
+    const fundableOrders = options.fundableOrders ? await options.fundableOrders().then(n => Math.max(0, Math.floor(n)), () => 0) : undefined;
     await options.council.updateOfficeExecution((execution, company) => {
-      const result = planSelfHeal({ state: execution.selfHeal, company, journal: execution.roleWork, owner: options.owner, now: at, maxPerDay: options.maxPerDay });
+      const result = planSelfHeal({ state: execution.selfHeal, company, journal: execution.roleWork, owner: options.owner, now: at, maxPerDay: options.maxPerDay, ...(options.maxOpenOrders !== undefined ? { maxOpenOrders: options.maxOpenOrders } : {}), ...(fundableOrders !== undefined ? { fundableOrders } : {}) });
       created = result.created.length;
       // Same established pattern as the factory career sweep: company changes
       // are committed in the same transaction as the office execution ledger.
