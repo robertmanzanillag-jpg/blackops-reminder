@@ -72,3 +72,14 @@ test('published effective timestamps cannot follow their snapshot and invalid ca
  for(const now of ['2026-02-30T14:00:00Z','2026-11-18T24:00:00Z'])assert.throws(()=>planClippersWeek({now}),/invalid_now/);
  b.snapshots[0].observedAt='2026-11-18T24:00:00Z';assert.equal(planClippersWeek(b).cells[0].reason,'provider_snapshot_unverified_or_stale');
 });
+
+test('five reviewed destinations fit a complete seven-day plan; unknown old alias reserves the current cell',()=>{
+ const now='2026-11-23T13:00:00.000Z',days=Array.from({length:7},(_,i)=>'2026-11-'+String(23+i));
+ const snapshots=DESTINATIONS.flatMap(destination=>days.map(day=>({destination,day,status:'verified',complete:true,evidenceSha256:sha,observedAt:now,posts:[]})));
+ const reservations=DESTINATIONS.flatMap(destination=>days.flatMap(day=>Array.from({length:5},()=>({destination,day,status:'outcome_unknown'}))));
+ let r=planClippersWeek({now,snapshots,reservations});assert.equal(r.cells.length,35);assert.equal(r.proposedCount,0);assert.ok(r.cells.every(c=>c.reason==='schedule_outcome_unreconciled'));
+ r=planClippersWeek({now,snapshots,reservations:[{destination:{brandId:6431685,network:'tiktok',account:'streamersclips'},day:days[0],status:'outcome_unknown'}]});
+ assert.equal(r.cells[0].reason,'schedule_outcome_unreconciled');assert.equal(r.cells[0].proposedSlots.length,0);
+ assert.throws(()=>planClippersWeek({now,snapshots:[...snapshots,snapshots[0]]}),/invalid_plan_input/);
+ assert.throws(()=>planClippersWeek({now,snapshots,reservations:[...reservations,reservations[0]]}),/invalid_plan_input/);
+});

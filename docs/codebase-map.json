@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-19T22:28:12.470Z",
+  "generatedAt": "2026-11-19T22:30:03.607Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-current-identities-20261119",
   "packageName": "rest-express",
   "scripts": {
@@ -126,9 +126,9 @@
   "totals": {
     "filesVisible": 1272,
     "filesIndexed": 1164,
-    "imports": 4729,
+    "imports": 4730,
     "routes": 627,
-    "symbols": 26577
+    "symbols": 26578
   },
   "directories": {
     ".": {
@@ -11863,6 +11863,7 @@
       "path": "script/clippers-weekly-plan.mjs",
       "kind": "script",
       "imports": [
+        "./clippers-destination-registry.mjs",
         "./clippers-portfolio-metricool.mjs",
         "node:crypto"
       ],
@@ -40918,6 +40919,7 @@
         "now",
         "p",
         "post",
+        "reservations",
         "snapshots"
       ],
       "routes": []

@@ -1,6 +1,6 @@
 # Codebase Map
 
-Generated: 2026-11-19T22:28:12.470Z
+Generated: 2026-11-19T22:30:03.607Z
 Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-current-identities-20261119`
 Package: `rest-express`
 
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1272 | 1164 | 4729 | 627 | 26577 |
+| 1272 | 1164 | 4730 | 627 | 26578 |
 
 ## Entrypoints
 - `client/src/App.tsx`
