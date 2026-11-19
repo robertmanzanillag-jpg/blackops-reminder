@@ -13,6 +13,7 @@ import { activeSummary, countActive, isActiveStatus, isOnDuty } from "@shared/of
 import { createOfficeScene, type SceneData, type SceneDepartment } from "./office-scene";
 import { countRoleWorkCompleted } from "@shared/office-role-work-activity";
 import { selfHealTotals } from "@shared/office-self-heal-view";
+import { creditPacerLine } from "@shared/credit-pacer-view";
 import { FACTORY_AGENTS } from "@shared/factory-office-agents";
 import { useWorkspaceRole } from "@/lib/workspace-role";
 import { officeDeepLinkStep } from "@/lib/office-central-panel";
@@ -316,6 +317,7 @@ export function AgentsOfficeWorld({
   const companyActivity = countActive(companyIds.map((id) => panelAgents.get(id)?.status));
   const verifiedTodayCount = officeWing === "main" ? countRoleWorkCompleted(roleWorkToday, companyIds) : 0;
   const selfHealTotal = selfHealTotals(selfHeal, companyIds);
+  const creditBudgetLine = creditPacerLine((council.view as unknown as { creditPacer?: unknown } | null)?.creditPacer);
   const focused = departments.find((department) => department.id === focusedDepartment) || null;
   const focusedAgents = focused ? focused.agentIds.map((id) => panelAgents.get(id)).filter((agent): agent is PanelAgent => Boolean(agent)) : [];
   const panelAgent = (panelAgentId && focusedAgents.find((agent) => agent.id === panelAgentId)) || focusedAgents[0] || null;
@@ -386,6 +388,7 @@ export function AgentsOfficeWorld({
         <div id="world-office-panel-content" hidden={mainPanelMinimized}>
           <p className="mt-2 text-lg font-black" data-testid="world-active-count" title="Activos = ejecutando ahora (reserva viva) + al día (último trabajo verificado dentro de su turno, sin fallos).">{companyActivity.active} de {companyActivity.total} activos · <span data-testid="world-working-count">{companyActivity.working} ejecutando ahora</span></p>
           {officeWing === "main" && <p className="mt-1 text-sm font-semibold text-emerald-200" data-testid="world-verified-today-count">{verifiedTodayCount} de {companyIds.length} con trabajo verificado hoy (ejecutor de la oficina)</p>}
+          {officeWing === "main" && creditBudgetLine && <p className="mt-1 text-xs text-amber-100" data-testid="world-credit-pacer">{creditBudgetLine}</p>}
           {officeWing === "main" && selfHeal.enabled && <p className="mt-1 text-xs text-zinc-300" data-testid="world-self-heal-summary">Auto-reparación: {selfHealTotal.detected} detectados · {selfHealTotal.repairing} en reparación · {selfHealTotal.verified} reparados y verificados · {selfHealTotal.needsOwner} necesitan al dueño{selfHealTotal.readyToMerge ? ` · ${selfHealTotal.readyToMerge} PR listos para fusionar (decide el dueño)` : ""}</p>}
           {officeWing === "kong" && <p className="mt-1 text-xs text-zinc-300">Todos los puestos centrales y {cityRooms.length} ciudades en la misma oficina. La oficina observa y coordina; abrirla no activa los ejecutores.</p>}
           {officeWing === "kong" && <div className="mt-2 space-y-1 text-[11px] text-zinc-300" data-testid="world-kong-rings-legend">
