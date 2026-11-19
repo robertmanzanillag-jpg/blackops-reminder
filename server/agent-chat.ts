@@ -1,3 +1,4 @@
+import { ceoFocusContext } from "./ceo-domain-policy";
 // Per-agent chat service (owner only). Deterministic first, $0 by default:
 // - every agent the office shows can be opened (shared/agent-chat-directory.ts): BlackOps
 //   departments, Black Room, KONG central desks, KONG city desks, factory engineers, trainees;
@@ -168,7 +169,7 @@ No prometas publicar, desplegar, pagar ni contactar a nadie: eso requiere aproba
 
 DATOS REGISTRADOS:
 ${facts}
-
+${ceoFocusContext()}
 CONVERSACIÓN RECIENTE:
 ${recent}
 

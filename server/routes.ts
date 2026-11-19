@@ -60,10 +60,13 @@ import { runLegalComplianceReports } from "./legal-compliance-agent";
 import { runAppQaScan } from "./app-qa-agent";
 import { createDeveloperAutopilotHandoff, createDeveloperAutopilotHandoffFromRequest, evaluateDeveloperReleaseGate } from "./developer-autopilot";
 import { buildMonthlyAiSpendReport } from "./ai-cost-policy";
+import { registerClippersOrchestraRoutes } from "./clippers-orchestra-routes";
+import { registerClippersStreamerRoutes } from "./clippers-streamers-status";
 import { getClipperWorkerRuntimeStatus } from "./clippers-runtime-status";
 import { registerOfficeRoutes } from "./office-routes";
 import { registerOfficeBusinessRoutes } from "./office-business-routes";
 import { registerSoftwareFactoryRoutes } from "./software-factory-routes";
+import { registerKongRepairRoutes } from "./kong-repair-routes";
 import { getFactoryOfficeAdmission } from "./software-factory-office-connection";
 import { getAuthenticatedCurrentUserId } from "./user-context";
 import { officeRuntime } from "./office-runtime";
@@ -305,11 +308,15 @@ export function buildClipperExternalCloseoutBatchCopyPacket(rows: unknown): stri
 
 let revenueEngineRouteQueue = Promise.resolve();
 
+import { ceoDomainRouteGuard, CeoDomainPausedError } from "./ceo-domain-policy";
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  app.use(ceoDomainRouteGuard);
   registerOfficeRoutes(app);
+  registerKongRepairRoutes(app);
   registerOfficeBusinessRoutes(app);
   registerSoftwareFactoryRoutes(app, {resolveCompanyAdmission:getFactoryOfficeAdmission});
   const CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS = 120_000;
@@ -2206,6 +2213,9 @@ export async function registerRoutes(
       res.status(500).json({ error: error.message || "Failed to inspect clippers status" });
     }
   });
+
+  registerClippersOrchestraRoutes(app);
+  registerClippersStreamerRoutes(app);
 
   app.get("/api/clippers/runtime-status", async (_req, res) => {
     try {
@@ -4366,6 +4376,7 @@ export async function registerRoutes(
       const run = await recordManualAutomationRun(automation, userId);
       res.status(201).json(run);
     } catch (error) {
+      if (error instanceof CeoDomainPausedError) return res.status(423).json({ error: error.code, domain: error.domain, queueDisposition: "held_not_deleted" });
       res.status(500).json({ error: "Failed to trigger automation" });
     }
   });

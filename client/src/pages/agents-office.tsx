@@ -31,6 +31,7 @@ import {
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
 import { OfficeConnectionsPanel } from "@/components/office-connections-panel";
+import { OfficeVerificationPanel } from "@/components/office-verification-panel";
 import { apiRequest } from "@/lib/queryClient";
 import { cn } from "@/lib/utils";
 import type { MonitoredProject } from "@shared/schema";
@@ -39,6 +40,7 @@ import { AgentsOfficeWorld } from "@/components/agents-world-office/agents-offic
 import { useWorkspaceRole } from "@/lib/workspace-role";
 import { KongSupervisorPanel } from "@/components/kong-supervisor-panel";
 import { KongOperationsPanel } from "@/components/kong-operations-panel";
+import { ClippersOfficeArea } from "@/components/clippers-office-area";
 import type { AgentLiveStatus } from "@/lib/agent-live-status";
 
 type GitHubOverview = Record<
@@ -2159,6 +2161,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
       <section className="relative h-full overflow-hidden bg-black bg-[linear-gradient(90deg,rgba(148,163,184,0.035)_1px,transparent_1px),linear-gradient(rgba(148,163,184,0.035)_1px,transparent_1px)] bg-[size:64px_64px,64px_64px]">
         <OfficeConnectionsPanel />
         <SoftwareFactoryPanel />
+        {workspace.isOwner && <OfficeVerificationPanel ownerId={ownerId} />}
         <div className="absolute left-5 top-5 z-[95]">
           <Link href="/">
             <Button variant="ghost" size="icon" className="mb-6 rounded-2xl border border-white/10 bg-white/[0.03]" data-testid="button-back-home">
@@ -2236,6 +2239,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
               <div data-testid="office-kong-supervisor-slot">
                 <KongSupervisorPanel />
               </div>
+              {workspace.isOwner && <div data-testid="office-clippers-area-slot"><ClippersOfficeArea ownerId={ownerId} /></div>}
               <button type="button" data-testid="office-open-kong" onClick={openKongOffice} className="rounded-xl border border-lime-300/35 bg-lime-400/10 px-3 py-2 text-xs font-semibold text-lime-100">
                 Oficina KONG
               </button>
