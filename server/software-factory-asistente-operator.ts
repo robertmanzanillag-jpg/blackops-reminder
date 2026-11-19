@@ -351,7 +351,8 @@ async function installed(store: Store) {
             const { configuredFactoryApiPrice, apiEvidenceHash } = await import("./factory-api-invocation");
             const base = { ...credits.pricing, cachedInputNanoUsdPerToken: credits.pricing.inputNanoUsdPerToken };
             const price = env.FACTORY_API_PRICING_CONFIG ? configuredFactoryApiPrice("openai", credits.pricing.model, env.FACTORY_API_PRICING_CONFIG) : { ...base, evidenceSha256: apiEvidenceHash(base) };
-            return { credits, modelRequest: createFactoryOpenAiTransport(env.OPENAI_API_KEY || "", fetch, { price }) };
+            const { createFactoryOpenAiCountTransport, routeFactoryOpenAiRequests } = await import("./software-factory-openai-count");
+            return { credits, modelRequest: routeFactoryOpenAiRequests(createFactoryOpenAiTransport(env.OPENAI_API_KEY || "", fetch, { price }), createFactoryOpenAiCountTransport(env.OPENAI_API_KEY || "")) };
         },
         loadAnthropic: async () => {
             const [{ loadAnthropicFactoryRuntime }, { createFactoryAnthropicTransport }] = await Promise.all([import("./software-factory-anthropic-ledger"), import("./software-factory-anthropic")]);
