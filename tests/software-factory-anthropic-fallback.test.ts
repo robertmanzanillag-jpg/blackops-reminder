@@ -315,3 +315,14 @@ test("startup surfaces the real code-owned Claude cause instead of a generic cod
   await assert.rejects(resolveFactoryModelCredits({ env: { ANTHROPIC_API_KEY: "sk-ant-x" }, now, requiredMicroUsd: 1, loadOpenAi: uncertain, loadAnthropic: async () => { throw Error("CREDIT_CLOCK_UNVERIFIED"); } }), /FACTORY_ANTHROPIC_CREDIT_CLOCK_UNVERIFIED/);
   await assert.rejects(resolveFactoryModelCredits({ env: { ANTHROPIC_API_KEY: "sk-ant-x" }, now, requiredMicroUsd: 1, loadOpenAi: uncertain, loadAnthropic: async () => { throw Error("secret text https://x"); } }), /^Error: FACTORY_ANTHROPIC_FALLBACK_UNAVAILABLE$/);
 });
+test("OpenAI monetary-gate refusal before dispatch is a zero-cost block that falls back; a dispatched failure is unknown", async () => {
+  const { FactoryApiBudgetError } = await import("../server/factory-api-invocation");
+  const gated = (error: Error) => async (url: string) => { if (url.endsWith("/input_tokens")) return Response.json({ object: "response.input_tokens", input_tokens: 10 }); throw error; };
+  const m = await matrix({ request: { request: gated(new FactoryApiBudgetError("FACTORY_API_BUDGET_EXHAUSTED")), calls: 0 } as any });
+  const out = await runFactoryModelCall(m.routes, callOptions("factory:gate"));
+  assert.equal(out.provider, "anthropic");
+  assert.equal((await m.oa.ledger.reservation("factory:gate"))?.actualMicroUsd, 0);
+  const d = await matrix({ request: { request: gated(new FactoryApiBudgetError("FACTORY_API_EXECUTION_UNCONFIRMED", true)), calls: 0 } as any });
+  await assert.rejects(runFactoryModelCall(d.routes, callOptions("factory:dispatched")), /CREDIT_EXECUTION_UNCONFIRMED/);
+  assert.equal(d.claude.calls.length, 0);
+});

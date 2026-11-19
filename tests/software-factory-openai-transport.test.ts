@@ -25,3 +25,22 @@ test('aborted or missing-parent calls make zero requests; dispatched error holds
  await assert.rejects(withFactoryApiParent(job,()=>request('https://api.openai.com/v1/responses',{method:'POST',body:body(),signal:new AbortController().signal})),/^Error: FACTORY_API_EXECUTION_UNCONFIRMED$/);assert.equal(calls,1);
  await assert.rejects(withFactoryApiParent(job,()=>request('https://api.openai.com/v1/responses',{method:'POST',body:body(),signal:new AbortController().signal})),/UNKNOWN_HOLD/);assert.equal(calls,1);
 });
+test('input-token counting passes inside a Factory job without a monetary hold; generation fields stay held; inert create fields are priced',async()=>{
+ const job=parent(),key='sk-proj-'+'c'.repeat(50),signal=new AbortController().signal,calls:{url:string;init:RequestInit}[]=[];
+ const invoke=fixtureFactoryInvocation(undefined,job);
+ const request=createFactoryOpenAiTransport(key,(async(url,init)=>{calls.push({url:String(url),init:init!});return String(url).endsWith('/input_tokens')?Response.json({object:'response.input_tokens',input_tokens:10}):Response.json(output());}) as typeof fetch,{price,invoke});
+ const count=JSON.stringify({model,instructions:'x',input:'synthetic requirements'});
+ const counted=await withFactoryApiParent(job,()=>request('https://api.openai.com/v1/responses/input_tokens',{method:'POST',body:count,signal}));
+ assert.equal((await counted.json()).input_tokens,10);assert.equal(new Headers(calls[0].init.headers).get('Authorization'),`Bearer ${key}`);assert.equal(calls[0].init.redirect,'error');
+ await assert.rejects(request('https://api.openai.com/v1/responses/input_tokens',{method:'POST',body:count,signal}),/PARENT_CONTEXT_UNAVAILABLE/);
+ for(const extra of [{max_output_tokens:32},{stream:true},{store:false},{tools:[{type:'web_search'}]},{background:false}])
+  await assert.rejects(withFactoryApiParent(job,()=>request('https://api.openai.com/v1/responses/input_tokens',{method:'POST',body:JSON.stringify({...JSON.parse(count),...extra}),signal})),/OPERATION_UNPRICED/);
+ assert.equal(calls.length,1);
+ // The exact Factory create body (background:false, truncation:"disabled") is priced and dispatched.
+ const create=JSON.stringify({model,instructions:'x',input:'synthetic requirements',max_output_tokens:32,store:false,tools:[],stream:false,background:false,service_tier:'default',truncation:'disabled'});
+ await withFactoryApiParent(job,()=>request('https://api.openai.com/v1/responses',{method:'POST',body:create,signal}));
+ assert.equal(calls.length,2);
+ for(const extra of [{background:true},{truncation:'auto'}])
+  await assert.rejects(withFactoryApiParent(job,()=>request('https://api.openai.com/v1/responses',{method:'POST',body:JSON.stringify({...JSON.parse(create),...extra}),signal})),/OPERATION_UNPRICED/);
+ assert.equal(calls.length,2);
+});

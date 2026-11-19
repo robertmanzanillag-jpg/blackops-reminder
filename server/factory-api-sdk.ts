@@ -5,7 +5,9 @@ type Env=Readonly<Record<string,string|undefined>>;
 const ALLOWED=new Set(['chat.completions.create','responses.create']);
 const commonFields=["model","temperature","top_p","store","metadata","user","safety_identifier","service_tier","tools","stream"];
 const chatFields=new Set([...commonFields,"messages","max_completion_tokens","max_tokens","n","stop","seed","frequency_penalty","presence_penalty","reasoning_effort","response_format","verbosity","thinking","modalities"]);
-const responseFields=new Set([...commonFields,"input","instructions","max_output_tokens","reasoning","text"]);
+// background/truncation are accepted only at their inert values (false /
+// "disabled"), which the Factory Responses provider always sends explicitly.
+const responseFields=new Set([...commonFields,"input","instructions","max_output_tokens","reasoning","text","background","truncation"]);
 function snapshotBody(value:unknown):any{
  try{
   const encoded=JSON.stringify(value);if(!encoded||Buffer.byteLength(encoded)>1_048_576)throw Error("size");
@@ -36,6 +38,7 @@ function boundedRequest(path:string,body:any){
  if(!ALLOWED.has(path)||!body||typeof body!=='object'||Array.isArray(body)||body.stream||body.background||body.previous_response_id||body.conversation||body.tools?.length||body.web_search_options||body.modalities?.some((m:unknown)=>m!=='text')||body.audio||body.service_tier&&body.service_tier!=="default")throw new FactoryApiBudgetError('FACTORY_API_OPERATION_UNPRICED');
  const fields=path==="responses.create"?responseFields:chatFields;
  if(Object.keys(body).some(key=>!fields.has(key)))throw new FactoryApiBudgetError("FACTORY_API_OPERATION_UNPRICED");
+ if(body.background!==undefined&&body.background!==false||body.truncation!==undefined&&body.truncation!=="disabled")throw new FactoryApiBudgetError("FACTORY_API_OPERATION_UNPRICED");
  if(body.max_tokens!==undefined&&body.max_completion_tokens!==undefined)throw new FactoryApiBudgetError("FACTORY_API_REQUEST_UNBOUNDED");
  const containsMedia=(value:any):boolean=>{
   if(!value||typeof value!=='object')return false;
@@ -112,8 +115,17 @@ export function guardFactoryOpenAiFetch(transport:typeof fetch,options:{price?:i
   if(options.requireParent&&!currentFactoryApiParent())throw new FactoryApiBudgetError("FACTORY_API_PARENT_CONTEXT_UNAVAILABLE");
   let method:unknown,encoded:unknown,signal:AbortSignal|undefined,headers:Headers;
   try{method=init?.method;encoded=init?.body;signal=init?.signal??undefined;headers=new Headers(init?.headers);}catch{throw new FactoryApiBudgetError("FACTORY_API_REQUEST_UNBOUNDED");}
-  if(url!=="https://api.openai.com/v1/responses"||method!=="POST"||typeof encoded!=="string"||Buffer.byteLength(encoded)>1_048_576)throw new FactoryApiBudgetError("FACTORY_API_OPERATION_UNPRICED");
+  const counting=url==="https://api.openai.com/v1/responses/input_tokens";
+  if((url!=="https://api.openai.com/v1/responses"&&!counting)||method!=="POST"||typeof encoded!=="string"||Buffer.byteLength(encoded)>1_048_576)throw new FactoryApiBudgetError("FACTORY_API_OPERATION_UNPRICED");
   let body:any;try{body=snapshotBody(JSON.parse(encoded));}catch{throw new FactoryApiBudgetError("FACTORY_API_REQUEST_UNBOUNDED");}
+  if(counting){
+   // Input-token counting generates no output and is not billed by OpenAI, so
+   // it carries no monetary reservation. It stays parent-bound (above), uses
+   // the same field allow-list, and can never carry generation fields.
+   if(body.max_output_tokens!==undefined||body.store!==undefined||body.stream!==undefined||body.background!==undefined||body.service_tier!==undefined)throw new FactoryApiBudgetError("FACTORY_API_OPERATION_UNPRICED");
+   boundedRequest('responses.create',body);
+   return transport(url,{method:"POST",body:JSON.stringify(body),headers,credentials:"omit",redirect:"error",signal});
+  }
   const request=Object.freeze({method:"POST",body:JSON.stringify(body),headers,credentials:"omit" as const});
   const bounded=boundedRequest('responses.create',body),env=options.env??process.env;
   const price=snapshotPrice(options.price??configuredFactoryApiPrice('openai',bounded.model,env.FACTORY_API_PRICING_CONFIG));

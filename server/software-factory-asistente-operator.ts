@@ -344,7 +344,15 @@ async function installed(store: Store) {
     if (env.SOFTWARE_FACTORY_OWNER_ID !== config.owner || env.DEFAULT_USER_ID !== config.owner)
         throw Error("FACTORY_OPERATOR_OWNER_MISMATCH");
     const selected = await resolveFactoryModelCredits({ env, now, requiredMicroUsd: (config.reservations.build + config.reservations.review) * 10000, log: message => console.error(message),
-        loadOpenAi: async () => ({ credits: await loadSharedCreditRuntime(env, now), modelRequest: createFactoryOpenAiTransport(env.OPENAI_API_KEY || "") }),
+        loadOpenAi: async () => {
+            const credits = await loadSharedCreditRuntime(env, now);
+            // Monetary gate price: the operator catalog when configured, else the
+            // shared-credit pricing (cached input conservatively at the full rate).
+            const { configuredFactoryApiPrice, apiEvidenceHash } = await import("./factory-api-invocation");
+            const base = { ...credits.pricing, cachedInputNanoUsdPerToken: credits.pricing.inputNanoUsdPerToken };
+            const price = env.FACTORY_API_PRICING_CONFIG ? configuredFactoryApiPrice("openai", credits.pricing.model, env.FACTORY_API_PRICING_CONFIG) : { ...base, evidenceSha256: apiEvidenceHash(base) };
+            return { credits, modelRequest: createFactoryOpenAiTransport(env.OPENAI_API_KEY || "", fetch, { price }) };
+        },
         loadAnthropic: async () => {
             const [{ loadAnthropicFactoryRuntime }, { createFactoryAnthropicTransport }] = await Promise.all([import("./software-factory-anthropic-ledger"), import("./software-factory-anthropic")]);
             const modelRequest = createFactoryAnthropicTransport(env.ANTHROPIC_API_KEY?.trim() || "");

@@ -18,6 +18,7 @@ export type FactoryModelRoute =
 const FALLBACK_RESULT_REASONS = new Set([
   "FACTORY_OPENAI_COUNT_UNAVAILABLE", "FACTORY_OPENAI_BUDGET_UNAVAILABLE",
   "FACTORY_OPENAI_PRICING_EXPIRED", "FACTORY_OPENAI_ADMISSION_EXPIRED",
+  "FACTORY_OPENAI_ADMISSION_UNAVAILABLE",
 ]);
 /** Ledger admission refusals: the shared credit is exhausted, expired,
  * uncertain (unknown/overrun hold), uninitialized or full. A corrupt,

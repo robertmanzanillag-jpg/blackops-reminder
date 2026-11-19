@@ -1,3 +1,4 @@
+import {FactoryApiBudgetError} from "./factory-api-invocation";
 /** Stateless text only. Trusted request must authenticate, honor AbortSignal,
  * and perform zero retries. Caller must durably reserve maxCostCents first and
  * retain that reservation on unknown; credits never discount ledger charges. */
@@ -87,7 +88,11 @@ export function createOpenAiFactoryTextProvider(config:{
    }
    if(!text.trim())return {status:"failed",reason:"FACTORY_OPENAI_EMPTY_TEXT",costCents};
    return {status:"completed",text,costCents,inputTokens:usage.input_tokens,outputTokens:usage.output_tokens};
-  }catch{return submitted?{status:"unknown",reason:"FACTORY_OPENAI_EXECUTION_UNCONFIRMED",costCents:0}:blocked("FACTORY_OPENAI_COUNT_UNAVAILABLE");}
+  }catch(error){
+   // The monetary gate refused before dispatching anything to OpenAI (budget,
+   // pricing, parent fence, reconciliation): nothing executed or billed.
+   if(error instanceof FactoryApiBudgetError&&!error.dispatched&&error.message!=="FACTORY_API_EXECUTION_UNCONFIRMED")return blocked("FACTORY_OPENAI_ADMISSION_UNAVAILABLE");
+   return submitted?{status:"unknown",reason:"FACTORY_OPENAI_EXECUTION_UNCONFIRMED",costCents:0}:blocked("FACTORY_OPENAI_COUNT_UNAVAILABLE");}
   finally{clearTimeout(timer);input.signal.removeEventListener("abort",abort);}
  };
 }
