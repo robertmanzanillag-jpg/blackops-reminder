@@ -159,7 +159,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
     profiles = list(await get('/api/admin/simpleProfiles'));
     const matches = profiles.filter(row => String(row.blogId ?? row.id ?? '') === String(destination.brandId));
     const profile = matches.length === 1 && matches[0];
-    if (!profile || profile.deleted === true || accountEvidence(profile, destination) === 'conflict') throw new Error('destination_identity_unverified');
+    if (!profile || profile.deleted === true || accountEvidence(profile, destination) !== 'match') throw new Error('destination_identity_unverified');
     const owned = profile.isShared === false && String(profile.ownerUserId ?? '') === String(userId);
     return { canPublish: profile.isWhiteLabelOnlyRead !== true && profile.canPublish !== false &&
       (profile.canPublish === true || owned) };

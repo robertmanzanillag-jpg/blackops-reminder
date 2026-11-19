@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-19T22:20:29.191Z",
+  "generatedAt": "2026-11-19T22:24:48.567Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-current-identities-20261119",
   "packageName": "rest-express",
   "scripts": {
@@ -131,34 +131,6 @@
     "symbols": 26577
   },
   "directories": {
-    "docs": {
-      "files": 80,
-      "indexed": 78,
-      "kinds": {
-        "docs": 80
-      }
-    },
-    "script": {
-      "files": 140,
-      "indexed": 126,
-      "kinds": {
-        "script": 140
-      }
-    },
-    "tests": {
-      "files": 336,
-      "indexed": 332,
-      "kinds": {
-        "test": 336
-      }
-    },
-    "tests/helpers": {
-      "files": 1,
-      "indexed": 1,
-      "kinds": {
-        "test": 1
-      }
-    },
     ".": {
       "files": 33,
       "indexed": 18,
@@ -230,12 +202,26 @@
         "client-page": 28
       }
     },
+    "docs": {
+      "files": 80,
+      "indexed": 78,
+      "kinds": {
+        "docs": 80
+      }
+    },
     "examples/clippers-motivation": {
       "files": 71,
       "indexed": 71,
       "kinds": {
         "docs": 1,
         "other": 70
+      }
+    },
+    "script": {
+      "files": 140,
+      "indexed": 126,
+      "kinds": {
+        "script": 140
       }
     },
     "script/office-api-budget-v6": {
@@ -294,6 +280,13 @@
         "shared": 1
       }
     },
+    "tests": {
+      "files": 336,
+      "indexed": 332,
+      "kinds": {
+        "test": 336
+      }
+    },
     "tests/fixtures": {
       "files": 7,
       "indexed": 5,
@@ -302,6 +295,13 @@
       }
     },
     "tests/harness": {
+      "files": 1,
+      "indexed": 1,
+      "kinds": {
+        "test": 1
+      }
+    },
+    "tests/helpers": {
       "files": 1,
       "indexed": 1,
       "kinds": {

@@ -288,7 +288,7 @@ test('actual TikTok response can prove owner and published time without fabricat
   assert.equal(observed.views, 42);
 });
 
-test('scoped settings supplies omitted profile identity without MCP; conflicts still deny', async () => {
+test('stored scoped identity cannot authorize missing or conflicting active profile identity', async () => {
   for (const connected of [undefined, null, false, { username: target.account, connected: false }, 'other-account']) {
     let mcpReads = 0;
     const adapter = createPortfolioMetricool({ token, userId: 12, fetcher: async (resource) => {
@@ -303,13 +303,8 @@ test('scoped settings supplies omitted profile identity without MCP; conflicts s
         { id: target.brandId, networksData: { tiktokData: target.account } },
       ] } } });
     } });
-    if (connected === undefined) {
-      assert.equal((await adapter.destinationSettings(target)).canPublish, true);
-      assert.equal(mcpReads, 0);
-    } else {
-      await assert.rejects(adapter.destinationSettings(target), /identity_unverified/);
-      assert.equal(mcpReads, 0);
-    }
+    await assert.rejects(adapter.destinationSettings(target), /identity_unverified/);
+    assert.equal(mcpReads, 0);
   }
 });
 

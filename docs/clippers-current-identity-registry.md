@@ -17,7 +17,9 @@ registry does not rewrite a historical handle, receipt, grant or digest.
 `findPublishDestination` accepts only current tuples. Only current destinations
 are enumerated for new work. The adapter checks scoped settings via GET with
 both `blogId` and the existing authenticated `userId`, and compares exact owner,
-provider ID hash, handle/Page ID and explicit disconnection flags. It repeats
+provider ID hash, handle/Page ID and explicit disconnection flags. The current
+simpleProfiles listing must also positively match the exact handle/Page ID; a
+stale stored settings identity cannot replace a missing active profile identity. It repeats
 this check before each dispatch. It fails closed on missing/conflicting evidence.
 No production verifier override or test option exists. Synthetic adapter tests
 load the same code against a wholly synthetic identity catalog.
