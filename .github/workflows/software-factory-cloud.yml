@@ -75,6 +75,10 @@ jobs:
           DEFAULT_USER_ID: ${{ secrets.FACTORY_OWNER_ID }}
           SOFTWARE_FACTORY_OWNER_ID: ${{ secrets.FACTORY_OWNER_ID }}
           OPENAI_API_KEY: ${{ secrets.FACTORY_OPENAI_API_KEY }}
+          # Optional Claude fallback when the OpenAI shared credit is unavailable/exhausted (absent key = unchanged behavior).
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          FACTORY_ANTHROPIC_FALLBACK_ENABLED: ${{ vars.FACTORY_ANTHROPIC_FALLBACK_ENABLED }}
+          FACTORY_ANTHROPIC_MONTHLY_BUDGET_USD: ${{ vars.FACTORY_ANTHROPIC_MONTHLY_BUDGET_USD }}
           SOFTWARE_FACTORY_GITHUB_TOKEN: ${{ secrets.SOFTWARE_FACTORY_GITHUB_TOKEN }}
         run: |
           set -euo pipefail

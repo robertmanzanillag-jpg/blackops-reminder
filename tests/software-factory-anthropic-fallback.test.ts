@@ -1,0 +1,235 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { APIError } from "@anthropic-ai/sdk";
+import { createSharedOpenAiCreditLedger, type SharedCreditState } from "../server/shared-openai-credit-ledger";
+import { createAnthropicFactoryTextProvider, createFactoryAnthropicTransport, anthropicUsageNanoUsd, type AnthropicFactoryClient } from "../server/software-factory-anthropic";
+import { createAnthropicFactoryLedger, factoryAnthropicFallbackEnabled, factoryAnthropicMonthlyBudgetMicroUsd, loadAnthropicFactoryRuntime } from "../server/software-factory-anthropic-ledger";
+import { runFactoryModelCall, factoryModelErrorLedger, type FactoryModelRoute } from "../server/software-factory-model-routes";
+import { resolveFactoryModelCredits } from "../server/software-factory-asistente-operator";
+import { withFactoryApiParent } from "../server/factory-api-context";
+
+const NOW = new Date("2026-11-19T12:00:00.000Z");
+const now = () => NOW;
+const signal = () => new AbortController().signal;
+
+// ---- mocks (no network) ----
+type Call = { kind: "count" | "stream"; params: any };
+function mockClient(reply: { message?: any; countTokens?: number; streamError?: unknown; connectThenError?: unknown; countError?: unknown }) {
+  const calls: Call[] = [];
+  const client: AnthropicFactoryClient = {
+    async countTokens(params) { calls.push({ kind: "count", params }); if (reply.countError) throw reply.countError; return { input_tokens: reply.countTokens ?? 1000 }; },
+    stream(params) {
+      calls.push({ kind: "stream", params });
+      let connect = () => {};
+      return { onConnect(listener) { connect = listener; },
+        async finalMessage() { if (reply.streamError) throw reply.streamError; connect(); if (reply.connectThenError) throw reply.connectThenError; return reply.message; } };
+    },
+  };
+  return { client, calls };
+}
+const message = (over: Record<string, unknown> = {}) => ({ id: "msg_1", type: "message", role: "assistant", model: "claude-opus-5-5", stop_reason: "end_turn", stop_details: null,
+  content: [{ type: "thinking", thinking: "", signature: "s" }, { type: "text", text: "{\"ok\":true}" }],
+  usage: { input_tokens: 1000, output_tokens: 2000, cache_read_input_tokens: 0, cache_creation_input_tokens: 0, iterations: null }, ...over });
+const claudeConfig = (client: AnthropicFactoryClient) => ({ request: async () => { throw Error("unused"); }, model: "claude-opus-5-5", inputNanoUsdPerToken: 4000, outputNanoUsdPerToken: 20000,
+  pricingValidUntil: "2027-05-19T00:00:00.000Z", now, maxInputTokens: 100000, effort: "high" as const, client });
+const input = (maxCostCents = 100) => ({ instructions: "Return JSON.", text: "{\"task\":1}", maxOutputTokens: 4096, maxCostCents, signal: signal() });
+
+function memoryStore() {
+  const rows = new Map<string, string>();
+  return { rows, transact: async (owner: string, fn: (raw: string | null) => Promise<string>) => { const next = await fn(rows.get(owner) ?? null); rows.set(owner, next); } };
+}
+function openAiLedger(availableMicroUsd = 5_000_000) {
+  let state: SharedCreditState = { version: 1, grant: null, reservations: [], lastObservedAt: null };
+  const ledger = createSharedOpenAiCreditLedger({ now, maximumGrantObservationAgeMs: 60000,
+    grant: { id: "grant-1", accountScope: "openai-test", availableMicroUsd, observedAt: "2026-11-19T11:59:30.000Z", expiresAt: "2026-12-19T00:00:00.000Z", verificationEvidenceId: "evidence-1" },
+    transact: async mutate => { const copy = structuredClone(state); const out = mutate(copy); state = copy; return out; } });
+  return { ledger, get state() { return state; } };
+}
+// OpenAI Responses fake. mode: "complete" | "refusal" | "count-fails"
+function openAiRequest(mode: "complete" | "refusal" | "count-fails") {
+  let calls = 0;
+  const request = async (url: string) => {
+    calls++;
+    if (url.endsWith("/input_tokens")) {
+      if (mode === "count-fails") throw Error("FACTORY_API_OPERATION_UNPRICED");
+      return Response.json({ object: "response.input_tokens", input_tokens: 10 });
+    }
+    const content = mode === "refusal" ? [{ type: "refusal", refusal: "no" }] : [{ type: "output_text", text: "{\"ok\":true}" }];
+    return Response.json({ object: "response", model: "gpt-6-astra", status: "completed", usage: { input_tokens: 10, output_tokens: 5, total_tokens: 15 },
+      output: [{ type: "message", role: "assistant", status: "completed", content }] });
+  };
+  return { request, get calls() { return calls; } };
+}
+const openAiModel = (request: (url: string, init: RequestInit) => Promise<Response>) => ({ request, model: "gpt-6-astra", inputNanoUsdPerToken: 1000, outputNanoUsdPerToken: 8000, pricingValidUntil: "2027-01-01T00:00:00.000Z", now, maxInputTokens: 100000 });
+const callOptions = (key = "factory:test-key") => ({ key, input: input(), unknownError: "FACTORY_MODEL_OUTCOME_UNKNOWN",
+  requestSha256: (m: { model: string }) => "a".repeat(63) + (m.model.startsWith("claude") ? "c" : "0"), evidenceId: (sha: string) => `factory-model:${sha}` });
+
+// ---- provider ----
+test("Claude provider sends adaptive thinking, explicit effort and default server-side fallbacks; settles from usage", async () => {
+  const { client, calls } = mockClient({ message: message() });
+  const result = await createAnthropicFactoryTextProvider(claudeConfig(client))(input());
+  assert.equal(result.status, "completed");
+  assert.equal(result.status === "completed" && result.text, "{\"ok\":true}");
+  // 1000 * $4/M + 2000 * $20/M = $0.044 -> 5 cents (ceil)
+  assert.equal(result.costCents, 5);
+  const stream = calls.find(c => c.kind === "stream")!.params;
+  assert.deepEqual(stream.thinking, { type: "adaptive" });
+  assert.equal(stream.output_config.effort, "high");
+  assert.deepEqual(stream.betas, ["server-side-fallback-2026-07-01"]);
+  assert.equal(stream.fallbacks, "default");
+  assert.equal(stream.model, "claude-opus-5-5");
+  for (const banned of ["temperature", "top_p", "top_k", "tool_choice", "tools"]) assert.equal(banned in stream, false);
+  assert.equal(stream.thinking.budget_tokens, undefined);
+  assert.deepEqual(stream.messages.map((m: any) => m.role), ["user"]); // no assistant prefill
+  assert.ok(stream.max_tokens >= 4096 && stream.max_tokens <= 32000);
+  assert.equal(calls[0].kind, "count");
+});
+
+test("Claude refusal is checked before content and is a terminal failure that still settles cost", async () => {
+  const { client } = mockClient({ message: message({ stop_reason: "refusal", stop_details: { type: "refusal", category: "cyber", explanation: null }, content: [{ type: "text", text: "partial output" }] }) });
+  const result = await createAnthropicFactoryTextProvider(claudeConfig(client))(input());
+  assert.deepEqual(result, { status: "failed", reason: "FACTORY_ANTHROPIC_REFUSAL", costCents: 5, servedModel: "claude-opus-5-5" });
+});
+
+test("usage iterations price a declined attempt and a fallback attempt at each model's rate", () => {
+  const usage = { input_tokens: 100, output_tokens: 1000, iterations: [
+    { type: "message", model: "claude-opus-5-5", input_tokens: 100, output_tokens: 50, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 },
+    { type: "fallback_message", model: "claude-opus-5", input_tokens: 100, output_tokens: 1000, cache_read_input_tokens: 1000, cache_creation_input_tokens: 0 } ] };
+  const settled = anthropicUsageNanoUsd({ model: "claude-opus-5", usage } as any, "claude-opus-5-5");
+  // 100*4000 + 50*20000 + 100*5000 + 1000*25000 + 1000*500
+  assert.equal(settled.nano, 400000n + 1000000n + 500000n + 25000000n + 500000n);
+  assert.equal(settled.outputTokens, 1050);
+  assert.throws(() => anthropicUsageNanoUsd({ model: "claude-opus-5-5", usage: { input_tokens: -1, output_tokens: 1 } } as any, "claude-opus-5-5"));
+});
+
+test("Claude provider blocks before streaming when the reserved cents cannot cover the worst case", async () => {
+  const { client, calls } = mockClient({ message: message(), countTokens: 50000 });
+  const result = await createAnthropicFactoryTextProvider(claudeConfig(client))(input(5));
+  assert.deepEqual(result, { status: "blocked", reason: "FACTORY_ANTHROPIC_BUDGET_UNAVAILABLE", costCents: 0 });
+  assert.equal(calls.some(c => c.kind === "stream"), false);
+});
+
+test("HTTP rejection before the stream connects is blocked; a failure after connect keeps the hold as unknown", async () => {
+  const rejected = mockClient({ streamError: new APIError(429, { type: "error", error: { type: "rate_limit_error" } }, "rate", new Headers()) });
+  assert.deepEqual(await createAnthropicFactoryTextProvider(claudeConfig(rejected.client))(input()), { status: "blocked", reason: "FACTORY_ANTHROPIC_RATE_LIMITED", costCents: 0 });
+  const billing = mockClient({ streamError: new APIError(400, { type: "error", error: { type: "invalid_request_error" } }, "bad", new Headers()) });
+  assert.equal((await createAnthropicFactoryTextProvider(claudeConfig(billing.client))(input())).status, "blocked");
+  const midStream = mockClient({ connectThenError: new APIError(undefined, undefined, "dropped", undefined) });
+  assert.deepEqual(await createAnthropicFactoryTextProvider(claudeConfig(midStream.client))(input()), { status: "unknown", reason: "FACTORY_ANTHROPIC_EXECUTION_UNCONFIRMED", costCents: 0 });
+  const max = mockClient({ message: message({ stop_reason: "max_tokens" }) });
+  assert.equal((await createAnthropicFactoryTextProvider(claudeConfig(max.client))(input())).status, "failed");
+});
+
+// ---- selection matrix (per call) ----
+async function matrix(openAi: { request: ReturnType<typeof openAiRequest>; ledger?: ReturnType<typeof openAiLedger> }) {
+  const oa = openAi.ledger ?? openAiLedger(); await oa.ledger.initialize().catch(() => undefined);
+  const store = memoryStore(), claudeLedger = createAnthropicFactoryLedger({ store, now, capMicroUsd: 50_000_000 });
+  const claude = mockClient({ message: message() });
+  const routes: FactoryModelRoute[] = [{ provider: "openai", ledger: oa.ledger, model: openAiModel(openAi.request.request) },
+    { provider: "anthropic", ledger: claudeLedger, model: claudeConfig(claude.client) }];
+  return { routes, claude, claudeLedger, oa };
+}
+test("selection: OpenAI success never touches Claude", async () => {
+  const m = await matrix({ request: openAiRequest("complete") });
+  const out = await runFactoryModelCall(m.routes, callOptions());
+  assert.equal(out.provider, "openai"); assert.equal(out.result.status, "completed"); assert.equal(m.claude.calls.length, 0);
+});
+test("selection: OpenAI content refusal is returned, not retried on Claude", async () => {
+  const m = await matrix({ request: openAiRequest("refusal") });
+  const out = await runFactoryModelCall(m.routes, callOptions());
+  assert.equal(out.provider, "openai"); assert.equal(out.result.status === "failed" && out.result.reason, "FACTORY_OPENAI_REFUSAL"); assert.equal(m.claude.calls.length, 0);
+});
+test("selection: OpenAI unavailable before submission falls back to Claude under the Claude ledger", async () => {
+  const m = await matrix({ request: openAiRequest("count-fails") });
+  const out = await runFactoryModelCall(m.routes, callOptions());
+  assert.equal(out.provider, "anthropic"); assert.equal(out.model, "claude-opus-5-5"); assert.equal(out.result.status, "completed");
+  const claudeStatus = await m.claudeLedger.status(), openStatus = await m.oa.ledger.status();
+  assert.equal(claudeStatus.spentMicroUsd, 50000); // 5 cents settled on the Claude ledger
+  assert.equal(openStatus.spentMicroUsd, 0);
+  assert.equal(openStatus.reservedMicroUsd, 0);
+});
+test("selection: exhausted / uncertain OpenAI credit falls back; already-admitted key never does", async () => {
+  const exhausted = await matrix({ request: openAiRequest("complete"), ledger: openAiLedger(1) });
+  assert.equal((await runFactoryModelCall(exhausted.routes, callOptions())).provider, "anthropic");
+  const uncertain = await matrix({ request: openAiRequest("complete") });
+  await uncertain.oa.ledger.reserve({ key: "factory:other", consumer: "factory", requestSha256: "b".repeat(64), maximumMicroUsd: 10 });
+  await uncertain.oa.ledger.markUnknown("factory:other", "unknown-1");
+  assert.equal((await runFactoryModelCall(uncertain.routes, callOptions())).provider, "anthropic");
+  const replay = await matrix({ request: openAiRequest("complete") });
+  await runFactoryModelCall(replay.routes, callOptions("factory:same"));
+  await assert.rejects(runFactoryModelCall(replay.routes, callOptions("factory:same")), (error: unknown) => {
+    assert.equal((error as Error).message, "CREDIT_EXECUTION_ALREADY_ADMITTED"); assert.equal(factoryModelErrorLedger(error), replay.oa.ledger); return true; });
+  assert.equal(replay.claude.calls.length, 0);
+});
+test("selection: an unknown OpenAI outcome is never retried on Claude", async () => {
+  const oa = openAiLedger(); await oa.ledger.initialize();
+  const claude = mockClient({ message: message() });
+  let n = 0;
+  const request = async (url: string) => { n++; if (url.endsWith("/input_tokens")) return Response.json({ object: "response.input_tokens", input_tokens: 10 }); throw Error("socket hang up"); };
+  const routes: FactoryModelRoute[] = [{ provider: "openai", ledger: oa.ledger, model: openAiModel(request) },
+    { provider: "anthropic", ledger: createAnthropicFactoryLedger({ store: memoryStore(), now, capMicroUsd: 50_000_000 }), model: claudeConfig(claude.client) }];
+  await assert.rejects(runFactoryModelCall(routes, callOptions()), /CREDIT_EXECUTION_UNCONFIRMED/);
+  assert.equal(claude.calls.length, 0); assert.equal(n, 2);
+});
+
+// ---- Claude ledger ----
+test("Claude monthly ledger fails closed over cap, settles real usage, and keeps spend when the cap changes", async () => {
+  const store = memoryStore();
+  const ledger = createAnthropicFactoryLedger({ store, now, capMicroUsd: 1_000_000 });
+  await assert.rejects(ledger.reserve({ key: "k-over", consumer: "factory", requestSha256: "c".repeat(64), maximumMicroUsd: 1_000_001 }), /CREDIT_UNAVAILABLE/);
+  assert.equal((await ledger.reserve({ key: "k1", consumer: "factory", requestSha256: "c".repeat(64), maximumMicroUsd: 600_000 })).admitted, true);
+  await ledger.settle({ key: "k1", actualMicroUsd: 400_000, evidenceId: "e1" });
+  assert.equal((await ledger.status()).availableMicroUsd, 600_000);
+  assert.deepEqual([...store.rows.keys()], [JSON.stringify(["factory-anthropic-budget-ledger-v1", "factory-anthropic", "anthropic-factory-2026-11"])]);
+  const lowered = createAnthropicFactoryLedger({ store, now, capMicroUsd: 300_000 });
+  const status = await lowered.status();
+  assert.equal(status.spentMicroUsd, 400_000); assert.equal(status.availableMicroUsd, 0);
+  await assert.rejects(lowered.reserve({ key: "k2", consumer: "factory", requestSha256: "c".repeat(64), maximumMicroUsd: 1 }), /CREDIT_UNAVAILABLE/);
+  // A new month starts a separate row.
+  const next = createAnthropicFactoryLedger({ store, now: () => new Date("2026-12-01T00:00:01.000Z"), capMicroUsd: 1_000_000 });
+  assert.equal((await next.status()).availableMicroUsd, 1_000_000);
+});
+test("Claude flag defaults on only with a key; budget env defaults to $50 and rejects invalid values", async () => {
+  assert.equal(factoryAnthropicFallbackEnabled({}), false);
+  assert.equal(factoryAnthropicFallbackEnabled({ FACTORY_ANTHROPIC_FALLBACK_ENABLED: "true" }), false);
+  assert.equal(factoryAnthropicFallbackEnabled({ ANTHROPIC_API_KEY: "sk-ant-x" }), true);
+  assert.equal(factoryAnthropicFallbackEnabled({ ANTHROPIC_API_KEY: "sk-ant-x", FACTORY_ANTHROPIC_FALLBACK_ENABLED: "false" }), false);
+  assert.equal(factoryAnthropicMonthlyBudgetMicroUsd({}), 50_000_000);
+  assert.equal(factoryAnthropicMonthlyBudgetMicroUsd({ FACTORY_ANTHROPIC_MONTHLY_BUDGET_USD: "" }), 50_000_000);
+  assert.throws(() => factoryAnthropicMonthlyBudgetMicroUsd({ FACTORY_ANTHROPIC_MONTHLY_BUDGET_USD: "lots" }), /BUDGET_INVALID/);
+  await assert.rejects(loadAnthropicFactoryRuntime({}, now, memoryStore()), /FALLBACK_DISABLED/);
+});
+
+// ---- startup selection ----
+test("startup: without Claude the OpenAI error is unchanged; with Claude an uncertain OpenAI credit runs on Claude", async () => {
+  const uncertainOpenAi = async () => { const oa = openAiLedger(); await oa.ledger.initialize(); await oa.ledger.reserve({ key: "x", consumer: "factory", requestSha256: "d".repeat(64), maximumMicroUsd: 1 }); await oa.ledger.markUnknown("x", "u");
+    return { credits: { ledger: oa.ledger, pricing: { model: "gpt-6-astra", inputNanoUsdPerToken: 1, outputNanoUsdPerToken: 1, validUntil: "2027-01-01T00:00:00.000Z" } }, modelRequest: async () => new Response() }; };
+  const claude = (cap: number) => async () => { const r = await loadAnthropicFactoryRuntime({ ANTHROPIC_API_KEY: "sk-ant-x", FACTORY_ANTHROPIC_MONTHLY_BUDGET_USD: String(cap) }, now, memoryStore()); return { credits: r, modelRequest: async () => new Response() }; };
+  await assert.rejects(resolveFactoryModelCredits({ env: {}, now, requiredMicroUsd: 1_000_000, loadOpenAi: uncertainOpenAi, loadAnthropic: claude(50) }), /FACTORY_OPERATOR_CREDIT_UNCERTAIN/);
+  const selected = await resolveFactoryModelCredits({ env: { ANTHROPIC_API_KEY: "sk-ant-x" }, now, requiredMicroUsd: 1_000_000, loadOpenAi: uncertainOpenAi, loadAnthropic: claude(50) });
+  assert.equal(selected.provider, "anthropic"); assert.equal(selected.credits.pricing.model, "claude-opus-5-5");
+  const missing = await resolveFactoryModelCredits({ env: { ANTHROPIC_API_KEY: "sk-ant-x" }, now, requiredMicroUsd: 1_000_000, loadOpenAi: async () => { throw Error("CREDIT_RUNTIME_CONFIGURATION_REQUIRED"); }, loadAnthropic: claude(50) });
+  assert.equal(missing.provider, "anthropic");
+  await assert.rejects(resolveFactoryModelCredits({ env: { ANTHROPIC_API_KEY: "sk-ant-x" }, now, requiredMicroUsd: 1_000_000, loadOpenAi: uncertainOpenAi, loadAnthropic: claude(0.5) }), /FACTORY_ANTHROPIC_CREDIT_INSUFFICIENT/);
+  const healthy = async () => { const oa = openAiLedger(); await oa.ledger.initialize(); return { credits: { ledger: oa.ledger, pricing: { model: "gpt-6-astra", inputNanoUsdPerToken: 1, outputNanoUsdPerToken: 1, validUntil: "2027-01-01T00:00:00.000Z" } }, modelRequest: async () => new Response() }; };
+  const both = await resolveFactoryModelCredits({ env: { ANTHROPIC_API_KEY: "sk-ant-x" }, now, requiredMicroUsd: 1_000_000, loadOpenAi: healthy, loadAnthropic: claude(50) });
+  assert.equal(both.provider, "openai"); assert.ok("fallback" in both && both.fallback);
+  const noClaude = await resolveFactoryModelCredits({ env: { ANTHROPIC_API_KEY: "sk-ant-x" }, now, requiredMicroUsd: 1_000_000, loadOpenAi: healthy, loadAnthropic: async () => { throw Error("db down"); } });
+  assert.equal(noClaude.provider, "openai"); assert.equal("fallback" in noClaude, false);
+});
+
+// ---- transport ----
+test("Claude transport is scoped to Messages endpoints inside a claimed Factory job and injects the key", async () => {
+  const seen: { url: string; headers: Headers }[] = [];
+  const request = createFactoryAnthropicTransport("sk-ant-" + "a".repeat(30), (async (url: string, init: RequestInit) => { seen.push({ url, headers: new Headers(init.headers) }); return Response.json({}); }) as typeof fetch);
+  const init = { method: "POST", body: "{}", headers: { "x-api-key": "factory-transport-injected" } };
+  await assert.rejects(request("https://api.anthropic.com/v1/messages", init), /PARENT_CONTEXT_UNAVAILABLE/);
+  const job = { id: "job-1", ownerKey: "o", fence: "f", status: "running" } as any;
+  await withFactoryApiParent(job, async () => {
+    await assert.rejects(request("https://evil.example/v1/messages", init), /SCOPE_INVALID/);
+    await assert.rejects(request("https://api.anthropic.com/v1/files", init), /SCOPE_INVALID/);
+    await request("https://api.anthropic.com/v1/messages?beta=true", init);
+  });
+  assert.equal(seen.length, 1); assert.equal(seen[0].headers.get("x-api-key"), "sk-ant-" + "a".repeat(30));
+  assert.throws(() => createFactoryAnthropicTransport("not-a-key"), /CREDENTIAL_REQUIRED/);
+});

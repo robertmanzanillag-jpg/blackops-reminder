@@ -20,6 +20,7 @@ import { createAsistenteReviewSourceLoader } from "./software-factory-asistente-
 import { createFactoryAsistenteGitHubClient, FACTORY_ASISTENTE_BASE_BRANCHES } from "./software-factory-github-client";
 import { createAsistenteGitHubTransport } from "./software-factory-github-transport";
 import { createFactoryOpenAiTransport } from "./software-factory-openai-transport";
+import type { FactoryModelRoute } from "./software-factory-model-routes";
 import { createRoleAcceptanceArtifactReader } from "./software-factory-role-artifact";
 import { createOfficeUiArtifactReader } from "./software-factory-office-ui-artifact";
 import { ROLE_WORK_ACCEPTANCE_ID } from "./software-factory-role-acceptance";
@@ -119,6 +120,12 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     syncSelfHeal?: () => Promise<unknown>;
     log?: (message: string) => void;
     now: () => Date;
+    /** Which provider credits/modelRequest belong to. Default "openai". */
+    provider?: "openai" | "anthropic";
+    /** Claude fallback (own ledger + transport), tried when OpenAI cannot admit/start a call. */
+    fallback?: { ledger: Credits["ledger"]; pricing: Credits["pricing"]; request: (url: string, init: RequestInit) => Promise<Response> };
+    /** Other ledgers whose settled admission receipts still count as history. */
+    priorLedgers?: Credits["ledger"][];
 }) {
     const config = validateAsistenteOperatorConfig(raw), { store, credits, now } = deps;
     if (config.ui.workflowId !== config.checks.workflowId || config.ui.workflowSha256 !== config.checks.workflowSha256 || new Set(config.orders.map(o => o.id)).size !== config.orders.length || typeof deps.readUi !== "function")
@@ -141,7 +148,8 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
         return { input, revision, mapping }; if (autoEligible(order))
         return { input, revision, mapping: undefined }; throw Error("FACTORY_OPERATOR_ORDER_NOT_MAPPED"); };
     const admissionKey = (inputKey: string) => `factory-admission:${hash([owner, inputKey])}`;
-    const settledAdmission = (inputKey: string) => credits.ledger.settledReceipt(admissionKey(inputKey)).then(() => true, () => false);
+    const historyLedgers = [credits.ledger, ...(deps.priorLedgers ?? [])];
+    const settledAdmission = async (inputKey: string) => { for (const l of historyLedgers) if (await l.settledReceipt(admissionKey(inputKey)).then(() => true, () => false)) return true; return false; };
     const readMainOrder = async (requestOwner: string, id: string) => { if (requestOwner !== owner)
         throw Error("FACTORY_OPERATOR_OWNER_MISMATCH"); return (await orders()).find(o => o.id === id); };
     const admitWithinCredits = async (requestOwner: string, input: FactoryJobInput) => {
@@ -197,10 +205,18 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     const readAcceptance = createRoleAcceptanceArtifactReader({ apiRequest: deps.githubRequest, download: deps.download, archiveHosts: config.archiveHosts, allowGitHubResultsAzureHosts: config.allowGitHubResultsAzureHosts, now: () => now().getTime() });
     const model = { request: deps.modelRequest, model: credits.pricing.model, inputNanoUsdPerToken: credits.pricing.inputNanoUsdPerToken, outputNanoUsdPerToken: credits.pricing.outputNanoUsdPerToken, pricingValidUntil: credits.pricing.validUntil, maxInputTokens: config.maxInputTokens, now };
     const buildModel = model.model === "gpt-6-astra" ? { ...model, reasoningEffort: "low" as const } : model;
+    // Provider routes: OpenAI first, then Claude; or Claude alone when the
+    // OpenAI shared credit could not be admitted at startup. Undefined keeps
+    // the exact single-provider behavior.
+    const claudeModel = (pricing: Credits["pricing"], request: (url: string, init: RequestInit) => Promise<Response>) => ({ request, model: pricing.model, inputNanoUsdPerToken: pricing.inputNanoUsdPerToken, outputNanoUsdPerToken: pricing.outputNanoUsdPerToken, pricingValidUntil: pricing.validUntil, maxInputTokens: config.maxInputTokens, now, effort: "high" as const });
+    const claudeRoute: FactoryModelRoute | undefined = deps.provider === "anthropic" ? { provider: "anthropic", ledger: credits.ledger, model: claudeModel(credits.pricing, deps.modelRequest) }
+        : deps.fallback ? { provider: "anthropic", ledger: deps.fallback.ledger, model: claudeModel(deps.fallback.pricing, deps.fallback.request) } : undefined;
+    const routesFor = (openAiModel: typeof model): FactoryModelRoute[] | undefined => deps.provider === "anthropic" ? [claudeRoute!]
+        : claudeRoute ? [{ provider: "openai", ledger: credits.ledger, model: openAiModel }, claudeRoute] : undefined;
     const draftsToday = async (at: Date, signal?: AbortSignal) => { signal?.throwIfAborted(); return countDraftPullRequestsToday(await store.list(owner), at, ownerKey); };
-    const build = createAsistenteFactoryBuild({ ledger: credits.ledger, githubRequest: deps.githubRequest, model: buildModel, baseBranch: config.baseBranch, writeRoots: config.writeRoots, maxFilesPerOrder: config.maxFilesPerOrder, dailyDraftLimit: { maxPerDay: config.maxDraftPullRequestsPerDay, countToday: draftsToday }, checks: config.checks, maxOutputTokens: config.maxOutputTokens, readAcceptance, now });
-    const review = createAsistenteIndependentReview({ ledger: credits.ledger, model, load: createAsistenteReviewSourceLoader(client, { writeRoots: config.writeRoots, maxFilesPerOrder: config.maxFilesPerOrder }), now, maxOutputTokens: Math.min(config.maxOutputTokens, 4096) });
-    const selectFiles = createFactoryOrderFileSelector({ ledger: credits.ledger, model, roots: config.writeRoots, maxFiles: config.maxFilesPerOrder, maxOutputTokens: config.maxOutputTokens,
+    const build = createAsistenteFactoryBuild({ ledger: credits.ledger, githubRequest: deps.githubRequest, model: buildModel, baseBranch: config.baseBranch, writeRoots: config.writeRoots, maxFilesPerOrder: config.maxFilesPerOrder, dailyDraftLimit: { maxPerDay: config.maxDraftPullRequestsPerDay, countToday: draftsToday }, checks: config.checks, maxOutputTokens: config.maxOutputTokens, readAcceptance, now, routes: routesFor(buildModel) });
+    const review = createAsistenteIndependentReview({ ledger: credits.ledger, model, load: createAsistenteReviewSourceLoader(client, { writeRoots: config.writeRoots, maxFilesPerOrder: config.maxFilesPerOrder }), now, maxOutputTokens: Math.min(config.maxOutputTokens, 4096), routes: routesFor(model) });
+    const selectFiles = createFactoryOrderFileSelector({ ledger: credits.ledger, model, routes: routesFor(model), roots: config.writeRoots, maxFiles: config.maxFilesPerOrder, maxOutputTokens: config.maxOutputTokens,
         listPaths: (baseSha, signal) => listFactorySelectablePaths(client, baseSha, config.writeRoots, signal) });
     const discover = createCompanyOrderDiscovery({ readMainOrder: id => readMainOrder(owner, id), resolveHead: async (repo, signal) => { signal.throwIfAborted(); if (repo !== ASISTENTE_REPOSITORY)
             throw Error("FACTORY_OPERATOR_REPOSITORY_INVALID"); return (await client.git.getRef({ owner: "robertmanzanillag-jpg", repo: "blackops-reminder", ref: `heads/${config.baseBranch}` })).data.object.sha; }, inspectOrder: async (order, baseSha, signal, budget) => { signal.throwIfAborted(); const { mapping, revision } = await resolve(order); if (!mapping) {
@@ -209,7 +225,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
             // requirements only; scope, kind and acceptance are enforced here.
             const selected = await selectFiles({ orderId: order.id, revision, orderText: order.text, baseSha, maxCostCents: budget.maxCostCents, signal });
             if (selected.status !== "selected") return { blocked: selected.reason, costCents: selected.costCents };
-            return { kind: selected.kind, regressionScenarioId: COMPANY_ORDER_CHECKS_ID, sourcePaths: selected.paths, costCents: selected.costCents };
+            return { kind: selected.kind, regressionScenarioId: COMPANY_ORDER_CHECKS_ID, sourcePaths: selected.paths, costCents: selected.costCents, ...(selected.modelProvider ? { modelProvider: selected.modelProvider } : {}) };
         } if (baseSha !== mapping.baseSha)
             throw Error("FACTORY_OPERATOR_ACCEPTANCE_BASE_CHANGED"); return { kind: mapping.kind, regressionScenarioId: mapping.scenarioId, sourcePaths: [...mapping.paths] }; } });
     const schedule = createFactoryCompanyOrderScheduler({ owner, project, readOrders: async () => { const rows = await orders(), jobs = await store.list(owner), at = now(); if (countDraftPullRequestsTodaySafe(jobs, at, ownerKey) >= config.maxDraftPullRequestsPerDay) return [];
@@ -252,6 +268,41 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
                     throw Error("FACTORY_OPERATOR_RUN_UNVERIFIED"); return { costCents: 0, evidence: await deps.readUi({ projectId: p.id, baseSha: state.candidate.baseSha, headSha: state.candidate.headSha, runId: Number(urls[0].split("/").pop()), signal: context.signal }) }; } } }); }
     };
 }
+/** Provider selection at startup. OpenAI stays first whenever its shared
+ * credit admits the job's worst case; otherwise (unavailable, expired,
+ * exhausted, uncertain, missing ledger/config/key) Claude runs the job alone
+ * under its own monthly ledger, which must itself pass the same admission
+ * checks (fail closed over cap). Without the Claude flag/key, OpenAI errors
+ * propagate exactly as before. */
+export async function resolveFactoryModelCredits(input: { env: NodeJS.ProcessEnv; now: () => Date; requiredMicroUsd: number;
+    loadOpenAi: () => Promise<{ credits: Credits; modelRequest: (url: string, init: RequestInit) => Promise<Response> }>;
+    loadAnthropic: () => Promise<{ credits: Credits; modelRequest: (url: string, init: RequestInit) => Promise<Response> }>;
+    log?: (message: string) => void; }) {
+    const { factoryAnthropicFallbackEnabled } = await import("./software-factory-anthropic-ledger");
+    const enabled = factoryAnthropicFallbackEnabled(input.env);
+    let openAi: Awaited<ReturnType<typeof input.loadOpenAi>> | undefined, openAiError: unknown;
+    try {
+        openAi = await input.loadOpenAi();
+        assertFactoryCreditReady(await openAi.credits.ledger.status(), input.requiredMicroUsd, openAi.credits.pricing.validUntil, input.now().getTime());
+    } catch (error) {
+        if (!enabled) throw error;
+        openAiError = error;
+    }
+    if (!enabled) return { provider: "openai" as const, credits: openAi!.credits, modelRequest: openAi!.modelRequest };
+    if (openAiError === undefined) {
+        // OpenAI admitted: Claude is the per-call fallback. A Claude setup
+        // failure never blocks the OpenAI path.
+        try {
+            const claude = await input.loadAnthropic();
+            return { provider: "openai" as const, credits: openAi!.credits, modelRequest: openAi!.modelRequest, fallback: { ledger: claude.credits.ledger, pricing: claude.credits.pricing, request: claude.modelRequest } };
+        } catch { input.log?.("Factory Claude fallback unavailable; continuing with OpenAI only."); return { provider: "openai" as const, credits: openAi!.credits, modelRequest: openAi!.modelRequest }; }
+    }
+    const claude = await input.loadAnthropic().catch(() => { throw Error("FACTORY_ANTHROPIC_FALLBACK_UNAVAILABLE"); });
+    try { assertFactoryCreditReady(await claude.credits.ledger.status(), input.requiredMicroUsd, claude.credits.pricing.validUntil, input.now().getTime()); }
+    catch (error) { throw Error(`FACTORY_ANTHROPIC_${(error as Error).message.replace(/^FACTORY_OPERATOR_/, "")}`); }
+    input.log?.("Factory OpenAI credit unavailable; this run uses the Claude fallback ledger.");
+    return { provider: "anthropic" as const, credits: claude.credits, modelRequest: claude.modelRequest, priorLedgers: openAi ? [openAi.credits.ledger] : [] };
+}
 async function privateFile(value: string | undefined, max: number) {
     if (!value || !path.isAbsolute(value))
         throw Error("FACTORY_OPERATOR_PRIVATE_PATH_REQUIRED");
@@ -271,11 +322,15 @@ async function installed(store: Store) {
     const config = validateAsistenteOperatorConfig(JSON.parse(await privateFile(env.SOFTWARE_FACTORY_OPERATOR_CONFIG, 65536)));
     if (env.SOFTWARE_FACTORY_OWNER_ID !== config.owner || env.DEFAULT_USER_ID !== config.owner)
         throw Error("FACTORY_OPERATOR_OWNER_MISMATCH");
-    const credits = await loadSharedCreditRuntime(env, now);
-    const budget = await credits.ledger.status();
-    assertFactoryCreditReady(budget, (config.reservations.build + config.reservations.review) * 10000, credits.pricing.validUntil, now().getTime());
+    const selected = await resolveFactoryModelCredits({ env, now, requiredMicroUsd: (config.reservations.build + config.reservations.review) * 10000, log: message => console.error(message),
+        loadOpenAi: async () => ({ credits: await loadSharedCreditRuntime(env, now), modelRequest: createFactoryOpenAiTransport(env.OPENAI_API_KEY || "") }),
+        loadAnthropic: async () => {
+            const [{ loadAnthropicFactoryRuntime }, { createFactoryAnthropicTransport }] = await Promise.all([import("./software-factory-anthropic-ledger"), import("./software-factory-anthropic")]);
+            const modelRequest = createFactoryAnthropicTransport(env.ANTHROPIC_API_KEY?.trim() || "");
+            return { credits: await loadAnthropicFactoryRuntime(env, now), modelRequest };
+        } });
+    const { credits, modelRequest } = selected;
     const githubRequest = createAsistenteGitHubTransport(env.SOFTWARE_FACTORY_GITHUB_TOKEN || "");
-    const modelRequest = createFactoryOpenAiTransport(env.OPENAI_API_KEY || "");
     const readUi = createOfficeUiArtifactReader({ apiRequest: githubRequest, download: fetch, archiveHosts: config.archiveHosts, allowGitHubResultsAzureHosts: config.allowGitHubResultsAzureHosts, ...config.ui, now });
     let recoveryPool: import('pg').Pool | undefined;
     const recoveryPrevious=async(ownerKey:string,failedId:string,jobId:string)=>{
@@ -315,7 +370,8 @@ async function installed(store: Store) {
             return { proposals: linkFactoryOfficeReviews(config.owner, read.proposals, runs as any), status: read.status };
         } });
     }
-    return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, download: fetch, readUi, recoveryPrevious, enqueueOfficeReview, scoreOfficeCareers, syncSelfHeal, log: message => console.error(message), now, readOrders: async (owner) => { const raw = await (await getCouncilStore()).read(owner); if (!raw)
+    return createAsistenteOperatorComposition(config, { store, credits, githubRequest, modelRequest, provider: selected.provider,
+        ...("fallback" in selected && selected.fallback ? { fallback: selected.fallback } : {}), ...("priorLedgers" in selected ? { priorLedgers: selected.priorLedgers } : {}), download: fetch, readUi, recoveryPrevious, enqueueOfficeReview, scoreOfficeCareers, syncSelfHeal, log: message => console.error(message), now, readOrders: async (owner) => { const raw = await (await getCouncilStore()).read(owner); if (!raw)
             throw Error("FACTORY_OPERATOR_COUNCIL_MISSING"); const state = JSON.parse(raw); if (!Array.isArray(state.company?.orders))
             throw Error("FACTORY_OPERATOR_COUNCIL_INVALID"); return state.company.orders; } });
 }
