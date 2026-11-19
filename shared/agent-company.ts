@@ -241,6 +241,10 @@ const DELTA: Record<AgentLiveState, { points: number; battery: number }> = {
   offline: { points: 0, battery: 0 },
   checking: { points: 0, battery: 0 },
 };
+/** Battery one recorded failure costs (read-only view of the rotation rule for the central panel). */
+export const RECORDED_FAILURE_BATTERY_COST = Math.abs(DELTA.error.battery);
+/** A new hire is never replaced before this tenure, even at zero battery. */
+export const REPLACEMENT_MIN_TENURE_MS = MIN_TENURE_MS;
 // A scheduled turn that passed without any run: smaller than a recorded failure, scored once per turn.
 const MISSED_TURN_DELTA = { points: -2, battery: -3 };
 
