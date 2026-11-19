@@ -5,6 +5,7 @@ import { PENDING_OFFICE_ROLES, sourceDigest } from "../server/office-role-snapsh
 import { parseRoleWork } from "../server/office-role-work";
 import { parseCapabilityTraining } from "../server/office-capability-training";
 import { WEB_SOURCE_ROLES } from "../server/office-web-role-sources";
+import { OFFICE_SOURCE_DOCUMENT_KINDS } from "../server/office-source-documents";
 
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
@@ -99,6 +100,22 @@ export function shapeWebSources(rows: Array<{ role: unknown; observed_at: unknow
       ageSeconds: observedAt ? Math.round((now - Date.parse(observedAt)) / 1000) : null,
       provenance: list(row.provenance).filter(object).map(p => ({ kind: pick(p.kind, PROVENANCE_KINDS), status: pick(p.status, PROVENANCE_STATUSES) })),
     }];
+  }));
+}
+
+const DOCUMENT_STATUSES = ["present", "invalid", "limit"] as const;
+const count = (value: unknown) => { const n = Number(value); return Number.isSafeInteger(n) && n >= 0 ? n : 0; };
+
+/** office_source_documents per kind for the configured owner (status counts and latest write), plus how many
+ * documents of each kind exist under OTHER owner keys (count only, never the keys). A kind absent for the owner but
+ * present elsewhere means the producer wrote under a different user than DEFAULT_USER_ID. */
+export function shapeSourceDocuments(own: Array<{ kind: unknown; status: unknown; count: unknown; latest: unknown }>, others: Array<{ kind: unknown; count: unknown }>) {
+  return Object.fromEntries(OFFICE_SOURCE_DOCUMENT_KINDS.map(kind => {
+    const rows = own.filter(row => row.kind === kind);
+    const statuses: Record<string, number> = {};
+    for (const row of rows) { const key = pick(row.status, DOCUMENT_STATUSES) ?? "other"; statuses[key] = (statuses[key] ?? 0) + count(row.count); }
+    const latest = rows.map(row => isoOrNull(row.latest)).filter((v): v is string => !!v).sort().pop() ?? null;
+    return [kind, { statuses, latestWrittenAt: latest, otherOwnerDocuments: others.filter(row => row.kind === kind).reduce((sum, row) => sum + count(row.count), 0) }];
   }));
 }
 
