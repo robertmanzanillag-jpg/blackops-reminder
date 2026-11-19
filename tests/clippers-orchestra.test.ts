@@ -1,3 +1,4 @@
+import { createPortfolioMetricool } from './helpers/clippers-current-identity-fixture.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp,mkdir,writeFile,readFile,rm,chmod,realpath } from 'node:fs/promises';
@@ -7,7 +8,7 @@ import { randomUUID,createHash } from 'node:crypto';
 import { buildClippersOrchestraReport } from '../script/clippers-orchestra-report.mjs';
 import { createClippersOrchestraRelay } from '../script/clippers-orchestra-relay.mjs';
 import { collectClippersAccountAnalytics,readOnlyAnalyticsFetch } from '../script/clippers-orchestra-analytics.mjs';
-import { DESTINATIONS,destinationKey,createPortfolioMetricool } from '../script/clippers-portfolio-metricool.mjs';
+import { DESTINATIONS,destinationKey } from '../script/clippers-portfolio-metricool.mjs';
 import { DISCOVERY_CREATORS } from '../script/clippers-portfolio-discovery.mjs';
 import { parseClippersOrchestraStatus } from '../shared/clippers-orchestra';
 import { createClippersOrchestraState,parseClippersEnvelope } from '../server/clippers-orchestra-state';
@@ -281,4 +282,13 @@ test('external owner UI observations survive wire validation without learner ACK
  await save(root,'reports/clippers-daily-learning/external-schedules.json',rows);
  const r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.equal(r.accounts[0].confirmedScheduledOrPublished,5);assert.equal(r.accounts[0].shortfall,0);assert.equal(r.accounts[1].confirmedScheduledOrPublished,null);
  const publisher=r.roles.find((v:any)=>v.stage==='publisher');assert.equal(publisher.outputs.externalOwnerUiObservations,5);assert.equal(publisher.lastRunAt,now().toISOString());assert.equal(publisher.outcomes.length,0);assert.equal(publisher.heartbeatAt,null);assert.equal(publisher.career.points,null);
+}));
+
+test('current report and immutable historical report parse; mixed alias sets cannot create duplicate destinations',async()=>fixture(async root=>{
+ const current=await base(root);assert.ok(parseClippersOrchestraStatus(current,NOW));
+ const legacy=structuredClone(current);
+ for(const a of legacy.accounts){if(a.account==='streamersus')a.account='streamersclips';if(a.account==='news305miami')a.account='ynb4b6r6';a.key=[a.brandId,a.network,a.account].join(':');}
+ assert.ok(parseClippersOrchestraStatus(legacy,NOW));
+ const mixed=structuredClone(current);mixed.accounts[0]=legacy.accounts[0];assert.equal(parseClippersOrchestraStatus(mixed,NOW),null);
+ const duplicate=structuredClone(current);duplicate.accounts.push(legacy.accounts[0]);assert.equal(parseClippersOrchestraStatus(duplicate,NOW),null);
 }));
