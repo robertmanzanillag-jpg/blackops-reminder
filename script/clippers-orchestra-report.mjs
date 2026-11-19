@@ -1,5 +1,5 @@
 import { publicationDestinationKey } from './clippers-destination-registry.mjs';
-import { verifiedExternalSchedules } from './clippers-native-media-receipts.mjs';
+import { METRICOOL_API_ORIGIN, verifiedExternalSchedules } from './clippers-native-media-receipts.mjs';
 // Read-only projection of the installed pipeline's private receipts. No provider, rights or publishing API.
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -295,7 +295,16 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
     role('learning',reportAt,artifacts.learning,state?{eligibleComparisons:eligibleComparisons,qualifiedCandidates:qualifications.length,promotions}:{},qualifications.length?[]:['three_current_independent_comparisons_required']),
     role('health',watchdogAt,artifacts.watchdog,{},sourceState==='connected'?[]:['runtime_evidence_unavailable_or_stale']),
   ];
-  if(externalAt&&(!reportAt||externalAt>reportAt)&&(!weeklyAt||externalAt>weeklyAt)){const p=roles.find(r=>r.stage==='publisher');p.evidenceAt=externalAt;p.lastRunAt=externalAt;p.runId=artifacts.external.sha;p.evidenceIds=[`clippers:${artifacts.external.sha}:publisher`];p.heartbeatAt=null;p.state=at-Date.parse(externalAt)>26*HOUR?'stale':'completed';p.heldReasons=[];p.outputs={confirmed:accounts.reduce((n,a)=>n+(a.confirmedScheduledOrPublished??0),0),externalOwnerUiObservations:external.length};}
+  if(externalAt&&(!reportAt||externalAt>reportAt)&&(!weeklyAt||externalAt>weeklyAt)){
+    const p=roles.find(r=>r.stage==='publisher');
+    const externalMetricoolApiObservations=external.filter(row=>row.origin===METRICOOL_API_ORIGIN).length;
+    p.evidenceAt=externalAt;p.lastRunAt=externalAt;p.runId=artifacts.external.sha;
+    p.evidenceIds=[`clippers:${artifacts.external.sha}:publisher`];p.heartbeatAt=null;
+    p.state=at-Date.parse(externalAt)>26*HOUR?'stale':'completed';p.heldReasons=[];
+    p.outputs={confirmed:accounts.reduce((n,a)=>n+(a.confirmedScheduledOrPublished??0),0),
+      externalOwnerUiObservations:external.length-externalMetricoolApiObservations,
+      ...(externalMetricoolApiObservations ? {externalMetricoolApiObservations} : {})};
+  }
   if(weeklyIsNewer&&weeklyReceipts.length)roles.find(r=>r.stage==='publisher').state='completed';
   const outcomes=(stage,items)=>{
     const target=roles.find(r=>r.stage===stage);

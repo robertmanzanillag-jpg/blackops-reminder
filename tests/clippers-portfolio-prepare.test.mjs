@@ -298,11 +298,19 @@ test('external owner UI exact GET and bytes are observed separately, even after 
  const observationTime=new Date('2026-11-18T18:00:00Z');
  const adapter={confirmSchedule:async(d,item)=>{reads++;assert.equal(item.caption,packet.caption);return{id:'123456',mediaUrl:NATIVE_URL};},schedule(){throw Error('no schedule');}};
  const options={workspaceRoot:f.root,assetId:packet.id,external,now:observationTime,adapter,fetcher:f.adapter.nativeFetch};
- assert.equal((await reconcileExternalMetricoolSchedule(options)).learnerStateChanged,false);const old=await readFile(path.join(f.root,REPORT,'native-media-imports',packet.id+'.json'),'utf8');
- assert.equal((await reconcileExternalMetricoolSchedule({...options,now:new Date(+observationTime+1000)})).providerWrites,0);assert.equal(await readFile(path.join(f.root,REPORT,'native-media-imports',packet.id+'.json'),'utf8'),old);
- const rows=JSON.parse(await readFile(path.join(f.root,REPORT,'external-schedules.json')));assert.equal(rows.length,1);assert.equal(verifiedExternalSchedules(rows,new Date(+observationTime+1000)).length,1);await assert.rejects(readFile(path.join(f.root,REPORT,'state.json')),/ENOENT/);
+ const observed=await reconcileExternalMetricoolSchedule(options);
+ assert.equal(observed.learnerStateChanged,false);
+ assert.equal(observed.origin,'external_owner_ui');
+ const mediaFile=path.join(f.root,REPORT,'native-media-imports',packet.id+'.json');
+ const ledgerFile=path.join(f.root,REPORT,'external-schedules.json');
+ const [old,originalLedger]=await Promise.all([readFile(mediaFile,'utf8'),readFile(ledgerFile,'utf8')]);
+ assert.equal((await reconcileExternalMetricoolSchedule({...options,now:new Date(+observationTime+1000)})).providerWrites,0);
+ await assert.rejects(reconcileExternalMetricoolSchedule({...options,external:{...external,origin:'external_metricool_api'}}),/external_schedule_identity_conflict/);
+ assert.equal(await readFile(mediaFile,'utf8'),old);
+ assert.equal(await readFile(ledgerFile,'utf8'),originalLedger);
+ const rows=JSON.parse(originalLedger);assert.equal(rows.length,1);assert.equal(verifiedExternalSchedules(rows,new Date(+observationTime+1000)).length,1);await assert.rejects(readFile(path.join(f.root,REPORT,'state.json')),/ENOENT/);
  const report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:new Date(+observationTime+1000)});assert.equal(report.accounts[0].confirmedScheduledOrPublished,1);assert.equal(report.accounts[0].shortfall,null);assert.equal(report.accounts[1].confirmedScheduledOrPublished,null);assert.equal(report.roles.find(r=>r.stage==='publisher').outcomes.length,0);
- await assert.rejects(reconcileExternalMetricoolSchedule({...options,external:{...external,caption:'different'}}),/binding/);assert.equal(reads,2);
+ await assert.rejects(reconcileExternalMetricoolSchedule({...options,external:{...external,caption:'different'}}),/binding/);assert.equal(reads,3);
 });
 
 test('external observation is durable before failed native import publication, and repeat repairs import only',{skip:!hasTools},async t=>{

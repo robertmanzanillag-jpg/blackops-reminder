@@ -11,7 +11,7 @@ import { editorialEngineSha256 } from '../script/clippers-reviewed-editorial-eng
 import { REVIEWED_EDITORIAL, readConfirmedReviewedEditorial, readReviewedEditorialPacket, renderReviewedEditorial } from '../script/clippers-reviewed-editorial.mjs';
 import { runClippersPortfolioPrepare } from '../script/clippers-portfolio-prepare.mjs';
 import { validateApprovedClippersAsset } from '../script/clippers-daily-learning.mjs';
-import { reconcileExternalMetricoolSchedule } from '../script/clippers-native-media-receipts.mjs';
+import { reconcileExternalMetricoolSchedule, verifiedExternalSchedules } from '../script/clippers-native-media-receipts.mjs';
 import { runClippersWeeklyScheduling } from '../script/clippers-weekly-scheduler.mjs';
 import { buildClippersOrchestraReport } from '../script/clippers-orchestra-report.mjs';
 import { weeklyDeliveryCollision, weeklyDigest as digest } from '../script/clippers-weekly-policy.mjs';
@@ -186,10 +186,13 @@ test('digest-resealed invalid inputs hold before ffmpeg', async t => {
   }
 });
 
-test('changed rights, slot, attribution or bytes hold before preparation, and owner UI history has a separate path', { skip: !available }, async t => {
+test('changed rights, slot, attribution or bytes hold before preparation, and confirmed API schedules keep their origin', { skip: !available }, async t => {
   const f = await reviewed(t, { target: DESTINATIONS.find(d => d.network === 'facebook') });
   await f.put(f.packetPath, f.packet);
   await f.put(f.nativePath, f.native);
+  await f.put(f.nativePath, { ...f.native, origin: 'native_metricool_upload' });
+  const mediaFile=path.join(f.root,f.nativePath);
+  const originalMedia=await readFile(mediaFile,'utf8');
   const confirm = () => readReviewedEditorialPacket(f.root, f.id, { now: prepNow });
   assert.equal((await confirm()).asset.network, 'facebook');
   for (const [key, value] of [['scheduledAt', '2026-11-21T02:18:00.000Z'], ['quality', 'pending'],
@@ -206,16 +209,42 @@ test('changed rights, slot, attribution or bytes hold before preparation, and ow
   await writeFile(clip, Buffer.alloc(f.bytes.length));
   await assert.rejects(confirm(), /editorial_media_bytes_changed/);
   await writeFile(clip, f.bytes);
-  const external = { destination: f.target, metricoolId: '89', scheduledAt, caption: f.packet.caption,
+  const external = { origin: 'external_metricool_api', destination: f.target, metricoolId: '89', scheduledAt, caption: f.packet.caption,
     mediaUrl: nativeUrl, sha256: f.packet.outputSha256, sizeBytes: f.bytes.length };
   const afterSlot = new Date('2026-11-21T02:00:00.000Z');
   const adapter = { confirmSchedule: async () => ({ id: '89', mediaUrl: nativeUrl }) };
-  const result = await reconcileExternalMetricoolSchedule({ workspaceRoot: f.root, assetId: f.id, external, now: afterSlot, adapter, fetcher: f.fetcher });
+  const options={ workspaceRoot: f.root, assetId: f.id, external, now: prepNow, adapter, fetcher: f.fetcher };
+  for(const origin of [null,'unknown_transport']){
+    await assert.rejects(reconcileExternalMetricoolSchedule({ ...options, external:{...external,origin},
+      fetcher:()=>assert.fail('unknown origin called the provider') }), /external_schedule_origin_invalid/);
+  }
+  const result = await reconcileExternalMetricoolSchedule(options);
+  assert.equal(result.origin, 'external_metricool_api');
   assert.equal(result.providerWrites, 0);
   assert.equal(result.learnerStateChanged, false);
-  const [observation] = await f.get(`${reports}/external-schedules.json`);
+  const ledgerPath=`${reports}/external-schedules.json`;
+  const [observation] = await f.get(ledgerPath);
+  assert.equal(observation.origin, 'external_metricool_api');
   assert.equal(observation.weeklySourceProof.sourceIdentity, 'youtube:aaaaaaaaaaa');
+  const {proofSha256,...body}=observation;
+  assert.equal(digest(body),proofSha256);
+  const unknown={...body,origin:'unknown_transport'};
+  assert.throws(()=>verifiedExternalSchedules([{...unknown,proofSha256:digest(unknown)}],prepNow), /external_schedule_ledger_invalid/);
+  assert.equal(await readFile(mediaFile,'utf8'),originalMedia);
+  const office=await buildClippersOrchestraReport({workspaceRoot:f.root,now:afterSlot});
+  const publisher=office.roles.find(role=>role.stage==='publisher');
+  assert.equal(office.accounts.find(row=>row.key===destinationKey(f.target)).confirmedScheduledOrPublished,1);
+  assert.equal(publisher.outputs.externalMetricoolApiObservations,1);
+  assert.equal(publisher.outputs.externalOwnerUiObservations,0);
+  assert.equal(publisher.outcomes.length,0);
+  assert.equal((await f.prepare()).prepared,1);
+  const weekly=await runClippersWeeklyScheduling({workspaceRoot:f.root,window,now:prepNow});
+  assert.equal(weekly.outcomes[0]?.reason,'external_metricool_api_schedule_observed_no_replay');
   await assert.rejects(readFile(path.join(f.root, reports, 'state.json')), { code: 'ENOENT' });
+  await rm(mediaFile);
+  assert.equal((await reconcileExternalMetricoolSchedule({...options,now:afterSlot})).origin,'external_metricool_api');
+  assert.equal((await f.get(f.nativePath)).origin,'external_metricool_api');
+  assert.deepEqual(await f.get(ledgerPath),[observation]);
   await assert.rejects(readReviewedEditorialPacket(f.root, f.id, { now: afterSlot }), /expired_or_slot_invalid/);
 });
 
