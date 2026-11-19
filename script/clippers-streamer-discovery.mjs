@@ -348,7 +348,9 @@ export async function runStreamerDiscovery({ env = process.env, now = Date.now()
     // Sync owner decisions from the approval queue.
     const ids = state.candidates.map(c => c.approval?.pendingActionId).filter(Boolean);
     const statuses = queue ? await queue.statuses(owner, ids) : new Map();
-    for (const c of state.candidates) if (c.approval?.pendingActionId && statuses.has(c.approval.pendingActionId)) c.approval.status = statuses.get(c.approval.pendingActionId) === 'executed' ? 'approved' : statuses.get(c.approval.pendingActionId);
+    // Prohibited / taken-down clips stay rejected locally even if the row was approved before the takedown.
+    for (const c of state.candidates) if (c.clipPolicy?.status === 'prohibited' && c.approval && c.approval.status !== 'not_requested') c.approval.status = 'rejected';
+    for (const c of state.candidates) if (c.clipPolicy?.status !== 'prohibited' && c.approval?.pendingActionId && statuses.has(c.approval.pendingActionId)) c.approval.status = statuses.get(c.approval.pendingActionId) === 'executed' ? 'approved' : statuses.get(c.approval.pendingActionId);
     if (queue && config.city.pages.length) {
       for (const c of selectForApproval(state, config)) {
         const row = approvalRow(c, owner, config);

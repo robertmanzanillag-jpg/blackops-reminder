@@ -106,3 +106,11 @@ test('self-heal: 3+ consecutive code failures open a factory order; missing secr
   const forged = planSelfHeal({ state: undefined, company: emptyCompanyState(), journal: { jobs: [] }, owner: 'o', now: AT, maxPerDay: 2, extraAudits: [{ ...audits[0], role: 'github' }] });
   assert.equal(forged.created.length, 0);
 });
+
+test('default takedown rejection reuses one module-level pool (no pool per takedown)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../server/clippers-streamers-status.ts', import.meta.url), 'utf8');
+  const fn = src.slice(src.indexOf('async function defaultRejectPending'), src.indexOf('export function registerClippersStreamerRoutes'));
+  assert.match(fn, /rejectPool \?\?=/);
+  assert.equal((fn.match(/createCouncilPool\(\)/g) ?? []).length, 1);
+});

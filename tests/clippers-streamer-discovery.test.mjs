@@ -198,3 +198,17 @@ test('minimum interval: a second trigger within 45 min skips without writing; in
   await assert.rejects(runStreamerDiscovery({ env: {}, now: NOW, fetch: async () => { throw new Error('x'); }, store: bad, queue: memoryQueue(), owner: 'o' }), /STREAMER_STATE_INVALID/);
   assert.equal(bad.data.get(STREAMER_STATE_NAMESPACE('o')), '{"version":2}');
 });
+
+test('approval sync never flips a prohibited/taken-down clip back to approved', async () => {
+  const store = memoryStore(), queue = memoryQueue(), { fn } = mockFetch();
+  const first = await runStreamerDiscovery({ env: ENV, now: NOW, fetch: fn, store, queue, owner: 'o' });
+  const c = first.state.candidates.find(x => x.approval?.pendingActionId);
+  queue.rows.get(c.approval.pendingActionId).status = 'approved';
+  const s = JSON.parse(store.data.get(STREAMER_STATE_NAMESPACE('o')));
+  s.takedowns.push({ creatorKey: c.creatorKey, reason: 'owner asked', receivedAt: new Date(NOW).toISOString() });
+  store.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(s));
+  const second = await runStreamerDiscovery({ env: ENV, now: NOW + 3600_000, fetch: fn, store, queue, owner: 'o' });
+  const after = second.state.candidates.find(x => x.id === c.id);
+  assert.equal(after.clipPolicy.status, 'prohibited'); assert.equal(after.approval.status, 'rejected');
+  assert.ok(!localWorkQueue(second.state).some(w => w.candidateId === c.id));
+});
