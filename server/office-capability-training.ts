@@ -98,6 +98,20 @@ const promptLabel=(version?:string)=>version===CAPABILITY_PROMPT_VERSION?"Instru
 export function capabilityRunSummary(run:CapabilityTrainingState["runs"][number]){return {id:run.id,role:run.role,kind:run.kind,status:run.status,startedAt:run.startedAt,policyVersion:run.policyVersion,promptVersion:run.promptVersion||"source-triage-prompt-v1",promptLabel:promptLabel(run.promptVersion),instructionCorrected:run.promptVersion===CAPABILITY_PROMPT_VERSION,artifactId:run.artifactId,reason:run.reason,...(run.trained?{quality:gradeCapabilityTriage(run.task,run.trained.result.text).quality,costUsd:run.trained.cost.usd,responseId:run.trained.result.sessionId}:{})};}
 export function capabilityTrainingSummary(raw:unknown,owner:string,generations?:Record<string,number>){const state=parseCapabilityTraining(raw,owner);const lifecycle=capabilityLifecycleSummary(state,CAPABILITY_PROMPT_VERSION,gradeCapabilityTriage,undefined,generations);return state.policies.map(p=>({role:p.role,generation:p.generation,capability:CAPABILITY,policyVersion:p.version,status:p.status,lessons:p.lessons,trainingRunId:p.trainingRunId,promptVersion:p.promptVersion||"source-triage-prompt-v1",promptLabel:promptLabel(p.promptVersion),instructionCorrected:p.promptVersion===CAPABILITY_PROMPT_VERSION,origin:p.origin,runtimeApplicable:lifecycle.find(l=>l.policyVersion===p.version)!.productionAdmissible,comparisonQualified:p.promptVersion===CAPABILITY_PROMPT_VERSION&&eligible(state,p),lifecycle:lifecycle.find(l=>l.policyVersion===p.version),fullRolePromotion:false,scope:"Triage de auditorías guardadas exclusivamente; sin cambios de negocio ni reemplazo del rol."}));}
 
+/** Cost minimization: a daily audit whose triage inputs (issue codes, blocked
+ * source) equal those of the role's latest VERIFIED production run, still under
+ * the same active policy, would only repeat a known, passing answer. It is
+ * skipped instead of paying for the call. Any change in findings, policy,
+ * generation or a failed last answer runs normally. */
+export function capabilityInputUnchanged(state:CapabilityTrainingState,job:RoleWorkJob,at:number):boolean{
+ let task:Task;try{task=realTask(job,at);}catch{return false;}
+ const last=state.runs.filter(r=>r.kind==="production"&&r.role===job.role&&r.generation===job.generation&&r.promptVersion===CAPABILITY_PROMPT_VERSION&&r.status==="completed"&&r.trained).sort((a,b)=>Date.parse(a.startedAt)-Date.parse(b.startedAt)).at(-1);
+ if(!last||last.task.id===task.id)return false;
+ const policy=state.policies.find(p=>p.version===last.policyVersion);
+ if(!policy||policy.status!=="active"||capabilityPolicyLife(state,policy,CAPABILITY_PROMPT_VERSION,gradeCapabilityTriage).retiredAt)return false;
+ return gradeCapabilityTriage(last.task,last.trained!.result.text).passed&&digest([last.task.issueCodes,last.task.sourceBlocked])===digest([task.issueCodes,task.sourceBlocked]);
+}
+
 /** Transact must use the existing durable council transaction/CAS. run and
  * verifyCost are trusted adapters: verifyCost independently loads the admitted
  * ledger receipt, never model-authored prices. Existing budgets remain required. */
@@ -118,7 +132,7 @@ export function createCapabilityTrainer(options:{owner:string;transact:(change:(
     // Never silently respawn a retired baseline. Its candidate may still train;
     // unconsumed audits remain in roleWork for a strictly qualified successor.
     return !policies.length||policies.some(p=>["active","probation"].includes(p.status)&&!capabilityPolicyLife(state,p,CAPABILITY_PROMPT_VERSION,gradeCapabilityTriage).retiredAt);
-   });
+   }).filter(j=>!capabilityInputUnchanged(state,j,start));
    const firstProduction=productionJobs.find(j=>!state.runs.some(r=>r.kind==="production" && r.role===j.role && r.generation===j.generation && r.promptVersion===CAPABILITY_PROMPT_VERSION));
    const candidates=state.policies.filter(p=>!ceoRolePaused(p.role) && p.status==="candidate" && p.promptVersion===CAPABILITY_PROMPT_VERSION && generations[p.role]===p.generation && work.jobs.some(j=>j.role===p.role && j.generation===p.generation));
    const candidate=candidates.find(p=>!state.runs.some(r=>r.kind==="holdout" && r.role===p.role && start-Date.parse(r.startedAt)<86400000) && state.runs.filter(r=>r.kind==="holdout"&&r.policyVersion===p.version).length<3);

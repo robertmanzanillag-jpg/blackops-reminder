@@ -6,6 +6,19 @@ import { parseRoleWork } from "../server/office-role-work";
 import { parseCapabilityTraining } from "../server/office-capability-training";
 import { WEB_SOURCE_ROLES } from "../server/office-web-role-sources";
 import { OFFICE_SOURCE_DOCUMENT_KINDS } from "../server/office-source-documents";
+import { creditPacerView, parseCreditPacerState, taskEfficiency } from "../server/credit-pacer";
+
+/** Daily credit pacer: static numbers, the mode enum and per-task-type average cost only. */
+export function shapeCreditPacer(raw: unknown, now: number) {
+  const view = creditPacerView(raw, now);
+  if (!view.present) return view;
+  let efficiency: Array<{ taskType: string; runs: number; avgUsd: number; trend: string }> = [];
+  try {
+    const ledger = Object.values(parseCreditPacerState(raw).ledgers).sort((a, b) => Date.parse(b.updatedAt) - Date.parse(a.updatedAt))[0];
+    efficiency = taskEfficiency(ledger, view.day).map(e => ({ taskType: e.taskType, runs: e.count, avgUsd: Math.round(e.avgMicroUsd / 100) / 10_000, trend: e.trend }));
+  } catch { efficiency = []; }
+  return { ...view, efficiency };
+}
 
 const object = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 const list = (value: unknown): unknown[] => (Array.isArray(value) ? value : []);
@@ -133,6 +146,7 @@ export function shapeCouncil(raw: string | null, owner: string, now: number) {
     capabilityTraining: shapeCapabilityTraining(execution?.capabilityTraining, owner, now),
     reviewerAcademy: shapeReviewerAcademy(state.company),
     tokens: shapeTokens(execution?.tokens, now),
+    creditPacer: shapeCreditPacer(execution?.creditPacer, now),
   };
 }
 

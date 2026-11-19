@@ -46,12 +46,32 @@ const record = (state: SelfHealState, c: CompanyState, observations: any[], jobs
   recordSelfHealFactory({ state, company: c, observations, journal: { jobs }, owner, now });
 const attemptRef = (state: SelfHealState, i = 0) => { const a = state.entries[i].attempts.at(-1)!; return { orderId: a.orderId, orderRevision: a.orderRevision }; };
 
-test("feature flag is off by default and the daily cap is bounded to 1..2", () => {
+test("feature flag is off unless 'true'; no fixed daily cap unless the optional variable sets one", () => {
   assert.deepEqual(selfHealSettings({}), { enabled: false });
-  assert.deepEqual(selfHealSettings({ OFFICE_SELF_HEAL_ENABLED: "true" }), { enabled: true, maxPerDay: 1 });
+  assert.deepEqual(selfHealSettings({ OFFICE_SELF_HEAL_ENABLED: "true" }), { enabled: true, maxPerDay: Number.POSITIVE_INFINITY });
+  assert.deepEqual(selfHealSettings({ OFFICE_SELF_HEAL_ENABLED: "true", OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY: "" }), { enabled: true, maxPerDay: Number.POSITIVE_INFINITY });
   assert.deepEqual(selfHealSettings({ OFFICE_SELF_HEAL_ENABLED: "true", OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY: "2" }), { enabled: true, maxPerDay: 2 });
-  for (const bad of ["0", "3", "5", "1.5", "x"]) assert.throws(() => selfHealSettings({ OFFICE_SELF_HEAL_ENABLED: "true", OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY: bad }));
-  assert.throws(() => plan(undefined, [], T0, company(), 3), /DAILY_CAP/);
+  assert.deepEqual(selfHealSettings({ OFFICE_SELF_HEAL_ENABLED: "true", OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY: "7" }), { enabled: true, maxPerDay: 7 });
+  for (const bad of ["0", "101", "1.5", "x"]) assert.throws(() => selfHealSettings({ OFFICE_SELF_HEAL_ENABLED: "true", OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY: bad }));
+  assert.throws(() => plan(undefined, [], T0, company(), -1), /DAILY_CAP/);
+  assert.throws(() => planSelfHeal({ state: undefined, company: company(), journal: { jobs: [] }, owner, now: T0, maxPerDay: 2, fundableOrders: 1.5 }), /DAILY_CAP/);
+});
+
+test("credit pacer gates new orders: unlimited while funded, waiting orders count, zero opens none", () => {
+  const prs = [7, 8, 9, 10].map(n => ({ n }));
+  const jobs = [codeJob(T0, prs, prs.map(p => ({ code: "PR_FAILING_CHECKS", recordIds: [prId(p.n)] })))];
+  const unlimited = planSelfHeal({ state: undefined, company: company(), journal: { jobs }, owner, now: T0, maxPerDay: Number.POSITIVE_INFINITY, fundableOrders: 3 });
+  assert.equal(unlimited.created.length, 3);
+  // Same day: the three orders still wait for the factory, so 3 fundable units add nothing.
+  const again = planSelfHeal({ state: unlimited.state, company: unlimited.company, journal: { jobs }, owner, now: T0 + HOUR, maxPerDay: Number.POSITIVE_INFINITY, fundableOrders: 3 });
+  assert.equal(again.created.length, 0);
+  const more = planSelfHeal({ state: unlimited.state, company: unlimited.company, journal: { jobs }, owner, now: T0 + HOUR, maxPerDay: Number.POSITIVE_INFINITY, fundableOrders: 4 });
+  assert.equal(more.created.length, 1);
+  assert.equal(planSelfHeal({ state: undefined, company: company(), journal: { jobs }, owner, now: T0, maxPerDay: Number.POSITIVE_INFINITY, fundableOrders: 0 }).created.length, 0);
+  // Without the pacer the optional cap still applies; dedupe keeps one open order per finding.
+  assert.equal(planSelfHeal({ state: undefined, company: company(), journal: { jobs }, owner, now: T0, maxPerDay: 2 }).created.length, 2);
+  const all = planSelfHeal({ state: undefined, company: company(), journal: { jobs }, owner, now: T0, maxPerDay: Number.POSITIVE_INFINITY, fundableOrders: 100 });
+  assert.equal(all.created.length, 4);
 });
 
 test("allowlist: only small code findings on the factory repository become orders, with a fixed template", () => {
@@ -248,7 +268,8 @@ test("runner commits orders and ledger in one transaction; state parse is owner-
   assert.equal(c.orders.length, 1); assert.equal(execution.selfHeal.entries.length, 1);
   assert.equal(parseSelfHealState(execution.selfHeal, owner).entries[0].attempts[0].orderId, c.orders[0].id);
   assert.throws(() => parseSelfHealState(execution.selfHeal, "someone-else"), /OWNER_MISMATCH/);
-  assert.throws(() => createSelfHealRunner({ council, owner, maxPerDay: 3 }), /DAILY_CAP/);
+  assert.throws(() => createSelfHealRunner({ council, owner, maxPerDay: 0 }), /DAILY_CAP/);
+  assert.throws(() => createSelfHealRunner({ council, owner, maxPerDay: 101 }), /DAILY_CAP/);
   const fixId = selfHealPullRecordId(fixUrl); assert.equal(fixId, prId(FIX_PR));
 });
 

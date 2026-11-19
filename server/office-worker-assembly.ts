@@ -43,7 +43,26 @@ if (roleWorkEnabled || roleAcademyEnabled || internalEnabled || process.env.OFFI
   academy = module.getAgentCouncil();
 }
 if (process.env.OFFICE_REVIEW_PROVIDER === "openai" && !reviewOnlyOwner) throw new Error("OpenAI requires the owner-scoped review-only worker.");
-const execution = reviewOnlyOwner && academy ? (await import("./office-execution")).createOfficeExecution(academy) : undefined;
+// Daily credit pacer (server/credit-pacer.ts): spreads the shared grant over its remaining days.
+// Every paid office consumer asks it before admitting work; it never reserves or calls a model.
+// Without a shared credit ledger there is nothing to pace and the previous limits apply.
+const sharedCredits=academy && process.env.OPENAI_SHARED_CREDIT_CONFIG && process.env.AGENT_COUNCIL_STORAGE==="postgres"
+  ? await (await import("./shared-openai-credit-runtime")).loadSharedCreditRuntime(process.env,()=>new Date()).catch(()=>{console.error("Office credit pacer unavailable: shared credit ledger not readable.");return undefined;})
+  : undefined;
+const pacerModule=sharedCredits?await import("./credit-pacer-runtime"):undefined;
+const {taskTypeOfExecution}=await import("./credit-pacer");
+const pacer=pacerModule && sharedCredits && academy?pacerModule.createCreditPacer({readSnapshot:()=>sharedCredits.ledger.paceSnapshot(),readHistory:pacerModule.councilPacerHistory(()=>academy!.load()),env:process.env}):undefined;
+const pacerSync=pacerModule && pacer && academy?pacerModule.createCreditPacerSync({council:academy,pacer}):undefined;
+const recordCost=(sample:{executionId:string;microUsd:number;outputTokens:number})=>pacer?.record({taskType:taskTypeOfExecution(sample.executionId),microUsd:sample.microUsd,outputTokens:sample.outputTokens,at:Date.now()});
+/** Fail closed: an unreadable pace admits no new paid work of that priority. */
+const paceAllows=async(priority:"standard"|"deferrable",taskType:import("./credit-pacer").PacerTaskType)=>{
+  if(!pacer)return true;
+  try{return (await pacer.allow(priority,taskType)).allowed;}catch{return false;}
+};
+const syncPacer=async()=>{if(pacerSync){try{await pacerSync();}catch{console.error("Office credit pacer sync unconfirmed; it will be retried on the next cycle.");}}};
+const executionBase = reviewOnlyOwner && academy ? (await import("./office-execution")).createOfficeExecution(academy,process.env,Date.now,pacer?{onCost:recordCost,outputTokens:base=>pacer.outputTokens(base)}:{}) : undefined;
+// Reviewer tasks are standard priority: claimed only while today's allowance has room.
+const execution = executionBase ? { ...executionBase, admission: { ...executionBase.admission, ready: async () => (await paceAllows("standard","office_review")) && executionBase.admission.ready() } } : undefined;
 const internalModule=internalEnabled ? await import("./office-internal-work"):undefined;
 const internal=internalModule && academy && protocolPool ? internalModule.createInternalWorkRunner({council:academy,owner:getSystemUserId(),read:role=>internalModule.readInternalWorkSnapshot(protocolPool,getSystemUserId(),role==="radio"),shouldStop}):undefined;
 const businessModule=internalEnabled ? await import("./office-business-work"):undefined;
@@ -54,9 +73,16 @@ const roleWork=roleWorkEnabled && academy && protocolPool?(await import("./offic
 // Self-heal (default off): turns allowlisted small code findings into bounded system orders and
 // verifies the fix with the next daily audits. Requires role audits; never merges or deploys.
 const selfHealConfig=(await import("./office-self-heal")).selfHealSettings(process.env);
-if(selfHealConfig.enabled && !roleWorkEnabled)throw new Error("Office self-heal requires real role audits (OFFICE_ROLE_WORK_ENABLED=true).");
-const selfHeal=selfHealConfig.enabled && roleWork && academy?(await import("./office-self-heal")).createSelfHealRunner({council:academy,owner:getSystemUserId(),maxPerDay:selfHealConfig.maxPerDay}):undefined;
-const roleExecution=roleAcademyEnabled && academy?(await import("./office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"1536"}):undefined;
+// Self-heal is on by default; without real role audits it has nothing to verify, so it stays idle
+// (static notice) instead of stopping the whole office run.
+if(selfHealConfig.enabled && !roleWorkEnabled)console.error("Office self-heal idle: it requires real role audits (OFFICE_ROLE_WORK_ENABLED=true).");
+// No fixed daily order cap: with the pacer, orders open while today's allowance can fund their
+// measured factory cost (one per finding, deduped; the factory's own daily draft PR cap still applies).
+const selfHealModule=await import("./office-self-heal");
+const selfHeal=selfHealConfig.enabled && roleWork && academy?selfHealModule.createSelfHealRunner({council:academy,owner:getSystemUserId(),
+  maxPerDay:pacer?selfHealConfig.maxPerDay:Math.min(selfHealConfig.maxPerDay,selfHealModule.SELF_HEAL_UNPACED_ORDERS_PER_DAY),
+  ...(pacer?{fundableOrders:()=>pacer.fundable("self_heal_order")}:{})}):undefined;
+const roleExecution=roleAcademyEnabled && academy?(await import("./office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"1536"},Date.now,pacer?{onCost:recordCost}:{}):undefined;
 const roleAcademy=roleExecution && academy?(await import("./office-role-academy")).createRoleAcademyRunner({council:academy,dailyPairs:Number(process.env.OFFICE_ROLE_ACADEMY_DAILY_PAIRS),shouldStop,run:async(prompt,call)=>{
   const result=await roleExecution.run(prompt,call.executionId);
   if(!("provider" in result) || result.provider!=="openai" || !("usage" in result))throw new Error("Role academy requires measured OpenAI execution.");
@@ -72,8 +98,8 @@ const blackroomAcademy=roleExecution && academy && process.env.OFFICE_BLACKROOM_
   return result as import("./office-openai").OfficeOpenAIResult;
 }}):undefined;
 const capabilityModule=capabilityEnabled?await import("./office-capability-training"):undefined;
-const capabilityCredits=capabilityModule?await (await import("./shared-openai-credit-runtime")).loadSharedCreditRuntime(process.env,()=>new Date()):undefined;
-const capabilityExecution=capabilityCredits && academy?(await import("./office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"768"},Date.now,{sharedCredits:capabilityCredits}):undefined;
+const capabilityCredits=capabilityModule?sharedCredits ?? await (await import("./shared-openai-credit-runtime")).loadSharedCreditRuntime(process.env,()=>new Date()):undefined;
+const capabilityExecution=capabilityCredits && academy?(await import("./office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"768"},Date.now,{sharedCredits:capabilityCredits,...(pacer?{onCost:recordCost}:{})}):undefined;
 const capabilityTrainer=capabilityModule && capabilityCredits && capabilityExecution && academy?capabilityModule.createCapabilityTrainer({owner:getSystemUserId(),maxCallsPerDay:Number(process.env.OFFICE_CAPABILITY_MAX_CALLS_PER_DAY),shouldStop,
  loadWork:async()=>{const state=await academy!.load();return (await import("./office-role-work")).parseRoleWork(state.officeExecution?.roleWork,getSystemUserId());},
  transact:async change=>{const saved=await academy!.updateOfficeExecution((state,company)=>{
@@ -87,9 +113,12 @@ const capabilityTrainer=capabilityModule && capabilityCredits && capabilityExecu
 const worker = createOfficeCloudWorker({ scheduledKongOwner, reviewOnlyOwner, ...(options.workerId ? { workerId: options.workerId } : {}), ...(execution ? { execute: execution.execute, probeClaude: execution.probe, admission: execution.admission } : {}) });
 const council = academy;
 // The academy block below is the PC worker's fifteen-minute cycle, unchanged.
+// Pacer priorities: role audits (free) and in-flight work are essential; reviewer tasks and
+// self-heal orders are standard; academies and capability training are deferrable (soft mode waits).
 const academyCycle = council ? async () => {
+  await syncPacer();
   await council.runCycle();
-  if (!shouldStop() && process.env.OFFICE_ACADEMY_EXECUTION_ENABLED === "true") await council.runAcademyCycle();
+  if (!shouldStop() && process.env.OFFICE_ACADEMY_EXECUTION_ENABLED === "true" && await paceAllows("deferrable","reviewer_academy")) await council.runAcademyCycle();
   if(internal && !shouldStop()) await internal.tick();
   if(businessWork && !shouldStop()) await businessWork.tick();
   if(revenueWork && !shouldStop()) await revenueWork.tick();
@@ -97,13 +126,18 @@ const academyCycle = council ? async () => {
   if(editorialWork && !shouldStop()) await editorialWork.tick();
   if(roleWork && !shouldStop()) await roleWork.tick();
   if(selfHeal && !shouldStop()){try{await selfHeal.tick();}catch{console.error("Office self-heal step unconfirmed; it will be reconciled on the next cycle.");}}
-  if(roleAcademy && !shouldStop()) await roleAcademy.tick();
-  if(blackroomAcademy && !shouldStop()) await blackroomAcademy.tick();
+  if(roleAcademy && !shouldStop() && await paceAllows("deferrable","academy_pair")) await roleAcademy.tick();
+  if(blackroomAcademy && !shouldStop() && await paceAllows("deferrable","blackroom_pair")) await blackroomAcademy.tick();
   // The web scheduler is disabled in this deployment. Preserve the
   // scout's durable daily cadence here; it only reads public releases.
   if (!shouldStop()) await council.runScout();
+  await syncPacer();
 } : undefined;
-const capabilityTick = capabilityTrainer ? () => capabilityTrainer.tick() : undefined;
-return { worker, checkProtocol, academyCycle, capabilityTick, runOnce, protocolPool, close: async () => { await protocolPool?.end(); } };
+const capabilityTick = capabilityTrainer ? async () => {
+  if(!(await paceAllows("deferrable","capability_training")))return;
+  await capabilityTrainer.tick();
+  if(pacer?.pendingSamples())await syncPacer();
+} : undefined;
+return { worker, checkProtocol, academyCycle, capabilityTick, runOnce, protocolPool, close: async () => { if(pacer?.pendingSamples())await syncPacer(); await protocolPool?.end(); } };
 } catch (error) { await protocolPool?.end(); throw error; }
 }

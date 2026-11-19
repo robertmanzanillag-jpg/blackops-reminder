@@ -40,6 +40,12 @@ on:
 permissions:
   contents: read
 
+# Factory admission of system-authored office self-heal orders. Overrides ONLY autoAdmit.systemOrders of
+# the private operator config (and only when that config already has autoAdmit); nothing else in the
+# secret can be changed from here. 'true' by default so the owner does not have to edit the secret.
+env:
+  FACTORY_AUTO_ADMIT_SYSTEM_ORDERS: ${{ vars.FACTORY_AUTO_ADMIT_SYSTEM_ORDERS || 'true' }}
+
 jobs:
   office-once:
     # Never on forks; only scheduled or manual runs of this repository can see the office secrets.
@@ -53,6 +59,10 @@ jobs:
     concurrency:
       group: office-worker-cloud
       cancel-in-progress: false
+    # issues: write only for the credit pacer's owner notification (one `budget` issue per alert).
+    permissions:
+      contents: read
+      issues: write
     runs-on: ubuntu-24.04
     # 13-minute run budget plus startup and bounded settlement/cleanup.
     timeout-minutes: 25
@@ -137,9 +147,12 @@ jobs:
           OFFICE_CAPABILITY_TRAINING_ENABLED: ${{ vars.OFFICE_CAPABILITY_TRAINING_ENABLED || 'false' }}
           OFFICE_CAPABILITY_MAX_CALLS_PER_DAY: ${{ vars.OFFICE_CAPABILITY_MAX_CALLS_PER_DAY }}
           OPENAI_SHARED_CREDITS_REQUIRED: ${{ vars.OFFICE_SHARED_CREDITS_REQUIRED || 'false' }}
-          # Office self-heal (finding -> order -> factory -> re-audit). Off unless the variable is 'true'.
-          OFFICE_SELF_HEAL_ENABLED: ${{ vars.OFFICE_SELF_HEAL_ENABLED || 'false' }}
-          OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY: ${{ vars.OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY || '1' }}
+          # Office self-heal (finding -> order -> factory -> re-audit). On unless the variable is 'false'.
+          # No fixed daily order cap: the daily credit pacer decides (an optional variable can still cap it).
+          OFFICE_SELF_HEAL_ENABLED: ${{ vars.OFFICE_SELF_HEAL_ENABLED || 'true' }}
+          OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY: ${{ vars.OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY }}
+          # Daily credit pacer: notify the owner after this many consecutive overspent days (default 3).
+          OFFICE_CREDIT_OVERSPEND_ALERT_DAYS: ${{ vars.OFFICE_CREDIT_OVERSPEND_ALERT_DAYS || '3' }}
           # Database cost: exit after this many seconds without claiming a task (default 120; 0 = run to
           # the deadline as before) and cap the run length (7..13 minutes, default 13).
           OFFICE_RUN_IDLE_EXIT_SECONDS: ${{ vars.OFFICE_RUN_IDLE_EXIT_SECONDS }}
@@ -149,6 +162,18 @@ jobs:
           if [ -n "${OFFICE_SHARED_CREDIT_FILE:-}" ]; then export OPENAI_SHARED_CREDIT_CONFIG="$OFFICE_SHARED_CREDIT_FILE"; fi
           # 15 minutes: the worker's own 13-minute budget, then SIGTERM for bounded settlement.
           timeout --signal=TERM --kill-after=3m 15m node --import tsx script/office-worker-once.ts
+
+      - name: Notify the owner of credit pacing alerts
+        # Read-only on the database; opens at most one `budget` issue per alert (fixed text + numbers).
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        timeout-minutes: 3
+        env:
+          DATABASE_URL: ${{ secrets.OFFICE_DATABASE_URL }}
+          DEFAULT_USER_ID: ${{ secrets.OFFICE_OWNER_ID }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [ -f script/credit-pacer-notify.ts ]; then node --import tsx script/credit-pacer-notify.ts; fi
 
       - name: Remove private configuration
         if: always()
@@ -263,9 +288,9 @@ jobs:
           SOFTWARE_FACTORY_OFFICE_REVIEW_ENABLED: ${{ vars.SOFTWARE_FACTORY_OFFICE_REVIEW_ENABLED || 'false' }}
           # Optional: score factory stage outcomes as office careers (lives, presence, successors).
           SOFTWARE_FACTORY_OFFICE_CAREERS_ENABLED: ${{ vars.SOFTWARE_FACTORY_OFFICE_CAREERS_ENABLED || 'false' }}
-          # Office self-heal (finding -> order -> factory -> re-audit). Off unless the variable is 'true'.
-          OFFICE_SELF_HEAL_ENABLED: ${{ vars.OFFICE_SELF_HEAL_ENABLED || 'false' }}
-          OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY: ${{ vars.OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY || '1' }}
+          # Office self-heal (finding -> order -> factory -> re-audit). On unless the variable is 'false'.
+          OFFICE_SELF_HEAL_ENABLED: ${{ vars.OFFICE_SELF_HEAL_ENABLED || 'true' }}
+          OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY: ${{ vars.OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY }}
         run: |
           set -euo pipefail
           export OPENAI_SHARED_CREDIT_CONFIG="$FACTORY_CONFIG_DIR/shared-credit.json"

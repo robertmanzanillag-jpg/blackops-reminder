@@ -98,6 +98,16 @@ export function createSharedOpenAiCreditLedger(options: {
     async status() {
       return transaction((state, at) => ({ grantId: grant.id, ...totals(state), expired: Date.parse(at) >= Date.parse(grant.expiresAt) }));
     },
+    /** Read-only view for the daily pacer (server/credit-pacer.ts): per reservation only
+     * its time, consumer, key kind (prefix before the first ':') and amounts. Never
+     * keys, request hashes or evidence ids. Grants no execution authority. */
+    async paceSnapshot() {
+      return transaction(state => ({
+        ledgerId: grant.accountScope, grantMicroUsd: grant.availableMicroUsd, observedAt: grant.observedAt, expiresAt: grant.expiresAt,
+        rows: state.reservations.map(row => ({ createdAt: row.createdAt, consumer: row.consumer, kind: row.key.split(":")[0], status: row.status,
+          reservedMicroUsd: row.reservedMicroUsd, ...(row.actualMicroUsd !== undefined ? { actualMicroUsd: row.actualMicroUsd } : {}) })),
+      }));
+    },
     /** Trusted consumers can verify one already-settled receipt. Reading it
      * grants no execution authority and never releases an uncertain hold. */
     async settledReceipt(key: string) {
