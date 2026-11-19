@@ -81,10 +81,11 @@ test("Clippers own area uses real evidence gates, expires activity, and protects
     assert.equal(await page.getByText("Ejecutando ahora", { exact: true }).count(), 0);
     await page.getByText("Actividad sin verificar", { exact: true }).waitFor();
     await page.getByRole("tab", { name: "Cuentas y métricas", exact: true }).click();
-    assert.equal(await page.locator('[data-testid^="clippers-account-"]').count(), 4);
+    assert.equal(await page.locator('[data-testid^="clippers-account-"]').count(), payload.accounts.length);
+    assert.equal(await page.getByTestId('clippers-account-6595747:facebook:1198281286708321').count(), 1);
     assert.equal(await dialog.evaluate(element => element.scrollWidth <= element.clientWidth + 1), true, "wide metric table must scroll locally without widening the dialog");
-    await page.getByText("NY · sin redes conectadas", { exact: true }).waitFor();
-    assert.equal(await page.getByText("No hay métricas observadas para esta cuenta.", { exact: true }).count(), 3);
+    await page.getByText("NY · TikTok · conexión pendiente", { exact: true }).waitFor();
+    assert.equal(await page.getByText("No hay métricas observadas para esta cuenta.", { exact: true }).count(), payload.accounts.length - 1);
     const account = page.getByTestId(`clippers-account-${payload.accounts[0].key}`);
     const analytics = page.getByTestId(`clippers-analytics-${payload.accounts[0].key}`);
     await analytics.getByText("7", { exact: true }).waitFor();
@@ -123,7 +124,7 @@ test("Clippers own area uses real evidence gates, expires activity, and protects
     assert.match(await dialog.innerText(), /promoción de parámetros de edición requiere revisión manual/);
     payload.learning.comparisons = [{ id: "fixture-comparison", destination: payload.accounts[0].key, variable: "hook", baselineVersion: "baseline-1", candidateVersion: "candidate-2", controlSamples: 5, candidateSamples: 5, improvementRatio: 0.25, current: true, renderReceiptVerified: true, eligible: true, heldReasons: [] }];
     payload.learning.eligibleComparisons = 1;
-    payload.creatorSelection={evaluatedAt:new Date(now).toISOString(),contexts:1,assigned:30,heldReasons:[],preferences:[{scopeKey:'a'.repeat(64),destination:{brandId:6431685,network:'tiktok',account:'streamersclips'},language:'en',format:'vertical_clip',context:'streamer_clip',postingBand:'10:00',timezone:'America/New_York',windowHours:24,baselineCreatorGroupId:'mrbeast',preferredCreatorGroupId:'thegrefg',status:'preferred',reason:'three_disjoint_batches_qualified',eligibleSamples:30,expiresAt:new Date(now+45000).toISOString(),evidenceSha256:'b'.repeat(64)}]};
+    payload.creatorSelection={evaluatedAt:new Date(now).toISOString(),contexts:1,assigned:30,heldReasons:[],preferences:[{scopeKey:'a'.repeat(64),destination:{brandId:Number(payload.accounts[0].brandId),network:payload.accounts[0].network,account:payload.accounts[0].account},language:'en',format:'vertical_clip',context:'streamer_clip',postingBand:'10:00',timezone:'America/New_York',windowHours:24,baselineCreatorGroupId:'mrbeast',preferredCreatorGroupId:'thegrefg',status:'preferred',reason:'three_disjoint_batches_qualified',eligibleSamples:30,expiresAt:new Date(now+45000).toISOString(),evidenceSha256:'b'.repeat(64)}]};
     await page.getByTestId("clippers-refresh").click();
     await page.getByText(/Comparación vigente · Elegible para revisión/).waitFor();
     await page.getByText('Preferencia con evidencia: thegrefg',{exact:true}).waitFor();

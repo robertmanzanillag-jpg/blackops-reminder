@@ -1,3 +1,4 @@
+import { publicationDestinationKey, currentDestinationForHistory } from './clippers-destination-registry.mjs';
 import { verifiedExternalSchedules, externalScheduleCollision } from './clippers-native-media-receipts.mjs';
 import { canonicalSourceIdentity } from '../shared/clippers-priority-creators.mjs';
 import { constants } from 'node:fs';
@@ -7,7 +8,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { loadClipperSelectedEnv } from './clippers-selected-env.mjs';
-import { createPortfolioMetricool, DESTINATIONS, destinationKey, findDestination, localDay, providerTimestamp, canonicalAccount } from './clippers-portfolio-metricool.mjs';
+import { createPortfolioMetricool, DESTINATIONS, destinationKey, findDestination, findPublishDestination, localDay, providerTimestamp } from './clippers-portfolio-metricool.mjs';
 import { validateApprovedClippersAsset } from './clippers-daily-learning.mjs';
 import { validWeeklyWindow, readWeeklyPrivateJson, weeklyDeliveryCollision, weeklyDigest } from './clippers-weekly-policy.mjs';
 const CONFIG='config/clippers-daily-learning', REPORT='reports/clippers-daily-learning';
@@ -50,7 +51,7 @@ export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new 
     const legacy=await readWeeklyPrivateJson(root,'reports/metricool-autopilot-ledger.json',[],0o022);
     if(!Array.isArray(receipts)||!Array.isArray(legacy))throw Error('weekly_receipt_ledger_invalid');
     const external=verifiedExternalSchedules(await readWeeklyPrivateJson(root,`${REPORT}/external-schedules.json`,[]),now);
-    const candidates=configured.assets.filter(a=>findDestination(a)&&(a.weeklyAuthorizationSha256||a.editorialPolicy==='evergreen_streamer_clip')&&providerTimestamp(a.scheduledAt)&&
+    const candidates=configured.assets.filter(a=>findPublishDestination(a)&&(a.weeklyAuthorizationSha256||a.editorialPolicy==='evergreen_streamer_clip')&&providerTimestamp(a.scheduledAt)&&
       localDay(new Date(a.scheduledAt))>=window.startDate&&localDay(new Date(a.scheduledAt))<=window.endDate);
     const counts=new Map();for(const a of candidates){const key=destinationKey(a)+':'+a.id;counts.set(key,(counts.get(key)||0)+1);}
     const windowKey=window.startDate+':'+window.endDate,budgetWeek=remainingWeeklyWindow(now).endDate;
@@ -59,13 +60,13 @@ export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new 
       const outcome={destination:destinationKey(raw),assetId:typeof raw.id==='string'&&/^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,99}$/.test(raw.id)?raw.id:'unverified_asset',scheduledAt:raw.scheduledAt,status:'held',reason:null};report.outcomes.push(outcome);
       if(!within()){outcome.reason='weekly_cycle_deadline';break;}
       if(counts.get(destinationKey(raw)+':'+raw.id)!==1){outcome.reason='duplicate_asset_identity';continue;}
-      if(external.some(r=>destinationKey(r.destination)===destinationKey(raw)&&(r.assetId===raw.id||r.sha256===raw.mediaSha256||r.mediaUrl===raw.mediaUrl))){outcome.reason='external_owner_ui_schedule_observed_no_replay';continue;}
+      if(external.some(r=>publicationDestinationKey(r.destination)===destinationKey(raw)&&(r.assetId===raw.id||r.sha256===raw.mediaSha256||r.mediaUrl===raw.mediaUrl))){outcome.reason='external_owner_ui_schedule_observed_no_replay';continue;}
       let item=await validateApprovedClippersAsset(raw,root,current(),receipts,state,window);
       if(!item){outcome.reason='weekly_asset_rights_media_or_render_unverified';continue;}
-      if(external.some(row=>externalScheduleCollision(row,item))||state.deliveries.some(row=>weeklyDeliveryCollision(row,item)) || legacy.some(row=>Number(row.metricoolBlogId)===item.brandId&&canonicalAccount(row.metricoolBlogId,item.network,row.account)===item.account&&
+      if(external.some(row=>externalScheduleCollision({...row,destination:currentDestinationForHistory(row.destination)},item))||state.deliveries.some(row=>weeklyDeliveryCollision({...row,...currentDestinationForHistory(row)},item)) || legacy.some(row=>Number(row.metricoolBlogId)===item.brandId&&publicationDestinationKey({brandId:Number(row.metricoolBlogId),network:item.network,account:String(row.account??'').replace(/^@/,'').toLowerCase()})===destinationKey(item)&&
           (row.sha256===item.mediaSha256||row.mediaSha256===item.mediaSha256||row.mediaUrl===item.mediaUrl||row.sourceUrl===item.sourceUrl||(canonicalSourceIdentity(row.sourceUrl)&&canonicalSourceIdentity(row.sourceUrl)===canonicalSourceIdentity(item.sourceUrl))))){outcome.reason='duplicate_or_overlapping_delivery';continue;}
       const day=localDay(new Date(item.scheduledAt));
-      const existing=state.deliveries.filter(row=>findDestination(row)&&destinationKey(row)===destinationKey(item)&&localDay(new Date(row.scheduledAt))===day);
+      const existing=state.deliveries.filter(row=>findDestination(row)&&publicationDestinationKey(row)===destinationKey(item)&&localDay(new Date(row.scheduledAt))===day);
       if(existing.some(row=>!['scheduled','published'].includes(row.status))){outcome.reason='prior_schedule_outcome_unreconciled';continue;}
       if(existing.length>=5){outcome.reason='destination_daily_cap';continue;}
       report.ready++;

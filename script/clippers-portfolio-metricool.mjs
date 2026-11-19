@@ -4,52 +4,9 @@ const API = 'https://app.metricool.com';
 const MCP = 'https://ai.metricool.com/mcp';
 export const TIME_ZONE = 'America/New_York';
 export const DAILY_LIMIT = 5;
-// Live Metricool identities (getBrandSettings, 2026-11-19): 6431685 "memes" TikTok @streamersus,
-// 6431687 "SPORT" TikTok @streamersclipusa, 6591612 TikTok @news305miami + Facebook page 1193011863901514.
-export const DESTINATIONS = Object.freeze([
-  Object.freeze({ brandId: 6431685, network: 'tiktok', account: 'streamersus' }),
-  Object.freeze({ brandId: 6431687, network: 'tiktok', account: 'streamersclipusa' }),
-  Object.freeze({ brandId: 6591612, network: 'tiktok', account: 'news305miami' }),
-  Object.freeze({ brandId: 6591612, network: 'facebook', account: '1193011863901514' }),
-]);
-// Earlier account names of the same brand+network. Ledger rows written with them still resolve to (and
-// count against the caps/duplicate checks of) the current destination; they are never targeted.
-export const LEGACY_ACCOUNT_ALIASES = Object.freeze({
-  '6431685:tiktok': Object.freeze(['streamersclips']),
-  '6591612:tiktok': Object.freeze(['ynb4b6r6']),
-});
-export const DISCONNECTED_BRAND = 6595747;
+export { DESTINATIONS, DISCONNECTED_BRAND, findDestination, findPublishDestination, destinationKey } from './clippers-destination-registry.mjs';
+import { DESTINATIONS, findDestination, findPublishDestination, destinationKey, verifyCurrentIdentity } from './clippers-destination-registry.mjs';
 export const localHour = time => new Intl.DateTimeFormat('en-US', {timeZone: TIME_ZONE, hour:'2-digit', hourCycle:'h23'}).format(new Date(time));
-function accountAliases(destination) {
-  return [destination.account, ...(LEGACY_ACCOUNT_ALIASES[`${destination.brandId}:${destination.network}`] ?? [])];
-}
-export function findDestination(value) {
-  return DESTINATIONS.find(d => d.brandId === value?.brandId && d.network === value.network && accountAliases(d).includes(value.account));
-}
-/** Canonical key: a legacy account alias maps to the current destination's key. */
-export const destinationKey = (value) => {
-  const { brandId, network, account } = findDestination(value) ?? value;
-  return [brandId, network, account].join(':');
-};
-/** Canonical form of a stored "brandId:network:account" key (legacy account aliases map to the current one). */
-export function canonicalDestinationKey(key) {
-  const m = /^(\d+):([a-z]+):(.+)$/.exec(String(key ?? ''));
-  if (!m) return key;
-  return destinationKey({ brandId: Number(m[1]), network: m[2], account: m[3] });
-}
-/** Current account for a stored brand/network/account triple (legacy alias -> current; anything else unchanged). */
-export function canonicalAccount(brandId, network, account) {
-  const value = String(account ?? '').replace(/^@/, '').toLowerCase();
-  return findDestination({ brandId: Number(brandId), network, account: value })?.account ?? value;
-}
-/** state.versions-style lookup by destination key; the exact canonical key wins over a legacy alias key. */
-export function valueForDestination(map, key) {
-  if (!map || typeof map !== 'object') return undefined;
-  const canonical = canonicalDestinationKey(key);
-  if (Object.hasOwn(map, canonical)) return map[canonical];
-  const legacy = Object.keys(map).find(k => k !== canonical && canonicalDestinationKey(k) === canonical);
-  return legacy === undefined ? undefined : map[legacy];
-}
 export function localDay(time) {
   return new Intl.DateTimeFormat('sv-SE', {
     timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -59,9 +16,7 @@ export function exactPost(value, destination) {
   try {
     const url = new URL(value);
     if (url.protocol !== 'https:' || url.username || url.password || url.port) return null;
-    const { network } = destination;
-    const current = findDestination(destination);
-    const account = '(?:' + (current ? accountAliases(current) : [destination.account]).map(a => String(a).replace(/[^A-Za-z0-9_.]/g, '').replace(/\./g, '\\.')).join('|') + ')';
+    const { network, account } = destination;
     const match = network === 'tiktok' && ['www.tiktok.com', 'tiktok.com'].includes(url.hostname)
       ? new RegExp('^/@' + account + '/video/(\\d+)/?$').exec(url.pathname)
       : network === 'facebook' && ['www.facebook.com', 'facebook.com'].includes(url.hostname)
@@ -195,27 +150,16 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
     if (!envelope?.result || envelope.error || envelope.result.isError) throw new Error('metricool_request_outcome_uncertain');
     return envelope.result;
   }
-  let settings;
-  async function connectionSettings() {
-    if (settings) return settings;
-    const result = await mcp('getBrandSettings', {});
-    const entries = result.structuredContent ?? (result.content?.length === 1 && JSON.parse(result.content[0].text));
-    settings = list(entries?.brands ?? entries?.profiles ?? entries);
-    return settings;
-  }
   async function destinationSettings(value) {
-    const destination = findDestination(value);
-    if (!destination) throw new Error('destination_not_allowlisted');
-    profiles ??= list(await get('/api/admin/simpleProfiles'));
+    const destination = findPublishDestination(value);
+    if (!destination) throw new Error('destination_not_allowlisted_publish_current');
+    // Never cache identity across preflight/dispatch; a relink invalidates the reviewed identity.
+    const detail = await get('/api/v2/settings/brands/' + destination.brandId, { blogId: destination.brandId });
+    if (!verifyCurrentIdentity(detail, destination, userId)) throw new Error('destination_identity_unverified');
+    profiles = list(await get('/api/admin/simpleProfiles'));
     const matches = profiles.filter(row => String(row.blogId ?? row.id ?? '') === String(destination.brandId));
     const profile = matches.length === 1 && matches[0];
-    if (!profile || profile.deleted === true) throw new Error('destination_identity_unverified');
-    const connection = accountEvidence(profile, destination);
-    if (connection === 'conflict') throw new Error('destination_identity_unverified');
-    if (connection === 'missing') {
-      const brands = (await connectionSettings()).filter(row => String(row.blogId ?? row.id ?? '') === String(destination.brandId));
-      if (brands.length !== 1 || accountEvidence(brands[0], destination) !== 'match') throw new Error('destination_identity_unverified');
-    }
+    if (!profile || profile.deleted === true || accountEvidence(profile, destination) !== 'match') throw new Error('destination_identity_unverified');
     const owned = profile.isShared === false && String(profile.ownerUserId ?? '') === String(userId);
     return { canPublish: profile.isWhiteLabelOnlyRead !== true && profile.canPublish !== false &&
       (profile.canPublish === true || owned) };
@@ -279,7 +223,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
       if (!(now instanceof Date) || !Number.isFinite(+now)) throw Error('weekly_now_required');
       const day = localDay(new Date(item.scheduledAt));
       if (Date.parse(item.scheduledAt) < +now + 300000) throw Error('weekly_schedule_expired');
-      profiles = settings = undefined;
+      profiles = undefined;
       if (!(await destinationSettings(destination)).canPublish) throw Error('destination_publish_permission_missing');
       const rows = await schedule(destination, day, true);
       const pending = new Map();
@@ -332,7 +276,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
         evidenceSha256:createHash('sha256').update(JSON.stringify(evidence)).digest('hex') };
     },
     async schedule(destination, item) {
-      profiles = settings = undefined;
+      profiles = undefined;
       if (!(await destinationSettings(destination)).canPublish) throw new Error('destination_publish_permission_missing');
       const networkOptions = destination.network === 'facebook'
         ? { facebookData: { type: 'REEL' } }

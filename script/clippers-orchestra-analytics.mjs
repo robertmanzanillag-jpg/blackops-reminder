@@ -1,7 +1,7 @@
 import { mkdir, lstat, realpath, writeFile, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
-import { createPortfolioMetricool, DESTINATIONS, destinationKey, localDay, findDestination, exactPost, providerTimestamp } from './clippers-portfolio-metricool.mjs';
+import { createPortfolioMetricool, DESTINATIONS, destinationKey, localDay, findDestination, findPublishDestination, exactPost, providerTimestamp } from './clippers-portfolio-metricool.mjs';
 import { privateOrchestraJson } from './clippers-orchestra-report.mjs';
 import { loadClipperSelectedEnv } from './clippers-selected-env.mjs';
 async function boundedBody(response,limit=2*1024*1024){
@@ -15,7 +15,7 @@ export function readOnlyAnalyticsFetch(fetcher,signal){
     const url=new URL(String(input)),method=String(init.method??'GET').toUpperCase();
     if(url.protocol!=='https:'||url.username||url.password||url.port)throw Error('analytics_read_scope_required');
     const get=method==='GET'&&url.hostname==='app.metricool.com'&&(
-      url.pathname==='/api/admin/simpleProfiles'||(/^\/api\/v2\/analytics\/posts\/(?:tiktok|facebook)$/.test(url.pathname)&&url.searchParams.getAll('blogId').length===1&&DESTINATIONS.some(d=>String(d.brandId)===url.searchParams.get('blogId')&&url.pathname.endsWith('/'+d.network))));
+      url.pathname==='/api/admin/simpleProfiles'||(/^\/api\/v2\/settings\/brands\/\d+$/.test(url.pathname)&&DESTINATIONS.some(d=>url.pathname.endsWith('/'+d.brandId)&&url.searchParams.get('blogId')===String(d.brandId)))||(/^\/api\/v2\/analytics\/posts\/(?:tiktok|facebook)$/.test(url.pathname)&&url.searchParams.getAll('blogId').length===1&&DESTINATIONS.some(d=>String(d.brandId)===url.searchParams.get('blogId')&&url.pathname.endsWith('/'+d.network))));
     let metadata=false;
     if(method==='POST'&&url.href==='https://ai.metricool.com/mcp'){
       const body=JSON.parse(String(init.body??''));metadata=body.method==='tools/call'&&body.params?.name==='getBrandSettings'&&Object.keys(body.params.arguments??{}).length===0;
@@ -30,7 +30,7 @@ export async function collectClippersAccountAnalytics({workspaceRoot,now=new Dat
   if(!(now instanceof Date)||!Number.isFinite(+now)||!Number.isInteger(maxCycleMs)||maxCycleMs<1||maxCycleMs>90000)throw Error('analytics_configuration_invalid');
   const root=await realpath(path.resolve(workspaceRoot||env.CLIPPERS_WORKSPACE_ROOT||'clippers_workspace'));
   const prior=(await privateOrchestraJson(root,'reports/clippers-account-analytics/latest.json',524288)).value;
-  if(prior?.schemaVersion===1&&prior.adapterContract==='utc-local-v1'&&prior.paidSpendUsd===0&&prior.readOnly===true&&Array.isArray(prior.accounts)&&prior.accounts.length===4&&new Set(prior.accounts.filter(a=>findDestination(a)).map(destinationKey)).size===4&&prior.date===localDay(now)&&Date.parse(prior.generatedAt)<=+now&&+now-Date.parse(prior.generatedAt)<6*3600000)return {...prior,reused:true};
+  if(prior?.schemaVersion===1&&prior.adapterContract==='utc-local-v1'&&prior.paidSpendUsd===0&&prior.readOnly===true&&Array.isArray(prior.accounts)&&prior.accounts.length===DESTINATIONS.length&&new Set(prior.accounts.filter(a=>findPublishDestination(a)).map(destinationKey)).size===DESTINATIONS.length&&prior.date===localDay(now)&&Date.parse(prior.generatedAt)<=+now&&+now-Date.parse(prior.generatedAt)<6*3600000)return {...prior,reused:true};
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),maxCycleMs);
   const started=performance.now();let client=adapter;
   if(!client){
@@ -62,7 +62,7 @@ export async function collectClippersAccountAnalytics({workspaceRoot,now=new Dat
     }
   }finally{clearTimeout(timer);}
   const report={schemaVersion:1,adapterContract:'utc-local-v1',date:localDay(now),generatedAt:now.toISOString(),readOnly:true,paidSpendUsd:0,accounts,
-    deniedBrandIds:[6431692,6475033,6585226],disconnected:[{brandId:6595747,reason:'destination_not_connected'}],
+    deniedBrandIds:[6431692,6475033,6585226],disconnected:[{brandId:6595747,network:'tiktok',reason:'destination_not_connected'}],
     notice:'Whole-account seven-day source analytics retain actual observation age; not controlled queue experiments, rights approval or publication proof.'};
   const directory=path.join(root,'reports/clippers-account-analytics');await mkdir(directory,{recursive:true,mode:0o700});
   const info=await lstat(directory);if(!info.isDirectory()||info.isSymbolicLink()||(info.mode&0o077)||(process.getuid&&info.uid!==process.getuid())||await realpath(directory)!==directory)throw Error('analytics_private_directory_required');
