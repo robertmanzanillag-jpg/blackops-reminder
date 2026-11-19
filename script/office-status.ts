@@ -2,12 +2,12 @@ import "../server/env-loader";
 import pg from "pg";
 import { createCouncilStore, type CouncilClient } from "../server/agent-council-store";
 import { safeErrorCode } from "./software-factory-db-cli";
-import { parseOwner, shapeCouncil, shapeWebSources, shapeWorkers, webSourceOwnerKey } from "./office-status-shape";
+import { parseOwner, shapeCouncil, shapeSourceDocuments, shapeWebSources, shapeWorkers, webSourceOwnerKey } from "./office-status-shape";
 
 // READ-ONLY office diagnostic. Everything runs inside one READ ONLY transaction that is always rolled
 // back, so PostgreSQL itself rejects any write. Prints ONE JSON line that is safe for public logs:
 // no user/worker/job ids, no URLs, no free text, no prompts or answers; only enum codes, counts and dates.
-const TABLES = ["agent_council_state", "office_agent_workers", "office_web_role_sources"] as const;
+const TABLES = ["agent_council_state", "office_agent_workers", "office_web_role_sources", "office_source_documents"] as const;
 
 async function main() {
   const owner = parseOwner(process.env);
@@ -43,6 +43,12 @@ async function main() {
       if (has("office_web_role_sources")) {
         const sources = await client.query("SELECT role, observed_at, source->'provenance' AS provenance FROM office_web_role_sources WHERE owner_key=$1", [webSourceOwnerKey(owner)]);
         report.webSources = shapeWebSources(sources.rows, now);
+      }
+      if (has("office_source_documents")) {
+        // Durable copies the web host mirrors (same owner key as office_web_role_sources). Never selects documents.
+        const own = await client.query("SELECT kind, status, count(*)::int AS count, max(written_at) AS latest FROM office_source_documents WHERE owner_key=$1 GROUP BY kind, status", [webSourceOwnerKey(owner)]);
+        const others = await client.query("SELECT kind, count(*)::int AS count FROM office_source_documents WHERE owner_key<>$1 GROUP BY kind", [webSourceOwnerKey(owner)]);
+        report.sourceDocuments = shapeSourceDocuments(own.rows, others.rows);
       }
       await client.query("ROLLBACK");
       console.log(JSON.stringify(report));

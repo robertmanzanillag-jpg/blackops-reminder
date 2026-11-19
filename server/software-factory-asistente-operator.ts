@@ -30,6 +30,7 @@ import { createFactoryOfficeReviewSweep, type FactoryOfficeReviewEnqueue } from 
 import { readFactoryOrderProposals } from "./software-factory-order-evidence";
 import { COMPANY_ORDER_CHECKS_ID, createFactoryOrderFileSelector, isFactoryTestPath, listFactorySelectablePaths } from "./software-factory-company-auto";
 import { isSelfHealOrder, isValidSelfHealOrder } from "./office-self-heal";
+import type { CreditPacer } from "./credit-pacer-runtime";
 const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const sha = z.string().regex(/^[a-f0-9]{40}$/), digest = z.string().regex(/^[a-f0-9]{64}$/);
 const cents = z.number().int().min(1).max(100);
@@ -89,6 +90,18 @@ export function countAutoAdmissionsToday(jobs: readonly FactoryJob[], now: Date,
 }
 /** Admission-side variant: an unprovable count defers admission (no hold). */
 function countDraftPullRequestsTodaySafe(jobs: readonly FactoryJob[], now: Date, ownerKey: string) { try { return countDraftPullRequestsToday(jobs, now, ownerKey); } catch { return Number.POSITIVE_INFINITY; } }
+/**
+ * The ONLY operator-config field the workflow environment may change:
+ * FACTORY_AUTO_ADMIT_SYSTEM_ORDERS=true|false sets autoAdmit.systemOrders, and only
+ * when autoAdmit already exists in the private config. It never enables automatic
+ * admission, widens caps, paths, owner, budgets or any other field. Any other value
+ * (or unset) leaves the private config unchanged.
+ */
+export function applyFactoryOperatorEnvOverride<T extends { autoAdmit?: { systemOrders?: boolean } }>(config: T, env: Record<string, string | undefined>): T {
+    const raw = env.FACTORY_AUTO_ADMIT_SYSTEM_ORDERS?.trim();
+    if ((raw !== "true" && raw !== "false") || !config.autoAdmit) return config;
+    return { ...config, autoAdmit: { ...config.autoAdmit, systemOrders: raw === "true" } };
+}
 export type OperatorUiReader = (input: {
     projectId: string;
     baseSha: string;
@@ -118,6 +131,10 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     scoreOfficeCareers?: () => Promise<unknown>;
     /** Optional office self-heal evidence sync (OFFICE_SELF_HEAL_ENABLED). No provider call. */
     syncSelfHeal?: () => Promise<unknown>;
+    /** Optional daily credit pacer: NEW admissions (owner or system orders) are standard
+     * priority and wait while today's allowance cannot fund the order's estimate.
+     * Admitted jobs keep running (their stages are essential; only the ledger limits them). */
+    pacer?: CreditPacer;
     log?: (message: string) => void;
     now: () => Date;
     /** Which provider credits/modelRequest belong to. Default "openai". */
@@ -158,6 +175,10 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
         if (await credits.ledger.settledReceipt(admissionKey(inputKey)).then(() => true, () => false)) return true;
         return (await otherAdmission(admissionKey(inputKey)))?.status === "settled";
     };
+    /** Config reservation (discover + build + review) is the ceiling; a lower measured average is preferred. */
+    const orderEstimateMicroUsd = async () => { const ceiling = (config.reservations.discover + config.reservations.build + config.reservations.review) * 10000;
+        const measured = await deps.pacer!.estimate("self_heal_order").catch(() => ceiling); return Math.min(ceiling, measured); };
+    const paceAdmits = async () => { if (!deps.pacer) return true; try { return (await deps.pacer.allow("standard", "self_heal_order", await orderEstimateMicroUsd())).allowed; } catch { return false; } };
     const readMainOrder = async (requestOwner: string, id: string) => { if (requestOwner !== owner)
         throw Error("FACTORY_OPERATOR_OWNER_MISMATCH"); return (await orders()).find(o => o.id === id); };
     const admitWithinCredits = async (requestOwner: string, input: FactoryJobInput) => {
@@ -175,6 +196,9 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
         const state = await store.status(owner);
         if (!state.configured || state.paused)
             throw Error("FACTORY_OPERATOR_PAUSED");
+        // New admissions wait for the daily credit pace before any credit hold.
+        if (deps.pacer && !(await settledAdmission(expected.key)) && !(await paceAdmits()))
+            throw Error("FACTORY_OPERATOR_DAILY_CREDIT_PACE");
         // New automatic admissions honor both daily caps before any credit hold.
         if (!resolved.mapping && auto && !(await settledAdmission(expected.key))) {
             const jobs = await store.list(owner), at = now();
@@ -240,6 +264,8 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
         } if (baseSha !== mapping.baseSha)
             throw Error("FACTORY_OPERATOR_ACCEPTANCE_BASE_CHANGED"); return { kind: mapping.kind, regressionScenarioId: mapping.scenarioId, sourcePaths: [...mapping.paths] }; } });
     const schedule = createFactoryCompanyOrderScheduler({ owner, project, readOrders: async () => { const rows = await orders(), jobs = await store.list(owner), at = now(); if (countDraftPullRequestsTodaySafe(jobs, at, ownerKey) >= config.maxDraftPullRequestsPerDay) return [];
+            // Daily credit pace reached: no new admission today (already admitted jobs continue).
+            if (!(await paceAdmits())) return [];
             const explicit = rows.filter(o => config.orders.some(m => m.id === o.id)).sort(newestFirst);
             if (!auto) return explicit;
             let admittedToday: number;
@@ -344,7 +370,7 @@ async function privateFile(value: string | undefined, max: number) {
 }
 async function installed(store: Store) {
     const env = { ...process.env }, now = () => new Date();
-    const config = validateAsistenteOperatorConfig(JSON.parse(await privateFile(env.SOFTWARE_FACTORY_OPERATOR_CONFIG, 65536)));
+    const config = validateAsistenteOperatorConfig(applyFactoryOperatorEnvOverride(JSON.parse(await privateFile(env.SOFTWARE_FACTORY_OPERATOR_CONFIG, 65536)), env));
     if (env.SOFTWARE_FACTORY_OWNER_ID !== config.owner || env.DEFAULT_USER_ID !== config.owner)
         throw Error("FACTORY_OPERATOR_OWNER_MISMATCH");
     const selected = await resolveFactoryModelCredits({ env, now, requiredMicroUsd: (config.reservations.build + config.reservations.review) * 10000, log: message => console.error(message),
@@ -364,6 +390,10 @@ async function installed(store: Store) {
             return { credits: await loadAnthropicFactoryRuntime(env, now), modelRequest };
         } });
     const { credits, modelRequest } = selected;
+    // Daily credit pacer over the selected ledger; estimates use the office's persisted cost history.
+    const { createCreditPacer, councilPacerHistory } = await import("./credit-pacer-runtime");
+    const pacer = createCreditPacer({ readSnapshot: () => credits.ledger.paceSnapshot(), env, now: () => now().getTime(),
+        readHistory: councilPacerHistory(async () => { const raw = await (await getCouncilStore()).read(config.owner); return raw ? JSON.parse(raw) : {}; }) });
     const githubRequest = createAsistenteGitHubTransport(env.SOFTWARE_FACTORY_GITHUB_TOKEN || "");
     const readUi = createOfficeUiArtifactReader({ apiRequest: githubRequest, download: fetch, archiveHosts: config.archiveHosts, allowGitHubResultsAzureHosts: config.allowGitHubResultsAzureHosts, ...config.ui, now });
     let recoveryPool: import('pg').Pool | undefined;
@@ -408,7 +438,7 @@ async function installed(store: Store) {
         ...("fallback" in selected && selected.fallback ? { fallback: selected.fallback } : {}), ...("priorLedgers" in selected ? { priorLedgers: selected.priorLedgers } : {}),
         // Claude admission rows (any month) count as history even when the
         // fallback is off or failed to load; read-only, never creates the row.
-        admissionHistory: selected.provider === "anthropic" ? [] : [async key => (await import("./software-factory-anthropic-ledger")).readAnthropicFactoryReservation(await getCouncilStore(), key)], download: fetch, readUi, recoveryPrevious, enqueueOfficeReview, scoreOfficeCareers, syncSelfHeal, log: message => console.error(message), now, readOrders: async (owner) => { const raw = await (await getCouncilStore()).read(owner); if (!raw)
+        admissionHistory: selected.provider === "anthropic" ? [] : [async key => (await import("./software-factory-anthropic-ledger")).readAnthropicFactoryReservation(await getCouncilStore(), key)], download: fetch, readUi, recoveryPrevious, enqueueOfficeReview, scoreOfficeCareers, syncSelfHeal, pacer, log: message => console.error(message), now, readOrders: async (owner) => { const raw = await (await getCouncilStore()).read(owner); if (!raw)
             throw Error("FACTORY_OPERATOR_COUNCIL_MISSING"); const state = JSON.parse(raw); if (!Array.isArray(state.company?.orders))
             throw Error("FACTORY_OPERATOR_COUNCIL_INVALID"); return state.company.orders; } });
 }

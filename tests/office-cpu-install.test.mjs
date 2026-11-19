@@ -41,7 +41,7 @@ test('default Linux installer attempts a GPU download; CPU workers and operator 
   const baseline = install({});
   assert.equal(baseline.downloads.length, 1);
   assert.match(baseline.downloads[0], /onnxruntime-linux-x64-gpu-/);
-  for (const [file, count] of [['office-worker-cloud.yml', 2], ['factory-ops.yml', 1]]) {
+  for (const [file, count] of [['office-worker-cloud.yml', 3], ['factory-ops.yml', 1]]) {
     const workflow = await readFile(new URL(`../.github/workflows/${file}`, import.meta.url), 'utf8');
     const steps = workflow.split(/^      - /m).filter(step => step.startsWith('name: Install dependencies\n'));
     assert.equal(steps.length, count, `${file} retains its install steps`);

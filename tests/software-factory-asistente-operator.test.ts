@@ -485,3 +485,20 @@ test("admission receipts survive provider switches: no duplicate admission acros
     assert.equal(g.calls(), 0);
     assert.equal((await g.ledger.status()).reservedMicroUsd, 0);
 });
+
+test("daily credit pacer: new admissions wait (scheduler reads nothing, route refuses); admitted jobs are untouched", async () => {
+    const pacer = (allowed: boolean) => ({ allow: async (_p: string, type: string, estimate?: number) => { assert.equal(type, "self_heal_order"); assert.ok(estimate! > 0 && estimate! < 1_000_000, "config reservation ceiling below the measured estimate"); return { allowed, reason: allowed ? "ALLOWED" : "DAILY_ALLOWANCE_REACHED" }; },
+        estimate: async () => 1_000_000 }) as any;
+    const denied = await autoFixture(), operator = createAsistenteOperatorComposition(denied.config, { ...denied.deps, pacer: pacer(false) });
+    await (await operator.createFactoryWorkerOptions()).scheduleCompanyOrders!(owner);
+    assert.equal(denied.counts().enqueued, 0); assert.equal((await denied.ledger.status()).reservedMicroUsd, 0);
+    await assert.rejects(operator.admitWithinCredits(owner, companyOrderJob(denied.orders[0], project, 1)), /FACTORY_OPERATOR_DAILY_CREDIT_PACE/);
+    assert.equal(denied.counts().enqueued, 0);
+    const allowed = await autoFixture(), open = createAsistenteOperatorComposition(allowed.config, { ...allowed.deps, pacer: pacer(true) });
+    await (await open.createFactoryWorkerOptions()).scheduleCompanyOrders!(owner);
+    assert.equal(allowed.counts().enqueued, 1);
+    // A pacer that cannot read the ledger admits nothing new.
+    const broken = await autoFixture(), closed = createAsistenteOperatorComposition(broken.config, { ...broken.deps, pacer: { allow: async () => { throw Error("down"); }, estimate: async () => { throw Error("down"); } } as any });
+    await (await closed.createFactoryWorkerOptions()).scheduleCompanyOrders!(owner);
+    assert.equal(broken.counts().enqueued, 0);
+});

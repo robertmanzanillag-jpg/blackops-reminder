@@ -39,6 +39,8 @@ function fail(code: string): never { throw new Error(`CREDIT_${code}`); }
 export function createSharedOpenAiCreditLedger(options: {
   grant: VerifiedCreditGrant; transact: CreditTransaction; now: () => Date;
   maximumGrantObservationAgeMs: number;
+  /** Optional plain read of the same durable state (no lock, no write). Used only by paceSnapshot. */
+  read?: () => Promise<SharedCreditState>;
 }) {
   const grant = grantSchema.parse(structuredClone(options.grant));
   const transact = options.transact, now = options.now, maximumAge = options.maximumGrantObservationAgeMs;
@@ -97,6 +99,23 @@ export function createSharedOpenAiCreditLedger(options: {
     },
     async status() {
       return transaction((state, at) => ({ grantId: grant.id, ...totals(state), expired: Date.parse(at) >= Date.parse(grant.expiresAt) }));
+    },
+    /** View for the daily pacer (server/credit-pacer.ts): per reservation only its time,
+     * consumer, key kind (prefix before the first ':') and amounts. Never keys, request
+     * hashes or evidence ids. Grants no execution authority. With `read` it is a plain
+     * validated read (no lock, no lastObservedAt write); without it, it falls back to the
+     * ordinary ledger transaction, which also records the observation time. */
+    async paceSnapshot() {
+      const view = (state: SharedCreditState) => ({
+        ledgerId: grant.accountScope, grantMicroUsd: grant.availableMicroUsd, observedAt: grant.observedAt, expiresAt: grant.expiresAt,
+        rows: state.reservations.map(row => ({ createdAt: row.createdAt, consumer: row.consumer, kind: row.key.split(":")[0], status: row.status,
+          reservedMicroUsd: row.reservedMicroUsd, ...(row.actualMicroUsd !== undefined ? { actualMicroUsd: row.actualMicroUsd } : {}) })),
+      });
+      if (!options.read) return transaction(state => view(state));
+      const state = structuredClone(await options.read());
+      validate(state);
+      if (!state.grant) fail("NOT_INITIALIZED");
+      return view(state);
     },
     /** Trusted consumers can verify one already-settled receipt. Reading it
      * grants no execution authority and never releases an uncertain hold. */
