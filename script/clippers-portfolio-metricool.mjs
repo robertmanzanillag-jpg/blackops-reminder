@@ -31,6 +31,25 @@ export const destinationKey = (value) => {
   const { brandId, network, account } = findDestination(value) ?? value;
   return [brandId, network, account].join(':');
 };
+/** Canonical form of a stored "brandId:network:account" key (legacy account aliases map to the current one). */
+export function canonicalDestinationKey(key) {
+  const m = /^(\d+):([a-z]+):(.+)$/.exec(String(key ?? ''));
+  if (!m) return key;
+  return destinationKey({ brandId: Number(m[1]), network: m[2], account: m[3] });
+}
+/** Current account for a stored brand/network/account triple (legacy alias -> current; anything else unchanged). */
+export function canonicalAccount(brandId, network, account) {
+  const value = String(account ?? '').replace(/^@/, '').toLowerCase();
+  return findDestination({ brandId: Number(brandId), network, account: value })?.account ?? value;
+}
+/** state.versions-style lookup by destination key; the exact canonical key wins over a legacy alias key. */
+export function valueForDestination(map, key) {
+  if (!map || typeof map !== 'object') return undefined;
+  const canonical = canonicalDestinationKey(key);
+  if (Object.hasOwn(map, canonical)) return map[canonical];
+  const legacy = Object.keys(map).find(k => k !== canonical && canonicalDestinationKey(k) === canonical);
+  return legacy === undefined ? undefined : map[legacy];
+}
 export function localDay(time) {
   return new Intl.DateTimeFormat('sv-SE', {
     timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',

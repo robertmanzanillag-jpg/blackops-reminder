@@ -23,7 +23,7 @@ import { pathToFileURL } from 'node:url';
 import { STREAMER_STATE_NAMESPACE, STREAMER_APPROVAL_ACTION, parseStreamerState, parseStreamerStateStrict, localWorkQueue, createTwitchClient, createYoutubeClient, createPendingActionsQueue } from './clippers-streamer-discovery.mjs';
 import { resolveClipPolicy, takedownBlocks, captionHasCredit, buildCreditCaption, clipLengthAllowed, detectClipProhibition, STREAMER_CLIP_MAX_SECONDS } from '../shared/clippers-streamer-policy.mjs';
 import { KNOWN_PROHIBITED_CREATORS } from '../shared/clippers-priority-creators.mjs';
-import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool, TIME_ZONE, localDay, localHour } from './clippers-portfolio-metricool.mjs';
+import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool, TIME_ZONE, localDay, localHour, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
 import { downloadSource, renderVerticalClip, makeWorkDir, hookText, creditText } from './clippers-streamer-cloud-render.mjs';
 import { computeLearning, chooseHookVariant, creatorBoostFor, OBSERVATION_WINDOW } from './clippers-streamer-cloud-learning.mjs';
 
@@ -93,7 +93,7 @@ function nextDay(day) { return new Date(Date.parse(`${day}T12:00:00Z`) + 24 * HO
  */
 export function nextSlot({ now, config, destination, index = 0, posts = [], skip = new Set() }) {
   const key = destinationKey(destination);
-  const mine = posts.filter(p => p.destinationKey === key && !['deferred', 'blocked', 'not_found'].includes(p.status));
+  const mine = posts.filter(p => canonicalDestinationKey(p.destinationKey) === key && !['deferred', 'blocked', 'not_found'].includes(p.status));
   let day = localDay(new Date(now));
   for (let d = 0; d < 2; d++, day = nextDay(day)) {
     const sameDay = mine.filter(p => localDay(new Date(p.scheduledAt)) === day);
@@ -370,7 +370,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     // Destination slots from our own (fresh) ledger; Metricool preflight stays authoritative across lanes.
     const posts = cloudPublishOf(parseStreamerState(await store.read(ns))).posts;
     const plan = config.destinations.map((d, index) => ({ destination: d, index, scheduledAt: nextSlot({ now, config, destination: d, index, posts }) }))
-      .filter(p => p.scheduledAt && !posts.some(x => x.candidateId === candidate.id && x.destinationKey === destinationKey(p.destination) && x.status !== 'deferred'));
+      .filter(p => p.scheduledAt && !posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === destinationKey(p.destination) && x.status !== 'deferred'));
     if (!plan.length) { report.heldReasons.push('no_free_slots'); break; }
     processed++;
     const { variant: hookVariant, mode: hookMode } = chooseHookVariant(learning, candidate.id);
@@ -380,6 +380,11 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     try {
       workDir = await makeDir();
       const source = await download({ candidate, workDir, targetSec: config.clipSeconds, env });
+      if (clock() - runStartedAt > config.runDeadlineMs) { // Too late to render + publish safely in this run.
+        report.heldReasons.push('run_deadline_reached');
+        await setClip({ status: 'deferred', reason: 'run_deadline_reached' });
+        break;
+      }
       rendered = await render({ sourceFile: source.file, workDir, duration: Math.min(source.cut.duration, config.clipSeconds, STREAMER_CLIP_MAX_SECONDS),
         hook: hookText({ variant: hookVariant, title: candidate.title, handle: candidate.handle }), credit: creditText(candidate) });
       report.counts.rendered++;

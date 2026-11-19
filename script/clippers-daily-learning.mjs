@@ -9,7 +9,7 @@ import { confirmedRenderReceipt, readPortfolioRenderManifest } from './clippers-
 import { createClippersCreatorRouting } from './clippers-creator-routing.mjs';
 import {
   createPortfolioMetricool, DAILY_LIMIT, DESTINATIONS, DISCONNECTED_BRAND, destinationKey,
-  exactPost, findDestination, localDay, providerTimestamp,
+  exactPost, findDestination, localDay, providerTimestamp, canonicalDestinationKey, canonicalAccount, valueForDestination,
 } from './clippers-portfolio-metricool.mjs';
 
 import { approvedWeeklyAuthorization, approvedEditorialSourceProof, weeklyDeliveryCollision } from './clippers-weekly-policy.mjs';
@@ -93,7 +93,7 @@ async function approvedItem(raw, root, now, receipts, state, weeklyWindow) {
   if (weeklyWindow && raw.weeklyAuthorizationSha256 && !weekly) return null;
   if (weeklyWindow && !raw.weeklyAuthorizationSha256 && raw.editorialPolicy!=='evergreen_streamer_clip') return null;
   if (raw.editorialPolicy!==undefined && raw.editorialPolicy!=='evergreen_streamer_clip') return null;
-  const currentVersion = state.versions[destinationKey(destination)] ?? BASELINE;
+  const currentVersion = valueForDestination(state.versions, destinationKey(destination)) ?? BASELINE;
   const scheduledAt = providerTimestamp(raw.scheduledAt);
   const rightsObservedAt = providerTimestamp(raw.rightsObservedAt);
   const publishedAt = providerTimestamp(raw.sourcePublishedAt);
@@ -135,7 +135,7 @@ async function approvedItem(raw, root, now, receipts, state, weeklyWindow) {
       evidence.quality !== 'passed' || evidence.originalEdit !== 'verified' ||
       evidence.disclosure !== 'verified' || !ID.test(evidence.reviewedBy ?? '') ||
       evidence.authorizedSpendUsd !== 0 || evidence.providerIncrementalCostUsd !== 0) return null;
-  const pinnedManifest = state.history.filter(row => row.destination === destinationKey(destination)).at(-1)?.toManifestSha;
+  const pinnedManifest = state.history.filter(row => canonicalDestinationKey(row.destination) === destinationKey(destination)).at(-1)?.toManifestSha;
   let renderProof = null;
   if (raw.experiment || usesVersion !== BASELINE || pinnedManifest || raw.renderReceiptSha256) {
     try { renderProof = await confirmedRenderReceipt(root, raw, destination); } catch { return null; }
@@ -217,11 +217,11 @@ async function reconcileAndCollect(state, adapter, now, counts, withinBudget) {
 function evaluate(state) {
   const groups = new Map();
   for (const metric of state.observations) {
-    const delivery = state.deliveries.find(d => d.id === metric.deliveryId && destinationKey(d) === metric.destination && d.post?.id === metric.postId);
+    const delivery = state.deliveries.find(d => d.id === metric.deliveryId && destinationKey(d) === canonicalDestinationKey(metric.destination) && d.post?.id === metric.postId);
     if (!delivery?.experiment || !delivery.renderProof?.comparison || !Number.isFinite(delivery.elapsedMs) || !Number.isFinite(metric.completionRate) || metric.timing !== 'provider_observation_time') continue;
     const { experiment: e } = delivery;
     const age = dayAge(metric.publishedAt, new Date(metric.observedAt));
-    const key = JSON.stringify([metric.destination, delivery.language, delivery.creator, e.id, e.context,
+    const key = JSON.stringify([canonicalDestinationKey(metric.destination), delivery.language, delivery.creator, e.id, e.context,
       e.baselineVersion, e.candidateVersion, metric.window, Math.floor(age),
       delivery.renderProof.comparison.baselineManifestSha, delivery.renderProof.comparison.candidateManifestSha]);
     const items = groups.get(key) ?? [];
@@ -262,7 +262,7 @@ function qualifiedPairs(pairs, key, active, candidateVersion) {
 function qualifiedCandidates(state, proposals) {
   const byVersion = new Map();
   for (const proposal of proposals) {
-    const active = state.versions[proposal.destination] ?? BASELINE;
+    const active = valueForDestination(state.versions, proposal.destination) ?? BASELINE;
     if (proposal.baselineVersion !== active || proposal.regressed) continue;
     const versionKey = JSON.stringify([proposal.destination, active, proposal.candidateVersion]);
     const group = byVersion.get(versionKey) ?? new Map();
@@ -293,11 +293,11 @@ async function applyApprovedActions(root, state, reviews, proposals, now) {
     const target = findDestination(review.destination);
     if (!target) continue;
     const key = destinationKey(target);
-    const active = state.versions[key] ?? BASELINE;
+    const active = valueForDestination(state.versions, key) ?? BASELINE;
     if (review.from !== active) continue;
     let fromManifestSha, toManifestSha;
     if (review.action === 'rollback') {
-      const last = state.history.filter(item => item.destination === key).at(-1);
+      const last = state.history.filter(item => canonicalDestinationKey(item.destination) === key).at(-1);
       if (!last || last.action !== 'activate' || review.to !== last.from || review.evidenceDigest !== last.evidenceDigest) continue;
       fromManifestSha = last.toManifestSha;
       toManifestSha = last.fromManifestSha;
@@ -325,13 +325,13 @@ async function applyApprovedActions(root, state, reviews, proposals, now) {
 function exportedVersionState(state) {
   return DESTINATIONS.map(destination => {
     const key = destinationKey(destination);
-    const active = state.versions[key] ?? BASELINE;
-    const activation = state.history.filter(e => e.destination === key).at(-1);
+    const active = valueForDestination(state.versions, key) ?? BASELINE;
+    const activation = state.history.filter(e => canonicalDestinationKey(e.destination) === key).at(-1);
     const observedPost = activation?.action === 'activate' && SHA.test(activation.toManifestSha ?? '') && state.deliveries.find(row => destinationKey(row) === key &&
       row.policyVersion === active && row.renderProof?.manifestSha === activation.toManifestSha &&
       row.post && Date.parse(row.post.publishedAt) > Date.parse(activation.at) &&
       Date.parse(row.createdAt) >= Date.parse(activation.at) && !row.experiment &&
-      state.observations.some(metric => metric.deliveryId === row.id && metric.destination === key));
+      state.observations.some(metric => metric.deliveryId === row.id && canonicalDestinationKey(metric.destination) === key));
     return {
       destination: key, active, scope: 'approved_media_queue',
       status: observedPost ? 'queue_policy_active_outcome_observed'
@@ -430,7 +430,7 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
         }
         if (external.some(row=>externalScheduleCollision(row,item)) || state.deliveries.some(row => deliveryCollision(row, item)) ||
             legacy.some(row => Number(row.metricoolBlogId) === item.brandId &&
-              String(row.account ?? '').replace(/^@/, '').toLowerCase() === item.account &&
+              canonicalAccount(row.metricoolBlogId, item.network, row.account) === item.account &&
               (row.mediaSha256 === item.mediaSha256 || row.sha256 === item.mediaSha256 || row.mediaUrl === item.mediaUrl || row.sourceUrl === item.sourceUrl))) {
           blockers.add('duplicate_delivery'); continue;
         }

@@ -11,6 +11,7 @@
 //     destination median (>= 3 observed posts), clamped to [-1, 1].
 import { createHash } from 'node:crypto';
 import { evaluateExperiments } from './clippers-content-learning-ceo.mjs';
+import { canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
 
 export const HOOK_VARIANTS = Object.freeze(['title', 'teaser']);
 export const OBSERVATION_WINDOW = Object.freeze({ minHours: 24, maxHours: 48 });
@@ -32,7 +33,8 @@ export function observedPosts(posts = []) {
 }
 
 export function computeLearning(posts = [], { now = Date.now(), policy = LEARNING_POLICY } = {}) {
-  const usable = observedPosts(posts);
+  // Legacy account aliases group with their current destination.
+  const usable = observedPosts(posts).map(p => ({ ...p, destinationKey: canonicalDestinationKey(p.destinationKey) }));
   const rows = usable.map(p => ({
     usable: true, experimentId: `streamer-hook:${p.destinationKey}`, experimentVariable: 'hook', experimentVariant: p.hookVariant,
     account: p.destinationKey, lane: 'streamer_clip', language: p.language ?? 'es', windowHours: 24,

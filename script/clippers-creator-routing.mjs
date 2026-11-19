@@ -3,7 +3,7 @@ import { constants } from 'node:fs';
 import { open, realpath, mkdir, writeFile, rename, unlink } from 'node:fs/promises';
 import path from 'node:path';
 import { selectCreatorPreferences } from './clippers-creator-selection.mjs';
-import { findDestination, destinationKey, exactPost } from './clippers-portfolio-metricool.mjs';
+import { findDestination, destinationKey, exactPost, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
 import { confirmedRenderReceipt } from './clippers-portfolio-render.mjs';
 import { canonicalSourceIdentity, resolveCreatorGroup } from '../shared/clippers-priority-creators.mjs';
 const HOUR=3600000, SHA=/^[a-f0-9]{64}$/, ID=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/;
@@ -67,7 +67,7 @@ function samplesFrom(ledger,state,now){
  for(const a of ledger.assignments){const r=a.record,plan=ledger.plans.find(p=>p.sha256===r.planSha256)?.manifest;if(!plan)continue;
   const d=state.deliveries.find(d=>d.id===r.deliveryId&&destinationKey(d)===destinationKey(r.meta.destination));
   const verified=!!d&&d.status==='published'&&d.creatorAssignmentSha256===a.sha256&&d.mediaSha256===r.mediaSha256&&d.evidenceSha256===r.evidenceSha256&&d.renderReceiptSha256===r.renderReceiptSha256&&exactPost(d.post?.url,d)?.id===d.post?.id&&Number.isFinite(time(d.post?.verifiedAt))&&time(d.post.verifiedAt)<=now&&time(d.post.publishedAt)>time(plan.registeredAt);
-  const observed=verified?state.observations.filter(o=>o.deliveryId===d.id&&o.destination===destinationKey(d)&&o.postId===d.post.id&&o.publishedAt===d.post.publishedAt&&o.window===r.meta.windowHours).sort((a,b)=>time(a.observedAt)-time(b.observedAt))[0]:null;
+  const observed=verified?state.observations.filter(o=>o.deliveryId===d.id&&canonicalDestinationKey(o.destination)===destinationKey(d)&&o.postId===d.post.id&&o.publishedAt===d.post.publishedAt&&o.window===r.meta.windowHours).sort((a,b)=>time(a.observedAt)-time(b.observedAt))[0]:null;
   // Keep every sealed assigned member, including unknown publication/metrics.
   // Filtering bad members could let a later cohort hide an incomplete old lot.
   samples.push({...r.meta,deliveryId:r.deliveryId,postId:verified?d.post.id:null,publishedAt:verified?d.post.publishedAt:null,observedAt:observed?.observedAt??null,timing:observed?.timing??null,actualAgeHours:observed?(time(observed.observedAt)-time(d.post.publishedAt))/HOUR:null,views:observed?.views??null,completionRate:observed?.completionRate??null,qualityDefinition:'completion_rate',costUsd:verified?d.costUsd:null,elapsedMs:verified?d.elapsedMs:null,evidence:{status:verified&&band(d.post.publishedAt)===r.meta.postingSlot?'ready':'unverified',publicationReceiptSha256:verified?sha({destination:r.meta.destination,post:d.post,metricoolId:d.metricoolId,mediaSha256:d.mediaSha256}):null,renderReceiptSha256:r.renderReceiptSha256,rightsEvidenceSha256:r.evidenceSha256,assignmentSha256:r.planSha256,rightsObservedAt:r.meta.rightsObservedAt,rightsValidUntil:r.meta.rightsValidUntil,sourcePublishedAt:r.meta.sourcePublishedAt},selectionExperiment:{id:plan.id,registeredAt:plan.registeredAt,expiresAt:plan.expiresAt,controlCreatorGroupId:plan.controlCreatorGroupId,challengerCreatorGroupId:plan.challengerCreatorGroupId,arm:r.arm}});

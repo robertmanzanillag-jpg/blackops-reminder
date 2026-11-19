@@ -7,7 +7,7 @@ import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { loadClipperSelectedEnv } from './clippers-selected-env.mjs';
-import { createPortfolioMetricool, DESTINATIONS, destinationKey, findDestination, localDay, providerTimestamp } from './clippers-portfolio-metricool.mjs';
+import { createPortfolioMetricool, DESTINATIONS, destinationKey, findDestination, localDay, providerTimestamp, canonicalAccount } from './clippers-portfolio-metricool.mjs';
 import { validateApprovedClippersAsset } from './clippers-daily-learning.mjs';
 import { validWeeklyWindow, readWeeklyPrivateJson, weeklyDeliveryCollision, weeklyDigest } from './clippers-weekly-policy.mjs';
 const CONFIG='config/clippers-daily-learning', REPORT='reports/clippers-daily-learning';
@@ -62,7 +62,7 @@ export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new 
       if(external.some(r=>destinationKey(r.destination)===destinationKey(raw)&&(r.assetId===raw.id||r.sha256===raw.mediaSha256||r.mediaUrl===raw.mediaUrl))){outcome.reason='external_owner_ui_schedule_observed_no_replay';continue;}
       let item=await validateApprovedClippersAsset(raw,root,current(),receipts,state,window);
       if(!item){outcome.reason='weekly_asset_rights_media_or_render_unverified';continue;}
-      if(external.some(row=>externalScheduleCollision(row,item))||state.deliveries.some(row=>weeklyDeliveryCollision(row,item)) || legacy.some(row=>Number(row.metricoolBlogId)===item.brandId&&String(row.account??'').replace(/^@/,'').toLowerCase()===item.account&&
+      if(external.some(row=>externalScheduleCollision(row,item))||state.deliveries.some(row=>weeklyDeliveryCollision(row,item)) || legacy.some(row=>Number(row.metricoolBlogId)===item.brandId&&canonicalAccount(row.metricoolBlogId,item.network,row.account)===item.account&&
           (row.sha256===item.mediaSha256||row.mediaSha256===item.mediaSha256||row.mediaUrl===item.mediaUrl||row.sourceUrl===item.sourceUrl||(canonicalSourceIdentity(row.sourceUrl)&&canonicalSourceIdentity(row.sourceUrl)===canonicalSourceIdentity(item.sourceUrl))))){outcome.reason='duplicate_or_overlapping_delivery';continue;}
       const day=localDay(new Date(item.scheduledAt));
       const existing=state.deliveries.filter(row=>findDestination(row)&&destinationKey(row)===destinationKey(item)&&localDay(new Date(row.scheduledAt))===day);
