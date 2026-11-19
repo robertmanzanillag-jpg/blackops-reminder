@@ -40,3 +40,18 @@ test('legacy external receipt and exact original public URL remain valid without
  assert.equal(exactPost('https://www.tiktok.com/@streamersclips/video/7709544295480511774',destination)?.id,'7709544295480511774');
  assert.equal(exactPost('https://www.tiktok.com/@streamersclips/video/7709544295480511774',DESTINATIONS[0]),null);
 });
+
+test('fresh installer validates the new registry dependency before any service operation',async t=>{
+ const {readFile,mkdtemp,mkdir,writeFile,rm}=await import('node:fs/promises');
+ const {tmpdir}=await import('node:os');const path=await import('node:path');const {spawnSync}=await import('node:child_process');
+ const installer=await readFile(new URL('../script/install-clippers-free-local-worker-launch-agent.sh',import.meta.url),'utf8');
+ const required=/REQUIRED_RUNTIME_FILES=\(([\s\S]*?)\n\)/.exec(installer)?.[1].trim().split(/\s+/);
+ const module='script/clippers-destination-registry.mjs';assert.equal(required?.filter(p=>p===module).length,1);
+ const guard=installer.slice(installer.indexOf('for relative in "${REQUIRED_RUNTIME_FILES[@]}"; do'),installer.indexOf('\ndone',installer.indexOf('for relative in "${REQUIRED_RUNTIME_FILES[@]}"; do'))+5);
+ assert.ok(guard.includes('missing or unreadable'));assert.ok(!guard.includes('launchctl'));
+ const root=await mkdtemp(path.join(tmpdir(),'clippers-registry-install-'));t.after(()=>rm(root,{recursive:true,force:true}));
+ const check=()=>spawnSync('/bin/zsh',['-c','RUNTIME_ROOT=$1; REQUIRED_RUNTIME_FILES=(script/clippers-destination-registry.mjs); '+guard,'fixture',root],{encoding:'utf8',env:{PATH:'/usr/bin:/bin'}});
+ assert.notEqual(check().status,0);await mkdir(path.join(root,'script'));
+ await writeFile(path.join(root,module),await readFile(new URL('../'+module,import.meta.url)));
+ assert.equal(check().status,0);
+});

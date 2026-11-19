@@ -117,6 +117,7 @@ REQUIRED_RUNTIME_FILES=(
   script/clippers-creator-routing.mjs
   shared/clippers-priority-creators.mjs
   script/clippers-portfolio-metricool.mjs
+  script/clippers-destination-registry.mjs
   script/clippers-portfolio-render.mjs
   script/clippers-portfolio-discovery.mjs
   script/clippers-portfolio-prepare.mjs

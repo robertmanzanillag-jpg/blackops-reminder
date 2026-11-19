@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-11-19T22:30:03.607Z",
+  "generatedAt": "2026-11-19T22:35:54.264Z",
   "repoRoot": "/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-current-identities-20261119",
   "packageName": "rest-express",
   "scripts": {
@@ -128,7 +128,7 @@
     "filesIndexed": 1164,
     "imports": 4730,
     "routes": 627,
-    "symbols": 26578
+    "symbols": 26584
   },
   "directories": {
     ".": {
@@ -39065,11 +39065,17 @@
       ],
       "exports": [],
       "symbols": [
+        "check",
         "d",
         "destination",
         "detail",
+        "guard",
+        "installer",
+        "module",
         "pin",
         "r",
+        "required",
+        "root",
         "sealed",
         "sha"
       ],
