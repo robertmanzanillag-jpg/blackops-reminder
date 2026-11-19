@@ -1,3 +1,4 @@
+import { publicationDestinationKey, findPublishDestination } from './clippers-destination-registry.mjs';
 import { createHash } from 'node:crypto';
 import { DESTINATIONS, DAILY_LIMIT, TIME_ZONE, destinationKey, findDestination, localDay, providerTimestamp } from './clippers-portfolio-metricool.mjs';
 
@@ -63,13 +64,13 @@ export function planClippersWeek({ now, startDate, endDate, snapshots = [], rese
   if (!end) { const d = date(start); d.setUTCDate(d.getUTCDate() + ((7 - d.getUTCDay()) % 7)); end = d.toISOString().slice(0, 10); }
   date(end);
   if (end < start || +date(end) - +date(start) > 6 * 24 * HOUR) throw new Error('invalid_week_range');
-  if (!Array.isArray(snapshots) || snapshots.length > 28 || !Array.isArray(reservations) || reservations.length > 140 ||
+  if (!Array.isArray(snapshots) || snapshots.length > DESTINATIONS.length * 7 || !Array.isArray(reservations) || reservations.length > DESTINATIONS.length * 7 * DAILY_LIMIT ||
       !Array.isArray(proposedHours) || proposedHours.length !== DAILY_LIMIT || new Set(proposedHours).size !== DAILY_LIMIT ||
       proposedHours.some(h => !Number.isInteger(h) || h < 0 || h > 23) || !Number.isFinite(maxSnapshotAgeMs) || maxSnapshotAgeMs <= 0 || maxSnapshotAgeMs > 15 * 60000) throw new Error('invalid_plan_input');
   const days = []; for (let day = start; day <= end; day = nextDay(day)) days.push(day);
   const snapshotMap = new Map();
   for (const snapshot of snapshots) {
-    if (!findDestination(snapshot?.destination) || !days.includes(snapshot.day)) throw new Error('snapshot_scope_rejected');
+    if (!findPublishDestination(snapshot?.destination) || !days.includes(snapshot.day)) throw new Error('snapshot_scope_rejected');
     const key = destinationKey(snapshot.destination) + ':' + snapshot.day;
     if (snapshotMap.has(key)) throw new Error('duplicate_snapshot');
     snapshotMap.set(key, snapshot);
@@ -77,7 +78,7 @@ export function planClippersWeek({ now, startDate, endDate, snapshots = [], rese
   const holds = new Map();
   for (const reservation of reservations) {
     if (!findDestination(reservation?.destination) || !days.includes(reservation.day) || !['in_flight', 'outcome_unknown'].includes(reservation.status)) throw new Error('reservation_scope_rejected');
-    holds.set(destinationKey(reservation.destination) + ':' + reservation.day, 'schedule_outcome_unreconciled');
+    holds.set(publicationDestinationKey(reservation.destination) + ':' + reservation.day, 'schedule_outcome_unreconciled');
   }
   const cells = [];
   for (const destination of DESTINATIONS) for (const day of days) {
@@ -109,7 +110,7 @@ export function planClippersWeek({ now, startDate, endDate, snapshots = [], rese
   const report = { schema: 1, generatedAt: iso(now), timeZone: TIME_ZONE, startDate: start, endDate: end, dailyLimitPerDestination: DAILY_LIMIT,
     targetPosts: cells.length * DAILY_LIMIT, coverageComplete: cells.every(c => c.deficit !== null), providerConfirmedCount: cells.reduce((n, c) => n + (c.providerConfirmedCount ?? 0), 0),
     knownDeficit: cells.reduce((n, c) => n + (c.deficit ?? 0), 0), unknownCells: cells.filter(c => c.deficit === null).length,
-    proposedCount: cells.reduce((n, c) => n + c.proposedSlots.length, 0), disconnectedDestinations: [{ brandId: 6595747, reason: 'network_not_verified' }],
+    proposedCount: cells.reduce((n, c) => n + c.proposedSlots.length, 0), disconnectedDestinations: [{ brandId: 6595747, network: 'tiktok', reason: 'network_not_verified' }],
     modelCostUsd: 0, providerWrites: 0, mayPublish: false, cells };
   return { ...report, planSha256: digest(report) };
 }

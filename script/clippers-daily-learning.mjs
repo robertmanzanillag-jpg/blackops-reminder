@@ -1,3 +1,4 @@
+import { publicationDestinationKey, currentDestinationForHistory, canonicalDestinationKey, valueForDestination } from './clippers-destination-registry.mjs';
 import { approvedNativeMedia, verifiedExternalSchedules, externalScheduleCollision } from './clippers-native-media-receipts.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -9,10 +10,11 @@ import { confirmedRenderReceipt, readPortfolioRenderManifest } from './clippers-
 import { createClippersCreatorRouting } from './clippers-creator-routing.mjs';
 import {
   createPortfolioMetricool, DAILY_LIMIT, DESTINATIONS, DISCONNECTED_BRAND, destinationKey,
-  exactPost, findDestination, localDay, providerTimestamp, canonicalDestinationKey, canonicalAccount, valueForDestination,
+  exactPost, findDestination, findPublishDestination, localDay, providerTimestamp,
 } from './clippers-portfolio-metricool.mjs';
 
 import { approvedWeeklyAuthorization, approvedEditorialSourceProof, weeklyDeliveryCollision } from './clippers-weekly-policy.mjs';
+import { REVIEWED_EDITORIAL } from './clippers-reviewed-editorial.mjs';
 
 const HOUR = 3_600_000;
 const WINDOWS = [24, 72, 168];
@@ -88,12 +90,15 @@ function approvedMedia(item, media) {
 async function approvedItem(raw, root, now, receipts, state, weeklyWindow) {
   const destination = findDestination(raw);
   if (!destination) return null;
-  if ((raw.weeklyAuthorizationSha256 || raw.editorialPolicy) && !weeklyWindow) return null;
+  const reviewed = raw.renderClass === REVIEWED_EDITORIAL;
+  if (raw.renderClass !== undefined && !reviewed) return null;
+  if ((raw.weeklyAuthorizationSha256 || raw.editorialPolicy || reviewed) && !weeklyWindow) return null;
   const weekly = !!weeklyWindow && await approvedWeeklyAuthorization(root, raw, now, weeklyWindow);
+  if (reviewed && (!weekly || raw.editorialPolicy !== undefined)) return null;
   if (weeklyWindow && raw.weeklyAuthorizationSha256 && !weekly) return null;
   if (weeklyWindow && !raw.weeklyAuthorizationSha256 && raw.editorialPolicy!=='evergreen_streamer_clip') return null;
   if (raw.editorialPolicy!==undefined && raw.editorialPolicy!=='evergreen_streamer_clip') return null;
-  const currentVersion = valueForDestination(state.versions, destinationKey(destination)) ?? BASELINE;
+  const currentVersion = reviewed ? undefined : (valueForDestination(state.versions, destinationKey(destination)) ?? BASELINE);
   const scheduledAt = providerTimestamp(raw.scheduledAt);
   const rightsObservedAt = providerTimestamp(raw.rightsObservedAt);
   const publishedAt = providerTimestamp(raw.sourcePublishedAt);
@@ -104,7 +109,7 @@ async function approvedItem(raw, root, now, receipts, state, weeklyWindow) {
     raw.experiment.candidateVersion !== currentVersion);
   const usesVersion = raw.experiment?.arm === 'candidate' ? raw.experiment.candidateVersion : currentVersion;
   if (!ID.test(raw.id ?? '') || !ID.test(raw.campaignId ?? '') || !ID.test(raw.sourceId ?? '') || !validVariant ||
-      raw.policyVersion !== usesVersion || !ID.test(raw.creator ?? '') || !/^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(raw.language ?? '') ||
+      (!reviewed && raw.policyVersion !== usesVersion) || !ID.test(raw.creator ?? '') || !/^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(raw.language ?? '') ||
       !scheduledAt || Date.parse(scheduledAt) < +now + 5 * 60_000 || (!weekly && localDay(new Date(scheduledAt)) !== localDay(now)) ||
       !rightsObservedAt || dayAge(rightsObservedAt, now) < 0 || dayAge(rightsObservedAt, now) > 24 ||
       !publishedAt || dayAge(publishedAt, now) < 0 || (!weekly && dayAge(publishedAt, new Date(scheduledAt)) > 72) ||
@@ -124,6 +129,8 @@ async function approvedItem(raw, root, now, receipts, state, weeklyWindow) {
       evidence.renderReceiptSha256 !== raw.renderReceiptSha256 ||
       featureDigest(evidence.experiment ?? null) !== featureDigest(raw.experiment ?? null) ||
       evidence.editorialPolicy !== raw.editorialPolicy || evidence.weeklyAuthorizationSha256 !== raw.weeklyAuthorizationSha256 ||
+      evidence.renderClass !== raw.renderClass || evidence.preparePacketSha256 !== raw.preparePacketSha256 ||
+      evidence.sourceDatePrecision !== raw.sourceDatePrecision || evidence.sourcePublishedDate !== raw.sourcePublishedDate ||
       evidence.rightsObservedAt !== raw.rightsObservedAt || evidence.rightsValidUntil !== raw.rightsValidUntil ||
       evidence.thirdPartyCommercial !== raw.thirdPartyCommercial || !findDestination(evidence.destination) ||
       destinationKey(evidence.destination) !== destinationKey(destination) ||
@@ -135,26 +142,32 @@ async function approvedItem(raw, root, now, receipts, state, weeklyWindow) {
       evidence.quality !== 'passed' || evidence.originalEdit !== 'verified' ||
       evidence.disclosure !== 'verified' || !ID.test(evidence.reviewedBy ?? '') ||
       evidence.authorizedSpendUsd !== 0 || evidence.providerIncrementalCostUsd !== 0) return null;
-  const pinnedManifest = state.history.filter(row => canonicalDestinationKey(row.destination) === destinationKey(destination)).at(-1)?.toManifestSha;
+  const pinnedManifest = !reviewed && state.history.filter(row => canonicalDestinationKey(row.destination) === canonicalDestinationKey(destinationKey(destination))).at(-1)?.toManifestSha;
   let renderProof = null;
-  if (raw.experiment || usesVersion !== BASELINE || pinnedManifest || raw.renderReceiptSha256) {
+  if (reviewed) {
+    renderProof = { renderClass: REVIEWED_EDITORIAL, authorizationSha256: raw.weeklyAuthorizationSha256 };
+  } else if (raw.experiment || usesVersion !== BASELINE || pinnedManifest || raw.renderReceiptSha256) {
     try { renderProof = await confirmedRenderReceipt(root, raw, destination); } catch { return null; }
     if (!renderProof) return null;
   }
-  const editorialProof=raw.editorialPolicy ? await approvedEditorialSourceProof(root,raw) : null;
-  if(raw.editorialPolicy && (!editorialProof || !renderProof || editorialProof.rightsBasis!==evidence.rightsBasis || editorialProof.membership!==evidence.membership || editorialProof.termsUrl!==evidence.termsUrl || editorialProof.ownership!==evidence.ownership))return null;
+  const editorialProof=reviewed ? weekly : raw.editorialPolicy ? await approvedEditorialSourceProof(root,raw) : null;
+  if((reviewed || raw.editorialPolicy) && (!editorialProof || !renderProof || editorialProof.rightsBasis!==evidence.rightsBasis || editorialProof.membership!==evidence.membership || editorialProof.termsUrl!==evidence.termsUrl || editorialProof.ownership!==evidence.ownership))return null;
   const { id, campaignId, sourceUrl, sourceId, creator, language, policyVersion, experiment, caption, mediaUrl,
     mediaSha256, thirdPartyCommercial, evidenceSha256 } = raw;
-  return { ...destination, id, campaignId, sourceId, sourceUrl, creator, language, policyVersion, experiment,
+  return { ...destination, id, campaignId, sourceId, sourceUrl, creator, language,
+    ...(reviewed ? { renderClass: raw.renderClass, preparePacketSha256: raw.preparePacketSha256,
+      sourcePublishedAt: raw.sourcePublishedAt, rightsObservedAt: raw.rightsObservedAt, rightsValidUntil: raw.rightsValidUntil,
+      ...(raw.sourceDatePrecision ? { sourceDatePrecision: raw.sourceDatePrecision, sourcePublishedDate: raw.sourcePublishedDate } : {}) }
+      : { policyVersion, experiment }),
     caption, mediaUrl, mediaSha256, thirdPartyCommercial, evidenceSha256, renderProof, scheduledAt,
-    ...(editorialProof ? {editorialPolicy:raw.editorialPolicy,weeklySourceProof:editorialProof} : {}),
+    ...(!reviewed && editorialProof ? {editorialPolicy:raw.editorialPolicy,weeklySourceProof:editorialProof} : {}),
     ...(weekly ? {weeklyAuthorizationSha256: raw.weeklyAuthorizationSha256,weeklySourceProof:weekly} : {}),
     draftFile: raw.draftFile, renderReceiptSha256: raw.renderReceiptSha256,
     rightsEvidence: { reviewedBy: evidence.reviewedBy, termsUrl: evidence.termsUrl, rightsBasis: evidence.rightsBasis,
       membership: evidence.membership, rightsObservedAt, rightsValidUntil, sourcePublishedAt: publishedAt } };
 }
 function deliveryCollision(a, b) {
-  if(a.editorialPolicy==='evergreen_streamer_clip'||b.editorialPolicy==='evergreen_streamer_clip')return weeklyDeliveryCollision(a,b);
+  if(a.renderClass===REVIEWED_EDITORIAL||b.renderClass===REVIEWED_EDITORIAL||a.editorialPolicy==='evergreen_streamer_clip'||b.editorialPolicy==='evergreen_streamer_clip')return weeklyDeliveryCollision(a,b);
   return destinationKey(a) === destinationKey(b) && (
     a.id === b.id || a.mediaSha256 === b.mediaSha256 || a.sourceUrl === b.sourceUrl ||
     a.scheduledAt === b.scheduledAt || a.caption.trim().toLowerCase() === b.caption.trim().toLowerCase()
@@ -217,7 +230,7 @@ async function reconcileAndCollect(state, adapter, now, counts, withinBudget) {
 function evaluate(state) {
   const groups = new Map();
   for (const metric of state.observations) {
-    const delivery = state.deliveries.find(d => d.id === metric.deliveryId && destinationKey(d) === canonicalDestinationKey(metric.destination) && d.post?.id === metric.postId);
+    const delivery = state.deliveries.find(d => d.id === metric.deliveryId && canonicalDestinationKey(destinationKey(d)) === canonicalDestinationKey(metric.destination) && d.post?.id === metric.postId);
     if (!delivery?.experiment || !delivery.renderProof?.comparison || !Number.isFinite(delivery.elapsedMs) || !Number.isFinite(metric.completionRate) || metric.timing !== 'provider_observation_time') continue;
     const { experiment: e } = delivery;
     const age = dayAge(metric.publishedAt, new Date(metric.observedAt));
@@ -297,7 +310,7 @@ async function applyApprovedActions(root, state, reviews, proposals, now) {
     if (review.from !== active) continue;
     let fromManifestSha, toManifestSha;
     if (review.action === 'rollback') {
-      const last = state.history.filter(item => canonicalDestinationKey(item.destination) === key).at(-1);
+      const last = state.history.filter(item => canonicalDestinationKey(item.destination) === canonicalDestinationKey(key)).at(-1);
       if (!last || last.action !== 'activate' || review.to !== last.from || review.evidenceDigest !== last.evidenceDigest) continue;
       fromManifestSha = last.toManifestSha;
       toManifestSha = last.fromManifestSha;
@@ -327,7 +340,7 @@ function exportedVersionState(state) {
     const key = destinationKey(destination);
     const active = valueForDestination(state.versions, key) ?? BASELINE;
     const activation = state.history.filter(e => canonicalDestinationKey(e.destination) === key).at(-1);
-    const observedPost = activation?.action === 'activate' && SHA.test(activation.toManifestSha ?? '') && state.deliveries.find(row => destinationKey(row) === key &&
+    const observedPost = activation?.action === 'activate' && SHA.test(activation.toManifestSha ?? '') && state.deliveries.find(row => publicationDestinationKey(row) === key &&
       row.policyVersion === active && row.renderProof?.manifestSha === activation.toManifestSha &&
       row.post && Date.parse(row.post.publishedAt) > Date.parse(activation.at) &&
       Date.parse(row.createdAt) >= Date.parse(activation.at) && !row.experiment &&
@@ -396,7 +409,7 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
     const duplicateAssetKeys = new Set(configured.assets.filter((a,i)=>findDestination(a)&&configured.assets.some((b,j)=>i!==j&&findDestination(b)&&destinationKey(a)===destinationKey(b)&&a.id===b.id)).map(a=>destinationKey(a)+':'+a.id));
     for (const raw of configured.assets) {
       if (!withinBudget()) { counts.timeBudgetReached = true; break; }
-      if (!findDestination(raw) || duplicateAssetKeys.has(destinationKey(raw)+':'+raw.id)) continue;
+      if (!findPublishDestination(raw) || duplicateAssetKeys.has(destinationKey(raw)+':'+raw.id)) continue;
       const item = await approvedItem(raw, workspaceRoot, new Date(+now + performance.now() - startedAt), authorized, state);
       checked.set(raw,item);
     }
@@ -410,7 +423,7 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
     for (const destination of DESTINATIONS) {
       const key = destinationKey(destination);
       let eligible = 0;
-      let confirmed = state.deliveries.filter(r => destinationKey(r) === key && localDay(new Date(r.scheduledAt)) === date &&
+      let confirmed = state.deliveries.filter(r => publicationDestinationKey(r) === key && localDay(new Date(r.scheduledAt)) === date &&
         ['scheduled', 'published'].includes(r.status)).length;
       const blockers = new Set();
       const scopedAssets = configured.assets.filter(item => findDestination(item) && destinationKey(item) === key)
@@ -428,16 +441,16 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
             dispatchNow - Date.parse(item.rightsEvidence.rightsObservedAt) > 24*HOUR) {
           blockers.add('asset_review_or_schedule_expired_during_cycle'); continue;
         }
-        if (external.some(row=>externalScheduleCollision(row,item)) || state.deliveries.some(row => deliveryCollision(row, item)) ||
+        if (external.some(row=>externalScheduleCollision({...row,destination:currentDestinationForHistory(row.destination)},item)) || state.deliveries.some(row => deliveryCollision({...row,...currentDestinationForHistory(row)}, item)) ||
             legacy.some(row => Number(row.metricoolBlogId) === item.brandId &&
-              canonicalAccount(row.metricoolBlogId, item.network, row.account) === item.account &&
+              publicationDestinationKey({brandId:Number(row.metricoolBlogId),network:item.network,account:String(row.account??'').replace(/^@/,'').toLowerCase()}) === destinationKey(item) &&
               (row.mediaSha256 === item.mediaSha256 || row.sha256 === item.mediaSha256 || row.mediaUrl === item.mediaUrl || row.sourceUrl === item.sourceUrl))) {
           blockers.add('duplicate_delivery'); continue;
         }
         eligible++;
         if (!withinBudget()) { counts.timeBudgetReached = true; blockers.add('cycle_time_budget_reached'); break; }
         if (configured.publish !== true || !adapter) { blockers.add('publisher_unavailable_or_disabled'); continue; }
-        if (confirmed >= DAILY_LIMIT || state.deliveries.some(row => destinationKey(row) === key &&
+        if (confirmed >= DAILY_LIMIT || state.deliveries.some(row => publicationDestinationKey(row) === key &&
              row.status === 'verification_pending' && localDay(new Date(row.scheduledAt)) === date)) {
           blockers.add('daily_target_or_unverified_prior_attempt'); continue;
         }
@@ -467,7 +480,7 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
     const report = {
       schemaVersion: 1, date, generatedAt: now.toISOString(), paidSpendUsd: 0, ...counts,
       status: outcomes.some(row => row.shortfall > 0) ? 'held_or_partial' : 'completed',
-      destinations: outcomes, disconnected: [{ brandId: DISCONNECTED_BRAND, reason: 'destination_not_connected' }],
+      destinations: outcomes, disconnected: [{ brandId: DISCONNECTED_BRAND, network: 'tiktok', reason: 'destination_not_connected' }],
       creatorSelection, observations: state.observations.length, missedSnapshots: missedSnapshots(state, now),
       proposalCount: proposals.length, proposals, qualifiedCandidates: qualifiedCandidates(state, proposals), versions: exportedVersionState(state),
       automaticPromotion: false, rendererPolicyBinding: 'required_for_experiments_and_candidate_versions',

@@ -1,3 +1,4 @@
+import { createPortfolioMetricool } from './helpers/clippers-current-identity-fixture.mjs';
 import { nativeReceiptDigest, externalScheduleCollision } from '../script/clippers-native-media-receipts.mjs';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -6,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { runClippersDailyLearning } from '../script/clippers-daily-learning.mjs';
-import { createPortfolioMetricool, DESTINATIONS, destinationKey } from '../script/clippers-portfolio-metricool.mjs';
+import { DESTINATIONS, destinationKey } from '../script/clippers-portfolio-metricool.mjs';
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const NOW = new Date('2026-11-18T15:00:00Z');
@@ -59,10 +60,10 @@ const receipt = item => ({
 });
 const forbidden = () => assert.fail('unexpected provider request');
 
-test('empty workspace reports four honest shortages and disconnected brand without calling provider', async t => {
+test('empty workspace reports exact current shortages and disconnected TikTok NY without calling provider', async t => {
   const f = await setup(t);
   const result = await runClippersDailyLearning({ workspaceRoot: f.root, now: NOW, adapter: new Proxy({}, { get: forbidden }) });
-  assert.deepEqual(result.destinations.map(d => d.shortfall), [5, 5, 5, 5]);
+  assert.deepEqual(result.destinations.map(d => d.shortfall), DESTINATIONS.map(()=>5));
   assert.deepEqual(result.disconnected.map(d => d.brandId), [6595747]);
   assert.equal(result.observations, 0);
   assert.equal(result.rendererPolicyBinding, 'required_for_experiments_and_candidate_versions');
@@ -129,7 +130,7 @@ test('attempt is persisted before remote write, uncertain receipt is reconciled 
     adapter: {
       schedule: forbidden,
       confirmSchedule: async () => 'scheduler-1',
-      publication: async () => ({ id: '123', url: 'https://www.tiktok.com/@streamersclips/video/123', publishedAt: item.scheduledAt, source: 'metricool_scheduler' }),
+      publication: async () => ({ id: '123', url: 'https://www.tiktok.com/@streamersus/video/123', publishedAt: item.scheduledAt, source: 'metricool_scheduler' }),
       metrics: async (_destination, _publication, now) => ({ views: 0, completionRate: null, observedAt: iso(now), timing: 'provider_observation_time', source: 'metricool_post_analytics' }),
     },
   });
@@ -147,7 +148,7 @@ test('only timely matching snapshots persist at 24, 72 and 168 hours', async t =
   const adapter = {
     preflight: async () => {},
     schedule: async () => 'metricool-1',
-    publication: async () => ({ id: '123', url: 'https://www.tiktok.com/@streamersclips/video/123?share=1', publishedAt: item.scheduledAt, source: 'metricool_scheduler' }),
+    publication: async () => ({ id: '123', url: 'https://www.tiktok.com/@streamersus/video/123?share=1', publishedAt: item.scheduledAt, source: 'metricool_scheduler' }),
     metrics: async (_target, _pub, now) => ({ views: 10, completionRate: 0.5, observedAt: iso(now), timing: 'provider_observation_time', source: 'metricool_post_analytics' }),
   };
   assert.equal((await runClippersDailyLearning({ workspaceRoot: f.root, now: NOW, adapter })).scheduled, 1);
@@ -159,7 +160,7 @@ test('only timely matching snapshots persist at 24, 72 and 168 hours', async t =
   const persisted = await f.state();
   assert.deepEqual(persisted.observations.map(row => row.window), [24, 72, 168]);
   assert.ok(persisted.observations.every(row => row.postId === '123' && row.source === 'metricool_post_analytics'));
-  assert.equal(persisted.deliveries[0].post.url, 'https://www.tiktok.com/@streamersclips/video/123');
+  assert.equal(persisted.deliveries[0].post.url, 'https://www.tiktok.com/@streamersus/video/123');
 });
 
 test('activation requires three independent version-bound proposals and rollback selects the prior version', async t => {
@@ -344,7 +345,7 @@ test('actual TikTok response can prove owner and published time without fabricat
   const item = { id: 'test', metricoolId: 'mc-id', caption: 'Proof', mediaUrl: 'https://drive.google.com/uc?id=test',
     scheduledAt: '2026-11-18T16:30:00.000Z' };
   const publishedAt = '2026-11-18T16:31:00.000Z';
-  const postUrl = 'https://www.tiktok.com/@streamersclips/video/123';
+  const postUrl = 'https://www.tiktok.com/@streamersus/video/123';
   const row = { id: item.metricoolId, text: item.caption, media: [item.mediaUrl],
     publicationDate: { dateTime: '2026-11-18T11:30:00', timezone: 'America/New_York' },
     providers: [{ network: 'tiktok', id: '123', status: 'PUBLISHED', publicUrl: postUrl }],
@@ -368,7 +369,7 @@ test('actual TikTok response can prove owner and published time without fabricat
   assert.equal(observed.views, 42);
 });
 
-test('brand settings fallback is only for omitted identities; conflicts never become authorized', async () => {
+test('stored scoped identity cannot authorize missing or conflicting active profile identity', async () => {
   for (const connected of [undefined, null, false, { username: target.account, connected: false }, 'other-account']) {
     let mcpReads = 0;
     const adapter = createPortfolioMetricool({ token, userId: 12, fetcher: async (resource) => {
@@ -383,13 +384,8 @@ test('brand settings fallback is only for omitted identities; conflicts never be
         { id: target.brandId, networksData: { tiktokData: target.account } },
       ] } } });
     } });
-    if (connected === undefined) {
-      assert.equal((await adapter.destinationSettings(target)).canPublish, true);
-      assert.equal(mcpReads, 1);
-    } else {
-      await assert.rejects(adapter.destinationSettings(target), /identity_unverified/);
-      assert.equal(mcpReads, 0);
-    }
+    await assert.rejects(adapter.destinationSettings(target), /identity_unverified/);
+    assert.equal(mcpReads, 0);
   }
 });
 
@@ -433,7 +429,7 @@ test('a destination schedules at most five distinct, freshest eligible items', a
   } });
   assert.deepEqual(calls, ['item-5', 'item-4', 'item-3', 'item-2', 'item-1']);
   assert.equal(report.destinations[0].shortfall, 0);
-  assert.deepEqual(report.destinations.slice(1).map(row => row.shortfall), [5, 5, 5]);
+  assert.deepEqual(report.destinations.slice(1).map(row => row.shortfall), DESTINATIONS.slice(1).map(()=>5));
 });
 
 test('a normalized provider video must match the approved hash and never receives the account credential', async () => {
@@ -469,13 +465,13 @@ test('schedule rereads the destination and holds when its connection changes aft
     if (options.method === 'POST') { writes++; assert.fail('a changed account must never reach Metricool create'); }
     if (u.pathname.endsWith('/simpleProfiles')) {
       return Response.json([{ id: target.brandId, ownerUserId: 12, isShared: false,
-        tiktok: ++profileReads === 1 ? target.account : 'reconnected-account' }]);
+        tiktok: ++profileReads <= 2 ? target.account : 'reconnected-account' }]);
     }
     return Response.json({ data: [] });
   } });
   await adapter.preflight(target, item);
   await assert.rejects(adapter.schedule(target, item), /destination_identity_unverified/);
-  assert.equal(profileReads, 2);
+  assert.equal(profileReads, 3);
   assert.equal(writes, 0);
 });
 

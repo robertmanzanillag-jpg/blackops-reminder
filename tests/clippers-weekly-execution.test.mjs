@@ -1,3 +1,4 @@
+import { createPortfolioMetricool } from './helpers/clippers-current-identity-fixture.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, readFile, rm, realpath, chmod } from 'node:fs/promises';
@@ -6,7 +7,7 @@ import path from 'node:path';
 import { execFile, spawnSync } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
-import { DESTINATIONS, destinationKey, createPortfolioMetricool } from '../script/clippers-portfolio-metricool.mjs';
+import { DESTINATIONS, destinationKey } from '../script/clippers-portfolio-metricool.mjs';
 import { weeklyDigest as digest, validateEvergreenAuthorization, weeklyDeliveryCollision, readWeeklyPrivateJson } from '../script/clippers-weekly-policy.mjs';
 import { runClippersWeeklyScheduling, parseWeeklySchedulingArgs } from '../script/clippers-weekly-scheduler.mjs';
 import { buildClippersOrchestraReport } from '../script/clippers-orchestra-report.mjs';
@@ -143,7 +144,7 @@ test('live coverage counts five pending plus real published once and holds opaqu
  const adapter=createPortfolioMetricool({token:'synthetic-fixture-token',userId:12,fetcher}),item={scheduledAt:'2026-11-18T17:00:00.000Z',caption:'new',mediaUrl:'https://drive.google.com/uc?id=new'};
  const row=(id,hour,status='PENDING')=>({id,providers:[{network:'tiktok',status}],publicationDate:`2026-11-18T${hour}:00:00Z`,text:id});
  rows=[row('one','18'),row('two','19'),row('three','20'),row('four','21')];analytics=[{postId:'111',publishedAt:'2026-11-18T14:00:00Z'}];await assert.rejects(adapter.weeklyPreflight(target,item,{now:NOW}),/daily_cap/);
- rows=[{...row('already','14','PUBLISHED'),providers:[{network:'tiktok',status:'PUBLISHED',publicUrl:'https://www.tiktok.com/@streamersclips/video/111'}]}];
+ rows=[{...row('already','14','PUBLISHED'),providers:[{network:'tiktok',status:'PUBLISHED',publicUrl:'https://www.tiktok.com/@streamersus/video/111'}]}];
  const c=await adapter.weeklyPreflight(target,item,{now:NOW});assert.equal(c.confirmedCount,1);assert.equal(c.evidenceSha256,digest(c.evidence));
  analytics=[];rows=[row('in-progress','14','PUBLISHING')];const reserved=await adapter.weeklyPreflight(target,item,{now:NOW});assert.equal(reserved.confirmedCount,1);assert.equal(reserved.reservedPublishing,1);assert.deepEqual(reserved.calendarIds,['in-progress']);
  rows=[row('unknown','18','AWAITING_CONFIRMATION')];await assert.rejects(adapter.weeklyPreflight(target,item,{now:NOW}),/unverified/);
@@ -203,25 +204,56 @@ test('Office daily coverage is account-local and retains outside pending/publish
  const f=await readyFixture(t,{sameDay:true}),preflight=f.adapter.weeklyPreflight;f.adapter.weeklyPreflight=async(...args)=>{const r=await preflight(...args);r.evidence.scheduled=[{id:'outside-pending',scheduledAt:'2026-11-18T18:00:00.000Z',status:'pending'}];r.evidence.published=[{id:'4444',publishedAt:'2026-11-18T14:00:00.000Z'}];r.confirmedCount=2;r.scheduledIds=['outside-pending'];r.publishedIds=['4444'];r.evidenceSha256=digest(r.evidence);return r;};
  await runClippersWeeklyScheduling({workspaceRoot:f.root,window:WINDOW,now:NOW,apply:true,adapter:f.adapter});const report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:new Date(+NOW+60000)});assert.equal(report.accounts[0].confirmedScheduledOrPublished,3);assert.equal(report.accounts[0].shortfall,2);assert.equal(report.accounts[1].confirmedScheduledOrPublished,null);
 });
-test('raw MCP scheduling follows authenticated native schema and sends public media in info, not picker attachments',async()=>{
+test('raw MCP scheduling supplies a bounded TikTok title and preserves the approved caption',async()=>{
  const fixture=JSON.parse(await readFile(new URL('./fixtures/metricool-create-post-schema-20261118.json',import.meta.url),'utf8'));
- assert.equal(fixture.inputSchemaSha256,'e8a8454f6d4de833250f35597c86086d37b685d9de75c8b9a895284e6a2c7cec');let posts=[],writes=0;
- const item={id:'actual-schema-fixture',scheduledAt:'2026-11-18T17:00:00.000Z',caption:'Approved source #TJR',mediaUrl:'https://drive.google.com/uc?export=download&id=fixture',thirdPartyCommercial:false};
- const fetcher=async(resource,options)=>{const url=new URL(resource);if(url.pathname==='/api/admin/simpleProfiles')return Response.json([{id:target.brandId,canPublish:true,tiktokUsername:target.account}]);
-  if(url.hostname==='ai.metricool.com'){
-   const request=JSON.parse(options.body),args=request.params.arguments,s=fixture.inputSchemaWithoutDescriptions;
-   for(const required of s.required)assert.ok(Object.hasOwn(args,required));for(const[k,v]of Object.entries(args)){assert.ok(Object.hasOwn(s.properties,k));assert.equal(typeof v,s.properties[k].type);}
-   assert.equal(args.mediaFiles,undefined);const info=JSON.parse(args.info);assert.deepEqual(info.media,[item.mediaUrl]);assert.deepEqual(info.providers,[{network:'tiktok'}]);assert.equal(info.tiktokData.commercialContentThirdParty,false);
-   writes++;posts=[{id:'native-schema-receipt',autoPublish:true,draft:false,providers:[{network:'tiktok',status:'PENDING'}],text:info.text,media:info.media,publicationDate:info.publicationDate}];return Response.json({result:{content:[]}});
-  }return Response.json(posts);
- };
- const adapter=createPortfolioMetricool({token:'synthetic-schema-token',userId:12,fetcher});const receipt=await adapter.schedule(target,item);assert.equal(writes,1);assert.equal(receipt.id,'native-schema-receipt');assert.equal(receipt.mediaUrl,item.mediaUrl);
+ assert.equal(fixture.inputSchemaSha256,'e8a8454f6d4de833250f35597c86086d37b685d9de75c8b9a895284e6a2c7cec');
+ const longTitle='🌎'.repeat(79)+'界';
+ const cases=[
+  {caption:'Approved source #TJR\r\nSource credit and approved disclosure.',title:'Approved source #TJR',commercial:false},
+  {caption:'  \n  '+longTitle+'🚀more text\nSource credit.',title:longTitle,commercial:true},
+ ];
+ for(const {caption,title,commercial} of cases){
+  let posts=[],writes=0,mcpCalls=0;
+  const item={id:'actual-schema-fixture',scheduledAt:'2026-11-18T17:00:00.000Z',caption,
+   mediaUrl:'https://drive.google.com/uc?export=download&id=fixture',thirdPartyCommercial:commercial};
+  const fetcher=async(resource,options)=>{
+   const url=new URL(resource);
+   if(url.pathname==='/api/admin/simpleProfiles')return Response.json([{id:target.brandId,canPublish:true,tiktokUsername:target.account}]);
+   if(url.hostname==='ai.metricool.com'){
+    mcpCalls++;
+    const request=JSON.parse(options.body),args=request.params.arguments,s=fixture.inputSchemaWithoutDescriptions;
+    for(const required of s.required)assert.ok(Object.hasOwn(args,required));
+    for(const[k,v]of Object.entries(args)){assert.ok(Object.hasOwn(s.properties,k));assert.equal(typeof v,s.properties[k].type);}
+    const info=JSON.parse(args.info);
+    if(!info.tiktokData?.title?.trim()){
+     return Response.json({error:{code:-32602,message:'INVALID_ARGUMENT: TikTok title is required'}});
+    }
+    assert.equal(args.mediaFiles,undefined);
+    assert.deepEqual(info.media,[item.mediaUrl]);
+    assert.deepEqual(info.providers,[{network:'tiktok'}]);
+    assert.equal(info.text,caption);
+    assert.deepEqual(info.tiktokData,{title,privacyOption:'PUBLIC_TO_EVERYONE',autoAddMusic:false,commercialContentThirdParty:commercial});
+    writes++;
+    posts=[{id:'native-schema-receipt',autoPublish:true,draft:false,providers:[{network:'tiktok',status:'PENDING'}],
+     text:info.text,media:info.media,publicationDate:info.publicationDate}];
+    return Response.json({result:{content:[]}});
+   }
+   return Response.json(posts);
+  };
+  const adapter=createPortfolioMetricool({token:'synthetic-schema-token',userId:12,fetcher});
+  const receipt=await adapter.schedule(target,item);
+  assert.equal(writes,1);
+  assert.equal(receipt.id,'native-schema-receipt');
+  assert.equal(receipt.mediaUrl,item.mediaUrl);
+  await assert.rejects(adapter.schedule(target,{...item,caption:' \r\n  '}), /metricool_tiktok_title_required/);
+  assert.equal(mcpCalls,1);
+ }
 });
 
 test('known publishing reserves capacity; calendar published joins analytics exactly once without inventing publication time',async()=>{
  let rows=[],analytics=[];const fetcher=async resource=>{const u=new URL(resource);return Response.json(u.pathname==='/api/admin/simpleProfiles'?[{id:target.brandId,canPublish:true,tiktokUsername:target.account}]:u.pathname.includes('/analytics/')?analytics:rows);};
  const adapter=createPortfolioMetricool({token:'synthetic-fixture-token',userId:12,fetcher}),item={scheduledAt:'2026-11-18T19:00:00.000Z',caption:'new distinct',mediaUrl:'https://static.metricool.com/video/123/202611/new.mp4'};
- const row={id:'123',providers:[{network:'tiktok',status:'PUBLISHED',publicUrl:'https://www.tiktok.com/@streamersclips/video/111'}],publicationDate:'2026-11-18T14:00:00Z',text:'original'};rows=[row];
+ const row={id:'123',providers:[{network:'tiktok',status:'PUBLISHED',publicUrl:'https://www.tiktok.com/@streamersus/video/111'}],publicationDate:'2026-11-18T14:00:00Z',text:'original'};rows=[row];
  let p=await adapter.weeklyPreflight(target,item,{now:NOW});assert.equal(p.confirmedCount,1);assert.equal(p.publicationTimesUnverified,1);assert.deepEqual(p.publishedIds,['111']);assert.equal(p.evidence.published.length,0);assert.equal(p.evidence.scheduled[0].publicationTimeVerified,false);assert.equal(Object.hasOwn(p.evidence.scheduled[0],'publishedAt'),false);
  analytics=[{postId:'111',publishedAt:'2026-11-18T14:00:00Z'}];p=await adapter.weeklyPreflight(target,item,{now:NOW});assert.equal(p.confirmedCount,1);assert.equal(p.evidence.scheduled.length,0);assert.deepEqual(p.calendarIds,['123']);
  analytics=[];rows=[{...row,providers:[{network:'tiktok',status:'PUBLISHED',publicUrl:'https://www.tiktok.com/@another/video/111'}]}];await assert.rejects(adapter.weeklyPreflight(target,item,{now:NOW}),/unreconciled/);
@@ -233,4 +265,23 @@ test('Office never double counts a local scheduled ACK after the same calendar I
  const state=await f.read(`${REPORT}/state.json`),delivery=state.deliveries[0],proof=delivery.preflightEvidence;proof.scheduled=[{id:delivery.metricoolId,scheduledAt:delivery.scheduledAt,status:'published',platformPostId:'111',publicationTimeVerified:false}];proof.published=[];proof.calendarPublished=[{id:delivery.metricoolId,platformPostId:'111'}];const {sha256,...p}=proof;proof.sha256=digest(p);await f.write(`${REPORT}/state.json`,state);
  let report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:new Date(+NOW+3*3600000)});assert.equal(report.accounts[0].confirmedScheduledOrPublished,1);assert.equal(report.accounts[0].shortfall,4);
  proof.scheduled=[];proof.published=[{id:'111',publishedAt:'2026-11-18T14:00:00.000Z'}];const {sha256:old,...updated}=proof;proof.sha256=digest(updated);await f.write(`${REPORT}/state.json`,state);report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:new Date(+NOW+3*3600000)});assert.equal(report.accounts[0].confirmedScheduledOrPublished,1);
+});
+
+test('historical aliases remain readable but cannot become fresh publication candidates',{skip:!tools},async t=>{
+ const f=await readyFixture(t),configured=await f.read(`${CONFIG}/approved-input.json`);
+ configured.assets[0].account='streamersclips';await f.write(`${CONFIG}/approved-input.json`,configured);
+ const old={...configured.assets[0],status:'published',metricoolId:'old-real-id',createdAt:NOW.toISOString()};
+ await f.write(`${REPORT}/state.json`,{schemaVersion:1,day:null,deliveries:[old],observations:[],history:[],versions:{}});
+ const r=await runClippersWeeklyScheduling({workspaceRoot:f.root,window:WINDOW,now:NOW,apply:true,adapter:f.adapter});
+ assert.equal(r.attempts,0);assert.equal(r.scheduled,0);assert.equal(f.calls.preflight,0);assert.equal(f.calls.schedule,0);
+ assert.equal((await f.read(`${REPORT}/state.json`)).deliveries[0].account,'streamersclips');
+});
+test('unknown attempt under historical handle blocks current-handle replay without altering its record',{skip:!tools},async t=>{
+ const f=await readyFixture(t),configured=await f.read(`${CONFIG}/approved-input.json`);
+ const old={...configured.assets[0],account:'streamersclips',status:'verification_pending',createdAt:NOW.toISOString()};
+ const state={schemaVersion:1,day:null,deliveries:[old],observations:[],history:[],versions:{}};
+ await f.write(`${REPORT}/state.json`,state);
+ const r=await runClippersWeeklyScheduling({workspaceRoot:f.root,window:WINDOW,now:NOW,apply:true,adapter:f.adapter});
+ assert.equal(r.attempts,0);assert.equal(f.calls.schedule,0);assert.equal(r.outcomes[0].reason,'duplicate_or_overlapping_delivery');
+ assert.deepEqual(await f.read(`${REPORT}/state.json`),state);
 });

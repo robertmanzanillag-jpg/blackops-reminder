@@ -315,15 +315,17 @@ test('B1: staging asset kept while Metricool references it; removed once a Metri
   assert.equal(stagedAssetRemovable(ledger, 'x', 'u', NOW + 99 * 3600_000), false, 'never while a write is uncertain');
 });
 
-test('B3: live Metricool identities, legacy ledger rows still resolve to the same destination', () => {
-  assert.deepEqual(DESTINATIONS.map(destinationKey), ['6431685:tiktok:streamersus', '6431687:tiktok:streamersclipusa', '6591612:tiktok:news305miami', '6591612:facebook:1193011863901514']);
+test('B3: current Metricool identities and historical proof scope use distinct keys', () => {
+  assert.deepEqual(DESTINATIONS.map(destinationKey), ['6431685:tiktok:streamersus', '6431687:tiktok:streamersclipusa', '6591612:tiktok:news305miami', '6591612:facebook:1193011863901514', '6595747:facebook:1198281286708321']);
   const legacy = { brandId: 6431685, network: 'tiktok', account: 'streamersclips' };
-  assert.equal(findDestination(legacy).account, 'streamersus');
-  assert.equal(destinationKey(legacy), '6431685:tiktok:streamersus');
-  assert.equal(destinationKey({ brandId: 6591612, network: 'tiktok', account: 'ynb4b6r6' }), '6591612:tiktok:news305miami');
+  assert.equal(findDestination(legacy).account, 'streamersclips');
+  assert.equal(destinationKey(legacy), '6431685:tiktok:streamersclips');
+  assert.equal(canonicalDestinationKey(destinationKey(legacy)), '6431685:tiktok:streamersus');
+  assert.equal(canonicalDestinationKey('6591612:tiktok:ynb4b6r6'), '6591612:tiktok:news305miami');
   assert.equal(findDestination({ brandId: 6431687, network: 'tiktok', account: 'streamersclips' }), undefined, 'aliases are per brand');
-  assert.equal(exactPost('https://www.tiktok.com/@streamersus/video/1', legacy).id, '1');
-  assert.equal(exactPost('https://www.tiktok.com/@streamersclips/video/2', DESTINATIONS[0]).id, '2', 'old post URLs still match for analytics');
+  assert.equal(exactPost('https://www.tiktok.com/@streamersus/video/1', DESTINATIONS[0]).id, '1');
+  assert.equal(exactPost('https://www.tiktok.com/@streamersclips/video/2', legacy).id, '2');
+  assert.equal(exactPost('https://www.tiktok.com/@streamersclips/video/2', DESTINATIONS[0]), null);
   assert.equal(exactPost('https://www.tiktok.com/@someoneelse/video/3', DESTINATIONS[2]), null);
 });
 

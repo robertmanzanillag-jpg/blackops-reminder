@@ -91,22 +91,22 @@ test('Drive helper receives the configured owner and only its existing credentia
   assert.deepEqual(Object.keys(cleaned).sort(), ['DEFAULT_USER_ID', 'GOOGLE_DRIVE_CLIENT_ID', 'GOOGLE_DRIVE_CLIENT_SECRET', 'REPL_IDENTITY']);
 });
 
-test('real original renders prepare all four exact destinations with one upload and preserve publisher switches', { skip: !hasTools }, async t => {
+test('real original renders prepare all current exact destinations with one upload and preserve publisher switches', { skip: !hasTools }, async t => {
   const f = await fixture(t, DESTINATIONS);
   assert.equal(new Set(f.packets.map(x => x.rendered.outputSha256)).size, 1);
   const r = await f.run();
-  assert.equal(r.prepared, 4); assert.equal(r.uploaded, 1); assert.equal(r.paidSpendUsd, 0);
+  assert.equal(r.prepared, DESTINATIONS.length); assert.equal(r.uploaded, 1); assert.equal(r.paidSpendUsd, 0);
   assert.deepEqual([f.calls.folder, f.calls.upload, f.calls.public], [1, 1, 1]);
   const input = JSON.parse(await readFile(path.join(f.root, CONFIG, 'approved-input.json')));
-  assert.equal(input.publish, false); assert.equal(input.collect, false); assert.equal(input.assets.length, 4);
+  assert.equal(input.publish, false); assert.equal(input.collect, false); assert.equal(input.assets.length, DESTINATIONS.length);
   const receipts = JSON.parse(await readFile(path.join(f.root, REPORT, 'portfolio-media-receipts.json')));
-  assert.equal(receipts.length, 4); assert.equal(new Set(receipts.map(destinationKey)).size, 4);
+  assert.equal(receipts.length, DESTINATIONS.length); assert.equal(new Set(receipts.map(destinationKey)).size, DESTINATIONS.length);
   assert.ok(receipts.every(x => x.renderReceiptSha256 && x.paidSpendAllowed === false));
   assert.equal((await stat(path.join(f.root, REPORT, 'portfolio-media-receipts.json'))).mode & 0o077, 0);
   const learning = await runClippersDailyLearning({ workspaceRoot: f.root, now,
     adapter: new Proxy({}, { get() { throw Error('publisher remains disabled'); } }) });
   assert.ok(learning.destinations.every(row => row.eligible === 1));
-  const again = await f.run(); assert.equal(again.prepared, 4);
+  const again = await f.run(); assert.equal(again.prepared, DESTINATIONS.length);
   assert.deepEqual([f.calls.folder, f.calls.upload, f.calls.public], [1, 1, 1], 'retries only verify existing public bytes');
 });
 
@@ -298,11 +298,19 @@ test('external owner UI exact GET and bytes are observed separately, even after 
  const observationTime=new Date('2026-11-18T18:00:00Z');
  const adapter={confirmSchedule:async(d,item)=>{reads++;assert.equal(item.caption,packet.caption);return{id:'123456',mediaUrl:NATIVE_URL};},schedule(){throw Error('no schedule');}};
  const options={workspaceRoot:f.root,assetId:packet.id,external,now:observationTime,adapter,fetcher:f.adapter.nativeFetch};
- assert.equal((await reconcileExternalMetricoolSchedule(options)).learnerStateChanged,false);const old=await readFile(path.join(f.root,REPORT,'native-media-imports',packet.id+'.json'),'utf8');
- assert.equal((await reconcileExternalMetricoolSchedule({...options,now:new Date(+observationTime+1000)})).providerWrites,0);assert.equal(await readFile(path.join(f.root,REPORT,'native-media-imports',packet.id+'.json'),'utf8'),old);
- const rows=JSON.parse(await readFile(path.join(f.root,REPORT,'external-schedules.json')));assert.equal(rows.length,1);assert.equal(verifiedExternalSchedules(rows,new Date(+observationTime+1000)).length,1);await assert.rejects(readFile(path.join(f.root,REPORT,'state.json')),/ENOENT/);
+ const observed=await reconcileExternalMetricoolSchedule(options);
+ assert.equal(observed.learnerStateChanged,false);
+ assert.equal(observed.origin,'external_owner_ui');
+ const mediaFile=path.join(f.root,REPORT,'native-media-imports',packet.id+'.json');
+ const ledgerFile=path.join(f.root,REPORT,'external-schedules.json');
+ const [old,originalLedger]=await Promise.all([readFile(mediaFile,'utf8'),readFile(ledgerFile,'utf8')]);
+ assert.equal((await reconcileExternalMetricoolSchedule({...options,now:new Date(+observationTime+1000)})).providerWrites,0);
+ await assert.rejects(reconcileExternalMetricoolSchedule({...options,external:{...external,origin:'external_metricool_api'}}),/external_schedule_identity_conflict/);
+ assert.equal(await readFile(mediaFile,'utf8'),old);
+ assert.equal(await readFile(ledgerFile,'utf8'),originalLedger);
+ const rows=JSON.parse(originalLedger);assert.equal(rows.length,1);assert.equal(verifiedExternalSchedules(rows,new Date(+observationTime+1000)).length,1);await assert.rejects(readFile(path.join(f.root,REPORT,'state.json')),/ENOENT/);
  const report=await buildClippersOrchestraReport({workspaceRoot:f.root,now:new Date(+observationTime+1000)});assert.equal(report.accounts[0].confirmedScheduledOrPublished,1);assert.equal(report.accounts[0].shortfall,null);assert.equal(report.accounts[1].confirmedScheduledOrPublished,null);assert.equal(report.roles.find(r=>r.stage==='publisher').outcomes.length,0);
- await assert.rejects(reconcileExternalMetricoolSchedule({...options,external:{...external,caption:'different'}}),/binding/);assert.equal(reads,2);
+ await assert.rejects(reconcileExternalMetricoolSchedule({...options,external:{...external,caption:'different'}}),/binding/);assert.equal(reads,3);
 });
 
 test('external observation is durable before failed native import publication, and repeat repairs import only',{skip:!hasTools},async t=>{

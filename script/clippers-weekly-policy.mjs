@@ -114,6 +114,11 @@ export async function approvedEditorialSourceProof(root,asset) {
 export async function approvedWeeklyAuthorization(root,asset,now,window) {
   if(!sha(asset?.weeklyAuthorizationSha256))return false;
   try {
+    if (asset.renderClass !== undefined) {
+      const { readConfirmedReviewedEditorial, reviewedEditorialSourceProof } = await import('./clippers-reviewed-editorial.mjs');
+      const proof = await readConfirmedReviewedEditorial(root, asset, { now, window });
+      return reviewedEditorialSourceProof(proof);
+    }
     const{request,rendered}=await readEditorialRender(root,asset),a=request.weeklyAuthorization;
     if(!sha(a?.licenseEvidenceSha256))return false;
     const license=await readWeeklyPrivateJson(root,`config/clippers-daily-learning/rights-evidence/${a.licenseEvidenceSha256}.json`);
@@ -126,11 +131,12 @@ export async function approvedWeeklyAuthorization(root,asset,now,window) {
 export const newYorkHour = time => new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',hour:'2-digit',hourCycle:'h23'}).format(new Date(time));
 
 export function weeklyDeliveryCollision(a,b) {
-  if (destinationKey(a)!==destinationKey(b))return false;
-  if(a.id===b.id || a.mediaSha256===b.mediaSha256 || a.scheduledAt===b.scheduledAt ||
-      (localDay(new Date(a.scheduledAt))===localDay(new Date(b.scheduledAt)) && newYorkHour(a.scheduledAt)===newYorkHour(b.scheduledAt)) ||
-      a.caption.trim().toLowerCase()===b.caption.trim().toLowerCase())return true;
   const x=a.weeklySourceProof,y=b.weeklySourceProof;
+  const sameDestination=destinationKey(a)===destinationKey(b);
+  if (!sameDestination && x?.reuseScope!=='exact_destination_only' && y?.reuseScope!=='exact_destination_only')return false;
+  if(a.mediaSha256===b.mediaSha256 || (sameDestination && (a.id===b.id || a.scheduledAt===b.scheduledAt ||
+      (localDay(new Date(a.scheduledAt))===localDay(new Date(b.scheduledAt)) && newYorkHour(a.scheduledAt)===newYorkHour(b.scheduledAt)) ||
+      a.caption.trim().toLowerCase()===b.caption.trim().toLowerCase())))return true;
   if(!x || !y) {
     if(a.sourceUrl===b.sourceUrl)return true;
     const legacy=x?b:y?a:null, proven=x??y;

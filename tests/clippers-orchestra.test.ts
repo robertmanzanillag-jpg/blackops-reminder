@@ -1,3 +1,4 @@
+import { createPortfolioMetricool } from './helpers/clippers-current-identity-fixture.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp,mkdir,writeFile,readFile,rm,chmod,realpath } from 'node:fs/promises';
@@ -7,7 +8,7 @@ import { randomUUID,createHash } from 'node:crypto';
 import { buildClippersOrchestraReport } from '../script/clippers-orchestra-report.mjs';
 import { createClippersOrchestraRelay } from '../script/clippers-orchestra-relay.mjs';
 import { collectClippersAccountAnalytics,readOnlyAnalyticsFetch } from '../script/clippers-orchestra-analytics.mjs';
-import { DESTINATIONS,destinationKey,createPortfolioMetricool } from '../script/clippers-portfolio-metricool.mjs';
+import { DESTINATIONS,destinationKey } from '../script/clippers-portfolio-metricool.mjs';
 import { DISCOVERY_CREATORS } from '../script/clippers-portfolio-discovery.mjs';
 import { parseClippersOrchestraStatus } from '../shared/clippers-orchestra';
 import { createClippersOrchestraState,parseClippersEnvelope } from '../server/clippers-orchestra-state';
@@ -23,7 +24,7 @@ function memory(){let raw:string|null=null;return {async read(_owner:string){ret
 const envelope=(report:any,nonce=randomUUID())=>({version:1,nonce,generatedAt:report.generatedAt,report});
 
 test('empty workspace is disconnected, not four fake zero accounts or nine running workers',async()=>fixture(async root=>{
- const r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.equal(r.sourceFreshness.state,'disconnected');assert.equal(r.accounts.length,4);assert.equal(r.disconnectedDestinations[0].brandId,'6595747');
+ const r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.equal(r.sourceFreshness.state,'disconnected');assert.equal(r.accounts.length,DESTINATIONS.length);assert.equal(r.disconnectedDestinations[0].brandId,'6595747');
  assert.ok(r.accounts.every((a:any)=>a.eligibleAssets===null&&a.confirmedScheduledOrPublished===null&&a.analytics.status==='unavailable'));
  assert.ok(r.roles.every((a:any)=>a.state==='disconnected'&&a.heartbeatAt===null&&a.activeUntil===null&&!a.career.registered&&a.career.battery===null&&a.outcomes.length===0));
  assert.equal(r.discovery.eligibleAssets,null);assert.equal(r.learning.promotions,null);assert.equal(r.safety.paidSpendUsd,0);
@@ -55,10 +56,10 @@ test('single public observation is initial baseline; fresh paired actual growth 
  await discovery(root,'2026-11-18T17:00:00.000Z',140,'2026-11-18-bbbbbbbbbbbbbbbb.json');r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.equal(r.discovery.signals[0].label,'paired_growth_observed');assert.equal(r.discovery.signals[0].growthPerHour,20);assert.equal(r.discovery.signals[0].rights,'unknown');assert.equal(r.discovery.sources.length,20);assert.equal(r.discovery.eligibleAssets,0);
  assert.equal(r.roles.find((r:any)=>r.stage==='trends').outcomes.length,1);
 }));
-test('whole-account collector reads every exact target, never NY/KONG/BlackRoom, then reuses same-day receipt',async()=>fixture(async root=>{
+test('whole-account collector reads every exact target, includes confirmed NY Facebook but never NY TikTok/KONG/BlackRoom, then reuses same-day receipt',async()=>fixture(async root=>{
  const called:string[]=[];const adapter={async accountAnalytics(d:any){called.push(destinationKey(d));return {posts:[post(d)],receivedRows:1,rejectedRows:0};}};
- const first=await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter});assert.equal(first.accounts.length,4);assert.deepEqual(called,DESTINATIONS.map(destinationKey));assert.equal(first.readOnly,true);assert.equal(first.paidSpendUsd,0);
- await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter});assert.equal(called.length,4);
+ const first=await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter});assert.equal(first.accounts.length,DESTINATIONS.length);assert.deepEqual(called,DESTINATIONS.map(destinationKey));assert.equal(first.readOnly,true);assert.equal(first.paidSpendUsd,0);
+ await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter});assert.equal(called.length,DESTINATIONS.length);
  const r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.ok(r.accounts.every((a:any)=>a.analytics.posts===1&&a.analytics.totalViews===100&&a.analytics.actualAgeHoursMin===24));assert.equal(r.learning.eligibleComparisons,null);
  assert.equal(r.roles.find((r:any)=>r.stage==='publisher').outcomes.length,0,'analytics never creates publication evidence');
 }));
@@ -233,7 +234,7 @@ test('analytics non-JSON, invalid JSON, unknown shape and HTTP errors stay held 
   [()=>Response.json({private:'not a list'}),'metricool_list_unrecognized'],
   [()=>new Response('private denial',{status:403}),'analytics_http_403'],
  ]as const){
-  const adapter=createPortfolioMetricool({token:'synthetic-token-valid',userId:'123',fetcher:async(input:any)=>{const u=new URL(input);if(u.pathname.endsWith('simpleProfiles'))return Response.json(DESTINATIONS.map(d=>({blogId:d.brandId,ownerUserId:'123',isShared:false,tiktokUsername:DESTINATIONS.find(x=>x.brandId===d.brandId&&x.network==='tiktok')?.account,facebook:d.brandId===6591612?'1193011863901514':undefined})).filter((d,i,a)=>a.findIndex(x=>x.blogId===d.blogId)===i));return response();}});
+  const adapter=createPortfolioMetricool({token:'synthetic-token-valid',userId:'123',fetcher:async(input:any)=>{const u=new URL(input);if(u.pathname.endsWith('simpleProfiles'))return Response.json(DESTINATIONS.map(d=>({blogId:d.brandId,ownerUserId:'123',isShared:false,tiktokUsername:DESTINATIONS.find(x=>x.brandId===d.brandId&&x.network==='tiktok')?.account,facebook:DESTINATIONS.find(x=>x.brandId===d.brandId&&x.network==='facebook')?.account})).filter((d,i,a)=>a.findIndex(x=>x.blogId===d.blogId)===i));return response();}});
   const receipt=await collectClippersAccountAnalytics({workspaceRoot:root,now:new Date(NOW+3600000*8),env:{},adapter});assert.ok(receipt.accounts.every((a:any)=>a.status==='held'&&a.observedAt===null&&a.reason===code));
   assert.ok(!JSON.stringify(receipt).includes('private'));await rm(path.join(root,'reports/clippers-account-analytics/latest.json'));
  }
@@ -242,8 +243,8 @@ test('analytics non-JSON, invalid JSON, unknown shape and HTTP errors stay held 
 test('a receipt from the rejected date contract is refreshed once, then the corrected contract reuses its cache',async()=>fixture(async root=>{
  await save(root,'reports/clippers-account-analytics/latest.json',{schemaVersion:1,date:'2026-11-18',generatedAt:now().toISOString(),readOnly:true,paidSpendUsd:0,accounts:DESTINATIONS.map(d=>({...d,status:'held',reason:'analytics_provider_read_unavailable',posts:[]}))});
  let calls=0;const adapter={async accountAnalytics(){calls++;return {posts:[],receivedRows:0,rejectedRows:0};}};
- const r=await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter});assert.equal(r.reused,false);assert.equal(r.adapterContract,'utc-local-v1');assert.equal(calls,4);
- assert.equal((await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter})).reused,true);assert.equal(calls,4);
+ const r=await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter});assert.equal(r.reused,false);assert.equal(r.adapterContract,'utc-local-v1');assert.equal(calls,DESTINATIONS.length);
+ assert.equal((await collectClippersAccountAnalytics({workspaceRoot:root,now:now(),env:{},adapter})).reused,true);assert.equal(calls,DESTINATIONS.length);
 }));
 
 test('real discovery producer receipts project empty success, stable replay freshness and same-channel paired growth',async()=>fixture(async root=>{
@@ -276,9 +277,18 @@ test('a newer failed routing cycle supersedes a still-dated old preference rathe
  const report=await base(root);assert.equal(report.creatorSelection.preferences.length,0);assert.equal(report.creatorSelection.assigned,null);assert.ok(report.creatorSelection.heldReasons.includes('creator_routing_unavailable'));assert.ok(parseClippersOrchestraStatus(report,NOW));
 }));
 
-test('external owner UI observations survive wire validation without learner ACK or career awards',async()=>fixture(async root=>{
- const rows=Array.from({length:5},(_,i)=>{const r={schemaVersion:1,origin:'external_owner_ui',kind:'external_schedule_observation',assetId:'owner-ui-'+i,destination:DESTINATIONS[0],sourceUrl:'https://www.youtube.com/watch?v=aaaaaaaaaaa',caption:'Actual observed caption '+i,metricoolId:String(1000+i),scheduledAt:`2026-11-18T${String(16+i*2).padStart(2,'0')}:00:00.000Z`.replace('T24:','T23:'),mediaUrl:`https://static.metricool.com/video/123/202611/observed${i}.mp4`,sha256:'a'.repeat(64),sizeBytes:100,renderReceiptSha256:'b'.repeat(64),observedAt:now().toISOString(),confirmation:'exact_scheduler_get_and_native_bytes',publicationState:'not_evaluated',paidSpendUsd:0};return{...r,proofSha256:digest(r)};});
+test('external UI and API observations survive wire validation without learner ACK or career awards',async()=>fixture(async root=>{
+ const rows=Array.from({length:5},(_,i)=>{const r={schemaVersion:1,origin:i===4?'external_metricool_api':'external_owner_ui',kind:'external_schedule_observation',assetId:'owner-ui-'+i,destination:DESTINATIONS[0],sourceUrl:'https://www.youtube.com/watch?v=aaaaaaaaaaa',caption:'Actual observed caption '+i,metricoolId:String(1000+i),scheduledAt:`2026-11-18T${String(16+i*2).padStart(2,'0')}:00:00.000Z`.replace('T24:','T23:'),mediaUrl:`https://static.metricool.com/video/123/202611/observed${i}.mp4`,sha256:'a'.repeat(64),sizeBytes:100,renderReceiptSha256:'b'.repeat(64),observedAt:now().toISOString(),confirmation:'exact_scheduler_get_and_native_bytes',publicationState:'not_evaluated',paidSpendUsd:0};return{...r,proofSha256:digest(r)};});
  await save(root,'reports/clippers-daily-learning/external-schedules.json',rows);
  const r=await base(root);assert.ok(parseClippersOrchestraStatus(r,NOW));assert.equal(r.accounts[0].confirmedScheduledOrPublished,5);assert.equal(r.accounts[0].shortfall,0);assert.equal(r.accounts[1].confirmedScheduledOrPublished,null);
- const publisher=r.roles.find((v:any)=>v.stage==='publisher');assert.equal(publisher.outputs.externalOwnerUiObservations,5);assert.equal(publisher.lastRunAt,now().toISOString());assert.equal(publisher.outcomes.length,0);assert.equal(publisher.heartbeatAt,null);assert.equal(publisher.career.points,null);
+ const publisher=r.roles.find((v:any)=>v.stage==='publisher');assert.equal(publisher.outputs.externalOwnerUiObservations,4);assert.equal(publisher.outputs.externalMetricoolApiObservations,1);assert.equal(publisher.lastRunAt,now().toISOString());assert.equal(publisher.outcomes.length,0);assert.equal(publisher.heartbeatAt,null);assert.equal(publisher.career.points,null);
+}));
+
+test('current report and immutable historical report parse; mixed alias sets cannot create duplicate destinations',async()=>fixture(async root=>{
+ const current=await base(root);assert.ok(parseClippersOrchestraStatus(current,NOW));
+ const legacy=structuredClone(current);legacy.accounts=legacy.accounts.filter(a=>a.key!=='6595747:facebook:1198281286708321');
+ for(const a of legacy.accounts){if(a.account==='streamersus')a.account='streamersclips';if(a.account==='news305miami')a.account='ynb4b6r6';a.key=[a.brandId,a.network,a.account].join(':');}
+ assert.ok(parseClippersOrchestraStatus(legacy,NOW));
+ const mixed=structuredClone(current);mixed.accounts[0]=legacy.accounts[0];assert.equal(parseClippersOrchestraStatus(mixed,NOW),null);
+ const duplicate=structuredClone(current);duplicate.accounts.push(legacy.accounts[0]);assert.equal(parseClippersOrchestraStatus(duplicate,NOW),null);
 }));

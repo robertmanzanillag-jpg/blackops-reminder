@@ -1,11 +1,13 @@
-import { verifiedExternalSchedules } from './clippers-native-media-receipts.mjs';
+import { publicationDestinationKey, canonicalDestinationKey } from './clippers-destination-registry.mjs';
+import { METRICOOL_API_ORIGIN, verifiedExternalSchedules } from './clippers-native-media-receipts.mjs';
 // Read-only projection of the installed pipeline's private receipts. No provider, rights or publishing API.
 import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open, realpath, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { DESTINATIONS, destinationKey, findDestination, exactPost, localDay, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
+import { DESTINATIONS, destinationKey, findDestination, findPublishDestination, exactPost, localDay } from './clippers-portfolio-metricool.mjs';
 import { readPortfolioRenderManifest } from './clippers-portfolio-render.mjs';
+import { readConfirmedReviewedEditorial, REVIEWED_EDITORIAL } from './clippers-reviewed-editorial.mjs';
 import { ALL_DISCOVERY_CREATORS, KNOWN_CREATOR_GROUPS } from '../shared/clippers-priority-creators.mjs';
 import { buildViralScout } from '../shared/clippers-viral-scout.mjs';
 const HOUR=3600000, SHA=/^[a-f0-9]{64}$/, ID=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/;
@@ -83,7 +85,7 @@ function creatorSelectionView(raw,now){
  const groups=new Set(KNOWN_CREATOR_GROUPS.map(g=>g.id));
  const preferences=[];
  for(const p of raw.preferences){
-  if(!SHA.test(p.scopeKey??'')||!SHA.test(p.evidenceSha256??'')||!findDestination(p.destination)||!groups.has(p.baselineCreatorGroupId)||!groups.has(p.preferredCreatorGroupId)||!['preferred','baseline','unmeasured'].includes(p.status)||!ID.test(p.reason??'')||!ID.test(p.format??'')||!ID.test(p.context??'')||!ID.test(p.language??'')||p.timezone!=='America/New_York'||!/^(?:[01]\d|2[0-3]):00$/.test(p.postingBand??'')||![24,72,168].includes(p.windowHours)||n(p.eligibleSamples)===null)return missing;
+  if(!SHA.test(p.scopeKey??'')||!SHA.test(p.evidenceSha256??'')||!findPublishDestination(p.destination)||!groups.has(p.baselineCreatorGroupId)||!groups.has(p.preferredCreatorGroupId)||!['preferred','baseline','unmeasured'].includes(p.status)||!ID.test(p.reason??'')||!ID.test(p.format??'')||!ID.test(p.context??'')||!ID.test(p.language??'')||p.timezone!=='America/New_York'||!/^(?:[01]\d|2[0-3]):00$/.test(p.postingBand??'')||![24,72,168].includes(p.windowHours)||n(p.eligibleSamples)===null)return missing;
   let status=p.status,reason=p.reason,preferredCreatorGroupId=p.preferredCreatorGroupId;
   if(status==='preferred'&&(!time(p.expiresAt,now+24*HOUR)||Date.parse(p.expiresAt)<=now||p.eligibleSamples<30)){status='baseline';reason='creator_preference_expired';preferredCreatorGroupId=p.baselineCreatorGroupId;}
   preferences.push({scopeKey:p.scopeKey,destination:findDestination(p.destination),language:p.language,format:p.format,context:p.context,postingBand:p.postingBand,timezone:p.timezone,windowHours:p.windowHours,baselineCreatorGroupId:p.baselineCreatorGroupId,preferredCreatorGroupId,status,reason,eligibleSamples:p.eligibleSamples,expiresAt:time(p.expiresAt,now+24*HOUR)??null,evidenceSha256:p.evidenceSha256});
@@ -91,6 +93,16 @@ function creatorSelectionView(raw,now){
  return {evaluatedAt:raw.evaluatedAt,contexts:preferences.length,assigned:raw.assigned,heldReasons:codes(raw.heldReasons),preferences};
 }
 async function verifiedRenderBinding(root,delivery,cache,media=[],at=Date.now()){
+  if (delivery.renderClass !== undefined) {
+    if (delivery.renderClass !== REVIEWED_EDITORIAL) return {verified:false};
+    try {
+      const {receipt, asset}=await readConfirmedReviewedEditorial(root,delivery,{now:new Date(at),historical:true});
+      const mediaReady=media.some(row=>findDestination(row)&&destinationKey(row)===destinationKey(asset)&&
+        row.status==='ready'&&row.paidSpendAllowed===false&&row.campaignId===asset.campaignId&&row.sha256===asset.mediaSha256&&
+        row.draftFile===asset.draftFile&&row.renderReceiptSha256===asset.renderReceiptSha256);
+      return {verified:mediaReady,receiptSha256:asset.renderReceiptSha256,renderedAt:receipt.renderedAt};
+    } catch { return {verified:false}; }
+  }
   if(!findDestination(delivery)||!ID.test(delivery.id??'')||!ID.test(delivery.policyVersion??'')||!SHA.test(delivery.mediaSha256??''))return {verified:false};
   const key=destinationKey(delivery),cacheKey=`${key}:${delivery.id}:${delivery.policyVersion}:${delivery.mediaSha256}`;
   if(cache.has(cacheKey))return cache.get(cacheKey);
@@ -213,17 +225,17 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   const {comparisons,qualifications}=await comparisonsView(root,state,metrics,at,media);
   const reportAt=time(report?.generatedAt,at),watchdogAt=time(wd?.generatedAt,at),prepareAt=time(prep?.generatedAt,at);
   const rawAnalytics=artifacts.accountAnalytics.value;
-  const analytics=time(rawAnalytics?.generatedAt,at)&&rawAnalytics?.schemaVersion===1&&rawAnalytics.paidSpendUsd===0&&rawAnalytics.readOnly===true&&Array.isArray(rawAnalytics.accounts)&&rawAnalytics.accounts.length===4&&new Set(rawAnalytics.accounts.filter(findDestination).map(destinationKey)).size===4?rawAnalytics:null;
+  const analytics=time(rawAnalytics?.generatedAt,at)&&rawAnalytics?.schemaVersion===1&&rawAnalytics.paidSpendUsd===0&&rawAnalytics.readOnly===true&&Array.isArray(rawAnalytics.accounts)&&rawAnalytics.accounts.length===DESTINATIONS.length&&new Set(rawAnalytics.accounts.filter(findPublishDestination).map(destinationKey)).size===DESTINATIONS.length?rawAnalytics:null;
   const analyticsAt=analytics?.generatedAt??null;
   const discoveryAt=discovery.sources.map(s=>s.observedAt).filter(Boolean).sort().at(-1)??null;
   const evidenceAt=[reportAt,watchdogAt,prepareAt,discoveryAt,analyticsAt,weeklyAt,externalAt].filter(Boolean).sort().at(-1)??null;
   const age=evidenceAt?(at-Date.parse(evidenceAt))/60000:null,sourceState=evidenceAt?(age<=26*60?'connected':'stale'):'disconnected';
-  const validLearning=report?.schemaVersion===1&&report.paidSpendUsd===0&&reportAt&&report.date===localDay(now)&&Array.isArray(report.destinations)&&report.destinations.length===4&&new Set(report.destinations.filter(d=>findDestination(d)).map(destinationKey)).size===4?report:null;
+  const validLearning=report?.schemaVersion===1&&report.paidSpendUsd===0&&reportAt&&report.date===localDay(now)&&Array.isArray(report.destinations)&&report.destinations.length===DESTINATIONS.length&&new Set(report.destinations.filter(d=>findPublishDestination(d)).map(destinationKey)).size===DESTINATIONS.length?report:null;
   const nextDue=watchdogAt?nextDaily(at,wd.checkHour):null;
   const weeklyIsNewer=weeklyAt&&(!reportAt||weeklyAt>reportAt);
   const accounts=DESTINATIONS.map(d=>{
     const key=destinationKey(d);let r=validLearning?.destinations.find(r=>findDestination(r)&&destinationKey(r)===key);
-    const own=weeklyReceipts.filter(v=>destinationKey(v)===key&&localDay(new Date(v.scheduledAt))===localDay(now)).sort((a,b)=>a.scheduleEvidence.confirmedAt.localeCompare(b.scheduleEvidence.confirmedAt));
+    const own=weeklyReceipts.filter(v=>publicationDestinationKey(v)===key&&localDay(new Date(v.scheduledAt))===localDay(now)).sort((a,b)=>a.scheduleEvidence.confirmedAt.localeCompare(b.scheduleEvidence.confirmedAt));
     const latestOwn=own.at(-1);
     if(latestOwn&&(!reportAt||latestOwn.scheduleEvidence.confirmedAt>reportAt)){
       let confirmed=new Set(own.map(v=>v.metricoolId)).size,shortfall=null,blockers=['weekly_day_coverage_unverified'];
@@ -231,7 +243,7 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
       if(objectRow(proof)){
         const {sha256,...p}=proof;
         const valid=typeof sha256==='string'&&SHA.test(sha256)&&digest(p)===sha256&&p.source==='fresh_rest_calendar_and_account_analytics'&&
-          findDestination(p.destination)&&destinationKey(p.destination)===key&&p.day===localDay(now)&&time(p.observedAt,at)&&p.observedAt<=latestOwn.scheduleEvidence.confirmedAt&&
+          findDestination(p.destination)&&publicationDestinationKey(p.destination)===key&&p.day===localDay(now)&&time(p.observedAt,at)&&p.observedAt<=latestOwn.scheduleEvidence.confirmedAt&&
           Array.isArray(p.scheduled)&&p.scheduled.length<=5&&Array.isArray(p.published)&&p.published.length<=5&&
           p.scheduled.every(v=>objectRow(v)&&typeof v.id==='string'&&ID.test(v.id)&&time(v.scheduledAt,Infinity)&&localDay(new Date(v.scheduledAt))===p.day&&(['pending','scheduled','publishing'].includes(v.status)||(['published','posted'].includes(v.status)&&typeof v.platformPostId==='string'&&/^\d+$/.test(v.platformPostId)&&v.publicationTimeVerified===false)))&&
           (p.calendarPublished===undefined||(Array.isArray(p.calendarPublished)&&p.calendarPublished.length<=5&&p.calendarPublished.every(v=>objectRow(v)&&typeof v.id==='string'&&ID.test(v.id)&&typeof v.platformPostId==='string'&&/^\d+$/.test(v.platformPostId))&&new Set(p.calendarPublished.map(v=>v.id)).size===p.calendarPublished.length&&new Set(p.calendarPublished.map(v=>v.platformPostId)).size===p.calendarPublished.length))&&
@@ -239,7 +251,7 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
         if(valid){
           const pending=new Set(p.scheduled.filter(v=>!v.platformPostId).map(v=>v.id)),published=new Set([...p.published.map(v=>v.id),...p.scheduled.filter(v=>v.platformPostId).map(v=>v.platformPostId)]);
           const calendarPublished=new Map([...(p.calendarPublished??[]),...p.scheduled.filter(v=>v.platformPostId)].map(v=>[v.id,v.platformPostId]));
-          for(const v of (state?.deliveries??[]).filter(v=>findDestination(v)&&destinationKey(v)===key&&['scheduled','published'].includes(v.status)&&ID.test(v.metricoolId??'')&&time(v.scheduledAt,Infinity)&&localDay(new Date(v.scheduledAt))===p.day&&(!v.weeklyWindow||weeklyReceipts.includes(v)))){
+          for(const v of (state?.deliveries??[]).filter(v=>findDestination(v)&&publicationDestinationKey(v)===key&&['scheduled','published'].includes(v.status)&&ID.test(v.metricoolId??'')&&time(v.scheduledAt,Infinity)&&localDay(new Date(v.scheduledAt))===p.day&&(!v.weeklyWindow||weeklyReceipts.includes(v)))){
             if(calendarPublished.has(v.metricoolId)){pending.delete(v.metricoolId);published.add(calendarPublished.get(v.metricoolId));}else if(v.status==='published'&&exactPost(v.post?.url,v)?.id===v.post?.id&&time(v.post?.publishedAt,at)){pending.delete(v.metricoolId);published.add(v.post.id);}else pending.add(v.metricoolId);
           }
           confirmed=pending.size+published.size;shortfall=Math.max(0,5-confirmed);blockers=confirmed>5?['daily_queue_exceeds_cap']:confirmed===5?[]:r?.blockers??['weekly_queue_partial'];
@@ -247,7 +259,7 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
       }
       r={...r,confirmedScheduledOrPublished:confirmed,shortfall,blockers};
     }
-    const externalOwn=external.filter(v=>destinationKey(v.destination)===key&&localDay(new Date(v.scheduledAt))===localDay(now));
+    const externalOwn=external.filter(v=>publicationDestinationKey(v.destination)===key&&localDay(new Date(v.scheduledAt))===localDay(now));
     if(externalOwn.length){
       const ownIds=new Set([...own.map(v=>v.metricoolId),...externalOwn.map(v=>v.metricoolId)]);
       const known=Math.max(r?.confirmedScheduledOrPublished??0,ownIds.size);
@@ -261,10 +273,10 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
     const analyticsStale=measured?.observedAt&&at-Date.parse(measured.observedAt)>26*HOUR;
     const accountAnalysis={status:analyticsStale?'held':measured?.status==='observed'?'observed':measured?'held':'unavailable',observedAt:time(measured?.observedAt,at),posts:measured?.status==='observed'?verifiedPosts.length:null,totalViews:measured?.status==='observed'?verifiedPosts.reduce((sum,p)=>sum+p.views,0):null,actualAgeHoursMin:ages.length?Math.min(...ages):null,actualAgeHoursMax:ages.length?Math.max(...ages):null,heldReasons:[...(analyticsStale?['account_analytics_stale']:[]),...(measured?.reason?codes([measured.reason]):measured?[]:['account_analytics_unavailable'])]};
     const accountObservedAt=[accountAnalysis.observedAt,observedAt].filter(Boolean).sort().at(-1)??null;
-    return {key,brandId:String(d.brandId),network:d.network,account:d.account,label:d.network==='facebook'?'Streamers · Facebook':`@${d.account}`,connection:accountObservedAt&&at-Date.parse(accountObservedAt)<=26*HOUR?'observed':'unverified',observedAt:accountObservedAt,dailyTarget:5,eligibleAssets:r?n(r.eligible):null,confirmedScheduledOrPublished:r?n(r.confirmedScheduledOrPublished):null,shortfall:r?n(r.shortfall):null,heldReasons:r?codes(r.blockers):['learning_report_unavailable'],activeVersion:state?String(state.versions[key]??'baseline-1'):null,policyStatus:typeof v?.status==='string'&&/^[a-z_]+$/.test(v.status)?v.status:'policy_unobserved',metricAgeBuckets:buckets,analytics:accountAnalysis};
+    return {key,brandId:String(d.brandId),network:d.network,account:d.account,label:d.network==='facebook'?(d.brandId===6595747?'New York News · Facebook':'Streamers · Facebook'):`@${d.account}`,connection:accountObservedAt&&at-Date.parse(accountObservedAt)<=26*HOUR?'observed':'unverified',observedAt:accountObservedAt,dailyTarget:5,eligibleAssets:r?n(r.eligible):null,confirmedScheduledOrPublished:r?n(r.confirmedScheduledOrPublished):null,shortfall:r?n(r.shortfall):null,heldReasons:r?codes(r.blockers):['learning_report_unavailable'],activeVersion:state?String(state.versions[key]??'baseline-1'):null,policyStatus:typeof v?.status==='string'&&/^[a-z_]+$/.test(v.status)?v.status:'policy_unobserved',metricAgeBuckets:buckets,analytics:accountAnalysis};
   });
   const confirmedMedia=Array.isArray(artifacts.media.value)?artifacts.media.value.filter(r=>findDestination(r)&&r.status==='ready'&&r.paidSpendAllowed===false&&SHA.test(r.sha256??'')&&SHA.test(r.renderReceiptSha256??'')):[];
-  const eligibleComparisons=state?comparisons.filter(c=>c.eligible).length:null;
+  const eligibleComparisons=state?comparisons.filter(c=>c.eligible&&DESTINATIONS.some(d=>destinationKey(d)===c.destination)).length:null;
   const promotions=state?state.history.filter(h=>h.action==='activate'&&DESTINATIONS.some(d=>destinationKey(d)===canonicalDestinationKey(h.destination))&&SHA.test(h.fromManifestSha??'')&&SHA.test(h.toManifestSha??'')&&time(h.at,at)).length:null;
   const role=(stage,when,artifact,outputs={},held=[])=>({id:`clippers-${stage}`,stage,state:!when?'disconnected':at-Date.parse(when)>26*HOUR?'stale':held.length?'held':Object.values(outputs).some(n=>n>0)?'completed':'idle',evidenceAt:when,activeUntil:null,lastRunAt:when,heartbeatAt:null,nextDueAt:stage==='health'?null:nextDue,runId:artifact?.sha??null,evidenceIds:when&&artifact?.sha?[`clippers:${artifact.sha}:${stage}`]:[],outputs,heldReasons:held,lifePenaltyExempt:true,career:emptyCareer(),outcomes:[]});
   const discoveryArtifact=discoveryReceipts.filter(r=>r.value?.observedAt===discoveryAt).at(-1);
@@ -283,7 +295,16 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
     role('learning',reportAt,artifacts.learning,state?{eligibleComparisons:eligibleComparisons,qualifiedCandidates:qualifications.length,promotions}:{},qualifications.length?[]:['three_current_independent_comparisons_required']),
     role('health',watchdogAt,artifacts.watchdog,{},sourceState==='connected'?[]:['runtime_evidence_unavailable_or_stale']),
   ];
-  if(externalAt&&(!reportAt||externalAt>reportAt)&&(!weeklyAt||externalAt>weeklyAt)){const p=roles.find(r=>r.stage==='publisher');p.evidenceAt=externalAt;p.lastRunAt=externalAt;p.runId=artifacts.external.sha;p.evidenceIds=[`clippers:${artifacts.external.sha}:publisher`];p.heartbeatAt=null;p.state=at-Date.parse(externalAt)>26*HOUR?'stale':'completed';p.heldReasons=[];p.outputs={confirmed:accounts.reduce((n,a)=>n+(a.confirmedScheduledOrPublished??0),0),externalOwnerUiObservations:external.length};}
+  if(externalAt&&(!reportAt||externalAt>reportAt)&&(!weeklyAt||externalAt>weeklyAt)){
+    const p=roles.find(r=>r.stage==='publisher');
+    const externalMetricoolApiObservations=external.filter(row=>row.origin===METRICOOL_API_ORIGIN).length;
+    p.evidenceAt=externalAt;p.lastRunAt=externalAt;p.runId=artifacts.external.sha;
+    p.evidenceIds=[`clippers:${artifacts.external.sha}:publisher`];p.heartbeatAt=null;
+    p.state=at-Date.parse(externalAt)>26*HOUR?'stale':'completed';p.heldReasons=[];
+    p.outputs={confirmed:accounts.reduce((n,a)=>n+(a.confirmedScheduledOrPublished??0),0),
+      externalOwnerUiObservations:external.length-externalMetricoolApiObservations,
+      ...(externalMetricoolApiObservations ? {externalMetricoolApiObservations} : {})};
+  }
   if(weeklyIsNewer&&weeklyReceipts.length)roles.find(r=>r.stage==='publisher').state='completed';
   const outcomes=(stage,items)=>{
     const target=roles.find(r=>r.stage===stage);
@@ -309,5 +330,5 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   const routingAt=time(artifacts.creatorSelection.value?.evaluatedAt,at);
   const rawCreatorSelection=report?.creatorSelection&&reportAt&&(!routingAt||Date.parse(reportAt)>=Date.parse(routingAt))?report.creatorSelection:artifacts.creatorSelection.value;
   const creatorSelection=creatorSelectionView(rawCreatorSelection,at);
-  return {version:1,creatorSelection,generatedAt:new Date(at).toISOString(),evidenceAt,sourceFreshness:{state:sourceState,transport:evidenceAt?'local_reports':'unavailable',receivedAt:null,reportedAt:evidenceAt,ageMinutes:age,staleAfterMinutes:26*60,heldReasons:evidenceAt?sourceState==='stale'?['runtime_evidence_stale']:[]:['runtime_reports_unavailable']},transport:{state:'disconnected',lastIngestAt:null,maxAgeMs:90000},disconnectedDestinations:[{brandId:'6595747',label:'New York',reason:'destination_not_connected'}],accounts,roles,discovery,learning:{comparisons,eligibleComparisons,promotions,requiredComparisons:3,minimumPerArm:5,improvementThreshold:0.2,automaticPromotion:false,heldReasons:qualifications.length?['manual_queue_review_required']:['three_current_independent_comparisons_required']},safety:{paidSpendUsd:0,deniedBrandIds:['6431692','6475033','6585226'],metadataDoesNotGrantRights:true,publicUploadRequiresReviewedPacket:true,publicationClaimsRequireProviderReceipt:true}};
+  return {version:1,creatorSelection,generatedAt:new Date(at).toISOString(),evidenceAt,sourceFreshness:{state:sourceState,transport:evidenceAt?'local_reports':'unavailable',receivedAt:null,reportedAt:evidenceAt,ageMinutes:age,staleAfterMinutes:26*60,heldReasons:evidenceAt?sourceState==='stale'?['runtime_evidence_stale']:[]:['runtime_reports_unavailable']},transport:{state:'disconnected',lastIngestAt:null,maxAgeMs:90000},disconnectedDestinations:[{brandId:'6595747',label:'New York · TikTok',reason:'destination_not_connected'}],accounts,roles,discovery,learning:{comparisons:comparisons.filter(c=>DESTINATIONS.some(d=>destinationKey(d)===c.destination)),eligibleComparisons,promotions,requiredComparisons:3,minimumPerArm:5,improvementThreshold:0.2,automaticPromotion:false,heldReasons:qualifications.length?['manual_queue_review_required']:['three_current_independent_comparisons_required']},safety:{paidSpendUsd:0,deniedBrandIds:['6431692','6475033','6585226'],metadataDoesNotGrantRights:true,publicUploadRequiresReviewedPacket:true,publicationClaimsRequireProviderReceipt:true}};
 }

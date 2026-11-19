@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { destinationKey, findDestination, providerTimestamp, TIME_ZONE, canonicalDestinationKey, valueForDestination } from './clippers-portfolio-metricool.mjs';
+import { destinationKey, findDestination, providerTimestamp, TIME_ZONE } from './clippers-portfolio-metricool.mjs';
 
 const exec = promisify(execFile);
 const BASELINE = 'baseline-1';
@@ -87,9 +87,9 @@ async function selecting(root, destination, request) {
   const state = await ownerJson(root, STATE_FILE, { schemaVersion: 1, versions: {} });
   if (state?.schemaVersion !== 1 || typeof state.versions !== 'object' || !state.versions) throw Error('render_state_invalid');
   const key = destinationKey(destination);
-  const active = valueForDestination(state.versions, key) ?? BASELINE;
+  const active = state.versions[key] ?? BASELINE;
   const baseline = await readPortfolioRenderManifest(root, destination, active);
-  const pinned = state.history?.filter(row => canonicalDestinationKey(row.destination) === key).at(-1)?.toManifestSha;
+  const pinned = state.history?.filter(row => row.destination === key).at(-1)?.toManifestSha;
   if (pinned && pinned !== baseline.sha) throw Error('active_render_manifest_changed');
   if (!request.experiment) {
     if (request.policyVersion !== active) throw Error('render_version_not_active');

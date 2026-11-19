@@ -138,6 +138,7 @@ export function registerClippersStreamerRoutes(app: Pick<Express, 'get' | 'post'
 const FALLBACK_ACCOUNTS: Array<[string, 'tiktok' | 'facebook', string, string]> = [
   ['6431685', 'tiktok', 'streamersus', 'TikTok @streamersus'], ['6431687', 'tiktok', 'streamersclipusa', 'TikTok @streamersclipusa'],
   ['6591612', 'tiktok', 'news305miami', 'Miami · TikTok @news305miami'], ['6591612', 'facebook', '1193011863901514', 'Miami · Facebook'],
+  ['6595747', 'facebook', '1198281286708321', 'New York · Facebook'],
 ];
 const STAGES = ['supervisor', 'analytics', 'trends', 'streamers', 'editor', 'checker', 'publisher', 'learning', 'health'] as const;
 
@@ -154,7 +155,7 @@ export function cloudFallbackReport(raw: string | null, at: number): ClippersOrc
     version: 1, generatedAt, evidenceAt: null,
     sourceFreshness: { state: 'disconnected', transport: 'unavailable', receivedAt: null, reportedAt: null, ageMinutes: null, staleAfterMinutes: 1560, heldReasons: ['mac_worker_offline', 'cloud_streamer_fallback'] },
     transport: { state: 'disconnected', lastIngestAt: null, maxAgeMs: 90_000 },
-    disconnectedDestinations: [{ brandId: '6595747', label: cityName('6595747') ?? 'New York (página de clips, sin red conectada)', reason: 'destination_not_connected' }],
+    disconnectedDestinations: [{ brandId: '6595747', label: `${cityName('6595747') ?? 'New York'} · TikTok`, reason: 'destination_not_connected' }],
     accounts: FALLBACK_ACCOUNTS.map(([brandId, network, account, label]) => ({ key: `${brandId}:${network}:${account}`, brandId, network, account,
       label: brandId === '6591612' && cityName(brandId) ? `${cityName(brandId)} · ${network === 'tiktok' ? 'TikTok' : 'Facebook'}` : label,
       connection: 'unverified', observedAt: null, dailyTarget: 5, eligibleAssets: null, confirmedScheduledOrPublished: null, shortfall: null,

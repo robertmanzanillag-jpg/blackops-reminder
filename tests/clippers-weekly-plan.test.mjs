@@ -7,21 +7,21 @@ const days = ['2026-11-18','2026-11-19','2026-11-20','2026-11-21','2026-11-22'];
 const snapshots = () => DESTINATIONS.flatMap(destination => days.map(day => ({destination,day,status:'verified',complete:true,evidenceSha256:sha,observedAt:now,posts:[]})));
 const base = () => ({now,snapshots:snapshots()});
 const post = (hour,id='p1',destination=DESTINATIONS[0]) => ({destination,providerPostId:id,scheduledAt:newYorkSlot(days[0],hour),status:'scheduled',confirmationSha256:sha});
-test('Wednesday to Sunday is 100 demand slots, 20 cells, zero ready/publication claims',()=>{
+test('Wednesday to Sunday is 125 demand slots, 25 cells, zero ready/publication claims',()=>{
  const input=base(),before=JSON.stringify(input),p=planClippersWeek(input);
- assert.equal(p.targetPosts,100); assert.equal(p.proposedCount,100); assert.equal(p.knownDeficit,100); assert.equal(p.cells.length,20);
+ assert.equal(p.targetPosts,DESTINATIONS.length*25); assert.equal(p.proposedCount,DESTINATIONS.length*25); assert.equal(p.knownDeficit,DESTINATIONS.length*25); assert.equal(p.cells.length,DESTINATIONS.length*5);
  assert.equal(p.providerWrites,0);assert.equal(p.mayPublish,false); assert.ok(p.cells.every(c=>c.readyAssetsVerified===null && c.proposedSlots.length===5));
  assert.equal(JSON.stringify(input),before); assert.deepEqual(planClippersWeek(input),p);
 });
 test('missing/stale/incomplete provider reads stay unknown, never inferred empty',()=>{
- assert.equal(planClippersWeek({now}).unknownCells,20);
+ assert.equal(planClippersWeek({now}).unknownCells,DESTINATIONS.length*5);
  for(const mutate of [s=>s.complete=false,s=>s.observedAt='2026-11-18T13:44:59Z',s=>s.observedAt='2026-11-18T14:00:01Z',s=>s.evidenceSha256='fake']){
  const input=base();mutate(input.snapshots[0]);const p=planClippersWeek(input);assert.equal(p.unknownCells,1);assert.equal(p.cells[0].deficit,null);assert.equal(p.cells[0].proposedSlots.length,0);
  }
 });
 test('exact provider identity dedupes and reduces only its own destination/date',()=>{
  const b=base();const row=post(12);b.snapshots[0].posts=[row,{...row}];const p=planClippersWeek(b);
- assert.equal(p.cells[0].providerConfirmedCount,1); assert.equal(p.cells[0].deficit,4);assert.equal(p.proposedCount,99);assert.equal(p.cells[1].deficit,5);
+ assert.equal(p.cells[0].providerConfirmedCount,1); assert.equal(p.cells[0].deficit,4);assert.equal(p.proposedCount,DESTINATIONS.length*25-1);assert.equal(p.cells[1].deficit,5);
  b.snapshots[0].posts[1].scheduledAt=newYorkSlot(days[0],14);assert.equal(planClippersWeek(b).cells[0].reason,'provider_post_identity_conflict');
 });
 test('five means five different local hours; no sixth to repair conflicts',()=>{
@@ -71,4 +71,15 @@ test('published effective timestamps cannot follow their snapshot and invalid ca
  assert.equal(planClippersWeek(b).cells[0].reason,'provider_snapshot_row_invalid');
  for(const now of ['2026-02-30T14:00:00Z','2026-11-18T24:00:00Z'])assert.throws(()=>planClippersWeek({now}),/invalid_now/);
  b.snapshots[0].observedAt='2026-11-18T24:00:00Z';assert.equal(planClippersWeek(b).cells[0].reason,'provider_snapshot_unverified_or_stale');
+});
+
+test('five reviewed destinations fit a complete seven-day plan; unknown old alias reserves the current cell',()=>{
+ const now='2026-11-23T13:00:00.000Z',days=Array.from({length:7},(_,i)=>'2026-11-'+String(23+i));
+ const snapshots=DESTINATIONS.flatMap(destination=>days.map(day=>({destination,day,status:'verified',complete:true,evidenceSha256:sha,observedAt:now,posts:[]})));
+ const reservations=DESTINATIONS.flatMap(destination=>days.flatMap(day=>Array.from({length:5},()=>({destination,day,status:'outcome_unknown'}))));
+ let r=planClippersWeek({now,snapshots,reservations});assert.equal(r.cells.length,35);assert.equal(r.proposedCount,0);assert.ok(r.cells.every(c=>c.reason==='schedule_outcome_unreconciled'));
+ r=planClippersWeek({now,snapshots,reservations:[{destination:{brandId:6431685,network:'tiktok',account:'streamersclips'},day:days[0],status:'outcome_unknown'}]});
+ assert.equal(r.cells[0].reason,'schedule_outcome_unreconciled');assert.equal(r.cells[0].proposedSlots.length,0);
+ assert.throws(()=>planClippersWeek({now,snapshots:[...snapshots,snapshots[0]]}),/invalid_plan_input/);
+ assert.throws(()=>planClippersWeek({now,snapshots,reservations:[...reservations,reservations[0]]}),/invalid_plan_input/);
 });
