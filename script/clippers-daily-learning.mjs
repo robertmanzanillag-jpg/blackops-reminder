@@ -1,3 +1,4 @@
+import { publicationDestinationKey, currentDestinationForHistory } from './clippers-destination-registry.mjs';
 import { approvedNativeMedia, verifiedExternalSchedules, externalScheduleCollision } from './clippers-native-media-receipts.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
@@ -9,7 +10,7 @@ import { confirmedRenderReceipt, readPortfolioRenderManifest } from './clippers-
 import { createClippersCreatorRouting } from './clippers-creator-routing.mjs';
 import {
   createPortfolioMetricool, DAILY_LIMIT, DESTINATIONS, DISCONNECTED_BRAND, destinationKey,
-  exactPost, findDestination, localDay, providerTimestamp,
+  exactPost, findDestination, findPublishDestination, localDay, providerTimestamp,
 } from './clippers-portfolio-metricool.mjs';
 
 import { approvedWeeklyAuthorization, approvedEditorialSourceProof, weeklyDeliveryCollision } from './clippers-weekly-policy.mjs';
@@ -396,7 +397,7 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
     const duplicateAssetKeys = new Set(configured.assets.filter((a,i)=>findDestination(a)&&configured.assets.some((b,j)=>i!==j&&findDestination(b)&&destinationKey(a)===destinationKey(b)&&a.id===b.id)).map(a=>destinationKey(a)+':'+a.id));
     for (const raw of configured.assets) {
       if (!withinBudget()) { counts.timeBudgetReached = true; break; }
-      if (!findDestination(raw) || duplicateAssetKeys.has(destinationKey(raw)+':'+raw.id)) continue;
+      if (!findPublishDestination(raw) || duplicateAssetKeys.has(destinationKey(raw)+':'+raw.id)) continue;
       const item = await approvedItem(raw, workspaceRoot, new Date(+now + performance.now() - startedAt), authorized, state);
       checked.set(raw,item);
     }
@@ -410,7 +411,7 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
     for (const destination of DESTINATIONS) {
       const key = destinationKey(destination);
       let eligible = 0;
-      let confirmed = state.deliveries.filter(r => destinationKey(r) === key && localDay(new Date(r.scheduledAt)) === date &&
+      let confirmed = state.deliveries.filter(r => publicationDestinationKey(r) === key && localDay(new Date(r.scheduledAt)) === date &&
         ['scheduled', 'published'].includes(r.status)).length;
       const blockers = new Set();
       const scopedAssets = configured.assets.filter(item => findDestination(item) && destinationKey(item) === key)
@@ -428,16 +429,16 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
             dispatchNow - Date.parse(item.rightsEvidence.rightsObservedAt) > 24*HOUR) {
           blockers.add('asset_review_or_schedule_expired_during_cycle'); continue;
         }
-        if (external.some(row=>externalScheduleCollision(row,item)) || state.deliveries.some(row => deliveryCollision(row, item)) ||
+        if (external.some(row=>externalScheduleCollision({...row,destination:currentDestinationForHistory(row.destination)},item)) || state.deliveries.some(row => deliveryCollision({...row,...currentDestinationForHistory(row)}, item)) ||
             legacy.some(row => Number(row.metricoolBlogId) === item.brandId &&
-              String(row.account ?? '').replace(/^@/, '').toLowerCase() === item.account &&
+              publicationDestinationKey({brandId:Number(row.metricoolBlogId),network:item.network,account:String(row.account??'').replace(/^@/,'').toLowerCase()}) === destinationKey(item) &&
               (row.mediaSha256 === item.mediaSha256 || row.sha256 === item.mediaSha256 || row.mediaUrl === item.mediaUrl || row.sourceUrl === item.sourceUrl))) {
           blockers.add('duplicate_delivery'); continue;
         }
         eligible++;
         if (!withinBudget()) { counts.timeBudgetReached = true; blockers.add('cycle_time_budget_reached'); break; }
         if (configured.publish !== true || !adapter) { blockers.add('publisher_unavailable_or_disabled'); continue; }
-        if (confirmed >= DAILY_LIMIT || state.deliveries.some(row => destinationKey(row) === key &&
+        if (confirmed >= DAILY_LIMIT || state.deliveries.some(row => publicationDestinationKey(row) === key &&
              row.status === 'verification_pending' && localDay(new Date(row.scheduledAt)) === date)) {
           blockers.add('daily_target_or_unverified_prior_attempt'); continue;
         }
@@ -467,7 +468,7 @@ export async function runClippersDailyLearning({ workspaceRoot, now = new Date()
     const report = {
       schemaVersion: 1, date, generatedAt: now.toISOString(), paidSpendUsd: 0, ...counts,
       status: outcomes.some(row => row.shortfall > 0) ? 'held_or_partial' : 'completed',
-      destinations: outcomes, disconnected: [{ brandId: DISCONNECTED_BRAND, reason: 'destination_not_connected' }],
+      destinations: outcomes, disconnected: [{ brandId: DISCONNECTED_BRAND, network: 'tiktok', reason: 'destination_not_connected' }],
       creatorSelection, observations: state.observations.length, missedSnapshots: missedSnapshots(state, now),
       proposalCount: proposals.length, proposals, qualifiedCandidates: qualifiedCandidates(state, proposals), versions: exportedVersionState(state),
       automaticPromotion: false, rendererPolicyBinding: 'required_for_experiments_and_candidate_versions',

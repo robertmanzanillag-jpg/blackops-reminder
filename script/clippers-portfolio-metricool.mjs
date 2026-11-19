@@ -4,18 +4,9 @@ const API = 'https://app.metricool.com';
 const MCP = 'https://ai.metricool.com/mcp';
 export const TIME_ZONE = 'America/New_York';
 export const DAILY_LIMIT = 5;
-export const DESTINATIONS = Object.freeze([
-  Object.freeze({ brandId: 6431685, network: 'tiktok', account: 'streamersclips' }),
-  Object.freeze({ brandId: 6431687, network: 'tiktok', account: 'streamersclipusa' }),
-  Object.freeze({ brandId: 6591612, network: 'tiktok', account: 'ynb4b6r6' }),
-  Object.freeze({ brandId: 6591612, network: 'facebook', account: '1193011863901514' }),
-]);
-export const DISCONNECTED_BRAND = 6595747;
+export { DESTINATIONS, DISCONNECTED_BRAND, findDestination, findPublishDestination, destinationKey } from './clippers-destination-registry.mjs';
+import { DESTINATIONS, findDestination, findPublishDestination, destinationKey, verifyCurrentIdentity } from './clippers-destination-registry.mjs';
 export const localHour = time => new Intl.DateTimeFormat('en-US', {timeZone: TIME_ZONE, hour:'2-digit', hourCycle:'h23'}).format(new Date(time));
-export const destinationKey = ({ brandId, network, account }) => [brandId, network, account].join(':');
-export function findDestination(value) {
-  return DESTINATIONS.find(d => d.brandId === value?.brandId && d.network === value.network && d.account === value.account);
-}
 export function localDay(time) {
   return new Intl.DateTimeFormat('sv-SE', {
     timeZone: TIME_ZONE, year: 'numeric', month: '2-digit', day: '2-digit',
@@ -159,27 +150,16 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
     if (!envelope?.result || envelope.error || envelope.result.isError) throw new Error('metricool_request_outcome_uncertain');
     return envelope.result;
   }
-  let settings;
-  async function connectionSettings() {
-    if (settings) return settings;
-    const result = await mcp('getBrandSettings', {});
-    const entries = result.structuredContent ?? (result.content?.length === 1 && JSON.parse(result.content[0].text));
-    settings = list(entries?.brands ?? entries?.profiles ?? entries);
-    return settings;
-  }
   async function destinationSettings(value) {
-    const destination = findDestination(value);
-    if (!destination) throw new Error('destination_not_allowlisted');
-    profiles ??= list(await get('/api/admin/simpleProfiles'));
+    const destination = findPublishDestination(value);
+    if (!destination) throw new Error('destination_not_allowlisted_publish_current');
+    // Never cache identity across preflight/dispatch; a relink invalidates the reviewed identity.
+    const detail = await get('/api/v2/settings/brands/' + destination.brandId, { blogId: destination.brandId });
+    if (!verifyCurrentIdentity(detail, destination, userId)) throw new Error('destination_identity_unverified');
+    profiles = list(await get('/api/admin/simpleProfiles'));
     const matches = profiles.filter(row => String(row.blogId ?? row.id ?? '') === String(destination.brandId));
     const profile = matches.length === 1 && matches[0];
-    if (!profile || profile.deleted === true) throw new Error('destination_identity_unverified');
-    const connection = accountEvidence(profile, destination);
-    if (connection === 'conflict') throw new Error('destination_identity_unverified');
-    if (connection === 'missing') {
-      const brands = (await connectionSettings()).filter(row => String(row.blogId ?? row.id ?? '') === String(destination.brandId));
-      if (brands.length !== 1 || accountEvidence(brands[0], destination) !== 'match') throw new Error('destination_identity_unverified');
-    }
+    if (!profile || profile.deleted === true || accountEvidence(profile, destination) !== 'match') throw new Error('destination_identity_unverified');
     const owned = profile.isShared === false && String(profile.ownerUserId ?? '') === String(userId);
     return { canPublish: profile.isWhiteLabelOnlyRead !== true && profile.canPublish !== false &&
       (profile.canPublish === true || owned) };
@@ -243,7 +223,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
       if (!(now instanceof Date) || !Number.isFinite(+now)) throw Error('weekly_now_required');
       const day = localDay(new Date(item.scheduledAt));
       if (Date.parse(item.scheduledAt) < +now + 300000) throw Error('weekly_schedule_expired');
-      profiles = settings = undefined;
+      profiles = undefined;
       if (!(await destinationSettings(destination)).canPublish) throw Error('destination_publish_permission_missing');
       const rows = await schedule(destination, day, true);
       const pending = new Map();
@@ -296,7 +276,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
         evidenceSha256:createHash('sha256').update(JSON.stringify(evidence)).digest('hex') };
     },
     async schedule(destination, item) {
-      profiles = settings = undefined;
+      profiles = undefined;
       if (!(await destinationSettings(destination)).canPublish) throw new Error('destination_publish_permission_missing');
       const networkOptions = destination.network === 'facebook'
         ? { facebookData: { type: 'REEL' } }

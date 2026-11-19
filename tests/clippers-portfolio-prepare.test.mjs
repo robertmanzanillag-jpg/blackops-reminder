@@ -91,22 +91,22 @@ test('Drive helper receives the configured owner and only its existing credentia
   assert.deepEqual(Object.keys(cleaned).sort(), ['DEFAULT_USER_ID', 'GOOGLE_DRIVE_CLIENT_ID', 'GOOGLE_DRIVE_CLIENT_SECRET', 'REPL_IDENTITY']);
 });
 
-test('real original renders prepare all four exact destinations with one upload and preserve publisher switches', { skip: !hasTools }, async t => {
+test('real original renders prepare all current exact destinations with one upload and preserve publisher switches', { skip: !hasTools }, async t => {
   const f = await fixture(t, DESTINATIONS);
   assert.equal(new Set(f.packets.map(x => x.rendered.outputSha256)).size, 1);
   const r = await f.run();
-  assert.equal(r.prepared, 4); assert.equal(r.uploaded, 1); assert.equal(r.paidSpendUsd, 0);
+  assert.equal(r.prepared, DESTINATIONS.length); assert.equal(r.uploaded, 1); assert.equal(r.paidSpendUsd, 0);
   assert.deepEqual([f.calls.folder, f.calls.upload, f.calls.public], [1, 1, 1]);
   const input = JSON.parse(await readFile(path.join(f.root, CONFIG, 'approved-input.json')));
-  assert.equal(input.publish, false); assert.equal(input.collect, false); assert.equal(input.assets.length, 4);
+  assert.equal(input.publish, false); assert.equal(input.collect, false); assert.equal(input.assets.length, DESTINATIONS.length);
   const receipts = JSON.parse(await readFile(path.join(f.root, REPORT, 'portfolio-media-receipts.json')));
-  assert.equal(receipts.length, 4); assert.equal(new Set(receipts.map(destinationKey)).size, 4);
+  assert.equal(receipts.length, DESTINATIONS.length); assert.equal(new Set(receipts.map(destinationKey)).size, DESTINATIONS.length);
   assert.ok(receipts.every(x => x.renderReceiptSha256 && x.paidSpendAllowed === false));
   assert.equal((await stat(path.join(f.root, REPORT, 'portfolio-media-receipts.json'))).mode & 0o077, 0);
   const learning = await runClippersDailyLearning({ workspaceRoot: f.root, now,
     adapter: new Proxy({}, { get() { throw Error('publisher remains disabled'); } }) });
   assert.ok(learning.destinations.every(row => row.eligible === 1));
-  const again = await f.run(); assert.equal(again.prepared, 4);
+  const again = await f.run(); assert.equal(again.prepared, DESTINATIONS.length);
   assert.deepEqual([f.calls.folder, f.calls.upload, f.calls.public], [1, 1, 1], 'retries only verify existing public bytes');
 });
 
