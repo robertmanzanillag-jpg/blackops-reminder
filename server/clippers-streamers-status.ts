@@ -136,8 +136,8 @@ export function registerClippersStreamerRoutes(app: Pick<Express, 'get' | 'post'
 
 // ---------- Mac-off fallback: a valid orchestra view built only from the cloud job state ----------
 const FALLBACK_ACCOUNTS: Array<[string, 'tiktok' | 'facebook', string, string]> = [
-  ['6431685', 'tiktok', 'streamersclips', 'TikTok @streamersclips'], ['6431687', 'tiktok', 'streamersclipusa', 'TikTok @streamersclipusa'],
-  ['6591612', 'tiktok', 'ynb4b6r6', 'Miami · TikTok'], ['6591612', 'facebook', '1193011863901514', 'Miami · Facebook'],
+  ['6431685', 'tiktok', 'streamersus', 'TikTok @streamersus'], ['6431687', 'tiktok', 'streamersclipusa', 'TikTok @streamersclipusa'],
+  ['6591612', 'tiktok', 'news305miami', 'Miami · TikTok @news305miami'], ['6591612', 'facebook', '1193011863901514', 'Miami · Facebook'],
 ];
 const STAGES = ['supervisor', 'analytics', 'trends', 'streamers', 'editor', 'checker', 'publisher', 'learning', 'health'] as const;
 

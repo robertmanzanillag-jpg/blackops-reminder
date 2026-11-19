@@ -71,13 +71,13 @@ export function wrapLines(text, maxChars = 22, maxLines = 3) {
 }
 
 export function hookText({ variant, title, handle, language = 'es' }) {
-  const h = '@' + clean(handle, 40).replace(/^@+/, '').replace(/[^A-Za-z0-9_.]/g, '');
+  const h = '@' + clean(handle, 40).replace(/^@+/, '').replace(/[^A-Za-z0-9_.-]/g, '');
   if (variant === 'teaser') return language === 'en' ? `Watch what happened to ${h}` : `Mira lo que le pasó a ${h}`;
   return clean(title, 90) || (language === 'en' ? `Best of ${h}` : `Lo mejor de ${h}`);
 }
 
 export function creditText({ handle, platform }) {
-  const h = '@' + clean(handle, 40).replace(/^@+/, '').replace(/[^A-Za-z0-9_.]/g, '');
+  const h = '@' + clean(handle, 40).replace(/^@+/, '').replace(/[^A-Za-z0-9_.-]/g, '');
   return `Créditos: ${h} · ${platform === 'twitch' ? 'Twitch' : 'YouTube'}`;
 }
 
@@ -135,9 +135,18 @@ export function validateRenderProbe(probe, { maxSec = STREAMER_CLIP_MAX_SECONDS 
   return { ok: errors.length === 0, errors, durationSec: Number.isFinite(duration) ? Math.round(duration * 100) / 100 : null };
 }
 
+/** Child processes get only what they need: never DATABASE_URL, Metricool, GitHub or API secrets. */
+export const CHILD_ENV_KEYS = Object.freeze(['PATH', 'HOME', 'TMPDIR', 'LANG', 'PYTHONPATH']);
+export function childEnv(parent = process.env, extra = {}) {
+  const out = {};
+  for (const key of CHILD_ENV_KEYS) if (typeof parent[key] === 'string') out[key] = parent[key];
+  for (const [key, value] of Object.entries(extra)) if (CHILD_ENV_KEYS.includes(key) && typeof value === 'string') out[key] = value;
+  return out;
+}
+
 function run(bin, args, { timeoutMs = 300_000, env = {}, maxBuffer = 64 * 1024 * 1024 } = {}) {
   return new Promise((resolve, reject) => {
-    execFile(bin, args, { timeout: timeoutMs, maxBuffer, windowsHide: true, env: { ...process.env, ...env } }, (error, stdout, stderr) => {
+    execFile(bin, args, { timeout: timeoutMs, maxBuffer, windowsHide: true, env: childEnv(process.env, env) }, (error, stdout, stderr) => {
       if (error) {
         // Never echo URLs/tokens: only a short code-like tail of stderr.
         const tail = String(stderr || error.message || '').replace(/https?:\/\/\S+/g, '[url]').replace(/\s+/g, ' ').trim().slice(-160);

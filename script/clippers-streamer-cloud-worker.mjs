@@ -10,9 +10,12 @@
 //      identity + publish-permission check, daily cap 5, slot/caption/media duplicate check, verified receipt)
 //   -> reconcile + 24-48 h analytics -> learning (hook variant + creator order) for the next run.
 //
-// Safety: off unless CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED=true; CLIPPERS_STREAMER_CLOUD_KILL_SWITCH=true
-// stops before any download or Metricool write; a Metricool write is never retried blindly (an uncertain
-// outcome is reconciled read-only). State: agent_council_state `clippers-streamers:<owner>` -> cloudPublish.
+// Safety: off unless CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED=true. The kill switch
+// (CLIPPERS_STREAMER_CLOUD_KILL_SWITCH=true) is read when a run starts (workflow `if` + here): it stops every
+// later run. Repository variables are not visible to a run already in progress, so to stop an in-flight run
+// cancel it in Actions. A Metricool write is never retried blindly (an uncertain outcome is reconciled
+// read-only). Each run stops taking new clips after CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES (default 20).
+// Dry runs never write state. State: agent_council_state `clippers-streamers:<owner>` -> cloudPublish.
 import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
@@ -48,7 +51,9 @@ export function parseSlots(raw) {
 export function cloudPublishConfig(env = process.env) {
   const keys = new Set(DESTINATIONS.map(destinationKey));
   const requested = String(env.CLIPPERS_STREAMER_CLOUD_DESTINATIONS ?? '').split(',').map(s => s.trim()).filter(Boolean);
-  const destinations = (requested.length ? requested.filter(k => keys.has(k)) : [...keys]).map(k => DESTINATIONS.find(d => destinationKey(d) === k));
+  // Default: the three TikTok streamer accounts. Facebook stays off until Robert lists it explicitly.
+  const defaults = DESTINATIONS.filter(d => d.network === 'tiktok').map(destinationKey);
+  const destinations = (requested.length ? requested.filter(k => keys.has(k)) : defaults).map(k => DESTINATIONS.find(d => destinationKey(d) === k));
   return {
     enabled: env.CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED === 'true',
     killSwitch: env.CLIPPERS_STREAMER_CLOUD_KILL_SWITCH === 'true',
@@ -61,6 +66,7 @@ export function cloudPublishConfig(env = process.env) {
     clipSeconds: int(env.CLIPPERS_STREAMER_CLIP_SECONDS, 45, 10, STREAMER_CLIP_MAX_SECONDS),
     maxSourceAgeHours: int(env.CLIPPERS_STREAMER_CLOUD_MAX_SOURCE_AGE_HOURS, 72, 6, 168),
     maxAttempts: 3,
+    runDeadlineMs: int(env.CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES, 20, 5, 25) * 60_000,
     destinations,
     missing: CLOUD_PUBLISH_SECRET_NAMES.filter(n => !real(env[n])),
     unknownDestinations: requested.filter(k => !keys.has(k)).map(k => k.replace(/[^0-9a-z:_-]/gi, '').slice(0, 60)),
@@ -110,6 +116,18 @@ export function emptyCloudPublish() { return { version: 1, clips: {}, posts: [],
 export function cloudPublishOf(state) {
   const c = state?.cloudPublish;
   return c?.version === 1 && Array.isArray(c.posts) && c.clips && typeof c.clips === 'object' ? c : emptyCloudPublish();
+}
+
+/**
+ * The public staging asset may be deleted only when no write for the clip is uncertain and every scheduled
+ * post either references a Metricool-hosted copy (confirmed media URL differs from the staging URL; the
+ * adapter SHA-verifies static.metricool.com copies) or its slot is at least 2 h in the past.
+ */
+export function stagedAssetRemovable(ledger, candidateId, assetUrl, now) {
+  const posts = ledger.posts.filter(p => p.candidateId === candidateId);
+  if (posts.some(p => UNCERTAIN.has(p.status))) return false;
+  return posts.filter(p => p.status === 'scheduled').every(p =>
+    (p.confirmedMediaUrl && p.confirmedMediaUrl !== assetUrl) || now >= Date.parse(p.scheduledAt) + 2 * HOUR);
 }
 
 /** Publish-time policy gate on the freshest state. Returns a reason code or null (allowed). */
@@ -252,6 +270,12 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
   // Durable ledger helper: every change goes through the same owner lock as discovery.
   const update = async change => {
     let out;
+    if (config.dryRun) { // Dry runs never change state: approvals stay queued, lastRun untouched.
+      const s = parseStreamerStateStrict(await store.read(ns));
+      if (!s) throw new Error('STREAMER_STATE_INVALID');
+      s.cloudPublish = cloudPublishOf(s);
+      return change(s, s.cloudPublish);
+    }
     await store.transact(ns, async raw => {
       const s = parseStreamerStateStrict(raw);
       if (!s) throw new Error('STREAMER_STATE_INVALID');
@@ -273,7 +297,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           if (status !== post.status) {
             await update((s, c) => {
               const p = c.posts.find(x => x.id === post.id);
-              if (p) { p.status = status; if (found) p.metricoolId = found.id; }
+              if (p) { p.status = status; if (found) { p.metricoolId = found.id; p.confirmedMediaUrl = found.mediaUrl ?? null; } }
               const clip = c.clips[post.candidateId];
               if (found && clip?.status === 'verification_pending') clip.status = 'published';
             });
@@ -302,7 +326,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       const keep = new Set();
       for (const [candidateId, clip] of Object.entries(current.clips)) {
         if (!clip.mediaAsset?.id) continue;
-        if (current.posts.some(p => p.candidateId === candidateId && UNCERTAIN.has(p.status))) { keep.add(clip.mediaAsset.id); continue; }
+        if (!stagedAssetRemovable(current, candidateId, clip.mediaAsset.url, now)) { keep.add(clip.mediaAsset.id); continue; }
         await stager.remove(clip.mediaAsset.id);
         report.counts.assetsRemoved++;
         await update((s, c) => { if (c.clips[candidateId]) c.clips[candidateId].mediaAsset = null; });
@@ -322,10 +346,11 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
   const ids = queue.map(c => c.approval?.pendingActionId).filter(Boolean);
   const live = approvals && ids.length ? await approvals.statuses(owner, ids) : new Map();
   let processed = 0;
+  const runStartedAt = clock();
   const canStart = report.status !== 'held_missing_secrets' && (config.dryRun || canWrite);
   for (const candidate of canStart ? queue : []) {
     if (processed >= config.clipsPerRun) break;
-    if (env.CLIPPERS_STREAMER_CLOUD_KILL_SWITCH === 'true') { report.status = 'kill_switch'; break; }
+    if (clock() - runStartedAt > config.runDeadlineMs) { report.heldReasons.push('run_deadline_reached'); break; }
     const setClip = (patch) => update((s, c) => { c.clips[candidate.id] = { ...(c.clips[candidate.id] ?? { attempts: 0 }), ...patch, updatedAt: iso(clock()) }; });
     // Approval gate (live): only approved/executed rows publish. AUTO_PUBLISH rows are inserted as approved.
     const approval = live.get(candidate.approval?.pendingActionId);
@@ -337,6 +362,11 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     if (gate) { await setClip({ status: 'blocked', reason: gate }); report.counts.blocked++; continue; }
     const fresh = await liveDescriptionCheck({ candidate, env, fetch: fetchImpl });
     if (fresh.checked && fresh.prohibited) { await setClip({ status: 'blocked', reason: 'live_description_prohibits_clipping', evidence: fresh.excerpt }); report.counts.blocked++; continue; }
+    if (!fresh.checked && fresh.reason !== 'live_check_keys_missing') {
+      // Keys are configured but the re-check failed: fail closed (retry on a later run, bounded by attempts).
+      await setClip({ status: 'deferred', reason: `live_check_unavailable:${fresh.reason}`, attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1 });
+      report.counts.deferred++; continue;
+    }
     // Destination slots from our own (fresh) ledger; Metricool preflight stays authoritative across lanes.
     const posts = cloudPublishOf(parseStreamerState(await store.read(ns))).posts;
     const plan = config.destinations.map((d, index) => ({ destination: d, index, scheduledAt: nextSlot({ now, config, destination: d, index, posts }) }))
@@ -364,7 +394,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       if (!await verifyPublicMedia(asset.url, fetchImpl)) throw new Error('PUBLIC_MEDIA_UNREACHABLE');
       let scheduled = 0, pending = 0, gateBlocked = null;
       for (const p of plan) {
-        if (env.CLIPPERS_STREAMER_CLOUD_KILL_SWITCH === 'true' || gateBlocked) break;
+        if (gateBlocked) break;
         let at = p.scheduledAt;
         const tried = new Set();
         for (let attempt = 0; attempt < 3 && at; attempt++) {
@@ -380,23 +410,28 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             return null;
           });
           if (blocked) { report.heldReasons.push(`publish_gate:${blocked}`); if (blocked !== 'already_attempted') { report.counts.blocked++; gateBlocked = blocked; } at = null; break; }
-          let status, metricoolId = null, reason = null;
+          let status, metricoolId = null, reason = null, confirmedMediaUrl = null;
           try {
             await metricool.preflight(p.destination, item);
           } catch (e) {
             reason = code(e);
             await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); });
-            if (reason === 'metricool_slot_duplicate_or_daily_cap') { tried.add(at); at = nextSlot({ now: clock(), config, destination: p.destination, index: p.index, posts, skip: tried }); continue; }
+            if (reason === 'metricool_slot_duplicate_or_daily_cap') {
+              tried.add(at);
+              const freshPosts = cloudPublishOf(parseStreamerState(await store.read(ns))).posts;
+              at = nextSlot({ now: clock(), config, destination: p.destination, index: p.index, posts: freshPosts, skip: tried });
+              continue;
+            }
             report.counts.deferred++; report.heldReasons.push(`destination_held:${p.destination.brandId}:${reason}`); at = null; break;
           }
           try {
             const found = await metricool.schedule(p.destination, item);
-            status = found ? 'scheduled' : 'verification_pending'; metricoolId = found?.id ?? null;
+            status = found ? 'scheduled' : 'verification_pending'; metricoolId = found?.id ?? null; confirmedMediaUrl = found?.mediaUrl ?? null;
           } catch (e) {
             reason = code(e);
             status = PRE_WRITE_ERRORS.has(reason) ? 'deferred' : 'verification_pending';
           }
-          await update((s, c) => { const x = c.posts.find(y => y.id === item.id); if (x) Object.assign(x, { status, metricoolId, reason }); });
+          await update((s, c) => { const x = c.posts.find(y => y.id === item.id); if (x) Object.assign(x, { status, metricoolId, reason, confirmedMediaUrl }); });
           if (status === 'scheduled') { scheduled++; report.counts.scheduled++; }
           else if (status === 'verification_pending') { pending++; report.counts.verificationPending++; }
           else report.counts.deferred++;
@@ -405,7 +440,9 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       }
       // Metricool copied the media once the receipt is verified: remove the public staging asset now.
       let mediaAsset = asset;
-      if (!pending) { await stager.remove(asset.id).then(() => { mediaAsset = null; report.counts.assetsRemoved++; }).catch(e => report.errors.push(`asset_remove:${code(e)}`)); }
+      if (stagedAssetRemovable(cloudPublishOf(parseStreamerState(await store.read(ns))), candidate.id, asset.url, clock())) {
+        await stager.remove(asset.id).then(() => { mediaAsset = null; report.counts.assetsRemoved++; }).catch(e => report.errors.push(`asset_remove:${code(e)}`));
+      }
       await setClip({ ...base, status: scheduled ? 'published' : pending ? 'verification_pending' : gateBlocked ? 'blocked' : 'deferred', reason: gateBlocked, mediaAsset });
       if (scheduled && candidate.approval?.pendingActionId && approvals?.markExecuted) {
         const posts = cloudPublishOf(parseStreamerState(await store.read(ns))).posts.filter(x => x.candidateId === candidate.id).map(x => ({ destination: x.destinationKey, scheduledAt: x.scheduledAt, status: x.status, metricoolId: x.metricoolId }));
@@ -414,7 +451,11 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     } catch (e) {
       report.counts.failed++;
       report.errors.push(`clip:${code(e)}`);
-      if (asset) await stager.remove(asset.id).then(() => { asset = null; }).catch(() => undefined);
+      // Never delete while a write for this clip may have been accepted (fail closed if the ledger is unreadable).
+      const raw = asset ? await store.read(ns).catch(() => undefined) : undefined;
+      if (asset && raw !== undefined && stagedAssetRemovable(cloudPublishOf(parseStreamerState(raw)), candidate.id, asset.url, clock())) {
+        await stager.remove(asset.id).then(() => { asset = null; }).catch(() => undefined);
+      }
       await setClip({ status: 'failed', attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1, reason: code(e), mediaAsset: asset ?? null });
     } finally {
       if (workDir) await rm(workDir, { recursive: true, force: true }).catch(() => undefined);

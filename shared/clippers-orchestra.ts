@@ -48,7 +48,7 @@ export type ClippersOrchestraStatus = {
 };
 
 const roleStages = ['supervisor','analytics','trends','streamers','editor','checker','publisher','learning','health'] as const;
-const targetKeys = ['6431685:tiktok:streamersclips','6431687:tiktok:streamersclipusa','6591612:tiktok:ynb4b6r6','6591612:facebook:1193011863901514'];
+const targetKeys = ['6431685:tiktok:streamersus','6431687:tiktok:streamersclipusa','6591612:tiktok:news305miami','6591612:facebook:1193011863901514'];
 const denied = ['6431692','6475033','6585226'];
 const sourceChannels:Record<string,string>=Object.fromEntries(ALL_DISCOVERY_CREATORS.map(c=>[c.id,c.channelId]));
 const knownGroups=new Set(KNOWN_CREATOR_GROUPS.map(g=>g.id));

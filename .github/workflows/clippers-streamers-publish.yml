@@ -8,10 +8,11 @@ name: Clippers streamers publish (cloud)
 # (script/clippers-portfolio-metricool.mjs). See docs/clippers-streamer-pages.md.
 #
 # Off by default. Enable: repository variable CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED = 'true'.
-# Kill switch: repository variable CLIPPERS_STREAMER_CLOUD_KILL_SWITCH = 'true' (also checked in the script).
+# Kill switch: repository variable CLIPPERS_STREAMER_CLOUD_KILL_SWITCH = 'true' stops every later run (checked by
+# the job `if` and at script start). A run already in progress cannot see variable changes: cancel it in Actions.
 # Cadence: after each "Office worker (cloud)" run, gated to minute < 15 between 09:00 and 19:59 New York time;
 # the script also skips when its last run is < CLIPPERS_STREAMER_CLOUD_MIN_INTERVAL_MINUTES (default 180) old.
-# At most CLIPPERS_STREAMER_CLOUD_CLIPS_PER_RUN (default 2) clips per run, 5 posts per destination per day,
+# At most CLIPPERS_STREAMER_CLOUD_CLIPS_PER_RUN (default 2) clips per run (no new clip after 20 min), 5 posts per destination per day,
 # slots 11:00-21:00 America/New_York. Explicit dispatches bypass the clock gate and the interval.
 
 on:
@@ -83,13 +84,17 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         env:
           YTDLP_FROM_PIP: ${{ vars.CLIPPERS_YTDLP_FROM_PIP || 'false' }}
+          # Exact pins. bin/yt-dlp 2026.06.09 supports curl_cffi 0.10.x-0.15.x only.
+          CURL_CFFI_VERSION: 0.13.0
+          YTDLP_PIP_VERSION: ${{ vars.CLIPPERS_YTDLP_PIP_VERSION || '2026.06.09' }}
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq --no-install-recommends ffmpeg > /dev/null
-          python3 -m pip install --quiet --disable-pip-version-check --target "$RUNNER_TEMP/curl-cffi" curl-cffi
+          python3 -m pip install --quiet --disable-pip-version-check --target "$RUNNER_TEMP/curl-cffi" "curl-cffi==$CURL_CFFI_VERSION"
           echo "CLIPPERS_CURL_CFFI_DIR=$RUNNER_TEMP/curl-cffi" >> "$GITHUB_ENV"
           if [ "$YTDLP_FROM_PIP" = "true" ]; then
-            python3 -m pip install --quiet --disable-pip-version-check --target "$RUNNER_TEMP/yt-dlp" "yt-dlp[default]"
+            if ! printf '%s' "$YTDLP_PIP_VERSION" | grep -Eq '^[0-9]{4}\.[0-9]{1,2}\.[0-9]{1,2}(\.[0-9]+)?$'; then echo "::error::CLIPPERS_YTDLP_PIP_VERSION must be an exact version"; exit 1; fi
+            python3 -m pip install --quiet --disable-pip-version-check --target "$RUNNER_TEMP/yt-dlp" "yt-dlp[default]==$YTDLP_PIP_VERSION"
             printf '#!/bin/sh\nPYTHONPATH="%s:%s" exec python3 -m yt_dlp "$@"\n' "$RUNNER_TEMP/yt-dlp" "$RUNNER_TEMP/curl-cffi" > "$RUNNER_TEMP/yt-dlp-bin"
             chmod +x "$RUNNER_TEMP/yt-dlp-bin"
             echo "CLIPPERS_YTDLP_BIN=$RUNNER_TEMP/yt-dlp-bin" >> "$GITHUB_ENV"
@@ -117,6 +122,7 @@ jobs:
           CLIPPERS_STREAMER_CLOUD_DESTINATIONS: ${{ vars.CLIPPERS_STREAMER_CLOUD_DESTINATIONS }}
           CLIPPERS_STREAMER_CLOUD_MIN_INTERVAL_MINUTES: ${{ vars.CLIPPERS_STREAMER_CLOUD_MIN_INTERVAL_MINUTES || '180' }}
           CLIPPERS_STREAMER_CLIP_SECONDS: ${{ vars.CLIPPERS_STREAMER_CLIP_SECONDS }}
+          CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES: ${{ vars.CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES || '20' }}
           EVENT: ${{ github.event_name }}
         run: |
           if [ "$EVENT" = "workflow_dispatch" ]; then

@@ -6,9 +6,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { buildCreditCaption, captionHasCredit, parseTakedown } from '../shared/clippers-streamer-policy.mjs';
 import { STREAMER_STATE_NAMESPACE } from '../script/clippers-streamer-discovery.mjs';
-import { DESTINATIONS, destinationKey } from '../script/clippers-portfolio-metricool.mjs';
-import { parseSlots, cloudPublishConfig, wallClockToIso, nextSlot, publishGate, runCloudPublisher, clipCaption, postItem, createGithubReleaseStager, liveDescriptionCheck } from '../script/clippers-streamer-cloud-worker.mjs';
-import { selectCutWindow, wrapLines, ffmpegRenderArgs, ytDlpDownloadArgs, ytDlpInfoArgs, validateRenderProbe, renderVerticalClip, makeWorkDir, hookText, creditText, BUNDLED_FONT } from '../script/clippers-streamer-cloud-render.mjs';
+import { DESTINATIONS, destinationKey, findDestination, exactPost } from '../script/clippers-portfolio-metricool.mjs';
+import { stagedAssetRemovable, parseSlots, cloudPublishConfig, wallClockToIso, nextSlot, publishGate, runCloudPublisher, clipCaption, postItem, createGithubReleaseStager, liveDescriptionCheck } from '../script/clippers-streamer-cloud-worker.mjs';
+import { selectCutWindow, wrapLines, ffmpegRenderArgs, ytDlpDownloadArgs, ytDlpInfoArgs, validateRenderProbe, childEnv, renderVerticalClip, makeWorkDir, hookText, creditText, BUNDLED_FONT } from '../script/clippers-streamer-cloud-render.mjs';
 import { computeLearning, chooseHookVariant, creatorBoostFor } from '../script/clippers-streamer-cloud-learning.mjs';
 
 const NOW = Date.parse('2026-11-19T14:00:00.000Z'); // 09:00 New York (EST)
@@ -65,10 +65,11 @@ function fakeMedia() {
 test('config: off by default, kill switch, allowlisted destinations only, slots inside 11:00-21:00', () => {
   const c = cloudPublishConfig({});
   assert.equal(c.enabled, false); assert.equal(c.dailyCap, 5); assert.deepEqual(c.missing, ['METRICOOL_USER_TOKEN', 'METRICOOL_USER_ID']);
-  assert.deepEqual(c.destinations.map(destinationKey), DESTINATIONS.map(destinationKey));
+  assert.deepEqual(c.destinations.map(destinationKey), ['6431685:tiktok:streamersus', '6431687:tiktok:streamersclipusa', '6591612:tiktok:news305miami'], 'TikTok only by default');
+  assert.equal(cloudPublishConfig({ CLIPPERS_STREAMER_CLOUD_DESTINATIONS: '6591612:facebook:1193011863901514' }).destinations[0].network, 'facebook');
   assert.ok(!c.destinations.some(d => d.brandId === 6595747), 'NY brand stays held until a destination is connected');
-  const k = cloudPublishConfig({ CLIPPERS_STREAMER_CLOUD_KILL_SWITCH: 'true', CLIPPERS_STREAMER_CLOUD_DESTINATIONS: '6431685:tiktok:streamersclips,6431692:tiktok:kong', CLIPPERS_STREAMER_CLOUD_DAILY_PER_DESTINATION: '50' });
-  assert.equal(k.killSwitch, true); assert.equal(k.dailyCap, 5); assert.deepEqual(k.destinations.map(destinationKey), ['6431685:tiktok:streamersclips']);
+  const k = cloudPublishConfig({ CLIPPERS_STREAMER_CLOUD_KILL_SWITCH: 'true', CLIPPERS_STREAMER_CLOUD_DESTINATIONS: '6431685:tiktok:streamersus,6431692:tiktok:kong', CLIPPERS_STREAMER_CLOUD_DAILY_PER_DESTINATION: '50' });
+  assert.equal(k.killSwitch, true); assert.equal(k.dailyCap, 5); assert.deepEqual(k.destinations.map(destinationKey), ['6431685:tiktok:streamersus']);
   assert.equal(k.unknownDestinations.length, 1);
   assert.deepEqual(parseSlots('09:00,11:00,11:30,22:00,21:00,16:45'), ['11:00', '16:45', '21:00']);
   assert.deepEqual(parseSlots(''), ['11:00', '13:30', '16:00', '18:30', '21:00']);
@@ -172,11 +173,12 @@ test('approved clip: policy-gated, rendered once, staggered to every destination
   const { report } = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store, approvals: appr, metricool: m, stager, fetch: okFetch, ...media, clock: () => NOW });
   assert.equal(report.status, 'completed', JSON.stringify(report));
   assert.deepEqual(media.calls.download, ['twitch-clip:a'], 'prohibited creator and pending approval are never downloaded');
-  assert.equal(m.calls.schedule.length, 4);
-  assert.deepEqual(m.calls.schedule.map(i => i.scheduledAt), ['2026-11-19T16:00:00.000Z', '2026-11-19T16:07:00.000Z', '2026-11-19T16:14:00.000Z', '2026-11-19T16:21:00.000Z']);
+  assert.equal(m.calls.schedule.length, 3);
+  assert.deepEqual(m.calls.schedule.map(i => i.destinationKey), ['6431685:tiktok:streamersus', '6431687:tiktok:streamersclipusa', '6591612:tiktok:news305miami']);
+  assert.deepEqual(m.calls.schedule.map(i => i.scheduledAt), ['2026-11-19T16:00:00.000Z', '2026-11-19T16:07:00.000Z', '2026-11-19T16:14:00.000Z']);
   assert.ok(m.calls.schedule.every(i => captionHasCredit(i.caption, 'thegrefg', 'https://clips.twitch.tv/a') && i.mediaSha256 === 'a'.repeat(64) && i.thirdPartyCommercial === false));
   assert.deepEqual(stager.removed, [1]);
-  assert.equal(appr.executed.length, 1); assert.equal(appr.executed[0].result.posts.length, 4);
+  assert.equal(appr.executed.length, 1); assert.equal(appr.executed[0].result.posts.length, 3);
   const c = store.state.cloudPublish;
   assert.equal(c.clips['twitch-clip:a'].status, 'published'); assert.equal(c.clips['twitch-clip:a'].mediaAsset, null);
   assert.equal(c.clips['twitch-clip:b'].status, 'blocked'); assert.equal(c.clips['twitch-clip:b'].reason, 'creator_prohibited');
@@ -184,7 +186,7 @@ test('approved clip: policy-gated, rendered once, staggered to every destination
   assert.ok(media.calls.render[0].credit.includes('@thegrefg'));
   // Second run: nothing re-published.
   const again = await runCloudPublisher({ env: ON, now: NOW + 3600_000, owner: 'o', store, approvals: appr, metricool: m, stager, fetch: okFetch, ...media });
-  assert.equal(m.calls.schedule.length, 4); assert.equal(again.report.counts.scheduled, 0);
+  assert.equal(m.calls.schedule.length, 3); assert.equal(again.report.counts.scheduled, 0);
 });
 
 test('uncertain Metricool write is never resent: reconciled read-only, then the asset is removed', async () => {
@@ -223,7 +225,7 @@ test('preflight slot conflict moves to the next slot; destination hold defers wi
     if (d.network === 'facebook') throw new Error('destination_publish_permission_missing');
     if (first) { first = false; throw new Error('metricool_slot_duplicate_or_daily_cap'); }
   } });
-  const env = { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: '6431685:tiktok:streamersclips,6591612:facebook:1193011863901514' };
+  const env = { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: '6431685:tiktok:streamersus,6591612:facebook:1193011863901514' };
   const { report } = await runCloudPublisher({ env, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia(), clock: () => NOW });
   assert.deepEqual(m.calls.schedule.map(i => i.scheduledAt), ['2026-11-19T18:30:00.000Z']);
   assert.equal(report.counts.deferred, 1);
@@ -239,7 +241,11 @@ test('missing Metricool secrets hold publishing; dry run renders without Metrico
   const dry = await runCloudPublisher({ env: { CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', CLIPPERS_STREAMER_CLOUD_DRY_RUN: 'true' }, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: null, stager: null, fetch: okFetch,
     ...media, render: async () => ({ file: '/tmp/cw-render.mp4', sha256: 'b'.repeat(64), durationSec: 30 }), outputDir: dir });
   assert.equal(dry.report.counts.rendered, 1); assert.equal(dry.report.counts.scheduled, 0);
-  assert.equal(store.state.cloudPublish.clips['twitch-clip:a'].status, 'dry_run_rendered');
+  assert.deepEqual(store.state.cloudPublish.clips, {}, 'dry run never writes clip state (approval stays queued)');
+  assert.equal(store.state.cloudPublish.lastRun.status, 'held_missing_secrets', 'dry run does not overwrite lastRun');
+  const dry2 = await runCloudPublisher({ env: { CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', CLIPPERS_STREAMER_CLOUD_DRY_RUN: 'true' }, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: null, stager: null, fetch: okFetch,
+    ...media, render: async () => ({ file: '/tmp/cw-render.mp4', sha256: 'b'.repeat(64), durationSec: 30 }), outputDir: dir });
+  assert.equal(dry2.report.counts.rendered, 1, 'still queueable after a dry run');
   assert.equal(await readFile(path.join(dir, 'twitch-clip_a.mp4'), 'utf8'), 'x');
   await rm(dir, { recursive: true, force: true });
 });
@@ -286,4 +292,59 @@ test('real ffmpeg render: 1080x1920, audio, <= 60 s, bundled font', { skip: !has
     assert.match(r.sha256, /^[a-f0-9]{64}$/); assert.ok(r.durationSec <= 5.2 && r.durationSec >= 4.5, String(r.durationSec));
     assert.equal((await readFile(BUNDLED_FONT)).length > 100_000, true);
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+
+test('B1: staging asset kept while Metricool references it; removed once a Metricool copy or the slot +2 h', async () => {
+  const store = memoryStore(baseState([candidate('a', 'twitch:100', 'thegrefg')]));
+  const stager = fakeStager();
+  const m = fakeMetricool({ scheduleResult: item => ({ id: `mc-${item.id}`, mediaUrl: item.mediaUrl }) }); // scheduler still points at the GitHub URL
+  const env = { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: '6431687:tiktok:streamersclipusa' };
+  await runCloudPublisher({ env, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: m, stager, fetch: okFetch, ...fakeMedia(), clock: () => NOW });
+  assert.deepEqual(stager.removed, []);
+  assert.equal(store.state.cloudPublish.clips['twitch-clip:a'].mediaAsset.id, 1);
+  const post = store.state.cloudPublish.posts[0];
+  assert.equal(post.confirmedMediaUrl, post.mediaUrl);
+  // Before the slot + 2 h: still kept.
+  await runCloudPublisher({ env, now: Date.parse(post.scheduledAt) + 3600_000, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: m, stager, fetch: okFetch, ...fakeMedia() });
+  assert.deepEqual(stager.removed, []);
+  await runCloudPublisher({ env, now: Date.parse(post.scheduledAt) + 3 * 3600_000, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: m, stager, fetch: okFetch, ...fakeMedia() });
+  assert.deepEqual(stager.removed, [1]);
+  assert.equal(store.state.cloudPublish.clips['twitch-clip:a'].mediaAsset, null);
+  const ledger = { posts: [{ candidateId: 'x', status: 'pending_write', scheduledAt: new Date(NOW).toISOString() }] };
+  assert.equal(stagedAssetRemovable(ledger, 'x', 'u', NOW + 99 * 3600_000), false, 'never while a write is uncertain');
+});
+
+test('B3: live Metricool identities, legacy ledger rows still resolve to the same destination', () => {
+  assert.deepEqual(DESTINATIONS.map(destinationKey), ['6431685:tiktok:streamersus', '6431687:tiktok:streamersclipusa', '6591612:tiktok:news305miami', '6591612:facebook:1193011863901514']);
+  const legacy = { brandId: 6431685, network: 'tiktok', account: 'streamersclips' };
+  assert.equal(findDestination(legacy).account, 'streamersus');
+  assert.equal(destinationKey(legacy), '6431685:tiktok:streamersus');
+  assert.equal(destinationKey({ brandId: 6591612, network: 'tiktok', account: 'ynb4b6r6' }), '6591612:tiktok:news305miami');
+  assert.equal(findDestination({ brandId: 6431687, network: 'tiktok', account: 'streamersclips' }), undefined, 'aliases are per brand');
+  assert.equal(exactPost('https://www.tiktok.com/@streamersus/video/1', legacy).id, '1');
+  assert.equal(exactPost('https://www.tiktok.com/@streamersclips/video/2', DESTINATIONS[0]).id, '2', 'old post URLs still match for analytics');
+  assert.equal(exactPost('https://www.tiktok.com/@someoneelse/video/3', DESTINATIONS[2]), null);
+});
+
+test('live re-check unavailable with keys configured: clip deferred, never downloaded', async () => {
+  const store = memoryStore(baseState([candidate('a', 'twitch:100', 'thegrefg')])), media = fakeMedia(), m = fakeMetricool();
+  const fetch = async () => { throw new Error('network down'); };
+  const { report } = await runCloudPublisher({ env: { ...ON, TWITCH_CLIENT_ID: 'cid', TWITCH_CLIENT_SECRET: 's' }, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: m, stager: fakeStager(), fetch, ...media });
+  assert.equal(media.calls.download.length, 0); assert.equal(report.counts.deferred, 1);
+  assert.match(store.state.cloudPublish.clips['twitch-clip:a'].reason, /^live_check_unavailable/);
+});
+
+test('run deadline: no new clip once the run is past the deadline', async () => {
+  const store = memoryStore(baseState([candidate('a', 'twitch:100', 'thegrefg'), candidate('b', 'twitch:100', 'thegrefg', { score: 3 })]));
+  let t = NOW; const media = fakeMedia();
+  const render = async (input) => { t += 21 * 60_000; return media.render(input); };
+  const { report } = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved', 'pa-b': 'approved' }), metricool: fakeMetricool(), stager: fakeStager(), fetch: okFetch, ...media, render, clock: () => t });
+  assert.equal(media.calls.download.length, 1); assert.ok(report.heldReasons.includes('run_deadline_reached'));
+});
+
+test('child processes get an allowlisted environment only', () => {
+  const env = childEnv({ PATH: '/bin', HOME: '/h', DATABASE_URL: 'postgres://secret', METRICOOL_USER_TOKEN: 't', GITHUB_TOKEN: 'g', LANG: 'C.UTF-8' }, { PYTHONPATH: '/p', DATABASE_URL: 'x' });
+  assert.deepEqual(env, { PATH: '/bin', HOME: '/h', LANG: 'C.UTF-8', PYTHONPATH: '/p' });
+  assert.equal(creditText({ handle: 'el-rubius', platform: 'youtube' }), 'Créditos: @el-rubius · YouTube');
 });

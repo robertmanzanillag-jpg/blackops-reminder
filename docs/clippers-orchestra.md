@@ -10,9 +10,9 @@ Only these destinations are supported:
 
 | Brand | Network | Exact account |
 | --- | --- | --- |
-| 6431685 | TikTok | streamersclips |
+| 6431685 | TikTok | streamersus (legacy: streamersclips) |
 | 6431687 | TikTok | streamersclipusa |
-| 6591612 | TikTok | ynb4b6r6 |
+| 6591612 | TikTok | news305miami (legacy: ynb4b6r6) |
 | 6591612 | Facebook | 1193011863901514 |
 
 Brand 6595747 is shown separately as New York with no connected network; the code does not invent an account or query it. KONG 6431692, kong.app 6475033 and BlackRoom 6585226 are denied. No BlackRoom or KONG analytics is imported into this orchestra. The existing BlackRoom device is reused only as an authenticated transport, preserving its prior commands, queue, publication safeguards and analytics behavior.
