@@ -237,6 +237,13 @@ export async function executeApprovedPendingAction(
         break;
       }
 
+      case "clippers.streamer_clip_publish": {
+        // Owner approval of a streamer clip candidate. Nothing external happens here: the cloud
+        // discovery job reads the approval and hands the clip to the Mac download/render worker;
+        // publication stays on the existing Metricool path with its own caps and receipts.
+        result = { handoff: "clippers_streamer_queue", candidateId: typeof input.candidateId === "string" ? input.candidateId : null, externalCalls: 0 };
+        break;
+      }
       case "agent_council.lesson":
       case "agent_council.skill_update":
       case "agent_council.new_agent":
