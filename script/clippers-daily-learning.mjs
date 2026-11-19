@@ -14,6 +14,7 @@ import {
 } from './clippers-portfolio-metricool.mjs';
 
 import { approvedWeeklyAuthorization, approvedEditorialSourceProof, weeklyDeliveryCollision } from './clippers-weekly-policy.mjs';
+import { REVIEWED_EDITORIAL } from './clippers-reviewed-editorial.mjs';
 
 const HOUR = 3_600_000;
 const WINDOWS = [24, 72, 168];
@@ -89,12 +90,15 @@ function approvedMedia(item, media) {
 async function approvedItem(raw, root, now, receipts, state, weeklyWindow) {
   const destination = findDestination(raw);
   if (!destination) return null;
-  if ((raw.weeklyAuthorizationSha256 || raw.editorialPolicy) && !weeklyWindow) return null;
+  const reviewed = raw.renderClass === REVIEWED_EDITORIAL;
+  if (raw.renderClass !== undefined && !reviewed) return null;
+  if ((raw.weeklyAuthorizationSha256 || raw.editorialPolicy || reviewed) && !weeklyWindow) return null;
   const weekly = !!weeklyWindow && await approvedWeeklyAuthorization(root, raw, now, weeklyWindow);
+  if (reviewed && (!weekly || raw.editorialPolicy !== undefined)) return null;
   if (weeklyWindow && raw.weeklyAuthorizationSha256 && !weekly) return null;
   if (weeklyWindow && !raw.weeklyAuthorizationSha256 && raw.editorialPolicy!=='evergreen_streamer_clip') return null;
   if (raw.editorialPolicy!==undefined && raw.editorialPolicy!=='evergreen_streamer_clip') return null;
-  const currentVersion = state.versions[destinationKey(destination)] ?? BASELINE;
+  const currentVersion = reviewed ? undefined : (state.versions[destinationKey(destination)] ?? BASELINE);
   const scheduledAt = providerTimestamp(raw.scheduledAt);
   const rightsObservedAt = providerTimestamp(raw.rightsObservedAt);
   const publishedAt = providerTimestamp(raw.sourcePublishedAt);
@@ -105,7 +109,7 @@ async function approvedItem(raw, root, now, receipts, state, weeklyWindow) {
     raw.experiment.candidateVersion !== currentVersion);
   const usesVersion = raw.experiment?.arm === 'candidate' ? raw.experiment.candidateVersion : currentVersion;
   if (!ID.test(raw.id ?? '') || !ID.test(raw.campaignId ?? '') || !ID.test(raw.sourceId ?? '') || !validVariant ||
-      raw.policyVersion !== usesVersion || !ID.test(raw.creator ?? '') || !/^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(raw.language ?? '') ||
+      (!reviewed && raw.policyVersion !== usesVersion) || !ID.test(raw.creator ?? '') || !/^[a-z]{2,3}(?:-[A-Z]{2})?$/.test(raw.language ?? '') ||
       !scheduledAt || Date.parse(scheduledAt) < +now + 5 * 60_000 || (!weekly && localDay(new Date(scheduledAt)) !== localDay(now)) ||
       !rightsObservedAt || dayAge(rightsObservedAt, now) < 0 || dayAge(rightsObservedAt, now) > 24 ||
       !publishedAt || dayAge(publishedAt, now) < 0 || (!weekly && dayAge(publishedAt, new Date(scheduledAt)) > 72) ||
@@ -125,6 +129,8 @@ async function approvedItem(raw, root, now, receipts, state, weeklyWindow) {
       evidence.renderReceiptSha256 !== raw.renderReceiptSha256 ||
       featureDigest(evidence.experiment ?? null) !== featureDigest(raw.experiment ?? null) ||
       evidence.editorialPolicy !== raw.editorialPolicy || evidence.weeklyAuthorizationSha256 !== raw.weeklyAuthorizationSha256 ||
+      evidence.renderClass !== raw.renderClass || evidence.preparePacketSha256 !== raw.preparePacketSha256 ||
+      evidence.sourceDatePrecision !== raw.sourceDatePrecision || evidence.sourcePublishedDate !== raw.sourcePublishedDate ||
       evidence.rightsObservedAt !== raw.rightsObservedAt || evidence.rightsValidUntil !== raw.rightsValidUntil ||
       evidence.thirdPartyCommercial !== raw.thirdPartyCommercial || !findDestination(evidence.destination) ||
       destinationKey(evidence.destination) !== destinationKey(destination) ||
@@ -136,26 +142,32 @@ async function approvedItem(raw, root, now, receipts, state, weeklyWindow) {
       evidence.quality !== 'passed' || evidence.originalEdit !== 'verified' ||
       evidence.disclosure !== 'verified' || !ID.test(evidence.reviewedBy ?? '') ||
       evidence.authorizedSpendUsd !== 0 || evidence.providerIncrementalCostUsd !== 0) return null;
-  const pinnedManifest = state.history.filter(row => row.destination === destinationKey(destination)).at(-1)?.toManifestSha;
+  const pinnedManifest = !reviewed && state.history.filter(row => row.destination === destinationKey(destination)).at(-1)?.toManifestSha;
   let renderProof = null;
-  if (raw.experiment || usesVersion !== BASELINE || pinnedManifest || raw.renderReceiptSha256) {
+  if (reviewed) {
+    renderProof = { renderClass: REVIEWED_EDITORIAL, authorizationSha256: raw.weeklyAuthorizationSha256 };
+  } else if (raw.experiment || usesVersion !== BASELINE || pinnedManifest || raw.renderReceiptSha256) {
     try { renderProof = await confirmedRenderReceipt(root, raw, destination); } catch { return null; }
     if (!renderProof) return null;
   }
-  const editorialProof=raw.editorialPolicy ? await approvedEditorialSourceProof(root,raw) : null;
-  if(raw.editorialPolicy && (!editorialProof || !renderProof || editorialProof.rightsBasis!==evidence.rightsBasis || editorialProof.membership!==evidence.membership || editorialProof.termsUrl!==evidence.termsUrl || editorialProof.ownership!==evidence.ownership))return null;
+  const editorialProof=reviewed ? weekly : raw.editorialPolicy ? await approvedEditorialSourceProof(root,raw) : null;
+  if((reviewed || raw.editorialPolicy) && (!editorialProof || !renderProof || editorialProof.rightsBasis!==evidence.rightsBasis || editorialProof.membership!==evidence.membership || editorialProof.termsUrl!==evidence.termsUrl || editorialProof.ownership!==evidence.ownership))return null;
   const { id, campaignId, sourceUrl, sourceId, creator, language, policyVersion, experiment, caption, mediaUrl,
     mediaSha256, thirdPartyCommercial, evidenceSha256 } = raw;
-  return { ...destination, id, campaignId, sourceId, sourceUrl, creator, language, policyVersion, experiment,
+  return { ...destination, id, campaignId, sourceId, sourceUrl, creator, language,
+    ...(reviewed ? { renderClass: raw.renderClass, preparePacketSha256: raw.preparePacketSha256,
+      sourcePublishedAt: raw.sourcePublishedAt, rightsObservedAt: raw.rightsObservedAt, rightsValidUntil: raw.rightsValidUntil,
+      ...(raw.sourceDatePrecision ? { sourceDatePrecision: raw.sourceDatePrecision, sourcePublishedDate: raw.sourcePublishedDate } : {}) }
+      : { policyVersion, experiment }),
     caption, mediaUrl, mediaSha256, thirdPartyCommercial, evidenceSha256, renderProof, scheduledAt,
-    ...(editorialProof ? {editorialPolicy:raw.editorialPolicy,weeklySourceProof:editorialProof} : {}),
+    ...(!reviewed && editorialProof ? {editorialPolicy:raw.editorialPolicy,weeklySourceProof:editorialProof} : {}),
     ...(weekly ? {weeklyAuthorizationSha256: raw.weeklyAuthorizationSha256,weeklySourceProof:weekly} : {}),
     draftFile: raw.draftFile, renderReceiptSha256: raw.renderReceiptSha256,
     rightsEvidence: { reviewedBy: evidence.reviewedBy, termsUrl: evidence.termsUrl, rightsBasis: evidence.rightsBasis,
       membership: evidence.membership, rightsObservedAt, rightsValidUntil, sourcePublishedAt: publishedAt } };
 }
 function deliveryCollision(a, b) {
-  if(a.editorialPolicy==='evergreen_streamer_clip'||b.editorialPolicy==='evergreen_streamer_clip')return weeklyDeliveryCollision(a,b);
+  if(a.renderClass===REVIEWED_EDITORIAL||b.renderClass===REVIEWED_EDITORIAL||a.editorialPolicy==='evergreen_streamer_clip'||b.editorialPolicy==='evergreen_streamer_clip')return weeklyDeliveryCollision(a,b);
   return destinationKey(a) === destinationKey(b) && (
     a.id === b.id || a.mediaSha256 === b.mediaSha256 || a.sourceUrl === b.sourceUrl ||
     a.scheduledAt === b.scheduledAt || a.caption.trim().toLowerCase() === b.caption.trim().toLowerCase()

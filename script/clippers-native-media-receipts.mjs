@@ -6,6 +6,7 @@ import { pathToFileURL } from 'node:url';
 import { findDestination,destinationKey,providerTimestamp,createPortfolioMetricool } from './clippers-portfolio-metricool.mjs';
 import { approvedEditorialSourceProof, weeklyDeliveryCollision, readWeeklyPrivateJson } from './clippers-weekly-policy.mjs';
 import { readPortfolioRenderManifest } from './clippers-portfolio-render.mjs';
+import { readReviewedEditorialPacket, reviewedEditorialSourceProof } from './clippers-reviewed-editorial.mjs';
 import { loadClipperSelectedEnv } from './clippers-selected-env.mjs';
 const SHA=/^[a-f0-9]{64}$/,ID=/^[A-Za-z0-9][A-Za-z0-9_.-]{0,99}$/;
 const sha=v=>typeof v==='string'&&SHA.test(v),id=v=>typeof v==='string'&&ID.test(v);
@@ -60,12 +61,23 @@ export async function reconcileExternalMetricoolSchedule({workspaceRoot,assetId,
  const root=await realpath(path.resolve(workspaceRoot));if(!id(assetId)||!external||!findDestination(external.destination)||typeof external.metricoolId!=='string'||!/^\d+$/.test(external.metricoolId)||!providerTimestamp(external.scheduledAt)||!metricoolNativeUrl(external.mediaUrl)||!sha(external.sha256)||!Number.isSafeInteger(external.sizeBytes))throw Error('external_schedule_scope_invalid');
  const packet=await readWeeklyPrivateJson(root,`${CONFIG}/prepare-requests/${assetId}.json`),request=await readWeeklyPrivateJson(root,`${CONFIG}/render-requests/${assetId}.json`);
  if(packet.id!==assetId||request.id!==assetId||!findDestination(packet.destination)||destinationKey(packet.destination)!==destinationKey(external.destination)||!findDestination(request)||destinationKey(request)!==destinationKey(external.destination)||packet.renderRequestSha256!==nativeReceiptDigest(request)||packet.outputSha256!==external.sha256||providerTimestamp(packet.scheduledAt)!==providerTimestamp(external.scheduledAt)||packet.caption!==external.caption||!sha(packet.renderReceiptSha256))throw Error('external_asset_binding_invalid');
+ let sourceProof;
+ if (packet.schemaVersion === 2 || request.schemaVersion === 2 || packet.renderClass !== undefined || request.renderClass !== undefined) {
+  const editorial = await readReviewedEditorialPacket(root, assetId, { now, historical: true });
+  if (editorial.asset.preparePacketSha256 !== nativeReceiptDigest(packet) ||
+      editorial.receipt.renderRequestSha256 !== nativeReceiptDigest(request) ||
+      editorial.bytes.length !== external.sizeBytes) throw Error('external_render_binding_invalid');
+  sourceProof = reviewedEditorialSourceProof(editorial);
+ } else {
  if(!id(request.policyVersion))throw Error('external_render_binding_invalid');
  const receipt=await readWeeklyPrivateJson(root,`${REPORT}/render-receipts/${destinationKey(external.destination).replaceAll(':','__')}/${assetId}/${request.policyVersion}/${packet.outputSha256}.json`);
  const manifest=await readPortfolioRenderManifest(root,external.destination,request.policyVersion);
  if(nativeReceiptDigest(receipt)!==packet.renderReceiptSha256||receipt.renderRequestSha256!==nativeReceiptDigest(request)||receipt.requestId!==assetId||receipt.version!==request.policyVersion||receipt.captionTextSha256!==hash(typeof request.captionText==='string'?request.captionText:'')||receipt.engineSha256!==manifest.engineSha256||receipt.outputSha256!==external.sha256||!findDestination(receipt.destination)||destinationKey(receipt.destination)!==destinationKey(external.destination)||receipt.sourceSha256!==request.sourceSha256||receipt.startSeconds!==request.sourceStartSeconds+receipt.actualParams?.hook||receipt.manifestSha!==manifest.sha||nativeReceiptDigest(receipt.actualParams)!==nativeReceiptDigest(manifest.params)||receipt.costUsd!==0)throw Error('external_render_binding_invalid');
  const file=path.resolve(root,receipt.draftFile);if(!file.startsWith(root+path.sep)||await realpath(file)!==file)throw Error('external_local_media_invalid');let fd;
  try{fd=await open(file,constants.O_RDONLY|constants.O_NOFOLLOW|constants.O_NONBLOCK);const s=await fd.stat();if(!s.isFile()||s.nlink!==1||(s.mode&0o022)||(process.getuid&&s.uid!==process.getuid())||s.size!==external.sizeBytes||s.size>250000000)throw Error('external_local_media_invalid');const h=createHash('sha256');let count=0;const chunk=Buffer.alloc(65536);while(true){const {bytesRead}=await fd.read(chunk,0,Math.min(chunk.length,external.sizeBytes+1-count));if(!bytesRead)break;count+=bytesRead;if(count>external.sizeBytes)throw Error('external_local_media_invalid');h.update(chunk.subarray(0,bytesRead));}const after=await fd.stat();if(count!==external.sizeBytes||h.digest('hex')!==external.sha256||after.size!==s.size||after.mtimeMs!==s.mtimeMs)throw Error('external_local_media_invalid');}finally{await fd?.close();}
+ const sourceAsset={...external.destination,id:assetId,policyVersion:request.policyVersion,mediaSha256:external.sha256,renderReceiptSha256:packet.renderReceiptSha256,sourceUrl:packet.sourceUrl,sourcePublishedAt:request.rights?.sourcePublishedAt,rightsObservedAt:request.rights?.observedAt,rightsValidUntil:request.rights?.validUntil,thirdPartyCommercial:packet.thirdPartyCommercial};
+ sourceProof=await approvedEditorialSourceProof(root,sourceAsset);if(!sourceProof)throw Error('external_source_binding_invalid');
+ }
  if(!await verifyMetricoolNativeBytes(external.mediaUrl,external.sha256,external.sizeBytes,{fetcher}))throw Error('external_public_media_invalid');
  if(!adapter){const selected={...env};if((!selected.METRICOOL_USER_TOKEN||!selected.METRICOOL_USER_ID)&&env.CLIPPERS_CONFIG_ROOT)loadClipperSelectedEnv(env.CLIPPERS_CONFIG_ROOT,selected);adapter=createPortfolioMetricool({token:selected.METRICOOL_USER_TOKEN,userId:selected.METRICOOL_USER_ID});}
  const item={...external.destination,id:assetId,scheduledAt:providerTimestamp(external.scheduledAt),caption:packet.caption,mediaUrl:external.mediaUrl,mediaSha256:external.sha256};
@@ -73,8 +85,6 @@ export async function reconcileExternalMetricoolSchedule({workspaceRoot,assetId,
  if(!confirmed||confirmed.id!==external.metricoolId||confirmed.mediaUrl!==external.mediaUrl)throw Error('external_provider_get_unconfirmed');
  const actualAt=now.toISOString();
  const media={schemaVersion:1,provider:'metricool',kind:'metricool_native_media_receipt',status:'ready',assetId,destination:external.destination,renderReceiptSha256:packet.renderReceiptSha256,renderRequestSha256:packet.renderRequestSha256,sha256:external.sha256,sizeBytes:external.sizeBytes,mediaUrl:external.mediaUrl,resource:{kind:'metricool_cdn_url',url:external.mediaUrl},verifiedAt:actualAt,verification:'anonymous_exact_bytes_sha256',paidSpendAllowed:false,paidSpendUsd:0,authorizedManifestSha256:nativeReceiptDigest(packet),origin:'external_owner_ui'};
- const sourceAsset={...external.destination,id:assetId,policyVersion:request.policyVersion,mediaSha256:external.sha256,renderReceiptSha256:packet.renderReceiptSha256,sourceUrl:packet.sourceUrl,sourcePublishedAt:request.rights?.sourcePublishedAt,rightsObservedAt:request.rights?.observedAt,rightsValidUntil:request.rights?.validUntil,thirdPartyCommercial:packet.thirdPartyCommercial};
- const sourceProof=await approvedEditorialSourceProof(root,sourceAsset);if(!sourceProof)throw Error('external_source_binding_invalid');
  const observation={schemaVersion:1,origin:'external_owner_ui',kind:'external_schedule_observation',assetId,destination:external.destination,sourceUrl:packet.sourceUrl,caption:packet.caption,weeklySourceProof:sourceProof,metricoolId:confirmed.id,scheduledAt:item.scheduledAt,mediaUrl:media.mediaUrl,sha256:media.sha256,sizeBytes:media.sizeBytes,renderReceiptSha256:packet.renderReceiptSha256,observedAt:actualAt,confirmation:'exact_scheduler_get_and_native_bytes',publicationState:'not_evaluated',paidSpendUsd:0};
  const lockPath=path.join(root,'reports/metricool-autopilot.lock');let lock;
  try{lock=await open(lockPath,'wx',0o600);}catch{throw Error('scheduler_worker_busy');}
@@ -96,7 +106,8 @@ export function verifiedExternalSchedules(rows,now=new Date(),{strict=true}={}){
 }
 
 export function externalScheduleCollision(observation,asset){
- if(!observation||!findDestination(observation.destination)||!findDestination(asset)||destinationKey(observation.destination)!==destinationKey(asset))return false;
- if(observation.assetId===asset.id||observation.sha256===asset.mediaSha256||observation.mediaUrl===asset.mediaUrl)return true;
+ if(!observation||!findDestination(observation.destination)||!findDestination(asset))return false;
+ if(destinationKey(observation.destination)===destinationKey(asset)&&
+    (observation.assetId===asset.id||observation.sha256===asset.mediaSha256||observation.mediaUrl===asset.mediaUrl))return true;
  return weeklyDeliveryCollision({...observation.destination,id:observation.assetId,mediaSha256:observation.sha256,scheduledAt:observation.scheduledAt,caption:observation.caption??'',sourceUrl:observation.sourceUrl,weeklySourceProof:observation.weeklySourceProof},asset);
 }
