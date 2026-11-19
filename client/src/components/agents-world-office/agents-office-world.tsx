@@ -29,6 +29,7 @@ import { creditPacerLine } from "@shared/credit-pacer-view";
 import { FACTORY_AGENTS, FACTORY_DEPARTMENT, factoryAgentStatus, type FactoryAgentView } from "@shared/factory-office-agents";
 import { buildOfficeCityRoomsFromSnapshot, officeCitySnapshotExpiresAt, parseOfficeCityDirectory, type OfficeCityAgent } from "@/lib/office-city-agents";
 import { useWorkspaceRole } from "@/lib/workspace-role";
+import { KONG_ORDER_MAX_TEXT, isKongOrderAgent } from "@shared/agent-chat-routing";
 import { PartnerInvitePanel } from "@/components/workspace/partner-invite-panel";
 import { BlackRoomAcademyPanel } from "./blackroom-academy-panel";
 import { BlackRoomCeoChatPanel } from "@/components/blackroom-ceo-chat/blackroom-ceo-chat-panel";
@@ -932,26 +933,29 @@ function colorFromGradient(gradient: string): string {
   return (match && TAILWIND_HEX[match[1]]) || "#94a3b8";
 }
 // KONG central desks and city desks take Robert's orders through the agent chat (server → KONG office-orders).
-const isKongOrderAgent = (id: string) => /^kong:./.test(id) || /^kong-city:[a-z0-9_-]+(:[a-z_]+)?$/.test(id);
 function OfficeAgentStatusChat({ agent }: { agent: PanelAgent }) {
   const workspace = useWorkspaceRole();
   const [message, setMessage] = useState("");
   const [reply, setReply] = useState<{ question: string; answer: string }>();
   const [sending, setSending] = useState(false);
   const threadRef = useRef<string | undefined>(undefined);
+  const pendingRef = useRef<{ text: string; requestId: string } | undefined>(undefined);
   // Anything the status rules below do not cover goes to the agent chat, which answers from the
   // agent's record or, for an order, sends it to KONG and replies with the KONG task number.
   const askAgentChat = async (question: string) => {
     setSending(true);
     setReply({ question, answer: "Enviando…" });
     try {
-      const requestId = `office-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      // A retry of the same unanswered text reuses its requestId, so KONG gets the same idempotency key.
+      const requestId = pendingRef.current?.text === question ? pendingRef.current.requestId : `office-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      pendingRef.current = { text: question, requestId };
       const res = await fetch(`/api/agent-chat/${encodeURIComponent(agent.id)}/messages`, {
         method: "POST", credentials: "include", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: question, requestId, ...(threadRef.current ? { threadId: threadRef.current } : {}) }),
       });
       const body = await res.json().catch(() => null) as { error?: string; thread?: { id: string }; messages?: Array<{ role: string; text: string }> } | null;
       if (!res.ok) throw new Error(body?.error || "No se pudo hablar con el agente.");
+      pendingRef.current = undefined;
       if (body?.thread?.id) threadRef.current = body.thread.id;
       const answer = [...(body?.messages || [])].reverse().find(item => item.role === "agent" || item.role === "handoff")?.text;
       setReply({ question, answer: (answer || "Sin respuesta registrada.").replace(/\*\*/g, "").replace(/`/g, "") });
@@ -998,7 +1002,7 @@ function OfficeAgentStatusChat({ agent }: { agent: PanelAgent }) {
     {reply && <div role="status" className="space-y-1"><p className="break-words text-slate-400">Tú · {reply.question}</p><p className="whitespace-pre-line break-words">{agent.role} · {reply.answer}</p>
       {threadRef.current && <a href={`/agent-chat?agent=${encodeURIComponent(agent.id)}`} className="text-cyan-200 underline" data-testid="world-status-chat-open-thread">Ver la conversación y el estado de la tarea</a>}</div>}
     <div className="flex gap-1">
-      <input id="world-status-chat-input" value={message} onChange={event => setMessage(event.target.value)} maxLength={240} placeholder={workspace.isOwner && isKongOrderAgent(agent.id) ? "Pregunta o dale una orden…" : "¿Qué estás haciendo?"} className="min-w-0 flex-1 rounded border border-white/20 bg-black px-2 py-1" />
+      <input id="world-status-chat-input" value={message} onChange={event => setMessage(event.target.value)} maxLength={workspace.isOwner && isKongOrderAgent(agent.id) ? KONG_ORDER_MAX_TEXT : 240} placeholder={workspace.isOwner && isKongOrderAgent(agent.id) ? "Pregunta o dale una orden…" : "¿Qué estás haciendo?"} className="min-w-0 flex-1 rounded border border-white/20 bg-black px-2 py-1" />
       <button type="submit" disabled={!message.trim() || sending} className="rounded bg-cyan-100 px-2 py-1 font-semibold text-slate-950 disabled:opacity-50">Preguntar</button>
     </div>
   </form>;

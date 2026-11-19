@@ -9,15 +9,16 @@
 // anything KONG sends back. Errors never carry fetch errors, headers or bodies.
 
 import { createHash } from "node:crypto";
+import { KONG_DESK_PROFILE, KONG_ORDER_MAX_TEXT, isKongOrderAgentShape } from "@shared/agent-chat-routing";
+export { KONG_DESK_PROFILE, KONG_ORDER_MAX_TEXT, isKongOrderAgentShape };
 
 export const DEFAULT_KONG_OFFICE_ORDER_URL = "https://kongnightlife.com/api/admin/ceo/office-orders";
-export const KONG_ORDER_MAX_TEXT = 1000;
-const TIMEOUT_MS = 15_000;
+const TIMEOUT_MS = 30_000;
 const MAX_BODY_BYTES = 64 * 1024;
 const TASK_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 export type KongOfficeOrderErrorCode =
-  | "NOT_CONFIGURED" | "INVALID_CONFIGURATION" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "REJECTED"
+  | "RATE_LIMITED" | "DISABLED" | "NOT_CONFIGURED" | "INVALID_CONFIGURATION" | "UNAUTHENTICATED" | "FORBIDDEN" | "NOT_FOUND" | "REJECTED"
   | "UNAVAILABLE" | "INVALID_RESPONSE" | "TIMEOUT" | "CONNECTION_FAILED";
 export class KongOfficeOrderError extends Error {
   constructor(public readonly code: KongOfficeOrderErrorCode, message: string) { super(message); this.name = "KongOfficeOrderError"; }
@@ -37,9 +38,8 @@ export type KongOfficeOrderClient = {
  * `kong:<desk>` (KONG central desks) and `kong-city:<city>[:<category>]` (pure; tested).
  */
 export function kongOrderAgentId(id: string): string | null {
-  if (/^kong:[A-Za-z0-9 _+.#-]{1,80}$/.test(id) && id.trim() !== "kong:") return id;
-  if (/^kong-city:[a-z0-9_-]{1,60}(:[a-z_]{1,30})?$/.test(id)) return id;
-  return null;
+  const mapped = KONG_DESK_PROFILE[id] ?? id;
+  return isKongOrderAgentShape(mapped) ? mapped : null;
 }
 
 /** Stable per message: a retried send reaches KONG with the same key and never creates two tasks. */
@@ -47,10 +47,12 @@ export function kongOrderIdempotencyKey(agentId: string, requestId: string): str
   return `office-${createHash("sha256").update(`${agentId}\n${requestId}`).digest("hex").slice(0, 40)}`;
 }
 
-const TERMINAL = new Set(["done", "completed", "complete", "succeeded", "success", "failed", "error", "cancelled", "canceled", "rejected", "expired"]);
+/** The order may have reached KONG: never store a final reply, a retry must reuse the same idempotency key. */
+export const isUncertainKongError = (error: unknown) => error instanceof KongOfficeOrderError && ["TIMEOUT", "CONNECTION_FAILED", "UNAVAILABLE"].includes(error.code);
+const TERMINAL = new Set(["blocked", "ready", "done", "completed", "complete", "succeeded", "success", "failed", "error", "cancelled", "canceled", "rejected", "expired"]);
 export const isTerminalKongStatus = (status: string) => TERMINAL.has(status.toLowerCase());
 const STATUS_LABELS: Record<string, string> = {
-  queued: "en cola", pending: "en cola", accepted: "aceptada", received: "recibida", running: "en curso", in_progress: "en curso", processing: "en curso",
+  queued: "en cola", pending: "en cola", accepted: "aceptada", received: "recibida", running: "en curso", ready: "lista", blocked: "necesita a Robert", in_progress: "en curso", processing: "en curso",
   done: "completada", completed: "completada", complete: "completada", succeeded: "completada", success: "completada",
   failed: "falló", error: "falló", cancelled: "cancelada", canceled: "cancelada", rejected: "rechazada", expired: "caducada",
 };
@@ -89,7 +91,9 @@ function parseTask(body: unknown, token: string): KongOfficeOrderTask {
   const status = cleanText(task.status, 40, token);
   if (!TASK_ID.test(taskId) || !status || !/^[A-Za-z0-9 _-]+$/.test(status)) return fail("INVALID_RESPONSE", "La respuesta de KONG no trae una tarea válida.");
   const agentValue = typeof task.agent === "object" && task.agent ? (task.agent as Record<string, unknown>).name ?? (task.agent as Record<string, unknown>).id : task.agent;
-  const result = cleanText(task.result ?? task.summary ?? task.message ?? task.error, 600, token);
+  const raw = task.result ?? task.summary ?? task.needsOwner ?? task.nextAction ?? task.message ?? task.error;
+  let result = cleanText(raw, 600, token);
+  if (!result && raw && typeof raw === "object") { try { const json = JSON.stringify(raw); result = json.length <= 600 ? cleanText(json, 600, token) : null; } catch { /* unreadable */ } }
   return { taskId, status, agent: cleanText(agentValue, 120, token), result };
 }
 
@@ -109,13 +113,29 @@ export function createKongOfficeOrderClient(deps: { fetchImpl?: typeof fetch; en
         headers: { Accept: "application/json", Authorization: `Bearer ${secret}`, ...(body ? { "Content-Type": "application/json" } : {}) },
         ...(body ? { body: JSON.stringify(body) } : {}),
       });
+      const kongError = async () => {
+        try {
+          const parsed = await readJson(response) as Record<string, unknown>;
+          const error = parsed?.error;
+          if (error && typeof error === "object") {
+            const e = error as Record<string, unknown>;
+            return { code: typeof e.code === "string" ? e.code : null, message: cleanText(e.message, 200, secret) };
+          }
+          return { code: null, message: cleanText(error ?? parsed?.message, 200, secret) };
+        } catch { return { code: null, message: null }; }
+      };
+      if (response.status === 429) return fail("RATE_LIMITED", "KONG ya recibió el máximo de órdenes por hora de la oficina (30/hora). Espera un rato y vuelve a enviarla.");
+      if (response.status === 503) {
+        const info = await kongError();
+        if (info.code === "office_orders_disabled") return fail("DISABLED", "KONG todavía no tiene activadas las órdenes de la oficina (falta su token de órdenes).");
+        return fail("UNAVAILABLE", "KONG no pudo recibir la orden ahora mismo.");
+      }
       if (response.status === 401) return fail("UNAUTHENTICATED", "KONG no aceptó el acceso de órdenes de la oficina (token inválido o caducado).");
       if (response.status === 403) return fail("FORBIDDEN", "KONG no permite a la oficina dar órdenes a ese agente.");
       if (response.status === 404) return fail("NOT_FOUND", "KONG no encontró esa tarea o el servicio de órdenes todavía no existe.");
       if (response.status >= 300 && response.status < 400) return fail("UNAVAILABLE", "KONG intentó redirigir la orden; no se envió.");
       if (response.status === 400 || response.status === 409 || response.status === 422) {
-        let reason: string | null = null;
-        try { const parsed = await readJson(response) as Record<string, unknown>; reason = cleanText(parsed?.error ?? parsed?.message, 200, secret); } catch { /* no reason */ }
+        const reason = (await kongError()).message;
         return fail("REJECTED", `KONG rechazó la orden${reason ? `: ${reason}` : "."}`);
       }
       if (!response.ok) return fail("UNAVAILABLE", "KONG no pudo recibir la orden ahora mismo.");

@@ -24,11 +24,14 @@ function fakeKong(handler: (call: Call) => { status?: number; body?: unknown; ty
 const env = (extra: Record<string, string> = {}) => ({ KONG_OFFICE_ORDER_TOKEN: TOKEN, ...extra }) as NodeJS.ProcessEnv;
 
 test("KONG agent ids, idempotency keys, URL config and the external-action guard", () => {
-  assert.equal(kongOrderAgentId("kong:Venues"), "kong:Venues");
-  assert.equal(kongOrderAgentId("kong:Promoters + Mesas"), "kong:Promoters + Mesas");
+  assert.equal(kongOrderAgentId("kong:Venues"), "kong:venue_deals");
+  assert.equal(kongOrderAgentId("kong:Promoters + Mesas"), "kong:promoters_partnerships");
+  assert.equal(kongOrderAgentId("kong:Kong Legal"), "kong:legal_security_compliance");
+  assert.equal(kongOrderAgentId("kong:KONG AI"), "kong:kong_ai_chat");
+  assert.equal(kongOrderAgentId("kong:venue_deals"), "kong:venue_deals");
   assert.equal(kongOrderAgentId("kong-city:miami:clubs"), "kong-city:miami:clubs");
   assert.equal(kongOrderAgentId("kong-city:buenos-aires"), "kong-city:buenos-aires");
-  for (const id of ["kong-videos", "kong-metrics", "code", "kong:", "kong-city:Miami:clubs", "kong-city:miami:clubs:extra"]) assert.equal(kongOrderAgentId(id), null, id);
+  for (const id of ["kong-videos", "kong-metrics", "code", "kong:", "kong:Unknown Desk", "kong-city:Miami:clubs", "kong-city:miami:clubs:extra", "kong-city:miami_1"]) assert.equal(kongOrderAgentId(id), null, id);
   assert.equal(kongOrderIdempotencyKey("kong-city:miami:clubs", "req-1"), kongOrderIdempotencyKey("kong-city:miami:clubs", "req-1"));
   assert.notEqual(kongOrderIdempotencyKey("kong-city:miami:clubs", "req-1"), kongOrderIdempotencyKey("kong-city:miami:events", "req-1"));
   assert.match(kongOrderIdempotencyKey("a", "b"), /^office-[0-9a-f]{40}$/);
@@ -37,6 +40,8 @@ test("KONG agent ids, idempotency keys, URL config and the external-action guard
   for (const bad of ["http://kongnightlife.com/x", "https://user:pw@kongnightlife.com/x", "https://kongnightlife.com/x?token=1", "not a url"]) assert.equal(kongOrderUrl({ KONG_OFFICE_ORDER_URL: bad } as NodeJS.ProcessEnv), null, bad);
   assert.equal(isExternalActionForKong("elimina el venue duplicado y los eventos duplicados"), false);
   assert.equal(isExternalActionForKong("borra el club repetido"), false);
+  assert.equal(isExternalActionForKong("elimina el venue LIV"), true, "deleting without duplicates is not exempt");
+  assert.equal(isExternalActionForKong("delete all events"), true);
   assert.equal(isExternalActionForKong("publica el evento en instagram"), true);
   assert.equal(isExternalActionForKong("contacta al venue mañana"), true);
   assert.equal(isExternalActionForKong("paga al DJ"), true);
@@ -158,7 +163,7 @@ test("questions stay answers; desk orders work; token unset, external actions an
   assert.match(question.messages[1].text, /Auditando clubs/);
   const desk = await service.send("kong:Venues", { text: "importa los eventos de E11even de esta semana", requestId: "req-kong-desk" });
   assert.match(desk.messages[1].text, /Orden enviada a Venues en KONG \(tarea #t_1\)/);
-  assert.equal(kong.calls[0].body.agentId, "kong:Venues");
+  assert.equal(kong.calls[0].body.agentId, "kong:venue_deals");
   const external = await service.send("kong-city:miami:clubs", { text: "contacta al venue y pídele los flyers", requestId: "req-kong-ext" });
   assert.match(external.messages.at(-1)!.text, /No envié la orden a KONG|Requiere tu aprobación/);
   const long = await service.send("kong:Venues", { text: `importa ${"eventos ".repeat(140)}`, requestId: "req-kong-long" });
@@ -171,10 +176,9 @@ test("questions stay answers; desk orders work; token unset, external actions an
   assert.match(reply.messages[1].text, /No envié nada/);
   assert.equal(off.kong.calls.length, 0);
 
-  const down = setup(env(), () => ({ status: 503 }));
-  const failed = await down.service.send("kong-city:miami:clubs", { text: "elimina el venue duplicado", requestId: "req-kong-down" });
-  assert.match(failed.messages[1].text, /No pude enviar la orden .* KONG no pudo recibir la orden ahora mismo\. No quedó registrada/);
-  assert.ok(!failed.messages[1].text.includes(TOKEN));
+  const rejected = setup(env(), () => ({ status: 422, body: { error: { code: "invalid_agent", message: "agentId desconocido" } } }));
+  const failed = await rejected.service.send("kong-city:miami:clubs", { text: "elimina el venue duplicado", requestId: "req-kong-422" });
+  assert.match(failed.messages[1].text, /No pude enviar la orden .* KONG rechazó la orden: agentId desconocido\. No quedó registrada/);
 });
 
 test("routes: only the owner can send KONG orders; partners get 403 and KONG is never called", async () => {
@@ -195,4 +199,66 @@ test("routes: only the owner can send KONG orders; partners get 403 and KONG is 
   assert.equal(ok.status, 200);
   assert.match(ok.body.messages[1].text, /tarea #t_9/);
   assert.ok(!JSON.stringify(ok.body).includes(TOKEN));
+});
+
+test("every office desk reaches its KONG profile id", async () => {
+  const expected: Record<string, string> = { "kong:Venues": "kong:venue_deals", "kong:Promoters + Mesas": "kong:promoters_partnerships", "kong:Kong Legal": "kong:legal_security_compliance", "kong:KONG AI": "kong:kong_ai_chat" };
+  for (const [desk, profile] of Object.entries(expected)) {
+    const { service, kong } = setup(env(), call => ({ body: { taskId: "11111111-2222-3333-4444-555555555555", status: "queued", agent: call.body.agentId } }));
+    const sent = await service.send(desk, { text: "revisa los pendientes de esta semana", requestId: `req-desk-${profile.slice(5)}` });
+    assert.equal(kong.calls[0]?.body.agentId, profile, desk);
+    assert.match(sent.messages[1].text, /tarea #11111111-2222-3333-4444-555555555555/);
+  }
+});
+
+test("KONG hangs or fails: no final reply, retry with the same requestId reuses the idempotency key", async () => {
+  for (const failure of ["reset", "502"]) {
+    let attempt = 0;
+    const { service, kong } = setup(env(), () => (++attempt === 1 ? (failure === "reset" ? Promise.reject(new Error("ECONNRESET")) : { status: 502 }) : { body: { taskId: "t_retry", status: "queued" } }));
+    const send = () => service.send("kong-city:miami:clubs", { text: "elimina el venue duplicado", requestId: `req-retry-${failure}` });
+    await assert.rejects(send(), /KONG puede haberla recibido; no la reenvíes, revisa la conversación/);
+    const ok = await send();
+    assert.match(ok.messages.at(-1)!.text, /tarea #t_retry/);
+    assert.equal(ok.messages.filter(m => m.role === "user").length, 1, "the user message is not duplicated");
+    assert.equal(kong.calls.length, 2);
+    assert.equal(kong.calls[0].body.idempotencyKey, kong.calls[1].body.idempotencyKey);
+  }
+  // A real timeout (30 s in production) with a short client timeout.
+  let attempt = 0;
+  const kong = fakeKong(() => (++attempt === 1 ? new Promise<never>(() => {}) : { body: { taskId: "t_late", status: "queued" } }));
+  const fetchImpl = ((url: string, init: RequestInit) => new Promise((resolve, reject) => {
+    init.signal?.addEventListener("abort", () => reject(new Error("aborted")));
+    (kong.fetchImpl as any)(url, init).then(resolve, reject);
+  })) as unknown as typeof fetch;
+  const service = createAgentChatService({ store: createChatStorageThreadStore(memoryChatStorage(), "owner"), council: council(),
+    kongOrders: createKongOfficeOrderClient({ fetchImpl, env: env(), timeoutMs: 50 }) });
+  await assert.rejects(service.send("kong-city:miami:clubs", { text: "elimina el venue duplicado", requestId: "req-timeout" }), /no la reenvíes/);
+  const late = await service.send("kong-city:miami:clubs", { text: "elimina el venue duplicado", requestId: "req-timeout" });
+  assert.match(late.messages.at(-1)!.text, /tarea #t_late/);
+  assert.equal(kong.calls[0].body.idempotencyKey, kong.calls[1].body.idempotencyKey);
+});
+
+test("KONG error bodies, rate limit, disabled orders, labels and blocked tasks", async () => {
+  const sendWith = (handler: Parameters<typeof fakeKong>[0]) => createKongOfficeOrderClient({ fetchImpl: fakeKong(handler).fetchImpl, env: env() }).send({ agentId: "kong:Venues", text: "x", idempotencyKey: "k" });
+  await assert.rejects(sendWith(() => ({ status: 429, body: { error: { code: "rate_limited", message: "Máximo 30 órdenes por hora" } } })), (e: any) => e.code === "RATE_LIMITED" && /30\/hora/.test(e.message));
+  await assert.rejects(sendWith(() => ({ status: 503, body: { error: { code: "office_orders_disabled", message: "x" } } })), (e: any) => e.code === "DISABLED" && /todavía no tiene activadas/.test(e.message));
+  await assert.rejects(sendWith(() => ({ status: 503, body: { error: { code: "unavailable", message: "x" } } })), (e: any) => e.code === "UNAVAILABLE");
+  await assert.rejects(sendWith(() => ({ status: 400, body: { error: { code: "invalid_agent", message: "agentId desconocido" } } })), (e: any) => e.message === "KONG rechazó la orden: agentId desconocido");
+
+  let status: Record<string, unknown> = { taskId: "t_b", status: "blocked", needsOwner: "Decide qué venue conservar", nextAction: "Esperar a Robert" };
+  const { service, kong, tick } = setup(env(), call => call.method === "POST" ? { body: { taskId: "t_b", status: "queued" } } : { body: status });
+  const sent = await service.send("kong-city:miami:clubs", { text: "elimina el venue duplicado", requestId: "req-blocked" });
+  tick(31_000);
+  const reopened = await service.thread("kong-city:miami:clubs", sent.thread.id);
+  assert.match(reopened.messages.at(-1)!.text, /necesita a Robert/);
+  assert.match(reopened.messages.at(-1)!.text, /Decide qué venue conservar/);
+  const polls = kong.calls.length;
+  tick(120_000);
+  await service.thread("kong-city:miami:clubs", sent.thread.id);
+  assert.equal(kong.calls.length, polls, "blocked waits for Robert: not polled again");
+  status = {};
+  const ready = await createKongOfficeOrderClient({ fetchImpl: fakeKong(() => ({ body: { taskId: "t_r", status: "ready", nextAction: "Revisar la propuesta" } })).fetchImpl, env: env() }).status("t_r");
+  assert.equal(ready.result, "Revisar la propuesta");
+  const objectResult = await createKongOfficeOrderClient({ fetchImpl: fakeKong(() => ({ body: { taskId: "t_o", status: "done", result: { removedVenues: 1, removedEvents: 3 } } })).fetchImpl, env: env() }).status("t_o");
+  assert.equal(objectResult.result, '{"removedVenues":1,"removedEvents":3}');
 });

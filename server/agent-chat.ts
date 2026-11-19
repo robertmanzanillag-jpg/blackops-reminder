@@ -18,7 +18,7 @@ import { ceoFocusContext } from "./ceo-domain-policy";
 import type { CouncilState } from "@shared/agent-council";
 import { isKongCompanyAgent, type CompanyOrder } from "@shared/agent-company";
 import { agentChatName, handoffLog, isExternalActionForKong, routeAgentMessage, scoreAgents, type AgentChatRoute } from "@shared/agent-chat-routing";
-import { KONG_ORDER_MAX_TEXT, KongOfficeOrderError, isTerminalKongStatus, kongOrderAgentId, kongOrderIdempotencyKey, kongStatusLabel, type KongOfficeOrderClient, type KongOfficeOrderTask } from "./kong-office-orders";
+import { KONG_ORDER_MAX_TEXT, KongOfficeOrderError, isTerminalKongStatus, isUncertainKongError, kongOrderAgentId, kongOrderIdempotencyKey, kongStatusLabel, type KongOfficeOrderClient, type KongOfficeOrderTask } from "./kong-office-orders";
 import { AGENT_CHAT_GROUP_LABELS, buildAgentChatDirectory, directoryCityNames, findAgentChatEntry, isAgentChatIdShape, type AgentChatEntry } from "@shared/agent-chat-directory";
 import { effectiveIntegrations, integrationFor, parseIntegrationOverrides } from "@shared/agent-integrations";
 import { factoryAgentsView, isFactoryAgentId } from "@shared/factory-office-agents";
@@ -219,6 +219,10 @@ export function kongTasksInThread(messages: readonly AgentChatMessage[]): Array<
 }
 const kongStatusText = (task: KongOfficeOrderTask) => `Estado en KONG: \`${task.status}\` (${kongStatusLabel(task.status)}).${task.result ? `\n\nKONG informa: ${task.result}` : ""}`;
 const KONG_POLL_MIN_MS = 30_000;
+/** KONG did not answer: the order may exist there. No final reply is stored, so a retry reuses the idempotency key. */
+export class KongOrderUncertain extends Error {
+  constructor(name: string) { super(`No tuve respuesta clara de KONG para ${name}. KONG puede haberla recibido; no la reenvíes, revisa la conversación en un momento.`); }
+}
 const KONG_POLL_MAX_TASKS = 3;
 
 export function createAgentChatService(deps: {
@@ -243,8 +247,9 @@ export function createAgentChatService(deps: {
       lastKongPoll.set(task.taskId, now());
       return `Orden enviada a ${target.name} en KONG (tarea #${task.taskId}). Te aviso el resultado aquí.\n\n${kongStatusText(task)}`;
     } catch (error) {
+      if (isUncertainKongError(error)) throw new KongOrderUncertain(target.name);
       const why = error instanceof KongOfficeOrderError ? error.message : "No se pudo conectar con KONG.";
-      return `No pude enviar la orden a **${target.name}** en KONG: ${why} No quedó registrada; vuelve a enviarla cuando quieras.`;
+      return `No pude enviar la orden a **${target.name}** en KONG: ${/[.!?]$/.test(why) ? why : `${why}.`} No quedó registrada; vuelve a enviarla cuando quieras.`;
     }
   }
 
