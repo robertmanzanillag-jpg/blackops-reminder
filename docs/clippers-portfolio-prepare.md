@@ -5,8 +5,8 @@ to the existing Google Drive OAuth/connector uploader and the daily scheduler's
 approved asset input. It does not collect sources, grant media rights, enable
 the publisher or post to a social network.
 
-The exact allowlist remains `6431685/tiktok/streamersclips`,
-`6431687/tiktok/streamersclipusa`, `6591612/tiktok/ynb4b6r6` and
+The exact allowlist remains `6431685/tiktok/streamersus`,
+`6431687/tiktok/streamersclipusa`, `6591612/tiktok/news305miami` and
 `6591612/facebook/1193011863901514`. New York's disconnected brand is not a
 destination. KONG and Black Room are never admitted.
 

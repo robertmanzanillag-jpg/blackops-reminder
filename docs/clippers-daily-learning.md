@@ -4,9 +4,9 @@ The 10:00 America/New_York Clippers watchdog runs the gaming portfolio cycle onc
 
 | Metricool brand | Exact destinations |
 | --- | --- |
-| 6431685 | TikTok @streamersclips |
+| 6431685 | TikTok @streamersus (legacy ledger name: streamersclips) |
 | 6431687 | TikTok @streamersclipusa |
-| 6591612 | TikTok @ynb4b6r6 and Facebook page 1193011863901514 |
+| 6591612 | TikTok @news305miami (legacy: ynb4b6r6) and Facebook page 1193011863901514 |
 | 6595747 | Held while no destination is connected |
 
 The adapter verifies the destination identity with Metricool and checks explicit posting capability or verified owner access, today's scheduled count and duplicates before every scheduling write. The daily cap is five per exact destination. The gaming portfolio cannot select KONG, kong.app or Black Room. The legacy news sender excludes the four portfolio brand IDs even when an old override or alias matches. Existing news accounts outside that set retain their current eligibility checks.

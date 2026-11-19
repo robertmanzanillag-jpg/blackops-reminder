@@ -4,7 +4,7 @@ import { createHash } from 'node:crypto';
 import { constants } from 'node:fs';
 import { open, realpath, readdir } from 'node:fs/promises';
 import path from 'node:path';
-import { DESTINATIONS, destinationKey, findDestination, exactPost, localDay } from './clippers-portfolio-metricool.mjs';
+import { DESTINATIONS, destinationKey, findDestination, exactPost, localDay, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
 import { readPortfolioRenderManifest } from './clippers-portfolio-render.mjs';
 import { ALL_DISCOVERY_CREATORS, KNOWN_CREATOR_GROUPS } from '../shared/clippers-priority-creators.mjs';
 import { buildViralScout } from '../shared/clippers-viral-scout.mjs';
@@ -265,7 +265,7 @@ export async function buildClippersOrchestraReport({workspaceRoot,now=new Date()
   });
   const confirmedMedia=Array.isArray(artifacts.media.value)?artifacts.media.value.filter(r=>findDestination(r)&&r.status==='ready'&&r.paidSpendAllowed===false&&SHA.test(r.sha256??'')&&SHA.test(r.renderReceiptSha256??'')):[];
   const eligibleComparisons=state?comparisons.filter(c=>c.eligible).length:null;
-  const promotions=state?state.history.filter(h=>h.action==='activate'&&DESTINATIONS.some(d=>destinationKey(d)===h.destination)&&SHA.test(h.fromManifestSha??'')&&SHA.test(h.toManifestSha??'')&&time(h.at,at)).length:null;
+  const promotions=state?state.history.filter(h=>h.action==='activate'&&DESTINATIONS.some(d=>destinationKey(d)===canonicalDestinationKey(h.destination))&&SHA.test(h.fromManifestSha??'')&&SHA.test(h.toManifestSha??'')&&time(h.at,at)).length:null;
   const role=(stage,when,artifact,outputs={},held=[])=>({id:`clippers-${stage}`,stage,state:!when?'disconnected':at-Date.parse(when)>26*HOUR?'stale':held.length?'held':Object.values(outputs).some(n=>n>0)?'completed':'idle',evidenceAt:when,activeUntil:null,lastRunAt:when,heartbeatAt:null,nextDueAt:stage==='health'?null:nextDue,runId:artifact?.sha??null,evidenceIds:when&&artifact?.sha?[`clippers:${artifact.sha}:${stage}`]:[],outputs,heldReasons:held,lifePenaltyExempt:true,career:emptyCareer(),outcomes:[]});
   const discoveryArtifact=discoveryReceipts.filter(r=>r.value?.observedAt===discoveryAt).at(-1);
   const queueMetricAt=metrics.map(m=>time(m.capturedAt,at)).filter(Boolean).sort().at(-1)??null;

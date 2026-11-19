@@ -181,6 +181,10 @@ test('legacy URL aliases without immutable intervals hold before any POST',{skip
  const f=await readyFixture(t,{sameDay:true});await f.write('reports/metricool-autopilot-ledger.json',[{metricoolBlogId:target.brandId,account:target.account,sourceUrl:'https://youtu.be/aaaaaaaaaaa',sha256:'different'}]);
  const r=await runClippersWeeklyScheduling({workspaceRoot:f.root,window:WINDOW,now:NOW,apply:true,adapter:f.adapter});assert.equal(r.scheduled,0);assert.equal(f.calls.schedule,0);assert.equal(f.calls.preflight,0);assert.equal(r.outcomes[0].reason,'duplicate_or_overlapping_delivery');
 });
+test('legacy ledger rows under the old account name (streamersclips) still block a duplicate',{skip:!tools},async t=>{
+ const f=await readyFixture(t,{sameDay:true});await f.write('reports/metricool-autopilot-ledger.json',[{metricoolBlogId:target.brandId,account:'@StreamersClips',sourceUrl:'https://youtu.be/aaaaaaaaaaa',sha256:'different'}]);
+ const r=await runClippersWeeklyScheduling({workspaceRoot:f.root,window:WINDOW,now:NOW,apply:true,adapter:f.adapter});assert.equal(r.scheduled,0);assert.equal(f.calls.schedule,0);assert.equal(r.outcomes[0].reason,'duplicate_or_overlapping_delivery');
+});
 test('calendar rows with unknown provider/brand identity cannot disappear into zero coverage',async()=>{
  let rows=[];const fetcher=async resource=>{const u=new URL(resource);return Response.json(u.pathname==='/api/admin/simpleProfiles'?[{id:target.brandId,canPublish:true,tiktokUsername:target.account}]:u.pathname.includes('/analytics/')?[]:rows);};
  const adapter=createPortfolioMetricool({token:'synthetic-fixture-token',userId:12,fetcher}),item={scheduledAt:'2026-11-18T17:00:00.000Z',caption:'new',mediaUrl:'https://drive.google.com/uc?id=new'};

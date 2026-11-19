@@ -4,17 +4,51 @@ const API = 'https://app.metricool.com';
 const MCP = 'https://ai.metricool.com/mcp';
 export const TIME_ZONE = 'America/New_York';
 export const DAILY_LIMIT = 5;
+// Live Metricool identities (getBrandSettings, 2026-11-19): 6431685 "memes" TikTok @streamersus,
+// 6431687 "SPORT" TikTok @streamersclipusa, 6591612 TikTok @news305miami + Facebook page 1193011863901514.
 export const DESTINATIONS = Object.freeze([
-  Object.freeze({ brandId: 6431685, network: 'tiktok', account: 'streamersclips' }),
+  Object.freeze({ brandId: 6431685, network: 'tiktok', account: 'streamersus' }),
   Object.freeze({ brandId: 6431687, network: 'tiktok', account: 'streamersclipusa' }),
-  Object.freeze({ brandId: 6591612, network: 'tiktok', account: 'ynb4b6r6' }),
+  Object.freeze({ brandId: 6591612, network: 'tiktok', account: 'news305miami' }),
   Object.freeze({ brandId: 6591612, network: 'facebook', account: '1193011863901514' }),
 ]);
+// Earlier account names of the same brand+network. Ledger rows written with them still resolve to (and
+// count against the caps/duplicate checks of) the current destination; they are never targeted.
+export const LEGACY_ACCOUNT_ALIASES = Object.freeze({
+  '6431685:tiktok': Object.freeze(['streamersclips']),
+  '6591612:tiktok': Object.freeze(['ynb4b6r6']),
+});
 export const DISCONNECTED_BRAND = 6595747;
 export const localHour = time => new Intl.DateTimeFormat('en-US', {timeZone: TIME_ZONE, hour:'2-digit', hourCycle:'h23'}).format(new Date(time));
-export const destinationKey = ({ brandId, network, account }) => [brandId, network, account].join(':');
+function accountAliases(destination) {
+  return [destination.account, ...(LEGACY_ACCOUNT_ALIASES[`${destination.brandId}:${destination.network}`] ?? [])];
+}
 export function findDestination(value) {
-  return DESTINATIONS.find(d => d.brandId === value?.brandId && d.network === value.network && d.account === value.account);
+  return DESTINATIONS.find(d => d.brandId === value?.brandId && d.network === value.network && accountAliases(d).includes(value.account));
+}
+/** Canonical key: a legacy account alias maps to the current destination's key. */
+export const destinationKey = (value) => {
+  const { brandId, network, account } = findDestination(value) ?? value;
+  return [brandId, network, account].join(':');
+};
+/** Canonical form of a stored "brandId:network:account" key (legacy account aliases map to the current one). */
+export function canonicalDestinationKey(key) {
+  const m = /^(\d+):([a-z]+):(.+)$/.exec(String(key ?? ''));
+  if (!m) return key;
+  return destinationKey({ brandId: Number(m[1]), network: m[2], account: m[3] });
+}
+/** Current account for a stored brand/network/account triple (legacy alias -> current; anything else unchanged). */
+export function canonicalAccount(brandId, network, account) {
+  const value = String(account ?? '').replace(/^@/, '').toLowerCase();
+  return findDestination({ brandId: Number(brandId), network, account: value })?.account ?? value;
+}
+/** state.versions-style lookup by destination key; the exact canonical key wins over a legacy alias key. */
+export function valueForDestination(map, key) {
+  if (!map || typeof map !== 'object') return undefined;
+  const canonical = canonicalDestinationKey(key);
+  if (Object.hasOwn(map, canonical)) return map[canonical];
+  const legacy = Object.keys(map).find(k => k !== canonical && canonicalDestinationKey(k) === canonical);
+  return legacy === undefined ? undefined : map[legacy];
 }
 export function localDay(time) {
   return new Intl.DateTimeFormat('sv-SE', {
@@ -25,7 +59,9 @@ export function exactPost(value, destination) {
   try {
     const url = new URL(value);
     if (url.protocol !== 'https:' || url.username || url.password || url.port) return null;
-    const { network, account } = destination;
+    const { network } = destination;
+    const current = findDestination(destination);
+    const account = '(?:' + (current ? accountAliases(current) : [destination.account]).map(a => String(a).replace(/[^A-Za-z0-9_.]/g, '').replace(/\./g, '\\.')).join('|') + ')';
     const match = network === 'tiktok' && ['www.tiktok.com', 'tiktok.com'].includes(url.hostname)
       ? new RegExp('^/@' + account + '/video/(\\d+)/?$').exec(url.pathname)
       : network === 'facebook' && ['www.facebook.com', 'facebook.com'].includes(url.hostname)

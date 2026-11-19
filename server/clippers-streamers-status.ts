@@ -41,7 +41,19 @@ export function streamerStatusView(raw: string | null, at = Date.now()) {
     liveSignals: s.signals.slice(0, 10).map((x: any) => ({ handle: x.handle, platform: x.platform, title: x.title, views: x.views, sourceUrl: x.sourceUrl })),
     takedowns: s.takedowns.map((t: any) => ({ ...t, overdue: !t.removedAt && Date.parse(t.removeBy) < at })),
     macQueue: localWorkQueue(s).length,
+    cloudPublish: cloudPublishSummary((s as any).cloudPublish),
     safety: { publishesHere: false, requiresOwnerApproval: true, creditRequired: true, maxClipSeconds: 60, takedownSlaHours: 24 },
+  };
+}
+
+/** Cloud publisher (GitHub Actions) ledger: last run, recent posts (to remove on a takedown) and learning. */
+export function cloudPublishSummary(c: any) {
+  if (!c || c.version !== 1 || !Array.isArray(c.posts)) return null;
+  return {
+    lastRun: c.lastRun ? { at: c.lastRun.at, status: c.lastRun.status, counts: c.lastRun.counts, heldReasons: c.lastRun.heldReasons, errors: c.lastRun.errors } : null,
+    posts: c.posts.slice(-30).reverse().map((p: any) => ({ id: p.id, candidateId: p.candidateId, creatorKey: p.creatorKey, destination: p.destinationKey, scheduledAt: p.scheduledAt,
+      status: p.status, metricoolId: p.metricoolId ?? null, hookVariant: p.hookVariant, views: p.observation?.views ?? null })),
+    learning: c.learning ? { evaluatedAt: c.learning.evaluatedAt, samples: c.learning.samples, hookPreference: c.learning.hookPreference, creatorBoost: c.learning.creatorBoost } : null,
   };
 }
 
@@ -124,8 +136,8 @@ export function registerClippersStreamerRoutes(app: Pick<Express, 'get' | 'post'
 
 // ---------- Mac-off fallback: a valid orchestra view built only from the cloud job state ----------
 const FALLBACK_ACCOUNTS: Array<[string, 'tiktok' | 'facebook', string, string]> = [
-  ['6431685', 'tiktok', 'streamersclips', 'TikTok @streamersclips'], ['6431687', 'tiktok', 'streamersclipusa', 'TikTok @streamersclipusa'],
-  ['6591612', 'tiktok', 'ynb4b6r6', 'Miami · TikTok'], ['6591612', 'facebook', '1193011863901514', 'Miami · Facebook'],
+  ['6431685', 'tiktok', 'streamersus', 'TikTok @streamersus'], ['6431687', 'tiktok', 'streamersclipusa', 'TikTok @streamersclipusa'],
+  ['6591612', 'tiktok', 'news305miami', 'Miami · TikTok @news305miami'], ['6591612', 'facebook', '1193011863901514', 'Miami · Facebook'],
 ];
 const STAGES = ['supervisor', 'analytics', 'trends', 'streamers', 'editor', 'checker', 'publisher', 'learning', 'health'] as const;
 

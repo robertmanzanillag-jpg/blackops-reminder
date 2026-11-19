@@ -60,6 +60,16 @@ test('three actual matched5+5 cohorts prefer the proven creator, without routing
  const expiredAt=START+31*DAY,ea=await asset(root,'expired-control',groups[0],expiredAt),eb=await asset(root,'expired-winner',groups[1],expiredAt);const expired=await session(root,state,[ea,eb],expiredAt);assert.notEqual(expired.report.preferences[0].status,'preferred');assert.equal(expired.report.preferences[0].preferredCreatorGroupId,groups[0].creatorGroupId);
 }));
 
+test('observations stored under the legacy destination key (streamersclips) still count',async()=>fixture(async root=>{
+ const state=empty();
+ for(let day=0;day<15;day++){
+  const at=START+day*DAY,a=await asset(root,'control'+day,groups[0],at,'10:00'),b=await asset(root,'winner'+day,groups[1],at,'10:30');const s=await session(root,state,[a,b],at);
+  await publish(state,a,await s.assign(a),100,at);await publish(state,b,await s.assign(b),150,at);
+ }
+ for(const o of state.observations)o.destination='6431685:tiktok:streamersclips';
+ const at=START+16*DAY,a=await asset(root,'freshcontrol',groups[0],at),b=await asset(root,'freshwinner',groups[1],at);
+ const p=(await session(root,state,[a,b],at)).report.preferences[0];assert.equal(p.status,'preferred');assert.equal(p.eligibleSamples,30);
+}));
 test('a preference cannot reorder another context and leaves a ready challenger position within its scope',async()=>fixture(async root=>{
  const state=empty(),a=await asset(root,'one',groups[0]),b=await asset(root,'two',groups[1]),other=await asset(root,'other',groups[2]);
  const file=path.join(root,`config/clippers-daily-learning/evidence/${other.evidenceSha256}.json`),e=JSON.parse(await readFile(file,'utf8'));e.creatorSelection.context='other_context';other.evidenceSha256=digest(e);await save(root,`config/clippers-daily-learning/evidence/${other.evidenceSha256}.json`,e);

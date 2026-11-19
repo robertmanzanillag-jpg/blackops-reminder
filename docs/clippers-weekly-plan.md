@@ -8,11 +8,11 @@ The calling owner workflow must obtain fresh, complete Metricool GET results for
 
 ```js
 {
-  destination: { brandId: 6431685, network: 'tiktok', account: 'streamersclips' },
+  destination: { brandId: 6431685, network: 'tiktok', account: 'streamersus' },
   day: '2026-11-18', status: 'verified', complete: true,
   observedAt: '2026-11-18T14:00:00Z', evidenceSha256: '<actual retained GET evidence digest>',
   posts: [{
-    destination: { brandId: 6431685, network: 'tiktok', account: 'streamersclips' },
+    destination: { brandId: 6431685, network: 'tiktok', account: 'streamersus' },
     providerPostId: '<actual Metricool ID>', scheduledAt: '2026-11-18T17:00:00Z',
     status: 'scheduled', confirmationSha256: '<actual retained confirmation digest>'
   }]
