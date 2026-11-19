@@ -350,3 +350,25 @@ test("follow-ups: missing OpenAI key keeps the OpenAI ledger as history; Claude-
   assert.deepEqual((await factoryModelKeyRows([route], "factory:openai-held")).map(r => r.provider), ["history"]);
   assert.equal((await runFactoryModelCall([route], callOptions("factory:fresh"))).provider, "anthropic");
 });
+test("pacer + Claude ledger: monthly view (cap / current UTC month) admits a $1 order on day 19 and refuses once the month is used", async () => {
+  const { createCreditPacer } = await import("../server/credit-pacer-runtime");
+  const store = memoryStore();
+  // Spend from an earlier month never counts against this month's pace.
+  const oct = await createAnthropicFactoryLedger({ store, now: () => new Date("2026-10-20T12:00:00.000Z"), capMicroUsd: 50_000_000 });
+  await oct.reserve({ key: "oct", consumer: "factory", requestSha256: "c".repeat(64), maximumMicroUsd: 45_000_000 });
+  await oct.settle({ key: "oct", actualMicroUsd: 45_000_000, evidenceId: "e-oct" });
+  await oct.reserve({ key: "oct-held", consumer: "factory", requestSha256: "c".repeat(64), maximumMicroUsd: 100_000 }); // still open: counts
+  const ledger = await createAnthropicFactoryLedger({ store, now, capMicroUsd: 50_000_000 });
+  const snapshot = await ledger.paceSnapshot();
+  assert.equal(snapshot.observedAt, "2026-11-01T00:00:00.000Z"); assert.equal(snapshot.expiresAt, "2026-12-01T00:00:00.000Z");
+  assert.equal(snapshot.grantMicroUsd, 50_000_000); assert.deepEqual(snapshot.rows.map(r => r.status), ["reserved"]); assert.equal(snapshot.ledgerId, "factory-anthropic");
+  const pacer = () => createCreditPacer({ readSnapshot: () => ledger.paceSnapshot(), now: () => NOW.getTime(), cacheMs: 0 });
+  const allowed = await pacer().allow("standard", "self_heal_order", 1_000_000);
+  assert.equal(allowed.allowed, true, allowed.reason);
+  // Use up the month: settled spend this month plus an older open hold.
+  await ledger.reserve({ key: "nov", consumer: "factory", requestSha256: "c".repeat(64), maximumMicroUsd: 49_400_000 });
+  await ledger.settle({ key: "nov", actualMicroUsd: 49_400_000, evidenceId: "e-nov" });
+  assert.equal((await ledger.paceSnapshot()).rows.length, 2);
+  const refused = await pacer().allow("standard", "self_heal_order", 1_000_000);
+  assert.equal(refused.allowed, false);
+});

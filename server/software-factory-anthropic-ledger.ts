@@ -22,7 +22,8 @@ const monthWindow = (now: Date) => {
   const at = now.getTime();
   if (!Number.isFinite(at)) throw Error("FACTORY_ANTHROPIC_CLOCK_UNVERIFIED");
   const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
-  return { month: start.toISOString().slice(0, 7), start: start.toISOString() };
+  const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+  return { month: start.toISOString().slice(0, 7), start: start.toISOString(), end: end.toISOString() };
 };
 /** One permanent row: holds, unknown outcomes, overruns and settled receipts
  * (including admission receipts) survive month boundaries. */
@@ -74,7 +75,16 @@ export async function createAnthropicFactoryLedger(options: { store: DurableStor
   const sameMonth = () => { if (monthWindow(now()).month !== month.month) throw Error("CREDIT_EXPIRED"); };
   return { ...ledger,
     reserve: async (input: Parameters<typeof ledger.reserve>[0]) => { sameMonth(); return ledger.reserve(input); },
-    executionWindow: async (key: string, maxMs?: number) => { sameMonth(); return ledger.executionWindow(key, maxMs); } };
+    executionWindow: async (key: string, maxMs?: number) => { sameMonth(); return ledger.executionWindow(key, maxMs); },
+    /** Daily pacer view of the CURRENT UTC month: the cap is the grant, and
+     * rows are this month's plus older rows still reserved/unknown (open
+     * holds). The permanent row's 2026..2100 window would otherwise spread
+     * the cap over 74 years. */
+    paceSnapshot: async () => {
+      const base = await ledger.paceSnapshot(), w = monthWindow(now()), start = Date.parse(w.start);
+      return { ...base, grantMicroUsd: options.capMicroUsd, observedAt: w.start, expiresAt: w.end,
+        rows: base.rows.filter(row => Date.parse(row.createdAt) >= start || row.status !== "settled") };
+    } };
 }
 /** Read-only (no row creation): the Claude ledger's row for one key, any month.
  * Used for admission history even when the fallback is not configured. */
