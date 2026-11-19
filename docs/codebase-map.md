@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-11-19T22:35:54.264Z
-Repo: `/Users/robertmanzanilla/.codex/worktrees/blackops-clippers-current-identities-20261119`
+Generated: 2026-11-19T22:40:07.506Z
+Repo: `/Users/robertmanzanilla/.codex/visualizations/2026/11/17/01a1ebbb-0f63-71e1-80fd-30b92e40d8b7/office-verification/clippers-editorial-nov19`
 Package: `rest-express`
 
 ## Guardrails
@@ -13,7 +13,7 @@ Package: `rest-express`
 ## Totals
 | Git-visible files | Indexed files | Imports | Routes | Symbols |
 | ---: | ---: | ---: | ---: | ---: |
-| 1272 | 1164 | 4730 | 627 | 26584 |
+| 1276 | 1168 | 4765 | 627 | 26766 |
 
 ## Entrypoints
 - `client/src/App.tsx`
@@ -28,11 +28,11 @@ Package: `rest-express`
 ## Main Directories
 | Directory | Visible | Indexed | Main kinds |
 | --- | ---: | ---: | --- |
-| `tests` | 336 | 332 | test:336 |
+| `tests` | 337 | 333 | test:337 |
 | `server` | 292 | 286 | server:292 |
 | `client/src` | 160 | 158 | ui-component:55, client-component:49, client-page:28, client-lib:21 |
-| `script` | 140 | 126 | script:140 |
-| `docs` | 80 | 78 | docs:80 |
+| `script` | 142 | 128 | script:142 |
+| `docs` | 81 | 79 | docs:81 |
 | `examples/clippers-motivation` | 71 | 71 | other:70, docs:1 |
 | `shared` | 38 | 35 | shared:38 |
 | `.` | 33 | 18 | other:21, docs:11, package:1 |
@@ -418,7 +418,7 @@ Package: `rest-express`
 - `script/clippers-content-local-worker.mjs` (script; 112 symbols, 10 imports)
 - `script/clippers-creator-routing.mjs` (script; 53 symbols, 8 imports)
 - `script/clippers-creator-selection.mjs` (script; 73 symbols, 1 imports)
-- `script/clippers-daily-learning.mjs` (script; 112 symbols, 12 imports)
+- `script/clippers-daily-learning.mjs` (script; 113 symbols, 13 imports)
 - `script/clippers-daily-watchdog.mjs` (script; 102 symbols, 8 imports)
 - `script/clippers-destination-registry.mjs` (script; 20 symbols, 1 imports)
 - `script/clippers-external-closeout-pack.mjs` (script; 249 symbols, 3 imports)
@@ -433,15 +433,15 @@ Package: `rest-express`
 - `script/clippers-marketplace-refresh.mjs` (script; 50 symbols, 4 imports)
 - `script/clippers-metricool-autopilot.mjs` (script; 116 symbols, 4 imports)
 - `script/clippers-motivation-shorts.mjs` (script; 157 symbols, 6 imports)
-- `script/clippers-native-media-receipts.mjs` (script; 34 symbols, 9 imports)
+- `script/clippers-native-media-receipts.mjs` (script; 34 symbols, 10 imports)
 - `script/clippers-operational-readiness.mjs` (script; 51 symbols, 4 imports)
 - `script/clippers-orchestra-analytics.mjs` (script; 23 symbols, 6 imports)
 - `script/clippers-orchestra-relay.mjs` (script; 6 symbols, 2 imports)
-- `script/clippers-orchestra-report.mjs` (script; 128 symbols, 10 imports)
+- `script/clippers-orchestra-report.mjs` (script; 129 symbols, 11 imports)
 - `script/clippers-orchestra-sender.mjs` (script; 41 symbols, 7 imports)
 - `script/clippers-portfolio-discovery.mjs` (script; 94 symbols, 7 imports)
 - `script/clippers-portfolio-metricool.mjs` (script; 78 symbols, 2 imports)
-- `script/clippers-portfolio-prepare.mjs` (script; 108 symbols, 9 imports)
+- `script/clippers-portfolio-prepare.mjs` (script; 108 symbols, 10 imports)
 - `script/clippers-portfolio-render.mjs` (script; 77 symbols, 8 imports)
 
 ## How Agents Should Use This

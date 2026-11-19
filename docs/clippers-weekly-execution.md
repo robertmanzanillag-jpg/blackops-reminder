@@ -33,7 +33,7 @@ For a spatially framed derivative, request.sourceSha256 is the honest derived fu
 
 ## Duration and duplicate rules
 
-Use the existing prospective `duration` candidate-manifest/experiment path for a complete editorial unit5–90s: review a new candidate version that changes only duration, and bind its exact experiment/version in the request before render. Do not alter active baseline30, fabricate actualParams/receipts, pad/truncate to make a sentence fit, or claim an improvement from this unbalanced pilot. Normal paired-learning gates remain intact.
+Choose [reviewed editorial clips](clippers-reviewed-editorial.md) for edits that need their own source interval, framing, captions, and publication slot. A controlled duration experiment still uses a prospective candidate manifest that changes only duration and binds the exact experiment and version before rendering. The active baseline and paired-learning gates remain in place.
 
 For explicitly reviewed evergreen assets, duplicate checks use immutable actual source interval `[startSeconds,startSeconds+actualParams.duration)` and source SHA, canonical original video identity and preserved original SHA. Overlaps, repeated intervals and reencodes/crops of the same interval are rejected per destination. Source URL aliases cannot evade this check. A previous delivery without a verified interval keeps conservative URL/canonical-original blocking. IDs/media/caption/time and same local-hour duplicates remain rejected; two different minutes in one NY hour are not separate daily hours. Default untagged behavior keeps the original URL rule. Cross-destination reuse still needs independently scoped rights/media/render receipts.
 

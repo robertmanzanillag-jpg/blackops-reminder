@@ -1,4 +1,5 @@
 import { resolveNativeMediaReceipt, nativeAssetMediaFields } from './clippers-native-media-receipts.mjs';
+import { readReviewedEditorialPacket, REVIEWED_EDITORIAL } from './clippers-reviewed-editorial.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 import { constants } from 'node:fs';
 import { spawn } from 'node:child_process';
@@ -33,7 +34,7 @@ async function ownerJson(root, relative, fallback) {
   let fd;
   try {
     if (await realpath(path.dirname(file)) !== path.dirname(file)) throw Error('private_parent_required');
-    fd = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW);
+    fd = await open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
     const info = await fd.stat();
     if (!info.isFile() || info.nlink !== 1 || (info.mode & 0o077) || info.size > 5_000_000 ||
         (process.getuid && info.uid !== process.getuid())) throw Error('owner_private_file_required');
@@ -206,6 +207,9 @@ async function privateStageDirectory(root) {
 async function renderAndApprove(root, id, now, renderer) {
   const packet = await ownerJson(root, `${CONFIG}/prepare-requests/${id}.json`);
   const request = await ownerJson(root, `${CONFIG}/render-requests/${id}.json`);
+  if (packet?.schemaVersion === 2 || request?.schemaVersion === 2 || packet?.renderClass !== undefined || request?.renderClass !== undefined) {
+    return readReviewedEditorialPacket(root, id, { now });
+  }
   const destination = findDestination(packet?.destination);
   if (!destination || packet.schemaVersion !== 1 || packet.id !== id || request.id !== id ||
       !findDestination(request) || destinationKey(destination) !== destinationKey(request) ||
@@ -277,20 +281,28 @@ async function renderAndApprove(root, id, now, renderer) {
 
 async function appendSchedulerInput(root, approved, uploaded) {
   const { asset, packet, request, destination } = approved;
+  const rights = approved.rights ?? request.rights;
   const result = { ...asset, ...(uploaded.provider==='metricool' ? nativeAssetMediaFields(uploaded) : {mediaReceiptFileId: uploaded.fileId,mediaUrl:uploaded.mediaUrl}) };
   const evidence = { assetId: result.id, destination, sourceUrl: result.sourceUrl, sourceId: result.sourceId,
     campaignId: result.campaignId, creator: result.creator, language: result.language,
-    sourcePublishedAt: result.sourcePublishedAt, mediaSha256: result.mediaSha256, mediaUrl: result.mediaUrl,
+    sourcePublishedAt: result.sourcePublishedAt,
+    ...(result.sourceDatePrecision ? { sourceDatePrecision: result.sourceDatePrecision, sourcePublishedDate: result.sourcePublishedDate } : {}),
+    mediaSha256: result.mediaSha256, mediaUrl: result.mediaUrl,
     ...(uploaded.provider==='metricool' ? nativeAssetMediaFields(uploaded) : {}),
-    caption: result.caption, policyVersion: result.policyVersion, scheduledAt: result.scheduledAt,
+    caption: result.caption,
+    ...(result.renderClass === REVIEWED_EDITORIAL
+      ? { renderClass: result.renderClass, preparePacketSha256: result.preparePacketSha256 }
+      : { policyVersion: result.policyVersion }),
+    scheduledAt: result.scheduledAt,
     ...(result.editorialPolicy ? {editorialPolicy:result.editorialPolicy} : {}),
     ...(result.weeklyAuthorizationSha256 ? { weeklyAuthorizationSha256: result.weeklyAuthorizationSha256 } : {}),
-    renderReceiptSha256: result.renderReceiptSha256, experiment: result.experiment ?? null,
+    renderReceiptSha256: result.renderReceiptSha256,
+    ...(result.renderClass === REVIEWED_EDITORIAL ? {} : { experiment: result.experiment ?? null }),
     ...(asset.creatorSelection ? { creatorSelection: asset.creatorSelection } : {}),
     rightsObservedAt: result.rightsObservedAt, rightsValidUntil: result.rightsValidUntil,
-    thirdPartyCommercial: result.thirdPartyCommercial, commercialPermission: request.rights.commercialPermission,
-    termsUrl: request.rights.termsUrl, sourceScope: request.rights.sourceScope, rightsBasis: request.rights.basis,
-    membership: request.rights.membership, ...(request.rights.ownership ? { ownership: request.rights.ownership } : {}),
+    thirdPartyCommercial: result.thirdPartyCommercial, commercialPermission: rights.commercialPermission,
+    termsUrl: rights.termsUrl, sourceScope: rights.sourceScope, rightsBasis: rights.basis,
+    membership: rights.membership, ...(rights.ownership ? { ownership: rights.ownership } : {}),
     quality: packet.quality, originalEdit: packet.originalEdit, disclosure: packet.disclosure,
     reviewedBy: packet.reviewedBy, authorizedSpendUsd: 0, providerIncrementalCostUsd: 0 };
   result.evidenceSha256 = digest(evidence);
@@ -450,7 +462,9 @@ export async function runClippersPortfolioPrepare({ workspaceRoot, now = new Dat
         const reason = ['reviewed_prepare_packet_required', 'prepare_schedule_outside_rights', 'reviewed_render_output_changed', 'render_receipt_unconfirmed',
           'portfolio_media_changed', 'owner_private_file_required', 'scheduler_worker_busy', 'approved_asset_conflict', 'portfolio_media_receipt_conflict', 'prepare_time_budget_reached',
           'approved_queue_capacity', 'portfolio_receipt_capacity', 'approved_scheduler_input_invalid', 'portfolio_media_ledger_invalid',
-          'private_stage_directory_required', 'staged_media_changed', 'native_media_provider_invalid', 'native_media_receipt_unverified', 'native_public_bytes_unverified'].includes(error.message)
+          'private_stage_directory_required', 'staged_media_changed', 'native_media_provider_invalid', 'native_media_receipt_unverified', 'native_public_bytes_unverified',
+          'editorial_authorization_invalid', 'editorial_license_invalid', 'editorial_render_receipt_invalid', 'editorial_authorization_expired_or_slot_invalid',
+          'editorial_request_invalid', 'editorial_reviewed_output_required', 'editorial_media_bytes_changed'].includes(error.message)
           ? error.message : 'prepare_validation_or_provider_unconfirmed';
         outcomes.push({ id, status: 'held', reason });
       }
