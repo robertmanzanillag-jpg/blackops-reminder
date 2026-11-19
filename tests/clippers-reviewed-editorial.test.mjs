@@ -6,13 +6,14 @@ import { createHash } from 'node:crypto';
 import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { DESTINATIONS } from '../script/clippers-portfolio-metricool.mjs';
+import { DESTINATIONS, destinationKey } from '../script/clippers-portfolio-metricool.mjs';
 import { editorialEngineSha256 } from '../script/clippers-reviewed-editorial-engine.mjs';
 import { REVIEWED_EDITORIAL, readConfirmedReviewedEditorial, readReviewedEditorialPacket, renderReviewedEditorial } from '../script/clippers-reviewed-editorial.mjs';
 import { runClippersPortfolioPrepare } from '../script/clippers-portfolio-prepare.mjs';
 import { validateApprovedClippersAsset } from '../script/clippers-daily-learning.mjs';
 import { reconcileExternalMetricoolSchedule } from '../script/clippers-native-media-receipts.mjs';
 import { runClippersWeeklyScheduling } from '../script/clippers-weekly-scheduler.mjs';
+import { buildClippersOrchestraReport } from '../script/clippers-orchestra-report.mjs';
 import { weeklyDeliveryCollision, weeklyDigest as digest } from '../script/clippers-weekly-policy.mjs';
 
 const exec = promisify(execFile);
@@ -28,7 +29,7 @@ const available = ['ffmpeg', 'ffprobe'].every(program => spawnSync(program, ['-v
 const titleAvailable = available && spawnSync('magick', ['-version']).status === 0;
 const prepEnv = { CLIPPERS_PORTFOLIO_PREPARE_ENABLED: 'true', CLIPPERS_PUBLIC_MEDIA_UPLOAD_AUTHORIZED: 'true' };
 const requiredAttribution = 'L. Example, Original teaching video (CC BY 4.0). Edited for length and portrait framing.';
-const initialState = { schemaVersion: 1, day: '2026-11-18', deliveries: [], observations: [], history: [], versions: { '6431685:tiktok:streamersclips': 'pinned-live' } };
+const initialState = { schemaVersion: 1, day: '2026-11-18', deliveries: [], observations: [], history: [], versions: { [destinationKey(DESTINATIONS[0])]: 'pinned-live' } };
 
 async function workspace(t) {
   const root = await realpath(await mkdtemp(path.join(tmpdir(), 'reviewed-editorial-test-')));
@@ -42,7 +43,7 @@ async function workspace(t) {
   return { root, put, get };
 }
 
-async function inputs(t, { renderSource = true, id = 'nov19-exact-fixture', target = DESTINATIONS[0], solid = false } = {}) {
+async function inputs(t, { renderSource = true, id = 'nov19-exact-fixture', target = DESTINATIONS[0], solid = false, campaign = false } = {}) {
   const f = await workspace(t);
   const sourceFile = 'media.mp4';
   const sourcePath = path.join(f.root, sourceFile);
@@ -58,9 +59,9 @@ async function inputs(t, { renderSource = true, id = 'nov19-exact-fixture', targ
   const rights = { destination: target, sourceSha256, sourcePublishedAt: '2026-11-17T08:00:00.000Z',
     observedAt: '2026-11-19T21:30:00.000Z', validUntil: '2026-11-23T04:00:00.000Z', reviewedBy: 'fixture-rights-review',
     termsUrl: 'https://creativecommons.org/licenses/by/4.0/', sourceScope: 'exact_asset', commercialPermission: 'approved',
-    basis: 'public_policy', membership: 'not_required', permittedNetworks: [target.network], thirdPartyCommercial: false };
+    basis: campaign ? 'campaign' : 'public_policy', membership: campaign ? 'verified' : 'not_required', permittedNetworks: [target.network], thirdPartyCommercial: false };
   const license = { ...rights, sourceUrl, schemaVersion: 1, kind: 'reviewed_exact_asset_license', permissionExpiresAt: null,
-    reuseScope: 'licensed_crosspost', requiredAttribution };
+    reuseScope: campaign ? 'exact_destination_only' : 'licensed_crosspost', requiredAttribution };
   const auth = { schemaVersion: 2, kind: 'reviewed_editorial_authorization', id, destination: target,
     reviewedBy: 'fixture-owner', reviewedAt: '2026-11-19T22:00:00.000Z', expiresAt: rights.validUntil,
     engineSha256: editorialEngineSha256, sourceFile, sourceUrl, sourceSha256, sourceStartSeconds: 1.25,
@@ -137,6 +138,10 @@ test('prospective reviewed render stays outside learning and enters exact future
   assert.equal(approved.weeklySourceProof.sourceIdentity, 'youtube:aaaaaaaaaaa');
   assert.equal(approved.weeklySourceProof.reuseScope, 'licensed_crosspost');
   assert.deepEqual(await f.get(`${reports}/state.json`), initialState);
+  const office = await buildClippersOrchestraReport({ workspaceRoot: f.root, now: new Date(+prepNow + 1000) });
+  assert.equal(office.roles.find(role => role.stage === 'editor').outcomes.length, 1);
+  assert.equal(office.roles.find(role => role.stage === 'checker').outcomes.length, 1);
+  assert.equal(office.learning.comparisons.length, 0);
   let calls = 0;
   const adapter = { async weeklyPreflight() {
     const evidence = { test: true };
@@ -286,4 +291,17 @@ test('signed owned cards replace source pixels while retaining source audio and 
   await assert.rejects(readReviewedEditorialPacket(f.root, f.id, { now: prepNow }), /editorial_reviewed_output_required/);
   await f.put(packetPath, { ...packet, caption: 'Excerpt + editorial graphics. ' + requiredAttribution });
   assert.equal((await readReviewedEditorialPacket(f.root, f.id, { now: prepNow })).receipt.outputSha256, receipt.outputSha256);
+});
+
+test('another destination in the unsegmented legacy ledger holds a new campaign render on the same original', { skip: !available }, async t => {
+  const f = await reviewed(t, { campaign: true });
+  await f.put(f.packetPath, f.packet);
+  await f.put(f.nativePath, f.native);
+  assert.equal((await f.prepare()).prepared, 1);
+  const other = DESTINATIONS[1];
+  await f.put('reports/metricool-autopilot-ledger.json', [{ metricoolBlogId: other.brandId, account: other.account,
+    sourceUrl: 'https://youtu.be/aaaaaaaaaaa', sha256: 'b'.repeat(64) }]);
+  const report = await runClippersWeeklyScheduling({ workspaceRoot: f.root, window, now: prepNow });
+  assert.equal(report.ready, 0);
+  assert.equal(report.outcomes[0]?.reason, 'duplicate_or_overlapping_delivery');
 });

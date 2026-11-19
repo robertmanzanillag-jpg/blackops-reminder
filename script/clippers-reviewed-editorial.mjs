@@ -4,7 +4,7 @@ import { chmod, lstat, mkdir, mkdtemp, open, readdir, realpath, rename, rm, writ
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { canonicalSourceIdentity } from '../shared/clippers-priority-creators.mjs';
-import { destinationKey, findDestination, localDay, providerTimestamp } from './clippers-portfolio-metricool.mjs';
+import { destinationKey, findDestination, findPublishDestination, localDay, providerTimestamp } from './clippers-portfolio-metricool.mjs';
 import { readWeeklyPrivateJson, validWeeklyWindow, weeklyDigest } from './clippers-weekly-policy.mjs';
 import { editorialEngineSha256, renderEditorialMp4 } from './clippers-reviewed-editorial-engine.mjs';
 
@@ -113,10 +113,10 @@ function validSourceDate(rights) {
     canonical === rights.sourcePublishedDate + 'T00:00:00.000Z';
 }
 
-async function loadAuthorization(root, requestId) {
+async function loadAuthorization(root, requestId, { historical = false } = {}) {
   if (!id(requestId)) throw Error('editorial_request_invalid');
   const request = await readWeeklyPrivateJson(root, `${CONFIG}/render-requests/${requestId}.json`);
-  const destination = findDestination(request);
+  const destination = historical ? findDestination(request) : findPublishDestination(request);
   if (!destination || request.id !== requestId || request.schemaVersion !== 2 ||
       !exactEditorialShape(request) || !sha(request.authorizationSha256)) throw Error('editorial_request_invalid');
   const authorization = await readWeeklyPrivateJson(root, `${CONFIG}/editorial-authorizations/${request.authorizationSha256}.json`);
@@ -282,7 +282,7 @@ export async function renderReviewedEditorial({ workspaceRoot, requestId, now = 
 }
 
 export async function readReviewedEditorialPacket(root, requestId, { now = new Date(), window, historical = false } = {}) {
-  const context = await loadAuthorization(root, requestId);
+  const context = await loadAuthorization(root, requestId, { historical });
   const { request, authorization: a, rights, license, destination } = context;
   const receipt = await readWeeklyPrivateJson(root, `${RECEIPTS}/${requestId}.json`);
   validateReceipt(context, receipt, now);

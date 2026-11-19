@@ -7,6 +7,7 @@ import { open, realpath, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { DESTINATIONS, destinationKey, findDestination, findPublishDestination, exactPost, localDay } from './clippers-portfolio-metricool.mjs';
 import { readPortfolioRenderManifest } from './clippers-portfolio-render.mjs';
+import { readConfirmedReviewedEditorial, REVIEWED_EDITORIAL } from './clippers-reviewed-editorial.mjs';
 import { ALL_DISCOVERY_CREATORS, KNOWN_CREATOR_GROUPS } from '../shared/clippers-priority-creators.mjs';
 import { buildViralScout } from '../shared/clippers-viral-scout.mjs';
 const HOUR=3600000, SHA=/^[a-f0-9]{64}$/, ID=/^[A-Za-z0-9][A-Za-z0-9_.:-]{0,99}$/;
@@ -92,6 +93,16 @@ function creatorSelectionView(raw,now){
  return {evaluatedAt:raw.evaluatedAt,contexts:preferences.length,assigned:raw.assigned,heldReasons:codes(raw.heldReasons),preferences};
 }
 async function verifiedRenderBinding(root,delivery,cache,media=[],at=Date.now()){
+  if (delivery.renderClass !== undefined) {
+    if (delivery.renderClass !== REVIEWED_EDITORIAL) return {verified:false};
+    try {
+      const {receipt, asset}=await readConfirmedReviewedEditorial(root,delivery,{now:new Date(at),historical:true});
+      const mediaReady=media.some(row=>findDestination(row)&&destinationKey(row)===destinationKey(asset)&&
+        row.status==='ready'&&row.paidSpendAllowed===false&&row.campaignId===asset.campaignId&&row.sha256===asset.mediaSha256&&
+        row.draftFile===asset.draftFile&&row.renderReceiptSha256===asset.renderReceiptSha256);
+      return {verified:mediaReady,receiptSha256:asset.renderReceiptSha256,renderedAt:receipt.renderedAt};
+    } catch { return {verified:false}; }
+  }
   if(!findDestination(delivery)||!ID.test(delivery.id??'')||!ID.test(delivery.policyVersion??'')||!SHA.test(delivery.mediaSha256??''))return {verified:false};
   const key=destinationKey(delivery),cacheKey=`${key}:${delivery.id}:${delivery.policyVersion}:${delivery.mediaSha256}`;
   if(cache.has(cacheKey))return cache.get(cacheKey);
