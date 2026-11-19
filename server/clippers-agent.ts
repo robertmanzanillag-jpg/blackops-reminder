@@ -29993,9 +29993,7 @@ export async function importClipperMetricoolApprovalEvidence(userId = getSystemU
     await unlink(METRICOOL_APPROVAL_IMPORTED_METRICS_PATH).catch(() => undefined);
   }
 
-  const metrics = await buildMetricsSummary(accounts);
-  await writeFile(METRICS_SUMMARY_PATH, JSON.stringify(metrics, null, 2));
-  mirrorOfficeSourceFile({ kind: "clip_metrics", filePath: METRICS_SUMMARY_PATH, raw: metrics });
+  const metrics = await writeClipperMetricsSummary(accounts);
 
   return { metricoolApprovalEvidenceImport, metrics, status: await getClipperStatus(userId) };
 }
@@ -32684,13 +32682,23 @@ async function buildMetricsSummary(accounts: ClipperAccount[]): Promise<ClipperM
   };
 }
 
+/** Rebuilds metrics-summary.json from the analytics exports already present in
+ * clippers_workspace/metrics (local files only: no provider call, no spend) and
+ * mirrors it to the office source documents. With no exports it records an
+ * honest empty summary (no records, generatedAt null), never invented numbers. */
+async function writeClipperMetricsSummary(accounts: ClipperAccount[]): Promise<ClipperMetricsSummary> {
+  await ensureClipperDirs();
+  const metrics = await buildMetricsSummary(accounts);
+  await writeFile(METRICS_SUMMARY_PATH, JSON.stringify(metrics, null, 2));
+  mirrorOfficeSourceFile({ kind: "clip_metrics", filePath: METRICS_SUMMARY_PATH, raw: metrics });
+  return metrics;
+}
+
 export async function ingestClipperMetrics(userId = getSystemUserId()): Promise<{ metrics: ClipperMetricsSummary; status: ClipperStatus }> {
   await ensureClipperDirs();
   const config = await readConfig();
   const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
-  const metrics = await buildMetricsSummary(accounts);
-  await writeFile(METRICS_SUMMARY_PATH, JSON.stringify(metrics, null, 2));
-  mirrorOfficeSourceFile({ kind: "clip_metrics", filePath: METRICS_SUMMARY_PATH, raw: metrics });
+  const metrics = await writeClipperMetricsSummary(accounts);
   return { metrics, status: await getClipperStatus(userId) };
 }
 
@@ -45832,6 +45840,9 @@ export async function runClipperAutomationCycle(input: unknown = {}, userId = ge
   };
   await writeFile(reportPath, JSON.stringify(cycleReport, null, 2));
   mirrorOfficeSourceFile({ kind: "clip_report", filePath: reportPath, raw: cycleReport, owner: userId });
+  // The office audits each cycle together with the metrics summary; refresh it
+  // from the local exports so it is never missing just because nobody ingested.
+  await writeClipperMetricsSummary(accounts);
   return { automation, status: await getClipperStatus(userId) };
 }
 
@@ -45913,6 +45924,7 @@ export async function runClipperDailyPlan(input: unknown = {}, userId = getSyste
 
   await writeFile(reportPath, JSON.stringify(report, null, 2));
   mirrorOfficeSourceFile({ kind: "clip_report", filePath: reportPath, raw: report, owner: userId });
+  await writeClipperMetricsSummary(status.accounts);
   return { report, status: await getClipperStatus(userId) };
 }
 
