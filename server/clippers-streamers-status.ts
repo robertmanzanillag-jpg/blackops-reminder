@@ -46,8 +46,10 @@ export function streamerStatusView(raw: string | null, at = Date.now()) {
 }
 
 type RejectPending = (owner: string, candidateIds: string[], reason: string) => Promise<number>;
+// One shared pool for the process: a takedown must not open a new pool each time.
+let rejectPool: Promise<Awaited<ReturnType<typeof import('./agent-council-store')['createCouncilPool']>>> | undefined;
 async function defaultRejectPending(owner: string, candidateIds: string[], reason: string) {
-  const pool = await (await import('./agent-council-store')).createCouncilPool();
+  const pool = await (rejectPool ??= import('./agent-council-store').then(m => m.createCouncilPool()).catch(e => { rejectPool = undefined; throw e; }));
   const query = async (sql: string, values?: unknown[]) => { const c = await pool.connect(); try { return await c.query(sql, values) as { rows: any[] }; } finally { c.release(); } };
   return createPendingActionsQueue(query).rejectCandidates(owner, candidateIds, reason);
 }
