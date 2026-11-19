@@ -14,6 +14,7 @@ export { KONG_DESK_PROFILE, KONG_ORDER_MAX_TEXT, isKongOrderAgentShape };
 
 export const DEFAULT_KONG_OFFICE_ORDER_URL = "https://kongnightlife.com/api/admin/ceo/office-orders";
 const TIMEOUT_MS = 30_000;
+const STATUS_TIMEOUT_MS = 8_000;
 const MAX_BODY_BYTES = 64 * 1024;
 const TASK_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -49,10 +50,11 @@ export function kongOrderIdempotencyKey(agentId: string, requestId: string): str
 
 /** The order may have reached KONG: never store a final reply, a retry must reuse the same idempotency key. */
 export const isUncertainKongError = (error: unknown) => error instanceof KongOfficeOrderError && ["TIMEOUT", "CONNECTION_FAILED", "UNAVAILABLE"].includes(error.code);
-const TERMINAL = new Set(["blocked", "ready", "done", "completed", "complete", "succeeded", "success", "failed", "error", "cancelled", "canceled", "rejected", "expired"]);
+// KONG "ready" = queued or a retry is scheduled (report-tasks.ts), so it is NOT final: keep polling it.
+const TERMINAL = new Set(["blocked", "done", "completed", "complete", "succeeded", "success", "failed", "error", "cancelled", "canceled", "rejected", "expired"]);
 export const isTerminalKongStatus = (status: string) => TERMINAL.has(status.toLowerCase());
 const STATUS_LABELS: Record<string, string> = {
-  queued: "en cola", pending: "en cola", accepted: "aceptada", received: "recibida", running: "en curso", ready: "lista", blocked: "necesita a Robert", in_progress: "en curso", processing: "en curso",
+  queued: "en cola", pending: "en cola", accepted: "aceptada", received: "recibida", running: "en curso", ready: "en cola", blocked: "necesita a Robert", in_progress: "en curso", processing: "en curso",
   done: "completada", completed: "completada", complete: "completada", succeeded: "completada", success: "completada",
   failed: "falló", error: "falló", cancelled: "cancelada", canceled: "cancelada", rejected: "rechazada", expired: "caducada",
 };
@@ -91,9 +93,13 @@ function parseTask(body: unknown, token: string): KongOfficeOrderTask {
   const status = cleanText(task.status, 40, token);
   if (!TASK_ID.test(taskId) || !status || !/^[A-Za-z0-9 _-]+$/.test(status)) return fail("INVALID_RESPONSE", "La respuesta de KONG no trae una tarea válida.");
   const agentValue = typeof task.agent === "object" && task.agent ? (task.agent as Record<string, unknown>).name ?? (task.agent as Record<string, unknown>).id : task.agent;
-  const raw = task.result ?? task.summary ?? task.needsOwner ?? task.nextAction ?? task.message ?? task.error;
-  let result = cleanText(raw, 600, token);
-  if (!result && raw && typeof raw === "object") { try { const json = JSON.stringify(raw); result = json.length <= 600 ? cleanText(json, 600, token) : null; } catch { /* unreadable */ } }
+  // First readable field wins; a KONG result object too long to show falls through to needsOwner/nextAction.
+  let result: string | null = null;
+  for (const raw of [task.result, task.summary, task.needsOwner, task.nextAction, task.message, task.error]) {
+    result = cleanText(raw, 600, token);
+    if (!result && raw && typeof raw === "object") { try { const json = JSON.stringify(raw); result = json.length <= 600 ? cleanText(json, 600, token) : null; } catch { /* unreadable */ } }
+    if (result) break;
+  }
   return { taskId, status, agent: cleanText(agentValue, 120, token), result };
 }
 
@@ -101,12 +107,12 @@ export function createKongOfficeOrderClient(deps: { fetchImpl?: typeof fetch; en
   const env = () => deps.env ?? process.env;
   const token = () => env().KONG_OFFICE_ORDER_TOKEN?.trim() || "";
 
-  async function call(method: "GET" | "POST", url: string, body?: unknown): Promise<KongOfficeOrderTask> {
+  async function call(method: "GET" | "POST", url: string, body?: unknown, timeoutMs = deps.timeoutMs ?? TIMEOUT_MS): Promise<KongOfficeOrderTask> {
     const secret = token();
     if (!secret) return fail("NOT_CONFIGURED", "El envío de órdenes a KONG no está activado en el servidor de la oficina.");
     if (/[\x00-\x20\x7f]/.test(secret)) return fail("INVALID_CONFIGURATION", "El acceso de órdenes de KONG tiene una configuración inválida.");
     const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), deps.timeoutMs ?? TIMEOUT_MS);
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
       const response = await (deps.fetchImpl ?? fetch)(url, {
         method, redirect: "error", cache: "no-store", signal: controller.signal,
@@ -162,7 +168,8 @@ export function createKongOfficeOrderClient(deps: { fetchImpl?: typeof fetch; en
       const url = kongOrderUrl(env());
       if (!url) return fail("INVALID_CONFIGURATION", "La dirección de órdenes de KONG configurada no es una URL HTTPS válida.");
       if (!TASK_ID.test(taskId)) return fail("REJECTED", "Tarea de KONG no válida.");
-      return call("GET", `${url}/${encodeURIComponent(taskId)}`);
+      // Status reads happen while Robert opens a chat: short timeout, the next reopen tries again.
+      return call("GET", `${url}/${encodeURIComponent(taskId)}`, undefined, Math.min(deps.timeoutMs ?? TIMEOUT_MS, STATUS_TIMEOUT_MS));
     },
   };
 }

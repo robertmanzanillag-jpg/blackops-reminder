@@ -262,3 +262,43 @@ test("KONG error bodies, rate limit, disabled orders, labels and blocked tasks",
   const objectResult = await createKongOfficeOrderClient({ fetchImpl: fakeKong(() => ({ body: { taskId: "t_o", status: "done", result: { removedVenues: 1, removedEvents: 3 } } })).fetchImpl, env: env() }).status("t_o");
   assert.equal(objectResult.result, '{"removedVenues":1,"removedEvents":3}');
 });
+
+test("KONG 'ready' is queued, not final: the office keeps polling until KONG finishes", async () => {
+  let current: Record<string, unknown> = { taskId: "t_q", status: "ready", nextAction: "Reintento 2/3 programado" };
+  const { service, kong, tick } = setup(env(), call => call.method === "POST" ? { body: { taskId: "t_q", status: "ready" } } : { body: current });
+  const sent = await service.send("kong-city:miami:clubs", { text: "elimina los clubs duplicados de Miami", requestId: "req-ready" });
+  assert.match(sent.messages.at(-1)!.text, /`ready` \(en cola\)/);
+  current = { taskId: "t_q", status: "running" };
+  tick(31_000);
+  let reopened = await service.thread("kong-city:miami:clubs", sent.thread.id);
+  assert.match(reopened.messages.at(-1)!.text, /`running` \(en curso\)/);
+  current = { taskId: "t_q", status: "completed", result: "2 clubs fusionados" };
+  tick(31_000);
+  reopened = await service.thread("kong-city:miami:clubs", sent.thread.id);
+  assert.match(reopened.messages.at(-1)!.text, /completada[\s\S]*2 clubs fusionados/);
+  const polls = kong.calls.length;
+  tick(120_000);
+  await service.thread("kong-city:miami:clubs", sent.thread.id);
+  assert.equal(kong.calls.length, polls, "completed is final: not polled again");
+});
+
+test("reopening a chat asks KONG about open tasks in parallel, and a long result falls back to the next action", async () => {
+  let inFlight = 0, maxInFlight = 0, n = 0;
+  const { service, tick } = setup(env(), async call => {
+    if (call.method === "POST") return { body: { taskId: `t_p${++n}`, status: "queued" } };
+    inFlight++; maxInFlight = Math.max(maxInFlight, inFlight);
+    await new Promise(resolve => setTimeout(resolve, 20));
+    inFlight--;
+    return { body: { taskId: call.url.split("/").pop(), status: "running" } };
+  });
+  const first = await service.send("kong-city:miami:clubs", { text: "revisa el club A", requestId: "req-par-1" });
+  await service.send("kong-city:miami:clubs", { text: "revisa el club B", requestId: "req-par-2", threadId: first.thread.id });
+  tick(31_000);
+  const reopened = await service.thread("kong-city:miami:clubs", first.thread.id);
+  assert.equal(reopened.messages.filter(m => /Actualización de KONG/.test(m.text)).length, 2);
+  assert.equal(maxInFlight, 2, "both status reads run at the same time");
+
+  const big = { rows: "x".repeat(900) };
+  const fallback = await createKongOfficeOrderClient({ fetchImpl: fakeKong(() => ({ body: { taskId: "t_l", status: "blocked", result: big, needsOwner: "Elige el venue a conservar" } })).fetchImpl, env: env() }).status("t_l");
+  assert.equal(fallback.result, "Elige el venue a conservar");
+});

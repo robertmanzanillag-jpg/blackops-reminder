@@ -259,14 +259,18 @@ export function createAgentChatService(deps: {
     const open = kongTasksInThread(messages).filter(task => !isTerminalKongStatus(task.status)
       && now() - (lastKongPoll.get(task.taskId) ?? 0) >= KONG_POLL_MIN_MS).slice(-KONG_POLL_MAX_TASKS);
     if (!open.length) return messages;
+    for (const known of open) lastKongPoll.set(known.taskId, now());
+    // Ask KONG about all open tasks at once so reopening a chat waits for one round trip, not one per task.
+    // A failed read keeps the last recorded status; the next reopen tries again.
+    const client = deps.kongOrders;
+    const results = await Promise.allSettled(open.map(known => client.status(known.taskId)));
     const added: AgentChatMessage[] = [];
-    for (const known of open) {
-      lastKongPoll.set(known.taskId, now());
-      try {
-        const task = await deps.kongOrders.status(known.taskId);
-        if (task.taskId !== known.taskId || task.status === known.status) continue;
-        added.push(await deps.store.append(threadId, { role: "agent", agentId, text: `Actualización de KONG · tarea #${task.taskId}\n\n${kongStatusText(task)}` }));
-      } catch { /* KONG unreachable: the last recorded status stays; the next reopen tries again. */ }
+    for (const [index, known] of open.entries()) {
+      const outcome = results[index];
+      if (outcome.status !== "fulfilled") continue;
+      const task = outcome.value;
+      if (task.taskId !== known.taskId || task.status === known.status) continue;
+      added.push(await deps.store.append(threadId, { role: "agent", agentId, text: `Actualización de KONG · tarea #${task.taskId}\n\n${kongStatusText(task)}` }));
     }
     return added.length ? [...messages, ...added] : messages;
   }
