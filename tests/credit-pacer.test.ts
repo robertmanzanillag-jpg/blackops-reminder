@@ -5,14 +5,16 @@ import {
   advanceCreditPacer, computePace, creditPacerView, decidePace, estimateFactoryOrder, fundableUnits, pacedOutputTokens, pacerDays, pacerSettings,
   taskEfficiency, taskTypeOfExecution, taskTypeOfKind, type PacerRow, type PacerSnapshot,
 } from "../server/credit-pacer";
-import { createCreditPacer, createCreditPacerSync, pacerAlertText } from "../server/credit-pacer-runtime";
+import { createCreditPacer, createCreditPacerSync, createPacerGate, pacerAlertText } from "../server/credit-pacer-runtime";
 import { creditPacerLine } from "../shared/credit-pacer-view";
 import { applyFactoryOperatorEnvOverride } from "../server/software-factory-asistente-operator";
 import { createSelfHealRunner, SELF_HEAL_REPOSITORY } from "../server/office-self-heal";
 import { githubRecordId, sourceDigest as digest } from "../server/office-role-snapshots";
 import { emptyCompanyState, type CompanyState } from "../shared/agent-company";
 import { alertBody, alertTitle, notifyAlerts, pendingAlerts } from "../script/credit-pacer-notify";
-import { CAPABILITY_PROMPT_VERSION, capabilityInputUnchanged, gradeCapabilityTriage, type CapabilityTrainingState } from "../server/office-capability-training";
+import { CAPABILITY_PROMPT_VERSION, capabilityInputUnchanged, capabilitySkipPredicate, gradeCapabilityTriage, type CapabilityTrainingState } from "../server/office-capability-training";
+import { capabilityLifecycleSummary } from "../server/office-capability-lifecycle";
+import { createSharedOpenAiCreditLedger, type SharedCreditState } from "../server/shared-openai-credit-ledger";
 import { auditSavedRole } from "../server/office-role-audits";
 import type { RoleWorkJob } from "../server/office-role-work";
 
@@ -110,7 +112,10 @@ test("cost per task type: factory from ledger kinds, office from samples; effici
   const ledger = (state as any).ledgers["openai-2026-11-19"];
   assert.equal(ledger.costs["2026-11-20"].factory_build.microUsd, 300_000);
   assert.equal(ledger.costs["2026-11-21"].capability_training.count, 1);
-  assert.equal(estimateFactoryOrder(ledger, "2026-11-22"), 500_000);
+  // Measured $0.50 per order is below the $1 floor: the estimate never undercuts a full build.
+  assert.equal(estimateFactoryOrder(ledger, "2026-11-22"), 1_000_000);
+  const pricey = { ...ledger, costs: Object.fromEntries(Object.entries(ledger.costs as Record<string, any>).map(([d, b]) => [d, { ...b, factory_build: { ...b.factory_build, microUsd: 2_000_000 } }])) };
+  assert.equal(estimateFactoryOrder(pricey, "2026-11-22"), 2_200_000);
   const efficiency = taskEfficiency(ledger, "2026-11-22");
   assert.equal(efficiency.find(e => e.taskType === "capability_training")?.avgMicroUsd, 9_000);
 });
@@ -138,14 +143,35 @@ test("runtime pacer: caches reads, fails closed for self-heal, sync persists his
   assert.equal(alerts.length, 1);
   assert.match(alertTitle(alerts[0]), /^Presupuesto API: 3 días seguidos sobre el límite diario \[overspend:openai-2026-11-19:2026-11-19\]$/);
   assert.doesNotMatch(alertBody(alerts[0]), /http|token|owner/i);
-  const posted: any[] = [];
+  // Fake GitHub that honours the filters: label creation (422 once it exists), creator filter on the list.
+  const issues: Array<{ title: string; creator: string; labels: string[] }> = [{ title: `Copy [${alerts[0].id}]`, creator: "someone-else", labels: [] }];
+  let labelExists = false, dropLabel = false;
   const fake = (async (url: string, init?: RequestInit) => {
-    if (!init?.method) return new Response(JSON.stringify(posted.map(p => ({ title: p.title }))), { status: 200 });
-    posted.push(JSON.parse(String(init.body))); return new Response("{}", { status: 201 });
+    const u = new URL(url);
+    if (u.pathname.endsWith("/labels") && init?.method === "POST") { const r = labelExists ? 422 : 201; labelExists = true; return new Response("{}", { status: r }); }
+    if (u.pathname.endsWith("/issues") && !init?.method) {
+      assert.equal(u.searchParams.get("state"), "all");
+      const creator = u.searchParams.get("creator"), label = u.searchParams.get("labels");
+      return Response.json(issues.filter(i => (!creator || i.creator === creator) && (!label || i.labels.includes(label))).map(i => ({ title: i.title })));
+    }
+    if (u.pathname.endsWith("/issues") && init?.method === "POST") {
+      const body = JSON.parse(String(init.body));
+      const labels = dropLabel ? [] : body.labels.filter(() => labelExists);
+      issues.push({ title: body.title, creator: "github-actions[bot]", labels });
+      return Response.json({ title: body.title, labels: labels.map((name: string) => ({ name })) }, { status: 201 });
+    }
+    throw Error(`UNEXPECTED ${url}`);
   }) as typeof fetch;
+  // A same-titled issue by another author is not ours: the bot still creates its own.
   assert.deepEqual(await notifyAlerts(alerts, { token: "t", repository: "o/r", fetch: fake }), { created: 1, existing: 0 });
   assert.deepEqual(await notifyAlerts(alerts, { token: "t", repository: "o/r", fetch: fake }), { created: 0, existing: 1 });
-  assert.deepEqual(posted[0].labels, ["budget"]);
+  // Dedupe does not depend on the label: a bot issue that lost its label still counts.
+  issues.at(-1)!.labels = [];
+  assert.deepEqual(await notifyAlerts(alerts, { token: "t", repository: "o/r", fetch: fake }), { created: 0, existing: 1 });
+  assert.deepEqual(issues.at(-1)!.creator, "github-actions[bot]");
+  // A created issue without the label is refused.
+  issues.splice(1); dropLabel = true;
+  await assert.rejects(notifyAlerts(alerts, { token: "t", repository: "o/r", fetch: fake }), /GITHUB_LABEL_MISSING/);
 });
 
 test("self-heal runner asks the pacer: orders while funded, none when the pacer read fails", async () => {
@@ -191,10 +217,17 @@ test("capability training skips a paid run when the audit inputs equal the last 
       startedAt: new Date(at - DAY + 1000).toISOString(), expiresAt: new Date(at - DAY + 361000).toISOString(), status: "completed",
       trained: { result: { text: passed ? text : "{}", sessionId: "resp_1", provider: "openai", model: "m", completedAt: new Date(at - DAY + 2000).toISOString(), usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
         cost: { receiptId: "r", executionId: "x", responseId: "resp_1", model: "m", usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 }, currency: "USD", usd: 0.001 }, durationMs: 1 } }] }) as unknown as CapabilityTrainingState;
-  assert.equal(capabilityInputUnchanged(state(true), today, at + 1000), true);
-  assert.equal(capabilityInputUnchanged(state(false), today, at + 1000), false); // last answer failed: run again
-  assert.equal(capabilityInputUnchanged(state(true, "superseded"), today, at + 1000), false); // policy changed
-  assert.equal(capabilityInputUnchanged(state(true), first, at + 1000), false); // same job is never "unchanged"
+  assert.equal(capabilityInputUnchanged(state(true), today, at + 1000, "m"), true);
+  assert.equal(capabilityInputUnchanged(state(true), today, at + 1000, "m-2026-11-01"), false); // different model
+  assert.equal(capabilityInputUnchanged(state(true), today, at + 1000), false); // unknown model: never skip
+  assert.equal(capabilityInputUnchanged(state(false), today, at + 1000, "m"), false); // last answer failed: run again
+  assert.equal(capabilityInputUnchanged(state(true, "superseded"), today, at + 1000, "m"), false); // policy changed
+  assert.equal(capabilityInputUnchanged(state(true), first, at + 1000, "m"), false); // same job is never "unchanged"
+  // Lifecycle reports the skipped audit as skipped, not pending.
+  const work = { version: 1 as const, ownerKey: digest(owner), jobs: [first, today] };
+  const [life] = capabilityLifecycleSummary(state(true), CAPABILITY_PROMPT_VERSION, gradeCapabilityTriage, work, undefined, capabilitySkipPredicate(state(true), at + 1000, "m"));
+  assert.deepEqual(life.pendingSourceJobIds, []); // first was consumed by the verified run
+  assert.deepEqual((life as any).skippedSourceJobIds, [today.id]);
 });
 
 test("workflow defaults: self-heal on, no fixed order cap, system orders admitted, notification step scoped", async () => {
@@ -204,8 +237,56 @@ test("workflow defaults: self-heal on, no fixed order cap, system orders admitte
   assert.equal(workflow.match(/OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY: \$\{\{ vars\.OFFICE_SELF_HEAL_MAX_ORDERS_PER_DAY \}\}/g)?.length, 2);
   assert.match(workflow, /^env:\n  FACTORY_AUTO_ADMIT_SYSTEM_ORDERS: \$\{\{ vars\.FACTORY_AUTO_ADMIT_SYSTEM_ORDERS \|\| 'true' \}\}$/m);
   assert.match(workflow, /OFFICE_CREDIT_OVERSPEND_ALERT_DAYS: \$\{\{ vars\.OFFICE_CREDIT_OVERSPEND_ALERT_DAYS \|\| '3' \}\}/);
+  // issues: write only in the separate notify job, never in the office executor.
   assert.equal(workflow.match(/^      issues: write$/gm)?.length, 1);
-  const notify = workflow.split(/^      - /m).find(step => step.startsWith("name: Notify the owner of credit pacing alerts"))!;
-  assert.match(notify, /continue-on-error: true/); assert.match(notify, /GH_TOKEN: \$\{\{ github\.token \}\}/);
-  assert.doesNotMatch(notify, /OPENAI_API_KEY|OFFICE_GITHUB_TOKEN/);
+  const jobs = workflow.split(/^  (?=[a-z-]+:\n)/m);
+  const notifyJob = jobs.find(j => j.startsWith("notify:"))!, officeJob = jobs.find(j => j.startsWith("office-once:"))!;
+  assert.match(notifyJob, /needs: office-once/); assert.match(notifyJob, /permissions:\n      contents: read\n      issues: write\n/);
+  assert.match(notifyJob, /continue-on-error: true/); assert.match(notifyJob, /GH_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.doesNotMatch(notifyJob, /OPENAI_API_KEY|OFFICE_GITHUB_TOKEN|OPENAI_SHARED_CREDIT/);
+  assert.doesNotMatch(officeJob, /issues: write|credit-pacer-notify/);
+});
+
+test("pacer gate: fails closed when a configured ledger has no pacer; reviewer admission is gated", async () => {
+  let ready = 0;
+  const base = { ready: async () => { ready++; return true; }, begin: async () => true };
+  const refusing = createPacerGate({ required: true });
+  assert.equal(refusing.refusing, true); assert.equal(refusing.governed, true);
+  assert.equal(await refusing.allows("standard", "office_review"), false);
+  assert.equal(await refusing.allows("deferrable", "academy_pair"), false);
+  assert.equal(await refusing.fundable("self_heal_order"), 0);
+  assert.equal(await refusing.admission(base).ready(), false); assert.equal(ready, 0);
+  const unconfigured = createPacerGate({ required: false });
+  assert.equal(unconfigured.governed, false); assert.equal(await unconfigured.allows("standard", "office_review"), true);
+  assert.equal(await unconfigured.admission(base).ready(), true); assert.equal(ready, 1);
+  // A pacer whose ledger read throws refuses too.
+  const broken = createPacerGate({ required: true, pacer: createCreditPacer({ readSnapshot: async () => { throw Error("down"); } }) });
+  assert.equal(await broken.allows("standard", "office_review"), false);
+  await assert.rejects(broken.fundable("self_heal_order"));
+  // Soft day: reviewer still admitted (standard) while within allowance; exhausted: refused.
+  const soft = createPacerGate({ required: true, pacer: createCreditPacer({ readSnapshot: async () => grant([spend(D0 + 16 * 3600_000, 20)]), now: () => D0 + DAY + 3600_000 }) });
+  assert.equal(await soft.admission(base).ready(), true);
+  assert.equal(await soft.allows("deferrable", "capability_training"), false);
+  assert.equal(await soft.outputTokens(2048), 1536);
+  const done = createPacerGate({ required: true, pacer: createCreditPacer({ readSnapshot: async () => grant([spend(D0 + 16 * 3600_000, 200)]), now: () => D0 + DAY }) });
+  assert.equal(await done.admission(base).ready(), false);
+});
+
+test("ledger paceSnapshot uses the plain read path: no lastObservedAt write, same validation", async () => {
+  const at = new Date("2026-11-19T15:00:00Z");
+  let state: SharedCreditState = { version: 1, grant: null, lastObservedAt: null, reservations: [] }, writes = 0;
+  const transact = async <T,>(fn: (s: SharedCreditState) => T) => { const copy = structuredClone(state), r = fn(copy); state = copy; writes++; return r; };
+  let clock = at.getTime();
+  const ledger = createSharedOpenAiCreditLedger({ transact, now: () => new Date(clock), maximumGrantObservationAgeMs: 60000, read: async () => structuredClone(state),
+    grant: { id: "g", accountScope: "scope", availableMicroUsd: 200 * USD, observedAt: at.toISOString(), expiresAt: "2026-12-19T23:59:59.000Z", verificationEvidenceId: "e" } });
+  await ledger.initialize();
+  await ledger.reserve({ key: "factory-select:abc", consumer: "factory", requestSha256: "a".repeat(64), maximumMicroUsd: 5 });
+  clock += 60_000;
+  const before = { writes, observed: state.lastObservedAt };
+  const snapshot = await ledger.paceSnapshot();
+  assert.equal(writes, before.writes); assert.equal(state.lastObservedAt, before.observed);
+  assert.deepEqual(snapshot.rows.map(r => [r.kind, r.status, r.reservedMicroUsd]), [["factory-select", "reserved", 5]]);
+  assert.ok(!JSON.stringify(snapshot).includes("abc"));
+  state = { ...state, reservations: [...state.reservations, state.reservations[0]] }; // duplicate key = corrupt
+  await assert.rejects(ledger.paceSnapshot(), /CREDIT_CORRUPT/);
 });

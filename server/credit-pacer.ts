@@ -263,7 +263,7 @@ export function estimateTask(ledger: CreditPacerLedgerState | undefined, type: P
   return count >= 3 ? Math.max(1_000, Math.round(total / count)) : DEFAULT_TASK_ESTIMATES[type];
 }
 
-/** Measured factory provider cost per admitted order: (select + build + review) / selects. */
+/** Measured factory provider cost per admitted order: (select + build + review) / selects, never below $1. */
 export function estimateFactoryOrder(ledger: CreditPacerLedgerState | undefined, today: string): number {
   let orders = 0, total = 0;
   const from = startOf(today) - 14 * PACER_DAY_MS;
@@ -272,7 +272,8 @@ export function estimateFactoryOrder(ledger: CreditPacerLedgerState | undefined,
     orders += bucket.factory_select?.count ?? 0;
     total += (bucket.factory_select?.microUsd ?? 0) + (bucket.factory_build?.microUsd ?? 0) + (bucket.factory_review?.microUsd ?? 0);
   }
-  return orders >= 3 ? Math.max(10_000, Math.round(total / orders)) : DEFAULT_TASK_ESTIMATES.self_heal_order;
+  // Floor at the default: orders that stop early (cheap selects) must never make a full build look cheap.
+  return orders >= 3 ? Math.max(DEFAULT_TASK_ESTIMATES.self_heal_order, Math.round(total / orders)) : DEFAULT_TASK_ESTIMATES.self_heal_order;
 }
 
 /** Public, static view for the office header / status script: USD numbers, mode and streak only. */

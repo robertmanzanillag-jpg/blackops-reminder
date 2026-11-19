@@ -59,10 +59,6 @@ jobs:
     concurrency:
       group: office-worker-cloud
       cancel-in-progress: false
-    # issues: write only for the credit pacer's owner notification (one `budget` issue per alert).
-    permissions:
-      contents: read
-      issues: write
     runs-on: ubuntu-24.04
     # 13-minute run budget plus startup and bounded settlement/cleanup.
     timeout-minutes: 25
@@ -163,21 +159,46 @@ jobs:
           # 15 minutes: the worker's own 13-minute budget, then SIGTERM for bounded settlement.
           timeout --signal=TERM --kill-after=3m 15m node --import tsx script/office-worker-once.ts
 
+      - name: Remove private configuration
+        if: always()
+        run: rm -rf "$RUNNER_TEMP/office-config"
+
+  notify:
+    # Owner notification for the daily credit pacer, isolated in its own job so that issues: write is
+    # never granted to the office executor. contents: read is only for the checkout of this private
+    # repository. Read-only on the database; at most one `budget` issue per alert (fixed text + numbers).
+    needs: office-once
+    if: ${{ !cancelled() && needs.office-once.result != 'skipped' }}
+    permissions:
+      contents: read
+      issues: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    continue-on-error: true
+    steps:
+      - name: Check out the office source in production
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ vars.OFFICE_SOURCE_REF }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        env:
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+        run: npm ci --no-audit --no-fund
+
       - name: Notify the owner of credit pacing alerts
-        # Read-only on the database; opens at most one `budget` issue per alert (fixed text + numbers).
-        if: ${{ !cancelled() }}
-        continue-on-error: true
-        timeout-minutes: 3
         env:
           DATABASE_URL: ${{ secrets.OFFICE_DATABASE_URL }}
           DEFAULT_USER_ID: ${{ secrets.OFFICE_OWNER_ID }}
           GH_TOKEN: ${{ github.token }}
         run: |
           if [ -f script/credit-pacer-notify.ts ]; then node --import tsx script/credit-pacer-notify.ts; fi
-
-      - name: Remove private configuration
-        if: always()
-        run: rm -rf "$RUNNER_TEMP/office-config"
 
   factory-gate:
     # Decides whether this run includes the factory. Never on forks; skipped (and so is the factory)

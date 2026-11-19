@@ -100,22 +100,31 @@ export function capabilityTrainingSummary(raw:unknown,owner:string,generations?:
 
 /** Cost minimization: a daily audit whose triage inputs (issue codes, blocked
  * source) equal those of the role's latest VERIFIED production run, still under
- * the same active policy, would only repeat a known, passing answer. It is
+ * the same active policy and the same model, would only repeat a known, passing answer. It is
  * skipped instead of paying for the call. Any change in findings, policy,
  * generation or a failed last answer runs normally. */
-export function capabilityInputUnchanged(state:CapabilityTrainingState,job:RoleWorkJob,at:number):boolean{
+export function capabilityInputUnchanged(state:CapabilityTrainingState,job:RoleWorkJob,at:number,model?:string):boolean{
+ // Unknown current model: never skip (a model change must re-verify the answer).
+ if(!model)return false;
  let task:Task;try{task=realTask(job,at);}catch{return false;}
  const last=state.runs.filter(r=>r.kind==="production"&&r.role===job.role&&r.generation===job.generation&&r.promptVersion===CAPABILITY_PROMPT_VERSION&&r.status==="completed"&&r.trained).sort((a,b)=>Date.parse(a.startedAt)-Date.parse(b.startedAt)).at(-1);
- if(!last||last.task.id===task.id)return false;
+ const answeredBy=last?.trained!.result.model;
+ // Same configured model (the provider may return a dated snapshot name of it).
+ if(!last||last.task.id===task.id||!answeredBy||(answeredBy!==model&&!answeredBy.startsWith(`${model}-`)))return false;
  const policy=state.policies.find(p=>p.version===last.policyVersion);
  if(!policy||policy.status!=="active"||capabilityPolicyLife(state,policy,CAPABILITY_PROMPT_VERSION,gradeCapabilityTriage).retiredAt)return false;
  return gradeCapabilityTriage(last.task,last.trained!.result.text).passed&&digest([last.task.issueCodes,last.task.sourceBlocked])===digest([task.issueCodes,task.sourceBlocked]);
 }
 
+/** Lifecycle predicate: audit jobs the trainer deliberately skips are reported as skipped, not pending. */
+export function capabilitySkipPredicate(state:CapabilityTrainingState,at:number,model?:string){return (job:RoleWorkJob)=>capabilityInputUnchanged(state,job,at,model);}
+
 /** Transact must use the existing durable council transaction/CAS. run and
  * verifyCost are trusted adapters: verifyCost independently loads the admitted
  * ledger receipt, never model-authored prices. Existing budgets remain required. */
-export function createCapabilityTrainer(options:{owner:string;transact:(change:(s:CapabilityTrainingState,generations:Record<string,number>,otherAcademyRunning?:boolean)=>CapabilityTrainingState)=>Promise<CapabilityTrainingState>;loadWork:()=>Promise<RoleWorkState>;run:(prompt:string,call:{executionId:string;maxOutputTokens:number})=>Promise<OfficeOpenAIResult>;verifyCost:(request:{executionId:string;responseId:string;model:string;usage:z.infer<typeof usageSchema>})=>Promise<VerifiedCapabilityCost>;maxCallsPerDay:number;now?:()=>number;shouldStop?:()=>boolean}){
+export function createCapabilityTrainer(options:{owner:string;transact:(change:(s:CapabilityTrainingState,generations:Record<string,number>,otherAcademyRunning?:boolean)=>CapabilityTrainingState)=>Promise<CapabilityTrainingState>;loadWork:()=>Promise<RoleWorkState>;run:(prompt:string,call:{executionId:string;maxOutputTokens:number})=>Promise<OfficeOpenAIResult>;verifyCost:(request:{executionId:string;responseId:string;model:string;usage:z.infer<typeof usageSchema>})=>Promise<VerifiedCapabilityCost>;maxCallsPerDay:number;now?:()=>number;shouldStop?:()=>boolean;
+ /** Current execution model; enables the input-unchanged skip (absent = never skip). */
+ model?:string}){
  if(!options.owner.trim()||!Number.isSafeInteger(options.maxCallsPerDay)||options.maxCallsPerDay<1||options.maxCallsPerDay>28)throw Error("CAPABILITY_EXISTING_DAILY_LIMIT_REQUIRED");
  const now=options.now||Date.now;
  return {async tick(){
@@ -132,7 +141,7 @@ export function createCapabilityTrainer(options:{owner:string;transact:(change:(
     // Never silently respawn a retired baseline. Its candidate may still train;
     // unconsumed audits remain in roleWork for a strictly qualified successor.
     return !policies.length||policies.some(p=>["active","probation"].includes(p.status)&&!capabilityPolicyLife(state,p,CAPABILITY_PROMPT_VERSION,gradeCapabilityTriage).retiredAt);
-   }).filter(j=>!capabilityInputUnchanged(state,j,start));
+   }).filter(j=>!capabilityInputUnchanged(state,j,start,options.model));
    const firstProduction=productionJobs.find(j=>!state.runs.some(r=>r.kind==="production" && r.role===j.role && r.generation===j.generation && r.promptVersion===CAPABILITY_PROMPT_VERSION));
    const candidates=state.policies.filter(p=>!ceoRolePaused(p.role) && p.status==="candidate" && p.promptVersion===CAPABILITY_PROMPT_VERSION && generations[p.role]===p.generation && work.jobs.some(j=>j.role===p.role && j.generation===p.generation));
    const candidate=candidates.find(p=>!state.runs.some(r=>r.kind==="holdout" && r.role===p.role && start-Date.parse(r.startedAt)<86400000) && state.runs.filter(r=>r.kind==="holdout"&&r.policyVersion===p.version).length<3);

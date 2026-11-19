@@ -6,7 +6,7 @@
 // (never writes the database) and opens one GitHub issue labelled `budget` per persisted alert:
 // once per overspend streak (OFFICE_CREDIT_OVERSPEND_ALERT_DAYS consecutive days, default 3) and
 // once per grant threshold (50/80/95%). Idempotent: an issue whose title carries the alert id is
-// never opened twice (open or closed). Issue text is fixed Spanish plus numbers only.
+// never opened twice (open or closed), matched on issues created by the workflow bot. Issue text is fixed Spanish plus numbers only.
 //
 // Environment: DATABASE_URL, DEFAULT_USER_ID, GH_TOKEN (workflow token with issues: write),
 // GITHUB_REPOSITORY. CI logs are public: prints only static lines and counts.
@@ -40,20 +40,38 @@ export function pendingAlerts(rawCouncil: string | null, now: number): PacerAler
   } catch { return []; }
 }
 
+export const NOTIFY_LABEL = "budget";
+export const NOTIFY_CREATOR = "github-actions[bot]";
+
+/**
+ * Dedupe never depends on the label: duplicates are found by listing every issue
+ * (open and closed) created by the workflow bot and matching the [alert id] in the title.
+ * The label is created once (422 = it already exists); an issue whose creation response
+ * lacks the label is refused (it would escape the owner's `budget` filter).
+ */
 export async function notifyAlerts(alerts: PacerAlert[], options: { token: string; repository: string; fetch?: Fetch }): Promise<{ created: number; existing: number }> {
   if (!alerts.length) return { created: 0, existing: 0 };
   if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(options.repository)) throw Error("REPOSITORY_INVALID");
   const request = options.fetch ?? fetch, api = `https://api.github.com/repos/${options.repository}`;
   const headers = { authorization: `Bearer ${options.token}`, accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28", "content-type": "application/json" };
-  const listed = await request(`${api}/issues?labels=budget&state=all&per_page=100`, { headers });
-  if (!listed.ok) throw Error(`GITHUB_LIST_FAILED_${listed.status}`);
-  const titles = ((await listed.json()) as Array<{ title?: unknown }>).map(issue => String(issue.title ?? ""));
+  const label = await request(`${api}/labels`, { method: "POST", headers, body: JSON.stringify({ name: NOTIFY_LABEL, color: "d93f0b", description: "Presupuesto API (ritmo diario del crédito)" }) });
+  if (!label.ok && label.status !== 422) throw Error(`GITHUB_LABEL_FAILED_${label.status}`);
+  const titles: string[] = [];
+  for (let page = 1; page <= 10; page++) {
+    const listed = await request(`${api}/issues?state=all&creator=${encodeURIComponent(NOTIFY_CREATOR)}&per_page=100&page=${page}`, { headers });
+    if (!listed.ok) throw Error(`GITHUB_LIST_FAILED_${listed.status}`);
+    const rows = (await listed.json()) as Array<{ title?: unknown }>;
+    titles.push(...rows.map(issue => String(issue.title ?? "")));
+    if (rows.length < 100) break;
+  }
   let created = 0, existing = 0;
   for (const alert of alerts) {
     if (titles.some(title => title.includes(`[${alert.id}]`))) { existing++; continue; }
-    const response = await request(`${api}/issues`, { method: "POST", headers, body: JSON.stringify({ title: alertTitle(alert), body: alertBody(alert), labels: ["budget"] }) });
+    const response = await request(`${api}/issues`, { method: "POST", headers, body: JSON.stringify({ title: alertTitle(alert), body: alertBody(alert), labels: [NOTIFY_LABEL] }) });
     if (!response.ok) throw Error(`GITHUB_CREATE_FAILED_${response.status}`);
     titles.push(alertTitle(alert));
+    const issue = (await response.json().catch(() => ({}))) as { labels?: Array<{ name?: unknown } | string> };
+    if (!Array.isArray(issue.labels) || !issue.labels.some(l => (typeof l === "string" ? l : l?.name) === NOTIFY_LABEL)) throw Error("GITHUB_LABEL_MISSING");
     created++;
   }
   return { created, existing };

@@ -101,3 +101,33 @@ export function createCreditPacerSync(options: { council: Council; pacer: Credit
 export function councilPacerHistory(load: () => Promise<{ officeExecution?: { creditPacer?: unknown } }>) {
   return async (ledgerId: string) => parseCreditPacerState((await load()).officeExecution?.creditPacer).ledgers[ledgerId];
 }
+
+/**
+ * Worker-side gate over an optional pacer. `required` means a shared credit ledger is
+ * configured: if the pacer could not be built the gate REFUSES everything (no paid work,
+ * no fundable self-heal orders) instead of running unpaced. Without a configured ledger
+ * there is nothing to pace and everything is allowed (the previous limits apply).
+ */
+export function createPacerGate(input: { pacer?: CreditPacer; required: boolean }) {
+  const { pacer } = input, refuse = input.required && !pacer;
+  const gate = {
+    /** True when admission is governed (pacer present, or refusing because it is missing). */
+    governed: !!pacer || refuse,
+    refusing: refuse,
+    async allows(priority: "standard" | "deferrable", taskType: PacerTaskType): Promise<boolean> {
+      if (refuse) return false;
+      if (!pacer) return true;
+      try { return (await pacer.allow(priority, taskType)).allowed; } catch { return false; }
+    },
+    async fundable(taskType: PacerTaskType): Promise<number> {
+      if (!pacer) return 0;
+      return pacer.fundable(taskType);
+    },
+    async outputTokens(base: number): Promise<number> { return pacer ? pacer.outputTokens(base) : base; },
+    /** Reviewer admission: claimed only while the standard-priority pace allows it. */
+    admission<A extends { ready: () => Promise<boolean> }>(admission: A): A {
+      return { ...admission, ready: async () => (await gate.allows("standard", "office_review")) && admission.ready() };
+    },
+  };
+  return gate;
+}

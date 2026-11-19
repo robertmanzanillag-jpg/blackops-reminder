@@ -46,13 +46,15 @@ if (process.env.OFFICE_REVIEW_PROVIDER === "openai" && !reviewOnlyOwner) throw n
 // Daily credit pacer (server/credit-pacer.ts): spreads the shared grant over its remaining days.
 // Every paid office consumer asks it before admitting work; it never reserves or calls a model.
 // Without a shared credit ledger there is nothing to pace and the previous limits apply.
-const sharedCredits=academy && process.env.OPENAI_SHARED_CREDIT_CONFIG && process.env.AGENT_COUNCIL_STORAGE==="postgres"
+// A configured ledger that cannot be read FAILS CLOSED: the gate refuses all paced work.
+const pacerRequired=!!process.env.OPENAI_SHARED_CREDIT_CONFIG;
+const sharedCredits=academy && pacerRequired && process.env.AGENT_COUNCIL_STORAGE==="postgres"
   ? await (await import("./shared-openai-credit-runtime")).loadSharedCreditRuntime(process.env,()=>new Date()).catch(()=>{console.error("Office credit pacer unavailable: shared credit ledger not readable.");return undefined;})
   : undefined;
-const pacerModule=sharedCredits?await import("./credit-pacer-runtime"):undefined;
+const pacerModule=await import("./credit-pacer-runtime");
 const {taskTypeOfExecution}=await import("./credit-pacer");
-const pacer=pacerModule && sharedCredits && academy?pacerModule.createCreditPacer({readSnapshot:()=>sharedCredits.ledger.paceSnapshot(),readHistory:pacerModule.councilPacerHistory(()=>academy!.load()),env:process.env}):undefined;
-const pacerSync=pacerModule && pacer && academy?pacerModule.createCreditPacerSync({council:academy,pacer}):undefined;
+const pacer=sharedCredits && academy?pacerModule.createCreditPacer({readSnapshot:()=>sharedCredits.ledger.paceSnapshot(),readHistory:pacerModule.councilPacerHistory(()=>academy!.load()),env:process.env}):undefined;
+const pacerSync=pacer && academy?pacerModule.createCreditPacerSync({council:academy,pacer}):undefined;
 // Measured cost samples (statistics only) from the result's usage, with the ledger's own pricing
 // and rounding. Kept here so the pinned credit adapters (office-execution / office-shared-credits) stay unchanged.
 const recordUsage=(executionId:string,result:unknown)=>{
@@ -63,17 +65,16 @@ const recordUsage=(executionId:string,result:unknown)=>{
     pacer.record({taskType:taskTypeOfExecution(executionId),microUsd:micro,outputTokens:usage.outputTokens as number,at:Date.now()});
   }catch{/* statistics only */}
 };
+const pacerGate=pacerModule.createPacerGate({pacer,required:pacerRequired});
+if(pacerGate.refusing)console.error("Office credit pacer unavailable with a configured ledger: paid office work and new self-heal orders are refused this run.");
 /** Fail closed: an unreadable pace admits no new paid work of that priority. */
-const paceAllows=async(priority:"standard"|"deferrable",taskType:import("./credit-pacer").PacerTaskType)=>{
-  if(!pacer)return true;
-  try{return (await pacer.allow(priority,taskType)).allowed;}catch{return false;}
-};
+const paceAllows=(priority:"standard"|"deferrable",taskType:import("./credit-pacer").PacerTaskType)=>pacerGate.allows(priority,taskType);
 const syncPacer=async()=>{if(pacerSync){try{await pacerSync();}catch{console.error("Office credit pacer sync unconfirmed; it will be retried on the next cycle.");}}};
 // Soft mode (read once per invocation; the cloud runs every 15 minutes) lowers the reviewer's output limit.
-const reviewerEnv=pacer?{...process.env,OFFICE_OPENAI_MAX_OUTPUT_TOKENS:String(await pacer.outputTokens(Number(process.env.OFFICE_OPENAI_MAX_OUTPUT_TOKENS||"2048")))}:process.env;
+const reviewerEnv=pacer?{...process.env,OFFICE_OPENAI_MAX_OUTPUT_TOKENS:String(await pacerGate.outputTokens(Number(process.env.OFFICE_OPENAI_MAX_OUTPUT_TOKENS||"2048")))}:process.env;
 const executionBase = reviewOnlyOwner && academy ? (await import("./office-execution")).createOfficeExecution(academy,reviewerEnv) : undefined;
 // Reviewer tasks are standard priority: claimed only while today's allowance has room.
-const execution = executionBase ? { ...executionBase, admission: { ...executionBase.admission, ready: async () => (await paceAllows("standard","office_review")) && executionBase.admission.ready() } } : undefined;
+const execution = executionBase ? { ...executionBase, admission: pacerGate.admission(executionBase.admission) } : undefined;
 const internalModule=internalEnabled ? await import("./office-internal-work"):undefined;
 const internal=internalModule && academy && protocolPool ? internalModule.createInternalWorkRunner({council:academy,owner:getSystemUserId(),read:role=>internalModule.readInternalWorkSnapshot(protocolPool,getSystemUserId(),role==="radio"),shouldStop}):undefined;
 const businessModule=internalEnabled ? await import("./office-business-work"):undefined;
@@ -91,8 +92,9 @@ if(selfHealConfig.enabled && !roleWorkEnabled)console.error("Office self-heal id
 // measured factory cost (one per finding, deduped; the factory's own daily draft PR cap still applies).
 const selfHealModule=await import("./office-self-heal");
 const selfHeal=selfHealConfig.enabled && roleWork && academy?selfHealModule.createSelfHealRunner({council:academy,owner:getSystemUserId(),
-  maxPerDay:pacer?selfHealConfig.maxPerDay:Math.min(selfHealConfig.maxPerDay,selfHealModule.SELF_HEAL_UNPACED_ORDERS_PER_DAY),
-  ...(pacer?{fundableOrders:()=>pacer.fundable("self_heal_order")}:{})}):undefined;
+  maxPerDay:pacerGate.governed?selfHealConfig.maxPerDay:Math.min(selfHealConfig.maxPerDay,selfHealModule.SELF_HEAL_UNPACED_ORDERS_PER_DAY),
+  maxOpenOrders:selfHealConfig.maxOpenOrders,
+  ...(pacerGate.governed?{fundableOrders:()=>pacerGate.fundable("self_heal_order")}:{})}):undefined;
 const roleExecution=roleAcademyEnabled && academy?(await import("./office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"1536"}):undefined;
 const roleAcademy=roleExecution && academy?(await import("./office-role-academy")).createRoleAcademyRunner({council:academy,dailyPairs:Number(process.env.OFFICE_ROLE_ACADEMY_DAILY_PAIRS),shouldStop,run:async(prompt,call)=>{
   const result=await roleExecution.run(prompt,call.executionId);recordUsage(call.executionId,result);
@@ -111,7 +113,7 @@ const blackroomAcademy=roleExecution && academy && process.env.OFFICE_BLACKROOM_
 const capabilityModule=capabilityEnabled?await import("./office-capability-training"):undefined;
 const capabilityCredits=capabilityModule?sharedCredits ?? await (await import("./shared-openai-credit-runtime")).loadSharedCreditRuntime(process.env,()=>new Date()):undefined;
 const capabilityExecution=capabilityCredits && academy?(await import("./office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"768"},Date.now,{sharedCredits:capabilityCredits}):undefined;
-const capabilityTrainer=capabilityModule && capabilityCredits && capabilityExecution && academy?capabilityModule.createCapabilityTrainer({owner:getSystemUserId(),maxCallsPerDay:Number(process.env.OFFICE_CAPABILITY_MAX_CALLS_PER_DAY),shouldStop,
+const capabilityTrainer=capabilityModule && capabilityCredits && capabilityExecution && academy?capabilityModule.createCapabilityTrainer({owner:getSystemUserId(),maxCallsPerDay:Number(process.env.OFFICE_CAPABILITY_MAX_CALLS_PER_DAY),shouldStop,model:process.env.OFFICE_OPENAI_MODEL||undefined,
  loadWork:async()=>{const state=await academy!.load();return (await import("./office-role-work")).parseRoleWork(state.officeExecution?.roleWork,getSystemUserId());},
  transact:async change=>{const saved=await academy!.updateOfficeExecution((state,company)=>{
   const current=capabilityModule.parseCapabilityTraining(state.capabilityTraining,getSystemUserId());
