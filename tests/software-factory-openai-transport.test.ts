@@ -25,3 +25,24 @@ test('aborted or missing-parent calls make zero requests; dispatched error holds
  await assert.rejects(withFactoryApiParent(job,()=>request('https://api.openai.com/v1/responses',{method:'POST',body:body(),signal:new AbortController().signal})),/^Error: FACTORY_API_EXECUTION_UNCONFIRMED$/);assert.equal(calls,1);
  await assert.rejects(withFactoryApiParent(job,()=>request('https://api.openai.com/v1/responses',{method:'POST',body:body(),signal:new AbortController().signal})),/UNKNOWN_HOLD/);assert.equal(calls,1);
 });
+test('Factory OpenAI path end to end: unbilled count transport + gated priced create with the provider\'s exact bodies',async()=>{
+ const {createFactoryOpenAiCountTransport,routeFactoryOpenAiRequests}=await import('../server/software-factory-openai-count');
+ const {createOpenAiFactoryTextProvider}=await import('../server/software-factory-openai');
+ const job=parent(),key='sk-proj-'+'c'.repeat(50),calls:{url:string;init:RequestInit}[]=[];
+ const raw=(async(url:string,init:RequestInit)=>{calls.push({url:String(url),init});return String(url).endsWith('/input_tokens')?Response.json({object:'response.input_tokens',input_tokens:10}):Response.json({...output(),model:'synthetic-model-2026-01-01',object:'response',output:[{type:'message',role:'assistant',status:'completed',content:[{type:'output_text',text:'ok'}]}],usage:{input_tokens:10,output_tokens:5,total_tokens:15,input_tokens_details:{cached_tokens:0}}});}) as typeof fetch;
+ // The price must name the provider model for the gate.
+ const gatedPrice={...price,model:'synthetic-model-2026-01-01'};
+ const request2=routeFactoryOpenAiRequests(createFactoryOpenAiTransport(key,raw,{price:gatedPrice,invoke:fixtureFactoryInvocation(undefined,job)}),createFactoryOpenAiCountTransport(key,raw));
+ const generate2=createOpenAiFactoryTextProvider({request:request2,model:'synthetic-model-2026-01-01',inputNanoUsdPerToken:400,outputNanoUsdPerToken:1600,pricingValidUntil:'2027-01-01T00:00:00.000Z',now:()=>new Date('2026-11-18T12:00:00.000Z'),maxInputTokens:1000});
+ const result=await withFactoryApiParent(job,()=>generate2({instructions:'x',text:'synthetic requirements',maxOutputTokens:32,maxCostCents:5,signal:new AbortController().signal}));
+ assert.equal(result.status,'completed');
+ assert.equal(calls.length,2);assert.ok(calls[0].url.endsWith('/input_tokens'));assert.equal(new Headers(calls[0].init.headers).get('Authorization'),`Bearer ${key}`);assert.equal(calls[0].init.redirect,'error');
+ // Count transport: parent-bound, prompt fields only.
+ const count=createFactoryOpenAiCountTransport(key,raw),signal=new AbortController().signal,ok=JSON.stringify({model:'m',instructions:'x',input:'y'});
+ await assert.rejects(count('https://api.openai.com/v1/responses/input_tokens',{method:'POST',body:ok,signal}),/PARENT_CONTEXT_UNAVAILABLE/);
+ for(const extra of [{max_output_tokens:32},{stream:true},{store:false},{tools:[]},{background:false},{previous_response_id:'r'},{input:[{type:'input_file',file_url:'https://x.example/a.pdf'}]},{input:[{role:'user',content:'y'}]},{instructions:['x']},{instructions:{text:'x'}}])
+  await assert.rejects(withFactoryApiParent(job,()=>count('https://api.openai.com/v1/responses/input_tokens',{method:'POST',body:JSON.stringify({...JSON.parse(ok),...extra}),signal})),/COUNT_SCOPE_INVALID/);
+ await assert.rejects(withFactoryApiParent(job,()=>count('https://api.openai.com/v1/responses',{method:'POST',body:ok,signal})),/COUNT_SCOPE_INVALID/);
+ assert.equal(calls.length,2);
+ assert.throws(()=>createFactoryOpenAiCountTransport('bad'),/CREDENTIAL_REQUIRED/);
+});
