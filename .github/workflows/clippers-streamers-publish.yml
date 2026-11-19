@@ -1,0 +1,135 @@
+name: Clippers streamers publish (cloud)
+
+# Cloud download -> render -> Metricool for the streamer clip pages ($0 AI, no Mac).
+# Reads approved rows from pending_actions (via the discovery state), re-checks the clip policy at publish
+# time, downloads only the needed section (yt-dlp --impersonate chrome for YouTube), renders a <= 60 s
+# vertical edit with ffmpeg + the bundled font, stages it as a temporary release asset on this repo (deleted
+# after Metricool copies it) and schedules it through the existing Metricool adapter
+# (script/clippers-portfolio-metricool.mjs). See docs/clippers-streamer-pages.md.
+#
+# Off by default. Enable: repository variable CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED = 'true'.
+# Kill switch: repository variable CLIPPERS_STREAMER_CLOUD_KILL_SWITCH = 'true' (also checked in the script).
+# Cadence: after each "Office worker (cloud)" run, gated to minute < 15 between 09:00 and 19:59 New York time;
+# the script also skips when its last run is < CLIPPERS_STREAMER_CLOUD_MIN_INTERVAL_MINUTES (default 180) old.
+# At most CLIPPERS_STREAMER_CLOUD_CLIPS_PER_RUN (default 2) clips per run, 5 posts per destination per day,
+# slots 11:00-21:00 America/New_York. Explicit dispatches bypass the clock gate and the interval.
+
+on:
+  workflow_run:
+    workflows: ["Office worker (cloud)"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Render only (no upload, no Metricool); rendered clips are kept as a 1-day artifact"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  CLIPPERS_DRY_RUN_REQUESTED: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && 'true' || vars.CLIPPERS_STREAMER_CLOUD_DRY_RUN || 'false' }}
+
+concurrency:
+  group: clippers-streamers-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.repository == 'robertmanzanillag-jpg/blackops-reminder' &&
+      vars.CLIPPERS_STREAMERS_CLOUD_ENABLED != 'false' &&
+      vars.CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED == 'true' &&
+      vars.CLIPPERS_STREAMER_CLOUD_KILL_SWITCH != 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write # temporary media release assets only (GITHUB_TOKEN, no extra secret)
+    steps:
+      - name: Clock gate (New York 09:00-19:59, minute < 15, unless dispatched)
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          hour=$((10#$(TZ=America/New_York date +%H)))
+          minute=$((10#$(date -u +%M)))
+          if [ "$EVENT" = "workflow_dispatch" ] || { [ "$hour" -ge 9 ] && [ "$hour" -le 19 ] && [ "$minute" -lt 15 ]; }; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Outside the publish window (NY hour $hour, minute $minute); skipping."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          ref: ${{ vars.OFFICE_SOURCE_REF || 'main' }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.gate.outputs.run == 'true'
+        env:
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Install ffmpeg and yt-dlp helpers
+        if: steps.gate.outputs.run == 'true'
+        env:
+          YTDLP_FROM_PIP: ${{ vars.CLIPPERS_YTDLP_FROM_PIP || 'false' }}
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq --no-install-recommends ffmpeg > /dev/null
+          python3 -m pip install --quiet --disable-pip-version-check --target "$RUNNER_TEMP/curl-cffi" curl-cffi
+          echo "CLIPPERS_CURL_CFFI_DIR=$RUNNER_TEMP/curl-cffi" >> "$GITHUB_ENV"
+          if [ "$YTDLP_FROM_PIP" = "true" ]; then
+            python3 -m pip install --quiet --disable-pip-version-check --target "$RUNNER_TEMP/yt-dlp" "yt-dlp[default]"
+            printf '#!/bin/sh\nPYTHONPATH="%s:%s" exec python3 -m yt_dlp "$@"\n' "$RUNNER_TEMP/yt-dlp" "$RUNNER_TEMP/curl-cffi" > "$RUNNER_TEMP/yt-dlp-bin"
+            chmod +x "$RUNNER_TEMP/yt-dlp-bin"
+            echo "CLIPPERS_YTDLP_BIN=$RUNNER_TEMP/yt-dlp-bin" >> "$GITHUB_ENV"
+          fi
+          ffmpeg -hide_banner -filters 2>/dev/null | grep -q drawtext
+
+      - name: Download, render, publish approved clips
+        if: steps.gate.outputs.run == 'true'
+        env:
+          NODE_ENV: production
+          DATABASE_URL: ${{ secrets.OFFICE_DATABASE_URL }}
+          DEFAULT_USER_ID: ${{ secrets.OFFICE_OWNER_ID }}
+          METRICOOL_USER_TOKEN: ${{ secrets.METRICOOL_USER_TOKEN }}
+          METRICOOL_USER_ID: ${{ secrets.METRICOOL_USER_ID }}
+          TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          GITHUB_TOKEN: ${{ github.token }}
+          CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: ${{ vars.CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED }}
+          CLIPPERS_STREAMER_CLOUD_KILL_SWITCH: ${{ vars.CLIPPERS_STREAMER_CLOUD_KILL_SWITCH || 'false' }}
+          CLIPPERS_STREAMER_CLOUD_DRY_RUN: ${{ env.CLIPPERS_DRY_RUN_REQUESTED }}
+          CLIPPERS_STREAMER_CLOUD_CLIPS_PER_RUN: ${{ vars.CLIPPERS_STREAMER_CLOUD_CLIPS_PER_RUN }}
+          CLIPPERS_STREAMER_CLOUD_DAILY_PER_DESTINATION: ${{ vars.CLIPPERS_STREAMER_CLOUD_DAILY_PER_DESTINATION }}
+          CLIPPERS_STREAMER_CLOUD_SLOTS: ${{ vars.CLIPPERS_STREAMER_CLOUD_SLOTS }}
+          CLIPPERS_STREAMER_CLOUD_DESTINATIONS: ${{ vars.CLIPPERS_STREAMER_CLOUD_DESTINATIONS }}
+          CLIPPERS_STREAMER_CLOUD_MIN_INTERVAL_MINUTES: ${{ vars.CLIPPERS_STREAMER_CLOUD_MIN_INTERVAL_MINUTES || '180' }}
+          CLIPPERS_STREAMER_CLIP_SECONDS: ${{ vars.CLIPPERS_STREAMER_CLIP_SECONDS }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            node --import tsx script/clippers-streamer-cloud-worker.mjs --dry-run-output "$RUNNER_TEMP/clippers-dry-run"
+          else
+            node --import tsx script/clippers-streamer-cloud-worker.mjs --respect-interval --dry-run-output "$RUNNER_TEMP/clippers-dry-run"
+          fi
+
+      - name: Keep dry-run renders for review (1 day)
+        if: steps.gate.outputs.run == 'true' && env.CLIPPERS_DRY_RUN_REQUESTED == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: clippers-dry-run-renders
+          path: ${{ runner.temp }}/clippers-dry-run/*.mp4
+          retention-days: 1
+          if-no-files-found: ignore

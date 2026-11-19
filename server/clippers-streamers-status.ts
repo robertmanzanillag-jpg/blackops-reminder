@@ -41,7 +41,19 @@ export function streamerStatusView(raw: string | null, at = Date.now()) {
     liveSignals: s.signals.slice(0, 10).map((x: any) => ({ handle: x.handle, platform: x.platform, title: x.title, views: x.views, sourceUrl: x.sourceUrl })),
     takedowns: s.takedowns.map((t: any) => ({ ...t, overdue: !t.removedAt && Date.parse(t.removeBy) < at })),
     macQueue: localWorkQueue(s).length,
+    cloudPublish: cloudPublishSummary((s as any).cloudPublish),
     safety: { publishesHere: false, requiresOwnerApproval: true, creditRequired: true, maxClipSeconds: 60, takedownSlaHours: 24 },
+  };
+}
+
+/** Cloud publisher (GitHub Actions) ledger: last run, recent posts (to remove on a takedown) and learning. */
+export function cloudPublishSummary(c: any) {
+  if (!c || c.version !== 1 || !Array.isArray(c.posts)) return null;
+  return {
+    lastRun: c.lastRun ? { at: c.lastRun.at, status: c.lastRun.status, counts: c.lastRun.counts, heldReasons: c.lastRun.heldReasons, errors: c.lastRun.errors } : null,
+    posts: c.posts.slice(-30).reverse().map((p: any) => ({ id: p.id, candidateId: p.candidateId, creatorKey: p.creatorKey, destination: p.destinationKey, scheduledAt: p.scheduledAt,
+      status: p.status, metricoolId: p.metricoolId ?? null, hookVariant: p.hookVariant, views: p.observation?.views ?? null })),
+    learning: c.learning ? { evaluatedAt: c.learning.evaluatedAt, samples: c.learning.samples, hookPreference: c.learning.hookPreference, creatorBoost: c.learning.creatorBoost } : null,
   };
 }
 

@@ -114,3 +114,13 @@ test('default takedown rejection reuses one module-level pool (no pool per taked
   assert.match(fn, /rejectPool \?\?=/);
   assert.equal((fn.match(/createCouncilPool\(\)/g) ?? []).length, 1);
 });
+
+test('status view lists cloud-published posts (for takedown removal) and the learning summary', () => {
+  const view: any = streamerStatusView(stateWith(null, { cloudPublish: { version: 1, clips: {}, lastRun: { at: '2026-11-19T14:00:00.000Z', status: 'completed', counts: { scheduled: 4 }, heldReasons: [], errors: [] },
+    posts: [{ id: 'stc-1', candidateId: 'twitch-clip:a', creatorKey: 'twitch:100', destinationKey: '6431685:tiktok:streamersclips', scheduledAt: '2026-11-19T16:00:00.000Z', status: 'scheduled', metricoolId: 'mc-1', hookVariant: 'title', caption: 'secret-free', observation: { views: 10 } }],
+    learning: { evaluatedAt: '2026-11-19T14:00:00.000Z', samples: 1, hookPreference: {}, creatorBoost: {}, experiments: [] } } }), AT);
+  assert.equal(view.cloudPublish.lastRun.counts.scheduled, 4);
+  assert.deepEqual(view.cloudPublish.posts[0], { id: 'stc-1', candidateId: 'twitch-clip:a', creatorKey: 'twitch:100', destination: '6431685:tiktok:streamersclips', scheduledAt: '2026-11-19T16:00:00.000Z', status: 'scheduled', metricoolId: 'mc-1', hookVariant: 'title', views: 10 });
+  assert.equal(view.cloudPublish.learning.samples, 1);
+  assert.equal(streamerStatusView(stateWith(null), AT).cloudPublish, null);
+});
