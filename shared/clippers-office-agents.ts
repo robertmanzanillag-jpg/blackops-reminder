@@ -6,7 +6,7 @@ export const CLIPPERS_AGENTS = [
   { id: "clippers-supervisor", stage: "supervisor", name: "Supervisor", role: "Coordina cuentas, turnos y bloqueos" },
   { id: "clippers-analytics", stage: "analytics", name: "Analytics", role: "Compara métricas reales por destino" },
   { id: "clippers-trends", stage: "trends", name: "Tendencias", role: "Detecta novedades y conserva su procedencia" },
-  { id: "clippers-streamers", stage: "streamers", name: "Streamers", role: "Descubre varias fuentes; verifica derechos por separado" },
+  { id: "clippers-streamers", stage: "streamers", name: "Streamers", role: "Descubre streamers en Twitch/YouTube; recorta salvo prohibición explícita, con crédito" },
   { id: "clippers-editor", stage: "editor", name: "Editor", role: "Prepara y renderiza material aprobado" },
   { id: "clippers-checker", stage: "checker", name: "Revisor", role: "Comprueba calidad, derechos y destino exacto" },
   { id: "clippers-publisher", stage: "publisher", name: "Publicador", role: "Publica con permiso vigente y recibo verificable" },
