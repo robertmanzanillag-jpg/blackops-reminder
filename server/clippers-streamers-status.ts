@@ -4,7 +4,7 @@ import { parseClippersOrchestraStatus, type ClippersOrchestraStatus } from '../s
 import { LEGACY_DISCOVERY_CREATORS as LEGACY_SOURCES } from '../shared/clippers-priority-creators.mjs';
 import type { SelfHealObservedAudit } from './office-self-heal';
 import { parseTakedown } from '../shared/clippers-streamer-policy.mjs';
-import { STREAMER_STATE_NAMESPACE, parseStreamerState, localWorkQueue } from '../script/clippers-streamer-discovery.mjs';
+import { STREAMER_STATE_NAMESPACE, parseStreamerState, parseStreamerStateStrict, localWorkQueue, createPendingActionsQueue } from '../script/clippers-streamer-discovery.mjs';
 import { getCurrentUserId, getSystemUserId } from './user-context';
 
 /** Store shape shared with the orchestra state (agent_council_state via the council store). */
@@ -45,33 +45,78 @@ export function streamerStatusView(raw: string | null, at = Date.now()) {
   };
 }
 
-export function registerClippersStreamerRoutes(app: Pick<Express, 'get' | 'post'>, options: { isOwner?: (req: Request) => boolean; store?: () => Promise<Store>; owner?: () => string; now?: () => number } = {}) {
+type RejectPending = (owner: string, candidateIds: string[], reason: string) => Promise<number>;
+async function defaultRejectPending(owner: string, candidateIds: string[], reason: string) {
+  const pool = await (await import('./agent-council-store')).createCouncilPool();
+  const query = async (sql: string, values?: unknown[]) => { const c = await pool.connect(); try { return await c.query(sql, values) as { rows: any[] }; } finally { c.release(); } };
+  return createPendingActionsQueue(query).rejectCandidates(owner, candidateIds, reason);
+}
+
+export function registerClippersStreamerRoutes(app: Pick<Express, 'get' | 'post'>, options: { isOwner?: (req: Request) => boolean; store?: () => Promise<Store>; owner?: () => string; now?: () => number; rejectPending?: RejectPending } = {}) {
   const isOwner = options.isOwner ?? ((req: Request) => getCurrentUserId(req) === getSystemUserId());
   const store = options.store ?? (async () => (await import('./agent-council-store')).getCouncilStore());
   const owner = options.owner ?? getSystemUserId;
   const now = options.now ?? Date.now;
+  const rejectPending = options.rejectPending ?? defaultRejectPending;
   const guard = (req: Request, res: any) => { res.set('Cache-Control', 'private, no-store, max-age=0'); try { if (!isOwner(req)) { res.status(403).json({ error: 'CLIPPERS_OWNER_REQUIRED' }); return false; } } catch { res.status(401).json({ error: 'CLIPPERS_AUTH_REQUIRED' }); return false; } return true; };
+  /** Runs `change` on a valid v1 state; an existing but invalid state is never overwritten. */
+  const update = async <T>(change: (s: any) => T): Promise<T> => {
+    let out!: T;
+    await (await store()).transact(STREAMER_STATE_NAMESPACE(owner()), async raw => {
+      const s = parseStreamerStateStrict(raw);
+      if (!s) throw new Error('CLIPPERS_STREAMERS_STATE_INVALID');
+      out = change(s);
+      return JSON.stringify(s);
+    });
+    return out;
+  };
   app.get('/api/clippers/streamers/status', async (req, res) => {
     if (!guard(req, res)) return;
-    try { res.json(streamerStatusView(await (await store()).read(STREAMER_STATE_NAMESPACE(owner())), now())); }
-    catch { res.status(503).json({ error: 'CLIPPERS_STREAMERS_UNAVAILABLE' }); }
+    try {
+      const raw = await (await store()).read(STREAMER_STATE_NAMESPACE(owner()));
+      if (!parseStreamerStateStrict(raw)) return res.status(503).json({ error: 'CLIPPERS_STREAMERS_STATE_INVALID' });
+      res.json(streamerStatusView(raw, now()));
+    } catch { res.status(503).json({ error: 'CLIPPERS_STREAMERS_UNAVAILABLE' }); }
   });
-  // Takedown: blocks a creator or clip forever; the owner removes any live post within 24h (Metricool UI).
+  // Takedown: blocks a creator or clip forever, rejects its open approval rows; the owner removes any live
+  // post within 24h (Metricool UI) and then marks it removed below.
   app.post('/api/clippers/streamers/takedown', async (req, res) => {
     if (!guard(req, res)) return;
     const at = now();
-    const entry = parseTakedown({ ...(req.body ?? {}), receivedAt: req.body?.receivedAt ?? new Date(at).toISOString(), removedAt: req.body?.removedAt ?? null }, at);
+    const body = req.body ?? {};
+    const id = createHash('sha256').update(JSON.stringify([body.creatorKey ?? null, body.creatorGroupId ?? null, body.candidateId ?? null, at])).digest('hex').slice(0, 16);
+    const entry = parseTakedown({ id, creatorKey: body.creatorKey ?? null, creatorGroupId: body.creatorGroupId ?? null, candidateId: body.candidateId ?? null, reason: body.reason,
+      receivedAt: new Date(at).toISOString(), removedAt: null }, at);
     if (!entry) return res.status(400).json({ error: 'CLIPPERS_TAKEDOWN_INVALID' });
+    let affected: string[];
     try {
-      await (await store()).transact(STREAMER_STATE_NAMESPACE(owner()), async raw => {
-        const s = parseStreamerState(raw);
+      affected = await update(s => {
         s.takedowns = [...s.takedowns, entry].slice(-500);
+        const hit: string[] = [];
         for (const c of s.candidates) if ((entry.candidateId && c.id === entry.candidateId) || (entry.creatorKey && c.creatorKey === entry.creatorKey) ||
-          (entry.creatorGroupId && s.creators[c.creatorKey]?.creatorGroupId === entry.creatorGroupId)) c.clipPolicy = { status: 'prohibited', source: 'takedown', evidence: { reason: entry.reason, receivedAt: entry.receivedAt }, checkedAt: entry.receivedAt };
-        return JSON.stringify(s);
+          (entry.creatorGroupId && s.creators[c.creatorKey]?.creatorGroupId === entry.creatorGroupId)) {
+          c.clipPolicy = { status: 'prohibited', source: 'takedown', evidence: { reason: entry.reason, receivedAt: entry.receivedAt }, checkedAt: entry.receivedAt };
+          if (c.approval && c.approval.status !== 'not_requested') c.approval.status = 'rejected';
+          hit.push(c.id);
+        }
+        if (entry.candidateId && !hit.includes(entry.candidateId)) hit.push(entry.candidateId);
+        return hit;
       });
-      res.json({ recorded: true, removeBy: entry.removeBy });
-    } catch { res.status(503).json({ error: 'CLIPPERS_STREAMERS_UNAVAILABLE' }); }
+    } catch { return res.status(503).json({ error: 'CLIPPERS_STREAMERS_UNAVAILABLE' }); }
+    let rejectedApprovals: number | null = null;
+    try { rejectedApprovals = await rejectPending(owner(), affected, 'takedown'); } catch { /* the block already holds: Mac queue and approval sync skip prohibited clips */ }
+    res.json({ recorded: true, id: entry.id, removeBy: entry.removeBy, rejectedApprovals });
+  });
+  // Owner confirms the live post was removed: clears takedown_overdue. The block itself stays forever.
+  app.post('/api/clippers/streamers/takedown/removed', async (req, res) => {
+    if (!guard(req, res)) return;
+    const id = req.body?.id;
+    if (typeof id !== 'string' || !/^[a-f0-9]{16}$/.test(id)) return res.status(400).json({ error: 'CLIPPERS_TAKEDOWN_ID_INVALID' });
+    const at = new Date(now()).toISOString();
+    try {
+      const found = await update(s => { const t = s.takedowns.find((x: any) => x.id === id); if (t && !t.removedAt) t.removedAt = at; return !!t; });
+      return found ? res.json({ removedAt: at }) : res.status(404).json({ error: 'CLIPPERS_TAKEDOWN_NOT_FOUND' });
+    } catch { return res.status(503).json({ error: 'CLIPPERS_STREAMERS_UNAVAILABLE' }); }
   });
 }
 
@@ -121,7 +166,7 @@ export function streamerSelfHealAudits(raw: string | null): SelfHealObservedAudi
   const run = parseStreamerState(raw).lastRun, streak = Number(parseStreamerState(raw).failureStreak ?? 0);
   if (!run || !Number.isFinite(Date.parse(run.at))) return [];
   const findings: SelfHealObservedAudit['findings'] = [];
-  if (run.status === 'skipped_missing_secrets' || (run.heldReasons ?? []).some((r: string) => r.startsWith('missing_secret:'))) findings.push({ code: 'CAPABILITY_UNAVAILABLE', recordId: null });
+  if (run.status === 'skipped_missing_secrets' || (run.heldReasons ?? []).some((r: string) => r.startsWith('missing_secret:') || r.startsWith('credential_invalid:'))) findings.push({ code: 'CAPABILITY_UNAVAILABLE', recordId: null });
   if (streak >= STREAMER_FAILURE_STREAK_THRESHOLD) findings.push({ code: 'STREAMER_DISCOVERY_FAILING', recordId: STREAMER_SELF_HEAL_RECORD });
   return [{ role: 'clippers-streamers', jobId: `clippers-streamers:${run.at}`, completedAt: run.at, status: 'completed', completeCoverage: true,
     artifactId: createHash('sha256').update(JSON.stringify(run)).digest('hex').slice(0, 64), findings,

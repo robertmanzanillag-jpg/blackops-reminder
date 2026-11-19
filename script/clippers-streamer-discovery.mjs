@@ -196,6 +196,12 @@ function downloadPlan(candidate) {
 export function emptyStreamerState() {
   return { version: 1, updatedAt: null, lastRun: null, creators: {}, takedowns: [], candidates: [], signals: [] };
 }
+/** null when a stored state exists but is not a valid v1 state (callers must not overwrite it). */
+export function parseStreamerStateStrict(raw) {
+  if (!raw) return emptyStreamerState();
+  try { const s = JSON.parse(raw); return s?.version === 1 && Array.isArray(s.candidates) && Array.isArray(s.takedowns ?? []) && s.creators && typeof s.creators === 'object' ? { ...emptyStreamerState(), ...s } : null; }
+  catch { return null; }
+}
 export function parseStreamerState(raw) {
   if (!raw) return emptyStreamerState();
   try { const s = JSON.parse(raw); return s?.version === 1 && Array.isArray(s.candidates) ? { ...emptyStreamerState(), ...s } : emptyStreamerState(); }
@@ -238,11 +244,17 @@ export function applyDiscovery(state, { now, twitch, youtube, config }) {
   return next;
 }
 
+/** True only when the creator's own channel description was actually checked this lane. */
+export function creatorPolicyChecked(state, candidate) {
+  const creator = state.creators?.[candidate.creatorKey];
+  return !!creator && !!creator.policy && creator.policy.source !== 'not_checked';
+}
+
 /** Candidates eligible for an owner approval row now. */
 export function selectForApproval(state, config) {
   const open = state.candidates.filter(c => ['pending', 'approved'].includes(c.approval?.status)).length;
   const room = Math.max(0, Math.min(config.maxApprovalsPerRun, config.maxOpenApprovals - open));
-  return state.candidates.filter(c => c.approval?.status === 'not_requested' && c.clipPolicy?.status === 'allowed_unless_prohibited' &&
+  return state.candidates.filter(c => c.approval?.status === 'not_requested' && c.clipPolicy?.status === 'allowed_unless_prohibited' && creatorPolicyChecked(state, c) &&
     !takedownBlocks(state.takedowns, { creatorKey: c.creatorKey, creatorGroupId: state.creators[c.creatorKey]?.creatorGroupId, candidateId: c.id }) &&
     (c.platform === 'twitch' ? clipLengthAllowed(c.durationSec) : true)).slice(0, room);
 }
@@ -263,11 +275,25 @@ export function approvalRow(candidate, owner, config) {
 export function createPendingActionsQueue(query) {
   return {
     async insert(row) {
-      const result = await query(`INSERT INTO pending_actions (user_id, created_by_actor_type, created_by_actor_id, origin, action_type, resource_type, resource_id, title, description, risk_level, permission_level_required, status, input, approved_by, approved_at, approval_reason)
-        VALUES ($1,'scheduler','clippers-streamers','scheduler',$2,$3,$4,$5,$6,$7,'execute_after_approval',$8,$9::jsonb,$10,$11,$12) RETURNING id`,
+      // Idempotent: a live row (any status but rejected/failed) for the same owner/action/candidate is reused.
+      const result = await query(`WITH existing AS (
+          SELECT id FROM pending_actions WHERE user_id=$1 AND action_type=$2 AND resource_id=$4 AND status NOT IN ('rejected','failed') ORDER BY created_at LIMIT 1
+        ), inserted AS (
+          INSERT INTO pending_actions (user_id, created_by_actor_type, created_by_actor_id, origin, action_type, resource_type, resource_id, title, description, risk_level, permission_level_required, status, input, approved_by, approved_at, approval_reason)
+          SELECT $1,'scheduler','clippers-streamers','scheduler',$2,$3,$4,$5,$6,$7,'execute_after_approval',$8,$9::jsonb,$10,$11,$12
+          WHERE NOT EXISTS (SELECT 1 FROM existing) RETURNING id
+        ) SELECT id FROM inserted UNION ALL SELECT id FROM existing LIMIT 1`,
         [row.userId, row.actionType, row.resourceType, row.resourceId, row.title, row.description, row.riskLevel, row.status, JSON.stringify(row.input),
           row.status === 'approved' ? 'clippers-auto-publish-flag' : null, row.status === 'approved' ? new Date() : null, row.status === 'approved' ? 'CLIPPERS_STREAMER_AUTO_PUBLISH=true' : null]);
+      if (!result.rows[0]) throw new Error('PENDING_ACTION_INSERT_FAILED');
       return String(result.rows[0].id);
+    },
+    /** Takedown: reject every still-open approval row for these candidates. */
+    async rejectCandidates(owner, candidateIds, reason) {
+      if (!candidateIds.length) return 0;
+      const result = await query(`UPDATE pending_actions SET status='rejected', rejection_reason=$4, updated_at=CURRENT_TIMESTAMP
+        WHERE user_id=$1 AND action_type=$2 AND resource_id = ANY($3::text[]) AND status IN ('pending','edited','snoozed','approved') RETURNING id`, [owner, STREAMER_APPROVAL_ACTION, candidateIds, reason]);
+      return result.rows.length;
     },
     async statuses(owner, ids) {
       if (!ids.length) return new Map();
@@ -278,21 +304,32 @@ export function createPendingActionsQueue(query) {
 }
 
 // ---------- One run ----------
-export async function runStreamerDiscovery({ env = process.env, now = Date.now(), fetch: fetchImpl = globalThis.fetch, store, queue, owner }) {
+export async function runStreamerDiscovery({ env = process.env, now = Date.now(), fetch: fetchImpl = globalThis.fetch, store, queue, owner, minIntervalMs = 0 }) {
   const config = streamerConfig(env);
   const heldReasons = [...config.missing.map(n => `missing_secret:${n}`), ...config.city.heldReasons];
   const catalogue = new Map(ALL_DISCOVERY_CREATORS.map(c => [c.id, c]));
   const report = { at: iso(now), status: 'completed', heldReasons, errors: [], counts: {}, twitchRequests: 0, youtubeUnits: 0, paidSpendUsd: 0, published: 0 };
   if (!config.twitch && !config.youtube) { report.status = 'skipped_missing_secrets'; }
+  // Hourly cadence even when several triggers fire: skip (without writing) if the last run is recent.
+  if (minIntervalMs > 0) {
+    const last = parseStreamerState(await store.read(STREAMER_STATE_NAMESPACE(owner))).lastRun;
+    if (last && now - Date.parse(last.at) >= 0 && now - Date.parse(last.at) < minIntervalMs) return { report: { ...last, status: 'skipped_recent_run', skippedAt: iso(now) }, state: null, skipped: true };
+  }
+  // Rejected keys (401/403) are an owner action, like missing keys: held reason, never a code failure.
+  let credentialFailures = 0;
+  const failure = (e, platform) => {
+    if ([401, 403].includes(e?.status)) { heldReasons.push(`credential_invalid:${platform}`); credentialFailures++; return; }
+    report.errors.push(String(e?.message ?? `${platform}_FAILED`).slice(0, 60));
+  };
   let twitch = null, youtube = null;
   if (config.twitch) {
     const client = createTwitchClient({ fetch: fetchImpl, clientId: env.TWITCH_CLIENT_ID, clientSecret: env.TWITCH_CLIENT_SECRET });
-    try { twitch = await discoverTwitch(client, now, catalogue); } catch (e) { report.errors.push(String(e?.message ?? 'TWITCH_FAILED').slice(0, 60)); }
+    try { twitch = await discoverTwitch(client, now, catalogue); } catch (e) { failure(e, 'TWITCH'); }
     report.twitchRequests = client.requests;
   }
   if (config.youtube) {
     const client = createYoutubeClient({ fetch: fetchImpl, apiKey: env.YOUTUBE_API_KEY, unitBudget: config.youtubeUnitBudget });
-    try { youtube = await discoverYoutube(client, now, config.youtubeRegions); heldReasons.push(...youtube.heldReasons); } catch (e) { report.errors.push(String(e?.message ?? 'YOUTUBE_FAILED').slice(0, 60)); }
+    try { youtube = await discoverYoutube(client, now, config.youtubeRegions); heldReasons.push(...youtube.heldReasons); } catch (e) { failure(e, 'YOUTUBE'); }
     report.youtubeUnits = client.units;
   }
   if (config.twitchCloudDownload && twitch) {
@@ -302,9 +339,11 @@ export async function runStreamerDiscovery({ env = process.env, now = Date.now()
     }
   }
   if (report.errors.length) report.status = twitch || youtube ? 'partial' : 'failed';
+  else if (credentialFailures) report.status = twitch || youtube ? 'partial' : 'held_credentials';
   let queued = 0;
   const saved = await store.transact(STREAMER_STATE_NAMESPACE(owner), async raw => {
-    let state = parseStreamerState(raw);
+    let state = parseStreamerStateStrict(raw);
+    if (!state) throw new Error('STREAMER_STATE_INVALID');
     if (twitch || youtube) state = applyDiscovery(state, { now, twitch, youtube, config });
     // Sync owner decisions from the approval queue.
     const ids = state.candidates.map(c => c.approval?.pendingActionId).filter(Boolean);
@@ -337,7 +376,7 @@ export async function runStreamerDiscovery({ env = process.env, now = Date.now()
 
 /** Mac worker input: approved candidates that still need yt-dlp download + render. */
 export function localWorkQueue(state) {
-  return state.candidates.filter(c => c.approval?.status === 'approved' && c.download?.mode === 'needs_local_download' && c.clipPolicy?.status === 'allowed_unless_prohibited' &&
+  return state.candidates.filter(c => c.approval?.status === 'approved' && c.download?.mode === 'needs_local_download' && c.clipPolicy?.status === 'allowed_unless_prohibited' && creatorPolicyChecked(state, c) &&
     !takedownBlocks(state.takedowns, { creatorKey: c.creatorKey, creatorGroupId: state.creators?.[c.creatorKey]?.creatorGroupId, candidateId: c.id }))
     .map(c => ({ candidateId: c.id, platform: c.platform, sourceUrl: c.sourceUrl, handle: c.handle, caption: c.caption, maxSeconds: 60, needsCutSelection: !!c.download.needsCutSelection, pendingActionId: c.approval.pendingActionId }));
 }
@@ -361,7 +400,9 @@ async function main() {
     console.log(JSON.stringify({ version: 1, items: localWorkQueue(parseStreamerState(await store.read(STREAMER_STATE_NAMESPACE(owner)))) }));
     return;
   }
-  const { report } = await runStreamerDiscovery({ env: process.env, store, queue: createPendingActionsQueue(query), owner });
+  const minIntervalMs = args.includes('--respect-interval') ? int(process.env.CLIPPERS_STREAMERS_MIN_INTERVAL_MINUTES, 45, 1, 720) * 60_000 : 0;
+  const { report, skipped } = await runStreamerDiscovery({ env: process.env, store, queue: createPendingActionsQueue(query), owner, minIntervalMs });
+  if (skipped) { console.log(`::notice::Streamer discovery skipped: last run at ${report.at} is within the minimum interval.`); return; }
   // Static summary only: counts, codes. No URLs with keys, no tokens.
   console.log(JSON.stringify({ status: report.status, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, twitchRequests: report.twitchRequests, youtubeUnits: report.youtubeUnits }));
   if (report.status === 'failed') process.exitCode = 1;

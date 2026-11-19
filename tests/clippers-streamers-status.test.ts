@@ -23,22 +23,39 @@ test('office Streamers role shows the cloud job state and missing-secret reason'
   applyStreamerOverlay(none, null, AT); assert.equal(none.roles[0].state, 'idle');
 });
 
-test('owner-only status and takedown routes; takedown blocks the creator and sets a 24h SLA', async () => {
+test('owner-only status, takedown (rejects open approvals) and removal confirmation; invalid state is 503 and untouched', async () => {
   const data = new Map<string, string>();
-  data.set('clippers-streamers:o', stateWith(null, { candidates: [{ id: 'twitch-clip:a', creatorKey: 'twitch:1', clipPolicy: { status: 'allowed_unless_prohibited' }, approval: { status: 'pending' }, download: { mode: 'needs_local_download' } }] }));
+  data.set('clippers-streamers:o', stateWith(null, { creators: { 'twitch:1': { creatorGroupId: 'g1' } }, candidates: [
+    { id: 'twitch-clip:a', creatorKey: 'twitch:1', clipPolicy: { status: 'allowed_unless_prohibited' }, approval: { status: 'pending', pendingActionId: 'pa-1' }, download: { mode: 'needs_local_download' } },
+    { id: 'twitch-clip:b', creatorKey: 'twitch:9', clipPolicy: { status: 'allowed_unless_prohibited' }, approval: { status: 'pending', pendingActionId: 'pa-2' }, download: { mode: 'needs_local_download' } }] }));
   const store = { read: async (k: string) => data.get(k) ?? null, transact: async (k: string, fn: (raw: string | null) => Promise<string>) => { const v = await fn(data.get(k) ?? null); data.set(k, v); return v; } };
   const routes: Record<string, Function> = {};
-  let owner = true;
+  let owner = true, clock = AT;
+  const rejected: string[][] = [];
   registerClippersStreamerRoutes({ get: (p: string, h: Function) => { routes['GET ' + p] = h; }, post: (p: string, h: Function) => { routes['POST ' + p] = h; } } as any,
-    { isOwner: () => owner, store: async () => store, owner: () => 'o', now: () => AT });
+    { isOwner: () => owner, store: async () => store, owner: () => 'o', now: () => clock, rejectPending: async (_o, ids) => { rejected.push(ids); return ids.length; } });
   const call = async (key: string, body?: any) => { const out: any = { code: 200 }; const res: any = { set() {}, status(c: number) { out.code = c; return res; }, json(b: any) { out.body = b; return res; } }; await routes[key]({ body }, res); return out; };
-  owner = false; assert.equal((await call('GET /api/clippers/streamers/status')).code, 403); owner = true;
+  owner = false;
+  for (const k of ['GET /api/clippers/streamers/status', 'POST /api/clippers/streamers/takedown', 'POST /api/clippers/streamers/takedown/removed']) assert.equal((await call(k, {})).code, 403);
+  owner = true;
   assert.equal((await call('POST /api/clippers/streamers/takedown', { reason: '' })).code, 400);
   const t = await call('POST /api/clippers/streamers/takedown', { creatorKey: 'twitch:1', reason: 'creator asked by DM' });
-  assert.equal(t.body.removeBy, '2026-11-20T15:00:00.000Z');
-  const s = await call('GET /api/clippers/streamers/status');
-  assert.equal(s.body.candidates[0].clipPolicy, 'prohibited'); assert.equal(s.body.safety.publishesHere, false);
-  assert.equal(streamerStatusView(data.get('clippers-streamers:o')!, AT + 25 * 3600_000).takedowns[0].overdue, true);
+  assert.equal(t.body.removeBy, '2026-11-20T15:00:00.000Z'); assert.equal(t.body.rejectedApprovals, 1);
+  assert.deepEqual(rejected, [['twitch-clip:a']]);
+  let s = await call('GET /api/clippers/streamers/status');
+  assert.equal(s.body.candidates[0].clipPolicy, 'prohibited'); assert.equal(s.body.candidates[0].approval, 'rejected'); assert.equal(s.body.safety.publishesHere, false);
+  clock = AT + 25 * 3600_000;
+  assert.equal((await call('GET /api/clippers/streamers/status')).body.takedowns[0].overdue, true);
+  assert.equal((await call('POST /api/clippers/streamers/takedown/removed', { id: 'nothex' })).code, 400);
+  assert.equal((await call('POST /api/clippers/streamers/takedown/removed', { id: '0'.repeat(16) })).code, 404);
+  assert.ok((await call('POST /api/clippers/streamers/takedown/removed', { id: t.body.id })).body.removedAt);
+  s = await call('GET /api/clippers/streamers/status');
+  assert.equal(s.body.takedowns[0].overdue, false); assert.equal(s.body.candidates[0].clipPolicy, 'prohibited');
+  // Existing but invalid state: 503, never overwritten.
+  data.set('clippers-streamers:o', '{"version":7}');
+  assert.equal((await call('GET /api/clippers/streamers/status')).code, 503);
+  assert.equal((await call('POST /api/clippers/streamers/takedown', { creatorKey: 'twitch:1', reason: 'x' })).code, 503);
+  assert.equal(data.get('clippers-streamers:o'), '{"version":7}');
 });
 
 test('local-news sender is retired for the repurposed brands unless explicitly re-enabled', async () => {

@@ -140,3 +140,61 @@ test('failure streak counts code failures only, not missing secrets', async () =
   for (let i = 1; i <= 3; i++) assert.equal((await runStreamerDiscovery({ env, now: NOW + i, fetch: broken, store, queue: memoryQueue(), owner: 'o' })).state.failureStreak, i);
   assert.equal((await runStreamerDiscovery({ env: {}, now: NOW + 9, fetch: broken, store, queue: memoryQueue(), owner: 'o' })).state.failureStreak, 0);
 });
+
+import { createPendingActionsQueue, creatorPolicyChecked } from '../script/clippers-streamer-discovery.mjs';
+const OUTSIDE = 'UCzzzzzzzzzzzzzzzzzzzzzz';
+
+test('YouTube budget exhausted before outside-channel lookup: unchecked creator is never offered or queued', async () => {
+  const base = mockFetch().fn;
+  const fetch = async (url, init) => {
+    const u = new URL(String(url)), p = u.pathname.split('/').pop();
+    const res = body => ({ ok: true, status: 200, json: async () => body, headers: new Map() });
+    if (p === 'videos' && u.searchParams.get('chart')) return res({ items: [{ id: 'zzzzzzzzzzz' }] });
+    if (p === 'videos') return res({ items: u.searchParams.get('id').split(',').map(id => id === 'zzzzzzzzzzz'
+      ? { id, snippet: { channelId: OUTSIDE, title: 'Trending', publishedAt: '2026-11-19T10:00:00Z', liveBroadcastContent: 'none' }, statistics: { viewCount: '9000000' }, contentDetails: { duration: 'PT40S' } }
+      : { id, snippet: { channelId: 'UCX6OQ3DkcsbYNE6H8uQQuVA', title: 'Big video', publishedAt: '2026-11-19T05:00:00Z', liveBroadcastContent: 'none' }, statistics: { viewCount: '10' }, contentDetails: { duration: 'PT20M' } }) });
+    return base(url, init);
+  };
+  const env = { YOUTUBE_API_KEY: 'ykey', CLIPPERS_YOUTUBE_UNITS_PER_RUN: '16', CLIPPERS_YOUTUBE_TRENDING_REGIONS: 'US', CLIPPERS_CITY_PAGE_NAMES: ENV.CLIPPERS_CITY_PAGE_NAMES };
+  const queue = memoryQueue();
+  const { report, state } = await runStreamerDiscovery({ env, now: NOW, fetch, store: memoryStore(), queue, owner: 'o' });
+  assert.ok(report.heldReasons.includes('youtube_unit_budget_reached'));
+  const c = state.candidates.find(x => x.id === 'youtube:zzzzzzzzzzz');
+  assert.ok(c); assert.equal(c.clipPolicy.source, 'not_checked'); assert.equal(creatorPolicyChecked(state, c), false);
+  assert.ok(![...queue.rows.values()].some(r => r.resourceId === c.id));
+  c.approval = { status: 'approved', pendingActionId: 'x' };
+  assert.ok(!localWorkQueue(state).some(w => w.candidateId === c.id));
+});
+
+test('pending_actions insert is idempotent per owner/action/candidate (SQL reuses a live row)', async () => {
+  const seen = [];
+  const q = createPendingActionsQueue(async (sql, values) => { seen.push({ sql, values }); return { rows: [{ id: 'existing-1' }] }; });
+  const id = await q.insert({ userId: 'o', actionType: STREAMER_APPROVAL_ACTION, resourceType: 'r', resourceId: 'twitch-clip:a', title: 't', description: 'd', riskLevel: 'medium', status: 'pending', input: {} });
+  assert.equal(id, 'existing-1');
+  assert.match(seen[0].sql, /WHERE NOT EXISTS \(SELECT 1 FROM existing\)/);
+  assert.match(seen[0].sql, /status NOT IN \('rejected','failed'\)/);
+  assert.deepEqual(seen[0].values.slice(0, 4), ['o', STREAMER_APPROVAL_ACTION, 'r', 'twitch-clip:a']);
+  await assert.rejects(createPendingActionsQueue(async () => ({ rows: [] })).insert({ userId: 'o', input: {} }), /PENDING_ACTION_INSERT_FAILED/);
+});
+
+test('401/403 become credential_invalid held reasons and never count as code failures', async () => {
+  const store = memoryStore();
+  const denied = async () => ({ ok: false, status: 401, json: async () => ({}) });
+  const r = await runStreamerDiscovery({ env: { TWITCH_CLIENT_ID: 'a', TWITCH_CLIENT_SECRET: 'b', YOUTUBE_API_KEY: 'k' }, now: NOW, fetch: denied, store, queue: memoryQueue(), owner: 'o' });
+  assert.equal(r.report.status, 'held_credentials');
+  assert.ok(r.report.heldReasons.includes('credential_invalid:TWITCH') && r.report.heldReasons.includes('credential_invalid:YOUTUBE'));
+  assert.equal(r.state.failureStreak, 0); assert.deepEqual(r.report.errors, []);
+});
+
+test('minimum interval: a second trigger within 45 min skips without writing; invalid stored state is never overwritten', async () => {
+  const store = memoryStore();
+  await runStreamerDiscovery({ env: {}, now: NOW, fetch: async () => { throw new Error('x'); }, store, queue: memoryQueue(), owner: 'o', minIntervalMs: 45 * 60_000 });
+  const before = store.data.get(STREAMER_STATE_NAMESPACE('o'));
+  const second = await runStreamerDiscovery({ env: {}, now: NOW + 10 * 60_000, fetch: async () => { throw new Error('x'); }, store, queue: memoryQueue(), owner: 'o', minIntervalMs: 45 * 60_000 });
+  assert.equal(second.skipped, true); assert.equal(store.data.get(STREAMER_STATE_NAMESPACE('o')), before);
+  const third = await runStreamerDiscovery({ env: {}, now: NOW + 50 * 60_000, fetch: async () => { throw new Error('x'); }, store, queue: memoryQueue(), owner: 'o', minIntervalMs: 45 * 60_000 });
+  assert.notEqual(third.skipped, true);
+  const bad = memoryStore(); bad.data.set(STREAMER_STATE_NAMESPACE('o'), '{"version":2}');
+  await assert.rejects(runStreamerDiscovery({ env: {}, now: NOW, fetch: async () => { throw new Error('x'); }, store: bad, queue: memoryQueue(), owner: 'o' }), /STREAMER_STATE_INVALID/);
+  assert.equal(bad.data.get(STREAMER_STATE_NAMESPACE('o')), '{"version":2}');
+});

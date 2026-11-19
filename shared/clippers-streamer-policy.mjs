@@ -52,7 +52,8 @@ export const isCreatorKey = value => typeof value === 'string' && KEY.test(value
 /** Validated takedown entry. Blocks a whole creator (creatorKey) or one clip (candidateId) forever. */
 export function parseTakedown(value, now = Date.now()) {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
-  const { creatorKey: ck = null, creatorGroupId = null, candidateId = null, reason, receivedAt, removedAt = null } = value;
+  const { id = null, creatorKey: ck = null, creatorGroupId = null, candidateId = null, reason, receivedAt, removedAt = null } = value;
+  if (id !== null && !/^[a-f0-9]{16}$/.test(id)) return null;
   if (ck !== null && !isCreatorKey(ck)) return null;
   if (creatorGroupId !== null && !/^[a-z0-9-]{1,64}$/.test(creatorGroupId)) return null;
   if (candidateId !== null && !/^[a-z-]{2,20}:[A-Za-z0-9:_-]{1,120}$/.test(candidateId)) return null;
@@ -61,7 +62,7 @@ export function parseTakedown(value, now = Date.now()) {
   const at = Date.parse(receivedAt);
   if (!Number.isFinite(at) || at > now + 60_000) return null;
   if (removedAt !== null && !Number.isFinite(Date.parse(removedAt))) return null;
-  return { creatorKey: ck, creatorGroupId, candidateId, reason: reason.trim(), receivedAt: new Date(at).toISOString(),
+  return { id, creatorKey: ck, creatorGroupId, candidateId, reason: reason.trim(), receivedAt: new Date(at).toISOString(),
     removeBy: new Date(at + TAKEDOWN_SLA_HOURS * 3600_000).toISOString(), removedAt };
 }
 

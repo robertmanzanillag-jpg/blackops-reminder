@@ -4,16 +4,15 @@ name: Clippers streamers (cloud)
 # explicit no-clip check -> ranking -> owner approval rows (pending_actions) -> Mac download queue.
 # It never publishes, never calls Metricool and never downloads YouTube media.
 #
-# Cadence: GitHub's `schedule` has proven unreliable here, so this also runs after each "Office worker
+# Cadence: GitHub's `schedule` has proven unreliable here (and would double-run), so this runs after each "Office worker
 # (cloud)" run (which the external cron dispatches every 15 minutes) and lets the clock gate it to
-# about once an hour (minute < 15 UTC). Explicit dispatches bypass the clock.
+# about once an hour (minute < 15 UTC); the script also skips, without writing, when the last stored run
+# is under 45 minutes old (CLIPPERS_STREAMERS_MIN_INTERVAL_MINUTES). Explicit dispatches bypass both.
 # Missing TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET / YOUTUBE_API_KEY: the job records the held reason
 # for the office and exits successfully with a notice.
 # Pause: set the repository variable CLIPPERS_STREAMERS_CLOUD_ENABLED to 'false'.
 
 on:
-  schedule:
-    - cron: "7 * * * *"
   workflow_run:
     workflows: ["Office worker (cloud)"]
     types: [completed]
@@ -81,4 +80,11 @@ jobs:
           CLIPPERS_YOUTUBE_UNITS_PER_RUN: ${{ vars.CLIPPERS_YOUTUBE_UNITS_PER_RUN }}
           CLIPPERS_YOUTUBE_TRENDING_REGIONS: ${{ vars.CLIPPERS_YOUTUBE_TRENDING_REGIONS }}
           CLIPPERS_TWITCH_CLOUD_DOWNLOAD: ${{ vars.CLIPPERS_TWITCH_CLOUD_DOWNLOAD || 'off' }}
-        run: node --import tsx script/clippers-streamer-discovery.mjs
+          CLIPPERS_STREAMERS_MIN_INTERVAL_MINUTES: ${{ vars.CLIPPERS_STREAMERS_MIN_INTERVAL_MINUTES || '45' }}
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ]; then
+            node --import tsx script/clippers-streamer-discovery.mjs
+          else
+            node --import tsx script/clippers-streamer-discovery.mjs --respect-interval
+          fi

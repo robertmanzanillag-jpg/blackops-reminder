@@ -7,3 +7,6 @@ export declare function emptyStreamerState(): StreamerState;
 export declare function localWorkQueue(state: StreamerState): Array<Record<string, unknown>>;
 export declare function streamerConfig(env?: Record<string, string | undefined>): Record<string, any>;
 export declare function runStreamerDiscovery(input: Record<string, any>): Promise<{ report: any; state: StreamerState }>;
+export declare function parseStreamerStateStrict(raw: string | null): StreamerState | null;
+export declare function creatorPolicyChecked(state: StreamerState, candidate: any): boolean;
+export declare function createPendingActionsQueue(query: (sql: string, values?: unknown[]) => Promise<{ rows: any[] }>): { insert(row: any): Promise<string>; rejectCandidates(owner: string, ids: string[], reason: string): Promise<number>; statuses(owner: string, ids: string[]): Promise<Map<string, string>> };
