@@ -2,7 +2,7 @@ import { createSharedOpenAiCreditLedger, type CreditTransaction, type SharedCred
 import type { createCouncilStore } from "./agent-council-store";
 import { ANTHROPIC_FACTORY_MODEL, ANTHROPIC_FACTORY_PRICES, ANTHROPIC_FACTORY_PRICING_VALID_UNTIL } from "./software-factory-anthropic";
 
-type DurableStore = Pick<ReturnType<typeof createCouncilStore>, "transact">;
+type DurableStore = Pick<ReturnType<typeof createCouncilStore>, "transact" | "read">;
 export const ANTHROPIC_FACTORY_ACCOUNT_SCOPE = "factory-anthropic";
 export const ANTHROPIC_FACTORY_DEFAULT_MONTHLY_BUDGET_USD = 50;
 
@@ -21,40 +21,63 @@ export function factoryAnthropicMonthlyBudgetMicroUsd(env: NodeJS.ProcessEnv) {
 const monthWindow = (now: Date) => {
   const at = now.getTime();
   if (!Number.isFinite(at)) throw Error("FACTORY_ANTHROPIC_CLOCK_UNVERIFIED");
-  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)), end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
-  return { month: start.toISOString().slice(0, 7), start: start.toISOString(), end: end.toISOString() };
+  const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+  return { month: start.toISOString().slice(0, 7), start: start.toISOString() };
 };
-/** The cap is the grant: one grant per UTC month. */
-export function anthropicMonthlyGrant(now: Date, capMicroUsd: number): VerifiedCreditGrant {
-  const w = monthWindow(now);
-  return { id: `anthropic-factory-${w.month}`, accountScope: ANTHROPIC_FACTORY_ACCOUNT_SCOPE, availableMicroUsd: capMicroUsd,
-    observedAt: w.start, expiresAt: w.end, verificationEvidenceId: "operator-env-FACTORY_ANTHROPIC_MONTHLY_BUDGET_USD" };
+/** One permanent row: holds, unknown outcomes, overruns and settled receipts
+ * (including admission receipts) survive month boundaries. */
+const LEDGER_OWNER = JSON.stringify(["factory-anthropic-budget-ledger-v2", ANTHROPIC_FACTORY_ACCOUNT_SCOPE]);
+const GRANT_BASE = { id: "anthropic-factory-monthly-cap", accountScope: ANTHROPIC_FACTORY_ACCOUNT_SCOPE,
+  observedAt: "2026-01-01T00:00:00.000Z", expiresAt: "2100-01-01T00:00:00.000Z", verificationEvidenceId: "operator-env-FACTORY_ANTHROPIC_MONTHLY_BUDGET_USD" } as const;
+const emptyState = (): SharedCreditState => ({ version: 1, grant: { ...GRANT_BASE, availableMicroUsd: 0 }, reservations: [], lastObservedAt: GRANT_BASE.observedAt });
+/** Settled spend of reservations created before this month: not part of the
+ * current month's cap. Earlier reserved/unknown/overrun rows still count and
+ * still force reconciliation (fail closed). */
+function priorMonthsSpend(state: SharedCreditState, monthStart: string) {
+  let spent = 0;
+  for (const row of state.reservations) if (row.status === "settled" && Date.parse(row.createdAt) < Date.parse(monthStart)) spent += row.actualMicroUsd ?? 0;
+  if (!Number.isSafeInteger(spent)) throw Error("CREDIT_TOTAL_OVERFLOW");
+  return spent;
 }
+const checkGrant = (state: SharedCreditState) => {
+  const g = state.grant;
+  if (!g || g.id !== GRANT_BASE.id || g.accountScope !== GRANT_BASE.accountScope || g.observedAt !== GRANT_BASE.observedAt || g.expiresAt !== GRANT_BASE.expiresAt || g.verificationEvidenceId !== GRANT_BASE.verificationEvidenceId) throw Error("FACTORY_ANTHROPIC_LEDGER_MISMATCH");
+};
 
-/** Separate PostgreSQL row per month (never the OpenAI ledger row). The first
- * use in a month creates that month's empty row. The cap is re-read from the
- * environment on every start, so raising/lowering it takes effect in place;
- * all settled spend and holds are kept, and the reservation/settle/unknown
- * rules are exactly the shared OpenAI ledger's. */
-export function createAnthropicMonthlyTransaction(store: DurableStore, grant: VerifiedCreditGrant): CreditTransaction {
-  const owner = JSON.stringify(["factory-anthropic-budget-ledger-v1", grant.accountScope, grant.id]);
-  return async <T>(mutate: (state: SharedCreditState) => T): Promise<T> => {
+/** Monthly cap enforced on current-month spend + all open holds:
+ * grant = cap + settled spend of earlier months, fixed for this process's
+ * month. A process that crosses a month boundary fails closed (CREDIT_EXPIRED)
+ * until restarted, which recomputes the grant. The cap is re-read on each start,
+ * so raising/lowering it takes effect without losing any spend or receipt. */
+export async function createAnthropicFactoryLedger(options: { store: DurableStore; now: () => Date; capMicroUsd: number }) {
+  const { store, now } = options, month = monthWindow(now());
+  if (!Number.isSafeInteger(options.capMicroUsd) || options.capMicroUsd < 0) throw Error("FACTORY_ANTHROPIC_BUDGET_INVALID");
+  const raw = await store.read(LEDGER_OWNER);
+  const current: SharedCreditState = raw === null ? emptyState() : JSON.parse(raw);
+  checkGrant(current);
+  const grant: VerifiedCreditGrant = { ...GRANT_BASE, availableMicroUsd: options.capMicroUsd + priorMonthsSpend(current, month.start) };
+  const transact: CreditTransaction = async <T>(mutate: (state: SharedCreditState) => T): Promise<T> => {
+    if (monthWindow(now()).month !== month.month) throw Error("CREDIT_EXPIRED");
     let result: T;
-    await store.transact(owner, async raw => {
-      const state: SharedCreditState = raw === null
-        ? { version: 1, grant: structuredClone(grant), reservations: [], lastObservedAt: grant.observedAt }
-        : JSON.parse(raw);
-      if (!state.grant || state.grant.id !== grant.id || state.grant.accountScope !== grant.accountScope || state.grant.observedAt !== grant.observedAt || state.grant.expiresAt !== grant.expiresAt) throw Error("FACTORY_ANTHROPIC_LEDGER_MISMATCH");
-      state.grant.availableMicroUsd = grant.availableMicroUsd;
+    await store.transact(LEDGER_OWNER, async stored => {
+      const state: SharedCreditState = stored === null ? emptyState() : JSON.parse(stored);
+      checkGrant(state);
+      state.grant!.availableMicroUsd = grant.availableMicroUsd;
       result = structuredClone(mutate(state));
       return JSON.stringify(state);
     });
     return result!;
   };
+  return createSharedOpenAiCreditLedger({ grant, now, maximumGrantObservationAgeMs: 3600000, transact });
 }
-export function createAnthropicFactoryLedger(options: { store: DurableStore; now: () => Date; capMicroUsd: number }) {
-  const grant = anthropicMonthlyGrant(options.now(), options.capMicroUsd);
-  return createSharedOpenAiCreditLedger({ grant, now: options.now, maximumGrantObservationAgeMs: 3600000, transact: createAnthropicMonthlyTransaction(options.store, grant) });
+/** Read-only (no row creation): the Claude ledger's row for one key, any month.
+ * Used for admission history even when the fallback is not configured. */
+export async function readAnthropicFactoryReservation(store: Pick<DurableStore, "read">, key: string) {
+  const raw = await store.read(LEDGER_OWNER);
+  if (raw === null) return null;
+  const state: SharedCreditState = JSON.parse(raw);
+  checkGrant(state);
+  return state.reservations.find(row => row.key === key) ?? null;
 }
 
 export const anthropicFactoryPricing = () => ({ model: ANTHROPIC_FACTORY_MODEL, inputNanoUsdPerToken: ANTHROPIC_FACTORY_PRICES[ANTHROPIC_FACTORY_MODEL].input,
@@ -66,7 +89,7 @@ export async function loadAnthropicFactoryRuntime(env: NodeJS.ProcessEnv, now: (
   if (!factoryAnthropicFallbackEnabled(env)) throw Error("FACTORY_ANTHROPIC_FALLBACK_DISABLED");
   if (!store && env.AGENT_COUNCIL_STORAGE !== "postgres") throw Error("FACTORY_ANTHROPIC_STORAGE_REQUIRED");
   const durable = store ?? await (await import("./agent-council-store")).getCouncilStore();
-  const ledger = createAnthropicFactoryLedger({ store: durable, now, capMicroUsd: factoryAnthropicMonthlyBudgetMicroUsd(env) });
+  const ledger = await createAnthropicFactoryLedger({ store: durable, now, capMicroUsd: factoryAnthropicMonthlyBudgetMicroUsd(env) });
   await ledger.status();
   return { ledger, pricing: anthropicFactoryPricing() };
 }

@@ -20,11 +20,14 @@ const FALLBACK_RESULT_REASONS = new Set([
   "FACTORY_OPENAI_PRICING_EXPIRED", "FACTORY_OPENAI_ADMISSION_EXPIRED",
 ]);
 /** Ledger admission refusals: the shared credit is exhausted, expired,
- * uncertain (unknown/overrun hold), missing or full. */
+ * uncertain (unknown/overrun hold), uninitialized or full. A corrupt,
+ * mismatched or unprovisioned ledger is an integrity failure and halts. */
 const FALLBACK_LEDGER_ERRORS = new Set([
-  "CREDIT_UNAVAILABLE", "CREDIT_EXPIRED", "CREDIT_RECONCILIATION_REQUIRED", "CREDIT_NOT_INITIALIZED",
-  "CREDIT_CAPACITY_REQUIRED", "CREDIT_STORAGE_NOT_PROVISIONED", "CREDIT_GRANT_MISMATCH", "CREDIT_CORRUPT",
+  "CREDIT_UNAVAILABLE", "CREDIT_EXPIRED", "CREDIT_RECONCILIATION_REQUIRED", "CREDIT_NOT_INITIALIZED", "CREDIT_CAPACITY_REQUIRED",
 ]);
+/** Per-provider HTTP window: Claude streams with adaptive thinking can exceed
+ * the 120 s OpenAI bound; 300 s stays inside the 600 s factory job lease. */
+export const FACTORY_MODEL_EXECUTION_WINDOW_MS = { openai: 120000, anthropic: 300000 } as const;
 export const isFactoryModelFallbackResult = (result: FactoryTextResult) => result.status === "blocked" && FALLBACK_RESULT_REASONS.has(result.reason);
 const messageOf = (error: unknown) => { try { const m = error instanceof Error ? Object.getOwnPropertyDescriptor(error, "message")?.value : undefined; return typeof m === "string" ? m : ""; } catch { return ""; } };
 export const isFactoryModelFallbackError = (error: unknown) => FALLBACK_LEDGER_ERRORS.has(messageOf(error));
@@ -32,7 +35,7 @@ export const isFactoryModelFallbackError = (error: unknown) => FALLBACK_LEDGER_E
 /** Every model call is bounded by its own ledger's execution window. */
 function routeGenerator(route: FactoryModelRoute, key: string) {
   const request = async (url: string, init: RequestInit) => {
-    const remaining = await route.ledger.executionWindow(key);
+    const remaining = await route.ledger.executionWindow(key, FACTORY_MODEL_EXECUTION_WINDOW_MS[route.provider]);
     const deadline = AbortSignal.timeout(Math.floor(remaining));
     const signal = init.signal ? AbortSignal.any([init.signal, deadline]) : deadline;
     signal.throwIfAborted(); return route.model.request(url, { ...init, signal });
@@ -44,6 +47,12 @@ function routeGenerator(route: FactoryModelRoute, key: string) {
 const ledgerOfError = new WeakMap<object, Ledger>();
 /** The ledger that refused/held the call that threw (for receipt lookups). */
 export const factoryModelErrorLedger = (error: unknown) => (error && typeof error === "object" ? ledgerOfError.get(error) : undefined);
+/** Rows for one key across every route's ledger (for receipt decisions). */
+export async function factoryModelKeyRows(routes: readonly FactoryModelRoute[], key: string) {
+  const rows = [];
+  for (const route of routes) { const row = await route.ledger.reservation(key); if (row) rows.push({ provider: route.provider, row }); }
+  return rows;
+}
 export const factoryModelProviderArtifact = (used: { provider: string; model: string }) => `factory-model-provider:${used.provider}:${used.model}`;
 
 /** Runs one stage model call. With a single route this is exactly the earlier
@@ -55,6 +64,13 @@ export async function runFactoryModelCall(routes: readonly FactoryModelRoute[], 
   unknownError: string;
 }): Promise<{ result: FactoryTextResult; provider: FactoryModelRoute["provider"]; model: string; requestSha256: string }> {
   if (!routes.length) throw Error("FACTORY_MODEL_ROUTE_REQUIRED");
+  // A key already present on any route's ledger is never executed again on
+  // another provider (no cross-provider replay of a held or settled call).
+  if (routes.length > 1) for (const route of routes) {
+    if (await route.ledger.reservation(call.key)) {
+      const error = Error("CREDIT_EXECUTION_ALREADY_ADMITTED"); ledgerOfError.set(error, route.ledger); throw error;
+    }
+  }
   for (const [index, route] of routes.entries()) {
     const last = index === routes.length - 1, requestSha256 = call.requestSha256(route.model);
     const generate = routeGenerator(route, call.key);

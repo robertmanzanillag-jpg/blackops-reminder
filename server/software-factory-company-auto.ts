@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { z } from "zod";
 import type { FactoryPilotGitHubClient } from "./software-factory-github-client";
 import { createOpenAiFactoryTextProvider } from "./software-factory-openai";
-import { factoryModelErrorLedger, factoryModelProviderArtifact, runFactoryModelCall, type FactoryModelRoute } from "./software-factory-model-routes";
+import { factoryModelErrorLedger, factoryModelKeyRows, factoryModelProviderArtifact, runFactoryModelCall, type FactoryModelRoute } from "./software-factory-model-routes";
 import type { createSharedOpenAiCreditLedger } from "./shared-openai-credit-ledger";
 import { FACTORY_MAX_FILES_PER_ORDER, isFactoryWritePathAllowed, validateFactoryOrderPaths, validateFactoryWriteRoots } from "./software-factory-write-scope";
 
@@ -104,7 +104,11 @@ export function createFactoryOrderFileSelector(options: {
       if (code === "CREDIT_EXECUTION_ALREADY_ADMITTED" || code === "CREDIT_IDEMPOTENCY_CONFLICT") {
         // Never replay an earlier selection call. A settled one is known and
         // terminal; a reserved/unknown one requires operator reconciliation.
-        const settled = await (factoryModelErrorLedger(error) ?? ledger).settledReceipt(key).then(() => true, () => false);
+        // Every row for this key on every route's ledger must be settled; any
+        // reserved/unknown row (on any provider) needs reconciliation.
+        const rows = options.routes?.length ? await factoryModelKeyRows(routes, key).catch(() => []) : [];
+        const settled = options.routes?.length ? rows.length > 0 && rows.every(r => r.row.status === "settled")
+          : await (factoryModelErrorLedger(error) ?? ledger).settledReceipt(key).then(() => true, () => false);
         if (settled) return blocked("FACTORY_AUTO_SELECTION_ALREADY_EXECUTED");
         throw Error("FACTORY_AUTO_SELECTION_OUTCOME_UNKNOWN");
       }

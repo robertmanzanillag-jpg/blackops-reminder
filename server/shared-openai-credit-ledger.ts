@@ -108,8 +108,16 @@ export function createSharedOpenAiCreditLedger(options: {
         return row;
       });
     },
-    async executionWindow(key: string) {
+    /** Read-only lookup of one key's row (any status); null when absent.
+     * Grants no execution authority. */
+    async reservation(key: string) {
       identifier.parse(key);
+      return transaction(state => state.reservations.find(item => item.key === key) ?? null);
+    },
+    /** maxMs: per-provider call bound (default 120 s, at most 600 s, the job lease). */
+    async executionWindow(key: string, maxMs = 120000) {
+      identifier.parse(key);
+      if (!Number.isSafeInteger(maxMs) || maxMs < 1 || maxMs > 600000) fail("CONFIGURATION_INVALID");
       await transaction((state, at) => {
         if (state.reservations.find(row => row.key === key)?.status !== "reserved") fail("RESERVATION_UNAVAILABLE");
         const budget = totals(state);
@@ -119,7 +127,7 @@ export function createSharedOpenAiCreditLedger(options: {
       // Recheck after the durable transaction returns, not before its I/O wait.
       const remainingMs = Date.parse(grant.expiresAt) - now().getTime();
       if (!Number.isFinite(remainingMs) || remainingMs <= 0) fail("EXPIRED");
-      return Math.min(remainingMs, 120000);
+      return Math.min(remainingMs, maxMs);
     },
     async reserve(input: { key: string; consumer: "office" | "factory"; requestSha256: string; maximumMicroUsd: number }) {
       const data = z.object({ key: identifier, consumer: z.enum(["office", "factory"]), requestSha256: z.string().regex(/^[a-f0-9]{64}$/), maximumMicroUsd: amount.refine(value => value > 0) }).strict().parse(input);

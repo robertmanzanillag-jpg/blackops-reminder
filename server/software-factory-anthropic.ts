@@ -154,7 +154,9 @@ export function createAnthropicFactoryTextProvider(config: AnthropicFactoryModel
       if (controller.signal.aborted) throw Error("cancelled");
       if (message?.type !== "message" || message.role !== "assistant" || !Array.isArray(message.content)) throw Error("shape");
       const settled = anthropicUsageNanoUsd(message, c.model), costCents = centsFromNano(settled.nano);
-      if (!Number.isSafeInteger(costCents)) throw Error("usage bounds");
+      // Like the OpenAI provider: usage beyond the reservation is unverified, so
+      // the caller keeps the full hold as unknown for reconciliation.
+      if (!Number.isSafeInteger(costCents) || costCents > input.maxCostCents) throw Error("usage bounds");
       const servedModel = typeof message.model === "string" ? message.model : c.model;
       // Refusal first: its content is not an answer (pre-output refusals are empty).
       if (message.stop_reason === "refusal") return { status: "failed", reason: "FACTORY_ANTHROPIC_REFUSAL", costCents, servedModel };
