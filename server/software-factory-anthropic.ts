@@ -70,7 +70,8 @@ export type AnthropicFactoryModelConfig = {
   timeoutMs?: number;
   /** Explicit (the model default is medium). Code generation uses high. */
   effort?: "medium" | "high" | "xhigh";
-  /** Upper bound for max_tokens. Adaptive thinking shares max_tokens with the
+  /** Upper bound for max_tokens (default 16000 so a high-effort stream fits
+   * the 300 s execution window comfortably). Adaptive thinking shares max_tokens with the
    * answer, so the call may use up to this many tokens if the reserved budget
    * covers them; it is never lower than the caller's maxOutputTokens. */
   maxTokensCeiling?: number;
@@ -108,7 +109,7 @@ const centsFromNano = (nano: bigint) => Number((nano + 9999999n) / 10000000n);
 /** Same contract as createOpenAiFactoryTextProvider: stateless text, caller
  * reserves maxCostCents first and keeps the hold on "unknown". */
 export function createAnthropicFactoryTextProvider(config: AnthropicFactoryModelConfig) {
-  const c = { ...config }, timeout = c.timeoutMs ?? 300000, ceiling = c.maxTokensCeiling ?? 32000, effort = c.effort ?? "high";
+  const c = { ...config }, timeout = c.timeoutMs ?? 300000, ceiling = c.maxTokensCeiling ?? 16000, effort = c.effort ?? "high";
   const positive = (n: unknown): n is number => typeof n === "number" && Number.isSafeInteger(n) && n > 0;
   const expiry = Date.parse(c.pricingValidUntil), listed = ANTHROPIC_FACTORY_PRICES[c.model];
   if (typeof c.request !== "function" || typeof c.now !== "function" || !listed || c.inputNanoUsdPerToken !== listed.input || c.outputNanoUsdPerToken !== listed.output ||

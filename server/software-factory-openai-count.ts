@@ -16,7 +16,9 @@ export function createFactoryOpenAiCountTransport(key: string, transport: typeof
     if (!currentFactoryApiParent()) throw Error("FACTORY_OPENAI_COUNT_PARENT_CONTEXT_UNAVAILABLE");
     let body: Record<string, unknown>;
     try { body = JSON.parse(init.body); } catch { throw Error("FACTORY_OPENAI_COUNT_SCOPE_INVALID"); }
-    if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.model !== "string" || Object.keys(body).some(k => !COUNT_FIELDS.has(k))) throw Error("FACTORY_OPENAI_COUNT_SCOPE_INVALID");
+    if (!body || typeof body !== "object" || Array.isArray(body) || typeof body.model !== "string" || Object.keys(body).some(k => !COUNT_FIELDS.has(k)) ||
+      // Plain text only: structured input items (files, images, URLs) are refused.
+      typeof body.input !== "string" || (body.instructions !== undefined && typeof body.instructions !== "string")) throw Error("FACTORY_OPENAI_COUNT_SCOPE_INVALID");
     init.signal.throwIfAborted();
     try {
       return await transport(COUNT_URL, { method: "POST", body: JSON.stringify(body), signal: init.signal, redirect: "error", credentials: "omit",

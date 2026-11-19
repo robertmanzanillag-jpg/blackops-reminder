@@ -46,8 +46,9 @@ const checkGrant = (state: SharedCreditState) => {
 
 /** Monthly cap enforced on current-month spend + all open holds:
  * grant = cap + settled spend of earlier months, fixed for this process's
- * month. A process that crosses a month boundary fails closed (CREDIT_EXPIRED)
- * until restarted, which recomputes the grant. The cap is re-read on each start,
+ * month. After a month boundary this process admits no new call (reserve and
+ * executionWindow fail closed with CREDIT_EXPIRED) until restarted, which
+ * recomputes the grant; settling and recording outcomes keep working. The cap is re-read on each start,
  * so raising/lowering it takes effect without losing any spend or receipt. */
 export async function createAnthropicFactoryLedger(options: { store: DurableStore; now: () => Date; capMicroUsd: number }) {
   const { store, now } = options, month = monthWindow(now());
@@ -57,7 +58,6 @@ export async function createAnthropicFactoryLedger(options: { store: DurableStor
   checkGrant(current);
   const grant: VerifiedCreditGrant = { ...GRANT_BASE, availableMicroUsd: options.capMicroUsd + priorMonthsSpend(current, month.start) };
   const transact: CreditTransaction = async <T>(mutate: (state: SharedCreditState) => T): Promise<T> => {
-    if (monthWindow(now()).month !== month.month) throw Error("CREDIT_EXPIRED");
     let result: T;
     await store.transact(LEDGER_OWNER, async stored => {
       const state: SharedCreditState = stored === null ? emptyState() : JSON.parse(stored);
@@ -68,7 +68,13 @@ export async function createAnthropicFactoryLedger(options: { store: DurableStor
     });
     return result!;
   };
-  return createSharedOpenAiCreditLedger({ grant, now, maximumGrantObservationAgeMs: 3600000, transact });
+  const ledger = createSharedOpenAiCreditLedger({ grant, now, maximumGrantObservationAgeMs: 3600000, transact });
+  // The month-scoped grant only gates NEW spend. settle/markUnknown/status and
+  // receipts always work, so a call that straddles midnight is never stuck.
+  const sameMonth = () => { if (monthWindow(now()).month !== month.month) throw Error("CREDIT_EXPIRED"); };
+  return { ...ledger,
+    reserve: async (input: Parameters<typeof ledger.reserve>[0]) => { sameMonth(); return ledger.reserve(input); },
+    executionWindow: async (key: string, maxMs?: number) => { sameMonth(); return ledger.executionWindow(key, maxMs); } };
 }
 /** Read-only (no row creation): the Claude ledger's row for one key, any month.
  * Used for admission history even when the fallback is not configured. */

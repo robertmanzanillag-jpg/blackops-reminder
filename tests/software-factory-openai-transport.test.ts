@@ -40,7 +40,7 @@ test('Factory OpenAI path end to end: unbilled count transport + gated priced cr
  // Count transport: parent-bound, prompt fields only.
  const count=createFactoryOpenAiCountTransport(key,raw),signal=new AbortController().signal,ok=JSON.stringify({model:'m',instructions:'x',input:'y'});
  await assert.rejects(count('https://api.openai.com/v1/responses/input_tokens',{method:'POST',body:ok,signal}),/PARENT_CONTEXT_UNAVAILABLE/);
- for(const extra of [{max_output_tokens:32},{stream:true},{store:false},{tools:[]},{background:false},{previous_response_id:'r'}])
+ for(const extra of [{max_output_tokens:32},{stream:true},{store:false},{tools:[]},{background:false},{previous_response_id:'r'},{input:[{type:'input_file',file_url:'https://x.example/a.pdf'}]},{input:[{role:'user',content:'y'}]},{instructions:['x']},{instructions:{text:'x'}}])
   await assert.rejects(withFactoryApiParent(job,()=>count('https://api.openai.com/v1/responses/input_tokens',{method:'POST',body:JSON.stringify({...JSON.parse(ok),...extra}),signal})),/COUNT_SCOPE_INVALID/);
  await assert.rejects(withFactoryApiParent(job,()=>count('https://api.openai.com/v1/responses',{method:'POST',body:ok,signal})),/COUNT_SCOPE_INVALID/);
  assert.equal(calls.length,2);

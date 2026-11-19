@@ -220,7 +220,7 @@ export function createAsistenteOperatorComposition(raw: AsistenteOperatorConfig,
     // OpenAI shared credit could not be admitted at startup. Undefined keeps
     // the exact single-provider behavior.
     const claudeModel = (pricing: Credits["pricing"], request: (url: string, init: RequestInit) => Promise<Response>) => ({ request, model: pricing.model, inputNanoUsdPerToken: pricing.inputNanoUsdPerToken, outputNanoUsdPerToken: pricing.outputNanoUsdPerToken, pricingValidUntil: pricing.validUntil, maxInputTokens: config.maxInputTokens, now, effort: "high" as const });
-    const claudeRoute: FactoryModelRoute | undefined = deps.provider === "anthropic" ? { provider: "anthropic", ledger: credits.ledger, model: claudeModel(credits.pricing, deps.modelRequest) }
+    const claudeRoute: FactoryModelRoute | undefined = deps.provider === "anthropic" ? { provider: "anthropic", ledger: credits.ledger, model: claudeModel(credits.pricing, deps.modelRequest), historyLedgers: [...(deps.priorLedgers ?? [])] }
         : deps.fallback ? { provider: "anthropic", ledger: deps.fallback.ledger, model: claudeModel(deps.fallback.pricing, deps.fallback.request) } : undefined;
     const routesFor = (openAiModel: typeof model): FactoryModelRoute[] | undefined => deps.provider === "anthropic" ? [claudeRoute!]
         : claudeRoute ? [{ provider: "openai", ledger: credits.ledger, model: openAiModel }, claudeRoute] : undefined;
@@ -295,15 +295,19 @@ const errorCode = (error: unknown) => { try { const m = error instanceof Error ?
  * checks (fail closed over cap). Without the Claude flag/key, OpenAI errors
  * propagate exactly as before. Logs carry only code-owned codes. */
 export async function resolveFactoryModelCredits(input: { env: NodeJS.ProcessEnv; now: () => Date; requiredMicroUsd: number;
-    loadOpenAi: () => Promise<{ credits: Credits; modelRequest: (url: string, init: RequestInit) => Promise<Response> }>;
+    /** createRequest is separate so a missing OpenAI key still leaves the
+     * loaded OpenAI ledger available as admission history. */
+    loadOpenAi: () => Promise<{ credits: Credits; createRequest: () => (url: string, init: RequestInit) => Promise<Response> }>;
     loadAnthropic: () => Promise<{ credits: Credits; modelRequest: (url: string, init: RequestInit) => Promise<Response> }>;
     log?: (message: string) => void; }) {
     const { factoryAnthropicFallbackEnabled } = await import("./software-factory-anthropic-ledger");
     const enabled = factoryAnthropicFallbackEnabled(input.env);
-    let openAi: Awaited<ReturnType<typeof input.loadOpenAi>> | undefined, openAiError: unknown;
+    let openAi: { credits: Credits; modelRequest: (url: string, init: RequestInit) => Promise<Response> } | undefined, openAiLedger: Credits["ledger"] | undefined, openAiError: unknown;
     try {
-        openAi = await input.loadOpenAi();
-        assertFactoryCreditReady(await openAi.credits.ledger.status(), input.requiredMicroUsd, openAi.credits.pricing.validUntil, input.now().getTime());
+        const loaded = await input.loadOpenAi();
+        openAiLedger = loaded.credits.ledger;
+        assertFactoryCreditReady(await loaded.credits.ledger.status(), input.requiredMicroUsd, loaded.credits.pricing.validUntil, input.now().getTime());
+        openAi = { credits: loaded.credits, modelRequest: loaded.createRequest() };
     } catch (error) {
         if (!enabled || !OPENAI_STARTUP_FALLBACK_CODES.has(errorCode(error) ?? "")) throw error;
         openAiError = error;
@@ -322,7 +326,7 @@ export async function resolveFactoryModelCredits(input: { env: NodeJS.ProcessEnv
     try { assertFactoryCreditReady(await claude.credits.ledger.status(), input.requiredMicroUsd, claude.credits.pricing.validUntil, input.now().getTime()); }
     catch (error) { throw Error(`FACTORY_ANTHROPIC_${(errorCode(error) ?? "CREDIT_UNAVAILABLE").replace(/^FACTORY_OPERATOR_/, "")}`); }
     input.log?.(`Factory OpenAI credit unavailable (${errorCode(openAiError)}); this run uses the Claude fallback ledger.`);
-    return { provider: "anthropic" as const, credits: claude.credits, modelRequest: claude.modelRequest, priorLedgers: openAi ? [openAi.credits.ledger] : [] };
+    return { provider: "anthropic" as const, credits: claude.credits, modelRequest: claude.modelRequest, priorLedgers: openAiLedger ? [openAiLedger] : [] };
 }
 async function privateFile(value: string | undefined, max: number) {
     if (!value || !path.isAbsolute(value))
@@ -352,7 +356,7 @@ async function installed(store: Store) {
             const base = { ...credits.pricing, cachedInputNanoUsdPerToken: credits.pricing.inputNanoUsdPerToken };
             const price = env.FACTORY_API_PRICING_CONFIG ? configuredFactoryApiPrice("openai", credits.pricing.model, env.FACTORY_API_PRICING_CONFIG) : { ...base, evidenceSha256: apiEvidenceHash(base) };
             const { createFactoryOpenAiCountTransport, routeFactoryOpenAiRequests } = await import("./software-factory-openai-count");
-            return { credits, modelRequest: routeFactoryOpenAiRequests(createFactoryOpenAiTransport(env.OPENAI_API_KEY || "", fetch, { price }), createFactoryOpenAiCountTransport(env.OPENAI_API_KEY || "")) };
+            return { credits, createRequest: () => routeFactoryOpenAiRequests(createFactoryOpenAiTransport(env.OPENAI_API_KEY || "", fetch, { price }), createFactoryOpenAiCountTransport(env.OPENAI_API_KEY || "")) };
         },
         loadAnthropic: async () => {
             const [{ loadAnthropicFactoryRuntime }, { createFactoryAnthropicTransport }] = await Promise.all([import("./software-factory-anthropic-ledger"), import("./software-factory-anthropic")]);

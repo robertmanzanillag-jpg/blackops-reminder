@@ -9,8 +9,16 @@ type OpenAiModel = Parameters<typeof createOpenAiFactoryTextProvider>[0];
 /** One provider with its own ledger. Routes are tried in order; each paid call
  * is reserved and settled only on that route's ledger. */
 export type FactoryModelRoute =
-  | { provider: "openai"; ledger: Ledger; model: OpenAiModel }
-  | { provider: "anthropic"; ledger: Ledger; model: AnthropicFactoryModelConfig };
+  | { provider: "openai"; ledger: Ledger; model: OpenAiModel; historyLedgers?: readonly Ledger[] }
+  | { provider: "anthropic"; ledger: Ledger; model: AnthropicFactoryModelConfig; historyLedgers?: readonly Ledger[] };
+/** Every ledger that may already hold this key: each route's own ledger plus
+ * read-only history ledgers (e.g. the OpenAI ledger in a Claude-only run). */
+const keyLedgers = (routes: readonly FactoryModelRoute[]) => {
+  const seen = new Set<Ledger>(), out: { provider: string; ledger: Ledger }[] = [];
+  for (const route of routes) for (const [provider, ledger] of [[route.provider, route.ledger] as const, ...(route.historyLedgers ?? []).map(l => ["history", l] as const)])
+    if (!seen.has(ledger)) { seen.add(ledger); out.push({ provider, ledger }); }
+  return out;
+};
 
 /** OpenAI could not admit or start the call (credit/quota/budget/pricing or
  * pre-submission transport failure). Nothing was executed, so trying the next
@@ -51,7 +59,7 @@ export const factoryModelErrorLedger = (error: unknown) => (error && typeof erro
 /** Rows for one key across every route's ledger (for receipt decisions). */
 export async function factoryModelKeyRows(routes: readonly FactoryModelRoute[], key: string) {
   const rows = [];
-  for (const route of routes) { const row = await route.ledger.reservation(key); if (row) rows.push({ provider: route.provider, row }); }
+  for (const { provider, ledger } of keyLedgers(routes)) { const row = await ledger.reservation(key); if (row) rows.push({ provider, row }); }
   return rows;
 }
 export const factoryModelProviderArtifact = (used: { provider: string; model: string }) => `factory-model-provider:${used.provider}:${used.model}`;
@@ -67,9 +75,10 @@ export async function runFactoryModelCall(routes: readonly FactoryModelRoute[], 
   if (!routes.length) throw Error("FACTORY_MODEL_ROUTE_REQUIRED");
   // A key already present on any route's ledger is never executed again on
   // another provider (no cross-provider replay of a held or settled call).
-  if (routes.length > 1) for (const route of routes) {
-    if (await route.ledger.reservation(call.key)) {
-      const error = Error("CREDIT_EXECUTION_ALREADY_ADMITTED"); ledgerOfError.set(error, route.ledger); throw error;
+  const ledgers = keyLedgers(routes);
+  if (ledgers.length > 1) for (const { ledger } of ledgers) {
+    if (await ledger.reservation(call.key)) {
+      const error = Error("CREDIT_EXECUTION_ALREADY_ADMITTED"); ledgerOfError.set(error, ledger); throw error;
     }
   }
   for (const [index, route] of routes.entries()) {

@@ -82,7 +82,7 @@ test("Claude provider sends adaptive thinking, explicit effort and default serve
   for (const banned of ["temperature", "top_p", "top_k", "tool_choice", "tools"]) assert.equal(banned in stream, false);
   assert.equal(stream.thinking.budget_tokens, undefined);
   assert.deepEqual(stream.messages.map((m: any) => m.role), ["user"]); // no assistant prefill
-  assert.ok(stream.max_tokens >= 4096 && stream.max_tokens <= 32000);
+  assert.ok(stream.max_tokens >= 4096 && stream.max_tokens <= 16000);
   assert.equal(calls[0].kind, "count");
 });
 
@@ -197,10 +197,15 @@ test("Claude ledger month rollover: new cap for settled history, but holds, unkn
   // A process that crosses the boundary fails closed until restarted.
   let at = NOW; const moving = await createAnthropicFactoryLedger({ store, now: () => at, capMicroUsd: 1_000_000 });
   at = new Date("2026-12-01T00:00:01.000Z");
-  await assert.rejects(moving.status(), /CREDIT_EXPIRED/);
+  // ...but a call admitted in November still settles after midnight.
+  await nov.reserve({ key: "straddle", consumer: "factory", requestSha256: "c".repeat(64), maximumMicroUsd: 10_000 });
+  await assert.rejects(moving.reserve({ key: "late", consumer: "factory", requestSha256: "c".repeat(64), maximumMicroUsd: 1 }), /CREDIT_EXPIRED/);
+  await assert.rejects(moving.executionWindow("straddle", 300000), /CREDIT_EXPIRED/);
+  await moving.settle({ key: "straddle", actualMicroUsd: 5_000, evidenceId: "e-straddle" });
+  assert.equal((await moving.status()).spentMicroUsd, 905_000);
   const dec = await createAnthropicFactoryLedger({ store, now: () => at, capMicroUsd: 1_000_000 });
   const status = await dec.status();
-  assert.equal(status.availableMicroUsd, 950_000); // November spend is outside December's cap; the open hold still counts
+  assert.equal(status.availableMicroUsd, 950_000); // November spend (incl. the straddling call) is outside December's cap; the open hold still counts
   await dec.markUnknown("held-nov", "unknown-nov");
   await assert.rejects(dec.reserve({ key: "new-dec", consumer: "factory", requestSha256: "c".repeat(64), maximumMicroUsd: 1 }), /CREDIT_RECONCILIATION_REQUIRED/);
   // A key from an earlier month is never admitted again.
@@ -220,7 +225,7 @@ test("Claude flag defaults on only with a key; budget env defaults to $50 and re
 // ---- startup selection ----
 test("startup: without Claude the OpenAI error is unchanged; with Claude an uncertain OpenAI credit runs on Claude", async () => {
   const uncertainOpenAi = async () => { const oa = openAiLedger(); await oa.ledger.initialize(); await oa.ledger.reserve({ key: "x", consumer: "factory", requestSha256: "d".repeat(64), maximumMicroUsd: 1 }); await oa.ledger.markUnknown("x", "u");
-    return { credits: { ledger: oa.ledger, pricing: { model: "gpt-6-astra", inputNanoUsdPerToken: 1, outputNanoUsdPerToken: 1, validUntil: "2027-01-01T00:00:00.000Z" } }, modelRequest: async () => new Response() }; };
+    return { credits: { ledger: oa.ledger, pricing: { model: "gpt-6-astra", inputNanoUsdPerToken: 1, outputNanoUsdPerToken: 1, validUntil: "2027-01-01T00:00:00.000Z" } }, createRequest: () => async () => new Response() }; };
   const claude = (cap: number) => async () => { const r = await loadAnthropicFactoryRuntime({ ANTHROPIC_API_KEY: "sk-ant-x", FACTORY_ANTHROPIC_MONTHLY_BUDGET_USD: String(cap) }, now, memoryStore()); return { credits: r, modelRequest: async () => new Response() }; };
   await assert.rejects(resolveFactoryModelCredits({ env: {}, now, requiredMicroUsd: 1_000_000, loadOpenAi: uncertainOpenAi, loadAnthropic: claude(50) }), /FACTORY_OPERATOR_CREDIT_UNCERTAIN/);
   const selected = await resolveFactoryModelCredits({ env: { ANTHROPIC_API_KEY: "sk-ant-x" }, now, requiredMicroUsd: 1_000_000, loadOpenAi: uncertainOpenAi, loadAnthropic: claude(50) });
@@ -228,7 +233,7 @@ test("startup: without Claude the OpenAI error is unchanged; with Claude an unce
   const missing = await resolveFactoryModelCredits({ env: { ANTHROPIC_API_KEY: "sk-ant-x" }, now, requiredMicroUsd: 1_000_000, loadOpenAi: async () => { throw Error("CREDIT_RUNTIME_CONFIGURATION_REQUIRED"); }, loadAnthropic: claude(50) });
   assert.equal(missing.provider, "anthropic");
   await assert.rejects(resolveFactoryModelCredits({ env: { ANTHROPIC_API_KEY: "sk-ant-x" }, now, requiredMicroUsd: 1_000_000, loadOpenAi: uncertainOpenAi, loadAnthropic: claude(0.5) }), /FACTORY_ANTHROPIC_CREDIT_INSUFFICIENT/);
-  const healthy = async () => { const oa = openAiLedger(); await oa.ledger.initialize(); return { credits: { ledger: oa.ledger, pricing: { model: "gpt-6-astra", inputNanoUsdPerToken: 1, outputNanoUsdPerToken: 1, validUntil: "2027-01-01T00:00:00.000Z" } }, modelRequest: async () => new Response() }; };
+  const healthy = async () => { const oa = openAiLedger(); await oa.ledger.initialize(); return { credits: { ledger: oa.ledger, pricing: { model: "gpt-6-astra", inputNanoUsdPerToken: 1, outputNanoUsdPerToken: 1, validUntil: "2027-01-01T00:00:00.000Z" } }, createRequest: () => async () => new Response() }; };
   const both = await resolveFactoryModelCredits({ env: { ANTHROPIC_API_KEY: "sk-ant-x" }, now, requiredMicroUsd: 1_000_000, loadOpenAi: healthy, loadAnthropic: claude(50) });
   assert.equal(both.provider, "openai"); assert.ok("fallback" in both && both.fallback);
   const noClaude = await resolveFactoryModelCredits({ env: { ANTHROPIC_API_KEY: "sk-ant-x" }, now, requiredMicroUsd: 1_000_000, loadOpenAi: healthy, loadAnthropic: async () => { throw Error("db down"); } });
@@ -325,4 +330,23 @@ test("OpenAI monetary-gate refusal before dispatch is a zero-cost block that fal
   const d = await matrix({ request: { request: gated(new FactoryApiBudgetError("FACTORY_API_EXECUTION_UNCONFIRMED", true)), calls: 0 } as any });
   await assert.rejects(runFactoryModelCall(d.routes, callOptions("factory:dispatched")), /CREDIT_EXECUTION_UNCONFIRMED/);
   assert.equal(d.claude.calls.length, 0);
+});
+
+test("follow-ups: missing OpenAI key keeps the OpenAI ledger as history; Claude-only runs check it per call", async () => {
+  const oa = openAiLedger(); await oa.ledger.initialize();
+  const loadOpenAi = async () => ({ credits: { ledger: oa.ledger, pricing: { model: "gpt-6-astra", inputNanoUsdPerToken: 1, outputNanoUsdPerToken: 1, validUntil: "2027-01-01T00:00:00.000Z" } },
+    createRequest: (): never => { throw Error("FACTORY_OPENAI_CREDENTIAL_REQUIRED"); } });
+  const claudeLoad = async () => ({ credits: await loadAnthropicFactoryRuntime({ ANTHROPIC_API_KEY: "sk-ant-x" }, now, memoryStore()), modelRequest: async () => new Response() });
+  const selected = await resolveFactoryModelCredits({ env: { ANTHROPIC_API_KEY: "sk-ant-x" }, now, requiredMicroUsd: 1, loadOpenAi, loadAnthropic: claudeLoad });
+  assert.equal(selected.provider, "anthropic");
+  assert.deepEqual("priorLedgers" in selected ? selected.priorLedgers : undefined, [oa.ledger]);
+  // Claude-only route: a key already on the OpenAI ledger is never executed on Claude.
+  await oa.ledger.reserve({ key: "factory:openai-held", consumer: "factory", requestSha256: "f".repeat(64), maximumMicroUsd: 1 });
+  const claude = mockClient({ message: message() });
+  const route: FactoryModelRoute = { provider: "anthropic", ledger: selected.credits.ledger, model: claudeConfig(claude.client), historyLedgers: [oa.ledger] };
+  await assert.rejects(runFactoryModelCall([route], callOptions("factory:openai-held")), (error: unknown) => {
+    assert.equal((error as Error).message, "CREDIT_EXECUTION_ALREADY_ADMITTED"); assert.equal(factoryModelErrorLedger(error), oa.ledger); return true; });
+  assert.equal(claude.calls.length, 0);
+  assert.deepEqual((await factoryModelKeyRows([route], "factory:openai-held")).map(r => r.provider), ["history"]);
+  assert.equal((await runFactoryModelCall([route], callOptions("factory:fresh"))).provider, "anthropic");
 });
