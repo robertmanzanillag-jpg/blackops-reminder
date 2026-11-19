@@ -17,11 +17,7 @@ type Council = Pick<ReturnType<typeof createAgentCouncil>, "updateOfficeExecutio
 export function createOfficeExecution(council: Council, env: NodeJS.ProcessEnv = process.env, now = Date.now,
   deps: { fetch?: typeof fetch; loadPr?: NonNullable<Parameters<typeof createOfficeRuntime>[0]>["loadPr"];
     factoryInvocation?: ReturnType<typeof import("./factory-api-invocation").createFactoryApiInvocation>;
-    sharedCredits?: Awaited<ReturnType<typeof loadSharedCreditRuntime>>;
-    /** Daily credit pacer hooks (server/credit-pacer-runtime.ts): measured cost samples and
-     * the paced output limit (lower in soft mode). Both optional; absent = previous behaviour. */
-    onCost?: (sample: { executionId: string; microUsd: number; outputTokens: number }) => void;
-    outputTokens?: (base: number) => Promise<number> } = {}) {
+    sharedCredits?: Awaited<ReturnType<typeof loadSharedCreditRuntime>> } = {}) {
   const openai = env.OFFICE_REVIEW_PROVIDER === "openai";
   const budget = openai ? createOfficeTokenBudget({ limit: Number(env.OFFICE_OPENAI_MONTHLY_TOKEN_LIMIT),
     transact: async change => { await council.updateOfficeExecution(state => {
@@ -29,17 +25,13 @@ export function createOfficeExecution(council: Council, env: NodeJS.ProcessEnv =
     }); }, now: () => new Date(now()),
   }) : undefined;
   let activeExecutionId: string | undefined;
-  const baseEnv = env;
   const run = async (prompt: string, executionId?: string) => {
     if (!openai) return runOfficeClaude(prompt);
-    const paced = deps.outputTokens ? await deps.outputTokens(Number(baseEnv.OFFICE_OPENAI_MAX_OUTPUT_TOKENS || "2048")).catch(() => undefined) : undefined;
-    // Soft pacing lowers this call's output limit only; everything else stays the configured env.
-    const env = paced !== undefined && Number.isInteger(paced) && paced >= 32 ? { ...baseEnv, OFFICE_OPENAI_MAX_OUTPUT_TOKENS: String(paced) } : baseEnv;
     if (deps.sharedCredits || env.OPENAI_SHARED_CREDIT_CONFIG || env.OPENAI_SHARED_CREDITS_REQUIRED === "true") {
       const assigned = executionId || activeExecutionId;
       if (!assigned) throw Error("OFFICE_CREDIT_ASSIGNMENT_REQUIRED");
       const shared = deps.sharedCredits || await loadSharedCreditRuntime(env, () => new Date(now()));
-      return createCreditLimitedOfficeRun({ ...shared, factoryInvocation:deps.factoryInvocation, env, now: () => new Date(now()), fetch: deps.fetch, onCost: deps.onCost,
+      return createCreditLimitedOfficeRun({ ...shared, factoryInvocation:deps.factoryInvocation, env, now: () => new Date(now()), fetch: deps.fetch,
         authorizeTokens: limits => budget!.reserve(limits), recordTokens: (id, metadata) => budget!.recordUsage(id, metadata),
       })(prompt, assigned);
     }

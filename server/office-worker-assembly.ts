@@ -53,14 +53,25 @@ const pacerModule=sharedCredits?await import("./credit-pacer-runtime"):undefined
 const {taskTypeOfExecution}=await import("./credit-pacer");
 const pacer=pacerModule && sharedCredits && academy?pacerModule.createCreditPacer({readSnapshot:()=>sharedCredits.ledger.paceSnapshot(),readHistory:pacerModule.councilPacerHistory(()=>academy!.load()),env:process.env}):undefined;
 const pacerSync=pacerModule && pacer && academy?pacerModule.createCreditPacerSync({council:academy,pacer}):undefined;
-const recordCost=(sample:{executionId:string;microUsd:number;outputTokens:number})=>pacer?.record({taskType:taskTypeOfExecution(sample.executionId),microUsd:sample.microUsd,outputTokens:sample.outputTokens,at:Date.now()});
+// Measured cost samples (statistics only) from the result's usage, with the ledger's own pricing
+// and rounding. Kept here so the pinned credit adapters (office-execution / office-shared-credits) stay unchanged.
+const recordUsage=(executionId:string,result:unknown)=>{
+  try{
+    const usage=(result as {usage?:{inputTokens?:unknown;outputTokens?:unknown}}|undefined)?.usage,price=sharedCredits?.pricing;
+    if(!pacer||!price||!usage||!Number.isSafeInteger(usage.inputTokens)||!Number.isSafeInteger(usage.outputTokens))return;
+    const micro=Number((BigInt(usage.inputTokens as number)*BigInt(price.inputNanoUsdPerToken)+BigInt(usage.outputTokens as number)*BigInt(price.outputNanoUsdPerToken)+999n)/1000n);
+    pacer.record({taskType:taskTypeOfExecution(executionId),microUsd:micro,outputTokens:usage.outputTokens as number,at:Date.now()});
+  }catch{/* statistics only */}
+};
 /** Fail closed: an unreadable pace admits no new paid work of that priority. */
 const paceAllows=async(priority:"standard"|"deferrable",taskType:import("./credit-pacer").PacerTaskType)=>{
   if(!pacer)return true;
   try{return (await pacer.allow(priority,taskType)).allowed;}catch{return false;}
 };
 const syncPacer=async()=>{if(pacerSync){try{await pacerSync();}catch{console.error("Office credit pacer sync unconfirmed; it will be retried on the next cycle.");}}};
-const executionBase = reviewOnlyOwner && academy ? (await import("./office-execution")).createOfficeExecution(academy,process.env,Date.now,pacer?{onCost:recordCost,outputTokens:base=>pacer.outputTokens(base)}:{}) : undefined;
+// Soft mode (read once per invocation; the cloud runs every 15 minutes) lowers the reviewer's output limit.
+const reviewerEnv=pacer?{...process.env,OFFICE_OPENAI_MAX_OUTPUT_TOKENS:String(await pacer.outputTokens(Number(process.env.OFFICE_OPENAI_MAX_OUTPUT_TOKENS||"2048")))}:process.env;
+const executionBase = reviewOnlyOwner && academy ? (await import("./office-execution")).createOfficeExecution(academy,reviewerEnv) : undefined;
 // Reviewer tasks are standard priority: claimed only while today's allowance has room.
 const execution = executionBase ? { ...executionBase, admission: { ...executionBase.admission, ready: async () => (await paceAllows("standard","office_review")) && executionBase.admission.ready() } } : undefined;
 const internalModule=internalEnabled ? await import("./office-internal-work"):undefined;
@@ -82,9 +93,9 @@ const selfHealModule=await import("./office-self-heal");
 const selfHeal=selfHealConfig.enabled && roleWork && academy?selfHealModule.createSelfHealRunner({council:academy,owner:getSystemUserId(),
   maxPerDay:pacer?selfHealConfig.maxPerDay:Math.min(selfHealConfig.maxPerDay,selfHealModule.SELF_HEAL_UNPACED_ORDERS_PER_DAY),
   ...(pacer?{fundableOrders:()=>pacer.fundable("self_heal_order")}:{})}):undefined;
-const roleExecution=roleAcademyEnabled && academy?(await import("./office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"1536"},Date.now,pacer?{onCost:recordCost}:{}):undefined;
+const roleExecution=roleAcademyEnabled && academy?(await import("./office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"1536"}):undefined;
 const roleAcademy=roleExecution && academy?(await import("./office-role-academy")).createRoleAcademyRunner({council:academy,dailyPairs:Number(process.env.OFFICE_ROLE_ACADEMY_DAILY_PAIRS),shouldStop,run:async(prompt,call)=>{
-  const result=await roleExecution.run(prompt,call.executionId);
+  const result=await roleExecution.run(prompt,call.executionId);recordUsage(call.executionId,result);
   if(!("provider" in result) || result.provider!=="openai" || !("usage" in result))throw new Error("Role academy requires measured OpenAI execution.");
   return result as import("./office-openai").OfficeOpenAIResult;
 }}):undefined;
@@ -93,13 +104,13 @@ const roleAcademy=roleExecution && academy?(await import("./office-role-academy"
 const blackroomAcademy=roleExecution && academy && process.env.OFFICE_BLACKROOM_ACADEMY_DAILY_PAIRS?(await import("./office-academy-blackroom")).createBlackRoomAcademyRunner({council:academy,dailyPairs:Number(process.env.OFFICE_BLACKROOM_ACADEMY_DAILY_PAIRS),shouldStop,
   loadLessons:async()=>(await (await import("./blackroom-team/lessons")).syncBlackRoomLessons()).rules,
   run:async(prompt,call)=>{
-  const result=await roleExecution.run(prompt,call.executionId);
+  const result=await roleExecution.run(prompt,call.executionId);recordUsage(call.executionId,result);
   if(!("provider" in result) || result.provider!=="openai" || !("usage" in result))throw new Error("Black Room academy requires measured OpenAI execution.");
   return result as import("./office-openai").OfficeOpenAIResult;
 }}):undefined;
 const capabilityModule=capabilityEnabled?await import("./office-capability-training"):undefined;
 const capabilityCredits=capabilityModule?sharedCredits ?? await (await import("./shared-openai-credit-runtime")).loadSharedCreditRuntime(process.env,()=>new Date()):undefined;
-const capabilityExecution=capabilityCredits && academy?(await import("./office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"768"},Date.now,{sharedCredits:capabilityCredits,...(pacer?{onCost:recordCost}:{})}):undefined;
+const capabilityExecution=capabilityCredits && academy?(await import("./office-execution")).createOfficeExecution(academy,{...process.env,OPENAI_SHARED_CREDITS_REQUIRED:"true",OFFICE_OPENAI_MAX_OUTPUT_TOKENS:"768"},Date.now,{sharedCredits:capabilityCredits}):undefined;
 const capabilityTrainer=capabilityModule && capabilityCredits && capabilityExecution && academy?capabilityModule.createCapabilityTrainer({owner:getSystemUserId(),maxCallsPerDay:Number(process.env.OFFICE_CAPABILITY_MAX_CALLS_PER_DAY),shouldStop,
  loadWork:async()=>{const state=await academy!.load();return (await import("./office-role-work")).parseRoleWork(state.officeExecution?.roleWork,getSystemUserId());},
  transact:async change=>{const saved=await academy!.updateOfficeExecution((state,company)=>{
@@ -107,7 +118,7 @@ const capabilityTrainer=capabilityModule && capabilityCredits && capabilityExecu
   const next=change(current,Object.fromEntries(Object.entries(company.careers).map(([role,career])=>[role,career.generation])),Boolean(company.academyJobs?.some(j=>j.status==="running") || state.roleAcademy?.jobs.some(j=>j.status==="running")));
   capabilityModule.parseCapabilityTraining(next,getSystemUserId());return {...state,capabilityTraining:next};
  });return saved.capabilityTraining!;},
- run:async(prompt,call)=>{const result=await capabilityExecution.run(prompt,call.executionId);if(!("provider" in result) || result.provider!=="openai" || !("usage" in result))throw Error("Measured OpenAI execution required");return result as import("./office-openai").OfficeOpenAIResult;},
+ run:async(prompt,call)=>{const result=await capabilityExecution.run(prompt,call.executionId);recordUsage(call.executionId,result);if(!("provider" in result) || result.provider!=="openai" || !("usage" in result))throw Error("Measured OpenAI execution required");return result as import("./office-openai").OfficeOpenAIResult;},
  verifyCost:(await import("./office-training-receipts")).createTrainingReceiptReader(capabilityCredits),
 }):undefined;
 const worker = createOfficeCloudWorker({ scheduledKongOwner, reviewOnlyOwner, ...(options.workerId ? { workerId: options.workerId } : {}), ...(execution ? { execute: execution.execute, probeClaude: execution.probe, admission: execution.admission } : {}) });

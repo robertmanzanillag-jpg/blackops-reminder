@@ -14,8 +14,6 @@ export function createCreditLimitedOfficeRun(options: {
   pricing: { model: string; inputNanoUsdPerToken: number; outputNanoUsdPerToken: number; validUntil: string };
   authorizeTokens: (limits: { model: string; promptBytes: number; maxOutputTokens: number }) => Promise<string>;
   recordTokens: (reservation: string, result: Omit<OfficeOpenAIResult, "text">) => Promise<void>;
-  /** Optional statistics hook for the daily credit pacer; called after settlement, never throws into the run. */
-  onCost?: (sample: { executionId: string; microUsd: number; outputTokens: number }) => void;
 }) {
   const { ledger, now, authorizeTokens, recordTokens } = options;
   const env = { ...options.env }, price = { ...options.pricing }, transport = options.fetch || fetch;
@@ -57,9 +55,7 @@ export function createCreditLimitedOfficeRun(options: {
       }) as typeof fetch,
       recordUsage: async metadata => {
         if (!tokenReservation || metadata.model !== price.model) throw Error("OFFICE_CREDIT_USAGE_UNVERIFIED");
-        const actualMicroUsd = cost(metadata.usage.inputTokens, metadata.usage.outputTokens);
-        await ledger.settle({ key, actualMicroUsd, evidenceId: metadata.sessionId });
-        try { options.onCost?.({ executionId, microUsd: actualMicroUsd, outputTokens: metadata.usage.outputTokens }); } catch { /* statistics only */ }
+        await ledger.settle({ key, actualMicroUsd: cost(metadata.usage.inputTokens, metadata.usage.outputTokens), evidenceId: metadata.sessionId });
         await recordTokens(tokenReservation, metadata);
       },
     });
