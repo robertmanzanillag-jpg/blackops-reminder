@@ -1,0 +1,84 @@
+name: Clippers streamers (cloud)
+
+# Streamer-pages discovery in the cloud ($0 official APIs): Twitch Helix + YouTube Data API ->
+# explicit no-clip check -> ranking -> owner approval rows (pending_actions) -> Mac download queue.
+# It never publishes, never calls Metricool and never downloads YouTube media.
+#
+# Cadence: GitHub's `schedule` has proven unreliable here, so this also runs after each "Office worker
+# (cloud)" run (which the external cron dispatches every 15 minutes) and lets the clock gate it to
+# about once an hour (minute < 15 UTC). Explicit dispatches bypass the clock.
+# Missing TWITCH_CLIENT_ID / TWITCH_CLIENT_SECRET / YOUTUBE_API_KEY: the job records the held reason
+# for the office and exits successfully with a notice.
+# Pause: set the repository variable CLIPPERS_STREAMERS_CLOUD_ENABLED to 'false'.
+
+on:
+  schedule:
+    - cron: "7 * * * *"
+  workflow_run:
+    workflows: ["Office worker (cloud)"]
+    types: [completed]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: clippers-streamers
+  cancel-in-progress: false
+
+jobs:
+  discover:
+    if: >-
+      github.repository == 'robertmanzanillag-jpg/blackops-reminder' &&
+      vars.CLIPPERS_STREAMERS_CLOUD_ENABLED != 'false'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Clock gate (hourly unless dispatched)
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          minute=$((10#$(date -u +%M)))
+          if [ "$EVENT" = "workflow_dispatch" ] || [ "$minute" -lt 15 ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Outside the hourly window (minute $minute); skipping."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          ref: ${{ vars.OFFICE_SOURCE_REF || 'main' }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.gate.outputs.run == 'true'
+        env:
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Discover, check prohibitions, queue owner approvals
+        if: steps.gate.outputs.run == 'true'
+        env:
+          NODE_ENV: production
+          DATABASE_URL: ${{ secrets.OFFICE_DATABASE_URL }}
+          DEFAULT_USER_ID: ${{ secrets.OFFICE_OWNER_ID }}
+          TWITCH_CLIENT_ID: ${{ secrets.TWITCH_CLIENT_ID }}
+          TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
+          YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+          CLIPPERS_CITY_PAGE_NAMES: ${{ vars.CLIPPERS_CITY_PAGE_NAMES }}
+          CLIPPERS_STREAMER_AUTO_PUBLISH: ${{ vars.CLIPPERS_STREAMER_AUTO_PUBLISH || 'false' }}
+          CLIPPERS_STREAMER_APPROVALS_PER_RUN: ${{ vars.CLIPPERS_STREAMER_APPROVALS_PER_RUN }}
+          CLIPPERS_STREAMER_MAX_OPEN_APPROVALS: ${{ vars.CLIPPERS_STREAMER_MAX_OPEN_APPROVALS }}
+          CLIPPERS_YOUTUBE_UNITS_PER_RUN: ${{ vars.CLIPPERS_YOUTUBE_UNITS_PER_RUN }}
+          CLIPPERS_YOUTUBE_TRENDING_REGIONS: ${{ vars.CLIPPERS_YOUTUBE_TRENDING_REGIONS }}
+          CLIPPERS_TWITCH_CLOUD_DOWNLOAD: ${{ vars.CLIPPERS_TWITCH_CLOUD_DOWNLOAD || 'off' }}
+        run: node --import tsx script/clippers-streamer-discovery.mjs

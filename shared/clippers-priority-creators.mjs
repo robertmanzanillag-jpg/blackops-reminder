@@ -1,5 +1,13 @@
 // Primary identities observed in the reviewed 2026-11-18 research artifact.
 // Identity, a public RSS feed and public views grant no reuse rights or account-performance evidence.
+//
+// Clip policy (owner decision 2026-11-19): `clipPolicy` is the owner's clipping rule, separate from
+// `permission`, which still records explicit licence/campaign evidence ("unknown" = none on file) and
+// keeps gating the legacy marketplace/portfolio publishers (`mayPublish: false`). The streamer-pages
+// lane (script/clippers-streamer-discovery.mjs) clips a creator unless they explicitly prohibit it:
+//   allowed_unless_prohibited -> may be clipped (credit @handle + source link, short edited clips only)
+//   prohibited                -> never clipped; set at runtime with evidence by the prohibition check,
+//                                by KNOWN_PROHIBITED_CREATORS below, or by the takedown list.
 const freeze = value => { if (value && typeof value === 'object') {Object.values(value).forEach(freeze);Object.freeze(value);} return value; };
 export const LEGACY_DISCOVERY_CREATORS = freeze([
   {
@@ -79,7 +87,8 @@ export const PRIORITY_CREATORS = freeze([
     "name": "MrBeast",
     "role": "main_channel",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   },
   {
     "id": "thegrefg",
@@ -92,7 +101,8 @@ export const PRIORITY_CREATORS = freeze([
     "name": "TheGrefg",
     "role": "main_channel",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   },
   {
     "id": "ishowspeed",
@@ -105,7 +115,8 @@ export const PRIORITY_CREATORS = freeze([
     "name": "IShowSpeed",
     "role": "main_channel",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   },
   {
     "id": "tjr-trading",
@@ -118,7 +129,8 @@ export const PRIORITY_CREATORS = freeze([
     "name": "TJR",
     "role": "trading_main_channel",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   },
   {
     "id": "adin-ross",
@@ -131,7 +143,8 @@ export const PRIORITY_CREATORS = freeze([
     "name": "Adin Live",
     "role": "live_highlights_channel",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   },
   {
     "id": "joe-rogan",
@@ -144,7 +157,8 @@ export const PRIORITY_CREATORS = freeze([
     "name": "PowerfulJRE",
     "role": "podcast_main_channel",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   },
   {
     "id": "the-wild-project",
@@ -157,7 +171,8 @@ export const PRIORITY_CREATORS = freeze([
     "name": "The Wild Project",
     "role": "podcast_show",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   },
   {
     "id": "jordi-wild",
@@ -170,7 +185,8 @@ export const PRIORITY_CREATORS = freeze([
     "name": "El Rincón De Giorgio",
     "role": "personal_channel",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   },
   {
     "id": "rubius",
@@ -183,7 +199,8 @@ export const PRIORITY_CREATORS = freeze([
     "name": "elrubiusOMG",
     "role": "main_channel",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   },
   {
     "id": "rubius-z",
@@ -196,7 +213,8 @@ export const PRIORITY_CREATORS = freeze([
     "name": "Rubius Z",
     "role": "secondary_channel",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   },
   {
     "id": "hola-soy-german",
@@ -209,7 +227,8 @@ export const PRIORITY_CREATORS = freeze([
     "name": "HolaSoyGerman.",
     "role": "sketch_channel",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   },
   {
     "id": "juega-german",
@@ -222,7 +241,8 @@ export const PRIORITY_CREATORS = freeze([
     "name": "JuegaGerman",
     "role": "gaming_channel",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   },
   {
     "id": "vegetta777",
@@ -235,7 +255,8 @@ export const PRIORITY_CREATORS = freeze([
     "name": "VEGETTA777",
     "role": "main_channel",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   }
 ]);
 export const DISCOVERY_CANDIDATES = freeze([
@@ -250,7 +271,8 @@ export const DISCOVERY_CANDIDATES = freeze([
     "name": "Ibai",
     "role": "discovery_candidate",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   },
   {
     "id": "auronplay",
@@ -263,7 +285,8 @@ export const DISCOVERY_CANDIDATES = freeze([
     "name": "AuronPlay",
     "role": "discovery_candidate",
     "permission": "unknown",
-    "mayPublish": false
+    "mayPublish": false,
+    "clipPolicy": "allowed_unless_prohibited"
   }
 ]);
 export const CREATOR_GROUPS = freeze([
@@ -539,8 +562,18 @@ export const KNOWN_CREATOR_GROUPS = freeze([
   }
 ]);
 export const DISCOVERY_CREATORS = LEGACY_DISCOVERY_CREATORS;
+export const CLIP_POLICIES = freeze(['allowed_unless_prohibited','prohibited']);
+// Reviewed explicit prohibitions: { creatorGroupId, evidenceUrl, evidenceText, recordedAt }. Empty until one is found.
+export const KNOWN_PROHIBITED_CREATORS = freeze([]);
+// Twitch login guesses keyed by creator id. NOT identity evidence: the discovery job resolves each
+// through Helix /users and records the returned id; an unresolved login is skipped, never guessed.
+export const TWITCH_LOGIN_CANDIDATES = freeze({
+  "thegrefg": ["thegrefg"], "rubius": ["rubius"], "vegetta777": ["vegetta777"], "ibai": ["ibai"], "auronplay": ["auronplay"],
+  "ishowspeed": ["ishowspeed"], "adin-ross": ["adinross"], "lacy": ["lacy"], "alanzoka": ["alanzoka"], "gotaga": ["gotaga"],
+  "papaplatte": ["papaplatte"], "k4sen": ["k4sen"], "juega-german": ["juegagerman"]
+});
 const priorities = new Set(PRIORITY_CREATORS.map(row => row.channelId));
-export const CHALLENGER_CREATORS = freeze([...LEGACY_DISCOVERY_CREATORS.filter(row => !priorities.has(row.channelId)).map(row => ({...row,creatorGroupId:row.id,name:row.handle,role:'legacy_challenger',permission:'unknown',mayPublish:false})),...DISCOVERY_CANDIDATES]);
+export const CHALLENGER_CREATORS = freeze([...LEGACY_DISCOVERY_CREATORS.filter(row => !priorities.has(row.channelId)).map(row => ({...row,creatorGroupId:row.id,name:row.handle,role:'legacy_challenger',permission:'unknown',mayPublish:false,clipPolicy:'allowed_unless_prohibited'})),...DISCOVERY_CANDIDATES]);
 export const ALL_DISCOVERY_CREATORS = freeze([...PRIORITY_CREATORS,...CHALLENGER_CREATORS]);
 const aliasKey = value => typeof value === 'string' ? value.normalize('NFKC').toLowerCase().replace(/^@/,'').replace(/[\s_-]+/g,'') : '';
 export function resolveCreatorGroup(value) {

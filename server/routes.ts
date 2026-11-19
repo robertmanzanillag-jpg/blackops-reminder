@@ -61,6 +61,7 @@ import { runAppQaScan } from "./app-qa-agent";
 import { createDeveloperAutopilotHandoff, createDeveloperAutopilotHandoffFromRequest, evaluateDeveloperReleaseGate } from "./developer-autopilot";
 import { buildMonthlyAiSpendReport } from "./ai-cost-policy";
 import { registerClippersOrchestraRoutes } from "./clippers-orchestra-routes";
+import { registerClippersStreamerRoutes } from "./clippers-streamers-status";
 import { getClipperWorkerRuntimeStatus } from "./clippers-runtime-status";
 import { registerOfficeRoutes } from "./office-routes";
 import { registerOfficeBusinessRoutes } from "./office-business-routes";
@@ -2214,6 +2215,7 @@ export async function registerRoutes(
   });
 
   registerClippersOrchestraRoutes(app);
+  registerClippersStreamerRoutes(app);
 
   app.get("/api/clippers/runtime-status", async (_req, res) => {
     try {

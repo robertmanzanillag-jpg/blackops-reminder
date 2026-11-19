@@ -823,6 +823,12 @@ const NEWS_LANE_CONFIG: Record<ClipperLocalNewsLane, { label: string; aliases: s
   },
 };
 
+export const LOCAL_NEWS_SENDER_RETIRED_REASON = "local_news_sender_retired_streamer_pages";
+/** True unless CLIPPERS_LOCAL_NEWS_SENDER_ENABLED is exactly "true". */
+export function localNewsSenderRetired(env: Record<string, string | undefined> = process.env): boolean {
+  return env.CLIPPERS_LOCAL_NEWS_SENDER_ENABLED !== "true";
+}
+
 export async function getClipperLocalNewsMetricoolReadiness(
   options: Pick<ClipperLocalNewsMetricoolOptions, "env" | "fetch" | "readPolicy"> = {},
 ): Promise<ClipperLocalNewsMetricoolReadiness> {
@@ -846,6 +852,7 @@ export async function getClipperLocalNewsMetricoolReadiness(
     ])),
   });
   if (!hasRealValue(token) || !hasRealValue(userId)) return blocked("configurar credenciales de Metricool");
+  if (localNewsSenderRetired(env)) return blocked("noticias locales retiradas: marcas NY/Miami ahora son páginas de clips de streamers");
   const policy = await (options.readPolicy || readLocalNewsDeliveryPolicy)();
   if (policy.paused) return blocked("entregas de noticias pausadas");
 
@@ -903,6 +910,14 @@ export async function deliverClipperLocalNewsToMetricool(
   const userId = env.METRICOOL_USER_ID;
   if (!hasRealValue(token) || !hasRealValue(userId)) {
     result.reason = "missing_metricool_credentials";
+    return result;
+  }
+  // 2026-11-19 owner decision: the NY/Miami Metricool brands are now streamer clip pages. The
+  // local-news autopilot sender is retired; ledgers stay on disk read-only. Re-enabling needs an
+  // explicit env opt-in so an old deployment cannot silently resume news posts.
+  if (localNewsSenderRetired(env)) {
+    result.status = "paused";
+    result.reason = LOCAL_NEWS_SENDER_RETIRED_REASON;
     return result;
   }
 

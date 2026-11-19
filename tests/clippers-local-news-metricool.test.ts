@@ -77,7 +77,7 @@ async function workspace(items: unknown[]) {
   return dir;
 }
 
-const credentials = { METRICOOL_USER_TOKEN: "real-token", METRICOOL_USER_ID: "123", CLIPPERS_LOCAL_NEWS_ENABLE_X: "true" };
+const credentials = { METRICOOL_USER_TOKEN: "real-token", METRICOOL_USER_ID: "123", CLIPPERS_LOCAL_NEWS_ENABLE_X: "true", CLIPPERS_LOCAL_NEWS_SENDER_ENABLED: "true" };
 const fixedNow = () => new Date("2026-07-21T16:00:00.000Z");
 
 // Explicit verified fixtures for legacy delivery-behaviour tests. Production
@@ -140,7 +140,7 @@ test("X delivery is opt-in so the paid Metricool add-on stays off by default", a
   const dir = await workspace([item()]);
   let fetched = false;
   const result = await deliverClipperLocalNewsToMetricool({
-    env: { METRICOOL_USER_TOKEN: "real-token", METRICOOL_USER_ID: "123" },
+    env: { METRICOOL_USER_TOKEN: "real-token", METRICOOL_USER_ID: "123", CLIPPERS_LOCAL_NEWS_SENDER_ENABLED: "true" },
     workspaceDir: dir,
     fetch: async () => { fetched = true; throw new Error("disabled X must not reach Metricool"); },
   });
