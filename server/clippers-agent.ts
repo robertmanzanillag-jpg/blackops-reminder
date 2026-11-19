@@ -29993,7 +29993,7 @@ export async function importClipperMetricoolApprovalEvidence(userId = getSystemU
     await unlink(METRICOOL_APPROVAL_IMPORTED_METRICS_PATH).catch(() => undefined);
   }
 
-  const metrics = await writeClipperMetricsSummary(accounts);
+  const metrics = (await writeClipperMetricsSummary(accounts))!;
 
   return { metricoolApprovalEvidenceImport, metrics, status: await getClipperStatus(userId) };
 }
@@ -32667,7 +32667,9 @@ async function buildMetricsSummary(accounts: ClipperAccount[]): Promise<ClipperM
     status: files.length === 0 ? "empty" : records.length === 0 ? "needs_records" : "ready",
     metricsDir: METRICS_DIR,
     summaryPath: METRICS_SUMMARY_PATH,
-    generatedAt: records.length || files.length ? new Date().toISOString() : null,
+    // Time of the measured data, never the rebuild time: the newest import of a
+    // file that produced records, or null when no export produced any record.
+    generatedAt: files.filter((file) => file.records > 0).map((file) => file.importedAt).sort().pop() ?? null,
     files,
     records,
     totals,
@@ -32684,11 +32686,14 @@ async function buildMetricsSummary(accounts: ClipperAccount[]): Promise<ClipperM
 
 /** Rebuilds metrics-summary.json from the analytics exports already present in
  * clippers_workspace/metrics (local files only: no provider call, no spend) and
- * mirrors it to the office source documents. With no exports it records an
- * honest empty summary (no records, generatedAt null), never invented numbers. */
-async function writeClipperMetricsSummary(accounts: ClipperAccount[]): Promise<ClipperMetricsSummary> {
+ * mirrors it to the office source documents. Automatic callers pass
+ * skipWhenNoExports so that, without any export file, nothing is written and the
+ * office keeps reporting clip_metrics as missing; only an explicit manual ingest
+ * records an empty summary. Never invents numbers. */
+async function writeClipperMetricsSummary(accounts: ClipperAccount[], options: { skipWhenNoExports?: boolean } = {}): Promise<ClipperMetricsSummary | null> {
   await ensureClipperDirs();
   const metrics = await buildMetricsSummary(accounts);
+  if (options.skipWhenNoExports && metrics.files.length === 0) return null;
   await writeFile(METRICS_SUMMARY_PATH, JSON.stringify(metrics, null, 2));
   mirrorOfficeSourceFile({ kind: "clip_metrics", filePath: METRICS_SUMMARY_PATH, raw: metrics });
   return metrics;
@@ -32698,7 +32703,7 @@ export async function ingestClipperMetrics(userId = getSystemUserId()): Promise<
   await ensureClipperDirs();
   const config = await readConfig();
   const accounts = (Array.isArray(config.accounts) && config.accounts.length ? config.accounts : DEFAULT_ACCOUNTS).map(ensureAccountShape);
-  const metrics = await writeClipperMetricsSummary(accounts);
+  const metrics = (await writeClipperMetricsSummary(accounts))!;
   return { metrics, status: await getClipperStatus(userId) };
 }
 
@@ -45841,8 +45846,8 @@ export async function runClipperAutomationCycle(input: unknown = {}, userId = ge
   await writeFile(reportPath, JSON.stringify(cycleReport, null, 2));
   mirrorOfficeSourceFile({ kind: "clip_report", filePath: reportPath, raw: cycleReport, owner: userId });
   // The office audits each cycle together with the metrics summary; refresh it
-  // from the local exports so it is never missing just because nobody ingested.
-  await writeClipperMetricsSummary(accounts);
+  // from existing local exports (best effort: never fails the cycle).
+  await writeClipperMetricsSummary(accounts, { skipWhenNoExports: true }).catch(() => undefined);
   return { automation, status: await getClipperStatus(userId) };
 }
 
@@ -45924,7 +45929,7 @@ export async function runClipperDailyPlan(input: unknown = {}, userId = getSyste
 
   await writeFile(reportPath, JSON.stringify(report, null, 2));
   mirrorOfficeSourceFile({ kind: "clip_report", filePath: reportPath, raw: report, owner: userId });
-  await writeClipperMetricsSummary(status.accounts);
+  await writeClipperMetricsSummary(status.accounts, { skipWhenNoExports: true }).catch(() => undefined);
   return { report, status: await getClipperStatus(userId) };
 }
 

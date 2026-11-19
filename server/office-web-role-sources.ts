@@ -21,8 +21,8 @@ export type WebSourceRole=typeof WEB_SOURCE_ROLES[number];
 export const CLIPPERS_NON_REPORT_FILES:ReadonlySet<string>=new Set(["metricool-approval-report.json","clippers-operational-readiness.json","clippers-external-closeout-pack.json","clippers-external-closeout-proof-todo.json","clippers-external-closeout-operator-queue.json","clippers-external-go-live-audit.json","clippers-external-operator-action-sheet.json","clippers-external-next-work-run.json","clippers-external-closeout-evidence-import-report.json","clippers-external-closeout-repair-work-packet.json","clippers-motivation-ledger.json","marketplace-supply-report.json","marketplace-refresh-report.json",
  // Metricool autopilot / reconciliation / media upload / streamer CEO workers.
  "metricool-autopilot-queue.json","metricool-autopilot-ledger.json","metricool-public-media-receipts.json","metricool-publication-reconciliation.json","streamer-growth-ceo.json","streamer-subtitle-batch.json",
- // Campaign draft renderer, YouTube upload/publish/delivery workers, content local worker.
- "campaign-draft-renderer.json","campaign-draft-renderer-ledger.json","youtube-upload-ledger.json","youtube-upload-packager-latest.json","youtube-publish-worker-latest.json","youtube-delivery-worker-latest.json","clippers-content-local-worker-latest.json","clippers-content-sleep-ledger.json"]);
+ // Campaign draft renderer, YouTube upload/publish/delivery workers.
+ "campaign-draft-renderer.json","campaign-draft-renderer-ledger.json","youtube-upload-ledger.json","youtube-upload-packager-latest.json","youtube-publish-worker-latest.json","youtube-delivery-worker-latest.json"]);
 export type SourcePool={query:(sql:string,args?:unknown[])=>Promise<{rows:any[]}>};
 const stamp=z.string().datetime({offset:true}),num=z.number().finite().nonnegative();
 const lane=z.enum(["miami-news","ny-news"]);
@@ -131,17 +131,18 @@ export async function readWebRoleSources(options:{pool:SourcePool;owner:string;c
   const candidates=entries.filter(e=>/^(?:automation-cycle-)?\d{4}-/.test(e.name));
   if(candidates.length!==entries.length)reports.push(empty("clip_reports","invalid"));
   // Reserve provenance for metrics, unknown contracts and the limit marker.
-  const reportLimit=Math.min(Math.max(0,20-fileCount),18-reports.length);
+  const reportLimit=Math.min(Math.max(0,20-fileCount),18-reports.length);let foreignSkipped=0;
   for(const entry of candidates.slice(0,reportLimit)){
    if(!DAILY_REPORT_NAME.test(entry.name)&&!CYCLE_REPORT_NAME.test(entry.name)){reports.push(empty("clip_reports","invalid"));continue;}
    // Another host user's well-formed report is not this owner's evidence:
    // skip it (as the owner-keyed durable copy does) instead of marking it invalid.
    const part=await file("clip_reports",path.join(dir,entry.name),v=>reportRows(projectOfficeSourceDocument("clip_report",v,{owner:options.owner,key:entry.name})));
-   if(!part.foreign)reports.push(part);
+   if(part.foreign)foreignSkipped++;else reports.push(part);
   }
   if(candidates.length>reportLimit)reports.push(empty("clip_reports","limit"));
-  // No report of this owner (empty folder, or only other users' reports) is a valid empty source.
-  if(!reports.length)reports.push({rows:[],provenance:{kind:"clip_reports",status:"present",sourceAt:null,digest:sourceDigest([]),records:0,files:0,empty:true}});
+  // An empty folder is a valid empty source. A folder holding only other
+  // users' reports has no evidence of this owner: missing, never present-empty.
+  if(!reports.length)reports.push(foreignSkipped?empty("clip_reports","missing"):{rows:[],provenance:{kind:"clip_reports",status:"present",sourceAt:null,digest:sourceDigest([]),records:0,files:0,empty:true}});
  }catch(error){reports.push(empty("clip_reports",(error as NodeJS.ErrnoException).code==="ENOENT"?"missing":"invalid"));}
  let remote=empty("blackroom_remote","missing");
  try{const result=await options.pool.query(BLACKROOM_SOURCE_PROJECTION_SQL,["blackroom-primary"]);if(result.rows.length){const x=rawRemote.parse(result.rows[0].data);if(x.device){const parsedQueue=remoteQueue.safeParse(x.device.queue);if(!parsedQueue.success){const invalidValue=parsedQueue.error.issues.some(issue=>issue.path.reduce<any>((value,key)=>value?.[key],x.device!.queue)!==undefined);const queueTime=x.device.queue.updatedAt;const futureQueue=typeof queueTime==="string"&&Date.parse(queueTime)>now+30000;remote=empty("blackroom_remote",invalidValue||futureQueue?"invalid":"missing");remote.provenance.heartbeatAt=x.device.seenAt;if([x.updatedAt,x.device.seenAt].some(t=>Date.parse(t)>now+30000))throw new Error("Future remote source");}else{const q=parsedQueue.data;if([x.updatedAt,x.device.seenAt].some(t=>Date.parse(t)>now+30000))throw new Error("Future remote source");if(Date.parse(q.updatedAt)>now+30000){remote=empty("blackroom_remote","invalid");remote.provenance.heartbeatAt=x.device.seenAt;}else remote={rows:[row("remote_queue","blackroom-primary","recorded",q.updatedAt,q.totals)],provenance:{kind:"blackroom_remote",status:"present",sourceAt:q.updatedAt,heartbeatAt:x.device.seenAt,digest:sourceDigest({seenAt:x.device.seenAt,queueAt:q.updatedAt,totals:q.totals}),records:1,files:0,empty:false}};}}else{if(Date.parse(x.updatedAt)>now+30000)throw new Error("Future remote source");remote={rows:[],provenance:{kind:"blackroom_remote",status:"present",sourceAt:x.updatedAt,digest:sourceDigest({updatedAt:x.updatedAt,device:null}),records:0,files:0,empty:true}};}}}catch{remote=empty("blackroom_remote","invalid");}
