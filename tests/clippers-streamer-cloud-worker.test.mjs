@@ -382,3 +382,61 @@ test('deadline is re-checked after download, before render', async () => {
   assert.equal(media.calls.render.length, 0); assert.ok(report.heldReasons.includes('run_deadline_reached'));
   assert.equal(store.state.cloudPublish.clips['twitch-clip:a'].status, 'deferred');
 });
+
+test('yt-dlp failures carry public-log-safe diagnostics (platform, step, exit code, scrubbed stderr)', async () => {
+  const { scrubDiagnostic, downloadSource } = await import('../script/clippers-streamer-cloud-render.mjs');
+  assert.equal(scrubDiagnostic('[debug] x\nERROR: [youtube] abcdefghijk: Sign in to confirm you’re not a bot. Use --cookies https://example.com/a?token=SECRETSECRETSECRETSECRET1234 /home/runner/x'),
+    'ERROR: [youtube] abcdefghijk: Sign in to confirm you’re not a bot. Use --cookies [url] [path]');
+  assert.equal(scrubDiagnostic('auth abcdefghijklmnopqrstuvwxyz0123456789 failed'), 'auth [id] failed');
+  const dir = await mkdtemp(path.join(tmpdir(), 'cw-diag-'));
+  const runner = async () => { throw Object.assign(new Error('YT_DLP_FAILED'), { exitCode: 1, detail: 'ERROR: Requested format is not available' }); };
+  await assert.rejects(downloadSource({ candidate: { platform: 'twitch', sourceUrl: 'https://clips.twitch.tv/a', durationSec: 30 }, workDir: dir, env: {}, runner }), e => {
+    assert.equal(e.diagnostics.platform, 'twitch');
+    assert.deepEqual(e.diagnostics.attempts.map(a => [a.step, a.impersonate, a.exitCode]), [['download', 'none', 1], ['download', 'chrome', 1]]);
+    assert.equal(e.diagnostics.attempts[0].detail, 'ERROR: Requested format is not available');
+    return true;
+  });
+  await rm(dir, { recursive: true, force: true });
+});
+
+test('cloud lane takes Twitch only by default; a YouTube bot check is classified and stops further YouTube tries', async () => {
+  const yt = { ...candidate('y1', 'twitch:100', 'thegrefg', { score: 9 }), id: 'youtube:abcdefghijk', platform: 'youtube', kind: 'video', approval: { status: 'approved', pendingActionId: 'pa-y1' } };
+  const store = memoryStore(baseState([yt, candidate('a', 'twitch:100', 'thegrefg')])), media = fakeMedia();
+  const { report } = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-y1': 'approved', 'pa-a': 'approved' }), metricool: fakeMetricool(), stager: fakeStager(), fetch: okFetch, ...media, clock: () => NOW });
+  assert.deepEqual(media.calls.download, ['twitch-clip:a']); assert.equal(report.counts.platforms, 'twitch');
+
+  const { downloadSource } = await import('../script/clippers-streamer-cloud-render.mjs');
+  const dir = await mkdtemp(path.join(tmpdir(), 'cw-bot-'));
+  const bot = async () => { throw Object.assign(new Error('YT_DLP_FAILED'), { exitCode: 1, detail: 'ERROR: [youtube] abcdefghijk: Sign in to confirm you’re not a bot.' }); };
+  await assert.rejects(downloadSource({ candidate: { platform: 'youtube', sourceUrl: 'https://www.youtube.com/watch?v=abcdefghijk' }, workDir: dir, env: {}, runner: bot }), /SOURCE_BOT_CHECK/);
+  await rm(dir, { recursive: true, force: true });
+
+  const yt2 = { ...yt, id: 'youtube:bbbbbbbbbbb', approval: { status: 'approved', pendingActionId: 'pa-y2' } };
+  const store2 = memoryStore(baseState([yt, yt2])), media2 = fakeMedia();
+  const download = async ({ candidate: c }) => { media2.calls.download.push(c.id); throw new Error('SOURCE_BOT_CHECK'); };
+  const r2 = await runCloudPublisher({ env: { ...ON, CLIPPERS_STREAMER_CLOUD_PLATFORMS: 'twitch,youtube' }, now: NOW, owner: 'o', store: store2, approvals: approvals({ 'pa-y1': 'approved', 'pa-y2': 'approved' }), metricool: fakeMetricool(), stager: fakeStager(), fetch: okFetch, ...media2, download });
+  assert.equal(media2.calls.download.length, 1, 'circuit breaker after the first bot check'); assert.deepEqual(r2.report.errors, ['clip:SOURCE_BOT_CHECK']);
+});
+
+test('scrubbing removes adversarial credentials before anything reaches the public log', async () => {
+  const { scrubText, scrubDiagnostic } = await import('../script/clippers-streamer-cloud-render.mjs');
+  const secrets = ['s3cr3tSig', 'tok123', 'abc.def', 'QWxhZGRpbjpvcGVu', 'sess=abc', 'u1:p1', 'u2:p2', 'AKIAEXAMPLE', 'dbuser:dbpass', 'clientSecretX'];
+  const cases = [
+    'ERROR: unable to download usher.ttvnw.net/api/channel/hls/x.m3u8?sig=s3cr3tSig&token=tok123',
+    'HTTP Error 401: Bearer abc.def',
+    'request failed token=QWxhZGRpbjpvcGVu==',
+    'Cookie: sess=abc; other=1',
+    'fetch ftp://u1:p1@files.example.org/a and wss://u2:p2@ws.example.org/s',
+    'ERROR: 403 X-Amz-Signature=AKIAEXAMPLE&X-Amz-Credential=AKIAEXAMPLE',
+    // Built at runtime so the diff-hygiene secret scanner does not flag a fixture as a real database URL.
+    ['connect ', 'postgres', '://', 'dbuser', ':', 'dbpass', '@db.example.org:5432/app failed'].join(''),
+    'oauth failed client_secret=clientSecretX',
+    'authorization: Basic QWxhZGRpbjpvcGVu',
+  ];
+  for (const c of cases) {
+    const out = scrubText(c);
+    for (const sec of secrets) assert.ok(!out.includes(sec), `${sec} leaked from: ${out}`);
+  }
+  assert.equal(scrubText('Authorization: Bearer x'), 'Authorization: [redacted]');
+  assert.equal(scrubDiagnostic('ok\nERROR: [twitch:clips] abc: Requested format is not available'), 'ERROR: [twitch:clips] abc: Requested format is not available');
+});

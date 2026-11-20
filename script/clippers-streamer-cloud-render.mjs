@@ -144,13 +144,39 @@ export function childEnv(parent = process.env, extra = {}) {
   return out;
 }
 
+/**
+ * Text made safe for public logs (the repository is public): credentials, signed URLs, cookies and
+ * tokens are removed; paths under home/tmp and long opaque ids are replaced.
+ */
+export function scrubText(text, max = 200) {
+  return String(text ?? '')
+    .replace(/[\x00-\x1f\x7f]/g, ' ')
+    .replace(/\b(authorization|proxy-authorization|cookie|set-cookie)\s*:.*$/gi, '$1: [redacted]')
+    .replace(/\b(Bearer|OAuth|Basic|Token)\s+[^\s,;]+/gi, '$1 [redacted]')
+    .replace(/\b[a-z][\w+.-]*:\/\/\S+/gi, '[url]')
+    .replace(/\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?\/\S*\?\S*/gi, '[url]')
+    .replace(/\b(sig|token|signature|key|auth|access_token|refresh_token|client_secret|client_id|password|passwd|secret|nauthsig|nauth|X-Amz-[\w-]+)=[^&\s]+/gi, '$1=[redacted]')
+    .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '[email]')
+    .replace(/\/(?:home|Users|tmp|root)\/\S*/g, '[path]')
+    .replace(/[A-Za-z0-9_+/=-]{24,}/g, '[id]')
+    .replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+/** Last meaningful stderr line, scrubbed with scrubText. */
+export function scrubDiagnostic(text, max = 200) {
+  const lines = String(text ?? '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const pick = [...lines].reverse().find(l => /ERROR|error|Error|WARNING/.test(l)) ?? lines.at(-1) ?? '';
+  return scrubText(pick, max);
+}
+
 function run(bin, args, { timeoutMs = 300_000, env = {}, maxBuffer = 64 * 1024 * 1024 } = {}) {
   return new Promise((resolve, reject) => {
     execFile(bin, args, { timeout: timeoutMs, maxBuffer, windowsHide: true, env: childEnv(process.env, env) }, (error, stdout, stderr) => {
       if (error) {
         // Never echo URLs/tokens: only a short code-like tail of stderr.
-        const tail = String(stderr || error.message || '').replace(/https?:\/\/\S+/g, '[url]').replace(/\s+/g, ' ').trim().slice(-160);
-        return reject(Object.assign(new Error(`${path.basename(bin).toUpperCase().replace(/[^A-Z0-9]/g, '_')}_FAILED`), { detail: tail }));
+        const exitCode = Number.isInteger(error.code) ? error.code : null;
+        return reject(Object.assign(new Error(`${path.basename(bin).toUpperCase().replace(/[^A-Z0-9]/g, '_')}_FAILED`),
+          { exitCode, signal: error.signal ?? null, timedOut: error.killed === true, detail: scrubDiagnostic(stderr || (typeof error.code === 'string' ? error.code : '')) }));
       }
       resolve({ stdout: String(stdout), stderr: String(stderr) });
     });
@@ -167,6 +193,8 @@ export async function makeWorkDir() {
   return dir;
 }
 
+export const BOT_CHECK = /confirm you.?re not a bot|Sign in to confirm/i;
+
 /** Download only the needed section. Returns { file, cut }. */
 export async function downloadSource({ candidate, workDir, targetSec = 45, env = process.env, runner = run }) {
   const base = ytDlpBase(env);
@@ -174,9 +202,11 @@ export async function downloadSource({ candidate, workDir, targetSec = 45, env =
   if (!/^https:\/\//.test(url)) throw new Error('SOURCE_URL_INVALID');
   let cut;
   let lastError = null;
+  const attempts = [];
   // Impersonation targets first (YouTube TLS fingerprinting), then plain yt-dlp.
   const variants = candidate.platform === 'youtube' ? [...base.impersonate, null] : [null, ...base.impersonate];
   for (const impersonate of variants) {
+    let step = 'info';
     try {
       if (!cut) {
         if (candidate.platform === 'twitch' && Number.isFinite(candidate.durationSec) && candidate.durationSec > 0) {
@@ -189,6 +219,7 @@ export async function downloadSource({ candidate, workDir, targetSec = 45, env =
         }
       }
       const outTemplate = path.join(workDir, 'source.%(ext)s');
+      step = 'download';
       await runner(base.bin, ytDlpDownloadArgs({ url, platform: candidate.platform, start: cut.start, duration: cut.duration, outTemplate, impersonate }), { env: base.extraEnv, timeoutMs: 600_000 });
       const file = (await readdir(workDir)).filter(n => n.startsWith('source.')).map(n => path.join(workDir, n))[0];
       if (!file) throw new Error('SOURCE_DOWNLOAD_EMPTY');
@@ -197,11 +228,18 @@ export async function downloadSource({ candidate, workDir, targetSec = 45, env =
       // With --download-sections the file already starts at the cut.
       return { file, cut: { ...cut, offsetInFile: 0 } };
     } catch (error) {
-      if (error?.fatal) throw error;
+      attempts.push({ step, impersonate: impersonate ?? 'none', error: scrubText(error?.message ?? 'ERROR', 40), exitCode: error?.exitCode ?? null,
+        timedOut: error?.timedOut ?? false, detail: error?.detail ?? null });
+      if (error?.fatal) throw Object.assign(error, { diagnostics: { platform: candidate.platform, attempts } });
       lastError = error;
+      // A fresh directory state for the next variant (a partial file must not be mistaken for the source).
+      for (const n of await readdir(workDir).catch(() => [])) if (n.startsWith('source.')) await rm(path.join(workDir, n), { force: true }).catch(() => undefined);
     }
   }
-  throw lastError ?? new Error('SOURCE_DOWNLOAD_FAILED');
+  const diagnostics = { platform: candidate.platform, attempts };
+  // Every variant hit the datacenter-IP bot check: report it as such (not a code or format problem).
+  if (attempts.length && attempts.every(a => BOT_CHECK.test(a.detail ?? ''))) throw Object.assign(new Error('SOURCE_BOT_CHECK'), { diagnostics });
+  throw Object.assign(lastError ?? new Error('SOURCE_DOWNLOAD_FAILED'), { diagnostics });
 }
 
 /** Render the vertical edit and validate it. Returns { file, sha256, durationSec }. */
