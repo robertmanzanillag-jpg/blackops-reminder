@@ -37,6 +37,8 @@ export type AgentCareer = {
   lastEvidenceId?: string;
   /** Quality signals already scored (approved/rejected posts, failed jobs...), so each counts once. */
   qualitySignalIds?: string[];
+  /** Cadence-based vida clock (shared/agent-vitality.ts). Absent until the first vitality tick. */
+  vitality?: import("./agent-vitality").CareerVitality;
 };
 
 export type SkillSource = "academia" | "orden" | "leccion";
@@ -431,7 +433,7 @@ export function advanceCompany(
 
     const exempt = input.exempt?.includes(agentId);
     // A new hire gets at least a day on the job before it can be fired again.
-    if (!exempt && career.battery === 0 && input.now - toMsSafe(career.hiredAt) >= MIN_TENURE_MS) {
+    if (!exempt && career.battery === 0 && !inactivityProtected(career) && input.now - toMsSafe(career.hiredAt) >= MIN_TENURE_MS) {
       const result = fireAndReplace({ careers, trainees, retiredCareers, events }, career, `Bateria en cero (${status.label}).`, input.roles, iso);
       ({ trainees, retiredCareers, events } = result);
       fired.push(result.fired);
@@ -440,6 +442,15 @@ export function advanceCompany(
     careers[agentId] = career;
   }
   return { state: { ...state, careers, trainees, retiredCareers, events: events.slice(0, MAX_EVENTS) }, fired };
+}
+
+/**
+ * A vida of 0 reached by an inactivity charge (shared/agent-vitality.ts cadence decay) never leads
+ * to an automatic replacement: it stays a flag for the CEO/Robert until verified work (or any vida
+ * above 0) clears it. A 0 reached by the agent's own errors keeps the existing replacement rule.
+ */
+export function inactivityProtected(career: AgentCareer): boolean {
+  return career.battery === 0 && typeof career.vitality?.zeroByDecay === "string" && career.vitality.zeroByDecay.length > 0;
 }
 
 /** Retires a career at battery zero and starts its replacement in the academy (same rules for every cause). */
@@ -465,6 +476,7 @@ function fireAndReplace(
     firedCount: career.firedCount + 1,
     hiredAt: iso,
     inTrainingUntilGeneration: nextGeneration,
+    vitality: undefined,
     memory: [{ at: iso, text: `Reemplaza a la generacion ${nextGeneration - 1}. Empieza en la academia.` }],
   };
   let trainees = current.trainees;
@@ -516,7 +528,7 @@ export function applyQualitySignals(
       memory: remember(existing.memory, iso, `${signal.text.slice(0, 140)} (${signal.points >= 0 ? "+" : ""}${Math.round(signal.points)} pts).`),
     };
     applied.push(signal.id);
-    if (career.battery === 0 && input.now - toMsSafe(career.hiredAt) >= MIN_TENURE_MS) {
+    if (career.battery === 0 && !inactivityProtected(career) && input.now - toMsSafe(career.hiredAt) >= MIN_TENURE_MS) {
       const result = fireAndReplace({ careers, trainees, retiredCareers, events }, career, `Bateria en cero por calidad (${signal.text.slice(0, 80)}).`, input.roles, iso);
       ({ trainees, retiredCareers, events } = result);
       fired.push(result.fired);
@@ -677,7 +689,7 @@ export function learnLessons(state: CompanyState, lessons: Array<{ key: string; 
   for (const lesson of lessons) {
     const career = careers[lesson.subject];
     if (!career || (career.skills || []).some((skill) => skill.id === `leccion:${lesson.key}`)) continue;
-    careers = { ...careers, [lesson.subject]: addSkill(career, { id: `leccion:${lesson.key}`, title: `Corrige: ${lesson.label.slice(0, 60)}`, source: "leccion" }, iso) };
+    careers = { ...careers, [lesson.subject]: addSkill(career, { id: `leccion:${lesson.key}`, title: lesson.key.startsWith("automejora:") ? `Mejora aprobada: ${lesson.label.replace(/^Mejora: /, "").slice(0, 60)}` : `Corrige: ${lesson.label.slice(0, 60)}`, source: "leccion" }, iso) };
   }
   return careers === state.careers ? state : { ...state, careers };
 }

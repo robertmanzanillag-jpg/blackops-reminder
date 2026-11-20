@@ -59,7 +59,8 @@ export type CouncilDebate = CouncilFinding & {
 };
 
 export type ProposalKind = "lesson" | "skill_update" | "new_agent" | "repair";
-export type ProposalStatus = "pending_submit" | "submitted" | "approved" | "applied" | "rejected" | "not_submitted";
+/** "withdrawn": closed by the system because it no longer applies (neither approved nor rejected by Robert). */
+export type ProposalStatus = "pending_submit" | "submitted" | "approved" | "applied" | "rejected" | "not_submitted" | "withdrawn";
 
 export type CouncilProposal = {
   key: string;
@@ -72,6 +73,8 @@ export type CouncilProposal = {
   createdAt: string;
   status: ProposalStatus;
   pendingActionId?: string;
+  /** Set once a withdrawn proposal's Trust Center row was cancelled (or was already closed). */
+  pendingActionClosedAt?: string;
   note?: string;
   closedAt?: string;
   lesson?: { ruleId: string; subject: string; label: string };
@@ -105,6 +108,8 @@ export type CouncilState = {
   kongCollaboration: OfficeKongCollaboration;
   kongLastStatuses: Record<string, { state: AgentLiveStatus["state"]; label: string }>;
   lastStatuses: Record<string, { state: AgentLiveStatus["state"]; label: string }>;
+  /** Latest Clippers academy lessons (measured Metricool performance), written by the council round. */
+  clippersAcademy?: { observedAt: string; lessons: import("./agent-self-improvement").ClippersLesson[] };
 };
 
 export const COUNCIL_CYCLE_MS = 15 * 60_000;
