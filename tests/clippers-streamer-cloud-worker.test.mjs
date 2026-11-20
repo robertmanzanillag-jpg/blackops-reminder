@@ -168,18 +168,19 @@ test('disabled or kill switch: nothing is read, downloaded or sent', async () =>
   }
 });
 
-test('approved clip: policy-gated, rendered once, staggered to every destination, asset removed, approval marked', async () => {
+test('approved clip (lanes off): policy-gated, rendered once, ONE account only as a draft (never fan-out), asset removed, approval marked', async () => {
   const state = baseState([candidate('a', 'twitch:100', 'thegrefg'), candidate('b', 'twitch:200', 'rubius', { score: 9 }), candidate('p', 'twitch:100', 'thegrefg', { score: 1, approval: { status: 'pending', pendingActionId: 'pa-p' } })]);
   const store = memoryStore(state), m = fakeMetricool(), stager = fakeStager(), media = fakeMedia(), appr = approvals({ 'pa-a': 'executed', 'pa-b': 'approved', 'pa-p': 'pending' });
   const { report } = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store, approvals: appr, metricool: m, stager, fetch: okFetch, ...media, clock: () => NOW });
   assert.equal(report.status, 'completed', JSON.stringify(report));
   assert.deepEqual(media.calls.download, ['twitch-clip:a'], 'prohibited creator and pending approval are never downloaded');
-  assert.equal(m.calls.schedule.length, 3);
-  assert.deepEqual(m.calls.schedule.map(i => i.destinationKey), ['6431685:tiktok:streamersus', '6431687:tiktok:streamersclipusa', '6591612:tiktok:news305miami']);
-  assert.deepEqual(m.calls.schedule.map(i => i.scheduledAt), ['2026-11-19T16:00:00.000Z', '2026-11-19T16:07:00.000Z', '2026-11-19T16:14:00.000Z']);
+  assert.equal(m.calls.schedule.length, 1, 'one video file -> one account, even with lanes off');
+  assert.deepEqual(m.calls.schedule.map(i => i.destinationKey), ['6431685:tiktok:streamersus']);
+  assert.deepEqual(m.calls.schedule.map(i => i.scheduledAt), ['2026-11-19T16:00:00.000Z']);
+  assert.equal(m.calls.schedule[0].draft, true, 'lanes off: owner approves every post');
   assert.ok(m.calls.schedule.every(i => captionHasCredit(i.caption, 'thegrefg', 'https://clips.twitch.tv/a') && i.mediaSha256 === 'a'.repeat(64) && i.thirdPartyCommercial === false));
   assert.deepEqual(stager.removed, [1]);
-  assert.equal(appr.executed.length, 1); assert.equal(appr.executed[0].result.posts.length, 3);
+  assert.equal(appr.executed.length, 1); assert.equal(appr.executed[0].result.posts.length, 1);
   const c = store.state.cloudPublish;
   assert.equal(c.clips['twitch-clip:a'].status, 'published'); assert.equal(c.clips['twitch-clip:a'].mediaAsset, null);
   assert.equal(c.clips['twitch-clip:b'].status, 'blocked'); assert.equal(c.clips['twitch-clip:b'].reason, 'creator_prohibited');
@@ -187,7 +188,7 @@ test('approved clip: policy-gated, rendered once, staggered to every destination
   assert.ok(media.calls.render[0].credit.includes('@thegrefg'));
   // Second run: nothing re-published.
   const again = await runCloudPublisher({ env: ON, now: NOW + 3600_000, owner: 'o', store, approvals: appr, metricool: m, stager, fetch: okFetch, ...media });
-  assert.equal(m.calls.schedule.length, 3); assert.equal(again.report.counts.scheduled, 0);
+  assert.equal(m.calls.schedule.length, 1); assert.equal(again.report.counts.scheduled, 0);
 });
 
 test('uncertain Metricool write is never resent: reconciled read-only, then the asset is removed', async () => {
@@ -229,8 +230,10 @@ test('preflight slot conflict moves to the next slot; destination hold defers wi
   const env = { ...ON, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: '6431685:tiktok:streamersus,6591612:facebook:1193011863901514' };
   const { report } = await runCloudPublisher({ env, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia(), clock: () => NOW });
   assert.deepEqual(m.calls.schedule.map(i => i.scheduledAt), ['2026-11-19T18:30:00.000Z']);
-  assert.equal(report.counts.deferred, 1);
-  assert.ok(report.heldReasons.some(r => r.startsWith('destination_held:6591612:destination_publish_permission_missing')));
+  assert.equal(report.counts.deferred, 0, 'single account: the second (Facebook) destination is never planned');
+  const fbFirst = await runCloudPublisher({ env: { ...env, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: '6591612:facebook:1193011863901514' }, now: NOW, owner: 'o', store: memoryStore(baseState([candidate('a', 'twitch:100', 'thegrefg')])), approvals: approvals({ 'pa-a': 'approved' }), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia(), clock: () => NOW });
+  assert.equal(fbFirst.report.counts.deferred, 1);
+  assert.ok(fbFirst.report.heldReasons.some(r => r.startsWith('destination_held:6591612:destination_publish_permission_missing')));
 });
 
 test('missing Metricool secrets hold publishing; dry run renders without Metricool', async () => {
@@ -360,7 +363,7 @@ test('N1: legacy-key rows (6431685:tiktok:streamersclips) count toward the cap a
   const m = fakeMetricool();
   await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia(), clock: () => NOW });
   assert.ok(!m.calls.schedule.some(i => i.destinationKey === '6431685:tiktok:streamersus'), 'not planned again for the renamed destination');
-  assert.equal(m.calls.schedule.length, 2);
+  assert.equal(m.calls.schedule.length, 1);
 });
 
 test('N2: canonical key/account helpers never loosen identity', () => {

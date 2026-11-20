@@ -223,3 +223,47 @@ test('with the cloud publisher on, approvals go only to platforms it can downloa
   const rows = [...queue.rows.values()];
   assert.ok(rows.length >= 1); assert.ok(rows.every(r => r.input.platform === 'twitch'));
 });
+
+test('approval-queue IO and HTTP never run while the council owner lock is held', async () => {
+  const base = memoryStore(), inner = memoryQueue(), { fn } = mockFetch();
+  let inTx = false, ioInTx = 0;
+  const store = { data: base.data, read: base.read, async transact(k, update) { inTx = true; try { return await base.transact(k, update); } finally { inTx = false; } } };
+  const queue = { rows: inner.rows, async insert(row) { if (inTx) ioInTx++; return inner.insert(row); }, async statuses(o, ids) { if (inTx) ioInTx++; return inner.statuses(o, ids); } };
+  const fetch = async (...a) => { if (inTx) ioInTx++; return fn(...a); };
+  const { report, state } = await runStreamerDiscovery({ env: ENV, now: NOW, fetch, store, queue, owner: 'o' });
+  assert.equal(report.status, 'completed', JSON.stringify(report.errors));
+  assert.equal(ioInTx, 0, 'no network or pending_actions IO inside the transaction');
+  assert.ok(inner.rows.size >= 2 && report.counts.queuedForApproval === inner.rows.size);
+  assert.ok([...inner.rows.values()].every(r => state.candidates.find(c => c.id === r.resourceId)?.approval?.pendingActionId === r.id));
+  // A second run reuses existing rows (idempotent) and keeps the recorded approvals.
+  const again = await runStreamerDiscovery({ env: ENV, now: NOW + 3_600_000, fetch, store, queue, owner: 'o' });
+  assert.equal(ioInTx, 0); assert.equal(again.report.counts.queuedForApproval, 0);
+});
+
+test('concurrent approval inserts for one candidate create exactly one live row (advisory lock + fresh statement)', async () => {
+  const { approvalInsertLockKey } = await import('../script/clippers-streamer-discovery.mjs');
+  const rows = []; const locks = new Map(); const seen = [];
+  // Fake PostgreSQL: per-key advisory lock held until COMMIT; the check-and-insert sees committed rows only.
+  const transaction = async fn => {
+    let release;
+    const q = async (sql, values) => {
+      seen.push(sql);
+      if (sql.includes('pg_advisory_xact_lock')) {
+        const key = values[0]; while (locks.has(key)) await locks.get(key);
+        locks.set(key, new Promise(r => { release = () => { locks.delete(key); r(); }; })); return { rows: [] };
+      }
+      await new Promise(r => setTimeout(r, 5)); // widen the race window
+      const live = rows.find(r => r.userId === values[0] && r.actionType === values[1] && r.resourceId === values[3]);
+      if (live) return { rows: [{ id: live.id }] };
+      const row = { id: `pa-${rows.length + 1}`, userId: values[0], actionType: values[1], resourceId: values[3] }; rows.push(row); return { rows: [{ id: row.id }] };
+    };
+    try { return await fn(q); } finally { release?.(); }
+  };
+  const q = createPendingActionsQueue(async () => { throw new Error('must use the transaction'); }, { transaction });
+  const row = { userId: 'o', actionType: STREAMER_APPROVAL_ACTION, resourceType: 'r', resourceId: 'twitch-clip:a', title: 't', description: 'd', riskLevel: 'medium', status: 'pending', input: {} };
+  const ids = await Promise.all([q.insert(row), q.insert(row), q.insert(row)]);
+  assert.equal(rows.length, 1); assert.deepEqual(new Set(ids), new Set(['pa-1']));
+  assert.ok(seen.indexOf(seen.find(s => s.includes('pg_advisory_xact_lock'))) < seen.findIndex(s => s.includes('WITH existing')));
+  assert.equal(approvalInsertLockKey(row), JSON.stringify(['clippers-streamer-approval-v1', 'o', STREAMER_APPROVAL_ACTION, 'twitch-clip:a']));
+  assert.notEqual(approvalInsertLockKey(row), approvalInsertLockKey({ ...row, resourceId: 'twitch-clip:b' }));
+});

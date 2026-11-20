@@ -116,7 +116,7 @@ test('default takedown rejection reuses one module-level pool (no pool per taked
   const src = readFileSync(new URL('../server/clippers-streamers-status.ts', import.meta.url), 'utf8');
   const fn = src.slice(src.indexOf('async function defaultRejectPending'), src.indexOf('export function registerClippersStreamerRoutes'));
   assert.match(fn, /rejectPool \?\?=/);
-  assert.equal((fn.match(/createCouncilPool\(\)/g) ?? []).length, 1);
+  assert.equal((fn.match(/createCouncilPool\('streamers-takedown'\)/g) ?? []).length, 1);
 });
 
 test('status view lists cloud-published posts (for takedown removal) and the learning summary', () => {

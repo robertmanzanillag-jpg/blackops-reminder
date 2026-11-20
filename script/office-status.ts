@@ -3,6 +3,7 @@ import pg from "pg";
 import { createCouncilStore, type CouncilClient } from "../server/agent-council-store";
 import { safeErrorCode } from "./software-factory-db-cli";
 import { parseOwner, shapeCouncil, shapeSourceDocuments, shapeWebSources, shapeWorkers, webSourceOwnerKey } from "./office-status-shape";
+import { blackopsApplicationName } from "../server/agent-council-store";
 
 // READ-ONLY office diagnostic. Everything runs inside one READ ONLY transaction that is always rolled
 // back, so PostgreSQL itself rejects any write. Prints ONE JSON line that is safe for public logs:
@@ -12,7 +13,7 @@ const TABLES = ["agent_council_state", "office_agent_workers", "office_web_role_
 async function main() {
   const owner = parseOwner(process.env);
   if (!process.env.DATABASE_URL?.trim()) throw new Error("DATABASE_URL_REQUIRED");
-  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 10000, max: 1 });
+  const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 10000, max: 1, application_name: blackopsApplicationName("office-status") });
   pool.on("error", () => undefined);
   try {
     const client = await pool.connect();

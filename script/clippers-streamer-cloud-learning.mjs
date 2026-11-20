@@ -86,7 +86,7 @@ export function creatorBoostFor(learning, creatorKey) {
 //   - kill a creator, hook variant or posting hour on an account when its median < 300 after >= 6 posts;
 //   - a post above 10k views within 24 h -> 3 more clips from the same stream/creator on that account;
 //   - a post above 100k views -> double that creator's share on that account.
-import { KILL_MEDIAN_VIEWS, KILL_MIN_POSTS, BREAKOUT_VIEWS_24H, BREAKOUT_FOLLOWUP_CLIPS, MEGA_VIEWS, laneForDestinationKey, autoPublishAllowed } from '../shared/clippers-account-lanes.mjs';
+import { KILL_MEDIAN_VIEWS, KILL_MIN_POSTS, BREAKOUT_VIEWS_24H, BREAKOUT_FOLLOWUP_CLIPS, MEGA_VIEWS, PAUSE_DAYS, laneForDestinationKey, autoPublishAllowed } from '../shared/clippers-account-lanes.mjs';
 
 export const GROWTH_WINDOW_DAYS = 14;
 const DAY = 86_400_000;
@@ -111,17 +111,19 @@ export function computeGrowth({ posts = [], accountPosts = {}, previous = null, 
     const mine = recent.filter(p => canonicalDestinationKey(p.destinationKey) === key).map(p => ({ ...p, latest: latestViews(p, accountPosts[key] ?? []) })).filter(p => p.latest);
     const weekly = rows.length ? rows.map(r => r.views) : mine.filter(p => now - Date.parse(p.scheduledAt) <= 7 * DAY).map(p => p.latest.views);
     const account = { lane: laneForDestinationKey(key)?.id ?? null, weeklyPosts: weekly.length, weeklyViews: weekly.reduce((a, b) => a + b, 0), weeklyMedian: median(weekly), source: rows.length ? 'metricool_account_analytics' : 'ledger_observations' };
-    account.autoPublish = autoPublishAllowed(account);
+    account.autoPublish = autoPublishAllowed(account); // also requires source = metricool_account_analytics
     account.scaled = account.autoPublish; // 6-8 posts/day once the weekly median passes 1k
     out.accounts[key] = account;
     if (account.autoPublish) out.decisions.push(`autopublish_on:${key}`);
     // Kill arms with a median below 300 after >= 6 posts on this account.
     for (const [arm, pick] of [['creator', p => p.creatorKey], ['hook', p => p.hookVariant], ['slot', p => nyHour(p.scheduledAt)]]) {
       const groups = new Map();
-      for (const p of mine) { const v = pick(p); if (v == null) continue; groups.set(v, [...(groups.get(v) ?? []), p.latest.views]); }
-      for (const [value, views] of groups) {
+      for (const p of mine) { const v = pick(p); if (v == null) continue; const g = groups.get(v) ?? { views: [], last: 0 }; g.views.push(p.latest.views); g.last = Math.max(g.last, Date.parse(p.scheduledAt)); groups.set(v, g); }
+      for (const [value, { views, last }] of groups) {
         const m = median(views);
-        if (views.length >= KILL_MIN_POSTS && m < KILL_MEDIAN_VIEWS) { out.kills.push({ destinationKey: key, arm, value, median: m, posts: views.length }); out.decisions.push(`kill_${arm}:${key}:${value}`); }
+        // A pause expires PAUSE_DAYS after the arm's newest post (then it is tried again).
+        const expiresAt = new Date(last + PAUSE_DAYS * DAY).toISOString();
+        if (views.length >= KILL_MIN_POSTS && m < KILL_MEDIAN_VIEWS && Date.parse(expiresAt) > now) { out.kills.push({ destinationKey: key, arm, value, median: m, posts: views.length, expiresAt }); out.decisions.push(`kill_${arm}:${key}:${value}`); }
       }
     }
     // Breakouts (> 10k within 24 h) and mega posts (> 100k).
@@ -148,11 +150,13 @@ export function computeGrowth({ posts = [], accountPosts = {}, previous = null, 
 /** Selection weight for a candidate on its routed account: 0 = killed, 2 = doubled creator, +breakout stream. */
 export function growthWeight(growth, { destinationKey, creatorKey, streamKey }, now = Date.now()) {
   if (!growth) return { weight: 1, killed: false, breakout: false };
-  if ((growth.kills ?? []).some(k => k.destinationKey === destinationKey && k.arm === 'creator' && k.value === creatorKey)) return { weight: 0, killed: true, breakout: false };
+  const live = k => !k.expiresAt || Date.parse(k.expiresAt) > now;
+  if ((growth.kills ?? []).some(k => k.destinationKey === destinationKey && k.arm === 'creator' && k.value === creatorKey && live(k))) return { weight: 0, killed: true, breakout: false };
   const breakout = (growth.breakouts ?? []).some(b => b.destinationKey === destinationKey && b.remaining > 0 && Date.parse(b.until) > now && ((streamKey && b.streamKey === streamKey) || b.creatorKey === creatorKey));
   const doubled = (growth.doubled ?? []).some(d => d.destinationKey === destinationKey && d.creatorKey === creatorKey);
   return { weight: (doubled ? 2 : 1) + (breakout ? 3 : 0), killed: false, breakout };
 }
-export const killedHooks = (growth, destinationKey) => (growth?.kills ?? []).filter(k => k.destinationKey === destinationKey && k.arm === 'hook').map(k => k.value);
-export const killedHours = (growth, destinationKey) => (growth?.kills ?? []).filter(k => k.destinationKey === destinationKey && k.arm === 'slot').map(k => Number(k.value));
+const livePause = (k, now) => !k.expiresAt || Date.parse(k.expiresAt) > now;
+export const killedHooks = (growth, destinationKey, now = Date.now()) => (growth?.kills ?? []).filter(k => k.destinationKey === destinationKey && k.arm === 'hook' && livePause(k, now)).map(k => k.value);
+export const killedHours = (growth, destinationKey, now = Date.now()) => (growth?.kills ?? []).filter(k => k.destinationKey === destinationKey && k.arm === 'slot' && livePause(k, now)).map(k => Number(k.value));
 export const promotedHours = (growth, destinationKey, now = Date.now()) => (growth?.breakouts ?? []).filter(b => b.destinationKey === destinationKey && Date.parse(b.until) > now).map(b => b.slotHour);

@@ -16,8 +16,13 @@
 // What never counts: heartbeats, readiness, a configured seat, a plan, a manual close.
 // What pauses the clock (no loss): an explicit setup hold (missing credentials or source,
 // needs-setup, a life-penalty exemption) and the academy.
+//
+// KONG agents (`kong:*`, `kong-city:*`) follow the same vida rules, but their turn is KONG's own
+// schedule (server/kong-company.ts scores +6 per verified run and -3 per missed nextRunAt, once
+// per evidence id); here they get the same holds ("en espera"), academy pause, vida-0 flag and the
+// repeated-blocker record that feeds automejora. No KONG snapshot this tick = everyone en espera.
 
-import { BATTERY_MAX, type AgentCareer, type CompanyState, type MemoryEntry } from "./agent-company";
+import { BATTERY_MAX, isKongSnapshotAgent, type AgentCareer, type CompanyState, type MemoryEntry } from "./agent-company";
 import { CLIPPERS_AGENTS } from "./clippers-office-agents";
 import { FACTORY_AGENTS } from "./factory-office-agents";
 import type { AgentLiveStatus } from "./agent-live-status";
@@ -88,7 +93,21 @@ export type CareerVitality = {
   /** Cooldowns kept on the career (proposal history is pruned): vida-0 review and automejora keys. */
   flagProposedAt?: string;
   proposedKeys?: Record<string, string>;
+  /** KONG agents: the blocker KONG keeps reporting and since when (feeds automejora proposals). */
+  kongBlocker?: { key: string; label: string; since: string };
 };
+
+/** What the KONG snapshot of this tick says for the vida rule (server/kong-company.ts advanceKongCareers). */
+export type KongVitalityInput = {
+  /** False when the snapshot was missing, stale or unreadable: every KONG career is en espera. */
+  observed: boolean;
+  /** Career ids present in the snapshot. */
+  agents: string[];
+  /** id -> why it has no turn to miss now (on demand, idle, disabled, evidence pending, ...). */
+  holds: Record<string, string>;
+  blockers: Record<string, { key: string; label: string }>;
+};
+export const KONG_UNREAD_HOLD = "KONG sin lectura verificada: BlackOps no pudo leer su estado";
 
 /** `clockOnly`: output already scored by another rule (e.g. Black Room quality signals): moves the clock, no extra vida. */
 export type VitalityEvidence = { id: string; agentId: string; at: string; label: string; clockOnly?: boolean };
@@ -113,6 +132,8 @@ const clean = (v: CareerVitality) => Object.fromEntries(Object.entries(v).filter
  */
 export function applyVitality(company: CompanyState, input: {
   now: number; evidence?: VitalityEvidence[]; holds?: Record<string, string>; exempt?: string[]; names?: Record<string, string>;
+  /** KONG snapshot of this tick. Omitted = KONG careers are left untouched (e.g. tests of other lanes). */
+  kong?: KongVitalityInput;
 }): { state: CompanyState; flagged: string[]; recovered: string[]; decayed: string[] } {
   const iso = new Date(input.now).toISOString();
   const careers: Record<string, AgentCareer> = { ...company.careers };
@@ -126,8 +147,10 @@ export function applyVitality(company: CompanyState, input: {
     evidenceBy.set(item.agentId, [...(evidenceBy.get(item.agentId) || []), item]);
   }
   for (const [agentId, original] of Object.entries(company.careers)) {
-    const cadence = vitalityCadenceMs(agentId);
-    if (cadence === null || isKong(agentId) || input.exempt?.includes(agentId) || original.scoreReconciliation !== undefined) continue;
+    const kong = isKongSnapshotAgent(agentId);
+    if (kong && !input.kong) continue;
+    const cadence = kong ? null : vitalityCadenceMs(agentId);
+    if ((cadence === null && !kong) || (!kong && isKong(agentId)) || input.exempt?.includes(agentId) || original.scoreReconciliation !== undefined) continue;
     const name = input.names?.[agentId] || agentId;
     let career: AgentCareer = { ...original };
     const previous = parseVitality(career.vitality);
@@ -165,24 +188,35 @@ export function applyVitality(company: CompanyState, input: {
     //    in that window), hire, first sight, the end of a hold, or the end of office downtime.
     const anchor = Math.max(ms(v.anchorAt), ms(v.lastVerifiedWorkAt), ms(career.lastEvaluatedAt), hired);
     if (anchor > ms(v.anchorAt)) v = { ...v, anchorAt: new Date(anchor).toISOString(), missesApplied: 0 };
-    const hold = input.holds?.[agentId];
-    const downtime = v.lastTickAt !== undefined && input.now - ms(v.lastTickAt) > cadence;
-    if (hold || downtime) {
+    if (kong && input.kong) {
+      // KONG turns are scored from the snapshot (missed nextRunAt = -3 once): no cadence decay here.
+      const k = input.kong;
+      const hold = !k.observed ? KONG_UNREAD_HOLD : k.holds[agentId] ?? (k.agents.includes(agentId) ? undefined : "ya no aparece en el estado de KONG");
       v = { ...v, anchorAt: iso, missesApplied: 0, holdReason: hold ? hold.slice(0, 120) : undefined };
+      if (k.observed) {
+        const blocker = k.blockers[agentId];
+        v.kongBlocker = blocker ? (v.kongBlocker?.key === blocker.key ? v.kongBlocker : { key: blocker.key.slice(0, 80), label: blocker.label.slice(0, 140), since: iso }) : undefined;
+      }
     } else {
-      if (v.holdReason) v = { ...v, holdReason: undefined };
-      const missed = Math.max(0, Math.floor((input.now - ms(v.anchorAt)) / cadence));
-      // At most one window per tick: a backlog is never charged at once.
-      if (missed > v.missesApplied) {
-        const before = career.battery;
-        career.battery = Math.max(0, career.battery - VITALITY_MISS.battery);
-        career.points = Math.max(0, career.points - VITALITY_MISS.points);
-        v.missesApplied += 1;
-        if (before !== career.battery) {
-          v.decayDebt = (v.decayDebt || 0) + (before - career.battery);
-          if (career.battery === 0) v.zeroByDecay = iso;
-          career.memory = remember(career.memory, iso, `Sin entregable verificado en ${Math.round(cadence / HOUR_MS)} h: -${before - career.battery} de vida.`);
-          decayed.push(agentId);
+      const hold = input.holds?.[agentId];
+      const downtime = v.lastTickAt !== undefined && input.now - ms(v.lastTickAt) > cadence!;
+      if (hold || downtime) {
+        v = { ...v, anchorAt: iso, missesApplied: 0, holdReason: hold ? hold.slice(0, 120) : undefined };
+      } else {
+        if (v.holdReason) v = { ...v, holdReason: undefined };
+        const missed = Math.max(0, Math.floor((input.now - ms(v.anchorAt)) / cadence!));
+        // At most one window per tick: a backlog is never charged at once.
+        if (missed > v.missesApplied) {
+          const before = career.battery;
+          career.battery = Math.max(0, career.battery - VITALITY_MISS.battery);
+          career.points = Math.max(0, career.points - VITALITY_MISS.points);
+          v.missesApplied += 1;
+          if (before !== career.battery) {
+            v.decayDebt = (v.decayDebt || 0) + (before - career.battery);
+            if (career.battery === 0) v.zeroByDecay = iso;
+            career.memory = remember(career.memory, iso, `Sin entregable verificado en ${Math.round(cadence! / HOUR_MS)} h: -${before - career.battery} de vida.`);
+            decayed.push(agentId);
+          }
         }
       }
     }
@@ -227,12 +261,13 @@ export function vitalityGroup(agentId: string): string {
   if (agentId.startsWith("blackroom") || agentId.startsWith("br-")) return "Black Room";
   if (["skills-scout", "agent-factory", "mechanic"].includes(agentId)) return "Consejo";
   if (agentId.startsWith("specialist:")) return "Academia";
+  if (isKongSnapshotAgent(agentId)) return "KONG";
   return "Oficina";
 }
 
 /** Read-only roster of every registered main-company agent with its vida and real state. */
 export function vitalityView(company: CompanyState | undefined, input: { now: number; names: Record<string, string>; exempt?: string[]; workingWindowMs?: number }): VitalityRow[] {
-  const ids = [...new Set([...Object.keys(input.names), ...Object.keys(company?.careers || {})])].filter(id => !isKong(id));
+  const ids = [...new Set([...Object.keys(input.names), ...Object.keys(company?.careers || {})])].filter(id => !isKong(id) || isKongSnapshotAgent(id));
   return ids.map((agentId): VitalityRow => {
     const name = input.names[agentId] || agentId;
     const career = company?.careers[agentId];
@@ -244,6 +279,15 @@ export function vitalityView(company: CompanyState | undefined, input: { now: nu
     const last = v?.lastVerifiedWorkAt || (career.lastState === "working" ? career.lastEvaluatedAt : undefined) || null;
     const learned = (career.skills || []).slice(0, 4).map(skill => skill.title);
     const common = { ...base, vida: career.battery, points: career.points, generation: career.generation, lastVerifiedWorkAt: last, lastVerifiedLabel: v?.lastVerifiedLabel || null, learned };
+    if (isKongSnapshotAgent(agentId)) {
+      // KONG turn = KONG's own schedule: measured agents lose vida only for a missed nextRunAt or a recorded failure.
+      if (career.inTrainingUntilGeneration) return { ...common, state: "en_academia", label: "En la academia: estudia, no pierde vida", nextLossAt: null, flagged: false };
+      if (career.battery === 0) return { ...common, state: "vida_cero", label: "Vida en cero: revisión del CEO/Robert pendiente (no se borra)", nextLossAt: null, flagged: true };
+      if (last && input.now - ms(last) <= 26 * HOUR_MS) return { ...common, state: "trabajando", label: "Entregó trabajo verificado en KONG recientemente", nextLossAt: null, flagged: false };
+      if (v?.holdReason) return { ...common, state: "en_espera", label: `En espera (${v.holdReason}): no pierde vida`, nextLossAt: null, flagged: false };
+      if (career.lastState === "error" && input.now - ms(career.lastEvaluatedAt) <= 26 * HOUR_MS) return { ...common, state: "atrasado", label: "Turno de KONG vencido o con falla registrada: pierde vida", nextLossAt: null, flagged: false };
+      return { ...common, state: "al_dia", label: "Medido por su turno programado en KONG; sin entrega nueva todavía", nextLossAt: null, flagged: false };
+    }
     if (input.exempt?.includes(agentId)) return { ...common, state: "sin_puntuar", label: "Pausado, externo o sin trabajo propio: no gana ni pierde vida", nextLossAt: null, flagged: false };
     if (cadence === null) return { ...common, state: "sin_entregable", label: "Coordina, observa o aún no tiene una fuente de entregables verificables: no pierde vida por inactividad", nextLossAt: null, flagged: false };
     if (career.inTrainingUntilGeneration) return { ...common, state: "en_academia", label: "En la academia: estudia, no pierde vida", nextLossAt: null, flagged: false };

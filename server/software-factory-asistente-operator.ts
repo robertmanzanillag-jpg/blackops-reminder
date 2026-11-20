@@ -31,6 +31,7 @@ import { readFactoryOrderProposals } from "./software-factory-order-evidence";
 import { COMPANY_ORDER_CHECKS_ID, createFactoryOrderFileSelector, isFactoryTestPath, listFactorySelectablePaths } from "./software-factory-company-auto";
 import { isSelfHealOrder, isValidSelfHealOrder } from "./office-self-heal";
 import type { CreditPacer } from "./credit-pacer-runtime";
+import { blackopsApplicationName } from "./agent-council-store";
 const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const sha = z.string().regex(/^[a-f0-9]{40}$/), digest = z.string().regex(/^[a-f0-9]{64}$/);
 const cents = z.number().int().min(1).max(100);
@@ -91,16 +92,26 @@ export function countAutoAdmissionsToday(jobs: readonly FactoryJob[], now: Date,
 /** Admission-side variant: an unprovable count defers admission (no hold). */
 function countDraftPullRequestsTodaySafe(jobs: readonly FactoryJob[], now: Date, ownerKey: string) { try { return countDraftPullRequestsToday(jobs, now, ownerKey); } catch { return Number.POSITIVE_INFINITY; } }
 /**
- * The ONLY operator-config field the workflow environment may change:
- * FACTORY_AUTO_ADMIT_SYSTEM_ORDERS=true|false sets autoAdmit.systemOrders, and only
- * when autoAdmit already exists in the private config. It never enables automatic
- * admission, widens caps, paths, owner, budgets or any other field. Any other value
- * (or unset) leaves the private config unchanged.
+ * The ONLY operator-config fields the workflow environment may change:
+ * - FACTORY_AUTO_ADMIT_SYSTEM_ORDERS=true|false sets autoAdmit.systemOrders, only when
+ *   autoAdmit already exists in the private config.
+ * - FACTORY_DRAFT_PRS_PER_DAY=<1..FACTORY_MAX_DRAFT_PULL_REQUESTS_PER_DAY> (owner request,
+ *   so the daily draft-PR cap can change without rewriting the private JSON) sets
+ *   maxDraftPullRequestsPerDay and, when present, autoAdmit.maxPerDay. The code-level
+ *   maximum still applies and the full schema validation runs after this override.
+ * Neither ever enables automatic admission or changes paths, owner, budgets or any other
+ * field. Any other value (or unset) leaves the private config unchanged.
  */
-export function applyFactoryOperatorEnvOverride<T extends { autoAdmit?: { systemOrders?: boolean } }>(config: T, env: Record<string, string | undefined>): T {
+export function applyFactoryOperatorEnvOverride<T extends { maxDraftPullRequestsPerDay?: number; autoAdmit?: { systemOrders?: boolean; maxPerDay?: number } }>(config: T, env: Record<string, string | undefined>): T {
+    let next = config;
     const raw = env.FACTORY_AUTO_ADMIT_SYSTEM_ORDERS?.trim();
-    if ((raw !== "true" && raw !== "false") || !config.autoAdmit) return config;
-    return { ...config, autoAdmit: { ...config.autoAdmit, systemOrders: raw === "true" } };
+    if ((raw === "true" || raw === "false") && next.autoAdmit) next = { ...next, autoAdmit: { ...next.autoAdmit, systemOrders: raw === "true" } };
+    const perDayRaw = env.FACTORY_DRAFT_PRS_PER_DAY?.trim();
+    const perDay = perDayRaw && /^\d{1,2}$/.test(perDayRaw) ? Number(perDayRaw) : NaN;
+    if (Number.isSafeInteger(perDay) && perDay >= 1 && perDay <= FACTORY_MAX_DRAFT_PULL_REQUESTS_PER_DAY) {
+        next = { ...next, maxDraftPullRequestsPerDay: perDay, ...(next.autoAdmit ? { autoAdmit: { ...next.autoAdmit, ...(next.autoAdmit.maxPerDay !== undefined ? { maxPerDay: perDay } : {}) } } : {}) };
+    }
+    return next;
 }
 export type OperatorUiReader = (input: {
     projectId: string;
@@ -399,7 +410,7 @@ async function installed(store: Store) {
     let recoveryPool: import('pg').Pool | undefined;
     const recoveryPrevious=async(ownerKey:string,failedId:string,jobId:string)=>{
       if(env.SOFTWARE_FACTORY_STORAGE_BACKEND && env.SOFTWARE_FACTORY_STORAGE_BACKEND!=='postgres')throw Error('FACTORY_RECOVERY_POSTGRES_REQUIRED');
-      if(!recoveryPool){const [{Pool},{resolveDatabaseConnectionString}]=await Promise.all([import('pg'),import('./database-url')]);recoveryPool=new Pool({connectionString:resolveDatabaseConnectionString(),allowExitOnIdle:true,max:1,connectionTimeoutMillis:10000,statement_timeout:15000});}
+      if(!recoveryPool){const [{Pool},{resolveDatabaseConnectionString}]=await Promise.all([import('pg'),import('./database-url')]);recoveryPool=new Pool({connectionString:resolveDatabaseConnectionString(),allowExitOnIdle:true,max:1,connectionTimeoutMillis:10000,statement_timeout:15000,application_name:blackopsApplicationName("factory-asistente")});}
       const {loadFailedBuildRecovery}=await import('./software-factory-build-recovery');
       return loadFailedBuildRecovery(recoveryPool,ownerKey,failedId,jobId);
     };

@@ -50,6 +50,9 @@ export function createCouncilStore(pool: CouncilPool) {
         await client.query("BEGIN");
         await client.query("SET LOCAL lock_timeout = '10s'");
         await client.query("SET LOCAL statement_timeout = '30s'");
+        // A holder that stalls (network or other-pool IO inside the update) is cut off by the server
+        // instead of blocking every other council writer until it finishes.
+        await client.query(`SET LOCAL idle_in_transaction_session_timeout = '${COUNCIL_IDLE_IN_TRANSACTION_MS}ms'`);
         // Lock even an absent row; every instance reads after acquiring the same owner lock.
         await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", [key(owner)]);
         const result = await client.query("SELECT state FROM agent_council_state WHERE owner_key = $1 FOR UPDATE", [key(owner)]);
@@ -68,6 +71,8 @@ export function createCouncilStore(pool: CouncilPool) {
 }
 
 const LOCK_RETRY_ATTEMPTS = 4;
+/** Server-side cap on "idle in transaction" for council connections (30 s). */
+export const COUNCIL_IDLE_IN_TRANSACTION_MS = 30_000;
 /** 2-4 s, 4-8 s, 8-16 s: spreads colliding writers apart without exceeding the office budget. */
 export function lockRetryDelayMs(attempt: number, random: () => number = Math.random): number {
   const base = 2_000 * 2 ** (attempt - 1);
@@ -75,16 +80,28 @@ export function lockRetryDelayMs(attempt: number, random: () => number = Math.ra
 }
 
 /** Non-secret label so owner-lock diagnostics (pg_stat_activity) show which host holds the lock. */
-export function councilApplicationName(env: Readonly<Record<string, string | undefined>> = process.env): string {
+export function councilApplicationName(env: Readonly<Record<string, string | undefined>> = process.env, role = "council"): string {
+  return blackopsApplicationName(role, env);
+}
+
+/** application_name for every BlackOps PostgreSQL pool: `blackops-<role>:<host>` (non-secret, <= 63 chars). */
+export function blackopsApplicationName(role: string, env: Readonly<Record<string, string | undefined>> = process.env): string {
+  const safeRole = role.replace(/[^A-Za-z0-9_-]/g, "").slice(0, 24) || "pool";
   const source = env.GITHUB_ACTIONS === "true" ? `gha-${(env.GITHUB_JOB || "job").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 32)}`
     : env.REPLIT_DEPLOYMENT ? "replit-web" : env.REPL_ID ? "replit-dev" : "local";
-  return `blackops-council:${source}`;
+  return `blackops-${safeRole}:${source}`.slice(0, 63);
 }
 
 /** The same bounded PostgreSQL pool the council store uses (DATABASE_URL). */
-export async function createCouncilPool(): Promise<CouncilPool> {
+export async function createCouncilPool(role = "council"): Promise<CouncilPool> {
   const [{ Pool }, { resolveDatabaseConnectionString }] = await Promise.all([import("pg"), import("./database-url")]);
-  return new Pool({ connectionString: resolveDatabaseConnectionString(), allowExitOnIdle: true, max: 2, connectionTimeoutMillis: 10000, statement_timeout: 30000, application_name: councilApplicationName() });
+  return new Pool(councilPoolConfig(resolveDatabaseConnectionString(), role));
+}
+
+/** Pool settings shared by every council connection (named, bounded, idle-in-transaction capped). */
+export function councilPoolConfig(connectionString: string | undefined, role = "council", env: Readonly<Record<string, string | undefined>> = process.env) {
+  return { connectionString, allowExitOnIdle: true, max: 2, connectionTimeoutMillis: 10000, statement_timeout: 30000,
+    idle_in_transaction_session_timeout: COUNCIL_IDLE_IN_TRANSACTION_MS, application_name: councilApplicationName(env, role) };
 }
 
 let store: ReturnType<typeof createCouncilStore> | undefined;

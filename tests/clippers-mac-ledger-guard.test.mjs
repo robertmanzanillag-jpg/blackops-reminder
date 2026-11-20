@@ -42,7 +42,9 @@ test('caption language is only reported when confident', () => {
 test('routing rules: account language, creator lane and stream owner', () => {
   assert.equal(macRoutingRefusal({ destination: MIAMI, item: item({ language: 'en' }), entries: [] }), 'language_mismatch:en_on_es');
   assert.equal(macRoutingRefusal({ destination: MEMES, item: item({ caption: '¿Qué acaba de pasar? No se lo esperaba en la sala' }), entries: [] }), 'language_mismatch:es_on_en');
-  assert.equal(macRoutingRefusal({ destination: MEMES, item: item({ creatorGroupId: 'westcol' }), entries: [] }), 'creator_routed_to_other_account:miami');
+  assert.equal(macRoutingRefusal({ destination: MEMES, item: item({ creatorGroupId: 'plaqueboymax' }), entries: [] }), 'creator_routed_to_other_account:sports');
+  // Language decides first (main): an English Westcol clip may go to an English lane.
+  assert.equal(macRoutingRefusal({ destination: MEMES, item: item({ creatorGroupId: 'westcol' }), entries: [] }), null);
   assert.equal(macRoutingRefusal({ destination: MEMES, item: item({ creatorGroupId: 'kai-cenat' }), entries: [] }), null);
   const owned = [{ candidateId: 'youtube:abcDEF12345', streamKey: 'youtube:abcDEF12345', segment: { key: 'youtube:abcDEF12345', start: 900 }, destinationKey: '6431687:tiktok:streamersclipusa', lane: 'sports' }];
   assert.equal(macRoutingRefusal({ destination: MEMES, item: item({ sourceStartSec: 2000 }), entries: owned }), 'stream_owned_by_other_account');
