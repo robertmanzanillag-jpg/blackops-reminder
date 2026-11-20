@@ -53,6 +53,11 @@ export function createClippersOrchestraState(options:{owner:()=>string;store:()=
     try{if(accepted)await options.careerSweep?.(e.report);}catch{return {accepted:true,duplicate,code:'CLIPPERS_ORCHESTRA_CAREERS_PENDING'};}
     return {accepted:accepted||duplicate,duplicate,code:duplicate?'CLIPPERS_ORCHESTRA_DUPLICATE':'CLIPPERS_ORCHESTRA_ACCEPTED'};
   }
+  // Former Mac LaunchAgent lanes now in GitHub Actions (clippers-cloud-lanes.yml); never fails the read.
+  async function overlayCloudLanes(report:ClippersOrchestraStatus,at:number){
+    try{const {applyCloudLanesOverlay}=await import('./clippers-cloud-lanes-status');const {CLOUD_LANES_NAMESPACE}=await import('../shared/clippers-cloud-lanes.mjs');
+      applyCloudLanesOverlay(report,await (await options.store()).read(CLOUD_LANES_NAMESPACE(options.owner())),at);}catch{}
+  }
   async function read(){
     const at=now(),stored=saved(await (await options.store()).read(namespace(options.owner())),at);
     if(!stored){
@@ -62,6 +67,7 @@ export function createClippersOrchestraState(options:{owner:()=>string;store:()=
         if(!fallback)return null;
         let company:CompanyState|undefined;try{company=await options.readCompany?.();}catch{}
         for(const role of fallback.roles)role.career=clippersCareerView(company,role.id);
+        await overlayCloudLanes(fallback,at);
         return fallback;}catch{return null;}
     }
     const report=structuredClone(stored.report),age=(at-Date.parse(stored.receivedAt));
@@ -90,6 +96,7 @@ export function createClippersOrchestraState(options:{owner:()=>string;store:()=
     // Cloud streamer discovery (GitHub Actions) reports into the same Streamers role; it never fails the read.
     try{const {applyStreamerOverlay}=await import('./clippers-streamers-status');const {STREAMER_STATE_NAMESPACE}=await import('../script/clippers-streamer-discovery.mjs');
       applyStreamerOverlay(report,await (await options.store()).read(STREAMER_STATE_NAMESPACE(options.owner())),at);}catch{}
+    await overlayCloudLanes(report,at);
     return report;
   }
   return {ingest,read};

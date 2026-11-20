@@ -64,6 +64,8 @@ export const SELF_HEAL_ALLOWLIST = {
   "code:PR_FAILING_CHECKS": { assignee: "code" },
   // Cloud streamer discovery failing on code (3+ consecutive runs). Missing keys are data absence, never an order.
   "clippers-streamers:STREAMER_DISCOVERY_FAILING": { assignee: "code" },
+  // Clippers cloud lanes (former Mac LaunchAgents) failing on code 3+ consecutive runs. Missing secrets are data absence.
+  "clippers-cloud-lanes:CLOUD_LANE_FAILING": { assignee: "code" },
 } as const;
 type AllowKey = keyof typeof SELF_HEAL_ALLOWLIST;
 
@@ -76,7 +78,7 @@ export const SELF_HEAL_DATA_ABSENCE_CODES = new Set([
 
 const SEVERITY: Record<string, number> = {
   HIGH_RISK_AUTONOMY: 4,
-  FAILING_DEFAULT_BRANCH: 3, PR_FAILING_CHECKS: 3, STREAMER_DISCOVERY_FAILING: 3, PR_CONFLICTED: 3, RECORDED_FAILURE: 3, COLLECTION_EXCEEDS_BOOKED: 3, REPOSITORIES_UNREADABLE: 3, INVALID_SOURCE_VALUES: 3,
+  FAILING_DEFAULT_BRANCH: 3, PR_FAILING_CHECKS: 3, STREAMER_DISCOVERY_FAILING: 3, CLOUD_LANE_FAILING: 3, PR_CONFLICTED: 3, RECORDED_FAILURE: 3, COLLECTION_EXCEEDS_BOOKED: 3, REPOSITORIES_UNREADABLE: 3, INVALID_SOURCE_VALUES: 3,
   PR_NEEDS_REVIEW: 2, CHECKS_UNREADABLE: 2, WORKFLOW_UNREADABLE: 2, REPOSITORY_UNREADABLE: 2, REPOSITORY_ARCHIVED: 2, SCHEDULE_UNVERIFIED: 2, SAVED_RUN_TIME_PASSED: 2, DUPLICATE_SCOPE: 2,
 };
 export const selfHealSeverity = (code: string) => SELF_HEAL_DATA_ABSENCE_CODES.has(code) ? 0 : SEVERITY[code] ?? 1;
@@ -127,7 +129,7 @@ export function observeRoleAudits(journal: unknown): SelfHealObservedAudit[] {
 }
 
 /** Only the cloud streamer role may be injected, with well-formed codes/records; sorted like the journal. */
-const EXTRA_ROLES = new Set(["clippers-streamers"]);
+const EXTRA_ROLES = new Set(["clippers-streamers", "clippers-cloud-lanes"]);
 function mergeAudits(base: SelfHealObservedAudit[], extra: readonly SelfHealObservedAudit[] = []): SelfHealObservedAudit[] {
   const ok = extra.filter(a => a && EXTRA_ROLES.has(a.role) && (a.status === "completed" || a.status === "blocked") && typeof a.jobId === "string" && Number.isFinite(Date.parse(a.completedAt)) &&
     Array.isArray(a.findings) && a.findings.every(f => CODE.test(f.code) && (f.recordId === null || RECORD.test(f.recordId))));
@@ -200,6 +202,8 @@ export function selfHealOrderText(marker: Pick<SelfHealOrderMarker, "role" | "co
     ? ` La última ejecución de Actions en la rama por defecto de ${SELF_HEAL_REPOSITORY} terminó en fallo.`
     : marker.code === "STREAMER_DISCOVERY_FAILING"
     ? ` Falla script/clippers-streamer-discovery.mjs (3+ ejecuciones).`
+    : marker.code === "CLOUD_LANE_FAILING"
+    ? ` Falla script/clippers-cloud-lanes.mjs (carril de Clippers en la nube, 3+ ejecuciones).`
     : ` Checks fallidos en el PR borrador #${marker.prNumber} de ${SELF_HEAL_REPOSITORY}.`;
   return `${head}${what} Reproduce el fallo con las pruebas existentes, corrige la causa mínima dentro del alcance de escritura y añade una prueba de regresión. No cambies workflows, dependencias, secretos, permisos ni presupuestos. Termina en PR borrador; fusionar es decisión del dueño.`;
 }
