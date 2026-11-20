@@ -212,3 +212,10 @@ test('approval sync never flips a prohibited/taken-down clip back to approved', 
   assert.equal(after.clipPolicy.status, 'prohibited'); assert.equal(after.approval.status, 'rejected');
   assert.ok(!localWorkQueue(second.state).some(w => w.candidateId === c.id));
 });
+
+test('with the cloud publisher on, approvals go only to platforms it can download (Twitch by default)', async () => {
+  const store = memoryStore(), queue = memoryQueue(), { fn } = mockFetch();
+  await runStreamerDiscovery({ env: { ...ENV, CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true' }, now: NOW, fetch: fn, store, queue, owner: 'o' });
+  const rows = [...queue.rows.values()];
+  assert.ok(rows.length >= 1); assert.ok(rows.every(r => r.input.platform === 'twitch'));
+});

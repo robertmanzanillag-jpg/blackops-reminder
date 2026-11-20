@@ -49,7 +49,8 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.gate.outputs.run == 'true'
         with:
-          ref: ${{ vars.OFFICE_SOURCE_REF || 'main' }}
+          # A manual dispatch runs the dispatched ref (the workflow file comes from it too); scheduled runs use main.
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || vars.OFFICE_SOURCE_REF || 'main' }}
           persist-credentials: false
 
       - uses: actions/setup-node@v4
@@ -75,6 +76,8 @@ jobs:
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           CLIPPERS_CITY_PAGE_NAMES: ${{ vars.CLIPPERS_CITY_PAGE_NAMES }}
           CLIPPERS_STREAMER_AUTO_PUBLISH: ${{ vars.CLIPPERS_STREAMER_AUTO_PUBLISH || 'false' }}
+          CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: ${{ vars.CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED || 'false' }}
+          CLIPPERS_STREAMER_CLOUD_PLATFORMS: ${{ vars.CLIPPERS_STREAMER_CLOUD_PLATFORMS }}
           CLIPPERS_STREAMER_APPROVALS_PER_RUN: ${{ vars.CLIPPERS_STREAMER_APPROVALS_PER_RUN }}
           CLIPPERS_STREAMER_MAX_OPEN_APPROVALS: ${{ vars.CLIPPERS_STREAMER_MAX_OPEN_APPROVALS }}
           CLIPPERS_YOUTUBE_UNITS_PER_RUN: ${{ vars.CLIPPERS_YOUTUBE_UNITS_PER_RUN }}

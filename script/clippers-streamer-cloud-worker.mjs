@@ -65,12 +65,20 @@ export function cloudPublishConfig(env = process.env) {
     leadMinutes: int(env.CLIPPERS_STREAMER_CLOUD_LEAD_MINUTES, 30, 15, 240),
     clipSeconds: int(env.CLIPPERS_STREAMER_CLIP_SECONDS, 45, 10, STREAMER_CLIP_MAX_SECONDS),
     maxSourceAgeHours: int(env.CLIPPERS_STREAMER_CLOUD_MAX_SOURCE_AGE_HOURS, 72, 6, 168),
+    // YouTube answers GitHub-hosted runner IPs with "Sign in to confirm you're not a bot" (even with
+    // --impersonate chrome), so the cloud lane takes Twitch clips only unless YouTube is listed explicitly.
+    platforms: cloudPlatforms(env),
     maxAttempts: 3,
     runDeadlineMs: int(env.CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES, 20, 5, 25) * 60_000,
     destinations,
     missing: CLOUD_PUBLISH_SECRET_NAMES.filter(n => !real(env[n])),
     unknownDestinations: requested.filter(k => !keys.has(k)).map(k => k.replace(/[^0-9a-z:_-]/gi, '').slice(0, 60)),
   };
+}
+
+export function cloudPlatforms(env = process.env) {
+  const list = String(env.CLIPPERS_STREAMER_CLOUD_PLATFORMS || 'twitch').split(',').map(s => s.trim().toLowerCase()).filter(p => ['twitch', 'youtube'].includes(p));
+  return list.length ? [...new Set(list)] : ['twitch'];
 }
 
 // ---------- Time / slots ----------
@@ -342,14 +350,17 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
   const queue = localWorkQueue(state).map(w => candidatesById.get(w.candidateId)).filter(Boolean)
     .filter(c => { const clip = ledger.clips[c.id]; return !clip || (['failed', 'deferred'].includes(clip.status) && (clip.attempts ?? 0) < config.maxAttempts); })
     .filter(c => now - Date.parse(c.publishedAt) <= config.maxSourceAgeHours * HOUR)
+    .filter(c => config.platforms.includes(c.platform))
     .sort((a, b) => (b.score + creatorBoostFor(learning, b.creatorKey)) - (a.score + creatorBoostFor(learning, a.creatorKey)));
   const ids = queue.map(c => c.approval?.pendingActionId).filter(Boolean);
   const live = approvals && ids.length ? await approvals.statuses(owner, ids) : new Map();
-  let processed = 0;
+  let processed = 0, tried = 0, botBlocked = false;
   const runStartedAt = clock();
+  report.counts.platforms = config.platforms.join(',');
   const canStart = report.status !== 'held_missing_secrets' && (config.dryRun || canWrite);
   for (const candidate of canStart ? queue : []) {
-    if (processed >= config.clipsPerRun) break;
+    if (processed >= config.clipsPerRun || tried >= config.clipsPerRun + 3) break;
+    if (botBlocked && candidate.platform === 'youtube') continue; // one bot check is enough for this run
     if (clock() - runStartedAt > config.runDeadlineMs) { report.heldReasons.push('run_deadline_reached'); break; }
     const setClip = (patch) => update((s, c) => { c.clips[candidate.id] = { ...(c.clips[candidate.id] ?? { attempts: 0 }), ...patch, updatedAt: iso(clock()) }; });
     // Approval gate (live): only approved/executed rows publish. AUTO_PUBLISH rows are inserted as approved.
@@ -372,7 +383,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     const plan = config.destinations.map((d, index) => ({ destination: d, index, scheduledAt: nextSlot({ now, config, destination: d, index, posts }) }))
       .filter(p => p.scheduledAt && !posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === destinationKey(p.destination) && x.status !== 'deferred'));
     if (!plan.length) { report.heldReasons.push('no_free_slots'); break; }
-    processed++;
+    tried++;
     const { variant: hookVariant, mode: hookMode } = chooseHookVariant(learning, candidate.id);
     const caption = clipCaption(candidate, hookVariant);
     if (!captionHasCredit(caption, candidate.handle, candidate.sourceUrl)) { await setClip({ status: 'blocked', reason: 'caption_missing_credit' }); report.counts.blocked++; continue; }
@@ -388,6 +399,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       rendered = await render({ sourceFile: source.file, workDir, duration: Math.min(source.cut.duration, config.clipSeconds, STREAMER_CLIP_MAX_SECONDS),
         hook: hookText({ variant: hookVariant, title: candidate.title, handle: candidate.handle }), credit: creditText(candidate) });
       report.counts.rendered++;
+      processed++;
       const base = { attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1, hookVariant, hookMode, cut: source.cut, renderSha256: rendered.sha256, durationSec: rendered.durationSec, reason: null };
       if (config.dryRun) {
         if (outputDir) { await mkdir(outputDir, { recursive: true }); await copyFile(rendered.file, path.join(outputDir, `${candidate.id.replace(/[^A-Za-z0-9_-]/g, '_')}.mp4`)); }
@@ -455,6 +467,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       }
     } catch (e) {
       report.counts.failed++;
+      if (code(e) === 'SOURCE_BOT_CHECK') botBlocked = true;
       report.errors.push(`clip:${code(e)}`);
       // Public-log-safe diagnostics: platform, step, impersonation, exit code, scrubbed last stderr line.
       report.diagnostics = [...(report.diagnostics ?? []), { platform: candidate.platform, kind: candidate.kind ?? null, error: code(e),

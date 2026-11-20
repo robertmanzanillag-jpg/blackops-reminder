@@ -40,6 +40,11 @@ export function streamerConfig(env = process.env) {
     youtubeUnitBudget: int(env.CLIPPERS_YOUTUBE_UNITS_PER_RUN, 60, 0, 400),
     youtubeRegions: String(env.CLIPPERS_YOUTUBE_TRENDING_REGIONS || 'US,ES,MX').split(',').map(r => r.trim().toUpperCase()).filter(r => /^[A-Z]{2}$/.test(r)).slice(0, 4),
     twitchCloudDownload: env.CLIPPERS_TWITCH_CLOUD_DOWNLOAD === 'probe',
+    // With the cloud publisher on, only platforms it can download get approval rows (and count as open),
+    // so unpublishable YouTube approvals never fill the open-approval budget.
+    approvalPlatforms: env.CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED === 'true'
+      ? [...new Set(String(env.CLIPPERS_STREAMER_CLOUD_PLATFORMS || 'twitch').split(',').map(p => p.trim().toLowerCase()).filter(p => ['twitch', 'youtube'].includes(p)))]
+      : ['twitch', 'youtube'],
   };
 }
 
@@ -252,9 +257,10 @@ export function creatorPolicyChecked(state, candidate) {
 
 /** Candidates eligible for an owner approval row now. */
 export function selectForApproval(state, config) {
-  const open = state.candidates.filter(c => ['pending', 'approved'].includes(c.approval?.status)).length;
+  const platforms = config.approvalPlatforms?.length ? config.approvalPlatforms : ['twitch', 'youtube'];
+  const open = state.candidates.filter(c => platforms.includes(c.platform) && ['pending', 'approved'].includes(c.approval?.status)).length;
   const room = Math.max(0, Math.min(config.maxApprovalsPerRun, config.maxOpenApprovals - open));
-  return state.candidates.filter(c => c.approval?.status === 'not_requested' && c.clipPolicy?.status === 'allowed_unless_prohibited' && creatorPolicyChecked(state, c) &&
+  return state.candidates.filter(c => platforms.includes(c.platform) && c.approval?.status === 'not_requested' && c.clipPolicy?.status === 'allowed_unless_prohibited' && creatorPolicyChecked(state, c) &&
     !takedownBlocks(state.takedowns, { creatorKey: c.creatorKey, creatorGroupId: state.creators[c.creatorKey]?.creatorGroupId, candidateId: c.id }) &&
     (c.platform === 'twitch' ? clipLengthAllowed(c.durationSec) : true)).slice(0, room);
 }

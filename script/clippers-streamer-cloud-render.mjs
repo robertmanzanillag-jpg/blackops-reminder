@@ -177,6 +177,8 @@ export async function makeWorkDir() {
   return dir;
 }
 
+export const BOT_CHECK = /confirm you.?re not a bot|Sign in to confirm/i;
+
 /** Download only the needed section. Returns { file, cut }. */
 export async function downloadSource({ candidate, workDir, targetSec = 45, env = process.env, runner = run }) {
   const base = ytDlpBase(env);
@@ -218,7 +220,10 @@ export async function downloadSource({ candidate, workDir, targetSec = 45, env =
       for (const n of await readdir(workDir).catch(() => [])) if (n.startsWith('source.')) await rm(path.join(workDir, n), { force: true }).catch(() => undefined);
     }
   }
-  throw Object.assign(lastError ?? new Error('SOURCE_DOWNLOAD_FAILED'), { diagnostics: { platform: candidate.platform, attempts } });
+  const diagnostics = { platform: candidate.platform, attempts };
+  // Every variant hit the datacenter-IP bot check: report it as such (not a code or format problem).
+  if (attempts.length && attempts.every(a => BOT_CHECK.test(a.detail ?? ''))) throw Object.assign(new Error('SOURCE_BOT_CHECK'), { diagnostics });
+  throw Object.assign(lastError ?? new Error('SOURCE_DOWNLOAD_FAILED'), { diagnostics });
 }
 
 /** Render the vertical edit and validate it. Returns { file, sha256, durationSec }. */
