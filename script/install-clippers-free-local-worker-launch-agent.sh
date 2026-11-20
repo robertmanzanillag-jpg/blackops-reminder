@@ -125,6 +125,11 @@ REQUIRED_RUNTIME_FILES=(
   script/clippers-orchestra-relay.mjs
   script/clippers-selected-env.mjs
   script/clippers-mac-ledger-guard.mjs
+  script/clippers-cloud-lanes.mjs
+  script/clippers-drive-workspace.mjs
+  script/clippers-portable-magick.mjs
+  script/clippers-mac-retire.sh
+  shared/clippers-cloud-lanes.mjs
   script/clippers-streamer-discovery.mjs
   shared/clippers-account-lanes.mjs
   shared/clippers-media-ledger.mjs

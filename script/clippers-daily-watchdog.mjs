@@ -524,6 +524,8 @@ export async function runClippersDailyWatchdog(options = {}) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  // Retired Mac lane (covered by the cloud streamer jobs): exit without running.
+  if (!(await import("./clippers-cloud-lanes.mjs").then((m) => m.macLaneGate("watchdog")).catch(() => true))) process.exit(0);
   const report = await runClippersDailyWatchdog({ dailyLearning: true, dailyDiscovery: true, dailyPrepare: true, dailyOrchestraAnalytics: true });
   console.log(JSON.stringify(report, null, 2));
   if (report.alert) process.exitCode = 2;

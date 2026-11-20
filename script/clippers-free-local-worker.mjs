@@ -8,6 +8,7 @@ import { CLIPPERS_ALLOWED_ENV_KEYS, loadClipperSelectedEnv } from "./clippers-se
 const SAFE_ENV_KEYS = ["HOME", "LANG", "LC_ALL", "NODE_ENV", "PATH", "SHELL", "TMPDIR", "USER"];
 const DEFAULT_PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LOCK_MAX_AGE_MS = 2 * 60 * 60_000;
+const CHILD_ENV_KEYS = new Set(["CLIPPERS_CONFIG_ROOT", "CLIPPERS_MARKETPLACE_SNAPSHOT_MAX_AGE_HOURS"]);
 
 function localOnlyEnv(source, overrides = {}) {
   const safe = Object.fromEntries(SAFE_ENV_KEYS
@@ -170,6 +171,10 @@ export async function runClipperFreeLocalWorker(options = {}) {
     CLIPPERS_MARKETPLACE_REFRESH_TIMEOUT_MS: workerEnv.CLIPPERS_MARKETPLACE_REFRESH_TIMEOUT_MS || "120000",
     ...Object.fromEntries(Object.entries(metricoolEnv).filter(([, value]) => typeof value === "string" && value)),
     ...publicMediaEnv,
+    // Cloud runner only (script/clippers-cloud-lanes.mjs): a few allowlisted extras for the child scripts. The Mac
+    // LaunchAgent passes none, so its behavior is unchanged.
+    ...Object.fromEntries(Object.entries(options.childEnv || {})
+      .filter(([key, value]) => CHILD_ENV_KEYS.has(key) && typeof value === "string" && value)),
   });
   const execute = options.run || run;
   try {
@@ -292,6 +297,8 @@ export async function runClipperFreeLocalWorker(options = {}) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
+  // Mac/cloud lane lock: refuse when the lane was retired or the cloud runs it (docs/clippers-cloud-lanes.md).
+  if (!(await import("./clippers-cloud-lanes.mjs").then((m) => m.macLaneGate("marketplace")).catch(() => true))) process.exit(0);
   const result = await runClipperFreeLocalWorker();
   console.log(JSON.stringify(result, null, 2));
   if (result.status === "blocked") process.exitCode = 1;
