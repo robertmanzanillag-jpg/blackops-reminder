@@ -15,6 +15,7 @@ import {
   panelCounters, readPanelParams, selectReplaceable, selectReplaced, type PanelAgentInput, type PanelCompany, type PanelRow, type PanelSectionId, type PanelStatusKind,
 } from "@/lib/office-central-panel";
 import { useOfficeRoster, type WorldAgent } from "./use-office-roster";
+import { ClippersCentralGrowth } from "./clippers-central-growth";
 import { OfficeAgentStatusChat, SOURCE_NAME } from "./agents-office-world";
 
 const KIND_STYLE: Record<PanelStatusKind, { dot: string; text: string; chip: string }> = {
@@ -143,6 +144,7 @@ function OwnerCentralPanel({ agents, kongTeam, legal }: { agents: WorldAgent[]; 
       <Counter label="Necesitan al dueño" value={needsOwner} tone="text-fuchsia-200" testId="counter-needs-owner" hint="Auto-reparaciones que esperan tu decisión + propuestas esperando tu OK" />
       <Counter label="Agentes en total" value={counters.total} tone="text-white" testId="counter-total" />
     </section>
+    <ClippersCentralGrowth />
 
     <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-4">
       <Card title={`En vivo · ${live.length}`} testId="central-panel-live">
