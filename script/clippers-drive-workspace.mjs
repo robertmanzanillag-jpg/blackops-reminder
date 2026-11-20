@@ -22,8 +22,19 @@ export const MAX_TEXT_FILE_BYTES = 1024 * 1024;
 export const MAX_TEXT_TOTAL_BYTES = 6 * 1024 * 1024;
 const FOLDER = 'application/vnd.google-apps.folder';
 // Never mirrored: build/temp dirs, locks/partials, and anything that looks like a credential (env files, keys, tokens).
-const SKIP = /(^|\/)(node_modules|\.git|tmp|source-drop)(\/|$)|\.lock$|\.partial\.mp4$|\.tmp$|(^|\/)\._/;
-const SECRETISH = /(^|\/)(\.[^/]+|[^/]*(credential|secret|token|oauth|password|passwd|apikey|api-key|private-key|cookie|keychain|session|storage-state|storagestate|auth-state|auth_state|authstate|auth\.json|login|metricool|netrc|npmrc|id_rsa|id_ed25519|id_ecdsa)[^/]*|[^/]*\.(pem|key|p12|pfx|jks|keystore|kdbx|sqlite|db|ldb)|(chrome|chromium|firefox|safari|profiles?|user-data|default)(-[^/]*)?)(\/|$)/i;
+// Locks, partial/temp renders (content worker *.partial.mp4, ffmpeg/yt-dlp temp outputs, caption scratch dirs).
+const SKIP = /(^|\/)(node_modules|\.git|tmp|source-drop)(\/|$)|\.lock$|\.partial(\.[^/]*)?$|\.part$|\.ytdl$|\.tmp(\.[a-z0-9]+)?$|\.temp(\.[a-z0-9]+)?$|\.captions(\/|$)|(^|\/)\._/i;
+// Credential-like paths: any dot-file/dot-dir (.metricool/, .ssh/, .netrc, .env...); browser/session DIRECTORIES
+// (not files that merely contain those words); credential words anywhere in a name; exact auth/session/login JSON;
+// key stores by extension.
+const SECRETISH = new RegExp([
+  String.raw`(^|\/)\.[^/]+(\/|$)`,
+  String.raw`(^|\/)(chrome|chromium|firefox|safari|profiles?|user-data|default|sessions?|logins?|cookies|keychains?)(-[^/]*)?\/`,
+  String.raw`(^|\/)[^/]*(credential|creds|secret|token|oauth|password|passwd|apikey|api-key|private-key|cookie|keychain|storage-?state|auth[-_]?state|service[-_]?account|application_default|netrc|npmrc|id_rsa|id_ed25519|id_ecdsa)[^/]*(\/|$)`,
+  String.raw`(^|\/)(auth|session|sessions|login|adc)\.json$`,
+  String.raw`(^|\/)[^/]*(^|[-_.])adc([-_.][^/]*)?$`,
+  String.raw`\.(pem|key|p12|pfx|jks|keystore|kdbx|sqlite|db|ldb)(\/|$)`,
+].join('|'), 'i');
 /** Seed (Mac -> cloud) is an allowlist: only these top-level folders, and only text or media files. */
 export const SEED_PREFIXES = Object.freeze(['config/', 'content/', 'manifests/', 'visuals/', 'rights/', 'research/', 'renders/', 'reports/']);
 export const MEDIA_EXTENSIONS = new Set(['.mp4', '.mov', '.m4a', '.mp3', '.wav', '.aac', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.srt', '.vtt', '.ttf', '.otf']);

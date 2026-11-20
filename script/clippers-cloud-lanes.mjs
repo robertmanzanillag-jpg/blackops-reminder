@@ -19,7 +19,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
-  CLOUD_JOBS, CLOUD_LANES_NAMESPACE, CLOUD_WORKSPACE_NAMESPACE, LANE_IDS, MAC_LANES, acquireLane, emptyLanesState, laneCloudQa,
+  CLOUD_JOBS, CLOUD_LANES_NAMESPACE, CLOUD_WORKSPACE_NAMESPACE, LANE_IDS, MAC_LANE_IDS, MAC_LANES, laneKind, acquireLane, emptyLanesState, laneCloudQa,
   isInformational, parseLanesState, recordLaneRun, retireMacLanes, unretireMacLanes,
 } from '../shared/clippers-cloud-lanes.mjs';
 import {
@@ -67,7 +67,7 @@ async function laneTransact(store, owner, fn) {
 /** Per-lane time limits (minutes), always below the 340 min job limit so a hung lane is still recorded. */
 export const LANE_TIMEOUT_MINUTES = Object.freeze({ content: 60, youtube_delivery: 45, marketplace: 60, sleep_content: 240 });
 export function laneTimeoutMs(lane, job, env = process.env) {
-  const base = job === 'sleep' && lane === 'content' ? LANE_TIMEOUT_MINUTES.sleep_content : LANE_TIMEOUT_MINUTES[lane] ?? 60;
+  const base = lane === 'sleep_content' ? LANE_TIMEOUT_MINUTES.sleep_content : LANE_TIMEOUT_MINUTES[laneKind(lane)] ?? 60;
   const override = Number(env.CLIPPERS_CLOUD_LANE_TIMEOUT_MINUTES);
   return Math.min(Number.isFinite(override) && override > 0 ? override : base, 280) * 60_000;
 }
@@ -161,7 +161,7 @@ export async function runCloudJob({ job, store, owner, env = process.env, now = 
   const results = {}, recorded = new Set();
   const runnable = [];
   for (const lane of lanes) {
-    const missing = missingSecrets(lane, env);
+    const missing = missingSecrets(laneKind(lane), env);
     if (missing.length) results[lane] = { at, status: 'held', heldReasons: missing.map(k => `missing_secret:${k}`), errors: [], counts: {}, dryRun };
     else runnable.push(lane);
   }
@@ -187,22 +187,29 @@ export async function runCloudJob({ job, store, owner, env = process.env, now = 
     // One lane at a time; each lane's text ledgers and media are persisted and its run recorded right after it, so a
     // later lane (or the job limit) can never lose what an earlier lane uploaded.
     let snapshot = before;
+    const quarantined = new Set(); // media written by a timed-out lane: never uploaded in this run
+    const contentLane = lanes.find(l => laneKind(l) === 'content');
     for (const lane of acquired) {
-      if (lane === 'youtube_delivery' && dryRun) results[lane] = { at, status: 'completed', heldReasons: ['dry_run_no_upload'], errors: [], counts: {}, dryRun };
-      else if (lane === 'youtube_delivery' && results.content && results.content.status !== 'completed') results[lane] = { at, status: 'held', heldReasons: ['content_lane_not_completed'], errors: [], counts: {}, dryRun };
-      else if (lane === 'youtube_delivery' && env.CLIPPERS_YOUTUBE_CLOUD_UPLOAD_ENABLED !== 'true') results[lane] = { at, status: 'completed', heldReasons: ['youtube_cloud_upload_disabled'], errors: [], counts: {}, dryRun };
+      const kind = laneKind(lane);
+      if (kind === 'youtube_delivery' && dryRun) results[lane] = { at, status: 'completed', heldReasons: ['dry_run_no_upload'], errors: [], counts: {}, dryRun };
+      else if (kind === 'youtube_delivery' && contentLane && results[contentLane] && results[contentLane].status !== 'completed') results[lane] = { at, status: 'held', heldReasons: ['content_lane_not_completed'], errors: [], counts: {}, dryRun };
+      else if (kind === 'youtube_delivery' && env.CLIPPERS_YOUTUBE_CLOUD_UPLOAD_ENABLED !== 'true') results[lane] = { at, status: 'completed', heldReasons: ['youtube_cloud_upload_disabled'], errors: [], counts: {}, dryRun };
       else {
-        const cfg = lane === 'content' ? CONTENT_CONFIG : lane === 'youtube_delivery' ? DELIVERY_CONFIG : null;
+        const cfg = kind === 'content' ? CONTENT_CONFIG : kind === 'youtube_delivery' ? DELIVERY_CONFIG : null;
         if (cfg && !(await stat(path.join(workspaceRoot, cfg)).catch(() => null))) results[lane] = { at, status: 'held', heldReasons: [`workspace_config_missing:${lane}`], errors: [], counts: {}, dryRun };
         else {
           const limitMs = laneTimeoutMs(lane, job, env);
-          try { results[lane] = { at, dryRun, ...(await withLaneTimeout(() => runners[lane]({ workspaceRoot, env, dryRun, now, mode: job === 'sleep' ? 'sleep' : 'motivation' }), limitMs)) }; }
+          try { results[lane] = { at, dryRun, ...(await withLaneTimeout(() => runners[kind]({ workspaceRoot, env, dryRun, now, mode: job === 'sleep' ? 'sleep' : 'motivation' }), limitMs)) }; }
           catch (e) { results[lane] = { at, status: 'failed', heldReasons: [], errors: [errorCode(e)], counts: {}, dryRun }; }
         }
       }
       if (!dryRun && index) {
         const after = await snapshotTree(workspaceRoot);
-        const { text, media } = planPersist(snapshot, after);
+        const planned = planPersist(snapshot, after);
+        // After a timeout the renderer may still be writing: keep its text state, never upload half-written media.
+        const timedOut = results[lane].errors.includes('lane_timeout');
+        if (timedOut) for (const rel of planned.media) quarantined.add(rel);
+        const { text } = planned, media = planned.media.filter(rel => !quarantined.has(rel));
         try {
           await store.transact(CLOUD_WORKSPACE_NAMESPACE(owner), async raw => JSON.stringify(await mergeTextFiles(raw ? JSON.parse(raw) : null, workspaceRoot, text, now)));
           await persistMedia({ drive: client, folderId, root: workspaceRoot, rels: media, driveIndex: index });
@@ -279,7 +286,7 @@ export async function retireMac({ lanes, store, owner, now = Date.now(), force =
   return laneTransact(store, owner, s => {
     const failures = [];
     for (const lane of lanes) {
-      if (!LANE_IDS.includes(lane)) { failures.push(`${lane}:unknown_lane`); continue; }
+      if (!MAC_LANE_IDS.includes(lane)) { failures.push(`${lane}:unknown_lane`); continue; }
       const qa = MAC_LANES[lane].coveredOnly ? { ok: !!streamerAt && now - Date.parse(streamerAt) < 7 * 86400_000 } : laneCloudQa(s, lane, now);
       if (!qa.ok && !force) failures.push(`${lane}:cloud_qa_missing`);
     }

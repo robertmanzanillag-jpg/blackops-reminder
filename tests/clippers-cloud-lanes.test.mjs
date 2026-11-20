@@ -65,6 +65,9 @@ test('text state: ledgers are never evicted; over the cap the merge fails instea
 
 test('seed allowlist: only workspace content folders with text/media; never credentials, browser state or dot-dirs', () => {
   for (const ok of ['config/clippers-content-worker.json', 'visuals/bg.png', 'renders/a.mp4', 'reports/ledger.json', 'research/marketplace-snapshots/vyro.json']) assert.equal(seedAllowed(ok), true, ok);
+  for (const ok of ['reports/metricool-autopilot-ledger.json', 'reports/metricool-public-media-receipts.json', 'content/session-1.md', 'visuals/default-bg.png', 'content/login-motivation.md']) assert.equal(seedAllowed(ok), true, ok);
+  for (const bad of ['config/creds.json', 'config/service-account.json', 'config/application_default_credentials.json', 'config/adc.json', 'research/sessions/x.json',
+    'renders/a.partial.mp4', 'renders/a.mp4.1.2.captions/c.png', 'renders/a.mp4.part', 'renders/out.tmp.mp4']) assert.equal(seedAllowed(bad), false, bad);
   for (const bad of ['notes.json', 'source-drop/a.mp4', 'config/storage-state.json', 'config/cookies.json', 'research/auth.json', 'config/session.json', 'reports/.metricool/x.json',
     '.ssh/id_rsa', 'config/.netrc', 'config/.npmrc', 'rights/cert.pfx', 'rights/keys.jks', 'visuals/chrome-profile/Cookies', 'config/a.keystore', 'renders/a.exe', 'config/youtube-token.json']) assert.equal(seedAllowed(bad), false, bad);
 });
@@ -227,8 +230,8 @@ test('both lanes retired: content ledger is in Postgres before delivery starts; 
     runners: { content: () => new Promise(() => {}) }, workspaceRoot: await mkdtemp(path.join(os.tmpdir(), 'cl-')) });
   assert.deepEqual(hung.lanes.content.errors, ['lane_timeout']);
   assert.equal(parseLanesState(store.rows.get(CLOUD_LANES_NAMESPACE('o'))).lanes.content.lastRun.errors[0], 'lane_timeout');
-  assert.ok(laneTimeoutMs('content', 'sleep', {}) > laneTimeoutMs('content', 'owned_content', {}));
-  assert.ok(laneTimeoutMs('content', 'sleep', {}) < 340 * 60_000);
+  assert.ok(laneTimeoutMs('sleep_content', 'sleep', {}) > laneTimeoutMs('content', 'owned_content', {}));
+  assert.ok(laneTimeoutMs('sleep_content', 'sleep', {}) < 340 * 60_000);
 });
 
 test('scheduled interval skip: not after a failure, Mac hold or missing secret', () => {
@@ -237,4 +240,33 @@ test('scheduled interval skip: not after a failure, Mac hold or missing secret',
   assert.equal(skipByInterval(run('failed'), NOW, 20), false);
   assert.equal(skipByInterval(run('held', ['mac_lane_active']), NOW, 20), false);
   assert.equal(skipByInterval(null, NOW, 20), false);
+});
+
+test('sleep job: own lane ids and records, handed over by the content/delivery retirement; never touches owned_content records', async () => {
+  const s = retireMacLanes(emptyLanesState(), ['content', 'youtube_delivery'], NOW - 60_000);
+  recordLaneRun(s, 'content', { at: new Date(NOW - 3600_000).toISOString(), status: 'completed', heldReasons: [], errors: [] });
+  const store = memStore({ [CLOUD_LANES_NAMESPACE('o')]: JSON.stringify(s) });
+  const files = { 'config/clippers-content-worker.json': { content: '{}', modifiedTime: '2026-11-19T00:00:00Z' }, 'config/clippers-youtube-upload-packager.json': { content: '{}', modifiedTime: '2026-11-19T00:00:00Z' } };
+  const modes = [];
+  const r = await runCloudJob({ job: 'sleep', store, owner: 'o', env: { ...DRIVE_ENV, ...YT, CLIPPERS_YOUTUBE_CLOUD_UPLOAD_ENABLED: 'true' }, now: NOW, drive: fakeDrive(files), workspaceRoot: await mkdtemp(path.join(os.tmpdir(), 'cl-')),
+    runners: { content: async ({ mode }) => { modes.push(mode); return { status: 'completed', heldReasons: [], errors: [], counts: {} }; }, youtube_delivery: async () => ({ status: 'completed', heldReasons: [], errors: [], counts: {} }) } });
+  assert.deepEqual(Object.keys(r.lanes).sort(), ['sleep_content', 'sleep_delivery']);
+  assert.deepEqual(modes, ['sleep']);
+  const after = parseLanesState(store.rows.get(CLOUD_LANES_NAMESPACE('o')));
+  assert.equal(after.lanes.content.lastRun.at, new Date(NOW - 3600_000).toISOString()); // owned_content record untouched
+  assert.equal(after.lanes.sleep_content.lastRun.status, 'completed');
+  // Not retired -> held; Mac can never take a cloud-only lane; it cannot be retired on its own.
+  assert.equal(acquireLane(emptyLanesState(), 'sleep_content', 'cloud', NOW).reason, 'mac_lane_not_retired');
+  assert.equal(acquireLane(emptyLanesState(), 'sleep_content', 'mac', NOW).reason, 'unknown_lane');
+  assert.throws(() => retireMacLanes(emptyLanesState(), ['sleep_content'], NOW), /unknown_lane/);
+});
+
+test('after a lane timeout its media are not uploaded (text state still saved)', async () => {
+  const store = memStore({ [CLOUD_LANES_NAMESPACE('o')]: JSON.stringify(retireMacLanes(emptyLanesState(), ['content', 'youtube_delivery'], NOW - 60_000)) });
+  const drive = fakeDrive({ 'config/clippers-content-worker.json': { content: '{}', modifiedTime: '2026-11-19T00:00:00Z' } });
+  const r = await runCloudJob({ job: 'owned_content', store, owner: 'o', env: { ...DRIVE_ENV, ...YT, CLIPPERS_CLOUD_LANE_TIMEOUT_MINUTES: '0.002' }, now: NOW, drive, workspaceRoot: await mkdtemp(path.join(os.tmpdir(), 'cl-')),
+    runners: { content: ({ workspaceRoot }) => new Promise(() => { mkdir(path.join(workspaceRoot, 'renders'), { recursive: true }).then(() => Promise.all([writeFile(path.join(workspaceRoot, 'renders', 'half.mp4'), 'v'), writeFile(path.join(workspaceRoot, 'renders', 'r.json'), '{}')])); }) } });
+  assert.deepEqual(r.lanes.content.errors, ['lane_timeout']);
+  assert.equal(drive.uploads.length, 0);
+  assert.ok(JSON.parse(store.rows.get(CLOUD_WORKSPACE_NAMESPACE('o'))).files['renders/r.json']);
 });

@@ -75,9 +75,10 @@ jobs:
     if: needs.gate.outputs.job != ''
     runs-on: ubuntu-24.04
     timeout-minutes: 340
-    # One run per job at a time (owned_content, sleep and marketplace never queue behind each other).
+    # owned_content and sleep share the content workspace (Drive + Postgres ledgers): one group, they queue.
+    # marketplace has its own group.
     concurrency:
-      group: clippers-cloud-lanes-${{ needs.gate.outputs.job }}
+      group: clippers-cloud-lanes-${{ needs.gate.outputs.job == 'marketplace' && 'marketplace' || 'owned' }}
       cancel-in-progress: false
     steps:
 

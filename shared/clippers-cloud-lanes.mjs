@@ -36,14 +36,29 @@ export const MAC_LANES = Object.freeze({
     cloud: 'covered by clippers-streamers.yml + clippers-streamers-publish.yml (#479 learning loop) and the office lane overlay',
     coveredOnly: true,
   },
+  // Cloud-only lanes of the weekly `sleep` job: own records, leases and interval, handed over by the retirement of
+  // the Mac lane they replace (macLane). They are never retired or gated on their own.
+  sleep_content: {
+    label: 'com.blackops.clippers-content-worker', macTime: 'weekly', roles: ['editor', 'checker'], macLane: 'content', cloudOnly: true,
+    cloud: 'clippers-cloud-lanes.yml (sleep, flag CLIPPERS_CLOUD_SLEEP_ENABLED): 8 h sleep render',
+  },
+  sleep_delivery: {
+    label: 'com.blackops.clippers-youtube-delivery-worker', macTime: 'weekly', roles: ['publisher'], macLane: 'youtube_delivery', cloudOnly: true,
+    cloud: 'clippers-cloud-lanes.yml (sleep): YouTube delivery of the sleep video',
+  },
 });
 export const LANE_IDS = Object.freeze(Object.keys(MAC_LANES));
+/** Lanes that exist on the Mac (retire / Mac gate); cloud-only lanes follow their macLane. */
+export const MAC_LANE_IDS = Object.freeze(LANE_IDS.filter(id => !MAC_LANES[id].cloudOnly));
+export const macLaneOf = lane => MAC_LANES[lane]?.macLane ?? lane;
+/** Which runner a lane uses. */
+export const laneKind = lane => (lane === 'sleep_content' ? 'content' : lane === 'sleep_delivery' ? 'youtube_delivery' : lane);
 /** Lanes a cloud job actually holds (watchdog is covered by the streamer jobs and is only retired). */
 export const CLOUD_LEASED_LANES = Object.freeze(LANE_IDS.filter(id => !MAC_LANES[id].coveredOnly));
 /** Lanes per cloud workflow job. */
 // `sleep` = the weekly 8 h sleep render + its delivery, a separate job behind CLIPPERS_CLOUD_SLEEP_ENABLED (default off)
 // until its runtime is measured; owned_content renders motivation only.
-export const CLOUD_JOBS = Object.freeze({ owned_content: ['content', 'youtube_delivery'], sleep: ['content', 'youtube_delivery'], marketplace: ['marketplace'] });
+export const CLOUD_JOBS = Object.freeze({ owned_content: ['content', 'youtube_delivery'], sleep: ['sleep_content', 'sleep_delivery'], marketplace: ['marketplace'] });
 /** Reasons that only say a flag is off by design (owner decision): shown, never a block. */
 export const INFORMATIONAL_REASONS = Object.freeze(new Set(['metricool_autopublish_not_authorized', 'youtube_cloud_upload_disabled', 'dry_run_no_upload',
   'content_shortfall', 'global_public_publish_authorization_missing', 'youtube_api_project_audit_required']));
@@ -89,7 +104,8 @@ function runOf(run) {
 export function acquireLane(state, lane, holder, now, { host = null } = {}) {
   if (!LANE_IDS.includes(lane)) return { ok: false, reason: 'unknown_lane' };
   if (!['mac', 'cloud'].includes(holder)) return { ok: false, reason: 'unknown_holder' };
-  const retired = state.retired?.[lane];
+  if (holder === 'mac' && MAC_LANES[lane].cloudOnly) return { ok: false, reason: 'unknown_lane' };
+  const retired = state.retired?.[macLaneOf(lane)];
   if (holder === 'mac' && retired) return { ok: false, reason: 'mac_lane_retired' };
   if (holder === 'cloud' && !retired) return { ok: false, reason: 'mac_lane_not_retired' };
   const lease = state.leases?.[lane];
@@ -117,7 +133,7 @@ export function recordLaneRun(state, lane, run) {
 /** Mac retirement: the lane is marked retired and the lease handed to the cloud. */
 export function retireMacLanes(state, lanes, now, by = 'owner') {
   for (const lane of lanes) {
-    if (!LANE_IDS.includes(lane)) throw new Error('unknown_lane');
+    if (!MAC_LANE_IDS.includes(lane)) throw new Error('unknown_lane');
     state.retired ??= {};
     state.retired[lane] = { at: new Date(now).toISOString(), by };
     if (!MAC_LANES[lane].coveredOnly) { state.leases ??= {}; state.leases[lane] = { holder: 'cloud', at: new Date(now).toISOString(), host: null }; }
@@ -128,7 +144,7 @@ export function retireMacLanes(state, lanes, now, by = 'owner') {
 /** Rollback to the Mac: the Mac takes the lease at once, so the cloud cannot run the lane again until re-retired. */
 export function unretireMacLanes(state, lanes, now = Date.now()) {
   for (const lane of lanes) {
-    if (!LANE_IDS.includes(lane)) throw new Error('unknown_lane');
+    if (!MAC_LANE_IDS.includes(lane)) throw new Error('unknown_lane');
     if (state.retired) delete state.retired[lane];
     state.leases ??= {};
     state.leases[lane] = { holder: 'mac', at: new Date(now).toISOString(), host: 'mac' };
@@ -155,7 +171,7 @@ export function laneCloudQa(state, lane, now) {
  * Mac off is never a failure on its own once the lane runs in the cloud.
  */
 export function laneView(state, lane, now) {
-  const l = state.lanes?.[lane], lease = state.leases?.[lane], retired = state.retired?.[lane] ?? null;
+  const l = state.lanes?.[lane], lease = state.leases?.[macLaneOf(lane)], retired = state.retired?.[macLaneOf(lane)] ?? null;
   const run = l?.lastRun ?? null;
   const macActive = lease?.holder === 'mac' && now - Date.parse(lease.at) < LANE_LEASE_MS && !retired;
   const reasons = [];
@@ -163,13 +179,15 @@ export function laneView(state, lane, now) {
   if (MAC_LANES[lane].coveredOnly) {
     roleState = retired ? 'completed' : 'idle';
     reasons.push(retired ? `mac_lane_retired:${lane}` : `mac_lane_not_retired:${lane}`);
+  } else if (!run && MAC_LANES[lane].cloudOnly) {
+    roleState = 'idle'; // weekly cloud-only lane that has not run yet: on duty, nothing to report
   } else if (!run) {
     roleState = macActive ? 'idle' : 'disconnected';
     reasons.push(macActive ? `mac_lane_active:${lane}` : `cloud_lane_never_ran:${lane}`);
   } else {
     const age = now - Date.parse(run.at);
     reasons.push(...run.heldReasons.map(r => `cloud_${lane}:${r}`), ...run.errors.map(e => `cloud_${lane}_error:${e}`));
-    if (age > CLOUD_LANE_STALE_MS) { roleState = 'stale'; reasons.push(`cloud_lane_stale:${lane}`); }
+    if (age > (MAC_LANES[lane].cloudOnly ? 8 * 86400_000 : CLOUD_LANE_STALE_MS)) { roleState = 'stale'; reasons.push(`cloud_lane_stale:${lane}`); }
     else if (run.status === 'failed') roleState = 'held';
     else if (run.status === 'held') roleState = macActive || run.heldReasons.some(r => r === 'mac_lane_active' || r === 'mac_lane_not_retired') ? 'idle' : 'held';
     else roleState = run.errors.length || run.heldReasons.some(r => !isInformational(r)) ? 'held' : 'completed';
