@@ -895,7 +895,15 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
   report.heldReasons = [...new Set(report.heldReasons)].slice(0, 50);
   report.counts.queue = queue.length;
   report.learning = { samples: learning.samples, hookPreference: learning.hookPreference };
-  await update((s, c) => { c.lastRun = report; });
+  await update((s, c) => {
+    c.lastRun = report;
+    if (report.dryRun) return;
+    // Code failures only for the office self-heal; missing secrets keep the streak (owner action), success resets it.
+    c.failureStreak = report.status === 'failed' ? (Number.isSafeInteger(c.failureStreak) ? c.failureStreak : 0) + 1 : report.status === 'held_missing_secrets' ? (Number.isSafeInteger(c.failureStreak) ? c.failureStreak : 0) : 0;
+    // Success = completed without errors, partial, or an idle held_* run other than missing secrets (nothing to do).
+    if ((report.status === 'completed' && !report.errors.length) || report.status === 'partial' || (report.status.startsWith('held_') && report.status !== 'held_missing_secrets' && !report.errors.length)) c.lastSuccessAt = report.at;
+    c.successTrackedSince ??= report.at;
+  });
   return { report, skipped: false };
 }
 

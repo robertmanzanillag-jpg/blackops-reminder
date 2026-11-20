@@ -2,7 +2,7 @@ export type LaneId = 'content' | 'youtube_delivery' | 'marketplace' | 'watchdog'
 export interface LaneRun { at: string; status: string; heldReasons: string[]; errors: string[]; counts: Record<string, number>; dryRun: boolean }
 export interface LanesState {
   version: 1;
-  lanes: Partial<Record<LaneId, { lastRun: LaneRun | null; lastDryRun: LaneRun | null; failureStreak: number }>>;
+  lanes: Partial<Record<LaneId, { lastRun: LaneRun | null; lastDryRun: LaneRun | null; failureStreak: number; lastSuccessAt?: string | null; successTrackedSince?: string | null }>>;
   leases: Partial<Record<LaneId, { holder: 'mac' | 'cloud'; at: string; host: string | null }>>;
   retired: Partial<Record<LaneId, { at: string; by: string }>>;
 }

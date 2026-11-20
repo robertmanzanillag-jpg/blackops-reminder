@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { ClippersOrchestraStatus } from '../shared/clippers-orchestra';
-import type { SelfHealObservedAudit } from './office-self-heal';
-import { CLOUD_LANES_NAMESPACE, CLOUD_LANE_FAILURE_STREAK_THRESHOLD, CLOUD_LEASED_LANES, LANE_IDS, MAC_LANES, laneView, parseLanesState } from '../shared/clippers-cloud-lanes.mjs';
+import { selfHealStall, type SelfHealObservedAudit } from './office-self-heal';
+import { CLOUD_LANES_NAMESPACE, CLOUD_LANE_FAILURE_STREAK_THRESHOLD, CLOUD_LEASED_LANES, LANE_IDS, MAC_LANES, laneView, macLaneOf, parseLanesState } from '../shared/clippers-cloud-lanes.mjs';
 
 const CODE = /^[a-zA-Z0-9_.:-]{1,200}$/;
 type RoleState = ClippersOrchestraStatus['roles'][number]['state'];
@@ -50,30 +50,43 @@ export function applyCloudLanesOverlay(report: ClippersOrchestraStatus, raw: str
 
 // ---------- Self-heal: a cloud lane failing on code 3+ consecutive runs becomes an allowlisted office finding ----------
 export const CLOUD_LANES_SELF_HEAL_RECORD = (lane: string) => createHash('sha256').update(JSON.stringify(['clippers-cloud-lanes', lane, 'robertmanzanillag-jpg/blackops-reminder'])).digest('hex');
-export function cloudLanesSelfHealAudits(raw: string | null): SelfHealObservedAudit[] {
+/** Daily lanes run once a day; the weekly sleep lanes once a week. Stall = no successful run for > 2x this. */
+export const cloudLaneIntervalMs = (lane: string) => ((MAC_LANES as Record<string, { cloudOnly?: boolean }>)[lane]?.cloudOnly ? 7 * 86400_000 : 86400_000);
+export function cloudLanesSelfHealAudits(raw: string | null, now?: number): SelfHealObservedAudit[] {
   const state = parseLanesState(raw);
   const findings: SelfHealObservedAudit['findings'] = [], records: SelfHealObservedAudit['records'] = {};
-  let latest: string | null = null;
+  let latest: string | null = null, stalled = false;
   for (const lane of CLOUD_LEASED_LANES) {
     const l = state.lanes[lane], run = l?.lastRun;
     if (!run) continue;
     if (!latest || Date.parse(run.at) > Date.parse(latest)) latest = run.at;
-    if (run.heldReasons.some(r => r.startsWith('missing_secret:'))) findings.push({ code: 'CAPABILITY_UNAVAILABLE', recordId: null });
-    if ((l.failureStreak ?? 0) >= CLOUD_LANE_FAILURE_STREAK_THRESHOLD) {
-      const id = CLOUD_LANES_SELF_HEAL_RECORD(lane);
+    const owner = run.heldReasons.some(r => r.startsWith('missing_secret:'));
+    if (owner) findings.push({ code: 'CAPABILITY_UNAVAILABLE', recordId: null });
+    const id = CLOUD_LANES_SELF_HEAL_RECORD(lane);
+    const failing = (l.failureStreak ?? 0) >= CLOUD_LANE_FAILURE_STREAK_THRESHOLD;
+    if (failing) {
       findings.push({ code: 'CLOUD_LANE_FAILING', recordId: id });
       records[id] = { repo: 'robertmanzanillag-jpg/blackops-reminder' } as SelfHealObservedAudit['records'][string];
     }
+    // Stall only for lanes the cloud owns (Mac lane retired); a lane still on the Mac is not expected to run here.
+    const retired = state.retired[macLaneOf(lane)];
+    if (!retired) continue;
+    const ok = ['completed', 'completed_with_shortfall'].includes(run.status);
+    // Legacy lanes without success tracking are skipped until their next run records it (no one-time false note).
+    const stall = now !== undefined && !!l.successTrackedSince && selfHealStall({ now, intervalMs: cloudLaneIntervalMs(lane), lastRunAt: run.at,
+      lastSuccessAt: l.lastSuccessAt ?? (ok ? run.at : null), trackedSince: l.successTrackedSince });
+    if (stall && !failing) { stalled = true; findings.push({ code: 'CLOUD_LANE_STALLED', recordId: null }); }
   }
   if (!latest) return [];
   const dedup = findings.filter((f, i) => f.recordId !== null || findings.findIndex(g => g.code === f.code && g.recordId === null) === i);
-  return [{ role: 'clippers-cloud-lanes', jobId: `clippers-cloud-lanes:${latest}`, completedAt: latest, status: 'completed', completeCoverage: true,
-    artifactId: createHash('sha256').update(JSON.stringify(state.lanes)).digest('hex').slice(0, 64), findings: dedup, records }];
+  const completedAt = stalled && now !== undefined ? new Date(now).toISOString() : latest;
+  return [{ role: 'clippers-cloud-lanes', jobId: `clippers-cloud-lanes:${completedAt}`, completedAt, status: 'completed', completeCoverage: true,
+    artifactId: createHash('sha256').update(JSON.stringify([state.lanes, dedup])).digest('hex').slice(0, 64), findings: dedup, records }];
 }
 export async function readCloudLanesState(owner: string): Promise<string | null> {
   const store = await (await import('./agent-council-store')).getCouncilStore();
   return store.read(CLOUD_LANES_NAMESPACE(owner));
 }
 export async function readCloudLanesSelfHealAudits(owner: string): Promise<SelfHealObservedAudit[]> {
-  return cloudLanesSelfHealAudits(await readCloudLanesState(owner));
+  return cloudLanesSelfHealAudits(await readCloudLanesState(owner), Date.now());
 }

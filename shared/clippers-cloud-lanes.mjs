@@ -79,7 +79,8 @@ export function parseLanesState(raw) {
   if (!isObj(s) || s.version !== 1) return out;
   for (const id of LANE_IDS) {
     const lane = s.lanes?.[id];
-    if (isObj(lane)) out.lanes[id] = { lastRun: runOf(lane.lastRun), lastDryRun: runOf(lane.lastDryRun), failureStreak: Number.isSafeInteger(lane.failureStreak) && lane.failureStreak >= 0 ? lane.failureStreak : 0 };
+    if (isObj(lane)) out.lanes[id] = { lastRun: runOf(lane.lastRun), lastDryRun: runOf(lane.lastDryRun), failureStreak: Number.isSafeInteger(lane.failureStreak) && lane.failureStreak >= 0 ? lane.failureStreak : 0,
+      lastSuccessAt: iso(lane.lastSuccessAt), successTrackedSince: iso(lane.successTrackedSince) };
     const lease = s.leases?.[id];
     if (isObj(lease) && ['mac', 'cloud'].includes(lease.holder) && iso(lease.at)) out.leases[id] = { holder: lease.holder, at: iso(lease.at), host: CODE.test(String(lease.host ?? '')) ? lease.host : null };
     const retired = s.retired?.[id];
@@ -126,7 +127,9 @@ export function recordLaneRun(state, lane, run) {
   if (!clean) return state;
   if (clean.dryRun) { state.lanes[lane] = { ...prev, lastDryRun: clean }; return state; }
   const streak = clean.status === 'failed' ? (prev.failureStreak ?? 0) + 1 : clean.status === 'held' ? (prev.failureStreak ?? 0) : 0;
-  state.lanes[lane] = { ...prev, lastRun: clean, failureStreak: streak };
+  // lastSuccessAt / successTrackedSince feed the office stall check (no successful run for > 2x the interval).
+  const success = ['completed', 'completed_with_shortfall'].includes(clean.status);
+  state.lanes[lane] = { ...prev, lastRun: clean, failureStreak: streak, lastSuccessAt: success ? clean.at : (prev.lastSuccessAt ?? null), successTrackedSince: prev.successTrackedSince ?? clean.at };
   return state;
 }
 

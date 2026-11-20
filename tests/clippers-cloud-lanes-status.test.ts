@@ -83,3 +83,23 @@ test('weekly sleep lanes report into editor/publisher with their own record and 
   assert.equal(editor.outputs.cloud_sleep_content_sleep_generated, 1);
   assert.ok(!editor.heldReasons.some(r => r.includes('sleep_content') && r.includes('stale')));
 });
+
+test('self-heal stall: a retired lane with no success for > 2x its interval is an attention note, never an order', () => {
+  const s = emptyLanesState();
+  retireMacLanes(s, ['marketplace', 'content'], AT - 10 * 86400_000);
+  recordLaneRun(s, 'marketplace', { at: new Date(AT - 3 * 86400_000).toISOString(), status: 'completed', heldReasons: [], errors: [] });
+  recordLaneRun(s, 'marketplace', { at: new Date(AT - 3600_000).toISOString(), status: 'failed', heldReasons: [], errors: ['internal_error'] });
+  assert.equal(s.lanes.marketplace!.lastSuccessAt, new Date(AT - 3 * 86400_000).toISOString());
+  const audits = cloudLanesSelfHealAudits(JSON.stringify(s), AT);
+  assert.deepEqual(audits[0].findings, [{ code: 'CLOUD_LANE_STALLED', recordId: null }]);
+  const out = planSelfHeal({ state: undefined, company: emptyCompanyState(), journal: { jobs: [] }, owner: 'o', now: AT, maxPerDay: 5, extraAudits: audits });
+  assert.equal(out.created.length, 0);
+  assert.ok(out.state.notes.some(n => n.code === 'CLOUD_LANE_STALLED'));
+  // No clock (legacy callers), a lane still on the Mac, or a legacy lane without success tracking: no stall.
+  assert.equal(cloudLanesSelfHealAudits(JSON.stringify(s))[0].findings.length, 0);
+  const legacy = JSON.parse(JSON.stringify(s)); delete legacy.lanes.marketplace.successTrackedSince; delete legacy.lanes.marketplace.lastSuccessAt;
+  assert.equal(cloudLanesSelfHealAudits(JSON.stringify(legacy), AT)[0].findings.length, 0);
+  const mac = emptyLanesState();
+  recordLaneRun(mac, 'marketplace', { at: new Date(AT - 3600_000).toISOString(), status: 'failed', heldReasons: [], errors: ['x'] });
+  assert.equal(cloudLanesSelfHealAudits(JSON.stringify(mac), AT + 5 * 86400_000)[0].findings.length, 0);
+});
