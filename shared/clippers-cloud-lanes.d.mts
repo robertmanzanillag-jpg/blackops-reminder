@@ -1,4 +1,4 @@
-export type LaneId = 'content' | 'youtube_delivery' | 'marketplace' | 'watchdog';
+export type LaneId = 'content' | 'youtube_delivery' | 'marketplace' | 'watchdog' | 'sleep_content' | 'sleep_delivery';
 export interface LaneRun { at: string; status: string; heldReasons: string[]; errors: string[]; counts: Record<string, number>; dryRun: boolean }
 export interface LanesState {
   version: 1;
@@ -13,9 +13,12 @@ export declare const CLOUD_WORKSPACE_NAMESPACE: (owner: string) => string;
 export declare const LANE_LEASE_MS: number;
 export declare const CLOUD_LANE_STALE_MS: number;
 export declare const CLOUD_LANE_FAILURE_STREAK_THRESHOLD: number;
-export declare const MAC_LANES: Readonly<Record<LaneId, { label: string; macTime: string; roles: string[]; cloud: string; coveredOnly?: boolean }>>;
+export declare const MAC_LANES: Readonly<Record<LaneId, { label: string; macTime: string; roles: string[]; cloud: string; coveredOnly?: boolean; cloudOnly?: boolean; macLane?: LaneId }>>;
 export declare const LANE_IDS: readonly LaneId[];
 export declare const CLOUD_LEASED_LANES: readonly LaneId[];
+export declare const MAC_LANE_IDS: readonly LaneId[];
+export declare function macLaneOf(lane: string): LaneId;
+export declare function laneKind(lane: string): LaneId;
 export declare const CLOUD_JOBS: Readonly<Record<'owned_content' | 'sleep' | 'marketplace', LaneId[]>>;
 export declare const INFORMATIONAL_REASONS: ReadonlySet<string>;
 export declare function isInformational(reason: string): boolean;

@@ -70,3 +70,16 @@ test('flags off by design are informational (not held); a lane timeout counts to
   for (let i = 0; i < 3; i++) recordLaneRun(s, 'content', { at: new Date(AT - (3 - i) * 3600_000).toISOString(), status: 'failed', heldReasons: [], errors: ['lane_timeout'] });
   assert.ok(cloudLanesSelfHealAudits(JSON.stringify(s))[0].findings.some(f => f.code === 'CLOUD_LANE_FAILING' && f.recordId === CLOUD_LANES_SELF_HEAL_RECORD('content')));
 });
+
+test('weekly sleep lanes report into editor/publisher with their own record and a weekly staleness window', () => {
+  const s = emptyLanesState();
+  retireMacLanes(s, ['content', 'youtube_delivery'], AT - 7 * 86400_000);
+  recordLaneRun(s, 'content', { at: '2026-11-20T09:05:00.000Z', status: 'completed', heldReasons: [], errors: [], counts: { motivation_rendered: 10 } });
+  recordLaneRun(s, 'sleep_content', { at: new Date(AT - 5 * 86400_000).toISOString(), status: 'completed', heldReasons: [], errors: [], counts: { sleep_generated: 1 } });
+  const report = cloudFallbackReport(streamerRaw, AT)!;
+  applyCloudLanesOverlay(report, JSON.stringify(s), AT);
+  const editor = report.roles.find(r => r.stage === 'editor')!;
+  assert.equal(editor.state, 'completed');
+  assert.equal(editor.outputs.cloud_sleep_content_sleep_generated, 1);
+  assert.ok(!editor.heldReasons.some(r => r.includes('sleep_content') && r.includes('stale')));
+});
