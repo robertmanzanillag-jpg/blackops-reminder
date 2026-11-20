@@ -80,6 +80,13 @@ restores the legacy fan-out.
 - **Caption:** curiosity line + question + creator name and credit/source + 3-5 hashtags; duet, stitch and comments on.
 - **Slots:** 10/12/16/18/20 ET, weekends -30 %; 8 a day (6 on weekends) once the weekly median passes 1k. Metricool
   best-time (read-only, refreshed weekly) reorders hours 09-22 when it has data.
+- **Owner override (on now):** `CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE` defaults to `memes:tiktok,sport:tiktok,miami:tiktok`
+  (@streamersus 6431685, @streamersclipusa 6431687, @news305miami 6591612). Those TikTok accounts auto-publish
+  without the 1k median gate (stale/missing analytics no longer force drafts there) and their clips skip the BlackOps
+  owner approval (`CLIPPERS_STREAMER_AUTO_PUBLISH` unset = `lanes`). One account per clip, language, prohibition/takedown,
+  daily caps (5/day until the real median passes 1k) and slots stay enforced. Facebook and NYC can never be overridden.
+  Office/Panel growth view shows `auto (owner override)`. **Kill switch:** set repo variable
+  `CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE` to `""` (env) or `off` (GitHub variables cannot be empty) -> drafts + owner approval.
 - **Auto-publish gate:** per account, weekly median >= 1k views over >= 5 posts. Below that, posts go to Metricool as
   drafts (`draft:true, autoPublish:false`) for owner approval. `CLIPPERS_STREAMER_LANE_AUTOPUBLISH=false` keeps all drafts.
 - **Growth loop (cloud):** job `growth` in `clippers-streamers-publish.yml` daily at 08:00 NY (and every 6 h inside the

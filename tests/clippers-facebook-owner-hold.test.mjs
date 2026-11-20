@@ -209,3 +209,15 @@ test('copy queued with lanes off is released as a draft even after lanes are tur
   assert.equal(m.calls.schedule.length, 1);
   assert.equal(m.calls.schedule[0].draft, true, 'never released live');
 });
+
+test('held Facebook release stays a draft with the owner override on (override is TikTok-only), even if facebook is listed', async () => {
+  const store = memoryStore(baseState([candidate('a')]));
+  const m = fakeMetricool(FIXTURE_ERRORS), st = stager();
+  const override = { CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: 'memes:tiktok,sport:tiktok,miami:tiktok,miami:facebook' };
+  await run(store, m, st, { ...FB_ONLY, ...override }, NOW);
+  assert.equal(store.state.cloudPublish.heldQueue.length, 1);
+  const r = await run(store, m, st, { ...FB_ONLY, ...override, CLIPPERS_FACEBOOK_HOLD_RESOLVED_AT: '2026-11-20T15:30:00Z' }, NOW + 2 * 3600_000);
+  assert.equal(r.report.counts.heldReleased, 1);
+  assert.equal(m.calls.schedule[0].destinationKey, FB_KEY);
+  assert.equal(m.calls.schedule[0].draft, true, 'Facebook never auto-publishes via the override');
+});

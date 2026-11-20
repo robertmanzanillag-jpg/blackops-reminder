@@ -194,6 +194,8 @@ jobs:
           CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES: ${{ vars.CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES || '20' }}
           CLIPPERS_STREAMER_LANES_ENABLED: ${{ vars.CLIPPERS_STREAMER_LANES_ENABLED || 'true' }}
           CLIPPERS_STREAMER_LANE_AUTOPUBLISH: ${{ vars.CLIPPERS_STREAMER_LANE_AUTOPUBLISH || 'true' }}
+          # Owner override (kill switch: set the repo variable to "off" / "" -> drafts + owner approval again).
+          CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: ${{ vars.CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE || 'default' }}
           CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS: ${{ vars.CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS || '6' }}
           EVENT: ${{ github.event_name }}
         run: |
@@ -368,6 +370,8 @@ jobs:
           CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES: ${{ vars.CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES || '20' }}
           CLIPPERS_STREAMER_LANES_ENABLED: ${{ vars.CLIPPERS_STREAMER_LANES_ENABLED || 'true' }}
           CLIPPERS_STREAMER_LANE_AUTOPUBLISH: ${{ vars.CLIPPERS_STREAMER_LANE_AUTOPUBLISH || 'true' }}
+          # Owner override (kill switch: set the repo variable to "off" / "" -> drafts + owner approval again).
+          CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: ${{ vars.CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE || 'default' }}
           CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS: ${{ vars.CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS || '6' }}
           EVENT: ${{ github.event_name }}
         run: |
@@ -445,4 +449,6 @@ jobs:
           CLIPPERS_STREAMER_CLOUD_KILL_SWITCH: ${{ vars.CLIPPERS_STREAMER_CLOUD_KILL_SWITCH || 'false' }}
           CLIPPERS_STREAMER_CLOUD_DESTINATIONS: ${{ vars.CLIPPERS_STREAMER_CLOUD_DESTINATIONS }}
           CLIPPERS_STREAMER_LANES_ENABLED: 'true'
+          # Owner override (kill switch: set the repo variable to "off" / "" -> drafts + owner approval again).
+          CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: ${{ vars.CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE || 'default' }}
         run: node --import tsx script/clippers-streamer-cloud-worker.mjs --growth-only

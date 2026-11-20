@@ -207,3 +207,32 @@ test('reasons are fixed codes (no hostnames) and refused runs still mirror pendi
   assert.equal(refused.ok, false);
   assert.deepEqual(cloudPublishOf(store.raw).mediaLedger.map(e => e.candidateId), ['mac:p1']);
 });
+
+test('lock: holder refreshes mtime while held; stale break never removes a fresh lock that raced in', async t => {
+  const mod = await import('../script/clippers-mac-ledger-guard.mjs');
+  const { writeFile, utimes, stat: st, readFile: rf } = await import('node:fs/promises');
+  const workspaceRoot = await root(t);
+  const lock = path.join(workspaceRoot, MAC_LEDGER_FILE) + '.lock';
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  let release, mtimes = [];
+  const guard = createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar(() => new Promise(r => { release = r; })) });
+  const pending = guard.reserve(MEMES, item());
+  await new Promise(r => setImmediate(r)); await new Promise(r => setTimeout(r, 30));
+  const old = new Date(Date.now() - 10 * 60_000);
+  await utimes(lock, old, old);
+  t.mock.timers.tick(mod.LEDGER_LOCK_HEARTBEAT_MS);
+  await new Promise(r => setTimeout(r, 30));
+  mtimes.push((await st(lock)).mtimeMs);
+  assert.ok(Date.now() - mtimes[0] < 60_000, 'heartbeat refreshed the lock');
+  release({ checkedDays: [] });
+  assert.equal((await pending).ok, true);
+  t.mock.timers.reset();
+  // Stale info refers to an old inode; the file now at lockPath is a different (fresh) lock -> it is put back.
+  await writeFile(lock, 'old'); const staleInfo = await st(lock);
+  const { rename: mv } = await import('node:fs/promises'); await mv(lock, lock + '.keep'); await writeFile(lock, 'fresh'); // old inode stays alive
+  assert.equal(await mod.breakStaleLock(lock, staleInfo), false);
+  assert.equal(await rf(lock, 'utf8'), 'fresh');
+  // Same inode -> removed.
+  assert.equal(await mod.breakStaleLock(lock, await st(lock)), true);
+  await assert.rejects(st(lock));
+});

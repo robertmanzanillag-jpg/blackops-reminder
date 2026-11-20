@@ -23,7 +23,7 @@ export function ClippersCentralGrowth() {
   return <section aria-label="Clippers · crecimiento por cuenta" className="mt-4 rounded-2xl border border-amber-200/20 bg-[#070b14] p-3 text-xs" data-testid="central-clippers-growth">
     <h3 className="font-semibold text-white">Clippers · crecimiento por cuenta (7 días)</h3>
     <ul className="mt-2 grid gap-1 sm:grid-cols-2">{rows.map(row => <li key={row.lane} className="text-zinc-300" data-testid={`central-clippers-growth-${row.lane}`}>
-      <span className="text-white">{row.label}</span>: {fmt(row.weeklyViews)} views · mediana {fmt(row.weeklyMedian)} · {row.autoPublish ? "auto-publica" : "borradores"} · {fmt(row.decisions)} decisiones
+      <span className="text-white">{row.label}</span>: {fmt(row.weeklyViews)} views · mediana {fmt(row.weeklyMedian)} · {row.ownerOverride ? "auto (owner override)" : row.autoPublish ? "auto-publica" : "borradores"} · {fmt(row.decisions)} decisiones
     </li>)}</ul>
   </section>;
 }

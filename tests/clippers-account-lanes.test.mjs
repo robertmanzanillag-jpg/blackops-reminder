@@ -3,9 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { LANES, routeCandidate, sourceSegment, mediaConflict, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, isWeekend } from '../shared/clippers-account-lanes.mjs';
+import { LANES, routeCandidate, sourceSegment, mediaConflict, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, isWeekend, parseAutopublishOverride, overrideLaneIds, DEFAULT_LANES_AUTOPUBLISH_OVERRIDE } from '../shared/clippers-account-lanes.mjs';
 import { computeGrowth, growthWeight } from '../script/clippers-streamer-cloud-learning.mjs';
-import { runCloudPublisher, laneTarget, cloudPublishConfig } from '../script/clippers-streamer-cloud-worker.mjs';
+import { runCloudPublisher, laneTarget, cloudPublishConfig, overrideApplies } from '../script/clippers-streamer-cloud-worker.mjs';
 import { peakStartFromEbur128, wordsFromWhisperJson, ffmpegRenderArgs } from '../script/clippers-streamer-cloud-render.mjs';
 import { createPortfolioMetricool } from '../script/clippers-portfolio-metricool.mjs';
 import { captionHasCredit, buildCreditCaption } from '../shared/clippers-streamer-policy.mjs';
@@ -152,7 +152,8 @@ let sha = 0;
 const media = () => ({ download: async () => ({ file: '/tmp/x/s.mp4', cut: { start: 0, duration: 50 } }),
   render: async input => ({ file: '/tmp/x/r.mp4', sha256: String(++sha).padStart(64, '0'), durationSec: input.duration, cutStart: 5, captions: 'whisper_not_configured', input }),
   makeDir: async () => mkdtemp(path.join(tmpdir(), 'lanes-')) });
-const ENV = { CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', METRICOOL_USER_TOKEN: 'metricool-token-123', METRICOOL_USER_ID: '12345' };
+// Kill switch on ('' = owner override off) so these tests exercise the median gate itself.
+const ENV = { CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: '', CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', METRICOOL_USER_TOKEN: 'metricool-token-123', METRICOOL_USER_ID: '12345' };
 const approvals = { async statuses(o, ids) { return new Map(ids.map(i => [i, 'approved'])); }, async markExecuted() {} };
 
 test('worker: each clip goes to exactly one account, as a Metricool draft, in its language, peak-first, 15-35 s', async () => {
@@ -269,4 +270,51 @@ test('Metricool adapter: a draft is confirmed from the shape Metricool reports (
   const item = { id: 'stc-2', scheduledAt: '2026-11-20T15:00:00.000Z', caption: 'cap', mediaUrl: 'https://e.com/a.mp4' };
   assert.equal((await mc.confirmSchedule(dest, { ...item, draft: true }))?.id, '434895937');
   assert.equal(await mc.confirmSchedule(dest, item), null, 'a draft never confirms an auto-publish write');
+});
+
+test('owner override: memes/sport/miami TikTok auto-publish now; Facebook/NYC never; kill switch back to drafts', async () => {
+  const FB = '6591612:facebook:1193011863901514';
+  const keys = parseAutopublishOverride(undefined);
+  assert.equal(DEFAULT_LANES_AUTOPUBLISH_OVERRIDE, 'memes:tiktok,sport:tiktok,miami:tiktok');
+  assert.deepEqual([...keys].sort(), [MEMES, SPORT, MIAMI].sort());
+  assert.deepEqual([...parseAutopublishOverride('default')].sort(), [MEMES, SPORT, MIAMI].sort());
+  for (const off of ['', 'off', 'none', 'false']) assert.equal(parseAutopublishOverride(off).size, 0, `kill switch "${off}"`);
+  assert.equal(parseAutopublishOverride('miami:facebook,nyc:facebook,nyc:tiktok').size, 0, 'Facebook and NYC are never overridden');
+  assert.ok(!parseAutopublishOverride('miami:tiktok,miami:facebook').has(FB));
+  assert.deepEqual([...overrideLaneIds(keys)].sort(), ['memes', 'miami', 'sports']);
+  assert.equal(autoPublishAllowed(null, { override: true }), true, 'override bypasses only the median gate');
+  assert.equal(autoPublishAllowed({ source: 'ledger_observations', weeklyPosts: 0, weeklyMedian: 0 }, { evaluatedAt: null, now: NOW, override: true }), true);
+
+  // Worker: default env (no override var) -> stale/missing analytics no longer force drafts on the lane account.
+  const config = cloudPublishConfig({ CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', METRICOOL_USER_TOKEN: 'metricool-token-123', METRICOOL_USER_ID: '12345' });
+  const staleLedger = { version: 1, clips: {}, posts: [], growth: { evaluatedAt: new Date(NOW - 40 * 3600_000).toISOString(), accounts: {}, kills: [], breakouts: [], doubled: [], decisions: [] } };
+  const s1 = state([candidate('o1', 'twitch:1', 'kaicenat')], staleLedger);
+  const t = laneTarget({ state: s1, ledger: staleLedger, candidate: s1.candidates[0], config, now: NOW });
+  assert.equal(t.ok, true); assert.equal(t.destinationKey, MEMES); assert.equal(t.draft, false, 'owner override -> auto-publish');
+  assert.equal(t.dailyLimit, 5, 'daily cap stays at 5 until the real median passes 1k');
+  const off = laneTarget({ state: s1, ledger: staleLedger, candidate: s1.candidates[0], config: cloudPublishConfig(ENV), now: NOW });
+  assert.equal(off.draft, true, 'kill switch -> drafts');
+  const lanesOff = laneTarget({ state: s1, ledger: staleLedger, candidate: s1.candidates[0], config: cloudPublishConfig({ ...ENV, CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: undefined, CLIPPERS_STREAMER_LANE_AUTOPUBLISH: 'false' }), now: NOW });
+  assert.equal(lanesOff.draft, true, 'CLIPPERS_STREAMER_LANE_AUTOPUBLISH=false still wins');
+
+  // Growth view mode: override (not earned) vs earned.
+  const g = computeGrowth({ posts: [], accountPosts: { [MEMES]: [], [FB]: [] }, now: NOW, override: keys });
+  assert.equal(g.accounts[MEMES].autoPublish, true); assert.equal(g.accounts[MEMES].autoPublishMode, 'owner_override'); assert.equal(g.accounts[MEMES].scaled, false);
+  assert.equal(g.accounts[FB].autoPublish, false); assert.equal(g.accounts[FB].autoPublishMode, 'drafts');
+  assert.ok(!g.decisions.some(d => d.startsWith('autopublish_on:')), 'override is not reported as an earned median decision');
+});
+
+test('owner override never auto-publishes Facebook (Miami FB copy, held-queue releases), even if the key is forced in', () => {
+  const FBD = { brandId: 6591612, network: 'facebook', account: '1193011863901514' }, FB = '6591612:facebook:1193011863901514';
+  const forced = { autopublishOverride: new Set([FB, MIAMI]) };
+  assert.equal(overrideApplies(forced, FBD, FB), false, 'facebook never');
+  assert.equal(overrideApplies(forced, { brandId: 6591612, network: 'tiktok', account: 'news305miami' }, MIAMI), true);
+  // Miami TikTok held -> lane picks the Facebook copy: it must stay a draft with the override on.
+  const env = { CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', METRICOOL_USER_TOKEN: 'metricool-token-123', METRICOOL_USER_ID: '12345', CLIPPERS_STREAMER_CLOUD_DESTINATIONS: `${MIAMI},${FB}` };
+  const config = { ...cloudPublishConfig(env), autopublishOverride: forced.autopublishOverride };
+  const ledger = { version: 1, clips: {}, posts: [], holds: { [MIAMI]: { status: 'held_owner_action' } }, growth: { evaluatedAt: new Date(NOW).toISOString(), accounts: {}, kills: [], breakouts: [], doubled: [], decisions: [] } };
+  const s1 = state([candidate('fb1', 'twitch:9', 'westcol')], ledger);
+  s1.candidates[0].language = 'es';
+  const t = laneTarget({ state: s1, ledger, candidate: s1.candidates[0], config, now: NOW });
+  assert.equal(t.ok, true, JSON.stringify(t)); assert.equal(t.destinationKey, FB); assert.equal(t.draft, true, 'facebook copy stays a draft');
 });

@@ -232,7 +232,9 @@ export const GROWTH_MAX_AGE_HOURS = 36;
  * Auto-publish flag for one account: weekly median >= 1k over >= 5 posts, computed from Metricool account
  * analytics (not our own ledger) by a growth pass less than 36 h old. Anything else -> drafts.
  */
-export function autoPublishAllowed(account, { evaluatedAt = null, now = null } = {}) {
+export function autoPublishAllowed(account, { evaluatedAt = null, now = null, override = false } = {}) {
+  // Owner override (CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE): bypasses ONLY the median/analytics-age gate.
+  if (override === true) return true;
   if (!account || account.source !== 'metricool_account_analytics') return false;
   if (!(Number.isSafeInteger(account.weeklyPosts) && account.weeklyPosts >= 5 && Number.isFinite(account.weeklyMedian) && account.weeklyMedian >= AUTOPUBLISH_MEDIAN_VIEWS)) return false;
   if (now !== null) {
@@ -241,4 +243,30 @@ export function autoPublishAllowed(account, { evaluatedAt = null, now = null } =
   }
   return true;
 }
+
+/**
+ * Owner override (2026-11, explicit Robert decision): auto-publish these TikTok lanes now, without waiting
+ * for the 1k weekly-median gate. Only the median/analytics-age gate is bypassed; one-account-per-clip,
+ * language, prohibition/takedown checks, daily caps and slots stay enforced. Facebook and NYC can never be
+ * overridden. Kill switch: set CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE="" (or "off") -> back to drafts.
+ */
+export const DEFAULT_LANES_AUTOPUBLISH_OVERRIDE = 'memes:tiktok,sport:tiktok,miami:tiktok';
+const OVERRIDE_LANE_ALIASES = freeze({ sport: 'sports' });
+const OVERRIDE_EXCLUDED_LANES = freeze(['nyc']);
+const OVERRIDE_NETWORKS = freeze(['tiktok']);
+/** env value -> Set of destination keys. undefined / 'default' -> owner default; '' / off / none / false -> empty. */
+export function parseAutopublishOverride(raw) {
+  const value = raw === undefined || raw === null || String(raw).trim().toLowerCase() === 'default' ? DEFAULT_LANES_AUTOPUBLISH_OVERRIDE : String(raw);
+  const out = new Set();
+  if (['', 'off', 'none', 'false'].includes(value.trim().toLowerCase())) return out;
+  for (const part of value.split(',')) {
+    const [laneRaw, networkRaw] = part.trim().toLowerCase().split(':');
+    const lane = laneById(OVERRIDE_LANE_ALIASES[laneRaw] ?? laneRaw);
+    if (!lane || OVERRIDE_EXCLUDED_LANES.includes(lane.id) || !OVERRIDE_NETWORKS.includes(networkRaw)) continue;
+    for (const d of lane.destinations) if (d.network === networkRaw) out.add(laneDestinationKey(d));
+  }
+  return out;
+}
+/** Lane ids with at least one overridden destination. */
+export const overrideLaneIds = keys => new Set([...keys].map(k => laneForDestinationKey(k)?.id).filter(Boolean));
 export const PAUSE_DAYS = 14;

@@ -14,7 +14,7 @@
 // Any error -> { ok: false }: the caller must not schedule. No Metricool writes happen here.
 
 import { createHash } from 'node:crypto';
-import { mkdir, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
+import { link, mkdir, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { STREAMER_STATE_NAMESPACE, parseStreamerStateStrict, emptyStreamerState } from './clippers-streamer-discovery.mjs';
 import { canonicalDestinationKey, destinationKey } from './clippers-portfolio-metricool.mjs';
@@ -38,6 +38,18 @@ export function safeCode(e) {
 }
 const providerCode = e => { const m = String(e?.message ?? ''); return /^[a-z][a-z0-9_]{2,59}$/.test(m) ? m : 'provider_error'; };
 export const LEDGER_LOCK_STALE_MS = 120_000;
+export const LEDGER_LOCK_HEARTBEAT_MS = 30_000;
+/** Break a stale lock safely: rename to a unique name, unlink only if it is the inode judged stale. */
+export async function breakStaleLock(lockPath, staleInfo) {
+  const moved = `${lockPath}.stale-${process.pid}-${createHash('sha256').update(String(Math.random()) + Date.now()).digest('hex').slice(0, 12)}`;
+  try { await rename(lockPath, moved); } catch { return false; }
+  const info = await stat(moved).catch(() => null);
+  if (info && info.ino === staleInfo.ino && info.dev === staleInfo.dev) { await unlink(moved).catch(() => undefined); return true; }
+  // Someone else's fresh lock: put it back unless a new one already exists (link fails on EEXIST).
+  await link(moved, lockPath).catch(() => undefined);
+  await unlink(moved).catch(() => undefined);
+  return false;
+}
 
 /** Canonical source identity, in the same key space the cloud worker uses for candidate ids / VOD segments. */
 export function sourceIdentity(sourceUrl) {
@@ -195,7 +207,11 @@ export function createMacLedgerGuard({ env = process.env, workspaceRoot, metrico
   const conflictOf = (entries, entry) => mediaConflict(entries.filter(e => canonicalDestinationKey(e?.destinationKey) !== entry.destinationKey),
     { segment: entry.segment, mediaSha256: entry.mediaSha256, destinationKey: entry.destinationKey, candidateId: entry.candidateId, sourceId: entry.sourceId });
 
-  /** Exclusive lock around read -> check -> write of the local ledger (stale locks > 2 min are broken). */
+  /**
+   * Exclusive lock around read -> check -> write of the local ledger. The holder refreshes the lock's mtime every
+   * 30 s; a lock untouched for > 2 min is stale. Breaking a stale lock renames it to a unique name first and unlinks
+   * it only if it is still the same inode that was judged stale (a fresh lock that raced in is put back).
+   */
   async function withLock(fn) {
     const lockPath = `${file}.lock`;
     await mkdir(path.dirname(file), { recursive: true });
@@ -205,14 +221,24 @@ export function createMacLedgerGuard({ env = process.env, workspaceRoot, metrico
       catch (e) {
         if (e?.code !== 'EEXIST') throw e;
         const info = await stat(lockPath).catch(() => null);
-        if (info && Date.now() - info.mtimeMs > LEDGER_LOCK_STALE_MS) { await unlink(lockPath).catch(() => undefined); continue; }
+        if (info && Date.now() - info.mtimeMs > LEDGER_LOCK_STALE_MS) { await breakStaleLock(lockPath, info); continue; }
         await new Promise(r => setTimeout(r, 200));
       }
     }
     if (!handle) throw new Error('ledger_lock_busy');
+    const mine = await handle.stat();
+    const beat = setInterval(() => { const t = new Date(); handle.utimes(t, t).catch(() => undefined); }, LEDGER_LOCK_HEARTBEAT_MS);
+    beat.unref?.();
     try { return await fn(); }
-    finally { await handle.close().catch(() => undefined); await unlink(lockPath).catch(() => undefined); }
+    finally {
+      clearInterval(beat);
+      await handle.close().catch(() => undefined);
+      const cur = await stat(lockPath).catch(() => null);
+      if (cur && cur.ino === mine.ino && cur.dev === mine.dev) await unlink(lockPath).catch(() => undefined);
+    }
   }
+
+ 
 
   /**
    * Check + claim one Mac delivery. Call immediately before the Metricool write.
