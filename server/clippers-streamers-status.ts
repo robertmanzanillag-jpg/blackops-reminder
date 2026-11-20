@@ -18,12 +18,16 @@ const STALE_MS = 3 * 3600_000;
  */
 export function applyStreamerOverlay(report: ClippersOrchestraStatus, raw: string | null, at: number): ClippersOrchestraStatus {
   const state = parseStreamerState(raw), run = state.lastRun;
-  if (!run) return report;
   const role = report.roles.find(r => r.stage === 'streamers');
   if (!role) return report;
+  // Owner-action holds (Facebook identity check) are an owner note, not a failure and never a self-heal order.
+  const holds = ownerHoldsOf((state as any).cloudPublish);
+  if (holds.length) role.ownerNotes = [...new Set([...(role.ownerNotes ?? []), ...holds.map(h => h.note)])].slice(0, 5);
+  if (!run) return report;
   const held = [...(run.heldReasons ?? []), ...(run.errors ?? []).map((e: string) => `streamer_cloud_error:${e}`)].filter(c => CODE.test(c));
   const age = at - Date.parse(run.at);
   role.lastRunAt = run.at;
+
   role.heldReasons = [...new Set([...role.heldReasons, ...held, ...(age > STALE_MS ? ['streamer_cloud_run_stale'] : [])])].slice(0, 100);
   role.state = run.status === 'failed' || run.status === 'skipped_missing_secrets' ? 'held' : age > STALE_MS ? 'stale' : run.status === 'completed' && !held.length ? 'completed' : 'held';
   for (const [k, v] of Object.entries(run.counts ?? {})) if (CODE.test(`cloud_${k}`) && Number.isSafeInteger(v) && (v as number) >= 0 && Object.keys(role.outputs).length < 20) role.outputs[`cloud_${k}`] = v as number;
@@ -46,6 +50,16 @@ export function streamerStatusView(raw: string | null, at = Date.now()) {
   };
 }
 
+export const FACEBOOK_HOLD_NOTE = 'Facebook pide verificar identidad en la app';
+/** Active per-brand per-network owner-action holds from the cloud ledger. */
+export function ownerHoldsOf(c: any): Array<{ destination: string; reason: string; since: string; note: string; queued: number }> {
+  if (!c || typeof c.holds !== 'object' || !c.holds) return [];
+  const queue = Array.isArray(c.heldQueue) ? c.heldQueue : [];
+  return Object.entries(c.holds as Record<string, any>).filter(([k, h]) => CODE.test(k) && h?.status === 'held_owner_action')
+    .map(([destination, h]) => ({ destination, reason: CODE.test(String(h.reason)) ? h.reason : 'facebook_account_action_required', since: String(h.since ?? ''),
+      note: FACEBOOK_HOLD_NOTE, queued: queue.filter((q: any) => q?.destinationKey === destination).length }));
+}
+
 /** Cloud publisher (GitHub Actions) ledger: last run, recent posts (to remove on a takedown) and learning. */
 export function cloudPublishSummary(c: any) {
   if (!c || c.version !== 1 || !Array.isArray(c.posts)) return null;
@@ -53,6 +67,7 @@ export function cloudPublishSummary(c: any) {
     lastRun: c.lastRun ? { at: c.lastRun.at, status: c.lastRun.status, counts: c.lastRun.counts, heldReasons: c.lastRun.heldReasons, errors: c.lastRun.errors } : null,
     posts: c.posts.slice(-30).reverse().map((p: any) => ({ id: p.id, candidateId: p.candidateId, creatorKey: p.creatorKey, destination: p.destinationKey, scheduledAt: p.scheduledAt,
       status: p.status, metricoolId: p.metricoolId ?? null, hookVariant: p.hookVariant, views: p.observation?.views ?? null })),
+    ownerHolds: ownerHoldsOf(c),
     learning: c.learning ? { evaluatedAt: c.learning.evaluatedAt, samples: c.learning.samples, hookPreference: c.learning.hookPreference, creatorBoost: c.learning.creatorBoost } : null,
   };
 }
@@ -120,6 +135,18 @@ export function registerClippersStreamerRoutes(app: Pick<Express, 'get' | 'post'
     let rejectedApprovals: number | null = null;
     try { rejectedApprovals = await rejectPending(owner(), affected, 'takedown'); } catch { /* the block already holds: Mac queue and approval sync skip prohibited clips */ }
     res.json({ recorded: true, id: entry.id, removeBy: entry.removeBy, rejectedApprovals });
+  });
+  // Owner confirms the Facebook identity check was completed: the next cloud run clears the hold and releases
+  // the queued Facebook copies gradually. Failed posts are never retried.
+  app.post('/api/clippers/streamers/holds/resolved', async (req, res) => {
+    if (!guard(req, res)) return;
+    const destination = req.body?.destination;
+    if (typeof destination !== 'string' || !/^\d+:facebook:\d+$/.test(destination)) return res.status(400).json({ error: 'CLIPPERS_HOLD_DESTINATION_INVALID' });
+    const at = new Date(now()).toISOString();
+    try {
+      const found = await update(s => { const h = s.cloudPublish?.holds?.[destination]; if (h?.status !== 'held_owner_action') return false; h.ownerResolvedAt = at; return true; });
+      return found ? res.json({ ownerResolvedAt: at }) : res.status(404).json({ error: 'CLIPPERS_HOLD_NOT_FOUND' });
+    } catch { return res.status(503).json({ error: 'CLIPPERS_STREAMERS_UNAVAILABLE' }); }
   });
   // Owner confirms the live post was removed: clears takedown_overdue. The block itself stays forever.
   app.post('/api/clippers/streamers/takedown/removed', async (req, res) => {
