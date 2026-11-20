@@ -161,3 +161,12 @@ test("paused commercial source and candidate queues reserve no model calls and s
   assert.deepEqual(f.state().runs.slice(0,1),history.runs);
  }finally{if(previous===undefined)delete process.env.CEO_PAUSED_DOMAINS;else process.env.CEO_PAUSED_DOMAINS=previous;}
 });
+
+test("the daily capability limit accepts up to 56 calls and rejects more", async () => {
+  const { createCapabilityTrainer, OFFICE_CAPABILITY_MAX_CALLS_PER_DAY_LIMIT } = await import("../server/office-capability-training");
+  assert.equal(OFFICE_CAPABILITY_MAX_CALLS_PER_DAY_LIMIT, 56);
+  const base = { owner: "owner", loadWork: async () => ({}) as any, transact: async () => undefined } as any;
+  assert.doesNotThrow(() => createCapabilityTrainer({ ...base, maxCallsPerDay: 56 }));
+  assert.throws(() => createCapabilityTrainer({ ...base, maxCallsPerDay: 57 }), /CAPABILITY_EXISTING_DAILY_LIMIT_REQUIRED/);
+  assert.throws(() => createCapabilityTrainer({ ...base, maxCallsPerDay: 0 }), /CAPABILITY_EXISTING_DAILY_LIMIT_REQUIRED/);
+});
