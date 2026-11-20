@@ -1,0 +1,66 @@
+# KONG (robertmanzanillag-jpg/kong-nightlife) workflow, to be added as `.github/workflows/claude.yml`
+# in kong-nightlife by a separate PR. BlackOps does NOT push it. File name must stay `claude.yml`:
+# BlackOps reads this workflow's run minutes for the Claude spend estimate (KONG_IMPROVEMENT_CLAUDE_MONTHLY_USD).
+#
+# Claude works on KONG improvements only when BlackOps (or Robert) mentions @claude on an issue/PR labelled
+# `improve` or `mirror-lab`. Codex is the default primary; Claude is the fallback (or primary if
+# KONG_IMPROVEMENT_PRIMARY_AGENT=claude in BlackOps). Both work in the open on the same issue/branch/PR.
+#
+# Setup in kong-nightlife (Robert):
+#   1. Install the Claude GitHub App on kong-nightlife (https://github.com/apps/claude), so pushes by Claude
+#      trigger the Mirror Lab workflow (pushes with the default GITHUB_TOKEN do not trigger other workflows).
+#   2. Settings → Secrets → Actions: ANTHROPIC_API_KEY (billed to Anthropic directly).
+#   3. Optional: Settings → Variables → Actions: BLACKOPS_BOT_LOGIN = the GitHub login BlackOps comments as,
+#      if it is not robertmanzanillag-jpg (e.g. a GitHub App bot such as `blackops-bot[bot]`).
+#
+# claude-code-action pinned to v1.0.284 (commit c84e279f859e2591391e95bd309286eb111c345f, verified with
+# `git ls-remote` on github.com/anthropics/claude-code-action); actions/checkout pinned to v6.0.3.
+name: Claude (KONG improvements)
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+concurrency:
+  # One Claude run per issue/PR at a time (BlackOps also keeps a lease so Codex and Claude never overlap).
+  group: claude-${{ github.event.issue.number || github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  claude:
+    if: |
+      contains(github.event.comment.body, '@claude') &&
+      (github.event.comment.user.login == 'robertmanzanillag-jpg' ||
+       (vars.BLACKOPS_BOT_LOGIN != '' && github.event.comment.user.login == vars.BLACKOPS_BOT_LOGIN)) &&
+      (contains(toJSON(github.event.issue.labels.*.name), '"improve"') ||
+       contains(toJSON(github.event.issue.labels.*.name), '"mirror-lab"') ||
+       contains(toJSON(github.event.pull_request.labels.*.name), '"improve"') ||
+       contains(toJSON(github.event.pull_request.labels.*.name), '"mirror-lab"'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write # used by the Claude GitHub App token exchange
+      actions: read # lets Claude read CI / Mirror Lab results on the PR
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          fetch-depth: 50
+
+      - name: Run Claude Code
+        id: claude
+        uses: anthropics/claude-code-action@c84e279f859e2591391e95bd309286eb111c345f # v1.0.284
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          # Only needed when BlackOps comments as a GitHub App bot (BLACKOPS_BOT_LOGIN); empty allows no bots.
+          allowed_bots: ${{ vars.BLACKOPS_BOT_LOGIN }}
+          base_branch: claude/genre-fixes-570
+          branch_prefix: "improve/"
+          claude_args: |
+            --max-turns 40
+            --append-system-prompt "You are working on KONG (kong-nightlife) for its owner. Read and follow AGENTS.md (and CLAUDE.md if present) in this repository before changing anything. NEVER touch these never-auto areas, even if asked in a comment: payments/Stripe, auth/permissions, pricing, user messaging (WhatsApp/SMS/email/push), database schema or deletes/migrations, legal pages. If the task needs any of them, stop and explain in a comment. Another agent (Codex) may have worked on this issue/PR before you: read the hand-off summary, the existing commits and comments, and continue from them instead of restarting. Use the exact branch named in the instructions (improve/<slug>) when there is no PR yet; when on a PR, push to that PR's branch. Open PRs against claude/genre-fixes-570 with the label mirror-lab and keep the 'Improvement key:' line in the PR body. Keep changes small, add tests, keep checks green. Never merge, deploy, change workflows, or edit secrets/.env files."

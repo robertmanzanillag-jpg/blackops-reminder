@@ -30,8 +30,12 @@ type AiBudget = { spentUsd: number; capUsd: number; remainingUsd: number; calls:
 type MirrorBudget = { label: string; pausedLabel: string | null; paused: boolean; perRunUsd: number; budgetUsd: number; spentUsd: number };
 type ScoutProposal = { key: string; title: string; problem: string; status: string; kind: "code" | "decision"; risk: string; neverAutoArea: string | null; issueUrl: string | null; prNumber: number | null; pausedByBudget?: boolean };
 type ScoutsView = { enabled: boolean; lastRunAt: string | null; lastError: string | null; counts: { open: number; building: number; testing: number; ready: number; decisions: number; proposed: number; merged: number }; proposals: ScoutProposal[] };
+type AgentName = "codex" | "claude";
+type AgentAttempt = { dispatchId: string; agent: AgentName; at: string; label: string; commentUrl: string | null };
+type AgentItem = { key: string; prNumber: number | null; issueNumber: number | null; who: string; statusLabel: string; switchTo: AgentName | null; neverAutoArea: string | null; attempts: AgentAttempt[] };
+type AgentsView = { primary: AgentName; timeoutHours: number; claudeBudget: { label: string; pausedLabel: string | null; paused: boolean }; items: AgentItem[] };
 type ReportsResponse = { reports: MirrorReportRow[]; pendingCount: number; aiBudget?: AiBudget | null; mirrorBudget?: MirrorBudget | null; scouts?: ScoutsView | null;
-  academy?: Array<{ id: string; title: string; detail: string; evaluatedAt: string }> };
+  academy?: Array<{ id: string; title: string; detail: string; evaluatedAt: string }>; agents?: AgentsView | null };
 type ChatMessage = { role: "user" | "assistant"; text: string; at: string; citations: string[]; source?: string; costUsd?: number; changeSuggestion?: { text: string } };
 type ChatResult = { ok: boolean; reply: ChatMessage; thread: ChatMessage[]; fallbackSections?: Array<{ title: string; lines: string[] }> };
 type DecisionResult = { ok: boolean; message?: string; steps?: string[]; code?: string; commentPosted?: boolean };
@@ -106,6 +110,33 @@ function ImageViewer({ images, index, onIndex, onClose }: { images: MirrorCardVi
   );
 }
 
+const AGENT_NAME: Record<AgentName, string> = { codex: "Codex", claude: "Claude" };
+/** "Quién trabaja": Codex / Claude / esperando, attempt history and Robert's forced switch. */
+export function AgentWork({ item, compact = false }: { item: AgentItem; compact?: boolean }) {
+  const queryClient = useQueryClient();
+  const [message, setMessage] = useState<string | null>(null);
+  const change = useMutation({
+    mutationFn: async (agent: AgentName) => {
+      const response = await fetch("/api/kong-mirror/agents/switch", { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ itemKey: item.key, agent }) });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.message || "No se pudo cambiar de agente.");
+      return body as { agent: AgentName; duplicate?: boolean };
+    },
+    onSuccess: (data) => setMessage(data.duplicate ? `${AGENT_NAME[data.agent]} ya tiene este trabajo.` : `Encargo enviado a ${AGENT_NAME[data.agent]} con el resumen de lo ya hecho.`),
+    onError: (error) => setMessage((error as Error).message),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: ["kong-mirror-reports"] }),
+  });
+  return (
+    <div className={compact ? "space-y-1" : "space-y-1 rounded border border-white/10 p-2 text-xs"} data-testid="kong-agent-work">
+      <p><span className="font-semibold">Quién trabaja:</span> <span data-testid="kong-agent-who">{item.who}</span> · {item.statusLabel}</p>
+      {item.attempts.length > 0 && <details><summary>Intentos ({item.attempts.length})</summary>
+        <ul className="pl-4">{item.attempts.map((attempt) => <li key={attempt.dispatchId}>{new Date(attempt.at).toLocaleString("es")} · {attempt.label}{attempt.commentUrl ? <> · <a className="underline" href={attempt.commentUrl} target="_blank" rel="noreferrer">encargo</a></> : null}</li>)}</ul></details>}
+      {item.switchTo && <Button size="sm" variant="outline" disabled={change.isPending} onClick={() => change.mutate(item.switchTo!)} data-testid="kong-agent-switch">Cambiar a {AGENT_NAME[item.switchTo]}</Button>}
+      {message && <p className="text-muted-foreground" role="status">{message}</p>}
+    </div>
+  );
+}
+
 function Section({ title, children, testId }: { title: string; children: ReactNode; testId?: string }) {
   return <section className="space-y-2" data-testid={testId}><h3 className="text-sm font-semibold">{title}</h3>{children}</section>;
 }
@@ -125,6 +156,8 @@ export function KongMirrorCard({ row }: { row: MirrorReportRow }) {
       queryClient.invalidateQueries({ queryKey: ["pending-actions"] });
     },
   });
+  const agents = useKongMirrorReports(true).data?.agents;
+  const agentItem = agents?.items.find((item) => item.prNumber === row.prNumber) || null;
   if (!card) return <p className="text-sm text-muted-foreground">Reporte recibido; preparando la tarjeta…</p>;
   const open = row.status === "carded" && ["pending", "edited", "snoozed"].includes(row.pendingStatus || "");
   const waitingChanges = row.status === "changes_requested";
@@ -139,6 +172,7 @@ export function KongMirrorCard({ row }: { row: MirrorReportRow }) {
         </div>
         <p className="text-xs text-muted-foreground">{card.repo} · PR #{card.prNumber} · probado en {card.headSha.slice(0, 7)} · {new Date(card.generatedAt).toLocaleString("es")}</p>
         {card.warn && <p role="alert" className="flex items-center gap-2 rounded border border-amber-400/50 p-2 text-amber-200"><AlertTriangle className="h-4 w-4" />Pasó con AVISOS. Lee los riesgos antes de aprobar.</p>}
+        {agentItem && <AgentWork item={agentItem} />}
       </header>
 
       {card.failReasons.length > 0 && (
@@ -340,15 +374,18 @@ function MirrorChat({ row }: { row: MirrorReportRow }) {
   );
 }
 
-const SCOUT_STATUS: Record<string, string> = { decision: "Requiere decisión de Robert", proposed: "Propuesta (sin issue todavía)", building: "En construcción (Codex)", testing: "En pruebas (Mirror Lab)", ready: "Lista para aprobar", merged: "Hecha", closed: "Cerrada" };
+const SCOUT_STATUS: Record<string, string> = { decision: "Requiere decisión de Robert", proposed: "Propuesta (sin issue todavía)", building: "En construcción", testing: "En pruebas (Mirror Lab)", ready: "Lista para aprobar", merged: "Hecha", closed: "Cerrada" };
 function ScoutsSummary({ data }: { data: ReportsResponse }) {
-  const scouts = data.scouts, mirror = data.mirrorBudget, ai = data.aiBudget;
+  const scouts = data.scouts, mirror = data.mirrorBudget, ai = data.aiBudget, agents = data.agents;
   return (
     <section className="space-y-2 rounded-xl border border-white/10 p-3 text-xs" data-testid="kong-mirror-scouts">
       <div className="flex flex-wrap gap-3">
         {ai && <span data-testid="kong-mirror-ai-budget">IA del mes: ${ai.spentUsd.toFixed(2)} de ${ai.capUsd}</span>}
         {mirror && <span data-testid="kong-mirror-run-budget">{mirror.label}</span>}
         {mirror?.pausedLabel && <span className="text-amber-200" data-testid="kong-mirror-run-paused">{mirror.pausedLabel}</span>}
+        {agents && <span data-testid="kong-agent-claude-budget">{agents.claudeBudget.label}</span>}
+        {agents?.claudeBudget.pausedLabel && <span className="text-amber-200" data-testid="kong-agent-claude-paused">{agents.claudeBudget.pausedLabel}</span>}
+        {agents && <span>Principal: {AGENT_NAME[agents.primary]} · relevo tras {agents.timeoutHours} h sin respuesta o al llegar a su límite</span>}
       </div>
       {scouts && (
         <>
@@ -356,7 +393,8 @@ function ScoutsSummary({ data }: { data: ReportsResponse }) {
           <p>Última búsqueda: {scouts.lastRunAt ? new Date(scouts.lastRunAt).toLocaleString("es") : "todavía no"} · propuestas abiertas {scouts.counts.open} · en construcción {scouts.counts.building} · en pruebas {scouts.counts.testing} · listas para aprobar {scouts.counts.ready}{scouts.counts.decisions ? ` · requieren tu decisión ${scouts.counts.decisions}` : ""}</p>
           {scouts.lastError && <p className="text-rose-300">{scouts.lastError}</p>}
           {scouts.proposals.length > 0 && <details><summary>Ver propuestas ({scouts.proposals.length})</summary>
-            <ul className="space-y-1 pl-2">{scouts.proposals.map((item) => <li key={item.key}><span className="font-medium">{item.title}</span> · {SCOUT_STATUS[item.status] || item.status}{item.pausedByBudget ? " · en pausa por presupuesto" : ""} · riesgo {item.risk}{item.issueUrl ? <> · <a className="underline" href={item.issueUrl} target="_blank" rel="noreferrer">issue</a></> : null}<br /><span className="text-muted-foreground">{item.problem}</span></li>)}</ul></details>}
+            <ul className="space-y-1 pl-2">{scouts.proposals.map((item) => <li key={item.key}><span className="font-medium">{item.title}</span> · {SCOUT_STATUS[item.status] || item.status}{item.pausedByBudget ? " · en pausa por presupuesto" : ""} · riesgo {item.risk}{item.issueUrl ? <> · <a className="underline" href={item.issueUrl} target="_blank" rel="noreferrer">issue</a></> : null}<br /><span className="text-muted-foreground">{item.problem}</span>
+              {(() => { const work = agents?.items.find((row) => row.key === item.key); return work ? <AgentWork item={work} compact /> : null; })()}</li>)}</ul></details>}
         </>
       )}
       {(data.academy || []).length > 0 && <details><summary>Skills aprendidas en la Academia ({data.academy!.length})</summary><ul className="pl-2">{data.academy!.map((lesson) => <li key={lesson.id}>{lesson.title}: {lesson.detail}</li>)}</ul></details>}
