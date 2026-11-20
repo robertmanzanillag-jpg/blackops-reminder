@@ -17,7 +17,7 @@ import { ceoFocusContext } from "./ceo-domain-policy";
 
 import type { CouncilState } from "@shared/agent-council";
 import { isKongCompanyAgent, type CompanyOrder } from "@shared/agent-company";
-import { agentChatName, handoffLog, isExternalActionForKong, routeAgentMessage, scoreAgents, type AgentChatRoute } from "@shared/agent-chat-routing";
+import { KONG_DESK_PROFILE, agentChatName, handoffLog, isExternalActionForKong, routeAgentMessage, scoreAgents, type AgentChatRoute } from "@shared/agent-chat-routing";
 import { KONG_ORDER_MAX_TEXT, KongOfficeOrderError, isTerminalKongStatus, isUncertainKongError, kongOrderAgentId, kongOrderIdempotencyKey, kongStatusLabel, type KongOfficeOrderClient, type KongOfficeOrderTask } from "./kong-office-orders";
 import { AGENT_CHAT_GROUP_LABELS, buildAgentChatDirectory, directoryCityNames, findAgentChatEntry, isAgentChatIdShape, type AgentChatEntry } from "@shared/agent-chat-directory";
 import { effectiveIntegrations, integrationFor, parseIntegrationOverrides } from "@shared/agent-integrations";
@@ -77,8 +77,10 @@ function groupFacts(state: CouncilState, profile: AgentChatEntry, now: number): 
     lines.push("Los listados concretos (nombres, fechas, precios o cantidades de clubs/eventos/mesas) viven en KONG y no están en mi registro de la oficina.");
   }
   if (profile.group === "kong-desk") {
-    const record = state.kongSupervision?.records?.find(item => item.agentId === profile.id);
-    lines.push(record ? `Última revisión del supervisor KONG (${when(record.checkedAt)}): ${record.result} — ${record.reason}` : "El supervisor KONG no tiene una revisión registrada de este puesto.");
+    // State comes only from KONG's own snapshot (the BlackOps "Supervisor KONG" was retired).
+    const kongId = KONG_DESK_PROFILE[profile.id] ?? profile.id;
+    const status = state.kongLastStatuses?.[kongId];
+    lines.push(status && state.kongObservedAt ? `Estado en la última lectura de KONG (${when(state.kongObservedAt)}): ${status.label}` : "No hay una lectura vigente de KONG para este puesto.");
   }
   if (profile.group === "factory" && isFactoryAgentId(profile.id)) {
     let view;

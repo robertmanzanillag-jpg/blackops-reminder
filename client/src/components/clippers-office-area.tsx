@@ -161,6 +161,7 @@ function AgentCard({ agent, role, fresh, now }: { agent: typeof CLIPPERS_AGENTS[
       {agent.stage === "learning" && <ClippersGrowthTable outputs={role.outputs} />}
       {Object.keys(role.outputs).some(key => !key.startsWith("growth_")) && <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">{Object.entries(role.outputs).filter(([key]) => !key.startsWith("growth_")).map(([key, value]) => <div key={key}><dt className="inline text-slate-500">{Object.hasOwn(outputLabels, key) ? outputLabels[key] : "Resultado registrado"}: </dt><dd className="inline text-slate-200">{number(value)}</dd></div>)}</dl>}
       <Reasons reasons={role.heldReasons} />
+      {role.ownerNotes?.map(note => <p key={note} className="mt-2 text-xs text-amber-100" data-testid="clippers-owner-note">Nota para Robert: {note}</p>)}
       {role.lifePenaltyExempt && role.heldReasons.length > 0 && <p className="mt-2 text-[10px] text-slate-500">Esta espera no penaliza la vida del agente.</p>}
     </>}
   </article>;
