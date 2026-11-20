@@ -340,10 +340,11 @@ export function createApprovalLedger(query) {
  */
 export async function runCloudPublisher({ env = process.env, now = Date.now(), owner, store, approvals, metricool, stager, fetch: fetchImpl = globalThis.fetch,
   download = downloadSource, render = renderVerticalClip, makeDir = makeWorkDir, outputDir = null, minIntervalMs = 0, clock = () => Date.now(), growthOnly = false }) {
-  const config = cloudPublishConfig(env);
+  // A growth-only pass (read-only analytics) runs even while publishing is off; the kill switch still stops it.
+  const config = { ...cloudPublishConfig(env), ...(growthOnly ? { enabled: true } : {}) };
   const ns = STREAMER_STATE_NAMESPACE(owner);
   const report = { at: iso(now), status: 'completed', heldReasons: [], errors: [], counts: { rendered: 0, scheduled: 0, verificationPending: 0, deferred: 0, blocked: 0, failed: 0, reconciled: 0, observed: 0, assetsRemoved: 0 }, dryRun: config.dryRun, paidSpendUsd: 0, aiSpendUsd: 0 };
-  if (!config.enabled && !growthOnly) return { report: { ...report, status: 'disabled' }, skipped: true };
+  if (!config.enabled) return { report: { ...report, status: 'disabled' }, skipped: true };
   if (config.killSwitch) return { report: { ...report, status: 'kill_switch' }, skipped: true };
   report.heldReasons.push(...config.unknownDestinations.map(k => `destination_not_allowlisted:${k}`));
   if (!config.dryRun && config.missing.length) {
