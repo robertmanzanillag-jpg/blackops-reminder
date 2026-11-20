@@ -176,25 +176,11 @@
         "installation verifies all launchd jobs without kickstarting them"
       ]
     },
-    "tests/clippers-motivation-shorts.test.mjs": {
-      "reason": "Local render pipeline returns render_failed on the Linux runner (expects the operator Mac toolchain); pre-existing.",
-      "failing": [
-        "cleans its partial SRT after a transient render failure so a retry can succeed",
-        "renders an authorized local voice to a deduplicated 9:16 Short with QA evidence",
-        "renders procedural-original audio without voice files or voice-rights evidence"
-      ]
-    },
     "tests/clippers-owned-source-scripts.test.ts": {
       "reason": "Evidence importer cases assume macOS paths (/private/tmp) and the operator toolchain; pre-existing.",
       "failing": [
         "external closeout evidence importer can apply accepted rows while leaving rejected rows blocked",
         "external closeout evidence importer validates local proof files without symlink escape"
-      ]
-    },
-    "tests/clippers-render-campaign-drafts.test.mjs": {
-      "reason": "Draft renderer needs ImageMagick 7 'magick' (spawn magick ENOENT on the runner); operator Mac toolchain only.",
-      "failing": [
-        "renders a deterministic local 9:16 draft with audio, subtitles, hashes, and three evidence frames"
       ]
     },
     "tests/clippers-youtube-delivery-worker.test.mjs": {
