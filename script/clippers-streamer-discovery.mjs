@@ -425,6 +425,9 @@ export async function runStreamerDiscovery({ env = process.env, now = Date.now()
     // Code failures only (API/parse errors). Missing secrets are an owner action, never a code failure.
     state.failureStreak = report.errors.length && report.status !== 'skipped_missing_secrets' ? (state.failureStreak ?? 0) + 1 : 0;
     report.failureStreak = state.failureStreak;
+    // Office stall check: last fully successful run and when tracking started.
+    if (report.status === 'completed' && !report.errors.length) state.lastSuccessAt = report.at;
+    state.successTrackedSince ??= report.at;
     state.lastRun = report;
     return JSON.stringify(state);
   });

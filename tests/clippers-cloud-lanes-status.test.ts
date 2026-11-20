@@ -83,3 +83,25 @@ test('weekly sleep lanes report into editor/publisher with their own record and 
   assert.equal(editor.outputs.cloud_sleep_content_sleep_generated, 1);
   assert.ok(!editor.heldReasons.some(r => r.includes('sleep_content') && r.includes('stale')));
 });
+
+test('self-heal stall: a retired lane with no success for > 2x its interval is an order on code failure, attention otherwise', () => {
+  const s = emptyLanesState();
+  retireMacLanes(s, ['marketplace', 'content'], AT - 10 * 86400_000);
+  recordLaneRun(s, 'marketplace', { at: new Date(AT - 3 * 86400_000).toISOString(), status: 'completed', heldReasons: [], errors: [] });
+  recordLaneRun(s, 'marketplace', { at: new Date(AT - 3600_000).toISOString(), status: 'failed', heldReasons: [], errors: ['internal_error'] });
+  recordLaneRun(s, 'content', { at: new Date(AT - 3 * 86400_000).toISOString(), status: 'completed', heldReasons: [], errors: [] });
+  recordLaneRun(s, 'content', { at: new Date(AT - 3600_000).toISOString(), status: 'held', heldReasons: ['missing_secret:GOOGLE_DRIVE_KEY'], errors: [] });
+  assert.equal(s.lanes.marketplace!.lastSuccessAt, new Date(AT - 3 * 86400_000).toISOString());
+  const audits = cloudLanesSelfHealAudits(JSON.stringify(s), AT);
+  assert.ok(audits[0].findings.some(f => f.code === 'CLOUD_LANE_STALLED' && f.recordId === CLOUD_LANES_SELF_HEAL_RECORD('marketplace')));
+  assert.ok(audits[0].findings.some(f => f.code === 'CLOUD_LANE_STALLED' && f.recordId === null));
+  const out = planSelfHeal({ state: undefined, company: emptyCompanyState(), journal: { jobs: [] }, owner: 'o', now: AT, maxPerDay: 5, extraAudits: audits });
+  assert.equal(out.created.length, 1);
+  assert.ok(isValidSelfHealOrder(out.created[0])); assert.equal(out.created[0].selfHeal!.code, 'CLOUD_LANE_STALLED');
+  assert.ok(out.state.notes.some(n => n.code === 'CLOUD_LANE_STALLED'));
+  // Without a clock (legacy callers) or for a lane still on the Mac there is no stall finding.
+  assert.ok(!cloudLanesSelfHealAudits(JSON.stringify(s))[0].findings.some(f => f.code === 'CLOUD_LANE_STALLED'));
+  const mac = emptyLanesState();
+  recordLaneRun(mac, 'marketplace', { at: new Date(AT - 3600_000).toISOString(), status: 'failed', heldReasons: [], errors: ['x'] });
+  assert.ok(!cloudLanesSelfHealAudits(JSON.stringify(mac), AT + 5 * 86400_000)[0].findings.some(f => f.code === 'CLOUD_LANE_STALLED'));
+});

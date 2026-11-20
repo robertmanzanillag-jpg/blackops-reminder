@@ -128,3 +128,62 @@ test('status view lists cloud-published posts (for takedown removal) and the lea
   assert.equal(view.cloudPublish.learning.samples, 1);
   assert.equal(streamerStatusView(stateWith(null), AT).cloudPublish, null);
 });
+
+// ---------- Self-heal: publisher failures and stall detection ----------
+import { STREAMER_PUBLISH_SELF_HEAL_RECORD } from '../server/clippers-streamers-status';
+import { selfHealOfficeView } from '../server/office-self-heal';
+const okRun = { at: '2026-11-19T14:30:00.000Z', status: 'completed', heldReasons: [], errors: [], counts: {} };
+const withPublish = (lastRun: any, extra: any = {}) => stateWith(okRun, { cloudPublish: { version: 1, clips: {}, posts: [], learning: null, holds: {}, heldQueue: [], lastRun, ...extra } });
+
+test('self-heal: publisher failing 3+ runs opens one valid order; missing secrets, dry runs and 2 failures never do', () => {
+  const failing = withPublish({ at: '2026-11-19T14:00:00.000Z', status: 'failed', heldReasons: [], errors: ['render_failed'], counts: {}, dryRun: false }, { failureStreak: 3, lastSuccessAt: '2026-11-19T10:00:00.000Z' });
+  const audits = streamerSelfHealAudits(failing, AT);
+  assert.deepEqual(audits[0].findings, [{ code: 'STREAMER_PUBLISH_FAILING', recordId: STREAMER_PUBLISH_SELF_HEAL_RECORD }]);
+  const out = planSelfHeal({ state: undefined, company: emptyCompanyState(), journal: { jobs: [] }, owner: 'o', now: AT, maxPerDay: 5, extraAudits: audits });
+  assert.equal(out.created.length, 1);
+  assert.equal(out.created[0].selfHeal!.code, 'STREAMER_PUBLISH_FAILING'); assert.equal(out.created[0].assignees[0].agentId, 'code');
+  assert.ok(isValidSelfHealOrder(out.created[0])); assert.match(out.created[0].text, /clippers-streamer-cloud-worker/);
+  // Idempotent: the next tick with the same finding opens nothing new.
+  assert.equal(planSelfHeal({ state: out.state, company: out.company, journal: { jobs: [] }, owner: 'o', now: AT + 60_000, maxPerDay: 5, extraAudits: audits }).created.length, 0);
+  assert.equal(streamerSelfHealAudits(withPublish({ at: '2026-11-19T14:00:00.000Z', status: 'failed', heldReasons: [], errors: ['x'], counts: {} }, { failureStreak: 2 }), AT)[0].findings.length, 0);
+  const secrets = streamerSelfHealAudits(withPublish({ at: '2026-11-19T14:00:00.000Z', status: 'held_missing_secrets', heldReasons: ['missing_secret:METRICOOL_USER_TOKEN'], errors: [], counts: {} }, { failureStreak: 0 }), AT);
+  assert.deepEqual(secrets[0].findings, [{ code: 'CAPABILITY_UNAVAILABLE', recordId: null }]);
+  const dry = streamerSelfHealAudits(withPublish({ at: '2026-11-19T14:00:00.000Z', status: 'failed', heldReasons: [], errors: ['x'], counts: {}, dryRun: true }, { failureStreak: 5 }), AT);
+  assert.ok(!dry[0].findings.some(f => f.code === 'STREAMER_PUBLISH_FAILING'));
+});
+
+test('self-heal stall: code-caused stall is an order, owner-caused stall is an attention note, fresh or switched-off jobs are silent', () => {
+  const now = Date.parse('2026-11-21T15:00:00.000Z');
+  // Publisher keeps running but fails on code (streak 2 < 3) and has not succeeded for 30 h (> 2 x 12 h).
+  const code = streamerSelfHealAudits(withPublish({ at: '2026-11-21T14:00:00.000Z', status: 'failed', heldReasons: [], errors: ['render_failed'], counts: {} },
+    { failureStreak: 2, lastSuccessAt: '2026-11-20T09:00:00.000Z' }), now);
+  assert.ok(code[0].findings.some(f => f.code === 'STREAMER_PUBLISH_STALLED' && f.recordId === STREAMER_PUBLISH_SELF_HEAL_RECORD));
+  assert.equal(code[0].completedAt, new Date(now).toISOString());
+  const order = planSelfHeal({ state: undefined, company: emptyCompanyState(), journal: { jobs: [] }, owner: 'o', now, maxPerDay: 5, extraAudits: code });
+  assert.ok(order.created.some(o => o.selfHeal!.code === 'STREAMER_PUBLISH_STALLED' && isValidSelfHealOrder(o)));
+  // Missing secret: attention note (office status needsOwner), never an order.
+  const owner = streamerSelfHealAudits(withPublish({ at: '2026-11-21T14:00:00.000Z', status: 'held_missing_secrets', heldReasons: ['missing_secret:METRICOOL_USER_TOKEN'], errors: [], counts: {} },
+    { failureStreak: 0, lastSuccessAt: '2026-11-20T09:00:00.000Z' }), now);
+  assert.ok(owner[0].findings.some(f => f.code === 'STREAMER_PUBLISH_STALLED' && f.recordId === null));
+  const note = planSelfHeal({ state: undefined, company: emptyCompanyState(), journal: { jobs: [] }, owner: 'o', now, maxPerDay: 5, extraAudits: owner });
+  assert.equal(note.created.length, 0);
+  assert.ok(note.state.notes.some(n => n.code === 'STREAMER_PUBLISH_STALLED'));
+  // Office status: missing secret + publish stall + discovery stall (its fixture run is 2 days old) are owner attention.
+  assert.equal(selfHealOfficeView(note.state, { jobs: [] }, now, true).agents.find(a => a.agentId === 'clippers-streamers')!.needsOwner, 3);
+  // Discovery stopped running entirely (no run for 5 h > 2 x 1 h): attention, the cause is unknown.
+  const stopped = streamerSelfHealAudits(stateWith({ ...okRun, at: '2026-11-21T10:00:00.000Z' }, { lastSuccessAt: '2026-11-21T10:00:00.000Z' }), now);
+  assert.deepEqual(stopped[0].findings, [{ code: 'STREAMER_DISCOVERY_STALLED', recordId: null }]);
+  // Fresh success: nothing. Last run older than 7 days: treated as switched off.
+  assert.equal(streamerSelfHealAudits(stateWith({ ...okRun, at: '2026-11-21T14:30:00.000Z' }), now)[0].findings.length, 0);
+  assert.equal(streamerSelfHealAudits(stateWith({ ...okRun, at: '2026-11-10T14:30:00.000Z' }), now)[0].findings.length, 0);
+  // Failing 3+ and stalled: one order only (the FAILING one), so the open-order cap is not spent twice.
+  const both = streamerSelfHealAudits(withPublish({ at: '2026-11-21T14:00:00.000Z', status: 'failed', heldReasons: [], errors: ['x'], counts: {} }, { failureStreak: 4, lastSuccessAt: '2026-11-19T09:00:00.000Z' }), now);
+  assert.deepEqual(both[0].findings.filter(f => f.code.startsWith('STREAMER_PUBLISH')).map(f => f.code), ['STREAMER_PUBLISH_FAILING']);
+});
+
+test('self-heal stall orders respect the max-open-orders cap', () => {
+  const now = Date.parse('2026-11-21T15:00:00.000Z');
+  const audits = streamerSelfHealAudits(withPublish({ at: '2026-11-21T14:00:00.000Z', status: 'failed', heldReasons: [], errors: ['x'], counts: {} }, { failureStreak: 2, lastSuccessAt: '2026-11-20T09:00:00.000Z' }), now);
+  const one = planSelfHeal({ state: undefined, company: emptyCompanyState(), journal: { jobs: [] }, owner: 'o', now, maxPerDay: 5, maxOpenOrders: 1, extraAudits: audits });
+  assert.equal(one.created.length, 1);
+});

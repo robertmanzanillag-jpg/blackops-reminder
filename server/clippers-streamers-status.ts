@@ -2,7 +2,7 @@ import type { Express, Request } from 'express';
 import { createHash } from 'node:crypto';
 import { parseClippersOrchestraStatus, type ClippersOrchestraStatus } from '../shared/clippers-orchestra';
 import { LEGACY_DISCOVERY_CREATORS as LEGACY_SOURCES } from '../shared/clippers-priority-creators.mjs';
-import type { SelfHealObservedAudit } from './office-self-heal';
+import { selfHealStall, type SelfHealObservedAudit } from './office-self-heal';
 import { parseTakedown, DEFAULT_CITY_PAGE_NAMES } from '../shared/clippers-streamer-policy.mjs';
 import { STREAMER_STATE_NAMESPACE, parseStreamerState, parseStreamerStateStrict, localWorkQueue, createPendingActionsQueue } from '../script/clippers-streamer-discovery.mjs';
 import { getCurrentUserId, getSystemUserId } from './user-context';
@@ -213,19 +213,54 @@ export function cloudFallbackReport(raw: string | null, at: number): ClippersOrc
 
 // ---------- Self-heal: cloud job code failures become an allowlisted office finding ----------
 export const STREAMER_FAILURE_STREAK_THRESHOLD = 3;
-export const STREAMER_SELF_HEAL_RECORD = createHash('sha256').update(JSON.stringify(['clippers-streamers', 'discovery', 'robertmanzanillag-jpg/blackops-reminder'])).digest('hex');
-/** One normalized audit per cloud run state. Missing keys -> data-absence note (never an order). */
-export function streamerSelfHealAudits(raw: string | null): SelfHealObservedAudit[] {
-  const run = parseStreamerState(raw).lastRun, streak = Number(parseStreamerState(raw).failureStreak ?? 0);
-  if (!run || !Number.isFinite(Date.parse(run.at))) return [];
+const record = (job: string) => createHash('sha256').update(JSON.stringify(['clippers-streamers', job, 'robertmanzanillag-jpg/blackops-reminder'])).digest('hex');
+export const STREAMER_SELF_HEAL_RECORD = record('discovery');
+export const STREAMER_PUBLISH_SELF_HEAL_RECORD = record('publish');
+/** Expected interval between runs: discovery about hourly; publish every 3 h inside 09:00-19:59 New York, so the
+ * overnight gap makes 12 h the longest normal gap. Stall = no successful run for > 2x this. */
+export const STREAMER_DISCOVERY_INTERVAL_MS = 3600_000;
+export const STREAMER_PUBLISH_INTERVAL_MS = 12 * 3600_000;
+const OWNER_HOLD = (r: string) => r.startsWith('missing_secret:') || r.startsWith('credential_invalid:');
+const iso = (v: unknown) => (typeof v === 'string' && Number.isFinite(Date.parse(v)) ? v : null);
+/** One normalized audit per cloud run state (discovery + publisher). Missing keys -> data-absence note (never an order). */
+export function streamerSelfHealAudits(raw: string | null, now?: number): SelfHealObservedAudit[] {
+  const state = parseStreamerState(raw) as any;
+  const run = state.lastRun && iso(state.lastRun.at) ? state.lastRun : null, streak = Number(state.failureStreak ?? 0);
+  const c = state.cloudPublish?.version === 1 ? state.cloudPublish : null;
+  const pub = c?.lastRun && iso(c.lastRun.at) && c.lastRun.dryRun !== true ? c.lastRun : null, pubStreak = Number(c?.failureStreak ?? 0);
+  if (!run && !pub) return [];
   const findings: SelfHealObservedAudit['findings'] = [];
-  if (run.status === 'skipped_missing_secrets' || (run.heldReasons ?? []).some((r: string) => r.startsWith('missing_secret:') || r.startsWith('credential_invalid:'))) findings.push({ code: 'CAPABILITY_UNAVAILABLE', recordId: null });
-  if (streak >= STREAMER_FAILURE_STREAK_THRESHOLD) findings.push({ code: 'STREAMER_DISCOVERY_FAILING', recordId: STREAMER_SELF_HEAL_RECORD });
-  return [{ role: 'clippers-streamers', jobId: `clippers-streamers:${run.at}`, completedAt: run.at, status: 'completed', completeCoverage: true,
-    artifactId: createHash('sha256').update(JSON.stringify(run)).digest('hex').slice(0, 64), findings,
-    records: { [STREAMER_SELF_HEAL_RECORD]: { repo: 'robertmanzanillag-jpg/blackops-reminder' } } }];
+  const records: SelfHealObservedAudit['records'] = {};
+  const flag = (code: string, id: string | null) => { findings.push({ code, recordId: id }); if (id) records[id] = { repo: 'robertmanzanillag-jpg/blackops-reminder' }; };
+  let stalled = false;
+  if (run) {
+    const owner = run.status === 'skipped_missing_secrets' || (run.heldReasons ?? []).some(OWNER_HOLD);
+    if (owner) flag('CAPABILITY_UNAVAILABLE', null);
+    const failing = streak >= STREAMER_FAILURE_STREAK_THRESHOLD;
+    if (failing) flag('STREAMER_DISCOVERY_FAILING', STREAMER_SELF_HEAL_RECORD);
+    const ok = run.status === 'completed' && !(run.errors ?? []).length;
+    const stall = now === undefined ? null : selfHealStall({ now, intervalMs: STREAMER_DISCOVERY_INTERVAL_MS, lastRunAt: run.at, lastSuccessAt: iso(state.lastSuccessAt) ?? (ok ? run.at : null),
+      trackedSince: iso(state.successTrackedSince), codeCaused: !owner && streak > 0 });
+    if (stall && !(stall === 'order' && failing)) { stalled = true; flag('STREAMER_DISCOVERY_STALLED', stall === 'order' ? STREAMER_SELF_HEAL_RECORD : null); }
+  }
+  if (pub) {
+    const owner = pub.status === 'held_missing_secrets' || (pub.heldReasons ?? []).some(OWNER_HOLD);
+    if (owner && !findings.some(f => f.code === 'CAPABILITY_UNAVAILABLE')) flag('CAPABILITY_UNAVAILABLE', null);
+    const failing = pubStreak >= STREAMER_FAILURE_STREAK_THRESHOLD;
+    if (failing) flag('STREAMER_PUBLISH_FAILING', STREAMER_PUBLISH_SELF_HEAL_RECORD);
+    const ok = (pub.status === 'completed' && !(pub.errors ?? []).length) || pub.status === 'partial';
+    const stall = now === undefined ? null : selfHealStall({ now, intervalMs: STREAMER_PUBLISH_INTERVAL_MS, lastRunAt: pub.at, lastSuccessAt: iso(c.lastSuccessAt) ?? (ok ? pub.at : null),
+      trackedSince: iso(c.successTrackedSince), codeCaused: !owner && pubStreak > 0 });
+    if (stall && !(stall === 'order' && failing)) { stalled = true; flag('STREAMER_PUBLISH_STALLED', stall === 'order' ? STREAMER_PUBLISH_SELF_HEAL_RECORD : null); }
+  }
+  const latest = [run?.at, pub?.at].filter((v): v is string => !!v).sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1)!;
+  // A stall is observed now (no new run needed); otherwise the audit is the latest recorded run.
+  const completedAt = stalled && now !== undefined ? new Date(now).toISOString() : latest;
+  return [{ role: 'clippers-streamers', jobId: `clippers-streamers:${completedAt}`, completedAt, status: 'completed', completeCoverage: true,
+    artifactId: createHash('sha256').update(JSON.stringify([run, pub, findings])).digest('hex').slice(0, 64), findings,
+    records: { [STREAMER_SELF_HEAL_RECORD]: { repo: 'robertmanzanillag-jpg/blackops-reminder' }, ...records } }];
 }
 export async function readStreamerSelfHealAudits(owner: string): Promise<SelfHealObservedAudit[]> {
   const store = await (await import('./agent-council-store')).getCouncilStore();
-  return streamerSelfHealAudits(await store.read(STREAMER_STATE_NAMESPACE(owner)));
+  return streamerSelfHealAudits(await store.read(STREAMER_STATE_NAMESPACE(owner)), Date.now());
 }
