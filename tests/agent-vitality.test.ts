@@ -27,7 +27,8 @@ test("cadence only for agents with a verified evidence source", () => {
   assert.equal(vitalityCadenceMs("clippers-streamers"), 48 * HOUR_MS);
   assert.equal(vitalityCadenceMs("clippers-learning"), 7 * 24 * HOUR_MS);
   for (const id of FACTORY_AGENT_IDS) assert.equal(vitalityCadenceMs(id), 7 * 24 * HOUR_MS);
-  for (const id of ["clippers-supervisor", "clippers-health", "clippers-trends", "ceo", "agent-factory", "cybersecurity", "app-qa", "kong:Venues"]) assert.equal(vitalityCadenceMs(id), null, id);
+  assert.equal(vitalityCadenceMs("blackroom-publisher"), 72 * HOUR_MS);
+  for (const id of ["blackroom-ceo", "clippers-supervisor", "clippers-health", "clippers-trends", "ceo", "agent-factory", "cybersecurity", "app-qa", "kong:Venues"]) assert.equal(vitalityCadenceMs(id), null, id);
 });
 
 test("no verified output: first sight is free, one window per tick, each window costs once", () => {
@@ -69,6 +70,9 @@ test("vida 0 from inactivity never fires on a later error or negative signal; ve
   assert.equal(errored.state.careers.code.generation, 1);
   const signaled = applyQualitySignals(errored.state, [{ id: "q-1", agentId: "code", at: iso(t), points: -5, battery: -10, text: "rechazado" }], { now: t + 1, roles: {} });
   assert.deepEqual(signaled.fired, []);
+  // Verified work clears the protection: a later 0 from errors is the agent's own record again.
+  const worked = applyVitality(signaled.state, { now: t + STEP, evidence: [{ id: "rolework:w", agentId: "code", at: iso(t + 2), label: "trabajo" }] }).state;
+  assert.equal(inactivityProtected(worked.careers.code), false);
   // Errors alone (no inactivity debt) keep the existing replacement rule.
   const errorsOnly = { ...hire(["github"]), careers: { github: { ...hire(["github"]).careers.github, battery: 10 } } };
   const fired = advanceCompany(errorsOnly, { now: T0 + 2 * 24 * HOUR_MS, roles: {}, statuses: { github: { state: "error", label: "fallo", evidenceId: "e1" } } });
@@ -131,7 +135,7 @@ test("vida 0 review: one proposal per agent, shares the Mechanic cap, cooldown o
   assert.equal(deriveVitalityFlagProposals(company, [], now, {}, [], 0).proposals.length, 0, "shared open-repair cap");
   const recovered = { ...first.company, careers: { ...first.company.careers, code: { ...first.company.careers.code, battery: 6 } } };
   const closed = closeStaleVitalityFlags(first.proposals, recovered, now + HOUR_MS);
-  assert.equal(closed[0].status, "rejected");
+  assert.equal(closed[0].status, "withdrawn", "neutral close: neither approved nor rejected by Robert");
   assert.match(closed[0].note || "", /Ya no aplica/);
   assert.equal(closeStaleVitalityFlags(first.proposals, first.company, now)[0].status, "pending_submit");
   const view = vitalityView(company, { now, names: { code: "Code" } });
@@ -254,4 +258,48 @@ test("clock-only evidence (already scored elsewhere) restarts the clock without 
   const r = applyVitality(company, { now: at + 1000, evidence: [{ id: "blackroom:q1", agentId: "br-editor", at: iso(at), label: "aprobado", clockOnly: true }] });
   assert.equal(r.state.careers["br-editor"].battery, 80);
   assert.deepEqual(tick(r.state, at + STEP, at + 71 * HOUR_MS).decayed, [], "clock restarted at the approval");
+});
+
+test("one missed window, then errors to 0: the existing replacement rule still applies", () => {
+  let company = tick(hire(["code"]), T0, T0 + 26 * HOUR_MS + STEP).state;
+  assert.equal(company.careers.code.battery, 77);
+  assert.equal(company.careers.code.vitality?.zeroByDecay, undefined);
+  let fired = 0;
+  for (let i = 1; i <= 8 && !fired; i++) {
+    const r = advanceCompany(company, { now: T0 + 26 * HOUR_MS + i * 24 * HOUR_MS, roles: { code: "Code" }, statuses: { code: { state: "error", label: "fallo", evidenceId: `err-${i}` } } });
+    fired = r.fired.length; company = r.state;
+  }
+  assert.equal(fired, 1, "inactivity does not shield an agent whose own errors emptied its vida");
+  assert.equal(company.careers.code.generation, 2);
+});
+
+test("Black Room quiet periods and scout network failures are holds", () => {
+  const now = T0;
+  const quiet = pipelineHolds({ now, blackroomSignals: [], scoutLastRunAt: iso(now - HOUR_MS), scoutError: "fetch failed" });
+  assert.match(quiet["blackroom-publisher"], /Black Room/);
+  assert.doesNotMatch(quiet["blackroom-videos"] || "", /Black Room/, "videos follow their own daily role work");
+  assert.match(quiet["skills-scout"], /red/);
+  const active = pipelineHolds({ now, blackroomSignals: [{ at: iso(now - HOUR_MS) }], scoutLastRunAt: iso(now - HOUR_MS), scoutError: null });
+  assert.equal(active["blackroom-publisher"], undefined);
+  assert.equal(active["skills-scout"], undefined);
+  const lessons = clippersAcademyLessons(streamerState(T0));
+  assert.equal(lessons.find(l => l.id === "clippers-creator:twitch:alpha:up")?.samples, 0, "samples come from observed posts, never a constant");
+});
+
+test("withdrawn proposals cancel their still-pending Trust Center row once", async () => {
+  const withdrawn: string[] = [];
+  const proposal = { key: "repair:code#vida-cero-g1-2026-11-01", kind: "repair", owner: "ceo", title: "t", description: "d", evidence: [], handoffBrief: "b", createdAt: iso(T0 - 9 * 24 * HOUR_MS), status: "withdrawn", closedAt: iso(T0 - HOUR_MS), pendingActionId: "pa-9", note: "Ya no aplica" };
+  let stored: string | null = JSON.stringify({ ...emptyCouncilState(), proposals: [proposal] });
+  let clock = T0;
+  const council = createAgentCouncil({
+    now: () => clock, userId: () => "owner", readState: async () => stored, writeState: async raw => { stored = raw; },
+    collect: async () => ({}), submitProposal: async () => "pa-x", getPendingActionStatus: async () => "pending",
+    fetchLatestRelease: async () => null, log: () => undefined,
+    withdrawProposal: async (_u, id) => { withdrawn.push(id); },
+  });
+  await council.runCycle();
+  clock += 20 * 60_000;
+  await council.runCycle();
+  assert.deepEqual(withdrawn, ["pa-9"]);
+  assert.ok(parseCouncilState(stored).proposals.find(p => p.key === proposal.key)?.pendingActionClosedAt);
 });

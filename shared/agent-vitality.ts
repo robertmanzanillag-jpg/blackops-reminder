@@ -59,6 +59,8 @@ export function vitalityCadenceMs(agentId: string): number | null {
   if (FACTORY_IDS.has(agentId)) return 7 * 24 * HOUR_MS;
   if (DAILY_ROLE_WORK.has(agentId) || INTERNAL_WORK.has(agentId)) return 26 * HOUR_MS;
   if (agentId === "skills-scout") return 72 * HOUR_MS;
+  // The Black Room CEO coordinates its team (like the main CEO): no output of its own to measure.
+  if (agentId === "blackroom-ceo") return null;
   if (agentId.startsWith("br-") || agentId.startsWith("blackroom-")) return 72 * HOUR_MS;
   return null;
 }
@@ -72,8 +74,10 @@ export type CareerVitality = {
   lastTickAt?: string;
   /** career.cyclesWorking already seen, so verified work that landed between rounds still counts. */
   seenCyclesWorking?: number;
-  /** Vida removed by inactivity and not yet recovered by verified work. While > 0, vida 0 never fires. */
+  /** Vida removed by inactivity and not yet recovered by verified work (informational). */
   decayDebt?: number;
+  /** Set when a missed-window charge itself brought vida to 0. While set (and vida is 0) the agent is never replaced automatically. */
+  zeroByDecay?: string;
   lastVerifiedWorkAt?: string;
   lastVerifiedLabel?: string;
   /** Latest caller evidence already credited (ids and time), so a receipt never recovers twice. */
@@ -176,11 +180,14 @@ export function applyVitality(company: CompanyState, input: {
         v.missesApplied += 1;
         if (before !== career.battery) {
           v.decayDebt = (v.decayDebt || 0) + (before - career.battery);
+          if (career.battery === 0) v.zeroByDecay = iso;
           career.memory = remember(career.memory, iso, `Sin entregable verificado en ${Math.round(cadence / HOUR_MS)} h: -${before - career.battery} de vida.`);
           decayed.push(agentId);
         }
       }
     }
+    // Verified work or any vida above 0 ends the inactivity protection: a later 0 is the agent's own record.
+    if (worked || career.battery > 0) v.zeroByDecay = undefined;
     v.lastTickAt = iso;
     // 4) Vida 0: flag once for the CEO/Robert. Never fired, replaced or deleted from here.
     if (career.battery === 0 && !v.flaggedAt) {
@@ -304,7 +311,7 @@ export function closeStaleVitalityFlags(proposals: Proposal[], company: CompanyS
     if (!match || !["pending_submit", "not_submitted", "submitted"].includes(p.status)) return p;
     const career = company.careers[match[1]];
     if (career && career.generation === Number(match[2]) && career.battery === 0) return p;
-    return { ...p, status: "rejected" as const, closedAt: iso, note: career && career.generation === Number(match[2]) ? "Ya no aplica: el agente recuperó vida con trabajo verificado." : "Ya no aplica: el puesto cambió de generación." };
+    return { ...p, status: "withdrawn" as const, closedAt: iso, note: career && career.generation === Number(match[2]) ? "Ya no aplica: el agente recuperó vida con trabajo verificado." : "Ya no aplica: el puesto cambió de generación." };
   });
 }
 

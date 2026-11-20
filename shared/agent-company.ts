@@ -445,13 +445,12 @@ export function advanceCompany(
 }
 
 /**
- * Vida lost to inactivity (shared/agent-vitality.ts cadence decay) never leads to an automatic
- * replacement: while any of it is unrecovered, or the vida-0 flag awaits the owner, a battery of 0
- * stays a flag for the CEO/Robert. Errors alone (no inactivity debt) keep the existing rule.
+ * A vida of 0 reached by an inactivity charge (shared/agent-vitality.ts cadence decay) never leads
+ * to an automatic replacement: it stays a flag for the CEO/Robert until verified work (or any vida
+ * above 0) clears it. A 0 reached by the agent's own errors keeps the existing replacement rule.
  */
 export function inactivityProtected(career: AgentCareer): boolean {
-  const v = career.vitality;
-  return Boolean(v && ((Number.isFinite(v.decayDebt) && (v.decayDebt as number) > 0) || v.flaggedAt));
+  return career.battery === 0 && typeof career.vitality?.zeroByDecay === "string" && career.vitality.zeroByDecay.length > 0;
 }
 
 /** Retires a career at battery zero and starts its replacement in the academy (same rules for every cause). */

@@ -119,6 +119,8 @@ export type CouncilDeps = {
   collectBlackRoomLife?: (userId: string) => Promise<BlackRoomLifeInput>;
   // Vida/automejora/academy: the cloud streamer lane state (read-only). Optional so tests stay small.
   collectVitality?: (userId: string) => Promise<VitalityInput>;
+  /** Cancels a still-pending Trust Center row of a proposal the system withdrew. Must be a no-op for closed rows. */
+  withdrawProposal?: (userId: string, pendingActionId: string, reason: string) => Promise<void>;
   // Real documents the academy teaches.
   loadCurriculum?: () => Promise<CurriculumModule[]>;
   // Which agents are paused / external / not built (never scored). Defaults to the shared table + env overrides.
@@ -315,7 +317,8 @@ function advanceCompanyCycle(
   const execution = state.officeExecution;
   const holds: Record<string, string> = {
     ...pipelineHolds({ now, roleWorkJobs, internalWorkJobs: execution?.internalWork?.jobs, seats: execution?.roles?.roles as Record<string, { status?: string }> | undefined,
-      factoryLedger: execution?.factoryCareers, streamerState: vitalityInput.streamerState, streamerRead: vitalityInput.streamerRead, scoutLastRunAt: state.scout.lastRunAt }),
+      factoryLedger: execution?.factoryCareers, streamerState: vitalityInput.streamerState, streamerRead: vitalityInput.streamerRead, scoutLastRunAt: state.scout.lastRunAt, scoutError: state.scout.error,
+      blackroomSignals: blackroom.signals }),
     ...streamer.holds,
   };
   for (const [id, status] of Object.entries(compact)) {
@@ -471,7 +474,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
   // Talks to the Trust Center for a snapshot of the proposals, WITHOUT holding the state lock:
   // creates approval requests for new proposals and reads the status of submitted ones.
   // Returns per-key patches that are merged into the latest state afterwards (mergeProposalSync).
-  type ProposalPatch = { expect: "unsubmitted" | { pendingActionId: string }; patch: Partial<CouncilProposal> };
+  type ProposalPatch = { expect: "unsubmitted" | { pendingActionId: string } | { withdrawnPendingActionId: string }; patch: Partial<CouncilProposal> };
   async function syncProposalsNetwork(snapshot: CouncilState, userId: string): Promise<Map<string, ProposalPatch>> {
     const iso = new Date(deps.now()).toISOString();
     const patches = new Map<string, ProposalPatch>();
@@ -483,6 +486,12 @@ export function createAgentCouncil(deps: CouncilDeps) {
         } catch (error) {
           patches.set(proposal.key, { expect: "unsubmitted", patch: { status: "not_submitted", note: `No se pudo enviar al Trust Center: ${error instanceof Error ? error.message : String(error)}` } });
         }
+        continue;
+      }
+      // A proposal the system withdrew (no longer applies) also leaves the Trust Center queue.
+      if (proposal.status === "withdrawn" && proposal.pendingActionId && !proposal.pendingActionClosedAt && deps.withdrawProposal) {
+        const closed = await withTimeout(deps.withdrawProposal(userId, proposal.pendingActionId, proposal.note || "Ya no aplica"), DB_TIMEOUT_MS, "Trust Center").then(() => true).catch(() => false);
+        if (closed) patches.set(proposal.key, { expect: { withdrawnPendingActionId: proposal.pendingActionId }, patch: { pendingActionClosedAt: iso } });
         continue;
       }
       if (proposal.status === "submitted" && proposal.pendingActionId) {
@@ -507,9 +516,12 @@ export function createAgentCouncil(deps: CouncilDeps) {
     const proposals = fresh.proposals.map((proposal) => {
       const entry = patches.get(proposal.key);
       if (!entry) return proposal;
-      const matches = entry.expect === "unsubmitted"
+      const expect = entry.expect;
+      const matches = expect === "unsubmitted"
         ? (proposal.status === "pending_submit" || proposal.status === "not_submitted") && !proposal.pendingActionId
-        : proposal.status === "submitted" && proposal.pendingActionId === entry.expect.pendingActionId;
+        : "withdrawnPendingActionId" in expect
+          ? proposal.status === "withdrawn" && proposal.pendingActionId === expect.withdrawnPendingActionId && !proposal.pendingActionClosedAt
+          : proposal.status === "submitted" && proposal.pendingActionId === expect.pendingActionId;
       if (!matches) return proposal;
       changed = true;
       return { ...proposal, ...entry.patch };
@@ -1343,6 +1355,15 @@ export function getAgentCouncil() {
         scope: "system",
       });
       return action.id;
+    },
+    withdrawProposal: async (userId, id, reason) => {
+      const { storage } = await import("./storage");
+      const action = await storage.getPendingAction(id);
+      // Only a row still waiting for Robert is cancelled; anything he already acted on is left as is.
+      if (!action || action.userId !== userId || action.status !== "pending") return;
+      await storage.updatePendingAction(action.id, { status: "cancelled", rejectionReason: reason.slice(0, 200) });
+      await storage.createPendingActionEvent({ pendingActionId: action.id, userId, actorType: "system", actorId: "agent-council", eventType: "cancelled",
+        previousStatus: action.status, nextStatus: "cancelled", note: reason.slice(0, 200), metadata: null });
     },
     getPendingActionStatus: async (id) => {
       const { storage } = await import("./storage");

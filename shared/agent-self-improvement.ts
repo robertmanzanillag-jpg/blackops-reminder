@@ -18,6 +18,7 @@ import { addSkill, type CompanyState } from "./agent-company";
 import type { CouncilProposal } from "./agent-council";
 import { CLIPPERS_MEASURED, DAILY_ROLE_WORK_ROLES, INTERNAL_WORK_ROLES, type VitalityEvidence } from "./agent-vitality";
 import { FACTORY_AGENTS } from "./factory-office-agents";
+import { BLACKROOM_TEAM } from "./blackroom-team";
 
 const ms = (value: unknown) => { const n = typeof value === "string" ? Date.parse(value) : NaN; return Number.isFinite(n) ? n : 0; };
 const isObj = (v: unknown): v is Record<string, any> => Boolean(v) && typeof v === "object" && !Array.isArray(v);
@@ -55,7 +56,9 @@ export function roleWorkHolds(jobs: unknown, now: number): Record<string, string
  */
 export function pipelineHolds(input: {
   now: number; roleWorkJobs?: unknown; internalWorkJobs?: unknown; seats?: Record<string, { status?: string }>;
-  factoryLedger?: unknown; streamerState?: unknown; streamerRead?: boolean; scoutLastRunAt?: string | null;
+  factoryLedger?: unknown; streamerState?: unknown; streamerRead?: boolean; scoutLastRunAt?: string | null; scoutError?: string | null;
+  /** Black Room outcomes (approvals, published posts, failures). No outcome in 72 h = a quiet period, not inactivity. */
+  blackroomSignals?: Array<{ at?: string }>;
 }): Record<string, string> {
   const holds: Record<string, string> = { ...roleWorkHolds(input.roleWorkJobs, input.now) };
   const recent = (job: JobLike | undefined) => Boolean(job && input.now - ms(job.startedAt) <= HOLD_WINDOW_MS);
@@ -79,6 +82,9 @@ export function pipelineHolds(input: {
       for (const id of measured.filter(id => id !== "clippers-streamers")) holds[id] ??= "publicador de Clippers en la nube apagado";
   }
   if (!input.scoutLastRunAt) holds["skills-scout"] = "sin primera revisión de releases";
+  else if (input.scoutError) holds["skills-scout"] = "fallo de red o infraestructura al leer releases";
+  if (!(input.blackroomSignals || []).some(signal => signal && input.now - ms(signal.at) <= 72 * 3600_000))
+    for (const agent of BLACKROOM_TEAM) if (agent.id !== "blackroom-videos") holds[agent.id] = "Black Room sin actividad registrada en 72 h";
   return holds;
 }
 
@@ -146,11 +152,14 @@ export function clippersAcademyLessons(raw: unknown): ClippersLesson[] {
         title: `Prueba A/B de hook en ${dest}`, detail: `Aún sin ganador (${String(e.reason || "insufficient_samples").replace(/[^a-z_]/g, "")}); se necesitan ≥5 publicaciones medidas por variante y ≥20% de mejora.` });
     }
   }
+  const observedByCreator = new Map<string, number>();
+  for (const post of Array.isArray(c!.posts) ? c!.posts : []) if (isObj(post) && typeof post.creatorKey === "string" && isObj(post.observation) && Number.isSafeInteger(post.observation.views))
+    observedByCreator.set(post.creatorKey, (observedByCreator.get(post.creatorKey) || 0) + 1);
   const boosts = isObj(learning.creatorBoost) ? Object.entries(learning.creatorBoost).filter(([k, v]) => SAFE.test(k) && Number.isFinite(v)) as Array<[string, number]> : [];
   for (const [creator, boost] of boosts.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 10)) {
     if (Math.abs(boost) < 0.3) continue;
-    lessons.push({ id: `clippers-creator:${creator}:${boost > 0 ? "up" : "down"}`, kind: "creator", agentIds: ["clippers-streamers", "clippers-learning"], supported: true, samples: 3, evaluatedAt,
-      title: `${boost > 0 ? "Priorizar" : "Bajar prioridad de"} ${creator}`, detail: `Sus clips rinden ${boost > 0 ? "por encima" : "por debajo"} de la mediana de su destino (impulso ${boost > 0 ? "+" : ""}${boost}, ≥3 publicaciones medidas).` });
+    lessons.push({ id: `clippers-creator:${creator}:${boost > 0 ? "up" : "down"}`, kind: "creator", agentIds: ["clippers-streamers", "clippers-learning"], supported: true, samples: observedByCreator.get(creator) ?? 0, evaluatedAt,
+      title: `${boost > 0 ? "Priorizar" : "Bajar prioridad de"} ${creator}`, detail: `Sus clips rinden ${boost > 0 ? "por encima" : "por debajo"} de la mediana de su destino (impulso ${boost > 0 ? "+" : ""}${boost}, ${observedByCreator.get(creator) ?? "≥3"} publicaciones medidas).` });
   }
   return lessons;
 }

@@ -87,7 +87,8 @@ export function AgentVitalityButton() {
     <DialogTrigger asChild>
       <button type="button" data-testid="office-open-vitality" className="rounded-xl border border-emerald-300/35 bg-emerald-400/10 px-3 py-2 text-xs font-semibold text-emerald-100">Vida del equipo</button>
     </DialogTrigger>
-    <DialogContent className="z-[250] max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
+    {/* Above every office control (top bar z-[95..110], legacy overlays z-[260]). */}
+    <DialogContent className="z-[270] max-h-[85dvh] overflow-y-auto sm:max-w-2xl" overlayClassName="z-[265]">
       <DialogHeader>
         <DialogTitle>Vida del equipo</DialogTitle>
         <DialogDescription>Todos los agentes registrados con su vida y su último entregable verificado.</DialogDescription>
