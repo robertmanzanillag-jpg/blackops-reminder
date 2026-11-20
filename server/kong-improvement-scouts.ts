@@ -55,13 +55,14 @@ export function estimateMirrorSpend(runs: MirrorWorkflowRun[], now: number, env:
 export type MirrorSpendEstimate = ReturnType<typeof estimateMirrorSpend>;
 
 // ---- Proposals ----
+// Fail closed: stems and plurals in Spanish and English ("authentication", "migraciones", "notifications" ...).
 export const NEVER_AUTO: Array<{ area: string; pattern: RegExp }> = [
-  { area: "pagos/Stripe", pattern: /\b(stripe|pago|pagos|payment|payments|checkout|cobro|cobros|factura|invoice|refund|reembolso)\b/ },
-  { area: "auth/permisos", pattern: /\b(auth|login|logout|sesion|session|password|contrasena|permiso|permisos|permission|permissions|rol|roles|role|oauth|2fa|admin access)\b/ },
-  { area: "precios", pattern: /\b(precio|precios|pricing|price|prices|tarifa|tarifas|suscripcion|subscription)\b/ },
-  { area: "mensajes a usuarios", pattern: /\b(whatsapp|sms|email|emails|correo|correos|push|notificacion|notificaciones|newsletter|mensajeria|mensajes a usuarios|user messaging)\b/ },
-  { area: "esquema de BD/borrados", pattern: /\b(schema|esquema|migracion|migration|drop table|delete|borrar|borrado|eliminar datos|truncate)\b/ },
-  { area: "legal", pattern: /\b(legal|privacidad|privacy|terminos|terms|gdpr|consentimiento|copyright|licencia)\b/ },
+  { area: "pagos/Stripe", pattern: /\b(stripe|pag(o|os|ar|ado|ados)|payments?|payouts?|checkout|cobr\w*|factur\w*|invoices?|refunds?|reembols\w*|billing|charges?|credit cards?|tarjetas? de credito)\b/ },
+  { area: "auth/permisos", pattern: /\b(auth(?!or)\w*|autentica\w*|autoriza\w*|log ?ins?|log ?outs?|sign ?(in|up|on|out)|sesion(es)?|sessions?|passwords?|contrasenas?|permisos?|permissions?|rol|roles?|oauth|2fa|mfa|tokens?|credenciales?|credentials?|admin access)\b/ },
+  { area: "precios", pattern: /\b(precios?|pricing|prices?|tarifas?|suscripcion(es)?|subscriptions?|descuentos?|discounts?|cupon(es)?|coupons?)\b/ },
+  { area: "mensajes a usuarios", pattern: /\b(whatsapp|telegram|sms|e-?mails?|correos?|push|notificacion(es)?|notifications?|newsletters?|mensajeria|mensajes? a (los )?usuarios|messages? to users|user messag\w*)\b/ },
+  { area: "esquema de BD/borrados", pattern: /\b(schemas?|esquemas?|migracion(es)?|migrations?|drop table|alter table|delet\w*|borr\w*|eliminar datos|truncate)\b/ },
+  { area: "legal", pattern: /\b(legal|privacidad|privacy|terminos|terms|gdpr|ccpa|consentimiento|consent|cookies?|copyright|licencias?|licenses?)\b/ },
 ];
 const fold = (value: string) => value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
 export function neverAutoArea(text: string): string | null {
@@ -195,10 +196,12 @@ export function createKongImprovementScouts(options: { owner: string; store: Mir
     const known = new Map(ledger.entries.map(entry => [entry.key, entry]));
     for (const proposal of proposals) {
       const prior = known.get(proposal.key);
-      if (prior && !["merged", "closed"].includes(prior.status)) { prior.lastSeenAt = iso(); if (!(prior.status === "proposed" && proposal.kind === "code")) continue; }
-      const entry: ScoutLedgerEntry = prior && prior.status === "proposed" ? prior : { ...proposal, generation: (prior?.generation || 0) + 1, status: proposal.kind === "decision" ? "decision" : "proposed",
+      // Dedupe: a key is proposed once. A merged or closed PR is final for that signal (a merge is not live until
+      // Robert republishes KONG, and a closed PR is his "no"), so it never reopens an issue every 6 h.
+      if (prior) { prior.lastSeenAt = iso(); if (!(prior.status === "proposed" && proposal.kind === "code")) continue; }
+      const entry: ScoutLedgerEntry = prior || { ...proposal, generation: 1, status: proposal.kind === "decision" ? "decision" : "proposed",
         issueUrl: null, issueNumber: null, prNumber: null, createdAt: iso(), lastSeenAt: iso() };
-      if (!prior || ["merged", "closed"].includes(prior.status)) known.set(entry.key, entry);
+      if (!prior) known.set(entry.key, entry);
       if (entry.kind !== "code" || entry.status !== "proposed") continue;
       if (budget.paused) { entry.pausedByBudget = true; pausedByBudget++; continue; }
       try {
