@@ -10,7 +10,7 @@ export const GROWTH_LANES = Object.freeze([
   { id: 'nyc', brandId: '6595747', network: 'facebook', label: 'Clipwave NYC · Facebook' },
 ] as const);
 export type GrowthLaneId = typeof GROWTH_LANES[number]['id'];
-export type GrowthRow = { lane: GrowthLaneId; label: string; weeklyViews: number | null; weeklyMedian: number | null; autoPublish: boolean | null; decisions: number | null };
+export type GrowthRow = { lane: GrowthLaneId; label: string; weeklyViews: number | null; weeklyMedian: number | null; autoPublish: boolean | null; ownerOverride: boolean | null; decisions: number | null };
 
 const OUTPUT = /^growth_(memes|sports|miami|miamifb|nyc)_(views|median|autopublish|decisions)$/;
 /** "kind:brandId:network:account[:value]" -> parts. */
@@ -30,7 +30,8 @@ export function growthOutputs(growth: any): Record<string, number> {
     const a = entry[1];
     out[`growth_${lane.id}_views`] = count(a?.weeklyViews) ?? 0;
     if (Number.isFinite(Number(a?.weeklyMedian)) && a?.weeklyMedian !== null) out[`growth_${lane.id}_median`] = Math.round(Number(a.weeklyMedian));
-    out[`growth_${lane.id}_autopublish`] = a?.autoPublish === true ? 1 : 0;
+    // 0 drafts, 1 auto (median >= 1k), 2 auto (owner override).
+    out[`growth_${lane.id}_autopublish`] = a?.autoPublish !== true ? 0 : a?.autoPublishMode === 'owner_override' ? 2 : 1;
     out[`growth_${lane.id}_decisions`] = decisions.filter(d => { const { kind, key } = parseDecision(d); return laneOfDestinationKey(key) === lane.id && kind !== 'autopublish_on'; }).length;
   }
   return out;
@@ -43,10 +44,10 @@ export function growthRows(outputs: Record<string, number> | undefined | null): 
     const m = OUTPUT.exec(key);
     if (!m) continue;
     const lane = m[1] as GrowthLaneId;
-    const row = rows.get(lane) ?? { lane, label: GROWTH_LANES.find(l => l.id === lane)!.label, weeklyViews: null, weeklyMedian: null, autoPublish: null, decisions: null };
+    const row = rows.get(lane) ?? { lane, label: GROWTH_LANES.find(l => l.id === lane)!.label, weeklyViews: null, weeklyMedian: null, autoPublish: null, ownerOverride: null, decisions: null };
     if (m[2] === 'views') row.weeklyViews = count(value);
     if (m[2] === 'median') row.weeklyMedian = count(value);
-    if (m[2] === 'autopublish') row.autoPublish = value === 1;
+    if (m[2] === 'autopublish') { row.autoPublish = value === 1 || value === 2; row.ownerOverride = value === 2; }
     if (m[2] === 'decisions') row.decisions = count(value);
     rows.set(lane, row);
   }

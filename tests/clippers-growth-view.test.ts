@@ -49,3 +49,17 @@ test('office: Clippers learning role and streamer status show the growth view', 
   assert.equal(view.cloudPublish.growth.accounts['6431685:tiktok:streamersus'].weeklyMedian, 1200);
   assert.ok(view.cloudPublish.growth.decisions.length >= 4);
 });
+
+test('growth view: owner override shows as "auto (owner override)" (output 2), earned auto as 1, drafts 0', () => {
+  const out = growthOutputs({ accounts: {
+    '6431685:tiktok:streamersus': { weeklyViews: 10, weeklyMedian: 5, autoPublish: true, autoPublishMode: 'owner_override' },
+    '6431687:tiktok:streamersclipusa': { weeklyViews: 9000, weeklyMedian: 1200, autoPublish: true, autoPublishMode: 'auto' },
+    '6591612:facebook:1193011863901514': { weeklyViews: 0, weeklyMedian: 0, autoPublish: false, autoPublishMode: 'drafts' },
+  }, decisions: [] });
+  assert.equal(out.growth_memes_autopublish, 2); assert.equal(out.growth_sports_autopublish, 1); assert.equal(out.growth_miamifb_autopublish, 0);
+  const rows = growthRows(out);
+  const memes = rows.find(r => r.lane === 'memes')!, sports = rows.find(r => r.lane === 'sports')!, fb = rows.find(r => r.lane === 'miamifb')!;
+  assert.equal(memes.autoPublish, true); assert.equal(memes.ownerOverride, true);
+  assert.equal(sports.autoPublish, true); assert.equal(sports.ownerOverride, false);
+  assert.equal(fb.autoPublish, false); assert.equal(fb.ownerOverride, false);
+});

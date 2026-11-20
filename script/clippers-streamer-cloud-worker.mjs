@@ -27,7 +27,7 @@ import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool
 export { facebookOwnerActionReason, providerHealthFromRows } from './clippers-portfolio-metricool.mjs';
 import { downloadSource, renderVerticalClip, makeWorkDir, hookText, creditText } from './clippers-streamer-cloud-render.mjs';
 import { computeLearning, chooseHookVariant, creatorBoostFor, OBSERVATION_WINDOW, computeGrowth, growthWeight, killedHooks, killedHours, promotedHours } from './clippers-streamer-cloud-learning.mjs';
-import { laneById, routeCandidate, sourceSegment, streamKeyOf, mediaConflict, mediaEntry, streamOwnerLane, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, CLIP_SECONDS } from '../shared/clippers-account-lanes.mjs';
+import { laneById, routeCandidate, sourceSegment, streamKeyOf, mediaConflict, mediaEntry, streamOwnerLane, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, parseAutopublishOverride, CLIP_SECONDS } from '../shared/clippers-account-lanes.mjs';
 
 const HOUR = 3_600_000;
 const MAX_POSTS = 600;
@@ -66,6 +66,8 @@ export function cloudPublishConfig(env = process.env) {
     lanesEnabled: env.CLIPPERS_STREAMER_LANES_ENABLED !== 'false',
     // Per-account auto-publish once the weekly median passes 1k; set 'false' to keep every lane on drafts.
     laneAutoPublish: env.CLIPPERS_STREAMER_LANE_AUTOPUBLISH !== 'false',
+    // Owner override: these destinations auto-publish without the median gate (kill switch: set it to "").
+    autopublishOverride: parseAutopublishOverride(env.CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE),
     growthIntervalMs: int(env.CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS, 6, 1, 48) * HOUR,
     dailyCap: int(env.CLIPPERS_STREAMER_CLOUD_DAILY_PER_DESTINATION, 5, 0, 5),
     slots: parseSlots(env.CLIPPERS_STREAMER_CLOUD_SLOTS || DEFAULT_SLOTS.join(',')),
@@ -280,9 +282,14 @@ export function laneTarget({ state, ledger, candidate, config, now }) {
   const best = tries.filter(t => typeof t === 'object').sort((a, b) => a.today - b.today || Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt))[0];
   if (!best) return { ok: false, reason: `lane_${tries.includes('lane_creator_killed') ? 'creator_killed' : tries.includes('destination_held') && !tries.includes('no_free_slots') ? 'destination_held' : 'no_free_slots'}:${lane.id}`, lane: lane.id };
   // Auto-publish only from Metricool account analytics of a growth pass < 36 h old; otherwise drafts.
-  const autoPublish = config.laneAutoPublish && autoPublishAllowed(best.plan.account, { evaluatedAt: ledger?.growth?.evaluatedAt ?? null, now });
+  const autoPublish = config.laneAutoPublish && autoPublishAllowed(best.plan.account, { evaluatedAt: ledger?.growth?.evaluatedAt ?? null, now, override: overrideApplies(config, best.destination, best.key) });
   return { ok: true, lane: lane.id, language: lane.language, destination: best.destination, destinationKey: best.key, scheduledAt: best.scheduledAt, segment, streamKey: streamKeyOf(candidate),
     draft: !autoPublish, dailyLimit: best.plan.cap, slots: best.plan.slots, slotsSource: best.plan.source, killedHooks: killedHooks(ledger?.growth, best.key, now), breakout: best.weight.breakout };
+}
+
+/** Owner override applies only to TikTok destinations listed in it (Facebook, incl. released held copies, never). */
+export function overrideApplies(config, destination, key = destination ? destinationKey(destination) : null) {
+  return destination?.network === 'tiktok' && !!key && !!config?.autopublishOverride?.has(key);
 }
 
 /** Selection weight of a candidate on the account it would route to (kills, breakouts, doubled creators). */
@@ -294,7 +301,7 @@ export function laneSortWeight(state, ledger, candidate, now) {
 }
 
 /** Read-only growth pass: Metricool account analytics + best-time -> computeGrowth (stored in the ledger). */
-export async function refreshGrowth({ metricool, ledger, now, report }) {
+export async function refreshGrowth({ metricool, ledger, now, report, override = new Set() }) {
   const accountPosts = {}, bestTimes = { ...(ledger.bestTimes ?? {}) };
   for (const d of DESTINATIONS) {
     const key = destinationKey(d);
@@ -305,7 +312,7 @@ export async function refreshGrowth({ metricool, ledger, now, report }) {
       catch (e) { report.heldReasons.push(`best_time:${d.brandId}:${code(e)}`); }
     }
   }
-  return { growth: computeGrowth({ posts: ledger.posts, accountPosts, previous: ledger.growth ?? null, now }), bestTimes };
+  return { growth: computeGrowth({ posts: ledger.posts, accountPosts, previous: ledger.growth ?? null, now, override }), bestTimes };
 }
 
 export function clipCaption(candidate, variant) {
@@ -498,7 +505,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       const scheduledAt = nextSlot({ now, config: slotConfig, destination, index: q.index ?? 0, posts: fresh.posts });
       if (!scheduledAt) { report.heldReasons.push('held_release:no_free_slots'); break; }
       const lane = q.lane ? { ...q.lane, dailyLimit: plan.cap,
-        draft: !(config.lanesEnabled && config.laneAutoPublish && autoPublishAllowed(plan.account, { evaluatedAt: fresh.growth?.evaluatedAt ?? null, now })) } : null;
+        draft: !(config.lanesEnabled && config.laneAutoPublish && autoPublishAllowed(plan.account, { evaluatedAt: fresh.growth?.evaluatedAt ?? null, now, override: overrideApplies(config, destination) })) } : null; // override: TikTok only, so Facebook releases need the real 1k gate
       const item = postItem({ candidate: { id: q.candidateId, creatorKey: q.creatorKey }, destination, scheduledAt, caption: q.caption, mediaUrl, mediaSha256: q.mediaSha256, hookVariant: q.hookVariant, lane });
       if (!lane) item.draft = true; // queued without lane fields (lanes off): owner approves it as a draft, whatever the current lane mode
       const blocked = await update((s, c) => {
@@ -562,7 +569,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     const cur = cloudPublishOf(parseStreamerState(await store.read(ns)));
     if (growthOnly || !cur.growth?.evaluatedAt || now - Date.parse(cur.growth.evaluatedAt) >= config.growthIntervalMs) {
       try {
-        const { growth, bestTimes } = await refreshGrowth({ metricool, ledger: cur, now, report });
+        const { growth, bestTimes } = await refreshGrowth({ metricool, ledger: cur, now, report, override: config.autopublishOverride });
         await update((s, c) => { c.growth = growth; c.bestTimes = bestTimes; });
         report.growth = { accounts: growth.accounts, decisions: growth.decisions.slice(0, 20) };
       } catch (e) { report.heldReasons.push(`growth:${code(e)}`); }
@@ -811,7 +818,7 @@ async function main() {
     outputDir: outIndex >= 0 ? path.resolve(args[outIndex + 1] ?? 'clippers-dry-run') : null, minIntervalMs, growthOnly });
   // Counts and codes only (public repository logs): no URLs, captions or tokens.
   console.log(JSON.stringify({ status: report.status, skipped, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, dryRun: report.dryRun, learning: report.learning ?? null,
-    growth: report.growth ? { accounts: Object.fromEntries(Object.entries(report.growth.accounts).map(([k, a]) => [k, { weeklyPosts: a.weeklyPosts, weeklyViews: a.weeklyViews, weeklyMedian: a.weeklyMedian, autoPublish: a.autoPublish }])), decisions: report.growth.decisions.length } : null }));
+    growth: report.growth ? { accounts: Object.fromEntries(Object.entries(report.growth.accounts).map(([k, a]) => [k, { weeklyPosts: a.weeklyPosts, weeklyViews: a.weeklyViews, weeklyMedian: a.weeklyMedian, autoPublish: a.autoPublish, autoPublishMode: a.autoPublishMode }])), decisions: report.growth.decisions.length } : null }));
   for (const d of report.diagnostics ?? []) console.log(`clip diagnostics: ${JSON.stringify(d)}`);
   // Handled per-clip failures (e.g. a YouTube bot block) are recorded for the office, not a red job.
   if (report.errors.length) console.log(`::warning::Streamer cloud publisher: ${report.errors.length} handled error(s): ${report.errors.slice(0, 5).join(', ')}`);

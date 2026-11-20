@@ -74,7 +74,10 @@ jobs:
           TWITCH_CLIENT_SECRET: ${{ secrets.TWITCH_CLIENT_SECRET }}
           YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
           CLIPPERS_CITY_PAGE_NAMES: ${{ vars.CLIPPERS_CITY_PAGE_NAMES }}
-          CLIPPERS_STREAMER_AUTO_PUBLISH: ${{ vars.CLIPPERS_STREAMER_AUTO_PUBLISH || 'false' }}
+          # Unset -> only owner-override lanes skip owner approval; 'false' -> every clip waits for approval.
+          CLIPPERS_STREAMER_AUTO_PUBLISH: ${{ vars.CLIPPERS_STREAMER_AUTO_PUBLISH || 'lanes' }}
+          # Owner override (kill switch: set the repo variable to "off" / "" -> drafts + owner approval again).
+          CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: ${{ vars.CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE || 'default' }}
           CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: ${{ vars.CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED || 'false' }}
           CLIPPERS_STREAMER_CLOUD_PLATFORMS: ${{ vars.CLIPPERS_STREAMER_CLOUD_PLATFORMS }}
           CLIPPERS_STREAMER_APPROVALS_PER_RUN: ${{ vars.CLIPPERS_STREAMER_APPROVALS_PER_RUN }}

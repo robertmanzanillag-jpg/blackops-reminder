@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { detectClipProhibition, resolveClipPolicy, buildCreditCaption, captionHasCredit, parseCityPageNames, parseTakedown, clipLengthAllowed } from '../shared/clippers-streamer-policy.mjs';
-import { runStreamerDiscovery, streamerConfig, isoDurationSeconds, twitchClipMp4Guess, localWorkQueue, STREAMER_STATE_NAMESPACE, STREAMER_APPROVAL_ACTION, popScore } from '../script/clippers-streamer-discovery.mjs';
+import { runStreamerDiscovery, streamerConfig, isoDurationSeconds, twitchClipMp4Guess, localWorkQueue, STREAMER_STATE_NAMESPACE, STREAMER_APPROVAL_ACTION, popScore, approvalModeFor, approvalRow } from '../script/clippers-streamer-discovery.mjs';
 import { ALL_DISCOVERY_CREATORS } from '../shared/clippers-priority-creators.mjs';
 
 const NOW = Date.parse('2026-11-19T15:00:00.000Z');
@@ -266,4 +266,22 @@ test('concurrent approval inserts for one candidate create exactly one live row 
   assert.ok(seen.indexOf(seen.find(s => s.includes('pg_advisory_xact_lock'))) < seen.findIndex(s => s.includes('WITH existing')));
   assert.equal(approvalInsertLockKey(row), JSON.stringify(['clippers-streamer-approval-v1', 'o', STREAMER_APPROVAL_ACTION, 'twitch-clip:a']));
   assert.notEqual(approvalInsertLockKey(row), approvalInsertLockKey({ ...row, resourceId: 'twitch-clip:b' }));
+});
+
+test('owner override lanes skip owner approval only for lane clips; "false" or empty override restores approval', () => {
+  const kai = { id: 'twitch-clip:k', platform: 'twitch', handle: 'kaicenat', title: 'LOL', language: 'en', sourceUrl: 'https://clips.twitch.tv/k', caption: 'c', download: { mode: 'direct' }, clipPolicy: { status: 'allowed_unless_prohibited' } };
+  const westcol = { ...kai, id: 'twitch-clip:w', handle: 'westcol', language: 'es' };
+  const nyc = { ...kai, id: 'twitch-clip:n', handle: 'fanum' };
+  const unrouted = { ...kai, id: 'twitch-clip:u', handle: 'random', language: 'fr' };
+  const cfg = streamerConfig(ENV);
+  assert.deepEqual([...cfg.autoPublishLanes].sort(), ['memes', 'miami', 'sports']);
+  assert.equal(approvalModeFor(kai, cfg), 'lane_owner_override');
+  assert.equal(approvalModeFor(westcol, cfg), 'lane_owner_override');
+  assert.equal(approvalModeFor(nyc, cfg), 'owner_approval', 'NYC stays on owner approval');
+  assert.equal(approvalModeFor(unrouted, cfg), 'owner_approval');
+  const row = approvalRow(kai, 'o', cfg);
+  assert.equal(row.status, 'approved'); assert.equal(row.input.approvalMode, 'lane_owner_override');
+  assert.equal(approvalRow(kai, 'o', streamerConfig({ ...ENV, CLIPPERS_STREAMER_AUTO_PUBLISH: 'false' })).status, 'pending');
+  assert.equal(approvalRow(kai, 'o', streamerConfig({ ...ENV, CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: '' })).status, 'pending');
+  assert.equal(approvalRow(kai, 'o', streamerConfig({ ...ENV, CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE: 'off' })).status, 'pending');
 });
