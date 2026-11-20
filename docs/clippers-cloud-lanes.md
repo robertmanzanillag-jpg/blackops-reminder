@@ -25,6 +25,16 @@ PostgreSQL (`agent_council_state`). Media lives in Google Drive. Nothing is stor
   That is the pre-cloud behavior. This is why the retirement step also unloads the agents.
 - After each lane, that lane's text ledgers go to Postgres and its media to Drive, and its run is recorded, **before** the next lane starts (in particular right after the YouTube delivery). Each lane has its own time limit below the 340 min job limit (content 60, delivery 45, marketplace 60, sleep render 240 min; `CLIPPERS_CLOUD_LANE_TIMEOUT_MINUTES` overrides), so a hang is recorded as `lane_timeout` and counted by self-heal. A failed persist stops the job.
 - Text state is capped at 6 MB. Ledger files are never evicted. If they alone exceed the cap, the run fails with `workspace_text_over_cap` instead of dropping anything.
+- **Single Metricool writer (fail closed).** `shared/clippers-metricool-writer.mjs` is checked at the write itself
+  (portfolio adapter `schedule()`, Mac ledger guard `reserve()`, metricool-autopilot). Outside Actions
+  (`GITHUB_ACTIONS` unset and `CLIPPERS_RUNTIME` not `cloud`) every write to the cloud-owned brands
+  6431685, 6431687, 6591612, 6595747 is refused with `cloud_owned_brand_mac_write_refused`, with or without the
+  database, retired or not, including drafts and manual runs. Rollback only: `CLIPPERS_MAC_METRICOOL_WRITES=owner_override`
+  in the Mac env (or `CLIPPERS_CLOUD_OWNED_BRANDS` to narrow the list, `none` to empty it). Reason: on 2026-11-19 a Mac
+  run filled brand 6431685's day with 10 TikTok drafts and blocked the cloud publisher.
+- **Shared brand day.** Metricool's cap is 5 posts per brand per day and every calendar row (drafts too) counts.
+  The marketplace lane (`metricool-autopilot`) counts all writers' rows toward 5 and may use at most
+  `CLIPPERS_MARKETPLACE_LANE_DAILY_QUOTA` (default 2) of a day, so it never takes the streamer publisher's whole day.
 - Dry runs take no lease, upload nothing and persist nothing. That is how you QA the cloud while the Mac still runs.
 
 Steps (on the Mac, from the runtime checkout):

@@ -20,6 +20,7 @@ import { STREAMER_STATE_NAMESPACE, parseStreamerStateStrict, emptyStreamerState 
 import { canonicalDestinationKey, destinationKey } from './clippers-portfolio-metricool.mjs';
 import { cloudPublishOf, mediaEntriesOf } from '../shared/clippers-media-ledger.mjs';
 import { loadClipperSelectedEnv } from './clippers-selected-env.mjs';
+import { metricoolWriteRefusal } from '../shared/clippers-metricool-writer.mjs';
 import { laneForDestinationKey, mediaConflict, routeCandidate } from '../shared/clippers-account-lanes.mjs';
 
 export const MAC_LEDGER_FILE = path.join('reports', 'clippers-media-ledger.json');
@@ -247,6 +248,9 @@ export function createMacLedgerGuard({ env = process.env, workspaceRoot, metrico
   async function reserve(destination, item) {
     const evidence = { ledger: db ? 'postgres' : 'local_plus_calendar', calendarCheck: null, at: now().toISOString() };
     if (!destination || !item) return { ok: false, reason: 'ledger_item_invalid' };
+    // Cloud-owned brand: the Mac must not write at all (checked before any ledger or calendar I/O).
+    const writeRefusal = metricoolWriteRefusal(destination.brandId, env);
+    if (writeRefusal) return { ok: false, reason: writeRefusal, evidence };
     if (!item.mediaSha256 && !item.sha256 && !macSegment(item)) return { ok: false, reason: 'ledger_identity_missing' };
     if (requireDb && !db) return { ok: false, reason: 'ledger_database_required_unavailable' };
     if (!metricool?.crossAccountPreflight) return { ok: false, reason: 'calendar_check_unavailable' };

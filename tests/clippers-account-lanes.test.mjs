@@ -212,7 +212,7 @@ test('Metricool adapter: draft payload (no auto-publish) with duet/stitch on; be
     const body = JSON.parse(init.body); sent.push(body.params);
     return res({ jsonrpc: '2.0', id: body.id, result: { content: [{ type: 'text', text: '[]' }] } });
   };
-  const mc = createPortfolioMetricool({ token: 'metricool-token-123', userId: '12345', fetcher });
+  const mc = createPortfolioMetricool({ token: 'metricool-token-123', userId: '12345', fetcher, env: { CLIPPERS_RUNTIME: 'cloud' } });
   const dest = { brandId: 6431685, network: 'tiktok', account: 'streamersus' };
   await mc.schedule(dest, { id: 'stc-1', scheduledAt: '2026-11-20T15:00:00.000Z', caption: 'x', mediaUrl: 'https://e.com/a.mp4', draft: true, allowDuetStitch: true });
   const info = JSON.parse(sent[0].arguments.info);
@@ -265,7 +265,7 @@ test('Metricool adapter: a draft is confirmed from the shape Metricool reports (
     if (u.pathname === '/api/admin/simpleProfiles') return res([{ blogId: 6431687, tiktokUsername: 'streamersclipusa', isShared: false, ownerUserId: '12345', canPublish: true }]);
     return res([row]);
   };
-  const mc = createPortfolioMetricool({ token: 'metricool-token-123', userId: '12345', fetcher });
+  const mc = createPortfolioMetricool({ token: 'metricool-token-123', userId: '12345', fetcher, env: { CLIPPERS_RUNTIME: 'cloud' } });
   const dest = { brandId: 6431687, network: 'tiktok', account: 'streamersclipusa' };
   const item = { id: 'stc-2', scheduledAt: '2026-11-20T15:00:00.000Z', caption: 'cap', mediaUrl: 'https://e.com/a.mp4' };
   assert.equal((await mc.confirmSchedule(dest, { ...item, draft: true }))?.id, '434895937');

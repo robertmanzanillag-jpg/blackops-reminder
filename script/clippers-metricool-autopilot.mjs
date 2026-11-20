@@ -3,10 +3,17 @@ import { mkdir, open, readFile, rename, stat, unlink, writeFile } from "node:fs/
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { createPortfolioMetricool } from "./clippers-portfolio-metricool.mjs";
+import { metricoolWriteRefusal } from "../shared/clippers-metricool-writer.mjs";
 import { createMacLedgerGuard, macLedgerEnv } from "./clippers-mac-ledger-guard.mjs";
 
 const METRICOOL_MCP_URL = "https://ai.metricool.com/mcp";
 const TIMEZONE = "America/New_York";
+const BRAND_DAILY_CAP = 5;
+/** This lane's share of a brand day (CLIPPERS_MARKETPLACE_LANE_DAILY_QUOTA, 0-5, default 2). */
+export function marketplaceLaneQuota(env = process.env) {
+  const n = Number(env.CLIPPERS_MARKETPLACE_LANE_DAILY_QUOTA);
+  return Number.isInteger(n) && n >= 0 && n <= BRAND_DAILY_CAP ? n : 2;
+}
 const DAILY_SLOTS = ["10:00:00", "12:30:00", "15:00:00", "17:30:00", "20:00:00"];
 
 function requiredEnv(env, name) {
@@ -186,6 +193,10 @@ export function buildPublicationSchedule(now = new Date(), count = 5, options = 
   const dailyCounts = new Map(Object.entries(options.existingDailyCounts || {})
     .map(([date, value]) => [date, Math.max(0, Math.trunc(Number(value) || 0))]));
   const dailyLimit = Math.max(1, Math.min(8, Math.trunc(Number(options.dailyLimit) || safeCount || 5)));
+  // Per-lane quota: this lane's own posts per local day (other writers' posts only count toward dailyLimit).
+  const laneCounts = new Map(Object.entries(options.laneDailyCounts || {})
+    .map(([date, value]) => [date, Math.max(0, Math.trunc(Number(value) || 0))]));
+  const laneQuota = options.laneDailyQuota == null ? Infinity : Math.max(0, Math.trunc(Number(options.laneDailyQuota) || 0));
   const rows = [];
   let dayOffset = 0;
   while (rows.length < safeCount) {
@@ -195,12 +206,15 @@ export function buildPublicationSchedule(now = new Date(), count = 5, options = 
       const local = `${localDate}T${slot}`;
       const instant = new Date(zonedDateTime(local));
       if (instant.getTime() <= now.getTime() + 30 * 60_000) continue;
-      if (occupied.has(local) || (dailyCounts.get(localDate) || 0) >= dailyLimit) continue;
+      if (occupied.has(local) || (dailyCounts.get(localDate) || 0) >= dailyLimit
+        || (laneCounts.get(localDate) || 0) >= laneQuota) continue;
       rows.push(local);
       dailyCounts.set(localDate, (dailyCounts.get(localDate) || 0) + 1);
+      laneCounts.set(localDate, (laneCounts.get(localDate) || 0) + 1);
       if (rows.length >= safeCount) break;
     }
     dayOffset += 1;
+    if (dayOffset > 60) break; // quota/cap leaves no room: never loop forever
   }
   return rows;
 }
@@ -443,10 +457,21 @@ export async function runMetricoolAutopilot(options = {}) {
     const date = row.dateTime.slice(0, 10);
     existingDailyCounts[date] = (existingDailyCounts[date] || 0) + 1;
   }
+  // Shared brand day: every calendar post (streamer publisher, drafts, this lane) counts toward Metricool's
+  // daily cap of 5, and this lane may use at most its own quota of that day (default 2).
+  const laneDailyCounts = {};
+  for (const row of Array.isArray(ledger) ? ledger : []) {
+    if (!["scheduled", "published", "verification_pending"].includes(normalized(row?.status))) continue;
+    if (Number(row?.metricoolBlogId) !== expectedBlogId || !/^\d{4}-\d{2}-\d{2}/.test(String(row?.scheduledFor || ""))) continue;
+    const date = String(row.scheduledFor).slice(0, 10);
+    laneDailyCounts[date] = (laneDailyCounts[date] || 0) + 1;
+  }
   const schedule = buildPublicationSchedule(now, Math.min(targetDailyClips, candidates.length), {
     occupiedLocalDateTimes: existingSchedule.map((row) => row.dateTime),
     existingDailyCounts,
-    dailyLimit: targetDailyClips,
+    dailyLimit: Math.min(targetDailyClips, BRAND_DAILY_CAP),
+    laneDailyCounts,
+    laneDailyQuota: marketplaceLaneQuota(env),
   });
   let scheduleIndex = 0;
   let guard = options.ledgerGuard || null;
@@ -541,6 +566,11 @@ export async function runMetricoolAutopilot(options = {}) {
       createdAt: new Date().toISOString(),
       paidSpendAllowed: false,
     };
+    const writeRefusal = metricoolWriteRefusal(blogId, env);
+    if (writeRefusal) {
+      results.push({ itemId: item.itemId, status: "blocked", blockers: [writeRefusal] });
+      continue;
+    }
     // Shared cross-account ledger (same as the cloud publisher): one clip -> one account, fail closed.
     const reservation = await ledgerGuard().reserve(
       { brandId: blogId, network: "tiktok", account: validation.account },

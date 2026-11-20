@@ -132,6 +132,7 @@ REQUIRED_RUNTIME_FILES=(
   shared/clippers-cloud-lanes.mjs
   script/clippers-streamer-discovery.mjs
   shared/clippers-account-lanes.mjs
+  shared/clippers-metricool-writer.mjs
   shared/clippers-media-ledger.mjs
   shared/clippers-streamer-policy.mjs
 )

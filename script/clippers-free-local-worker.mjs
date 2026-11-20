@@ -8,7 +8,7 @@ import { CLIPPERS_ALLOWED_ENV_KEYS, loadClipperSelectedEnv } from "./clippers-se
 const SAFE_ENV_KEYS = ["HOME", "LANG", "LC_ALL", "NODE_ENV", "PATH", "SHELL", "TMPDIR", "USER"];
 const DEFAULT_PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const LOCK_MAX_AGE_MS = 2 * 60 * 60_000;
-const CHILD_ENV_KEYS = new Set(["CLIPPERS_CONFIG_ROOT", "CLIPPERS_MARKETPLACE_SNAPSHOT_MAX_AGE_HOURS"]);
+const CHILD_ENV_KEYS = new Set(["CLIPPERS_CONFIG_ROOT", "CLIPPERS_MARKETPLACE_SNAPSHOT_MAX_AGE_HOURS", "CLIPPERS_MARKETPLACE_LANE_DAILY_QUOTA", "CLIPPERS_RUNTIME"]);
 
 function localOnlyEnv(source, overrides = {}) {
   const safe = Object.fromEntries(SAFE_ENV_KEYS
