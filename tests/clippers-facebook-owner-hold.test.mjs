@@ -196,3 +196,16 @@ test('owner-only endpoint marks the hold resolved', async () => {
     assert.equal(store.state.cloudPublish.holds[FB_KEY].ownerResolvedAt, new Date(NOW).toISOString());
   } finally { server.close(); }
 });
+
+test('copy queued with lanes off is released as a draft even after lanes are turned on', async () => {
+  const store = memoryStore(baseState([candidate('a')]));
+  const m = fakeMetricool(FIXTURE_ERRORS);
+  const off = { ...FB_ONLY, CLIPPERS_STREAMER_LANES_ENABLED: 'false' };
+  await run(store, m, stager(), off, NOW);
+  const q = store.state.cloudPublish.heldQueue;
+  assert.equal(q.length, 1); assert.equal(q[0].lane, null); assert.equal(q[0].draft, true);
+  const resolvedOn = { ...FB_ONLY, CLIPPERS_FACEBOOK_HOLD_RESOLVED_AT: '2026-11-20T15:30:00Z' };
+  await run(store, m, stager(), resolvedOn, NOW + 2 * 3600_000);
+  assert.equal(m.calls.schedule.length, 1);
+  assert.equal(m.calls.schedule[0].draft, true, 'never released live');
+});

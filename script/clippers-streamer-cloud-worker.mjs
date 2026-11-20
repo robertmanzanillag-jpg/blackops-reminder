@@ -500,7 +500,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       const lane = q.lane ? { ...q.lane, dailyLimit: plan.cap,
         draft: !(config.lanesEnabled && config.laneAutoPublish && autoPublishAllowed(plan.account, { evaluatedAt: fresh.growth?.evaluatedAt ?? null, now })) } : null;
       const item = postItem({ candidate: { id: q.candidateId, creatorKey: q.creatorKey }, destination, scheduledAt, caption: q.caption, mediaUrl, mediaSha256: q.mediaSha256, hookVariant: q.hookVariant, lane });
-      if (!lane && config.lanesEnabled === false) item.draft = true;
+      if (!lane) item.draft = true; // queued without lane fields (lanes off): owner approves it as a draft, whatever the current lane mode
       const blocked = await update((s, c) => {
         const cand = s.candidates.find(x => x.id === q.candidateId);
         const reason = cand ? publishGate(s, cand) : 'candidate_missing';
