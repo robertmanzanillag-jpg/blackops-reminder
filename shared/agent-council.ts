@@ -8,7 +8,6 @@ import type { OfficeKongCollaboration } from "../server/office-kong-collaboratio
 // itself: approved items become playbook lessons or PR-first handoff briefs.
 
 import { agentProbes, summarizeProbe, type AgentLiveStatus } from "./agent-live-status";
-import { emptyKongSupervision, parseKongSupervision, type KongSupervision } from "./kong-supervisor";
 import { emptyCompanyState, isKongSnapshotAgent, kongCareersMirror, mergeKongCompany, parseCompanyState, separateLegacyKongCompany, type CompanyState } from "./agent-company";
 
 export type Severity = "low" | "medium" | "high";
@@ -87,7 +86,8 @@ export type ScoutRelease = { repo: string; tag: string; url: string; publishedAt
 export type CouncilState = {
   officeExecution?: { roles: import("./office-role-lifecycle").OfficeRoleLifecycleState; tokens: import("../server/office-token-budget").OfficeTokenBudgetState; internalWork?: import("../server/office-internal-work").InternalWorkState; roleAcademy?: import("../server/office-role-academy").RoleAcademyState; capabilityTraining?: import("../server/office-capability-training").CapabilityTrainingState; roleWork?: import("../server/office-role-work").RoleWorkState; factoryCareers?: import("./factory-office-agents").FactoryCareerLedger; selfHeal?: import("../server/office-self-heal").SelfHealState; creditPacer?: import("../server/credit-pacer").CreditPacerState };
   version: 1;
-  kongSupervision: KongSupervision;
+  /** Retired Supervisor KONG state, kept verbatim (never deleted, never advanced). Read only by parseLegacyKongSupervision. */
+  kongSupervision?: unknown;
   cycles: number;
   lastCycleAt: string | null;
   lastCycleError: string | null;
@@ -139,7 +139,6 @@ export const SCOUT_WATCHLIST: Array<{ repo: string; skills: string[]; why: strin
 export function emptyCouncilState(): CouncilState {
   return {
     version: 1,
-    kongSupervision: emptyKongSupervision(),
     cycles: 0,
     lastCycleAt: null,
     lastCycleError: null,
@@ -211,7 +210,6 @@ export function parseCouncilState(raw: string | null): CouncilState {
         ? { at: value.kongRead.at, ok: value.kongRead.ok, code: typeof value.kongRead.code === "string" ? value.kongRead.code.slice(0, 40) : null }
         : null,
       kongLastStatuses: obj(value.kongLastStatuses) ? value.kongLastStatuses : {},
-      kongSupervision: parseKongSupervision(value.kongSupervision),
       lastStatuses: obj(value.lastStatuses) ? value.lastStatuses : {},
     };
   } catch {

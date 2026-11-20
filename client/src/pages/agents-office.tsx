@@ -38,7 +38,7 @@ import type { MonitoredProject } from "@shared/schema";
 import { AgentsOfficeWorld } from "@/components/agents-world-office/agents-office-world";
 import { OfficeCentralPanel } from "@/components/agents-world-office/office-central-panel";
 import { useWorkspaceRole } from "@/lib/workspace-role";
-import { KongSupervisorPanel } from "@/components/kong-supervisor-panel";
+import { KongRepairDialog } from "@/components/kong-repair-dialog";
 import { KongOperationsPanel } from "@/components/kong-operations-panel";
 import { ClippersOfficeArea } from "@/components/clippers-office-area";
 import { AgentVitalityButton } from "@/components/agent-vitality-roster";
@@ -1406,9 +1406,9 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
                 Panel completo
               </Link>}
               {workspace.isOwner && <AgentVitalityButton />}
-              <div data-testid="office-kong-supervisor-slot">
-                <KongSupervisorPanel />
-              </div>
+              {workspace.isOwner && <div data-testid="office-kong-repairs-slot">
+                <KongRepairDialog />
+              </div>}
               {workspace.isOwner && <div data-testid="office-clippers-area-slot"><ClippersOfficeArea ownerId={ownerId} /></div>}
               <button type="button" data-testid="office-open-kong" onClick={openKongOffice} className="rounded-xl border border-lime-300/35 bg-lime-400/10 px-3 py-2 text-xs font-semibold text-lime-100">
                 Oficina KONG

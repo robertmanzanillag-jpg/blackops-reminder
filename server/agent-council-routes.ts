@@ -1,8 +1,6 @@
 import type { Express } from "express";
 import { OrderEvidenceError, getAgentCouncil, isAgentCouncilEnabled, setAgentCouncilUser } from "./agent-council";
 import { getCurrentUserId, getSystemUserId } from "./user-context";
-import { agentProbes, summarizeProbe } from "@shared/agent-live-status";
-import { createKongSupervisorConversation } from "./kong-supervisor-conversation";
 import { registerKongSupervisorRoutes } from "./kong-supervisor-routes";
 import {capabilityTrainingSummary,capabilityRunSummary} from "./office-capability-training";
 import { createHash } from "node:crypto";
@@ -58,19 +56,8 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
     const userId = requestUserId(req);
     return userId !== ownerUserId() && await isPartner(userId);
   };
-  // Supervisor KONG (PR #315): owner-only chat and read-only readiness review.
-  // It reads the Kong video status; it never edits, publishes or runs commercial orders.
-  const kongConversation = createKongSupervisorConversation({
-    now: () => Date.now(),
-    commit: (change) => councilInstance().updateKongSupervision(change),
-    read: () => councilInstance().readKongSupervision(),
-    readVideoStatus: async () => {
-      const { getPromoVideoStatus } = await import("./promo-video-agent");
-      const body = await getPromoVideoStatus(ownerUserId());
-      return summarizeProbe(agentProbes["kong-videos"], { ok: true, status: 200, body: JSON.parse(JSON.stringify(body ?? null)) });
-    },
-  });
-  registerKongSupervisorRoutes(app, kongConversation, {
+  // Retired Supervisor KONG (PR #315): its stored conversation stays readable for the owner; it runs nothing.
+  registerKongSupervisorRoutes(app, () => councilInstance().readLegacyKongSupervision(), {
     requestUserId: (req) => {
       try {
         return requestUserId(req);
