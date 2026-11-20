@@ -72,23 +72,34 @@ export function creatorGroupOf(candidate, creator = null) {
   return null;
 }
 
+/** 'en' | 'es' | other two-letter code | null. Region and script suffixes are dropped (es-419 -> es). */
+export function normalizeLanguage(value) {
+  const code = fold(value).trim().split(/[-_ ]/)[0];
+  return /^[a-z]{2,3}$/.test(code) ? code : null;
+}
+export const SERVED_LANGUAGES = freeze(['en', 'es']);
+
 /**
- * Pick exactly one lane for a candidate.
- * Order: stream already owned by a lane > creator allowlist > sports content > Spanish > NYC content > English default (memes).
- * Other languages are not routed (EN/ES accounts only).
+ * Pick exactly one lane for a candidate. Only clips whose language is known and exactly 'en' or 'es' are routed,
+ * and only to a lane with that language (Spanish only for Clipwave Miami, English for the others).
+ * Order inside the language: stream already owned by a lane > creator allowlist > sports content > city content > default.
  */
 export function routeCandidate(candidate, { creator = null, streamOwner = null } = {}) {
-  if (streamOwner && laneById(streamOwner)) return { lane: streamOwner, reason: 'stream_owner' };
+  const language = normalizeLanguage(candidate?.language);
+  if (!language) return { lane: null, reason: 'language_unknown' };
+  if (!SERVED_LANGUAGES.includes(language)) return { lane: null, reason: `language_not_served:${language}` };
+  const eligible = LANES.filter(l => l.language === language);
+  const owner = streamOwner ? laneById(streamOwner) : null;
+  if (owner) return owner.language === language ? { lane: owner.id, reason: 'stream_owner' } : { lane: null, reason: 'stream_owner_language_mismatch' };
   const group = creatorGroupOf(candidate, creator);
-  const byCreator = group ? LANES.find(l => l.creators.includes(group)) : null;
+  const byCreator = group ? eligible.find(l => l.creators.includes(group)) : null;
   if (byCreator) return { lane: byCreator.id, reason: 'creator_allowlist', group };
   const text = fold(`${candidate?.title ?? ''} ${candidate?.gameName ?? ''}`);
-  const language = fold(candidate?.language).slice(0, 2);
-  if (laneById('sports').keywords.test(text) || /^sports$/.test(fold(candidate?.gameName))) return { lane: language === 'es' ? 'miami' : 'sports', reason: 'sports_content' };
-  if (language === 'es' || laneById('miami').keywords.test(text)) return { lane: 'miami', reason: language === 'es' ? 'spanish' : 'miami_content' };
+  const sports = laneById('sports').keywords.test(text) || /^sports$/.test(fold(candidate?.gameName));
+  if (language === 'es') return { lane: 'miami', reason: sports ? 'sports_content_es' : laneById('miami').keywords.test(text) ? 'miami_content' : 'spanish_default' };
+  if (sports) return { lane: 'sports', reason: 'sports_content' };
   if (laneById('nyc').keywords.test(text)) return { lane: 'nyc', reason: 'nyc_content' };
-  if (!language || language === 'en') return { lane: 'memes', reason: 'english_default' };
-  return { lane: null, reason: `language_not_served:${language.replace(/[^a-z]/g, '') || 'unknown'}` };
+  return { lane: 'memes', reason: 'english_default' };
 }
 
 // ---------- Cross-account media ledger ----------
@@ -96,6 +107,10 @@ export function routeCandidate(candidate, { creator = null, streamOwner = null }
 export function sourceSegment(candidate, cut = null) {
   if (candidate?.vodId && Number.isFinite(candidate.vodOffset)) {
     return { key: `twitch-vod:${String(candidate.vodId).replace(/[^0-9A-Za-z_-]/g, '')}`, start: Math.round(candidate.vodOffset + (cut?.start ?? 0)) };
+  }
+  // Twitch clip without a VOD: the broadcaster + clip creation time (+-60 s) identifies the moment.
+  if (candidate?.platform === 'twitch' && candidate?.creatorKey && Number.isFinite(Date.parse(candidate?.publishedAt))) {
+    return { key: `twitch-moment:${String(candidate.creatorKey).replace(/[^0-9A-Za-z:_-]/g, '')}`, start: Math.round(Date.parse(candidate.publishedAt) / 1000 + (cut?.start ?? 0)) };
   }
   return { key: String(candidate?.id ?? '').slice(0, 140), start: Math.round(cut?.start ?? 0) };
 }
@@ -206,6 +221,18 @@ export function parseBestTimes(raw) {
 }
 
 /** Auto-publish flag for one account: weekly median >= 1k with at least 5 posts in the week. */
-export function autoPublishAllowed(account) {
-  return !!account && Number.isSafeInteger(account.weeklyPosts) && account.weeklyPosts >= 5 && Number.isFinite(account.weeklyMedian) && account.weeklyMedian >= AUTOPUBLISH_MEDIAN_VIEWS;
+export const GROWTH_MAX_AGE_HOURS = 36;
+/**
+ * Auto-publish flag for one account: weekly median >= 1k over >= 5 posts, computed from Metricool account
+ * analytics (not our own ledger) by a growth pass less than 36 h old. Anything else -> drafts.
+ */
+export function autoPublishAllowed(account, { evaluatedAt = null, now = null } = {}) {
+  if (!account || account.source !== 'metricool_account_analytics') return false;
+  if (!(Number.isSafeInteger(account.weeklyPosts) && account.weeklyPosts >= 5 && Number.isFinite(account.weeklyMedian) && account.weeklyMedian >= AUTOPUBLISH_MEDIAN_VIEWS)) return false;
+  if (now !== null) {
+    const at = Date.parse(evaluatedAt ?? '');
+    if (!Number.isFinite(at) || now - at > GROWTH_MAX_AGE_HOURS * 3_600_000 || at > now + 60_000) return false;
+  }
+  return true;
 }
+export const PAUSE_DAYS = 14;

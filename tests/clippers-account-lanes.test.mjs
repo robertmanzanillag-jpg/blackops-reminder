@@ -14,16 +14,23 @@ import { STREAMER_STATE_NAMESPACE } from '../script/clippers-streamer-discovery.
 const NOW = Date.parse('2026-11-19T14:00:00.000Z'); // Thursday 09:00 New York
 const MEMES = '6431685:tiktok:streamersus', SPORT = '6431687:tiktok:streamersclipusa', MIAMI = '6591612:tiktok:news305miami';
 
-test('routing: one lane per creator/content; Spanish only to Miami; other languages unrouted', () => {
-  assert.equal(routeCandidate({ handle: 'kaicenat', title: 'LOL' }).lane, 'memes');
-  assert.equal(routeCandidate({ handle: 'x' }, { creator: { creatorGroupId: 'ishowspeed' } }).lane, 'memes');
+test('routing: language must be exactly en|es and match the lane (Spanish only Miami, English the others)', () => {
+  assert.equal(routeCandidate({ handle: 'kaicenat', title: 'LOL', language: 'en' }).lane, 'memes');
+  assert.equal(routeCandidate({ handle: 'x', language: 'EN-gb' }, { creator: { creatorGroupId: 'ishowspeed' } }).lane, 'memes');
   assert.equal(routeCandidate({ handle: 'random', title: 'NBA 2K dunk contest', language: 'en' }).lane, 'sports');
   assert.equal(routeCandidate({ handle: 'westcol', language: 'es' }).lane, 'miami');
-  assert.equal(routeCandidate({ handle: 'random', title: 'jajaja', language: 'es' }).lane, 'miami');
-  assert.equal(routeCandidate({ handle: 'fanum' }).lane, 'nyc');
+  assert.equal(routeCandidate({ handle: 'random', title: 'jajaja', language: 'es-419' }).lane, 'miami');
+  assert.equal(routeCandidate({ handle: 'fanum', language: 'en' }).lane, 'nyc');
   assert.equal(routeCandidate({ handle: 'random', title: 'IRL in the Bronx', language: 'en' }).lane, 'nyc');
+  // Review cases.
+  assert.deepEqual(routeCandidate({ handle: 'kaicenat', title: 'LOL' }), { lane: null, reason: 'language_unknown' }, 'null language is never routed');
+  assert.equal(routeCandidate({ handle: 'random', title: 'Night out in Miami', language: 'en' }).lane, 'memes', 'English + Miami keyword stays on an English lane');
+  assert.deepEqual(routeCandidate({ handle: 'random', title: 'GOAL!!! golaço', language: 'pt' }), { lane: null, reason: 'language_not_served:pt' });
+  assert.equal(routeCandidate({ handle: 'ibai', title: 'English stream', language: 'en' }).lane, 'memes', 'English Ibai clip is not sent to the Spanish lane');
+  assert.equal(routeCandidate({ handle: 'kaicenat', title: 'Kai habla español', language: 'es' }).lane, 'miami', 'Spanish Kai Cenat clip goes to the Spanish lane');
   assert.equal(routeCandidate({ handle: 'k4sen', language: 'ja' }).lane, null);
-  assert.equal(routeCandidate({ handle: 'kaicenat' }, { streamOwner: 'sports' }).lane, 'sports', 'stream stays on its first account');
+  assert.equal(routeCandidate({ handle: 'kaicenat', language: 'en' }, { streamOwner: 'sports' }).lane, 'sports', 'stream stays on its first account');
+  assert.equal(routeCandidate({ handle: 'kaicenat', language: 'es' }, { streamOwner: 'sports' }).lane, null, 'never a lane of another language');
   for (const l of LANES) assert.equal(l.language, l.id === 'miami' ? 'es' : 'en');
 });
 
@@ -34,6 +41,12 @@ test('media ledger: same VOD segment or file hash cannot go to a second account'
   assert.equal(mediaConflict(entries, { segment: sourceSegment({ id: 'twitch-clip:c', vodId: '99', vodOffset: 1300 }), destinationKey: SPORT }), null, 'other moment of the stream is a different segment');
   assert.equal(mediaConflict(entries, { segment: { key: 'x', start: 0 }, mediaSha256: 'f'.repeat(64), destinationKey: SPORT }).reason, 'cross_account_duplicate');
   assert.equal(mediaConflict(entries, { segment: seg, destinationKey: MEMES }).reason, 'already_posted');
+  // No VOD: broadcaster + clip creation time (+-60 s) identifies the moment.
+  const a = sourceSegment({ id: 'twitch-clip:x', platform: 'twitch', creatorKey: 'twitch:1', publishedAt: '2026-11-19T12:00:00Z' });
+  const b = sourceSegment({ id: 'twitch-clip:y', platform: 'twitch', creatorKey: 'twitch:1', publishedAt: '2026-11-19T12:00:40Z' });
+  const c = sourceSegment({ id: 'twitch-clip:z', platform: 'twitch', creatorKey: 'twitch:1', publishedAt: '2026-11-19T12:05:00Z' });
+  assert.equal(mediaConflict([{ candidateId: 'twitch-clip:x', segment: a, destinationKey: MEMES }], { segment: b, destinationKey: SPORT }).reason, 'cross_account_duplicate');
+  assert.equal(mediaConflict([{ candidateId: 'twitch-clip:x', segment: a, destinationKey: MEMES }], { segment: c, destinationKey: SPORT }), null);
 });
 
 test('hooks: 3-6 upper-case words; captions: curiosity + creator + credit + 3-5 hashtags, no disclaimers', () => {
@@ -65,10 +78,16 @@ test('schedule: 10/12/16/18/20 ET, weekends -30 %, 8/day once scaled, Metricool 
   assert.ok(!laneSchedule({ day: '2026-11-19', killedHours: [10] }).slots.includes('10:00'));
 });
 
-test('auto-publish only once the weekly median passes 1k', () => {
-  assert.equal(autoPublishAllowed({ weeklyPosts: 30, weeklyMedian: 999 }), false);
-  assert.equal(autoPublishAllowed({ weeklyPosts: 30, weeklyMedian: 1000 }), true);
-  assert.equal(autoPublishAllowed({ weeklyPosts: 3, weeklyMedian: 5000 }), false);
+test('auto-publish only once the weekly median passes 1k, from fresh Metricool account analytics', () => {
+  const mc = { source: 'metricool_account_analytics' };
+  assert.equal(autoPublishAllowed({ ...mc, weeklyPosts: 30, weeklyMedian: 999 }), false);
+  assert.equal(autoPublishAllowed({ ...mc, weeklyPosts: 30, weeklyMedian: 1000 }), true);
+  assert.equal(autoPublishAllowed({ ...mc, weeklyPosts: 3, weeklyMedian: 5000 }), false);
+  assert.equal(autoPublishAllowed({ source: 'ledger_observations', weeklyPosts: 30, weeklyMedian: 5000 }), false, 'own ledger is not enough');
+  const fresh = new Date(NOW - 35 * 3600_000).toISOString(), stale = new Date(NOW - 37 * 3600_000).toISOString();
+  assert.equal(autoPublishAllowed({ ...mc, weeklyPosts: 30, weeklyMedian: 5000 }, { evaluatedAt: fresh, now: NOW }), true);
+  assert.equal(autoPublishAllowed({ ...mc, weeklyPosts: 30, weeklyMedian: 5000 }, { evaluatedAt: stale, now: NOW }), false, 'growth older than 36 h -> drafts');
+  assert.equal(autoPublishAllowed({ ...mc, weeklyPosts: 30, weeklyMedian: 5000 }, { evaluatedAt: null, now: NOW }), false);
 });
 
 test('growth loop: weekly stats, kill < 300 median after 6 posts, breakout > 10k -> 3 follow-ups, > 100k doubles the creator', () => {
@@ -85,6 +104,9 @@ test('growth loop: weekly stats, kill < 300 median after 6 posts, breakout > 10k
   assert.equal(growthWeight(g, { destinationKey: MEMES, creatorKey: 'twitch:kai', streamKey: 'twitch-vod:1' }, NOW).weight, 5);
   const later = computeGrowth({ posts: [...posts, { id: 'f1', destinationKey: MEMES, status: 'scheduled', creatorKey: 'twitch:kai', streamKey: 'twitch-vod:1', attemptedAt: new Date(NOW + 60_000).toISOString(), scheduledAt: new Date(NOW + 3600_000).toISOString() }], accountPosts, previous: g, now: NOW + 120_000 });
   assert.equal(later.breakouts[0].remaining, 2);
+  // Pauses expire 14 days after the arm's newest post.
+  assert.ok(g.kills.every(k => k.expiresAt));
+  assert.equal(growthWeight(g, { destinationKey: MEMES, creatorKey: 'twitch:bad' }, NOW + 20 * 86400_000).weight, 1);
 });
 
 test('render helpers: peak-first start from ebur128, word-by-word captions from whisper JSON', () => {
@@ -104,7 +126,7 @@ function candidate(id, creatorKey, handle, extra = {}) {
   return { id: `twitch-clip:${id}`, platform: 'twitch', kind: 'clip', creatorKey, handle, title: `${handle} loses it on stream`, sourceUrl, durationSec: 50, views: 9000,
     publishedAt: new Date(NOW - 2 * 3600_000).toISOString(), observedAt: new Date(NOW).toISOString(), score: 4, clipPolicy: { status: 'allowed_unless_prohibited' },
     download: { mode: 'needs_local_download' }, approval: { status: 'approved', pendingActionId: `pa-${id}` },
-    caption: buildCreditCaption({ handle, platform: 'twitch', sourceUrl, title: handle }), ...extra };
+    caption: buildCreditCaption({ handle, platform: 'twitch', sourceUrl, title: handle }), language: 'en', ...extra };
 }
 const checked = { status: 'allowed_unless_prohibited', source: 'channel_description_checked' };
 function state(candidates, cloudPublish) {
@@ -152,7 +174,7 @@ test('worker: each clip goes to exactly one account, as a Metricool draft, in it
 });
 
 test('worker: a second clip of the same VOD moment is refused for every other account; auto-publish once median >= 1k', async () => {
-  const growth = { evaluatedAt: new Date(NOW).toISOString(), accounts: { [MEMES]: { weeklyPosts: 20, weeklyMedian: 1500, scaled: true, autoPublish: true } }, kills: [], breakouts: [], doubled: [], decisions: [] };
+  const growth = { evaluatedAt: new Date(NOW - 3600_000).toISOString(), accounts: { [MEMES]: { weeklyPosts: 20, weeklyMedian: 1500, scaled: true, autoPublish: true, source: 'metricool_account_analytics' } }, kills: [], breakouts: [], doubled: [], decisions: [] };
   const ledger = { version: 1, clips: {}, posts: [], learning: null, lastRun: null, growth,
     mediaLedger: [{ candidateId: 'twitch-clip:old', streamKey: 'twitch-vod:9', segment: { key: 'twitch-vod:9', start: 110 }, mediaSha256: null, destinationKey: SPORT, lane: 'sports' }] };
   const s = state([candidate('d', 'twitch:1', 'kaicenat', { vodId: '9', vodOffset: 100 }), candidate('e', 'twitch:1', 'kaicenat', { vodId: '7', vodOffset: 0 })], ledger);
@@ -198,4 +220,53 @@ test('Metricool adapter: draft payload (no auto-publish) with duet/stitch on; be
   await mc.bestTimes(dest, new Date(NOW));
   assert.equal(sent[1].name, 'getBestTimeToPostByNetwork');
   await assert.doesNotReject(mc.crossAccountPreflight(dest, { scheduledAt: '2026-11-20T15:00:00.000Z', caption: 'unique', mediaUrl: 'https://e.com/b.mp4' }));
+});
+
+test('review fixes: stale growth -> drafts; held destination skipped; slot retry uses the lane plan; claim dropped on pre-write defer; cross-account check required', async () => {
+  const config = cloudPublishConfig(ENV);
+  const acct = { weeklyPosts: 20, weeklyMedian: 1500, scaled: true, autoPublish: true, source: 'metricool_account_analytics' };
+  const staleLedger = { version: 1, clips: {}, posts: [], growth: { evaluatedAt: new Date(NOW - 40 * 3600_000).toISOString(), accounts: { [MEMES]: acct }, kills: [], breakouts: [], doubled: [], decisions: [] } };
+  const s1 = state([candidate('h', 'twitch:1', 'kaicenat')], staleLedger);
+  assert.equal(laneTarget({ state: s1, ledger: staleLedger, candidate: s1.candidates[0], config, now: NOW }).draft, true, 'stale growth -> drafts');
+  // Held Miami TikTok (owner action) -> the Facebook copy of the same lane is picked, never both.
+  const fbConfig = cloudPublishConfig({ ...ENV, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: `${MIAMI},6591612:facebook:1193011863901514` });
+  const heldLedger = { version: 1, clips: {}, posts: [], holds: { [MIAMI]: { status: 'held_owner_action' } } };
+  const s2 = state([candidate('w', 'twitch:2', 'westcol', { language: 'es' })], heldLedger);
+  assert.equal(laneTarget({ state: s2, ledger: heldLedger, candidate: s2.candidates[0], config: fbConfig, now: NOW }).destinationKey, '6591612:facebook:1193011863901514');
+  const allHeld = { ...heldLedger, holds: { [MIAMI]: { status: 'held_owner_action' } } };
+  assert.equal(laneTarget({ state: s2, ledger: allHeld, candidate: s2.candidates[0], config, now: NOW }).reason, 'lane_destination_held:miami');
+  // Slot conflict retry stays on the lane slots (10/12/16/18/20 ET), not the legacy 11/13:30 list.
+  let first = true;
+  const mc = fakeMetricool();
+  mc.preflight = async () => { if (first) { first = false; throw new Error('metricool_slot_duplicate_or_daily_cap'); } };
+  const store = memoryStore(state([candidate('r', 'twitch:1', 'kaicenat')]));
+  await runCloudPublisher({ env: ENV, now: NOW, owner: 'o', store, approvals, metricool: mc, stager: stager(), fetch: async () => ({ status: 206 }), ...media(), clock: () => NOW });
+  assert.deepEqual(mc.calls.schedule.map(c => c.item.scheduledAt), ['2026-11-19T17:00:00.000Z'], '12:00 ET after the 10:00 ET conflict');
+  // Pre-write defer drops the media-ledger claim.
+  const held = fakeMetricool();
+  held.preflight = async () => { throw new Error('destination_publish_permission_missing'); };
+  const store2 = memoryStore(state([candidate('q', 'twitch:1', 'kaicenat')]));
+  await runCloudPublisher({ env: ENV, now: NOW, owner: 'o', store: store2, approvals, metricool: held, stager: stager(), fetch: async () => ({ status: 206 }), ...media(), clock: () => NOW });
+  assert.equal(held.calls.schedule.length, 0); assert.deepEqual(store2.state.cloudPublish.mediaLedger ?? [], []);
+  // Adapter without crossAccountPreflight: no write on the lane path.
+  const nocross = fakeMetricool(); delete nocross.crossAccountPreflight;
+  const r = await runCloudPublisher({ env: ENV, now: NOW, owner: 'o', store: memoryStore(state([candidate('n', 'twitch:1', 'kaicenat')])), approvals, metricool: nocross, stager: stager(), fetch: async () => ({ status: 206 }), ...media(), clock: () => NOW });
+  assert.equal(nocross.calls.schedule.length, 0); assert.ok(r.report.heldReasons.some(x => x.includes('cross_account_check_unavailable')));
+});
+
+test('Metricool adapter: a draft is confirmed from the shape Metricool reports (draft:true, autoPublish:false, provider PENDING, NY wall time)', async () => {
+  // Shape observed read-only via getScheduledPosts on brand 6431687 (2026-11-20).
+  const row = { id: 434895937, publicationDate: { dateTime: '2026-11-20T10:00:00', timezone: 'America/New_York' }, text: 'cap', providers: [{ network: 'tiktok', status: 'PENDING', detailedStatus: 'Pending' }],
+    media: ['https://e.com/a.mp4'], autoPublish: false, draft: true, tiktokData: { disableDuet: false, disableStitch: false } };
+  const res = body => ({ ok: true, status: 200, headers: { get: () => 'application/json' }, json: async () => body, text: async () => JSON.stringify(body) });
+  const fetcher = async url => {
+    const u = new URL(url);
+    if (u.pathname === '/api/admin/simpleProfiles') return res([{ blogId: 6431687, tiktokUsername: 'streamersclipusa', isShared: false, ownerUserId: '12345', canPublish: true }]);
+    return res([row]);
+  };
+  const mc = createPortfolioMetricool({ token: 'metricool-token-123', userId: '12345', fetcher });
+  const dest = { brandId: 6431687, network: 'tiktok', account: 'streamersclipusa' };
+  const item = { id: 'stc-2', scheduledAt: '2026-11-20T15:00:00.000Z', caption: 'cap', mediaUrl: 'https://e.com/a.mp4' };
+  assert.equal((await mc.confirmSchedule(dest, { ...item, draft: true }))?.id, '434895937');
+  assert.equal(await mc.confirmSchedule(dest, item), null, 'a draft never confirms an auto-publish write');
 });

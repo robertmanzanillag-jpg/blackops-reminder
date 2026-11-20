@@ -85,3 +85,27 @@ restores the legacy fan-out.
 - **Growth loop (cloud):** job `growth` in `clippers-streamers-publish.yml` daily at 08:00 NY (and every 6 h inside the
   publish job): kill a creator / hook / hour with median < 300 after 6 posts; > 10k views in 24 h -> 3 more clips from
   that stream/creator on that account within 24 h and promote the hour; > 100k -> double that creator's share.
+
+### Review follow-ups (2026-11-20)
+
+- Language is normalised (`es-419` -> `es`). Only `en` and `es` are routed, and only to a lane with that language;
+  unknown or other languages are never posted (an English Ibai clip goes to an English lane, a Spanish Kai Cenat clip to Miami).
+- Auto-publish requires a growth pass < 36 h old computed from Metricool account analytics; otherwise drafts.
+- `CLIPPERS_STREAMER_LANES_ENABLED=false` never restores the fan-out: one account (first planned) and drafts only.
+- Pauses (kills) expire 14 days after the arm's newest post. Pre-write defers drop their media-ledger claim.
+  `crossAccountPreflight` is required on the lane path. Without a Twitch VOD, broadcaster + clip time +-60 s is the segment.
+- Metricool drafts read back as `draft:true, autoPublish:false`, provider `PENDING`, `publicationDate` in America/New_York;
+  `confirmSchedule` matches exactly that for draft writes.
+
+### Note for the Facebook owner-action hold lane (`claude/clippers-facebook-identity-hold`)
+
+`laneTarget` already skips any destination whose `cloudPublish.holds[key].status === 'held_owner_action'` (it picks the
+lane's other destination, e.g. Miami Facebook vs TikTok, or holds the clip with `lane_destination_held:<lane>`). When the
+hold lane merges on top of lanes:
+1. In lane mode, compute `heldTargets` only from the picked destination (`lanePick.destination`), never from
+   `config.destinations`, so a held copy is queued for at most one account.
+2. Queue it with the lane fields (`lane`, `streamKey`, `segment`, `dailyLimit`, `countDrafts`, `allowDuetStitch`) and
+   `draft` from `lanePick` (pass `lane: lanePick` to `postItem` on release).
+3. In the release transaction, run the same `mediaConflict(mediaEntriesOf(c), ...)` check and `mediaEntry` claim as the
+   main write path, and `dropClaim` when the release is deferred before any Metricool write; call `crossAccountPreflight`
+   after `preflight`.
