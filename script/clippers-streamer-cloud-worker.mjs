@@ -25,7 +25,8 @@ import { resolveClipPolicy, takedownBlocks, captionHasCredit, buildCreditCaption
 import { KNOWN_PROHIBITED_CREATORS } from '../shared/clippers-priority-creators.mjs';
 import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool, TIME_ZONE, localDay, localHour, canonicalDestinationKey } from './clippers-portfolio-metricool.mjs';
 import { downloadSource, renderVerticalClip, makeWorkDir, hookText, creditText } from './clippers-streamer-cloud-render.mjs';
-import { computeLearning, chooseHookVariant, creatorBoostFor, OBSERVATION_WINDOW } from './clippers-streamer-cloud-learning.mjs';
+import { computeLearning, chooseHookVariant, creatorBoostFor, OBSERVATION_WINDOW, computeGrowth, growthWeight, killedHooks, killedHours, promotedHours } from './clippers-streamer-cloud-learning.mjs';
+import { laneById, routeCandidate, sourceSegment, streamKeyOf, mediaConflict, mediaEntry, streamOwnerLane, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, CLIP_SECONDS } from '../shared/clippers-account-lanes.mjs';
 
 const HOUR = 3_600_000;
 const MAX_POSTS = 600;
@@ -58,12 +59,20 @@ export function cloudPublishConfig(env = process.env) {
     enabled: env.CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED === 'true',
     killSwitch: env.CLIPPERS_STREAMER_CLOUD_KILL_SWITCH === 'true',
     dryRun: env.CLIPPERS_STREAMER_CLOUD_DRY_RUN === 'true',
-    clipsPerRun: int(env.CLIPPERS_STREAMER_CLOUD_CLIPS_PER_RUN, 2, 0, 5),
+    clipsPerRun: int(env.CLIPPERS_STREAMER_CLOUD_CLIPS_PER_RUN, 4, 0, 8),
+    // Account lanes (one clip -> one account, niche routing, per-account slots/caps, growth loop). On by default.
+    // 'false' never restores the old fan-out: each clip still goes to ONE account (the first listed) as a draft.
+    lanesEnabled: env.CLIPPERS_STREAMER_LANES_ENABLED !== 'false',
+    // Per-account auto-publish once the weekly median passes 1k; set 'false' to keep every lane on drafts.
+    laneAutoPublish: env.CLIPPERS_STREAMER_LANE_AUTOPUBLISH !== 'false',
+    growthIntervalMs: int(env.CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS, 6, 1, 48) * HOUR,
     dailyCap: int(env.CLIPPERS_STREAMER_CLOUD_DAILY_PER_DESTINATION, 5, 0, 5),
     slots: parseSlots(env.CLIPPERS_STREAMER_CLOUD_SLOTS || DEFAULT_SLOTS.join(',')),
     staggerMinutes: int(env.CLIPPERS_STREAMER_CLOUD_STAGGER_MINUTES, 7, 0, 14),
     leadMinutes: int(env.CLIPPERS_STREAMER_CLOUD_LEAD_MINUTES, 30, 15, 240),
-    clipSeconds: int(env.CLIPPERS_STREAMER_CLIP_SECONDS, 45, 10, STREAMER_CLIP_MAX_SECONDS),
+    clipSeconds: env.CLIPPERS_STREAMER_LANES_ENABLED !== 'false'
+      ? int(env.CLIPPERS_STREAMER_CLIP_SECONDS, CLIP_SECONDS.target, CLIP_SECONDS.min, CLIP_SECONDS.max)
+      : int(env.CLIPPERS_STREAMER_CLIP_SECONDS, 45, 10, STREAMER_CLIP_MAX_SECONDS),
     maxSourceAgeHours: int(env.CLIPPERS_STREAMER_CLOUD_MAX_SOURCE_AGE_HOURS, 72, 6, 168),
     // YouTube answers GitHub-hosted runner IPs with "Sign in to confirm you're not a bot" (even with
     // --impersonate chrome), so the cloud lane takes Twitch clips only unless YouTube is listed explicitly.
@@ -174,10 +183,93 @@ export async function liveDescriptionCheck({ candidate, env, fetch: fetchImpl })
   return { checked: false, reason: 'live_check_keys_missing' };
 }
 
-export function postItem({ candidate, destination, scheduledAt, caption, mediaUrl, mediaSha256, hookVariant }) {
+export function postItem({ candidate, destination, scheduledAt, caption, mediaUrl, mediaSha256, hookVariant, lane = null }) {
   const key = destinationKey(destination);
   return { id: `stc-${sha(`${candidate.id}|${key}`).slice(0, 24)}`, candidateId: candidate.id, creatorKey: candidate.creatorKey, destination: { ...destination }, destinationKey: key,
-    scheduledAt, caption, mediaUrl, mediaSha256, hookVariant, language: 'es', thirdPartyCommercial: false, status: 'pending_write', metricoolId: null, attemptedAt: null, observation: null };
+    scheduledAt, caption, mediaUrl, mediaSha256, hookVariant, language: lane?.language ?? 'es', thirdPartyCommercial: false, status: 'pending_write', metricoolId: null, attemptedAt: null, observation: null,
+    ...(lane ? { lane: lane.lane, streamKey: lane.streamKey, segment: lane.segment, draft: lane.draft, dailyLimit: lane.dailyLimit, countDrafts: true, allowDuetStitch: true } : {}) };
+}
+
+// ---------- Account lanes ----------
+/** Remove the media-ledger claim of a post that was never written to Metricool. */
+export function dropClaim(c, item) {
+  if (Array.isArray(c.mediaLedger)) c.mediaLedger = c.mediaLedger.filter(e => !(e.candidateId === item.candidateId && e.destinationKey === item.destinationKey));
+}
+/** Ledger of every media/source already given to an account (explicit entries + the post ledger). */
+export function mediaEntriesOf(c) {
+  const explicit = Array.isArray(c?.mediaLedger) ? c.mediaLedger : [];
+  const fromPosts = (c?.posts ?? []).filter(p => !['deferred', 'not_found', 'blocked'].includes(p.status))
+    .map(p => ({ candidateId: p.candidateId, streamKey: p.streamKey ?? null, segment: p.segment ?? null, mediaSha256: p.mediaSha256 ?? null, destinationKey: canonicalDestinationKey(p.destinationKey), lane: p.lane ?? null }));
+  return [...explicit, ...fromPosts];
+}
+
+/** Slots + cap for one account today (weekly median, Metricool best time, killed and promoted hours). */
+export function accountSchedule(c, destination, now) {
+  const key = destinationKey(destination);
+  const account = c?.growth?.accounts?.[key] ?? null;
+  const plan = laneSchedule({ day: localDay(new Date(now)), scaled: !!account?.scaled, bestTimes: c?.bestTimes?.[key]?.rows ?? null, killedHours: killedHours(c?.growth, key, now) });
+  const promoted = promotedHours(c?.growth, key, now).map(h => `${String(h).padStart(2, '0')}:00`).filter(h => !plan.slots.includes(h));
+  if (promoted.length) plan.slots = [...plan.slots.slice(0, Math.max(0, plan.cap - promoted.length)), ...promoted.slice(0, plan.cap)].sort();
+  return { ...plan, account };
+}
+
+/**
+ * One account for one candidate, or a skip reason. Never more than one: same stream stays on its first
+ * account; a source/segment already given to any account is refused.
+ */
+export function laneTarget({ state, ledger, candidate, config, now }) {
+  const entries = mediaEntriesOf(ledger);
+  const route = routeCandidate(candidate, { creator: state.creators?.[candidate.creatorKey] ?? null, streamOwner: streamOwnerLane(entries, candidate) });
+  if (!route.lane) return { ok: false, reason: `lane_unrouted:${route.reason}` };
+  const lane = laneById(route.lane);
+  const enabled = new Set(config.destinations.map(destinationKey));
+  const options = lane.destinations.map(d => findDestination(d)).filter(d => d && enabled.has(destinationKey(d)));
+  if (!options.length) return { ok: false, reason: `lane_destination_not_connected:${lane.id}`, lane: lane.id };
+  const segment = sourceSegment(candidate);
+  const seen = mediaConflict(entries, { segment, candidateId: candidate.id, destinationKey: '' });
+  if (seen) return { ok: false, reason: options.some(d => destinationKey(d) === seen.entry.destinationKey) ? 'already_posted' : 'cross_account_duplicate', lane: lane.id };
+  const tries = [];
+  for (const destination of options) {
+    const key = destinationKey(destination);
+    // Owner-action hold (Facebook identity check lane): never pick a held destination.
+    if (ledger?.holds?.[key]?.status === 'held_owner_action') { tries.push('destination_held'); continue; }
+    const weight = growthWeight(ledger?.growth, { destinationKey: key, creatorKey: candidate.creatorKey, streamKey: streamKeyOf(candidate) }, now);
+    if (weight.killed) { tries.push('lane_creator_killed'); continue; }
+    const plan = accountSchedule(ledger, destination, now);
+    const scheduledAt = nextSlot({ now, config: { ...config, slots: plan.slots, dailyCap: plan.cap }, destination, index: 0, posts: ledger?.posts ?? [] });
+    if (!scheduledAt) { tries.push('no_free_slots'); continue; }
+    const today = (ledger?.posts ?? []).filter(p => canonicalDestinationKey(p.destinationKey) === key && localDay(new Date(p.scheduledAt)) === localDay(new Date(scheduledAt)) && !['deferred', 'blocked', 'not_found'].includes(p.status)).length;
+    tries.push({ destination, key, scheduledAt, today, plan, weight });
+  }
+  const best = tries.filter(t => typeof t === 'object').sort((a, b) => a.today - b.today || Date.parse(a.scheduledAt) - Date.parse(b.scheduledAt))[0];
+  if (!best) return { ok: false, reason: `lane_${tries.includes('lane_creator_killed') ? 'creator_killed' : tries.includes('destination_held') && !tries.includes('no_free_slots') ? 'destination_held' : 'no_free_slots'}:${lane.id}`, lane: lane.id };
+  // Auto-publish only from Metricool account analytics of a growth pass < 36 h old; otherwise drafts.
+  const autoPublish = config.laneAutoPublish && autoPublishAllowed(best.plan.account, { evaluatedAt: ledger?.growth?.evaluatedAt ?? null, now });
+  return { ok: true, lane: lane.id, language: lane.language, destination: best.destination, destinationKey: best.key, scheduledAt: best.scheduledAt, segment, streamKey: streamKeyOf(candidate),
+    draft: !autoPublish, dailyLimit: best.plan.cap, slots: best.plan.slots, slotsSource: best.plan.source, killedHooks: killedHooks(ledger?.growth, best.key, now), breakout: best.weight.breakout };
+}
+
+/** Selection weight of a candidate on the account it would route to (kills, breakouts, doubled creators). */
+export function laneSortWeight(state, ledger, candidate, now) {
+  const route = routeCandidate(candidate, { creator: state.creators?.[candidate.creatorKey] ?? null, streamOwner: streamOwnerLane(mediaEntriesOf(ledger), candidate) });
+  const lane = route.lane ? laneById(route.lane) : null;
+  if (!lane?.destinations.length) return 1;
+  return Math.max(...lane.destinations.map(d => growthWeight(ledger?.growth, { destinationKey: destinationKey(d), creatorKey: candidate.creatorKey, streamKey: streamKeyOf(candidate) }, now).weight));
+}
+
+/** Read-only growth pass: Metricool account analytics + best-time -> computeGrowth (stored in the ledger). */
+export async function refreshGrowth({ metricool, ledger, now, report }) {
+  const accountPosts = {}, bestTimes = { ...(ledger.bestTimes ?? {}) };
+  for (const d of DESTINATIONS) {
+    const key = destinationKey(d);
+    try { const r = await metricool.accountAnalytics(d, new Date(now)); accountPosts[key] = Array.isArray(r?.posts) ? r.posts : []; }
+    catch (e) { report.heldReasons.push(`growth_analytics:${d.brandId}:${code(e)}`); }
+    if (metricool.bestTimes && (!bestTimes[key] || now - Date.parse(bestTimes[key].at) > 7 * 24 * HOUR)) {
+      try { bestTimes[key] = { at: iso(now), rows: parseBestTimes(await metricool.bestTimes(d, new Date(now))).slice(0, 200) }; }
+      catch (e) { report.heldReasons.push(`best_time:${d.brandId}:${code(e)}`); }
+    }
+  }
+  return { growth: computeGrowth({ posts: ledger.posts, accountPosts, previous: ledger.growth ?? null, now }), bestTimes };
 }
 
 export function clipCaption(candidate, variant) {
@@ -255,8 +347,9 @@ export function createApprovalLedger(query) {
  * deps: { store, approvals, metricool (createPortfolioMetricool-like), stager, fetch, download, render, outputDir }
  */
 export async function runCloudPublisher({ env = process.env, now = Date.now(), owner, store, approvals, metricool, stager, fetch: fetchImpl = globalThis.fetch,
-  download = downloadSource, render = renderVerticalClip, makeDir = makeWorkDir, outputDir = null, minIntervalMs = 0, clock = () => Date.now() }) {
-  const config = cloudPublishConfig(env);
+  download = downloadSource, render = renderVerticalClip, makeDir = makeWorkDir, outputDir = null, minIntervalMs = 0, clock = () => Date.now(), growthOnly = false }) {
+  // A growth-only pass (read-only analytics) runs even while publishing is off; the kill switch still stops it.
+  const config = { ...cloudPublishConfig(env), ...(growthOnly ? { enabled: true } : {}) };
   const ns = STREAMER_STATE_NAMESPACE(owner);
   const report = { at: iso(now), status: 'completed', heldReasons: [], errors: [], counts: { rendered: 0, scheduled: 0, verificationPending: 0, deferred: 0, blocked: 0, failed: 0, reconciled: 0, observed: 0, assetsRemoved: 0 }, dryRun: config.dryRun, paidSpendUsd: 0, aiSpendUsd: 0 };
   if (!config.enabled) return { report: { ...report, status: 'disabled' }, skipped: true };
@@ -343,6 +436,23 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     } catch (e) { report.heldReasons.push(`media_sweep:${code(e)}`); }
   }
 
+  // 2b) Per-account growth loop (read-only Metricool analytics + best time), at most every growthIntervalMs.
+  if (config.lanesEnabled && metricool?.accountAnalytics && !config.missing.length) {
+    const cur = cloudPublishOf(parseStreamerState(await store.read(ns)));
+    if (growthOnly || !cur.growth?.evaluatedAt || now - Date.parse(cur.growth.evaluatedAt) >= config.growthIntervalMs) {
+      try {
+        const { growth, bestTimes } = await refreshGrowth({ metricool, ledger: cur, now, report });
+        await update((s, c) => { c.growth = growth; c.bestTimes = bestTimes; });
+        report.growth = { accounts: growth.accounts, decisions: growth.decisions.slice(0, 20) };
+      } catch (e) { report.heldReasons.push(`growth:${code(e)}`); }
+    }
+  }
+  if (growthOnly) {
+    report.heldReasons = [...new Set(report.heldReasons)].slice(0, 50);
+    if (!config.dryRun) await update((s, c) => { c.lastGrowthRun = { at: report.at, heldReasons: report.heldReasons, growth: report.growth ?? null }; });
+    return { report: { ...report, status: report.growth ? 'growth_updated' : 'growth_unavailable' }, skipped: false };
+  }
+
   // 3) New clips.
   const state = parseStreamerState(await store.read(ns));
   const ledger = cloudPublishOf(state);
@@ -351,7 +461,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     .filter(c => { const clip = ledger.clips[c.id]; return !clip || (['failed', 'deferred'].includes(clip.status) && (clip.attempts ?? 0) < config.maxAttempts); })
     .filter(c => now - Date.parse(c.publishedAt) <= config.maxSourceAgeHours * HOUR)
     .filter(c => config.platforms.includes(c.platform))
-    .sort((a, b) => (b.score + creatorBoostFor(learning, b.creatorKey)) - (a.score + creatorBoostFor(learning, a.creatorKey)));
+    .map(c => ({ c, w: config.lanesEnabled ? laneSortWeight(state, ledger, c, now) : 1 })).filter(x => x.w > 0)
+    .sort((a, b) => (b.w * (b.c.score + creatorBoostFor(learning, b.c.creatorKey))) - (a.w * (a.c.score + creatorBoostFor(learning, a.c.creatorKey)))).map(x => x.c);
   const ids = queue.map(c => c.approval?.pendingActionId).filter(Boolean);
   const live = approvals && ids.length ? await approvals.statuses(owner, ids) : new Map();
   let processed = 0, tried = 0, botBlocked = false;
@@ -382,10 +493,26 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     const posts = cloudPublishOf(parseStreamerState(await store.read(ns))).posts;
     const plan = config.destinations.map((d, index) => ({ destination: d, index, scheduledAt: nextSlot({ now, config, destination: d, index, posts }) }))
       .filter(p => p.scheduledAt && !posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === destinationKey(p.destination) && x.status !== 'deferred'));
+    // Account lanes: exactly one account per clip (replaces the fan-out to every destination).
+    let lanePick = null;
+    if (config.lanesEnabled) {
+      const freshLedger = cloudPublishOf(parseStreamerState(await store.read(ns)));
+      lanePick = laneTarget({ state, ledger: freshLedger, candidate, config, now });
+      if (!lanePick.ok) { report.heldReasons.push(lanePick.reason); report.counts.laneSkipped = (report.counts.laneSkipped ?? 0) + 1; continue; }
+      plan.splice(0, plan.length, { destination: lanePick.destination, index: 0, scheduledAt: lanePick.scheduledAt });
+      report.counts[`lane_${lanePick.lane}`] = (report.counts[`lane_${lanePick.lane}`] ?? 0) + 1;
+    } else if (plan.length > 1) {
+      // Lanes off: still one account per clip (never the old fan-out); posts are forced to drafts below.
+      plan.splice(1);
+    }
     if (!plan.length) { report.heldReasons.push('no_free_slots'); break; }
     tried++;
-    const { variant: hookVariant, mode: hookMode } = chooseHookVariant(learning, candidate.id);
-    const caption = clipCaption(candidate, hookVariant);
+    let { variant: hookVariant, mode: hookMode } = chooseHookVariant(learning, candidate.id);
+    if (lanePick?.killedHooks?.includes(hookVariant)) { hookVariant = hookVariant === 'title' ? 'teaser' : 'title'; hookMode = 'killed_arm_swap'; }
+    const creatorName = state.creators?.[candidate.creatorKey]?.displayName ?? candidate.handle;
+    const caption = lanePick
+      ? laneCaption({ lane: lanePick.lane, title: candidate.title, name: creatorName, handle: candidate.handle, platform: candidate.platform, sourceUrl: candidate.sourceUrl })
+      : clipCaption(candidate, hookVariant);
     if (!captionHasCredit(caption, candidate.handle, candidate.sourceUrl)) { await setClip({ status: 'blocked', reason: 'caption_missing_credit' }); report.counts.blocked++; continue; }
     let workDir = null, rendered = null, asset = null;
     try {
@@ -397,7 +524,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         break;
       }
       rendered = await render({ sourceFile: source.file, workDir, duration: Math.min(source.cut.duration, config.clipSeconds, STREAMER_CLIP_MAX_SECONDS),
-        hook: hookText({ variant: hookVariant, title: candidate.title, handle: candidate.handle }), credit: creditText(candidate) });
+        hook: lanePick ? laneHook({ variant: hookVariant, title: candidate.title, name: creatorName, language: lanePick.language }) : hookText({ variant: hookVariant, title: candidate.title, handle: candidate.handle }),
+        credit: creditText(candidate), peakFirst: !!lanePick, env });
       report.counts.rendered++;
       processed++;
       const base = { attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1, hookVariant, hookMode, cut: source.cut, renderSha256: rendered.sha256, durationSec: rendered.durationSec, reason: null };
@@ -415,13 +543,22 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         let at = p.scheduledAt;
         const tried = new Set();
         for (let attempt = 0; attempt < 3 && at; attempt++) {
-          const item = postItem({ candidate, destination: p.destination, scheduledAt: at, caption, mediaUrl: asset.url, mediaSha256: rendered.sha256, hookVariant });
+          const item = postItem({ candidate, destination: p.destination, scheduledAt: at, caption, mediaUrl: asset.url, mediaSha256: rendered.sha256, hookVariant,
+            lane: lanePick ? { ...lanePick, segment: sourceSegment(candidate, { start: (source.cut?.start ?? 0) + (rendered.cutStart ?? 0) }) } : null });
+          if (!lanePick) item.draft = true; // lanes off: single account, owner approves every post
           // Fresh gate + durable "pending_write" BEFORE the write (a crash can never authorise a resend).
           const blocked = await update((s, c) => {
             const reason = publishGate(s, s.candidates.find(x => x.id === candidate.id) ?? candidate);
             if (reason) return reason;
             const prior = c.posts.find(x => x.id === item.id);
             if (prior && prior.status !== 'deferred') return 'already_attempted';
+            if (lanePick) { // One video file / source segment -> one account (checked and claimed atomically).
+              const others = mediaEntriesOf({ ...c, posts: c.posts.filter(x => x.id !== item.id) }).filter(e => !(e.candidateId === candidate.id && e.destinationKey === item.destinationKey));
+              const conflict = mediaConflict(others, { segment: item.segment, mediaSha256: item.mediaSha256, candidateId: candidate.id, destinationKey: item.destinationKey });
+              if (conflict) return conflict.reason;
+              c.mediaLedger = [...(Array.isArray(c.mediaLedger) ? c.mediaLedger : []).filter(e => !(e.candidateId === candidate.id && e.destinationKey === item.destinationKey)),
+                mediaEntry({ candidate, segment: item.segment, mediaSha256: item.mediaSha256, destinationKey: item.destinationKey, at: iso(clock()) })].slice(-5000);
+            }
             c.posts = c.posts.filter(x => x.id !== item.id);
             c.posts.push({ ...item, attemptedAt: iso(clock()) });
             return null;
@@ -430,13 +567,19 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           let status, metricoolId = null, reason = null, confirmedMediaUrl = null;
           try {
             await metricool.preflight(p.destination, item);
+            if (lanePick) { // Required on the lane path: no cross-account read, no write.
+              if (!metricool.crossAccountPreflight) throw new Error('cross_account_check_unavailable');
+              await metricool.crossAccountPreflight(p.destination, item);
+            }
           } catch (e) {
             reason = code(e);
-            await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); });
+            // Nothing was written: drop the post and its media-ledger claim.
+            await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); dropClaim(c, item); });
             if (reason === 'metricool_slot_duplicate_or_daily_cap') {
               tried.add(at);
               const freshPosts = cloudPublishOf(parseStreamerState(await store.read(ns))).posts;
-              at = nextSlot({ now: clock(), config, destination: p.destination, index: p.index, posts: freshPosts, skip: tried });
+              const slotConfig = lanePick ? { ...config, slots: lanePick.slots, dailyCap: lanePick.dailyLimit } : config;
+              at = nextSlot({ now: clock(), config: slotConfig, destination: p.destination, index: p.index, posts: freshPosts, skip: tried });
               continue;
             }
             report.counts.deferred++; report.heldReasons.push(`destination_held:${p.destination.brandId}:${reason}`); at = null; break;
@@ -448,7 +591,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             reason = code(e);
             status = PRE_WRITE_ERRORS.has(reason) ? 'deferred' : 'verification_pending';
           }
-          await update((s, c) => { const x = c.posts.find(y => y.id === item.id); if (x) Object.assign(x, { status, metricoolId, reason, confirmedMediaUrl }); });
+          await update((s, c) => { const x = c.posts.find(y => y.id === item.id); if (x) Object.assign(x, { status, metricoolId, reason, confirmedMediaUrl }); if (status === 'deferred') dropClaim(c, item); });
           if (status === 'scheduled') { scheduled++; report.counts.scheduled++; }
           else if (status === 'verification_pending') { pending++; report.counts.verificationPending++; }
           else report.counts.deferred++;
@@ -494,7 +637,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
 async function main() {
   const args = process.argv.slice(2);
   const config = cloudPublishConfig(process.env);
-  if (!config.enabled) { console.log('::notice::Streamer cloud publisher is off (set CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED=true).'); return; }
+  const growthOnly = args.includes('--growth-only');
+  if (!config.enabled && !growthOnly) { console.log('::notice::Streamer cloud publisher is off (set CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED=true).'); return; }
   if (config.killSwitch) { console.log('::notice::Streamer cloud publisher kill switch is on (CLIPPERS_STREAMER_CLOUD_KILL_SWITCH=true).'); return; }
   if (!process.env.DATABASE_URL?.trim() || !process.env.DEFAULT_USER_ID?.trim()) { console.log('::notice::Streamer cloud publisher skipped: OFFICE_DATABASE_URL / OFFICE_OWNER_ID not available.'); return; }
   const { getCouncilStore, createCouncilPool } = await import('../server/agent-council-store.ts');
@@ -507,16 +651,17 @@ async function main() {
     try { metricool = createPortfolioMetricool({ token: process.env.METRICOOL_USER_TOKEN.trim(), userId: process.env.METRICOOL_USER_ID.trim() }); }
     catch (e) { console.log(`::warning::Metricool adapter unavailable: ${code(e)}`); }
   } else console.log(`::notice::Missing secrets for publishing: ${config.missing.join(', ')}.`);
-  if (!config.dryRun) {
+  if (!config.dryRun && !growthOnly) {
     try { stager = createGithubReleaseStager({ token: process.env.GITHUB_TOKEN, repo: process.env.GITHUB_REPOSITORY }); }
     catch (e) { console.log(`::warning::Media staging unavailable: ${code(e)}`); }
   }
   const minIntervalMs = args.includes('--respect-interval') ? int(process.env.CLIPPERS_STREAMER_CLOUD_MIN_INTERVAL_MINUTES, 180, 30, 1440) * 60_000 : 0;
   const outIndex = args.indexOf('--dry-run-output');
   const { report, skipped } = await runCloudPublisher({ env: process.env, owner, store, approvals: createApprovalLedger(query), metricool, stager,
-    outputDir: outIndex >= 0 ? path.resolve(args[outIndex + 1] ?? 'clippers-dry-run') : null, minIntervalMs });
+    outputDir: outIndex >= 0 ? path.resolve(args[outIndex + 1] ?? 'clippers-dry-run') : null, minIntervalMs, growthOnly });
   // Counts and codes only (public repository logs): no URLs, captions or tokens.
-  console.log(JSON.stringify({ status: report.status, skipped, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, dryRun: report.dryRun, learning: report.learning ?? null }));
+  console.log(JSON.stringify({ status: report.status, skipped, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, dryRun: report.dryRun, learning: report.learning ?? null,
+    growth: report.growth ? { accounts: Object.fromEntries(Object.entries(report.growth.accounts).map(([k, a]) => [k, { weeklyPosts: a.weeklyPosts, weeklyViews: a.weeklyViews, weeklyMedian: a.weeklyMedian, autoPublish: a.autoPublish }])), decisions: report.growth.decisions.length } : null }));
   for (const d of report.diagnostics ?? []) console.log(`clip diagnostics: ${JSON.stringify(d)}`);
   // Handled per-clip failures (e.g. a YouTube bot block) are recorded for the office, not a red job.
   if (report.errors.length) console.log(`::warning::Streamer cloud publisher: ${report.errors.length} handled error(s): ${report.errors.slice(0, 5).join(', ')}`);
