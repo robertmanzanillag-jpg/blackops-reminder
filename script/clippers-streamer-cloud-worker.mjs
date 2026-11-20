@@ -492,23 +492,41 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       const mediaUrl = fresh.clips[q.candidateId]?.mediaAsset?.url;
       const drop = () => update((s, c) => { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); });
       if (!mediaUrl || !await verifyPublicMedia(mediaUrl, fetchImpl)) { await drop(); report.heldReasons.push('held_release:media_unavailable'); continue; }
-      const scheduledAt = nextSlot({ now, config, destination, index: q.index ?? 0, posts: fresh.posts });
+      // Lane copies keep the lane's per-account slots/cap; the 1k auto-publish gate is re-evaluated now.
+      const plan = q.lane ? accountSchedule(fresh, destination, now) : null;
+      const slotConfig = plan ? { ...config, slots: plan.slots, dailyCap: plan.cap } : config;
+      const scheduledAt = nextSlot({ now, config: slotConfig, destination, index: q.index ?? 0, posts: fresh.posts });
       if (!scheduledAt) { report.heldReasons.push('held_release:no_free_slots'); break; }
-      const item = postItem({ candidate: { id: q.candidateId, creatorKey: q.creatorKey }, destination, scheduledAt, caption: q.caption, mediaUrl, mediaSha256: q.mediaSha256, hookVariant: q.hookVariant });
+      const lane = q.lane ? { ...q.lane, dailyLimit: plan.cap,
+        draft: !(config.lanesEnabled && config.laneAutoPublish && autoPublishAllowed(plan.account, { evaluatedAt: fresh.growth?.evaluatedAt ?? null, now })) } : null;
+      const item = postItem({ candidate: { id: q.candidateId, creatorKey: q.creatorKey }, destination, scheduledAt, caption: q.caption, mediaUrl, mediaSha256: q.mediaSha256, hookVariant: q.hookVariant, lane });
+      if (!lane && config.lanesEnabled === false) item.draft = true;
       const blocked = await update((s, c) => {
         const cand = s.candidates.find(x => x.id === q.candidateId);
         const reason = cand ? publishGate(s, cand) : 'candidate_missing';
         if (reason) { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return reason; }
         const prior = c.posts.find(x => x.id === item.id);
         if (prior && prior.status !== 'deferred') { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return 'already_attempted'; }
+        if (lane) { // Same one-file-one-account check + claim as the main write path, inside this transaction.
+          const others = mediaEntriesOf({ ...c, posts: c.posts.filter(x => x.id !== item.id) }).filter(e => !(e.candidateId === q.candidateId && e.destinationKey === item.destinationKey));
+          const conflict = mediaConflict(others, { segment: item.segment, mediaSha256: item.mediaSha256, candidateId: q.candidateId, destinationKey: item.destinationKey });
+          if (conflict) { c.heldQueue = c.heldQueue.filter(x => x.id !== q.id); return conflict.reason; }
+          c.mediaLedger = [...(Array.isArray(c.mediaLedger) ? c.mediaLedger : []).filter(e => !(e.candidateId === q.candidateId && e.destinationKey === item.destinationKey)),
+            mediaEntry({ candidate: cand, segment: item.segment, mediaSha256: item.mediaSha256, destinationKey: item.destinationKey, at: iso(clock()) })].slice(-5000);
+        }
         c.posts = c.posts.filter(x => x.id !== item.id);
         c.posts.push({ ...item, attemptedAt: iso(clock()), releasedFromHold: true });
         return null;
       });
       if (blocked) { report.heldReasons.push(`held_release_gate:${blocked}`); continue; }
-      try { await metricool.preflight(destination, item); }
-      catch (e) { // Keep it queued; a later run retries the slot (nothing was written).
-        await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); });
+      try {
+        await metricool.preflight(destination, item);
+        if (lane) {
+          if (!metricool.crossAccountPreflight) throw new Error('cross_account_check_unavailable');
+          await metricool.crossAccountPreflight(destination, item);
+        }
+      } catch (e) { // Keep it queued; a later run retries the slot (nothing was written): drop post + claim.
+        await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); dropClaim(c, item); });
         report.heldReasons.push(`held_release_deferred:${code(e)}`); break;
       }
       let status, metricoolId = null, reason = null, confirmedMediaUrl = null;
@@ -516,7 +534,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       catch (e) { reason = code(e); status = PRE_WRITE_ERRORS.has(reason) ? 'deferred' : 'verification_pending'; }
       await update((s, c) => {
         const x = c.posts.find(y => y.id === item.id); if (x) Object.assign(x, { status, metricoolId, reason, confirmedMediaUrl });
-        if (status !== 'deferred') c.heldQueue = c.heldQueue.filter(y => y.id !== q.id);
+        if (status !== 'deferred') c.heldQueue = c.heldQueue.filter(y => y.id !== q.id); else dropClaim(c, item);
       });
       if (status === 'scheduled') report.counts.scheduled++; else if (status === 'verification_pending') report.counts.verificationPending++; else { report.counts.deferred++; break; }
       released++; report.counts.heldReleased++;
@@ -596,7 +614,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     const ledgerNow = cloudPublishOf(parseStreamerState(await store.read(ns)));
     const posts = ledgerNow.posts;
     // Held destinations (owner action pending) are left out of the Metricool post; their copy is queued locally.
-    const heldTargets = config.destinations.map((d, index) => ({ destination: d, index })).filter(p => isHeld(ledgerNow, p.destination));
+    // Never more than one account per clip: a copy is queued only when the single picked target is held.
+    let heldTargets = [];
     const plan = config.destinations.map((d, index) => ({ destination: d, index, scheduledAt: nextSlot({ now, config, destination: d, index, posts }) }))
       .filter(p => !isHeld(ledgerNow, p.destination))
       .filter(p => p.scheduledAt && !posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === destinationKey(p.destination) && x.status !== 'deferred'));
@@ -605,14 +624,22 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     if (config.lanesEnabled) {
       const freshLedger = cloudPublishOf(parseStreamerState(await store.read(ns)));
       lanePick = laneTarget({ state, ledger: freshLedger, candidate, config, now });
+      if (!lanePick.ok && String(lanePick.reason).startsWith('lane_destination_held:')) {
+        // Every destination of this lane is on owner-action hold: pick as if unheld, render, queue that one copy.
+        const heldPick = laneTarget({ state, ledger: { ...freshLedger, holds: {} }, candidate, config, now });
+        if (heldPick.ok && isHeld(freshLedger, heldPick.destination)) { lanePick = heldPick; heldTargets = [{ destination: heldPick.destination, index: 0, lane: heldPick }]; }
+      }
       if (!lanePick.ok) { report.heldReasons.push(lanePick.reason); report.counts.laneSkipped = (report.counts.laneSkipped ?? 0) + 1; continue; }
-      plan.splice(0, plan.length, { destination: lanePick.destination, index: 0, scheduledAt: lanePick.scheduledAt });
+      plan.splice(0, plan.length, ...(heldTargets.length ? [] : [{ destination: lanePick.destination, index: 0, scheduledAt: lanePick.scheduledAt }]));
       report.counts[`lane_${lanePick.lane}`] = (report.counts[`lane_${lanePick.lane}`] ?? 0) + 1;
     } else if (plan.length > 1) {
       // Lanes off: still one account per clip (never the old fan-out); posts are forced to drafts below.
       plan.splice(1);
+    } else if (!plan.length) {
+      const first = config.destinations.findIndex(d => isHeld(ledgerNow, d) && !posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === destinationKey(d) && x.status !== 'deferred'));
+      if (first >= 0 && config.destinations.every(d => isHeld(ledgerNow, d))) heldTargets = [{ destination: config.destinations[first], index: first, lane: null }];
     }
-    if (!plan.length) { report.heldReasons.push('no_free_slots'); break; }
+    if (!plan.length && !heldTargets.length) { report.heldReasons.push('no_free_slots'); break; }
     tried++;
     let { variant: hookVariant, mode: hookMode } = chooseHookVariant(learning, candidate.id);
     if (lanePick?.killedHooks?.includes(hookVariant)) { hookVariant = hookVariant === 'title' ? 'teaser' : 'title'; hookMode = 'killed_arm_swap'; }
@@ -711,8 +738,10 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             const key = destinationKey(h.destination);
             const id = `held-${sha(`${candidate.id}|${key}`).slice(0, 24)}`;
             if (c.heldQueue.some(q => q.id === id) || c.posts.some(x => x.candidateId === candidate.id && canonicalDestinationKey(x.destinationKey) === key && x.status !== 'deferred')) continue;
+            const lane = h.lane ? { lane: h.lane.lane, language: h.lane.language, streamKey: h.lane.streamKey,
+              segment: sourceSegment(candidate, { start: (source.cut?.start ?? 0) + (rendered.cutStart ?? 0) }), dailyLimit: h.lane.dailyLimit, draft: h.lane.draft, countDrafts: true, allowDuetStitch: true } : null;
             c.heldQueue.push({ id, candidateId: candidate.id, creatorKey: candidate.creatorKey, destination: { ...h.destination }, destinationKey: key, index: h.index,
-              caption, mediaSha256: rendered.sha256, hookVariant, queuedAt: iso(clock()), status: HOLD_OWNER_ACTION });
+              caption, mediaSha256: rendered.sha256, hookVariant, queuedAt: iso(clock()), status: HOLD_OWNER_ACTION, lane, draft: lane ? lane.draft : true });
             report.counts.heldQueued++;
           }
           c.heldQueue = c.heldQueue.slice(-100);
@@ -723,7 +752,8 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       if (stagedAssetRemovable(cloudPublishOf(parseStreamerState(await store.read(ns))), candidate.id, asset.url, clock())) {
         await stager.remove(asset.id).then(() => { mediaAsset = null; report.counts.assetsRemoved++; }).catch(e => report.errors.push(`asset_remove:${code(e)}`));
       }
-      await setClip({ ...base, status: scheduled ? 'published' : pending ? 'verification_pending' : gateBlocked ? 'blocked' : 'deferred', reason: gateBlocked, mediaAsset });
+      const queuedOnly = !scheduled && !pending && !gateBlocked && heldTargets.length > 0;
+      await setClip({ ...base, status: scheduled ? 'published' : pending ? 'verification_pending' : gateBlocked ? 'blocked' : queuedOnly ? HOLD_OWNER_ACTION : 'deferred', reason: gateBlocked, mediaAsset });
       if (scheduled && candidate.approval?.pendingActionId && approvals?.markExecuted) {
         const posts = cloudPublishOf(parseStreamerState(await store.read(ns))).posts.filter(x => x.candidateId === candidate.id).map(x => ({ destination: x.destinationKey, scheduledAt: x.scheduledAt, status: x.status, metricoolId: x.metricoolId }));
         await approvals.markExecuted(owner, candidate.approval.pendingActionId, { handoff: 'clippers_streamer_cloud', posts, externalCalls: posts.length }).catch(e => report.errors.push(`approval_update:${code(e)}`));
