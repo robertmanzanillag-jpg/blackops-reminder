@@ -21,9 +21,11 @@ name: Office worker (cloud)
 # its concurrency group serializes runs). Explicit `target=office|factory|both` dispatches bypass the
 # clock. `software-factory-cloud.yml` is kept as a manual-only fallback with no schedule.
 
+# Single trigger: the external cron dispatches this workflow every 15 minutes. GitHub's own `schedule`
+# event used to be listed too; it began firing sporadically on top of the dispatch, so the office ran
+# twice in the same window and the second round collided on the shared council lock (CODE_55P03).
+# Do not add `schedule` back without removing the external dispatcher.
 on:
-  schedule:
-    - cron: "*/15 * * * *"
   workflow_dispatch:
     inputs:
       target:
