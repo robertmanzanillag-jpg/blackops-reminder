@@ -444,3 +444,16 @@ test('scrubbing removes adversarial credentials before anything reaches the publ
   assert.equal(scrubText('Authorization: Bearer x'), 'Authorization: [redacted]');
   assert.equal(scrubDiagnostic('ok\nERROR: [twitch:clips] abc: Requested format is not available'), 'ERROR: [twitch:clips] abc: Requested format is not available');
 });
+
+test('optional YT_DLP_PROXY: only YouTube downloads use it, invalid values are ignored', async () => {
+  const { youtubeProxy, ytDlpDownloadArgs, ytDlpInfoArgs } = await import('../script/clippers-streamer-cloud-render.mjs');
+  assert.equal(youtubeProxy({}), null);
+  assert.equal(youtubeProxy({ YT_DLP_PROXY: 'not a url' }), null);
+  const proxy = youtubeProxy({ YT_DLP_PROXY: 'http://u:p@proxy.example:8080' });
+  assert.equal(proxy, 'http://u:p@proxy.example:8080');
+  const yt = ytDlpDownloadArgs({ url: 'https://www.youtube.com/watch?v=abcdefghijk', platform: 'youtube', start: 10, duration: 30, outTemplate: '/tmp/x/source.%(ext)s', impersonate: 'chrome', proxy });
+  assert.deepEqual(yt.slice(yt.indexOf('--proxy'), yt.indexOf('--proxy') + 2), ['--proxy', proxy]);
+  const tw = ytDlpDownloadArgs({ url: 'https://clips.twitch.tv/x', platform: 'twitch', start: 0, duration: 30, outTemplate: '/tmp/x/source.%(ext)s', impersonate: null, proxy });
+  assert.equal(tw.includes('--proxy'), false);
+  assert.equal(ytDlpInfoArgs({ url: 'https://clips.twitch.tv/x', impersonate: null }).includes('--proxy'), false);
+});

@@ -91,16 +91,26 @@ export function ytDlpBase(env = process.env) {
   const bin = clean(env.CLIPPERS_YTDLP_BIN, 300) || fileURLToPath(new URL('../bin/yt-dlp', import.meta.url));
   const extraEnv = env.CLIPPERS_CURL_CFFI_DIR ? { PYTHONPATH: [env.CLIPPERS_CURL_CFFI_DIR, env.PYTHONPATH].filter(Boolean).join(path.delimiter) } : {};
   const impersonate = String(env.YT_DLP_IMPERSONATE || 'chrome').split(',').map(s => s.trim()).filter(s => /^[a-z0-9.:-]{1,30}$/i.test(s));
-  return { bin, extraEnv, impersonate: impersonate.length ? impersonate : ['chrome'] };
+  return { bin, extraEnv, impersonate: impersonate.length ? impersonate : ['chrome'], youtubeProxy: youtubeProxy(env) };
 }
 
-export function ytDlpInfoArgs({ url, impersonate }) {
-  return [...(impersonate ? ['--impersonate', impersonate] : []), '--js-runtimes', 'node', '--no-playlist', '--no-warnings', '--skip-download', '--dump-single-json', '--', url];
+/**
+ * Optional residential proxy for YouTube sources only (datacenter IPs get the bot check). Secret YT_DLP_PROXY,
+ * e.g. http://user:pass@host:port; Twitch never uses it. Invalid values are ignored (never logged).
+ */
+export function youtubeProxy(env = process.env) {
+  const value = String(env.YT_DLP_PROXY ?? '').trim();
+  return /^(https?|socks5h?):\/\/[^\s"'`]{3,500}$/i.test(value) ? value : null;
+}
+const proxyArgs = proxy => (proxy ? ['--proxy', proxy] : []);
+
+export function ytDlpInfoArgs({ url, impersonate, proxy = null }) {
+  return [...(impersonate ? ['--impersonate', impersonate] : []), ...proxyArgs(proxy), '--js-runtimes', 'node', '--no-playlist', '--no-warnings', '--skip-download', '--dump-single-json', '--', url];
 }
 
-export function ytDlpDownloadArgs({ url, platform, start, duration, outTemplate, impersonate }) {
+export function ytDlpDownloadArgs({ url, platform, start, duration, outTemplate, impersonate, proxy = null }) {
   const format = platform === 'twitch' ? 'best[ext=mp4]/best' : 'bv*[height<=1080][ext=mp4]+ba[ext=m4a]/b[height<=1080][ext=mp4]/bv*[height<=1080]+ba/b';
-  const args = [...(impersonate ? ['--impersonate', impersonate] : []), '--js-runtimes', 'node', '--no-playlist', '--no-warnings', '--no-part',
+  const args = [...(impersonate ? ['--impersonate', impersonate] : []), ...proxyArgs(platform === 'youtube' ? proxy : null), '--js-runtimes', 'node', '--no-playlist', '--no-warnings', '--no-part',
     '--max-filesize', String(MAX_SOURCE_BYTES), '-f', format, '--merge-output-format', 'mp4', '-o', outTemplate];
   // Only the selected section is downloaded (never the whole video/VOD).
   if (platform !== 'twitch' || start > 0) args.push('--download-sections', `*${Math.max(0, start).toFixed(1)}-${(Math.max(0, start) + duration + 1).toFixed(1)}`);
@@ -265,7 +275,7 @@ export async function downloadSource({ candidate, workDir, targetSec = 45, env =
         if (candidate.platform === 'twitch' && Number.isFinite(candidate.durationSec) && candidate.durationSec > 0) {
           cut = selectCutWindow({ durationSec: candidate.durationSec, targetSec: STREAMER_CLIP_MAX_SECONDS });
         } else {
-          const { stdout } = await runner(base.bin, ytDlpInfoArgs({ url, impersonate }), { env: base.extraEnv, timeoutMs: 120_000 });
+          const { stdout } = await runner(base.bin, ytDlpInfoArgs({ url, impersonate, proxy: candidate.platform === 'youtube' ? base.youtubeProxy : null }), { env: base.extraEnv, timeoutMs: 120_000 });
           const info = JSON.parse(stdout);
           if (info?.is_live || info?.live_status === 'is_live') throw Object.assign(new Error('SOURCE_IS_LIVE'), { fatal: true });
           cut = selectCutWindow({ durationSec: Number(info?.duration) || candidate.durationSec, heatmap: info?.heatmap, targetSec });
@@ -273,7 +283,7 @@ export async function downloadSource({ candidate, workDir, targetSec = 45, env =
       }
       const outTemplate = path.join(workDir, 'source.%(ext)s');
       step = 'download';
-      await runner(base.bin, ytDlpDownloadArgs({ url, platform: candidate.platform, start: cut.start, duration: cut.duration, outTemplate, impersonate }), { env: base.extraEnv, timeoutMs: 600_000 });
+      await runner(base.bin, ytDlpDownloadArgs({ url, platform: candidate.platform, start: cut.start, duration: cut.duration, outTemplate, impersonate, proxy: base.youtubeProxy }), { env: base.extraEnv, timeoutMs: 600_000 });
       const file = (await readdir(workDir)).filter(n => n.startsWith('source.')).map(n => path.join(workDir, n))[0];
       if (!file) throw new Error('SOURCE_DOWNLOAD_EMPTY');
       const info = await stat(file);
