@@ -456,6 +456,9 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     } catch (e) {
       report.counts.failed++;
       report.errors.push(`clip:${code(e)}`);
+      // Public-log-safe diagnostics: platform, step, impersonation, exit code, scrubbed last stderr line.
+      report.diagnostics = [...(report.diagnostics ?? []), { platform: candidate.platform, kind: candidate.kind ?? null, error: code(e),
+        attempts: e?.diagnostics?.attempts ?? (e?.detail ? [{ step: 'render', error: code(e), exitCode: e.exitCode ?? null, detail: e.detail }] : []) }].slice(-10);
       // Never delete while a write for this clip may have been accepted (fail closed if the ledger is unreadable).
       const raw = asset ? await store.read(ns).catch(() => undefined) : undefined;
       if (asset && raw !== undefined && stagedAssetRemovable(cloudPublishOf(parseStreamerState(raw)), candidate.id, asset.url, clock())) {
@@ -501,6 +504,7 @@ async function main() {
     outputDir: outIndex >= 0 ? path.resolve(args[outIndex + 1] ?? 'clippers-dry-run') : null, minIntervalMs });
   // Counts and codes only (public repository logs): no URLs, captions or tokens.
   console.log(JSON.stringify({ status: report.status, skipped, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, dryRun: report.dryRun, learning: report.learning ?? null }));
+  for (const d of report.diagnostics ?? []) console.log(`clip diagnostics: ${JSON.stringify(d)}`);
   // Handled per-clip failures (e.g. a YouTube bot block) are recorded for the office, not a red job.
   if (report.errors.length) console.log(`::warning::Streamer cloud publisher: ${report.errors.length} handled error(s): ${report.errors.slice(0, 5).join(', ')}`);
 }

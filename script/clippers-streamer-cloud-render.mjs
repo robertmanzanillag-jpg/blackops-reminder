@@ -144,13 +144,23 @@ export function childEnv(parent = process.env, extra = {}) {
   return out;
 }
 
+/** Last meaningful stderr line, safe for public logs: no URLs, e-mails, paths with a home dir, or long tokens. */
+export function scrubDiagnostic(text, max = 200) {
+  const lines = String(text ?? '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const pick = [...lines].reverse().find(l => /ERROR|error|Error|WARNING/.test(l)) ?? lines.at(-1) ?? '';
+  return pick.replace(/https?:\/\/\S+/g, '[url]').replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '[email]')
+    .replace(/\/(?:home|Users|tmp|root)\/\S*/g, '[path]').replace(/[A-Za-z0-9_-]{24,}/g, '[id]')
+    .replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
 function run(bin, args, { timeoutMs = 300_000, env = {}, maxBuffer = 64 * 1024 * 1024 } = {}) {
   return new Promise((resolve, reject) => {
     execFile(bin, args, { timeout: timeoutMs, maxBuffer, windowsHide: true, env: childEnv(process.env, env) }, (error, stdout, stderr) => {
       if (error) {
         // Never echo URLs/tokens: only a short code-like tail of stderr.
-        const tail = String(stderr || error.message || '').replace(/https?:\/\/\S+/g, '[url]').replace(/\s+/g, ' ').trim().slice(-160);
-        return reject(Object.assign(new Error(`${path.basename(bin).toUpperCase().replace(/[^A-Z0-9]/g, '_')}_FAILED`), { detail: tail }));
+        const exitCode = Number.isInteger(error.code) ? error.code : null;
+        return reject(Object.assign(new Error(`${path.basename(bin).toUpperCase().replace(/[^A-Z0-9]/g, '_')}_FAILED`),
+          { exitCode, signal: error.signal ?? null, timedOut: error.killed === true, detail: scrubDiagnostic(stderr || (typeof error.code === 'string' ? error.code : '')) }));
       }
       resolve({ stdout: String(stdout), stderr: String(stderr) });
     });
@@ -174,9 +184,11 @@ export async function downloadSource({ candidate, workDir, targetSec = 45, env =
   if (!/^https:\/\//.test(url)) throw new Error('SOURCE_URL_INVALID');
   let cut;
   let lastError = null;
+  const attempts = [];
   // Impersonation targets first (YouTube TLS fingerprinting), then plain yt-dlp.
   const variants = candidate.platform === 'youtube' ? [...base.impersonate, null] : [null, ...base.impersonate];
   for (const impersonate of variants) {
+    let step = 'info';
     try {
       if (!cut) {
         if (candidate.platform === 'twitch' && Number.isFinite(candidate.durationSec) && candidate.durationSec > 0) {
@@ -189,6 +201,7 @@ export async function downloadSource({ candidate, workDir, targetSec = 45, env =
         }
       }
       const outTemplate = path.join(workDir, 'source.%(ext)s');
+      step = 'download';
       await runner(base.bin, ytDlpDownloadArgs({ url, platform: candidate.platform, start: cut.start, duration: cut.duration, outTemplate, impersonate }), { env: base.extraEnv, timeoutMs: 600_000 });
       const file = (await readdir(workDir)).filter(n => n.startsWith('source.')).map(n => path.join(workDir, n))[0];
       if (!file) throw new Error('SOURCE_DOWNLOAD_EMPTY');
@@ -197,11 +210,15 @@ export async function downloadSource({ candidate, workDir, targetSec = 45, env =
       // With --download-sections the file already starts at the cut.
       return { file, cut: { ...cut, offsetInFile: 0 } };
     } catch (error) {
-      if (error?.fatal) throw error;
+      attempts.push({ step, impersonate: impersonate ?? 'none', error: String(error?.message ?? 'ERROR').slice(0, 40), exitCode: error?.exitCode ?? null,
+        timedOut: error?.timedOut ?? false, detail: error?.detail ?? null });
+      if (error?.fatal) throw Object.assign(error, { diagnostics: { platform: candidate.platform, attempts } });
       lastError = error;
+      // A fresh directory state for the next variant (a partial file must not be mistaken for the source).
+      for (const n of await readdir(workDir).catch(() => [])) if (n.startsWith('source.')) await rm(path.join(workDir, n), { force: true }).catch(() => undefined);
     }
   }
-  throw lastError ?? new Error('SOURCE_DOWNLOAD_FAILED');
+  throw Object.assign(lastError ?? new Error('SOURCE_DOWNLOAD_FAILED'), { diagnostics: { platform: candidate.platform, attempts } });
 }
 
 /** Render the vertical edit and validate it. Returns { file, sha256, durationSec }. */

@@ -65,7 +65,8 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.gate.outputs.run == 'true'
         with:
-          ref: ${{ vars.OFFICE_SOURCE_REF || 'main' }}
+          # A manual dispatch tests the dispatched ref (the workflow file comes from it too); scheduled runs use main.
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || vars.OFFICE_SOURCE_REF || 'main' }}
           persist-credentials: false
 
       - uses: actions/setup-node@v4
@@ -100,6 +101,12 @@ jobs:
             echo "CLIPPERS_YTDLP_BIN=$RUNNER_TEMP/yt-dlp-bin" >> "$GITHUB_ENV"
           fi
           ffmpeg -hide_banner -filters 2>/dev/null | grep -q drawtext
+          # Non-secret tool diagnostics for the public log.
+          YTDLP="${CLIPPERS_YTDLP_BIN:-bin/yt-dlp}"
+          if [ -f "$GITHUB_ENV" ]; then YTDLP="$(grep '^CLIPPERS_YTDLP_BIN=' "$GITHUB_ENV" | tail -1 | cut -d= -f2- || true)"; YTDLP="${YTDLP:-bin/yt-dlp}"; fi
+          echo "yt-dlp: $("$YTDLP" --version 2>&1 | tail -1)"
+          echo "ffmpeg: $(ffmpeg -version 2>/dev/null | head -1 | cut -d' ' -f1-3)"
+          echo "impersonate targets (chrome):"; PYTHONPATH="$RUNNER_TEMP/curl-cffi" "$YTDLP" --list-impersonate-targets 2>&1 | grep -iE 'chrome|curl_cffi|unavailable' | head -5 || true
 
       - name: Download, render, publish approved clips
         if: steps.gate.outputs.run == 'true'

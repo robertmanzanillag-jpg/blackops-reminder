@@ -382,3 +382,19 @@ test('deadline is re-checked after download, before render', async () => {
   assert.equal(media.calls.render.length, 0); assert.ok(report.heldReasons.includes('run_deadline_reached'));
   assert.equal(store.state.cloudPublish.clips['twitch-clip:a'].status, 'deferred');
 });
+
+test('yt-dlp failures carry public-log-safe diagnostics (platform, step, exit code, scrubbed stderr)', async () => {
+  const { scrubDiagnostic, downloadSource } = await import('../script/clippers-streamer-cloud-render.mjs');
+  assert.equal(scrubDiagnostic('[debug] x\nERROR: [youtube] abcdefghijk: Sign in to confirm you’re not a bot. Use --cookies https://example.com/a?token=SECRETSECRETSECRETSECRET1234 /home/runner/x'),
+    'ERROR: [youtube] abcdefghijk: Sign in to confirm you’re not a bot. Use --cookies [url] [path]');
+  assert.equal(scrubDiagnostic('auth abcdefghijklmnopqrstuvwxyz0123456789 failed'), 'auth [id] failed');
+  const dir = await mkdtemp(path.join(tmpdir(), 'cw-diag-'));
+  const runner = async () => { throw Object.assign(new Error('YT_DLP_FAILED'), { exitCode: 1, detail: 'ERROR: Requested format is not available' }); };
+  await assert.rejects(downloadSource({ candidate: { platform: 'twitch', sourceUrl: 'https://clips.twitch.tv/a', durationSec: 30 }, workDir: dir, env: {}, runner }), e => {
+    assert.equal(e.diagnostics.platform, 'twitch');
+    assert.deepEqual(e.diagnostics.attempts.map(a => [a.step, a.impersonate, a.exitCode]), [['download', 'none', 1], ['download', 'chrome', 1]]);
+    assert.equal(e.diagnostics.attempts[0].detail, 'ERROR: Requested format is not available');
+    return true;
+  });
+  await rm(dir, { recursive: true, force: true });
+});
