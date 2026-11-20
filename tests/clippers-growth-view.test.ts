@@ -10,6 +10,7 @@ const growth = {
     '6431685:tiktok:streamersus': { weeklyPosts: 30, weeklyViews: 45000, weeklyMedian: 1200, autoPublish: true },
     '6431687:tiktok:streamersclipusa': { weeklyPosts: 20, weeklyViews: 4000, weeklyMedian: 180, autoPublish: false },
     '6591612:tiktok:news305miami': { weeklyPosts: 10, weeklyViews: 900, weeklyMedian: 90, autoPublish: false },
+    '6591612:facebook:1193011863901514': { weeklyPosts: 6, weeklyViews: 12000, weeklyMedian: 2000, autoPublish: true },
   },
   decisions: ['autopublish_on:6431685:tiktok:streamersus', 'kill_creator:6431687:tiktok:streamersclipusa:twitch:42', 'breakout:6431685:tiktok:streamersus:twitch:7', 'double_creator:6431685:tiktok:streamersus:twitch:7'],
 };
@@ -22,7 +23,9 @@ test('growth outputs: per-account weekly views, median, auto-publish flag and de
   assert.equal(out.growth_nyc_views, undefined, 'no data for NYC -> no row');
   assert.ok(Object.keys(out).length <= 20);
   const rows = growthRows(out);
-  assert.deepEqual(rows.map(r => r.lane), ['memes', 'sports', 'miami']);
+  assert.deepEqual(rows.map(r => r.lane), ['memes', 'sports', 'miami', 'miamifb']);
+  assert.equal(out.growth_miami_median, 90, 'Miami TikTok shown on its own (not the max with Facebook)');
+  assert.equal(out.growth_miami_autopublish, 0); assert.equal(out.growth_miamifb_median, 2000); assert.equal(out.growth_miamifb_autopublish, 1);
   assert.equal(rows[0].autoPublish, true); assert.equal(rows[1].weeklyMedian, 180);
   assert.deepEqual(growthOutputs(null), {}); assert.deepEqual(growthRows({ growth_evil_views: 1, other: 2 }), []);
 });
