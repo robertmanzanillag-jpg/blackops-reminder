@@ -84,7 +84,7 @@ export function pipelineHolds(input: {
   if (!input.scoutLastRunAt) holds["skills-scout"] = "sin primera revisión de releases";
   else if (input.scoutError) holds["skills-scout"] = "fallo de red o infraestructura al leer releases";
   if (!(input.blackroomSignals || []).some(signal => signal && input.now - ms(signal.at) <= 72 * 3600_000))
-    for (const agent of BLACKROOM_TEAM) if (agent.id !== "blackroom-videos") holds[agent.id] = "Black Room sin actividad registrada en 72 h";
+    for (const agent of BLACKROOM_TEAM) holds[agent.id] = "Black Room sin actividad registrada en 72 h";
   return holds;
 }
 
