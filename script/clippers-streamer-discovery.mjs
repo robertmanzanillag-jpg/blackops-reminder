@@ -278,11 +278,15 @@ export function approvalRow(candidate, owner, config) {
   };
 }
 
-export function createPendingActionsQueue(query) {
-  return {
-    async insert(row) {
+/** Advisory key serializing approval inserts per owner/action/candidate (concurrent runs never duplicate a live row). */
+export const approvalInsertLockKey = row => JSON.stringify(['clippers-streamer-approval-v1', row.userId, row.actionType, row.resourceId]);
+
+/** transaction(fn): runs fn(query) inside BEGIN/COMMIT on one connection. Without it inserts are only
+ * idempotent sequentially (unit tests); production always passes one. */
+export function createPendingActionsQueue(query, { transaction } = {}) {
+  const insertOnce = async (q, row) => {
       // Idempotent: a live row (any status but rejected/failed) for the same owner/action/candidate is reused.
-      const result = await query(`WITH existing AS (
+      const result = await q(`WITH existing AS (
           SELECT id FROM pending_actions WHERE user_id=$1 AND action_type=$2 AND resource_id=$4 AND status NOT IN ('rejected','failed') ORDER BY created_at LIMIT 1
         ), inserted AS (
           INSERT INTO pending_actions (user_id, created_by_actor_type, created_by_actor_id, origin, action_type, resource_type, resource_id, title, description, risk_level, permission_level_required, status, input, approved_by, approved_at, approval_reason)
@@ -293,6 +297,16 @@ export function createPendingActionsQueue(query) {
           row.status === 'approved' ? 'clippers-auto-publish-flag' : null, row.status === 'approved' ? new Date() : null, row.status === 'approved' ? 'CLIPPERS_STREAMER_AUTO_PUBLISH=true' : null]);
       if (!result.rows[0]) throw new Error('PENDING_ACTION_INSERT_FAILED');
       return String(result.rows[0].id);
+  };
+  return {
+    async insert(row) {
+      if (!transaction) return insertOnce(query, row);
+      // Lock first, then check-and-insert in a NEW statement: its snapshot sees any row a concurrent
+      // run committed while this one waited, so two runs can never both insert a live row.
+      return transaction(async q => {
+        await q('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [approvalInsertLockKey(row)]);
+        return insertOnce(q, row);
+      });
     },
     /** Takedown: reject every still-open approval row for these candidates. */
     async rejectCandidates(owner, candidateIds, reason) {
@@ -420,13 +434,23 @@ async function main() {
   const store = await getCouncilStore();
   const pool = await createCouncilPool('streamers');
   const query = async (sql, values) => { const client = await pool.connect(); try { return await client.query(sql, values); } finally { client.release(); } };
+  const transaction = async fn => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '10s'");
+      const out = await fn((sql, values) => client.query(sql, values));
+      await client.query('COMMIT');
+      return out;
+    } catch (e) { await client.query('ROLLBACK').catch(() => undefined); throw e; } finally { client.release(); }
+  };
   const owner = process.env.DEFAULT_USER_ID.trim();
   if (args.includes('--export-local-queue')) {
     console.log(JSON.stringify({ version: 1, items: localWorkQueue(parseStreamerState(await store.read(STREAMER_STATE_NAMESPACE(owner)))) }));
     return;
   }
   const minIntervalMs = args.includes('--respect-interval') ? int(process.env.CLIPPERS_STREAMERS_MIN_INTERVAL_MINUTES, 45, 1, 720) * 60_000 : 0;
-  const { report, skipped } = await runStreamerDiscovery({ env: process.env, store, queue: createPendingActionsQueue(query), owner, minIntervalMs });
+  const { report, skipped } = await runStreamerDiscovery({ env: process.env, store, queue: createPendingActionsQueue(query, { transaction }), owner, minIntervalMs });
   if (skipped) { console.log(`::notice::Streamer discovery skipped: last run at ${report.at} is within the minimum interval.`); return; }
   // Static summary only: counts, codes. No URLs with keys, no tokens.
   console.log(JSON.stringify({ status: report.status, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, twitchRequests: report.twitchRequests, youtubeUnits: report.youtubeUnits }));

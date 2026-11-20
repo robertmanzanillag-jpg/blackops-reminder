@@ -239,3 +239,31 @@ test('approval-queue IO and HTTP never run while the council owner lock is held'
   const again = await runStreamerDiscovery({ env: ENV, now: NOW + 3_600_000, fetch, store, queue, owner: 'o' });
   assert.equal(ioInTx, 0); assert.equal(again.report.counts.queuedForApproval, 0);
 });
+
+test('concurrent approval inserts for one candidate create exactly one live row (advisory lock + fresh statement)', async () => {
+  const { approvalInsertLockKey } = await import('../script/clippers-streamer-discovery.mjs');
+  const rows = []; const locks = new Map(); const seen = [];
+  // Fake PostgreSQL: per-key advisory lock held until COMMIT; the check-and-insert sees committed rows only.
+  const transaction = async fn => {
+    let release;
+    const q = async (sql, values) => {
+      seen.push(sql);
+      if (sql.includes('pg_advisory_xact_lock')) {
+        const key = values[0]; while (locks.has(key)) await locks.get(key);
+        locks.set(key, new Promise(r => { release = () => { locks.delete(key); r(); }; })); return { rows: [] };
+      }
+      await new Promise(r => setTimeout(r, 5)); // widen the race window
+      const live = rows.find(r => r.userId === values[0] && r.actionType === values[1] && r.resourceId === values[3]);
+      if (live) return { rows: [{ id: live.id }] };
+      const row = { id: `pa-${rows.length + 1}`, userId: values[0], actionType: values[1], resourceId: values[3] }; rows.push(row); return { rows: [{ id: row.id }] };
+    };
+    try { return await fn(q); } finally { release?.(); }
+  };
+  const q = createPendingActionsQueue(async () => { throw new Error('must use the transaction'); }, { transaction });
+  const row = { userId: 'o', actionType: STREAMER_APPROVAL_ACTION, resourceType: 'r', resourceId: 'twitch-clip:a', title: 't', description: 'd', riskLevel: 'medium', status: 'pending', input: {} };
+  const ids = await Promise.all([q.insert(row), q.insert(row), q.insert(row)]);
+  assert.equal(rows.length, 1); assert.deepEqual(new Set(ids), new Set(['pa-1']));
+  assert.ok(seen.indexOf(seen.find(s => s.includes('pg_advisory_xact_lock'))) < seen.findIndex(s => s.includes('WITH existing')));
+  assert.equal(approvalInsertLockKey(row), JSON.stringify(['clippers-streamer-approval-v1', 'o', STREAMER_APPROVAL_ACTION, 'twitch-clip:a']));
+  assert.notEqual(approvalInsertLockKey(row), approvalInsertLockKey({ ...row, resourceId: 'twitch-clip:b' }));
+});

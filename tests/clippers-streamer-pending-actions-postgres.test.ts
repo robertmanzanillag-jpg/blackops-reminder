@@ -37,6 +37,17 @@ test('streamer approval rows: idempotent insert and takedown rejection on real P
     const c = await q.insert(row);
     assert.notEqual(c, a, 'a rejected row is not reused');
     assert.equal(await q.rejectCandidates('other-owner', ['twitch-clip:a'], 'takedown'), 0);
+    // Concurrent runs (separate connections) never create two live rows for one candidate.
+    const transaction = async <T>(fn: (q: (sql: string, v?: unknown[]) => Promise<{ rows: any[] }>) => Promise<T>) => {
+      const client = await pool!.connect();
+      try { await client.query('BEGIN'); const out = await fn((sql, v) => client.query(sql, v as unknown[])); await client.query('COMMIT'); return out; }
+      catch (e) { await client.query('ROLLBACK').catch(() => undefined); throw e; } finally { client.release(); }
+    };
+    const tq = createPendingActionsQueue((sql, values) => pool!.query(sql, values as unknown[]), { transaction });
+    const raced = { ...row, resourceId: 'twitch-clip:race' };
+    const ids = await Promise.all([tq.insert(raced), tq.insert(raced), tq.insert(raced), tq.insert(raced)]);
+    assert.equal(new Set(ids).size, 1);
+    assert.equal((await pool.query("SELECT count(*)::int n FROM pending_actions WHERE resource_id='twitch-clip:race'")).rows[0].n, 1);
   } finally {
     await pool?.end().catch(() => undefined);
     if (started) await exec(path.join(bin, 'pg_ctl'), ['-D', data, '-m', 'immediate', '-w', 'stop'], { env, timeout: 15000 }).catch(() => undefined);
