@@ -39,6 +39,7 @@ const iso = ms => new Date(ms).toISOString();
 const code = (e, d = 'ERROR') => String(e?.message ?? d).replace(/https?:\/\/\S+/g, '[url]').replace(/[^A-Za-z0-9_:.-]+/g, '_').slice(0, 80);
 export const DEFAULT_SLOTS = Object.freeze(['11:00', '13:30', '16:00', '18:30', '21:00']);
 export const PRE_WRITE_ERRORS = new Set(['destination_publish_permission_missing', 'destination_identity_unverified', 'destination_not_allowlisted', 'metricool_credentials_unavailable', 'metricool_slot_duplicate_or_daily_cap', 'metricool_schedule_time_unverified']);
+export const TRANSIENT_LANE_MISS = /^(?:lane_)?(?:no_free_slots|destination_held|lane_destination_not_connected)(?::|$)/;
 const UNCERTAIN = new Set(['pending_write', 'verification_pending']);
 export const CLOUD_PUBLISH_SECRET_NAMES = Object.freeze(['METRICOOL_USER_TOKEN', 'METRICOOL_USER_ID']);
 
@@ -648,7 +649,13 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
     let lanePick = null, pre = null, languageEvidence = null;
     const discardPre = async () => { if (pre?.workDir) await rm(pre.workDir, { recursive: true, force: true }).catch(() => undefined); pre = null; };
     const priorAttempts = ledger.clips[candidate.id]?.attempts ?? 0;
-    if (needsLanguage(candidate)) {
+    const storedEvidence = ledger.clips[candidate.id]?.status === 'deferred' ? ledger.clips[candidate.id]?.languageEvidence : null;
+    if (needsLanguage(candidate) && storedEvidence?.language && SERVED_LANGUAGES.includes(normalizeLanguage(storedEvidence.language))) {
+      // Retry of a transient lane miss: reuse the stored language decision (no re-download, no re-detection).
+      languageEvidence = { ...storedEvidence };
+      report.counts.language_reused = (report.counts.language_reused ?? 0) + 1;
+      candidate = { ...candidate, language: normalizeLanguage(storedEvidence.language), languageSource: storedEvidence.source ?? 'ledger', languageConfidence: storedEvidence.confidence ?? null };
+    } else if (needsLanguage(candidate)) {
       // Clip/VOD language missing: channel broadcaster_language prior, plus whisper on the cut when configured
       // (run even with a known channel language so bilingual channels are caught; a confident disagreement holds).
       const [platform, channelId] = String(candidate.creatorKey ?? '').split(':');
@@ -690,9 +697,16 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           await setClip({ status: 'held_language', reason: resolved.reason, languageEvidence });
         } else {
           // Not configured / unknown: retried later, bounded by maxAttempts. Detection errors count as failed.
-          const status = resolved.reason === 'language_detect_detection_failed' ? 'failed' : 'deferred';
-          report.counts[status === 'failed' ? 'failed' : 'deferred']++;
-          await setClip({ status, reason: resolved.reason, languageEvidence, attempts: priorAttempts + 1 });
+          const attempts = priorAttempts + 1;
+          if (resolved.reason === 'language_detect_whisper_not_configured' && attempts >= config.maxAttempts) {
+            // No channel language and no whisper after every attempt: final hold with evidence.
+            report.counts.languageHeld = (report.counts.languageHeld ?? 0) + 1;
+            await setClip({ status: 'held_language', reason: 'whisper_not_configured', languageEvidence, attempts });
+          } else {
+            const status = resolved.reason === 'language_detect_detection_failed' ? 'failed' : 'deferred';
+            report.counts[status === 'failed' ? 'failed' : 'deferred']++;
+            await setClip({ status, reason: resolved.reason, languageEvidence, attempts });
+          }
         }
         continue;
       }
@@ -718,11 +732,13 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       }
       if (!lanePick.ok) {
         await discardPre();
-        // Evidence is only written together with a status, so the queue filter retries transient lane misses.
+        // Evidence is only written together with a status. Transient misses are deferred (bounded by attempts,
+        // and counted as tried); permanent ones (already_posted, cross_account_duplicate, creator_killed, ...) are final.
         if (languageEvidence) {
           const r = String(lanePick.reason);
-          const notServed = /language_not_served:/.test(r);
-          await setClip(notServed ? { status: 'language_not_served', reason: r, languageEvidence } : { status: 'deferred', reason: r, languageEvidence });
+          if (/language_not_served:/.test(r)) await setClip({ status: 'language_not_served', reason: r, languageEvidence });
+          else if (TRANSIENT_LANE_MISS.test(r)) { tried++; report.counts.deferred++; await setClip({ status: 'deferred', reason: r, languageEvidence, attempts: priorAttempts + 1 }); }
+          else await setClip({ status: 'lane_final', reason: r, languageEvidence });
         }
         report.heldReasons.push(lanePick.reason); report.counts.laneSkipped = (report.counts.laneSkipped ?? 0) + 1; continue; }
       plan.splice(0, plan.length, ...(heldTargets.length ? [] : [{ destination: lanePick.destination, index: 0, scheduledAt: lanePick.scheduledAt }]));

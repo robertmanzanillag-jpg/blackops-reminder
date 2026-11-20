@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { resolveCandidateLanguage, LANGUAGE_DETECT_MIN_CONFIDENCE } from '../shared/clippers-account-lanes.mjs';
+import { resolveCandidateLanguage, LANGUAGE_DETECT_MIN_CONFIDENCE, mediaEntry, sourceSegment } from '../shared/clippers-account-lanes.mjs';
 import { parseWhisperLanguage, whisperDetectArgs, detectSpeechLanguage, whisperConfigured } from '../script/clippers-streamer-cloud-render.mjs';
 import { runCloudPublisher, cloudPublishConfig, broadcasterLanguage, broadcasterLanguages } from '../script/clippers-streamer-cloud-worker.mjs';
 import { buildCreditCaption } from '../shared/clippers-streamer-policy.mjs';
@@ -221,4 +221,43 @@ test('fix 6: one Twitch client per run, channel languages batched (<= 100 ids pe
   const store = memoryStore(state([candidate('b1', 'twitch:1', 'kaicenat'), candidate('b2', 'twitch:2', 'westcol')]));
   await runCloudPublisher({ env: TENV, now: NOW, owner: 'o', store, approvals, metricool: fakeMetricool(), stager: stager(), fetch: twitchFetch({ 1: 'en', 2: 'es' }, log2), ...media({}) });
   assert.equal(log2.filter(u => u.includes('/helix/channels')).length, 1, 'one batched channels call for the run');
+});
+
+// ---------- Re-review fixes ----------
+test('lane miss: transient -> deferred with attempts and reused evidence (no re-download); permanent -> lane_final', async () => {
+  const store = memoryStore(state([candidate('t', 'twitch:2', 'westcol')]));
+  const m = media({ 'twitch-clip:t': { status: 'detected', language: 'es', confidence: 0.9 } });
+  const env = { ...WENV, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: MEMES }; // Miami lane not connected
+  await runCloudPublisher({ env, now: NOW, owner: 'o', store, approvals, metricool: fakeMetricool(), stager: stager(), fetch: async () => ({ status: 206 }), ...m });
+  let clip = store.state.cloudPublish.clips['twitch-clip:t'];
+  assert.equal(clip.status, 'deferred'); assert.equal(clip.attempts, 1); assert.equal(clip.languageEvidence.language, 'es');
+  const r2 = await runCloudPublisher({ env, now: NOW, owner: 'o', store, approvals, metricool: fakeMetricool(), stager: stager(), fetch: async () => ({ status: 206 }), ...m });
+  assert.equal(m.calls.download.length, 1, 'retry reuses the stored language: no second detection download');
+  assert.equal(m.calls.detect.length, 1);
+  assert.equal(r2.report.counts.language_reused, 1);
+  assert.equal(store.state.cloudPublish.clips['twitch-clip:t'].attempts, 2);
+  // Once the lane is connected the deferred clip publishes with the stored language (render download only).
+  const mc = fakeMetricool();
+  await runCloudPublisher({ env: WENV, now: NOW, owner: 'o', store, approvals, metricool: mc, stager: stager(), fetch: async () => ({ status: 206 }), ...m });
+  assert.equal(mc.calls.schedule[0].item.destinationKey, MIAMI);
+  assert.equal(m.calls.detect.length, 1);
+
+  // Permanent: the same source segment already went to the lane's account.
+  const cand = candidate('u', 'twitch:1', 'kaicenat');
+  const s = state([cand]);
+  s.cloudPublish = { version: 1, clips: {}, posts: [], learning: null, lastRun: null, holds: {}, heldQueue: [], mediaLedger: [mediaEntry({ candidate: { id: 'twitch-clip:other', vodId: null }, segment: sourceSegment(cand), mediaSha256: null, destinationKey: MEMES, at: new Date(NOW).toISOString() })] };
+  const store2 = memoryStore(s);
+  const m2 = media({ 'twitch-clip:u': { status: 'detected', language: 'en', confidence: 0.9 } });
+  await runCloudPublisher({ env: WENV, now: NOW, owner: 'o', store: store2, approvals, metricool: fakeMetricool(), stager: stager(), fetch: async () => ({ status: 206 }), ...m2 });
+  const u = store2.state.cloudPublish.clips['twitch-clip:u'];
+  assert.equal(u.status, 'lane_final'); assert.match(u.reason, /already_posted|cross_account_duplicate/);
+  await runCloudPublisher({ env: WENV, now: NOW, owner: 'o', store: store2, approvals, metricool: fakeMetricool(), stager: stager(), fetch: async () => ({ status: 206 }), ...m2 });
+  assert.equal(m2.calls.download.length, 1, 'a final lane miss is never re-downloaded');
+});
+
+test('whisper not configured and no channel language: final held_language whisper_not_configured after maxAttempts', async () => {
+  const store = memoryStore(state([candidate('w', 'twitch:1', 'kaicenat')]));
+  for (let i = 0; i < 4; i++) await runCloudPublisher({ env: ENV, now: NOW, owner: 'o', store, approvals, metricool: fakeMetricool(), stager: stager(), fetch: async () => ({ status: 206 }), ...media({}) });
+  const w = store.state.cloudPublish.clips['twitch-clip:w'];
+  assert.equal(w.status, 'held_language'); assert.equal(w.reason, 'whisper_not_configured'); assert.equal(w.attempts, 3);
 });

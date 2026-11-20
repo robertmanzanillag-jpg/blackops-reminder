@@ -204,13 +204,13 @@ export function parseWhisperLanguage(text) {
   return { language: m[1].toLowerCase(), confidence: Number.isFinite(confidence) ? Math.min(1, Math.max(0, confidence)) : 0 };
 }
 
+/** True when a whisper.cpp binary + model are configured (checked before any download for detection). */
+export function whisperConfigured(env = process.env) { return !!(clean(env.CLIPPERS_WHISPER_BIN, 300) && clean(env.CLIPPERS_WHISPER_MODEL, 300)); }
+
 /**
  * Spoken language of the downloaded cut (first <= 30 s of audio, whisper's window). Never throws:
  * { status: 'detected', language, confidence } | { status: 'whisper_not_configured' | 'detection_failed', error? }.
  */
-/** True when a whisper.cpp binary + model are configured (checked before any download for detection). */
-export function whisperConfigured(env = process.env) { return !!(clean(env.CLIPPERS_WHISPER_BIN, 300) && clean(env.CLIPPERS_WHISPER_MODEL, 300)); }
-
 export async function detectSpeechLanguage({ sourceFile, workDir, env = process.env, ffmpeg = 'ffmpeg', runner = run, maxSec = 30 }) {
   const whisperBin = clean(env.CLIPPERS_WHISPER_BIN, 300), whisperModel = clean(env.CLIPPERS_WHISPER_MODEL, 300);
   if (!whisperBin || !whisperModel) return { status: 'whisper_not_configured' };
