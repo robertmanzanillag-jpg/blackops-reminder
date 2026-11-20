@@ -91,6 +91,8 @@ import {
   type QualitySignal,
 } from "@shared/agent-company";
 import { advanceBlackRoomAcademy, scheduleBlackRoomAcademy, BLACKROOM_ACADEMY_ROLES } from "@shared/blackroom-academy";
+import { applyVitality, deriveVitalityFlagProposals, vitalityView } from "@shared/agent-vitality";
+import { clippersAcademyLessons, deriveSelfImprovementProposals, learnClippersLessons, roleWorkHolds, roleWorkVitalityEvidence, streamerVitalityEvidence } from "@shared/agent-self-improvement";
 import type { BlackRoomTeamLessonRule } from "@shared/blackroom-team";
 import { blackRoomCurriculumModules } from "./office-role-blackroom-curricula";
 
@@ -114,6 +116,8 @@ export type CouncilDeps = {
   // Black Room team: quality signals from real outcomes (posts approved/rejected, failed edit jobs,
   // posts above the team median) and the lessons derived from them. Optional so tests stay small.
   collectBlackRoomLife?: (userId: string) => Promise<BlackRoomLifeInput>;
+  // Vida/automejora/academy: the cloud streamer lane state (read-only). Optional so tests stay small.
+  collectVitality?: (userId: string) => Promise<VitalityInput>;
   // Real documents the academy teaches.
   loadCurriculum?: () => Promise<CurriculumModule[]>;
   // Which agents are paused / external / not built (never scored). Defaults to the shared table + env overrides.
@@ -238,6 +242,11 @@ const CURRICULUM_TIMEOUT_MS = 30_000;
 export const CYCLE_WATCHDOG_MS = 5 * 60_000;
 
 export type BlackRoomLifeInput = { signals: QualitySignal[]; rules: Record<string, BlackRoomTeamLessonRule[]> };
+/** Raw `clippers-streamers:<owner>` state (parsed defensively by shared/agent-self-improvement.ts). */
+export type VitalityInput = { streamerState?: unknown };
+
+/** Main-company agents (KONG has its own company and its own missed-turn rule). */
+export const MAIN_AGENT_NAMES: Record<string, string> = Object.fromEntries(Object.entries(AGENT_NAMES).filter(([id]) => !isKongCompanyAgent(id)));
 
 function advanceCompanyCycle(
   state: CouncilState,
@@ -245,7 +254,8 @@ function advanceCompanyCycle(
   curriculum: CurriculumModule[],
   now: number,
   integrations: Record<string, AgentIntegration> = {},
-  blackroom: BlackRoomLifeInput = { signals: [], rules: {} }
+  blackroom: BlackRoomLifeInput = { signals: [], rules: {} },
+  vitalityInput: VitalityInput = {}
 ): CouncilState {
   const unscored = new Set([...EXEMPT_IDS, ...unscoredAgentIds(integrations)]);
   const compact = Object.fromEntries(Object.entries(statuses).map(([id, status]) => [id, { state: status.state, label: status.label, ...(status.evidenceId ? { evidenceId: status.evidenceId } : {}), ...(status.lifePenaltyExempt ? { lifePenaltyExempt: true } : {}) }]));
@@ -296,7 +306,25 @@ function advanceCompanyCycle(
     now
   );
   company = advanceBlackRoomAcademy(company, compact, now);
-  return { ...state, company, lastStatuses: compact, ...(state.officeExecution ? { officeExecution: { ...state.officeExecution, roles: reconcileRoleLifecycles(state.officeExecution.roles, company, now) } } : {}) };
+  // Vida by cadence + Clippers academy + evidence no other rule scores ($0, deterministic).
+  const roleWorkJobs = state.officeExecution?.roleWork?.jobs;
+  const streamer = streamerVitalityEvidence(vitalityInput.streamerState, now);
+  const clippersLessons = clippersAcademyLessons(vitalityInput.streamerState);
+  company = learnClippersLessons(company, clippersLessons, now);
+  const holds: Record<string, string> = { ...roleWorkHolds(roleWorkJobs, now), ...streamer.holds };
+  for (const [id, status] of Object.entries(compact)) {
+    if (status.state === "needs-setup") holds[id] = "esperando configuración";
+    else if (status.lifePenaltyExempt) holds[id] ??= "bloqueo de infraestructura, no del agente";
+  }
+  // Every registered main-company agent gets a career (and so a vida), even without a live probe
+  // of its own (e.g. the Clippers lanes when the Mac never reported). Registration is not evidence.
+  const unregistered = Object.keys(MAIN_AGENT_NAMES).filter(id => !company.careers[id] && !unscored.has(id));
+  if (unregistered.length) company = advanceCompany(company, { now, roles: AGENT_NAMES, statuses: Object.fromEntries(unregistered.map(id => [id, { state: "available" as const, label: "Registrado; pendiente de entregables verificables" }])) }).state;
+  company = applyVitality(company, { now, evidence: [...roleWorkVitalityEvidence(roleWorkJobs), ...streamer.evidence,
+    ...blackroom.signals.filter(signal => signal.points > 0).map(signal => ({ id: `blackroom:${signal.id}`, agentId: signal.agentId, at: signal.at, label: signal.text.slice(0, 100), clockOnly: true })),
+    ...(state.scout.lastRunAt && !state.scout.error ? [{ id: `scout:${state.scout.lastRunAt}`, agentId: "skills-scout", at: state.scout.lastRunAt, label: "Revisión diaria de releases completada" }] : [])], holds, exempt: [...unscored], names: MAIN_AGENT_NAMES }).state;
+  const clippersAcademy = vitalityInput.streamerState !== undefined ? { observedAt: new Date(now).toISOString(), lessons: clippersLessons } : state.clippersAcademy;
+  return { ...state, company, lastStatuses: compact, ...(clippersAcademy ? { clippersAcademy } : {}), ...(state.officeExecution ? { officeExecution: { ...state.officeExecution, roles: reconcileRoleLifecycles(state.officeExecution.roles, company, now) } } : {}) };
 }
 
 // Agent factory: recurring work nobody could take becomes a "hire a specialist" proposal for Robert.
@@ -584,6 +612,9 @@ export function createAgentCouncil(deps: CouncilDeps) {
       const everyone = deps.collectStatuses
         ? await withTimeout(deps.collectStatuses(userId), collectTimeout, "estado de los agentes").catch(() => ({} as Record<string, AgentLiveStatus>))
         : {};
+      const vitalityInput: VitalityInput = deps.collectVitality
+        ? await withTimeout(deps.collectVitality(userId), collectTimeout, "vida y academia").catch(() => ({}))
+        : {};
       const blackroomLife: BlackRoomLifeInput = deps.collectBlackRoomLife
         ? await withTimeout(deps.collectBlackRoomLife(userId), collectTimeout, "vida de Black Room").catch(() => ({ signals: [], rules: {} }))
         : { signals: [], rules: {} };
@@ -622,13 +653,16 @@ export function createAgentCouncil(deps: CouncilDeps) {
         const unscored = [...EXEMPT_IDS, ...unscoredAgentIds(integrations)];
         const scored = Object.fromEntries(Object.entries(statuses).filter(([id]) => !unscored.includes(id) && !isKongCompanyAgent(id)));
         let next = finishCycle(state, { findings, statuses: scored, now, agentNames: AGENT_NAMES });
-        next = advanceCompanyCycle(next, statuses, curriculum, now, integrations, blackroomLife);
+        next = advanceCompanyCycle(next, statuses, curriculum, now, integrations, blackroomLife, vitalityInput);
         const kong = advanceKongCompany({ company: state.kongCompany, evidenceAt: state.kongEvidenceAt, evidence: kongEvidence, now, curriculum });
         next = { ...next, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt ?? state.kongObservedAt, kongCollaboration: kong.collaboration };
         if (deps.collectKongEvidence) next = { ...next, kongRead: { at: new Date(now).toISOString(), ok: Boolean(kong.observedAt), code: kong.observedAt ? null : kongCode ?? "NOT_VERIFIED" } };
         // This completes only a read-only readiness review, never the worker's commercial task.
         next = { ...next, kongSupervision: reviewKongReadiness(state.kongSupervision, everyone, now) };
-        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, Object.fromEntries(Object.entries(statuses).filter(([id]) => !isKongCompanyAgent(id))), now, AGENT_NAMES, unscored), ...deriveSpecialistProposals(next, now), ...next.proposals]) };
+        next = { ...next, proposals: pruneProposals([...deriveRepairProposals(next, Object.fromEntries(Object.entries(statuses).filter(([id]) => !isKongCompanyAgent(id))), now, AGENT_NAMES, unscored), ...deriveSpecialistProposals(next, now),
+          ...deriveVitalityFlagProposals(next.company, next.proposals, now, AGENT_NAMES, unscored),
+          ...deriveSelfImprovementProposals({ proposals: next.proposals, lessons: next.lessons, roleWorkJobs: next.officeExecution?.roleWork?.jobs, clippersLessons: next.clippersAcademy?.lessons, now, names: AGENT_NAMES, exempt: unscored }),
+          ...next.proposals]) };
         wroteRound = true;
         return next;
       });
@@ -882,6 +916,9 @@ export function createAgentCouncil(deps: CouncilDeps) {
       factoryAgents: factoryAgentsView({ ledger: loaded.officeExecution?.factoryCareers, liveJobs: options.factoryLiveJobs, ownerKey: options.factoryOwnerKey, now: deps.now() }),
       // Public summary of today's recorded role work (role, status, times only; no sources or audits).
       roleWorkToday: roleWorkActivityView(loaded.officeExecution?.roleWork?.jobs, deps.now()),
+      // Every registered main-company agent with its vida, real state and what it learned (no memory text).
+      vitality: vitalityView(state.company, { now: deps.now(), names: MAIN_AGENT_NAMES, exempt: [...EXEMPT_IDS, ...unscoredAgentIds(integrationsNow())] }),
+      clippersAcademy: state.clippersAcademy ?? null,
       // Public self-heal counts per agent (detected / in repair / verified / needs owner); no ids or audit details.
       // Daily credit pacer: today's allowance, spend, mode and overspend streak (numbers only).
       creditPacer: creditPacerView(loaded.officeExecution?.creditPacer, deps.now()),
@@ -1306,6 +1343,13 @@ export function getAgentCouncil() {
     fetchLatestRelease: fetchLatestReleaseReal,
     log: (message) => console.warn(`[agent-council] ${message}`),
     collectStatuses: collectStatusesReal,
+    collectVitality: async (userId) => {
+      const { getCouncilStore } = await import("./agent-council-store");
+      const { STREAMER_STATE_NAMESPACE } = await import("../script/clippers-streamer-discovery.mjs");
+      const raw = await (await getCouncilStore()).read(STREAMER_STATE_NAMESPACE(userId));
+      if (!raw) return { streamerState: null };
+      try { return { streamerState: JSON.parse(raw) }; } catch { return { streamerState: null }; }
+    },
     collectBlackRoomLife: async () => {
       const { signals, rules } = await (await import("./blackroom-team/lessons")).syncBlackRoomLessons();
       return { signals, rules };

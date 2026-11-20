@@ -267,6 +267,8 @@ export function redactCouncilViewForPartner<T extends Record<string, unknown>>(v
   if (Array.isArray(view.resolvedDebates)) out.resolvedDebates = view.resolvedDebates.filter(bySubject("subject"));
   if (Array.isArray(view.proposals)) out.proposals = view.proposals.filter(bySubject("owner"));
   if (Array.isArray(view.lessons)) out.lessons = view.lessons.filter(bySubject("subject"));
+  if (Array.isArray(view.vitality)) out.vitality = view.vitality.filter(bySubject("agentId"));
+  if ("clippersAcademy" in view) out.clippersAcademy = null;
   if (view.overrides && typeof view.overrides === "object") {
     out.overrides = Object.fromEntries(Object.entries(view.overrides as Record<string, unknown>).filter(([id]) => isBlackRoomScopeAgent(id)));
   }

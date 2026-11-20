@@ -105,6 +105,8 @@ export type CouncilState = {
   kongCollaboration: OfficeKongCollaboration;
   kongLastStatuses: Record<string, { state: AgentLiveStatus["state"]; label: string }>;
   lastStatuses: Record<string, { state: AgentLiveStatus["state"]; label: string }>;
+  /** Latest Clippers academy lessons (measured Metricool performance), written by the council round. */
+  clippersAcademy?: { observedAt: string; lessons: import("./agent-self-improvement").ClippersLesson[] };
 };
 
 export const COUNCIL_CYCLE_MS = 15 * 60_000;

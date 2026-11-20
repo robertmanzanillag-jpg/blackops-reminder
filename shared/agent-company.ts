@@ -37,6 +37,8 @@ export type AgentCareer = {
   lastEvidenceId?: string;
   /** Quality signals already scored (approved/rejected posts, failed jobs...), so each counts once. */
   qualitySignalIds?: string[];
+  /** Cadence-based vida clock (shared/agent-vitality.ts). Absent until the first vitality tick. */
+  vitality?: import("./agent-vitality").CareerVitality;
 };
 
 export type SkillSource = "academia" | "orden" | "leccion";
@@ -677,7 +679,7 @@ export function learnLessons(state: CompanyState, lessons: Array<{ key: string; 
   for (const lesson of lessons) {
     const career = careers[lesson.subject];
     if (!career || (career.skills || []).some((skill) => skill.id === `leccion:${lesson.key}`)) continue;
-    careers = { ...careers, [lesson.subject]: addSkill(career, { id: `leccion:${lesson.key}`, title: `Corrige: ${lesson.label.slice(0, 60)}`, source: "leccion" }, iso) };
+    careers = { ...careers, [lesson.subject]: addSkill(career, { id: `leccion:${lesson.key}`, title: lesson.key.startsWith("automejora:") ? `Mejora aprobada: ${lesson.label.replace(/^Mejora: /, "").slice(0, 60)}` : `Corrige: ${lesson.label.slice(0, 60)}`, source: "leccion" }, iso) };
   }
   return careers === state.careers ? state : { ...state, careers };
 }

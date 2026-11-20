@@ -15,6 +15,8 @@ import { kongOfficeSnapshotKey, readOwnerKongSnapshot } from "@/lib/whatsapp-off
 import { applyRoleWorkActivity, parseRoleWorkActivity } from "@shared/office-role-work-activity";
 import { parseSelfHealView, selfHealLine } from "@shared/office-self-heal-view";
 import { FACTORY_AGENTS, FACTORY_DEPARTMENT, factoryAgentStatus, type FactoryAgentView } from "@shared/factory-office-agents";
+import { CLIPPERS_AGENTS, CLIPPERS_DEPARTMENT } from "@shared/clippers-office-agents";
+import { vitalityLiveStatus, type VitalityRow } from "@shared/agent-vitality";
 import { buildOfficeCityRoomsFromSnapshot, officeCitySnapshotExpiresAt, parseOfficeCityDirectory, type OfficeCityAgent } from "@/lib/office-city-agents";
 
 // Shared roster for the 3D office and the central panel: the same live probes, council
@@ -59,11 +61,13 @@ export const DEPARTMENTS: OfficeDepartment[] = [
   { id: "ingenieria", name: "Ingenieria y app", color: "#38bdf8", agentIds: ["code", "github", "claude-reviewer", "app-qa"] },
   // Software Factory engineers: main-company careers, presence read from factory stage leases.
   { id: "fabrica", name: FACTORY_DEPARTMENT, color: "#0ea5e9", agentIds: FACTORY_AGENTS.map((agent) => agent.id) },
+  // Clippers lanes (incl. Streamers): careers scored from receipts; desk status from vida (shared/agent-vitality.ts).
+  { id: "clippers-orquesta", name: CLIPPERS_DEPARTMENT, color: "#f472b6", agentIds: CLIPPERS_AGENTS.map((agent) => agent.id) },
   { id: "seguridad", name: "Seguridad y legal", color: "#a78bfa", agentIds: ["cybersecurity", "legal"] },
   { id: "operaciones", name: "Operaciones", color: "#2dd4bf", agentIds: ["automations"] },
 ];
 
-export type CompanyView = { factoryAgents?: FactoryAgentView[]; kongCompany?: CompanyState; kongLeaderboard?: LeaderboardRow[]; kongPersonalities?: Record<string, Personality>; kongCollaboration?: OfficeKongCollaboration; company?: CompanyState; leaderboard?: LeaderboardRow[]; personalities?: Record<string, Personality>; integrations?: Record<string, AgentIntegration> };
+export type CompanyView = { vitality?: VitalityRow[]; factoryAgents?: FactoryAgentView[]; kongCompany?: CompanyState; kongLeaderboard?: LeaderboardRow[]; kongPersonalities?: Record<string, Personality>; kongCollaboration?: OfficeKongCollaboration; company?: CompanyState; leaderboard?: LeaderboardRow[]; personalities?: Record<string, Personality>; integrations?: Record<string, AgentIntegration> };
 export type PanelAgent = { id: string; name: string; role: string; description: string; href?: string; status: AgentLiveStatus; kong?: boolean; color: string; cityAgent?: OfficeCityAgent; kongEvidence?: OfficeKongCentralSignal; whatsappEvidence?: WhatsAppOfficeView };
 
 const cityRefreshInterval = ({ state }: { state: { error: Error | null } }) => /^(401|403):/.test(state.error?.message ?? "") ? false as const : 60_000;
@@ -205,6 +209,13 @@ export function useOfficeRoster({ agents, kongTeam, legal, kongEnabled }: {
     panelAgents.set(agent.id, { id: agent.id, name: agent.name, role: agent.role, color: "#0ea5e9",
       description: `${agent.role}. Trabaja en la fabrica de software (PR borrador, alcance de escritura, limite diario y creditos sin cambios). Su vida sigue las mismas reglas que el resto: +6 por etapa verificada, -10 por fallo atribuible.`,
       status: factoryAgentStatus(view, council.error ? "error" : council.view ? "ready" : "loading", clock) });
+  }
+  const vitalityRows = Array.isArray(companyView.vitality) ? companyView.vitality : [];
+  for (const agent of CLIPPERS_AGENTS) {
+    const row = vitalityRows.find((item) => item.agentId === agent.id);
+    panelAgents.set(agent.id, { id: agent.id, name: `Clippers · ${agent.name}`, role: agent.role, color: "#f472b6", href: "/clippers",
+      description: `${agent.role}. Su vida sube con recibos verificados (Metricool, render, revisión) y baja si no entrega en su turno.`,
+      status: !council.view ? (council.error ? { state: "offline", label: "Sin conexion con el consejo" } : { state: "checking", label: "Verificando..." }) : vitalityLiveStatus(row, clock) });
   }
   for (const member of centralKongTeam) {
     const seat = OFFICE_KONG_CENTRAL_SEATS.find(item => item.nativeName === member.name);

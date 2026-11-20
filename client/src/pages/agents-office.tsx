@@ -41,6 +41,7 @@ import { useWorkspaceRole } from "@/lib/workspace-role";
 import { KongSupervisorPanel } from "@/components/kong-supervisor-panel";
 import { KongOperationsPanel } from "@/components/kong-operations-panel";
 import { ClippersOfficeArea } from "@/components/clippers-office-area";
+import { AgentVitalityButton } from "@/components/agent-vitality-roster";
 import type { AgentLiveStatus } from "@/lib/agent-live-status";
 
 type GitHubOverview = Record<
@@ -1404,6 +1405,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
               {workspace.isOwner && <Link href="/agents-office/panel" className="rounded-xl bg-cyan-100 px-3 py-2 text-xs font-bold text-slate-950 shadow-xl shadow-black/30 hover:bg-white" data-testid="office-open-central-panel">
                 Panel completo
               </Link>}
+              {workspace.isOwner && <AgentVitalityButton />}
               <div data-testid="office-kong-supervisor-slot">
                 <KongSupervisorPanel />
               </div>
