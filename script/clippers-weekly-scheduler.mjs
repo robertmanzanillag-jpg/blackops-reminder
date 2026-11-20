@@ -8,6 +8,7 @@ import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { loadClipperSelectedEnv } from './clippers-selected-env.mjs';
 import { createPortfolioMetricool, DESTINATIONS, destinationKey, findDestination, localDay, providerTimestamp, canonicalAccount } from './clippers-portfolio-metricool.mjs';
+import { createMacLedgerGuard, macLedgerEnv } from './clippers-mac-ledger-guard.mjs';
 import { validateApprovedClippersAsset } from './clippers-daily-learning.mjs';
 import { validWeeklyWindow, readWeeklyPrivateJson, weeklyDeliveryCollision, weeklyDigest } from './clippers-weekly-policy.mjs';
 const CONFIG='config/clippers-daily-learning', REPORT='reports/clippers-daily-learning';
@@ -25,7 +26,7 @@ const initialReport=(now,window,apply)=>({schemaVersion:1,mode:'weekly',generate
 /** Explicit owner invocation only. Existing publish permission is still required, and report-only is default.
  * Shares the daily learner lock/state but never marks the metrics day complete or promotes render policies.
  */
-export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new Date(),env=process.env,adapter,apply=false,maxCycleMs=480000}={}) {
+export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new Date(),env=process.env,adapter,ledgerGuard,apply=false,maxCycleMs=480000}={}) {
   if(!(now instanceof Date)||!Number.isFinite(+now)||!validWeeklyWindow(window,now)||window.endDate>remainingWeeklyWindow(now).endDate)throw Error('weekly_window_invalid');
   if(typeof apply!=='boolean'||!Number.isFinite(maxCycleMs)||maxCycleMs<=0)throw Error('weekly_cycle_invalid');
   const root=await realpath(path.resolve(workspaceRoot||env.CLIPPERS_WORKSPACE_ROOT||'clippers_workspace'));
@@ -97,7 +98,11 @@ export async function runClippersWeeklyScheduling({workspaceRoot,window,now=new 
       item=await validateApprovedClippersAsset(latestRows[0],root,current(),currentReceipts,state,window);
       if(!item){outcome.reason='weekly_review_expired_during_preflight';continue;}
 
-      const record={...item,createdAt:current().toISOString(),status:'verification_pending',costUsd:0,weeklyWindow:windowKey,weeklyBudgetWeek:budgetWeek,preflightEvidence};
+      // Shared cross-account ledger (same as the cloud publisher): one clip -> one account, fail closed.
+      ledgerGuard??=createMacLedgerGuard({env:macLedgerEnv(env),workspaceRoot:root,metricool:adapter});
+      const reservation=await ledgerGuard.reserve(findDestination(item),item);
+      if(!reservation.ok){outcome.reason=`cross_account_ledger:${reservation.reason}`;continue;}
+      const record={...item,createdAt:current().toISOString(),status:'verification_pending',costUsd:0,weeklyWindow:windowKey,weeklyBudgetWeek:budgetWeek,preflightEvidence,ledgerEvidence:reservation.evidence};
       state.deliveries.push(record);
       try{await save(root,`${REPORT}/state.json`,state);}catch(error){state.deliveries.pop();throw error;}
       report.attempts++;attempts++;

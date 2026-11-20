@@ -38,7 +38,7 @@ async function approved(fixture, id = 'clip-1', overrides = {}, evidenceOverride
   const item = {
     ...target, id, campaignId: 'campaign', sourceId: 'source', sourceUrl: 'https://example.com/video/' + id,
     sourcePublishedAt: iso(days(-1)), rightsObservedAt: iso(NOW), rightsValidUntil: iso(days(1)),
-    policyVersion: 'baseline-1', language: 'es', creator: 'creator', caption: 'Original edit ' + id,
+    policyVersion: 'baseline-1', language: 'en', creator: 'creator', caption: 'Original edit ' + id,
     mediaReceiptFileId: 'drive-' + id, draftFile: id + '.mp4',
     mediaUrl: 'https://drive.google.com/uc?export=download&id=drive-' + id, mediaSha256: digest(id),
     scheduledAt: new Date(+NOW + 600_000).toISOString(), thirdPartyCommercial: false, ...overrides,
@@ -115,6 +115,7 @@ test('attempt is persisted before remote write, uncertain receipt is reconciled 
   await f.write('reports/metricool-public-media-receipts.json', [item, second].map(receipt));
   const adapter = {
     async preflight(dest) { assert.deepEqual(dest, target); },
+    async crossAccountPreflight() { return { checkedDays: [] }; },
     async schedule(dest, candidate) {
       assert.deepEqual(dest, target); assert.equal(candidate.id, item.id);
       assert.equal((await f.state()).deliveries[0].status, 'verification_pending');
@@ -146,6 +147,7 @@ test('only timely matching snapshots persist at 24, 72 and 168 hours', async t =
   await f.write('reports/metricool-public-media-receipts.json', [receipt(item)]);
   const adapter = {
     preflight: async () => {},
+    crossAccountPreflight: async () => ({ checkedDays: [] }),
     schedule: async () => 'metricool-1',
     publication: async () => ({ id: '123', url: 'https://www.tiktok.com/@streamersclips/video/123?share=1', publishedAt: item.scheduledAt, source: 'metricool_scheduler' }),
     metrics: async (_target, _pub, now) => ({ views: 10, completionRate: 0.5, observedAt: iso(now), timing: 'provider_observation_time', source: 'metricool_post_analytics' }),
@@ -429,6 +431,7 @@ test('a destination schedules at most five distinct, freshest eligible items', a
   const calls = [];
   const report = await runClippersDailyLearning({ workspaceRoot: f.root, now: NOW, adapter: {
     preflight: async () => {},
+    crossAccountPreflight: async () => ({ checkedDays: [] }),
     schedule: async (destination, item) => { assert.deepEqual(destination, target); calls.push(item.id); return item.id; },
   } });
   assert.deepEqual(calls, ['item-5', 'item-4', 'item-3', 'item-2', 'item-1']);

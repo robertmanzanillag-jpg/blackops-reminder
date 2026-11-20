@@ -27,6 +27,7 @@ import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool
 export { facebookOwnerActionReason, providerHealthFromRows } from './clippers-portfolio-metricool.mjs';
 import { downloadSource, renderVerticalClip, makeWorkDir, hookText, creditText } from './clippers-streamer-cloud-render.mjs';
 import { computeLearning, chooseHookVariant, creatorBoostFor, OBSERVATION_WINDOW, computeGrowth, growthWeight, killedHooks, killedHours, promotedHours } from './clippers-streamer-cloud-learning.mjs';
+import { emptyCloudPublish, cloudPublishOf, mediaEntriesOf } from '../shared/clippers-media-ledger.mjs';
 import { laneById, routeCandidate, sourceSegment, streamKeyOf, mediaConflict, mediaEntry, streamOwnerLane, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, parseAutopublishOverride, CLIP_SECONDS } from '../shared/clippers-account-lanes.mjs';
 
 const HOUR = 3_600_000;
@@ -136,14 +137,7 @@ export function nextSlot({ now, config, destination, index = 0, posts = [], skip
 }
 
 // ---------- State ----------
-export function emptyCloudPublish() { return { version: 1, clips: {}, posts: [], learning: null, lastRun: null, holds: {}, heldQueue: [] }; }
-export function cloudPublishOf(state) {
-  const c = state?.cloudPublish;
-  if (!(c?.version === 1 && Array.isArray(c.posts) && c.clips && typeof c.clips === 'object')) return emptyCloudPublish();
-  if (!c.holds || typeof c.holds !== 'object' || Array.isArray(c.holds)) c.holds = {};
-  if (!Array.isArray(c.heldQueue)) c.heldQueue = [];
-  return c;
-}
+export { emptyCloudPublish, cloudPublishOf } from '../shared/clippers-media-ledger.mjs';
 
 // ---------- Per-brand per-network owner-action hold ----------
 export const HOLD_OWNER_ACTION = 'held_owner_action';
@@ -233,13 +227,7 @@ export function postItem({ candidate, destination, scheduledAt, caption, mediaUr
 export function dropClaim(c, item) {
   if (Array.isArray(c.mediaLedger)) c.mediaLedger = c.mediaLedger.filter(e => !(e.candidateId === item.candidateId && e.destinationKey === item.destinationKey));
 }
-/** Ledger of every media/source already given to an account (explicit entries + the post ledger). */
-export function mediaEntriesOf(c) {
-  const explicit = Array.isArray(c?.mediaLedger) ? c.mediaLedger : [];
-  const fromPosts = (c?.posts ?? []).filter(p => !['deferred', 'not_found', 'blocked'].includes(p.status))
-    .map(p => ({ candidateId: p.candidateId, streamKey: p.streamKey ?? null, segment: p.segment ?? null, mediaSha256: p.mediaSha256 ?? null, destinationKey: canonicalDestinationKey(p.destinationKey), lane: p.lane ?? null }));
-  return [...explicit, ...fromPosts];
-}
+export { mediaEntriesOf } from '../shared/clippers-media-ledger.mjs';
 
 /** Slots + cap for one account today (weekly median, Metricool best time, killed and promoted hours). */
 export function accountSchedule(c, destination, now) {
@@ -666,10 +654,13 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       }
       rendered = await render({ sourceFile: source.file, workDir, duration: Math.min(source.cut.duration, config.clipSeconds, STREAMER_CLIP_MAX_SECONDS),
         hook: lanePick ? laneHook({ variant: hookVariant, title: candidate.title, name: creatorName, language: lanePick.language }) : hookText({ variant: hookVariant, title: candidate.title, handle: candidate.handle }),
-        credit: creditText(candidate), peakFirst: !!lanePick, env });
+        credit: creditText(candidate), peakFirst: !!lanePick, env, language: lanePick?.language ?? 'en' });
+      // Caption evidence: word_by_word | no_speech | transcription_failed (rendered without word captions) | whisper_not_configured.
+      report.captions = { ...(report.captions ?? {}), [rendered.captions ?? 'none']: ((report.captions ?? {})[rendered.captions ?? 'none'] ?? 0) + 1 };
       report.counts.rendered++;
       processed++;
-      const base = { attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1, hookVariant, hookMode, cut: source.cut, renderSha256: rendered.sha256, durationSec: rendered.durationSec, reason: null };
+      const base = { attempts: (ledger.clips[candidate.id]?.attempts ?? 0) + 1, hookVariant, hookMode, cut: source.cut, renderSha256: rendered.sha256, durationSec: rendered.durationSec, reason: null,
+        captions: rendered.captions ?? null, captionsError: rendered.captionsError ?? null, captionLanguage: rendered.captionLanguage ?? null };
       if (config.dryRun) {
         if (outputDir) { await mkdir(outputDir, { recursive: true }); await copyFile(rendered.file, path.join(outputDir, `${candidate.id.replace(/[^A-Za-z0-9_-]/g, '_')}.mp4`)); }
         await setClip({ ...base, status: 'dry_run_rendered' });
@@ -817,7 +808,7 @@ async function main() {
   const { report, skipped } = await runCloudPublisher({ env: process.env, owner, store, approvals: createApprovalLedger(query), metricool, stager,
     outputDir: outIndex >= 0 ? path.resolve(args[outIndex + 1] ?? 'clippers-dry-run') : null, minIntervalMs, growthOnly });
   // Counts and codes only (public repository logs): no URLs, captions or tokens.
-  console.log(JSON.stringify({ status: report.status, skipped, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, dryRun: report.dryRun, learning: report.learning ?? null,
+  console.log(JSON.stringify({ status: report.status, skipped, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, dryRun: report.dryRun, captions: report.captions ?? null, learning: report.learning ?? null,
     growth: report.growth ? { accounts: Object.fromEntries(Object.entries(report.growth.accounts).map(([k, a]) => [k, { weeklyPosts: a.weeklyPosts, weeklyViews: a.weeklyViews, weeklyMedian: a.weeklyMedian, autoPublish: a.autoPublish, autoPublishMode: a.autoPublishMode }])), decisions: report.growth.decisions.length } : null }));
   for (const d of report.diagnostics ?? []) console.log(`clip diagnostics: ${JSON.stringify(d)}`);
   // Handled per-clip failures (e.g. a YouTube bot block) are recorded for the office, not a red job.

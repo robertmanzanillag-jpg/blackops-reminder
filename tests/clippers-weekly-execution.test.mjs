@@ -71,7 +71,7 @@ async function readyFixture(t,{sameDay=false}={}){
  assert.equal(prepared.prepared,1);assert.equal(calls.upload,1);
  const configured=await f.read(`${CONFIG}/approved-input.json`);configured.publish=true;await f.write(`${CONFIG}/approved-input.json`,configured);
  let scheduledId=null;
- const adapter={weeklyPreflight:async(d,item)=>{calls.preflight++;const evidence={destination:d,day:item.scheduledAt.slice(0,10),observedAt:NOW.toISOString(),source:'fresh_rest_calendar_and_account_analytics',scheduled:[],published:[]};return{day:evidence.day,confirmedCount:scheduledId?1:0,scheduledIds:scheduledId?[scheduledId]:[],publishedIds:[],evidence,evidenceSha256:digest(evidence)};},schedule:async(d,item)=>{calls.schedule++;scheduledId='actual-fake-get-receipt';return{id:scheduledId,mediaUrl:item.mediaUrl};},confirmSchedule:async(d,item)=>({id:scheduledId,mediaUrl:item.mediaUrl})};
+ const adapter={weeklyPreflight:async(d,item)=>{calls.preflight++;const evidence={destination:d,day:item.scheduledAt.slice(0,10),observedAt:NOW.toISOString(),source:'fresh_rest_calendar_and_account_analytics',scheduled:[],published:[]};return{day:evidence.day,confirmedCount:scheduledId?1:0,scheduledIds:scheduledId?[scheduledId]:[],publishedIds:[],evidence,evidenceSha256:digest(evidence)};},schedule:async(d,item)=>{calls.schedule++;scheduledId='actual-fake-get-receipt';return{id:scheduledId,mediaUrl:item.mediaUrl};},confirmSchedule:async(d,item)=>({id:scheduledId,mediaUrl:item.mediaUrl}),crossAccountPreflight:async()=>({checkedDays:[]})};
  return{...f,calls,adapter,p,packet};
 }
 test('actual FFmpeg preparation binds future exact-slot evergreen and weekly receipt replay is idempotent', {skip:!tools},async t=>{

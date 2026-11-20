@@ -14,7 +14,8 @@ name: Clippers streamers publish (cloud)
 # the script also skips when its last run is < CLIPPERS_STREAMER_CLOUD_MIN_INTERVAL_MINUTES (default 180) old.
 # At most CLIPPERS_STREAMER_CLOUD_CLIPS_PER_RUN (default 4) clips per run (no new clip after 20 min). Account lanes
 # (default on): each clip goes to ONE account; 10/12/16/18/20 ET (weekends -30 %), 6-8/day once an account's weekly
-# median passes 1k; Metricool drafts until then. Lanes off: legacy 5/day fan-out, slots 11:00-21:00. Explicit dispatches bypass the clock gate and the interval.
+# median passes 1k; Metricool drafts until then. Word-by-word captions via a cached whisper.cpp (base model; es for
+# Clipwave Miami, en otherwise; only the 15-35 s cut is transcribed); repository variable CLIPPERS_WHISPER_ENABLED=false turns it off. Lanes off: legacy 5/day fan-out, slots 11:00-21:00. Explicit dispatches bypass the clock gate and the interval.
 
 on:
   workflow_run:
@@ -113,6 +114,60 @@ jobs:
           echo "yt-dlp: $("$YTDLP" --version 2>&1 | tail -1)"
           echo "ffmpeg: $(ffmpeg -version 2>/dev/null | head -1 | cut -d' ' -f1-3)"
           echo "impersonate targets (chrome):"; PYTHONPATH="$RUNNER_TEMP/curl-cffi" "$YTDLP" --list-impersonate-targets 2>&1 | grep -iE 'chrome|curl_cffi|unavailable' | head -5 || true
+
+      # Word-by-word captions: whisper.cpp built from source at a pinned tag + commit, multilingual ggml base model
+      # (EN + ES) with a pinned checksum, both cached (actions/cache). Best effort: if any of this fails the env vars
+      # stay unset and clips render without word captions (evidence: captions=whisper_not_configured).
+      - name: Restore whisper.cpp build + model cache
+        if: steps.gate.outputs.run == 'true' && vars.CLIPPERS_WHISPER_ENABLED != 'false'
+        id: whisper-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/whisper
+          key: whisper-cpp-v1.8.7-48f628a8-ggml-base-4657074-ubuntu-24.04-${{ runner.arch }}
+
+      - name: Build whisper.cpp + fetch model (pinned, verified)
+        if: steps.gate.outputs.run == 'true' && vars.CLIPPERS_WHISPER_ENABLED != 'false'
+        continue-on-error: true
+        timeout-minutes: 6
+        env:
+          WHISPER_TAG: v1.8.7
+          WHISPER_COMMIT: 48f628a84833905ee4a0658ee6d4a5c915ce1997
+          # ggml-base.bin (multilingual, 142 MiB). SHA-1 as published in whisper.cpp v1.8.7 models/README.md;
+          # optional extra SHA-256 pin via the repository variable CLIPPERS_WHISPER_MODEL_SHA256.
+          MODEL_URL: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+          MODEL_SHA1: 465707469ff3a37a2b9b8d8f89f2f99de7299dac
+          MODEL_SHA256: ${{ vars.CLIPPERS_WHISPER_MODEL_SHA256 }}
+          BIN_SHA256: ${{ vars.CLIPPERS_WHISPER_BIN_SHA256 }}
+          CACHE_HIT: ${{ steps.whisper-cache.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          W="$RUNNER_TEMP/whisper"; mkdir -p "$W"
+          if [ ! -x "$W/whisper-cli" ]; then
+            git -c advice.detachedHead=false clone -q --depth 1 --branch "$WHISPER_TAG" https://github.com/ggml-org/whisper.cpp "$W/src"
+            test "$(git -C "$W/src" rev-parse HEAD)" = "$WHISPER_COMMIT" || { echo "::warning::whisper.cpp tag moved; not building"; exit 1; }
+            cmake -S "$W/src" -B "$W/build" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF \
+              -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF > /dev/null
+            cmake --build "$W/build" -j"$(nproc)" --target whisper-cli > /dev/null
+            cp "$W/build/bin/whisper-cli" "$W/whisper-cli"; rm -rf "$W/src" "$W/build"
+            sha256sum "$W/whisper-cli" | cut -d' ' -f1 > "$W/whisper-cli.sha256"
+          fi
+          # The cached binary must match the SHA-256 recorded when it was built (and the optional pinned value).
+          BIN_SHA="$(sha256sum "$W/whisper-cli" | cut -d' ' -f1)"
+          if [ ! -s "$W/whisper-cli.sha256" ] || [ "$BIN_SHA" != "$(cat "$W/whisper-cli.sha256")" ] || { [ -n "$BIN_SHA256" ] && [ "$BIN_SHA" != "$BIN_SHA256" ]; }; then
+            rm -f "$W/whisper-cli" "$W/whisper-cli.sha256"; echo "::warning::whisper-cli SHA-256 mismatch"; exit 1
+          fi
+          echo "whisper-cli sha256: $BIN_SHA"
+          if [ ! -f "$W/ggml-base.bin" ]; then
+            curl -fsSL --retry 3 --max-time 240 -o "$W/ggml-base.bin.part" "$MODEL_URL"
+            mv "$W/ggml-base.bin.part" "$W/ggml-base.bin"
+          fi
+          # Verify on every run (cache hits included); a mismatch deletes the files so the cache cannot keep them.
+          if ! echo "$MODEL_SHA1  $W/ggml-base.bin" | sha1sum -c --quiet -; then rm -f "$W/ggml-base.bin"; echo "::warning::whisper model SHA-1 mismatch"; exit 1; fi
+          if [ -n "$MODEL_SHA256" ] && ! echo "$MODEL_SHA256  $W/ggml-base.bin" | sha256sum -c --quiet -; then rm -f "$W/ggml-base.bin"; echo "::warning::whisper model SHA-256 mismatch"; exit 1; fi
+          echo "whisper model sha256: $(sha256sum "$W/ggml-base.bin" | cut -d' ' -f1) (cache hit: ${CACHE_HIT:-false})"
+          "$W/whisper-cli" --help > /dev/null 2>&1
+          { echo "CLIPPERS_WHISPER_BIN=$W/whisper-cli"; echo "CLIPPERS_WHISPER_MODEL=$W/ggml-base.bin"; echo "CLIPPERS_WHISPER_THREADS=$(nproc)"; } >> "$GITHUB_ENV"
 
       - name: Download, render, publish approved clips
         if: steps.gate.outputs.run == 'true'
@@ -238,6 +293,60 @@ jobs:
           echo "yt-dlp: $("$YTDLP" --version 2>&1 | tail -1)"
           echo "ffmpeg: $(ffmpeg -version 2>/dev/null | head -1 | cut -d' ' -f1-3)"
           echo "impersonate targets (chrome):"; PYTHONPATH="$RUNNER_TEMP/curl-cffi" "$YTDLP" --list-impersonate-targets 2>&1 | grep -iE 'chrome|curl_cffi|unavailable' | head -5 || true
+
+      # Word-by-word captions: whisper.cpp built from source at a pinned tag + commit, multilingual ggml base model
+      # (EN + ES) with a pinned checksum, both cached (actions/cache). Best effort: if any of this fails the env vars
+      # stay unset and clips render without word captions (evidence: captions=whisper_not_configured).
+      - name: Restore whisper.cpp build + model cache
+        if: steps.gate.outputs.run == 'true' && vars.CLIPPERS_WHISPER_ENABLED != 'false'
+        id: whisper-cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/whisper
+          key: whisper-cpp-v1.8.7-48f628a8-ggml-base-4657074-ubuntu-24.04-${{ runner.arch }}
+
+      - name: Build whisper.cpp + fetch model (pinned, verified)
+        if: steps.gate.outputs.run == 'true' && vars.CLIPPERS_WHISPER_ENABLED != 'false'
+        continue-on-error: true
+        timeout-minutes: 6
+        env:
+          WHISPER_TAG: v1.8.7
+          WHISPER_COMMIT: 48f628a84833905ee4a0658ee6d4a5c915ce1997
+          # ggml-base.bin (multilingual, 142 MiB). SHA-1 as published in whisper.cpp v1.8.7 models/README.md;
+          # optional extra SHA-256 pin via the repository variable CLIPPERS_WHISPER_MODEL_SHA256.
+          MODEL_URL: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
+          MODEL_SHA1: 465707469ff3a37a2b9b8d8f89f2f99de7299dac
+          MODEL_SHA256: ${{ vars.CLIPPERS_WHISPER_MODEL_SHA256 }}
+          BIN_SHA256: ${{ vars.CLIPPERS_WHISPER_BIN_SHA256 }}
+          CACHE_HIT: ${{ steps.whisper-cache.outputs.cache-hit }}
+        run: |
+          set -euo pipefail
+          W="$RUNNER_TEMP/whisper"; mkdir -p "$W"
+          if [ ! -x "$W/whisper-cli" ]; then
+            git -c advice.detachedHead=false clone -q --depth 1 --branch "$WHISPER_TAG" https://github.com/ggml-org/whisper.cpp "$W/src"
+            test "$(git -C "$W/src" rev-parse HEAD)" = "$WHISPER_COMMIT" || { echo "::warning::whisper.cpp tag moved; not building"; exit 1; }
+            cmake -S "$W/src" -B "$W/build" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DGGML_NATIVE=OFF \
+              -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF > /dev/null
+            cmake --build "$W/build" -j"$(nproc)" --target whisper-cli > /dev/null
+            cp "$W/build/bin/whisper-cli" "$W/whisper-cli"; rm -rf "$W/src" "$W/build"
+            sha256sum "$W/whisper-cli" | cut -d' ' -f1 > "$W/whisper-cli.sha256"
+          fi
+          # The cached binary must match the SHA-256 recorded when it was built (and the optional pinned value).
+          BIN_SHA="$(sha256sum "$W/whisper-cli" | cut -d' ' -f1)"
+          if [ ! -s "$W/whisper-cli.sha256" ] || [ "$BIN_SHA" != "$(cat "$W/whisper-cli.sha256")" ] || { [ -n "$BIN_SHA256" ] && [ "$BIN_SHA" != "$BIN_SHA256" ]; }; then
+            rm -f "$W/whisper-cli" "$W/whisper-cli.sha256"; echo "::warning::whisper-cli SHA-256 mismatch"; exit 1
+          fi
+          echo "whisper-cli sha256: $BIN_SHA"
+          if [ ! -f "$W/ggml-base.bin" ]; then
+            curl -fsSL --retry 3 --max-time 240 -o "$W/ggml-base.bin.part" "$MODEL_URL"
+            mv "$W/ggml-base.bin.part" "$W/ggml-base.bin"
+          fi
+          # Verify on every run (cache hits included); a mismatch deletes the files so the cache cannot keep them.
+          if ! echo "$MODEL_SHA1  $W/ggml-base.bin" | sha1sum -c --quiet -; then rm -f "$W/ggml-base.bin"; echo "::warning::whisper model SHA-1 mismatch"; exit 1; fi
+          if [ -n "$MODEL_SHA256" ] && ! echo "$MODEL_SHA256  $W/ggml-base.bin" | sha256sum -c --quiet -; then rm -f "$W/ggml-base.bin"; echo "::warning::whisper model SHA-256 mismatch"; exit 1; fi
+          echo "whisper model sha256: $(sha256sum "$W/ggml-base.bin" | cut -d' ' -f1) (cache hit: ${CACHE_HIT:-false})"
+          "$W/whisper-cli" --help > /dev/null 2>&1
+          { echo "CLIPPERS_WHISPER_BIN=$W/whisper-cli"; echo "CLIPPERS_WHISPER_MODEL=$W/ggml-base.bin"; echo "CLIPPERS_WHISPER_THREADS=$(nproc)"; } >> "$GITHUB_ENV"
 
       - name: Download, render, publish approved clips
         if: steps.gate.outputs.run == 'true'
