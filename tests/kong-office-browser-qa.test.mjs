@@ -104,7 +104,7 @@ test('KONG unified office: browser route, click, API, error and improvement scou
    const account=await page.getByRole('button',{name:'Salir',exact:true}).locator('..').boundingBox();assert.ok(account);
    // Only the 3D office remains: the Edificio and Clasica view switches were removed.
    for(const title of ['Edificio','Clasica'])assert.equal(await page.getByRole('button',{name:title,exact:true}).count(),0,title+' view was removed');
-   for(const title of ['Supervisor KONG','Oficina KONG','Operacion KONG']){
+   for(const title of ['Reparaciones KONG','Oficina KONG','Operacion KONG']){
     const box=await page.getByRole('button',{name:title,exact:true}).boundingBox();assert.ok(box,title);
     assert.ok(box.x>=0 && box.x+box.width<=page.viewportSize().width,title+' stays within viewport');
     assert.ok(box.x+box.width<=account.x || account.x+account.width<=box.x || box.y+box.height<=account.y || account.y+account.height<=box.y,title+' must not overlap account controls');

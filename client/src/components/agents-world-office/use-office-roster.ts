@@ -55,7 +55,7 @@ export const DEPARTMENTS: OfficeDepartment[] = [
   { id: "direccion", name: "Direccion", color: "#fbbf24", agentIds: ["ceo", "assistant", "control"] },
   { id: "negocios", name: "Negocios", color: "#34d399", agentIds: ["revenue", "dropshipping", "portfolio"] },
   { id: "blackroom", name: "Black Room", color: "#e879f9", agentIds: [...BLACKROOM_DEPARTMENT_ORDER] },
-  { id: "kong", name: "Kong", color: "#a3e635", agentIds: ["kong-videos", "kong-metrics", "kong:KONG AI", "kong:Promoters + Mesas", "kong:Venues", "kong:Kong Legal"] },
+  { id: "kong", name: "Kong", color: "#a3e635", agentIds: ["kong-videos", "kong-metrics"] },
   { id: "medios", name: "Marketing y medios", color: "#f472b6", agentIds: ["marketing-cmo", "clippers"] },
   { id: "noticias-ciudad", name: "Noticias por ciudad", color: "#fb923c", agentIds: ["news", ...CITY_NEWS_AGENTS.map((agent) => agent.id)] },
   { id: "ingenieria", name: "Ingenieria y app", color: "#38bdf8", agentIds: ["code", "github", "claude-reviewer", "app-qa"] },

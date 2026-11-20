@@ -48,19 +48,3 @@ test("council connections carry a non-secret host label", () => {
   assert.equal(councilApplicationName({ REPLIT_DEPLOYMENT: "1" }), "blackops-council:replit-web");
   assert.equal(councilApplicationName({}), "blackops-council:local");
 });
-
-test("Kong supervisor reads video status before taking the council owner lock", async () => {
-  const { createKongSupervisorConversation } = await import("../server/kong-supervisor-conversation");
-  const { emptyKongSupervision, parseKongSupervision } = await import("../shared/kong-supervisor");
-  let raw = JSON.stringify(emptyKongSupervision());
-  let inLock = false, readsInsideLock = 0, reads = 0;
-  const service = createKongSupervisorConversation({
-    now: () => Date.parse("2026-11-05T01:00:00Z"),
-    read: async () => parseKongSupervision(JSON.parse(raw)),
-    readVideoStatus: async () => { reads++; if (inLock) readsInsideLock++; return { state: "working" } as any; },
-    commit: async change => { inLock = true; try { const next = await change(parseKongSupervision(JSON.parse(raw))); raw = JSON.stringify(next); return next; } finally { inLock = false; } },
-  } as any);
-  await service.talk({ message: "revisar", requestId: "request-0001", agentId: "kong-supervisor" });
-  assert.equal(reads, 1);
-  assert.equal(readsInsideLock, 0);
-});

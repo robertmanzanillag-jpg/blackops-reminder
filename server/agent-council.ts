@@ -24,7 +24,7 @@ import type { OfficeKongAuditResult } from "./office-kong";
 // Trust Center pending actions for proposals. Approving a proposal records a
 // lesson or marks a PR-first brief as ready; it does not change code or skills.
 
-import { reviewKongReadiness } from "@shared/kong-supervisor";
+import { parseLegacyKongSupervision } from "@shared/kong-supervisor";
 import { buildBlackRoomOfficeOperations } from "./blackroom-office-operations";
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { randomUUID, createHash } from "node:crypto";
@@ -160,7 +160,6 @@ function kongReadCode(error: unknown): string {
 }
 const SKIP = Symbol("skip");
 
-export const KONG_TEAM = ["KONG AI", "Promoters + Mesas", "Venues", "Kong Legal"];
 // Order routing only trusts live states from a recent council cycle.
 const STATUS_FRESH_MS = 45 * 60_000;
 
@@ -194,7 +193,6 @@ export const AGENT_NAMES: Record<string, string> = {
   // Software Factory engineers: main-company careers scored only from real factory stage rows.
   ...FACTORY_AGENT_NAMES,
   ...CLIPPERS_AGENT_NAMES,
-  ...Object.fromEntries(KONG_TEAM.map((name) => [`kong:${name}`, name])),
 };
 // Always unscored, whatever the overrides say: they have no work of their own to measure
 // (the KONG guides and the mechanic). Same predicate the central panel uses.
@@ -694,8 +692,6 @@ export function createAgentCouncil(deps: CouncilDeps) {
         next = advanceCompanyCycle(next, statuses, curriculum, now, integrations, blackroomLife, { ...vitalityInput, kong: kong.vitality, kongNames: kong.names });
         next = { ...next, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.observedAt ? kong.statuses : state.kongLastStatuses, kongObservedAt: kong.observedAt ?? state.kongObservedAt, kongCollaboration: kong.collaboration };
         if (deps.collectKongEvidence) next = { ...next, kongRead: { at: new Date(now).toISOString(), ok: Boolean(kong.observedAt), code: kong.observedAt ? null : kongCode ?? "NOT_VERIFIED" } };
-        // This completes only a read-only readiness review, never the worker's commercial task.
-        next = { ...next, kongSupervision: reviewKongReadiness(state.kongSupervision, everyone, now) };
         const repairs = deriveRepairProposals(next, Object.fromEntries(Object.entries(statuses).filter(([id]) => !isKongCompanyAgent(id))), now, AGENT_NAMES, unscored);
         const specialists = deriveSpecialistProposals(next, now);
         // Vida 0 reviews share the Mechanic's per-agent key prefix and its open-repair cap (no duplicates in one round).
@@ -925,12 +921,10 @@ export function createAgentCouncil(deps: CouncilDeps) {
 
   async function view(options: { factoryLiveJobs?: Parameters<typeof factoryAgentsView>[0]["liveJobs"]; factoryOwnerKey?: string } = {}) {
     const loaded = await load();
-    // The KONG conversation is owner-only (served by /api/kong-supervisor/state with an owner check).
-    // This view is readable by any signed-in user, so it only carries the readiness records.
-    const { messages: _privateMessages, ...kongSupervisionPublic } = loaded.kongSupervision;
-    const { kongLegacyCompany: _legacyHistory, officeExecution: _privateExecution, ...publicState } = loaded;
+    // Retired Supervisor KONG history is owner-only (read-only GET /api/kong-supervisor/state): never in this view.
+    const { kongLegacyCompany: _legacyHistory, officeExecution: _privateExecution, kongSupervision: _retiredSupervisor, ...publicState } = loaded;
     // One ledger, two views: the office keeps showing BlackOps agents and KONG agents in their own wings.
-    const state = { ...publicState, company: publicCareerVitality(mainCompanyView(publicState.company)), kongCompany: publicCareerVitality(kongCareersMirror(publicState.company)), kongSupervision: kongSupervisionPublic };
+    const state = { ...publicState, company: publicCareerVitality(mainCompanyView(publicState.company)), kongCompany: publicCareerVitality(kongCareersMirror(publicState.company)) };
     const personalities = Object.fromEntries(Object.values(state.company.careers).map((career) => [career.agentId, personalityFor(career.agentId, career.generation)]));
     return {
       ...state,
@@ -975,13 +969,9 @@ export function createAgentCouncil(deps: CouncilDeps) {
 
   // KONG supervisor (PR #315): its conversation and read-only reviews are committed through the same
   // serialized, revision-checked mutate as everything else. The change may be replayed on a conflict.
-  async function updateKongSupervision(change: (current: CouncilState["kongSupervision"]) => Promise<CouncilState["kongSupervision"]>) {
-    const state = await mutate(async (current) => ({ ...current, kongSupervision: await change(current.kongSupervision) }));
-    return state.kongSupervision;
-  }
-
-  async function readKongSupervision() {
-    return (await load()).kongSupervision;
+  // Retired Supervisor KONG: stored conversation, read-only (never advanced, never in the public view).
+  async function readLegacyKongSupervision() {
+    return parseLegacyKongSupervision((await load()).kongSupervision);
   }
 
   // Internal worker only: callbacks must be pure because CAS may replay them.
@@ -1009,7 +999,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
     return state.company;
   }
-  return { runCycle, runKongCatchUp, catchUpKongIfStale, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, placeChatOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution, updateBlackRoomAcademy };
+  return { runCycle, runKongCatchUp, catchUpKongIfStale, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, placeChatOrder, finishOrder, readLegacyKongSupervision, updateOfficeExecution, updateBlackRoomAcademy };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {

@@ -7,7 +7,7 @@ import { build } from "esbuild";
 import express from "express";
 import { chromium } from "playwright";
 
-test("KONG supervisor shows owner repair evidence and refreshes only with GET", async t => {
+test("KONG repair dialog shows owner repair evidence and refreshes only with GET", async t => {
   const temp = await mkdtemp(path.join(os.tmpdir(), "kong-repair-panel-"));
   t.after(() => rm(temp, { recursive: true, force: true }));
   await build({
@@ -16,10 +16,10 @@ test("KONG supervisor shows owner repair evidence and refreshes only with GET", 
         import { createRoot } from 'react-dom/client';
         import { QueryClientProvider } from '@tanstack/react-query';
         import { queryClient } from './client/src/lib/queryClient';
-        import { KongSupervisorPanel } from './client/src/components/kong-supervisor-panel';
+        import { KongRepairDialog } from './client/src/components/kong-repair-dialog';
         queryClient.setQueryData(['auth-me'], { authenticated: true, user: { id: 'fixture-owner' } });
         createRoot(document.getElementById('root')).render(
-          <QueryClientProvider client={queryClient}><KongSupervisorPanel /></QueryClientProvider>
+          <QueryClientProvider client={queryClient}><KongRepairDialog /></QueryClientProvider>
         );
       `,
       resolveDir: process.cwd(),
@@ -77,7 +77,7 @@ test("KONG supervisor shows owner repair evidence and refreshes only with GET", 
   await page.clock.install({ time: new Date(now) });
   await page.goto(origin);
   assert.equal(requests.length, 0);
-  await page.getByRole("button", { name: "Supervisor KONG", exact: true }).click();
+  await page.getByRole("button", { name: "Reparaciones KONG", exact: true }).click();
   const panel = page.getByRole("region", { name: "Reparaciones de KONG" });
   const refresh = panel.getByRole("button", { name: "Actualizar estado" });
   await panel.getByText("Conexión verificada · En espera", { exact: false }).waitFor();
@@ -147,7 +147,7 @@ test("KONG supervisor shows owner repair evidence and refreshes only with GET", 
   const closedCount = requests.length;
   verifiedId = "different-session";
   const authResponse = page.waitForResponse(response => new URL(response.url()).pathname === "/api/auth/me");
-  await page.getByRole("button", { name: "Supervisor KONG", exact: true }).click();
+  await page.getByRole("button", { name: "Reparaciones KONG", exact: true }).click();
   await authResponse;
   await page.clock.fastForward(2 * minute);
   assert.equal(await panel.count(), 0);
