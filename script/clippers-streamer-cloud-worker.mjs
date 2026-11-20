@@ -119,13 +119,13 @@ function nextDay(day) { return new Date(Date.parse(`${day}T12:00:00Z`) + 24 * HO
  * Earliest free slot for one destination from our own ledger (Metricool's preflight remains the authority
  * across every lane). Destinations are staggered by `index * staggerMinutes` inside the same hour.
  */
-export function nextSlot({ now, config, destination, index = 0, posts = [], skip = new Set() }) {
+export function nextSlot({ now, config, destination, index = 0, posts = [], skip = new Set(), skipDays = new Set() }) {
   const key = destinationKey(destination);
   const mine = posts.filter(p => canonicalDestinationKey(p.destinationKey) === key && !['deferred', 'blocked', 'not_found'].includes(p.status));
   let day = localDay(new Date(now));
   for (let d = 0; d < 2; d++, day = nextDay(day)) {
     const sameDay = mine.filter(p => localDay(new Date(p.scheduledAt)) === day);
-    if (sameDay.length >= config.dailyCap) continue;
+    if (skipDays.has(day) || sameDay.length >= config.dailyCap) continue;
     const hours = new Set(sameDay.map(p => localHour(p.scheduledAt)));
     for (const slot of config.slots) {
       const [h, m] = slot.split(':').map(Number);
@@ -786,11 +786,12 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       asset = await stager.upload(rendered.file, `stc-${rendered.sha256.slice(0, 24)}.mp4`);
       await setClip({ ...base, status: 'staged', mediaAsset: asset });
       if (!await verifyPublicMedia(asset.url, fetchImpl)) throw new Error('PUBLIC_MEDIA_UNREACHABLE');
-      let scheduled = 0, pending = 0, gateBlocked = null;
+      let scheduled = 0, pending = 0, gateBlocked = null, dropReason = null;
       for (const p of plan) {
         if (gateBlocked) break;
         let at = p.scheduledAt;
-        const tried = new Set();
+        const tried = new Set(), fullDays = new Set();
+        let slotMiss = null; // last Metricool slot/cap rejection: reported if no slot is left (never a silent drop)
         for (let attempt = 0; attempt < 3 && at; attempt++) {
           const item = postItem({ candidate, destination: p.destination, scheduledAt: at, caption, mediaUrl: asset.url, mediaSha256: rendered.sha256, hookVariant,
             lane: lanePick ? { ...lanePick, segment: sourceSegment(candidate, { start: (source.cut?.start ?? 0) + (rendered.cutStart ?? 0) }) } : null });
@@ -812,7 +813,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             c.posts.push({ ...item, attemptedAt: iso(clock()) });
             return null;
           });
-          if (blocked) { report.heldReasons.push(`publish_gate:${blocked}`); if (blocked !== 'already_attempted') { report.counts.blocked++; gateBlocked = blocked; } at = null; break; }
+          if (blocked) { report.heldReasons.push(`publish_gate:${blocked}`); if (blocked !== 'already_attempted') report.counts.blocked++; gateBlocked = blocked; at = null; break; }
           let status, metricoolId = null, reason = null, confirmedMediaUrl = null;
           try {
             await metricool.preflight(p.destination, item);
@@ -824,14 +825,23 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
             reason = code(e);
             // Nothing was written: drop the post and its media-ledger claim.
             await update((s, c) => { c.posts = c.posts.filter(x => x.id !== item.id); dropClaim(c, item); });
+            if (reason === 'metricool_slot_duplicate_or_daily_cap' && e?.detail === 'slot_duplicate_content') {
+              // Same caption/media already on this account: never repeat a clip, no other hour, no next day.
+              gateBlocked = 'metricool_duplicate_content'; report.counts.blocked++;
+              report.heldReasons.push(`metricool_duplicate_content:${p.destination.brandId}:${p.destination.network}`); at = null; break;
+            }
             if (reason === 'metricool_slot_duplicate_or_daily_cap') {
               tried.add(at);
+              // Metricool's day is already at the cap (drafts count, e.g. another pipeline's drafts): skip the whole day.
+              if (e?.detail === 'daily_cap') fullDays.add(localDay(new Date(at)));
+              slotMiss = `${e?.detail ?? 'slot_duplicate_or_daily_cap'}${e?.detail === 'daily_cap' && Number.isFinite(e?.dayRows) ? `:${e.dayRows}/${e.dayLimit}` : ''}`;
               const freshPosts = cloudPublishOf(parseStreamerState(await store.read(ns))).posts;
               const slotConfig = lanePick ? { ...config, slots: lanePick.slots, dailyCap: lanePick.dailyLimit } : config;
-              at = nextSlot({ now: clock(), config: slotConfig, destination: p.destination, index: p.index, posts: freshPosts, skip: tried });
+              at = nextSlot({ now: clock(), config: slotConfig, destination: p.destination, index: p.index, posts: freshPosts, skip: tried, skipDays: fullDays });
+              if (!at || attempt === 2) { report.counts.deferred++; report.counts.slotExhausted = (report.counts.slotExhausted ?? 0) + 1; dropReason = `metricool_no_free_slot:${p.destination.brandId}:${p.destination.network}:${slotMiss}`; report.heldReasons.push(dropReason); at = null; break; }
               continue;
             }
-            report.counts.deferred++; report.heldReasons.push(`destination_held:${p.destination.brandId}:${reason}`); at = null; break;
+            report.counts.deferred++; dropReason = `destination_held:${p.destination.brandId}:${reason}`; report.heldReasons.push(dropReason); at = null; break;
           }
           try {
             const found = await metricool.schedule(p.destination, item);
@@ -843,7 +853,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
           await update((s, c) => { const x = c.posts.find(y => y.id === item.id); if (x) Object.assign(x, { status, metricoolId, reason, confirmedMediaUrl }); if (status === 'deferred') dropClaim(c, item); });
           if (status === 'scheduled') { scheduled++; report.counts.scheduled++; }
           else if (status === 'verification_pending') { pending++; report.counts.verificationPending++; }
-          else report.counts.deferred++;
+          else { report.counts.deferred++; dropReason = `destination_held:${p.destination.brandId}:${reason}`; report.heldReasons.push(dropReason); }
           break;
         }
       }
@@ -868,7 +878,12 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
         await stager.remove(asset.id).then(() => { mediaAsset = null; report.counts.assetsRemoved++; }).catch(e => report.errors.push(`asset_remove:${code(e)}`));
       }
       const queuedOnly = !scheduled && !pending && !gateBlocked && heldTargets.length > 0;
-      await setClip({ ...base, status: scheduled ? 'published' : pending ? 'verification_pending' : gateBlocked ? 'blocked' : queuedOnly ? HOLD_OWNER_ACTION : 'deferred', reason: gateBlocked, mediaAsset });
+      if (!scheduled && !pending && !gateBlocked && !queuedOnly && !dropReason) {
+        // Rendered but nothing written or queued: always name it (deferred/held reasons above, or this catch-all).
+        dropReason = plan.length ? 'rendered_not_scheduled:no_write_attempt' : 'rendered_not_scheduled:no_target';
+        report.heldReasons.push(dropReason); report.counts.deferred++;
+      }
+      await setClip({ ...base, status: scheduled ? 'published' : pending ? 'verification_pending' : gateBlocked ? 'blocked' : queuedOnly ? HOLD_OWNER_ACTION : 'deferred', reason: gateBlocked ?? dropReason, mediaAsset });
       if (scheduled && candidate.approval?.pendingActionId && approvals?.markExecuted) {
         const posts = cloudPublishOf(parseStreamerState(await store.read(ns))).posts.filter(x => x.candidateId === candidate.id).map(x => ({ destination: x.destinationKey, scheduledAt: x.scheduledAt, status: x.status, metricoolId: x.metricoolId }));
         await approvals.markExecuted(owner, candidate.approval.pendingActionId, { handoff: 'clippers_streamer_cloud', posts, externalCalls: posts.length }).catch(e => report.errors.push(`approval_update:${code(e)}`));

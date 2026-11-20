@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { buildCreditCaption, captionHasCredit, parseTakedown } from '../shared/clippers-streamer-policy.mjs';
 import { STREAMER_STATE_NAMESPACE } from '../script/clippers-streamer-discovery.mjs';
-import { DESTINATIONS, destinationKey, findDestination, exactPost, canonicalDestinationKey, canonicalAccount, valueForDestination } from '../script/clippers-portfolio-metricool.mjs';
+import { DESTINATIONS, destinationKey, findDestination, exactPost, canonicalDestinationKey, canonicalAccount, valueForDestination, createPortfolioMetricool } from '../script/clippers-portfolio-metricool.mjs';
 import { stagedAssetRemovable, parseSlots, cloudPublishConfig, wallClockToIso, nextSlot, publishGate, runCloudPublisher, clipCaption, postItem, createGithubReleaseStager, liveDescriptionCheck } from '../script/clippers-streamer-cloud-worker.mjs';
 import { selectCutWindow, wrapLines, ffmpegRenderArgs, ytDlpDownloadArgs, ytDlpInfoArgs, validateRenderProbe, childEnv, renderVerticalClip, makeWorkDir, hookText, creditText, BUNDLED_FONT } from '../script/clippers-streamer-cloud-render.mjs';
 import { computeLearning, chooseHookVariant, creatorBoostFor } from '../script/clippers-streamer-cloud-learning.mjs';
@@ -234,6 +234,89 @@ test('preflight slot conflict moves to the next slot; destination hold defers wi
   const fbFirst = await runCloudPublisher({ env: { ...env, CLIPPERS_STREAMER_CLOUD_DESTINATIONS: '6591612:facebook:1193011863901514' }, now: NOW, owner: 'o', store: memoryStore(baseState([candidate('a', 'twitch:100', 'thegrefg')])), approvals: approvals({ 'pa-a': 'approved' }), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia(), clock: () => NOW });
   assert.equal(fbFirst.report.counts.deferred, 1);
   assert.ok(fbFirst.report.heldReasons.some(r => r.startsWith('destination_held:6591612:destination_publish_permission_missing')));
+});
+
+test('Metricool daily cap (drafts from another pipeline) skips the day; no free slot is reported, never a silent drop', async () => {
+  const capErr = () => Object.assign(new Error('metricool_slot_duplicate_or_daily_cap'), { detail: 'daily_cap', dayRows: 10, dayLimit: 5 });
+  const today = new Date(NOW).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  const dayOf = iso => new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/New_York' });
+  // Today full: one rejection, then the next pick is tomorrow (not another hour today).
+  const m = fakeMetricool({ preflight: async (d, item) => { if (dayOf(item.scheduledAt) === today) throw capErr(); } });
+  const ok = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store: memoryStore(baseState([candidate('a', 'twitch:100', 'thegrefg')])), approvals: approvals({ 'pa-a': 'approved' }), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia(), clock: () => NOW });
+  assert.equal(ok.report.counts.scheduled, 1);
+  assert.equal(m.calls.preflight.length, 2, 'a full day is skipped in one step');
+  assert.notEqual(dayOf(m.calls.schedule[0].scheduledAt), today);
+  // Every day full: rendered, nothing written, explicit reason + count.
+  const store = memoryStore(baseState([candidate('a', 'twitch:100', 'thegrefg')]));
+  const full = fakeMetricool({ preflight: async () => { throw capErr(); } });
+  const { report } = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: full, stager: fakeStager(), fetch: okFetch, ...fakeMedia(), clock: () => NOW });
+  assert.equal(report.counts.rendered, 1); assert.equal(report.counts.scheduled, 0);
+  assert.equal(full.calls.schedule.length, 0);
+  assert.equal(report.counts.slotExhausted, 1); assert.equal(report.counts.deferred, 1);
+  const reason = report.heldReasons.find(r => r.startsWith('metricool_no_free_slot:'));
+  assert.ok(reason && reason.endsWith(':daily_cap:10/5'), reason);
+  assert.equal(store.state.cloudPublish.clips['twitch-clip:a'].status, 'deferred');
+  assert.equal(store.state.cloudPublish.clips['twitch-clip:a'].reason, reason);
+});
+
+test('Metricool preflight detail: content match beats daily cap; hour clash and full day are distinct', async () => {
+  const target = DESTINATIONS.find(d => d.network === 'tiktok');
+  const at = '2026-11-19T21:00:00.000Z'; // 16:00 ET
+  const row = (hour, text, media) => ({ id: `r${hour}${text}`, text, media: [media], draft: true,
+    publicationDate: { dateTime: `2026-11-19T${String(hour).padStart(2, '0')}:00:00`, timezone: 'America/New_York' }, providers: [{ network: 'tiktok', status: 'PENDING' }] });
+  const run = async rows => {
+    const adapter = createPortfolioMetricool({ token: 'metricool-token-123', userId: 12, fetcher: async resource => {
+      const u = new URL(resource);
+      if (u.pathname.endsWith('/simpleProfiles')) return Response.json([{ id: target.brandId, tiktok: target.account, ownerUserId: 12, isShared: false }]);
+      if (u.pathname.includes('/scheduler/')) return Response.json({ data: rows });
+      assert.fail('unexpected request');
+    } });
+    try { await adapter.preflight(target, { scheduledAt: at, caption: 'mine', mediaUrl: 'https://x/mine.mp4', dailyLimit: 5, countDrafts: true }); return null; }
+    catch (e) { assert.equal(e.message, 'metricool_slot_duplicate_or_daily_cap'); return e.detail; }
+  };
+  const full = [11, 13, 15, 17, 19].map(h => row(h, `other${h}`, `https://x/o${h}.mp4`));
+  assert.equal(await run([...full, row(20, 'mine', 'https://x/z.mp4')]), 'slot_duplicate_content', 'caption match wins over daily cap');
+  assert.equal(await run([...full.slice(0, 4), row(21, 'x', 'https://x/mine.mp4')]), 'slot_duplicate_content', 'media match wins over daily cap');
+  assert.equal(await run(full), 'daily_cap');
+  assert.equal(await run([row(16, 'other', 'https://x/o.mp4')]), 'slot_duplicate');
+  assert.equal(await run([row(11, 'other', 'https://x/o.mp4')]), null);
+});
+
+test('worker: duplicate content stops without retry; destination hold labels the clip; already_attempted is not a silent drop', async () => {
+  const dupErr = () => Object.assign(new Error('metricool_slot_duplicate_or_daily_cap'), { detail: 'slot_duplicate_content' });
+  const store = memoryStore(baseState([candidate('a', 'twitch:100', 'thegrefg')]));
+  const m = fakeMetricool({ preflight: async () => { throw dupErr(); } });
+  const dup = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: m, stager: fakeStager(), fetch: okFetch, ...fakeMedia(), clock: () => NOW });
+  assert.equal(m.calls.preflight.length, 1, 'no other hour, no next day');
+  assert.equal(dup.report.counts.blocked, 1); assert.equal(dup.report.counts.deferred, 0);
+  assert.ok(dup.report.heldReasons.some(r => r.startsWith('metricool_duplicate_content:')));
+  assert.equal(store.state.cloudPublish.clips['twitch-clip:a'].status, 'blocked');
+  assert.equal(store.state.cloudPublish.clips['twitch-clip:a'].reason, 'metricool_duplicate_content');
+
+  const store2 = memoryStore(baseState([candidate('a', 'twitch:100', 'thegrefg')]));
+  const held = fakeMetricool({ preflight: async () => { throw new Error('destination_publish_permission_missing'); } });
+  const h = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store: store2, approvals: approvals({ 'pa-a': 'approved' }), metricool: held, stager: fakeStager(), fetch: okFetch, ...fakeMedia(), clock: () => NOW });
+  assert.equal(h.report.counts.deferred, 1);
+  assert.ok(!h.report.heldReasons.some(r => r.startsWith('rendered_not_scheduled')));
+  assert.match(store2.state.cloudPublish.clips['twitch-clip:a'].reason, /^destination_held:\d+:destination_publish_permission_missing$/);
+
+  // A post for the same clip/destination appears while rendering (another run): already_attempted, nothing written.
+  const store3 = memoryStore(baseState([candidate('a', 'twitch:100', 'thegrefg')]));
+  const media = fakeMedia();
+  const render = async input => {
+    const out = await media.render(input);
+    const c = candidate('a', 'twitch:100', 'thegrefg');
+    const st = store3.state;
+    for (const destination of DESTINATIONS) st.cloudPublish.posts.push({ ...postItem({ candidate: c, destination, scheduledAt: new Date(NOW + 5 * 3600_000).toISOString(), caption: 'c', mediaUrl: 'u', mediaSha256: 'a'.repeat(64), hookVariant: 'title' }), status: 'pending_write' });
+    store3.data.set(STREAMER_STATE_NAMESPACE('o'), JSON.stringify(st));
+    return out;
+  };
+  const m3 = fakeMetricool();
+  const r3 = await runCloudPublisher({ env: ON, now: NOW, owner: 'o', store: store3, approvals: approvals({ 'pa-a': 'approved' }), metricool: m3, stager: fakeStager(), fetch: okFetch, ...media, render, clock: () => NOW });
+  assert.equal(m3.calls.schedule.length, 0);
+  assert.ok(r3.report.heldReasons.includes('publish_gate:already_attempted'));
+  assert.ok(!r3.report.heldReasons.some(r => r.startsWith('rendered_not_scheduled')));
+  assert.equal(r3.report.counts.deferred, 0); assert.equal(r3.report.counts.blocked, 0);
 });
 
 test('missing Metricool secrets hold publishing; dry run renders without Metricool', async () => {
