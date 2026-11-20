@@ -9,7 +9,7 @@ import type { OfficeKongCollaboration } from "../server/office-kong-collaboratio
 
 import { agentProbes, summarizeProbe, type AgentLiveStatus } from "./agent-live-status";
 import { emptyKongSupervision, parseKongSupervision, type KongSupervision } from "./kong-supervisor";
-import { emptyCompanyState, parseCompanyState, separateLegacyKongCompany, type CompanyState } from "./agent-company";
+import { emptyCompanyState, isKongSnapshotAgent, kongCareersMirror, mergeKongCompany, parseCompanyState, separateLegacyKongCompany, type CompanyState } from "./agent-company";
 
 export type Severity = "low" | "medium" | "high";
 export type Verdict = "escalado" | "confirmado" | "descartado";
@@ -98,6 +98,10 @@ export type CouncilState = {
   agentStates: Record<string, { working: boolean; since: string }>;
   scout: { lastRunAt: string | null; lastSeen: Record<string, string>; latest: ScoutRelease[]; error: string | null };
   company: CompanyState;
+  /**
+   * Deprecated: read only to migrate states whose `company` lacks `kongCareersMerged`. Written as a mirror of the
+   * KONG careers in `company` (withKongMirror) so an older, not yet republished process keeps them.
+   */
   kongCompany: CompanyState;
   /** Historical records only; never scored or advanced and never returned by the public view. */
   kongLegacyCompany: CompanyState;
@@ -145,7 +149,7 @@ export function emptyCouncilState(): CouncilState {
     lessons: [],
     agentStates: {},
     scout: { lastRunAt: null, lastSeen: {}, latest: [], error: null },
-    company: emptyCompanyState(),
+    company: { ...emptyCompanyState(), kongCareersMerged: true },
     kongCompany: emptyCompanyState(),
     kongLegacyCompany: emptyCompanyState(),
     kongEvidenceAt: {},
@@ -183,7 +187,13 @@ export function parseCouncilState(raw: string | null): CouncilState {
     const value = JSON.parse(raw);
     if (value?.version !== 1 || !Array.isArray(value.debates) || !Array.isArray(value.proposals) || !obj(value.scout)) return emptyCouncilState();
     const base = emptyCouncilState();
-    const legacy = separateLegacyKongCompany(parseCompanyState(value.company), parseCompanyState(value.kongLegacyCompany));
+    // States written before the merge: quarantine old main-company KONG scores as before, then move
+    // the separate KONG ledger in unchanged. Merged states keep their KONG careers in `company`.
+    // The marker lives inside `company` because older processes rebuild `company` field by field and
+    // drop it: a state they wrote is then migrated again from their (mirror-continued) KONG ledger.
+    const merged = obj(value.company)?.kongCareersMerged === true;
+    const legacy = separateLegacyKongCompany(parseCompanyState(value.company), parseCompanyState(value.kongLegacyCompany), merged ? isKongSnapshotAgent : undefined);
+    const company: CompanyState = { ...(merged ? legacy.company : mergeKongCompany(legacy.company, parseCompanyState(value.kongCompany))), kongCareersMerged: true };
     return {
       ...base,
       ...value,
@@ -191,9 +201,9 @@ export function parseCouncilState(raw: string | null): CouncilState {
       lessons: Array.isArray(value.lessons) ? value.lessons : [],
       resolvedDebates: Array.isArray(value.resolvedDebates) ? value.resolvedDebates : [],
       scout: { ...base.scout, ...value.scout, lastSeen: obj(value.scout.lastSeen) ? value.scout.lastSeen : {} },
-      company: legacy.company,
+      company,
       kongLegacyCompany: legacy.archived,
-      kongCompany: parseCompanyState(value.kongCompany),
+      kongCompany: kongCareersMirror(company),
       kongEvidenceAt: Object.fromEntries(Object.entries(obj(value.kongEvidenceAt) || {}).filter(([, v]) => typeof v === "string" && Number.isFinite(Date.parse(v)))),
       kongCollaboration: obj(value.kongCollaboration) && Array.isArray(value.kongCollaboration.exchanges) ? value.kongCollaboration : base.kongCollaboration,
       kongObservedAt: typeof value.kongObservedAt === "string" ? value.kongObservedAt : null,
@@ -207,6 +217,11 @@ export function parseCouncilState(raw: string | null): CouncilState {
   } catch {
     return emptyCouncilState();
   }
+}
+
+/** Every write refreshes the compatibility mirror of the KONG careers (see `kongCompany`). */
+export function withKongMirror(state: CouncilState): CouncilState {
+  return { ...state, company: { ...state.company, kongCareersMerged: true }, kongCompany: kongCareersMirror(state.company) };
 }
 
 function subjectStatus(agentId: string, body: unknown): AgentLiveStatus | null {

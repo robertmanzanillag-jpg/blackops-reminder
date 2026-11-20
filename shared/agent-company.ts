@@ -176,6 +176,8 @@ export type CompanyOrder = {
   // The text is a fixed template derived from finding codes and record ids; `chain` mirrors the
   // evidence (finding -> order -> factory job -> PR -> reviews -> re-audit). Never set by routes.
   selfHeal?: SelfHealOrderMarker;
+  /** Orders placed in the KONG wing (CEO KONG channel); recorded for review only, never dispatched. */
+  scope?: "kong";
 };
 
 export type SelfHealOrderMarker = {
@@ -197,6 +199,8 @@ export type CompanyState = {
   academyJobs?: AcademyJob[];
   /** Black Room academy journal (its own track, so it never blocks the reviewer's daily job). */
   blackroomAcademyJobs?: BlackRoomAcademyJob[];
+  /** Main company only: the KONG careers already live here (migrated from the old separate KONG ledger). */
+  kongCareersMerged?: true;
 };
 
 /** One paired Black Room curriculum evaluation. Grades are computed on the server from fixed expectations. */
@@ -338,6 +342,7 @@ export function parseCompanyState(value: unknown): CompanyState {
     ["running", "completed", "blocked", "unknown"].includes(j.status)).slice(-200) : undefined;
   return { version: 1, careers, trainees, orders, events,
     ...(blackroomAcademyJobs ? { blackroomAcademyJobs } : {}),
+    ...(v.kongCareersMerged === true ? { kongCareersMerged: true as const } : {}),
     retiredCareers: Array.isArray(v.retiredCareers) ? v.retiredCareers : [],
     academyJobs: Array.isArray(v.academyJobs) ? v.academyJobs.map((j, index) => {
       const valid = j && [j.id,j.traineeId,j.curriculumVersion,j.benchmarkId].every(s => typeof s === "string" && s.length > 0) &&
@@ -424,6 +429,11 @@ export function advanceCompany(
     const delta = status.missedTurn && status.state === "error" ? MISSED_TURN_DELTA : DELTA[status.state];
     career.points = Math.max(0, career.points + delta.points);
     career.battery = Math.max(0, Math.min(BATTERY_MAX, career.battery + delta.battery));
+    // A missed scheduled turn is an inactivity charge (same as the vida cadence rule): a 0 reached
+    // this way is protected (zeroByDecay) and flagged for the CEO/Robert, never fired automatically.
+    if (status.missedTurn && status.state === "error" && career.battery === 0) {
+      career.vitality = { anchorAt: iso, missesApplied: 0, creditedIds: [], ...(career.vitality || {}), zeroByDecay: iso };
+    }
     career.cyclesTotal += 1;
     if (status.state === "working") career.cyclesWorking += 1;
     if (career.lastState !== status.state) {
@@ -674,6 +684,7 @@ export function specialistNeeds(state: CompanyState, now: number): Array<{ topic
   const groups = new Map<string, CompanyOrder[]>();
   for (const order of state.orders) {
     if (now - Date.parse(order.createdAt) > SPECIALIST_WINDOW_MS) continue;
+    if (isKongOrder(order)) continue; // KONG wing orders are recorded for review, never BlackOps hiring signals.
     if (order.assignees.length && order.assignees.some((assignee) => assignee.status === "en_curso" || (assignee.status === "hecha" && order.closedBy === "evidencia"))) continue;
     const topic = orderTopic(order.text);
     if (topic === "general") continue;
@@ -895,11 +906,15 @@ export function leaderboard(state: CompanyState, exclude: string[] = ["ceo"]): L
   return rows;
 }
 
-/** KONG has its own company ledger; these ids must never advance in BlackOps. */
+/** KONG agent ids: they are never scored from BlackOps live probes (only from KONG's own snapshot). */
 export const isKongCompanyAgent = (id: string) => id === "kong" || id.startsWith("kong:") || id.startsWith("kong-city:") || ["kong-videos", "kong-metrics", "kong-supervisor"].includes(id);
+/** Agents that live inside KONG (departments, system agents, city jobs): their career is in the main company. */
+export const isKongSnapshotAgent = (id: string) => id.startsWith("kong:") || id.startsWith("kong-city:");
+const isLegacyKongId = isKongCompanyAgent;
 
 /** Quarantine old unproven scores and academy records without relabelling them as new evidence. */
-export function separateLegacyKongCompany(company: CompanyState, archived: CompanyState) {
+export function separateLegacyKongCompany(company: CompanyState, archived: CompanyState, keep: (id: string) => boolean = () => false) {
+  const isKongCompanyAgent = (id: string) => isLegacyKongId(id) && !keep(id);
   const legacyCareers = Object.fromEntries(Object.entries(company.careers).filter(([id]) => isKongCompanyAgent(id)));
   const legacyTrainees = company.trainees.filter(item => isKongCompanyAgent(item.forAgentId));
   const legacyOrders = company.orders.filter(item => item.assignees.some(assignee => isKongCompanyAgent(assignee.agentId)));
@@ -918,5 +933,53 @@ export function separateLegacyKongCompany(company: CompanyState, archived: Compa
       trainees: dedupe([...archived.trainees, ...legacyTrainees]),
       orders: dedupe([...archived.orders, ...legacyOrders]),
     },
+  };
+}
+
+export const isKongOrder = (order: CompanyOrder) => order.scope === "kong" || (order.assignees.length > 0 && order.assignees.every(assignee => isKongSnapshotAgent(assignee.agentId)));
+
+/**
+ * Moves the careers of the old separate KONG ledger into the main company, unchanged (points,
+ * battery, generation, memory, skills, evidence ids). Ids map 1:1 (`kong:<id>`,
+ * `kong-city:<city>:<category>`), so nothing is reset or duplicated. Idempotent: a career already in
+ * the main company is kept as is unless the ledger copy has strictly more scored cycles.
+ */
+export function mergeKongCompany(company: CompanyState, kong: CompanyState): CompanyState {
+  const careers = { ...company.careers };
+  for (const [id, career] of Object.entries(kong.careers)) {
+    if (!isKongSnapshotAgent(id) || career.agentId !== id) continue;
+    const current = careers[id];
+    if (!current || career.cyclesTotal > current.cyclesTotal) careers[id] = career;
+  }
+  const byId = <T extends { id: string }>(items: T[], extra: T[]) => [...new Map([...items, ...extra].map(item => [item.id, item])).values()];
+  const trainees = byId(company.trainees, kong.trainees.filter(item => isKongSnapshotAgent(item.forAgentId) && !company.trainees.some(t => t.id === item.id)));
+  // Every order of the old KONG ledger belonged to the KONG wing, even without assignees.
+  const orders = byId(company.orders, kong.orders.filter(item => !company.orders.some(o => o.id === item.id)).map(item => ({ ...item, scope: "kong" as const })))
+    .sort((a, b) => toMsSafe(b.createdAt) - toMsSafe(a.createdAt));
+  const retiredKey = (c: AgentCareer) => `${c.agentId}#${c.generation}#${c.hiredAt || ""}`;
+  const retired = company.retiredCareers || [];
+  const retiredCareers = [...retired, ...(kong.retiredCareers || []).filter(c => isKongSnapshotAgent(c.agentId) && !retired.some(r => retiredKey(r) === retiredKey(c)))];
+  return { ...company, careers, trainees, orders, retiredCareers };
+}
+
+/** Compatibility copy of the KONG careers, written only so a not-yet-republished older process keeps the same careers. Never read as a ledger. */
+export function kongCareersMirror(company: CompanyState): CompanyState {
+  return {
+    ...emptyCompanyState(),
+    careers: Object.fromEntries(Object.entries(company.careers).filter(([id]) => isKongSnapshotAgent(id))),
+    trainees: company.trainees.filter(item => isKongSnapshotAgent(item.forAgentId)),
+    orders: company.orders.filter(isKongOrder),
+    retiredCareers: (company.retiredCareers || []).filter(c => isKongSnapshotAgent(c.agentId)),
+  };
+}
+
+/** The BlackOps-agent part of the main company (the office main wing); KONG careers are shown by kongCareersMirror. */
+export function mainCompanyView(company: CompanyState): CompanyState {
+  return {
+    ...company,
+    careers: Object.fromEntries(Object.entries(company.careers).filter(([id]) => !isKongSnapshotAgent(id))),
+    trainees: company.trainees.filter(item => !isKongSnapshotAgent(item.forAgentId)),
+    orders: company.orders.filter(item => !isKongOrder(item)),
+    retiredCareers: (company.retiredCareers || []).filter(c => !isKongSnapshotAgent(c.agentId)),
   };
 }

@@ -8,6 +8,7 @@ import {capabilityTrainingSummary,capabilityRunSummary} from "./office-capabilit
 import { createHash } from "node:crypto";
 import { factoryAgentForStage, type FactoryJobRow } from "@shared/factory-office-agents";
 import { redactChatActivity } from "@shared/agent-chat-routing";
+import { isKongSnapshotAgent } from "@shared/agent-company";
 
 const FACTORY_LIVE_CACHE_MS = 30_000;
 const FACTORY_LIVE_TIMEOUT_MS = 3_000;
@@ -98,6 +99,10 @@ export function registerAgentCouncilRoutes(app: Express, dependencies: {
         view.kongRead = null;
         view.kongCollaboration = { verified: false, observedAt: null, totalFindings: 0, exchanges: [] };
         view.roleWorkToday = [];
+        // KONG careers share the main ledger but stay owner-only: no KONG vida rows, automejora or lessons.
+        view.vitality = view.vitality.filter(row => !isKongSnapshotAgent(row.agentId));
+        view.proposals = view.proposals.filter(proposal => !isKongSnapshotAgent(proposal.owner));
+        view.lessons = view.lessons.filter(lesson => !isKongSnapshotAgent(lesson.subject));
         // Owner-only per-agent chat: orders, hand-off events and hand-off memory never reach other users.
         view.company = redactChatActivity(view.company);
       }
