@@ -166,7 +166,7 @@ async function listWorkflowRuns(repo: string, workflow: string, sinceIso: string
   const [owner, name] = repo.split("/");
   try {
     const runs = await github.paginate(github.actions.listWorkflowRuns, { owner, repo: name, workflow_id: workflow, created: `>=${sinceIso.slice(0, 10)}`, per_page: 100 });
-    return runs.map(run => ({ id: run.id, status: run.status, runStartedAt: run.run_started_at || null, updatedAt: run.updated_at || null, createdAt: run.created_at }));
+    return runs.map(run => ({ id: run.id, status: run.status, conclusion: run.conclusion ?? null, runStartedAt: run.run_started_at || null, updatedAt: run.updated_at || null, createdAt: run.created_at }));
   } catch (error) {
     if ((error as { status?: number }).status === 404) return []; // workflow not created yet: no runs, no spend
     throw error;

@@ -32,7 +32,7 @@ export function resolveMirrorUsdPerMinute(env: NodeJS.ProcessEnv = process.env):
   const value = raw === undefined || raw.trim() === "" ? 0.008 : Number(raw);
   return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0.008;
 }
-export type MirrorWorkflowRun = { id: number; status: string | null; runStartedAt: string | null; updatedAt: string | null; createdAt: string };
+export type MirrorWorkflowRun = { id: number; status: string | null; conclusion?: string | null; runStartedAt: string | null; updatedAt: string | null; createdAt: string };
 const round = (value: number) => Math.round(value * 100) / 100;
 export function estimateMirrorSpend(runs: MirrorWorkflowRun[], now: number, env: NodeJS.ProcessEnv = process.env) {
   const rate = resolveMirrorUsdPerMinute(env), budgetUsd = resolveMirrorRunBudgetUsd(env);
