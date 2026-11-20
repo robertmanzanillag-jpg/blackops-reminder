@@ -67,6 +67,7 @@ import { registerOfficeRoutes } from "./office-routes";
 import { registerOfficeBusinessRoutes } from "./office-business-routes";
 import { registerSoftwareFactoryRoutes } from "./software-factory-routes";
 import { registerKongRepairRoutes } from "./kong-repair-routes";
+import { registerKongMirrorRoutes, readKongMirrorSummarySpend } from "./kong-mirror-routes";
 import { getFactoryOfficeAdmission } from "./software-factory-office-connection";
 import { getAuthenticatedCurrentUserId } from "./user-context";
 import { officeRuntime } from "./office-runtime";
@@ -317,6 +318,7 @@ export async function registerRoutes(
   app.use(ceoDomainRouteGuard);
   registerOfficeRoutes(app);
   registerKongRepairRoutes(app);
+  registerKongMirrorRoutes(app);
   registerOfficeBusinessRoutes(app);
   registerSoftwareFactoryRoutes(app, {resolveCompanyAdmission:getFactoryOfficeAdmission});
   const CLIPPER_ROUTE_SCRIPT_TIMEOUT_MS = 120_000;
@@ -3957,6 +3959,9 @@ export async function registerRoutes(
       if (!action || action.userId !== userId) {
         return res.status(404).json({ error: "Pending action not found" });
       }
+      if (action.actionType === "kong_mirror_improvement") {
+        return res.status(409).json({ error: "Esta mejora KONG se aprueba desde su tarjeta del Mirror Lab (verifica SHA y checks antes del merge)." });
+      }
       const canEditRadioDjName = action.actionType === "radio_edit.resolve_dj_name" && action.status === "failed";
       if (!["pending", "edited", "snoozed"].includes(action.status) && !canEditRadioDjName) {
         return res.status(400).json({ error: "Only pending actions can be edited" });
@@ -4022,6 +4027,9 @@ export async function registerRoutes(
       const userId = getCurrentUserId(req);
       if (!action || action.userId !== userId) {
         return res.status(404).json({ error: "Pending action not found" });
+      }
+      if (action.actionType === "kong_mirror_improvement") {
+        return res.status(409).json({ error: "Esta mejora KONG se aprueba desde su tarjeta del Mirror Lab (verifica SHA y checks antes del merge)." });
       }
       if (!["pending", "edited", "snoozed"].includes(action.status)) {
         return res.status(400).json({ error: "Only pending actions can be approved" });
@@ -4195,6 +4203,9 @@ export async function registerRoutes(
       const userId = getCurrentUserId(req);
       if (!action || action.userId !== userId) {
         return res.status(404).json({ error: "Pending action not found" });
+      }
+      if (action.actionType === "kong_mirror_improvement") {
+        return res.status(409).json({ error: "Esta mejora KONG se aprueba desde su tarjeta del Mirror Lab (verifica SHA y checks antes del merge)." });
       }
       const result = await executeApprovedPendingAction(action, userId);
       res.status(result.success ? 200 : 400).json(result);
@@ -6562,7 +6573,8 @@ export async function registerRoutes(
         storage.getAutomationRuns(userId, undefined, 500),
         storage.getAutomationDefinitions(userId),
       ]);
-      res.json({ ...buildMonthlyAiSpendReport(runs), automations });
+      const mirrorSummary = await readKongMirrorSummarySpend().catch(() => null);
+      res.json({ ...buildMonthlyAiSpendReport(runs, new Date(), mirrorSummary ? [mirrorSummary] : []), automations });
     } catch (error) {
       res.status(500).json({ error: "Failed to build AI spend report" });
     }

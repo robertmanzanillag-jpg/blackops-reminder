@@ -45,6 +45,7 @@ const DEFAULT_SCOPE_PERMISSIONS: Record<TrustScope, PermissionLevel> = {
 };
 
 const ACTION_RISK: Record<string, RiskLevel> = {
+  kong_mirror_improvement: "high",
   "calendar.create_event": "medium",
   "calendar.modify_radio": "high",
   "finance.create_investment": "high",

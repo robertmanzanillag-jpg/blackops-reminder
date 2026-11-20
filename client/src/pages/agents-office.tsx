@@ -40,6 +40,7 @@ import { OfficeCentralPanel } from "@/components/agents-world-office/office-cent
 import { useWorkspaceRole } from "@/lib/workspace-role";
 import { KongRepairDialog } from "@/components/kong-repair-dialog";
 import { KongOperationsPanel } from "@/components/kong-operations-panel";
+import { KongMirrorPanel } from "@/components/kong-mirror-panel";
 import { ClippersOfficeArea } from "@/components/clippers-office-area";
 import { AgentVitalityButton } from "@/components/agent-vitality-roster";
 import type { AgentLiveStatus } from "@/lib/agent-live-status";
@@ -1416,6 +1417,7 @@ function LiveAgentsOffice({ ownerId }: { ownerId: string }) {
               <div data-testid="office-kong-operations-slot">
                 <KongOperationsPanel />
               </div>
+              {workspace.isOwner && <div data-testid="office-kong-mirror-slot"><KongMirrorPanel /></div>}
             </div>
             <div className="hidden w-[260px] rounded-3xl border border-white/10 bg-[#0c1018]/92 p-4 shadow-2xl shadow-black/40 backdrop-blur">
               <div className="mb-2 flex items-center justify-between">

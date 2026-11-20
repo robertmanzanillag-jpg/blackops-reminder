@@ -554,6 +554,9 @@ async function handleTelegramControlCommand(userId: string, message: string): Pr
   if (command === "approve") {
     const actionId = extractActionId(message);
     if (!actionId) return "Pásame el ID completo de la acción. Ejemplo: aprobar 00000000-0000-0000-0000-000000000000";
+    // KONG Mirror Lab merges need the card's SHA + checks guards: never approve them from Telegram.
+    const pendingKind = (await storage.getPendingAction(actionId))?.actionType;
+    if (pendingKind === "kong_mirror_improvement") return "Esta mejora KONG se aprueba solo desde su tarjeta del Mirror Lab en BlackOps (verifica SHA y checks antes del merge). No cambié nada.";
 
     await recordPendingActionDecision(userId, actionId, "approved", "Aprobado desde Telegram");
     const action = await storage.getPendingAction(actionId);
