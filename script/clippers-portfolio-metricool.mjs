@@ -1,3 +1,4 @@
+import { metricoolWriteRefusal } from '../shared/clippers-metricool-writer.mjs';
 import { createHash, randomUUID } from 'node:crypto';
 
 const API = 'https://app.metricool.com';
@@ -197,7 +198,7 @@ export function providerHealthFromRows(rows, destination) {
   return { ownerAction, published };
 }
 
-export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
+export function createPortfolioMetricool({ token, userId, fetcher = fetch, env = process.env }) {
   if (typeof token !== 'string' || token.length < 12 || !/^\d+$/.test(String(userId))) throw new Error('metricool_credentials_unavailable');
   const headers = { 'X-Mc-Auth': token, accept: 'application/json' };
   let profiles;
@@ -411,6 +412,9 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
         evidenceSha256:createHash('sha256').update(JSON.stringify(evidence)).digest('hex') };
     },
     async schedule(destination, item) {
+      // Cloud is the only writer for the Clippers brands (shared/clippers-metricool-writer.mjs).
+      const refused = metricoolWriteRefusal(destination?.brandId, env);
+      if (refused) throw new Error(refused);
       profiles = settings = undefined;
       if (!(await destinationSettings(destination)).canPublish) throw new Error('destination_publish_permission_missing');
       const networkOptions = destination.network === 'facebook'

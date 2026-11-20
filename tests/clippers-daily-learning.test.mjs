@@ -7,6 +7,8 @@ import path from 'node:path';
 import test from 'node:test';
 import { runClippersDailyLearning } from '../script/clippers-daily-learning.mjs';
 import { createPortfolioMetricool, DESTINATIONS, destinationKey } from '../script/clippers-portfolio-metricool.mjs';
+// These tests exercise the write paths themselves: opt in like an Actions runner (shared/clippers-metricool-writer.mjs).
+process.env.CLIPPERS_RUNTIME = 'cloud';
 
 const digest = value => createHash('sha256').update(JSON.stringify(value)).digest('hex');
 const NOW = new Date('2026-11-18T15:00:00Z');

@@ -57,7 +57,7 @@ test('refuses a clip the cloud already gave to another account (Postgres ledger)
     posts: [{ id: 'p1', candidateId: 'youtube:abcDEF12345', destinationKey: '6431687:tiktok:streamersclipusa', status: 'scheduled', lane: 'sports', streamKey: 'youtube:abcDEF12345', segment: { key: 'youtube:abcDEF12345', start: 10 }, mediaSha256: 'c'.repeat(64) }] } };
   const store = memoryStore(cloudState);
   const metricool = calendar();
-  const guard = createMacLedgerGuard({ env: { OFFICE_OWNER_ID: 'owner' }, workspaceRoot, metricool, store });
+  const guard = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud',  OFFICE_OWNER_ID: 'owner' }, workspaceRoot, metricool, store });
   assert.equal(guard.mode, 'postgres');
   const dup = await guard.reserve(MEMES, item());
   assert.equal(dup.ok, false);
@@ -80,7 +80,7 @@ test('refuses a clip the cloud already gave to another account (Postgres ledger)
 test('without a database: calendar check is mandatory, local ledger blocks cross-account, later mirror to Postgres', async t => {
   const workspaceRoot = await root(t);
   const metricool = calendar();
-  const guard = createMacLedgerGuard({ env: {}, workspaceRoot, metricool });
+  const guard = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud' }, workspaceRoot, metricool });
   assert.equal(guard.mode, 'local_plus_calendar');
   const first = await guard.reserve(MEMES, item());
   assert.equal(first.ok, true, first.reason);
@@ -93,7 +93,7 @@ test('without a database: calendar check is mandatory, local ledger blocks cross
   assert.equal((await guard.reserve(MEMES, item({ id: 'a1' }))).ok, true);
   // Next run with Postgres pushes the unmirrored local entries.
   const store = memoryStore(null);
-  const withDb = createMacLedgerGuard({ env: { OFFICE_OWNER_ID: 'owner' }, workspaceRoot, metricool, store });
+  const withDb = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud',  OFFICE_OWNER_ID: 'owner' }, workspaceRoot, metricool, store });
   assert.equal((await withDb.reserve(MEMES, item({ id: 'z', sourceUrl: 'https://youtu.be/third000000', mediaSha256: 'f'.repeat(64) }))).ok, true);
   const ids = cloudPublishOf(store.raw).mediaLedger.map(e => e.candidateId);
   assert.deepEqual(ids.sort(), ['mac:a1', 'mac:z']);
@@ -101,23 +101,23 @@ test('without a database: calendar check is mandatory, local ledger blocks cross
 
 test('fails closed: calendar duplicate, calendar unavailable, database down, required database missing, corrupt ledger', async t => {
   const workspaceRoot = await root(t);
-  const dup = createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar(async () => { throw new Error('cross_account_duplicate'); }) });
+  const dup = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud' }, workspaceRoot, metricool: calendar(async () => { throw new Error('cross_account_duplicate'); }) });
   assert.deepEqual([(await dup.reserve(MEMES, item())).ok, (await dup.reserve(MEMES, item())).reason], [false, 'cross_account_duplicate']);
-  const down = createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar(async () => { throw new Error('HTTP 503'); }) });
+  const down = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud' }, workspaceRoot, metricool: calendar(async () => { throw new Error('HTTP 503'); }) });
   assert.match((await down.reserve(MEMES, item())).reason, /^calendar_check_failed:/);
-  const none = createMacLedgerGuard({ env: {}, workspaceRoot, metricool: null });
+  const none = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud' }, workspaceRoot, metricool: null });
   assert.equal((await none.reserve(MEMES, item())).reason, 'calendar_check_unavailable');
-  const db = createMacLedgerGuard({ env: { OFFICE_OWNER_ID: 'o' }, workspaceRoot, metricool: calendar(), store: memoryStore(null, { fail: true }) });
+  const db = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud',  OFFICE_OWNER_ID: 'o' }, workspaceRoot, metricool: calendar(), store: memoryStore(null, { fail: true }) });
   assert.match((await db.reserve(MEMES, item())).reason, /^ledger_check_unavailable:/);
-  const required = createMacLedgerGuard({ env: { CLIPPERS_LEDGER_REQUIRE_DATABASE: 'true' }, workspaceRoot, metricool: calendar() });
+  const required = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud',  CLIPPERS_LEDGER_REQUIRE_DATABASE: 'true' }, workspaceRoot, metricool: calendar() });
   assert.equal((await required.reserve(MEMES, item())).reason, 'ledger_database_required_unavailable');
-  const invalidState = createMacLedgerGuard({ env: { OFFICE_OWNER_ID: 'o' }, workspaceRoot, metricool: calendar(), store: memoryStore({ version: 2 }) });
+  const invalidState = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud',  OFFICE_OWNER_ID: 'o' }, workspaceRoot, metricool: calendar(), store: memoryStore({ version: 2 }) });
   assert.match((await invalidState.reserve(MEMES, item())).reason, /STREAMER_STATE_INVALID/);
   assert.equal((await none.reserve(MEMES, { caption: 'x' })).reason, 'ledger_identity_missing');
   const { writeFile, mkdir } = await import('node:fs/promises');
   await mkdir(path.join(workspaceRoot, 'reports'), { recursive: true });
   await writeFile(path.join(workspaceRoot, MAC_LEDGER_FILE), '{not json');
-  const corrupt = createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar() });
+  const corrupt = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud' }, workspaceRoot, metricool: calendar() });
   assert.match((await corrupt.reserve(MEMES, item())).reason, /^ledger_check_unavailable:/);
 });
 
@@ -127,7 +127,7 @@ test('autopilot never calls createScheduledPost when the ledger guard refuses', 
   const queueItem = { campaignId: 'c1', draftFile: 'd1.mp4', account: 'streamersclipusa', publishAllowed: true, status: 'ready_for_metricool_autopilot',
     mediaUrl: 'https://media.example.com/d1.mp4', caption: 'Wait for it #sports', requiredHashtags: [], sourceUrl: 'https://youtu.be/abcDEF12345' };
   const result = await runMetricoolAutopilot({
-    env: { CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: 'true', METRICOOL_USER_TOKEN: 'token-123456789', METRICOOL_USER_ID: '3558197', CLIPPERS_METRICOOL_BLOG_ID: '6431687', CLIPPERS_TIKTOK_ACCOUNT: 'streamersclipusa' },
+    env: { CLIPPERS_RUNTIME: 'cloud',  CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: 'true', METRICOOL_USER_TOKEN: 'token-123456789', METRICOOL_USER_ID: '3558197', CLIPPERS_METRICOOL_BLOG_ID: '6431687', CLIPPERS_TIKTOK_ACCOUNT: 'streamersclipusa' },
     workspaceRoot, now: new Date('2026-11-20T12:00:00Z'),
     queue: { targetDailyClips: 1, items: [queueItem] }, ledger: [],
     mediaReceipts: [{ campaignId: 'c1', draftFile: 'd1.mp4', fileId: 'f1', mediaUrl: queueItem.mediaUrl, sha256: 'a'.repeat(64) }],
@@ -148,7 +148,7 @@ test('Twitch: cloud claim blocks the Mac and a Mac claim blocks the cloud (clip 
   const cloudEntry = mediaEntry({ candidate: cloudCandidate, segment: sourceSegment(cloudCandidate, { start: 0 }), mediaSha256: 'c'.repeat(64), destinationKey: '6431687:tiktok:streamersclipusa', at: 'x' });
   assert.match(cloudEntry.segment.key, /^twitch-moment:/);
   const store = memoryStore({ version: 1, candidates: [], creators: {}, takedowns: [], cloudPublish: { version: 1, clips: {}, posts: [], mediaLedger: [cloudEntry] } });
-  const guard = createMacLedgerGuard({ env: { OFFICE_OWNER_ID: 'o' }, workspaceRoot: await root(t), metricool: calendar(), store });
+  const guard = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud',  OFFICE_OWNER_ID: 'o' }, workspaceRoot: await root(t), metricool: calendar(), store });
   // Same clip URL (no timing info on the Mac side): matched through sourceId <-> candidateId.
   const r1 = await guard.reserve(MEMES, item({ id: 'm1', sourceUrl: 'https://www.twitch.tv/kai/clip/FunnySlug-abc', mediaSha256: '1'.repeat(64) }));
   assert.match(r1.reason, /^(cross_account_duplicate|stream_owned_by_other_account)$/);
@@ -172,8 +172,8 @@ test('local ledger lock: concurrent reserves never double-claim; a held lock ref
   const workspaceRoot = await root(t);
   let release;
   const slow = calendar(() => new Promise(r => { release = r; }));
-  const g1 = createMacLedgerGuard({ env: {}, workspaceRoot, metricool: slow });
-  const g2 = createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar() });
+  const g1 = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud' }, workspaceRoot, metricool: slow });
+  const g2 = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud' }, workspaceRoot, metricool: calendar() });
   const first = g1.reserve(MEMES, item());
   await new Promise(r => setTimeout(r, 50));
   const second = g2.reserve(SPORTS, item({ id: 'x2', mediaSha256: '9'.repeat(64) }));
@@ -185,11 +185,11 @@ test('local ledger lock: concurrent reserves never double-claim; a held lock ref
   const { writeFile, utimes } = await import('node:fs/promises');
   const lock = path.join(workspaceRoot, MAC_LEDGER_FILE) + '.lock';
   await writeFile(lock, 'other');
-  const busy = await createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar() }).reserve(MEMES, item({ id: 'y', sourceUrl: 'https://youtu.be/yyyyyyyyyyy', mediaSha256: '8'.repeat(64) }));
+  const busy = await createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud' }, workspaceRoot, metricool: calendar() }).reserve(MEMES, item({ id: 'y', sourceUrl: 'https://youtu.be/yyyyyyyyyyy', mediaSha256: '8'.repeat(64) }));
   assert.equal(busy.reason, 'ledger_check_unavailable:ledger_lock_busy');
   const old = new Date(Date.now() - 10 * 60_000);
   await utimes(lock, old, old);
-  const after = await createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar() }).reserve(MEMES, item({ id: 'y', sourceUrl: 'https://youtu.be/yyyyyyyyyyy', mediaSha256: '8'.repeat(64) }));
+  const after = await createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud' }, workspaceRoot, metricool: calendar() }).reserve(MEMES, item({ id: 'y', sourceUrl: 'https://youtu.be/yyyyyyyyyyy', mediaSha256: '8'.repeat(64) }));
   assert.equal(after.ok, true, after.reason);
 });
 
@@ -199,11 +199,11 @@ test('reasons are fixed codes (no hostnames) and refused runs still mirror pendi
   assert.equal(safeCode(Object.assign(new Error('password authentication failed for user "x"'), { code: '28P01' })), 'database_auth_failed');
   assert.equal(safeCode(new Error('getaddrinfo ENOTFOUND secret-host')), 'internal_error');
   const workspaceRoot = await root(t);
-  const leak = createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar(async () => { throw new Error('GET https://app.metricool.com/api?token=abc failed'); }) });
+  const leak = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud' }, workspaceRoot, metricool: calendar(async () => { throw new Error('GET https://app.metricool.com/api?token=abc failed'); }) });
   assert.equal((await leak.reserve(MEMES, item())).reason, 'calendar_check_failed:provider_error');
-  assert.equal((await createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar() }).reserve(MEMES, item({ id: 'p1' }))).ok, true);
+  assert.equal((await createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud' }, workspaceRoot, metricool: calendar() }).reserve(MEMES, item({ id: 'p1' }))).ok, true);
   const store = memoryStore(null);
-  const refused = await createMacLedgerGuard({ env: { OFFICE_OWNER_ID: 'o' }, workspaceRoot, metricool: calendar(), store }).reserve(SPORTS, item({ id: 'p2', mediaSha256: '7'.repeat(64) }));
+  const refused = await createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud',  OFFICE_OWNER_ID: 'o' }, workspaceRoot, metricool: calendar(), store }).reserve(SPORTS, item({ id: 'p2', mediaSha256: '7'.repeat(64) }));
   assert.equal(refused.ok, false);
   assert.deepEqual(cloudPublishOf(store.raw).mediaLedger.map(e => e.candidateId), ['mac:p1']);
 });
@@ -215,7 +215,7 @@ test('lock: holder refreshes mtime while held; stale break never removes a fresh
   const lock = path.join(workspaceRoot, MAC_LEDGER_FILE) + '.lock';
   t.mock.timers.enable({ apis: ['setInterval'] });
   let release, mtimes = [];
-  const guard = createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar(() => new Promise(r => { release = r; })) });
+  const guard = createMacLedgerGuard({ env: { CLIPPERS_RUNTIME: 'cloud' }, workspaceRoot, metricool: calendar(() => new Promise(r => { release = r; })) });
   const pending = guard.reserve(MEMES, item());
   await new Promise(r => setImmediate(r)); await new Promise(r => setTimeout(r, 30));
   const old = new Date(Date.now() - 10 * 60_000);

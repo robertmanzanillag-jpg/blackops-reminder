@@ -70,7 +70,7 @@ test("counts existing TikTok posts toward the daily limit and avoids occupied sl
 });
 
 test("does not schedule without explicit authorization", async () => {
-  const result = await runMetricoolAutopilot({ env: {}, queue: { targetDailyClips: 5, items: [eligible] } });
+  const result = await runMetricoolAutopilot({ env: { CLIPPERS_RUNTIME: 'cloud' }, queue: { targetDailyClips: 5, items: [eligible] } });
   assert.equal(result.status, "blocked");
   assert.equal(result.scheduled, 0);
 });
@@ -80,7 +80,7 @@ test("dry-run validates a verified media receipt without credentials or network 
   try {
     const result = await runMetricoolAutopilot({
       dryRun: true,
-      env: { CLIPPERS_METRICOOL_BLOG_ID: "6431687", CLIPPERS_TIKTOK_ACCOUNT: "streamersclipusa" },
+      env: { CLIPPERS_RUNTIME: 'cloud',  CLIPPERS_METRICOOL_BLOG_ID: "6431687", CLIPPERS_TIKTOK_ACCOUNT: "streamersclipusa" },
       workspaceRoot,
       ledgerGuard: allowGuard,
       queue: { targetDailyClips: 5, items: [eligible] },
@@ -103,7 +103,7 @@ test("blocks an item whose public URL has no matching upload receipt", async () 
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-metricool-receipt-"));
   try {
     const result = await runMetricoolAutopilot({
-      env: {
+      env: { CLIPPERS_RUNTIME: 'cloud', 
         CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
         METRICOOL_USER_TOKEN: "token",
         METRICOOL_USER_ID: "3558197",
@@ -130,7 +130,7 @@ test("schedules eligible unique rows through Metricool MCP and writes no paid sp
   const calls = [];
   try {
     const result = await runMetricoolAutopilot({
-      env: {
+      env: { CLIPPERS_RUNTIME: 'cloud', 
         CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
         METRICOOL_USER_TOKEN: "token",
         METRICOOL_USER_ID: "3558197",
@@ -188,7 +188,7 @@ test("records an uncertain Metricool outcome and never retries it silently", asy
   try {
     let mcpCalls = 0;
     const result = await runMetricoolAutopilot({
-      env: {
+      env: { CLIPPERS_RUNTIME: 'cloud', 
         CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
         METRICOOL_USER_TOKEN: "token",
         METRICOOL_USER_ID: "3558197",
@@ -227,7 +227,7 @@ test("records an uncertain Metricool outcome and never retries it silently", asy
     assert.equal(mcpCalls, 1);
 
     const retry = await runMetricoolAutopilot({
-      env: {
+      env: { CLIPPERS_RUNTIME: 'cloud', 
         CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
         METRICOOL_USER_TOKEN: "token",
         METRICOOL_USER_ID: "3558197",
@@ -259,7 +259,7 @@ test("blocks a queue item routed to a different Metricool blog", async () => {
   const workspaceRoot = await mkdtemp(path.join(os.tmpdir(), "clippers-metricool-blog-"));
   try {
     const result = await runMetricoolAutopilot({
-      env: {
+      env: { CLIPPERS_RUNTIME: 'cloud', 
         CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
         METRICOOL_USER_TOKEN: "token",
         METRICOOL_USER_ID: "3558197",
@@ -287,7 +287,7 @@ test("blocks a slot that would run after the verified campaign expiry", async ()
   let mcpCalls = 0;
   try {
     const result = await runMetricoolAutopilot({
-      env: {
+      env: { CLIPPERS_RUNTIME: 'cloud', 
         CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
         METRICOOL_USER_TOKEN: "token",
         METRICOOL_USER_ID: "3558197",
@@ -323,7 +323,7 @@ test("blocks an already expired campaign without calling Metricool", async () =>
   let fetchCalls = 0;
   try {
     const result = await runMetricoolAutopilot({
-      env: {
+      env: { CLIPPERS_RUNTIME: 'cloud', 
         CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
         METRICOOL_USER_TOKEN: "token",
         METRICOOL_USER_ID: "3558197",
@@ -356,7 +356,7 @@ test("deduplicates identical items inside one queue before calling Metricool", a
   let mcpCalls = 0;
   try {
     const result = await runMetricoolAutopilot({
-      env: {
+      env: { CLIPPERS_RUNTIME: 'cloud', 
         CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true",
         METRICOOL_USER_TOKEN: "token",
         METRICOOL_USER_ID: "3558197",
@@ -406,7 +406,7 @@ test("skips a concurrent autopilot run while its lock is active", async () => {
   const lock = await open(path.join(reportDir, "metricool-autopilot.lock"), "wx", 0o600);
   try {
     const result = await runMetricoolAutopilot({
-      env: { CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true" },
+      env: { CLIPPERS_RUNTIME: 'cloud',  CLIPPERS_METRICOOL_AUTOPUBLISH_AUTHORIZED: "true" },
       workspaceRoot,
       ledgerGuard: allowGuard,
       mediaReceipts: [mediaReceipt],

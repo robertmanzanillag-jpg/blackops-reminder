@@ -9,6 +9,8 @@ import test from 'node:test';
 import { runClippersDailyLearning } from '../script/clippers-daily-learning.mjs';
 import { confirmedRenderReceipt, renderClippersPortfolio } from '../script/clippers-portfolio-render.mjs';
 import { DESTINATIONS, destinationKey } from '../script/clippers-portfolio-metricool.mjs';
+// These tests exercise the write paths themselves: opt in like an Actions runner (shared/clippers-metricool-writer.mjs).
+process.env.CLIPPERS_RUNTIME = 'cloud';
 
 const exec = promisify(execFile);
 const engineSha = value => createHash('sha256').update(value).digest('hex');

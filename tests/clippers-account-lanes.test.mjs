@@ -10,6 +10,8 @@ import { peakStartFromEbur128, wordsFromWhisperJson, ffmpegRenderArgs } from '..
 import { createPortfolioMetricool } from '../script/clippers-portfolio-metricool.mjs';
 import { captionHasCredit, buildCreditCaption } from '../shared/clippers-streamer-policy.mjs';
 import { STREAMER_STATE_NAMESPACE } from '../script/clippers-streamer-discovery.mjs';
+// These tests exercise the write paths themselves: opt in like an Actions runner (shared/clippers-metricool-writer.mjs).
+process.env.CLIPPERS_RUNTIME = 'cloud';
 
 const NOW = Date.parse('2026-11-19T14:00:00.000Z'); // Thursday 09:00 New York
 const MEMES = '6431685:tiktok:streamersus', SPORT = '6431687:tiktok:streamersclipusa', MIAMI = '6591612:tiktok:news305miami';
