@@ -18,6 +18,21 @@ export function isLockNotAvailable(error: unknown, depth = 0): boolean {
   } catch { return false; }
 }
 
+/** True when the error or any error in its cause chain marks a council update as already started. */
+export function councilUpdateStarted(error: unknown, depth = 0): boolean {
+  if (error === null || typeof error !== "object" || depth > 4) return false;
+  try {
+    if (Object.getOwnPropertyDescriptor(error, "updateStarted")?.value === true) return true;
+    const cause = Object.getOwnPropertyDescriptor(error, "cause")?.value;
+    return cause !== undefined && councilUpdateStarted(cause, depth + 1);
+  } catch { return true; }
+}
+
+/** 55P03 raised before any council update callback ran (nothing was written): safe to retry next cycle. */
+export function isRetryableLockContention(error: unknown): boolean {
+  return isLockNotAvailable(error) && !councilUpdateStarted(error);
+}
+
 export interface LockHolder { pid: number; application: string; state: string; granted: boolean; xactSeconds: number | null }
 export interface LockDiagnosticsClient { query(sql: string, values?: unknown[]): Promise<{ rows: Record<string, unknown>[] }> }
 
@@ -48,7 +63,7 @@ export function skipOnOwnerLockTimeout(step: string, run: () => Promise<void>, d
     try {
       await run();
     } catch (error) {
-      if (!isLockNotAvailable(error)) throw error;
+      if (!isRetryableLockContention(error)) throw error;
       let holders: LockHolder[] | "unavailable" = "unavailable";
       try { holders = await diagnose(); } catch { /* diagnostics are best effort */ }
       log(JSON.stringify({ event: "office_owner_lock_busy", step, action: "skipped_cycle_will_retry", holders }));

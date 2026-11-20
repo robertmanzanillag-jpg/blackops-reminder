@@ -108,20 +108,54 @@ export function ytDlpDownloadArgs({ url, platform, start, duration, outTemplate,
 }
 
 /** ffmpeg args for the vertical edit. Inputs must be in a safe temp dir (paths go into the filtergraph). */
-export function ffmpegRenderArgs({ input, output, hookFile, creditFile, fontFile, duration }) {
+export function ffmpegRenderArgs({ input, output, hookFile, creditFile, fontFile, duration, start = 0, words = [] }) {
   const d = Math.max(1, Math.min(STREAMER_CLIP_MAX_SECONDS, Number(duration)));
   const font = filterPath(fontFile), hook = filterPath(hookFile), credit = filterPath(creditFile);
+  // Word-by-word burned captions (lower-middle), one drawtext per word with its own time window.
+  const wordFilters = (Array.isArray(words) ? words : []).slice(0, MAX_CAPTION_WORDS).filter(w => w?.file && Number.isFinite(w.from) && Number.isFinite(w.to) && w.to > w.from)
+    .map(w => `drawtext=fontfile=${font}:textfile=${filterPath(w.file)}:expansion=none:fontsize=78:fontcolor=yellow:borderw=6:bordercolor=black:x=(w-text_w)/2:y=h*0.66:enable='between(t,${w.from.toFixed(2)},${w.to.toFixed(2)})'`);
   const text = (file, size, y, box) => `drawtext=fontfile=${font}:textfile=${file}:expansion=none:fontsize=${size}:fontcolor=white:borderw=5:bordercolor=black@0.85:line_spacing=10:text_align=C:x=(w-text_w)/2:y=${y}${box ? ':box=1:boxcolor=black@0.35:boxborderw=18' : ''}`;
   const graph = [
     `[0:v]fps=30,split=2[a][b]`,
     `[a]scale=${RENDER_WIDTH}:${RENDER_HEIGHT}:force_original_aspect_ratio=increase,crop=${RENDER_WIDTH}:${RENDER_HEIGHT},gblur=sigma=28,eq=brightness=-0.10[bg]`,
     `[b]scale=${RENDER_WIDTH}:${RENDER_HEIGHT}:force_original_aspect_ratio=decrease,setsar=1[fg]`,
-    `[bg][fg]overlay=(W-w)/2:(H-h)/2,${text(hook, 64, 'h*0.12', true)},${text(credit, 40, 'h*0.86', false)},format=yuv420p[v]`,
+    `[bg][fg]overlay=(W-w)/2:(H-h)/2,${text(hook, 76, 'h*0.10', true)},${[...wordFilters, ''].join(',')}${text(credit, 40, 'h*0.86', false)},format=yuv420p[v]`,
     `[0:a]aresample=48000,loudnorm=I=-14:TP=-1.5:LRA=11,aresample=48000,afade=t=in:d=0.25,afade=t=out:st=${Math.max(0, d - 0.6).toFixed(2)}:d=0.6[aout]`,
   ].join(';');
-  return ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y', '-i', input, '-t', d.toFixed(2), '-filter_complex', graph,
+  const seek = Number(start) > 0 ? ['-ss', Number(start).toFixed(2)] : [];
+  return ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y', ...seek, '-i', input, '-t', d.toFixed(2), '-filter_complex', graph,
     '-map', '[v]', '-map', '[aout]', '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '22', '-profile:v', 'high', '-r', '30',
     '-c:a', 'aac', '-b:a', '160k', '-ar', '48000', '-map_metadata', '-1', '-movflags', '+faststart', output];
+}
+
+export const MAX_CAPTION_WORDS = 90;
+
+/**
+ * Peak-first cut: the loudest momentary-loudness point (ffmpeg ebur128 log) becomes second ~1 of the clip.
+ * Returns the start offset in seconds (0 when the source already fits the target).
+ */
+export function peakStartFromEbur128(stderr, { available, targetSec, leadSec = 1 }) {
+  if (!Number.isFinite(available) || available <= targetSec + 0.5) return 0;
+  let best = null;
+  for (const m of String(stderr ?? '').matchAll(/\bt:\s*([0-9.]+)\s+TARGET:[^M]*M:\s*(-?[0-9.]+)/g)) {
+    const t = Number(m[1]), loud = Number(m[2]);
+    if (Number.isFinite(t) && Number.isFinite(loud) && (!best || loud > best.loud)) best = { t, loud };
+  }
+  if (!best) return 0;
+  return Math.round(Math.max(0, Math.min(best.t - leadSec, available - targetSec)) * 10) / 10;
+}
+
+/** whisper.cpp JSON (-ml 1 -oj) -> [{ text, from, to }] in seconds, relative to the cut. */
+export function wordsFromWhisperJson(json, { start = 0, duration = Infinity } = {}) {
+  const rows = Array.isArray(json?.transcription) ? json.transcription : [];
+  const out = [];
+  for (const r of rows) {
+    const text = clean(r?.text, 24).replace(/[^\p{L}\p{N}'’!?$%-]+/gu, '');
+    const from = Number(r?.offsets?.from) / 1000 - start, to = Number(r?.offsets?.to) / 1000 - start;
+    if (!text || !Number.isFinite(from) || !Number.isFinite(to) || to <= 0 || from >= duration) continue;
+    out.push({ text: text.toUpperCase(), from: Math.max(0, from), to: Math.min(duration, Math.max(to, from + 0.15)) });
+  }
+  return out.slice(0, MAX_CAPTION_WORDS);
 }
 
 /** Rendered output check: exact 1080x1920 video, audio present, 3 s <= duration <= 60 s (+0.5 tolerance). */
@@ -243,7 +277,7 @@ export async function downloadSource({ candidate, workDir, targetSec = 45, env =
 }
 
 /** Render the vertical edit and validate it. Returns { file, sha256, durationSec }. */
-export async function renderVerticalClip({ sourceFile, workDir, duration, hook, credit, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', runner = run }) {
+export async function renderVerticalClip({ sourceFile, workDir, duration, hook, credit, ffmpeg = 'ffmpeg', ffprobe = 'ffprobe', runner = run, peakFirst = false, env = process.env }) {
   const probeIn = JSON.parse((await runner(ffprobe, ['-v', 'error', '-show_entries', 'stream=codec_type:format=duration', '-of', 'json', sourceFile], { timeoutMs: 60_000 })).stdout);
   if (!probeIn.streams?.some(s => s.codec_type === 'audio')) throw new Error('SOURCE_WITHOUT_AUDIO');
   if (!probeIn.streams?.some(s => s.codec_type === 'video')) throw new Error('SOURCE_WITHOUT_VIDEO');
@@ -253,12 +287,33 @@ export async function renderVerticalClip({ sourceFile, workDir, duration, hook, 
   const fontFile = path.join(workDir, 'font.ttf');
   await copyFile(BUNDLED_FONT, fontFile);
   const hookFile = path.join(workDir, 'hook.txt'), creditFile = path.join(workDir, 'credit.txt');
-  await writeFile(hookFile, wrapLines(hook, 22, 3), 'utf8');
+  await writeFile(hookFile, wrapLines(hook, 18, 3), 'utf8');
   await writeFile(creditFile, clean(credit, 80), 'utf8');
   const output = path.join(workDir, 'render.mp4');
-  await runner(ffmpeg, ffmpegRenderArgs({ input: sourceFile, output, hookFile, creditFile, fontFile, duration: d }), { timeoutMs: 600_000 });
+  // Peak-first: start ~1 s before the loudest moment (scream / punchline / reaction).
+  let start = 0, captions = 'none';
+  if (peakFirst && Number.isFinite(available) && available > d + 0.5) {
+    try {
+      const { stderr } = await runner(ffmpeg, ['-hide_banner', '-nostdin', '-i', sourceFile, '-vn', '-af', 'ebur128=framelog=verbose', '-f', 'null', '-'], { timeoutMs: 180_000 });
+      start = peakStartFromEbur128(stderr, { available, targetSec: d });
+    } catch { start = 0; }
+  }
+  // Word-by-word captions when a whisper.cpp binary + model are configured (CLIPPERS_WHISPER_BIN / CLIPPERS_WHISPER_MODEL).
+  const words = [];
+  const whisperBin = clean(env.CLIPPERS_WHISPER_BIN, 300), whisperModel = clean(env.CLIPPERS_WHISPER_MODEL, 300);
+  if (whisperBin && whisperModel) {
+    try {
+      const wav = path.join(workDir, 'speech.wav');
+      await runner(ffmpeg, ['-hide_banner', '-loglevel', 'error', '-nostdin', '-y', ...(start > 0 ? ['-ss', start.toFixed(2)] : []), '-i', sourceFile, '-t', d.toFixed(2), '-vn', '-ac', '1', '-ar', '16000', wav], { timeoutMs: 120_000 });
+      await runner(whisperBin, ['-m', whisperModel, '-f', wav, '-ml', '1', '-oj', '-of', path.join(workDir, 'speech')], { timeoutMs: 300_000 });
+      const parsed = wordsFromWhisperJson(JSON.parse(await readFile(path.join(workDir, 'speech.json'), 'utf8')), { duration: d });
+      for (const [i, w] of parsed.entries()) { const file = path.join(workDir, `w${i}.txt`); await writeFile(file, w.text, 'utf8'); words.push({ ...w, file }); }
+      captions = words.length ? 'word_by_word' : 'no_speech';
+    } catch { captions = 'transcription_failed'; }
+  } else captions = 'whisper_not_configured';
+  await runner(ffmpeg, ffmpegRenderArgs({ input: sourceFile, output, hookFile, creditFile, fontFile, duration: d, start, words }), { timeoutMs: 600_000 });
   const probe = JSON.parse((await runner(ffprobe, ['-v', 'error', '-show_entries', 'stream=codec_type,width,height:format=duration', '-of', 'json', output], { timeoutMs: 60_000 })).stdout);
   const check = validateRenderProbe(probe);
   if (!check.ok) throw new Error(check.errors[0].toUpperCase());
-  return { file: output, sha256: await sha256File(output), durationSec: check.durationSec, sizeBytes: (await stat(output)).size };
+  return { file: output, sha256: await sha256File(output), durationSec: check.durationSec, sizeBytes: (await stat(output)).size, cutStart: start, captions };
 }

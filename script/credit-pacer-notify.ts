@@ -14,6 +14,7 @@ import pg from "pg";
 import { createCouncilStore, type CouncilClient } from "../server/agent-council-store";
 import { parseCreditPacerState, type PacerAlert } from "../server/credit-pacer";
 import { pacerAlertText } from "../server/credit-pacer-runtime";
+import { blackopsApplicationName } from "../server/agent-council-store";
 
 type Env = Record<string, string | undefined>;
 type Fetch = typeof fetch;
@@ -80,7 +81,7 @@ export async function notifyAlerts(alerts: PacerAlert[], options: { token: strin
 async function readCouncil(env: Env): Promise<string | null> {
   const owner = env.DEFAULT_USER_ID?.trim();
   if (!owner || !env.DATABASE_URL?.trim()) throw Error("CONFIGURATION_REQUIRED");
-  const pool = new pg.Pool({ connectionString: env.DATABASE_URL, connectionTimeoutMillis: 10000, max: 1 });
+  const pool = new pg.Pool({ connectionString: env.DATABASE_URL, connectionTimeoutMillis: 10000, max: 1, application_name: blackopsApplicationName("credit-notify") });
   pool.on("error", () => undefined);
   try {
     const client = await pool.connect();

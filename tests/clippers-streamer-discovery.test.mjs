@@ -25,11 +25,15 @@ test('policy order: takedown > known list > description > allowed', () => {
   assert.equal(parseTakedown({ reason: 'x', receivedAt: '2026-11-19T10:00:00.000Z' }, NOW), null);
 });
 
-test('caption always credits @handle and links the source; city names come from config only', () => {
+test('caption always credits @handle and links the source; city names default to Clipwave, env overrides', () => {
   const c = buildCreditCaption({ handle: 'TheGrefg', platform: 'twitch', sourceUrl: 'https://clips.twitch.tv/Abc', title: 'Locura' });
   assert.ok(captionHasCredit(c, 'TheGrefg', 'https://clips.twitch.tv/Abc'));
   assert.throws(() => buildCreditCaption({ handle: 'a', platform: 'twitch', sourceUrl: 'http://x', title: '' }));
-  assert.deepEqual(parseCityPageNames('').heldReasons, ['city_page_names_not_configured']);
+  const defaults = parseCityPageNames('');
+  assert.deepEqual(defaults.heldReasons, []);
+  assert.deepEqual(defaults.pages.map(p => [p.name, p.handle, p.source]), [['Clipwave Miami', '@clipwave.mia', 'default'], ['Clipwave NYC', '@clipwave.nyc', 'default']]);
+  const partial = parseCityPageNames('{"6595747":{"name":"NYC Clips"}}');
+  assert.deepEqual(partial.pages.map(p => p.name), ['Clipwave Miami', 'NYC Clips']);
   const named = parseCityPageNames(ENV.CLIPPERS_CITY_PAGE_NAMES);
   assert.deepEqual(named.pages.map(p => p.name), ['Miami Streamers', 'NYC Streamers']);
   assert.match(parseCityPageNames('{"6431692":{"name":"KONG"}}').heldReasons[0], /city_page_brand_not_allowed/);
@@ -218,4 +222,48 @@ test('with the cloud publisher on, approvals go only to platforms it can downloa
   await runStreamerDiscovery({ env: { ...ENV, CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true' }, now: NOW, fetch: fn, store, queue, owner: 'o' });
   const rows = [...queue.rows.values()];
   assert.ok(rows.length >= 1); assert.ok(rows.every(r => r.input.platform === 'twitch'));
+});
+
+test('approval-queue IO and HTTP never run while the council owner lock is held', async () => {
+  const base = memoryStore(), inner = memoryQueue(), { fn } = mockFetch();
+  let inTx = false, ioInTx = 0;
+  const store = { data: base.data, read: base.read, async transact(k, update) { inTx = true; try { return await base.transact(k, update); } finally { inTx = false; } } };
+  const queue = { rows: inner.rows, async insert(row) { if (inTx) ioInTx++; return inner.insert(row); }, async statuses(o, ids) { if (inTx) ioInTx++; return inner.statuses(o, ids); } };
+  const fetch = async (...a) => { if (inTx) ioInTx++; return fn(...a); };
+  const { report, state } = await runStreamerDiscovery({ env: ENV, now: NOW, fetch, store, queue, owner: 'o' });
+  assert.equal(report.status, 'completed', JSON.stringify(report.errors));
+  assert.equal(ioInTx, 0, 'no network or pending_actions IO inside the transaction');
+  assert.ok(inner.rows.size >= 2 && report.counts.queuedForApproval === inner.rows.size);
+  assert.ok([...inner.rows.values()].every(r => state.candidates.find(c => c.id === r.resourceId)?.approval?.pendingActionId === r.id));
+  // A second run reuses existing rows (idempotent) and keeps the recorded approvals.
+  const again = await runStreamerDiscovery({ env: ENV, now: NOW + 3_600_000, fetch, store, queue, owner: 'o' });
+  assert.equal(ioInTx, 0); assert.equal(again.report.counts.queuedForApproval, 0);
+});
+
+test('concurrent approval inserts for one candidate create exactly one live row (advisory lock + fresh statement)', async () => {
+  const { approvalInsertLockKey } = await import('../script/clippers-streamer-discovery.mjs');
+  const rows = []; const locks = new Map(); const seen = [];
+  // Fake PostgreSQL: per-key advisory lock held until COMMIT; the check-and-insert sees committed rows only.
+  const transaction = async fn => {
+    let release;
+    const q = async (sql, values) => {
+      seen.push(sql);
+      if (sql.includes('pg_advisory_xact_lock')) {
+        const key = values[0]; while (locks.has(key)) await locks.get(key);
+        locks.set(key, new Promise(r => { release = () => { locks.delete(key); r(); }; })); return { rows: [] };
+      }
+      await new Promise(r => setTimeout(r, 5)); // widen the race window
+      const live = rows.find(r => r.userId === values[0] && r.actionType === values[1] && r.resourceId === values[3]);
+      if (live) return { rows: [{ id: live.id }] };
+      const row = { id: `pa-${rows.length + 1}`, userId: values[0], actionType: values[1], resourceId: values[3] }; rows.push(row); return { rows: [{ id: row.id }] };
+    };
+    try { return await fn(q); } finally { release?.(); }
+  };
+  const q = createPendingActionsQueue(async () => { throw new Error('must use the transaction'); }, { transaction });
+  const row = { userId: 'o', actionType: STREAMER_APPROVAL_ACTION, resourceType: 'r', resourceId: 'twitch-clip:a', title: 't', description: 'd', riskLevel: 'medium', status: 'pending', input: {} };
+  const ids = await Promise.all([q.insert(row), q.insert(row), q.insert(row)]);
+  assert.equal(rows.length, 1); assert.deepEqual(new Set(ids), new Set(['pa-1']));
+  assert.ok(seen.indexOf(seen.find(s => s.includes('pg_advisory_xact_lock'))) < seen.findIndex(s => s.includes('WITH existing')));
+  assert.equal(approvalInsertLockKey(row), JSON.stringify(['clippers-streamer-approval-v1', 'o', STREAMER_APPROVAL_ACTION, 'twitch-clip:a']));
+  assert.notEqual(approvalInsertLockKey(row), approvalInsertLockKey({ ...row, resourceId: 'twitch-clip:b' }));
 });

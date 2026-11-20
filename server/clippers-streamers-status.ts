@@ -3,9 +3,10 @@ import { createHash } from 'node:crypto';
 import { parseClippersOrchestraStatus, type ClippersOrchestraStatus } from '../shared/clippers-orchestra';
 import { LEGACY_DISCOVERY_CREATORS as LEGACY_SOURCES } from '../shared/clippers-priority-creators.mjs';
 import type { SelfHealObservedAudit } from './office-self-heal';
-import { parseTakedown } from '../shared/clippers-streamer-policy.mjs';
+import { parseTakedown, DEFAULT_CITY_PAGE_NAMES } from '../shared/clippers-streamer-policy.mjs';
 import { STREAMER_STATE_NAMESPACE, parseStreamerState, parseStreamerStateStrict, localWorkQueue, createPendingActionsQueue } from '../script/clippers-streamer-discovery.mjs';
 import { getCurrentUserId, getSystemUserId } from './user-context';
+import { growthOutputs, growthDecisionLines } from '../shared/clippers-growth-view';
 
 /** Store shape shared with the orchestra state (agent_council_state via the council store). */
 interface Store { read(owner: string): Promise<string | null>; transact(owner: string, update: (raw: string | null) => Promise<string>): Promise<string> }
@@ -31,6 +32,15 @@ export function applyStreamerOverlay(report: ClippersOrchestraStatus, raw: strin
   role.heldReasons = [...new Set([...role.heldReasons, ...held, ...(age > STALE_MS ? ['streamer_cloud_run_stale'] : [])])].slice(0, 100);
   role.state = run.status === 'failed' || run.status === 'skipped_missing_secrets' ? 'held' : age > STALE_MS ? 'stale' : run.status === 'completed' && !held.length ? 'completed' : 'held';
   for (const [k, v] of Object.entries(run.counts ?? {})) if (CODE.test(`cloud_${k}`) && Number.isSafeInteger(v) && (v as number) >= 0 && Object.keys(role.outputs).length < 20) role.outputs[`cloud_${k}`] = v as number;
+  applyGrowthOverlay(report, (state as any).cloudPublish?.growth);
+  return report;
+}
+
+/** Per-account weekly views, median, auto-publish flag and decision count on the Clippers "learning" role. */
+export function applyGrowthOverlay(report: ClippersOrchestraStatus, growth: unknown): ClippersOrchestraStatus {
+  const role = report.roles.find(r => r.stage === 'learning');
+  if (!role) return report;
+  for (const [k, v] of Object.entries(growthOutputs(growth))) if (CODE.test(k) && (Object.hasOwn(role.outputs, k) || Object.keys(role.outputs).length < 20)) role.outputs[k] = v;
   return report;
 }
 
@@ -69,6 +79,7 @@ export function cloudPublishSummary(c: any) {
       status: p.status, metricoolId: p.metricoolId ?? null, hookVariant: p.hookVariant, views: p.observation?.views ?? null })),
     ownerHolds: ownerHoldsOf(c),
     learning: c.learning ? { evaluatedAt: c.learning.evaluatedAt, samples: c.learning.samples, hookPreference: c.learning.hookPreference, creatorBoost: c.learning.creatorBoost } : null,
+    growth: c.growth?.evaluatedAt ? { evaluatedAt: c.growth.evaluatedAt, accounts: c.growth.accounts ?? {}, decisions: growthDecisionLines(c.growth, 30) } : null,
   };
 }
 
@@ -76,7 +87,7 @@ type RejectPending = (owner: string, candidateIds: string[], reason: string) => 
 // One shared pool for the process: a takedown must not open a new pool each time.
 let rejectPool: Promise<Awaited<ReturnType<typeof import('./agent-council-store')['createCouncilPool']>>> | undefined;
 async function defaultRejectPending(owner: string, candidateIds: string[], reason: string) {
-  const pool = await (rejectPool ??= import('./agent-council-store').then(m => m.createCouncilPool()).catch(e => { rejectPool = undefined; throw e; }));
+  const pool = await (rejectPool ??= import('./agent-council-store').then(m => m.createCouncilPool('streamers-takedown')).catch(e => { rejectPool = undefined; throw e; }));
   const query = async (sql: string, values?: unknown[]) => { const c = await pool.connect(); try { return await c.query(sql, values) as { rows: any[] }; } finally { c.release(); } };
   return createPendingActionsQueue(query).rejectCandidates(owner, candidateIds, reason);
 }
@@ -173,7 +184,8 @@ export function cloudFallbackReport(raw: string | null, at: number): ClippersOrc
   const state = parseStreamerState(raw);
   if (!state.lastRun) return null;
   const generatedAt = new Date(at).toISOString();
-  const cityName = (brandId: string) => (state.cityPages ?? []).find((p: any) => p.brandId === brandId && p.name)?.name as string | undefined;
+  const cityName = (brandId: string) => (state.cityPages ?? []).find((p: any) => p.brandId === brandId && p.name)?.name as string | undefined
+    ?? DEFAULT_CITY_PAGE_NAMES[brandId]?.name;
   const role = (stage: typeof STAGES[number]) => ({ id: `clippers-${stage}` as const, stage, state: 'disconnected' as const, evidenceAt: null, activeUntil: null, lastRunAt: null,
     heartbeatAt: null, nextDueAt: null, runId: null, evidenceIds: [], outputs: {}, heldReasons: ['mac_worker_offline'], lifePenaltyExempt: true,
     career: { registered: false, generation: null, points: null, battery: null, inTraining: false, hiredAt: null, skillIds: [], lastEvidenceId: null } });

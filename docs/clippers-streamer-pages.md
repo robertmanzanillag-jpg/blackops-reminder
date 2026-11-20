@@ -1,8 +1,9 @@
 # Clippers streamer pages (cloud)
 
 The NY News (6595747) and Miami News (6591612) Metricool brands are now streamer clip pages.
-Page names come from the repository variable `CLIPPERS_CITY_PAGE_NAMES`, for example
-`{"6591612":{"name":"<Miami page name>"},"6595747":{"name":"<NYC page name>"}}`. No name is hardcoded.
+Default page names: Miami (6591612) is "Clipwave Miami" (suggested handle `@clipwave.mia`) and NYC (6595747) is
+"Clipwave NYC" (suggested handle `@clipwave.nyc`). The repository variable `CLIPPERS_CITY_PAGE_NAMES` overrides them per brand, for example
+`{"6591612":{"name":"Clipwave Miami","handle":"@clipwave.mia"}}`. Brands left out keep the default.
 The local-news Metricool sender is retired (`CLIPPERS_LOCAL_NEWS_SENDER_ENABLED` must be `"true"` to resume it).
 Its ledgers stay on disk and are read-only.
 
@@ -56,3 +57,55 @@ The default slots are 11:00, 13:30, 16:00, 18:30 and 21:00 America/New_York (`CL
 
 Secrets (repository Actions): `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `YOUTUBE_API_KEY`, plus `METRICOOL_USER_TOKEN` and `METRICOOL_USER_ID` for publishing. The workflows also use
 `OFFICE_DATABASE_URL` and `OFFICE_OWNER_ID`, which already exist. Set the `CLIPPERS_STREAMERS_CLOUD_ENABLED=false` variable to pause.
+
+## Account lanes and growth loop (2-week test from 2026-11-20)
+
+Code: `shared/clippers-account-lanes.mjs`, `script/clippers-streamer-cloud-worker.mjs` (`laneTarget`, `refreshGrowth`),
+`script/clippers-streamer-cloud-learning.mjs` (`computeGrowth`). On by default; `CLIPPERS_STREAMER_LANES_ENABLED=false`
+restores the legacy fan-out.
+
+| Lane | Account | Language | Creators / content |
+|---|---|---|---|
+| memes | 6431685 TikTok @streamersus | EN | Kai Cenat, IShowSpeed, Adin Ross, Jynxzi, Duke Dennis, xQc, Agent00; English default |
+| sports | 6431687 TikTok @streamersclipusa | EN | sports content (NBA/NFL/FIFA/2K/football keywords, Sports category), PlaqueBoyMax, Castro |
+| miami | 6591612 Clipwave Miami (TikTok; Facebook when listed in `CLIPPERS_STREAMER_CLOUD_DESTINATIONS`) | ES only | Latin/Spanish streamers (Westcol, ElMariana, JuanSGuarnizo, Rivers, Spreen, Ibai, ...), any Spanish clip |
+| nyc | 6595747 Clipwave NYC (Facebook Reels) | EN | Fanum, NYC IRL content. Held until a Facebook Page is connected in the adapter allowlist |
+
+- **One video file -> one account.** The worker checks and claims a media ledger entry (same rendered SHA-256, same
+  source clip, or same Twitch VOD within 60 s) inside the owner lock before each write, and Metricool's brand-wide
+  calendars (drafts included, day +-1) are read before each write (`crossAccountPreflight`). Follow-up clips of a stream
+  stay on the account that used it first. Other languages are not routed.
+- **Edit:** peak-first cut (loudest ebur128 moment at ~1 s), 15-35 s (default 28), 3-6 word upper-case hook in the top
+  third, burned word-by-word captions when `CLIPPERS_WHISPER_BIN` + `CLIPPERS_WHISPER_MODEL` are set (otherwise none).
+- **Caption:** curiosity line + question + creator name and credit/source + 3-5 hashtags; duet, stitch and comments on.
+- **Slots:** 10/12/16/18/20 ET, weekends -30 %; 8 a day (6 on weekends) once the weekly median passes 1k. Metricool
+  best-time (read-only, refreshed weekly) reorders hours 09-22 when it has data.
+- **Auto-publish gate:** per account, weekly median >= 1k views over >= 5 posts. Below that, posts go to Metricool as
+  drafts (`draft:true, autoPublish:false`) for owner approval. `CLIPPERS_STREAMER_LANE_AUTOPUBLISH=false` keeps all drafts.
+- **Growth loop (cloud):** job `growth` in `clippers-streamers-publish.yml` daily at 08:00 NY (and every 6 h inside the
+  publish job): kill a creator / hook / hour with median < 300 after 6 posts; > 10k views in 24 h -> 3 more clips from
+  that stream/creator on that account within 24 h and promote the hour; > 100k -> double that creator's share.
+
+### Review follow-ups (2026-11-20)
+
+- Language is normalised (`es-419` -> `es`). Only `en` and `es` are routed, and only to a lane with that language;
+  unknown or other languages are never posted (an English Ibai clip goes to an English lane, a Spanish Kai Cenat clip to Miami).
+- Auto-publish requires a growth pass < 36 h old computed from Metricool account analytics; otherwise drafts.
+- `CLIPPERS_STREAMER_LANES_ENABLED=false` never restores the fan-out: one account (first planned) and drafts only.
+- Pauses (kills) expire 14 days after the arm's newest post. Pre-write defers drop their media-ledger claim.
+  `crossAccountPreflight` is required on the lane path. Without a Twitch VOD, broadcaster + clip time +-60 s is the segment.
+- Metricool drafts read back as `draft:true, autoPublish:false`, provider `PENDING`, `publicationDate` in America/New_York;
+  `confirmSchedule` matches exactly that for draft writes.
+
+### Note for the Facebook owner-action hold lane (`claude/clippers-facebook-identity-hold`)
+
+`laneTarget` already skips any destination whose `cloudPublish.holds[key].status === 'held_owner_action'` (it picks the
+lane's other destination, e.g. Miami Facebook vs TikTok, or holds the clip with `lane_destination_held:<lane>`). When the
+hold lane merges on top of lanes:
+1. In lane mode, compute `heldTargets` only from the picked destination (`lanePick.destination`), never from
+   `config.destinations`, so a held copy is queued for at most one account.
+2. Queue it with the lane fields (`lane`, `streamKey`, `segment`, `dailyLimit`, `countDrafts`, `allowDuetStitch`) and
+   `draft` from `lanePick` (pass `lane: lanePick` to `postItem` on release).
+3. In the release transaction, run the same `mediaConflict(mediaEntriesOf(c), ...)` check and `mediaEntry` claim as the
+   main write path, and `dropClaim` when the release is deferred before any Metricool write; call `crossAccountPreflight`
+   after `preflight`.

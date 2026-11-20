@@ -12,8 +12,9 @@ name: Clippers streamers publish (cloud)
 # the job `if` and at script start). A run already in progress cannot see variable changes: cancel it in Actions.
 # Cadence: after each "Office worker (cloud)" run, gated to minute < 15 between 09:00 and 19:59 New York time;
 # the script also skips when its last run is < CLIPPERS_STREAMER_CLOUD_MIN_INTERVAL_MINUTES (default 180) old.
-# At most CLIPPERS_STREAMER_CLOUD_CLIPS_PER_RUN (default 2) clips per run (no new clip after 20 min), 5 posts per destination per day,
-# slots 11:00-21:00 America/New_York. Explicit dispatches bypass the clock gate and the interval.
+# At most CLIPPERS_STREAMER_CLOUD_CLIPS_PER_RUN (default 4) clips per run (no new clip after 20 min). Account lanes
+# (default on): each clip goes to ONE account; 10/12/16/18/20 ET (weekends -30 %), 6-8/day once an account's weekly
+# median passes 1k; Metricool drafts until then. Lanes off: legacy 5/day fan-out, slots 11:00-21:00. Explicit dispatches bypass the clock gate and the interval.
 
 on:
   workflow_run:
@@ -23,6 +24,10 @@ on:
     inputs:
       dry_run:
         description: "Render only (no upload, no Metricool); rendered clips are kept as a 1-day artifact"
+        type: boolean
+        default: false
+      growth_only:
+        description: "Run only the per-account growth loop (read-only Metricool analytics + best time)"
         type: boolean
         default: false
 
@@ -43,7 +48,7 @@ jobs:
       vars.CLIPPERS_STREAMERS_CLOUD_ENABLED != 'false' &&
       vars.CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED == 'true' &&
       vars.CLIPPERS_STREAMER_CLOUD_KILL_SWITCH != 'true' &&
-      !(github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main')
+      !(github.event_name == 'workflow_dispatch' && (github.ref != 'refs/heads/main' || inputs.growth_only))
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
@@ -132,6 +137,9 @@ jobs:
           CLIPPERS_STREAMER_CLIP_SECONDS: ${{ vars.CLIPPERS_STREAMER_CLIP_SECONDS }}
           CLIPPERS_STREAMER_CLOUD_PLATFORMS: ${{ vars.CLIPPERS_STREAMER_CLOUD_PLATFORMS }}
           CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES: ${{ vars.CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES || '20' }}
+          CLIPPERS_STREAMER_LANES_ENABLED: ${{ vars.CLIPPERS_STREAMER_LANES_ENABLED || 'true' }}
+          CLIPPERS_STREAMER_LANE_AUTOPUBLISH: ${{ vars.CLIPPERS_STREAMER_LANE_AUTOPUBLISH || 'true' }}
+          CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS: ${{ vars.CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS || '6' }}
           EVENT: ${{ github.event_name }}
         run: |
           if [ "$EVENT" = "workflow_dispatch" ]; then
@@ -249,6 +257,9 @@ jobs:
           CLIPPERS_STREAMER_CLIP_SECONDS: ${{ vars.CLIPPERS_STREAMER_CLIP_SECONDS }}
           CLIPPERS_STREAMER_CLOUD_PLATFORMS: ${{ vars.CLIPPERS_STREAMER_CLOUD_PLATFORMS }}
           CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES: ${{ vars.CLIPPERS_STREAMER_CLOUD_RUN_DEADLINE_MINUTES || '20' }}
+          CLIPPERS_STREAMER_LANES_ENABLED: ${{ vars.CLIPPERS_STREAMER_LANES_ENABLED || 'true' }}
+          CLIPPERS_STREAMER_LANE_AUTOPUBLISH: ${{ vars.CLIPPERS_STREAMER_LANE_AUTOPUBLISH || 'true' }}
+          CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS: ${{ vars.CLIPPERS_STREAMER_GROWTH_INTERVAL_HOURS || '6' }}
           EVENT: ${{ github.event_name }}
         run: |
           if [ "$EVENT" = "workflow_dispatch" ]; then
@@ -265,3 +276,64 @@ jobs:
           path: ${{ runner.temp }}/clippers-dry-run/*.mp4
           retention-days: 1
           if-no-files-found: ignore
+
+  # Per-account growth loop in the cloud (no Mac): once a day before the first slot (New York 08:00-08:14),
+  # or on a growth_only dispatch. Read-only Metricool analytics + best time; never writes a Metricool post.
+  # Decisions (kill < 300 median after 6 posts, > 10k -> 3 follow-ups, > 100k -> double the creator,
+  # auto-publish at weekly median >= 1k) are stored in the streamer ledger for the publish job and the office.
+  growth:
+    if: >-
+      github.repository == 'robertmanzanillag-jpg/blackops-reminder' &&
+      vars.CLIPPERS_STREAMERS_CLOUD_ENABLED != 'false' &&
+      vars.CLIPPERS_STREAMER_CLOUD_KILL_SWITCH != 'true' &&
+      vars.CLIPPERS_STREAMER_LANES_ENABLED != 'false' &&
+      (github.event_name == 'workflow_run' || (github.event_name == 'workflow_dispatch' && inputs.growth_only && github.ref == 'refs/heads/main'))
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - name: Clock gate (New York 08:00-08:14, unless dispatched)
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          hour=$((10#$(TZ=America/New_York date +%H)))
+          minute=$((10#$(date -u +%M)))
+          if [ "$EVENT" = "workflow_dispatch" ] || { [ "$hour" -eq 8 ] && [ "$minute" -lt 15 ]; }; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          ref: ${{ vars.OFFICE_SOURCE_REF || 'main' }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.run == 'true'
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.gate.outputs.run == 'true'
+        env:
+          ONNXRUNTIME_NODE_INSTALL_CUDA: skip
+        run: npm ci --ignore-scripts --no-audit --no-fund
+
+      - name: Growth loop (read-only Metricool)
+        if: steps.gate.outputs.run == 'true'
+        env:
+          NODE_ENV: production
+          DATABASE_URL: ${{ secrets.OFFICE_DATABASE_URL }}
+          DEFAULT_USER_ID: ${{ secrets.OFFICE_OWNER_ID }}
+          METRICOOL_USER_TOKEN: ${{ secrets.METRICOOL_USER_TOKEN }}
+          METRICOOL_USER_ID: ${{ secrets.METRICOOL_USER_ID }}
+          CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: ${{ vars.CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED }}
+          CLIPPERS_STREAMER_CLOUD_KILL_SWITCH: ${{ vars.CLIPPERS_STREAMER_CLOUD_KILL_SWITCH || 'false' }}
+          CLIPPERS_STREAMER_CLOUD_DESTINATIONS: ${{ vars.CLIPPERS_STREAMER_CLOUD_DESTINATIONS }}
+          CLIPPERS_STREAMER_LANES_ENABLED: 'true'
+        run: node --import tsx script/clippers-streamer-cloud-worker.mjs --growth-only

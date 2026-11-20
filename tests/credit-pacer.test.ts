@@ -290,3 +290,15 @@ test("ledger paceSnapshot uses the plain read path: no lastObservedAt write, sam
   state = { ...state, reservations: [...state.reservations, state.reservations[0]] }; // duplicate key = corrupt
   await assert.rejects(ledger.paceSnapshot(), /CREDIT_CORRUPT/);
 });
+
+test("FACTORY_DRAFT_PRS_PER_DAY sets the daily draft-PR cap within the code maximum", () => {
+  const base = { owner: "o", maxDraftPullRequestsPerDay: 5, autoAdmit: { enabled: true, since: "2026-11-01T00:00:00Z", maxPerDay: 5 } };
+  const raised = applyFactoryOperatorEnvOverride(base, { FACTORY_DRAFT_PRS_PER_DAY: "10" });
+  assert.equal(raised.maxDraftPullRequestsPerDay, 10); assert.equal(raised.autoAdmit.maxPerDay, 10); assert.equal(raised.autoAdmit.enabled, true);
+  for (const value of [undefined, "", "0", "11", "50", "-1", "7.5", "ten"]) assert.equal(applyFactoryOperatorEnvOverride(base, { FACTORY_DRAFT_PRS_PER_DAY: value }), base);
+  const noAuto = { owner: "o", maxDraftPullRequestsPerDay: 5 } as { owner: string; maxDraftPullRequestsPerDay: number; autoAdmit?: { systemOrders?: boolean; maxPerDay?: number } };
+  const r2 = applyFactoryOperatorEnvOverride(noAuto, { FACTORY_DRAFT_PRS_PER_DAY: "8" });
+  assert.equal(r2.maxDraftPullRequestsPerDay, 8); assert.equal(r2.autoAdmit, undefined, "never creates automatic admission");
+  const both = applyFactoryOperatorEnvOverride(base, { FACTORY_DRAFT_PRS_PER_DAY: "10", FACTORY_AUTO_ADMIT_SYSTEM_ORDERS: "true" });
+  assert.equal(both.autoAdmit.systemOrders, true); assert.equal(both.maxDraftPullRequestsPerDay, 10);
+});

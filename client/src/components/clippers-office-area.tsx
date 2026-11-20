@@ -10,6 +10,7 @@ import { CLIPPERS_AGENTS } from "@shared/clippers-office-agents";
 import { parseClippersOrchestraStatus, type ClippersOrchestraStatus, type ClippersRoleEvidence } from "@shared/clippers-orchestra";
 import type { ViralScoutView } from "@shared/clippers-viral-scout.mjs";
 import { kongSupervisorSessionScope, type SupervisorAuth } from "./kong-supervisor-session";
+import { growthRows } from "@shared/clippers-growth-view";
 
 export const CLIPPERS_ORCHESTRA_ENDPOINT = "/api/clippers/orchestra/status";
 const dateFormat = new Intl.DateTimeFormat("es", { dateStyle: "short", timeStyle: "short" });
@@ -109,6 +110,20 @@ const outputLabels: Record<string, string> = {
   verifiedScopedMedia: "Material verificado por destino", confirmed: "Confirmados por el proveedor", verifiedPublications: "Publicaciones verificadas", eligibleComparisons: "Comparaciones elegibles",
 };
 
+/** Per-account weekly views, median, auto-publish gate and growth decisions (cloud growth loop). */
+export function ClippersGrowthTable({ outputs }: { outputs: Record<string, number> }) {
+  const rows = growthRows(outputs);
+  if (!rows.length) return null;
+  return <table className="mt-3 w-full text-left text-[11px]" data-testid="clippers-growth-table">
+    <caption className="mb-1 text-left text-slate-400">Crecimiento por cuenta (últimos 7 días)</caption>
+    <thead><tr className="text-slate-500"><th className="font-normal">Cuenta</th><th className="font-normal">Views</th><th className="font-normal">Mediana</th><th className="font-normal">Publicación</th><th className="font-normal">Decisiones</th></tr></thead>
+    <tbody>{rows.map(row => <tr key={row.lane} className="text-slate-200" data-testid={`clippers-growth-${row.lane}`}>
+      <td>{row.label}</td><td>{number(row.weeklyViews)}</td><td>{number(row.weeklyMedian)}</td>
+      <td>{row.autoPublish ? "Automática" : "Borradores (aprobación)"}</td><td>{number(row.decisions)}</td>
+    </tr>)}</tbody>
+  </table>;
+}
+
 function Reasons({ reasons }: { reasons: string[] }) {
   return reasons.length > 0 ? <ul className="mt-2 space-y-1 text-xs leading-relaxed text-amber-100/90">
     {reasons.map((reason, index) => <li key={`${index}:${reason}`} className="break-words">{Object.hasOwn(reasonLabels, reason) ? reasonLabels[reason] : "Motivo pendiente de verificación."}</li>)}
@@ -143,7 +158,8 @@ function AgentCard({ agent, role, fresh, now }: { agent: typeof CLIPPERS_AGENTS[
         <Time label="Última ejecución" value={role.lastRunAt} /><Time label="Próximo turno" value={role.nextDueAt} />
         <Time label="Latido observado" value={role.heartbeatAt} /><Time label="Evidencia" value={role.evidenceAt} />
       </dl>
-      {Object.keys(role.outputs).length > 0 && <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">{Object.entries(role.outputs).map(([key, value]) => <div key={key}><dt className="inline text-slate-500">{Object.hasOwn(outputLabels, key) ? outputLabels[key] : "Resultado registrado"}: </dt><dd className="inline text-slate-200">{number(value)}</dd></div>)}</dl>}
+      {agent.stage === "learning" && <ClippersGrowthTable outputs={role.outputs} />}
+      {Object.keys(role.outputs).some(key => !key.startsWith("growth_")) && <dl className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-xs">{Object.entries(role.outputs).filter(([key]) => !key.startsWith("growth_")).map(([key, value]) => <div key={key}><dt className="inline text-slate-500">{Object.hasOwn(outputLabels, key) ? outputLabels[key] : "Resultado registrado"}: </dt><dd className="inline text-slate-200">{number(value)}</dd></div>)}</dl>}
       <Reasons reasons={role.heldReasons} />
       {role.ownerNotes?.map(note => <p key={note} className="mt-2 text-xs text-amber-100" data-testid="clippers-owner-note">Nota para Robert: {note}</p>)}
       {role.lifePenaltyExempt && role.heldReasons.length > 0 && <p className="mt-2 text-[10px] text-slate-500">Esta espera no penaliza la vida del agente.</p>}
