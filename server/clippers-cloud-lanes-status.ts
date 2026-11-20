@@ -72,13 +72,10 @@ export function cloudLanesSelfHealAudits(raw: string | null, now?: number): Self
     const retired = state.retired[macLaneOf(lane)];
     if (!retired) continue;
     const ok = ['completed', 'completed_with_shortfall'].includes(run.status);
-    const stall = now === undefined ? null : selfHealStall({ now, intervalMs: cloudLaneIntervalMs(lane), lastRunAt: run.at, lastSuccessAt: l.lastSuccessAt ?? (ok ? run.at : null),
-      trackedSince: l.successTrackedSince ?? retired.at, codeCaused: !owner && run.status === 'failed' });
-    if (stall && !(stall === 'order' && failing)) {
-      stalled = true;
-      findings.push({ code: 'CLOUD_LANE_STALLED', recordId: stall === 'order' ? id : null });
-      if (stall === 'order') records[id] = { repo: 'robertmanzanillag-jpg/blackops-reminder' } as SelfHealObservedAudit['records'][string];
-    }
+    // Legacy lanes without success tracking are skipped until their next run records it (no one-time false note).
+    const stall = now !== undefined && !!l.successTrackedSince && selfHealStall({ now, intervalMs: cloudLaneIntervalMs(lane), lastRunAt: run.at,
+      lastSuccessAt: l.lastSuccessAt ?? (ok ? run.at : null), trackedSince: l.successTrackedSince });
+    if (stall && !failing) { stalled = true; findings.push({ code: 'CLOUD_LANE_STALLED', recordId: null }); }
   }
   if (!latest) return [];
   const dedup = findings.filter((f, i) => f.recordId !== null || findings.findIndex(g => g.code === f.code && g.recordId === null) === i);

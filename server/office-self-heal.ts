@@ -68,11 +68,6 @@ export const SELF_HEAL_ALLOWLIST = {
   "clippers-cloud-lanes:CLOUD_LANE_FAILING": { assignee: "code" },
   // Cloud streamer publisher (clippers-streamers-publish.yml) failing on code 3+ consecutive runs.
   "clippers-streamers:STREAMER_PUBLISH_FAILING": { assignee: "code" },
-  // No successful run for > 2x the expected interval. Only an order when the last runs failed on code (record id
-  // present); otherwise (no runs, missing secret, billing) an owner attention note.
-  "clippers-streamers:STREAMER_DISCOVERY_STALLED": { assignee: "code" },
-  "clippers-streamers:STREAMER_PUBLISH_STALLED": { assignee: "code" },
-  "clippers-cloud-lanes:CLOUD_LANE_STALLED": { assignee: "code" },
 } as const;
 type AllowKey = keyof typeof SELF_HEAL_ALLOWLIST;
 
@@ -83,21 +78,21 @@ export const SELF_HEAL_DATA_ABSENCE_CODES = new Set([
   "GITHUB_RATE_LIMITED", "GITHUB_TIMEOUT", "GITHUB_READ_DEADLINE", "GITHUB_NETWORK_ERROR", "GITHUB_UPSTREAM_ERROR", "GITHUB_RESPONSE_INVALID",
 ]);
 
-/** Stall findings without a record id: the cause is not code (no runs, missing secret, billing). Owner attention
- * notes in the office view, never an order. With a record id they are code-caused and allowlisted. */
+/** Stall findings (no successful run for > 2x the interval): always owner attention notes, never an order. A code
+ * cause is covered by the *_FAILING order (same record) once the failure streak reaches its threshold, so a stall
+ * never opens a second order for the same problem nor clears it when the streak takes over. */
 export const SELF_HEAL_ATTENTION_CODES = new Set(["STREAMER_DISCOVERY_STALLED", "STREAMER_PUBLISH_STALLED", "CLOUD_LANE_STALLED"]);
 /** Enabled jobs whose last recorded run is older than this are treated as switched off: no stall finding. */
 export const SELF_HEAL_STALL_MAX_AGE_MS = 7 * 86400_000;
 /**
  * Pure stall check for a cloud job: no successful run for more than 2x its expected interval.
- * Returns "order" when the job keeps running and its last run failed on code, "attention" otherwise, or null.
+ * True means an attention note; jobs silent for more than 7 days are treated as switched off.
  */
-export function selfHealStall(input: { now: number; intervalMs: number; lastRunAt: string | null; lastSuccessAt: string | null; trackedSince: string | null; codeCaused: boolean }): "order" | "attention" | null {
+export function selfHealStall(input: { now: number; intervalMs: number; lastRunAt: string | null; lastSuccessAt: string | null; trackedSince: string | null }): boolean {
   const t = (v: string | null) => (v && Number.isFinite(Date.parse(v)) ? Date.parse(v) : null);
   const run = t(input.lastRunAt), ok = t(input.lastSuccessAt), since = ok ?? t(input.trackedSince) ?? run;
-  if (run === null || since === null || !(input.intervalMs > 0) || input.now - run > SELF_HEAL_STALL_MAX_AGE_MS) return null;
-  if (input.now - since <= 2 * input.intervalMs) return null;
-  return input.codeCaused && (ok === null || run > ok) ? "order" : "attention";
+  if (run === null || since === null || !(input.intervalMs > 0) || input.now - run > SELF_HEAL_STALL_MAX_AGE_MS) return false;
+  return input.now - since > 2 * input.intervalMs;
 }
 
 const SEVERITY: Record<string, number> = {
@@ -231,12 +226,6 @@ export function selfHealOrderText(marker: Pick<SelfHealOrderMarker, "role" | "co
     ? ` Falla script/clippers-cloud-lanes.mjs (carril de Clippers en la nube, 3+ ejecuciones).`
     : marker.code === "STREAMER_PUBLISH_FAILING"
     ? ` Falla script/clippers-streamer-cloud-worker.mjs (publicación, 3+ ejecuciones).`
-    : marker.code === "STREAMER_DISCOVERY_STALLED"
-    ? ` Sin éxito de script/clippers-streamer-discovery.mjs en >2x su intervalo.`
-    : marker.code === "STREAMER_PUBLISH_STALLED"
-    ? ` Sin éxito de script/clippers-streamer-cloud-worker.mjs en >2x su intervalo.`
-    : marker.code === "CLOUD_LANE_STALLED"
-    ? ` Sin éxito de script/clippers-cloud-lanes.mjs en >2x su intervalo.`
     : ` Checks fallidos en el PR borrador #${marker.prNumber} de ${SELF_HEAL_REPOSITORY}.`;
   return `${head}${what} Reproduce el fallo con las pruebas existentes, corrige la causa mínima dentro del alcance de escritura y añade una prueba de regresión. No cambies workflows, dependencias, secretos, permisos ni presupuestos. Termina en PR borrador; fusionar es decisión del dueño.`;
 }
@@ -398,7 +387,7 @@ export function planSelfHeal(input: { state: unknown; company: CompanyState; jou
   // 2. Data-absence notes: the owner must provide data/access; never an order.
   const notes = new Map(state.notes.map(n => [n.key, n]));
   for (const [role, audit] of latest) {
-    const present = new Set(audit.findings.filter(f => SELF_HEAL_DATA_ABSENCE_CODES.has(f.code) || (f.recordId === null && SELF_HEAL_ATTENTION_CODES.has(f.code))).map(f => f.code));
+    const present = new Set(audit.findings.filter(f => SELF_HEAL_DATA_ABSENCE_CODES.has(f.code) || SELF_HEAL_ATTENTION_CODES.has(f.code)).map(f => f.code));
     for (const code of present) { const key = `${role}:${code}`, old = notes.get(key); notes.set(key, { key, role, code, firstSeenAt: old?.firstSeenAt ?? iso, lastSeenAt: iso }); }
     for (const [key, note] of notes) if (note.role === role && !present.has(note.code)) notes.delete(key);
   }

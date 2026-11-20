@@ -220,6 +220,10 @@ export const STREAMER_PUBLISH_SELF_HEAL_RECORD = record('publish');
  * overnight gap makes 12 h the longest normal gap. Stall = no successful run for > 2x this. */
 export const STREAMER_DISCOVERY_INTERVAL_MS = 3600_000;
 export const STREAMER_PUBLISH_INTERVAL_MS = 12 * 3600_000;
+/** Publisher success for the stall check: completed without errors, partial, or an idle held_* run (nothing to do)
+ * other than missing secrets. Shared with script/clippers-streamer-cloud-worker.mjs. */
+export const publishRunSucceeded = (r: { status?: unknown; errors?: unknown[] }) => (r.status === 'completed' && !(r.errors ?? []).length) || r.status === 'partial' ||
+  (typeof r.status === 'string' && r.status.startsWith('held_') && r.status !== 'held_missing_secrets' && !(r.errors ?? []).length);
 const OWNER_HOLD = (r: string) => r.startsWith('missing_secret:') || r.startsWith('credential_invalid:');
 const iso = (v: unknown) => (typeof v === 'string' && Number.isFinite(Date.parse(v)) ? v : null);
 /** One normalized audit per cloud run state (discovery + publisher). Missing keys -> data-absence note (never an order). */
@@ -239,19 +243,19 @@ export function streamerSelfHealAudits(raw: string | null, now?: number): SelfHe
     const failing = streak >= STREAMER_FAILURE_STREAK_THRESHOLD;
     if (failing) flag('STREAMER_DISCOVERY_FAILING', STREAMER_SELF_HEAL_RECORD);
     const ok = run.status === 'completed' && !(run.errors ?? []).length;
-    const stall = now === undefined ? null : selfHealStall({ now, intervalMs: STREAMER_DISCOVERY_INTERVAL_MS, lastRunAt: run.at, lastSuccessAt: iso(state.lastSuccessAt) ?? (ok ? run.at : null),
-      trackedSince: iso(state.successTrackedSince), codeCaused: !owner && streak > 0 });
-    if (stall && !(stall === 'order' && failing)) { stalled = true; flag('STREAMER_DISCOVERY_STALLED', stall === 'order' ? STREAMER_SELF_HEAL_RECORD : null); }
+    const stall = now !== undefined && selfHealStall({ now, intervalMs: STREAMER_DISCOVERY_INTERVAL_MS, lastRunAt: run.at, lastSuccessAt: iso(state.lastSuccessAt) ?? (ok ? run.at : null),
+      trackedSince: iso(state.successTrackedSince) });
+    if (stall && !failing) { stalled = true; flag('STREAMER_DISCOVERY_STALLED', null); }
   }
   if (pub) {
     const owner = pub.status === 'held_missing_secrets' || (pub.heldReasons ?? []).some(OWNER_HOLD);
     if (owner && !findings.some(f => f.code === 'CAPABILITY_UNAVAILABLE')) flag('CAPABILITY_UNAVAILABLE', null);
     const failing = pubStreak >= STREAMER_FAILURE_STREAK_THRESHOLD;
     if (failing) flag('STREAMER_PUBLISH_FAILING', STREAMER_PUBLISH_SELF_HEAL_RECORD);
-    const ok = (pub.status === 'completed' && !(pub.errors ?? []).length) || pub.status === 'partial';
-    const stall = now === undefined ? null : selfHealStall({ now, intervalMs: STREAMER_PUBLISH_INTERVAL_MS, lastRunAt: pub.at, lastSuccessAt: iso(c.lastSuccessAt) ?? (ok ? pub.at : null),
-      trackedSince: iso(c.successTrackedSince), codeCaused: !owner && pubStreak > 0 });
-    if (stall && !(stall === 'order' && failing)) { stalled = true; flag('STREAMER_PUBLISH_STALLED', stall === 'order' ? STREAMER_PUBLISH_SELF_HEAL_RECORD : null); }
+    const ok = publishRunSucceeded(pub);
+    const stall = now !== undefined && selfHealStall({ now, intervalMs: STREAMER_PUBLISH_INTERVAL_MS, lastRunAt: pub.at, lastSuccessAt: iso(c.lastSuccessAt) ?? (ok ? pub.at : null),
+      trackedSince: iso(c.successTrackedSince) });
+    if (stall && !failing) { stalled = true; flag('STREAMER_PUBLISH_STALLED', null); }
   }
   const latest = [run?.at, pub?.at].filter((v): v is string => !!v).sort((a, b) => Date.parse(a) - Date.parse(b)).at(-1)!;
   // A stall is observed now (no new run needed); otherwise the audit is the latest recorded run.
