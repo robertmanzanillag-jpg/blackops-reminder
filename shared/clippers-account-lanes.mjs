@@ -125,17 +125,21 @@ const overlaps = (a, b) => a.key === b.key && (a.start == null || b.start == nul
  * Conflict for a new post: an existing ledger entry with the same file hash or an overlapping source segment.
  * Same destination -> 'already_posted'; another destination -> 'cross_account_duplicate'. null = free.
  */
-export function mediaConflict(entries, { segment, mediaSha256 = null, destinationKey, candidateId = null }) {
+export function mediaConflict(entries, { segment, mediaSha256 = null, destinationKey, candidateId = null, sourceId = null }) {
+  // Source identity: the cloud candidate id (youtube:<id>, twitch-clip:<slug>) and the Mac sourceId share one key
+  // space, so a candidateId on one side matches a sourceId on the other.
+  const ids = new Set([candidateId, sourceId].filter(Boolean));
   for (const e of entries ?? []) {
     if (!e) continue;
-    const same = (mediaSha256 && e.mediaSha256 === mediaSha256) || (segment && e.segment && overlaps(segment, e.segment)) || (candidateId && e.candidateId === candidateId);
+    const same = (mediaSha256 && e.mediaSha256 === mediaSha256) || (segment && e.segment && overlaps(segment, e.segment)) ||
+      (ids.size && (ids.has(e.candidateId) || ids.has(e.sourceId)));
     if (!same) continue;
     return { reason: e.destinationKey === destinationKey ? 'already_posted' : 'cross_account_duplicate', entry: e };
   }
   return null;
 }
 export function mediaEntry({ candidate, segment, mediaSha256, destinationKey, at }) {
-  return { candidateId: candidate.id, streamKey: streamKeyOf(candidate), segment, mediaSha256: mediaSha256 ?? null, destinationKey, lane: laneForDestinationKey(destinationKey)?.id ?? null, at };
+  return { candidateId: candidate.id, sourceId: candidate.id, streamKey: streamKeyOf(candidate), segment, mediaSha256: mediaSha256 ?? null, destinationKey, lane: laneForDestinationKey(destinationKey)?.id ?? null, at };
 }
 /** Lane that already used this stream (so follow-up clips stay on the same account). */
 export function streamOwnerLane(entries, candidate) {

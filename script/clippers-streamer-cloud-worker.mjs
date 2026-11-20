@@ -27,6 +27,7 @@ import { DESTINATIONS, destinationKey, findDestination, createPortfolioMetricool
 export { facebookOwnerActionReason, providerHealthFromRows } from './clippers-portfolio-metricool.mjs';
 import { downloadSource, renderVerticalClip, makeWorkDir, hookText, creditText } from './clippers-streamer-cloud-render.mjs';
 import { computeLearning, chooseHookVariant, creatorBoostFor, OBSERVATION_WINDOW, computeGrowth, growthWeight, killedHooks, killedHours, promotedHours } from './clippers-streamer-cloud-learning.mjs';
+import { emptyCloudPublish, cloudPublishOf, mediaEntriesOf } from '../shared/clippers-media-ledger.mjs';
 import { laneById, routeCandidate, sourceSegment, streamKeyOf, mediaConflict, mediaEntry, streamOwnerLane, laneHook, laneCaption, laneSchedule, parseBestTimes, autoPublishAllowed, CLIP_SECONDS } from '../shared/clippers-account-lanes.mjs';
 
 const HOUR = 3_600_000;
@@ -134,14 +135,7 @@ export function nextSlot({ now, config, destination, index = 0, posts = [], skip
 }
 
 // ---------- State ----------
-export function emptyCloudPublish() { return { version: 1, clips: {}, posts: [], learning: null, lastRun: null, holds: {}, heldQueue: [] }; }
-export function cloudPublishOf(state) {
-  const c = state?.cloudPublish;
-  if (!(c?.version === 1 && Array.isArray(c.posts) && c.clips && typeof c.clips === 'object')) return emptyCloudPublish();
-  if (!c.holds || typeof c.holds !== 'object' || Array.isArray(c.holds)) c.holds = {};
-  if (!Array.isArray(c.heldQueue)) c.heldQueue = [];
-  return c;
-}
+export { emptyCloudPublish, cloudPublishOf } from '../shared/clippers-media-ledger.mjs';
 
 // ---------- Per-brand per-network owner-action hold ----------
 export const HOLD_OWNER_ACTION = 'held_owner_action';
@@ -231,13 +225,7 @@ export function postItem({ candidate, destination, scheduledAt, caption, mediaUr
 export function dropClaim(c, item) {
   if (Array.isArray(c.mediaLedger)) c.mediaLedger = c.mediaLedger.filter(e => !(e.candidateId === item.candidateId && e.destinationKey === item.destinationKey));
 }
-/** Ledger of every media/source already given to an account (explicit entries + the post ledger). */
-export function mediaEntriesOf(c) {
-  const explicit = Array.isArray(c?.mediaLedger) ? c.mediaLedger : [];
-  const fromPosts = (c?.posts ?? []).filter(p => !['deferred', 'not_found', 'blocked'].includes(p.status))
-    .map(p => ({ candidateId: p.candidateId, streamKey: p.streamKey ?? null, segment: p.segment ?? null, mediaSha256: p.mediaSha256 ?? null, destinationKey: canonicalDestinationKey(p.destinationKey), lane: p.lane ?? null }));
-  return [...explicit, ...fromPosts];
-}
+export { mediaEntriesOf } from '../shared/clippers-media-ledger.mjs';
 
 /** Slots + cap for one account today (weekly median, Metricool best time, killed and promoted hours). */
 export function accountSchedule(c, destination, now) {
@@ -659,7 +647,7 @@ export async function runCloudPublisher({ env = process.env, now = Date.now(), o
       }
       rendered = await render({ sourceFile: source.file, workDir, duration: Math.min(source.cut.duration, config.clipSeconds, STREAMER_CLIP_MAX_SECONDS),
         hook: lanePick ? laneHook({ variant: hookVariant, title: candidate.title, name: creatorName, language: lanePick.language }) : hookText({ variant: hookVariant, title: candidate.title, handle: candidate.handle }),
-        credit: creditText(candidate), peakFirst: !!lanePick, env, language: lanePick?.language ?? 'auto' });
+        credit: creditText(candidate), peakFirst: !!lanePick, env, language: lanePick?.language ?? 'en' });
       // Caption evidence: word_by_word | no_speech | transcription_failed (rendered without word captions) | whisper_not_configured.
       report.captions = { ...(report.captions ?? {}), [rendered.captions ?? 'none']: ((report.captions ?? {})[rendered.captions ?? 'none'] ?? 0) + 1 };
       report.counts.rendered++;

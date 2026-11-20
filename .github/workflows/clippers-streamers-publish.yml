@@ -138,6 +138,7 @@ jobs:
           MODEL_URL: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
           MODEL_SHA1: 465707469ff3a37a2b9b8d8f89f2f99de7299dac
           MODEL_SHA256: ${{ vars.CLIPPERS_WHISPER_MODEL_SHA256 }}
+          BIN_SHA256: ${{ vars.CLIPPERS_WHISPER_BIN_SHA256 }}
           CACHE_HIT: ${{ steps.whisper-cache.outputs.cache-hit }}
         run: |
           set -euo pipefail
@@ -149,7 +150,14 @@ jobs:
               -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF > /dev/null
             cmake --build "$W/build" -j"$(nproc)" --target whisper-cli > /dev/null
             cp "$W/build/bin/whisper-cli" "$W/whisper-cli"; rm -rf "$W/src" "$W/build"
+            sha256sum "$W/whisper-cli" | cut -d' ' -f1 > "$W/whisper-cli.sha256"
           fi
+          # The cached binary must match the SHA-256 recorded when it was built (and the optional pinned value).
+          BIN_SHA="$(sha256sum "$W/whisper-cli" | cut -d' ' -f1)"
+          if [ ! -s "$W/whisper-cli.sha256" ] || [ "$BIN_SHA" != "$(cat "$W/whisper-cli.sha256")" ] || { [ -n "$BIN_SHA256" ] && [ "$BIN_SHA" != "$BIN_SHA256" ]; }; then
+            rm -f "$W/whisper-cli" "$W/whisper-cli.sha256"; echo "::warning::whisper-cli SHA-256 mismatch"; exit 1
+          fi
+          echo "whisper-cli sha256: $BIN_SHA"
           if [ ! -f "$W/ggml-base.bin" ]; then
             curl -fsSL --retry 3 --max-time 240 -o "$W/ggml-base.bin.part" "$MODEL_URL"
             mv "$W/ggml-base.bin.part" "$W/ggml-base.bin"
@@ -307,6 +315,7 @@ jobs:
           MODEL_URL: https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin
           MODEL_SHA1: 465707469ff3a37a2b9b8d8f89f2f99de7299dac
           MODEL_SHA256: ${{ vars.CLIPPERS_WHISPER_MODEL_SHA256 }}
+          BIN_SHA256: ${{ vars.CLIPPERS_WHISPER_BIN_SHA256 }}
           CACHE_HIT: ${{ steps.whisper-cache.outputs.cache-hit }}
         run: |
           set -euo pipefail
@@ -318,7 +327,14 @@ jobs:
               -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DWHISPER_SDL2=OFF > /dev/null
             cmake --build "$W/build" -j"$(nproc)" --target whisper-cli > /dev/null
             cp "$W/build/bin/whisper-cli" "$W/whisper-cli"; rm -rf "$W/src" "$W/build"
+            sha256sum "$W/whisper-cli" | cut -d' ' -f1 > "$W/whisper-cli.sha256"
           fi
+          # The cached binary must match the SHA-256 recorded when it was built (and the optional pinned value).
+          BIN_SHA="$(sha256sum "$W/whisper-cli" | cut -d' ' -f1)"
+          if [ ! -s "$W/whisper-cli.sha256" ] || [ "$BIN_SHA" != "$(cat "$W/whisper-cli.sha256")" ] || { [ -n "$BIN_SHA256" ] && [ "$BIN_SHA" != "$BIN_SHA256" ]; }; then
+            rm -f "$W/whisper-cli" "$W/whisper-cli.sha256"; echo "::warning::whisper-cli SHA-256 mismatch"; exit 1
+          fi
+          echo "whisper-cli sha256: $BIN_SHA"
           if [ ! -f "$W/ggml-base.bin" ]; then
             curl -fsSL --retry 3 --max-time 240 -o "$W/ggml-base.bin.part" "$MODEL_URL"
             mv "$W/ggml-base.bin.part" "$W/ggml-base.bin"

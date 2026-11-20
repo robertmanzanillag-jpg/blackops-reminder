@@ -140,3 +140,70 @@ test('autopilot never calls createScheduledPost when the ledger guard refuses', 
   assert.equal(posts.length, 0);
   assert.ok(result.results.some(r => r.status === 'blocked' && r.blockers.includes('cross_account_ledger:cross_account_duplicate')));
 });
+
+test('Twitch: cloud claim blocks the Mac and a Mac claim blocks the cloud (clip id, VOD and moment keys)', async t => {
+  const { mediaConflict, mediaEntry, sourceSegment } = await import('../shared/clippers-account-lanes.mjs');
+  // Cloud clip without VOD: segment twitch-moment:..., candidateId twitch-clip:<slug>.
+  const cloudCandidate = { id: 'twitch-clip:FunnySlug-abc', platform: 'twitch', creatorKey: 'twitch:123', publishedAt: '2026-11-20T15:00:00Z' };
+  const cloudEntry = mediaEntry({ candidate: cloudCandidate, segment: sourceSegment(cloudCandidate, { start: 0 }), mediaSha256: 'c'.repeat(64), destinationKey: '6431687:tiktok:streamersclipusa', at: 'x' });
+  assert.match(cloudEntry.segment.key, /^twitch-moment:/);
+  const store = memoryStore({ version: 1, candidates: [], creators: {}, takedowns: [], cloudPublish: { version: 1, clips: {}, posts: [], mediaLedger: [cloudEntry] } });
+  const guard = createMacLedgerGuard({ env: { OFFICE_OWNER_ID: 'o' }, workspaceRoot: await root(t), metricool: calendar(), store });
+  // Same clip URL (no timing info on the Mac side): matched through sourceId <-> candidateId.
+  const r1 = await guard.reserve(MEMES, item({ id: 'm1', sourceUrl: 'https://www.twitch.tv/kai/clip/FunnySlug-abc', mediaSha256: '1'.repeat(64) }));
+  assert.match(r1.reason, /^(cross_account_duplicate|stream_owned_by_other_account)$/);
+  // A different clip slug of the same moment (creatorKey + time within 60 s): matched through the moment key.
+  const r2 = await guard.reserve(MEMES, item({ id: 'm2', sourceUrl: 'https://clips.twitch.tv/OtherSlug', creatorKey: 'twitch:123', sourcePublishedAt: '2026-11-20T15:00:30Z', mediaSha256: '2'.repeat(64) }));
+  assert.match(r2.reason, /^(cross_account_duplicate|stream_owned_by_other_account)$/);
+  // Mac claims a VOD segment; the cloud's own check (same mediaConflict call as the worker) refuses it.
+  const ok = await guard.reserve(MEMES, item({ id: 'm3', sourceUrl: 'https://www.twitch.tv/videos/777', sourceStartSec: 100, mediaSha256: '3'.repeat(64) }));
+  assert.equal(ok.ok, true, ok.reason);
+  const cloudVod = { id: 'twitch-clip:VodClip', platform: 'twitch', vodId: '777', vodOffset: 90 };
+  const entries = mediaEntriesOf(cloudPublishOf(store.raw));
+  const hit = mediaConflict(entries, { segment: sourceSegment(cloudVod, { start: 0 }), candidateId: cloudVod.id, destinationKey: '6431687:tiktok:streamersclipusa' });
+  assert.equal(hit?.reason, 'cross_account_duplicate');
+  // And a Mac claim of a clip URL blocks the cloud candidate with that id.
+  assert.equal((await guard.reserve(MEMES, item({ id: 'm4', sourceUrl: 'https://clips.twitch.tv/Fresh-1', mediaSha256: '4'.repeat(64) }))).ok, true);
+  const hit2 = mediaConflict(mediaEntriesOf(cloudPublishOf(store.raw)), { segment: { key: 'twitch-moment:twitch:999', start: 1 }, candidateId: 'twitch-clip:Fresh-1', destinationKey: '6431687:tiktok:streamersclipusa' });
+  assert.equal(hit2?.reason, 'cross_account_duplicate');
+});
+
+test('local ledger lock: concurrent reserves never double-claim; a held lock refuses; a stale lock is broken', async t => {
+  const workspaceRoot = await root(t);
+  let release;
+  const slow = calendar(() => new Promise(r => { release = r; }));
+  const g1 = createMacLedgerGuard({ env: {}, workspaceRoot, metricool: slow });
+  const g2 = createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar() });
+  const first = g1.reserve(MEMES, item());
+  await new Promise(r => setTimeout(r, 50));
+  const second = g2.reserve(SPORTS, item({ id: 'x2', mediaSha256: '9'.repeat(64) }));
+  await new Promise(r => setTimeout(r, 300));
+  release({ checkedDays: [] });
+  const [a, b] = await Promise.all([first, second]);
+  assert.equal(a.ok, true);
+  assert.equal(b.ok, false, 'second waited for the lock, then saw the first claim');
+  const { writeFile, utimes } = await import('node:fs/promises');
+  const lock = path.join(workspaceRoot, MAC_LEDGER_FILE) + '.lock';
+  await writeFile(lock, 'other');
+  const busy = await createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar() }).reserve(MEMES, item({ id: 'y', sourceUrl: 'https://youtu.be/yyyyyyyyyyy', mediaSha256: '8'.repeat(64) }));
+  assert.equal(busy.reason, 'ledger_check_unavailable:ledger_lock_busy');
+  const old = new Date(Date.now() - 10 * 60_000);
+  await utimes(lock, old, old);
+  const after = await createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar() }).reserve(MEMES, item({ id: 'y', sourceUrl: 'https://youtu.be/yyyyyyyyyyy', mediaSha256: '8'.repeat(64) }));
+  assert.equal(after.ok, true, after.reason);
+});
+
+test('reasons are fixed codes (no hostnames) and refused runs still mirror pending local entries', async t => {
+  const { safeCode } = await import('../script/clippers-mac-ledger-guard.mjs');
+  assert.equal(safeCode(Object.assign(new Error('connect ECONNREFUSED db.internal.example:5432'), { code: 'ECONNREFUSED' })), 'database_unreachable');
+  assert.equal(safeCode(Object.assign(new Error('password authentication failed for user "x"'), { code: '28P01' })), 'database_auth_failed');
+  assert.equal(safeCode(new Error('getaddrinfo ENOTFOUND secret-host')), 'internal_error');
+  const workspaceRoot = await root(t);
+  const leak = createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar(async () => { throw new Error('GET https://app.metricool.com/api?token=abc failed'); }) });
+  assert.equal((await leak.reserve(MEMES, item())).reason, 'calendar_check_failed:provider_error');
+  assert.equal((await createMacLedgerGuard({ env: {}, workspaceRoot, metricool: calendar() }).reserve(MEMES, item({ id: 'p1' }))).ok, true);
+  const store = memoryStore(null);
+  const refused = await createMacLedgerGuard({ env: { OFFICE_OWNER_ID: 'o' }, workspaceRoot, metricool: calendar(), store }).reserve(SPORTS, item({ id: 'p2', mediaSha256: '7'.repeat(64) }));
+  assert.equal(refused.ok, false);
+  assert.deepEqual(cloudPublishOf(store.raw).mediaLedger.map(e => e.candidateId), ['mac:p1']);
+});

@@ -14,17 +14,30 @@
 // Any error -> { ok: false }: the caller must not schedule. No Metricool writes happen here.
 
 import { createHash } from 'node:crypto';
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { mkdir, open, readFile, rename, stat, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { STREAMER_STATE_NAMESPACE, parseStreamerStateStrict, emptyStreamerState } from './clippers-streamer-discovery.mjs';
 import { canonicalDestinationKey, destinationKey } from './clippers-portfolio-metricool.mjs';
-import { cloudPublishOf, mediaEntriesOf } from './clippers-streamer-cloud-worker.mjs';
+import { cloudPublishOf, mediaEntriesOf } from '../shared/clippers-media-ledger.mjs';
 import { loadClipperSelectedEnv } from './clippers-selected-env.mjs';
 import { laneForDestinationKey, mediaConflict, routeCandidate } from '../shared/clippers-account-lanes.mjs';
 
 export const MAC_LEDGER_FILE = path.join('reports', 'clippers-media-ledger.json');
 const MAX_LOCAL = 5000;
-const code = e => String(e?.message ?? e ?? 'error').replace(/[^A-Za-z0-9_:.-]+/g, '_').slice(0, 80);
+const KNOWN_CODES = new Set(['STREAMER_STATE_INVALID', 'local_ledger_invalid', 'ledger_lock_busy']);
+/** Fixed reason codes only: never hostnames, URLs or driver messages (reasons land in reports and logs). */
+export function safeCode(e) {
+  const msg = String(e?.message ?? ''), c = String(e?.code ?? '');
+  if (KNOWN_CODES.has(msg)) return msg;
+  if (/^(ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|EAI_AGAIN|EHOSTUNREACH|ENETUNREACH)$/.test(c) || /timeout|terminated|connect/i.test(msg)) return 'database_unreachable';
+  if (c === '28P01' || c === '28000') return 'database_auth_failed';
+  if (c === '55P03') return 'database_lock_timeout';
+  if (/^[0-9A-Z]{5}$/.test(c)) return 'database_error';
+  if (e instanceof SyntaxError) return 'local_ledger_invalid';
+  return 'internal_error';
+}
+const providerCode = e => { const m = String(e?.message ?? ''); return /^[a-z][a-z0-9_]{2,59}$/.test(m) ? m : 'provider_error'; };
+export const LEDGER_LOCK_STALE_MS = 120_000;
 
 /** Canonical source identity, in the same key space the cloud worker uses for candidate ids / VOD segments. */
 export function sourceIdentity(sourceUrl) {
@@ -50,9 +63,18 @@ export function sourceIdentity(sourceUrl) {
 
 /** Source segment of a Mac item. Unknown cut offset -> start null (overlaps every cut of that source). */
 export function macSegment(item) {
-  const key = sourceIdentity(item?.sourceUrl);
-  if (!key) return null;
+  const id = sourceIdentity(item?.sourceUrl);
+  if (!id) return null;
   const raw = item?.sourceStartSec ?? item?.cutStartSec ?? item?.cut?.start;
+  const cut = Number.isFinite(Number(raw)) && raw !== null && raw !== '' ? Number(raw) : 0;
+  // Twitch clip without a VOD offset: same moment key as the cloud (broadcaster + clip creation time, +-60 s).
+  if (id.startsWith('twitch-clip:') && !Number.isFinite(Number(item?.vodOffsetSec)) && item?.creatorKey && Number.isFinite(Date.parse(item?.sourcePublishedAt))) {
+    return { key: `twitch-moment:${String(item.creatorKey).replace(/[^0-9A-Za-z:_-]/g, '')}`, start: Math.round(Date.parse(item.sourcePublishedAt) / 1000 + cut) };
+  }
+  if (id.startsWith('twitch-clip:') && item?.vodId && Number.isFinite(Number(item?.vodOffsetSec))) {
+    return { key: `twitch-vod:${String(item.vodId).replace(/[^0-9A-Za-z_-]/g, '')}`, start: Math.round(Number(item.vodOffsetSec) + cut) };
+  }
+  const key = id;
   const vod = Number(item?.vodOffsetSec);
   const start = Number.isFinite(Number(raw)) && raw !== null && raw !== '' ? Math.round(Number(raw) + (Number.isFinite(vod) ? vod : 0)) : null;
   return { key, start };
@@ -98,7 +120,7 @@ export function macEntry({ destination, item, at }) {
   const key = canonicalDestinationKey(destinationKey(destination));
   const segment = macSegment(item);
   const itemId = String(item?.id ?? item?.itemId ?? createHash('sha256').update(`${key}|${item?.mediaSha256 ?? ''}|${item?.sourceUrl ?? ''}`).digest('hex').slice(0, 24)).slice(0, 100);
-  return { candidateId: `mac:${itemId}`, streamKey: segment?.key ?? null, segment, mediaSha256: item?.mediaSha256 || item?.sha256 || null,
+  return { candidateId: `mac:${itemId}`, sourceId: sourceIdentity(item?.sourceUrl), streamKey: segment?.key ?? null, segment, mediaSha256: item?.mediaSha256 || item?.sha256 || null,
     destinationKey: key, lane: laneForDestinationKey(key)?.id ?? null, at, origin: 'mac' };
 }
 
@@ -171,7 +193,26 @@ export function createMacLedgerGuard({ env = process.env, workspaceRoot, metrico
   const strip = ({ mirrored, ...e }) => e;
   // Only other accounts count here: same-account repeats are each Mac script's own dedupe/cap responsibility.
   const conflictOf = (entries, entry) => mediaConflict(entries.filter(e => canonicalDestinationKey(e?.destinationKey) !== entry.destinationKey),
-    { segment: entry.segment, mediaSha256: entry.mediaSha256, destinationKey: entry.destinationKey, candidateId: entry.candidateId });
+    { segment: entry.segment, mediaSha256: entry.mediaSha256, destinationKey: entry.destinationKey, candidateId: entry.candidateId, sourceId: entry.sourceId });
+
+  /** Exclusive lock around read -> check -> write of the local ledger (stale locks > 2 min are broken). */
+  async function withLock(fn) {
+    const lockPath = `${file}.lock`;
+    await mkdir(path.dirname(file), { recursive: true });
+    let handle = null;
+    for (let i = 0; i < 50 && !handle; i++) {
+      try { handle = await open(lockPath, 'wx', 0o600); await handle.writeFile(`${process.pid} ${now().toISOString()}`); }
+      catch (e) {
+        if (e?.code !== 'EEXIST') throw e;
+        const info = await stat(lockPath).catch(() => null);
+        if (info && Date.now() - info.mtimeMs > LEDGER_LOCK_STALE_MS) { await unlink(lockPath).catch(() => undefined); continue; }
+        await new Promise(r => setTimeout(r, 200));
+      }
+    }
+    if (!handle) throw new Error('ledger_lock_busy');
+    try { return await fn(); }
+    finally { await handle.close().catch(() => undefined); await unlink(lockPath).catch(() => undefined); }
+  }
 
   /**
    * Check + claim one Mac delivery. Call immediately before the Metricool write.
@@ -179,43 +220,47 @@ export function createMacLedgerGuard({ env = process.env, workspaceRoot, metrico
    */
   async function reserve(destination, item) {
     const evidence = { ledger: db ? 'postgres' : 'local_plus_calendar', calendarCheck: null, at: now().toISOString() };
+    if (!destination || !item) return { ok: false, reason: 'ledger_item_invalid' };
+    if (!item.mediaSha256 && !item.sha256 && !macSegment(item)) return { ok: false, reason: 'ledger_identity_missing' };
+    if (requireDb && !db) return { ok: false, reason: 'ledger_database_required_unavailable' };
+    if (!metricool?.crossAccountPreflight) return { ok: false, reason: 'calendar_check_unavailable' };
     try {
-      if (!destination || !item) return { ok: false, reason: 'ledger_item_invalid' };
-      if (!item.mediaSha256 && !item.sha256 && !macSegment(item)) return { ok: false, reason: 'ledger_identity_missing' };
-      if (requireDb && !db) return { ok: false, reason: 'ledger_database_required_unavailable' };
-      if (!metricool?.crossAccountPreflight) return { ok: false, reason: 'calendar_check_unavailable' };
-      const local = await readLocal();
-      const entry = macEntry({ destination, item, at: evidence.at });
-      const firstLocal = local.entries.map(strip);
-      const refusal = macRoutingRefusal({ destination, item, entries: firstLocal }) ?? conflictOf(firstLocal, entry)?.reason;
-      if (refusal) return { ok: false, reason: refusal, evidence };
-      // Mandatory cross-brand calendar check (read-only).
-      try { evidence.calendarCheck = (await metricool.crossAccountPreflight(destination, item)) ?? { ok: true }; }
-      catch (e) { return { ok: false, reason: code(e) === 'cross_account_duplicate' ? 'cross_account_duplicate' : `calendar_check_failed:${code(e)}`, evidence }; }
-      let mirrored = false;
-      if (db) {
-        let blocked = null;
-        await db.transact(ns, async raw => {
-          const s = raw ? parseStreamerStateStrict(raw) : emptyStreamerState();
-          if (!s) throw new Error('STREAMER_STATE_INVALID');
-          s.cloudPublish = cloudPublishOf(s);
-          const shared = [...mediaEntriesOf(s.cloudPublish), ...local.entries.map(strip)];
-          blocked = macRoutingRefusal({ destination, item, entries: shared }) ?? conflictOf(shared, entry)?.reason ?? null;
-          if (blocked) return raw ?? JSON.stringify(s);
-          const known = new Set((s.cloudPublish.mediaLedger ?? []).map(e => `${e.candidateId}|${e.destinationKey}`));
-          const pending = local.entries.filter(e => !e.mirrored && !known.has(`${e.candidateId}|${e.destinationKey}`)).map(strip);
-          s.cloudPublish.mediaLedger = [...(Array.isArray(s.cloudPublish.mediaLedger) ? s.cloudPublish.mediaLedger : []).filter(e => !(e.candidateId === entry.candidateId && e.destinationKey === entry.destinationKey)), ...pending, entry].slice(-5000);
-          return JSON.stringify(s);
-        });
-        if (blocked) return { ok: false, reason: blocked, evidence };
-        mirrored = true;
-        for (const e of local.entries) e.mirrored = true;
-      }
-      local.entries = [...local.entries.filter(e => !(e.candidateId === entry.candidateId && e.destinationKey === entry.destinationKey)), { ...entry, mirrored }];
-      await writeLocal(local);
-      return { ok: true, evidence: { ...evidence, mirrored, entry: { streamKey: entry.streamKey, lane: entry.lane, destinationKey: entry.destinationKey } } };
+      return await withLock(async () => {
+        const local = await readLocal();
+        const entry = macEntry({ destination, item, at: evidence.at });
+        const firstLocal = local.entries.map(strip);
+        let refusal = macRoutingRefusal({ destination, item, entries: firstLocal }) ?? conflictOf(firstLocal, entry)?.reason ?? null;
+        if (!refusal) {
+          // Mandatory cross-brand calendar check (read-only).
+          try { evidence.calendarCheck = (await metricool.crossAccountPreflight(destination, item)) ?? { ok: true }; }
+          catch (e) { const c = providerCode(e); refusal = c === 'cross_account_duplicate' ? c : `calendar_check_failed:${c}`; }
+        }
+        let mirrored = false;
+        if (db) {
+          // Always push unmirrored local entries; claim this one only when nothing refused it.
+          await db.transact(ns, async raw => {
+            const s = raw ? parseStreamerStateStrict(raw) : emptyStreamerState();
+            if (!s) throw new Error('STREAMER_STATE_INVALID');
+            s.cloudPublish = cloudPublishOf(s);
+            const shared = [...mediaEntriesOf(s.cloudPublish), ...firstLocal];
+            if (!refusal) refusal = macRoutingRefusal({ destination, item, entries: shared }) ?? conflictOf(shared, entry)?.reason ?? null;
+            const existing = Array.isArray(s.cloudPublish.mediaLedger) ? s.cloudPublish.mediaLedger : [];
+            const known = new Set(existing.map(e => `${e.candidateId}|${e.destinationKey}`));
+            const pending = local.entries.filter(e => !e.mirrored && !known.has(`${e.candidateId}|${e.destinationKey}`)).map(strip);
+            if (refusal && !pending.length) return raw ?? JSON.stringify(s);
+            s.cloudPublish.mediaLedger = [...existing.filter(e => refusal || !(e.candidateId === entry.candidateId && e.destinationKey === entry.destinationKey)), ...pending, ...(refusal ? [] : [entry])].slice(-5000);
+            return JSON.stringify(s);
+          });
+          mirrored = true;
+          for (const e of local.entries) e.mirrored = true;
+        }
+        if (!refusal) local.entries = [...local.entries.filter(e => !(e.candidateId === entry.candidateId && e.destinationKey === entry.destinationKey)), { ...entry, mirrored }];
+        if (!refusal || mirrored) await writeLocal(local);
+        if (refusal) return { ok: false, reason: refusal, evidence };
+        return { ok: true, evidence: { ...evidence, mirrored, entry: { streamKey: entry.streamKey, sourceId: entry.sourceId, lane: entry.lane, destinationKey: entry.destinationKey } } };
+      });
     } catch (e) {
-      return { ok: false, reason: `ledger_check_unavailable:${code(e)}`, evidence };
+      return { ok: false, reason: `ledger_check_unavailable:${safeCode(e)}`, evidence };
     }
   }
   return { reserve, file, mode: db ? 'postgres' : 'local_plus_calendar', close: async () => { if (!store) await db?.close?.(); } };
