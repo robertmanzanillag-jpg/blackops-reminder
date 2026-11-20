@@ -1,7 +1,9 @@
 import type { Express, Request } from "express";
 import { createKongMirrorLab, createMirrorSummarizer, createMirrorAiBudget, MirrorError, KONG_MIRROR_ACTION_TYPE, type MirrorCards, type MirrorGithub, type MirrorStore, type MirrorCard, type MirrorAiCall } from "./kong-mirror-lab";
 import { createMirrorChat, type MirrorChatGithub, type MirrorChatProvider } from "./kong-mirror-chat";
-import { createKongImprovementScouts, startScoutLoop, type ScoutGithub, type ScoutInputs } from "./kong-improvement-scouts";
+import { createKongImprovementScouts, startScoutLoop, type MirrorWorkflowRun, type ScoutGithub, type ScoutInputs } from "./kong-improvement-scouts";
+import { createKongAgentHandoff, startHandoffLoop, type AgentActivity, type HandoffGithub } from "./kong-agent-handoff";
+import { buildChangeTask } from "./kong-mirror-lab";
 import { lessonFromMergedImprovement, type KongImprovementLesson } from "@shared/kong-improvement-academy";
 import { getAuthenticatedCurrentUserId, getSystemUserId } from "./user-context";
 import { officeSameOrigin } from "./office-routes";
@@ -11,6 +13,7 @@ type Lab = ReturnType<typeof createKongMirrorLab>;
 type Chat = ReturnType<typeof createMirrorChat>;
 type Scouts = ReturnType<typeof createKongImprovementScouts>;
 type Budget = ReturnType<typeof createMirrorAiBudget>;
+type Handoff = ReturnType<typeof createKongAgentHandoff>;
 export const KONG_MIRROR_REPORT_PATH = "/api/integrations/kong/mirror-reports";
 
 /** Trust Center rows for this kind. Writes go through storage + pending_action_events + audit log, like the generic routes. */
@@ -145,6 +148,61 @@ export function createOctokitChatGithub(): MirrorChatGithub {
   };
 }
 
+/** By branch first; else (Claude may name its branch differently) a recent PR whose body has the improvement key. */
+async function findPull(repo: string, branch: string | null, key?: string) {
+  const github = await (await import("./github-client")).getGitHubClient();
+  const [owner, name] = repo.split("/");
+  if (branch) {
+    const pull = (await github.pulls.list({ owner, repo: name, head: `${owner}:${branch}`, state: "all", per_page: 5 })).data[0];
+    if (pull) return pull;
+  }
+  if (!key) return null;
+  const recent = (await github.pulls.list({ owner, repo: name, state: "all", sort: "created", direction: "desc", per_page: 50 })).data;
+  return recent.find(pull => (pull.body || "").includes(key)) || null;
+}
+
+async function listWorkflowRuns(repo: string, workflow: string, sinceIso: string): Promise<MirrorWorkflowRun[]> {
+  const github = await (await import("./github-client")).getGitHubClient();
+  const [owner, name] = repo.split("/");
+  try {
+    const runs = await github.paginate(github.actions.listWorkflowRuns, { owner, repo: name, workflow_id: workflow, created: `>=${sinceIso.slice(0, 10)}`, per_page: 100 });
+    return runs.map(run => ({ id: run.id, status: run.status, conclusion: run.conclusion ?? null, runStartedAt: run.run_started_at || null, updatedAt: run.updated_at || null, createdAt: run.created_at }));
+  } catch (error) {
+    if ((error as { status?: number }).status === 404) return []; // workflow not created yet: no runs, no spend
+    throw error;
+  }
+}
+
+export function createOctokitHandoffGithub(): HandoffGithub {
+  const client = async () => (await import("./github-client")).getGitHubClient();
+  const split = (repo: string) => { const [owner, name] = repo.split("/"); return { owner, repo: name }; };
+  type Commit = { sha: string; author?: { login?: string } | null; commit: { message: string; author?: { name?: string; date?: string } | null; committer?: { date?: string } | null } };
+  const toCommit = (row: Commit) => ({ sha: row.sha, message: row.commit.message, author: row.author?.login || row.commit.author?.name || "?", at: row.commit.committer?.date || row.commit.author?.date || "" });
+  return {
+    async comment(repo, number, body) {
+      const github = await client();
+      const created = (await github.issues.createComment({ ...split(repo), issue_number: number, body })).data;
+      return { url: created.html_url || null };
+    },
+    async readActivity(repo, target, sinceIso): Promise<AgentActivity> {
+      const github = await client();
+      const pull = target.prNumber ? (await github.pulls.get({ ...split(repo), pull_number: target.prNumber })).data : await findPull(repo, target.branch, target.key);
+      const numbers = [...new Set([target.issueNumber, pull?.number].filter((value): value is number => !!value))];
+      const comments = (await Promise.all(numbers.map(number => github.paginate(github.issues.listComments, { ...split(repo), issue_number: number, since: sinceIso, per_page: 100 })))).flat()
+        .map(comment => ({ author: comment.user?.login || "?", body: comment.body || "", at: comment.created_at, url: comment.html_url }))
+        .sort((a, b) => a.at.localeCompare(b.at));
+      let commits: AgentActivity["commits"] = [];
+      if (pull) commits = (await github.paginate(github.pulls.listCommits, { ...split(repo), pull_number: pull.number, per_page: 100 })).map(row => toCommit(row as Commit));
+      else if (target.branch) {
+        try { commits = (await github.repos.listCommits({ ...split(repo), sha: target.branch, since: sinceIso, per_page: 50 })).data.map(row => toCommit(row as Commit)); }
+        catch (error) { const status = (error as { status?: number }).status; if (status !== 404 && status !== 409 && status !== 422) throw error; } // branch not created yet
+      }
+      return { commits: commits.filter(row => row.at >= sinceIso), comments, prNumber: pull?.number || null, headSha: pull?.head.sha || null };
+    },
+    listClaudeRuns: listWorkflowRuns,
+  };
+}
+
 export function createOctokitScoutGithub(): ScoutGithub {
   const client = async () => (await import("./github-client")).getGitHubClient();
   const split = (repo: string) => { const [owner, name] = repo.split("/"); return { owner, repo: name }; };
@@ -154,23 +212,11 @@ export function createOctokitScoutGithub(): ScoutGithub {
       const created = (await github.issues.create({ ...split(repo), title: issue.title, body: issue.body, labels: issue.labels })).data;
       return { number: created.number, url: created.html_url };
     },
-    async findPullByBranch(repo, branch) {
-      const github = await client();
-      const [owner] = repo.split("/");
-      const pulls = (await github.pulls.list({ ...split(repo), head: `${owner}:${branch}`, state: "all", per_page: 5 })).data;
-      const pull = pulls[0];
+    async findPullByBranch(repo, branch, key) {
+      const pull = await findPull(repo, branch, key);
       return pull ? { number: pull.number, state: pull.state, merged: !!pull.merged_at } : null;
     },
-    async listMirrorRuns(repo, workflow, sinceIso) {
-      const github = await client();
-      try {
-        const runs = await github.paginate(github.actions.listWorkflowRuns, { ...split(repo), workflow_id: workflow, created: `>=${sinceIso.slice(0, 10)}`, per_page: 100 });
-        return runs.map(run => ({ id: run.id, status: run.status, runStartedAt: run.run_started_at || null, updatedAt: run.updated_at || null, createdAt: run.created_at }));
-      } catch (error) {
-        if ((error as { status?: number }).status === 404) return []; // workflow not created yet: no runs, no spend
-        throw error;
-      }
-    },
+    listMirrorRuns: listWorkflowRuns,
   };
 }
 
@@ -223,7 +269,12 @@ async function createRuntime() {
       return used ? price(used.name, used.model, call.inputTokens, call.outputTokens) : Math.max(...providers.map(provider => price(provider.name, provider.model, call.inputTokens, call.outputTokens)));
     } });
   const academyNamespace = JSON.stringify(["kong-improvement-academy-v1", owner]);
+  let scoutsRef: Scouts | undefined;
+  const handoff = createKongAgentHandoff({ owner, store, now: Date.now, github: createOctokitHandoffGithub(),
+    mirrorPaused: async () => scoutsRef ? (await scoutsRef.mirrorBudget()).paused : true });
   const lab = createKongMirrorLab({ owner, store, now: Date.now, cards: createStorageMirrorCards(owner), github: createOctokitMirrorGithub(),
+    dispatchChange: async (entry, request) => handoff.requestChange({ prNumber: entry.prNumber, title: entry.title,
+      task: buildChangeTask({ prNumber: entry.prNumber, headSha: entry.headSha, text: request.text }) }),
     summarize: report => summarizer.summarize(report),
     onMerged: async (entry, card) => {
       const lesson = lessonFromMergedImprovement({ prNumber: entry.prNumber, headSha: entry.headSha, title: entry.title, agents: card?.agents || [], mergedAt: new Date().toISOString() });
@@ -234,7 +285,7 @@ async function createRuntime() {
       });
     } });
   const chat = createMirrorChat({ owner, store, now: Date.now, budget, providers, estimateUsd: price, github: createOctokitChatGithub(), lab });
-  const scouts = createKongImprovementScouts({ owner, store, now: Date.now, github: createOctokitScoutGithub(),
+  const scouts = createKongImprovementScouts({ owner, store, now: Date.now, github: createOctokitScoutGithub(), handoff,
     mirrorStatusFor: async prNumber => (await lab.list()).find(row => row.prNumber === prNumber)?.status || null,
     readInputs: async (): Promise<ScoutInputs> => {
       const { runOfficeKongReadOnly } = await import("./office-kong");
@@ -248,7 +299,8 @@ async function createRuntime() {
         cities: kong.evidence.cities.map(city => ({ id: city.id, name: city.name, categories: city.categories })), repairs, lessons };
     } });
   const academy = async () => { const raw = await store.read(academyNamespace); return raw ? (JSON.parse(raw).lessons || []) as KongImprovementLesson[] : []; };
-  return { lab, budget, chat, scouts, academy };
+  scoutsRef = scouts;
+  return { lab, budget, chat, scouts, academy, handoff };
 }
 
 let runtime: ReturnType<typeof createRuntime> | undefined;
@@ -262,11 +314,12 @@ export async function readKongMirrorSummarySpend() {
   return { id: "kong_mirror_ai", label: `IA Mirror Lab KONG (tope $${spend.capUsd})`, amountUsd: spend.spentUsd, count: spend.calls, kind: "estimated" as const };
 }
 
-export type MirrorRouteRuntime = { lab: Lab; chat?: Chat; scouts?: Scouts; budget?: Budget; academy?: () => Promise<KongImprovementLesson[]> };
+export type MirrorRouteRuntime = { lab: Lab; chat?: Chat; scouts?: Scouts; budget?: Budget; academy?: () => Promise<KongImprovementLesson[]>; handoff?: Handoff };
 export function registerKongMirrorRoutes(app: Express, options: { resolve?: () => Promise<Lab>; runtime?: () => Promise<MirrorRouteRuntime>; owner?: (req: Request) => boolean; secret?: () => string | undefined; sameOrigin?: (req: Request) => boolean } = {}) {
   const full: () => Promise<MirrorRouteRuntime> = options.runtime || (options.resolve ? async () => ({ lab: await options.resolve!() }) : getRuntime);
   const resolve = async () => (await full()).lab;
   if (!options.runtime && !options.resolve && process.env.KONG_IMPROVEMENT_SCOUTS_ENABLED === "true") startScoutLoop(async () => (await getRuntime()).scouts.run());
+  if (!options.runtime && !options.resolve) startHandoffLoop(async () => (await getRuntime()).handoff.tick());
   let budgetCache: { at: number; value: unknown } | undefined;
   const mirrorBudget = async () => {
     const rt = await full();
@@ -300,11 +353,11 @@ export function registerKongMirrorRoutes(app: Express, options: { resolve?: () =
     try {
       const rt = await full();
       const reports = await rt.lab.list();
-      const [aiBudget, scouts, academy, mirror] = await Promise.all([
+      const [aiBudget, scouts, academy, mirror, agents] = await Promise.all([
         rt.budget ? rt.budget.monthSpend().catch(() => null) : null, rt.scouts ? rt.scouts.view().catch(() => null) : null,
-        rt.academy ? rt.academy().catch(() => []) : [], mirrorBudget()]);
+        rt.academy ? rt.academy().catch(() => []) : [], mirrorBudget(), rt.handoff ? rt.handoff.view().catch(() => null) : null]);
       return res.json({ reports, pendingCount: reports.filter(report => report.status === "carded" && ["pending", "edited", "snoozed"].includes(report.pendingStatus || "")).length,
-        aiBudget, mirrorBudget: mirror, scouts, academy: academy.slice(0, 30) });
+        aiBudget, mirrorBudget: mirror, scouts, academy: academy.slice(0, 30), agents });
     } catch { return res.status(503).json({ code: "MIRROR_UNAVAILABLE" }); }
   });
 
@@ -316,6 +369,20 @@ export function registerKongMirrorRoutes(app: Express, options: { resolve?: () =
       res.set({ "Content-Type": image.mime, "Cache-Control": "private, max-age=3600", "X-Content-Type-Options": "nosniff", "Content-Security-Policy": "default-src 'none'" });
       return res.end(image.bytes);
     } catch { return res.status(503).end(); }
+  });
+
+  // "Cambiar a Claude/Codex": Robert forces the hand-off (registered before /:key/:decision).
+  app.post("/api/kong-mirror/agents/switch", async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    if (!owner(req) || !sameOrigin(req)) return res.status(403).json({ code: "MIRROR_OWNER_REQUIRED", message: "Solo Robert puede cambiar de agente." });
+    const itemKey = typeof req.body?.itemKey === "string" ? req.body.itemKey : "";
+    if (!/^kong-(mejora:[a-f0-9]{24}|pr:\d{1,9})$/.test(itemKey)) return res.status(404).json({ code: "HANDOFF_NOT_FOUND", message: "No encontré este trabajo." });
+    try {
+      const rt = await full();
+      if (!rt.handoff) return res.status(503).json({ code: "HANDOFF_UNAVAILABLE", message: "El relevo entre agentes no está disponible." });
+      const result = await rt.handoff.switchTo(itemKey, req.body?.agent);
+      return result.ok ? res.json(result) : res.status(result.status).json(result);
+    } catch { return res.status(503).json({ code: "HANDOFF_UNAVAILABLE", message: "No se pudo cambiar de agente. No se envió nada." }); }
   });
 
   app.post("/api/kong-mirror/:key/:decision", async (req, res) => {

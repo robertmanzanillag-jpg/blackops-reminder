@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { CLAUDE_CODE_FOOTER, redactForGithub, type MirrorStore } from "./kong-mirror-lab";
+import type { KongAgentHandoff } from "./kong-agent-handoff";
 
 /**
  * "Equipo de mejoras KONG": deterministic scouts ($0, no AI) that read the KONG evidence BlackOps already
@@ -31,7 +32,7 @@ export function resolveMirrorUsdPerMinute(env: NodeJS.ProcessEnv = process.env):
   const value = raw === undefined || raw.trim() === "" ? 0.008 : Number(raw);
   return Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : 0.008;
 }
-export type MirrorWorkflowRun = { id: number; status: string | null; runStartedAt: string | null; updatedAt: string | null; createdAt: string };
+export type MirrorWorkflowRun = { id: number; status: string | null; conclusion?: string | null; runStartedAt: string | null; updatedAt: string | null; createdAt: string };
 const round = (value: number) => Math.round(value * 100) / 100;
 export function estimateMirrorSpend(runs: MirrorWorkflowRun[], now: number, env: NodeJS.ProcessEnv = process.env) {
   const rate = resolveMirrorUsdPerMinute(env), budgetUsd = resolveMirrorRunBudgetUsd(env);
@@ -130,7 +131,20 @@ export function deriveKongImprovementProposals(input: ScoutInputs): KongImprovem
   return [...out.values()];
 }
 
-export function buildImprovementIssue(proposal: KongImprovementProposal, productionBranch: string) {
+/** The agent-neutral task (Codex or Claude): the same words go to whichever agent holds the item. */
+export function buildImprovementTask(proposal: Pick<KongImprovementProposal, "key" | "slug">, productionBranch: string, issueNumber?: number) {
+  const branch = `improve/${proposal.slug}`;
+  return [
+    `Please implement the improvement described in ${issueNumber ? `issue #${issueNumber}` : "this issue"}:`,
+    `1. Create a branch named \`${branch}\` from \`${productionBranch}\` (or continue on it if it already exists).`,
+    "2. Keep the change small and scoped; add or update tests and keep all checks green.",
+    "3. Do not touch payments/Stripe, auth/permissions, pricing, user messaging, database schema/deletes or legal pages.",
+    `4. Open a pull request against \`${productionBranch}\` with the label \`mirror-lab\` and include \`Improvement key: ${proposal.key}\` in the PR body, so the KONG mirror lab tests it automatically.`,
+    "5. Do not merge or deploy; the owner approves from BlackOps.",
+  ].join("\n");
+}
+
+export function buildImprovementIssue(proposal: KongImprovementProposal, productionBranch: string, options: { agentNeutral?: boolean } = {}) {
   const branch = `improve/${proposal.slug}`;
   const body = [
     `Improvement key: ${proposal.key}`,
@@ -143,12 +157,10 @@ export function buildImprovementIssue(proposal: KongImprovementProposal, product
     `**Expected benefit:** ${redactForGithub(proposal.benefit)}`,
     `**Risk class:** ${proposal.risk}`,
     "",
-    "@codex Please implement this improvement:",
-    `1. Create a branch named \`${branch}\` from \`${productionBranch}\`.`,
-    "2. Keep the change small and scoped; add or update tests and keep all checks green.",
-    "3. Do not touch payments/Stripe, auth/permissions, pricing, user messaging, database schema/deletes or legal pages.",
-    `4. Open a pull request against \`${productionBranch}\` with the label \`mirror-lab\` and include \`Improvement key: ${proposal.key}\` in the PR body, so the KONG mirror lab tests it automatically.`,
-    "5. Do not merge or deploy; the owner approves from BlackOps.",
+    ...(options.agentNeutral
+      ? ["Shared work record: BlackOps assigns Codex or Claude in a comment below (one at a time). Both see each other's commits, comments and Mirror Lab reports here.",
+        "Instructions for the assigned agent:", buildImprovementTask(proposal, productionBranch).split("\n").slice(1).join("\n")]
+      : ["@codex Please implement this improvement:", buildImprovementTask(proposal, productionBranch).split("\n").slice(1).join("\n")]),
   ].join("\n") + CLAUDE_CODE_FOOTER;
   return { title: `[improve] ${proposal.title}`.slice(0, 200), body, labels: ["improve"], branch };
 }
@@ -164,12 +176,14 @@ export type ScoutLedgerEntry = z.infer<typeof ledgerEntry>;
 
 export interface ScoutGithub {
   createIssue(repo: string, issue: { title: string; body: string; labels: string[] }): Promise<{ number: number; url: string }>;
-  findPullByBranch(repo: string, branch: string): Promise<{ number: number; state: string; merged: boolean } | null>;
+  findPullByBranch(repo: string, branch: string, key?: string): Promise<{ number: number; state: string; merged: boolean } | null>;
   listMirrorRuns(repo: string, workflow: string, sinceIso: string): Promise<MirrorWorkflowRun[]>;
 }
 
 export function createKongImprovementScouts(options: { owner: string; store: MirrorStore; now: () => number; env?: NodeJS.ProcessEnv; github: ScoutGithub;
-  readInputs: () => Promise<ScoutInputs>; mirrorStatusFor: (prNumber: number) => Promise<string | null> }) {
+  readInputs: () => Promise<ScoutInputs>; mirrorStatusFor: (prNumber: number) => Promise<string | null>;
+  /** Codex/Claude primary+fallback. Without it, the issue body itself asks @codex (PR #472 behaviour). */
+  handoff?: Pick<KongAgentHandoff, "start"> }) {
   const env = options.env || process.env;
   const namespace = JSON.stringify(["kong-improvement-scouts-v1", options.owner]);
   const parse = (raw: string | null) => raw ? ledgerSchema.parse(JSON.parse(raw)) : { version: 1 as const, lastRunAt: null, lastError: null, entries: [] as ScoutLedgerEntry[] };
@@ -205,15 +219,19 @@ export function createKongImprovementScouts(options: { owner: string; store: Mir
       if (entry.kind !== "code" || entry.status !== "proposed") continue;
       if (budget.paused) { entry.pausedByBudget = true; pausedByBudget++; continue; }
       try {
-        const issue = await options.github.createIssue(KONG_IMPROVEMENT_REPOSITORY, buildImprovementIssue(proposal, branch));
+        const built = buildImprovementIssue(proposal, branch, { agentNeutral: !!options.handoff });
+        const issue = await options.github.createIssue(KONG_IMPROVEMENT_REPOSITORY, built);
         entry.issueUrl = issue.url; entry.issueNumber = issue.number; entry.status = "building"; entry.pausedByBudget = false; opened++;
+        // A failed dispatch leaves the item "esperando"; the hand-off tick retries it.
+        if (options.handoff) await options.handoff.start({ key: proposal.key, title: proposal.title, issueNumber: issue.number, branch: built.branch,
+          task: buildImprovementTask(proposal, branch, issue.number), neverAutoArea: proposal.neverAutoArea }).catch(() => undefined);
       } catch { entry.status = "proposed"; }
     }
     // Track progress: issue → PR (en pruebas) → card (lista) → merged.
     for (const entry of known.values()) {
       if (!["building", "testing", "ready"].includes(entry.status)) continue;
       try {
-        const pull = await options.github.findPullByBranch(KONG_IMPROVEMENT_REPOSITORY, `improve/${entry.slug}`);
+        const pull = await options.github.findPullByBranch(KONG_IMPROVEMENT_REPOSITORY, `improve/${entry.slug}`, entry.key);
         if (!pull) continue;
         entry.prNumber = pull.number;
         if (pull.merged) entry.status = "merged";

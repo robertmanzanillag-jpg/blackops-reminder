@@ -19,6 +19,7 @@
     "test:ceo-backup-check-cli": "node --import tsx --test tests/ceo-backup-check-cli.test.ts",
     "test:ceo-operability": "node --import tsx --test tests/ceo-operability.test.ts",
     "test:scheduler": "node --import tsx --test tests/reminder-scheduler.test.ts",
+    "test:kong-agent-handoff": "node --import tsx --test tests/kong-improvement-agent-handoff.test.ts tests/kong-mirror-lab.test.ts tests/kong-mirror-qa-scenarios.test.ts",
     "test:telegram": "node --import tsx --test tests/telegram-*.test.ts",
     "test:assistant-chat": "node --import tsx --test tests/assistant-chat-flow.test.ts",
     "test:ai-cost-notifications": "node --import tsx --test tests/ai-cost-notifications.test.ts",

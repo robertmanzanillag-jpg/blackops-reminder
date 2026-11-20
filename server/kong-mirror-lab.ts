@@ -344,16 +344,20 @@ export function redactForGithub(value: string): string {
 }
 /** The @codex comment Robert's change request posts on the KONG PR (English instructions + his own words). */
 export function buildCodexChangeComment(input: { prNumber: number; headSha: string; text: string }) {
+  return `@codex ${buildChangeTask(input)}${CLAUDE_CODE_FOOTER}`;
+}
+/** Agent-neutral change task: the same words go to Codex or Claude (whoever holds the PR). */
+export function buildChangeTask(input: { prNumber: number; headSha: string; text: string }) {
   const words = redactForGithub(input.text).replace(/\r/g, "").trim().slice(0, 1500);
   return [
-    `@codex Please update this pull request (#${input.prNumber}, tested at ${input.headSha.slice(0, 7)}) with the change the owner requested below.`,
+    `Please update this pull request (#${input.prNumber}, tested at ${input.headSha.slice(0, 7)}) with the change the owner requested below.`,
     "- Keep the change scoped to what is asked; do not touch payments, auth, pricing, user messaging, database schema/deletes or legal pages.",
     "- Keep or add tests, keep all checks green, and push to this same PR branch so the KONG mirror lab re-tests it automatically.",
     "- If the request is ambiguous or conflicts with the current change, explain it in a PR comment instead of guessing.",
     "",
     "Owner's request (original words, Spanish):",
     ...words.split("\n").map(line => `> ${line}`),
-  ].join("\n") + CLAUDE_CODE_FOOTER;
+  ].join("\n");
 }
 /** Deterministic: does Robert's chat message ask for a different change? ($0, no AI) */
 export function looksLikeChangeRequest(message: string): boolean {
@@ -375,7 +379,9 @@ export function kongRepublishSteps(mergeSha: string | null, baseRef: string) {
 
 export function createKongMirrorLab(options: { owner: string; store: MirrorStore; now: () => number; cards: MirrorCards; github: MirrorGithub;
   summarize: (report: KongMirrorReport) => Promise<{ text: string; source: "ai" | "deterministic"; reason?: string }>; imageUrl?: (imageKey: string) => string;
-  onMerged?: (entry: MirrorJournalEntry, card: MirrorCard | null) => Promise<void> }) {
+  onMerged?: (entry: MirrorJournalEntry, card: MirrorCard | null) => Promise<void>;
+  /** Codex/Claude hand-off: posts the change to the agent holding the PR (primary, fallback only when needed). */
+  dispatchChange?: (entry: MirrorJournalEntry, request: MirrorChangeRequest) => Promise<{ url?: string | null } | void> }) {
   const { owner, store, now } = options;
   if (!owner.trim()) throw new Error("MIRROR_OWNER_REQUIRED");
   const namespace = JSON.stringify(["kong-mirror-reports-v1", owner]);
@@ -567,7 +573,8 @@ export function createKongMirrorLab(options: { owner: string; store: MirrorStore
     if ("prior" in claim && claim.prior) return { ok: true as const, duplicate: true, request: claim.prior, status: entry.status };
     const request = (claim as { request: MirrorChangeRequest }).request;
     let posted: { url?: string | null } | void = undefined, failed = false;
-    try { posted = await options.github.comment(entry.repo, entry.prNumber, buildCodexChangeComment({ prNumber: entry.prNumber, headSha: entry.headSha, text: request.text })); }
+    try { posted = options.dispatchChange ? await options.dispatchChange(entry, request)
+      : await options.github.comment(entry.repo, entry.prNumber, buildCodexChangeComment({ prNumber: entry.prNumber, headSha: entry.headSha, text: request.text })); }
     catch { failed = true; }
     const saved = await mutate(journal => {
       const current = journal.entries.find(item => item.key === key)!;
