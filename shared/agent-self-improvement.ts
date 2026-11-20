@@ -14,7 +14,7 @@
 //    (pending_actions) and changes nothing until Robert approves; approval only records the
 //    improvement as a skill. Bounded: at most 3 open at once, one per key.
 
-import { addSkill, type CompanyState } from "./agent-company";
+import { addSkill, isKongSnapshotAgent, type CompanyState } from "./agent-company";
 import type { CouncilProposal } from "./agent-council";
 import { CLIPPERS_MEASURED, DAILY_ROLE_WORK_ROLES, INTERNAL_WORK_ROLES, type VitalityEvidence } from "./agent-vitality";
 import { FACTORY_AGENTS } from "./factory-office-agents";
@@ -216,9 +216,9 @@ export function deriveSelfImprovementProposals(input: {
   };
   const blocked = (key: string) => input.lessons.some(lesson => lesson.key === key) || all().some(p => p.key === key && (OPEN.includes(p.status) || input.now - ms(p.closedAt || p.createdAt) < COOLDOWN_MS));
   const nameOf = (id: string) => input.names[id] || id;
-  const push = (agentId: string, key: string, title: string, description: string, evidence: string[], goal: string, label: string) => {
+  const push = (agentId: string, key: string, title: string, description: string, evidence: string[], goal: string, label: string, handoffBrief = brief(title, goal, evidence)) => {
     if (openCount() >= MAX_OPEN_SELF_IMPROVEMENT || blocked(key) || stamped(agentId, key) || input.exempt?.includes(agentId) || !input.names[agentId]) return;
-    created.push({ key, kind: "lesson", owner: agentId, title, description, evidence, handoffBrief: brief(title, goal, evidence), createdAt: iso, status: "pending_submit",
+    created.push({ key, kind: "lesson", owner: agentId, title, description, evidence, handoffBrief, createdAt: iso, status: "pending_submit",
       lesson: { ruleId: key, subject: agentId, label } });
   };
   for (const lesson of input.clippersLessons || []) {
@@ -244,7 +244,34 @@ export function deriveSelfImprovementProposals(input: {
         [`Diagnóstico repetido: ${code}`, `Días: ${[...set].sort().join(", ")}`], `Que ${nameOf(agentId)} deje de repetir ${code}: ${hint}. Sin inventar datos; si falta una conexión, dilo.`, `Mejora: ${hint}`);
     }
   }
+  // KONG agents: the same blocker reported by KONG's own snapshot for >= 3 days becomes ONE proposal.
+  // Proposal only: approving it records the lesson as a skill of that career in BlackOps. Nothing is
+  // sent to or changed in KONG (see kongImprovementApplyHook for the out-of-scope phase 3).
+  for (const career of Object.values(input.company?.careers || {}).sort((a, b) => a.agentId.localeCompare(b.agentId))) {
+    const blocker = career.vitality?.kongBlocker;
+    if (!isKongSnapshotAgent(career.agentId) || !blocker || career.inTrainingUntilGeneration || input.now - ms(blocker.since) < KONG_BLOCKER_DAYS * 24 * 3600_000) continue;
+    const agentId = career.agentId;
+    const days = Math.floor((input.now - ms(blocker.since)) / (24 * 3600_000));
+    const title = `Automejora de ${nameOf(agentId)}: resolver el bloqueo que KONG repite`;
+    const evidence = [`KONG reporta el mismo bloqueo desde ${blocker.since} (${days} días)`, `Bloqueo: ${blocker.label}`];
+    push(agentId, `${SELF_IMPROVEMENT_PREFIX}kong:${agentId}:${keyHash(blocker.key)}`, title,
+      `${nameOf(agentId)} lleva ${days} días con el mismo bloqueo en KONG. Propuesta solamente: si apruebas, queda como lección aprendida en su carrera. No cambia nada en KONG.`,
+      evidence, `Resolver en KONG el bloqueo repetido de ${nameOf(agentId)}.`, `Bloqueo repetido en KONG: ${blocker.label}`.slice(0, 140),
+      [`Propuesta de automejora para un agente de KONG (solo lectura, $0): ${title}`, "", "Evidencia:", ...evidence.map(line => `- ${line}`), "",
+        "Reglas:", "- Aprobar solo registra la lección en la carrera del agente dentro de BlackOps.", "- BlackOps no cambia KONG: aplicar la mejora en KONG es un paso aparte (fase 3) con su propio PR en el repo de KONG y aprobación de Robert."].join("\n"));
+  }
   return created;
+}
+/** Days the same KONG blocker must repeat before an automejora proposal. */
+export const KONG_BLOCKER_DAYS = 3;
+const keyHash = (text: string) => { let h = 2166136261; for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 16777619); return (h >>> 0).toString(36); };
+/**
+ * TODO(fase 3, fuera de alcance): aplicar en KONG una automejora aprobada de un agente de KONG
+ * (orden por /api/admin/ceo/office-orders o PR en el repo de KONG, siempre con aprobación de Robert).
+ * Hoy es un no-op deliberado: BlackOps solo propone y registra la lección; nunca cambia KONG.
+ */
+export function kongImprovementApplyHook(_proposal: CouncilProposal): { applied: false; reason: string } {
+  return { applied: false, reason: "Fase 3 pendiente: BlackOps no aplica cambios en KONG." };
 }
 
 /** Records each new automejora key on its owner's career, so the 14-day cooldown outlives pruned history. */

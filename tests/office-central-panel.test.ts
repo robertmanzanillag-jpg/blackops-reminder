@@ -122,7 +122,8 @@ test("panel exemption is the council's: mechanic, kong:* guides and non-active i
   assert.deepEqual(["mechanic", "kong:Venues", "kong:anything", "kong-videos", "radio"].filter(exempt), ["mechanic", "kong:Venues", "kong:anything", "kong-videos", "radio"]);
   assert.deepEqual(["ceo", "skills-scout", "agent-factory", "code", "blackroom-videos"].filter(exempt), [], "the council rotates these, so the panel must list them");
   // Server parity: the council's always-unscored list is derived from the same predicate.
-  assert.deepEqual([...EXEMPT_IDS].sort(), ["kong:KONG AI", "kong:Kong Legal", "kong:Promoters + Mesas", "kong:Venues", "mechanic"]);
+  // The placeholder KONG roles were retired (their real agents are scored from the KONG snapshot).
+  assert.deepEqual([...EXEMPT_IDS].sort(), ["mechanic"]);
   const careers = { main: { ceo: career("ceo", { battery: 0 }), mechanic: career("mechanic", { battery: 0 }), radio: career("radio", { battery: 0 }) }, kong: {} };
   const rows = selectReplaceable({ careers, statuses: new Map(), isExempt: (id, company) => company === "main" && exempt(id), nameOf: id => id, now });
   assert.deepEqual(rows.map(item => item.agentId), ["ceo"]);

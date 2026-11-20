@@ -199,7 +199,7 @@ test("compiled office mounts the Clippers area for its owner and preserves KONG 
         const trigger = page.getByTestId("open-clippers-office");
         await trigger.waitFor();
         assert.equal(reads, 0, "office entry cannot start Clippers reads or jobs");
-        assert.equal(await page.getByTestId("office-kong-supervisor-slot").isVisible(), true);
+        assert.equal(await page.getByTestId("office-kong-repairs-slot").isVisible(), true);
         assert.equal(await page.getByTestId("office-open-kong").isVisible(), true);
         await trigger.click();
         await page.getByTestId("clippers-orchestra-report").waitFor();

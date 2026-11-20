@@ -160,6 +160,10 @@ export function isPublicApiRequest(req: Request): boolean {
   if (path === "/api/blackroom-agent/clippers-orchestra") {
     return req.method === "POST" && req.originalUrl === path && Object.keys(req.query || {}).length === 0;
   }
+  // KONG Mirror Lab reports: the handler requires the HMAC signature and a fresh timestamp.
+  if (path === "/api/integrations/kong/mirror-reports") {
+    return req.method === "POST" && req.originalUrl === path && Object.keys(req.query || {}).length === 0;
+  }
   return isPublicApiPath(path);
 }
 

@@ -1,5 +1,5 @@
 import { ceoFocusIntegrations } from "./ceo-domain-policy";
-import { advanceKongCompany, isKongCompanyAgent } from "./kong-company";
+import { advanceKongCareers, isKongCompanyAgent, isKongSnapshotAgent, type KongCompanyObservation } from "./kong-company";
 import { parseInternalWork } from "./office-internal-work";
 import {parseRoleAcademy} from "./office-role-academy";
 import {parseCapabilityTraining} from "./office-capability-training";
@@ -24,7 +24,7 @@ import type { OfficeKongAuditResult } from "./office-kong";
 // Trust Center pending actions for proposals. Approving a proposal records a
 // lesson or marks a PR-first brief as ready; it does not change code or skills.
 
-import { reviewKongReadiness } from "@shared/kong-supervisor";
+import { parseLegacyKongSupervision } from "@shared/kong-supervisor";
 import { buildBlackRoomOfficeOperations } from "./blackroom-office-operations";
 import { mkdir, readFile, readdir, rename, stat, unlink, writeFile } from "node:fs/promises";
 import { randomUUID, createHash } from "node:crypto";
@@ -47,6 +47,7 @@ import {
   pruneProposals,
   safeText,
   toMs,
+  withKongMirror,
   runCrossChecks,
   type CouncilProposal,
   type CouncilSignals,
@@ -90,6 +91,9 @@ import {
   type AcademyAssessment,
   applyQualitySignals,
   type QualitySignal,
+  kongCareersMirror,
+  mainCompanyView,
+  isKongOrder,
 } from "@shared/agent-company";
 import { advanceBlackRoomAcademy, scheduleBlackRoomAcademy, BLACKROOM_ACADEMY_ROLES } from "@shared/blackroom-academy";
 import { applyVitality, closeStaleVitalityFlags, deriveVitalityFlagProposals, publicCareerVitality, vitalityView } from "@shared/agent-vitality";
@@ -156,7 +160,6 @@ function kongReadCode(error: unknown): string {
 }
 const SKIP = Symbol("skip");
 
-export const KONG_TEAM = ["KONG AI", "Promoters + Mesas", "Venues", "Kong Legal"];
 // Order routing only trusts live states from a recent council cycle.
 const STATUS_FRESH_MS = 45 * 60_000;
 
@@ -190,7 +193,6 @@ export const AGENT_NAMES: Record<string, string> = {
   // Software Factory engineers: main-company careers scored only from real factory stage rows.
   ...FACTORY_AGENT_NAMES,
   ...CLIPPERS_AGENT_NAMES,
-  ...Object.fromEntries(KONG_TEAM.map((name) => [`kong:${name}`, name])),
 };
 // Always unscored, whatever the overrides say: they have no work of their own to measure
 // (the KONG guides and the mechanic). Same predicate the central panel uses.
@@ -246,10 +248,20 @@ export const CYCLE_WATCHDOG_MS = 5 * 60_000;
 
 export type BlackRoomLifeInput = { signals: QualitySignal[]; rules: Record<string, BlackRoomTeamLessonRule[]> };
 /** Raw `clippers-streamers:<owner>` state (parsed defensively by shared/agent-self-improvement.ts). */
-export type VitalityInput = { streamerState?: unknown; streamerRead?: boolean };
+export type VitalityInput = { streamerState?: unknown; streamerRead?: boolean;
+  /** KONG snapshot of this round (advanceKongCareers): holds / blockers for the KONG careers' vida tick. */
+  kong?: KongCompanyObservation["vitality"]; kongNames?: Record<string, string> };
 
-/** Main-company agents (KONG has its own company and its own missed-turn rule). */
+/** BlackOps agents registered in AGENT_NAMES (KONG agents come from KONG's snapshot, not from this list). */
 export const MAIN_AGENT_NAMES: Record<string, string> = Object.fromEntries(Object.entries(AGENT_NAMES).filter(([id]) => !isKongCompanyAgent(id)));
+
+/** Display names of the KONG careers, as KONG last reported them (falls back to the id). */
+function kongNamesOf(state: Pick<CouncilState, "company" | "kongLastStatuses">): Record<string, string> {
+  return Object.fromEntries(Object.keys(state.company.careers).filter(isKongSnapshotAgent).map(id => {
+    const name = (state.kongLastStatuses[id] as { name?: unknown } | undefined)?.name;
+    return [id, typeof name === "string" && name ? name.slice(0, 80) : id.replace(/^kong(-city)?:/, "")];
+  }));
+}
 
 function advanceCompanyCycle(
   state: CouncilState,
@@ -282,7 +294,7 @@ function advanceCompanyCycle(
     company = enrollTrainee(company, { id: proposal.key, forAgentId, role: proposal.title.replace(/^Contratar /, ""), now });
   }
   // Skills from the lessons Robert approved about each agent.
-  company = learnLessons(company, state.lessons.filter(lesson => !isKongCompanyAgent(lesson.subject)), now);
+  company = learnLessons(company, state.lessons.filter(lesson => !isKongCompanyAgent(lesson.subject) || isKongSnapshotAgent(lesson.subject)), now);
   // Reading never replaces verified execution evidence. Each trainee first studies its own job (why it failed, its orders,
   // its lessons), then the general docs.
   const modules = curriculum.length ? curriculum : [{ id: "core-rules", title: "Reglas basicas", summary: "PR-first, QA antes de publicar, nada de gasto sin aprobacion de Robert." }];
@@ -331,7 +343,9 @@ function advanceCompanyCycle(
   if (unregistered.length) company = advanceCompany(company, { now, roles: AGENT_NAMES, statuses: Object.fromEntries(unregistered.map(id => [id, { state: "available" as const, label: "Registrado; pendiente de entregables verificables" }])) }).state;
   company = applyVitality(company, { now, evidence: [...roleWorkVitalityEvidence(roleWorkJobs), ...streamer.evidence,
     ...blackroom.signals.filter(signal => signal.points > 0).map(signal => ({ id: `blackroom:${signal.id}`, agentId: signal.agentId, at: signal.at, label: signal.text.slice(0, 100), clockOnly: true })),
-    ...(state.scout.lastRunAt && !state.scout.error ? [{ id: `scout:${state.scout.lastRunAt}`, agentId: "skills-scout", at: state.scout.lastRunAt, label: "Revisión diaria de releases completada" }] : [])], holds, exempt: [...unscored], names: MAIN_AGENT_NAMES }).state;
+    ...(state.scout.lastRunAt && !state.scout.error ? [{ id: `scout:${state.scout.lastRunAt}`, agentId: "skills-scout", at: state.scout.lastRunAt, label: "Revisión diaria de releases completada" }] : [])], holds, exempt: [...unscored], names: { ...MAIN_AGENT_NAMES, ...vitalityInput.kongNames },
+    // KONG careers: same vida tick, driven only by this round's KONG snapshot (none = everyone en espera).
+    kong: vitalityInput.kong ?? { observed: false, agents: [], holds: {}, blockers: {} } }).state;
   const clippersAcademy = vitalityInput.streamerState !== undefined ? { observedAt: new Date(now).toISOString(), lessons: clippersLessons } : state.clippersAcademy;
   return { ...state, company, lastStatuses: compact, ...(clippersAcademy ? { clippersAcademy } : {}), ...(state.officeExecution ? { officeExecution: { ...state.officeExecution, roles: reconcileRoleLifecycles(state.officeExecution.roles, company, now) } } : {}) };
 }
@@ -441,14 +455,15 @@ export function createAgentCouncil(deps: CouncilDeps) {
         const raw = await deps.transactState(async raw => {
           const current = parseDurableCouncilState(raw,deps.userId());
           const next = await change(current);
-          return JSON.stringify(next === SKIP ? current : next);
+          return JSON.stringify(withKongMirror(next === SKIP ? current : next));
         });
         return parseDurableCouncilState(raw,deps.userId());
       }
       if (!deps.versioned) {
         const current = await load();
-        const next = await change(current);
-        if (next === SKIP) return current;
+        const changed = await change(current);
+        if (changed === SKIP) return current;
+        const next = withKongMirror(changed);
         await deps.writeState(JSON.stringify(next, null, 2));
         cached = next;
         return next;
@@ -456,8 +471,9 @@ export function createAgentCouncil(deps: CouncilDeps) {
       for (let attempt = 0; ; attempt++) {
         const { raw, revision } = await deps.versioned.read();
         const current = parseDurableCouncilState(raw,deps.userId());
-        const next = await change(current);
-        if (next === SKIP) { cached = current; return current; }
+        const changed = await change(current);
+        if (changed === SKIP) { cached = current; return current; }
+        const next = withKongMirror(changed);
         try {
           await deps.versioned.write(JSON.stringify(next), revision);
           cached = next;
@@ -583,11 +599,11 @@ export function createAgentCouncil(deps: CouncilDeps) {
       if (!state.lastCycleAt) { verified = true; return SKIP; }
       // Another instance (or the round) already verified KONG recently: nothing to catch up.
       if (state.kongObservedAt && now - Date.parse(state.kongObservedAt) < KONG_CATCHUP_MS) { verified = true; return SKIP; }
-      const kong = advanceKongCompany({ company: state.kongCompany, evidenceAt: state.kongEvidenceAt, evidence, now, curriculum });
+      const kong = advanceKongCareers({ company: state.company, evidenceAt: state.kongEvidenceAt, evidence, now });
       verified = Boolean(kong.observedAt);
       const kongRead = { at: new Date(now).toISOString(), ok: verified, code: verified ? null : code ?? "NOT_VERIFIED" };
       if (!verified) return { ...state, kongRead };
-      return { ...state, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt, kongCollaboration: kong.collaboration, kongRead };
+      return { ...state, company: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt, kongCollaboration: kong.collaboration, kongRead };
     });
     if (verified || attempt >= KONG_CATCHUP_ATTEMPTS) kongCatchUpPending = false;
     else scheduleKongCatchUp(attempt + 1);
@@ -657,10 +673,10 @@ export function createAgentCouncil(deps: CouncilDeps) {
           // still advance when that process could not verify it (e.g. an older office worker).
           const observed = state.kongObservedAt ? Date.parse(state.kongObservedAt) : 0;
           if (!deps.collectKongEvidence || now - observed <= KONG_STALE_AFTER_MS) return state;
-          const kong = advanceKongCompany({ company: state.kongCompany, evidenceAt: state.kongEvidenceAt, evidence: kongEvidence, now, curriculum });
+          const kong = advanceKongCareers({ company: state.company, evidenceAt: state.kongEvidenceAt, evidence: kongEvidence, now });
           const kongRead = { at: new Date(now).toISOString(), ok: Boolean(kong.observedAt), code: kong.observedAt ? null : kongCode ?? "NOT_VERIFIED" };
           if (!kong.observedAt) return { ...state, kongRead };
-          return { ...state, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt, kongCollaboration: kong.collaboration, kongRead };
+          return { ...state, company: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt, kongCollaboration: kong.collaboration, kongRead };
         }
         const signals: CouncilSignals = { ...collected, now };
         const findings = runCrossChecks(signals);
@@ -670,18 +686,17 @@ export function createAgentCouncil(deps: CouncilDeps) {
         const integrations = integrationsNow();
         const unscored = [...EXEMPT_IDS, ...unscoredAgentIds(integrations)];
         const scored = Object.fromEntries(Object.entries(statuses).filter(([id]) => !unscored.includes(id) && !isKongCompanyAgent(id)));
-        let next = finishCycle(state, { findings, statuses: scored, now, agentNames: AGENT_NAMES });
-        next = advanceCompanyCycle(next, statuses, curriculum, now, integrations, blackroomLife, vitalityInput);
-        const kong = advanceKongCompany({ company: state.kongCompany, evidenceAt: state.kongEvidenceAt, evidence: kongEvidence, now, curriculum });
-        next = { ...next, kongCompany: kong.company, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.statuses, kongObservedAt: kong.observedAt ?? state.kongObservedAt, kongCollaboration: kong.collaboration };
+        // KONG careers live in the main company: score KONG's snapshot first, then the same vida/academy tick for everyone.
+        const kong = advanceKongCareers({ company: state.company, evidenceAt: state.kongEvidenceAt, evidence: kongEvidence, now });
+        let next = finishCycle({ ...state, company: kong.company }, { findings, statuses: scored, now, agentNames: AGENT_NAMES });
+        next = advanceCompanyCycle(next, statuses, curriculum, now, integrations, blackroomLife, { ...vitalityInput, kong: kong.vitality, kongNames: kong.names });
+        next = { ...next, kongEvidenceAt: kong.evidenceAt, kongLastStatuses: kong.observedAt ? kong.statuses : state.kongLastStatuses, kongObservedAt: kong.observedAt ?? state.kongObservedAt, kongCollaboration: kong.collaboration };
         if (deps.collectKongEvidence) next = { ...next, kongRead: { at: new Date(now).toISOString(), ok: Boolean(kong.observedAt), code: kong.observedAt ? null : kongCode ?? "NOT_VERIFIED" } };
-        // This completes only a read-only readiness review, never the worker's commercial task.
-        next = { ...next, kongSupervision: reviewKongReadiness(state.kongSupervision, everyone, now) };
         const repairs = deriveRepairProposals(next, Object.fromEntries(Object.entries(statuses).filter(([id]) => !isKongCompanyAgent(id))), now, AGENT_NAMES, unscored);
         const specialists = deriveSpecialistProposals(next, now);
         // Vida 0 reviews share the Mechanic's per-agent key prefix and its open-repair cap (no duplicates in one round).
         const flags = deriveVitalityFlagProposals(next.company, [...repairs, ...specialists, ...next.proposals], now, AGENT_NAMES, unscored, MAX_OPEN_REPAIR_PROPOSALS);
-        const automejora = deriveSelfImprovementProposals({ proposals: next.proposals, lessons: next.lessons, roleWorkJobs: next.officeExecution?.roleWork?.jobs, clippersLessons: next.clippersAcademy?.lessons, now, names: AGENT_NAMES, exempt: unscored, company: flags.company });
+        const automejora = deriveSelfImprovementProposals({ proposals: next.proposals, lessons: next.lessons, roleWorkJobs: next.officeExecution?.roleWork?.jobs, clippersLessons: next.clippersAcademy?.lessons, now, names: { ...kongNamesOf(next), ...AGENT_NAMES }, exempt: unscored, company: flags.company });
         const company = stampSelfImprovementCooldowns(flags.company, automejora, now);
         next = { ...next, company, proposals: closeStaleVitalityFlags(pruneProposals([...repairs, ...specialists, ...flags.proposals, ...automejora, ...next.proposals]), company, now) };
         wroteRound = true;
@@ -784,8 +799,9 @@ export function createAgentCouncil(deps: CouncilDeps) {
         const available = matching.length ? matching : ids;
         // Recorded for review only: an office order does not dispatch a remote worker.
         const statuses = Object.fromEntries(available.map(id => [id, { state: "offline" as const, label: "Orden registrada para revisión; sin despacho remoto" }]));
-        const result = createOrder(state.kongCompany, { text, now, statuses, available, names: {} });
-        return { ...state, kongCompany: stamp(result.state) };
+        const result = createOrder(state.company, { text, now, statuses, available, names: {} });
+        const [order, ...rest] = result.state.orders;
+        return { ...state, company: stamp({ ...result.state, orders: [{ ...order, scope: "kong" as const }, ...rest] }) };
       }
       // Black Room scope (the Black Room CEO channel, also used by partners): only Black Room members
       // can be assigned; without a matching word the order goes to the Black Room CEO.
@@ -833,8 +849,8 @@ export function createAgentCouncil(deps: CouncilDeps) {
     if (scope === "kong") {
       if (evidenceRunId) throw new OrderEvidenceError("Una ejecución genérica no demuestra que esta orden KONG se realizó. Confírmala manualmente sin puntos.");
       return mutate(state => {
-        if (!state.kongCompany.orders.some(order => order.id === orderId)) throw new Error("Orden no encontrada");
-        return { ...state, kongCompany: completeOrder(state.kongCompany, orderId, deps.now()) };
+        if (!kongCareersMirror(state.company).orders.some(order => order.id === orderId)) throw new Error("Orden no encontrada");
+        return { ...state, company: completeOrder(state.company, orderId, deps.now()) };
       });
     }
     let evidence: OrderEvidence | undefined;
@@ -846,7 +862,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
       evidence = { ref: `automation_run:${run.id}`, source: "automation_run", summary: run.summary || "Ejecucion exitosa", at: run.at || new Date(deps.now()).toISOString() };
     }
     return mutate((state) => {
-      if (!state.company.orders.some((order) => order.id === orderId)) throw new Error("Orden no encontrada");
+      if (!state.company.orders.some((order) => order.id === orderId && !isKongOrder(order))) throw new Error("Orden no encontrada");
       if (evidence && evidenceAlreadyUsed(state.company, evidence.ref)) throw new OrderEvidenceError("Esa ejecucion ya cerro otra orden.");
       return { ...state, company: completeOrder(state.company, orderId, deps.now(), evidence) };
     });
@@ -905,11 +921,10 @@ export function createAgentCouncil(deps: CouncilDeps) {
 
   async function view(options: { factoryLiveJobs?: Parameters<typeof factoryAgentsView>[0]["liveJobs"]; factoryOwnerKey?: string } = {}) {
     const loaded = await load();
-    // The KONG conversation is owner-only (served by /api/kong-supervisor/state with an owner check).
-    // This view is readable by any signed-in user, so it only carries the readiness records.
-    const { messages: _privateMessages, ...kongSupervisionPublic } = loaded.kongSupervision;
-    const { kongLegacyCompany: _legacyHistory, officeExecution: _privateExecution, ...publicState } = loaded;
-    const state = { ...publicState, company: publicCareerVitality(publicState.company), kongSupervision: kongSupervisionPublic };
+    // Retired Supervisor KONG history is owner-only (read-only GET /api/kong-supervisor/state): never in this view.
+    const { kongLegacyCompany: _legacyHistory, officeExecution: _privateExecution, kongSupervision: _retiredSupervisor, ...publicState } = loaded;
+    // One ledger, two views: the office keeps showing BlackOps agents and KONG agents in their own wings.
+    const state = { ...publicState, company: publicCareerVitality(mainCompanyView(publicState.company)), kongCompany: publicCareerVitality(kongCareersMirror(publicState.company)) };
     const personalities = Object.fromEntries(Object.values(state.company.careers).map((career) => [career.agentId, personalityFor(career.agentId, career.generation)]));
     return {
       ...state,
@@ -938,7 +953,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
       // Public summary of today's recorded role work (role, status, times only; no sources or audits).
       roleWorkToday: roleWorkActivityView(loaded.officeExecution?.roleWork?.jobs, deps.now()),
       // Every registered main-company agent with its vida, real state and what it learned (no memory text).
-      vitality: vitalityView(state.company, { now: deps.now(), names: MAIN_AGENT_NAMES, exempt: [...EXEMPT_IDS, ...unscoredAgentIds(integrationsNow())] }),
+      vitality: vitalityView(publicState.company, { now: deps.now(), names: { ...kongNamesOf(loaded), ...MAIN_AGENT_NAMES }, exempt: [...EXEMPT_IDS, ...unscoredAgentIds(integrationsNow())] }),
       clippersAcademy: state.clippersAcademy ?? null,
       // Public self-heal counts per agent (detected / in repair / verified / needs owner); no ids or audit details.
       // Daily credit pacer: today's allowance, spend, mode and overspend streak (numbers only).
@@ -954,13 +969,9 @@ export function createAgentCouncil(deps: CouncilDeps) {
 
   // KONG supervisor (PR #315): its conversation and read-only reviews are committed through the same
   // serialized, revision-checked mutate as everything else. The change may be replayed on a conflict.
-  async function updateKongSupervision(change: (current: CouncilState["kongSupervision"]) => Promise<CouncilState["kongSupervision"]>) {
-    const state = await mutate(async (current) => ({ ...current, kongSupervision: await change(current.kongSupervision) }));
-    return state.kongSupervision;
-  }
-
-  async function readKongSupervision() {
-    return (await load()).kongSupervision;
+  // Retired Supervisor KONG: stored conversation, read-only (never advanced, never in the public view).
+  async function readLegacyKongSupervision() {
+    return parseLegacyKongSupervision((await load()).kongSupervision);
   }
 
   // Internal worker only: callbacks must be pure because CAS may replay them.
@@ -988,7 +999,7 @@ export function createAgentCouncil(deps: CouncilDeps) {
     });
     return state.company;
   }
-  return { runCycle, runKongCatchUp, catchUpKongIfStale, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, placeChatOrder, finishOrder, updateKongSupervision, readKongSupervision, updateOfficeExecution, updateBlackRoomAcademy };
+  return { runCycle, runKongCatchUp, catchUpKongIfStale, runScout, runAcademyCycle, approveFromTrustCenter, view, load, placeOrder, placeChatOrder, finishOrder, readLegacyKongSupervision, updateOfficeExecution, updateBlackRoomAcademy };
 }
 
 export function isAgentCouncilEnabled(env: NodeJS.ProcessEnv = process.env) {
