@@ -12,7 +12,8 @@ import { selectCutWindow, wrapLines, ffmpegRenderArgs, ytDlpDownloadArgs, ytDlpI
 import { computeLearning, chooseHookVariant, creatorBoostFor } from '../script/clippers-streamer-cloud-learning.mjs';
 
 const NOW = Date.parse('2026-11-19T14:00:00.000Z'); // 09:00 New York (EST)
-const ON = { CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', METRICOOL_USER_TOKEN: 'metricool-token-123', METRICOOL_USER_ID: '12345' };
+// Legacy fan-out mode (lanes off); the account-lane mode is covered by tests/clippers-account-lanes.test.mjs.
+const ON = { CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', CLIPPERS_STREAMER_LANES_ENABLED: 'false', METRICOOL_USER_TOKEN: 'metricool-token-123', METRICOOL_USER_ID: '12345' };
 
 function candidate(id, creatorKey, handle, extra = {}) {
   const sourceUrl = `https://clips.twitch.tv/${id}`;
@@ -234,16 +235,16 @@ test('preflight slot conflict moves to the next slot; destination hold defers wi
 
 test('missing Metricool secrets hold publishing; dry run renders without Metricool', async () => {
   const store = memoryStore(baseState([candidate('a', 'twitch:100', 'thegrefg')])), media = fakeMedia();
-  const held = await runCloudPublisher({ env: { CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true' }, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: null, stager: null, fetch: okFetch, ...media });
+  const held = await runCloudPublisher({ env: { CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', CLIPPERS_STREAMER_LANES_ENABLED: 'false' }, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: null, stager: null, fetch: okFetch, ...media });
   assert.equal(held.report.status, 'held_missing_secrets'); assert.equal(media.calls.download.length, 0);
   const dir = await mkdtemp(path.join(tmpdir(), 'cw-dry-'));
   await writeFile('/tmp/cw-render.mp4', 'x');
-  const dry = await runCloudPublisher({ env: { CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', CLIPPERS_STREAMER_CLOUD_DRY_RUN: 'true' }, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: null, stager: null, fetch: okFetch,
+  const dry = await runCloudPublisher({ env: { CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', CLIPPERS_STREAMER_LANES_ENABLED: 'false', CLIPPERS_STREAMER_CLOUD_DRY_RUN: 'true' }, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: null, stager: null, fetch: okFetch,
     ...media, render: async () => ({ file: '/tmp/cw-render.mp4', sha256: 'b'.repeat(64), durationSec: 30 }), outputDir: dir });
   assert.equal(dry.report.counts.rendered, 1); assert.equal(dry.report.counts.scheduled, 0);
   assert.deepEqual(store.state.cloudPublish.clips, {}, 'dry run never writes clip state (approval stays queued)');
   assert.equal(store.state.cloudPublish.lastRun.status, 'held_missing_secrets', 'dry run does not overwrite lastRun');
-  const dry2 = await runCloudPublisher({ env: { CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', CLIPPERS_STREAMER_CLOUD_DRY_RUN: 'true' }, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: null, stager: null, fetch: okFetch,
+  const dry2 = await runCloudPublisher({ env: { CLIPPERS_STREAMER_CLOUD_PUBLISH_ENABLED: 'true', CLIPPERS_STREAMER_LANES_ENABLED: 'false', CLIPPERS_STREAMER_CLOUD_DRY_RUN: 'true' }, now: NOW, owner: 'o', store, approvals: approvals({ 'pa-a': 'approved' }), metricool: null, stager: null, fetch: okFetch,
     ...media, render: async () => ({ file: '/tmp/cw-render.mp4', sha256: 'b'.repeat(64), durationSec: 30 }), outputDir: dir });
   assert.equal(dry2.report.counts.rendered, 1, 'still queueable after a dry run');
   assert.equal(await readFile(path.join(dir, 'twitch-clip_a.mp4'), 'utf8'), 'x');

@@ -133,12 +133,16 @@ async function discoverTwitch(client, now, catalogue) {
     publishedAt: s.started_at, observedAt, gameName: s.game_name ?? null, priority: known.has(s.user_id) });
   // Top clips in the last 24h for priority creators plus the five biggest live channels.
   const since = iso(now - 24 * HOUR);
-  const clipTargets = [...new Set([...known.keys(), ...streams.slice(0, 5).map(s => s.user_id)])].slice(0, 20);
+  const gameNames = new Map([...games.map(g => [g.id, g.name]), ...streams.map(s => [s.game_id, s.game_name])].filter(([id, name]) => id && name));
+  const clipTargets = [...new Set([...known.keys(), ...streams.slice(0, 5).map(s => s.user_id)])].slice(0, 32);
   for (const id of clipTargets) {
     for (const c of await client.helix('clips', [['broadcaster_id', id], ['started_at', since], ['first', 5]])) {
       out.clips.push({ id: `twitch-clip:${c.id}`, platform: 'twitch', kind: 'clip', creatorKey: creatorKey('twitch', c.broadcaster_id), handle: describe.get(c.broadcaster_id)?.login ?? c.broadcaster_name,
         title: String(c.title ?? '').slice(0, 200), sourceUrl: c.url, durationSec: Number(c.duration) || null, views: Number(c.view_count) || 0,
-        publishedAt: c.created_at, observedAt, thumbnailUrl: c.thumbnail_url ?? null, priority: known.has(c.broadcaster_id) });
+        publishedAt: c.created_at, observedAt, thumbnailUrl: c.thumbnail_url ?? null, priority: known.has(c.broadcaster_id),
+        // Lane routing + cross-account dedupe: language, game and the VOD segment the clip came from.
+        language: typeof c.language === 'string' ? c.language.slice(0, 8) : null, gameName: gameNames.get(c.game_id) ?? null,
+        vodId: /^\d{1,20}$/.test(String(c.video_id ?? '')) ? String(c.video_id) : null, vodOffset: Number.isFinite(c.vod_offset) ? c.vod_offset : null });
     }
   }
   return out;
