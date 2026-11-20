@@ -31,6 +31,7 @@ import { readFactoryOrderProposals } from "./software-factory-order-evidence";
 import { COMPANY_ORDER_CHECKS_ID, createFactoryOrderFileSelector, isFactoryTestPath, listFactorySelectablePaths } from "./software-factory-company-auto";
 import { isSelfHealOrder, isValidSelfHealOrder } from "./office-self-heal";
 import type { CreditPacer } from "./credit-pacer-runtime";
+import { blackopsApplicationName } from "./agent-council-store";
 const hash = (v: unknown) => createHash("sha256").update(JSON.stringify(v)).digest("hex");
 const sha = z.string().regex(/^[a-f0-9]{40}$/), digest = z.string().regex(/^[a-f0-9]{64}$/);
 const cents = z.number().int().min(1).max(100);
@@ -399,7 +400,7 @@ async function installed(store: Store) {
     let recoveryPool: import('pg').Pool | undefined;
     const recoveryPrevious=async(ownerKey:string,failedId:string,jobId:string)=>{
       if(env.SOFTWARE_FACTORY_STORAGE_BACKEND && env.SOFTWARE_FACTORY_STORAGE_BACKEND!=='postgres')throw Error('FACTORY_RECOVERY_POSTGRES_REQUIRED');
-      if(!recoveryPool){const [{Pool},{resolveDatabaseConnectionString}]=await Promise.all([import('pg'),import('./database-url')]);recoveryPool=new Pool({connectionString:resolveDatabaseConnectionString(),allowExitOnIdle:true,max:1,connectionTimeoutMillis:10000,statement_timeout:15000});}
+      if(!recoveryPool){const [{Pool},{resolveDatabaseConnectionString}]=await Promise.all([import('pg'),import('./database-url')]);recoveryPool=new Pool({connectionString:resolveDatabaseConnectionString(),allowExitOnIdle:true,max:1,connectionTimeoutMillis:10000,statement_timeout:15000,application_name:blackopsApplicationName("factory-asistente")});}
       const {loadFailedBuildRecovery}=await import('./software-factory-build-recovery');
       return loadFailedBuildRecovery(recoveryPool,ownerKey,failedId,jobId);
     };

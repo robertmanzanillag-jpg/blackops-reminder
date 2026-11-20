@@ -499,7 +499,7 @@ async function main() {
   if (!process.env.DATABASE_URL?.trim() || !process.env.DEFAULT_USER_ID?.trim()) { console.log('::notice::Streamer cloud publisher skipped: OFFICE_DATABASE_URL / OFFICE_OWNER_ID not available.'); return; }
   const { getCouncilStore, createCouncilPool } = await import('../server/agent-council-store.ts');
   const store = await getCouncilStore();
-  const pool = await createCouncilPool();
+  const pool = await createCouncilPool('streamers-cloud');
   const query = async (sql, values) => { const client = await pool.connect(); try { return await client.query(sql, values); } finally { client.release(); } };
   const owner = process.env.DEFAULT_USER_ID.trim();
   let metricool = null, stager = null;

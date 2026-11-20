@@ -106,3 +106,11 @@ test("a lock timeout raised after the update started is never retried", async ()
   await assert.rejects(store.transact("owner", async () => { updates++; return '{}'; }), (error: any) => error.code === "55P03");
   assert.equal(updates, 1);
 });
+
+test("every council transaction caps idle-in-transaction so a stalled holder cannot block other writers", async () => {
+  const calls: string[] = [];
+  const pool: CouncilPool = { async connect() { return { async query(sql: string) { calls.push(sql); return { rows: [] }; }, release() {} }; } };
+  await createCouncilStore(pool).transact("owner-1", async () => "{}");
+  const idx = calls.findIndex(sql => /SET LOCAL idle_in_transaction_session_timeout = '30000ms'/.test(sql));
+  assert.ok(idx > calls.indexOf("BEGIN") && idx < calls.findIndex(sql => sql.includes("pg_advisory")), calls.join(" | "));
+});

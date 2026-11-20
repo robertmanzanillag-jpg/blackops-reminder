@@ -1,6 +1,7 @@
 // Dedicated trusted entrypoint: never loads repository .env or arbitrary adapters.
 import { runSoftwareFactoryOnce } from "../server/software-factory-once";
 import { factoryOnceFailure, type FactoryOncePhase } from "../server/software-factory-diagnostics";
+import { blackopsApplicationName } from "../server/agent-council-store";
 
 let phase: FactoryOncePhase = "configuration";
 
@@ -16,7 +17,7 @@ async function main() {
       import("../server/software-factory-store"), import("../server/software-factory-asistente-operator"), import("../server/software-factory-runtime"), import("../server/software-factory-worker"), import("pg"), import("../server/database-url"),
     ]);
     phase = "database";
-    pool = new Pool({ connectionString: resolveDatabaseConnectionString(), max: 2, connectionTimeoutMillis: 10000, statement_timeout: 30000, query_timeout: 35000, allowExitOnIdle: true });
+    pool = new Pool({ connectionString: resolveDatabaseConnectionString(), max: 2, connectionTimeoutMillis: 10000, statement_timeout: 30000, query_timeout: 35000, allowExitOnIdle: true, application_name: blackopsApplicationName("factory-once") });
     const store = createSoftwareFactoryStore(pool);
     const owner = process.env.SOFTWARE_FACTORY_OWNER_ID;
     if (!owner || shutdown.signal.aborted) throw Error("FACTORY_OWNER_REQUIRED");
