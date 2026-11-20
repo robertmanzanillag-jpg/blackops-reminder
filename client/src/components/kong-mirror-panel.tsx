@@ -20,11 +20,20 @@ export type MirrorCardView = {
   images: Array<{ id: string; key: string; url: string; page: string; viewport: string; kind: "before" | "after" | "diff"; caption: string }>;
   videos: Array<{ url: string; caption: string }>;
 };
+type ChangeRequest = { id: string; text: string; at: string; state: "posting" | "posted" | "failed"; commentUrl?: string | null };
 type MirrorReportRow = {
-  key: string; status: "received" | "carded" | "merging" | "merged" | "rejected"; pendingStatus: string | null; approvable: boolean; overall: string;
-  headSha: string; mergeSha?: string | null; lastRefusal?: { at: string; code: string; message: string }; rejectNote?: string; card: MirrorCardView | null;
+  key: string; status: "received" | "carded" | "merging" | "merged" | "rejected" | "changes_requested" | "superseded"; pendingStatus: string | null; approvable: boolean; overall: string;
+  prNumber: number; headSha: string; mergeSha?: string | null; lastRefusal?: { at: string; code: string; message: string }; rejectNote?: string; card: MirrorCardView | null;
+  supersedes?: string; supersededBy?: string; changeRequests?: ChangeRequest[]; history?: Array<{ at: string; event: string; note: string }>;
 };
-type ReportsResponse = { reports: MirrorReportRow[]; pendingCount: number };
+type AiBudget = { spentUsd: number; capUsd: number; remainingUsd: number; calls: number };
+type MirrorBudget = { label: string; pausedLabel: string | null; paused: boolean; perRunUsd: number; budgetUsd: number; spentUsd: number };
+type ScoutProposal = { key: string; title: string; problem: string; status: string; kind: "code" | "decision"; risk: string; neverAutoArea: string | null; issueUrl: string | null; prNumber: number | null; pausedByBudget?: boolean };
+type ScoutsView = { enabled: boolean; lastRunAt: string | null; lastError: string | null; counts: { open: number; building: number; testing: number; ready: number; decisions: number; proposed: number; merged: number }; proposals: ScoutProposal[] };
+type ReportsResponse = { reports: MirrorReportRow[]; pendingCount: number; aiBudget?: AiBudget | null; mirrorBudget?: MirrorBudget | null; scouts?: ScoutsView | null;
+  academy?: Array<{ id: string; title: string; detail: string; evaluatedAt: string }> };
+type ChatMessage = { role: "user" | "assistant"; text: string; at: string; citations: string[]; source?: string; costUsd?: number; changeSuggestion?: { text: string } };
+type ChatResult = { ok: boolean; reply: ChatMessage; thread: ChatMessage[]; fallbackSections?: Array<{ title: string; lines: string[] }> };
 type DecisionResult = { ok: boolean; message?: string; steps?: string[]; code?: string; commentPosted?: boolean };
 
 const VERDICT_STYLE: Record<Verdict, string> = {
@@ -118,6 +127,7 @@ export function KongMirrorCard({ row }: { row: MirrorReportRow }) {
   });
   if (!card) return <p className="text-sm text-muted-foreground">Reporte recibido; preparando la tarjeta…</p>;
   const open = row.status === "carded" && ["pending", "edited", "snoozed"].includes(row.pendingStatus || "");
+  const waitingChanges = row.status === "changes_requested";
   const groups = (["before", "after", "diff"] as const).map((kind) => ({ kind, items: card.images.map((image, index) => ({ image, index })).filter(({ image }) => image.kind === kind) }));
   return (
     <article className="space-y-4 rounded-xl border border-white/10 bg-black/30 p-4 text-sm" data-testid="kong-mirror-card">
@@ -209,6 +219,15 @@ export function KongMirrorCard({ row }: { row: MirrorReportRow }) {
       {row.lastRefusal && open && <p role="alert" className="rounded border border-rose-400/40 p-2 text-rose-200">Último intento rechazado: {row.lastRefusal.message}</p>}
       {row.status === "merged" && <p className="rounded border border-emerald-400/40 p-2 text-emerald-200">Merge hecho{row.mergeSha ? ` (${row.mergeSha.slice(0, 7)})` : ""}: falta republicar KONG en Replit.</p>}
       {row.status === "rejected" && <p className="text-muted-foreground">Rechazada{row.rejectNote ? `: ${row.rejectNote}` : "."}</p>}
+      {waitingChanges && <div role="status" className="rounded border border-sky-400/40 p-2 text-sky-100" data-testid="kong-mirror-changes-requested">
+        <p className="font-semibold">Cambios pedidos: aprobar queda desactivado hasta que llegue el nuevo reporte del Mirror Lab.</p>
+        <ul className="list-disc pl-5 text-xs">{(row.changeRequests || []).filter((request) => request.state === "posted").map((request) => <li key={request.id}>{request.text}{request.commentUrl ? <> · <a className="underline" href={request.commentUrl} target="_blank" rel="noreferrer">ver en el PR</a></> : null}</li>)}</ul>
+      </div>}
+      {row.status === "superseded" && <p className="text-muted-foreground" data-testid="kong-mirror-superseded">Reemplazada por un reporte más nuevo del PR #{row.prNumber}. Se guarda como historial.</p>}
+      {row.supersedes && <p className="text-xs text-muted-foreground">Esta tarjeta reemplaza a una versión anterior del mismo PR (ver historial abajo).</p>}
+      {(row.history || []).length > 0 && <details className="text-xs text-muted-foreground"><summary>Historial de decisiones ({row.history!.length})</summary>
+        <ul className="pl-4">{row.history!.map((item, index) => <li key={`${index}-${item.at}`}>{new Date(item.at).toLocaleString("es")} · {item.event}: {item.note}</li>)}</ul></details>}
+      {row.status !== "superseded" && row.status !== "rejected" && <MirrorChat row={row} />}
 
       {result?.ok && result.steps && (
         <div className="space-y-1 rounded border border-emerald-400/40 p-3" data-testid="kong-mirror-merged"><p className="font-semibold text-emerald-200">{result.message}</p>
@@ -217,9 +236,10 @@ export function KongMirrorCard({ row }: { row: MirrorReportRow }) {
       {result?.ok && result.commentPosted !== undefined && <p className="text-xs text-muted-foreground">Rechazada.{result.commentPosted ? " Tu nota se publicó en el PR." : ""}</p>}
       {mutation.isError && <p role="alert" className="flex items-center gap-2 text-amber-300"><AlertTriangle className="h-4 w-4" />{(mutation.error as Error).message}</p>}
 
-      {open && (
+      {(open || waitingChanges) && (
         <div className="space-y-2 border-t border-white/10 pt-3">
-          {card.approvable && (confirming ? (
+          {card.approvable && waitingChanges && <Button size="sm" disabled title="Esperando el nuevo reporte del Mirror Lab"><Check className="mr-1 h-3.5 w-3.5" />Aprobar (esperando nuevo reporte)</Button>}
+          {card.approvable && !waitingChanges && (confirming ? (
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs">Se volverá a comprobar el SHA y los checks; si todo está igual, se fusiona el PR #{card.prNumber}.</span>
               <Button size="sm" disabled={mutation.isPending} onClick={() => mutation.mutate({ decision: "approve", body: { confirm: true, headSha: card.headSha } })} data-testid="kong-mirror-confirm"><Check className="mr-1 h-3.5 w-3.5" />Confirmar merge</Button>
@@ -233,6 +253,114 @@ export function KongMirrorCard({ row }: { row: MirrorReportRow }) {
         </div>
       )}
     </article>
+  );
+}
+
+function newIdempotencyKey() {
+  const random = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  return `cambio-${random}`.replace(/[^A-Za-z0-9_.:-]/g, "").slice(0, 90);
+}
+
+/** Per-card chat: grounded answers with citations, honest budget messages and "Pedir este cambio". */
+function MirrorChat({ row }: { row: MirrorReportRow }) {
+  const queryClient = useQueryClient();
+  const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState("");
+  const [fallback, setFallback] = useState<ChatResult["fallbackSections"]>();
+  const [proposal, setProposal] = useState<{ text: string; key: string } | null>(null);
+  const [warning, setWarning] = useState<string | null>(null);
+  const thread = useQuery<{ thread: ChatMessage[] }>({
+    queryKey: ["kong-mirror-chat", row.key], enabled: open,
+    queryFn: async () => { const response = await fetch(`/api/kong-mirror/${encodeURIComponent(row.key)}/chat`, { credentials: "same-origin" }); if (!response.ok) throw new Error("No se pudo leer el chat"); return response.json(); },
+  });
+  const ask = useMutation({
+    mutationFn: async (text: string) => {
+      const response = await fetch(`/api/kong-mirror/${encodeURIComponent(row.key)}/chat`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message: text }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "No se pudo enviar la pregunta");
+      return data as ChatResult;
+    },
+    onSuccess: (data) => {
+      setMessage(""); setFallback(data.fallbackSections);
+      if (data.reply.changeSuggestion) setProposal({ text: data.reply.changeSuggestion.text, key: newIdempotencyKey() });
+      queryClient.setQueryData(["kong-mirror-chat", row.key], { thread: data.thread });
+    },
+  });
+  const change = useMutation({
+    mutationFn: async (input: { text: string; key: string }) => {
+      const response = await fetch(`/api/kong-mirror/${encodeURIComponent(row.key)}/change-request`, { method: "POST", credentials: "same-origin", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text: input.text, idempotencyKey: input.key }) });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || "No se pudo pedir el cambio");
+      return data as { warning?: string | null };
+    },
+    onSuccess: (data) => { setProposal(null); setWarning(data.warning || null); queryClient.invalidateQueries({ queryKey: ["kong-mirror-reports"] }); },
+  });
+  const messages = thread.data?.thread || [];
+  return (
+    <div className="rounded-lg border border-white/10 p-3" data-testid="kong-mirror-chat">
+      <button type="button" className="text-sm font-semibold underline-offset-2 hover:underline" aria-expanded={open} onClick={() => setOpen((value) => !value)}>
+        {open ? "Ocultar chat" : "Preguntar al equipo sobre esta mejora"}
+      </button>
+      {open && (
+        <div className="mt-2 space-y-2">
+          <ul className="max-h-72 space-y-2 overflow-y-auto text-xs">
+            {messages.length === 0 && <li className="text-muted-foreground">Pregunta lo que quieras: por qué, qué archivos cambia, qué riesgos vio el equipo… Si pides otro cambio, te ofreceré «Pedir este cambio».</li>}
+            {messages.map((item, index) => (
+              <li key={`${index}-${item.at}`} className={item.role === "user" ? "ml-8 rounded bg-sky-900/40 p-2" : "mr-8 rounded bg-white/5 p-2"}>
+                <p className="whitespace-pre-wrap">{item.text}</p>
+                {item.citations.length > 0 && <p className="mt-1 text-[11px] text-muted-foreground">Fuentes: {item.citations.join(" · ")}</p>}
+              </li>
+            ))}
+          </ul>
+          {fallback && fallback.length > 0 && (
+            <div className="rounded border border-amber-400/30 p-2 text-xs" data-testid="kong-mirror-chat-fallback">
+              {fallback.map((section) => <div key={section.title}><p className="font-semibold">{section.title}</p><ul className="list-disc pl-4">{section.lines.map((line) => <li key={line}>{line}</li>)}</ul></div>)}
+            </div>
+          )}
+          {proposal && (
+            <div className="space-y-2 rounded border border-lime-300/40 p-2" data-testid="kong-mirror-change-box">
+              <p className="text-xs font-semibold">Pedir este cambio</p>
+              <p className="text-[11px] text-muted-foreground">Se publicará un comentario @codex en el PR #{row.prNumber} con tus palabras. El laboratorio volverá a probarlo.</p>
+              <Textarea value={proposal.text} maxLength={1500} onChange={(event) => setProposal({ ...proposal, text: event.target.value })} className="min-h-[60px] text-xs" />
+              <div className="flex gap-2">
+                <Button size="sm" disabled={change.isPending || proposal.text.trim().length < 3} onClick={() => change.mutate(proposal)} data-testid="kong-mirror-change-confirm">Pedir este cambio</Button>
+                <Button size="sm" variant="ghost" onClick={() => setProposal(null)}>Cancelar</Button>
+              </div>
+            </div>
+          )}
+          {warning && <p role="status" className="text-xs text-amber-200">{warning}</p>}
+          {(ask.isError || change.isError) && <p role="alert" className="text-xs text-rose-300">{((ask.error || change.error) as Error).message}</p>}
+          <form className="flex gap-2" onSubmit={(event) => { event.preventDefault(); if (message.trim().length >= 2) ask.mutate(message.trim()); }}>
+            <Textarea value={message} maxLength={1000} onChange={(event) => setMessage(event.target.value)} placeholder="Ej.: ¿qué archivos cambia? · hazlo azul" className="min-h-[40px] text-xs" aria-label="Pregunta para el equipo" />
+            <Button size="sm" type="submit" disabled={ask.isPending}>{ask.isPending ? "…" : "Enviar"}</Button>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const SCOUT_STATUS: Record<string, string> = { decision: "Requiere decisión de Robert", proposed: "Propuesta (sin issue todavía)", building: "En construcción (Codex)", testing: "En pruebas (Mirror Lab)", ready: "Lista para aprobar", merged: "Hecha", closed: "Cerrada" };
+function ScoutsSummary({ data }: { data: ReportsResponse }) {
+  const scouts = data.scouts, mirror = data.mirrorBudget, ai = data.aiBudget;
+  return (
+    <section className="space-y-2 rounded-xl border border-white/10 p-3 text-xs" data-testid="kong-mirror-scouts">
+      <div className="flex flex-wrap gap-3">
+        {ai && <span data-testid="kong-mirror-ai-budget">IA del mes: ${ai.spentUsd.toFixed(2)} de ${ai.capUsd}</span>}
+        {mirror && <span data-testid="kong-mirror-run-budget">{mirror.label}</span>}
+        {mirror?.pausedLabel && <span className="text-amber-200" data-testid="kong-mirror-run-paused">{mirror.pausedLabel}</span>}
+      </div>
+      {scouts && (
+        <>
+          <p className="font-semibold">Buscando mejoras{scouts.enabled ? "" : " (apagado: KONG_IMPROVEMENT_SCOUTS_ENABLED)"}</p>
+          <p>Última búsqueda: {scouts.lastRunAt ? new Date(scouts.lastRunAt).toLocaleString("es") : "todavía no"} · propuestas abiertas {scouts.counts.open} · en construcción {scouts.counts.building} · en pruebas {scouts.counts.testing} · listas para aprobar {scouts.counts.ready}{scouts.counts.decisions ? ` · requieren tu decisión ${scouts.counts.decisions}` : ""}</p>
+          {scouts.lastError && <p className="text-rose-300">{scouts.lastError}</p>}
+          {scouts.proposals.length > 0 && <details><summary>Ver propuestas ({scouts.proposals.length})</summary>
+            <ul className="space-y-1 pl-2">{scouts.proposals.map((item) => <li key={item.key}><span className="font-medium">{item.title}</span> · {SCOUT_STATUS[item.status] || item.status}{item.pausedByBudget ? " · en pausa por presupuesto" : ""} · riesgo {item.risk}{item.issueUrl ? <> · <a className="underline" href={item.issueUrl} target="_blank" rel="noreferrer">issue</a></> : null}<br /><span className="text-muted-foreground">{item.problem}</span></li>)}</ul></details>}
+        </>
+      )}
+      {(data.academy || []).length > 0 && <details><summary>Skills aprendidas en la Academia ({data.academy!.length})</summary><ul className="pl-2">{data.academy!.map((lesson) => <li key={lesson.id}>{lesson.title}: {lesson.detail}</li>)}</ul></details>}
+    </section>
   );
 }
 
@@ -257,6 +385,7 @@ export function KongMirrorPanel({ reportKey, triggerLabel }: { reportKey?: strin
         {query.isError && <p role="alert" className="text-sm text-rose-400">No se pudieron leer las mejoras.</p>}
         {query.isLoading && <p className="text-sm text-muted-foreground">Cargando…</p>}
         {!query.isLoading && rows.length === 0 && <p className="text-sm text-muted-foreground">Todavía no hay reportes del laboratorio.</p>}
+        {!reportKey && query.data && <ScoutsSummary data={query.data} />}
         <div className="space-y-4">{rows.map((row) => <KongMirrorCard key={row.key} row={row} />)}</div>
       </DialogContent>
     </Dialog>

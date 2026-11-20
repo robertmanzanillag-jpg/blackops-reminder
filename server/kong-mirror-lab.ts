@@ -16,7 +16,7 @@ export const MIRROR_GENERATED_MAX_AGE_MS = 60 * 60 * 1000;
 const MIRROR_FUTURE_SKEW_MS = 60 * 1000;
 const RECEIPT_RETENTION_MS = 24 * 60 * 60 * 1000;
 const MERGE_LEASE_MS = 2 * 60 * 1000;
-export const MIRROR_SUMMARY_MAX_CAP_USD = 3;
+export const MIRROR_AI_MAX_CAP_USD = 5;
 
 const sha = z.string().regex(/^[a-f0-9]{40}$/);
 const text = (max: number) => z.string().trim().max(max);
@@ -193,70 +193,89 @@ export function buildMirrorCard(report: KongMirrorReport, extra: { key: string; 
   };
 }
 
-// ---- Summary budget ($3/month hard ceiling, 0 = off) ----
-export function resolveMirrorSummaryCapUsd(env: NodeJS.ProcessEnv = process.env): number {
-  const raw = env.BLACKOPS_MIRROR_SUMMARY_MONTHLY_USD;
-  if (raw === undefined || raw.trim() === "") return MIRROR_SUMMARY_MAX_CAP_USD;
+// ---- Mirror AI budget: ONE monthly cap for the summary and the per-card chat ($5 ceiling, 0 = off) ----
+export function resolveMirrorAiCapUsd(env: NodeJS.ProcessEnv = process.env): number {
+  const primary = env.BLACKOPS_MIRROR_AI_MONTHLY_USD;
+  const raw = primary !== undefined && primary.trim() !== "" ? primary : env.BLACKOPS_MIRROR_SUMMARY_MONTHLY_USD;
+  if (raw === undefined || raw.trim() === "") return MIRROR_AI_MAX_CAP_USD;
   const value = Number(raw);
   if (!Number.isFinite(value) || value <= 0) return 0;
-  return Math.min(MIRROR_SUMMARY_MAX_CAP_USD, value);
+  return Math.min(MIRROR_AI_MAX_CAP_USD, value);
 }
+/** @deprecated alias kept for the first version of this PR. */
+export const resolveMirrorSummaryCapUsd = resolveMirrorAiCapUsd;
 
 export interface MirrorStore { read(owner: string): Promise<string | null>; transact(owner: string, change: (raw: string | null) => Promise<string>): Promise<string> }
 const spendSchema = z.object({ version: z.literal(1), months: z.record(z.string(), z.object({ spentUsd: z.number().min(0), reservedUsd: z.number().min(0), calls: z.number().int().min(0) }).strict()) }).strict();
 type SpendLedger = z.infer<typeof spendSchema>;
 const monthOf = (time: number) => new Date(time).toISOString().slice(0, 7);
 const money = (value: number) => Math.round(value * 1_000_000) / 1_000_000;
+/** Errors raised before any provider request (unpriced/unconfigured): the reservation is released. */
+export const isMirrorPreflightError = (error: unknown) => error instanceof Error && /^(FACTORY_API_|AI_INTEGRATIONS_GEMINI_API_KEY|OPENAI_API_KEY|MIRROR_NO_PROVIDER)/.test(error.message);
 
-export type MirrorGenerate = (prompt: string) => Promise<{ text: string; inputTokens?: number; outputTokens?: number }>;
-export function createMirrorSummarizer(options: { owner: string; store: MirrorStore; now: () => number; env?: NodeJS.ProcessEnv;
-  generate?: MirrorGenerate; estimateUsd: (inputTokens: number, outputTokens: number) => number; maxOutputTokens?: number;
+export type MirrorAiCall = { text: string; inputTokens?: number; outputTokens?: number; provider?: string; model?: string };
+export type MirrorAiOutcome = { ok: true; call: MirrorAiCall; costUsd: number } | { ok: false; reason: "off" | "exhausted" | "unavailable" | "ledger"; message: string };
+export function createMirrorAiBudget(options: { owner: string; store: MirrorStore; now: () => number; env?: NodeJS.ProcessEnv;
   onSpend?: (usd: number, meta: Record<string, unknown>) => Promise<void>; timeoutMs?: number }) {
-  const namespace = JSON.stringify(["kong-mirror-summary-spend-v1", options.owner]);
-  const maxOutput = options.maxOutputTokens || 350;
+  const namespace = JSON.stringify(["kong-mirror-ai-spend-v1", options.owner]);
   const parse = (raw: string | null): SpendLedger => raw ? spendSchema.parse(JSON.parse(raw)) : { version: 1, months: {} };
+  const cap = () => resolveMirrorAiCapUsd(options.env);
   async function monthSpend(month = monthOf(options.now())) {
     const row = parse(await options.store.read(namespace)).months[month];
-    return { month, spentUsd: money((row?.spentUsd || 0) + (row?.reservedUsd || 0)), calls: row?.calls || 0, capUsd: resolveMirrorSummaryCapUsd(options.env) };
+    const spentUsd = money((row?.spentUsd || 0) + (row?.reservedUsd || 0)), capUsd = cap();
+    return { month, spentUsd, calls: row?.calls || 0, capUsd, remainingUsd: money(Math.max(0, capUsd - spentUsd)) };
   }
-  async function summarize(report: KongMirrorReport): Promise<{ text: string; source: "ai" | "deterministic"; reason?: string; costUsd: number }> {
-    const fallback = (reason: string) => ({ text: deterministicMirrorNarrative(report), source: "deterministic" as const, reason, costUsd: 0 });
-    const cap = resolveMirrorSummaryCapUsd(options.env);
-    if (cap <= 0) return fallback("resumen IA apagado (BLACKOPS_MIRROR_SUMMARY_MONTHLY_USD=0)");
-    if (!options.generate) return fallback("sin proveedor IA barato configurado");
-    const prompt = buildMirrorSummaryPrompt(report);
-    const estimate = options.estimateUsd(Math.ceil(prompt.length / 3), maxOutput);
+  /** Reserve the worst-case estimate, call, then settle to the measured cost. */
+  async function run(estimateUsd: number, call: () => Promise<MirrorAiCall>, priceOf: (call: MirrorAiCall) => number, meta: Record<string, unknown>): Promise<MirrorAiOutcome> {
+    const capUsd = cap();
+    if (capUsd <= 0) return { ok: false, reason: "off", message: "IA del Mirror Lab apagada (BLACKOPS_MIRROR_AI_MONTHLY_USD=0)" };
     const month = monthOf(options.now());
     let reserved = false;
     try {
       await options.store.transact(namespace, async raw => {
         const ledger = parse(raw), row = ledger.months[month] ||= { spentUsd: 0, reservedUsd: 0, calls: 0 };
-        if (row.spentUsd + row.reservedUsd + estimate > cap) return JSON.stringify(ledger);
-        row.reservedUsd = money(row.reservedUsd + estimate); reserved = true;
+        if (row.spentUsd + row.reservedUsd + estimateUsd > capUsd) return JSON.stringify(ledger);
+        row.reservedUsd = money(row.reservedUsd + estimateUsd); reserved = true;
         return JSON.stringify(ledger);
       });
-    } catch { return fallback("no se pudo leer el presupuesto del resumen"); }
-    if (!reserved) return fallback(`tope mensual del resumen alcanzado ($${cap})`);
-    let result: Awaited<ReturnType<MirrorGenerate>> | undefined, failure: unknown;
+    } catch { return { ok: false, reason: "ledger", message: "no se pudo leer el presupuesto de IA" }; }
+    if (!reserved) return { ok: false, reason: "exhausted", message: `el presupuesto de IA del mes ($${capUsd}) ya se usó` };
+    let result: MirrorAiCall | undefined, failure: unknown;
     try {
-      result = await Promise.race([options.generate(prompt), new Promise<never>((_, reject) => setTimeout(() => reject(new Error("MIRROR_SUMMARY_TIMEOUT")), options.timeoutMs || 20000).unref?.())]);
+      result = await Promise.race([call(), new Promise<never>((_, reject) => { setTimeout(() => reject(new Error("MIRROR_AI_TIMEOUT")), options.timeoutMs || 20000).unref?.(); })]);
     } catch (error) { failure = error; }
     // A call refused before reaching the provider releases its reservation; anything ambiguous stays counted.
-    const preflight = failure instanceof Error && /^(FACTORY_API_|AI_INTEGRATIONS_GEMINI_API_KEY)/.test(failure.message);
-    const actual = result ? Math.min(estimate * 4, options.estimateUsd(result.inputTokens ?? Math.ceil(prompt.length / 3), result.outputTokens ?? Math.ceil(result.text.length / 3))) : preflight ? 0 : estimate;
+    const actual = result ? Math.min(estimateUsd * 4, priceOf(result)) : isMirrorPreflightError(failure) ? 0 : estimateUsd;
     await options.store.transact(namespace, async raw => {
       const ledger = parse(raw), row = ledger.months[month] ||= { spentUsd: 0, reservedUsd: 0, calls: 0 };
-      row.reservedUsd = money(Math.max(0, row.reservedUsd - estimate));
+      row.reservedUsd = money(Math.max(0, row.reservedUsd - estimateUsd));
       row.spentUsd = money(row.spentUsd + actual);
       if (actual > 0) row.calls += 1;
       return JSON.stringify(ledger);
     }).catch(() => undefined);
-    if (actual > 0) await options.onSpend?.(actual, { month, prNumber: report.prNumber, outcome: result ? "ok" : "unknown" }).catch(() => undefined);
-    const cleaned = result?.text.replace(/[`*#<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 1200);
-    if (!cleaned) return fallback("el resumen IA no respondió; se usó el resumen del equipo");
-    return { text: cleaned, source: "ai", costUsd: actual };
+    if (actual > 0) await options.onSpend?.(actual, { month, provider: result?.provider, model: result?.model, outcome: result ? "ok" : "unknown", ...meta }).catch(() => undefined);
+    if (!result) return { ok: false, reason: "unavailable", message: "la IA barata no está disponible ahora" };
+    return { ok: true, call: result, costUsd: actual };
   }
-  return { summarize, monthSpend };
+  return { run, monthSpend, cap };
+}
+export type MirrorAiBudget = ReturnType<typeof createMirrorAiBudget>;
+
+export type MirrorGenerate = (prompt: string, maxOutputTokens: number) => Promise<MirrorAiCall>;
+export function createMirrorSummarizer(options: { budget: MirrorAiBudget; generate?: MirrorGenerate; estimateUsd: (call: { inputTokens: number; outputTokens: number; model?: string }) => number; maxOutputTokens?: number }) {
+  const maxOutput = options.maxOutputTokens || 350;
+  async function summarize(report: KongMirrorReport): Promise<{ text: string; source: "ai" | "deterministic"; reason?: string; costUsd: number }> {
+    const fallback = (reason: string) => ({ text: deterministicMirrorNarrative(report), source: "deterministic" as const, reason, costUsd: 0 });
+    if (!options.generate) return fallback("sin proveedor IA barato configurado");
+    const prompt = buildMirrorSummaryPrompt(report), inputTokens = Math.ceil(prompt.length / 3);
+    const outcome = await options.budget.run(options.estimateUsd({ inputTokens, outputTokens: maxOutput }), () => options.generate!(prompt, maxOutput),
+      call => options.estimateUsd({ inputTokens: call.inputTokens ?? inputTokens, outputTokens: call.outputTokens ?? Math.ceil(call.text.length / 3), model: call.model }), { operation: "resumen", prNumber: report.prNumber });
+    if (!outcome.ok) return fallback(outcome.reason === "exhausted" ? `tope mensual de IA alcanzado: ${outcome.message}` : outcome.message);
+    const cleaned = outcome.call.text.replace(/[`*#<>]/g, "").replace(/\s+/g, " ").trim().slice(0, 1200);
+    if (!cleaned) return fallback("el resumen IA no respondió; se usó el resumen del equipo");
+    return { text: cleaned, source: "ai", costUsd: outcome.costUsd };
+  }
+  return { summarize, monthSpend: options.budget.monthSpend };
 }
 
 /** Report text only (never images). The agents' words are untrusted data. */
@@ -276,12 +295,18 @@ export function buildMirrorSummaryPrompt(report: KongMirrorReport): string {
 }
 
 // ---- Journal, cards and approval ----
+const changeRequestSchema = z.object({ id: z.string(), idempotencyKey: z.string(), text: z.string(), at: z.string(),
+  state: z.enum(["posting", "posted", "failed"]), commentUrl: z.string().nullable().optional() }).strict();
+export type MirrorChangeRequest = z.infer<typeof changeRequestSchema>;
 const entrySchema = z.object({
   key: z.string(), repo: z.literal(KONG_MIRROR_REPOSITORY), prNumber: z.number().int().positive(), prUrl: z.string(), title: z.string(),
   baseSha: sha, headSha: sha, overall: z.enum(["pass", "warn", "fail"]), approvable: z.boolean(), reportDigest: z.string(),
   receivedAt: z.string(), updatedAt: z.string(), pendingActionId: z.string().optional(), imageKeys: z.array(z.string()).default([]),
-  status: z.enum(["received", "carded", "merging", "merged", "rejected"]), mergingUntil: z.number().optional(), mergeSha: z.string().nullable().optional(),
+  status: z.enum(["received", "carded", "merging", "merged", "rejected", "changes_requested", "superseded"]), mergingUntil: z.number().optional(), mergeSha: z.string().nullable().optional(),
   lastRefusal: z.object({ at: z.string(), code: z.string(), message: z.string() }).strict().optional(), rejectNote: z.string().optional(),
+  supersedes: z.string().optional(), supersededBy: z.string().optional(),
+  changeRequests: z.array(changeRequestSchema).default([]),
+  history: z.array(z.object({ at: z.string(), event: z.string(), note: z.string() }).strict()).default([]),
 }).strict();
 const journalSchema = z.object({ version: z.literal(1), entries: z.array(entrySchema), receipts: z.array(z.object({ digest: z.string(), at: z.number() }).strict()) }).strict();
 export type MirrorJournalEntry = z.infer<typeof entrySchema>;
@@ -292,7 +317,7 @@ export interface MirrorGithub {
   readPull(repo: string, prNumber: number): Promise<MirrorPull>;
   readChecks(repo: string, sha: string): Promise<{ passed: boolean; summary: string }>;
   merge(repo: string, prNumber: number, sha: string, title: string): Promise<{ merged: boolean; sha: string | null; message?: string }>;
-  comment(repo: string, prNumber: number, body: string): Promise<void>;
+  comment(repo: string, prNumber: number, body: string): Promise<{ url?: string | null } | void>;
 }
 export interface MirrorCards {
   create(card: MirrorCard): Promise<{ id: string }>;
@@ -303,6 +328,38 @@ export interface MirrorCards {
   executed(id: string, actorId: string, result: Record<string, unknown>): Promise<void>;
   reopen(id: string, actorId: string, note: string): Promise<void>;
   rejected(id: string, actorId: string, note: string | null): Promise<void>;
+  /** Closes an older card (new headSha report or change request). */
+  closed(id: string, note: string): Promise<void>;
+}
+
+export const CLAUDE_CODE_FOOTER = "\n\n---\n_Generated by [Claude Code](https://claude.ai/code)_";
+/** Strip anything that looks like a credential or personal contact before text leaves BlackOps. */
+export function redactForGithub(value: string): string {
+  return value
+    .replace(/\b(gh[pousr]|github_pat)_[A-Za-z0-9_]{10,}\b/g, "[redactado]")
+    .replace(/\b(sk|rk|pk)[-_][A-Za-z0-9_-]{12,}\b/g, "[redactado]")
+    .replace(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, "[email redactado]")
+    .replace(/\+?\d[\d\s().-]{8,}\d/g, "[teléfono redactado]")
+    .replace(/\b(password|contraseña|token|secret|api[_ -]?key)\s*[:=]\s*\S+/gi, "$1: [redactado]");
+}
+/** The @codex comment Robert's change request posts on the KONG PR (English instructions + his own words). */
+export function buildCodexChangeComment(input: { prNumber: number; headSha: string; text: string }) {
+  const words = redactForGithub(input.text).replace(/\r/g, "").trim().slice(0, 1500);
+  return [
+    `@codex Please update this pull request (#${input.prNumber}, tested at ${input.headSha.slice(0, 7)}) with the change the owner requested below.`,
+    "- Keep the change scoped to what is asked; do not touch payments, auth, pricing, user messaging, database schema/deletes or legal pages.",
+    "- Keep or add tests, keep all checks green, and push to this same PR branch so the KONG mirror lab re-tests it automatically.",
+    "- If the request is ambiguous or conflicts with the current change, explain it in a PR comment instead of guessing.",
+    "",
+    "Owner's request (original words, Spanish):",
+    ...words.split("\n").map(line => `> ${line}`),
+  ].join("\n") + CLAUDE_CODE_FOOTER;
+}
+/** Deterministic: does Robert's chat message ask for a different change? ($0, no AI) */
+export function looksLikeChangeRequest(message: string): boolean {
+  const text = message.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  if (/\?$/.test(text) && !/^(puedes|podrias|podemos)\b/.test(text)) return false;
+  return /\b(hazlo|hazla|haz|cambia|cambialo|cambiala|no cambies|no toques|agrega|agregale|anade|quita|quitale|elimina|pon|ponlo|ponla|usa|mueve|tambien|reemplaza|vuelve|make it|change|add|remove|do not change)\b/.test(text);
 }
 
 export function kongRepublishSteps(mergeSha: string | null, baseRef: string) {
@@ -317,7 +374,8 @@ export function kongRepublishSteps(mergeSha: string | null, baseRef: string) {
 }
 
 export function createKongMirrorLab(options: { owner: string; store: MirrorStore; now: () => number; cards: MirrorCards; github: MirrorGithub;
-  summarize: (report: KongMirrorReport) => Promise<{ text: string; source: "ai" | "deterministic"; reason?: string }>; imageUrl?: (imageKey: string) => string }) {
+  summarize: (report: KongMirrorReport) => Promise<{ text: string; source: "ai" | "deterministic"; reason?: string }>; imageUrl?: (imageKey: string) => string;
+  onMerged?: (entry: MirrorJournalEntry, card: MirrorCard | null) => Promise<void> }) {
   const { owner, store, now } = options;
   if (!owner.trim()) throw new Error("MIRROR_OWNER_REQUIRED");
   const namespace = JSON.stringify(["kong-mirror-reports-v1", owner]);
@@ -343,11 +401,24 @@ export function createKongMirrorLab(options: { owner: string; store: MirrorStore
       const prior = journal.entries.find(entry => entry.key === key);
       if (prior) return { replay: false as const, entry: prior, duplicate: true };
       const entry: MirrorJournalEntry = { key, repo: report.repo, prNumber: report.prNumber, prUrl: report.prUrl, title: report.title, baseSha: report.baseSha,
-        headSha: report.headSha, overall, approvable: overall !== "fail", reportDigest: digest, receivedAt: iso(), updatedAt: iso(), imageKeys: [], status: "received" };
+        headSha: report.headSha, overall, approvable: overall !== "fail", reportDigest: digest, receivedAt: iso(), updatedAt: iso(), imageKeys: [], status: "received",
+        changeRequests: [], history: [{ at: iso(), event: "reporte", note: `Reporte del Mirror Lab recibido (${overall}) para ${report.headSha.slice(0, 7)}` }] };
+      // A new head SHA for the same PR replaces the older open card; history stays linked both ways.
+      const superseded: MirrorJournalEntry[] = [];
+      for (const older of journal.entries) {
+        if (older.repo !== report.repo || older.prNumber !== report.prNumber || older.headSha === report.headSha) continue;
+        if (!["received", "carded", "changes_requested"].includes(older.status)) continue;
+        older.status = "superseded"; older.supersededBy = key; older.updatedAt = iso();
+        older.history.push({ at: iso(), event: "reemplazada", note: `Reemplazada por el reporte de ${report.headSha.slice(0, 7)}` });
+        if (!entry.supersedes) entry.supersedes = older.key;
+        superseded.push(older);
+      }
+      if (superseded.length) entry.history.push({ at: iso(), event: "reemplaza", note: `Reemplaza la tarjeta de ${superseded.map(item => item.headSha.slice(0, 7)).join(", ")}` });
       journal.entries.push(entry);
-      return { replay: false as const, entry, duplicate: false };
+      return { replay: false as const, entry, duplicate: false, superseded: superseded.map(item => item.pendingActionId).filter((id): id is string => !!id) };
     });
     if (outcome.replay) throw Object.assign(new MirrorError("MIRROR_REPLAY", 409), { pendingActionId: outcome.entry?.pendingActionId });
+    for (const oldId of ("superseded" in outcome ? outcome.superseded || [] : [])) await options.cards.closed(oldId, `Reemplazada por un nuevo reporte del Mirror Lab (${report.headSha.slice(0, 7)})`).catch(() => undefined);
     if (outcome.duplicate && outcome.entry.pendingActionId) return { accepted: true, duplicate: true, key, pendingActionId: outcome.entry.pendingActionId, overall: outcome.entry.overall, approvable: outcome.entry.approvable };
     // Images live in their own store rows; the journal and the card keep only references.
     const images: MirrorImageRef[] = [];
@@ -401,6 +472,8 @@ export function createKongMirrorLab(options: { owner: string; store: MirrorStore
     if (input.headSha !== undefined && input.headSha !== entry.headSha) return refuse("MIRROR_STALE_CARD", "La tarjeta que viste no corresponde a la versión registrada. Recarga y revisa de nuevo.");
     if (entry.status === "merged") return refuse("MIRROR_ALREADY_MERGED", "Esta mejora ya se fusionó.");
     if (entry.status === "rejected") return refuse("MIRROR_REJECTED", "Esta mejora fue rechazada.");
+    if (entry.status === "changes_requested") return refuse("MIRROR_CHANGES_REQUESTED", "Pediste cambios: espera el nuevo reporte del Mirror Lab para la nueva versión antes de aprobar.");
+    if (entry.status === "superseded") return refuse("MIRROR_SUPERSEDED", "Esta tarjeta fue reemplazada por un reporte más nuevo del mismo PR.");
     const pending = await options.cards.get(entry.pendingActionId);
     if (!pending || !["pending", "edited", "snoozed"].includes(pending.status)) return refuse("MIRROR_CARD_CLOSED", "La tarjeta ya no está pendiente en el Trust Center.");
     const claimed = await mutate(journal => {
@@ -413,7 +486,8 @@ export function createKongMirrorLab(options: { owner: string; store: MirrorStore
     if (!claimed) return refuse("MIRROR_BUSY", "Ya hay una aprobación en curso para esta mejora.");
     const release = async (code: string, message: string) => {
       await mutate(journal => { const current = journal.entries.find(item => item.key === key)!;
-        current.status = "carded"; delete current.mergingUntil; current.lastRefusal = { at: iso(), code, message }; current.updatedAt = iso(); });
+        current.status = "carded"; delete current.mergingUntil; current.lastRefusal = { at: iso(), code, message }; current.updatedAt = iso();
+        current.history.push({ at: iso(), event: "aprobación negada", note: message }); });
       await options.cards.note(entry.pendingActionId!, message, { code }).catch(() => undefined);
       return refuse(code, message);
     };
@@ -441,8 +515,11 @@ export function createKongMirrorLab(options: { owner: string; store: MirrorStore
     const message = "Merge hecho: falta republicar KONG en Replit";
     const result = { merged: true, mergeSha: merged.sha, prUrl: entry.prUrl, message, steps: kongRepublishSteps(merged.sha, pull.baseRef), deployed: false };
     await mutate(journal => { const current = journal.entries.find(item => item.key === key)!;
-      current.status = "merged"; current.mergeSha = merged.sha; delete current.mergingUntil; current.updatedAt = iso(); });
+      current.status = "merged"; current.mergeSha = merged.sha; delete current.mergingUntil; current.updatedAt = iso();
+      current.history.push({ at: iso(), event: "merge", note: `${message} (${(merged.sha || "").slice(0, 7)})` }); });
     await options.cards.executed(entry.pendingActionId, input.actorId, result);
+    const rawCard = await store.read(cardNamespace(key)).catch(() => null);
+    await options.onMerged?.(entry, rawCard ? JSON.parse(rawCard) as MirrorCard : null).catch(() => undefined);
     return { ok: true as const, ...result };
   }
 
@@ -452,15 +529,66 @@ export function createKongMirrorLab(options: { owner: string; store: MirrorStore
     if (entry.status === "merged" || entry.status === "merging") return refuse("MIRROR_ALREADY_MERGED", "Esta mejora ya se está fusionando o se fusionó.");
     const note = typeof input.note === "string" ? input.note.replace(/[\u0000-\u0008\u000b-\u001f]/g, "").trim().slice(0, 1000) : "";
     await mutate(journal => { const current = journal.entries.find(item => item.key === key)!;
-      current.status = "rejected"; if (note) current.rejectNote = note; current.updatedAt = iso(); });
+      current.status = "rejected"; if (note) current.rejectNote = note; current.updatedAt = iso();
+      current.history.push({ at: iso(), event: "rechazada", note: note || "sin nota" }); });
     await options.cards.rejected(entry.pendingActionId, input.actorId, note || null);
     let commentPosted = false;
     if (note) {
-      try { await options.github.comment(entry.repo, entry.prNumber, `Robert rechazó esta mejora desde BlackOps (Mirror Lab, commit ${entry.headSha.slice(0, 7)}):\n\n> ${note.replace(/\n/g, "\n> ")}`); commentPosted = true; }
+      try { await options.github.comment(entry.repo, entry.prNumber, `The owner rejected this improvement from BlackOps (Mirror Lab, commit ${entry.headSha.slice(0, 7)}):\n\n> ${redactForGithub(note).replace(/\n/g, "\n> ")}${CLAUDE_CODE_FOOTER}`); commentPosted = true; }
       catch { commentPosted = false; }
     }
     return { ok: true as const, rejected: true, commentPosted };
   }
 
-  return { receive, list, image, approve, reject, find };
+  /**
+   * Robert asks for a different change from the chat: ONE @codex comment per idempotency key
+   * (double clicks reuse it), the card moves to "Cambios pedidos" and approve waits for the new report.
+   * There is no cap on how many different changes he can request.
+   */
+  async function requestChange(key: string, input: { actorId: string; text: unknown; idempotencyKey: unknown }) {
+    const text = typeof input.text === "string" ? input.text.replace(/[\u0000-\u0008\u000b-\u001f]/g, "").trim().slice(0, 1500) : "";
+    const idempotencyKey = typeof input.idempotencyKey === "string" && /^[A-Za-z0-9_.:-]{8,100}$/.test(input.idempotencyKey) ? input.idempotencyKey : "";
+    if (text.length < 3) return refuse("MIRROR_CHANGE_EMPTY", "Escribe qué cambio quieres.", 400);
+    if (!idempotencyKey) return refuse("MIRROR_CHANGE_KEY", "Falta la clave de la solicitud; recarga e inténtalo de nuevo.", 400);
+    const claim = await mutate(journal => {
+      const current = journal.entries.find(item => item.key === key);
+      if (!current || !current.pendingActionId) return { refusal: refuse("MIRROR_NOT_FOUND", "No encontré esta mejora.", 404) };
+      const prior = current.changeRequests.find(request => request.idempotencyKey === idempotencyKey);
+      if (prior && prior.state !== "failed") return { prior, entry: current };
+      if (!["carded", "changes_requested"].includes(current.status)) return { refusal: refuse("MIRROR_CHANGE_CLOSED", "Esta tarjeta ya no acepta cambios (fusionada, rechazada o reemplazada).") };
+      const request = prior || { id: `cambio-${current.changeRequests.length + 1}`, idempotencyKey, text, at: iso(), state: "posting" as const, commentUrl: null };
+      request.state = "posting";
+      if (!prior) current.changeRequests.push(request);
+      current.updatedAt = iso();
+      return { request: { ...request }, entry: current };
+    });
+    if ("refusal" in claim && claim.refusal) return claim.refusal;
+    const entry = claim.entry!;
+    if ("prior" in claim && claim.prior) return { ok: true as const, duplicate: true, request: claim.prior, status: entry.status };
+    const request = (claim as { request: MirrorChangeRequest }).request;
+    let posted: { url?: string | null } | void = undefined, failed = false;
+    try { posted = await options.github.comment(entry.repo, entry.prNumber, buildCodexChangeComment({ prNumber: entry.prNumber, headSha: entry.headSha, text: request.text })); }
+    catch { failed = true; }
+    const saved = await mutate(journal => {
+      const current = journal.entries.find(item => item.key === key)!;
+      const row = current.changeRequests.find(item => item.idempotencyKey === idempotencyKey)!;
+      row.state = failed ? "failed" : "posted"; row.commentUrl = posted && posted.url ? posted.url : null;
+      if (!failed) {
+        current.status = "changes_requested";
+        current.history.push({ at: iso(), event: "cambios pedidos", note: request.text.slice(0, 300) });
+      }
+      current.updatedAt = iso();
+      return { row: { ...row }, status: current.status };
+    });
+    if (failed) return refuse("MIRROR_CHANGE_NOT_POSTED", "No pude publicar el pedido en el PR de GitHub. No se pidió nada; inténtalo de nuevo.", 502);
+    await options.cards.note(entry.pendingActionId!, `Cambios pedidos: ${request.text.slice(0, 300)}`, { changeRequest: request.id }).catch(() => undefined);
+    return { ok: true as const, duplicate: false, request: saved.row, status: saved.status };
+  }
+
+  async function readCard(key: string) {
+    const raw = await store.read(cardNamespace(key));
+    return raw ? JSON.parse(raw) as MirrorCard : null;
+  }
+
+  return { receive, list, image, approve, reject, find, requestChange, readCard };
 }
