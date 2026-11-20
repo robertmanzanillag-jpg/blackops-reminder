@@ -4,6 +4,8 @@ const API = 'https://app.metricool.com';
 const MCP = 'https://ai.metricool.com/mcp';
 export const TIME_ZONE = 'America/New_York';
 export const DAILY_LIMIT = 5;
+// Per-account scale-up ceiling (cloud streamer lanes, weekly median >= 1k views). Callers opt in per item.
+export const SCALED_DAILY_LIMIT = 8;
 // Live Metricool identities (getBrandSettings, 2026-11-19): 6431685 "memes" TikTok @streamersus,
 // 6431687 "SPORT" TikTok @streamersclipusa, 6591612 TikTok @news305miami + Facebook page 1193011863901514.
 export const DESTINATIONS = Object.freeze([
@@ -220,7 +222,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
     return { canPublish: profile.isWhiteLabelOnlyRead !== true && profile.canPublish !== false &&
       (profile.canPublish === true || owned) };
   }
-  async function schedule(destination, day, strict=false) {
+  async function schedule(destination, day, strict=false, includeDrafts=false) {
     await destinationSettings(destination);
     const rows=list(await get('/api/v2/scheduler/posts', {
       blogId: destination.brandId, integrationSource: 'MCP',
@@ -234,7 +236,7 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
           row.providers.some(p=>!p||typeof p!=='object'||Array.isArray(p)||typeof p.network!=='string'||!networks.has(p.network))||
           new Set(row.providers.map(p=>p.network)).size!==row.providers.length)throw Error('weekly_provider_schedule_unverified');
     }
-    return rows.filter(row=>provider(row,destination)&&row.draft!==true&&!['deleted','cancelled','canceled','failed'].includes(String(statusOf(row,destination)).toLowerCase()));
+    return rows.filter(row=>provider(row,destination)&&(includeDrafts||row.draft!==true)&&!['deleted','cancelled','canceled','failed'].includes(String(statusOf(row,destination)).toLowerCase()));
   }
   async function postAnalytics(destination, from, now) {
     await destinationSettings(destination);
@@ -267,13 +269,45 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
     },
     async preflight(destination, item) {
       if (!(await destinationSettings(destination)).canPublish) throw new Error('destination_publish_permission_missing');
-      const rows = await schedule(destination, localDay(new Date(item.scheduledAt)));
+      // Drafts count too: a draft waiting for owner approval holds its slot, caption and media.
+      const rows = await schedule(destination, localDay(new Date(item.scheduledAt)), false, item.countDrafts === true);
       if (rows.some(row => !scheduledTime(row))) throw Error('metricool_schedule_time_unverified');
       const duplicate = rows.some(row => {
         return localHour(scheduledTime(row)) === localHour(item.scheduledAt) || row.text === item.caption ||
           providerMedia(row) === item.mediaUrl;
       });
-      if (duplicate || rows.length >= DAILY_LIMIT) throw new Error('metricool_slot_duplicate_or_daily_cap');
+      const limit = Number.isSafeInteger(item.dailyLimit) ? Math.max(1, Math.min(SCALED_DAILY_LIMIT, item.dailyLimit)) : DAILY_LIMIT;
+      if (duplicate || rows.length >= limit) throw new Error('metricool_slot_duplicate_or_daily_cap');
+    },
+    /**
+     * Read-only cross-account guard: the same caption or media must not be scheduled, drafted or published on any
+     * other allowlisted account on the slot's day or the day either side. One video file -> one account.
+     */
+    async crossAccountPreflight(destination, item) {
+      const day = localDay(new Date(item.scheduledAt));
+      const days = [-1, 0, 1].map(offset => localDay(new Date(Date.parse(item.scheduledAt) + offset * 86400000))).filter((d, i, a) => a.indexOf(d) === i);
+      const head = text => String(text ?? '').split('\n')[0].trim().toLowerCase().slice(0, 80);
+      // Brand-wide calendars (every network, drafts included); on this brand only the other networks count.
+      for (const brandId of [...new Set(DESTINATIONS.map(d => d.brandId))]) {
+        for (const d of days) {
+          const rows = list(await get('/api/v2/scheduler/posts', { blogId: brandId, integrationSource: 'MCP', start: d + 'T00:00:00', end: d + 'T23:59:59', timezone: TIME_ZONE, extendedRange: false }));
+          const others = rows.filter(row => row && !['deleted', 'cancelled', 'canceled'].includes(String(row.status ?? '').toLowerCase()) &&
+            (brandId !== destination.brandId || (Array.isArray(row.providers) && row.providers.some(p => p?.network && p.network !== destination.network))));
+          if (others.some(row => row.text === item.caption || (head(row.text) && head(row.text) === head(item.caption)) || (item.mediaUrl && providerMedia(row) === item.mediaUrl))) {
+            throw new Error('cross_account_duplicate');
+          }
+        }
+      }
+      return { checkedDays: days, day };
+    },
+    /** Read-only Metricool best-time-to-post (last 4 weeks) for one destination; raw rows for parseBestTimes. */
+    async bestTimes(destination, now = new Date()) {
+      if (!findDestination(destination)) throw new Error('destination_not_allowlisted');
+      const to = new Date(+now), from = new Date(+now - 28 * 86400000);
+      const fmt = d => d.toISOString().slice(0, 19) + '+00:00';
+      const result = await mcp('getBestTimeToPostByNetwork', { brandId: String(destination.brandId), socialNetwork: destination.network, timezone: TIME_ZONE, fromDate: fmt(from), toDate: fmt(to) });
+      const body = result.structuredContent ?? (result.content?.length === 1 ? JSON.parse(result.content[0].text) : null);
+      return body?.data ?? body?.bestTimes ?? body ?? [];
     },
     async weeklyPreflight(destination, item, { now } = {}) {
       if (!(now instanceof Date) || !Number.isFinite(+now)) throw Error('weekly_now_required');
@@ -337,9 +371,12 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
       const networkOptions = destination.network === 'facebook'
         ? { facebookData: { type: 'REEL' } }
         : { tiktokData: { privacyOption: 'PUBLIC_TO_EVERYONE', autoAddMusic: false,
-          commercialContentThirdParty: item.thirdPartyCommercial === true } };
+          commercialContentThirdParty: item.thirdPartyCommercial === true,
+          ...(item.allowDuetStitch === true ? { disableComment: false, disableDuet: false, disableStitch: false } : {}) } };
+      // Draft mode: the post waits in Metricool for owner approval (no auto-publish).
+      const asDraft = item.draft === true;
       const post = {
-        autoPublish: true, draft: false, providers: [{ network: destination.network }],
+        autoPublish: !asDraft, draft: asDraft, providers: [{ network: destination.network }],
         publicationDate: { dateTime: item.scheduledAt.slice(0, 19), timezone: 'UTC' },
         text: item.caption, media: [item.mediaUrl], ...networkOptions,
       };
@@ -350,8 +387,9 @@ export function createPortfolioMetricool({ token, userId, fetcher = fetch }) {
       return this.confirmSchedule(destination, item);
     },
     async confirmSchedule(destination, item) {
-      const matches = (await schedule(destination, localDay(new Date(item.scheduledAt)))).filter(row =>
-        row.autoPublish === true && row.draft === false &&
+      const asDraft = item.draft === true;
+      const matches = (await schedule(destination, localDay(new Date(item.scheduledAt)), false, asDraft)).filter(row =>
+        (asDraft ? row.draft === true : row.autoPublish === true && row.draft === false) &&
         ['scheduled', 'pending', 'published', 'posted'].includes(String(statusOf(row, destination)).toLowerCase()) &&
         matchingContent(row, item, destination));
       const row = matches.length === 1 ? matches[0] : null;

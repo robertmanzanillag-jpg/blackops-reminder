@@ -133,12 +133,16 @@ async function discoverTwitch(client, now, catalogue) {
     publishedAt: s.started_at, observedAt, gameName: s.game_name ?? null, priority: known.has(s.user_id) });
   // Top clips in the last 24h for priority creators plus the five biggest live channels.
   const since = iso(now - 24 * HOUR);
-  const clipTargets = [...new Set([...known.keys(), ...streams.slice(0, 5).map(s => s.user_id)])].slice(0, 20);
+  const gameNames = new Map([...games.map(g => [g.id, g.name]), ...streams.map(s => [s.game_id, s.game_name])].filter(([id, name]) => id && name));
+  const clipTargets = [...new Set([...known.keys(), ...streams.slice(0, 5).map(s => s.user_id)])].slice(0, 32);
   for (const id of clipTargets) {
     for (const c of await client.helix('clips', [['broadcaster_id', id], ['started_at', since], ['first', 5]])) {
       out.clips.push({ id: `twitch-clip:${c.id}`, platform: 'twitch', kind: 'clip', creatorKey: creatorKey('twitch', c.broadcaster_id), handle: describe.get(c.broadcaster_id)?.login ?? c.broadcaster_name,
         title: String(c.title ?? '').slice(0, 200), sourceUrl: c.url, durationSec: Number(c.duration) || null, views: Number(c.view_count) || 0,
-        publishedAt: c.created_at, observedAt, thumbnailUrl: c.thumbnail_url ?? null, priority: known.has(c.broadcaster_id) });
+        publishedAt: c.created_at, observedAt, thumbnailUrl: c.thumbnail_url ?? null, priority: known.has(c.broadcaster_id),
+        // Lane routing + cross-account dedupe: language, game and the VOD segment the clip came from.
+        language: typeof c.language === 'string' ? c.language.slice(0, 8) : null, gameName: gameNames.get(c.game_id) ?? null,
+        vodId: /^\d{1,20}$/.test(String(c.video_id ?? '')) ? String(c.video_id) : null, vodOffset: Number.isFinite(c.vod_offset) ? c.vod_offset : null });
     }
   }
   return out;
@@ -278,11 +282,15 @@ export function approvalRow(candidate, owner, config) {
   };
 }
 
-export function createPendingActionsQueue(query) {
-  return {
-    async insert(row) {
+/** Advisory key serializing approval inserts per owner/action/candidate (concurrent runs never duplicate a live row). */
+export const approvalInsertLockKey = row => JSON.stringify(['clippers-streamer-approval-v1', row.userId, row.actionType, row.resourceId]);
+
+/** transaction(fn): runs fn(query) inside BEGIN/COMMIT on one connection. Without it inserts are only
+ * idempotent sequentially (unit tests); production always passes one. */
+export function createPendingActionsQueue(query, { transaction } = {}) {
+  const insertOnce = async (q, row) => {
       // Idempotent: a live row (any status but rejected/failed) for the same owner/action/candidate is reused.
-      const result = await query(`WITH existing AS (
+      const result = await q(`WITH existing AS (
           SELECT id FROM pending_actions WHERE user_id=$1 AND action_type=$2 AND resource_id=$4 AND status NOT IN ('rejected','failed') ORDER BY created_at LIMIT 1
         ), inserted AS (
           INSERT INTO pending_actions (user_id, created_by_actor_type, created_by_actor_id, origin, action_type, resource_type, resource_id, title, description, risk_level, permission_level_required, status, input, approved_by, approved_at, approval_reason)
@@ -293,6 +301,16 @@ export function createPendingActionsQueue(query) {
           row.status === 'approved' ? 'clippers-auto-publish-flag' : null, row.status === 'approved' ? new Date() : null, row.status === 'approved' ? 'CLIPPERS_STREAMER_AUTO_PUBLISH=true' : null]);
       if (!result.rows[0]) throw new Error('PENDING_ACTION_INSERT_FAILED');
       return String(result.rows[0].id);
+  };
+  return {
+    async insert(row) {
+      if (!transaction) return insertOnce(query, row);
+      // Lock first, then check-and-insert in a NEW statement: its snapshot sees any row a concurrent
+      // run committed while this one waited, so two runs can never both insert a live row.
+      return transaction(async q => {
+        await q('SELECT pg_advisory_xact_lock(hashtextextended($1, 0))', [approvalInsertLockKey(row)]);
+        return insertOnce(q, row);
+      });
     },
     /** Takedown: reject every still-open approval row for these candidates. */
     async rejectCandidates(owner, candidateIds, reason) {
@@ -307,6 +325,14 @@ export function createPendingActionsQueue(query) {
       return new Map(result.rows.map(r => [String(r.id), String(r.status)]));
     },
   };
+}
+
+/** Owner decisions from the approval queue onto local candidates (pure; no IO). */
+export function syncApprovals(state, statuses) {
+  // Prohibited / taken-down clips stay rejected locally even if the row was approved before the takedown.
+  for (const c of state.candidates) if (c.clipPolicy?.status === 'prohibited' && c.approval && c.approval.status !== 'not_requested') c.approval.status = 'rejected';
+  for (const c of state.candidates) if (c.clipPolicy?.status !== 'prohibited' && c.approval?.pendingActionId && statuses.has(c.approval.pendingActionId)) c.approval.status = statuses.get(c.approval.pendingActionId) === 'executed' ? 'approved' : statuses.get(c.approval.pendingActionId);
+  return state;
 }
 
 // ---------- One run ----------
@@ -347,22 +373,31 @@ export async function runStreamerDiscovery({ env = process.env, now = Date.now()
   if (report.errors.length) report.status = twitch || youtube ? 'partial' : 'failed';
   else if (credentialFailures) report.status = twitch || youtube ? 'partial' : 'held_credentials';
   let queued = 0;
-  const saved = await store.transact(STREAMER_STATE_NAMESPACE(owner), async raw => {
+  // Never hold the council owner lock across IO on another pool: read the approval queue and insert
+  // (idempotent per candidate) BEFORE the transaction; the transaction itself only applies results.
+  const ns = STREAMER_STATE_NAMESPACE(owner);
+  const preview = parseStreamerStateStrict(await store.read(ns));
+  if (!preview) throw new Error('STREAMER_STATE_INVALID');
+  const draft = twitch || youtube ? applyDiscovery(preview, { now, twitch, youtube, config }) : preview;
+  const draftIds = draft.candidates.map(c => c.approval?.pendingActionId).filter(Boolean);
+  const statuses = queue ? await queue.statuses(owner, draftIds) : new Map();
+  syncApprovals(draft, statuses);
+  const requested = new Map();
+  if (queue && config.city.pages.length) {
+    for (const c of selectForApproval(draft, config)) {
+      const row = approvalRow(c, owner, config);
+      requested.set(c.id, { status: row.status, pendingActionId: await queue.insert(row), requestedAt: report.at, mode: row.input.approvalMode });
+    }
+  }
+  const saved = await store.transact(ns, async raw => {
     let state = parseStreamerStateStrict(raw);
     if (!state) throw new Error('STREAMER_STATE_INVALID');
     if (twitch || youtube) state = applyDiscovery(state, { now, twitch, youtube, config });
-    // Sync owner decisions from the approval queue.
-    const ids = state.candidates.map(c => c.approval?.pendingActionId).filter(Boolean);
-    const statuses = queue ? await queue.statuses(owner, ids) : new Map();
-    // Prohibited / taken-down clips stay rejected locally even if the row was approved before the takedown.
-    for (const c of state.candidates) if (c.clipPolicy?.status === 'prohibited' && c.approval && c.approval.status !== 'not_requested') c.approval.status = 'rejected';
-    for (const c of state.candidates) if (c.clipPolicy?.status !== 'prohibited' && c.approval?.pendingActionId && statuses.has(c.approval.pendingActionId)) c.approval.status = statuses.get(c.approval.pendingActionId) === 'executed' ? 'approved' : statuses.get(c.approval.pendingActionId);
-    if (queue && config.city.pages.length) {
-      for (const c of selectForApproval(state, config)) {
-        const row = approvalRow(c, owner, config);
-        c.approval = { status: row.status, pendingActionId: await queue.insert(row), requestedAt: report.at, mode: row.input.approvalMode };
-        queued++;
-      }
+    syncApprovals(state, statuses);
+    queued = 0;
+    for (const c of state.candidates) {
+      const approval = requested.get(c.id);
+      if (approval && c.approval?.status === 'not_requested') { c.approval = approval; queued++; }
     }
     const overdue = state.takedowns.filter(t => !t.removedAt && Date.parse(t.removeBy) < now);
     if (overdue.length) heldReasons.push('takedown_overdue');
@@ -401,15 +436,25 @@ async function main() {
   }
   const { getCouncilStore, createCouncilPool } = await import('../server/agent-council-store.ts');
   const store = await getCouncilStore();
-  const pool = await createCouncilPool();
+  const pool = await createCouncilPool('streamers');
   const query = async (sql, values) => { const client = await pool.connect(); try { return await client.query(sql, values); } finally { client.release(); } };
+  const transaction = async fn => {
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+      await client.query("SET LOCAL lock_timeout = '10s'");
+      const out = await fn((sql, values) => client.query(sql, values));
+      await client.query('COMMIT');
+      return out;
+    } catch (e) { await client.query('ROLLBACK').catch(() => undefined); throw e; } finally { client.release(); }
+  };
   const owner = process.env.DEFAULT_USER_ID.trim();
   if (args.includes('--export-local-queue')) {
     console.log(JSON.stringify({ version: 1, items: localWorkQueue(parseStreamerState(await store.read(STREAMER_STATE_NAMESPACE(owner)))) }));
     return;
   }
   const minIntervalMs = args.includes('--respect-interval') ? int(process.env.CLIPPERS_STREAMERS_MIN_INTERVAL_MINUTES, 45, 1, 720) * 60_000 : 0;
-  const { report, skipped } = await runStreamerDiscovery({ env: process.env, store, queue: createPendingActionsQueue(query), owner, minIntervalMs });
+  const { report, skipped } = await runStreamerDiscovery({ env: process.env, store, queue: createPendingActionsQueue(query, { transaction }), owner, minIntervalMs });
   if (skipped) { console.log(`::notice::Streamer discovery skipped: last run at ${report.at} is within the minimum interval.`); return; }
   // Static summary only: counts, codes. No URLs with keys, no tokens.
   console.log(JSON.stringify({ status: report.status, heldReasons: report.heldReasons, errors: report.errors, counts: report.counts, twitchRequests: report.twitchRequests, youtubeUnits: report.youtubeUnits }));

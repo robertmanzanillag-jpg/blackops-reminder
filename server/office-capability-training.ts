@@ -122,10 +122,14 @@ export function capabilitySkipPredicate(state:CapabilityTrainingState,at:number,
 /** Transact must use the existing durable council transaction/CAS. run and
  * verifyCost are trusted adapters: verifyCost independently loads the admitted
  * ledger receipt, never model-authored prices. Existing budgets remain required. */
+/** Hard upper bound for OFFICE_CAPABILITY_MAX_CALLS_PER_DAY (raised from 28 at Robert's request). Each call
+ * still needs shared OpenAI credit and the office monthly token limit, so spend stays bounded by those. */
+export const OFFICE_CAPABILITY_MAX_CALLS_PER_DAY_LIMIT = 56;
+
 export function createCapabilityTrainer(options:{owner:string;transact:(change:(s:CapabilityTrainingState,generations:Record<string,number>,otherAcademyRunning?:boolean)=>CapabilityTrainingState)=>Promise<CapabilityTrainingState>;loadWork:()=>Promise<RoleWorkState>;run:(prompt:string,call:{executionId:string;maxOutputTokens:number})=>Promise<OfficeOpenAIResult>;verifyCost:(request:{executionId:string;responseId:string;model:string;usage:z.infer<typeof usageSchema>})=>Promise<VerifiedCapabilityCost>;maxCallsPerDay:number;now?:()=>number;shouldStop?:()=>boolean;
  /** Current execution model; enables the input-unchanged skip (absent = never skip). */
  model?:string}){
- if(!options.owner.trim()||!Number.isSafeInteger(options.maxCallsPerDay)||options.maxCallsPerDay<1||options.maxCallsPerDay>28)throw Error("CAPABILITY_EXISTING_DAILY_LIMIT_REQUIRED");
+ if(!options.owner.trim()||!Number.isSafeInteger(options.maxCallsPerDay)||options.maxCallsPerDay<1||options.maxCallsPerDay>OFFICE_CAPABILITY_MAX_CALLS_PER_DAY_LIMIT)throw Error("CAPABILITY_EXISTING_DAILY_LIMIT_REQUIRED");
  const now=options.now||Date.now;
  return {async tick(){
   if(options.shouldStop?.())return;

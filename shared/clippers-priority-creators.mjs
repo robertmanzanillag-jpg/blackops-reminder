@@ -570,7 +570,11 @@ export const KNOWN_PROHIBITED_CREATORS = freeze([]);
 export const TWITCH_LOGIN_CANDIDATES = freeze({
   "thegrefg": ["thegrefg"], "rubius": ["rubius"], "vegetta777": ["vegetta777"], "ibai": ["ibai"], "auronplay": ["auronplay"],
   "ishowspeed": ["ishowspeed"], "adin-ross": ["adinross"], "lacy": ["lacy"], "alanzoka": ["alanzoka"], "gotaga": ["gotaga"],
-  "papaplatte": ["papaplatte"], "k4sen": ["k4sen"], "juega-german": ["juegagerman"]
+  "papaplatte": ["papaplatte"], "k4sen": ["k4sen"], "juega-german": ["juegagerman"],
+  // Account-lane seeds (owner plan 2026-11-20): big English streamers, sports, Latin/Spanish and NYC creators.
+  "kai-cenat": ["kaicenat"], "jynxzi": ["jynxzi"], "duke-dennis": ["dukedennis"], "xqc": ["xqc"], "agent00": ["agent00"],
+  "fanum": ["fanum"], "plaqueboymax": ["plaqueboymax"], "castro": ["castro_1021"],
+  "westcol": ["westcol"], "elmariana": ["elmariana"], "juansguarnizo": ["juansguarnizo"], "rivers": ["rivers_gg"], "spreen": ["spreen"]
 });
 const priorities = new Set(PRIORITY_CREATORS.map(row => row.channelId));
 export const CHALLENGER_CREATORS = freeze([...LEGACY_DISCOVERY_CREATORS.filter(row => !priorities.has(row.channelId)).map(row => ({...row,creatorGroupId:row.id,name:row.handle,role:'legacy_challenger',permission:'unknown',mayPublish:false,clipPolicy:'allowed_unless_prohibited'})),...DISCOVERY_CANDIDATES]);
