@@ -49,8 +49,7 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.gate.outputs.run == 'true'
         with:
-          # A manual dispatch runs the dispatched ref (the workflow file comes from it too); scheduled runs use main.
-          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || vars.OFFICE_SOURCE_REF || 'main' }}
+          ref: ${{ vars.OFFICE_SOURCE_REF || 'main' }}
           persist-credentials: false
 
       - uses: actions/setup-node@v4

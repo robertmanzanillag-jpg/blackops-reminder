@@ -28,8 +28,16 @@ Its ledgers stay on disk and are read-only.
 
 ### Platforms
 YouTube answers GitHub-hosted runner IPs with "Sign in to confirm you're not a bot", even with `--impersonate chrome` and a working curl-cffi. That was verified on 2026-11-19. The cloud lane therefore takes **Twitch clips only** (`CLIPPERS_STREAMER_CLOUD_PLATFORMS`, default `twitch`).
-While the cloud publisher is on, discovery creates approval rows only for those platforms, so unpublishable YouTube approvals don't fill the open-approval budget.
+While the cloud publisher is on, discovery creates approval rows only for those platforms, so unpublishable YouTube approvals don't fill the open-approval budget. This also means **no new YouTube approvals are created for the Mac lane** while the cloud publisher is on. Add `youtube` to `CLIPPERS_STREAMER_CLOUD_PLATFORMS`, or turn the publisher off, to get them back.
 A YouTube bot check is reported as `SOURCE_BOT_CHECK`, and the run stops trying other YouTube clips. Every failed clip prints a log-safe line: `clip diagnostics: {platform, step, impersonate, exitCode, detail}`. The detail is the last stderr line, with URLs, paths, e-mails and long tokens removed.
+
+### Testing a branch
+A `workflow_dispatch` of the publish workflow on a branch other than `main` runs the `branch-dry-run` job. That job:
+- fails unless `dry_run=true`
+- gets no Metricool token and only a read-only `GITHUB_TOKEN`
+- renders only, keeping the renders as a 1-day artifact, and writes no state
+
+Dispatches on `main`, and all scheduled runs, use the reviewed `OFFICE_SOURCE_REF` (or `main`). Discovery always runs `OFFICE_SOURCE_REF`/`main`.
 
 ### Destinations and schedule
 The adapter allowlist (`script/clippers-portfolio-metricool.mjs`) matches the live Metricool identities (getBrandSettings, 2026-11-19): `6431685/tiktok/streamersus` (memes), `6431687/tiktok/streamersclipusa` (SPORT), `6591612/tiktok/news305miami` and `6591612/facebook/1193011863901514`.

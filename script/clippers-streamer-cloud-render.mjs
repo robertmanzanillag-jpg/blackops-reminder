@@ -144,13 +144,29 @@ export function childEnv(parent = process.env, extra = {}) {
   return out;
 }
 
-/** Last meaningful stderr line, safe for public logs: no URLs, e-mails, paths with a home dir, or long tokens. */
+/**
+ * Text made safe for public logs (the repository is public): credentials, signed URLs, cookies and
+ * tokens are removed; paths under home/tmp and long opaque ids are replaced.
+ */
+export function scrubText(text, max = 200) {
+  return String(text ?? '')
+    .replace(/[\x00-\x1f\x7f]/g, ' ')
+    .replace(/\b(authorization|proxy-authorization|cookie|set-cookie)\s*:.*$/gi, '$1: [redacted]')
+    .replace(/\b(Bearer|OAuth|Basic|Token)\s+[^\s,;]+/gi, '$1 [redacted]')
+    .replace(/\b[a-z][\w+.-]*:\/\/\S+/gi, '[url]')
+    .replace(/\b(?:[a-z0-9-]+\.)+[a-z]{2,}(?::\d+)?\/\S*\?\S*/gi, '[url]')
+    .replace(/\b(sig|token|signature|key|auth|access_token|refresh_token|client_secret|client_id|password|passwd|secret|nauthsig|nauth|X-Amz-[\w-]+)=[^&\s]+/gi, '$1=[redacted]')
+    .replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '[email]')
+    .replace(/\/(?:home|Users|tmp|root)\/\S*/g, '[path]')
+    .replace(/[A-Za-z0-9_+/=-]{24,}/g, '[id]')
+    .replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+/** Last meaningful stderr line, scrubbed with scrubText. */
 export function scrubDiagnostic(text, max = 200) {
   const lines = String(text ?? '').split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const pick = [...lines].reverse().find(l => /ERROR|error|Error|WARNING/.test(l)) ?? lines.at(-1) ?? '';
-  return pick.replace(/https?:\/\/\S+/g, '[url]').replace(/[\w.+-]+@[\w-]+\.[\w.]+/g, '[email]')
-    .replace(/\/(?:home|Users|tmp|root)\/\S*/g, '[path]').replace(/[A-Za-z0-9_-]{24,}/g, '[id]')
-    .replace(/[\x00-\x1f\x7f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+  return scrubText(pick, max);
 }
 
 function run(bin, args, { timeoutMs = 300_000, env = {}, maxBuffer = 64 * 1024 * 1024 } = {}) {
@@ -212,7 +228,7 @@ export async function downloadSource({ candidate, workDir, targetSec = 45, env =
       // With --download-sections the file already starts at the cut.
       return { file, cut: { ...cut, offsetInFile: 0 } };
     } catch (error) {
-      attempts.push({ step, impersonate: impersonate ?? 'none', error: String(error?.message ?? 'ERROR').slice(0, 40), exitCode: error?.exitCode ?? null,
+      attempts.push({ step, impersonate: impersonate ?? 'none', error: scrubText(error?.message ?? 'ERROR', 40), exitCode: error?.exitCode ?? null,
         timedOut: error?.timedOut ?? false, detail: error?.detail ?? null });
       if (error?.fatal) throw Object.assign(error, { diagnostics: { platform: candidate.platform, attempts } });
       lastError = error;

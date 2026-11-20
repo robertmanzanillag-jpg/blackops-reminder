@@ -417,3 +417,25 @@ test('cloud lane takes Twitch only by default; a YouTube bot check is classified
   const r2 = await runCloudPublisher({ env: { ...ON, CLIPPERS_STREAMER_CLOUD_PLATFORMS: 'twitch,youtube' }, now: NOW, owner: 'o', store: store2, approvals: approvals({ 'pa-y1': 'approved', 'pa-y2': 'approved' }), metricool: fakeMetricool(), stager: fakeStager(), fetch: okFetch, ...media2, download });
   assert.equal(media2.calls.download.length, 1, 'circuit breaker after the first bot check'); assert.deepEqual(r2.report.errors, ['clip:SOURCE_BOT_CHECK']);
 });
+
+test('scrubbing removes adversarial credentials before anything reaches the public log', async () => {
+  const { scrubText, scrubDiagnostic } = await import('../script/clippers-streamer-cloud-render.mjs');
+  const secrets = ['s3cr3tSig', 'tok123', 'abc.def', 'QWxhZGRpbjpvcGVu', 'sess=abc', 'u1:p1', 'u2:p2', 'AKIAEXAMPLE', 'dbuser:dbpass', 'clientSecretX'];
+  const cases = [
+    'ERROR: unable to download usher.ttvnw.net/api/channel/hls/x.m3u8?sig=s3cr3tSig&token=tok123',
+    'HTTP Error 401: Bearer abc.def',
+    'request failed token=QWxhZGRpbjpvcGVu==',
+    'Cookie: sess=abc; other=1',
+    'fetch ftp://u1:p1@files.example.org/a and wss://u2:p2@ws.example.org/s',
+    'ERROR: 403 X-Amz-Signature=AKIAEXAMPLE&X-Amz-Credential=AKIAEXAMPLE',
+    'connect postgres://dbuser:dbpass@db.example.org:5432/app failed',
+    'oauth failed client_secret=clientSecretX',
+    'authorization: Basic QWxhZGRpbjpvcGVu',
+  ];
+  for (const c of cases) {
+    const out = scrubText(c);
+    for (const sec of secrets) assert.ok(!out.includes(sec), `${sec} leaked from: ${out}`);
+  }
+  assert.equal(scrubText('Authorization: Bearer x'), 'Authorization: [redacted]');
+  assert.equal(scrubDiagnostic('ok\nERROR: [twitch:clips] abc: Requested format is not available'), 'ERROR: [twitch:clips] abc: Requested format is not available');
+});
