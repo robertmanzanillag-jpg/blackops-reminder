@@ -119,7 +119,7 @@ export function ClippersGrowthTable({ outputs }: { outputs: Record<string, numbe
     <thead><tr className="text-slate-500"><th className="font-normal">Cuenta</th><th className="font-normal">Views</th><th className="font-normal">Mediana</th><th className="font-normal">Publicación</th><th className="font-normal">Decisiones</th></tr></thead>
     <tbody>{rows.map(row => <tr key={row.lane} className="text-slate-200" data-testid={`clippers-growth-${row.lane}`}>
       <td>{row.label}</td><td>{number(row.weeklyViews)}</td><td>{number(row.weeklyMedian)}</td>
-      <td>{row.autoPublish ? "Automática" : "Borradores (aprobación)"}</td><td>{number(row.decisions)}</td>
+      <td>{row.ownerOverride ? "auto (owner override)" : row.autoPublish ? "Automática" : "Borradores (aprobación)"}</td><td>{number(row.decisions)}</td>
     </tr>)}</tbody>
   </table>;
 }

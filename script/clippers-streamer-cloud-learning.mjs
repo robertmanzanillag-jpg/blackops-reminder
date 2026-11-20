@@ -102,7 +102,7 @@ export function latestViews(post, accountPosts = []) {
 }
 const HOUR_MS = 3_600_000;
 
-export function computeGrowth({ posts = [], accountPosts = {}, previous = null, now = Date.now() }) {
+export function computeGrowth({ posts = [], accountPosts = {}, previous = null, now = Date.now(), override = new Set() }) {
   const out = { evaluatedAt: new Date(now).toISOString(), accounts: {}, kills: [], breakouts: [], doubled: [], decisions: [] };
   const recent = posts.filter(p => p && typeof p.destinationKey === 'string' && ['scheduled', 'published'].includes(p.status) && now - Date.parse(p.scheduledAt) <= GROWTH_WINDOW_DAYS * DAY && Date.parse(p.scheduledAt) <= now);
   const keys = new Set([...Object.keys(accountPosts), ...recent.map(p => canonicalDestinationKey(p.destinationKey))]);
@@ -111,10 +111,12 @@ export function computeGrowth({ posts = [], accountPosts = {}, previous = null, 
     const mine = recent.filter(p => canonicalDestinationKey(p.destinationKey) === key).map(p => ({ ...p, latest: latestViews(p, accountPosts[key] ?? []) })).filter(p => p.latest);
     const weekly = rows.length ? rows.map(r => r.views) : mine.filter(p => now - Date.parse(p.scheduledAt) <= 7 * DAY).map(p => p.latest.views);
     const account = { lane: laneForDestinationKey(key)?.id ?? null, weeklyPosts: weekly.length, weeklyViews: weekly.reduce((a, b) => a + b, 0), weeklyMedian: median(weekly), source: rows.length ? 'metricool_account_analytics' : 'ledger_observations' };
-    account.autoPublish = autoPublishAllowed(account); // also requires source = metricool_account_analytics
-    account.scaled = account.autoPublish; // 6-8 posts/day once the weekly median passes 1k
+    const earned = autoPublishAllowed(account); // also requires source = metricool_account_analytics
+    account.scaled = earned; // 6-8 posts/day only once the weekly median really passes 1k (override keeps 5/day)
+    account.autoPublish = earned || override.has(key);
+    account.autoPublishMode = earned ? 'auto' : account.autoPublish ? 'owner_override' : 'drafts';
     out.accounts[key] = account;
-    if (account.autoPublish) out.decisions.push(`autopublish_on:${key}`);
+    if (earned) out.decisions.push(`autopublish_on:${key}`);
     // Kill arms with a median below 300 after >= 6 posts on this account.
     for (const [arm, pick] of [['creator', p => p.creatorKey], ['hook', p => p.hookVariant], ['slot', p => nyHour(p.scheduledAt)]]) {
       const groups = new Map();

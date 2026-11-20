@@ -15,6 +15,7 @@
 import { createHash } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
 import { ALL_DISCOVERY_CREATORS, PRIORITY_CREATORS, TWITCH_LOGIN_CANDIDATES, KNOWN_PROHIBITED_CREATORS } from '../shared/clippers-priority-creators.mjs';
+import { routeCandidate, parseAutopublishOverride, overrideLaneIds } from '../shared/clippers-account-lanes.mjs';
 import { resolveClipPolicy, buildCreditCaption, parseCityPageNames, parseTakedown, takedownBlocks, clipLengthAllowed, creatorKey } from '../shared/clippers-streamer-policy.mjs';
 
 export const STREAMER_SECRET_NAMES = Object.freeze(['TWITCH_CLIENT_ID', 'TWITCH_CLIENT_SECRET', 'YOUTUBE_API_KEY']);
@@ -35,6 +36,10 @@ export function streamerConfig(env = process.env) {
   return {
     twitch, youtube, missing, city,
     autoPublish: env.CLIPPERS_STREAMER_AUTO_PUBLISH === 'true',
+    // Owner override lanes: with CLIPPERS_STREAMER_AUTO_PUBLISH unset (or 'lanes'), clips routed to an
+    // overridden lane skip the BlackOps owner approval; every other gate (policy, takedown, length) still applies.
+    // 'false' puts every clip back on owner approval; CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE="" does the same.
+    autoPublishLanes: env.CLIPPERS_STREAMER_AUTO_PUBLISH === 'false' ? new Set() : overrideLaneIds(parseAutopublishOverride(env.CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE)),
     maxApprovalsPerRun: int(env.CLIPPERS_STREAMER_APPROVALS_PER_RUN, 5, 0, 20),
     maxOpenApprovals: int(env.CLIPPERS_STREAMER_MAX_OPEN_APPROVALS, 25, 0, 100),
     youtubeUnitBudget: int(env.CLIPPERS_YOUTUBE_UNITS_PER_RUN, 60, 0, 400),
@@ -270,15 +275,24 @@ export function selectForApproval(state, config) {
 }
 
 // ---------- Approval queue (existing pending_actions table; owner-only via user_id) ----------
-export function approvalRow(candidate, owner, config) {
+/** 'auto_publish_flag' (global flag), 'lane_owner_override' (overridden lane) or 'owner_approval'. */
+export function approvalModeFor(candidate, config, creator = null) {
+  if (config.autoPublish) return 'auto_publish_flag';
+  const lane = config.autoPublishLanes?.size ? routeCandidate(candidate, { creator }).lane : null;
+  return lane && config.autoPublishLanes.has(lane) ? 'lane_owner_override' : 'owner_approval';
+}
+
+export function approvalRow(candidate, owner, config, creator = null) {
+  const mode = approvalModeFor(candidate, config, creator);
+  const auto = mode !== 'owner_approval';
   return {
     userId: owner, actionType: STREAMER_APPROVAL_ACTION, resourceType: 'clippers_streamer_candidate', resourceId: candidate.id,
     title: `Clip de @${String(candidate.handle).slice(0, 40)}: ${String(candidate.title).slice(0, 80)}`,
     description: `Aprobar para recortar (máx. 60 s, editado), acreditar y programar en las páginas de clips. Fuente: ${candidate.sourceUrl}. Descarga: ${candidate.download.mode}. Publicación sólo por la ruta Metricool existente tras la aprobación.`,
-    riskLevel: 'medium', status: config.autoPublish ? 'approved' : 'pending',
+    riskLevel: 'medium', status: auto ? 'approved' : 'pending',
     input: { candidateId: candidate.id, platform: candidate.platform, sourceUrl: candidate.sourceUrl, handle: candidate.handle, caption: candidate.caption,
       durationSec: candidate.durationSec ?? null, download: candidate.download, clipPolicy: candidate.clipPolicy.status, destinations: config.city.pages.map(p => p.brandId),
-      approvalMode: config.autoPublish ? 'auto_publish_flag' : 'owner_approval' },
+      approvalMode: mode },
   };
 }
 
@@ -298,7 +312,7 @@ export function createPendingActionsQueue(query, { transaction } = {}) {
           WHERE NOT EXISTS (SELECT 1 FROM existing) RETURNING id
         ) SELECT id FROM inserted UNION ALL SELECT id FROM existing LIMIT 1`,
         [row.userId, row.actionType, row.resourceType, row.resourceId, row.title, row.description, row.riskLevel, row.status, JSON.stringify(row.input),
-          row.status === 'approved' ? 'clippers-auto-publish-flag' : null, row.status === 'approved' ? new Date() : null, row.status === 'approved' ? 'CLIPPERS_STREAMER_AUTO_PUBLISH=true' : null]);
+          row.status === 'approved' ? 'clippers-auto-publish-flag' : null, row.status === 'approved' ? new Date() : null, row.status === 'approved' ? (row.input.approvalMode === 'lane_owner_override' ? 'CLIPPERS_LANES_AUTOPUBLISH_OVERRIDE (owner decision)' : 'CLIPPERS_STREAMER_AUTO_PUBLISH=true') : null]);
       if (!result.rows[0]) throw new Error('PENDING_ACTION_INSERT_FAILED');
       return String(result.rows[0].id);
   };
@@ -385,7 +399,7 @@ export async function runStreamerDiscovery({ env = process.env, now = Date.now()
   const requested = new Map();
   if (queue && config.city.pages.length) {
     for (const c of selectForApproval(draft, config)) {
-      const row = approvalRow(c, owner, config);
+      const row = approvalRow(c, owner, config, draft.creators?.[c.creatorKey] ?? null);
       requested.set(c.id, { status: row.status, pendingActionId: await queue.insert(row), requestedAt: report.at, mode: row.input.approvalMode });
     }
   }
