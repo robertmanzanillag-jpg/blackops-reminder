@@ -26,6 +26,11 @@ Its ledgers stay on disk and are read-only.
 | Learning | Same job, `script/clippers-streamer-cloud-learning.mjs` | Reads Metricool post analytics 24–48 h after the slot. It runs an A/B test on the burned hook (`title` vs `teaser`) per destination with the existing `evaluateExperiments`, and orders creators by relative median views. |
 | Office | Orchestra role `clippers-streamers` + `GET /api/clippers/streamers/status` | Shows held reasons such as `missing_secret:TWITCH_CLIENT_ID`. `cloudPublish` lists the recent posts (use it to remove posts after a takedown) and the learning summary. |
 
+### Platforms
+YouTube answers GitHub-hosted runner IPs with "Sign in to confirm you're not a bot", even with `--impersonate chrome` and a working curl-cffi. That was verified on 2026-11-19. The cloud lane therefore takes **Twitch clips only** (`CLIPPERS_STREAMER_CLOUD_PLATFORMS`, default `twitch`).
+While the cloud publisher is on, discovery creates approval rows only for those platforms, so unpublishable YouTube approvals don't fill the open-approval budget.
+A YouTube bot check is reported as `SOURCE_BOT_CHECK`, and the run stops trying other YouTube clips. Every failed clip prints a log-safe line: `clip diagnostics: {platform, step, impersonate, exitCode, detail}`. The detail is the last stderr line, with URLs, paths, e-mails and long tokens removed.
+
 ### Destinations and schedule
 The adapter allowlist (`script/clippers-portfolio-metricool.mjs`) matches the live Metricool identities (getBrandSettings, 2026-11-19): `6431685/tiktok/streamersus` (memes), `6431687/tiktok/streamersclipusa` (SPORT), `6591612/tiktok/news305miami` and `6591612/facebook/1193011863901514`.
 Ledger rows written under the old account names `streamersclips` and `ynb4b6r6` still resolve to the same destination through `LEGACY_ACCOUNT_ALIASES`, so they keep counting toward the caps and duplicate checks.
