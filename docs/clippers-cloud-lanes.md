@@ -8,8 +8,8 @@ PostgreSQL (`agent_council_state`). Media lives in Google Drive. Nothing is stor
 
 | Mac LaunchAgent (NY time) | Scripts | What it does | Cloud path |
 |---|---|---|---|
-| `com.blackops.clippers-content-worker` 04:00 | `clippers-content-local-worker` → `content-learning-ceo`, `motivation-shorts`, `sleep-video-generator` | Motivation ES/EN Shorts (≤5/day/channel) and a weekly 8 h sleep video from owned manifests and visuals. No network. | **`clippers-cloud-lanes.yml` job `owned_content`**: Drive workspace hydrate → same worker → media to Drive, ledgers to Postgres. Needs the portable renderer (#483). |
-| `com.blackops.clippers-youtube-delivery-worker` 06:30 | `run-clippers-youtube-delivery-worker.sh` (zsh) → `youtube-delivery-worker` → `youtube-upload-packager`, `youtube-publish-worker` | Packages today's renders and uploads them with the YouTube Data API (per-lane OAuth refresh tokens). | **Same job, after content**: the Node runner passes the same exact env allowlist as the zsh wrapper (`youtubeEnv`). Secrets come from Actions secrets, never from a file. |
+| `com.blackops.clippers-content-worker` 04:00 | `clippers-content-local-worker` → `content-learning-ceo`, `motivation-shorts`, `sleep-video-generator` | Motivation ES/EN Shorts (≤5/day/channel) and a weekly 8 h sleep video from owned manifests and visuals. No network. | **`clippers-cloud-lanes.yml` job `owned_content`** (motivation only): Drive workspace hydrate → same worker → media to Drive, ledgers to Postgres. The sleep video is its **own job `sleep`** (Sunday 00:00 NY) behind `CLIPPERS_CLOUD_SLEEP_ENABLED` (default off) until its runtime is measured. Needs the portable renderer (#483). |
+| `com.blackops.clippers-youtube-delivery-worker` 06:30 | `run-clippers-youtube-delivery-worker.sh` (zsh) → `youtube-delivery-worker` → `youtube-upload-packager`, `youtube-publish-worker` | Packages today's renders and uploads them with the YouTube Data API (per-lane OAuth refresh tokens). | **Same job, after content** (and in `sleep`, after the sleep render), only with `CLIPPERS_YOUTUBE_CLOUD_UPLOAD_ENABLED=true` (default false). The Node runner passes the same exact env allowlist as the zsh wrapper (`youtubeEnv`). Secrets come from Actions secrets, never from a file. |
 | `com.blackops.clippers-free-worker` 07:00 | `clippers-free-local-worker` → `marketplace-refresh`, `marketplace-intake`, `render-campaign-drafts`, `upload-metricool-media`, `streamer-growth-ceo`, `metricool-autopilot`, `reconcile-publications`, `cleanup-published-vyro-media` | Marketplace (Vyro/Whop/Content Rewards/Clipping) campaigns → drafts → Drive → Metricool (≤5/day) → reconcile. | **Job `marketplace`**: everything except `marketplace-refresh` (it needs logged-in browser sessions). Intake reads owner snapshots from Drive `research/marketplace-snapshots/`. Metricool writes stay off until `CLIPPERS_MARKETPLACE_CLOUD_PUBLISH_ENABLED=true`. |
 | `com.blackops.clippers-daily-watchdog` 10:00 | `clippers-daily-watchdog` → `portfolio-discovery`, `portfolio-prepare`, `daily-learning`, `orchestra-analytics` | Freshness checks, YouTube RSS discovery, prepare, the A/B daily learning (it schedules to Metricool). | **Covered, not re-implemented**: discovery = `clippers-streamers.yml`, publish + learning loop = `clippers-streamers-publish.yml` (#479). Freshness = the office lane overlay + self-heal. You only retire it. |
 | BlackRoom local editor (separate installer) | yt-dlp with browser cookies | DJ sets for BlackRoom. | Out of scope for Clippers. It stays on the Mac or moves to owner-uploaded sets. |
@@ -18,19 +18,21 @@ PostgreSQL (`agent_council_state`). Media lives in Google Drive. Nothing is stor
 
 `shared/clippers-cloud-lanes.mjs` keeps one lease per lane in `clippers-cloud-lanes:<owner>`:
 
+- **Retirement is the only handover.** A real (non-dry) cloud run of a lane is refused (`mac_lane_not_retired`, shown as *idle*) until that lane was retired on the Mac. A stale Mac heartbeat (Mac off) is not a handover.
 - Every Mac entry point (content, YouTube delivery, free worker, watchdog) calls `macLaneGate(lane)` before running.
   It writes a Mac heartbeat. It refuses (exits 0 without work) when the lane is **retired** or the cloud holds a fresh lease.
   Without `OFFICE_DATABASE_URL`/`OFFICE_OWNER_ID` in the Mac selected env, or on a database error, it fails open and logs it.
   That is the pre-cloud behavior. This is why the retirement step also unloads the agents.
-- The cloud job refuses a lane while the Mac heartbeat is younger than 26 h (`mac_lane_active`, shown as *idle* in the office), unless the lane is retired.
+- After each lane, that lane's text ledgers go to Postgres and its media to Drive, and its run is recorded, **before** the next lane starts (in particular right after the YouTube delivery). Each lane has its own time limit below the 340 min job limit (content 60, delivery 45, marketplace 60, sleep render 240 min; `CLIPPERS_CLOUD_LANE_TIMEOUT_MINUTES` overrides), so a hang is recorded as `lane_timeout` and counted by self-heal. A failed persist stops the job.
+- Text state is capped at 6 MB. Ledger files are never evicted. If they alone exceed the cap, the run fails with `workspace_text_over_cap` instead of dropping anything.
 - Dry runs take no lease, upload nothing and persist nothing. That is how you QA the cloud while the Mac still runs.
 
 Steps (on the Mac, from the runtime checkout):
 
-1. `zsh script/clippers-mac-retire.sh seed` copies the Mac workspace into the cloud. Text files of 1 MB or less (ledgers, configs, manifests, snapshots) go to Postgres with the Mac path replaced by `{{CLIPPERS_WORKSPACE}}`. Media up to 300 MB go to the Drive folder. Env files and anything named like a credential, secret, token or key are never copied. It uses the Mac's own Drive OAuth client, so the default `drive.file` scope can read the files back in the cloud.
+1. `zsh script/clippers-mac-retire.sh seed` copies the Mac workspace into the cloud. It is an **allowlist**: only `config/ content/ manifests/ visuals/ rights/ research/ renders/ reports/`, and only text or media extensions. Text files of 1 MB or less go to Postgres with the Mac path replaced by `{{CLIPPERS_WORKSPACE}}`. Media up to 300 MB go to the Drive folder. Dot-files and dot-dirs, and anything named like a credential, secret, token, cookie, keychain, session, storage-state, auth/login JSON, `.metricool`, `.netrc`, `.npmrc`, SSH key, pem/p12/pfx/jks/keystore or a browser profile, are never copied. The script refuses `/`, `$HOME` and `~/Library`, and requires `config/clippers-content-worker.json` in the workspace. It uses the Mac's own Drive OAuth client, so the default `drive.file` scope can read the files back in the cloud.
 2. In Actions, dispatch **Clippers cloud lanes** with `dry_run=true` for `owned_content` and `marketplace`. Check the office roles (or `node script/clippers-cloud-lanes.mjs --status`).
-3. `zsh script/clippers-mac-retire.sh retire` (default: all four lanes). It requires a completed cloud run or dry run in the last 7 days per lane, and a streamer cloud run for `watchdog`. `FORCE=1` skips that check. It marks the lanes retired in Postgres **first**, then runs `launchctl bootout` on each agent and moves its plist to `~/Library/LaunchAgents/retired-clippers/`.
-4. Rollback: `zsh script/clippers-mac-retire.sh restore [lanes]`, then set `CLIPPERS_CLOUD_LANES_ENABLED=false`.
+3. `zsh script/clippers-mac-retire.sh retire` (default: all four lanes). It requires a completed cloud run or dry run in the last 7 days per lane, and a streamer cloud run for `watchdog`. A delivery dry run uploads nothing, so it never counts: retire `youtube_delivery` with `FORCE=1` after the content QA (or later, once uploads are enabled). `FORCE=1` skips that check. It marks the lanes retired in Postgres **first**, then runs `launchctl bootout` on each agent and moves its plist to `~/Library/LaunchAgents/retired-clippers/`.
+4. Rollback: first set `CLIPPERS_CLOUD_LANES_ENABLED=false`, then run `zsh script/clippers-mac-retire.sh restore [lanes] --cloud-paused`. It refuses without the flag. The Mac takes the leases at once and the agents are loaded again.
 
 ## 3. Owner setup (exact secrets and variables)
 
@@ -45,7 +47,7 @@ Repository **secrets**:
 | `OFFICE_DATABASE_URL`, `OFFICE_OWNER_ID` | state | These already exist. |
 | `YT_DLP_PROXY` (optional) | YouTube *sources* for streamer clips | See section 5. |
 
-Repository **variables**: `CLIPPERS_CLOUD_LANES_ENABLED=true` (off by default), `CLIPPERS_CLOUD_LANES_KILL_SWITCH`,
+Repository **variables**: `CLIPPERS_CLOUD_LANES_ENABLED=true` (off by default), `CLIPPERS_YOUTUBE_CLOUD_UPLOAD_ENABLED` (default false), `CLIPPERS_CLOUD_SLEEP_ENABLED` (default false), `CLIPPERS_CLOUD_LANES_KILL_SWITCH`,
 `CLIPPERS_MARKETPLACE_CLOUD_PUBLISH_ENABLED` (Metricool + public media for the marketplace lane, default false),
 `CLIPPERS_METRICOOL_BLOG_ID`, `CLIPPERS_TIKTOK_ACCOUNT`, `CLIPPERS_MARKETPLACE_SNAPSHOT_MAX_AGE_HOURS`
 (default 48; set 192 for weekly snapshots), `CLIPPERS_YOUTUBE_PUBLISH_AUTHORIZED` / `CLIPPERS_YOUTUBE_API_PROJECT_AUDIT_VERIFIED`

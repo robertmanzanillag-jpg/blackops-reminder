@@ -23,7 +23,14 @@ export const MAX_TEXT_TOTAL_BYTES = 6 * 1024 * 1024;
 const FOLDER = 'application/vnd.google-apps.folder';
 // Never mirrored: build/temp dirs, locks/partials, and anything that looks like a credential (env files, keys, tokens).
 const SKIP = /(^|\/)(node_modules|\.git|tmp|source-drop)(\/|$)|\.lock$|\.partial\.mp4$|\.tmp$|(^|\/)\._/;
-const SECRETISH = /(^|\/)(\.env[^/]*|[^/]*(credential|secret|token|oauth|password|apikey|api-key|private-key)[^/]*|[^/]*\.(pem|key|p12))(\/|$)/i;
+const SECRETISH = /(^|\/)(\.[^/]+|[^/]*(credential|secret|token|oauth|password|passwd|apikey|api-key|private-key|cookie|keychain|session|storage-state|storagestate|auth-state|auth_state|authstate|auth\.json|login|metricool|netrc|npmrc|id_rsa|id_ed25519|id_ecdsa)[^/]*|[^/]*\.(pem|key|p12|pfx|jks|keystore|kdbx|sqlite|db|ldb)|(chrome|chromium|firefox|safari|profiles?|user-data|default)(-[^/]*)?)(\/|$)/i;
+/** Seed (Mac -> cloud) is an allowlist: only these top-level folders, and only text or media files. */
+export const SEED_PREFIXES = Object.freeze(['config/', 'content/', 'manifests/', 'visuals/', 'rights/', 'research/', 'renders/', 'reports/']);
+export const MEDIA_EXTENSIONS = new Set(['.mp4', '.mov', '.m4a', '.mp3', '.wav', '.aac', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.srt', '.vtt', '.ttf', '.otf']);
+export const seedAllowed = rel => safeRel(rel) && SEED_PREFIXES.some(p => rel.startsWith(p))
+  && (TEXT_EXTENSIONS.has(path.extname(rel).toLowerCase()) || MEDIA_EXTENSIONS.has(path.extname(rel).toLowerCase()));
+/** Ledger-like files are never evicted (they are what prevents duplicates). */
+export const isLedgerPath = rel => /ledger|queue|publish|upload|receipt|reconcil/i.test(rel);
 
 export const driveCredentials = (env = process.env) => {
   const pick = names => names.map(n => String(env[n] ?? '').trim()).find(Boolean) || '';
@@ -178,17 +185,26 @@ export function planPersist(before, after) {
   return { text: text.sort(), media: media.sort() };
 }
 
-/** Merge changed text into the stored workspace document (bounded; oldest-updated files dropped first if over cap). */
+/**
+ * Merge changed text into the stored workspace document. Over the cap, non-ledger files are evicted oldest first;
+ * ledger files are never evicted: if they alone exceed the cap the merge fails (workspace_text_over_cap) and
+ * nothing is written.
+ */
 export async function mergeTextFiles(stored, root, rels, now) {
   const doc = { version: 1, files: { ...(stored?.files ?? {}) } };
   for (const rel of rels) {
     const content = tokenize(await readFile(path.join(root, rel), 'utf8'), root);
     doc.files[rel] = { content, sha256: sha256(content), updatedAt: new Date(now).toISOString() };
   }
-  let entries = Object.entries(doc.files).sort((a, b) => Date.parse(b[1].updatedAt) - Date.parse(a[1].updatedAt));
-  let total = 0;
-  entries = entries.filter(([, f]) => (total += Buffer.byteLength(f.content)) <= MAX_TEXT_TOTAL_BYTES);
-  doc.files = Object.fromEntries(entries);
+  const size = f => Buffer.byteLength(f.content);
+  const entries = Object.entries(doc.files);
+  let total = entries.reduce((n, [, f]) => n + size(f), 0);
+  if (total <= MAX_TEXT_TOTAL_BYTES) return doc;
+  const ledgerBytes = entries.filter(([rel]) => isLedgerPath(rel)).reduce((n, [, f]) => n + size(f), 0);
+  if (ledgerBytes > MAX_TEXT_TOTAL_BYTES) throw new Error('workspace_text_over_cap');
+  const evictable = entries.filter(([rel]) => !isLedgerPath(rel) && !rels.includes(rel)).sort((a, b) => Date.parse(a[1].updatedAt) - Date.parse(b[1].updatedAt));
+  for (const [rel, f] of evictable) { if (total <= MAX_TEXT_TOTAL_BYTES) break; delete doc.files[rel]; total -= size(f); }
+  if (total > MAX_TEXT_TOTAL_BYTES) throw new Error('workspace_text_over_cap');
   return doc;
 }
 

@@ -41,7 +41,13 @@ export const LANE_IDS = Object.freeze(Object.keys(MAC_LANES));
 /** Lanes a cloud job actually holds (watchdog is covered by the streamer jobs and is only retired). */
 export const CLOUD_LEASED_LANES = Object.freeze(LANE_IDS.filter(id => !MAC_LANES[id].coveredOnly));
 /** Lanes per cloud workflow job. */
-export const CLOUD_JOBS = Object.freeze({ owned_content: ['content', 'youtube_delivery'], marketplace: ['marketplace'] });
+// `sleep` = the weekly 8 h sleep render + its delivery, a separate job behind CLIPPERS_CLOUD_SLEEP_ENABLED (default off)
+// until its runtime is measured; owned_content renders motivation only.
+export const CLOUD_JOBS = Object.freeze({ owned_content: ['content', 'youtube_delivery'], sleep: ['content', 'youtube_delivery'], marketplace: ['marketplace'] });
+/** Reasons that only say a flag is off by design (owner decision): shown, never a block. */
+export const INFORMATIONAL_REASONS = Object.freeze(new Set(['metricool_autopublish_not_authorized', 'youtube_cloud_upload_disabled', 'dry_run_no_upload',
+  'content_shortfall', 'global_public_publish_authorization_missing', 'youtube_api_project_audit_required']));
+export const isInformational = r => INFORMATIONAL_REASONS.has(r);
 
 const CODE = /^[a-zA-Z0-9_.:-]{1,120}$/;
 const iso = v => (typeof v === 'string' && Number.isFinite(Date.parse(v)) ? new Date(Date.parse(v)).toISOString() : null);
@@ -75,8 +81,9 @@ function runOf(run) {
 }
 
 /**
- * Single-holder lease. holder 'cloud' is refused while a fresh Mac heartbeat exists (unless the lane is retired);
- * holder 'mac' is refused when the lane is retired or the cloud holds a fresh lease. On success the lease is renewed.
+ * Single-holder lease. Retirement is the only handover: holder 'cloud' is refused (mac_lane_not_retired) until the
+ * owner retired the Mac lane; holder 'mac' is refused when the lane is retired or the cloud holds a fresh lease.
+ * Dry runs never call this. On success the lease is renewed.
  * Mutates `state`; returns { ok, reason }.
  */
 export function acquireLane(state, lane, holder, now, { host = null } = {}) {
@@ -84,6 +91,7 @@ export function acquireLane(state, lane, holder, now, { host = null } = {}) {
   if (!['mac', 'cloud'].includes(holder)) return { ok: false, reason: 'unknown_holder' };
   const retired = state.retired?.[lane];
   if (holder === 'mac' && retired) return { ok: false, reason: 'mac_lane_retired' };
+  if (holder === 'cloud' && !retired) return { ok: false, reason: 'mac_lane_not_retired' };
   const lease = state.leases?.[lane];
   const fresh = lease && now - Date.parse(lease.at) < LANE_LEASE_MS && Date.parse(lease.at) <= now + 5 * 60_000;
   if (lease && lease.holder !== holder && fresh && !(holder === 'cloud' && retired)) {
@@ -117,8 +125,14 @@ export function retireMacLanes(state, lanes, now, by = 'owner') {
   return state;
 }
 
-export function unretireMacLanes(state, lanes) {
-  for (const lane of lanes) { if (state.retired) delete state.retired[lane]; if (state.leases?.[lane]?.holder === 'cloud') delete state.leases[lane]; }
+/** Rollback to the Mac: the Mac takes the lease at once, so the cloud cannot run the lane again until re-retired. */
+export function unretireMacLanes(state, lanes, now = Date.now()) {
+  for (const lane of lanes) {
+    if (!LANE_IDS.includes(lane)) throw new Error('unknown_lane');
+    if (state.retired) delete state.retired[lane];
+    state.leases ??= {};
+    state.leases[lane] = { holder: 'mac', at: new Date(now).toISOString(), host: 'mac' };
+  }
   return state;
 }
 
@@ -128,7 +142,9 @@ export function unretireMacLanes(state, lanes) {
  */
 export function laneCloudQa(state, lane, now) {
   const l = state.lanes?.[lane];
-  const ok = r => r && ['completed', 'completed_with_shortfall'].includes(r.status) && now - Date.parse(r.at) < 7 * 86400_000;
+  // A dry run of the delivery lane uploads nothing, so it is never QA evidence for that lane.
+  const ok = r => r && ['completed', 'completed_with_shortfall'].includes(r.status) && now - Date.parse(r.at) < 7 * 86400_000
+    && !r.heldReasons.includes('dry_run_no_upload') && !r.heldReasons.includes('youtube_cloud_upload_disabled');
   if (ok(l?.lastRun)) return { ok: true, evidence: `cloud_run:${l.lastRun.at}` };
   if (ok(l?.lastDryRun)) return { ok: true, evidence: `cloud_dry_run:${l.lastDryRun.at}` };
   return { ok: false, evidence: null };
@@ -155,8 +171,8 @@ export function laneView(state, lane, now) {
     reasons.push(...run.heldReasons.map(r => `cloud_${lane}:${r}`), ...run.errors.map(e => `cloud_${lane}_error:${e}`));
     if (age > CLOUD_LANE_STALE_MS) { roleState = 'stale'; reasons.push(`cloud_lane_stale:${lane}`); }
     else if (run.status === 'failed') roleState = 'held';
-    else if (run.status === 'held') roleState = macActive || run.heldReasons.includes('mac_lane_active') ? 'idle' : 'held';
-    else roleState = run.errors.length || run.heldReasons.length ? 'held' : 'completed';
+    else if (run.status === 'held') roleState = macActive || run.heldReasons.some(r => r === 'mac_lane_active' || r === 'mac_lane_not_retired') ? 'idle' : 'held';
+    else roleState = run.errors.length || run.heldReasons.some(r => !isInformational(r)) ? 'held' : 'completed';
     if (retired) reasons.push(`mac_lane_retired:${lane}`);
   }
   const missing = (run?.heldReasons ?? []).filter(r => r.startsWith('missing_secret:')).map(r => r.slice('missing_secret:'.length));

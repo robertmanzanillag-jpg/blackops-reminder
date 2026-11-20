@@ -4,7 +4,8 @@
 #   zsh script/clippers-mac-retire.sh seed            # 1. copy the Mac workspace to Drive + Postgres (once)
 #   (dispatch "Clippers cloud lanes" dry runs in Actions for owned_content and marketplace)
 #   zsh script/clippers-mac-retire.sh retire [lanes]  # 2. needs cloud QA, marks lanes retired, unloads the agents
-#   zsh script/clippers-mac-retire.sh restore [lanes] # rollback: clears retirement and loads the agents again
+#   zsh script/clippers-mac-retire.sh restore [lanes] --cloud-paused  # rollback (after CLIPPERS_CLOUD_LANES_ENABLED=false):
+#                                                    # the Mac takes the leases and the agents are loaded again
 #
 # lanes: comma list of content,youtube_delivery,marketplace,watchdog (default: all four). FORCE=1 skips the cloud
 # QA check (owner decision). Retirement is recorded in Postgres first, so even an agent that is still loaded
@@ -14,6 +15,7 @@ umask 077
 
 ACTION="${1:-}"
 LANES="${2:-content,youtube_delivery,marketplace,watchdog}"
+[[ "$LANES" == "--cloud-paused" ]] && { LANES="content,youtube_delivery,marketplace,watchdog"; CLOUD_PAUSED=1; }
 AGENTS_DIR="$HOME/Library/LaunchAgents"
 # Defaults come from the installed content-worker agent (the same values the Mac jobs run with).
 plist_env() { /usr/libexec/PlistBuddy -c "Print :EnvironmentVariables:$1" "$AGENTS_DIR/com.blackops.clippers-content-worker.plist" 2>/dev/null || true; }
@@ -21,6 +23,11 @@ ROOT="${CLIPPERS_RUNTIME_ROOT:-${0:A:h:h}}"
 CONFIG_ROOT="${CLIPPERS_CONFIG_ROOT:-$(plist_env CLIPPERS_CONFIG_ROOT)}"
 WORKSPACE="${CLIPPERS_WORKSPACE_ROOT:-$(plist_env CLIPPERS_WORKSPACE_ROOT)}"
 [[ -n "$CONFIG_ROOT" && -n "$WORKSPACE" ]] || { print -u2 "Set CLIPPERS_CONFIG_ROOT and CLIPPERS_WORKSPACE_ROOT (agent not installed here)."; exit 2; }
+WORKSPACE="${WORKSPACE:A}"
+case "$WORKSPACE" in
+  /|"${HOME:A}"|"${HOME:A}/Library"|"${HOME:A}/Library/"*) print -u2 "Refused: workspace $WORKSPACE is not a Clippers workspace."; exit 2 ;;
+esac
+[[ -f "$WORKSPACE/config/clippers-content-worker.json" ]] || { print -u2 "Refused: $WORKSPACE/config/clippers-content-worker.json is missing."; exit 2; }
 RETIRED_DIR="$AGENTS_DIR/retired-clippers"
 NODE="${CLIPPERS_NODE_PATH:-$(command -v node)}"
 typeset -A LABELS
@@ -51,7 +58,9 @@ case "$ACTION" in
     done
     ;;
   restore)
-    "$NODE" "$ROOT/script/clippers-cloud-lanes.mjs" --unretire-mac "$LANES"
+    [[ "${3:-}" == "--cloud-paused" || "${CLOUD_PAUSED:-0}" == "1" ]] || {
+      print -u2 "Refused: set the repository variable CLIPPERS_CLOUD_LANES_ENABLED=false first, then run: restore [lanes] --cloud-paused"; exit 3; }
+    "$NODE" "$ROOT/script/clippers-cloud-lanes.mjs" --unretire-mac "$LANES" --cloud-paused
     for lane in "${lanes[@]}"; do
       label="${LABELS[$lane]}"
       if [[ -f "$RETIRED_DIR/$label.plist" ]]; then
@@ -60,8 +69,7 @@ case "$ACTION" in
       fi
       print "restored $lane ($label)"
     done
-    print "Pause the cloud lanes too (repository variable CLIPPERS_CLOUD_LANES_ENABLED=false) or the Mac gate refuses while the cloud lease is fresh."
     ;;
   *)
-    print -u2 "Usage: zsh script/clippers-mac-retire.sh seed | retire [lanes] | restore [lanes]"; exit 2 ;;
+    print -u2 "Usage: zsh script/clippers-mac-retire.sh seed | retire [lanes] | restore [lanes] --cloud-paused"; exit 2 ;;
 esac

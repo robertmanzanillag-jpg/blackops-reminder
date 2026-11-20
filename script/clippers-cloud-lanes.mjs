@@ -20,11 +20,11 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import {
   CLOUD_JOBS, CLOUD_LANES_NAMESPACE, CLOUD_WORKSPACE_NAMESPACE, LANE_IDS, MAC_LANES, acquireLane, emptyLanesState, laneCloudQa,
-  parseLanesState, recordLaneRun, retireMacLanes, unretireMacLanes,
+  isInformational, parseLanesState, recordLaneRun, retireMacLanes, unretireMacLanes,
 } from '../shared/clippers-cloud-lanes.mjs';
 import {
   createDriveClient, detokenize, driveCredentials, isTextPath, mergeTextFiles, missingDriveSecrets, planHydration, planPersist,
-  snapshotTree, textOverlay, tokenize, writeOverlay, MAX_TEXT_FILE_BYTES,
+  seedAllowed, snapshotTree, textOverlay, tokenize, writeOverlay, MAX_TEXT_FILE_BYTES,
 } from './clippers-drive-workspace.mjs';
 
 const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -64,11 +64,32 @@ async function laneTransact(store, owner, fn) {
   return out;
 }
 
+/** Per-lane time limits (minutes), always below the 340 min job limit so a hung lane is still recorded. */
+export const LANE_TIMEOUT_MINUTES = Object.freeze({ content: 60, youtube_delivery: 45, marketplace: 60, sleep_content: 240 });
+export function laneTimeoutMs(lane, job, env = process.env) {
+  const base = job === 'sleep' && lane === 'content' ? LANE_TIMEOUT_MINUTES.sleep_content : LANE_TIMEOUT_MINUTES[lane] ?? 60;
+  const override = Number(env.CLIPPERS_CLOUD_LANE_TIMEOUT_MINUTES);
+  return Math.min(Number.isFinite(override) && override > 0 ? override : base, 280) * 60_000;
+}
+export async function withLaneTimeout(task, ms) {
+  let timer;
+  try { return await Promise.race([task(), new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('lane_timeout')), ms); })]); }
+  finally { clearTimeout(timer); }
+}
+
 /** Default lane runners (real scripts). Tests inject fakes. */
 export const defaultRunners = {
-  async content({ workspaceRoot }) {
+  async content({ workspaceRoot, mode = 'motivation' }) {
     const { runContentLocalWorker } = await import('./clippers-content-local-worker.mjs');
-    const r = await runContentLocalWorker({ configPath: path.join(workspaceRoot, CONTENT_CONFIG) });
+    // owned_content renders motivation only; the `sleep` job (flag, default off) renders only the sleep video.
+    const cfg = JSON.parse(await readFile(path.join(workspaceRoot, CONTENT_CONFIG), 'utf8'));
+    if (mode === 'sleep') for (const l of ['es', 'en']) { if (cfg.motivation?.[l]) cfg.motivation[l].manifestFiles = []; }
+    else cfg.sleep = { ...(cfg.sleep ?? {}), enabled: false };
+    cfg.workspaceRoot = '..';
+    const tmpConfig = path.join(workspaceRoot, 'tmp', `content-${mode}.json`);
+    await mkdir(path.dirname(tmpConfig), { recursive: true, mode: 0o700 });
+    await writeFile(tmpConfig, JSON.stringify(cfg), { mode: 0o600 });
+    const r = await runContentLocalWorker({ configPath: tmpConfig });
     const rendered = ['es', 'en'].reduce((n, l) => n + Number(r.motivation?.[l]?.rendered ?? 0), 0);
     return { status: 'completed', heldReasons: r.status === 'completed_with_shortfall' ? ['content_shortfall'] : [], errors: [],
       counts: { motivation_rendered: rendered, sleep_generated: Number(r.sleep?.generated ?? 0) } };
@@ -98,8 +119,11 @@ export const defaultRunners = {
       const scrub = Object.fromEntries(Object.keys(env).filter(k => /^(OFFICE_|METRICOOL_|GOOGLE_|CLIPPERS_)/.test(k)).map(k => [k, '']));
       const r = await runClipperFreeLocalWorker({ projectRoot: REPO_ROOT, workspaceRoot, configRoot, env: { ...scrub, CLIPPERS_CONFIG_ROOT: configRoot },
         childEnv: { CLIPPERS_CONFIG_ROOT: configRoot, ...(has(env, 'CLIPPERS_MARKETPLACE_SNAPSHOT_MAX_AGE_HOURS') ? { CLIPPERS_MARKETPLACE_SNAPSHOT_MAX_AGE_HOURS: env.CLIPPERS_MARKETPLACE_SNAPSHOT_MAX_AGE_HOURS } : {}) } });
-      const held = [...(r.configurationBlockers ?? []), ...(r.failedStage ? [`stage_${r.failedStage}`] : [])];
-      return { status: r.status === 'blocked' ? 'held' : 'completed', heldReasons: held, errors: [],
+      const blockers = r.configurationBlockers ?? [];
+      // Metricool off by design (owner flag) stops the chain at "delivery": informational, not a block.
+      const byDesign = r.failedStage === 'delivery' && blockers.length > 0 && blockers.every(isInformational);
+      const held = [...blockers, ...(r.failedStage && !byDesign ? [`stage_${r.failedStage}`] : [])];
+      return { status: r.status === 'blocked' && !byDesign ? 'held' : 'completed', heldReasons: held, errors: [],
         counts: { rendered: Number(r.renderingReport?.summary?.rendered ?? 0) } };
     } finally { await rm(configRoot, { recursive: true, force: true }); }
   },
@@ -134,7 +158,7 @@ export async function runCloudJob({ job, store, owner, env = process.env, now = 
   const lanes = CLOUD_JOBS[job];
   if (!lanes) throw new Error('unknown_job');
   const at = new Date(now).toISOString();
-  const results = {};
+  const results = {}, recorded = new Set();
   const runnable = [];
   for (const lane of lanes) {
     const missing = missingSecrets(lane, env);
@@ -154,36 +178,50 @@ export async function runCloudJob({ job, store, owner, env = process.env, now = 
     let index, before;
     try {
       await mkdir(workspaceRoot, { recursive: true, mode: 0o700 });
-      index = await hydrate({ drive: client, folderId, root: workspaceRoot, stored, now, env });
+      index = await withLaneTimeout(() => hydrate({ drive: client, folderId, root: workspaceRoot, stored, now, env }), 30 * 60_000);
       before = await snapshotTree(workspaceRoot);
     } catch (e) {
       for (const lane of acquired) results[lane] = { at, status: errorCode(e).startsWith('drive_') ? 'held' : 'failed', heldReasons: [], errors: [errorCode(e)], counts: {}, dryRun };
       acquired.length = 0;
     }
+    // One lane at a time; each lane's text ledgers and media are persisted and its run recorded right after it, so a
+    // later lane (or the job limit) can never lose what an earlier lane uploaded.
+    let snapshot = before;
     for (const lane of acquired) {
-      if (lane === 'youtube_delivery' && dryRun) { results[lane] = { at, status: 'completed', heldReasons: ['dry_run_no_upload'], errors: [], counts: {}, dryRun }; continue; }
-      if (lane === 'youtube_delivery' && results.content && !['completed'].includes(results.content.status)) {
-        results[lane] = { at, status: 'held', heldReasons: ['content_lane_not_completed'], errors: [], counts: {}, dryRun }; continue;
+      if (lane === 'youtube_delivery' && dryRun) results[lane] = { at, status: 'completed', heldReasons: ['dry_run_no_upload'], errors: [], counts: {}, dryRun };
+      else if (lane === 'youtube_delivery' && results.content && results.content.status !== 'completed') results[lane] = { at, status: 'held', heldReasons: ['content_lane_not_completed'], errors: [], counts: {}, dryRun };
+      else if (lane === 'youtube_delivery' && env.CLIPPERS_YOUTUBE_CLOUD_UPLOAD_ENABLED !== 'true') results[lane] = { at, status: 'completed', heldReasons: ['youtube_cloud_upload_disabled'], errors: [], counts: {}, dryRun };
+      else {
+        const cfg = lane === 'content' ? CONTENT_CONFIG : lane === 'youtube_delivery' ? DELIVERY_CONFIG : null;
+        if (cfg && !(await stat(path.join(workspaceRoot, cfg)).catch(() => null))) results[lane] = { at, status: 'held', heldReasons: [`workspace_config_missing:${lane}`], errors: [], counts: {}, dryRun };
+        else {
+          const limitMs = laneTimeoutMs(lane, job, env);
+          try { results[lane] = { at, dryRun, ...(await withLaneTimeout(() => runners[lane]({ workspaceRoot, env, dryRun, now, mode: job === 'sleep' ? 'sleep' : 'motivation' }), limitMs)) }; }
+          catch (e) { results[lane] = { at, status: 'failed', heldReasons: [], errors: [errorCode(e)], counts: {}, dryRun }; }
+        }
       }
-      const cfg = lane === 'content' ? CONTENT_CONFIG : lane === 'youtube_delivery' ? DELIVERY_CONFIG : null;
-      if (cfg && !(await stat(path.join(workspaceRoot, cfg)).catch(() => null))) {
-        results[lane] = { at, status: 'held', heldReasons: [`workspace_config_missing:${lane}`], errors: [], counts: {}, dryRun }; continue;
+      if (!dryRun && index) {
+        const after = await snapshotTree(workspaceRoot);
+        const { text, media } = planPersist(snapshot, after);
+        try {
+          await store.transact(CLOUD_WORKSPACE_NAMESPACE(owner), async raw => JSON.stringify(await mergeTextFiles(raw ? JSON.parse(raw) : null, workspaceRoot, text, now)));
+          await persistMedia({ drive: client, folderId, root: workspaceRoot, rels: media, driveIndex: index });
+          snapshot = after;
+          results[lane].counts = { ...results[lane].counts, persisted_text: text.length, persisted_media: media.length };
+        } catch (e) {
+          results[lane] = { ...results[lane], status: 'failed', errors: [...(results[lane].errors ?? []), `persist_${errorCode(e)}`.slice(0, 60)] };
+        }
       }
-      try { results[lane] = { at, dryRun, ...(await runners[lane]({ workspaceRoot, env, dryRun, now })) }; }
-      catch (e) { results[lane] = { at, status: 'failed', heldReasons: [], errors: [errorCode(e)], counts: {}, dryRun }; }
+      await laneTransact(store, owner, st => { recordLaneRun(st, lane, results[lane]); });
+      // A failed persist stops the job: the next lane must not act on state the cloud could not save.
+      if (results[lane].errors.some(e => e.startsWith('persist_'))) {
+        for (const rest of acquired.slice(acquired.indexOf(lane) + 1)) results[rest] = { at, status: 'held', heldReasons: ['previous_lane_persist_failed'], errors: [], counts: {}, dryRun };
+        break;
+      }
     }
-    if (index && !dryRun && acquired.length) {
-      const { text, media } = planPersist(before, await snapshotTree(workspaceRoot));
-      try {
-        await store.transact(CLOUD_WORKSPACE_NAMESPACE(owner), async raw => JSON.stringify(await mergeTextFiles(raw ? JSON.parse(raw) : null, workspaceRoot, text, now)));
-        await persistMedia({ drive: client, folderId, root: workspaceRoot, rels: media, driveIndex: index });
-      } catch (e) {
-        for (const lane of acquired) results[lane] = { ...results[lane], status: 'failed', errors: [...(results[lane]?.errors ?? []), `persist_${errorCode(e)}`.slice(0, 60)] };
-      }
-      for (const lane of acquired) if (results[lane]) results[lane].counts = { ...results[lane].counts, persisted_text: text.length, persisted_media: media.length };
-    }
+    for (const lane of acquired) recorded.add(lane);
   }
-  await laneTransact(store, owner, s => { for (const [lane, run] of Object.entries(results)) recordLaneRun(s, lane, run); });
+  await laneTransact(store, owner, s => { for (const [lane, run] of Object.entries(results)) if (!recorded.has(lane) || run.heldReasons.includes('previous_lane_persist_failed')) recordLaneRun(s, lane, run); });
   return { lanes: results };
 }
 
@@ -205,7 +243,8 @@ export async function macLaneGate(lane, { env = process.env, store = null, now =
 /** Upload the Mac workspace: text (<= 1 MB) into Postgres with the Mac root tokenized, media (<= maxBytes) into Drive. */
 export async function seedWorkspace({ macRoot, store, owner, drive, folderId, now = Date.now(), contentConfig = null, deliveryConfig = null, maxMediaBytes = 300 * 1024 ** 2, log = console.log }) {
   const root = path.resolve(macRoot);
-  const tree = await snapshotTree(root);
+  // Allowlist only (SEED_PREFIXES + text/media extensions); credential-like names and dot-dirs are always skipped.
+  const tree = new Map([...(await snapshotTree(root))].filter(([rel]) => seedAllowed(rel)));
   const text = [...tree].filter(([rel, f]) => isTextPath(rel) && f.size <= MAX_TEXT_FILE_BYTES).map(([rel]) => rel);
   const media = [...tree].filter(([rel, f]) => !(isTextPath(rel) && f.size <= MAX_TEXT_FILE_BYTES) && f.size <= maxMediaBytes).map(([rel]) => rel);
   await store.transact(CLOUD_WORKSPACE_NAMESPACE(owner), async raw => {
@@ -253,7 +292,7 @@ export async function retireMac({ lanes, store, owner, now = Date.now(), force =
 /** Scheduled runs skip a lane that already ran (not failed, not waiting on the Mac / a secret) within `hours`. */
 export function skipByInterval(run, now, hours) {
   if (!run || run.status === 'failed') return false;
-  if (run.heldReasons.some(r => r === 'mac_lane_active' || r.startsWith('missing_secret:'))) return false;
+  if (run.heldReasons.some(r => r === 'mac_lane_active' || r === 'mac_lane_not_retired' || r.startsWith('missing_secret:'))) return false;
   return now - Date.parse(run.at) < hours * 3600_000;
 }
 
@@ -287,7 +326,12 @@ async function main() {
       if (!r.ok) process.exitCode = 3;
       return;
     }
-    if (arg('unretire-mac')) { await laneTransact(store, owner, s => unretireMacLanes(s, lanesArg(arg('unretire-mac')))); console.log(JSON.stringify({ ok: true })); return; }
+    if (arg('unretire-mac')) {
+      // Rollback hands the lanes back to the Mac: only once the owner paused the cloud lanes (no overlap).
+      if (!process.argv.includes('--cloud-paused')) { console.error('Refused: pause the cloud lanes first (CLIPPERS_CLOUD_LANES_ENABLED=false), then pass --cloud-paused.'); process.exitCode = 3; return; }
+      await laneTransact(store, owner, s => unretireMacLanes(s, lanesArg(arg('unretire-mac')), Date.now()));
+      console.log(JSON.stringify({ ok: true })); return;
+    }
     const job = arg('job');
     if (!CLOUD_JOBS[job]) throw new Error('unknown_job');
     if (env.CLIPPERS_CLOUD_LANES_KILL_SWITCH === 'true') { console.log('::notice::Clippers cloud lanes kill switch is on.'); return; }
@@ -304,6 +348,8 @@ async function main() {
     }
     console.log(JSON.stringify(Object.fromEntries(Object.entries(lanes).map(([k, r]) => [k, { status: r.status, heldReasons: r.heldReasons, errors: r.errors, counts: r.counts }]))));
     if (Object.values(lanes).some(r => r.status === 'failed')) process.exitCode = 1;
+    // A timed-out lane may still have a child process running: everything is recorded, so stop here.
+    if (Object.values(lanes).some(r => r.errors.includes('lane_timeout'))) { await store.close?.(); process.exit(1); }
   } finally { await store.close?.(); }
 }
 
