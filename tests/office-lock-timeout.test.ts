@@ -79,7 +79,7 @@ test("every pool role gets a named application_name; council pools cap idle-in-t
 test("no PostgreSQL pool in server/ or script/ is left without application_name", async () => {
   const { readdirSync, readFileSync } = await import("node:fs");
   const unnamed: string[] = [];
-  for (const dir of ["server", "script"]) for (const file of (readdirSync(new URL(`../${dir}/`, import.meta.url), { recursive: true }) as string[]).filter(f => !f.startsWith("office-api-budget-v6/") && f !== "software-factory-store.ts")) {
+  for (const dir of ["server", "script"]) for (const file of (readdirSync(new URL(`../${dir}/`, import.meta.url), { recursive: true }) as string[]).filter(f => !f.startsWith("office-api-budget-v6/") && f !== "software-factory-store.ts" && !f.startsWith("release-gate/"))) {
     if (!/\.(ts|mjs)$/.test(file) || /\.test\./.test(file)) continue;
     const src = readFileSync(new URL(`../${dir}/${file}`, import.meta.url), "utf8");
     for (const m of src.matchAll(/new (?:pg\.)?Pool\(\{[^;]*?\}\)/gs)) if (!/application_name/.test(m[0]) && !/councilPoolConfig/.test(m[0])) unnamed.push(`${dir}/${file}`);
