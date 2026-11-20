@@ -143,7 +143,8 @@ async function prepareSubtitleOverlay(subtitlePath, outputPath, durationSeconds,
     await run("magick", [
       "-background", "none", "-fill", "white", "-stroke", "black", "-strokewidth", "3",
       "-font", "Arial-Bold", "-pointsize", "58", "-gravity", "center", "-size", "900x300",
-      `caption:${segment.caption}`, imagePath,
+      // A leading @ would make ImageMagick read a file: escape it.
+      `caption:${String(segment.caption).replace(/^@/, "\\@")}`, imagePath,
     ]);
     concat.push(`file '${imagePath}'`, `duration ${(segment.end - segment.start).toFixed(3)}`);
     cursor = segment.end;
