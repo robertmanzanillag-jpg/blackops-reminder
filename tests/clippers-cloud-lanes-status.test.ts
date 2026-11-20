@@ -57,3 +57,16 @@ test('self-heal: a lane failing 3+ runs opens one valid order; missing secrets a
   assert.equal(none.created.length, 0);
   assert.deepEqual(cloudLanesSelfHealAudits(null), []);
 });
+
+test('flags off by design are informational (not held); a lane timeout counts toward the self-heal streak', () => {
+  const s = emptyLanesState();
+  retireMacLanes(s, ['marketplace', 'youtube_delivery'], AT - 7200_000);
+  recordLaneRun(s, 'marketplace', { at: '2026-11-20T12:05:00.000Z', status: 'completed', heldReasons: ['metricool_autopublish_not_authorized'], errors: [] });
+  recordLaneRun(s, 'youtube_delivery', { at: '2026-11-20T09:20:00.000Z', status: 'completed', heldReasons: ['youtube_cloud_upload_disabled'], errors: [] });
+  const report = cloudFallbackReport(streamerRaw, AT)!;
+  applyCloudLanesOverlay(report, JSON.stringify(s), AT);
+  assert.equal(report.roles.find(r => r.stage === 'trends')!.state, 'completed');
+  assert.equal(report.roles.find(r => r.stage === 'publisher')!.state, 'completed');
+  for (let i = 0; i < 3; i++) recordLaneRun(s, 'content', { at: new Date(AT - (3 - i) * 3600_000).toISOString(), status: 'failed', heldReasons: [], errors: ['lane_timeout'] });
+  assert.ok(cloudLanesSelfHealAudits(JSON.stringify(s))[0].findings.some(f => f.code === 'CLOUD_LANE_FAILING' && f.recordId === CLOUD_LANES_SELF_HEAL_RECORD('content')));
+});
